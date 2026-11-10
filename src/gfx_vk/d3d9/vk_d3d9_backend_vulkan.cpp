@@ -233,6 +233,11 @@ void BackendFrame(Backend *backend)
     Tuning tuning;
     backend->host->tuning(backend->host->user, tuning);
     Tuning &old = backend->tuning;
+    if (tuning.keepDrawState != old.keepDrawState)
+    {
+        old.keepDrawState = tuning.keepDrawState;
+        lg::SetKeepDrawState(backend->legacy, tuning.keepDrawState);
+    }
     if (tuning.gpuFeed == old.gpuFeed && tuning.gpuFeedDraws == old.gpuFeedDraws
         && tuning.gpuFeedIdleDraws == old.gpuFeedIdleDraws)
         return;

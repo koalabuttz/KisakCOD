@@ -403,6 +403,10 @@ struct Device
     // they differ. On whenever the validation layer is, so the check
     // programs and any run made to hunt a drawing bug have it.
     bool verifyShortcuts = false;
+    // SetKeepDrawState. Off: every draw starts with keyStale and dynamicStale
+    // set, no uniform block and no vertex buffer, index buffer or descriptor
+    // set bound (DropKeptDrawState), so it takes none of the shortcuts.
+    bool keepDrawState = true;
     // Uniform blocks in this frame's memory, by set 0 binding, and the
     // transient buffer the newest of them went to. With dynamic uniforms a
     // set 0 points at one buffer, so only blocks in that buffer are used again.

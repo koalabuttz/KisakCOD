@@ -1338,11 +1338,32 @@ bool ApplyDynamicState(Device &device, d3d::PrimitiveType type)
     return true;
 }
 
+// Device::keepDrawState off: the draw finds nothing an earlier one left for
+// it, so it makes its pipeline key and dynamic state, writes every uniform
+// block and records every bind. The pipeline and the dynamic state its
+// command buffer has stay known: the adapter compared those and left an equal
+// one alone before it kept anything else, so a draw writes and records what
+// it did then.
+void DropKeptDrawState(Device &device)
+{
+    device.keyStale = true;
+    device.dynamicStale = true;
+    for (UniformSlot &slot : device.uniformSlots)
+        slot.size = 0;
+    for (VertexBind &bind : device.boundVertices)
+        bind.buffer = VK_NULL_HANDLE;
+    device.boundIndices = VK_NULL_HANDLE;
+    device.boundUniforms.set = VK_NULL_HANDLE;
+    device.boundTextureSet = VK_NULL_HANDLE;
+}
+
 // Everything a draw needs, up to the draw command. False: skip the draw.
 bool PrepareDraw(Device &device, d3d::PrimitiveType type)
 {
     if (!EnsureFrame(device))
         return false;
+    if (!device.keepDrawState)
+        DropKeptDrawState(device);
     Shader *vs = device.vertexShader;
     Shader *ps = device.pixelShader;
     VertexDecl *decl = device.decl;

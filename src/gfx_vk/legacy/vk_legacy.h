@@ -313,6 +313,18 @@ struct GpuFeed
 };
 GpuFeed GetGpuFeed(const Device *device);
 void SetGpuFeed(Device *device, const GpuFeed &feed);
+
+// Whether a draw takes up what the draw before it left: the pipeline and the
+// dynamic state while nothing they are made of was set, the uniform blocks
+// whose bytes would be the same, and the binds its command buffer has already
+// (vk_legacy_draw.cpp). On when a device is created. Off, every draw makes
+// its pipeline key and dynamic state again, writes all its uniform blocks and
+// records every bind, as the adapter did before it kept any of them: for
+// measuring what keeping them is worth on a machine, and for telling a fault
+// of the kept state from any other. SetKeepDrawState changes it at any point
+// between two calls; the change is logged.
+bool GetKeepDrawState(const Device *device);
+void SetKeepDrawState(Device *device, bool keep);
 #endif
 
 // The shader cache. Translated shaders are kept by their D3D9 bytecode for the

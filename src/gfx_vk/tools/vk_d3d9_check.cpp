@@ -67,11 +67,16 @@ struct Options
     gfx_vk::Validation validation = gfx_vk::Validation::IfFound;
     int device = -1;
     std::string only;
+    // --keep-draw-state 0: the bench scenes draw with front::Tuning's
+    // keepDrawState off, to set their timings beside the default's.
+    bool benchKeepsDrawState = true;
 };
 
 void Usage(const char *argv0)
 {
-    std::fprintf(stderr, "usage: %s [--validation off|auto|require] [--device N] [--scene NAME]\n", argv0);
+    std::fprintf(stderr,
+                 "usage: %s [--validation off|auto|require] [--device N] [--scene NAME] [--keep-draw-state 0|1]\n",
+                 argv0);
 }
 
 bool ParseOptions(int argc, char **argv, Options &options)
@@ -107,6 +112,11 @@ bool ParseOptions(int argc, char **argv, Options &options)
             options.only = next;
             ++i;
         }
+        else if (arg == "--keep-draw-state" && next && (!std::strcmp(next, "0") || !std::strcmp(next, "1")))
+        {
+            options.benchKeepsDrawState = next[0] == '1';
+            ++i;
+        }
         else
         {
             return false;
@@ -137,6 +147,7 @@ struct SdlHost
     std::mutex mutex;
     front::Tuning tuning{};
     std::vector<std::string> *logKept = nullptr;
+    bool benchKeepsDrawState = true; // Options::benchKeepsDrawState
 };
 
 void LogLine(void *user, const char *line)
@@ -468,6 +479,7 @@ public:
     void GpuFeed();
     void Tuning();
     void SlowFrames();
+    void KeptState();
     void Bench();
     void BenchRuns();
     void BenchFrames(bool runs);
@@ -1953,6 +1965,163 @@ void Check::SlowFrames()
                 second, gpuTimed ? "yes" : "no");
 }
 
+// The switch for what a draw takes up from the draw before it
+// (front::Tuning::keepDrawState, the engine's r_vkKeepDrawState). The same
+// frame of 600 draws, in runs of eight that share a texture and with a vertex
+// shader constant set to another value for every draw, is drawn with the
+// state kept, not kept, and kept again. Each change is taken up by the
+// Present after it and logged once. The three pictures are the same to the
+// pixel, and the statistics say what the switch did: every draw of the frame
+// in the middle wrote all its constants again, close to twice the bytes of
+// the frames around it or more.
+void Check::KeptState()
+{
+    constexpr int kDraws = 600;
+    constexpr int kRun = 8;
+    constexpr int kCell = 4;
+    constexpr int kAcross = int(kSize) / kCell;
+    std::vector<std::string> lines;
+    const auto set = [&](bool keep) {
+        const std::lock_guard<std::mutex> lock(host->mutex);
+        host->tuning = front::Tuning{};
+        host->tuning.keepDrawState = keep;
+    };
+    // The number the line has behind `label`, or in front of `unit`; -1 without it.
+    const auto behind = [](const std::string &line, const char *label) {
+        const size_t at = line.find(label);
+        return at == std::string::npos ? -1.0 : std::strtod(line.c_str() + at + std::strlen(label), nullptr);
+    };
+    const auto before = [](const std::string &line, const char *unit) {
+        const size_t at = line.find(unit);
+        if (at == std::string::npos)
+            return -1.0;
+        size_t start = at;
+        while (start > 0 && (std::isdigit(static_cast<unsigned char>(line[start - 1])) || line[start - 1] == '.'))
+            --start;
+        return start < at ? std::strtod(line.c_str() + start, nullptr) : -1.0;
+    };
+    struct Frame
+    {
+        double frames = -1, draws = -1, constantKb = -1;
+        size_t saidOn = 0, saidOff = 0;
+        std::vector<uint8_t> picture;
+    };
+    IDirect3DTexture9 *textures[2] = {
+        FilledTexture(2, 2, [](UINT, UINT) { return Argb(255, 255, 255, 255); }),
+        FilledTexture(2, 2, [](UINT, UINT) { return Argb(255, 255, 128, 0); }),
+    };
+    if (!textures[0] || !textures[1])
+    {
+        SafeRelease(textures[0]);
+        SafeRelease(textures[1]);
+        return;
+    }
+    // The Present takes the setting up; the statistics then count the one
+    // frame drawn under it.
+    const auto frame = [&](bool keep) {
+        Frame out;
+        set(keep);
+        {
+            const std::lock_guard<std::mutex> lock(host->mutex);
+            lines.clear();
+            host->logKept = &lines;
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        front::LogDeviceStats(true);
+        {
+            const std::lock_guard<std::mutex> lock(host->mutex);
+            for (const std::string &line : lines)
+            {
+                out.saidOn += line.find("draw state kept from one draw to the next: now on") != std::string::npos;
+                out.saidOff += line.find("draw state kept from one draw to the next: now off") != std::string::npos;
+            }
+            lines.clear();
+        }
+        Reset(Argb(255, 0, 64, 0));
+        Ok(device->SetPixelShader(psTexture), "SetPixelShader");
+        for (int draw = 0; draw < kDraws; ++draw)
+        {
+            if (draw % kRun == 0)
+                Ok(device->SetTexture(0, textures[draw / kRun % 2]), "SetTexture");
+            // The quad is made one to three cells to the left of its place
+            // and the constant, which the vertex shader adds, brings it
+            // back: a draw that took the constant of the one before would
+            // land in another cell and leave its own as the Clear made it.
+            const int shift = 1 + draw % 3;
+            const float back[4] = {float(shift) * 2.0f * kCell / float(kSize), 0, 0, 0};
+            Ok(device->SetVertexShaderConstantF(0, back, 1), "SetVertexShaderConstantF");
+            const float x = float((draw % kAcross - shift) * kCell);
+            const float y = float(draw / kAcross * kCell);
+            DrawQuad(x, y, x + kCell, y + kCell, 0.5f, 0xffffffffu);
+        }
+        if (Read())
+            out.picture = pixels;
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        if (front::LogDeviceStats(true) == 1)
+        {
+            const std::lock_guard<std::mutex> lock(host->mutex);
+            for (const std::string &line : lines)
+            {
+                if (line.find("vulkan d3d9: frame stats: ") == std::string::npos)
+                    continue;
+                out.frames = behind(line, "frame stats: ");
+                out.draws = before(line, " draws, ");
+                out.constantKb = before(line, " KB constants");
+            }
+        }
+        const std::lock_guard<std::mutex> lock(host->mutex);
+        host->logKept = nullptr;
+        return out;
+    };
+
+    const Frame kept = frame(true);
+    const Frame unkept = frame(false);
+    const Frame again = frame(true);
+    set(true);
+    device->SetTexture(0, nullptr);
+    SafeRelease(textures[0]);
+    SafeRelease(textures[1]);
+
+    Equal("kept_frames", kept.frames, 1);
+    Equal("kept_draws", kept.draws, kDraws);
+    Equal("unkept_frames", unkept.frames, 1);
+    Equal("unkept_draws", unkept.draws, kDraws);
+    Equal("again_draws", again.draws, kDraws);
+    // The device begins with the state kept: the first frame logs no change.
+    Equal("kept_logs_nothing", kept.saidOn + kept.saidOff, size_t(0));
+    Equal("off_logged_once", unkept.saidOff, size_t(1));
+    Equal("off_logged_alone", unkept.saidOn, size_t(0));
+    Equal("on_logged_once", again.saidOn, size_t(1));
+    Equal("on_logged_alone", again.saidOff, size_t(0));
+    // Kept, a draw writes the vertex shader's constants; not kept, the pixel
+    // shader's sampler states and alpha test with them.
+    Equal("kept_writes_constants", kept.constantKb > 0.0, true);
+    Equal("unkept_writes_more", unkept.constantKb >= 1.9 * kept.constantKb, true);
+    Equal("again_writes_as_before", again.constantKb, kept.constantKb);
+    Equal("kept_picture_read", kept.picture.size(), size_t(kSize) * kSize * 4);
+    Equal("unkept_picture_same", unkept.picture == kept.picture, true);
+    Equal("again_picture_same", again.picture == kept.picture, true);
+    if (kept.picture.size() == size_t(kSize) * kSize * 4)
+    {
+        // Every cell has its run's texture: white, then orange.
+        int wrong = 0;
+        for (int draw = 0; draw < kDraws; ++draw)
+        {
+            const uint8_t *p = &kept.picture[((draw / kAcross * kCell + kCell / 2) * kSize
+                                              + draw % kAcross * kCell + kCell / 2) * 4];
+            const bool orange = draw / kRun % 2 == 1;
+            wrong += !(p[2] == 255 && p[1] == (orange ? 128 : 255) && p[0] == (orange ? 0 : 255));
+        }
+        Equal("cells_wrong", wrong, 0);
+        pixels = kept.picture;
+        Expect("first_cell", kCell / 2, kCell / 2, 255, 255, 255);
+        Expect("second_run", 8 * kCell + kCell / 2, kCell / 2, 255, 128, 0);
+        Expect("clear_kept", kSize - 6, kSize - 2, 0, 64, 0);
+    }
+    std::printf("d3d9_check.kept_state=draws=%d kept_kb=%.1f unkept_kb=%.1f\n", kDraws, kept.constantKb,
+                unkept.constantKb);
+}
+
 // Not part of a full run: --scene bench. What a frame of the engine's size
 // costs the thread that draws it, with the engine's other habits around it:
 // 768 draws of four D3D9 calls each (a constant, a texture, a render state,
@@ -2034,6 +2203,18 @@ void Check::BenchFrames(bool runs)
             SafeRelease(texture);
         return;
     }
+    // --keep-draw-state 0: a Present takes the setting up before the first
+    // frame is drawn, and the scene leaves the device as it found it.
+    const bool keepDrawState = host->benchKeepsDrawState;
+    const auto keep = [&](bool on) {
+        {
+            const std::lock_guard<std::mutex> lock(host->mutex);
+            host->tuning.keepDrawState = on;
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    };
+    if (!keepDrawState)
+        keep(false);
     std::atomic<bool> stop{false};
     std::atomic<uint64_t> polls{0};
     IDirect3DQuery9 *const polled = syncFence;
@@ -2119,6 +2300,8 @@ void Check::BenchFrames(bool runs)
     stop = true;
     mainThread.join();
     const front::DeviceCounters after = Counters();
+    if (!keepDrawState)
+        keep(true);
     Equal(runs ? "bench_runs_frames_presented" : "bench_frames_presented",
           (after.presents - before.presents) + (after.presentsSkipped - before.presentsSkipped), uint64_t(kFrames));
     const int counted = kFrames - kWarmUp;
@@ -2339,6 +2522,7 @@ int Run(const Options &options)
     if (!SDL_Vulkan_LoadLibrary(nullptr))
         return Failed("loader", SDL_GetError());
     SdlHost sdl;
+    sdl.benchKeepsDrawState = options.benchKeepsDrawState;
     sdl.window = SDL_CreateWindow("KisakCOD Vulkan D3D9 check", int(kSize) * 4, int(kSize) * 4, SDL_WINDOW_VULKAN);
     if (!sdl.window)
         return Failed("window", SDL_GetError());
@@ -2385,6 +2569,7 @@ int Run(const Options &options)
         {"gpu_feed", &Check::GpuFeed, true},
         {"tuning", &Check::Tuning, true},
         {"slow_frames", &Check::SlowFrames, true},
+        {"kept_state", &Check::KeptState, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},

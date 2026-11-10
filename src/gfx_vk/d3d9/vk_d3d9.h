@@ -41,8 +41,9 @@ using D3D9Point = KisakDxvkPOINT;
 #endif
 
 // Settings the program may change while a device exists, so that one run can
-// compare them (the engine's r_vkGpuFeed dvars; perf_ab flips those). The
-// front asks for them at every Present. The PS Vita's GXM back end has none.
+// compare them (the engine's r_vkGpuFeed dvars and r_vkKeepDrawState; perf_ab
+// flips those). The front asks for them at every Present. The PS Vita's GXM
+// back end has none.
 struct Tuning
 {
     // The GPU feed (lg::GpuFeed): -1 the device's own choice (its kind of
@@ -52,6 +53,9 @@ struct Tuning
     uint32_t gpuFeedDraws = 0;
     // The idle rule's first part (lg::GpuFeed::idleDraws); 0 for no such rule.
     uint32_t gpuFeedIdleDraws = 0;
+    // A draw takes up the pipeline, constants and binds the draw before it
+    // left (lg::SetKeepDrawState). False makes every draw set them all again.
+    bool keepDrawState = true;
 };
 
 // What the front needs from the program around it: the window system, display

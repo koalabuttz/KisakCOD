@@ -322,6 +322,18 @@ void SetGpuFeed(Device *device, const GpuFeed &feed)
     Log(*device, "GPU feed now %s", text);
 }
 
+bool GetKeepDrawState(const Device *device) { return device->keepDrawState; }
+
+void SetKeepDrawState(Device *device, bool keep)
+{
+    if (device->keepDrawState == keep)
+        return;
+    // Nothing to let go of either way: what a draw leaves is right for the
+    // state it was made from whether or not the next draw looks at it.
+    device->keepDrawState = keep;
+    Log(*device, "draw state kept from one draw to the next: now %s", keep ? "on" : "off");
+}
+
 Surface *BackBuffer(Device *device) { return &device->backBufferSurface; }
 
 Surface *FrontBuffer(Device *device) { return &device->frontBufferSurface; }
