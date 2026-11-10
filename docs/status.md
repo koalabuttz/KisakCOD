@@ -1,8 +1,11 @@
 # Linux port status
 
-Last updated 2026-11-10 12:37 UTC (master `5e2e574`: the 64-bit
-singleplayer fixes, the frames and deaths sweep and the singleplayer Vulkan
-link, PR 193). This page is the current state of
+Last updated 2026-11-10 15:58 UTC (master `d42c92d`: the Vulkan back end's
+multisampling and kept draw state, PR 203, and its Release build on demand,
+PR 208; the PS Vita static model cache, literal shader constants and map
+change memory, PRs 202, 211 and 212; fewer Linux CI jobs, PR 196; Steam
+Windows run 3 and the PC's server browser and HTTP download runs; the Steam
+verdict fix, PR 194). This page is the current state of
 the native Linux port and the other platform builds, the open pull requests and
 the roadmap. The [docs index](README.md) lists the detailed guides;
 older handoffs are in [history](history/README.md) and are not current.
@@ -27,14 +30,14 @@ Vulkan checks run on lavapipe and MoltenVK).
 | Multiplayer client, aarch64 | the client options with `-DKISAK_LINUX_ARCH=aarch64` | Builds and passes the asset-free client checks (qemu and hosted Arm CI) against a D3D9 stand-in; no aarch64 DXVK build yet, so it has not drawn a frame. [Guide](linux-arm64.md#building-the-aarch64-client) |
 | Dedicated server, armv7 (32-bit Arm) | `-DKISAK_LINUX_ARCH=armv7` | Cross-compiled from x86, boots without game data under qemu-arm (hosted CI). First step toward a PS Vita port. Not yet run with game data. [Guide](linux-armv7.md) |
 | Dedicated server, PS Vita | `-DKISAK_PLATFORM=vita` | Clang + VitaSDK build packed into `KisakCOD-dedi.vpk` (hosted CI job, artifact). Boots in Vita3K without game data; capped at 24 players so its snapshot buffers fit the Vita's memory. Runs on David's Vita (2026-11-08): run 1 crashed on an unaligned 8-byte store, run 2 loaded mp_crash's zones then crashed on shared thread-locals, run 3 started the game then crashed on an unaligned script vector (all fixed). The run 4 build ran 9 h idle on mp_crash without a crash, and a key-code client on the laptop joined it over Wi-Fi (2026-11-09). An opt-in i386 Linux build (`-DKISAK_ALIGNMENT_CHECK=ON`) lists misaligned accesses ahead of time; the laptop scan of all 21 maps with bots is clean. [Guide](vita.md) |
-| Multiplayer client, PS Vita | `-DKISAK_PLATFORM=vita -DKISAK_BUILD_VITA_MP_CLIENT=ON` | KisakCOD-mp compiles, links and packs into `KisakCOD-mp.vpk` (hosted CI job); its own listen server is capped at 8 players. On David's Vita the main menu works (run K), and since console run L (2026-11-10, a build of master with PRs 162, 168, 174 and 175, all since merged) mp_crash loads on the console from the command line and from the menu and quits cleanly, with no GPU memory refused (at most 97.5 of 104 MB). A sceGxm back end under the D3D9 front draws it, the game's shaders are translated to Cg and compiled on the console, and touch, buttons and music work. With the default settings the picture showed double and triple images: the console refuses the depth clear the back end makes for depth of field and soft particles. With `r_dof_enable 0` and `r_zFeather 0` the picture was right and play ran at 5 to 8 frames a second. PR 192 (merged) clears depth in a way the console accepts and clears the scene's colour every frame; in Vita3K its pictures match run Y with no smear (PC run AA), and console run M is to show the double images gone on the console. What made the map fit, each measured first in Vita3K on the PC: render targets get GPU memory at first use and shadow maps are off (PR 155), loaded sounds are compressed to IMA ADPCM (`snd_adpcm`, PR 154; nobody has listened to them), GPU memory is set aside for the colour targets (PR 161), the engine's dynamic buffers take 12.5 MB instead of 25.5 (PR 166), and shader programs are made on a worker thread so the menu no longer freezes for up to 23.6 s while the game loads (PR 164). Sunlit ground is too yellow, a fault of the Vita build in the lightmap term; the flat white sky is the map's own look (PC run Y, beside the Windows build). Since PR 162 the system's on-screen keyboard opens for a menu's text field, the chat line and a typed command; a scripted answer reached the game in Vita3K (PC runs KB1 and KB2), but no text has come back from the system's own dialog and the keyboard has not been tried on the console. The layout of the controls in a game is not confirmed yet. [Guide](vita-client.md) |
+| Multiplayer client, PS Vita | `-DKISAK_PLATFORM=vita -DKISAK_BUILD_VITA_MP_CLIENT=ON` | KisakCOD-mp compiles, links and packs into `KisakCOD-mp.vpk` (hosted CI job); its own listen server is capped at 8 players. On David's Vita the main menu works (run K), and since console run L (2026-11-10, a build of master with PRs 162, 168, 174 and 175, all since merged) mp_crash loads on the console from the command line and from the menu and quits cleanly, with no GPU memory refused (at most 97.5 of 104 MB). A sceGxm back end under the D3D9 front draws it, the game's shaders are translated to Cg and compiled on the console, and touch, buttons and music work. With the default settings the picture showed double and triple images: the console refuses the depth clear the back end makes for depth of field and soft particles. With `r_dof_enable 0` and `r_zFeather 0` the picture was right and play ran at 5 to 8 frames a second. PR 192 (merged) clears depth in a way the console accepts and clears the scene's colour every frame; in Vita3K its pictures match run Y with no smear (PC run AA), and console run M is to show the double images gone on the console. What made the map fit, each measured first in Vita3K on the PC: render targets get GPU memory at first use and shadow maps are off (PR 155), loaded sounds are compressed to IMA ADPCM (`snd_adpcm`, PR 154; nobody has listened to them), GPU memory is set aside for the colour targets (PR 161), the engine's dynamic buffers take 12.5 MB instead of 25.5 (PR 166), and shader programs are made on a worker thread so the menu no longer freezes for up to 23.6 s while the game loads (PR 164). Since PR 202 static models in view go out in one draw again from a 4 MB cache, and the back end skips program lookups, texture binds and uniform buffers a draw repeats (a `no-draw-reuse` file turns that off): in Vita3K the ground view takes 30.2 ms a frame, against 47.2 with the savings off and 67.0 with no cache (PC run AC). Since PR 212 retired GPU memory is freed on a map change, so mp_backlot loads after mp_crash in Vita3K (run Z9). In a Vita3K sweep of all 21 maps (a local build of master with three more commits) every map started, loaded and quit cleanly; mp_carentan ran out of GPU memory and only mp_killhouse reached 60 fps. None of this has run on the console yet. Sunlit ground is too yellow, a fault of the Vita build in the lightmap term; the flat white sky is the map's own look (PC run Y, beside the Windows build). Since PR 211 shader constants written as literals compile right, so the wall posters match Windows in Vita3K (run Z8); the ground under decals still shows a red and green speckle, which PR 214 (open) removes by building fragment programs without fast maths (run Z10, two programs). Since PR 162 the system's on-screen keyboard opens for a menu's text field, the chat line and a typed command; a scripted answer reached the game in Vita3K (PC runs KB1 and KB2), but no text has come back from the system's own dialog and the keyboard has not been tried on the console. The layout of the controls in a game is not confirmed yet. [Guide](vita-client.md) |
 | Dedicated server, macOS (arm64 and x86_64) | `-DKISAK_PLATFORM=macos` | Builds with Apple Clang on hosted macOS runners (Apple silicon and Intel) and boots without game data to the first missing fastfile. Not yet run with game data or on a real Mac. [Guide](macos.md) |
 | Movies | `KISAK_LINUX_CINEMATICS` (`AUTO`, the default since PR 187) | Bink movies play through an FFmpeg-backed shim on i386 and x86_64 (laptop). Built in when the FFmpeg development files are found at configure time; `OFF` leaves them out, and a build folder made before PR 187 keeps the `OFF` it stored. [Guide](linux-cinematics.md) |
-| Steam authentication | `-DKISAK_LINUX_STEAM=ON` | Added by PR 85. Logs in through the running Steam client's `steamclient.so`; a probe got a ticket validated on i386 and x86_64, and an i386 client joined, reconnected to and was refused by (with Steam off) an i386 dedicated server; the same passed with x86_64 client and server, and across i386 and x86_64 in both directions (laptop, one Steam account). A dedicated server can instead log on as an anonymous Steam game server (`KISAK_STEAM_SERVER_LOGIN=anonymous`); a Windows client on David's PC joined such a laptop server and was refused with the server's Steam off. The 32-bit Windows dedicated server can log on the same way since PR 179; that is compiled on hosted CI and has not been run against Steam yet. Off by default. [Guide](linux-steam.md) |
+| Steam authentication | `-DKISAK_LINUX_STEAM=ON` | Added by PR 85. Logs in through the running Steam client's `steamclient.so`; a probe got a ticket validated on i386 and x86_64, and an i386 client joined, reconnected to and was refused by (with Steam off) an i386 dedicated server; the same passed with x86_64 client and server, and across i386 and x86_64 in both directions (laptop, one Steam account). A dedicated server can instead log on as an anonymous Steam game server (`KISAK_STEAM_SERVER_LOGIN=anonymous`); a Windows client on David's PC joined such a laptop server and was refused with the server's Steam off. The 32-bit Windows dedicated server can log on the same way since PR 179: in Steam Windows run 3 (2026-11-10, a local Release build on the PC) it logged on anonymously, the laptop's x86_64 Linux Steam client joined it over the LAN twice and passed the Steam auth check, and with Steam off on the server the client was refused. Off by default. [Guide](linux-steam.md) |
 | Key codes (no Steam) | default | A client without Steam (or with `cl_keyCodeOnly 1`) joins servers with `sv_allowUnverifiedGuids 1` using a GUID derived from `codkey.txt` or, on Windows, the retail registry key. Unverified by design. Laptop run (x86_64 client and dedi, made-up key): joined, spawned and reconnected with the GUID; refused without the server opt-in, without a key file, with a group-readable file and with a mistyped key. Since PR 159 the game's own key code menu saves a typed key as `codkey.txt` (mode 600) and keeps it out of the dvars a server's menus can read; that is checked asset-free on hosted CI, and the menu has not been used on screen yet. [Guide](key-codes.md) |
-| Finding servers | default | The local list, favourites and `connect` need no setup. The internet list is opt-in: `masterServerName` is empty by default, so no master server is contacted (retail's is gone); when set, the client asks that master and a `dedicated 2` server sends it heartbeats. A list is accepted only from the master that was asked, and since PR 179 the local list shows an unasked reply only when it echoes the random token of the client's last scan and arrives within 10 seconds. Checked asset-free over loopback UDP on hosted CI; no scan of a real network has been run, and the Join Game menu has not been opened on a real client yet. [Guide](server-browser.md) |
+| Finding servers | default | The local list, favourites and `connect` need no setup. The internet list is opt-in: `masterServerName` is empty by default, so no master server is contacted (retail's is gone); when set, the client asks that master and a `dedicated 2` server sends it heartbeats. A list is accepted only from the master that was asked, and since PR 179 the local list shows an unasked reply only when it echoes the random token of the client's last scan and arrives within 10 seconds. Checked asset-free over loopback UDP on hosted CI. In WSL on the PC (local, software rendering) a client got the server from the test master, joined and played, `masterServerName` stayed locked while connected, and the server signed off from the master on quit (server browser run 1); the LAN scan works there too (LAN scan probe 1). The Join Game menu has not been opened on screen, and no scan of a physical network has run. [Guide](server-browser.md) |
 | Singleplayer `KisakCOD-sp`, i386 | `-DKISAK_BUILD_LINUX_SP_GAME=ON` | killhouse and cargoship load, leave the pregame by themselves and play about a minute each, clean quit (laptop). All 21 levels load, run 45 s and quit cleanly; a 4-level mission chain and devsave/loadgame pass (laptop sweep run 1, [levels](linux-sp-levels.md)). Since PR 193 the sweep also checks each level's frame (`--screenshot`) and a death and retry (`--death-retry`); both pass on all 21 levels (laptop). The x86_64 build (since PR 167) also loads all 21 levels and passes the chain and save/load on the laptop, with movies on. `KisakCOD-sp` links the opt-in Vulkan back end and `r_vkStats` (PR 193), build proof only: no level has been drawn through it. [Guide](linux-sp-game.md) |
-| Vulkan renderer back end | `-DKISAK_BUILD_VULKAN_BACKEND=ON`, then `+set r_backend vulkan` | The game's own D3D9 renderer drawn through this project's Vulkan back end in place of DXVK (Linux) or `d3d9.dll` (Windows), with the original visuals. `KisakCOD-mp` plays mp_crash through it on the laptop (x86_64) and on the PC (the Win32 build from CI), and quits cleanly. The picture matches: the world draw probe's two views agree with DXVK at PSNR 66.7 and 100 (laptop), and on the PC Vulkan and real D3D9 agree at 37 to 44 dB from one indoor view, the same spread as repeats of that comparison. Speed at a fixed mp_crash view on the laptop: since PR 152 (commands recorded on a second thread, a frame handed to the GPU in parts while it is drawn) 140.9 fps against 151.3 through DXVK on mains in power-saver mode (run 9), and 139.5 against 138.2 on battery (run 10, one pass); before it, 116 to 125 against 151 to 159. Those laptop figures are not like for like: the DXVK rows drew 4x anti-aliasing and the Vulkan rows one sample, because the back end on master offers no multisampling (laptop run 13, part 0; PR 203, open, adds it). On the PC the 75 fps cap is gone since PR 173 asks for the IMMEDIATE present mode with vsync off: 154.6 fps against about 203 for real D3D9 at one view, and forcing MAILBOX brings 75 back (PC run 7). Translated shaders and pipelines are kept between runs (PC, Debug build: 15 s to the map warm, 62 s cold). Hosted CI builds it into the i386 Linux client, the macOS client and the Windows game (Win32 and x64), runs the device probe and the adapter and front pixel checks on lavapipe, and runs those two checks on macOS through MoltenVK. The darker models an earlier laptop run showed with `r_altModelLightingUpdate 1` (the default) were the view moving between screenshots, not the back end: measured again over several shots a launch, Vulkan and DXVK on the laptop, and Vulkan and real D3D9 on the PC (PC run 6), draw the same brightness at 0 and at 1, and hosted CI now checks both update paths through the front (PRs 165 and 183). Since PR 173 the sun's occlusion queries count samples: in the open every result is 256 of 256 and indoors none, as with DXVK on the laptop (run 11) and real D3D9 on the PC (run 7), and the GPU feed is set from the console (`r_vkGpuFeed`, statistics with `r_vkStats`). Open: about one frame in two minutes takes 110 to 230 ms. Off by default. [Guide](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan) |
+| Vulkan renderer back end | `-DKISAK_BUILD_VULKAN_BACKEND=ON`, then `+set r_backend vulkan` | The game's own D3D9 renderer drawn through this project's Vulkan back end in place of DXVK (Linux) or `d3d9.dll` (Windows), with the original visuals. `KisakCOD-mp` plays mp_crash through it on the laptop (x86_64) and on the PC (the Win32 build from CI), and quits cleanly. The picture matches: the world draw probe's two views agree with DXVK at PSNR 66.7 and 100 (laptop), and on the PC Vulkan and real D3D9 agree at 37 to 44 dB from one indoor view, the same spread as repeats of that comparison. Speed at a fixed mp_crash view on the laptop: since PR 152 (commands recorded on a second thread, a frame handed to the GPU in parts while it is drawn) 140.9 fps against 151.3 through DXVK on mains in power-saver mode (run 9), and 139.5 against 138.2 on battery (run 10, one pass); before it, 116 to 125 against 151 to 159. Those laptop figures are not like for like: the DXVK rows drew 4x anti-aliasing and the Vulkan rows one sample, because the back end had no multisampling until PR 203 (laptop run 13, part 0); a laptop comparison at equal samples is still to run. On the PC the 75 fps cap is gone since PR 173 asks for the IMMEDIATE present mode with vsync off: 154.6 fps against about 203 for real D3D9 at one view, and forcing MAILBOX brings 75 back (PC run 7). Translated shaders and pipelines are kept between runs (PC, Debug build: 15 s to the map warm, 62 s cold). Hosted CI builds it into the i386 Linux client, the macOS client and the Windows game (Win32 and x64), runs the device probe and the adapter and front pixel checks on lavapipe, and runs those two checks on macOS through MoltenVK. The darker models an earlier laptop run showed with `r_altModelLightingUpdate 1` (the default) were the view moving between screenshots, not the back end: measured again over several shots a launch, Vulkan and DXVK on the laptop, and Vulkan and real D3D9 on the PC (PC run 6), draw the same brightness at 0 and at 1, and hosted CI now checks both update paths through the front (PRs 165 and 183). Since PR 203 the back end does less work for a draw like the one before, keeps descriptor sets across frames (`r_vkKeepDrawState`, on by default) and draws multisampled targets; on the PC (run 8, the hosted Debug build) multisampling works with 4 samples, the kept state wrote 0 descriptor sets a frame against 227 without it (171.2 against 160.8 fps), and Vulkan ran at about 80% of real D3D9's frame rate (171 against 210 at 1 sample, 176 against 230 at 4). That Debug build leaves the back end unoptimised; since PR 208 a manual Windows CI run builds the Release game with it, for a fair comparison. Since PR 173 the sun's occlusion queries count samples: in the open every result is 256 of 256 and indoors none, as with DXVK on the laptop (run 11) and real D3D9 on the PC (run 7), and the GPU feed is set from the console (`r_vkGpuFeed`, statistics with `r_vkStats`). Open: about one frame in two minutes takes 110 to 230 ms. Off by default. [Guide](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan) |
 | Windows x64 | MSVC `-A x64` (`KISAK_WIN64`) | sp, mp and dedi build and link (CI job "MSVC x64 build"); opt-in FFmpeg movies; OpenAL sound, no Steam. On the PC, mp_crash loads to class select, the dedicated server hosts bots, and singleplayer plays: killhouse and cargoship with autosave and checkpoint loads (PR 95), and a 12-level tour loaded, saved and played without a crash or script error (PRs 111 and 114). A tour of all 21 levels (PR 167's build, 2026-11-10) loaded 20; airlift crashes about 4.5 s in, with the older x64 build too, and PR 193 (merged) fixes it: an effect model's physics preset was read at a 32-bit slot. Airlift then held 60 s in three of three launches on the PC, where it had crashed three of three. [x64 track](linux-x64.md#windows-msvc-x64-build) |
 | Windows ARM64 | MSVC `KISAK_WIN_ARM64` | sp, mp and dedi build and start up to the missing-game-data error on hosted Windows on Arm. Not run with game data. [arm64 track](linux-arm64.md) |
 | Profiling | `KISAK_LINUX_TRACY` / `KISAK_WIN_TRACY` | Opt-in Tracy builds of the game clients on Linux and Windows. |
@@ -122,8 +125,14 @@ builds use `-ffp-contract=off` (no fused multiply-add).
   server build with `fs_game` set listed the game's own fastfiles as mod
   fastfiles, so no client could join a modded Linux server. PR 205 (merged)
   fixes that and a `+set sv_wwwBaseURL http://...` on a Linux or macOS
-  command line that was cut to `http:`; it has not been rerun with the game
-  yet (PC run 2). A first start on a fresh client home ignores `+connect`
+  command line that was cut to `http:` (both confirmed by PC run 2). x86_64
+  clients then stopped loading the map on an assertion, because the weapon
+  file fields were read at 32-bit offsets; PR 209 (open) fixes it, and with
+  it a client reached the game once the server's `sv_connectTimeout` was
+  raised to 180, since a software-rendered map load with a mod takes longer
+  than the default 45 s (PC run 3). A first start on a fresh client home
+  ignores `+connect` because the intro film starts after it, as in the
+  original game; `+set com_introPlayed 1` avoids it
   ([guide](linux-mp-client.md#http-downloads)).
 
 ## Security
@@ -138,8 +147,11 @@ since that audit; its fixes are PR 191 (merged: sound sizes that wrap in
 32-bit math are refused, Windows opens only http and https addresses for a
 server, and the Vita reads its text run settings once at start-up so a
 server cannot have them run commands; compiled and checked on hosted CI,
-not run on Windows, in Vita3K or on a console) and PR 194 (a Steam
-ticket's later verdict, open).
+not run on Windows, in Vita3K or on a console) and PR 194 (merged: a
+server acts on Steam's later verdict for a ticket, so a dropped or refused
+player needs a new challenge and ticket; Steam verdict run 1 passed with a
+Linux server and with a Windows server on the PC, each with the laptop's
+Linux Steam player).
 
 ## Other Linux pieces
 
@@ -170,17 +182,16 @@ These came before the playable client and still build and run in CI:
 
 ## Open pull requests
 
-As of 2026-11-10 12:37 UTC, four. They change by the hour; the
+As of 2026-11-10 15:58 UTC, three. They change by the hour; the
 [list on GitHub](https://github.com/koalabuttz/KisakCOD/pulls) is the current
 one. A machine run a pull request waits on is named where its author has
 said so.
 
 | PR | What | Machine run it waits on |
 | --- | --- | --- |
-| 194 | Steam: a server acts on Steam's later verdict for a ticket | A run with a real Steam player: join, leave and join again, then a kick and an attempt to come back. |
-| 196 | Fewer Linux CI jobs per push: five quick checks run both configurations in one job | |
-| 202 | PS Vita client: the static model cache back (4 MB) and less CPU work per draw, with a `no-draw-reuse` switch to compare | A Vita3K run of the head (the 4 MB cache with the savings together). |
-| 203 | Vulkan back end: less work per draw, multisampled targets so `r_aaSamples` means the same as on D3D9, descriptor sets kept across frames, and `slow frame` lines in `r_vkStats` | Laptop run 13 (the first GPU run of multisampling) and a GPU run of the kept draw state on the laptop or PC. |
+| 209 | Linux client: 64-bit clients load a modded server's map (weapon file fields at their real offsets), and the HTTP fallback line names the URL | A PC WSL rerun with the game. |
+| 213 | Fewer Linux CI jobs per push: five more jobs run both configurations in one job (17 instead of 22) | |
+| 214 | PS Vita client: build fragment programs without fast maths, for the speckle on the ground under decals | Vita3K run Z11 with every fragment program rebuilt, against Windows and run Z8. |
 
 ## Laptop and PC runs still to do
 
@@ -190,14 +201,15 @@ frame-rate driver, timed PS Vita starts) is in [runs.md](runs.md), since
 PR 168.
 
 - Vulkan back end: laptop run 13, Vulkan against DXVK at the same
-  anti-aliasing (part 0 is done; multisampling is in PR 203, open). PC run 7 and laptop run 11 are done
-  (PR 173, merged).
+  anti-aliasing (part 0 is done; multisampling is merged, PR 203), and a PC
+  run of the Release build with the back end (PR 208).
 - Vulkan probe with the Khronos validation layer (synchronisation checks) on a
   real GPU; the laptop and PC runs so far had no layer installed. The
   standalone Legacy adapter and D3D9 front checks have no recorded PC run
   either (the game itself draws through both there).
 - PS Vita client: console run M, PR 192's depth clear (merged) with depth
-  of field and soft particles on; the keyboard on the console; a listen of the
+  of field and soft particles on, and PR 202's cache and per-draw savings on
+  the console; Vita3K run Z11 for PR 214; the keyboard on the console; a listen of the
   compressed sounds; the controls' layout in a game.
 - PS Vita dedicated server with bots (it has taken one player).
 - Sound listening run for the OpenAL fix (PR 102, merged): plan in
@@ -208,15 +220,12 @@ PR 168.
 - Multiplayer client: sweep run 1 passed all 21 stock maps on i386 and
   x86_64 ([guide](linux-mp-client.md#map-sweep)). Next: a follow-up on the
   nearly black i386 mp_convoy frame (queued), hand play beyond mp_crash, and
-  a 30-minute session on one map. PC HTTP download run 2 on PR 205's fixes (run 1 fetched the file, but no client reached the game).
+  a 30-minute session on one map. A PC HTTP download run of PR 209 at the default connect time-out (runs 1 to 3 are done).
   The setup tool on a real GPU and monitor (its first run, on the PC's WSL,
   passed with software rendering), and a real controller in the game.
 - Finding servers (PR 163, merged): the Join Game menu on a real client, and
-  a real dedicated server, the test master and a client together (laptop run
-  queued; [guide](server-browser.md#what-is-checked)). A scan of a real
-  network for the local list (PR 179, merged; queued on the PC).
-- Steam: the Windows dedicated server's anonymous login against Steam
-  (PR 179, merged; queued on the PC and the laptop).
+  a LAN scan across two machines ([guide](server-browser.md#what-is-checked));
+  server browser run 1 and LAN scan probe 1 in WSL are done.
 - Key code menu (PR 159, merged): a key typed into the menu on screen
   ([guide](key-codes.md#the-key-code-menu)).
 - CPU measuring: `r_gpuSyncSleepUnlocked` (PR 197, merged, off by
@@ -232,14 +241,18 @@ no fixed order.
    mp_crash run on the console (console run L), with the dynamic GPU
    buffers cut to fit (PR 166) and shader programs made in the background
    so the menu does not freeze (PR 164). Next is the depth clear on the console
-   (PR 192 is merged, console run M checks it), speed, text typed on the console's own keyboard (PR 162 is
+   (PR 192 is merged, console run M checks it), speed (PR 202 cut the
+   ground view's frame time from 67 to 30 ms in Vita3K), the decal speckle
+   (PR 214), the other maps (all 21 start in Vita3K; mp_carentan runs out
+   of GPU memory), text typed on the console's own keyboard (PR 162 is
    merged and checked in the emulator), and joining a server
    ([guide](vita-client.md#stages)).
 3. **Renderer**: the Vulkan back end with the original visuals draws the game
    on the laptop and the PC (PRs 124 to 152), on the laptop near DXVK's
    frame rate, though DXVK drew 4x anti-aliasing there and Vulkan one sample. The PC's 75 fps cap and the occlusion queries are
-   fixed (PR 173). Next is multisampling (PR 203, open), so the laptop
-   compares like for like with DXVK, the render thread's time per draw, the open differences in the table above,
+   fixed (PR 173), and multisampling and the kept draw state are merged
+   (PR 203). Next is like-for-like runs: the laptop at equal samples and
+   the PC's Release build (PR 208), the render thread's time per draw, the open differences in the table above,
    and the checks on more GPUs. The Modern path comes after (plan
    in the project files, `renderer/modern-renderer-plan.md`). The target is
    Modern at 60 fps on the laptop's Intel U300.
@@ -267,7 +280,8 @@ no fixed order.
 7. **Remote play**: Steam login is opt-in (`KISAK_LINUX_STEAM`, PR 85); a
    Windows client joined a Linux server logged on as an anonymous game server
    (PR 133), and a client without Steam joins servers that accept key code
-   GUIDs (PR 134). Next: a Linux Steam client on an anonymous-login server,
+   GUIDs (PR 134). A Linux Steam client has joined anonymous-login servers
+   on Linux and on Windows (Steam Windows run 3, Steam verdict run 1, PR 194). Next:
    a Windows key code client, a Steam player and a key code player on one
    server, two Steam accounts, and the internet list seen working in the
    Join Game menu (PR 163 made the master a setting).
@@ -277,7 +291,7 @@ no fixed order.
    through `r_backend vulkan` (first run on an Intel MacBook Pro; a release
    bundle also needs MoltenVK and the Vulkan loader), and bots on the PS Vita
    dedicated server ([guide](vita.md)).
-9. **Security**: the daily check's first fixes (PR 191 merged, PR 194 open).
+9. **Security**: the daily check's first fixes are merged (PRs 191 and 194).
 
 ## Checks before a push
 
