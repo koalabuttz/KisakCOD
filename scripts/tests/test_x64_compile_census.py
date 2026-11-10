@@ -415,7 +415,15 @@ class X64DedicatedWorkflowTests(unittest.TestCase):
         cls.commands = "\n".join(step.get("run", "") for step in cls.job["steps"])
 
     def test_both_configs_build_and_boot_as_x86_64(self):
-        self.assertEqual(self.job["strategy"]["matrix"]["config"], ["Debug", "RelWithDebInfo"])
+        # Both configurations in this one job (scripts/ci/each-config.sh); the
+        # unsigned negation scan, the same for both, runs for Debug only.
+        self.assertNotIn("strategy", self.job)
+        steps = {step.get("name"): step for step in self.job["steps"]}
+        for name in ("Configure x86_64", "Check fastfile record layout tables",
+                     "Build x86_64 KisakCOD-dedi", "Asset-free x86_64 checks"):
+            self.assertIn("scripts/ci/each-config.sh <<'COMMANDS'", steps[name]["run"], name)
+        self.assertIn("\nconfig=Debug\n", steps["Check for negated 32-bit unsigned indexes"]["run"])
+        self.assertIn('-DCMAKE_BUILD_TYPE=$config', self.commands)
         self.assertIn("-DKISAK_LINUX_ARCH=x86_64", self.commands)
         self.assertIn("--target KisakCOD-dedi", self.commands)
         # run_linux_checks.py --arch x86_64 runs the bootstrap check with

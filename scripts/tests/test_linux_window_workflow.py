@@ -32,8 +32,8 @@ class WindowWorkflowTests(unittest.TestCase):
                     self.assertIn(path, paths)
 
     def test_configuration_matrix(self):
-        self.assertEqual(self.job['strategy']['matrix']['config'],
-                         ['Debug', 'RelWithDebInfo'])
+        # One job per SDL major version; each builds and tests both configurations.
+        assert_both_configurations_in_one_job(self, self.job, ['Build and test asset-free window host'])
         self.assertEqual(self.job['runs-on'], 'ubuntu-24.04')
         self.assertEqual(self.job['strategy']['matrix']['sdl'], WINDOW_SDL_MATRIX)
 
@@ -61,7 +61,7 @@ class WindowWorkflowTests(unittest.TestCase):
         self.assertEqual(step['env']['SDL_AUDIODRIVER'], 'dummy')
         self.assertIn('set -euo pipefail', step['run'])
         self.assertIn('--video-driver dummy', step['run'])
-        self.assertIn('window-sdl${{ matrix.sdl }}-${{ matrix.config }}', step['run'])
+        self.assertIn('window-sdl${{ matrix.sdl }}-$config', step['run'])
         self.assertIn('--sdl-major "${{ matrix.sdl }}"', step['run'])
         self.assertIn('--sdl3-dir "$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3"', step['run'])
         self.assertIn('export LD_LIBRARY_PATH=', step['run'])
@@ -73,6 +73,32 @@ class WindowWorkflowTests(unittest.TestCase):
         self.assertEqual(upload['if'], 'always()')
         self.assertEqual(upload['with']['path'], 'artifacts/*.log')
         self.assertIn('sdl${{ matrix.sdl }}', upload['with']['name'])
+
+
+def assert_both_configurations_in_one_job(test, job, looped, debug_only=()):
+    """Debug and RelWithDebInfo share one runner: no configuration axis in the
+    matrix, every step that depends on the configuration runs it for both
+    through scripts/ci/each-config.sh (test_ci_each_config.py), and a step
+    that was Debug only before still runs once, for Debug."""
+    test.assertNotIn('config', job.get('strategy', {}).get('matrix', {}))
+    test.assertNotIn('matrix.config', yaml.safe_dump(job))
+    steps = {step.get('name'): step for step in job['steps']}
+    for name in looped:
+        with test.subTest(step=name):
+            run = steps[name]['run']
+            test.assertTrue(run.startswith("set -euo pipefail\nscripts/ci/each-config.sh <<'COMMANDS'\n"), run[:120])
+            test.assertTrue(run.rstrip().endswith('\nCOMMANDS'))
+            test.assertNotIn('if', steps[name])
+    for name in debug_only:
+        with test.subTest(step=name):
+            test.assertNotIn('if', steps[name])
+            test.assertTrue(steps[name]['run'].startswith('set -euo pipefail\n# Debug only'), name)
+            test.assertIn('\nconfig=Debug\n', steps[name]['run'])
+    # Nothing outside those steps may read $config: it would be empty there.
+    for name, step in steps.items():
+        if name in looped or name in debug_only:
+            continue
+        test.assertNotRegex(step.get('run', ''), r'\$\{?config\b', name)
 
 
 def each_config_commands(test, job, step_name):
@@ -228,10 +254,12 @@ class NativeD3D9BoundaryWorkflowTests(unittest.TestCase):
                     self.assertIn(path, paths)
 
     def test_exactly_two_explicit_configurations(self):
-        self.assertEqual(self.job['strategy']['matrix']['config'], ['Debug', 'RelWithDebInfo'])
+        assert_both_configurations_in_one_job(self, self.job, [
+            'Run asset-free native D3D9 boundary checks',
+            'Configure and build the opt-in CMake boundary proofs',
+            'Build the offline world front-end probe'])
         self.assertEqual(self.job['runs-on'], 'ubuntu-24.04')
         self.assertIn('timeout-minutes', self.job)
-        self.assertEqual(self.job['strategy']['fail-fast'], 'false')
 
     def test_dxvk_and_its_directx_headers_are_pinned_and_verified(self):
         self.assertEqual(self.job['env']['DXVK_REVISION'], self.DXVK_REVISION)
@@ -270,10 +298,10 @@ class NativeD3D9BoundaryWorkflowTests(unittest.TestCase):
     def test_runner_is_invoked_per_configuration_with_both_compilers_and_pipefail(self):
         run = self.step('Run asset-free native D3D9 boundary checks')['run']
         self.assertIn('scripts/tests/run_native_d3d9_boundary_checks.py', run)
-        self.assertIn('--config "${{ matrix.config }}"', run)
+        self.assertIn('--config "$config"', run)
         self.assertIn('--dxvk-source "$RUNNER_TEMP/dxvk-source"', run)
         self.assertIn('--header-cxx g++ --header-cxx clang++ --engine-cxx clang++', run)
-        self.assertIn('--log-dir "artifacts/native-d3d9-${{ matrix.config }}"', run)
+        self.assertIn('--log-dir "artifacts/native-d3d9-$config"', run)
         self.assertIn('2>&1 | tee', run)
 
     def test_cmake_proofs_are_opt_in_and_never_build_the_server(self):
@@ -320,7 +348,7 @@ class NativeD3D9BoundaryWorkflowTests(unittest.TestCase):
                       if step.get('uses', '').startswith('actions/upload-artifact@'))
         self.assertEqual(upload['if'], 'always()')
         self.assertEqual(upload['with']['path'], 'artifacts/')
-        self.assertIn('native-d3d9-${{ matrix.config }}', upload['with']['name'])
+        self.assertEqual(upload['with']['name'], 'KisakCOD-native-d3d9')
 
     # Asset-free renderer tests that compile production units through the boundary
     # with DXVK's headers (never its library). Every other job stays DXVK-free.
@@ -396,10 +424,11 @@ class DeviceProbeWorkflowTests(unittest.TestCase):
                     self.assertIn(path, paths)
 
     def test_exactly_two_explicit_configurations(self):
-        self.assertEqual(self.job['strategy']['matrix']['config'], ['Debug', 'RelWithDebInfo'])
+        assert_both_configurations_in_one_job(self, self.job, [
+            name for name in (step.get('name') for step in self.job['steps'])
+            if name.startswith(('Build the ', 'Run the '))])
         self.assertEqual(self.job['runs-on'], 'ubuntu-24.04')
         self.assertIn('timeout-minutes', self.job)
-        self.assertEqual(self.job['strategy']['fail-fast'], 'false')
 
     def test_pins_match_the_window_and_boundary_jobs(self):
         boundary = self.workflow['jobs']['native_d3d9_boundary']
@@ -473,7 +502,7 @@ class DeviceProbeWorkflowTests(unittest.TestCase):
         self.assertEqual(step['env']['SDL_AUDIODRIVER'], 'dummy')
         run = step['run']
         self.assertIn('python3 -u scripts/tests/test_world_device_probe.py', run)
-        self.assertIn('--probe "$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-world-device-probe"',
+        self.assertIn('--probe "$GITHUB_WORKSPACE/out/device-probe-$config/KisakCOD-world-device-probe"',
                       run)
         self.assertIn('export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/d3d9-unavailable"', run)
 
@@ -516,7 +545,7 @@ class DeviceProbeWorkflowTests(unittest.TestCase):
         self.assertEqual(step['env']['SDL_AUDIODRIVER'], 'dummy')
         run = step['run']
         self.assertIn('python3 -u scripts/tests/test_world_draw_probe.py', run)
-        self.assertIn('--probe "$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-world-draw-probe"',
+        self.assertIn('--probe "$GITHUB_WORKSPACE/out/device-probe-$config/KisakCOD-world-draw-probe"',
                       run)
         self.assertIn('export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/d3d9-unavailable"', run)
 
@@ -563,7 +592,7 @@ class DeviceProbeWorkflowTests(unittest.TestCase):
         self.assertEqual(step['env']['SDL_AUDIODRIVER'], 'dummy')
         run = step['run']
         self.assertIn('python3 -u scripts/tests/test_linux_mp_client.py', run)
-        self.assertIn('--binary "$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-mp"', run)
+        self.assertIn('--binary "$GITHUB_WORKSPACE/out/device-probe-$config/KisakCOD-mp"', run)
         self.assertIn('export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/d3d9-unavailable:'
                       '$RUNNER_TEMP/openal-unavailable"', run)
 
@@ -574,7 +603,7 @@ class DeviceProbeWorkflowTests(unittest.TestCase):
         self.assertIn("readelf -d \"$window_test\" | grep -F 'Shared library: [libSDL3.so.0]'", build)
         self.assertIn('the game window test must not link a D3D9 library', build)
         run = self.step(self.MP_RUN_STEP)['run']
-        test = '"$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-mp-client-window-test"'
+        test = '"$GITHUB_WORKSPACE/out/device-probe-$config/KisakCOD-mp-client-window-test"'
         self.assertIn(test, run)
         self.assertLess(run.index(test), run.index('scripts/tests/test_linux_mp_client.py'))
 
@@ -604,7 +633,7 @@ class DeviceProbeWorkflowTests(unittest.TestCase):
                       if step.get('uses', '').startswith('actions/upload-artifact@'))
         self.assertEqual(upload['if'], 'always()')
         self.assertEqual(upload['with']['path'], 'artifacts/')
-        self.assertIn('device-probe-${{ matrix.config }}', upload['with']['name'])
+        self.assertEqual(upload['with']['name'], 'KisakCOD-device-probe')
 
 
 class AssetFreeFreeCameraWorkflowTests(unittest.TestCase):
@@ -1047,7 +1076,17 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
         return next(step for step in self.job['steps'] if step.get('name') == name)
 
     def test_both_configurations_on_hosted_ubuntu(self):
-        self.assertEqual(self.job['strategy']['matrix']['config'], ['Debug', 'RelWithDebInfo'])
+        # The build and the first checks run for both configurations; the
+        # repeats under other switches and ThreadSanitizer run for Debug only.
+        assert_both_configurations_in_one_job(self, self.job, [
+            'Build the Vulkan window probe', 'Run the Vulkan window probe on lavapipe',
+            'Check the Legacy shader translator', 'Run the Legacy adapter check on lavapipe',
+            'Run the D3D9 front check on lavapipe'], debug_only=[
+            "Run both checks again on MoltenVK's paths",
+            'Run the checks again with the record thread switched',
+            'Run the checks again with the GPU feed off and at its extreme',
+            'Run the checks again without occlusion counts',
+            "Check the D3D9 front's lock with ThreadSanitizer"])
         self.assertEqual(self.job['runs-on'], 'ubuntu-24.04')
         self.assertIn('timeout-minutes', self.job)
 
@@ -1133,7 +1172,7 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
 
     def test_the_gpu_feed_is_checked_off_and_at_its_extreme(self):
         step = self.step('Run the checks again with the GPU feed off and at its extreme')
-        self.assertEqual(step['if'], "${{ matrix.config == 'Debug' }}")
+        self.assertIn('\nconfig=Debug\n', step['run'])
         run = step['run']
         # Off: the path tile-based GPUs and MoltenVK take by default.
         self.assertIn('KISAK_VK_GPU_FEED=0 python3 -u scripts/tests/test_vulkan_d3d9_front.py', run)
@@ -1144,7 +1183,7 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
 
     def test_the_checks_run_again_without_occlusion_counts(self):
         step = self.step('Run the checks again without occlusion counts')
-        self.assertEqual(step['if'], "${{ matrix.config == 'Debug' }}")
+        self.assertIn('\nconfig=Debug\n', step['run'])
         run = step['run']
         # The path of a device that cannot count samples, in both checks.
         self.assertIn('KISAK_VK_OCCLUSION_QUERIES=0 python3 -u scripts/tests/test_vulkan_d3d9_front.py', run)
@@ -1153,7 +1192,7 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
 
     def test_the_front_lock_is_checked_with_thread_sanitizer(self):
         step = self.step("Check the D3D9 front's lock with ThreadSanitizer")
-        self.assertEqual(step['if'], "${{ matrix.config == 'Debug' }}")
+        self.assertIn('\nconfig=Debug\n', step['run'])
         self.assertEqual(step['env']['SDL_VIDEODRIVER'], 'offscreen')
         self.assertIn('halt_on_error=1', step['env']['TSAN_OPTIONS'])
         # Lavapipe is not instrumented: its rasterizer threads' hand-over to
@@ -1329,8 +1368,11 @@ class CiCacheTests(unittest.TestCase):
                 # and configuration (this branch first, then master) is restored.
                 self.assertTrue(restore['with']['key'].endswith('-${{ github.run_id }}-${{ github.run_attempt }}'))
                 self.assertTrue(restore['with']['key'].startswith(restore['with']['restore-keys']))
-                if 'strategy' in job:
+                # A job that builds both configurations keeps both in one cache.
+                if 'config' in job.get('strategy', {}).get('matrix', {}):
                     self.assertIn('${{ matrix.config }}', restore['with']['restore-keys'])
+                else:
+                    self.assertNotIn('matrix.config', restore['with']['restore-keys'])
                 self.assertEqual(use['id'], 'ccache')
                 self.assertIn('scripts/ci/use-ccache.sh', use['run'])
                 self.assertEqual(save['if'], "${{ !cancelled() && steps.ccache.outcome == 'success' }}")
