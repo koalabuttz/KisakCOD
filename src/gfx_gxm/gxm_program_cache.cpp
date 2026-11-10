@@ -19,19 +19,39 @@ bool g_folderMade = false;
 bool g_compilerTried = false;
 bool g_compilerReady = false;
 std::string g_compilerMessage;
+uint64_t g_lastCompile = 0;
 ProgramCacheStats g_stats{};
+
+// The compiler is unloaded once it holds this much of the heap, and once it
+// has had nothing to do for this long. The heap is the game's too: a first
+// start compiles hundreds of programs while the game loads, and the sounds
+// that load last found no room left beside what the compiler kept.
+constexpr size_t kCompilerHeapLimit = 2 << 20;
+constexpr uint64_t kCompilerIdleMicros = 5 * 1000 * 1000;
 
 uint64_t Micros()
 {
     return sceKernelGetProcessTimeWide();
 }
 
-std::string PathFor(const std::string &cg, ShaderStage stage)
+void UnloadCompiler()
+{
+    g_stats.compilerGaveBack += UnloadShaderCompiler();
+    ++g_stats.compilerUnloads;
+    if (!ShaderCompilerLoaded())
+        g_compilerTried = false; // the next program to compile loads it again
+}
+
+uint64_t KeyFor(const std::string &cg, ShaderStage stage)
 {
     const uint8_t tag = stage == ShaderStage::Vertex ? 'v' : 'f';
-    const uint64_t hash = cg::Hash(cg.data(), cg.size(), cg::Hash(&tag, 1));
+    return cg::Hash(cg.data(), cg.size(), cg::Hash(&tag, 1));
+}
+
+std::string PathFor(const std::string &cg, ShaderStage stage, const char *extension = ".gxp")
+{
     char name[32];
-    std::snprintf(name, sizeof(name), "/%016llx.gxp", static_cast<unsigned long long>(hash));
+    std::snprintf(name, sizeof(name), "/%016llx%s", static_cast<unsigned long long>(KeyFor(cg, stage)), extension);
     return g_folder + name;
 }
 
@@ -77,6 +97,30 @@ bool WriteFile(const std::string &path, const std::vector<uint8_t> &data)
     sceIoRemove(path.c_str());
     return sceIoRename(temporary.c_str(), path.c_str()) >= 0;
 }
+
+bool g_dumpChecked = false;
+bool g_dump = false;
+
+// The program's source next to its file, when the folder asks for it.
+void DumpSource(const std::string &cg, ShaderStage stage)
+{
+    if (!g_dumpChecked)
+    {
+        g_dumpChecked = true;
+        g_dump = ProgramCacheMarker("dump-cg");
+    }
+    if (!g_dump)
+        return;
+    const std::string path = PathFor(cg, stage, ".cg");
+    SceIoStat stat{};
+    if (sceIoGetstat(path.c_str(), &stat) >= 0)
+        return;
+    if (FILE *file = std::fopen(path.c_str(), "wb"))
+    {
+        std::fwrite(cg.data(), 1, cg.size(), file);
+        std::fclose(file);
+    }
+}
 } // namespace
 
 void SetProgramCacheFolder(const char *folder)
@@ -85,14 +129,30 @@ void SetProgramCacheFolder(const char *folder)
     while (!g_folder.empty() && g_folder.back() == '/')
         g_folder.pop_back();
     g_folderMade = false;
+    g_dumpChecked = false;
 }
 
-bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &program, std::string &log)
+bool ProgramCacheMarker(const char *name)
+{
+    if (g_folder.empty())
+        return false;
+    SceIoStat stat{};
+    return sceIoGetstat((g_folder + "/" + name).c_str(), &stat) >= 0;
+}
+
+uint64_t ProgramCacheKey(const std::string &cg, ShaderStage stage)
+{
+    return KeyFor(cg, stage);
+}
+
+bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &program, std::string &log,
+                bool fastMath, int optimization)
 {
     log.clear();
     std::string path;
     if (!g_folder.empty())
     {
+        DumpSource(cg, stage);
         path = PathFor(cg, stage);
         const uint64_t begin = Micros();
         if (ReadFile(path, program) &&
@@ -116,8 +176,14 @@ bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &
         return false;
     }
     const uint64_t begin = Micros();
-    const bool compiled = CompileCg(cg.data(), cg.size(), stage, program, log);
-    g_stats.compileMicros += Micros() - begin;
+    const bool compiled = CompileCg(cg.data(), cg.size(), stage, program, log, fastMath, optimization);
+    g_lastCompile = Micros();
+    g_stats.compileMicros += g_lastCompile - begin;
+    size_t held = 0, peak = 0;
+    uint32_t refused = 0;
+    ShaderCompilerMemory(held, peak, refused);
+    if (held > kCompilerHeapLimit)
+        UnloadCompiler();
     if (!compiled)
     {
         ++g_stats.failed;
@@ -127,6 +193,12 @@ bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &
     if (!path.empty() && !WriteFile(path, program))
         ++g_stats.writeFailures;
     return true;
+}
+
+void ProgramCacheFrame()
+{
+    if (ShaderCompilerLoaded() && Micros() - g_lastCompile > kCompilerIdleMicros)
+        UnloadCompiler();
 }
 
 const ProgramCacheStats &GetProgramCacheStats()

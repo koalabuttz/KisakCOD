@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 namespace gfx_gxm
 {
@@ -46,6 +47,13 @@ struct State
     SceGxmSyncObject *displaySync[kDisplayBuffers] = {};
     void *depthData = nullptr;
     SceGxmDepthStencilSurface depthSurface;
+
+    struct SizedTarget
+    {
+        uint32_t width, height;
+        SceGxmRenderTarget *target;
+    };
+    std::vector<SizedTarget> targets; // RenderTargetFor
 
     uint32_t back = 0;
     uint32_t front = kDisplayBuffers - 1;
@@ -279,6 +287,8 @@ void ShutdownDisplay()
     for (uint32_t i = 0; i < kDisplayBuffers; ++i)
         if (g.displaySync[i])
             sceGxmSyncObjectDestroy(g.displaySync[i]);
+    for (const State::SizedTarget &sized : g.targets)
+        sceGxmDestroyRenderTarget(sized.target);
     if (g.renderTarget)
         sceGxmDestroyRenderTarget(g.renderTarget);
     if (g.context)
@@ -323,6 +333,39 @@ void *FrontBufferData()
 const SceGxmColorSurface *BackBufferSurface()
 {
     return &g.displaySurface[g.back];
+}
+
+SceGxmSyncObject *BackBufferSync()
+{
+    return g.displaySync[g.back];
+}
+
+SceGxmRenderTarget *RenderTargetFor(uint32_t width, uint32_t height)
+{
+    if (!DisplayReady() || !width || !height)
+        return nullptr;
+    for (const State::SizedTarget &sized : g.targets)
+        if (sized.width == width && sized.height == height)
+            return sized.target;
+    SceGxmRenderTargetParams params{};
+    params.flags = 0;
+    params.width = static_cast<uint16_t>(width);
+    params.height = static_cast<uint16_t>(height);
+    // A frame may come back to the same target a few times (a render to
+    // texture between two parts of the frame).
+    params.scenesPerFrame = 4;
+    params.multisampleMode = SCE_GXM_MULTISAMPLE_NONE;
+    params.multisampleLocations = 0;
+    params.driverMemBlock = -1;
+    SceGxmRenderTarget *target = nullptr;
+    const int result = sceGxmCreateRenderTarget(&params, &target);
+    if (result < 0)
+    {
+        Log("gxm: sceGxmCreateRenderTarget %ux%u failed (0x%08x)", width, height, static_cast<unsigned>(result));
+        return nullptr;
+    }
+    g.targets.push_back(State::SizedTarget{width, height, target});
+    return target;
 }
 
 const SceGxmDepthStencilSurface *DepthStencilSurface()
