@@ -126,7 +126,7 @@ Other large static arrays in the client:
 The heap and the engine reservations are the server's for now: a 64 MB heap, the 128 MB zone arena and the hunks. Textures go to the GPU's own memory (CDRAM, about 112 MB), not main memory.
 
 What the menu takes (run K on the console, and the same build in Vita3K, 2026-11-10):
-- **Heap:** 55 of 64 MB once `common_mp` is loaded. About 41 MB of that is the loaded sounds, which are decoded to 16-bit PCM in the heap. At the failed map load the console's heap stood at 60.7 MB.
+- **Heap:** 55 of 64 MB once `common_mp` is loaded. About 40 MB of that is the menu's 702 loaded sounds, held as 16-bit PCM as the fastfiles hold them. At the failed map load the console's heap stood at 60.7 MB. That build kept every sound that way; with `snd_adpcm 1`, the default since, the same menu holds 23.8 MB in Vita3K (run S, under Sound below), which is not measured on a console yet.
 - **System memory:** 15 MB free on the console beyond the heap and the reservations, so the heap cannot simply grow. Vita3K reports far more free system memory than a console has (107 MB at the same point); never size memory from its number.
 - **Zone arena:** 72 MB of 128 free in the menu, 46 MB at the failed map load.
 - **GPU:** 95 of 104 MB of CDRAM and 18 to 19 of the 20 MB main pool. By use, from the `gpu memory by use` log line:
@@ -316,18 +316,20 @@ Gains are Q15 and move toward their targets every 64 frames, so a volume or
 position change does not click. One lock guards all of it; the mixer holds it
 for one update.
 
-**Loaded sounds in memory** (`snd_adpcm`). The fastfiles hold loaded sounds
-as IMA ADPCM, four bits a sample, or as PCM. The retail game kept IMA ADPCM
-as it was loaded and decoded it while it played. The OpenAL driver expanded
-every sound to 16-bit PCM when it loaded, four times the size. On the Vita
-that was most of the heap: with sound on, a map's sounds took about 41 MB of
-the 64 MB (console run K: 60.7 of 64 MB in use when the load failed), and a
-start that ran out of heap crashed in `SND_SetData`, which wrote through the
-null pointer.
+**Loaded sounds in memory** (`snd_adpcm`). The OpenAL driver keeps every
+loaded sound as 16-bit PCM, and that is also how the fastfiles hold the sounds
+counted so far: all 702 the menu loads and the nine Crash adds came as 16-bit
+PCM, none as IMA ADPCM, which the loader reads too. On the Vita they were most
+of the heap: the menu's sounds took about 40 MB of the 64 MB (console run K:
+55 MB in use at the menu, 60.7 MB when a map load failed), and a start that
+ran out of heap crashed in `SND_SetData`, which wrote through the null
+pointer.
 
-With `snd_adpcm 1`, the default on the Vita, the driver keeps loaded sounds as
-IMA ADPCM in whole blocks (`src/sound/snd_ima_adpcm.h`) and OpenAL decodes
-them as they play:
+With `snd_adpcm 1`, the default on the Vita, the driver compresses loaded
+sounds to IMA ADPCM when they load, four bits a sample where the game's files
+have 16, keeps them in whole blocks (`src/sound/snd_ima_adpcm.h`) and lets
+OpenAL decode them as they play. The retail game played these sounds
+uncompressed, so this is a loss in quality taken for the memory:
 
 - A sound loaded as IMA ADPCM at a rate the mixer plays keeps its own blocks,
   byte for byte.
@@ -358,11 +360,41 @@ below.
 After each burst of loading, with `snd_adpcm`, with `snd_alDebug 1` or when a
 sound found no memory, the log has one line: `sound data: ... sounds loaded,
 in ... KB (... KB as 16-bit PCM); they came as ... IMA ADPCM, ... 16-bit and
-... 8-bit; ... kept as IMA ADPCM, ... encoded to it, ... found no memory`.
+... 8-bit; ... kept as IMA ADPCM, ... encoded to it in ... ms, ... found no
+memory, ... claimed more frames than their bytes hold`. The milliseconds are
+what the encoding added to the load. They are whole milliseconds of the clock
+summed over sounds that take about one each, so read them as a rough total.
 
-Not measured yet: which formats a map's sounds come in (that line says), what
-the heap holds after a map load with `snd_adpcm 1`, what the mixer costs with
-packed sources on the console, and how the encoded sounds sound.
+Some sounds claim more frames than their bytes hold. Both ways of keeping a
+sound now read no further than its bytes. Before, the 16-bit path believed the
+claim when it halved a sound's rate, read past the end of the sound's data and
+kept what it found there as the sound's second part. That happens only below
+`snd_khz 44`, so the desktop's default never met it. The last figure in the
+line counts such sounds, and `snd_alDebug 2` prints the first eight: `sound
+data: a sound claims ... frames and its ... bytes hold ...`.
+
+Measured in Vita3K on the Windows PC (run S, 2026-11-10, a build made on that
+PC, at the menu, `snd_khz 22`; the log line had no milliseconds or claim count
+yet):
+
+| | `snd_adpcm 1` | `snd_adpcm 0` |
+|---|---:|---:|
+| The menu's 702 sounds | 9574 KB | 40882 KB |
+| The same sounds as 16-bit PCM, by the log line | 37405 KB | 40882 KB |
+| Heap in use at the menu, of 64 MB | 23.8 MB | 55.0 MB |
+
+All 702 were encoded and none found no memory. Menu sounds started 22 times
+from packed buffers with no OpenAL error, no cut and no clipped frame, and an
+update of the mixer took 21 to 24 µs on average. With Crash's fastfile started
+the count was 711 sounds in 9693 KB. The two columns disagree on the second
+row by 3477 KB: that is what the 16-bit path read from past the ends of
+sounds, as above.
+
+Not measured yet: all of this on a console (Vita3K's memory figures are not a
+console's), what the encoding adds to a load there, the claim count and which
+sounds claim too much, the path that keeps a sound's own IMA ADPCM blocks with
+real data, and how the encoded sounds sound. Nobody has listened to them: the
+runs had no listener.
 
 **Output.** The engine asks for 11025, 22050 or 44100 Hz (`snd_khz`). The
 default is 44, and 22 on the Vita, where a saved config still wins: at 22 the
