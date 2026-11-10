@@ -1,7 +1,9 @@
 #pragma once
 
-// IMA ADPCM in the Microsoft block layout (WAVE format 0x11): the 4-bit form
-// the retail fastfiles hold loaded sounds in, a quarter the size of 16-bit PCM.
+// IMA ADPCM in the Microsoft block layout (WAVE format 0x11): a 4-bit form, a
+// quarter the size of 16-bit PCM. It is one of the formats a fastfile can hold
+// a loaded sound in, though the multiplayer sounds counted so far all come as
+// 16-bit PCM; snd_adpcm encodes those to it when they load.
 //
 // A block holds, for each channel, a 4-byte header (the block's first sample,
 // the step index, a reserved byte), then 4 bytes per channel for every eight

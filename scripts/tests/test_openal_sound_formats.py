@@ -11,6 +11,10 @@ With snd_adpcm the driver keeps sounds as IMA ADPCM instead, a quarter of the si
 finds no memory must end up without data and with a warning, not with a write through
 a null pointer: that crashed the PS Vita client when its 64 MB heap ran out.
 
+A sound may claim more frames than its bytes hold (a Vita3K run of the retail
+multiplayer fastfiles showed it). Neither way of keeping it may read past the bytes:
+the sanitizers watch the source buffers here, which are sized to the bytes exactly.
+
 The production functions are extracted from src/sound/snd_driver_openal.cpp and compiled
 with the vendored dr_wav. A small reference IMA ADPCM encoder (Microsoft block layout)
 writes a sine wave, and the decoded result must match it closely. Allocations can be made
@@ -123,8 +127,11 @@ void Com_Printf(int, const char *format, ...) {
     printed += line;
 }
 static struct { uint32_t playback_rate; int time; } g_snd;
-static bool alDebug = false;
-static bool SND_AlDebug(int) { return alDebug; }
+static int alDebug = 0;
+static bool SND_AlDebug(int level) { return alDebug >= level; }
+// A clock that moves 3 ms at every look: each sound encoded "takes" 3 ms.
+static uint32_t clockNow = 0;
+uint32_t Sys_MillisecondsRaw() { clockNow += 3; return clockNow; }
 
 %(production)s
 
@@ -312,6 +319,35 @@ static void CheckSetData() {
                   && sound.info.data_len == 12000 && StoredSnr(sound, stereo, 1) > 90,
               "by default 16-bit PCM above the mixer's rate is halved");
     }
+    {
+        // A sound that claims twice the frames its bytes hold, as some stereo sounds in
+        // the fastfiles do. Halving it reads the source by frame: only the 6000 frames
+        // that are there (the sanitizer watches the 24000 bytes), and 3000 are stored.
+        MssSoundCOD4 sound = Sound(SND_FORMAT_PCM, 16, 2, 44100, 12000, 4, 24000);
+        std::vector<int16_t> exact(stereo);
+        printed.clear();
+        alDebug = 2;
+        SND_SetData(&sound, (void *)exact.data());
+        alDebug = 0;
+        Check(sound.info.format == SND_FORMAT_PCM && sound.info.rate == 22050 && sound.info.samples == 3000
+                  && sound.info.data_len == 12000 && StoredSnr(sound, stereo, 1) > 90,
+              "by default a sound that claims more frames than it holds is halved from the frames it holds");
+        Check(printed == "sound data: a sound claims 12000 frames and its 24000 bytes hold 6000 "
+                         "(format 1, 16 bits, 2 channels, 44100 Hz)\n",
+              "  and snd_alDebug 2 names it");
+        if (failures) std::printf("     %%s", printed.c_str());
+    }
+    {
+        // Three channels are more than the frame count above is worked out for: such
+        // a sound is copied as it is and is not counted as claiming too much.
+        MssSoundCOD4 sound = Sound(SND_FORMAT_PCM, 16, 3, 22050, 2000, 6, 12000);
+        printed.clear();
+        alDebug = 2;
+        SND_SetData(&sound, (void *)mono.data());
+        alDebug = 0;
+        Check(sound.info.samples == 2000 && sound.info.data_len == 12000 && printed.empty(),
+              "a sound of three channels is copied and not counted as claiming too much");
+    }
     for (int fail = 1; fail <= 3; ++fail) {
         // 1: the 16-bit copy. 2: dr_wav's copy of the blocks. 3: the sound's own memory.
         MssSoundCOD4 sound = Sound(SND_FORMAT_IMA_ADPCM, 4, 1, 44100, 6000, 512, (uint32_t)adpcmMono.size());
@@ -339,14 +375,15 @@ static void CheckSetData() {
         SND_SetData(&sound, (void *)mono.data());
         Check(warnings == before && sound.info.data_len == 0, "an empty sound loads without a warning");
     }
-    // Two sounds of 12000 bytes and the 6000 of the one stored as silence.
+    // Four sounds of 12000 bytes and the 6000 of the one stored as silence.
     printed.clear();
     g_snd.time = 1000;
     SND_ReportLoadedData();
     g_snd.time = 5000;
     SND_ReportLoadedData();
-    Check(printed.find("sound data: 7 sounds loaded, in 30 KB (30 KB as 16-bit PCM); they came as 4 IMA ADPCM, 3 16-bit and 0 8-bit; "
-                       "0 kept as IMA ADPCM, 0 encoded to it, 3 found no memory") == 0,
+    Check(printed == "sound data: 9 sounds loaded, in 53 KB (53 KB as 16-bit PCM); they came as 4 IMA ADPCM, 5 16-bit and 0 8-bit; "
+                     "0 kept as IMA ADPCM, 0 encoded to it in 0 ms, 3 found no memory, "
+                     "1 claimed more frames than their bytes hold\n",
           "the report counts what loaded, and is printed when a sound found no memory");
     if (failures) std::printf("     %%s", printed.c_str());
 
@@ -381,6 +418,18 @@ static void CheckSetData() {
               "with snd_adpcm 16-bit PCM is encoded: 3 KB where 12 KB were");
     }
     {
+        // The sound that claims twice its frames: the frames it holds are encoded.
+        MssSoundCOD4 sound = Sound(SND_FORMAT_PCM, 16, 2, 44100, 12000, 4, 24000);
+        std::vector<int16_t> exact(stereo);
+        printed.clear();
+        SND_SetData(&sound, (void *)exact.data());
+        Check(sound.info.format == SND_FORMAT_IMA_ADPCM && sound.info.channels == 2 && sound.info.rate == 22050
+                  && sound.info.samples == 3000 && sound.info.block_size == 512 && sound.info.data_len == 6 * 512
+                  && StoredSnr(sound, stereo, 1) > 25,
+              "with snd_adpcm a sound that claims more frames than it holds is encoded from the frames it holds");
+        Check(printed.empty(), "  and without snd_alDebug 2 it is only counted");
+    }
+    {
         MssSoundCOD4 sound = Sound(SND_FORMAT_PCM, 8, 1, 11025, 6000, 1, 6000);
         SND_SetData(&sound, eight.data());
         Check(sound.info.format == SND_FORMAT_IMA_ADPCM && sound.info.rate == 11025 && sound.info.samples == 6000
@@ -405,7 +454,8 @@ static void CheckSetData() {
         Check(failAllocation == 0 && warnings == before + 1 && HasNoData(sound) && liveAllocations == 0,
               "with snd_adpcm a sound that finds no memory has no data");
     }
-    // Four sounds of 3072 bytes where 12000 were, and the unknown one's 8.
+    // Five sounds of 3072 bytes where 12000 were, and the unknown one's 8. The clock
+    // above gives each of the four encoded ones 3 ms.
     printed.clear();
     g_snd.time = 9000;
     SND_ReportLoadedData();
@@ -415,8 +465,9 @@ static void CheckSetData() {
     Check(printed.empty(), "  for a second");
     g_snd.time = 10000;
     SND_ReportLoadedData();
-    Check(printed == "sound data: 7 sounds loaded, in 13 KB (47 KB as 16-bit PCM); they came as 4 IMA ADPCM, 2 16-bit and 1 8-bit; "
-                     "1 kept as IMA ADPCM, 3 encoded to it, 2 found no memory\n",
+    Check(printed == "sound data: 8 sounds loaded, in 16 KB (59 KB as 16-bit PCM); they came as 4 IMA ADPCM, 3 16-bit and 1 8-bit; "
+                     "1 kept as IMA ADPCM, 4 encoded to it in 12 ms, 2 found no memory, "
+                     "1 claimed more frames than their bytes hold\n",
           "the report says what the sounds take and what they would take as 16-bit PCM");
     if (failures) std::printf("     %%s", printed.c_str());
     printed.clear();
@@ -436,7 +487,7 @@ static void CheckSetData() {
     g_snd.time = 40000;
     SND_ReportLoadedData();
     Check(printed.empty(), "by default the report stays quiet");
-    alDebug = true;
+    alDebug = 1;
     {
         MssSoundCOD4 sound = Sound(SND_FORMAT_PCM, 16, 1, 22050, 6000, 2, 12000);
         SND_SetData(&sound, (void *)mono.data());

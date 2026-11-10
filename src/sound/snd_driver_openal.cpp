@@ -91,7 +91,7 @@ char SND_InitDriver()
         0,
         DvarLimits(0, 2),
         DVAR_NOFLAG,
-        "OpenAL sound diagnostics: 1 prints errors, stream underruns, a summary every 5 seconds and what loaded sounds take in memory, 2 also prints each sound start");
+        "OpenAL sound diagnostics: 1 prints errors, stream underruns, a summary every 5 seconds and what loaded sounds take in memory, 2 also prints each sound start and the first loaded sounds that claim more frames than their data holds");
     snd_adpcm = Dvar_RegisterBool(
         "snd_adpcm",
         SND_DEFAULT_ADPCM,
@@ -1951,6 +1951,13 @@ static SndStored SND_SetPcmData(MssSoundCOD4 *mssSound, const void *srcData)
         uint32_t srcFrameCount = mssSound->info.samples;
         uint32_t channels = mssSound->info.channels;
         uint32_t rate = mssSound->info.rate;
+        // The loop below reads the source by frame, and a sound holds no more frames
+        // than its bytes do, whatever it claims. Some fastfile sounds claim more
+        // (SND_SetData counts them), and their extra frames were read from past the
+        // end of the data.
+        const uint32_t heldFrames = channels ? mssSound->info.data_len / (channels * (uint32_t)sizeof(int16_t)) : 0;
+        if (srcFrameCount > heldFrames)
+            srcFrameCount = heldFrames;
         uint32_t frameCount = srcFrameCount;
 
         while (rate > g_snd.playback_rate)
@@ -1997,8 +2004,9 @@ static SndStored SND_SetPcmData(MssSoundCOD4 *mssSound, const void *srcData)
 
 // Keeps the sound as IMA ADPCM in whole blocks (snd_ima_adpcm.h): its own blocks when
 // it was loaded as IMA ADPCM at a rate the mixer plays, as the retail game kept them;
-// otherwise it is brought to such a rate and encoded. *asLoaded says which.
-static SndStored SND_SetPackedData(MssSoundCOD4 *mssSound, const void *srcData, bool *asLoaded)
+// otherwise it is brought to such a rate and encoded. *asLoaded says which, and
+// *encodeMsec what the encoding took.
+static SndStored SND_SetPackedData(MssSoundCOD4 *mssSound, const void *srcData, bool *asLoaded, uint32_t *encodeMsec)
 {
     _AILSOUNDINFO_COD4 *info = &mssSound->info;
     const kisak::ima_adpcm::Sound sound = {
@@ -2018,7 +2026,14 @@ static SndStored SND_SetPackedData(MssSoundCOD4 *mssSound, const void *srcData, 
     }
     uint8_t *data = MSS_Alloc(plan.packed.bytes, plan.packed.rate);
     if (data)
+    {
+        // Encoding is the work this way of keeping sounds adds to a load. A sound takes
+        // about a millisecond, so the clock's whole milliseconds only add up over many.
+        const uint32_t start = Sys_MillisecondsRaw();
         kisak::ima_adpcm::Pack(sound, (const uint8_t *)srcData, plan, scratch, data);
+        if (!plan.asLoaded)
+            *encodeMsec = Sys_MillisecondsRaw() - start;
+    }
     Z_Free(scratch, 15);
     if (!data)
         return SND_NO_MEMORY;
@@ -2046,7 +2061,9 @@ struct SndDataStats
     std::atomic<uint32_t> from8;          // as 8-bit PCM
     std::atomic<uint32_t> asLoaded;       // IMA ADPCM kept as loaded
     std::atomic<uint32_t> encoded;        // encoded to IMA ADPCM
+    std::atomic<uint32_t> encodeMsec;     // what that took
     std::atomic<uint32_t> noMemory;
+    std::atomic<uint32_t> claimedMore;    // claimed more frames than their bytes hold
 };
 static SndDataStats s_dataStats;
 static uint32_t s_dataReportSounds;       // s_dataStats.sounds when the main thread last looked
@@ -2063,7 +2080,8 @@ static uint32_t SND_TakeCount(std::atomic<uint32_t> &counter)
 }
 
 // One line for each burst of loading, a second after its last sound: how many sounds,
-// what they take, and what they would take as 16-bit PCM. Printed with snd_adpcm or
+// what they take, what they would take as 16-bit PCM, what encoding them took, and
+// how many claimed more frames than their bytes hold. Printed with snd_adpcm or
 // snd_alDebug, and always when a sound found no memory.
 static void SND_ReportLoadedData()
 {
@@ -2086,13 +2104,15 @@ static void SND_ReportLoadedData()
     const uint32_t from8 = SND_TakeCount(s_dataStats.from8);
     const uint32_t asLoaded = SND_TakeCount(s_dataStats.asLoaded);
     const uint32_t encoded = SND_TakeCount(s_dataStats.encoded);
+    const uint32_t encodeMsec = SND_TakeCount(s_dataStats.encodeMsec);
     const uint32_t noMemory = SND_TakeCount(s_dataStats.noMemory);
+    const uint32_t claimedMore = SND_TakeCount(s_dataStats.claimedMore);
     if (!s_keepSoundsPacked.load(std::memory_order_relaxed) && !noMemory && !SND_AlDebug(1))
         return;
     Com_Printf(
         CON_CHANNEL_SOUND,
         "sound data: %u sounds loaded, in %u KB (%u KB as 16-bit PCM); they came as %u IMA ADPCM, %u 16-bit and %u 8-bit; "
-        "%u kept as IMA ADPCM, %u encoded to it, %u found no memory\n",
+        "%u kept as IMA ADPCM, %u encoded to it in %u ms, %u found no memory, %u claimed more frames than their bytes hold\n",
         count,
         (held + 1023) / 1024,
         (pcm + 1023) / 1024,
@@ -2101,7 +2121,9 @@ static void SND_ReportLoadedData()
         from8,
         asLoaded,
         encoded,
-        noMemory);
+        encodeMsec,
+        noMemory,
+        claimedMore);
 }
 
 // Takes a loaded sound's data into the driver's own memory. A sound that finds no
@@ -2112,10 +2134,35 @@ void SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
     const int loadedBits = mssSound->info.bits;
     const uint32_t loadedBytes = mssSound->info.data_len;
 
+    // A sound's frame count is not always what its bytes hold: both ways of keeping a
+    // sound read no further than the bytes. Counted here, and named with snd_alDebug 2.
+    const kisak::ima_adpcm::Sound loaded = {
+        (uint32_t)mssSound->info.format, (uint32_t)mssSound->info.bits, (uint32_t)mssSound->info.channels,
+        mssSound->info.rate, 0xFFFFFFFFu, mssSound->info.block_size, mssSound->info.data_len };
+    const uint32_t heldFrames = kisak::ima_adpcm::ReadableFrames(loaded);
+    const bool readable = mssSound->info.channels >= 1 && mssSound->info.channels <= (int)kisak::ima_adpcm::kMaxChannels
+        && (loadedFormat == SND_FORMAT_IMA_ADPCM || (loadedFormat == SND_FORMAT_PCM && (loadedBits == 8 || loadedBits == 16)));
+    if (readable && mssSound->info.samples > heldFrames)
+    {
+        if (s_dataStats.claimedMore.load(std::memory_order_relaxed) < 8 && SND_AlDebug(2))
+            Com_Printf(
+                CON_CHANNEL_SOUND,
+                "sound data: a sound claims %u frames and its %u bytes hold %u (format %i, %i bits, %i channels, %u Hz)\n",
+                mssSound->info.samples,
+                loadedBytes,
+                heldFrames,
+                loadedFormat,
+                loadedBits,
+                mssSound->info.channels,
+                mssSound->info.rate);
+        SND_CountUp(s_dataStats.claimedMore, 1);
+    }
+
     bool asLoaded = false;
+    uint32_t encodeMsec = 0;
     SndStored stored = SND_NOT_STORED;
     if (s_keepSoundsPacked.load(std::memory_order_relaxed))
-        stored = SND_SetPackedData(mssSound, srcData, &asLoaded);
+        stored = SND_SetPackedData(mssSound, srcData, &asLoaded, &encodeMsec);
     const bool packed = stored == SND_STORED;
     if (stored == SND_NOT_STORED)
         stored = SND_SetPcmData(mssSound, srcData);
@@ -2139,6 +2186,7 @@ void SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
     SND_CountUp(loadedFormat == SND_FORMAT_IMA_ADPCM ? s_dataStats.fromAdpcm : loadedBits == 8 ? s_dataStats.from8 : s_dataStats.from16, 1);
     if (packed)
         SND_CountUp(asLoaded ? s_dataStats.asLoaded : s_dataStats.encoded, 1);
+    SND_CountUp(s_dataStats.encodeMsec, encodeMsec);
     SND_CountUp(s_dataStats.sounds, 1);
 }
 
