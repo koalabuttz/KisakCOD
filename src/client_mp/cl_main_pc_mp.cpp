@@ -248,6 +248,15 @@ void CL_ServerInfoPacket(netadr_t from, msg_t *msg, int time)
         }
         if (!cls.pingUpdateSource)
         {
+            // KISAK: nobody asked this address by name, so it is listed only as
+            // an answer to the last LAN scan (qcommon/master_server.h).  Retail
+            // listed whoever sent an infoResponse.
+            if (!Master_LanScanAccepts(&cl_lanScan, Info_ValueForKey(infoString, "challenge"), Sys_Milliseconds()))
+            {
+                Com_DPrintf(CON_CHANNEL_CLIENT, "infoResponse from %s is not an answer to a LAN scan, ignored\n",
+                    NET_AdrToString(from));
+                return;
+            }
             for (i = 0; i < 128 && cls.localServers[i].adr.port; ++i)
             {
                 if (NET_CompareAdr(from, cls.localServers[i].adr))

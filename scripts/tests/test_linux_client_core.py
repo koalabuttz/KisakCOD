@@ -455,7 +455,7 @@ def check_build_and_run(cxx, cc, build_dir, build_type, jobs, timeout, build_tim
             ("KisakCOD-client-receive-test", "client receive/lifecycle test", (), 34),
             ("KisakCOD-client-platform-test", "client platform test", (), 10),
             ("KisakCOD-client-connect-test", "client connect test", (), 25),
-            ("KisakCOD-client-server-list-test", "client server list test", (), 44),
+            ("KisakCOD-client-server-list-test", "client server list test", (), 58),
             ("KisakCOD-client-state-test", "client state test", ("parser", "input"), 15),
         ):
             binary = build_dir / "bin" / name
