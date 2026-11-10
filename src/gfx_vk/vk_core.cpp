@@ -98,6 +98,42 @@ bool Check(Core &core, VkResult result, const char *what)
 
 namespace
 {
+// The validation layer reports calls the record thread makes on that thread:
+// the message waits for the owning thread (SyncRecorder), which logs it and
+// counts it. The draw rule OnDebugMessage counts apart shows up here.
+VkBool32 OnRecordThreadMessage(Core &core, VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+                               VkDebugUtilsMessageTypeFlagsEXT types, const VkDebugUtilsMessengerCallbackDataEXT *data,
+                               const char *text)
+{
+    Recorder &recorder = core.recorder;
+    std::lock_guard<std::mutex> lock(recorder.messageMutex);
+    if (!(types & (VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)))
+    {
+        recorder.messages.push_back(std::string("loader: ") + text);
+        return VK_FALSE;
+    }
+    const char *id = data && data->pMessageIdName ? data->pMessageIdName : "";
+    const size_t idLength = std::strlen(id);
+    if (idLength > 11 && std::strcmp(id + idLength - 11, "-None-06479") == 0 && std::strncmp(id, "VUID-vkCmdDraw", 14) == 0)
+    {
+        ++recorder.validationIgnored;
+        return VK_FALSE;
+    }
+    const bool error = (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0;
+    if (error)
+        ++recorder.validationErrors;
+    else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+        ++recorder.validationWarnings;
+    else
+        return VK_FALSE;
+    if (++recorder.messagesSeen <= kValidationMessagesLogged)
+        recorder.messages.push_back(std::string(error ? "validation error" : "validation warning")
+                                    + " (record thread): " + text);
+    if (recorder.messagesSeen == kValidationMessagesLogged)
+        recorder.messages.push_back("validation: further record thread messages are counted, not printed");
+    return VK_FALSE;
+}
+
 VKAPI_ATTR VkBool32 VKAPI_CALL OnDebugMessage(
     VkDebugUtilsMessageSeverityFlagBitsEXT severity,
     VkDebugUtilsMessageTypeFlagsEXT types,
@@ -106,6 +142,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL OnDebugMessage(
 {
     Core &core = *static_cast<Core *>(user);
     const char *text = data && data->pMessage ? data->pMessage : "(no message)";
+    if (OnRecordThread())
+        return OnRecordThreadMessage(core, severity, types, data, text);
     if (!(types & (VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)))
     {
         // General messages come from the loader (an installed driver that does
@@ -583,6 +621,31 @@ bool EnvEquals(const char *name, const char *value)
 #endif
 }
 
+// A count from 1 to 65535 in the variable, or fallback when it is not set or
+// is anything else.
+uint32_t EnvCount(const char *name, uint32_t fallback)
+{
+#if defined(_MSC_VER)
+    char *owned = nullptr;
+    size_t length = 0;
+    const char *text = _dupenv_s(&owned, &length, name) == 0 ? owned : nullptr;
+#else
+    const char *text = std::getenv(name);
+#endif
+    uint32_t count = fallback;
+    if (text && *text)
+    {
+        char *end = nullptr;
+        const unsigned long value = std::strtoul(text, &end, 10);
+        if (!*end && value >= 1 && value <= 65535)
+            count = static_cast<uint32_t>(value);
+    }
+#if defined(_MSC_VER)
+    std::free(owned);
+#endif
+    return count;
+}
+
 bool CreateDevice(Core &core)
 {
     Dispatch &vk = core.vk;
@@ -633,6 +696,17 @@ bool CreateDevice(Core &core)
     core.optional.fixedDepthCompare = portability || EnvEquals("KISAK_VK_DEPTH_COMPARE", "fixed");
     core.optional.forceWideRenderTargets = EnvEquals("KISAK_VK_RENDER_TARGETS", "wide");
     core.optional.staticUniforms = EnvEquals("KISAK_VK_UNIFORMS", "static");
+    core.optional.fenceFlush = !EnvEquals("KISAK_VK_FENCE_FLUSH", "0");
+    // Tile-based GPUs pay for every part with a store and a load of the
+    // targets (see OptionalFeatures): Apple, Arm, Qualcomm, Imagination,
+    // Broadcom, and MoltenVK on any GPU.
+    const uint32_t vendor = core.properties.vendorID;
+    const bool tiled = portability || vendor == 0x106b || vendor == 0x13b5 || vendor == 0x5143 || vendor == 0x1010
+        || vendor == 0x14e4;
+    core.optional.gpuFeedAlways = EnvEquals("KISAK_VK_GPU_FEED", "always");
+    core.optional.gpuFeed =
+        core.optional.gpuFeedAlways || EnvEquals("KISAK_VK_GPU_FEED", "1") || (!tiled && !EnvEquals("KISAK_VK_GPU_FEED", "0"));
+    core.optional.gpuFeedDraws = EnvCount("KISAK_VK_GPU_FEED_DRAWS", 128);
 
     VkPhysicalDeviceVulkan13Features features13{};
     features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
@@ -839,8 +913,9 @@ BuildResult BuildSwapchain(Core &core)
         }
     }
 
-    // Rebuilding: nothing in flight may still use the old images.
-    if (core.swapchain && !Check(core, vk.vkDeviceWaitIdle(core.dev), "vkDeviceWaitIdle"))
+    // Rebuilding: nothing in flight may still use the old images, and the
+    // record thread is done with the old swapchain and the queue.
+    if (core.swapchain && (!DrainRecorder(core) || !Check(core, vk.vkDeviceWaitIdle(core.dev), "vkDeviceWaitIdle")))
         return BuildResult::Failed;
 
     VkSwapchainCreateInfoKHR info{};
@@ -921,8 +996,12 @@ Core *CreateCore(const CoreDesc &desc, const WindowSystem &window, char *error, 
     Core *core = new Core();
     core->desc = desc;
     core->window = window;
+    if (EnvEquals("KISAK_VK_RECORD_THREAD", "0"))
+        core->desc.recordThread = false;
+    else if (EnvEquals("KISAK_VK_RECORD_THREAD", "1"))
+        core->desc.recordThread = true;
     bool ok = CreateInstance(*core) && PickDevice(*core) && CreateDevice(*core) && CreateFrameResources(*core)
-        && CreatePipelineCache(*core);
+        && StartRecorder(*core) && CreatePipelineCache(*core);
     if (ok)
     {
         const BuildResult built = BuildSwapchain(*core);
@@ -945,6 +1024,9 @@ void DestroyCore(Core *core, CoreStats *finalStats)
     if (!core)
         return;
     Dispatch &vk = core->vk;
+    // Everything recorded runs (an open frame's commands are never submitted:
+    // the pool goes with them), then the thread ends.
+    StopRecorder(*core);
     if (core->dev)
     {
         vk.vkDeviceWaitIdle(core->dev);
@@ -985,6 +1067,7 @@ void DetachWindow(Core *core_)
     {
         // The acquired image is never presented.
         AbandonFrame(core);
+        DrainRecorder(core);
         vk.vkDeviceWaitIdle(core.dev);
         DestroySwapchainResources(core);
         if (core.swapchain)

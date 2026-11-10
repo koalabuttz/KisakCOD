@@ -290,8 +290,9 @@ timings mean nothing there.
 - Hidden runtime differences that only game data reaches, such as the 16 KiB
   pages of Apple silicon under a real map load (the virtual-memory self-test
   covers the layer itself) and float results compared with x86.
-- The client draws nothing yet: the Vulkan core runs on Metal through
-  MoltenVK, but the renderer does not use it yet (the Legacy adapter comes
-  later in the renderer plan). Sound through OpenAL Soft, a game movie played
+- The client has drawn nothing on a Mac yet. The Vulkan back end is linked
+  into it and its checks pass on Metal through MoltenVK
+  ([above](#vulkan-back-end)), but a map drawn with `r_backend vulkan` needs
+  the game's files. Sound through OpenAL Soft, a game movie played
   through the Bink shim, and a signed, notarised app are later steps too.
 - No run on a real Mac's GPU yet: the hosted runners' GPU is a virtual one.

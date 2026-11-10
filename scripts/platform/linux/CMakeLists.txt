@@ -300,13 +300,27 @@ if(KISAK_BUILD_LINUX_CLIENT_CORE)
         "${SRC_DIR}/universal/base64.cpp"
         "${SRC_DIR}/universal/sha256.cpp"
     )
-    foreach(client_test KisakCOD-client-connect-test KisakCOD-client-platform-test KisakCOD-client-receive-test KisakCOD-client-auth-test KisakCOD-client-headless KisakCOD-client-netchan-test KisakCOD-client-state-test KisakCOD-client-packet-test)
+    # How servers are found: the production globalservers/localservers commands,
+    # list reply handlers and the server's master heartbeat, over real loopback
+    # UDP through the engine's own socket. The master is opt-in; see
+    # docs/server-browser.md.
+    add_executable(KisakCOD-client-server-list-test
+        "${TESTS_DIR}/linux_client_core/client_server_list_test.cpp"
+        "${SRC_DIR}/client_mp/cl_main_pc_mp.cpp"
+        "${SRC_DIR}/client_mp/cl_main_mp.cpp"
+        "${SRC_DIR}/server_mp/sv_main_pc_mp.cpp"
+        "${SRC_DIR}/qcommon/msg_mp.cpp"
+        "${SRC_DIR}/qcommon/huffman.cpp"
+        ${KISAK_CLIENT_RUNTIME_SOURCES}
+    )
+    target_link_libraries(KisakCOD-client-server-list-test PRIVATE Threads::Threads)
+    foreach(client_test KisakCOD-client-server-list-test KisakCOD-client-connect-test KisakCOD-client-platform-test KisakCOD-client-receive-test KisakCOD-client-auth-test KisakCOD-client-headless KisakCOD-client-netchan-test KisakCOD-client-state-test KisakCOD-client-packet-test)
         target_compile_features(${client_test} PRIVATE cxx_std_20)
         target_compile_definitions(${client_test} PRIVATE
             KISAK_MP KISAK_OPENAL RELEASE_ASSERTS
             _FILE_OFFSET_BITS=64 _GNU_SOURCE
         )
-        if(NOT client_test STREQUAL "KisakCOD-client-headless")
+        if(NOT client_test STREQUAL "KisakCOD-client-headless" AND NOT client_test STREQUAL "KisakCOD-client-server-list-test")
             target_compile_definitions(${client_test} PRIVATE TRACY_ENABLE TRACY_ON_DEMAND TRACY_ONLY_LOCALHOST)
         endif()
         target_include_directories(${client_test} PRIVATE "${SRC_DIR}" "${DEPS_DIR}" "${tracy_SOURCE_DIR}/public")

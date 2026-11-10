@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 04:15:33 +0000
+Subject: [PATCH] fix: draw the flashbang white-out and concussion blur in
+ multiplayer
+
+clientViewParamsArray had no initializer in multiplayer, so the
+shellshock screen effects sized their quads from a 0x0 rectangle. The
+camera shook but the screen never went white or blurred.
+
+Initialize it to the full screen, as cg_view.cpp does for singleplayer.
+---
+ src/cgame_mp/cg_view_mp.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/cgame_mp/cg_view_mp.cpp b/src/cgame_mp/cg_view_mp.cpp
+index 3b507a1a..43b71bf7 100644
+--- a/src/cgame_mp/cg_view_mp.cpp
++++ b/src/cgame_mp/cg_view_mp.cpp
+@@ -23,7 +23,7 @@
+ #include <game_mp/g_main_mp.h>
+ 
+ TestEffect s_testEffect[1];
+-ClientViewParams clientViewParamsArray[1][1];
++ClientViewParams clientViewParamsArray[1][1] = { { { 0.0f, 0.0f, 1.0f, 1.0f } } }; // full screen, as in SP
+ 
+ const dvar_t *cg_heliKillCamDist;
+ const dvar_t *cg_heliKillCamFov;

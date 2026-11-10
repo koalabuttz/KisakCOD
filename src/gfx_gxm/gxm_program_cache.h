@@ -9,8 +9,12 @@
 // changes the source, so stale programs are never picked up; they only take
 // space. A file that fails sceGxmProgramCheck is compiled again.
 //
-// One thread at a time.
+// Any thread may call these. The cache itself (card and compiler) is used by
+// one thread at a time: GetProgram waits for its turn, which can be a whole
+// compile. RequestProgram never waits: it hands the work to the cache's own
+// thread (gxm_program_queue.h), which is how the game's shaders get theirs.
 
+#include "gxm_program_queue.h"
 #include "gxm_shader_compiler.h"
 
 #include <cstdint>
@@ -34,6 +38,16 @@ struct ProgramCacheStats
     // bytes that gave back.
     uint32_t compilerUnloads;
     uint64_t compilerGaveBack;
+    // The slowest single compile and read from the card.
+    uint64_t slowestCompileMicros;
+    uint64_t slowestReadMicros;
+    // Programs asked for with RequestProgram: how many, how many of them a
+    // draw hurried, how many were dropped unmade, and the most that waited
+    // at once.
+    uint64_t requested;
+    uint64_t hurried;
+    uint64_t dropped;
+    uint32_t mostWaiting;
 };
 
 // The program for this source, from its file or compiled now (and then
@@ -43,9 +57,20 @@ struct ProgramCacheStats
 // found by the source alone.
 bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &program, std::string &log,
                 bool fastMath = true, int optimization = 3);
-// Once a frame: unloads the compiler when it has been idle for a while, so
-// that it holds no memory while the game runs. It is loaded again when a
-// program has to be compiled.
+// The same program without waiting for it: read or compiled on the cache's
+// thread, in the order asked. The request says when it is ready
+// (ProgramRequest::state); label names it in the log line of a failure.
+// Dropping the request before its turn drops the work.
+ProgramRequestRef RequestProgram(std::string cg, ShaderStage stage, std::string label);
+// A draw wants this request's program: it is made before the others.
+void HurryProgram(const ProgramRequestRef &request);
+// Requested programs not made yet.
+size_t ProgramsWaiting();
+// Requests that failed since the last call, for the log.
+void TakeProgramFailures(std::vector<ProgramRequestRef> &failures);
+// Once a frame: has the compiler unloaded when it has been idle for a while,
+// so that it holds no memory while the game runs. It is loaded again when a
+// program has to be compiled. Never waits for a compile.
 void ProgramCacheFrame();
 // Whether the folder holds a file of this name: switches for runs on a
 // console or an emulator ("dump-cg" below, the draw tests' "run-tests").
@@ -57,5 +82,5 @@ uint64_t ProgramCacheKey(const std::string &cg, ShaderStage stage);
 // folder holds a file named "dump-cg", every program asked for also leaves
 // its Cg source there as <16 hex digits>.cg. The sources come from the
 // game's shaders, so they stay on that machine like the game's files.
-const ProgramCacheStats &GetProgramCacheStats();
+ProgramCacheStats GetProgramCacheStats();
 } // namespace gfx_gxm

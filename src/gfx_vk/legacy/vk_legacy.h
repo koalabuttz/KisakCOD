@@ -263,6 +263,8 @@ struct DeviceStats
     uint64_t descriptorSetsReused; // sets bound again instead of allocated and written
     uint64_t constantBytes;   // constant and render-state uniform data written
     uint64_t dynamicRenames;  // DISCARD locks that took a new buffer
+    uint64_t fenceFlushes;    // frames submitted ahead of their Present by a frame fence poll (GetQueryData)
+    uint64_t feedFlushes;     // parts of frames submitted while the frame was being drawn (OptionalFeatures::gpuFeed)
     // Where the time goes on the CPU, for the load and first-draw costs.
     uint32_t shaders;          // shaders created
     uint32_t shadersCached;    // of those, served by the shader cache (not translated)
@@ -485,5 +487,12 @@ void IssueQuery(Device *device, Query *query, bool begin);
 // D3D9's GetData: false while the result is not ready (flush asks the GPU to
 // start, like D3DGETDATA_FLUSH). result receives TRUE for events and the
 // sample count for occlusion queries.
+//
+// An event issued right after Present, with nothing recorded since, is a
+// frame fence: it marks the end of the frame just presented. A caller
+// that polls it with flush is waiting for that frame and records nothing
+// meanwhile, so the first such poll that finds it unfinished also submits what
+// was recorded after it: the next frame's work is then queued behind the
+// frame the GPU is still on, instead of reaching it only at Present.
 bool GetQueryData(Device *device, Query *query, bool flush, uint32_t &result);
 } // namespace gfx_vk::legacy

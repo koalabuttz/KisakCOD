@@ -15,6 +15,7 @@ of them.
 | Windows | Win32 Debug and Release, Vulkan probe, regression checks | also MSVC x64 and MSVC ARM64 |
 | macOS | Apple silicon (arm64) | also Intel (x86_64) |
 | PS Vita workflow | dedicated server and client, Debug and RelWithDebInfo, and the port's host tests | the same |
+| Upstream patch queue | only when `docs/upstream` or its tool changes: the patches apply, and the patched upstream tree builds with MSVC | the same |
 
 - **Drafts.** No job runs while a pull request is a draft. Marking it ready for
   review starts the checks, and so does every later push. Open a pull request

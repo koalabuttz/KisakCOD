@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 04:15:33 +0000
+Subject: [PATCH] fix: keep the red channel of color dvars
+
+Dvar_RegisterColor stored the red byte through DvarValue::enabled, a
+bool, so any non-zero red became 1. Color dvars registered with red
+above zero started at red 1/255: g_fogColorReadOnly dumped as
+"0.00392157 0 0 1".
+
+Store it through color[0] like the other three channels.
+---
+ src/universal/dvar.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/universal/dvar.cpp b/src/universal/dvar.cpp
+index 0e0eeb72..0970d531 100644
+--- a/src/universal/dvar.cpp
++++ b/src/universal/dvar.cpp
+@@ -2291,7 +2291,7 @@ const dvar_s *__cdecl Dvar_RegisterColor(
+     else
+         v8 = 0.0;
+     dvarValue.color[3] = SnapFloatToInt(v8 * 255.0f);
+-    dvarValue.enabled = SnapFloatToInt(v17 * 255.0f);
++    dvarValue.color[0] = SnapFloatToInt(v17 * 255.0f);
+     dvarValue.color[1] = SnapFloatToInt(v14 * 255.0f);
+     dvarValue.color[2] = SnapFloatToInt(v11 * 255.0f);
+     return Dvar_RegisterVariant(dvarName, DVAR_TYPE_COLOR, flags, dvarValue, 0, description);
