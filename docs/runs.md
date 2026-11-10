@@ -135,9 +135,14 @@ What the driver does by itself, because each has spoiled a row before:
   during which the machine slept (a closed lid: the game wakes up and carries
   on, with wrong waits and frame times) is treated the same way, and says how
   many seconds it slept.
-- **Other load.** It waits while another process uses more than
-  `max_cpu_percent` of a core, and notes the busiest other processes before the
-  launch and at the capture.
+- **Other load.** Before a launch (`wait`) and again before a capture
+  (`wait_at_capture`, 120 seconds unless `wait` is shorter) it waits while
+  another process uses more than `max_cpu_percent` of a core, and it measures
+  the other processes over the capture itself. A row captured beside a
+  process over the limit is kept, marked `flagged: other load during the
+  capture (java 234% of a core)` and run again like a row whose power changed.
+  The first run on the laptop showed why: a process that was not ours started
+  inside a row, the row lost a sixth of its frame rate and still read "ok".
 - **Leftovers.** No launch while a process of the same binary still runs, and
   the run stops while a program named in `stop_if_running` does.
 - **The guard.** Listings (names, sizes, times, never contents) of the `guard`
@@ -184,7 +189,13 @@ the scene read and the frame log line as the game printed it, a few hundred
 bytes a row. It carries a checksum of its own and the checksum of the file it
 was cut from, and `run_report.py` makes the same tables and summary from it.
 The other verbatim lines stay in the full file on the machine until someone
-asks for them.
+asks for them, unless the run says how many of them should cross:
+`"compact_lines": 4` in a recipe (or in any results file) keeps up to four
+lines per pattern and row in the short form, the first and the last ones with
+the number left out between them, each cut at 300 characters;
+`run_report.py results.json --compact --lines 4` does the same afterwards. A
+run whose point is a handful of log lines (a memory line, a refusal) then
+needs no prose beside its short form.
 
 `scripts/tests/test_perf_run.py` checks both scripts on the host with a
 stand-in game (`tests/runs/fake_game.cpp`) and a made-up power-supply folder:
@@ -205,3 +216,18 @@ with `arm-vita-eabi-addr2line -f -C -i -e KisakCOD-mp.elf <address>` on the
 machine that fetched the artifact. The artifact can be downloaded as soon as
 that job has finished; the rest of the workflow run need not be done. The job
 is in the **PS Vita server and client** workflow (`build-kisakcod-vita.yaml`).
+
+### A Vita3K run from one description: `scripts/runs/vita3k`
+
+On a Windows machine with Vita3K and WSL, `vita-run.ps1 <run.json>` builds a
+commit as the CI job does, installs the `.vpk`, runs each start with the
+switches above, and writes the same sealed `results.json` and one-line
+`results-compact.json` as `perf_run.py`, so `run_report.py` checks and renders
+a Vita run like a frame-rate run. A request to that machine is then one JSON
+description (commit, starts, the log lines and counts wanted), and its answer
+is the short form. The folder's `README.md` has the description's keys, two
+examples, how a start ends (Vita3K's "The app exited with code N" line, a
+time limit and a kill for what never gets there) and how to set a machine up.
+It was written on the project's Windows PC and is checked by hand there:
+`scripts/tests/test_vita3k_runner.py` covers only what a Linux host can run
+(the sealing script, the shell scripts' syntax, the README's examples).

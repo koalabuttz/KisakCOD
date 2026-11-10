@@ -19,6 +19,56 @@ Movies are opt-in ([linux-cinematics.md](linux-cinematics.md)).
 
 ## Building
 
+### One command (x86_64)
+
+```sh
+python3 scripts/tools/setup_linux_client.py
+```
+
+fetches SDL3 and DXVK Native at the revisions this project pins, builds both
+into `kisak-sdk` next to the repository (`--prefix` moves it), and builds the
+x86_64 `KisakCOD-mp` against them in `build-linux/mp-x64`, with
+[controller support](#game-controllers) on. It ends by printing the line that
+starts the client. Its DXVK is 2.7.1 plus the one upstream commit
+that fullscreen on a Wayland session needs (see
+[The game window and input](#the-game-window-and-input)), so that works without
+patching anything by hand.
+
+It installs nothing. When a build tool is missing it stops and names the
+Debian/Ubuntu package; the full set is:
+
+```sh
+sudo apt install git cmake ninja-build clang meson glslang-tools pkg-config \
+  libopenal-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev \
+  libxi-dev libxkbcommon-dev libwayland-dev libdecor-0-dev libegl1-mesa-dev libudev-dev
+```
+
+The last two lines are what SDL3 needs to open windows on X11 and Wayland. The
+tool prints which of the two its SDL3 got, and says so when Wayland is missing.
+
+Running it again skips what is already built at the same revision, so after a
+`git pull` it only rebuilds the client. It removes only folders it made itself
+(each holds a `.kisak-setup` file). Useful switches:
+
+| Switch | What it does |
+| --- | --- |
+| `--package <new folder>` | Also packs the client, SDL3 and DXVK into a [folder that runs on another PC](#a-folder-that-runs-on-another-pc), and `<new folder>.tar.gz`. That client is built without movies, because a movie build only starts where the build machine's own FFmpeg version is installed; `--movies` keeps them. |
+| `--sdk-only` | Builds SDL3 and DXVK and stops. |
+| `--build-type Debug` | The client's build type (default `RelWithDebInfo`). |
+| `--cmake-arg=-D...` | One more option for the client's configure, for example `--cmake-arg=-DKISAK_LINUX_HTTP_DOWNLOADS=ON`. |
+| `--openal-include <folder>` | Where `AL/al.h` is, when `libopenal-dev` is not installed (see below). |
+| `--dry-run` | Prints every command and runs nothing. |
+
+Checked so far in a cloud container only (x86_64, Clang 18, no GPU, SDL3 built
+without desktop support): a full run took about five minutes and the packed
+folder started (`--version`) with no library path set. It has not been run on
+a desktop PC yet. `scripts/tests/test_setup_linux_client.py` checks the tool's
+logic without the network; the hosted workflow "Linux client setup tool" does
+the real fetch and build when the tool changes. The i386 client still needs
+the recipe below.
+
+### By hand
+
 ```sh
 cmake -S . -B build-linux/mp -G Ninja -DCMAKE_BUILD_TYPE=Debug \
   -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
@@ -83,7 +133,7 @@ then drops it from every target, so `AL/al.h` goes missing.
 | Engine | The source groups of the Windows target that the client compile census covers, with the client definitions, minus what the census still blocks. |
 | Renderer | The units on `native_d3d9_renderer_sources.txt` (24, now including `r_screenshot.cpp`) and `r_utils.cpp` go through the native D3D9 boundary. The rest keep the type-only stand-in. |
 | Windows platform units | `mp_client_platform_sources.txt` lists the ones linked as they are: `win_storage.cpp`, the player's stats. The census compiles them too. |
-| Cinematics | `r_cinematic.cpp` is built without `CINEMA` by default. That is the engine's own build with no Bink: no cinematic ever plays. `CINEMA` is read nowhere else. With `KISAK_LINUX_CINEMATICS=ON` it is built with `CINEMA` on the Linux Bink shim, which decodes with FFmpeg's libavcodec ([linux-cinematics.md](linux-cinematics.md)). |
+| Cinematics | When libavcodec and libavutil are found at configure time (`KISAK_LINUX_CINEMATICS`, `AUTO` by default), `r_cinematic.cpp` is built with `CINEMA` on the Linux Bink shim, which decodes with FFmpeg's libavcodec ([linux-cinematics.md](linux-cinematics.md)). Otherwise, or with `-DKISAK_LINUX_CINEMATICS=OFF`, it is built without `CINEMA`: the engine's own build with no Bink, in which no cinematic ever plays. `CINEMA` is read nowhere else. |
 | Platform | `src/linux` as the dedicated server uses it, without its server-only stand-ins and its non-interactive script debugger. The client links the in-game debugger, `scr_debugger.cpp`. |
 | Client platform | `msvc_rand.cpp`, the SDL3 Win32 window layer, `texture_memory.cpp` (`r_texturemem.cpp`'s answer without DirectDraw) and the generated `Material_Sort` span of `r_material_load_obj.cpp`. |
 | Window and input | `mp_client_window.cpp` and `mp_client_input.cpp`, below, over the window tests' `WindowHost` and `EngineInput`. |
@@ -124,7 +174,8 @@ fullscreen, Wayland refuses to position it, and 2.7.1 gives up. With that one
 commit, the laptop played fullscreen on GNOME Wayland, and Alt-Tab worked. The
 project still builds against 2.7.1's headers. Only the library the client loads
 at run time needs the fix, so putting the patched library first on
-`LD_LIBRARY_PATH` is enough. Without it, run windowed (`+set r_fullscreen 0`),
+`LD_LIBRARY_PATH` is enough, and `scripts/tools/setup_linux_client.py` builds
+exactly that library. Without it, run windowed (`+set r_fullscreen 0`),
 or use XWayland (`SDL_VIDEO_DRIVER=x11`). Fullscreen uses `r_mode` as on
 Windows, so set it to the panel's size for a sharp picture; a smaller mode is
 scaled up. `vid_restart` is refused while a listen server runs, as in the
@@ -134,7 +185,64 @@ The engine's own `SIGINT`/`SIGTERM` handling stays in place: the client tells
 SDL not to install its signal handlers. Pointer boundaries the adapter queues
 (`SE_POINTER`) are dropped before `Com_EventLoop`, which has no case for them.
 Joysticks, MIDI and DirectInput are not ported; the Windows build does not use
-them either.
+them either. A game controller is separate, optional code:
+
+## Game controllers
+
+`-DKISAK_LINUX_GAMEPAD=ON` (off by default; `scripts/tools/setup_linux_client.py`
+turns it on) builds controller support into `KisakCOD-mp` through SDL3's
+gamepad API, which also covers a Steam Deck's own controls. The retail PC game
+has none, and the engine takes keys and a mouse only, so the controller is
+turned into those, with the mapping the PS Vita client already uses
+([vita-client.md](vita-client.md#controls)):
+
+| Control | In the game (default) | In a menu |
+| --- | --- | --- |
+| Left stick | Move (`AUX9` to `AUX12`) | Moves the cursor |
+| Right stick | Look (mouse motion, with the game's sensitivity) | Scrolls |
+| A / B / X / Y | Jump, stance, use and reload, next weapon (`AUX1` to `AUX4`) | A clicks, B goes back |
+| Left / right trigger | Aim down the sight, fire (`AUX5`, `AUX6`) | |
+| Left / right bumper | Special grenade, frag grenade (`AUX13`, `AUX14`) | |
+| Left stick click | Sprint, hold breath (`AUX8`) | |
+| Right stick click | Melee (`AUX15`) | |
+| D-pad | Action slots 1 to 4 (keypad arrows) | Moves the focus; A then accepts |
+| Back (View) | Scores (`AUX7`) | |
+| Start (Menu) | The menu (Escape) | Back |
+
+Every control is an engine key of its own, so `bind` and the controls menu
+rebind them like any PC key. Sprint follows the console game: click the left
+stick while pushing forward and the key stays down until the stick comes back.
+Face buttons go by position, so the bottom one jumps whatever letter it has.
+
+The first time a controller is connected while no `AUX` key has a binding, the
+default layout above is bound, and the console says so; a profile that never
+sees a controller is not touched. `gamepad_binddefaults` sets the layout again,
+and `in_gamepadDefaultBinds 0` stops the automatic part. The mouse and keyboard
+keep working alongside: look motion adds up, and in a menu the cursor belongs
+to whichever of the mouse and the left stick moved last.
+
+| Dvar | Default | Meaning |
+| --- | --- | --- |
+| `in_gamepad` | 1 | Use a connected controller. 0 also stops asking SDL for one. |
+| `in_gamepadLookSpeed` | 1400 | Right stick at full deflection, in mouse counts a second. |
+| `in_gamepadLookPitchRatio` | 0.65 | Up and down, as a part of the look speed. |
+| `in_gamepadLookCurve` | 2 | 1 is linear; higher is finer near the centre. |
+| `in_gamepadDeadzone` | 0.2 | Part of a stick's travel around the centre that does nothing. |
+| `in_gamepadTrigger` | 0.3 | How far a trigger is pulled before its key goes down. |
+| `in_gamepadCursorSpeed` | 1000 | Left stick in a menu, in pixels a second. |
+| `in_gamepadDebug` | 0 | Logs every key the controller sends. |
+
+The first controller SDL lists is used; when it is unplugged everything it held
+is let go, and the next one is picked up within a second. Not there: rumble,
+aim assist, a second controller, and button pictures in the menus (bindings
+show as `AUX` key names).
+
+What has been checked: the mapping on the host with made-up readings
+(`scripts/tests/test_linux_gamepad.py`), and the reader against SDL3 itself
+with one of SDL's virtual controllers (`KisakCOD-mp-gamepad-test`, in the
+hosted x86_64 client job). **No real controller has been tried in the game
+yet**, so the feel of the sticks, the menus and the default speeds are untested
+by hand.
 
 ## Where it writes
 
@@ -265,6 +373,62 @@ LD_LIBRARY_PATH=<sdl3-sdk>/lib SDL_VIDEODRIVER=dummy <bin>/KisakCOD-mp-client-wi
 
 CI builds both in the device-probe job with the stand-ins and runs both.
 
+## A folder that runs on another PC
+
+A client built as above runs where it was built: its run path names that
+machine's SDL3 and DXVK folders. `scripts/tools/package_linux_client.py` makes a
+folder that can be copied to another Linux PC of the same architecture:
+
+```sh
+cmake ... -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_LINUX_PORTABLE_RUNPATH=ON
+cmake --build <build> --target KisakCOD-mp
+python3 scripts/tools/package_linux_client.py \
+  --binary <bin>/KisakCOD-mp \
+  --lib-dir <sdl3-sdk>/lib --lib-dir <dxvk>/lib \
+  --license SDL3=<sdl3-source>/LICENSE.txt --license DXVK=<dxvk-source>/LICENSE \
+  --label "$(git rev-parse --short HEAD)" --out KisakCOD-linux --archive
+```
+
+`KISAK_LINUX_PORTABLE_RUNPATH` (off by default) makes the client's run path
+`$ORIGIN/lib` and nothing else. The tool refuses a binary whose run path names
+build folders, because on another PC the loader would still look in them
+first, and there they are folders anyone may be able to create
+(`--allow-build-runpath` packs it anyway, for a folder that stays on the build
+machine). With the option on, the build tree's own client needs
+`LD_LIBRARY_PATH` to start, as the checks above already set it.
+
+The tool reads each file's ELF `NEEDED` list and copies, by soname, every
+library it finds in a `--lib-dir`, and what those need in turn (the SDL3 SDK's
+own libraries next to `libSDL3.so`, for example). `--also <soname>` adds a
+library that is only loaded by name at run time. It runs nothing and reads no
+game file. What it does not find stays the other PC's job and is listed in the
+folder's `README.txt`: typically OpenAL, and FFmpeg or libcurl when those
+options are on. The C library, `libstdc++`, `libgcc_s` and the Vulkan and GL
+libraries are never packed, whatever the folders hold.
+
+The folder holds the binary, `lib/`, a launcher, `README.txt`, `MANIFEST.txt`
+(size and SHA-256 of every file) and the licence texts given with `--license`.
+The launcher puts `lib/` first on the library path, which also covers what the
+packed libraries need themselves, and passes the game folder as `fs_basepath`:
+
+```sh
+KisakCOD-linux/run-mp.sh --game "<Call of Duty 4 folder>" +set r_fullscreen 0
+```
+
+The game folder can also come from `KISAKCOD_GAME_DIR` or be the current
+folder. For fullscreen on a native Wayland session, pack a DXVK build that has
+the fix named under [The game window and input](#the-game-window-and-input);
+`scripts/tools/setup_linux_client.py --package <new folder>` builds that DXVK
+and packs the folder in one go.
+Several binaries of one architecture can share a folder (`--binary` again for
+`KisakCOD-sp` or `KisakCOD-dedi`; each gets its own `run-*.sh`).
+
+`scripts/tests/test_package_linux_client.py` checks the tool with a made-up
+binary and SDK built by the host compiler: the packed folder still runs after
+the SDK is moved away. Hosted CI also packs the x86_64 client with the SDL3 SDK
+and the stand-ins and starts it through the launcher with no library path set.
+No packed folder has been tried on a second real PC yet.
+
 ## On the laptop
 
 These steps need a GPU and the game files, so they ran on a developer laptop
@@ -301,7 +465,7 @@ first map load with an existing retail profile drops once (see
 ### Map sweep
 
 Only mp_crash has been played by hand. `scripts/tests/run_linux_mp_map_sweep.py`
-runs `KisakCOD-mp` against an install on the other maps and writes a report. It
+runs `KisakCOD-mp` against an install on every map and writes a report. It
 is not run by CI; `scripts/tests/test_linux_mp_map_sweep.py` checks the tool
 itself against a stand-in game.
 
@@ -354,7 +518,18 @@ to the install's `main`, `zone` and `localization.txt`, `home/` as
 folder is not staged. The logs there hold the console output, asset names
 included, so keep the directory private.
 
-No laptop run of the sweep has been made yet.
+Results so far, on one laptop (Intel U300 graphics, DXVK, master 6e11f2b,
+2026-11-10; a local run, not CI evidence): all 21 stock maps passed every step
+on both builds. x86_64 ran one process per map (23 minutes), i386 ran all maps
+chained in one process (22 minutes). No assertion, error, script error or drop;
+every process exited 0. Sound went to OpenAL's null device, so the mixer ran
+and nobody listened: no OpenAL error and no stream underrun. The first map of a
+run takes longer to enter (21 to 37 s against 6 to 12 s). One frame stood
+apart: i386 mp_convoy in the chained run was nearly black (12% of it not
+black) where the x86_64 frame of that map was normal; whether that is the
+build, the chain or the place the player spawned is not known yet. Nobody has
+looked at these maps or played them by hand; the sweep shows they load, take
+a player and keep running, nothing more.
 
 ### Flashbang and concussion screen effects
 

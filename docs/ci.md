@@ -54,7 +54,12 @@ of them.
   Linux workflow changed, or a changed header is named in an `#include` but in
   no compiled unit's list), and always on master.
 - **Newer pushes.** A newer push to a pull request cancels that pull request's
-  older run, and a newer push to master cancels the older master run.
+  older run. A master run is not cancelled once it is in progress: later merges
+  wait behind it, and of those only the newest is kept, so master runs neither
+  pile up nor get cut off (on 2026-11-10, with a merge every twenty minutes and
+  an hour's queue, five master runs in a row were cancelled before they
+  finished). The PS Vita workflow goes further: every master run of it
+  finishes, so each merge that changes the port keeps its vpk for console runs.
 
 Decided by the project owner on 2026-11-10 (drafts, Windows ARM64, Intel macOS)
 and 2026-11-03 (SDL2 after a merge, path filters, cancelling). Both build
