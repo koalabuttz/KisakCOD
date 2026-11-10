@@ -296,6 +296,69 @@ void SV_SetAdvertisedProtocolInfo(char *info)
     Info_SetValueForKey(info, "protocol", va("%i", SV_GetAdvertisedProtocol()));
 }
 
+// KISAK: a challenge is only as good as the proof behind it.
+//
+// SV_DirectConnect admits whoever returns a challenge number from the address
+// it was sent to, and takes the identity from the challenge record.  Retail
+// could leave a record in place for ever, because its proof (the authorize
+// server's answer) was final.  A Steam ticket's is not: BeginAuthSession only
+// accepts the ticket for checking, and Steam's verdict comes later and can
+// change later still.  So the record must not outlive the proof:
+//
+//   * SV_DropClient forgets the dropped player's records, so coming back takes
+//     a new getchallenge (and with it a new ban check and a new ticket check);
+//   * a negative Steam verdict drops the players holding that SteamID64 and
+//     forgets its records, whether or not anyone had connected with them yet;
+//   * a newly accepted ticket forgets the other records of its SteamID64, so
+//     one auth session never backs two pending connections.
+
+// Forgets every challenge record that holds this identity, except `keep`.
+void SV_ForgetChallengesForIdentity(const char *identity, const challenge_t *keep)
+{
+    if (!identity || !identity[0])
+        return;
+    for (int slot = 0; slot < 1024; ++slot)
+    {
+        if (&svs.challenges[slot] != keep && SV_IdentitiesMatch(svs.challenges[slot].cdkeyHash, identity))
+            memset(&svs.challenges[slot], 0, sizeof(svs.challenges[slot]));
+    }
+}
+
+// A connected client, other than `except`, that holds this identity; or null.
+// `after` continues a search: pass the previous result to get the next one.
+client_t *SV_FindClientWithIdentity(const char *identity, const client_t *except, const client_t *after)
+{
+    if (!identity || !identity[0] || !sv_maxclients)
+        return nullptr;
+    for (int clientNum = after ? static_cast<int>(after - svs.clients) + 1 : 0;
+        clientNum < sv_maxclients->current.integer; ++clientNum)
+    {
+        client_t *client = &svs.clients[clientNum];
+        if (client != except && client->header.state >= CS_CONNECTED && SV_IdentitiesMatch(client->cdkeyHash, identity))
+            return client;
+    }
+    return nullptr;
+}
+
+// The Steam backend calls this when a SteamID64 no longer has a ticket that
+// Steam stands behind: a negative verdict, or an auth session that ended with
+// nothing to replace it.
+void SV_OnSteamAuthRejected(uint64_t steamID64)
+{
+    char identity[33];
+    Com_sprintf(identity, sizeof(identity), "%llu", static_cast<unsigned long long>(steamID64));
+
+    for (client_t *client = SV_FindClientWithIdentity(identity, nullptr, nullptr); client;
+        client = SV_FindClientWithIdentity(identity, nullptr, client))
+    {
+        SV_DropClient(client, "Steam Auth Timed out", true);
+    }
+    SV_ForgetChallengesForIdentity(identity, nullptr);
+    // SV_DropClient ends the session only on a dedicated server, and nobody may
+    // have connected at all.  Ending it twice is harmless.
+    Steam_OnClientDropped(steamID64);
+}
+
 void SV_GetChallenge(netadr_t from)
 {
 #if (defined(__linux__) || defined(__APPLE__) || defined(__vita__)) && defined(KISAK_DEDICATED)
@@ -438,6 +501,31 @@ void SV_GetChallenge(netadr_t from)
         return;
     }
 
+    // KISAK: a Steam-format request for a SteamID64 that someone connected is
+    // playing as.  Letting it reach the backend could end that player's auth
+    // session (see SV_SteamReconnectMayReplaceSession), so it is refused before
+    // any ticket is looked at.
+    if (!localTest && !retailGuidMode)
+    {
+        for (client_t *holder = SV_FindClientWithIdentity(identity, nullptr, nullptr); holder;
+            holder = SV_FindClientWithIdentity(identity, nullptr, holder))
+        {
+            const bool sameHost = NET_CompareBaseAdr(from, holder->header.netchan.remoteAddress);
+            if (!SV_SteamReconnectMayReplaceSession(sameHost, svs.time, holder->lastPacketTime))
+            {
+                Com_Printf(CON_CHANNEL_SERVER, "rejected connection: Steam GUID \"%s\" is already connected\n", identity);
+                // The player's own host gets no answer.  A game that lost its
+                // connection asks again every three seconds, and an "error"
+                // would end that attempt; it is let in once the old connection
+                // has been silent long enough.  Anyone else is told why.
+                if (!sameHost)
+                    NET_OutOfBandPrint(NS_SERVER, from, "error\nThis Steam account is already connected to this server.");
+                memset(&svs.challenges[i], 0, sizeof(svs.challenges[i]));
+                return;
+            }
+        }
+    }
+
     //I_strncpyz(svs.challenges[i].cdkeyHash, cdkeyHash, 33);
     memcpy(svs.challenges[i].cdkeyHash, identity, sizeof(identity));
 
@@ -451,6 +539,11 @@ void SV_GetChallenge(netadr_t from)
         Steam_CheckClientTicket(decodedSteamTicket, decodedLen, steamID64);
     if (authenticated)
     {
+        // KISAK: the ticket just accepted is the only proof this SteamID64 has
+        // now; an older pending challenge for it was backed by a session the
+        // backend may have replaced.
+        if (!localTest && !retailGuidMode)
+            SV_ForgetChallengesForIdentity(identity, &svs.challenges[i]);
         challenge->pingTime = svs.time;
         NET_OutOfBandPrint(NS_SERVER, from, va("challengeResponse %i", challenge->challenge));
         return;
@@ -461,7 +554,9 @@ void SV_GetChallenge(netadr_t from)
         NET_OutOfBandPrint(NS_SERVER, from, "error\nSteam authentication is unavailable in this native Linux build.");
 #else
         Com_Printf(CON_CHANNEL_SERVER, "rejected connection from invalid Steam GUID \"%s\"\n", identity);
-        NET_OutOfBandPrint(NS_SERVER, svs.challenges[i].adr, "error\xA\x15Your Steam Client Ticket was Invalid");
+        // KISAK: to `from`, not to the record's address. The backend may have
+        // forgotten this record already (SV_OnSteamAuthRejected).
+        NET_OutOfBandPrint(NS_SERVER, from, "error\xA\x15Your Steam Client Ticket was Invalid");
 #endif
         memset(&svs.challenges[i], 0, sizeof(svs.challenges[i]));
         return;
@@ -1231,7 +1326,11 @@ void SV_DropClient(client_t *drop, const char *reason, bool tellThem)
         )
     {
         uint64_t steamID64 = 0;
-        if (SV_ParseSteamIdentity(drop->cdkeyHash, &steamID64))
+        // KISAK: the auth session belongs to the SteamID64, not to this slot.
+        // While another connected client holds the same one (the player came
+        // back in a new slot before this one timed out), it stays open.
+        if (SV_ParseSteamIdentity(drop->cdkeyHash, &steamID64)
+            && !SV_FindClientWithIdentity(drop->cdkeyHash, drop, nullptr))
             Steam_OnClientDropped(steamID64);
     }
 
@@ -1279,6 +1378,9 @@ void SV_DropClient(client_t *drop, const char *reason, bool tellThem)
                 ++challenge;
             }
         }
+        // KISAK: coming back takes a new getchallenge; see the note above
+        // SV_ForgetChallengesForIdentity.
+        SV_ForgetChallengesForIdentity(drop->cdkeyHash, nullptr);
         translationForReason = SEH_StringEd_GetString(reason) != 0;
         if (I_stricmp(reason, "EXE_DISCONNECTED"))
         {

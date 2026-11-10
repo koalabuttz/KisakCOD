@@ -90,6 +90,35 @@ Steam at all (there is no 64-bit `steam_api` in `deps/steamsdk`).
 
 This mode has not been run yet (see Verified).
 
+### After a ticket is accepted
+
+`BeginAuthSession` only accepts a ticket for checking. Steam's verdict comes a
+moment later, and it can change while the player is in the game (the account
+signs in somewhere else, for example). The server acts on a negative verdict
+whenever it arrives (`SV_OnSteamAuthRejected` in
+`src/server_mp/sv_client_mp.cpp`, on Linux and on Windows):
+
+- every connected player with that SteamID64 is dropped ("Steam Auth Timed
+  out");
+- the challenge the server gave that SteamID64 is forgotten, so the verdict
+  also holds for a `connect` that is sent after it;
+- a dropped player's challenge is forgotten as well. Coming back takes a new
+  `getchallenge`, and with it a new ban check and a new ticket check.
+
+Steam keeps one auth session per SteamID64, so the server keeps one pending
+challenge per SteamID64 and does not let a request replace the session of
+someone who is playing. A `getchallenge` for a SteamID64 that a connected
+player holds is refused before the ticket is looked at ("This Steam account is
+already connected to this server."). The exception is the player's own
+computer coming back after the game died: a request from the same address goes
+through once the connected player has been silent for five seconds. Until then
+it gets no answer, and the game asks again by itself every three seconds. A
+player whose address changed in the middle of a game waits until the old
+connection times out (`sv_timeout`).
+
+`scripts/tests/test_server_handshake_auth.py` covers these rules without Steam.
+They have not been run against Steam yet (see Verified).
+
 If Steam is not running, not logged in, or the library is missing, start-up
 prints why and the backend stays off: the client refuses remote servers and the
 server rejects every Steam ticket. There is no fallback that admits players
@@ -170,11 +199,14 @@ as `steam_session`) needs no Steam:
   quit all exited 0.
 
 Not verified: a Windows server in either mode (its anonymous game server
-login has never been run against Steam), two different Steam accounts, and a
+login has never been run against Steam), a negative verdict from Steam for a
+player who is connected or about to connect (only host tests cover it), two
+different Steam accounts, and a
 Windows client against a Linux server in client mode (one account can't be signed in on
 two computers at once, which is why the anonymous login exists).
 
 Steam delivers auth verdicts to every process logged in to the same account,
 so each process acts only on verdicts for SteamIDs it started a session for. A
-player who reconnects before their old session ended (a listen server does not
-end it on drop) gets the old session ended and the new ticket checked.
+player who asks for a challenge before their old session ended (a listen server
+does not end it on drop) gets the old session ended and the new ticket checked;
+if the new ticket is refused, nothing is left that admits that SteamID64.
