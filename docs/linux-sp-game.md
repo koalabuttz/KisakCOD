@@ -36,6 +36,16 @@ the same stand-ins (no D3D9 device, no OpenAL device). Add
 ([linux-cinematics.md](linux-cinematics.md)); without it no movie plays. Both
 games can be switched on in one build directory.
 
+The Vulkan back end is linked in the way the multiplayer client links it: add
+`-DKISAK_BUILD_VULKAN_PROBE=ON -DKISAK_BUILD_VULKAN_SHADERS=ON
+-DKISAK_BUILD_VULKAN_LEGACY=ON -DKISAK_BUILD_VULKAN_BACKEND=ON` (Vulkan
+headers needed; the loader is opened at run time through SDL, never linked),
+and `+set r_backend vulkan` then draws through it instead of DXVK
+([vulkan-d3d9-front.md](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan)).
+The default stays `r_backend d3d9`. This is build proof only so far: the game
+compiles and links with the back end and starts as before without game files,
+but no singleplayer level has been drawn through Vulkan yet.
+
 For x86_64, add `-DKISAK_LINUX_ARCH=x86_64` in a build directory of its own
 and point the three libraries at x86_64 builds, as for the x86_64 multiplayer
 client ([linux-x64.md](linux-x64.md#x86_64-multiplayer-client)). The aarch64,
@@ -70,7 +80,10 @@ drivers: an empty base path is refused at the file system check, and a one-line
 stub of `fileSysCheck.cfg` gets through the file system to autoconfigure and
 stops there. CI builds and runs it in the device-probe job (i386, Debug and
 RelWithDebInfo) and in the x86_64 client job (Debug), where the 32-bit layout
-checks also read the singleplayer sources.
+checks also read the singleplayer sources. The Vulkan engine job builds the
+i386 game with the Vulkan back end linked in and runs the same check on it:
+without game files the game stops before the renderer, so this shows that the
+back end builds, links and leaves the start alone, not that it draws.
 
 ## Fixes the first level loads found
 
@@ -94,7 +107,9 @@ checks also read the singleplayer sources.
    are in [linux-sp-levels.md](linux-sp-levels.md).
 2. The x86_64 game's first level loads: the same sweep on the laptop with an
    x86_64 build.
-3. Compare with the Windows `KisakCOD-sp` build on the same data, to tell
+3. A first level through `r_backend vulkan` on the laptop, to find what the
+   singleplayer levels ask of the D3D9 front that multiplayer maps do not.
+4. Compare with the Windows `KisakCOD-sp` build on the same data, to tell
    port bugs from bugs the Windows build shares. Linux keeps assertions on in
    every configuration and the Windows Release build does not, so compare
    assertions with a Windows Debug build.
