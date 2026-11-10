@@ -93,6 +93,13 @@ def source_checks(checker):
                     "the client's own definitions leave Tracy off")
     checker.require("if(KISAK_LINUX_TRACY)\n    target_link_libraries(KisakCOD-mp PRIVATE TracyClient)" in module,
                     "KISAK_LINUX_TRACY links the Tracy client library into KisakCOD-mp")
+    # Assertions stay in the client unless a measuring build asks otherwise.
+    checker.require(re.search(r'option\(KISAK_LINUX_CLIENT_ASSERTS\s+"[^"]*"\s+ON\)', fence) is not None
+                    and "if(KISAK_LINUX_CLIENT_ASSERTS)\n    set(KISAK_LINUX_CLIENT_ASSERT_DEFINITIONS RELEASE_ASSERTS)"
+                    in fence
+                    and definitions is not None
+                    and "${KISAK_LINUX_CLIENT_ASSERT_DEFINITIONS}" in definitions.group(1).split(),
+                    "the client keeps the engine's assertions by default (KISAK_LINUX_CLIENT_ASSERTS)")
     readers = []
     for path in SRC.rglob("*"):
         if path.suffix in (".cpp", ".h") and path.is_file():
