@@ -153,7 +153,7 @@ Assault (give the second step `"at"` or its own pattern; steps run in order).
                    faulting address in Vita3K's log the function and line from addr2line with the kept ELF
         "note": what fell back or was left alone
         "tail": the last 30 log lines, when the row is not ok
-    "state": installed_build, installed_eboot_sha256, cmdline_mp_txt, programs_in_gxp, marker_files
+    "state": installed_build, installed_eboot_sha256, cmdline_mp_txt, programs_in_gxp, cg_files_in_gxp, marker_files (names; .gxp and .cg files are only counted)
     "sha256": run_report.py's checksum (the SHA-256 of the object without this key, as JSON with sorted keys,
               separators "," and ":", ASCII escapes)
 
