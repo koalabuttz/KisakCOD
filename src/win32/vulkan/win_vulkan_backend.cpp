@@ -292,8 +292,9 @@ void HostTuning(void *, front::Tuning &out)
 {
     out.keepDrawState = r_vkKeepDrawState->current.enabled;
     out.gpuFeed = r_vkGpuFeed->current.integer - 1;
-    out.gpuFeedDraws = static_cast<uint32_t>(std::max(0, r_vkGpuFeedDraws->current.integer));
-    out.gpuFeedIdleDraws = static_cast<uint32_t>(std::max(0, r_vkGpuFeedIdleDraws->current.integer));
+    // In parentheses: <windows.h> defines max as a macro here.
+    out.gpuFeedDraws = static_cast<uint32_t>((std::max)(0, r_vkGpuFeedDraws->current.integer));
+    out.gpuFeedIdleDraws = static_cast<uint32_t>((std::max)(0, r_vkGpuFeedIdleDraws->current.integer));
 }
 
 gfx_vk::Validation ValidationSetting()

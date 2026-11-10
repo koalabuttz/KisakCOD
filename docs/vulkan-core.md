@@ -261,6 +261,27 @@ the same block (every run of the adapter check, with or without the record
 thread). Without rasterizer threads lavapipe's other threads and every thread
 of ours are still there.
 
+The variable turned out not to be enough (2026-11-10): a hosted run of the
+`threads` scene failed on that mutex with a thread named `llvmpipe-1` in the
+report, although the step sets the variable and the hosted driver is the build
+used here, where the variable does take those threads away. Why is not known.
+Since then the ThreadSanitizer runs also load
+`scripts/tests/vulkan_tsan_suppressions.txt`, whose one rule,
+`race:libvulkan_lvp.so`, drops a report that has the driver in the stack of
+either access or in the stack that created one of the threads it names. Here,
+with the rasterizer threads on, 8 of 36 runs of the step's nine commands fail
+without the rule (the adapter check every time, the `threads`, `frame_loop`
+and `bench` scenes now and then) and 0 of 54 with it; with the threads off and
+the rule, as CI runs them, 0 of 72. What the rule gives up: a race between the
+driver and a thread of ours on the same memory, and one between two threads of
+ours that are both inside driver calls, are no longer reported, where
+ThreadSanitizer saw them at all (only through the driver's libc calls). A race
+between two accesses in our own code is reported as before:
+with it loaded, a counter that the `threads` scene's two threads were made to
+write without a lock, and the front's lock taken away, each failed that scene
+in 10 runs of 10 with a report that names our code (neither change is in the
+tree).
+
 Occlusion counts (2026-11-10, cloud sandbox, lavapipe from Mesa 25.2.8, which
 has precise queries and host query reset): the adapter's `occlusion_query`
 scene and the front's `occlusion` scene get every sample count exactly, with

@@ -36,6 +36,14 @@
 #include <thread>
 #include <vector>
 
+// MSVC rejects sscanf as unsafe (C4996, an error under /WX). The formats here
+// read numbers only, and for those sscanf_s takes the same arguments.
+#ifdef _MSC_VER
+#define KISAK_SCAN_NUMBERS sscanf_s
+#else
+#define KISAK_SCAN_NUMBERS std::sscanf
+#endif
+
 namespace
 {
 namespace front = gfx_vk::d3d9;
@@ -1541,7 +1549,7 @@ void Check::Tuning()
         }
         for (const std::string &line : said)
         {
-            if (std::sscanf(line.c_str(),
+            if (KISAK_SCAN_NUMBERS(line.c_str(),
                             "vulkan d3d9: frame stats: %llu frames in %lf s (%lf fps); per frame %lf draws, %lf "
                             "passes, %lf descriptor sets (%lf reused), %lf KB constants, %lf dynamic renames, %lf "
                             "submissions (%llu flushes in all, %llu of them ahead of Present at a swap fence, %llu "
@@ -1552,7 +1560,7 @@ void Check::Tuning()
                             &out.feedFlushes, &out.gpuAverage, &out.gpuMin, &out.gpuMax, &out.timed)
                 == 17)
                 out.found = true;
-            if (std::sscanf(line.c_str(),
+            if (KISAK_SCAN_NUMBERS(line.c_str(),
                             "vulkan d3d9: GPU time: per frame %lf ms in passes, %lf ms between them, and %lf ms "
                             "without work before the frame (%lf max); %llu parts sent early to a GPU with nothing "
                             "left",

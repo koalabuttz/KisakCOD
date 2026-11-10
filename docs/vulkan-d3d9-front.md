@@ -330,7 +330,8 @@ both scripts with `KISAK_VK_OCCLUSION_QUERIES=0`, and
 builds the check with ThreadSanitizer and runs the `threads`, `frame_loop`
 (also with `KISAK_VK_GPU_FEED=always`), `gpu_feed`, `bench`, `occlusion` and
 `tuning` scenes, which fail on any data race in our code (llvmpipe's rasterizer threads
-are off there, [vulkan-core.md](vulkan-core.md)). The
+are off there and reports from inside the driver are dropped,
+[vulkan-core.md](vulkan-core.md)). The
 Windows `vulkan-probe` job builds it with MSVC, checks that it imports neither
 `vulkan-1.dll` nor `d3d9.dll` and that it starts, and adds it to the
 `KisakCOD-vulkan-probe-x64` artifact.
@@ -431,7 +432,12 @@ the device was made, and starts them again; `r_vkStats keep` prints them
 without starting again. To measure a setting: change the dvar, wait for the
 frame rate to settle, `r_vkStats`, wait as long as the measurement should
 take, `r_vkStats` again and read the second report. With `r_backend d3d9`
-the command says there is no Vulkan device.
+the command says there is no Vulkan device. The command exists only where
+`r_cmds.cpp` is compiled with `KISAK_VULKAN_BACKEND`: the Linux and macOS
+build gives the definition to each program's stand-in objects for it (the
+first build with the command did not, and the Linux game had the dvars
+without the command until laptop run 11 typed it), and CI's `vulkan_engine`
+job looks for the command in the programs it builds.
 
 With `r_backend vulkan`, `R_HW_Direct3DCreate9`
 (`src/gfx_d3d/rhi/r_rhi_d3d9_calls.cpp`, built with `KISAK_VULKAN_BACKEND`)

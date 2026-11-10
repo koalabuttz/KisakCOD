@@ -951,8 +951,15 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
         self.assertEqual(step['env']['SDL_VIDEODRIVER'], 'offscreen')
         self.assertIn('halt_on_error=1', step['env']['TSAN_OPTIONS'])
         # Lavapipe is not instrumented: its rasterizer threads' hand-over to
-        # its queue thread reads as a race, so they are off for these runs.
+        # its queue thread reads as a race, so they are off for these runs,
+        # and reports from inside the driver are dropped. The file holds
+        # that one rule and nothing that could hide a race in our code.
         self.assertEqual(step['env']['LP_NUM_THREADS'], '0')
+        suppressions = 'scripts/tests/vulkan_tsan_suppressions.txt'
+        self.assertIn('suppressions=${{ github.workspace }}/' + suppressions, step['env']['TSAN_OPTIONS'])
+        rules = [line.strip() for line in (ROOT / suppressions).read_text().splitlines()
+                 if line.strip() and not line.startswith('#')]
+        self.assertEqual(rules, ['race:libvulkan_lvp.so'])
         run = step['run']
         self.assertIn('-DCMAKE_CXX_FLAGS=-fsanitize=thread', run)
         self.assertIn('--scene threads', run)
@@ -1027,6 +1034,27 @@ class VulkanEngineWorkflowTests(unittest.TestCase):
         self.assertIn("grep -q 'libvulkan'", build)
         for program in ('KisakCOD-device-probe', 'KisakCOD-world-draw-probe', 'KisakCOD-mp'):
             self.assertIn(program, build)
+
+    def test_the_programs_with_a_console_get_the_statistics_command(self):
+        # r_vkStats is registered by src/gfx_d3d/r_cmds.cpp, which is not in
+        # the objects that make D3D9 calls. The first build with the command
+        # gave the back end's definition to those objects only, and the game
+        # had no r_vkStats (found by a laptop run, not by CI).
+        module = (ROOT / 'scripts/vulkan_probe/vulkan_backend.cmake').read_text()
+        for pair in ('KisakCOD-world-draw-probe KisakCOD-world-draw-standin', 'KisakCOD-mp KisakCOD-mp-standin'):
+            self.assertIn(pair, module)
+        self.assertIn('target_compile_definitions(${command_objects} PRIVATE KISAK_VULKAN_BACKEND)', module)
+        self.assertIn('message(FATAL_ERROR\n                "${command_objects} does not compile src/gfx_d3d/r_cmds.cpp',
+                      module)
+        commands = (ROOT / 'src/gfx_d3d/r_cmds.cpp').read_text()
+        self.assertIn('#if defined(KISAK_VULKAN_BACKEND)\n\tCmd_AddCommandInternal("r_vkStats"', commands)
+        self.assertIn('"r_vkStats: there is no Vulkan device', commands)
+        build = self.step(self.BUILD_STEP)['run']
+        self.assertIn('for program in KisakCOD-world-draw-probe KisakCOD-mp; do\n'
+                      'grep -qx -- "-- Vulkan back end: r_vkStats registered in $program" "$RUNNER_TEMP/configure.log"',
+                      '\n'.join(line.strip() for line in build.splitlines()))
+        self.assertIn('if ! grep -aq \'r_vkStats: there is no Vulkan device\' "$OUT_DIR/$program"; then', build)
+        self.assertLess(build.index('cmake --build "$BUILD_DIR"'), build.index("grep -aq 'r_vkStats"))
 
     def test_the_device_probe_runs_through_the_back_end_on_lavapipe(self):
         install = next(step['run'] for step in self.job['steps'] if step.get('name', '').startswith('Install '))
