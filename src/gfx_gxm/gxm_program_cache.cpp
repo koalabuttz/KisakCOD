@@ -19,11 +19,27 @@ bool g_folderMade = false;
 bool g_compilerTried = false;
 bool g_compilerReady = false;
 std::string g_compilerMessage;
+uint64_t g_lastCompile = 0;
 ProgramCacheStats g_stats{};
+
+// The compiler is unloaded once it holds this much of the heap, and once it
+// has had nothing to do for this long. The heap is the game's too: a first
+// start compiles hundreds of programs while the game loads, and the sounds
+// that load last found no room left beside what the compiler kept.
+constexpr size_t kCompilerHeapLimit = 2 << 20;
+constexpr uint64_t kCompilerIdleMicros = 5 * 1000 * 1000;
 
 uint64_t Micros()
 {
     return sceKernelGetProcessTimeWide();
+}
+
+void UnloadCompiler()
+{
+    g_stats.compilerGaveBack += UnloadShaderCompiler();
+    ++g_stats.compilerUnloads;
+    if (!ShaderCompilerLoaded())
+        g_compilerTried = false; // the next program to compile loads it again
 }
 
 uint64_t KeyFor(const std::string &cg, ShaderStage stage)
@@ -161,7 +177,13 @@ bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &
     }
     const uint64_t begin = Micros();
     const bool compiled = CompileCg(cg.data(), cg.size(), stage, program, log, fastMath, optimization);
-    g_stats.compileMicros += Micros() - begin;
+    g_lastCompile = Micros();
+    g_stats.compileMicros += g_lastCompile - begin;
+    size_t held = 0, peak = 0;
+    uint32_t refused = 0;
+    ShaderCompilerMemory(held, peak, refused);
+    if (held > kCompilerHeapLimit)
+        UnloadCompiler();
     if (!compiled)
     {
         ++g_stats.failed;
@@ -171,6 +193,12 @@ bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &
     if (!path.empty() && !WriteFile(path, program))
         ++g_stats.writeFailures;
     return true;
+}
+
+void ProgramCacheFrame()
+{
+    if (ShaderCompilerLoaded() && Micros() - g_lastCompile > kCompilerIdleMicros)
+        UnloadCompiler();
 }
 
 const ProgramCacheStats &GetProgramCacheStats()

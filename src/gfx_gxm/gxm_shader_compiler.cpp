@@ -7,7 +7,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <malloc.h>
 
 namespace gfx_gxm
 {
@@ -30,30 +29,57 @@ SceShaccCgSourceFile *OpenSource(const char *, const SceShaccCgSourceLocation *,
     return &g_source;
 }
 
-// What the compiler holds of the heap, for the logs: it allocates through
-// these two and keeps working memory between programs.
+// The compiler allocates from the game's heap through these two and keeps
+// working memory between programs (about 6 MB after a console compiled the
+// menu's programs). Each block carries a header that links it to the others,
+// so that everything the compiler still holds can be given back once it is
+// unloaded, whatever it freed by itself.
+struct Block
+{
+    Block *previous;
+    Block *next;
+    uint32_t size;
+    uint32_t mark;
+};
+static_assert(sizeof(Block) == 16, "the header keeps malloc's alignment");
+constexpr uint32_t kBlockMark = 0x53484343; // 'SHCC'
+
+Block g_blocks{&g_blocks, &g_blocks, 0, 0};
 size_t g_heldBytes = 0, g_heldPeak = 0;
 uint32_t g_refusedAllocations = 0;
 
 void *CompilerAlloc(unsigned int size)
 {
-    void *memory = std::malloc(size);
-    if (memory)
+    Block *block = static_cast<Block *>(std::malloc(sizeof(Block) + size));
+    if (!block)
     {
-        g_heldBytes += malloc_usable_size(memory);
-        if (g_heldBytes > g_heldPeak)
-            g_heldPeak = g_heldBytes;
-    }
-    else
         ++g_refusedAllocations;
-    return memory;
+        return nullptr;
+    }
+    block->size = size;
+    block->mark = kBlockMark;
+    block->previous = &g_blocks;
+    block->next = g_blocks.next;
+    g_blocks.next->previous = block;
+    g_blocks.next = block;
+    g_heldBytes += sizeof(Block) + size;
+    if (g_heldBytes > g_heldPeak)
+        g_heldPeak = g_heldBytes;
+    return block + 1;
 }
 
 void CompilerFree(void *memory)
 {
-    if (memory)
-        g_heldBytes -= malloc_usable_size(memory);
-    std::free(memory);
+    if (!memory)
+        return;
+    Block *block = static_cast<Block *>(memory) - 1;
+    if (block->mark != kBlockMark)
+        return; // not one of ours (or freed twice): leave it alone
+    block->mark = 0;
+    block->previous->next = block->next;
+    block->next->previous = block->previous;
+    g_heldBytes -= sizeof(Block) + block->size;
+    std::free(block);
 }
 
 bool FileExists(const char *path)
@@ -89,8 +115,13 @@ bool LoadShaderCompiler(std::string &message)
     }
     // The compiler links to the system's C library and file I/O modules,
     // which a game does not load by itself.
-    sceKernelLoadStartModule("vs0:sys/external/libfios2.suprx", 0, nullptr, 0, nullptr, nullptr);
-    sceKernelLoadStartModule("vs0:sys/external/libc.suprx", 0, nullptr, 0, nullptr, nullptr);
+    static bool systemModules = false;
+    if (!systemModules)
+    {
+        systemModules = true;
+        sceKernelLoadStartModule("vs0:sys/external/libfios2.suprx", 0, nullptr, 0, nullptr, nullptr);
+        sceKernelLoadStartModule("vs0:sys/external/libc.suprx", 0, nullptr, 0, nullptr, nullptr);
+    }
     int status = 0;
     const SceUID module = sceKernelLoadStartModule(path, 0, nullptr, 0, nullptr, &status);
     if (module < 0)
@@ -119,6 +150,29 @@ void ReleaseShaderCompiler()
 {
     if (g_module >= 0)
         sceShaccCgReleaseCompiler();
+}
+
+size_t UnloadShaderCompiler()
+{
+    if (g_module < 0)
+        return 0;
+    const size_t before = g_heldBytes;
+    sceShaccCgReleaseCompiler();
+    int status = 0;
+    if (sceKernelStopUnloadModule(g_module, 0, nullptr, 0, nullptr, &status) < 0)
+        return before - g_heldBytes; // still loaded: what it freed by itself is all there is
+    g_module = -1;
+    // Nothing refers to what it left behind now.
+    while (g_blocks.next != &g_blocks)
+    {
+        Block *block = g_blocks.next;
+        g_blocks.next = block->next;
+        block->mark = 0;
+        std::free(block);
+    }
+    g_blocks.previous = &g_blocks;
+    g_heldBytes = 0;
+    return before;
 }
 
 void ShaderCompilerMemory(size_t &held, size_t &peak, uint32_t &refused)

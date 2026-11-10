@@ -30,6 +30,10 @@ struct ProgramCacheStats
     uint32_t writeFailures;
     uint64_t compileMicros;
     uint64_t readMicros;
+    // Times the compiler was unloaded to give its memory back, and the heap
+    // bytes that gave back.
+    uint32_t compilerUnloads;
+    uint64_t compilerGaveBack;
 };
 
 // The program for this source, from its file or compiled now (and then
@@ -39,6 +43,10 @@ struct ProgramCacheStats
 // found by the source alone.
 bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &program, std::string &log,
                 bool fastMath = true, int optimization = 3);
+// Once a frame: unloads the compiler when it has been idle for a while, so
+// that it holds no memory while the game runs. It is loaded again when a
+// program has to be compiled.
+void ProgramCacheFrame();
 // Whether the folder holds a file of this name: switches for runs on a
 // console or an emulator ("dump-cg" below, the draw tests' "run-tests").
 bool ProgramCacheMarker(const char *name);

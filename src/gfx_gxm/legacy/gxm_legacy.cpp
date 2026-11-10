@@ -745,8 +745,10 @@ void LogShaderSummary(Device &device, const char *when)
     uint32_t refused = 0;
     gxm::ShaderCompilerMemory(held, peak, refused);
     if (p.compiled || refused)
-        Log(device, "shader compiler memory %s: %.1f MB of the heap held, %.1f MB at most, %u allocations refused",
-            when, held / 1048576.0, peak / 1048576.0, refused);
+        Log(device,
+            "shader compiler memory %s: %.1f MB of the heap held, %.1f MB at most, %u allocations refused; "
+            "unloaded %u times, which gave back %.1f MB",
+            when, held / 1048576.0, peak / 1048576.0, refused, p.compilerUnloads, p.compilerGaveBack / 1048576.0);
     if (std::strcmp(when, "in all") == 0)
         for (const auto &[reason, count] : c.refusals)
             Log(device, "shaders not translated: %u x %s", count, reason.c_str());
@@ -1127,6 +1129,7 @@ PresentResult Present(Device *device)
     EndScene(*device);
     const bool shown = gxm::Present();
     FrameDone(*device);
+    gxm::ProgramCacheFrame();
     if (!shown)
     {
         device->error = "sceGxm could not present";
