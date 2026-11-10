@@ -14,7 +14,7 @@ what is still missing. Build steps are in the
   on x86_64, a portable folder, and opt-in controllers
 - [Singleplayer game](linux-sp-game.md): `KisakCOD-sp`, built like the
   multiplayer client from the singleplayer lists; killhouse and cargoship load
-  and play on i386; the x86_64 build has loaded its first levels in local runs
+  and play on i386; the x86_64 build loads all 21 levels in local runs
 - [Singleplayer levels](linux-sp-levels.md): what the other levels use, the
   level sweep tool and the laptop run plan
 - [Cinematics](linux-cinematics.md): Bink movies through an FFmpeg-backed shim
