@@ -251,6 +251,14 @@ struct DrawState
 
     uint64_t drawn = 0, skipped[SkipCount] = {};
     uint64_t renames = 0, ringOverflows = 0;
+    // Every wait for the GPU (FinishGpu): after one, nothing drawn before it
+    // is still read.
+    uint64_t gpuWaits = 0;
+    // Renames that found no room and waited for the GPU, renames a wait since
+    // the buffer's last draw made needless, and the bytes of renamed buffers'
+    // old memory the GPU may still read.
+    uint64_t renameWaits = 0, renamesSpared = 0;
+    uint32_t renamedWaiting = 0, renamedWaitingMost = 0;
     uint32_t drawFailures = 0, uniformFailures = 0;
     uint64_t copies = 0;
     uint32_t variantsMade = 0, variantFailures = 0;
@@ -1875,6 +1883,8 @@ void FinishGpu(Device &device)
 {
     EndScene(device);
     gxm::Finish();
+    if (device.draw)
+        ++device.draw->gpuWaits;
 }
 
 void FrameDone(Device &device)
@@ -1939,22 +1949,50 @@ void ForgetDecl(Device &device, VertexDecl &decl)
         DropProgramsIf(device, [&](const VertexProgramEntry &e) { return e.decl == &decl; }, nullptr);
 }
 
+// The engine locks most of its dynamic buffers with DISCARD every frame, and
+// the old memory of each rename waits kFramesInFlight frames. So a buffer can
+// hold four times its size, and the pools have no room for that in a game.
+// The fresh memory therefore comes from the pool the buffer belongs in (main
+// for dynamic buffers) and from no other: copies that spilled into CDRAM took
+// the room the game's render targets needed, in pieces. When that pool is
+// full, the lock waits for the GPU and writes in place. One such wait serves
+// every buffer drawn before it: until a draw reads one again, its locks
+// write in place too.
 void Rename(Device &device, GpuBuffer &buffer)
 {
-    Memory fresh;
-    const bool dynamic = (buffer.usage & d3d::USAGE_DYNAMIC) != 0;
-    if (!AllocateMemory(device, fresh, buffer.size, 16, buffer.pool, !dynamic, buffer.memory.use,
-                        buffer.name.c_str()))
+    DrawState &d = *device.draw;
+    if (buffer.drawnWait != d.gpuWaits)
     {
-        // No memory: wait for the GPU instead.
-        FinishGpu(device);
         buffer.drawn = false;
+        ++d.renamesSpared;
         return;
     }
-    Retire(device, buffer.memory);
+    Memory fresh;
+    const bool dynamic = (buffer.usage & d3d::USAGE_DYNAMIC) != 0;
+    if (!AllocateRenamed(fresh, buffer.size, 16, dynamic ? gxm::MemoryKind::Main : gxm::MemoryKind::Cdram,
+                         buffer.memory.use))
+    {
+        FinishGpu(device);
+        buffer.drawn = false;
+        ++d.renameWaits;
+        return;
+    }
+    {
+        const gxm::MemoryKind kind = buffer.memory.kind;
+        void *data = buffer.memory.data;
+        const MemoryUse use = buffer.memory.use;
+        const uint32_t bytes = buffer.memory.bytes;
+        DrawState *state = &d;
+        d.renamedWaiting += bytes;
+        d.renamedWaitingMost = std::max(d.renamedWaitingMost, d.renamedWaiting);
+        Defer(device, [state, kind, data, use, bytes] {
+            FreeGpuMemory(kind, data, use, bytes);
+            state->renamedWaiting -= bytes;
+        });
+    }
     buffer.memory = std::move(fresh);
     buffer.drawn = false;
-    ++device.draw->renames;
+    ++d.renames;
     ++device.stats.dynamicRenames;
 }
 
@@ -2202,6 +2240,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         }
         indexData = ib->memory.data + startIndex * bytes;
         ib->drawn = true;
+        ib->drawnWait = d.gpuWaits;
     }
     else if (indexCount > kSequentialIndices)
     {
@@ -2328,6 +2367,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             return;
         }
         vb->drawn = true;
+        vb->drawnWait = d.gpuWaits;
         streamData[i] = vb->memory.data + int64_t(device.streams[s].offset) + int64_t(baseVertex) * strides[s];
     }
 
@@ -2690,5 +2730,10 @@ void LogDrawSummary(Device &device)
     for (int i = 0; i < SkipCount; ++i)
         if (d->skipped[i])
             Log(device, "draws skipped: %llu x %s", (unsigned long long)d->skipped[i], kSkipNames[i]);
+    Log(device,
+        "buffer renames: %llu took fresh memory, %llu waited for the GPU instead (their pool was full) and %llu "
+        "needed neither (a wait since their last draw); old copies the GPU might still read took %u KB at most",
+        (unsigned long long)d->renames, (unsigned long long)d->renameWaits, (unsigned long long)d->renamesSpared,
+        d->renamedWaitingMost >> 10);
 }
 } // namespace gfx_vk::legacy

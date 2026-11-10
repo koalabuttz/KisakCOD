@@ -242,6 +242,20 @@ bool AllocateMemory(Device &device, Memory &memory, uint32_t bytes, uint32_t ali
     return false;
 }
 
+bool AllocateRenamed(Memory &memory, uint32_t bytes, uint32_t align, gxm::MemoryKind kind, MemoryUse use)
+{
+    void *data = gxm::Allocate(kind, bytes, align);
+    if (!data)
+        return false;
+    memory.data = static_cast<uint8_t *>(data);
+    memory.kind = kind;
+    memory.gpu = true;
+    memory.use = use;
+    memory.bytes = bytes;
+    Account(kind, use, bytes, true);
+    return true;
+}
+
 void FreeGpuMemory(gxm::MemoryKind kind, void *data, MemoryUse use, uint32_t bytes)
 {
     if (gxm::Free(kind, data))
