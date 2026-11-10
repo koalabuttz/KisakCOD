@@ -199,13 +199,13 @@ void R_CreateDynamicBuffers()
 #endif
     gfxBuf.dynamicVertexBuffer = gfxBuf.dynamicVertexBufferPool;
     for (bufferItera = 0; bufferItera != 2; ++bufferItera)
-        R_InitDynamicVertexBufferState(&gfxBuf.skinnedCacheVbPool[bufferItera], 0x480000);
+        R_InitDynamicVertexBufferState(&gfxBuf.skinnedCacheVbPool[bufferItera], R_SKINNED_CACHE_BYTES);
     R_InitTempSkinBuf();
     for (bufferIterb = 0; bufferIterb != 1; ++bufferIterb)
         R_InitDynamicIndexBufferState(&gfxBuf.dynamicIndexBufferPool[bufferIterb], 0x100000);
     gfxBuf.dynamicIndexBuffer = gfxBuf.dynamicIndexBufferPool;
     for (bufferIterc = 0; bufferIterc != 2; ++bufferIterc)
-        R_InitDynamicIndexBufferState(&gfxBuf.preTessIndexBufferPool[bufferIterc], 0x100000);
+        R_InitDynamicIndexBufferState(&gfxBuf.preTessIndexBufferPool[bufferIterc], R_PRETESS_INDEX_COUNT);
     gfxBuf.preTessIndexBuffer = gfxBuf.preTessIndexBufferPool;
     gfxBuf.preTessBufferFrame = 0;
 }
