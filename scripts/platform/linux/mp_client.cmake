@@ -57,6 +57,8 @@ option(KISAK_LINUX_HTTP_DOWNLOADS
     "Fetch a server's map and mod files over HTTP(S) in KisakCOD-mp with the engine's libcurl downloader (needs libcurl 7.85 or newer, found with pkg-config)" OFF)
 option(KISAK_LINUX_TRACY
     "Build KisakCOD-dedi, KisakCOD-mp and KisakCOD-sp with the Tracy profiler: idle until a profiler connects, localhost only. For profiling runs" OFF)
+option(KISAK_LINUX_PORTABLE_RUNPATH
+    "Give KisakCOD-mp the run path $ORIGIN/lib instead of the build machine's SDK folders, for a folder made with scripts/tools/package_linux_client.py. The build tree then needs LD_LIBRARY_PATH to run it" OFF)
 option(KISAK_BUILD_LINUX_MP_CLIENT
     "Build the native Linux multiplayer client KisakCOD-mp (needs KISAK_BUILD_LINUX_NATIVE_D3D9, KISAK_DXVK_NATIVE_LIBRARY, KISAK_OPENAL_LIBRARY and SDL3)" OFF)
 if(NOT KISAK_BUILD_LINUX_MP_CLIENT)
@@ -353,6 +355,21 @@ endif()
 target_link_libraries(KisakCOD-mp PRIVATE
     "${KISAK_DXVK_NATIVE_LIBRARY}" "${KISAK_OPENAL_LIBRARY}" SDL3::SDL3 Threads::Threads ${CMAKE_DL_LIBS})
 add_dependencies(KisakCOD-mp update_build_number)
+if(KISAK_LINUX_PORTABLE_RUNPATH)
+    if(APPLE)
+        message(FATAL_ERROR "KISAK_LINUX_PORTABLE_RUNPATH is for ELF targets; macOS has its own bundle rules")
+    endif()
+    # CMake's default run path lists every folder a linked library came from:
+    # the SDL3 and DXVK SDK folders of this machine. A copy of the binary on
+    # another PC would still search those names first, and there they are
+    # folders anyone may be able to create. A packaged client looks only in
+    # the lib folder next to itself (and then in the system's own folders).
+    set_target_properties(KisakCOD-mp PROPERTIES
+        SKIP_BUILD_RPATH OFF
+        BUILD_WITH_INSTALL_RPATH ON
+        INSTALL_RPATH "\$ORIGIN/lib")
+    target_link_options(KisakCOD-mp PRIVATE -Wl,--enable-new-dtags)
+endif()
 if(KISAK_LINUX_CINEMATICS)
     target_link_libraries(KisakCOD-mp PRIVATE PkgConfig::KISAK_FFMPEG)
 endif()
