@@ -16,10 +16,13 @@
 //     IN_MouseMove does on Windows. Its answer says who has the mouse, which
 //     is how the next reading is mapped;
 //   * IN_SetCursorPos moves the cursor the mapping keeps.
-// The Vita's controls are engine keys of their own (AUX1 to AUX16 and the
-// keypad arrows), so `bind` and the controls menu work on them. A profile has
-// no bindings for them at first; the default layout is set once, while none of
-// the AUX keys is bound to anything (vita_defaultBinds, vita_binddefaults).
+// The Vita's controls are engine keys of their own (AUX1 to AUX16, the keypad
+// arrows and the keypad's 5), so `bind` and the controls menu work on them. A
+// profile has no bindings for them at first; the default layout is set once,
+// while none of the AUX keys is bound to anything (vita_defaultBinds,
+// vita_binddefaults). A profile that got an earlier default layout is given
+// the controls that came since, once (vita_layout). The controls menu and the
+// game's hints show the controls by name, "Square" for AUX3 (NameControls).
 //
 // START + SELECT still quits, from the main loop (Vita_QuitRequested): both
 // readers peek at the pad, so neither takes the other's samples.
@@ -74,12 +77,17 @@ static_assert(SameKey(vi::kKeyUpArrow, K_UPARROW) && SameKey(vi::kKeyDownArrow, 
 static_assert(SameKey(vi::kKeyLeftArrow, K_LEFTARROW) && SameKey(vi::kKeyRightArrow, K_RIGHTARROW));
 static_assert(SameKey(vi::kKeyKpUpArrow, K_KP_UPARROW) && SameKey(vi::kKeyKpDownArrow, K_KP_DOWNARROW));
 static_assert(SameKey(vi::kKeyKpLeftArrow, K_KP_LEFTARROW) && SameKey(vi::kKeyKpRightArrow, K_KP_RIGHTARROW));
+static_assert(SameKey(vi::kKeyKp5, K_KP_5));
 static_assert(SameKey(vi::kKeyMouse1, K_MOUSE1) && SameKey(vi::kKeyWheelDown, K_MWHEELDOWN));
 static_assert(SameKey(vi::kKeyWheelUp, K_MWHEELUP) && SameKey(vi::kKeyAux1, K_AUX1));
 static_assert(SameKey(vi::kKeyAux1 + 15, K_AUX16));
 static_assert(SameKey(vi::kMaxFrontTouches, 6) && SameKey(vi::kMaxRearTouches, 4) && SCE_TOUCH_MAX_REPORT >= 6);
 static_assert(SameKey(vt::kKeyEnter, K_ENTER) && SameKey(vt::kKeyEscape, K_ESCAPE));
 static_assert(SameKey(vt::kMaxText, kVitaKeyboardMaxText));
+
+// The names the engine shows for keys (cl_keys.cpp); it has no header for
+// them. The names `bind` and the config files use are another table.
+extern keyname_t keynames_localized[96];
 
 namespace {
 
@@ -124,6 +132,8 @@ const dvar_t *vita_cursorSpeed;
 const dvar_t *vita_frontTouch;
 const dvar_t *vita_rearTouch;
 const dvar_t *vita_defaultBinds;
+const dvar_t *vita_layout;
+const dvar_t *vita_buttonNames;
 const dvar_t *vita_inputDebug;
 const dvar_t *vita_keyboard;
 cmd_function_s s_bindDefaultsCommand;
@@ -315,8 +325,9 @@ bool Unbound(int key)
 }
 
 // Gives the Vita's controls their default actions: all of them, or only
-// those bound to nothing.
-int BindDefaults(bool all)
+// those bound to nothing, and of those only the ones that came after the
+// default layout `since`.
+int BindDefaults(bool all, int since = 0)
 {
     int bound = 0;
     for (int i = 0; i < vi::kControlCount; ++i)
@@ -324,7 +335,7 @@ int BindDefaults(bool all)
         const vi::Control control = static_cast<vi::Control>(i);
         const char *const command = vi::DefaultBinding(control);
         const int key = vi::GameKey(control);
-        if (!command || (!all && !Unbound(key)))
+        if (!command || vi::LayoutOf(control) <= since || (!all && !Unbound(key)))
             continue;
         char binding[64];
         snprintf(binding, sizeof(binding), "%s", command);
@@ -334,28 +345,80 @@ int BindDefaults(bool all)
     return bound;
 }
 
+void SetLayout(int layout)
+{
+    if (vita_layout && vita_layout->current.integer != layout)
+        Dvar_SetInt(vita_layout, layout);
+}
+
 void BindDefaults_f()
 {
     Com_Printf(CON_CHANNEL_SYSTEM, "vita input: %d controls set to the default layout\n", BindDefaults(true));
+    SetLayout(vi::kCurrentLayout);
 }
 
 // A profile made on a PC, a new profile and the controls menu's "reset" all
 // start from `unbindall` and the PC's keys, which leave every AUX key bound to
 // nothing: the Vita's layout is set then. One control left unbound on purpose
 // stays so, as long as another AUX key has a binding.
+//
+// A profile that has bindings got them from the default layout its vita_layout
+// names, the first one if its config does not say (the engine sets every dvar
+// back to its default before it reads another profile's config). The controls
+// that came with later layouts get their default actions there once, where
+// they are bound to nothing, and the profile is marked as having today's.
 void CheckDefaultBinds()
 {
     if (!vita_defaultBinds || !vita_defaultBinds->current.enabled || Display_KeyBindPending())
         return;
+    bool anyBound = false;
     for (int key = K_AUX1; key <= K_AUX16; ++key)
+        anyBound = anyBound || !Unbound(key);
+    if (!anyBound)
     {
-        if (!Unbound(key))
-            return;
+        const int bound = BindDefaults(false);
+        SetLayout(vi::kCurrentLayout);
+        Com_Printf(CON_CHANNEL_SYSTEM,
+                   "vita input: the Vita's controls had no bindings; %d set to the default layout (docs/vita-client.md)\n",
+                   bound);
+        return;
     }
-    const int bound = BindDefaults(false);
+    const int layout = vita_layout ? vita_layout->current.integer : vi::kCurrentLayout;
+    if (layout >= vi::kCurrentLayout)
+        return;
+    const int bound = BindDefaults(false, layout);
+    SetLayout(vi::kCurrentLayout);
     Com_Printf(CON_CHANNEL_SYSTEM,
-               "vita input: the Vita's controls had no bindings; %d set to the default layout (docs/vita-client.md)\n",
-               bound);
+               "vita input: the profile's controls were default layout %d; %d newer controls set to layout %d's actions\n",
+               layout, bound, vi::kCurrentLayout);
+}
+
+// The engine's names for the Vita's keys are the PC's: "AUX3", and from the
+// game's own texts something like it. The controls menu and the hints on the
+// screen ("Press ... to use") take a key's name from keynames_localized and
+// show it as it is when the game's texts have no entry under it, so the
+// controls' own names go there: "Square". The table `bind` and the configs use
+// is not touched, so a profile reads the same with and without.
+void NameControls()
+{
+    static const char *s_engineNames[vi::kControlCount];
+    const bool named = vita_buttonNames && vita_buttonNames->current.enabled;
+    for (int i = 0; i < vi::kControlCount; ++i)
+    {
+        const vi::Control control = static_cast<vi::Control>(i);
+        const int key = vi::GameKey(control);
+        if (key == K_ESCAPE)
+            continue; // Start is the engine's Escape, under that name
+        for (keyname_t *entry = keynames_localized; entry->name; ++entry)
+        {
+            if (entry->keynum != key)
+                continue;
+            if (!s_engineNames[i])
+                s_engineNames[i] = entry->name;
+            entry->name = named ? vi::ControlName(control) : s_engineNames[i];
+            break;
+        }
+    }
 }
 
 bool KeyboardWanted()
@@ -534,6 +597,11 @@ void Housekeeping(uint32_t now)
     s_lastHousekeepingMs = now;
     CheckDefaultBinds();
     OfferProfileName();
+    if (vita_buttonNames && vita_buttonNames->modified)
+    {
+        Dvar_ClearModified(const_cast<dvar_s *>(vita_buttonNames));
+        NameControls();
+    }
 }
 
 } // namespace
@@ -590,12 +658,21 @@ void IN_Init()
     vita_cursorSpeed = Dvar_RegisterFloat("vita_cursorSpeed", 700.0f, 100.0f, 4000.0f, DVAR_ARCHIVE,
                                           "Left stick at full deflection in a menu, in pixels a second");
     vita_frontTouch = Dvar_RegisterBool("vita_frontTouch", 1, DVAR_ARCHIVE,
-                                        "The screen's left and right thirds are keys in the game (AUX13 to AUX15)");
+                                        "The screen's left and right thirds and the top of its middle are keys in "
+                                        "the game (AUX13 to AUX15 and KP_5)");
     vita_rearTouch = Dvar_RegisterBool("vita_rearTouch", 1, DVAR_ARCHIVE,
                                        "A tap on the rear touch pad's left or right half is a key in the game "
                                        "(AUX8 and AUX16)");
     vita_defaultBinds = Dvar_RegisterBool("vita_defaultBinds", 1, DVAR_ARCHIVE,
                                           "Set the default layout while no AUX key has a binding");
+    vita_layout = Dvar_RegisterInt("vita_layout", vi::kFirstLayout, vi::kFirstLayout, vi::kCurrentLayout, DVAR_ARCHIVE,
+                                   "The default layout this profile's controls were last given; controls that "
+                                   "came with a later one get their default actions once");
+    vita_buttonNames = Dvar_RegisterBool("vita_buttonNames", 1, DVAR_ARCHIVE,
+                                         "The controls menu and the hints name the Vita's controls (Square), not "
+                                         "the engine's keys (AUX3)");
+    Dvar_ClearModified(const_cast<dvar_s *>(vita_buttonNames));
+    NameControls();
     vita_inputDebug = Dvar_RegisterBool("vita_inputDebug", 0, 0, "Log every key the controls send and every touch");
     vita_keyboard = Dvar_RegisterBool("vita_keyboard", 1, DVAR_ARCHIVE,
                                       "Open the on-screen keyboard when a menu's text field or the chat line waits "

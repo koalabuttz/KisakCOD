@@ -168,10 +168,16 @@ void TestTables()
         // A key of its own, which no PC keyboard or mouse has.
         const bool aux = key >= Aux(1) && key <= Aux(16);
         const bool keypad = key == kKeyKpUpArrow || key == kKeyKpDownArrow || key == kKeyKpLeftArrow
-                            || key == kKeyKpRightArrow;
+                            || key == kKeyKpRightArrow || key == kKeyKp5;
         CHECK(aux || keypad);
         CHECK(DefaultBinding(control) != nullptr && strlen(DefaultBinding(control)) > 0);
+        // Which layout it came with: the first, or a later one up to today's.
+        CHECK(LayoutOf(control) >= kFirstLayout && LayoutOf(control) <= kCurrentLayout);
+        CHECK((LayoutOf(control) == kFirstLayout) == (control != kFrontTopMiddle));
     }
+    CHECK(GameKey(kFrontTopMiddle) == kKeyKp5 && LayoutOf(kFrontTopMiddle) == 2 && kCurrentLayout == 2);
+    CHECK(std::string(DefaultBinding(kFrontTopMiddle)) == "chatmodepublic");
+    CHECK(LayoutOf(static_cast<Control>(-1)) == 0 && LayoutOf(kControlCount) == 0);
     // All sixteen AUX keys are taken.
     for (int n = 1; n <= 16; ++n)
         CHECK(used[Aux(n)]);
@@ -747,7 +753,8 @@ void TestGameTouch()
     Rig rig;
     rig.Step();
 
-    // The left third, the right third's two halves, and the middle.
+    // The left third, the right third's two halves, and the middle below its
+    // top third.
     rig.Touch(100, 300, 1);
     rig.Step();
     CHECK(rig.keys.Drain() == (Events{{Aux(13), true}}));
@@ -781,8 +788,9 @@ void TestGameTouch()
         int key;
     };
     const Case cases[] = {
-        {0, 0, Aux(13)},     {319, 543, Aux(13)}, {320, 100, 0},       {639, 100, 0},
+        {0, 0, Aux(13)},     {319, 543, Aux(13)}, {320, 181, 0},       {639, 543, 0},
         {640, 0, Aux(14)},   {959, 271, Aux(14)}, {640, 272, Aux(15)}, {959, 543, Aux(15)},
+        {320, 0, kKeyKp5},   {639, 180, kKeyKp5}, {319, 0, Aux(13)},   {480, 181, 0},
     };
     uint8_t id = 10;
     for (const Case &c : cases)
@@ -811,14 +819,43 @@ void TestGameTouch()
     rig.Step();
     CHECK(rig.keys.Drain().empty());
     // And one that landed in the middle stays nothing.
-    rig.Touch(480, 100, 31);
+    rig.Touch(480, 300, 31);
     rig.Step();
     rig.pad.front[1] = {100, 100, 31};
+    rig.Step();
+    rig.pad.front[1] = {480, 50, 31};
     rig.Step();
     CHECK(rig.keys.Drain().empty());
     rig.Lift();
     rig.Step();
     CHECK(rig.keys.Drain() == (Events{{Aux(14), false}}));
+
+    // The top of the middle is a key of its own (the chat line, by default):
+    // down when the finger lands, up when it lifts, beside the others.
+    rig.Touch(480, 60, 32);
+    rig.Step();
+    CHECK(rig.keys.Drain() == (Events{{kKeyKp5, true}}));
+    CHECK(rig.mapper.Held(kFrontTopMiddle));
+    rig.Touch(100, 300, 33);
+    rig.Step();
+    rig.pad.front[0] = {480, 500, 32};
+    rig.Step();
+    CHECK(rig.keys.Drain() == (Events{{Aux(13), true}}));
+    rig.Lift();
+    rig.Step();
+    CHECK(rig.keys.Drain() == (Events{{Aux(13), false}, {kKeyKp5, false}}));
+    // In a menu the screen is the pointer there, as everywhere.
+    rig.menu = true;
+    rig.Frame();
+    rig.Touch(480, 60, 34);
+    rig.Frame();
+    rig.Frame();
+    CHECK(rig.keys.Count(kKeyKp5, true) == 0 && rig.keys.Count(kKeyMouse1, true) == 1);
+    rig.Lift();
+    rig.Frame();
+    rig.menu = false;
+    rig.Step();
+    rig.keys.Drain();
 
     // Two fingers in one area: down once, up when both are gone.
     rig.Touch(50, 50, 40);
@@ -870,7 +907,7 @@ void TestGameTouch()
 }
 
 // The rear pad: a tap is the key press, a resting finger is nothing, and the
-// key stays down while the left stick pushes forward.
+// key stays down while the left stick pushes forward or L is held.
 void TestRearTap()
 {
     g_test = "rear tap";
@@ -1007,6 +1044,38 @@ void TestRearTap()
     CHECK(rig.keys.Drain() == (Events{{Aux(8), false}}));
     rig.pad.ly = 128;
     rig.pad.lx = 128;
+    rig.Step();
+    rig.keys.Drain();
+
+    // A held breath. Tapped while L is held (the sight is up, by default), the
+    // key stays down until L is let go, standing still.
+    rig.pad.buttons = Bit(kLeftShoulder);
+    rig.Step();
+    CHECK(rig.keys.Drain() == (Events{{Aux(5), true}}));
+    tap(100, 15);
+    CHECK(rig.keys.Drain() == (Events{{Aux(8), true}}));
+    for (int i = 0; i < 200; ++i)
+        rig.Step(50);
+    CHECK(rig.keys.Drain().empty());
+    CHECK(rig.mapper.Held(kRearLeft));
+    rig.pad.buttons = 0;
+    rig.Step();
+    CHECK(rig.keys.Drain() == (Events{{Aux(5), false}}));
+    rig.Step(239);
+    CHECK(rig.keys.Drain().empty());
+    rig.Step(1);
+    CHECK(rig.keys.Drain() == (Events{{Aux(8), false}}));
+    // L alone presses nothing on the pad, and another button holds nothing.
+    rig.pad.buttons = Bit(kLeftShoulder);
+    rig.Step(500);
+    CHECK(rig.keys.Drain() == (Events{{Aux(5), true}}));
+    rig.pad.buttons = Bit(kRightShoulder);
+    rig.Step();
+    tap(100, 16);
+    CHECK(rig.keys.Drain() == (Events{{Aux(5), false}, {Aux(6), true}, {Aux(8), true}}));
+    rig.Step(250);
+    CHECK(rig.keys.Drain() == (Events{{Aux(8), false}}));
+    rig.pad.buttons = 0;
     rig.Step();
     rig.keys.Drain();
 

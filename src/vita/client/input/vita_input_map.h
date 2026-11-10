@@ -9,12 +9,13 @@
 //
 //   in the game (the engine has the mouse for looking)
 //     * every button, the four directions of the left stick, the rear touch
-//       pad's two halves and three areas of the screen are keys of their own
-//       (AUX1 to AUX16 and the keypad arrows), so they can be bound and
-//       rebound like any PC key;
+//       pad's two halves and four areas of the screen are keys of their own
+//       (AUX1 to AUX16, the keypad arrows and the keypad's 5), so they can be
+//       bound and rebound like any PC key;
 //     * the rear pad's keys are pressed by a tap, since the fingers that hold
 //       the console rest on it, and stay down while the left stick is pushed
-//       forward: sprint, by default, as the console game's click of the stick;
+//       forward or L is held: by default sprint, as the console game's click
+//       of the stick, and a held breath for as long as the sight is up;
 //     * the right stick is the mouse: its motion goes through the engine's
 //       mouse path, with the game's own sensitivity, pitch inversion and
 //       aim-down-sight slowdown.
@@ -54,6 +55,7 @@ enum : int
     kKeyRightArrow = 0x9D,
     kKeyKpUpArrow = 0xB7,
     kKeyKpLeftArrow = 0xB9,
+    kKeyKp5 = 0xBA,
     kKeyKpRightArrow = 0xBB,
     kKeyKpDownArrow = 0xBD,
     kKeyMouse1 = 0xC8,
@@ -87,8 +89,15 @@ enum Control : int
     kFrontLeft,
     kFrontRightTop,
     kFrontRightBottom,
+    kFrontTopMiddle,
     kControlCount,
 };
+
+// The default layout has grown since the first one. A profile remembers which
+// layout it was last given, so a control that came later gets its default
+// action there too, once, without touching what the player has rebound.
+inline constexpr int kFirstLayout = 1;
+inline constexpr int kCurrentLayout = 2; // 2: the screen's top middle (chat)
 
 // The key a control sends while the engine has the mouse, or while the
 // controls menu waits for a key to bind. Start is Escape everywhere.
@@ -97,6 +106,8 @@ int GameKey(Control control);
 const char *ControlName(Control control);
 // The command a control's game key is bound to when nothing else is.
 const char *DefaultBinding(Control control);
+// The layout (kFirstLayout to kCurrentLayout) the control's default came with.
+int LayoutOf(Control control);
 
 struct Touch
 {
@@ -132,7 +143,7 @@ struct Settings
     float cursorSpeed = 700.0f;   // menu cursor, pixels a second at full deflection
     float scrollRate = 12.0f;     // menu wheel steps a second at full deflection
     bool rearTouch = true;        // the rear pad's two keys, by a tap
-    bool frontTouch = true;       // the screen's three keys in the game
+    bool frontTouch = true;       // the screen's four keys in the game
 };
 
 // Receives the keys, in the order the engine must see them.
@@ -231,7 +242,7 @@ private:
     uint8_t fingerCount_ = 0;
     RearFinger rearFingers_[kMaxRearTouches] = {}; // and on the rear pad
     uint8_t rearFingerCount_ = 0;
-    uint32_t rearKeepMs_[2] = {}; // when each half's key was last wanted: its tap, or the stick forward
+    uint32_t rearKeepMs_[2] = {}; // when each half's key was last wanted: its tap, the stick forward or L held
     bool started_ = false;
     Mode mode_ = Mode::Menu;
     bool cursorHidden_ = false;
