@@ -277,12 +277,22 @@ the device's log line and holds the `gpu_feed` scene's parts to it: none with
 the feed off, one for every draw with `KISAK_VK_GPU_FEED=always`, else one to
 four. It reads from the same line whether occlusion queries are counted
 (always on lavapipe, never with `KISAK_VK_OCCLUSION_QUERIES=0`) and holds the
-`occlusion` scene's report to that: at least one Vulkan query for each of its
-700 queries out of two pools, or none at all. It holds the `tuning` scene's
+`occlusion` scene's report to that: at least one Vulkan query and one result
+for each of its 700 queries out of two pools, with the results in the
+`occlusion queries:` log line too, or none at all. It holds the `tuning` scene's
 report to its five frames and 3000 draws, to one to five early parts in the
 idle rule's frame, and to the last logged change of the feed being the
 setting the device began with. On lavapipe the swapchain of a full run must
 have a present mode that does not wait for the display.
+
+Run the script on a machine that is doing nothing else. The `queries` scene's
+swap fence check needs its poll to find the frame unfinished, and on lavapipe
+a timestamp read at the next frame's start waits for whatever has been
+submitted by then. With the CPU heavily oversubscribed (a build running beside
+the script), the record thread gets the frame submitted first, each of the
+scene's eight tries finds the fence finished, and the script fails `swap fence
+poll flushes the next frame once`. Eight busy loops on four cores did that in
+10 of 20 runs of the i386 check; an idle machine in none of 20.
 
 The hosted `vulkan_window` job (Linux) stages DXVK Native's headers at the
 x86_64 client's pin, builds the check in Debug and RelWithDebInfo and runs that
