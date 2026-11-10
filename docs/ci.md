@@ -55,9 +55,16 @@ of them.
   request they scan only the units the change can reach (`--changed-since
   HEAD^1`, `scripts/tools/changed_units.py`): those whose dependency list in
   the job's own Ninja build holds a changed file. They scan everything when
-  the reach is not known (a CMake file, the tools, their allow lists or the
-  Linux workflow changed, or a changed header is named in an `#include` but in
-  no compiled unit's list), and always on master.
+  the reach is not known (a CMake file, the tools or their allow lists
+  changed, a changed header is named in an `#include` but in no compiled
+  unit's list, or the Linux workflow changed in a way that can alter the
+  scanned build), and always on master. A workflow change counts only in its
+  top-level settings other than the triggers, the concurrency group and the
+  permissions, and in a job that runs one of the scans; a change to the
+  triggers or to any other job does not (`changed_units.py`,
+  `WorkflowTests`). On 2026-11-10 PR 213 changed neither, yet the old rule
+  ran both scans over the whole tree and its x86_64 client job took 45
+  minutes instead of about 10.
 - **Newer pushes.** A newer push to a pull request cancels that pull request's
   older run. A master run is not cancelled once it is in progress: later merges
   wait behind it, and of those only the newest is kept, so master runs neither

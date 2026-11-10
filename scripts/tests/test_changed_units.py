@@ -12,6 +12,7 @@ Usage:
     python3 scripts/tests/test_changed_units.py
 """
 
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -123,6 +124,88 @@ class WorkflowTests(unittest.TestCase):
         for tool in ("check_32bit_size_literals", "check_32bit_layout_offsets"):
             self.assertIn(f'scripts/tools/{tool}.py --build-dir "$BUILD_DIR" "${{since[@]}}"', job)
         self.assertEqual(text.count("--changed-since"), 2)
+
+
+WORKFLOW = """name: Linux things
+on:
+  push:
+    paths: ['**']
+concurrency:
+  group: one
+env:
+  TOP: 1
+jobs:
+  window:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo window
+  x64_client:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: cmake -DFLAG=on
+      - run: python3 scripts/tools/check_32bit_layout_offsets.py
+  last:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo last
+"""
+
+
+class WorkflowTests(unittest.TestCase):
+    """A change to the Linux workflow rescans everything only when it can change
+    the scanned build: not for its triggers or a job that runs no scan."""
+
+    def setUp(self):
+        self.work = tempfile.TemporaryDirectory(prefix="kisak-changed-units-workflow-")
+        self.root = Path(self.work.name).resolve()
+        (self.root / ".github/workflows").mkdir(parents=True)
+        self.file = self.root / changed_units.SCAN_WORKFLOW
+        self.file.write_text(WORKFLOW)
+        for argv in (["init", "-q"], ["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@example.com",
+                                                      "commit", "-q", "-m", "base"]):
+            subprocess.run(["git", *argv], cwd=self.root, check=True)
+
+    def tearDown(self):
+        self.work.cleanup()
+
+    def decides(self, old, new, since="HEAD"):
+        self.file.write_text(WORKFLOW.replace(old, new))
+        return changed_units._workflow_decides_the_scan(self.root, since, changed_units.SCAN_WORKFLOW)
+
+    def test_triggers_concurrency_and_other_jobs_do_not_decide(self):
+        self.assertFalse(self.decides("paths: ['**']", "paths: ['**', '!scripts/runs/**']"))
+        self.assertFalse(self.decides("group: one", "group: two"))
+        self.assertFalse(self.decides("echo window", "echo window again"))
+        self.assertFalse(self.decides("echo last", "echo last\n      - run: echo more"))
+        self.assertFalse(self.decides("  window:\n", "  added:\n    runs-on: x\n    steps: []\n  window:\n"))
+
+    def test_the_scan_job_and_the_top_level_settings_decide(self):
+        self.assertTrue(self.decides("-DFLAG=on", "-DFLAG=off"))
+        self.assertTrue(self.decides("layout_offsets.py", "layout_offsets.py --jobs 2"))
+        self.assertTrue(self.decides("TOP: 1", "TOP: 2"))
+        self.assertTrue(self.decides("name: Linux things", "name: Linux other"))
+        self.assertTrue(self.decides("  x64_client:\n", "  x64_client_renamed:\n"))
+
+    def test_a_workflow_that_cannot_be_read_decides(self):
+        self.assertTrue(self.decides("x", "x", since=None))
+        self.assertTrue(self.decides("x", "x", since="no-such-commit"))
+        self.file.write_text("not a workflow\n")
+        self.assertTrue(changed_units._workflow_decides_the_scan(self.root, "HEAD", changed_units.SCAN_WORKFLOW))
+        self.file.unlink()
+        self.assertTrue(changed_units._workflow_decides_the_scan(self.root, "HEAD", changed_units.SCAN_WORKFLOW))
+
+    def test_other_files_that_are_not_harmless_still_decide(self):
+        self.assertTrue(changed_units._workflow_decides_the_scan(self.root, "HEAD", "CMakeLists.txt"))
+
+    def test_reachable_follows_it(self):
+        units = {str(self.root / "src/a.cpp")}
+        deps = {"o": [str(self.root / "src/a.cpp")]}
+        self.file.write_text(WORKFLOW.replace("group: one", "group: two"))
+        path = changed_units.SCAN_WORKFLOW
+        self.assertEqual(changed_units.reachable(units, [path], deps, self.root, "HEAD")[0], set())
+        self.assertIsNone(changed_units.reachable(units, [path], deps, self.root)[0])
+        self.file.write_text(WORKFLOW.replace("-DFLAG=on", "-DFLAG=off"))
+        self.assertIsNone(changed_units.reachable(units, [path], deps, self.root, "HEAD")[0])
 
 
 if __name__ == "__main__":
