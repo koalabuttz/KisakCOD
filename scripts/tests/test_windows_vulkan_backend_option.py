@@ -8,8 +8,8 @@ Source checks only, as hosted runners have no GPU:
 - only KisakCOD-mp links the back end and gets KISAK_VULKAN_BACKEND
 - the Win32 host opens vulkan-1.dll from the system directory at run time
   instead of importing it
-- the Windows workflow builds it for Win32 Debug and x64, but not for the
-  Win32 Release player build
+- the Windows workflow builds it for Win32 Debug and x64, and for the Win32
+  Release player build only on a manual run that asks for it
 """
 
 from pathlib import Path
@@ -74,9 +74,21 @@ def main() -> int:
             "the host avoids winsock's s_host macro")
 
     configure = re.search(r"- name: Configure CMake \$\{\{ matrix.config \}\}\n(.*?)\n      - name:", workflow, re.S)
-    require(configure is not None and "-eq 'Debug'" in configure.group(1)
+    require(configure is not None
+            and "if ('${{ matrix.config }}' -eq 'Debug' -or '${{ inputs.vulkan }}' -eq 'true') {"
+            in configure.group(1)
             and "-DKISAK_BUILD_VULKAN_BACKEND=ON" in configure.group(1),
-            "the Win32 Debug build turns the back end on (Release stays without it)")
+            "the Win32 Debug build turns the back end on; Release only on a manual vulkan run")
+    require(configure is not None and "if ($vulkan.Count -gt 0) {" in configure.group(1),
+            "every Win32 build with the back end checks the configure log for the link")
+    require(re.search(r"workflow_dispatch:\s*\n\s*inputs:\s*\n(?:.*\n)*?\s*vulkan:\s*\n(?:\s*#[^\n]*\n)*"
+                      r"(?:\s*\w+:[^\n]*\n)*?\s*default: false", workflow) is not None,
+            "the manual vulkan input defaults to false")
+    imports = re.search(r"- name: Check KisakCOD-mp does not import vulkan-1.dll\n\s*if: ([^\n]*)", workflow)
+    require(imports is not None and imports.group(1).strip() == "matrix.config == 'Debug' || inputs.vulkan",
+            "every Win32 build with the back end checks it does not import vulkan-1.dll")
+    require("${{ inputs.vulkan && matrix.config == 'Release' && '-Vulkan' || '' }}" in workflow,
+            "a Win32 Release artifact with the back end is named -Vulkan")
     x64 = re.search(r"- name: Configure x64\n(.*?)\n\n", workflow, re.S)
     require(x64 is not None and "-DKISAK_BUILD_VULKAN_BACKEND=ON" in x64.group(1),
             "the x64 build turns the back end on")
