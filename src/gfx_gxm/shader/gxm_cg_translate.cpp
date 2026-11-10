@@ -545,13 +545,17 @@ uint8_t Emitter::ZeroLanes(const Operand &op) const
 }
 
 // A product by a def'd constant's zero is never left to the Vita's compiler:
-// with fast maths it folds x * 0 + c to 0, not to c, and takes the rest of
-// the program with it. The game's shaders are full of it: HLSL writes
+// above optimisation level 0, with or without fast maths, it folds
+// x * k.y + k.x (k = 1, 0, 0, 0) to 0, not to 1, and takes the rest of the
+// program with it. The game's shaders are full of it: HLSL writes
 // float4(v.xyz, 1) as mad r0, v0.xyzx, c8.xxxy, c8.yyyx with c8 = (1, 0, 0,
-// 0), and the menu's position lost every w term (run J of the client's
-// console runs). So in the components the instruction writes where a factor
-// is such a zero, the value is 'instead' (the addend, or 0.0), and the
-// product is only used for the others.
+// 0), and the menu's position lost every w term (runs J and K of the
+// client's console runs: making the constant non-const or static, splitting
+// the statement, a function or constructors around the swizzles all compile
+// to the same wrong program; literals or one component at a time are right).
+// So in the components the instruction writes where a factor is such a
+// zero, the value is 'instead' (the addend, or 0.0), and the product is only
+// used for the others.
 std::string Emitter::WithoutZeroProducts(const Instruction &ins, const std::string &value, const std::string &instead)
 {
     const uint8_t mask = ins.destination.mask;
