@@ -160,11 +160,22 @@ struct CoreStats
     double recordWaitMs;      // time the calling thread waited for that thread
     uint64_t flushes;         // Flush() calls and flushes forced by staging use
 
+    // Where the calling thread stood still, in milliseconds since the core
+    // was created (take a difference for a stretch): for a swapchain image
+    // (vkAcquireNextImageKHR), for a submission to finish (vkWaitSemaphores,
+    // every wait), and the part of that which was a Present waiting for the
+    // frame before the one it shows (the two frames in flight).
+    double imageWaitMs;
+    double gpuWaitMs;
+    double frameLimitWaitMs;
+
     // Memory, in bytes, as allocated from the driver (blocks, not suballocations):
     // Device buffers and images, and mapped Upload and Readback memory.
     uint64_t deviceMemoryBytes;
     uint64_t hostMemoryBytes;
     uint32_t memoryBlocks;
+    uint64_t memoryAllocations; // blocks ever allocated (memoryBlocks is those alive)
+    double memoryAllocateMs;    // in vkAllocateMemory and vkMapMemory for them
     uint32_t buffersAlive;
     uint32_t imagesAlive;
     uint64_t deferredDestroyed; // objects destroyed after their last frame finished
@@ -220,6 +231,20 @@ const CoreStats &Stats(const Core *core);
 // caller that measures a stretch of a run (the counters are left alone: take
 // their difference).
 void ResetFrameTimings(Core *core);
+
+// The GPU's times for one presented frame: what CoreStats::frame, framePasses
+// and frameGap add up, for the frame alone.
+struct FrameGpuTimes
+{
+    double frameMs;  // first to last timestamp
+    double passesMs; // of that, in its passes
+    double gapMs;    // from the end of the frame before to its first timestamp
+};
+// Looks a frame up by its number, which is CoreStats::framesPresented as its
+// Present left it. False while the frame's timestamps have not been read (they
+// are a few frames after its Present), once 16 newer frames have been read,
+// and on a queue without timestamps.
+bool FrameGpuTime(const Core *core, uint64_t frame, FrameGpuTimes &out);
 
 // The window may have changed size (or was minimised or restored): the next
 // frame checks the surface and rebuilds the swapchain if the size differs.

@@ -24,6 +24,7 @@
 #include <SDL3/SDL_vulkan.h>
 
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -466,6 +467,7 @@ public:
     void FrameLoop();
     void GpuFeed();
     void Tuning();
+    void SlowFrames();
     void Bench();
     void BenchRuns();
     void BenchFrames(bool runs);
@@ -1791,6 +1793,166 @@ void Check::Tuning()
                 first.gpuTime ? "yes" : "no");
 }
 
+// The statistics' `slow frame` lines: the frames that took longest since the
+// statistics were last reset, each with what the device did in it. Eight
+// frames are presented, of which the second builds a pipeline (the only
+// blended draws of the whole check) and then stands still for 400 ms, and the
+// third uploads a texture and stands still for 250 ms. The report must name
+// those two by their numbers, with their draws, the pipeline and the upload,
+// and with the GPU's times where the device timed its frames; it holds one
+// line after one frame, three after eight, the longest first, and none after
+// a reset. The two frames are looked up by number and not by rank: a machine
+// busy enough to hold another frame up for longer still passes.
+void Check::SlowFrames()
+{
+    constexpr int kFrames = 8;
+    constexpr int kPipelineFrame = 2, kPipelineDraws = 20, kPipelineMs = 400;
+    constexpr int kUploadFrame = 3, kUploadDraws = 5, kUploadMs = 250;
+    std::vector<std::string> lines;
+    bool timed = false;
+    // The `slow frame` lines of one report.
+    const auto report = [&](bool reset) {
+        {
+            const std::lock_guard<std::mutex> lock(host->mutex);
+            lines.clear();
+            host->logKept = &lines;
+        }
+        const uint32_t devices = front::LogDeviceStats(reset);
+        std::vector<std::string> slow;
+        const std::lock_guard<std::mutex> lock(host->mutex);
+        host->logKept = nullptr;
+        for (const std::string &line : lines)
+        {
+            if (devices == 1 && line.find("vulkan d3d9: slow frame ") != std::string::npos)
+                slow.push_back(line);
+            const size_t over = line.find(" max over ");
+            if (over != std::string::npos && line.find("vulkan d3d9: frame stats: ") != std::string::npos)
+                timed = std::strtoull(line.c_str() + over + 10, nullptr, 10) > 0;
+        }
+        return slow;
+    };
+    // The number a line has in front of `unit`, or behind `label`; -1 without it.
+    const auto before = [](const std::string &line, const char *unit) {
+        const size_t at = line.find(unit);
+        if (at == std::string::npos)
+            return -1.0;
+        size_t start = at;
+        while (start > 0 && (std::isdigit(static_cast<unsigned char>(line[start - 1])) || line[start - 1] == '.'))
+            --start;
+        return start < at ? std::strtod(line.c_str() + start, nullptr) : -1.0;
+    };
+    const auto behind = [](const std::string &line, const char *label) {
+        const size_t at = line.find(label);
+        return at == std::string::npos ? -1.0 : std::strtod(line.c_str() + at + std::strlen(label), nullptr);
+    };
+    const auto numbered = [&](const std::vector<std::string> &slow, int number) -> const std::string * {
+        for (const std::string &line : slow)
+        {
+            if (behind(line, " ms, frame ") == double(number))
+                return &line;
+        }
+        return nullptr;
+    };
+    const auto draw = [&](int draws) {
+        for (int i = 0; i < draws; ++i)
+            DrawQuad(float(4 * i), 0, float(4 * i + 4), 4, 0.5f, Argb(128, 255, uint32_t(8 * i), 0));
+    };
+
+    // Frames count from a Present, and the statistics from here.
+    Reset(Argb(255, 0, 64, 0));
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    report(true);
+    Equal("lines_after_reset", report(false).size(), size_t(0));
+
+    IDirect3DTexture9 *texture = nullptr;
+    std::vector<std::string> first;
+    for (int frame = 1; frame <= kFrames; ++frame)
+    {
+        Reset(Argb(255, 0, 64, 0));
+        if (frame == kPipelineFrame)
+        {
+            // No other scene blends: the first of these draws builds a pipeline.
+            Ok(device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE), "SetRenderState");
+            Ok(device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_INVDESTCOLOR), "SetRenderState");
+            Ok(device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR), "SetRenderState");
+            draw(kPipelineDraws);
+            SDL_Delay(kPipelineMs);
+        }
+        else if (frame == kUploadFrame)
+        {
+            texture = FilledTexture(64, 64, [](UINT x, UINT y) { return Argb(255, 4 * x, 4 * y, 128); });
+            if (!texture)
+                return;
+            Ok(device->SetTexture(0, texture), "SetTexture");
+            Ok(device->SetPixelShader(psTexture), "SetPixelShader");
+            draw(kUploadDraws);
+            SDL_Delay(kUploadMs);
+        }
+        else
+            draw(frame == 1 ? 10 : 3);
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        if (frame == 1)
+            first = report(false);
+    }
+    const std::vector<std::string> slow = report(false);
+    const bool gpuTimed = timed; // by that report's frame stats line
+    device->SetTexture(0, nullptr);
+    SafeRelease(texture);
+
+    Equal("first_frame_lines", first.size(), size_t(1));
+    if (first.size() == 1)
+    {
+        Equal("first_frame_rank", behind(first[0], "slow frame "), 1);
+        Equal("first_frame_number", behind(first[0], " ms, frame "), 1);
+        Equal("first_frame_draws", before(first[0], " draws"), 10);
+    }
+    Equal("lines", slow.size(), size_t(3));
+    double longest = 0.0, second = 0.0;
+    bool ordered = true;
+    for (size_t i = 0; i < slow.size(); ++i)
+    {
+        const double ms = before(slow[i], " ms, frame ");
+        ordered = ordered && behind(slow[i], "slow frame ") == double(i + 1) && ms > 0.0
+                  && (i == 0 || ms <= before(slow[i - 1], " ms, frame "));
+        if (i == 0)
+            longest = ms;
+        else if (i == 1)
+            second = ms;
+    }
+    Equal("longest_first", ordered, true);
+    const std::string *pipelineLine = numbered(slow, kPipelineFrame);
+    Equal("pipeline_frame_named", pipelineLine != nullptr, true);
+    if (pipelineLine)
+    {
+        Equal("pipeline_frame_time", before(*pipelineLine, " ms, frame ") >= double(kPipelineMs), true);
+        Equal("pipeline_frame_draws", before(*pipelineLine, " draws"), kPipelineDraws);
+        Equal("pipeline_frame_pipelines", before(*pipelineLine, " pipelines") >= 1.0, true);
+        Equal("pipeline_frame_uploads", before(*pipelineLine, " texture uploads"), 0);
+        // Its timestamps were read frames ago, where the device has them.
+        Equal("pipeline_frame_gpu_time", pipelineLine->find("; GPU time not read") == std::string::npos, gpuTimed);
+        if (gpuTimed)
+            Equal("pipeline_frame_gpu_values",
+                  behind(*pipelineLine, "; GPU ") >= before(*pipelineLine, " in passes")
+                      && before(*pipelineLine, " in passes") >= 0.0
+                      && before(*pipelineLine, " without work before it") >= 0.0,
+                  true);
+    }
+    const std::string *uploadLine = numbered(slow, kUploadFrame);
+    Equal("upload_frame_named", uploadLine != nullptr, true);
+    if (uploadLine)
+    {
+        Equal("upload_frame_time", before(*uploadLine, " ms, frame ") >= double(kUploadMs), true);
+        Equal("upload_frame_draws", before(*uploadLine, " draws"), kUploadDraws);
+        Equal("upload_frame_uploads", before(*uploadLine, " texture uploads") >= 1.0, true);
+        Equal("upload_frame_megabytes", behind(*uploadLine, " texture uploads (") > 0.0, true);
+    }
+    // Asked for again with a new start: the same three, and then none.
+    Equal("kept_lines", report(true).size(), size_t(3));
+    Equal("lines_after_second_reset", report(false).size(), size_t(0));
+    std::printf("d3d9_check.slow_frames=frames=%d longest_ms=%.2f second_ms=%.2f gpu_time=%s\n", kFrames, longest,
+                second, gpuTimed ? "yes" : "no");
+}
+
 // Not part of a full run: --scene bench. What a frame of the engine's size
 // costs the thread that draws it, with the engine's other habits around it:
 // 768 draws of four D3D9 calls each (a constant, a texture, a render state,
@@ -2222,6 +2384,7 @@ int Run(const Options &options)
         {"frame_loop", &Check::FrameLoop, true},
         {"gpu_feed", &Check::GpuFeed, true},
         {"tuning", &Check::Tuning, true},
+        {"slow_frames", &Check::SlowFrames, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},

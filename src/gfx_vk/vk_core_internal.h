@@ -7,6 +7,7 @@
 #include "vk_core.h"
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdarg>
 #include <cstring>
@@ -164,6 +165,9 @@ struct FrameSlot
     bool frameTimed = false;     // queries 0 and 1 of the slot hold the frame
     uint32_t queriesUsed = 0;
     bool queriesPending = false; // written, not yet collected
+    // CoreStats::framesPresented as the slot's frame left it, 0 for a frame
+    // that was not presented (FrameGpuTime).
+    uint64_t frameNumber = 0;
 };
 
 // ---- Recording ---------------------------------------------------------------------
@@ -342,6 +346,14 @@ public:
     uint64_t lastFrameEndTicks = 0;
     bool lastFrameEndKnown = false;
     std::vector<std::pair<const char *, PassTimings>> passTimings;
+    // The newest frames' GPU times, each at its number modulo the size
+    // (FrameGpuTime).
+    struct FrameGpuEntry
+    {
+        uint64_t frame = 0;
+        FrameGpuTimes times{};
+    };
+    FrameGpuEntry frameGpuTimes[16];
 
     std::vector<VkQueryPool> occlusionPools;
     std::vector<OcclusionCount> occlusionCounts; // by number
@@ -369,6 +381,24 @@ public:
 
     RecordState record;
     Recorder recorder;
+};
+
+// Adds the time it lives, in milliseconds, to one of CoreStats' counts of
+// where the calling thread stood still.
+class StandStill
+{
+  public:
+    explicit StandStill(double &total) : total_(total), start_(std::chrono::steady_clock::now()) {}
+    ~StandStill()
+    {
+        total_ += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start_).count();
+    }
+    StandStill(const StandStill &) = delete;
+    StandStill &operator=(const StandStill &) = delete;
+
+  private:
+    double &total_;
+    const std::chrono::steady_clock::time_point start_;
 };
 
 // vk_core.cpp
