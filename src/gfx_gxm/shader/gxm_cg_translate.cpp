@@ -1,9 +1,11 @@
 #include "gxm_cg_translate.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <map>
 #include <set>
 
 namespace gfx_gxm::cg
@@ -379,6 +381,9 @@ class Emitter
     bool usesAddress_ = false;
     // def'd float constants.
     std::set<uint16_t> defined_;
+    std::map<uint16_t, std::array<float, 4>> definedValues_;
+    uint8_t ZeroLanes(const Operand &op) const;
+    std::string WithoutZeroProducts(const Instruction &ins, const std::string &value, const std::string &instead);
     // vs_3_0 and ps_3_0 declarations: register -> (semantic, index, mask).
     struct Dcl
     {
@@ -523,6 +528,66 @@ std::string Emitter::Source(const Operand &op)
     return SourceWithNumber(op, op.number);
 }
 
+// The components (bit 0 = x) in which this source is a def'd constant's
+// zero.
+uint8_t Emitter::ZeroLanes(const Operand &op) const
+{
+    if (op.type != kConst || op.relative || (op.modifier != kSmNone && op.modifier != kSmNeg))
+        return 0;
+    const auto found = definedValues_.find(op.number);
+    if (found == definedValues_.end())
+        return 0;
+    uint8_t lanes = 0;
+    for (int i = 0; i < 4; ++i)
+        if (found->second[(op.swizzle >> (2 * i)) & 3] == 0.0f)
+            lanes |= uint8_t(1 << i);
+    return lanes;
+}
+
+// A product by a def'd constant's zero is never left to the Vita's compiler:
+// with fast maths it folds x * 0 + c to 0, not to c, and takes the rest of
+// the program with it. The game's shaders are full of it: HLSL writes
+// float4(v.xyz, 1) as mad r0, v0.xyzx, c8.xxxy, c8.yyyx with c8 = (1, 0, 0,
+// 0), and the menu's position lost every w term (run J of the client's
+// console runs). So in the components the instruction writes where a factor
+// is such a zero, the value is 'instead' (the addend, or 0.0), and the
+// product is only used for the others.
+std::string Emitter::WithoutZeroProducts(const Instruction &ins, const std::string &value, const std::string &instead)
+{
+    const uint8_t mask = ins.destination.mask;
+    const uint8_t zero = uint8_t((ZeroLanes(ins.sources[0]) | ZeroLanes(ins.sources[1])) & mask);
+    if (!zero)
+        return value;
+    // Runs of components from the same side, as constructor arguments.
+    // Components the instruction does not write take whichever side their
+    // neighbour does.
+    std::string out = "float4(";
+    for (int i = 0; i < 4;)
+    {
+        auto side = [&](int lane) { return (mask >> lane) & 1 ? int((zero >> lane) & 1) : -1; };
+        int from = side(i);
+        int end = i + 1;
+        while (end < 4 && (side(end) == from || side(end) < 0 || from < 0))
+        {
+            if (from < 0)
+                from = side(end);
+            ++end;
+        }
+        std::string lanes;
+        for (int lane = i; lane < end; ++lane)
+            lanes += kComponents[lane];
+        if (i)
+            out += ", ";
+        if (from > 0 && instead == "0.0")
+            for (int lane = i; lane < end; ++lane)
+                out += lane == i ? "0.0" : ", 0.0";
+        else
+            out += (from > 0 ? "(" + instead + ")" : value) + "." + lanes; // value comes parenthesised
+        i = end;
+    }
+    return out + ")";
+}
+
 bool Emitter::Write(const Instruction &ins, const std::string &valueIn)
 {
     const Operand &dst = ins.destination;
@@ -642,10 +707,10 @@ bool Emitter::Statement(const Instruction &ins)
         v = "(" + src(0) + " - " + src(1) + ")";
         break;
     case kMul:
-        v = "(" + src(0) + " * " + src(1) + ")";
+        v = WithoutZeroProducts(ins, "(" + src(0) + " * " + src(1) + ")", "0.0");
         break;
     case kMad:
-        v = "(" + src(0) + " * " + src(1) + " + " + src(2) + ")";
+        v = WithoutZeroProducts(ins, "(" + src(0) + " * " + src(1) + " + " + src(2) + ")", src(2));
         break;
     case kRcp:
         v = splat("1.0 / " + Scalar(s[0]));
@@ -931,7 +996,12 @@ bool Emitter::Run(std::string &cg, std::string &error)
     for (const Instruction &ins : shader_.instructions)
     {
         if (ins.opcode == kDef)
+        {
             defined_.insert(ins.destination.number);
+            std::array<float, 4> values;
+            std::memcpy(values.data(), ins.literal, sizeof(float) * 4);
+            definedValues_[ins.destination.number] = values;
+        }
         if (ins.opcode != kDcl)
             continue;
         const Operand &dst = ins.destination;
