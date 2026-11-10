@@ -39,6 +39,7 @@
 
 #include <gfx_gxm/gxm_program_cache.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <functional>
@@ -319,6 +320,19 @@ struct DrawState
     // Every wait for the GPU (FinishGpu): after one, nothing drawn before it
     // is still read.
     uint64_t gpuWaits = 0;
+    // Run diagnostic (a file named gpu-scene-times beside the programs): the
+    // CPU waits for the GPU after every scene and adds the wait to that
+    // scene's target, so the log says which pass costs the GPU's time. The
+    // waits keep the CPU and the GPU from working at once, so frames are
+    // slower than without it.
+    struct SceneTime
+    {
+        std::string name;
+        uint64_t micros = 0, scenes = 0, draws = 0;
+    };
+    bool sceneTimes = false;
+    std::vector<SceneTime> sceneTimeList;
+    uint64_t sceneDraws = 0, sceneTimesFrames = 0;
     // Renames that found no room and waited for the GPU, renames a wait since
     // the buffer's last draw made needless, and the bytes of renamed buffers'
     // old memory the GPU may still read.
@@ -1141,6 +1155,7 @@ bool OpenScene(Device &device)
         return false;
     }
     d.sceneOpen = true;
+    d.sceneDraws = 0;
     d.sceneColor = color;
     d.sceneDepth = depth;
     d.sceneWidth = width;
@@ -1679,6 +1694,12 @@ bool InitDraw(Device &device, std::string &error)
         d.census = true;
         Log(device, "diag: diag-state-census is there: each new draw state is logged once (census lines)");
     }
+    if (gxm::ProgramCacheMarker("gpu-scene-times"))
+    {
+        d.sceneTimes = true;
+        Log(device, "diag: gpu-scene-times is there: the CPU waits for the GPU after every scene, and the GPU's "
+                    "time is logged by scene every 60 frames (frames are slower with it)");
+    }
     if (gxm::ProgramCacheMarker("no-draw-reuse"))
     {
         d.reuse = false;
@@ -2108,18 +2129,87 @@ size_t FreeRetiredNow(Device &device)
     return work.size();
 }
 
+std::string SurfaceName(const Surface *surface)
+{
+    if (!surface)
+        return "none";
+    if (surface->kind == SurfaceKind::BackBuffer)
+        return "back buffer";
+    if (surface->kind == SurfaceKind::FrontBuffer)
+        return "front buffer";
+    if (!surface->texture)
+        return "?";
+    std::string name = surface->texture->name.empty() ? "unnamed" : surface->texture->name;
+    if (surface->level)
+        name += " level " + std::to_string(surface->level);
+    return name;
+}
+
+// gpu-scene-times: the scene just sent to the GPU is waited for, and the wait
+// is added to its targets' line.
+void TimeScene(Device &device, const Surface *color, const Surface *depth)
+{
+    DrawState &d = *device.draw;
+    const uint64_t from = Micros();
+    gxm::Finish();
+    const uint64_t took = Micros() - from;
+    ++d.gpuWaits;
+    char size[32];
+    std::snprintf(size, sizeof(size), " %ux%u", d.sceneWidth, d.sceneHeight);
+    const std::string name = SurfaceName(color) + " + depth " + SurfaceName(depth) + size;
+    DrawState::SceneTime *entry = nullptr;
+    for (auto &e : d.sceneTimeList)
+        if (e.name == name)
+            entry = &e;
+    if (!entry)
+    {
+        if (d.sceneTimeList.size() >= 32)
+            return;
+        d.sceneTimeList.push_back({name});
+        entry = &d.sceneTimeList.back();
+    }
+    entry->micros += took;
+    ++entry->scenes;
+    entry->draws += d.sceneDraws;
+    d.sceneDraws = 0;
+}
+
+// Every 60 frames: the GPU's time by scene target, most first.
+void LogSceneTimes(Device &device)
+{
+    DrawState &d = *device.draw;
+    if (++d.sceneTimesFrames < 60)
+        return;
+    std::sort(d.sceneTimeList.begin(), d.sceneTimeList.end(),
+              [](const DrawState::SceneTime &a, const DrawState::SceneTime &b) { return a.micros > b.micros; });
+    const double frames = double(d.sceneTimesFrames);
+    uint64_t total = 0;
+    for (const auto &e : d.sceneTimeList)
+        total += e.micros;
+    Log(device, "diag: gpu by scene, frames %llu to %llu: %.2f ms a frame in all",
+        (unsigned long long)(d.frame - d.sceneTimesFrames), (unsigned long long)d.frame, total / 1000.0 / frames);
+    for (const auto &e : d.sceneTimeList)
+        Log(device, "diag: gpu by scene: %.2f ms a frame, %.2f scenes and %.1f draws a frame: %s",
+            e.micros / 1000.0 / frames, e.scenes / frames, e.draws / frames, e.name.c_str());
+    d.sceneTimeList.clear();
+    d.sceneTimesFrames = 0;
+}
+
 void EndScene(Device &device)
 {
     DrawState *d = device.draw;
     if (!d || !d->sceneOpen)
         return;
     d->sceneOpen = false;
+    const Surface *color = d->sceneColor, *depth = d->sceneDepth;
     d->sceneColor = d->sceneDepth = nullptr;
     const uint64_t from = Micros();
     const int result = sceGxmEndScene(Gxm(), nullptr, nullptr);
     device.frameTime.SceneEnd(Micros() - from);
     if (result < 0)
         Log(device, "sceGxmEndScene failed (0x%08x)", unsigned(result));
+    if (d->sceneTimes)
+        TimeScene(device, color, depth);
 }
 
 void FinishGpu(Device &device)
@@ -2137,6 +2227,8 @@ void FrameDone(Device &device)
     DrawState &d = *device.draw;
     ++d.frame;
     d.ringUsed = 0;
+    if (d.sceneTimes)
+        LogSceneTimes(device);
     uint64_t into = 0;
     const int mode = d.diagTests ? DiagModeFor(d.frame, &into) : 0;
     if (d.frame == kDiagnosedFrame)
@@ -2956,6 +3048,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         return;
     }
     ++d.drawn;
+    ++d.sceneDraws;
     if (target)
         target->unfilled = false;
 }
