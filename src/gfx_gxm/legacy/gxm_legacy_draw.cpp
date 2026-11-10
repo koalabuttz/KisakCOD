@@ -1044,8 +1044,10 @@ bool OpenScene(Device &device)
     SceGxmRenderTarget *target = gxm::RenderTargetFor(width, height);
     if (!target)
         return false;
+    const uint64_t from = Micros();
     const int result =
         sceGxmBeginScene(Gxm(), 0, target, nullptr, nullptr, sync, colorSurface, depthSurface);
+    device.frameTime.SceneStart(Micros() - from);
     if (result < 0)
     {
         if (device.draw->scenes == 0 || device.draw->skipped[SkipNoScene] == 0)
@@ -1959,7 +1961,9 @@ void EndScene(Device &device)
         return;
     d->sceneOpen = false;
     d->sceneColor = d->sceneDepth = nullptr;
+    const uint64_t from = Micros();
     const int result = sceGxmEndScene(Gxm(), nullptr, nullptr);
+    device.frameTime.SceneEnd(Micros() - from);
     if (result < 0)
         Log(device, "sceGxmEndScene failed (0x%08x)", unsigned(result));
 }
@@ -1967,7 +1971,9 @@ void EndScene(Device &device)
 void FinishGpu(Device &device)
 {
     EndScene(device);
+    const uint64_t from = Micros();
     gxm::Finish();
+    device.frameTime.Wait(Micros() - from);
     if (device.draw)
         ++device.draw->gpuWaits;
 }

@@ -13,6 +13,7 @@
 #include <gfx_vk/legacy/vk_legacy.h>
 
 #include <gfx_gxm/gxm_display.h>
+#include <gfx_gxm/gxm_frame_time.h>
 #include <gfx_gxm/gxm_memory.h>
 #include <gfx_gxm/gxm_program_queue.h>
 #include <gfx_gxm/shader/gxm_cg_translate.h>
@@ -309,6 +310,9 @@ struct Device
         // Each reason the translator gave, with how many shaders it refused.
         std::vector<std::pair<std::string, uint32_t>> refusals;
     } shaderCounts;
+    // Where a frame's time goes in this back end since the last `frame time`
+    // line (LogFrameTime).
+    gxm::FrameTime frameTime;
     uint32_t live = 0; // resources not yet destroyed
     DrawState *draw = nullptr;
 };

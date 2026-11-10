@@ -46,8 +46,9 @@ and RelWithDebInfo. It runs the server's float checks (no fused multiply-add, no
 NEON float) and link checks (weak pthread references, the main stack size), and
 uploads the RelWithDebInfo `.vpk`. It also runs the controls' and the sound's
 host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`), the run
-plan's, the GPU heap's and the shader translator's (`test_vita_run_plan.py`,
-`test_vita_gxm_heap.py`, `test_vita_cg_translate.py`).
+plan's, the GPU heap's, the frame time figures' and the shader translator's
+(`test_vita_run_plan.py`, `test_vita_gxm_heap.py`, `test_vita_frame_time.py`,
+`test_vita_cg_translate.py`).
 
 ## Running
 
@@ -881,6 +882,33 @@ with the engine's other figures (once a minute by default, `vita_statsEvery`,
 and before a timed quit) and at every failed allocation (`gpu memory by use (cdram +
 main MB, pieces): ...`), and logs each piece of 1 MB or more as it is made
 (`gpu memory piece N: ...`, with its size, format and usage).
+
+With the same figures, and once more when the device goes, it says where a
+frame's time went since the last such line, as a frame's mean:
+`gxm legacy: frame time, last N frames: X ms a frame. In this back end: N
+draws X ms (one in 16 timed), N clears and copies X ms, N scenes' starts and
+ends X ms, N waits for the GPU X ms (longest X ms), showing the frame X ms
+(longest X ms). The rest, X ms, is the game, the D3D9 front and the filling of
+buffers and textures. ...`. How to read it:
+- **Waits for the GPU** are `sceGxmFinish` calls: a renamed buffer that found
+  no room, a target read back. Each stops the CPU until the GPU has drawn
+  everything sent so far.
+- **Showing the frame** is `sceGxmDisplayQueueAddEntry`, which waits while
+  every display buffer is still queued. A large figure there with small ones
+  elsewhere means the GPU, or the screen's 60 frames a second, is what holds
+  the frame.
+- **Draws** are too many to time each (a clock read may be a system call, and
+  the line ends with what one costs), so about one in 16 is timed, picked
+  without a fixed step, and the sum is scaled up. A timed draw that took over
+  2 ms (a program made on the spot) counts its excess once; the line says how
+  many there were. Scene work and waits inside a draw, a clear or a copy are
+  counted under their own names only.
+- **The rest** is everything outside those calls. The system's `Vita load`
+  line beside it says how busy the processor was.
+
+The sums are plain arithmetic (`gxm_frame_time.h`), tested on the host by
+`scripts/tests/test_vita_frame_time.py`. The line itself has not run on a
+console or in Vita3K yet; in Vita3K its figures will be the emulator's.
 
 The display's own buffers take about 9 MB of CDRAM and 2.6 MB of main memory.
 The parameter buffer, which sceGxm takes from main memory itself, adds 16 MB.
