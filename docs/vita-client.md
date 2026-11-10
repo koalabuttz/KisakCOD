@@ -734,6 +734,27 @@ What the GXM back end does so far (step 2d):
   ready, then it is registered with the shader patcher. Vertex
   programs are kept per variant, declaration and stream strides; fragment
   programs per variant, vertex program, blend state and target format.
+- **A draw does not do again what an earlier one did** (built, not run
+  yet). Before, every draw built two map keys as strings to find its
+  programs, made each texture's view with five `sceGxmTextureSet...` calls,
+  set every texture unit and copied its vertex shader's whole constant
+  array (up to 4 KB) into a newly reserved uniform buffer. Now:
+  the programs a combination of shaders, declaration, strides, alpha
+  function and index width drew with are remembered in a table of 512 and
+  forgotten when a shader or a declaration goes; a texture keeps its view
+  for the filters and address modes it was last sampled with; a unit that
+  already holds the same texture in the open scene is not set again; and
+  the uniform buffers are neither reserved nor written when both programs
+  and every constant are the last draw's (sceGxm keeps a reserved default
+  uniform buffer for a program until the program is set anew; the back end
+  drops both when either program changes and at every scene's start, and
+  always writes for a pixel shader that takes a volume texture's depth).
+  Draws a run diagnostic looks at or changes take the old path. The quit
+  summary says how often each applied: `draw work left out: N of N draws
+  found their programs in the table; of N texture binds N were set already
+  and N set their filters anew; of N uniform buffers N were the last
+  draw's`. What it saves in a frame's time is not measured yet, in Vita3K
+  or on a console.
 - **Textures** are linear: rows of whole multiples of 8 texels, and the
   levels of a mipmapped texture sized from the power of two above the base,
   which is how sceGxm reads them and also a layout LockRect can hand out.
