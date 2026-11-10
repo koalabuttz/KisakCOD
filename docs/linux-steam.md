@@ -121,7 +121,7 @@ player whose address changed in the middle of a game waits until the old
 connection times out (`sv_timeout`).
 
 `scripts/tests/test_server_handshake_auth.py` covers these rules without Steam.
-They have not been run against Steam yet (see Verified).
+Steam verdict run 1 ran them against Steam (see Verified).
 
 If Steam is not running, not logged in, or the library is missing, start-up
 prints why and the backend stays off: the client refuses remote servers and the
@@ -213,8 +213,19 @@ as `steam_session`) needs no Steam:
   start-up lines were never shown (they were printed before the console
   existed) and that two of its lines had no line break; both are fixed.
 
+- 2026-11-10, Steam verdict run 1 (PR 194 at 2d04091; Part A an x86_64 dedi
+  and client on the laptop, Part B the Win32 dedi on the Windows PC with the
+  laptop as player; anonymous server login both times): every join passed the
+  Steam auth check; leaving and joining again, and a game killed with
+  `kill -9` and started again at once, got back in with no "already
+  connected" refusal (Steam's own verdict for the killed session arrived
+  first and the server dropped it); `steam_testkick` dropped the player to the
+  menu ("Steam Auth Timed out") with the server still up, and a new ticket got
+  back in; every process quit with exit 0. The menu's text for the kick is not
+  in the client's log, so its wording on screen is unconfirmed.
+
 Not verified: a Windows server in client mode, a negative verdict from Steam for a
-player who is connected or about to connect (only host tests cover it), two
+player who is about to connect (only host tests cover it), two
 different Steam accounts, and a
 Windows client against a Linux server in client mode (one account can't be signed in on
 two computers at once, which is why the anonymous login exists).
