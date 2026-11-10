@@ -1088,6 +1088,26 @@ bool Emitter::Run(std::string &cg, std::string &error)
             epilogue += "    out_POSITION.zw = float2(0.5, 1.0);\n";
         else if (options_.diagPosition == 4)
             epilogue += "    out_POSITION.z = out_POSITION.w * 0.5;\n";
+        else if (options_.diagPosition >= 5 && options_.diagPosition <= 8 && !positionInput.empty())
+        {
+            bool texcoord = false;
+            for (const std::string &p : parameters)
+                if (p.find(" out_TEXCOORD0 ") != std::string::npos)
+                    texcoord = true;
+            const char *probe = nullptr;
+            if (options_.diagPosition == 5)
+                probe = "out_POSITION.x * 0.5 + 0.5, out_POSITION.y * 0.5 + 0.5, out_POSITION.w * 0.5";
+            else if (options_.diagPosition == 6 && r_.floatConstants >= 8)
+                probe = "c[1].w - 0.5, c[3].w * 0.5, c[7].w * 0.5";
+            else if (options_.diagPosition == 7 && r_.floatConstants >= 7)
+                probe = "c[4].x * 0.5, c[5].y * 0.5, c[6].z * 0.5";
+            else if (options_.diagPosition == 8)
+                probe = "out_POSITION.z * 0.25 + 0.5, out_POSITION.w * 0.25 + 0.5, 0.25";
+            if (texcoord && probe)
+                epilogue += std::string("    out_TEXCOORD0 = float4(") + probe + ", 1.0);\n";
+            epilogue += "    out_POSITION = float4(" + positionInput + ".x / 480.0 - 1.0, 1.0 - " + positionInput +
+                        ".y / 272.0, 0.5, 1.0);\n";
+        }
     }
     else
     {

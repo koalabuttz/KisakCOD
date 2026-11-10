@@ -135,6 +135,13 @@ struct Options
     //   2: x and y from dot(position, c[0]) and dot(position, c[1]); z 0.5, w 1
     //   3: z 0.5 and w 1; x and y as computed
     //   4: z half of the computed w
+    // 5 to 8 draw at the POSITION input's pixels (as 1) and, when the
+    // program writes TEXCOORD0, put numbers there for a fragment program
+    // to show as a colour:
+    //   5: the computed position: x / 2 + 0.5, y / 2 + 0.5, w / 2
+    //   6: constants: c[1].w - 0.5, c[3].w / 2, c[7].w / 2
+    //   7: constants: c[4].x / 2, c[5].y / 2, c[6].z / 2
+    //   8: the computed position: z / 4 + 0.5, w / 4 + 0.5, 0.25
     uint8_t diagPosition = 0;
 };
 

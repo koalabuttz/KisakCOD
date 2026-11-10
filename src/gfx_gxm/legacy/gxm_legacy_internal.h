@@ -171,6 +171,7 @@ struct IndexBuffer : GpuBuffer
 struct Variant
 {
     uint64_t key = 0; // the options, packed (VariantKey)
+    uint64_t cacheKey = 0; // its file in the program cache (gxm::ProgramCacheKey), for logs
     std::vector<uint8_t> gxp; // never resized once registered
     SceGxmShaderPatcherId id = nullptr;
     bool failed = false; // did not compile or register; draws with it skip
@@ -194,6 +195,7 @@ struct Shader
     bool translated = false;
     gfx_gxm::cg::Shader parsed;
     std::vector<uint8_t> program; // the default variant; empty when it did not compile
+    uint64_t programCacheKey = 0;
     std::vector<std::unique_ptr<Variant>> variants;
 };
 

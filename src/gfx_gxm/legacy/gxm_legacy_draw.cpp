@@ -267,40 +267,116 @@ struct DrawState
     Variant diagMimic;
     const SceGxmProgramParameter *diagMimicPosition = nullptr;
     std::map<uint32_t, SceGxmVertexProgram *> diagMimicPrograms;
+    // A fragment program that shows TEXCOORD0's x, y, z as the colour.
+    Variant diagProbe;
+    // Shaders written for these tests in the shape of the menu's vertex
+    // shader (kDiagTests): two go through the translator like the game's,
+    // one is plain Cg.
+    Shader diagSynthetic[3];
+    Variant diagPlain;
 };
 
-// Run diagnostics (DiagnoseDraw, DiagnoseFrame): which frames.
-// The first is logged at length (8 draws); the others sit inside a test's
-// window and log 2 draws, for what that test's program variant takes.
-constexpr uint64_t kDiagnosedFrames[] = {300, 960, 1260, 1560, 1860, 2160, 2460};
-constexpr uint64_t kReadBackFrames[] = {300, 700, 1000, 1300, 1600, 1900, 2200, 2500};
+// Run diagnostics (DiagnoseDraw, DiagnoseFrame). Frame 300's first 8 draws
+// are logged at length and its back buffer read; a magenta rectangle is
+// drawn from frame 600 and read at 700. Then come the tests on the game's
+// own draws: one every 300 frames from frame 900, on for 180 frames, 2 draws
+// logged 60 frames in and the back buffer read 100 frames in.
+//
+// Runs H and I: a pass-through vertex program on the game's vertices fills
+// the screen; the game's translated vertex program computes a wrong
+// position (its w above all), on the console and in Vita3K. So these tests
+// read the numbers the program computes, and try shaders written here in
+// the menu vertex shader's shape, which can be told apart from the game's.
+constexpr uint64_t kDiagnosedFrame = 300, kReadBackFrames[] = {300, 700};
 constexpr uint64_t kTestRectFirst = 600, kTestRectLast = 779;
-// Tests on the game's own draws, three seconds each from frame 900, one
-// every 300 frames (read back 100 frames in). Every test writes opaque green
-// with no blending. Run H: a pass-through vertex program on the game's
-// vertices fills the screen, the game's translated vertex program draws
-// nothing, so these replace parts of the translated program's position
-// (gxm::cg::Options::diagPosition).
-enum DiagMode
+constexpr uint64_t kTestsFirst = 900, kTestEvery = 300, kTestFrames = 180, kTestLogged = 60, kTestRead = 100;
+struct DiagTest
 {
-    DiagNone = 0,
-    DiagPosPixels = 1,   // the translated program; position replaced by the POSITION input as pixels
-    DiagPosDots = 2,     // x and y from dots with c[0] and c[1], z 0.5, w 1
-    DiagPosZW = 3,       // x and y as computed, z 0.5, w 1
-    DiagPosZ = 4,        // z half the computed w
-    DiagMimic = 5,       // a hand-written program: four dots with c[0] to c[3]
-    DiagPassThrough = 6, // run H's pass-through program (the control: fills the screen)
-    DiagModeCount
+    const char *name;
+    uint8_t option;    // gxm::cg::Options::diagPosition for the vertex program
+    uint8_t standIn;   // 1: the pass-through program, 2: the mimic
+    uint8_t synthetic; // draws with the menu's vertex shader use: 1 the guess, 3 four dots, 4 eight dots, all
+                       // translated like the game's; 2 the guess as plain Cg
+    bool probe;        // TEXCOORD0 shown as the colour (else opaque green)
 };
-int DiagModeFor(uint64_t frame)
+constexpr DiagTest kDiagTests[] = {
+    {"x and y as computed, z 0.5, w 1", 3, 0, 0, false},
+    {"probe: computed x / 2 + 0.5, y / 2 + 0.5, w / 2", 5, 0, 0, true},
+    {"probe: computed z / 4 + 0.5, w / 4 + 0.5, 0.25", 8, 0, 0, true},
+    {"probe: constants c1.w - 0.5, c3.w / 2, c7.w / 2", 6, 0, 0, true},
+    {"probe: constants c4.x / 2, c5.y / 2, c6.z / 2", 7, 0, 0, true},
+    {"synthetic: the guess, translated", 0, 0, 1, false},
+    {"synthetic: the guess, plain Cg", 0, 0, 2, false},
+    {"synthetic: four dots, translated", 0, 0, 3, false},
+    {"synthetic: eight dots, translated", 0, 0, 4, false},
+    {"synthetic: the guess, translated; probe x, y, w", 5, 0, 1, true},
+    {"synthetic: the guess, translated; probe z, w", 8, 0, 1, true},
+    {"pass-through", 0, 1, 0, false},
+};
+constexpr int kDiagTestCount = int(sizeof(kDiagTests) / sizeof(kDiagTests[0]));
+// The test of this frame, from 1; 0 for none.
+int DiagModeFor(uint64_t frame, uint64_t *into = nullptr)
 {
-    if (frame < 900)
-        return DiagNone;
-    const uint64_t test = (frame - 900) / 300;
-    if (test + 1 >= DiagModeCount || (frame - 900) % 300 >= 180)
-        return DiagNone;
+    if (frame < kTestsFirst)
+        return 0;
+    const uint64_t test = (frame - kTestsFirst) / kTestEvery;
+    const uint64_t at = (frame - kTestsFirst) % kTestEvery;
+    if (test >= uint64_t(kDiagTestCount) || at >= kTestFrames)
+        return 0;
+    if (into)
+        *into = at;
     return int(test) + 1;
 }
+
+// The guess at the menu's vertex shader, from what the run logs say of it
+// (vs_3_0, 11 instructions, constants c0 to c7, position, colour and
+// texture coordinate in and out): the position with w 1 through the rows
+// c4 to c7, then through c0 to c3.
+//   def c8, 1, 0, 0, 0 / dcl_position v0 / dcl_color v1 / dcl_texcoord v2
+//   dcl_position o0 / dcl_color o1 / dcl_texcoord o2
+//   mad r0, v0.xyzx, c8.xxxy, c8.yyyx
+//   dp4 r1.x, r0, c4 (.y c5, .z c6, .w c7) / dp4 o0.x, r1, c0 (.y c1, .z c2, .w c3)
+//   mov o1, v1 / mov o2, v2
+constexpr uint32_t kGuessShader[] = {
+    0xfffe0300, 0x05000051, 0xa00f0008, 0x3f800000, 0x00000000, 0x00000000, 0x00000000, 0x0200001f, 0x80000000,
+    0x900f0000, 0x0200001f, 0x8000000a, 0x900f0001, 0x0200001f, 0x80000005, 0x900f0002, 0x0200001f, 0x80000000,
+    0xe00f0000, 0x0200001f, 0x8000000a, 0xe00f0001, 0x0200001f, 0x80000005, 0xe00f0002, 0x04000004, 0x800f0000,
+    0x90240000, 0xa0400008, 0xa0150008, 0x03000009, 0x80010001, 0x80e40000, 0xa0e40004, 0x03000009, 0x80020001,
+    0x80e40000, 0xa0e40005, 0x03000009, 0x80040001, 0x80e40000, 0xa0e40006, 0x03000009, 0x80080001, 0x80e40000,
+    0xa0e40007, 0x03000009, 0xe0010000, 0x80e40001, 0xa0e40000, 0x03000009, 0xe0020000, 0x80e40001, 0xa0e40001,
+    0x03000009, 0xe0040000, 0x80e40001, 0xa0e40002, 0x03000009, 0xe0080000, 0x80e40001, 0xa0e40003, 0x02000001,
+    0xe00f0001, 0x90e40001, 0x02000001, 0xe00f0002, 0x90e40002, 0x0000ffff,
+};
+// The same inputs and outputs; the position straight through c0 to c3.
+//   dp4 o0.x, v0, c0 (.y c1, .z c2, .w c3) / mov o1, v1 / mov o2, v2
+constexpr uint32_t kFourDotsShader[] = {
+    0xfffe0300, 0x0200001f, 0x80000000, 0x900f0000, 0x0200001f, 0x8000000a, 0x900f0001, 0x0200001f, 0x80000005,
+    0x900f0002, 0x0200001f, 0x80000000, 0xe00f0000, 0x0200001f, 0x8000000a, 0xe00f0001, 0x0200001f, 0x80000005,
+    0xe00f0002, 0x03000009, 0xe0010000, 0x90e40000, 0xa0e40000, 0x03000009, 0xe0020000, 0x90e40000, 0xa0e40001,
+    0x03000009, 0xe0040000, 0x90e40000, 0xa0e40002, 0x03000009, 0xe0080000, 0x90e40000, 0xa0e40003, 0x02000001,
+    0xe00f0001, 0x90e40001, 0x02000001, 0xe00f0002, 0x90e40002, 0x0000ffff,
+};
+// The guess without its first instruction: w from the vertex, not set to 1.
+//   dp4 r1.x, v0, c4 (.y c5, .z c6, .w c7) / dp4 o0.x, r1, c0 (.y c1, .z c2, .w c3) / mov o1, v1 / mov o2, v2
+constexpr uint32_t kEightDotsShader[] = {
+    0xfffe0300, 0x0200001f, 0x80000000, 0x900f0000, 0x0200001f, 0x8000000a, 0x900f0001, 0x0200001f, 0x80000005,
+    0x900f0002, 0x0200001f, 0x80000000, 0xe00f0000, 0x0200001f, 0x8000000a, 0xe00f0001, 0x0200001f, 0x80000005,
+    0xe00f0002, 0x03000009, 0x80010001, 0x90e40000, 0xa0e40004, 0x03000009, 0x80020001, 0x90e40000, 0xa0e40005,
+    0x03000009, 0x80040001, 0x90e40000, 0xa0e40006, 0x03000009, 0x80080001, 0x90e40000, 0xa0e40007, 0x03000009,
+    0xe0010000, 0x80e40001, 0xa0e40000, 0x03000009, 0xe0020000, 0x80e40001, 0xa0e40001, 0x03000009, 0xe0040000,
+    0x80e40001, 0xa0e40002, 0x03000009, 0xe0080000, 0x80e40001, 0xa0e40003, 0x02000001, 0xe00f0001, 0x90e40001,
+    0x02000001, 0xe00f0002, 0x90e40002, 0x0000ffff,
+};
+// The guess as plain Cg, for a D3DCOLOR colour and a two-float coordinate.
+constexpr char kGuessPlainCg[] =
+    "// KisakCOD: diagnostics\nuniform float4 c[8];\n"
+    "void main(float4 in_v0, float4 in_v1, float2 in_v2, out float4 out_POSITION : POSITION,\n"
+    "          out float4 out_COLOR0 : COLOR0, out float4 out_TEXCOORD0 : TEXCOORD0)\n{\n"
+    "    float4 p = float4(in_v0.xyz, 1.0);\n"
+    "    float4 w = float4(dot(p, c[4]), dot(p, c[5]), dot(p, c[6]), dot(p, c[7]));\n"
+    "    out_POSITION = float4(dot(w, c[0]), dot(w, c[1]), dot(w, c[2]), dot(w, c[3]));\n"
+    "    out_COLOR0 = in_v1.zyxw;\n"
+    "    out_TEXCOORD0 = float4(in_v2, 0.0, 1.0);\n}\n";
 
 namespace
 {
@@ -424,14 +500,17 @@ Variant *GetVariant(Device &device, Shader &shader, const gxm::cg::Options &opti
     std::unique_ptr<Variant> variant(new Variant);
     variant->key = key;
     if (key == 0)
+    {
         variant->gxp = shader.program;
+        variant->cacheKey = shader.programCacheKey;
+    }
     else
     {
+        const gxm::ShaderStage stage = shader.pixel ? gxm::ShaderStage::Fragment : gxm::ShaderStage::Vertex;
         std::string cg, error, log;
         if (!gxm::cg::Emit(shader.parsed, options, cg, error))
             log = error;
-        else if (!gxm::GetProgram(cg, shader.pixel ? gxm::ShaderStage::Fragment : gxm::ShaderStage::Vertex,
-                                  variant->gxp, log))
+        else if (variant->cacheKey = gxm::ProgramCacheKey(cg, stage); !gxm::GetProgram(cg, stage, variant->gxp, log))
             variant->gxp.clear();
         if (variant->gxp.empty() && d.variantFailures++ < 20)
             Log(device, "%s shader variant %016llx did not compile: %s", shader.pixel ? "pixel" : "vertex",
@@ -521,6 +600,21 @@ void PlanInputs(Device &device, const Shader &shader, const VertexDecl &decl, In
         else
             plan.options.inputComponents[input.reg] = components == 4 ? 0 : components;
     }
+}
+
+// Run diagnostics: whether this draw's vertex shader and vertex layout are
+// the menu's, as far as the reflection tells (kGuessShader).
+bool MenuShaped(const Shader &shader, const InputPlan &plan)
+{
+    const gxm::cg::Reflection &r = shader.parsed.reflection;
+    if (r.instructions != 11 || r.floatConstants != 8 || r.relativeConstants || r.inputs.size() != 3)
+        return false;
+    static const uint8_t usage[3] = {d3d::DECLUSAGE_POSITION, d3d::DECLUSAGE_COLOR, d3d::DECLUSAGE_TEXCOORD};
+    for (const gxm::cg::VertexInput &input : r.inputs)
+        if (input.reg > 2 || input.usage != usage[input.reg] || input.usageIndex != 0)
+            return false;
+    return plan.options.absentInputs == 0 && plan.options.bgraInputs == 2 && plan.options.inputComponents[0] == 0 &&
+           plan.options.inputComponents[2] == 2;
 }
 
 template <class T> void Append(std::string &key, const T &value)
@@ -1296,6 +1390,31 @@ bool InitDraw(Device &device, std::string &error)
             d.diagMimic.failed = true;
         Log(device, "diag: mimic program %s", DescribeProgram(d.diagMimic.program()).c_str());
     }
+    if (!gxm::GetProgram("// KisakCOD: diagnostics\nfloat4 main(float4 in_TEXCOORD0 : TEXCOORD0) : COLOR\n{\n"
+                         "    return float4(in_TEXCOORD0.xyz, 1.0);\n}\n",
+                         gxm::ShaderStage::Fragment, d.diagProbe.gxp, log))
+        Log(device, "diag: the probe program did not compile: %s", log.substr(0, log.find('\n')).c_str());
+    Register(device, d.diagProbe, "diag probe program");
+    const struct
+    {
+        const uint32_t *words;
+        size_t bytes;
+    } synthetic[3] = {{kGuessShader, sizeof(kGuessShader)},
+                      {kFourDotsShader, sizeof(kFourDotsShader)},
+                      {kEightDotsShader, sizeof(kEightDotsShader)}};
+    for (int i = 0; i < 3; ++i)
+    {
+        std::string reason;
+        d.diagSynthetic[i].translated = gxm::cg::Parse(synthetic[i].words, synthetic[i].bytes, d.diagSynthetic[i].parsed, reason);
+        if (!d.diagSynthetic[i].translated)
+            Log(device, "diag: synthetic shader %d not translated: %s", i + 1, reason.c_str());
+    }
+    d.diagPlain.cacheKey = gxm::ProgramCacheKey(kGuessPlainCg, gxm::ShaderStage::Vertex);
+    if (!gxm::GetProgram(kGuessPlainCg, gxm::ShaderStage::Vertex, d.diagPlain.gxp, log))
+        Log(device, "diag: the plain guess did not compile: %s", log.substr(0, log.find('\n')).c_str());
+    if (Register(device, d.diagPlain, "diag plain guess"))
+        Log(device, "diag: plain guess, cache file %016llx: %s", (unsigned long long)d.diagPlain.cacheKey,
+            DescribeProgram(d.diagPlain.program()).c_str());
     return true;
 }
 
@@ -1619,15 +1738,15 @@ void FrameDone(Device &device)
     DrawState &d = *device.draw;
     ++d.frame;
     d.ringUsed = 0;
-    for (const uint64_t frame : kDiagnosedFrames)
-        if (d.frame == frame)
-            d.diagnosedDraws = frame == kDiagnosedFrames[0] ? 8 : 2;
-    const int mode = DiagModeFor(d.frame);
+    uint64_t into = 0;
+    const int mode = DiagModeFor(d.frame, &into);
+    if (d.frame == kDiagnosedFrame)
+        d.diagnosedDraws = 8;
+    else if (mode && into == kTestLogged)
+        d.diagnosedDraws = 2;
     if (mode != d.diagMode)
-        Log(device,
-            "diag: frame %llu, test %d (1 position from pixels, 2 x y from dots, 3 z w fixed, 4 z fixed, 5 mimic, "
-            "6 pass-through, 0 none)",
-            (unsigned long long)d.frame, mode);
+        Log(device, "diag: frame %llu, test %d of %d: %s", (unsigned long long)d.frame, mode, kDiagTestCount,
+            mode ? kDiagTests[mode - 1].name : "none");
     d.diagMode = mode;
     // Work recorded in frame F was queued before Present F + 1, and after
     // Present P the frames before P - 1 have been shown.
@@ -1783,9 +1902,10 @@ namespace
 // Stage 2d's first runs drew a black screen with no errors. These log what a
 // few draws ask for and what lands in the back buffer, so a run tells a
 // display problem from a draw-state one:
-// - frames 300 and 1200: the first 8 draws' state, the first vertex's
-//   position and the first vertex shader constants;
-// - frames 300, 700 and 1200: what the back buffer holds before it is shown;
+// - frame 300 and each test (kDiagTests): the first draws' state, the first
+//   vertex's position and the first vertex shader constants;
+// - frames 300 and 700 and each test: what the back buffer holds before it
+//   is shown;
 // - frames 600 to 779: a magenta rectangle (the top-left quarter) drawn
 //   through the clear path after the game's frame, so it shows on screen
 //   for three seconds and in frame 700's count.
@@ -1948,9 +2068,25 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     InputPlan plan;
     PlanInputs(device, *vs, *device.decl, plan);
     const int diag = d.diagMode;
-    if (diag >= DiagPosPixels && diag <= DiagPosZ)
-        plan.options.diagPosition = uint8_t(diag);
-    Variant *vertex = GetVariant(device, *vs, plan.options);
+    const DiagTest *test = diag ? &kDiagTests[diag - 1] : nullptr;
+    // The shader whose program this draw runs: the game's, or in some tests
+    // one written here for draws with the menu's vertex shader.
+    Shader *vsUsed = vs;
+    Variant *vertex = nullptr;
+    if (test)
+    {
+        plan.options.diagPosition = test->option;
+        if (test->synthetic && MenuShaped(*vs, plan))
+        {
+            if (test->synthetic == 2)
+                vertex = d.diagPlain.failed ? nullptr : &d.diagPlain;
+            else if (Shader &synthetic = d.diagSynthetic[test->synthetic == 1 ? 0 : test->synthetic - 2];
+                     synthetic.translated)
+                vsUsed = &synthetic;
+        }
+    }
+    if (!vertex)
+        vertex = GetVariant(device, *vsUsed, plan.options);
     gxm::cg::Options pixelOptions;
     if (device.renderStates[d3d::RS_ALPHATESTENABLE])
     {
@@ -1964,19 +2100,29 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         CountSkip(device, SkipNoProgram);
         return;
     }
-    if (diag != DiagNone && !d.diagGreen.failed)
-        pixel = &d.diagGreen;
+    bool diagPixel = false;
+    if (test)
+    {
+        bool texcoord = false;
+        for (const gxm::cg::Varying &varying : vsUsed->parsed.reflection.varyings)
+            texcoord |= varying.semantic == gxm::cg::Semantic::Texcoord && varying.index == 0;
+        if (test->probe && texcoord && !d.diagProbe.failed)
+            pixel = &d.diagProbe;
+        else if (!d.diagGreen.failed)
+            pixel = &d.diagGreen;
+        diagPixel = pixel == &d.diagProbe || pixel == &d.diagGreen;
+    }
     // A stand-in vertex program for this draw.
     Variant *standIn = nullptr;
     const SceGxmProgramParameter *standInPosition = nullptr;
     std::map<uint32_t, SceGxmVertexProgram *> *standInPrograms = nullptr;
-    if (diag == DiagPassThrough && !d.diagPass.failed)
+    if (test && test->standIn == 1 && !d.diagPass.failed)
     {
         standIn = &d.diagPass;
         standInPosition = d.diagPassPosition;
         standInPrograms = &d.diagPassPrograms;
     }
-    else if (diag == DiagMimic && !d.diagMimic.failed)
+    else if (test && test->standIn == 2 && !d.diagMimic.failed)
     {
         standIn = &d.diagMimic;
         standInPosition = d.diagMimicPosition;
@@ -2002,7 +2148,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     if (!vertexProgram)
         return;
     SceGxmBlendInfo blend{};
-    const bool blended = pixel != &d.diagGreen && MakeBlend(device, d.color.noAlpha, blend);
+    const bool blended = !diagPixel && MakeBlend(device, d.color.noAlpha, blend);
     const FragmentProgramEntry *fragmentProgram =
         GetFragmentProgram(device, *pixel, passThrough ? *standIn : *vertex, blended ? &blend : nullptr);
     if (!fragmentProgram)
@@ -2103,7 +2249,10 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     {
         void *uniforms = nullptr;
         const int reserved = sceGxmReserveVertexDefaultUniformBuffer(context, &uniforms);
-        const uint16_t count = vs->parsed.reflection.floatConstants;
+        // As many as the program declares (a test's shader may declare fewer than the game's).
+        const uint32_t count = vertex->constants
+                                   ? std::min<uint32_t>(256u, sceGxmProgramParameterGetArraySize(vertex->constants))
+                                   : 0u;
         int set = 0;
         if (vertex->constants && count && reserved >= 0)
             set = sceGxmSetUniformDataF(uniforms, vertex->constants, 0, count * 4u, device.vsConstants.data());
@@ -2130,7 +2279,9 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         // What the vertex program takes, and what this draw feeds it.
         std::string line;
         char part[160];
-        Log(device, "diag frame %llu draw: vertex program %s", (unsigned long long)d.frame,
+        Log(device, "diag frame %llu draw: vertex program (cache file %016llx%s) %s", (unsigned long long)d.frame,
+            (unsigned long long)vertex->cacheKey,
+            vertex == &d.diagPlain ? ", the plain guess" : vsUsed != vs ? ", a synthetic shader" : "",
             DescribeProgram(vertex->program()).c_str());
         line.clear();
         for (int reg = 0; reg < 16; ++reg)
@@ -2331,7 +2482,8 @@ void DiagnoseFrame(Device &device)
             Log(device, "diag: drawing a magenta rectangle over the top-left quarter until frame %llu",
                 (unsigned long long)kTestRectLast);
     }
-    bool readBack = false;
+    uint64_t into = 0;
+    bool readBack = DiagModeFor(d->frame, &into) && into == kTestRead;
     for (const uint64_t frame : kReadBackFrames)
         readBack |= d->frame == frame;
     if (!readBack)
@@ -2365,9 +2517,10 @@ void DiagnoseFrame(Device &device)
     Log(device,
         "diag frame %llu (test %d) back buffer: %u of %u pixels not black (%u in the top-left quarter), %u "
         "magenta, %u green; mean r %u g %u b %u; samples (A8B8G8R8) centre %08x, quarter points %08x %08x %08x %08x, "
-        "corner %08x",
+        "corner %08x; grid x 120 480 840 at y 68: %08x %08x %08x, y 272: %08x %08x %08x, y 476: %08x %08x %08x",
         (unsigned long long)d->frame, d->diagMode, lit, total, litTopLeft, magenta, green, sum[0] / total, sum[1] / total, sum[2] / total,
-        at(480, 272), at(240, 136), at(720, 136), at(240, 408), at(720, 408), at(2, 2));
+        at(480, 272), at(240, 136), at(720, 136), at(240, 408), at(720, 408), at(2, 2), at(120, 68), at(480, 68),
+        at(840, 68), at(120, 272), at(480, 272), at(840, 272), at(120, 476), at(480, 476), at(840, 476));
 }
 
 void LogDrawSummary(Device &device)

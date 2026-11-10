@@ -96,6 +96,11 @@ CHECKS = [
      "constants=6"),
     ("vs3_psize_fog", ["--diag-position", "3"], "out_POSITION.zw = float2(0.5, 1.0);", "constants=5"),
     ("vs3_psize_fog", ["--diag-position", "4"], "out_POSITION.z = out_POSITION.w * 0.5;", "constants=5"),
+    ("vs2_oT_oD_fog", ["--diag-position", "5"],
+     "out_TEXCOORD0 = float4(out_POSITION.x * 0.5 + 0.5, out_POSITION.y * 0.5 + 0.5, out_POSITION.w * 0.5, 1.0);\n"
+     "    out_POSITION = float4(v0.x / 480.0 - 1.0, 1.0 - v0.y / 272.0, 0.5, 1.0);", "constants=6"),
+    ("vs2_oT_oD_fog", ["--diag-position", "8"],
+     "out_TEXCOORD0 = float4(out_POSITION.z * 0.25 + 0.5, out_POSITION.w * 0.25 + 0.5, 0.25, 1.0);", "constants=6"),
 ]
 
 

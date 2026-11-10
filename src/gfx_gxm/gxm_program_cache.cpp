@@ -26,12 +26,16 @@ uint64_t Micros()
     return sceKernelGetProcessTimeWide();
 }
 
-std::string PathFor(const std::string &cg, ShaderStage stage)
+uint64_t KeyFor(const std::string &cg, ShaderStage stage)
 {
     const uint8_t tag = stage == ShaderStage::Vertex ? 'v' : 'f';
-    const uint64_t hash = cg::Hash(cg.data(), cg.size(), cg::Hash(&tag, 1));
+    return cg::Hash(cg.data(), cg.size(), cg::Hash(&tag, 1));
+}
+
+std::string PathFor(const std::string &cg, ShaderStage stage, const char *extension = ".gxp")
+{
     char name[32];
-    std::snprintf(name, sizeof(name), "/%016llx.gxp", static_cast<unsigned long long>(hash));
+    std::snprintf(name, sizeof(name), "/%016llx%s", static_cast<unsigned long long>(KeyFor(cg, stage)), extension);
     return g_folder + name;
 }
 
@@ -77,6 +81,31 @@ bool WriteFile(const std::string &path, const std::vector<uint8_t> &data)
     sceIoRemove(path.c_str());
     return sceIoRename(temporary.c_str(), path.c_str()) >= 0;
 }
+
+bool g_dumpChecked = false;
+bool g_dump = false;
+
+// The program's source next to its file, when the folder asks for it.
+void DumpSource(const std::string &cg, ShaderStage stage)
+{
+    if (!g_dumpChecked)
+    {
+        g_dumpChecked = true;
+        SceIoStat stat{};
+        g_dump = sceIoGetstat((g_folder + "/dump-cg").c_str(), &stat) >= 0;
+    }
+    if (!g_dump)
+        return;
+    const std::string path = PathFor(cg, stage, ".cg");
+    SceIoStat stat{};
+    if (sceIoGetstat(path.c_str(), &stat) >= 0)
+        return;
+    if (FILE *file = std::fopen(path.c_str(), "wb"))
+    {
+        std::fwrite(cg.data(), 1, cg.size(), file);
+        std::fclose(file);
+    }
+}
 } // namespace
 
 void SetProgramCacheFolder(const char *folder)
@@ -85,6 +114,12 @@ void SetProgramCacheFolder(const char *folder)
     while (!g_folder.empty() && g_folder.back() == '/')
         g_folder.pop_back();
     g_folderMade = false;
+    g_dumpChecked = false;
+}
+
+uint64_t ProgramCacheKey(const std::string &cg, ShaderStage stage)
+{
+    return KeyFor(cg, stage);
 }
 
 bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &program, std::string &log)
@@ -93,6 +128,7 @@ bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &
     std::string path;
     if (!g_folder.empty())
     {
+        DumpSource(cg, stage);
         path = PathFor(cg, stage);
         const uint64_t begin = Micros();
         if (ReadFile(path, program) &&

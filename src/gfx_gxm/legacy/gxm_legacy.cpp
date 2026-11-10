@@ -777,6 +777,8 @@ void CompileDefaultVariant(Device &device, Shader &shader, uint64_t hash)
         return;
     }
     shader.translated = true;
+    shader.programCacheKey =
+        gxm::ProgramCacheKey(cg, shader.pixel ? gxm::ShaderStage::Fragment : gxm::ShaderStage::Vertex);
     std::string log;
     if (!gxm::GetProgram(cg, shader.pixel ? gxm::ShaderStage::Fragment : gxm::ShaderStage::Vertex, shader.program,
                          log))

@@ -68,6 +68,11 @@ START + SELECT quits. For a run nobody watches, `+set vita_quitAfter 90` in
 the command line file quits by itself 90 seconds after start-up (the
 dedicated server takes it too).
 
+To see what a translated shader looks like, put an empty file named
+`dump-cg` in `ux0:data/KisakCOD/gxp`: every program asked for then also
+leaves its Cg source there as `<same 16 hex digits>.cg`. Those sources come
+from the game's shaders, so keep them on that machine like the game's files.
+
 ## What it builds
 
 `scripts/platform/vita/mp_client.cmake` takes the same engine sources as the
