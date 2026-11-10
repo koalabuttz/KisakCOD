@@ -79,8 +79,16 @@ from the game's shaders, so keep them on that machine like the game's files.
 A file named `run-tests` in the same folder turns on the draw tests of
 `gxm_legacy_draw.cpp` (`kGuessEdits`): for the first minute and a half the
 screen shows test pictures, mostly plain green, and the log says what each
-left in the back buffer. Without the file the client only logs frame 300's
-first draws and what frames 300 and 700 left in the back buffer.
+left in the back buffer. A file named `read-back` there has the client log
+only what frames 300 and 700 left in the back buffer (`diag frame 300 ... back
+buffer: N of 522240 pixels not black`), which on a console says whether a
+picture was drawn. Without either file the client logs frame 300's first
+draws and reads nothing back. Leave both files out in Vita3K unless a run is
+about them: once the game has read a display buffer, the emulator draws every
+later frame into that buffer slowly. Up to PC run H1 the two reads were made
+in every run, and the menu there fell from 43 frames a second to 12 after
+frame 300 and to 6 after frame 700 (a frame of 250 ms in every three), while
+the read itself counted no lit pixel.
 
 Two switches are for measuring in an emulator what the game would take if it
 had the room; a console has no memory for either:
