@@ -97,7 +97,8 @@ in a build with `KISAK_BUILD_VULKAN_BACKEND`. Bottom to top:
 - [Measuring a change from inside the game](perf-ab.md): `perf_ab` and
   `perf_sample` compare two settings in one launch (Linux and the other
   native builds, not Windows yet), with the switches to measure:
-  `r_gpuSyncSleep` and `xanim_blendOnce`, both off by default
+  `r_gpuSyncSleep` (100 on Linux by default since PR 197, 0 elsewhere) and
+  `xanim_blendOnce` (off by default)
 - [Speed builds](linux-speed-builds.md): opt-in build options for measuring
   (`KISAK_LINUX_CPU`, `KISAK_LINUX_LTO`, `KISAK_LINUX_CLIENT_ASSERTS=OFF`);
   none is measured yet
