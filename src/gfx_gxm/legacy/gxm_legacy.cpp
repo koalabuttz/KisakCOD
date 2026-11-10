@@ -35,6 +35,7 @@
 #include <psp2/kernel/sysmem.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -122,10 +123,96 @@ namespace
 void LogShaderSummary(Device &device, const char *when); // with CreateShader
 } // namespace
 
+// GPU memory in use by what it is for, in each of the two pools it can be in.
+namespace
+{
+std::atomic<uint32_t> g_useBytes[2][static_cast<int>(MemoryUse::Count)];
+std::atomic<uint32_t> g_useCount[2][static_cast<int>(MemoryUse::Count)];
+// Pieces this large are logged one by one as they are made, up to a count.
+constexpr uint32_t kLoggedPieceBytes = 1u << 20;
+uint32_t g_loggedPieces = 0;
+constexpr uint32_t kLoggedPieces = 300;
+
+const char *MemoryUseName(MemoryUse use)
+{
+    switch (use)
+    {
+    case MemoryUse::TextureCompressed:
+        return "compressed textures";
+    case MemoryUse::Texture:
+        return "other textures";
+    case MemoryUse::Cube:
+        return "cubes";
+    case MemoryUse::Volume:
+        return "volumes";
+    case MemoryUse::RenderTarget:
+        return "render targets";
+    case MemoryUse::DepthStencil:
+        return "depth";
+    case MemoryUse::VertexStatic:
+        return "static vertices";
+    case MemoryUse::VertexDynamic:
+        return "dynamic vertices";
+    case MemoryUse::IndexStatic:
+        return "static indices";
+    case MemoryUse::IndexDynamic:
+        return "dynamic indices";
+    default:
+        return "?";
+    }
+}
+
+void Account(gxm::MemoryKind kind, MemoryUse use, uint32_t bytes, bool taken)
+{
+    const int pool = kind == gxm::MemoryKind::Cdram ? 0 : 1;
+    const int index = static_cast<int>(use);
+    if (taken)
+    {
+        g_useBytes[pool][index] += bytes;
+        ++g_useCount[pool][index];
+    }
+    else
+    {
+        g_useBytes[pool][index] -= bytes;
+        --g_useCount[pool][index];
+    }
+}
+} // namespace
+
+MemoryUse TextureUse(const TextureDesc &desc, const FormatInfo &format)
+{
+    if (desc.usage & d3d::USAGE_DEPTHSTENCIL)
+        return MemoryUse::DepthStencil;
+    if (desc.usage & d3d::USAGE_RENDERTARGET)
+        return MemoryUse::RenderTarget;
+    if (desc.kind == TextureKind::Cube)
+        return MemoryUse::Cube;
+    if (desc.kind == TextureKind::Volume)
+        return MemoryUse::Volume;
+    return format.compressed ? MemoryUse::TextureCompressed : MemoryUse::Texture;
+}
+
+std::string DescribeMemoryUse()
+{
+    std::string out = "gpu memory by use (cdram + main MB, pieces):";
+    for (int i = 0; i < static_cast<int>(MemoryUse::Count); ++i)
+    {
+        const uint32_t cdram = g_useBytes[0][i], main = g_useBytes[1][i];
+        const uint32_t pieces = g_useCount[0][i] + g_useCount[1][i];
+        if (!pieces)
+            continue;
+        char part[96];
+        std::snprintf(part, sizeof(part), " %s %.1f + %.1f (%u);", MemoryUseName(static_cast<MemoryUse>(i)),
+                      cdram / 1048576.0, main / 1048576.0, pieces);
+        out += part;
+    }
+    return out;
+}
+
 // GPU memory: the preferred pool, then the other one. SYSTEMMEM and SCRATCH
 // resources stay in the C heap.
 bool AllocateMemory(Device &device, Memory &memory, uint32_t bytes, uint32_t align, d3d::Pool pool, bool preferCdram,
-                    const char *name)
+                    MemoryUse use, const char *name)
 {
     if (pool == d3d::POOL_SYSTEMMEM || pool == d3d::POOL_SCRATCH)
     {
@@ -143,19 +230,39 @@ bool AllocateMemory(Device &device, Memory &memory, uint32_t bytes, uint32_t ali
             memory.data = static_cast<uint8_t *>(data);
             memory.kind = kind;
             memory.gpu = true;
+            memory.use = use;
+            memory.bytes = bytes;
+            Account(kind, use, bytes, true);
             return true;
         }
     }
-    Log(device, "out of GPU memory for %s (%u KB); %s", name ? name : "a resource", bytes >> 10,
-        gxm::DescribeMemory().c_str());
+    Log(device, "out of GPU memory for %s (%s, %u KB); %s", name && *name ? name : "a resource", MemoryUseName(use),
+        bytes >> 10, gxm::DescribeMemory().c_str());
+    Log(device, "%s", DescribeMemoryUse().c_str());
     return false;
+}
+
+void FreeGpuMemory(gxm::MemoryKind kind, void *data, MemoryUse use, uint32_t bytes)
+{
+    if (gxm::Free(kind, data))
+        Account(kind, use, bytes, false);
 }
 
 void FreeMemory(Memory &memory)
 {
     if (memory.gpu)
-        gxm::Free(memory.kind, memory.data);
+        FreeGpuMemory(memory.kind, memory.data, memory.use, memory.bytes);
     memory = Memory{};
+}
+
+// One line for a large piece of GPU memory as it is made.
+void LogLargePiece(Device &device, const Memory &memory, const char *what)
+{
+    if (!memory.gpu || memory.bytes < kLoggedPieceBytes || g_loggedPieces >= kLoggedPieces)
+        return;
+    ++g_loggedPieces;
+    Log(device, "gpu memory piece %u: %.1f MB of %s for %s, %s", g_loggedPieces, memory.bytes / 1048576.0,
+        gxm::MemoryKindName(memory.kind), MemoryUseName(memory.use), what);
 }
 
 // The display's raw texel for a D3DCOLOR: the display buffers are A8B8G8R8.
@@ -417,9 +524,17 @@ Texture *CreateTexture(Device *device, const TextureDesc &desc)
     // textures (cubes, block-compressed) have only their swizzled copy, which
     // SetUpTexture makes.
     texture->swizzledLayout = SwizzledTexture(texture->desc, *format);
-    if (!texture->swizzledLayout && !AllocateMemory(*device, texture->memory, total, 256, desc.pool, true, desc.name))
+    if (!texture->swizzledLayout && !AllocateMemory(*device, texture->memory, total, 256, desc.pool, true,
+                                                    TextureUse(texture->desc, *format), desc.name))
         return nullptr;
     SetUpTexture(*device, *texture);
+    {
+        char what[96];
+        std::snprintf(what, sizeof(what), "%ux%ux%u, %u levels, format %u, usage 0x%x", texture->desc.width,
+                      texture->desc.height, texture->desc.kind == TextureKind::Cube ? 6u : depth,
+                      texture->desc.levels, unsigned(desc.format), desc.usage);
+        LogLargePiece(*device, texture->swizzledLayout ? texture->swizzled : texture->memory, what);
+    }
     texture->surfaces.resize(texture->levels.size());
     ++device->live;
     return texture.release();
@@ -633,10 +748,12 @@ void UnlockSurface(Device *device, Surface *surface)
 namespace
 {
 template <class T>
-T *CreateBuffer(Device *device, uint32_t bytes, uint32_t usage, d3d::Pool pool, const char *name)
+T *CreateBuffer(Device *device, uint32_t bytes, uint32_t usage, d3d::Pool pool, bool vertices, const char *name)
 {
     if (!device || !bytes)
         return nullptr;
+    const MemoryUse use = vertices ? ((usage & d3d::USAGE_DYNAMIC) ? MemoryUse::VertexDynamic : MemoryUse::VertexStatic)
+                                   : ((usage & d3d::USAGE_DYNAMIC) ? MemoryUse::IndexDynamic : MemoryUse::IndexStatic);
     std::unique_ptr<T> buffer(new T);
     buffer->size = bytes;
     buffer->usage = usage;
@@ -646,8 +763,13 @@ T *CreateBuffer(Device *device, uint32_t bytes, uint32_t usage, d3d::Pool pool, 
     // writes are cheap. Static geometry goes to CDRAM, which main memory
     // cannot spare.
     const bool dynamic = (usage & d3d::USAGE_DYNAMIC) != 0;
-    if (!AllocateMemory(*device, buffer->memory, bytes, 16, pool, !dynamic, name))
+    if (!AllocateMemory(*device, buffer->memory, bytes, 16, pool, !dynamic, use, name))
         return nullptr;
+    {
+        char what[48];
+        std::snprintf(what, sizeof(what), "usage 0x%x", usage);
+        LogLargePiece(*device, buffer->memory, what);
+    }
     ++device->live;
     return buffer.release();
 }
@@ -673,7 +795,7 @@ void DestroyBuffer(Device *device, GpuBuffer *buffer)
 
 VertexBuffer *CreateVertexBuffer(Device *device, uint32_t bytes, uint32_t usage, d3d::Pool pool, const char *name)
 {
-    return CreateBuffer<VertexBuffer>(device, bytes, usage, pool, name);
+    return CreateBuffer<VertexBuffer>(device, bytes, usage, pool, true, name);
 }
 
 void DestroyVertexBuffer(Device *device, VertexBuffer *buffer)
@@ -690,7 +812,7 @@ void DestroyVertexBuffer(Device *device, VertexBuffer *buffer)
 IndexBuffer *CreateIndexBuffer(Device *device, uint32_t bytes, uint32_t usage, d3d::Format format, d3d::Pool pool,
                                const char *name)
 {
-    IndexBuffer *buffer = CreateBuffer<IndexBuffer>(device, bytes, usage, pool, name);
+    IndexBuffer *buffer = CreateBuffer<IndexBuffer>(device, bytes, usage, pool, false, name);
     if (buffer)
         buffer->indexFormat = format;
     return buffer;
@@ -1130,6 +1252,14 @@ PresentResult Present(Device *device)
     const bool shown = gxm::Present();
     FrameDone(*device);
     gxm::ProgramCacheFrame();
+    // Once a minute, beside the system's memory line (vita_stats.cpp).
+    static uint64_t memoryLogged = 0;
+    if (Micros() - memoryLogged > 60 * 1000 * 1000)
+    {
+        memoryLogged = Micros();
+        Log(*device, "%s", gxm::DescribeMemory().c_str());
+        Log(*device, "%s", DescribeMemoryUse().c_str());
+    }
     if (!shown)
     {
         device->error = "sceGxm could not present";

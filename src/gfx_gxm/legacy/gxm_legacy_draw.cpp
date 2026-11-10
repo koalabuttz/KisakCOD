@@ -1760,7 +1760,8 @@ void SetUpTexture(Device &device, Texture &texture)
         if (!TextureFormat(desc.format, format) || !LayOutSwizzled(texture))
             return;
         const uint32_t bytes = texture.faceStride * texture.faces;
-        if (!AllocateMemory(device, texture.swizzled, bytes, 4096, d3d::POOL_DEFAULT, true, texture.name.c_str()))
+        if (!AllocateMemory(device, texture.swizzled, bytes, 4096, d3d::POOL_DEFAULT, true,
+                            TextureUse(desc, *texture.format), texture.name.c_str()))
             return;
         std::memset(texture.swizzled.data, desc.kind == TextureKind::Cube ? 0x80 : 0, bytes);
         int result;
@@ -1842,7 +1843,9 @@ void Retire(Device &device, Memory &memory)
     {
         const gxm::MemoryKind kind = memory.kind;
         void *data = memory.data;
-        Defer(device, [kind, data] { gxm::Free(kind, data); });
+        const MemoryUse use = memory.use;
+        const uint32_t bytes = memory.bytes;
+        Defer(device, [kind, data, use, bytes] { FreeGpuMemory(kind, data, use, bytes); });
         memory = Memory{};
         return;
     }
@@ -1933,7 +1936,8 @@ void Rename(Device &device, GpuBuffer &buffer)
 {
     Memory fresh;
     const bool dynamic = (buffer.usage & d3d::USAGE_DYNAMIC) != 0;
-    if (!AllocateMemory(device, fresh, buffer.size, 16, buffer.pool, !dynamic, buffer.name.c_str()))
+    if (!AllocateMemory(device, fresh, buffer.size, 16, buffer.pool, !dynamic, buffer.memory.use,
+                        buffer.name.c_str()))
     {
         // No memory: wait for the GPU instead.
         FinishGpu(device);

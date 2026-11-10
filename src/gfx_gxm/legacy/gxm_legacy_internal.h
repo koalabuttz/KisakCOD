@@ -97,11 +97,29 @@ struct Level
 
 // Where a resource's bytes are: a GPU pool, or the C heap for SYSTEMMEM and
 // SCRATCH resources (which the GPU never reads).
+// What a piece of GPU memory is for: the logs add the pools' use up by these.
+enum class MemoryUse : uint8_t
+{
+    TextureCompressed, // block-compressed 2D textures
+    Texture,           // other 2D textures
+    Cube,
+    Volume,
+    RenderTarget,
+    DepthStencil,
+    VertexStatic,
+    VertexDynamic,
+    IndexStatic,
+    IndexDynamic,
+    Count,
+};
+
 struct Memory
 {
     uint8_t *data = nullptr;
     gxm::MemoryKind kind = gxm::MemoryKind::Cdram;
     bool gpu = false;
+    MemoryUse use = MemoryUse::Texture;
+    uint32_t bytes = 0; // of GPU memory, for the accounts
     std::vector<uint8_t> host;
 };
 
@@ -273,8 +291,17 @@ uint64_t Micros();
 // GPU memory: the preferred pool, then the other one. SYSTEMMEM and SCRATCH
 // resources stay in the C heap.
 bool AllocateMemory(Device &device, Memory &memory, uint32_t bytes, uint32_t align, d3d::Pool pool, bool preferCdram,
-                    const char *name);
+                    MemoryUse use, const char *name);
 void FreeMemory(Memory &memory);
+// Frees a piece AllocateMemory handed out, by its parts (for frees that wait
+// for the GPU).
+void FreeGpuMemory(gxm::MemoryKind kind, void *data, MemoryUse use, uint32_t bytes);
+// What a texture's memory counts as.
+MemoryUse TextureUse(const TextureDesc &desc, const FormatInfo &format);
+// The pools' use by what it is for, in one line.
+std::string DescribeMemoryUse();
+// One log line for a large piece of GPU memory as it is made.
+void LogLargePiece(Device &device, const Memory &memory, const char *what);
 // The display's raw texel for a D3DCOLOR: the display buffers are A8B8G8R8.
 uint32_t DisplayColor(uint32_t color);
 bool Describe(const Surface *surface, Target &out);
