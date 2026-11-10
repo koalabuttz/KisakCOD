@@ -8,7 +8,8 @@ name: Upstream patch queue
 # pull request (MSVC, DirectX SDK, Debug and Release; sp, mp and dedi).
 #
 # The build is of all patches together. Each patch is also checked to apply to
-# the base alone, because each is meant to be its own pull request.
+# the base alone, because each is meant to be its own pull request; the few
+# that docs/upstream/DEPENDS lists are checked on top of the patches they name.
 
 on:
   workflow_dispatch:
