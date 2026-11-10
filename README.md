@@ -111,8 +111,8 @@ SDL3, DXVK and the client in one command. Build steps, a portable folder and
 opt-in controller support: [multiplayer client](docs/linux-mp-client.md). The singleplayer game
 ([guide](docs/linux-sp-game.md), i386) plays its first levels, killhouse and
 cargoship, and all 21 levels load and run unattended
-([levels](docs/linux-sp-levels.md)); it also builds for x86_64, where the
-first levels have loaded in local runs ([status](docs/status.md)).
+([levels](docs/linux-sp-levels.md)); the x86_64 build loads all 21 levels
+unattended too, in local runs on the laptop ([status](docs/status.md)).
 
 **Vulkan.** An opt-in back end (`-DKISAK_BUILD_VULKAN_BACKEND=ON`, then
 `+set r_backend vulkan`) draws the same renderer through Vulkan directly,

@@ -1,8 +1,8 @@
 # Linux port status
 
-Last updated 2026-11-10 12:24 UTC (master `074f7f1`: the first daily
-security check's fixes, PR 191; modded Linux servers and HTTP downloads,
-PR 205). This page is the current state of
+Last updated 2026-11-10 12:37 UTC (master `5e2e574`: the 64-bit
+singleplayer fixes, the frames and deaths sweep and the singleplayer Vulkan
+link, PR 193). This page is the current state of
 the native Linux port and the other platform builds, the open pull requests and
 the roadmap. The [docs index](README.md) lists the detailed guides;
 older handoffs are in [history](history/README.md) and are not current.
@@ -33,9 +33,9 @@ Vulkan checks run on lavapipe and MoltenVK).
 | Steam authentication | `-DKISAK_LINUX_STEAM=ON` | Added by PR 85. Logs in through the running Steam client's `steamclient.so`; a probe got a ticket validated on i386 and x86_64, and an i386 client joined, reconnected to and was refused by (with Steam off) an i386 dedicated server; the same passed with x86_64 client and server, and across i386 and x86_64 in both directions (laptop, one Steam account). A dedicated server can instead log on as an anonymous Steam game server (`KISAK_STEAM_SERVER_LOGIN=anonymous`); a Windows client on David's PC joined such a laptop server and was refused with the server's Steam off. The 32-bit Windows dedicated server can log on the same way since PR 179; that is compiled on hosted CI and has not been run against Steam yet. Off by default. [Guide](linux-steam.md) |
 | Key codes (no Steam) | default | A client without Steam (or with `cl_keyCodeOnly 1`) joins servers with `sv_allowUnverifiedGuids 1` using a GUID derived from `codkey.txt` or, on Windows, the retail registry key. Unverified by design. Laptop run (x86_64 client and dedi, made-up key): joined, spawned and reconnected with the GUID; refused without the server opt-in, without a key file, with a group-readable file and with a mistyped key. Since PR 159 the game's own key code menu saves a typed key as `codkey.txt` (mode 600) and keeps it out of the dvars a server's menus can read; that is checked asset-free on hosted CI, and the menu has not been used on screen yet. [Guide](key-codes.md) |
 | Finding servers | default | The local list, favourites and `connect` need no setup. The internet list is opt-in: `masterServerName` is empty by default, so no master server is contacted (retail's is gone); when set, the client asks that master and a `dedicated 2` server sends it heartbeats. A list is accepted only from the master that was asked, and since PR 179 the local list shows an unasked reply only when it echoes the random token of the client's last scan and arrives within 10 seconds. Checked asset-free over loopback UDP on hosted CI; no scan of a real network has been run, and the Join Game menu has not been opened on a real client yet. [Guide](server-browser.md) |
-| Singleplayer `KisakCOD-sp`, i386 | `-DKISAK_BUILD_LINUX_SP_GAME=ON` | killhouse and cargoship load, leave the pregame by themselves and play about a minute each, clean quit (laptop). All 21 levels load, run 45 s and quit cleanly; a 4-level mission chain and devsave/loadgame pass (laptop sweep run 1, [levels](linux-sp-levels.md)). [Guide](linux-sp-game.md) |
+| Singleplayer `KisakCOD-sp`, i386 | `-DKISAK_BUILD_LINUX_SP_GAME=ON` | killhouse and cargoship load, leave the pregame by themselves and play about a minute each, clean quit (laptop). All 21 levels load, run 45 s and quit cleanly; a 4-level mission chain and devsave/loadgame pass (laptop sweep run 1, [levels](linux-sp-levels.md)). Since PR 193 the sweep also checks each level's frame (`--screenshot`) and a death and retry (`--death-retry`); both pass on all 21 levels (laptop). The x86_64 build (since PR 167) also loads all 21 levels and passes the chain and save/load on the laptop, with movies on. `KisakCOD-sp` links the opt-in Vulkan back end and `r_vkStats` (PR 193), build proof only: no level has been drawn through it. [Guide](linux-sp-game.md) |
 | Vulkan renderer back end | `-DKISAK_BUILD_VULKAN_BACKEND=ON`, then `+set r_backend vulkan` | The game's own D3D9 renderer drawn through this project's Vulkan back end in place of DXVK (Linux) or `d3d9.dll` (Windows), with the original visuals. `KisakCOD-mp` plays mp_crash through it on the laptop (x86_64) and on the PC (the Win32 build from CI), and quits cleanly. The picture matches: the world draw probe's two views agree with DXVK at PSNR 66.7 and 100 (laptop), and on the PC Vulkan and real D3D9 agree at 37 to 44 dB from one indoor view, the same spread as repeats of that comparison. Speed at a fixed mp_crash view on the laptop: since PR 152 (commands recorded on a second thread, a frame handed to the GPU in parts while it is drawn) 140.9 fps against 151.3 through DXVK on mains in power-saver mode (run 9), and 139.5 against 138.2 on battery (run 10, one pass); before it, 116 to 125 against 151 to 159. Those laptop figures are not like for like: the DXVK rows drew 4x anti-aliasing and the Vulkan rows one sample, because the back end on master offers no multisampling (laptop run 13, part 0; PR 203, open, adds it). On the PC the 75 fps cap is gone since PR 173 asks for the IMMEDIATE present mode with vsync off: 154.6 fps against about 203 for real D3D9 at one view, and forcing MAILBOX brings 75 back (PC run 7). Translated shaders and pipelines are kept between runs (PC, Debug build: 15 s to the map warm, 62 s cold). Hosted CI builds it into the i386 Linux client, the macOS client and the Windows game (Win32 and x64), runs the device probe and the adapter and front pixel checks on lavapipe, and runs those two checks on macOS through MoltenVK. The darker models an earlier laptop run showed with `r_altModelLightingUpdate 1` (the default) were the view moving between screenshots, not the back end: measured again over several shots a launch, Vulkan and DXVK on the laptop, and Vulkan and real D3D9 on the PC (PC run 6), draw the same brightness at 0 and at 1, and hosted CI now checks both update paths through the front (PRs 165 and 183). Since PR 173 the sun's occlusion queries count samples: in the open every result is 256 of 256 and indoors none, as with DXVK on the laptop (run 11) and real D3D9 on the PC (run 7), and the GPU feed is set from the console (`r_vkGpuFeed`, statistics with `r_vkStats`). Open: about one frame in two minutes takes 110 to 230 ms. Off by default. [Guide](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan) |
-| Windows x64 | MSVC `-A x64` (`KISAK_WIN64`) | sp, mp and dedi build and link (CI job "MSVC x64 build"); opt-in FFmpeg movies; OpenAL sound, no Steam. On the PC, mp_crash loads to class select, the dedicated server hosts bots, and singleplayer plays: killhouse and cargoship with autosave and checkpoint loads (PR 95), and a 12-level tour loaded, saved and played without a crash or script error (PRs 111 and 114). A tour of all 21 levels (PR 167's build, 2026-11-10) loaded 20; airlift crashes about 4.5 s in, with the older x64 build too, and PR 193 (open) fixes it (three of three airlift launches held 60 s on the PC). [x64 track](linux-x64.md#windows-msvc-x64-build) |
+| Windows x64 | MSVC `-A x64` (`KISAK_WIN64`) | sp, mp and dedi build and link (CI job "MSVC x64 build"); opt-in FFmpeg movies; OpenAL sound, no Steam. On the PC, mp_crash loads to class select, the dedicated server hosts bots, and singleplayer plays: killhouse and cargoship with autosave and checkpoint loads (PR 95), and a 12-level tour loaded, saved and played without a crash or script error (PRs 111 and 114). A tour of all 21 levels (PR 167's build, 2026-11-10) loaded 20; airlift crashes about 4.5 s in, with the older x64 build too, and PR 193 (merged) fixes it: an effect model's physics preset was read at a 32-bit slot. Airlift then held 60 s in three of three launches on the PC, where it had crashed three of three. [x64 track](linux-x64.md#windows-msvc-x64-build) |
 | Windows ARM64 | MSVC `KISAK_WIN_ARM64` | sp, mp and dedi build and start up to the missing-game-data error on hosted Windows on Arm. Not run with game data. [arm64 track](linux-arm64.md) |
 | Profiling | `KISAK_LINUX_TRACY` / `KISAK_WIN_TRACY` | Opt-in Tracy builds of the game clients on Linux and Windows. |
 
@@ -81,17 +81,11 @@ builds use `-ffp-contract=off` (no fused multiply-add).
 - **Singleplayer played by hand past two levels.** All 21 levels load and run
   unattended, and mission changes and save loading work from the console
   ([linux-sp-levels.md](linux-sp-levels.md)). Only killhouse and cargoship
-  have been played by hand; night vision, ac130, the Javelin, slow motion,
-  death and retry, and the victory screen are untried.
-- **Singleplayer without movies.** A `KisakCOD-sp` built without movies
-  (`KISAK_LINUX_CINEMATICS` `OFF`, or `AUTO` on a machine without the FFmpeg
-  development files) loads no level: the loading screen samples the movie
-  images and nothing sets them (found on the laptop, x86_64). PR 193 (open)
-  fixes it; build with movies until then.
-- **x86_64 Linux singleplayer beyond two levels.** `KisakCOD-sp` builds for
-  x86_64 since PR 167. Master's x86_64 build loaded killhouse and airlift
-  and quit cleanly in WSL on the PC (software rendering, local runs); PR 193
-  (open) says its branch loaded all 21 levels on the laptop
+  have been played by hand; night vision, ac130, the Javelin, slow motion
+  and the victory screen are untried by hand.
+- **A singleplayer save with a moving dynamic entity on x86_64.** PR 193
+  stores a loaded entity's physics body as an object id so it survives on
+  64-bit builds; no run has loaded such a save yet
   ([guide](linux-x64.md#x86_64-singleplayer-game)).
 - **The PS Vita client's default picture on the console, and its speed.**
   mp_crash loads on the console. With depth of field and soft particles on
@@ -176,14 +170,13 @@ These came before the playable client and still build and run in CI:
 
 ## Open pull requests
 
-As of 2026-11-10 12:24 UTC, five. They change by the hour; the
+As of 2026-11-10 12:37 UTC, four. They change by the hour; the
 [list on GitHub](https://github.com/koalabuttz/KisakCOD/pulls) is the current
 one. A machine run a pull request waits on is named where its author has
 said so.
 
 | PR | What | Machine run it waits on |
 | --- | --- | --- |
-| 193 | Singleplayer: the 64-bit airlift crash and the movies-off load, and frame and death checks in the level sweep | The i386 sweep of all 21 levels with the new checks, on the laptop. |
 | 194 | Steam: a server acts on Steam's later verdict for a ticket | A run with a real Steam player: join, leave and join again, then a kick and an attempt to come back. |
 | 196 | Fewer Linux CI jobs per push: five quick checks run both configurations in one job | |
 | 202 | PS Vita client: the static model cache back (4 MB) and less CPU work per draw, with a `no-draw-reuse` switch to compare | A Vita3K run of the head (the 4 MB cache with the savings together). |
@@ -226,8 +219,6 @@ PR 168.
   (PR 179, merged; queued on the PC and the laptop).
 - Key code menu (PR 159, merged): a key typed into the menu on screen
   ([guide](key-codes.md#the-key-code-menu)).
-- Singleplayer: the sweep's new frame and death checks on i386, all 21
-  levels (PR 193 waits on it).
 - CPU measuring: `r_gpuSyncSleepUnlocked` (PR 197, merged, off by
   default) on a GPU. Laptop perf run 5 is done ([guide](perf-ab.md)).
 
@@ -257,8 +248,10 @@ no fixed order.
    game (PR 205's fixes, PC run 2), then voice chat and the remote
    script debugger
    ([list](linux-mp-client.md#what-it-does-not-have-yet)).
-5. **Linux singleplayer beyond two levels**: hand play of the swept levels,
-   and the x86_64 and movies-off fixes (PR 193).
+5. **Linux singleplayer beyond two levels**: hand play of the swept levels
+   (all 21 pass the unattended sweep on i386 and x86_64), a save with a
+   moving dynamic entity on x86_64, and a level drawn through the Vulkan
+   back end.
 6. **Performance on the CPU**: the laptop A/B runs and the function-level
    profile are done (PRs 97 and 112). Their reading is that the laptop is
    limited by its GPU at both sizes measured, so CPU work there is about
