@@ -831,6 +831,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			Steam_Init();
 			// LWSS END
 			Com_Init(sys_cmdline);
+			// KISAK: Steam_Init ran before the console and log file existed.
+			Steam_PrintStartupMessages();
 
 #ifdef KISAK_MP
 			if (!com_dedicated->current.integer)

@@ -10,7 +10,10 @@
 
 bool g_steamInitialized = false;
 
-void Steam_Init()
+void Steam_Init() {}
+
+// Steam_Init runs before Com_Init, when nothing printed would be seen.
+void Steam_PrintStartupMessages()
 {
     Com_PrintWarning(CON_CHANNEL_SYSTEM,
         "Steam is unavailable in the 64-bit Windows build; Steam-authenticated servers will reject it, "

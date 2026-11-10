@@ -5,6 +5,9 @@
 #include <cstdint>
 
 void Steam_Init();
+// KISAK: prints what Steam_Init had to say, which it keeps until the console
+// and log file exist. win_main.cpp calls it right after Com_Init.
+void Steam_PrintStartupMessages();
 void Steam_Shutdown();
 
 // KISAK: Windows dedicated server, at quit: logs an anonymous Steam game server
