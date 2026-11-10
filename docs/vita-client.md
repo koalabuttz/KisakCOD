@@ -13,7 +13,7 @@ from the card in 1.4 s). Step 2d, the first real draws, is built and not run
 on the Vita yet.**
 - The whole client compiles, links and packs into a `.vpk`: client, cgame, UI, sound, renderer and its own listen server.
 - Stage 1 had no graphics back end, so the client stopped at the renderer through `Sys_Error`. Stage 2 replaces that: the renderer gets the D3D9 front on the GXM back end ("Graphics" below), which does everything but draw.
-- Sound links the OpenAL stand-in ("no device").
+- Stage 3 (controls and sound) runs on the console: on run 1 (2026-11-09) the menu music and the menu's sounds were heard, and every button arrived as its key. The screen's touch and the layout in a game are not confirmed yet: see "Controls" and "Sound" below.
 
 **Runs on David's Vita (2026-11-09):**
 - Run 1 reached the renderer, but its log was empty. A game client's `Sys_Print` was silent: on Linux `Com_PrintMessage` copies lines to stderr, which the Vita lacks. It then aborted on an assert, because `R_SetWndParms` read an empty display-mode list after the "no device" answer. Both are fixed.
@@ -25,7 +25,7 @@ on the Vita yet.**
 
 As for the server (see [vita.md](vita.md)), plus two header directories:
 - **DXVK Native's headers** supply the D3D9 declarations: the types and interface layouts only. No DXVK code is built or linked. The pinned 2.7.1 headers come from `scripts/tests/run_native_d3d9_boundary_checks.py --stage-dxvk-headers`, as in the Linux client jobs.
-- **OpenAL's `AL/al.h`** comes from libopenal-dev or the OpenAL Soft source.
+- **OpenAL's headers** (`AL/al.h`, `AL/alc.h`, `AL/efx.h`) come from libopenal-dev or the OpenAL Soft source, for the declarations only. No OpenAL library is linked ("Sound" below).
 
 ```sh
 export VITASDK="$(scripts/ci/install-vitasdk.sh "$HOME/vitasdk-pinned")"
@@ -41,7 +41,8 @@ cmake --build build-vita-mp --target KisakCOD-mp-vpk
 Hosted CI: the Linux workflow's **PS Vita multiplayer client** job builds Debug
 and RelWithDebInfo. It runs the server's float checks (no fused multiply-add, no
 NEON float) and link checks (weak pthread references, the main stack size), and
-uploads the RelWithDebInfo `.vpk`.
+uploads the RelWithDebInfo `.vpk`. It also runs the controls' and the sound's
+host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`).
 
 ## Running
 
@@ -88,11 +89,11 @@ Around them:
 |---|---|---|
 | Platform layer | `src/linux/*.cpp` + `src/vita/*.cpp` | The server's, minus its stand-ins for client systems |
 | Win32 window calls | `src/vita/client/vita_win32_window.cpp` | One window: the 960 x 544 screen. One monitor |
-| Window procedure, input | `src/vita/client/vita_client_input.cpp` | Sets `g_wv.hWnd`; buttons are not mapped yet |
+| Window procedure, input | `src/vita/client/vita_client_input.cpp`, `input/vita_input_map.cpp` | Sets `g_wv.hWnd`; the pad and the touch panels become engine keys and mouse motion ("Controls") |
 | Graphics device | `src/vita/client/vita_d3d9.cpp` | The D3D9 front's host: one 960 x 544 mode, one monitor, the log |
 | D3D9 front | `src/gfx_vk/d3d9` | The Vulkan work's IDirect3D9, unchanged, over the seam in `vk_d3d9_backend.h` |
 | GXM back end | `src/gfx_gxm` | The Legacy API on sceGxm (`legacy/gxm_legacy.cpp`), the screen, GPU memory |
-| Sound | `tests/linux_mp_client/openal_unavailable.cpp` | OpenAL stand-in until the Vita has an OpenAL |
+| Sound | `src/vita/client/sound/vita_al.cpp`, `vita_al_output.cpp` | The OpenAL calls the engine makes, on a small mixer, played through SceAudioOut ("Sound") |
 | Linux client pieces | `msvc_rand.cpp`, `mp_client_unavailable.cpp`, `texture_memory.cpp`, the Material_Sort span | As on Linux |
 
 `deps/binklib/radbase.h` gains a `__vita__` branch (the Linux one, with the
@@ -114,6 +115,194 @@ Other large static arrays in the client:
 - `clients` 1.7 MB, `g_streamState` 1.7 MB.
 
 The heap and the engine reservations are the server's for now: a 64 MB heap, the 128 MB zone arena and the hunks. Stage 1's run measures what is left. Textures will go to the GPU's own memory (CDRAM, about 112 MB), not main memory.
+
+## Controls (stage 3)
+
+The multiplayer engine takes keys and a mouse. It has no gamepad path. So the
+Vita's controls become engine keys and mouse motion, and the game's own
+`bind`, controls menu, sensitivity and pitch inversion work on them. No engine
+source changes.
+
+- `src/vita/client/input/vita_input_map.cpp` is the mapping. It makes no
+  engine call and no Vita call, so `scripts/tests/test_vita_input.py` builds
+  it on the host with sanitizers and drives it with made-up readings.
+- `src/vita/client/vita_client_input.cpp` reads the pad
+  (`sceCtrlPeekBufferPositive`) and both touch panels (`sceTouchPeek`) on the
+  main thread whenever the engine asks for events, at most every 4 ms. Keys
+  go into the event queue as `SE_KEY`, as on every platform. `IN_Frame` hands
+  the menu cursor or the look motion to `CL_MouseEvent`. That call's answer
+  says who has the mouse, a menu or the game, and that decides how the next
+  reading is mapped.
+
+**On the console** (run 1, 2026-11-09, in the menus, with nothing drawn yet
+and `vita_inputDebug 1`): every button arrived as the key in the tables
+below, the right stick as the wheel, and a start-up without a profile got the
+default layout and the profile name. Not confirmed yet: a touch on the screen
+(the log has none), which side of the rear pad is which, and the look speed
+and the layout in a game, which need a game on the screen.
+
+### In the game
+
+Every control is a key of its own: AUX1 to AUX16 and the keypad arrows, which
+no PC keyboard or mouse sends. The default layout is the console game's where
+the Vita has the button.
+
+| Control | Engine key | Default binding | Does |
+|---|---|---|---|
+| Left stick | `AUX9` up, `AUX10` down, `AUX11` left, `AUX12` right | `+forward`, `+back`, `+moveleft`, `+moveright` | Move |
+| Right stick | mouse motion | | Look |
+| R | `AUX6` | `+attack` | Fire |
+| L | `AUX5` | `+speed_throw` | Aim down the sight |
+| Cross | `AUX1` | `+gostand` | Jump, stand up |
+| Circle | `AUX2` | `+stance` | Crouch; hold for prone |
+| Square | `AUX3` | `+usereload` | Use, reload |
+| Triangle | `AUX4` | `weapnext` | Next weapon |
+| D-pad up, down, left, right | `KP_UPARROW`, `KP_DOWNARROW`, `KP_LEFTARROW`, `KP_RIGHTARROW` | `+actionslot 1` to `4` | The console game's d-pad |
+| Select | `AUX7` | `+scores` | Scoreboard |
+| Start | `ESCAPE` | fixed | Menu |
+| Rear touch pad, a tap on the left or right half | `AUX8`, `AUX16` | `+breath_sprint` | Sprint (the left stick's click on a console) |
+| Screen, left third | `AUX13` | `+smoke` | Special grenade |
+| Screen, right third, top half | `AUX14` | `+frag` | Frag grenade |
+| Screen, right third, bottom half | `AUX15` | `+melee` | Knife |
+
+- **Moving** is four keys, so it is full speed in eight directions. A
+  direction takes hold at 40% of the stick's travel past the dead zone and
+  lets go at 30%.
+- **Looking** goes through the engine's mouse path, so `sensitivity`, pitch
+  inversion and the slowdown while aiming apply. At full deflection the stick
+  sends `vita_lookSpeed` mouse counts a second: 1400, which is about 150
+  degrees a second at the default sensitivity. Up and down is slower
+  (`vita_lookPitchRatio`), and the response is a curve (`vita_lookCurve`), so
+  a small push turns slowly.
+- **Touch.** A finger keeps the area of the screen it landed in until it
+  lifts, wherever it slides. The middle third of the screen is no key.
+- **The rear pad** is a tap. The fingers that hold the console lie on it: the
+  first console run logged 30 touches in 40 seconds where two taps were asked
+  for. So a finger that stays longer than 0.3 s is resting and does nothing. A
+  tap presses its half's key when the finger leaves, and the key stays down
+  while the left stick is pushed forward and for a quarter of a second after.
+  With the default binding that is the console game's sprint: tap, and run
+  until you stop. A tap while standing still is a short press, and a tap while
+  the key is down presses it again. Holding your breath behind a scope wants a
+  held key, so give `+holdbreath` a control of its own.
+
+### In a menu
+
+- A finger on the screen moves the cursor there and clicks. The click is sent
+  after the engine has been told where the cursor is.
+- The left stick moves the cursor. Cross clicks.
+- The d-pad is the arrow keys, which move the menu's focus, and repeat while
+  held. It hides the cursor, which would otherwise take the focus back; the
+  stick or a finger brings it back. While the cursor is hidden, Cross is
+  Enter: it accepts the focused item.
+- Circle and Start are Escape. The right stick is the mouse wheel.
+- When a menu opens or closes, the sticks' and the panels' keys are let go,
+  and a finger already on the screen does nothing until it lifts. A button
+  keeps the key it pressed until it is released.
+
+### Binding
+
+The controls menu works: while it waits for a key, every control sends its
+game key, and Start cancels. The menu and the game's hints show the engine's
+names (`AUX6`, not "R"); the table above translates.
+
+A profile from a PC, a new profile and the menu's "reset to default" all
+leave the AUX keys bound to nothing. While none of AUX1 to AUX16 has a
+binding, the default layout is set (`vita_defaultBinds`, on by default; the
+log says so). One control unbound on purpose stays unbound. `vita_binddefaults`
+sets the whole default layout at any time.
+
+| Dvar | Default | |
+|---|---|---|
+| `vita_stickDeadzone` | 0.2 | Part of a stick's travel around the centre that does nothing |
+| `vita_lookSpeed` | 1400 | Right stick at full deflection, in mouse counts a second |
+| `vita_lookPitchRatio` | 0.65 | Up and down, as a part of `vita_lookSpeed` |
+| `vita_lookCurve` | 2 | 1 is linear; higher is finer near the centre |
+| `vita_cursorSpeed` | 700 | Left stick in a menu, pixels a second |
+| `vita_frontTouch` | 1 | The screen's three areas are keys in the game |
+| `vita_rearTouch` | 1 | A tap on either half of the rear pad is a key in the game |
+| `vita_defaultBinds` | 1 | Set the default layout while no AUX key is bound |
+| `vita_inputDebug` | 0 | Log every key sent, every finger that lands (with its panel and screen position) and how long it stayed |
+
+### Not done yet
+
+- **The on-screen keyboard** for text fields (names, server addresses, chat).
+  It needs a hook in the frame's present, so it follows the first drawn
+  frames. Until then one field is filled in: with no player profile, the
+  "create profile" box is offered the name `Vita` to accept.
+- Walking speed from how far the stick is pushed. The engine moves by keys.
+- A stray touch on the rear pad that is as short as a tap still counts as
+  one. `vita_rearTouch 0` turns the pad off. The tap has not been tried on the
+  console; the next run logs how long each touch lasts, which will say whether
+  it needs a tighter rule.
+
+## Sound (stage 3)
+
+The engine's sound driver (`src/sound/snd_openal.cpp`,
+`snd_driver_openal.cpp`) talks OpenAL 1.1 with a few EFX calls, 44 entry
+points in all. The Vita client answers them itself:
+
+- `src/vita/client/sound/vita_al.cpp` is a small OpenAL on an integer mixer.
+  It uses no Vita call and no engine header, so
+  `scripts/tests/test_vita_sound.py` builds it on the host under
+  AddressSanitizer, UBSan and ThreadSanitizer.
+- `src/vita/client/sound/vita_al_output.cpp` opens a SceAudioOut port and runs
+  the thread that pulls the mixer.
+
+OpenAL Soft was the other choice. Its float mixer, HRTF and reverb cost more
+of the Vita's CPU than sound should, and it would be one more dependency to
+build for the Vita. The engine needs little of it.
+
+What the small OpenAL keeps:
+- sources with one buffer or a queue of buffers, the four source states,
+  looping, gain, pitch and the play offset;
+- the buffer and queue rules the engine depends on: a buffer in use cannot be
+  deleted, a playing source cannot change its buffer, only played buffers
+  leave a queue;
+- mono and stereo buffers of 8 or 16 bits at any rate, resampled with linear
+  interpolation.
+
+What it leaves out:
+- **Distance models.** The engine sets `AL_NONE` and puts its own falloff
+  into the gain.
+- **The listener.** The engine keeps it at the origin and hands every
+  position in listener space, so a position only pans, left to right with
+  equal power.
+- **Reverb and filters.** Effects, filters and slots get names and nothing
+  else, so there is no reverb.
+
+The mixer adds every playing source into 32-bit sums and clips to 16 bits.
+Gains are Q15 and move toward their targets every 64 frames, so a volume or
+position change does not click. One lock guards all of it; the mixer holds it
+for one update.
+
+**Output.** The engine asks for 11025, 22050 or 44100 Hz (`snd_khz`, default
+44). SceAudioOut's main ports play 48000 Hz only, so the client opens the one
+background-music port, which takes the engine's rates, and mixes at the rate
+asked for. If that port does not open, it takes a main port and mixes at
+48000 Hz. One update is about 23 ms (512 frames at 22050 Hz, 1024 at 44100),
+and `sceAudioOutOutput` blocks until the port has taken it, which paces the
+thread.
+
+**In the log** (`console-mp.log`): `vita sound: port ..., ... Hz stereo, ...
+frames per update` when sound starts, then after ten seconds, once a minute
+and once more when sound stops `vita sound: ... updates, mixing ... us each on
+average and ... at most, ... sources at most, ... clipped frames, ... refused
+updates`.
+
+**On the console** (run 1, 2026-11-09): the menu music and the menu's sounds
+were heard. The port opened at 22050 Hz with 512 frames per update (that
+console's `snd_khz` is 22). An update with nothing playing took 34 µs on
+average and 89 at most. What an update costs with sources playing was not
+captured: the run ended before the second line, and the line at the end came
+after it.
+
+Known limits:
+- The engine decodes streamed sounds (music) on its main thread, 8192 frames
+  at a time. On the Vita that may show as a frame hitch; a run with a picture
+  will tell.
+- The background-music port is the one the system's own music player takes
+  over when the user plays music from the home screen.
 
 ## Graphics (stage 2)
 
@@ -285,6 +474,6 @@ The plan, with reasons and risks: `vita-client-plan.md` in the project files.
 
 1. **Build and boot** (this page).
 2. **Screen:** a GXM back end for the Legacy adapter API (`src/gfx_vk/legacy/vk_legacy.h`), under the existing D3D9 front (`src/gfx_vk/d3d9`). Game shaders are translated to Cg, compiled on the Vita by `libshacccg.suprx` (each user extracts it from their own firmware) and cached as `.gxp`.
-3. **Controls and sound:** buttons, sticks and touch become engine input, and sound gets a Vita output.
+3. **Controls and sound:** buttons, sticks and touch become engine input, and sound gets a Vita output. Built and tested on the host ("Controls", "Sound"); the on-screen keyboard follows the first drawn frames.
 4. **Join and play:** connect to a server and play, with the visual cuts from the feasibility study.
 5. **Make it fast:** profile on the Vita, then cut the hot spots.

@@ -8,7 +8,12 @@
 #
 #   * vita_win32_window.cpp: the Win32 window and monitor calls the renderer
 #     makes (src/linux/win32_window.h), for the Vita's one fixed 960x544 screen.
-#   * vita_client_input.cpp: the client's window pump and IN_* functions.
+#   * vita_client_input.cpp: the client's window pump and IN_* functions. It
+#     reads the pad and the touch panels; what they mean to the engine is
+#     input/vita_input_map.cpp (scripts/tests/test_vita_input.py).
+#   * sound/vita_al.cpp: the OpenAL calls the engine's sound driver makes, on a
+#     small mixer of its own (scripts/tests/test_vita_sound.py), played through
+#     SceAudioOut by sound/vita_al_output.cpp. No OpenAL library is linked.
 #   * vita_d3d9.cpp: the renderer's Direct3DCreate9. It hands out the D3D9
 #     front of the Vulkan work (src/gfx_vk/d3d9) on the GXM Legacy back end
 #     (src/gfx_gxm/legacy), which owns the Vita's screen. Stage 2 so far: no
@@ -17,9 +22,8 @@
 # The D3D9 declarations come from DXVK Native's headers through the native D3D9
 # boundary (KISAK_DXVK_NATIVE_INCLUDE_DIR), as on Linux and macOS: only the
 # types and the interface layouts are used, no DXVK code is built or linked.
-# Sound links the OpenAL stand-in (tests/linux_mp_client/openal_unavailable.cpp,
-# "no device") until the Vita has an OpenAL; it needs <AL/al.h> from
-# KISAK_OPENAL_INCLUDE_DIR.
+# The sound units need <AL/al.h>, <AL/alc.h> and <AL/efx.h> from
+# KISAK_OPENAL_INCLUDE_DIR, for the declarations only.
 # ---------------------------------------------------------------------------
 option(KISAK_BUILD_VITA_MP_CLIENT
     "Build the PS Vita multiplayer client KisakCOD-mp (needs KISAK_DXVK_NATIVE_INCLUDE_DIR and KISAK_OPENAL_INCLUDE_DIR)" OFF)
@@ -126,8 +130,13 @@ set(vita_mp_own_sources
     "${KISAK_MATERIAL_SORT_SPAN_UNIT}"
     "${SRC_DIR}/linux/client/msvc_rand.cpp"
     "${SRC_DIR}/linux/client/mp_client_unavailable.cpp"
-    "${SRC_DIR}/linux/client/texture_memory.cpp"
-    "${TESTS_DIR}/linux_mp_client/openal_unavailable.cpp")
+    "${SRC_DIR}/linux/client/texture_memory.cpp")
+# The controls' mapping and the sound: no engine header, and the host tests
+# build the same files (scripts/tests/test_vita_input.py, test_vita_sound.py).
+set(vita_mp_input_sound_sources
+    "${SRC_DIR}/vita/client/input/vita_input_map.cpp"
+    "${SRC_DIR}/vita/client/sound/vita_al.cpp"
+    "${SRC_DIR}/vita/client/sound/vita_al_output.cpp")
 
 set(KISAK_VITA_MP_DEFINITIONS
     KISAK_MP USE_SEPARATE_BLIT_TEXTURE KISAK_OPENAL RELEASE_ASSERTS
@@ -176,6 +185,14 @@ target_link_libraries(KisakCOD-mp-vita-gfx PRIVATE kisak_linux_native_d3d9)
 # psp2/display.h's enum size checks assume -fshort-enums (gxm_display.cpp).
 set_source_files_properties("${SRC_DIR}/gfx_gxm/gxm_display.cpp" TARGET_DIRECTORY KisakCOD-mp-vita-gfx
     PROPERTIES COMPILE_OPTIONS "-UENABLE_VITASDK_BUILD_ASSERT")
+# The controls' mapping and the sound, with the warnings their host tests use.
+add_library(KisakCOD-mp-vita-input-sound OBJECT ${vita_mp_input_sound_sources})
+target_compile_features(KisakCOD-mp-vita-input-sound PRIVATE cxx_std_20)
+target_compile_definitions(KisakCOD-mp-vita-input-sound PRIVATE ENABLE_VITASDK_BUILD_ASSERT)
+target_compile_options(KisakCOD-mp-vita-input-sound PRIVATE
+    -ffunction-sections -fdata-sections -Wall -Wextra -Werror=format-security)
+target_include_directories(KisakCOD-mp-vita-input-sound PRIVATE "${SRC_DIR}")
+target_include_directories(KisakCOD-mp-vita-input-sound SYSTEM PRIVATE "${KISAK_OPENAL_INCLUDE_DIR}")
 
 set_property(SOURCE "${SRC_DIR}/sound/snd_driver_load_obj.cpp" TARGET_DIRECTORY KisakCOD-mp-vita-standin
     APPEND PROPERTY COMPILE_DEFINITIONS DR_WAV_IMPLEMENTATION DR_MP3_IMPLEMENTATION)
@@ -194,7 +211,8 @@ add_executable(KisakCOD-mp
     $<TARGET_OBJECTS:KisakCOD-mp-vita-native>
     $<TARGET_OBJECTS:KisakCOD-mp-vita-standin>
     $<TARGET_OBJECTS:KisakCOD-mp-vita-own>
-    $<TARGET_OBJECTS:KisakCOD-mp-vita-gfx>)
+    $<TARGET_OBJECTS:KisakCOD-mp-vita-gfx>
+    $<TARGET_OBJECTS:KisakCOD-mp-vita-input-sound>)
 target_compile_features(KisakCOD-mp PRIVATE cxx_std_20)
 target_compile_definitions(KisakCOD-mp PRIVATE ${KISAK_VITA_MP_DEFINITIONS})
 target_compile_options(KisakCOD-mp PRIVATE ${KISAK_VITA_MP_OPTIONS})
@@ -204,7 +222,7 @@ target_link_options(KisakCOD-mp PRIVATE ${KISAK_VITA_LINK_OPTIONS})
 # The shader compiler is the user's own libshacccg.suprx, loaded at run time
 # (gxm_shader_compiler.h): weak imports, so the client starts without it.
 target_link_libraries(KisakCOD-mp PRIVATE ${KISAK_VITA_LINK_LIBRARIES} SceCtrl_stub SceTouch_stub
-    SceGxm_stub SceDisplay_stub SceShaccCg_stub_weak)
+    SceAudio_stub SceGxm_stub SceDisplay_stub SceShaccCg_stub_weak)
 add_dependencies(KisakCOD-mp update_build_number)
 
 set(KISAK_VITA_MP_TITLE_ID "KSKD00002" CACHE STRING "PS Vita title ID of the multiplayer client .vpk (9 characters)")
