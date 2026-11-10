@@ -777,8 +777,13 @@ What the GXM back end does so far (step 2d):
 - **Memory.** DISCARD on a buffer a draw read takes fresh memory. Memory the
   GPU may still read (old buffers, destroyed resources, released programs) is
   freed three frames later, since the display queue lets the CPU run at most
-  two frames ahead. DrawPrimitiveUP and the clear quads copy their vertices
-  into a 512 KB per-frame ring.
+  two frames ahead. When a new resource finds no room, the back end waits for
+  the GPU, frees all of that memory at once and tries again, logging
+  `no room for ...: waited for the GPU and freed N retired pieces`. A map
+  change needs this: it frees the old map's buffers and asks for the new
+  map's before a frame is shown (run Z8's long warm-ups ran out of CDRAM
+  going from mp_crash to mp_backlot). DrawPrimitiveUP and the clear quads
+  copy their vertices into a 512 KB per-frame ring.
 
 ### Shaders (step 2c)
 
