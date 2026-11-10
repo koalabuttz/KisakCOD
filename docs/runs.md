@@ -211,3 +211,18 @@ with `arm-vita-eabi-addr2line -f -C -i -e KisakCOD-mp.elf <address>` on the
 machine that fetched the artifact. The artifact can be downloaded as soon as
 that job has finished; the rest of the workflow run need not be done. The job
 is in the **PS Vita server and client** workflow (`build-kisakcod-vita.yaml`).
+
+### A Vita3K run from one description: `scripts/runs/vita3k`
+
+On a Windows machine with Vita3K and WSL, `vita-run.ps1 <run.json>` builds a
+commit as the CI job does, installs the `.vpk`, runs each start with the
+switches above, and writes the same sealed `results.json` and one-line
+`results-compact.json` as `perf_run.py`, so `run_report.py` checks and renders
+a Vita run like a frame-rate run. A request to that machine is then one JSON
+description (commit, starts, the log lines and counts wanted), and its answer
+is the short form. The folder's `README.md` has the description's keys, two
+examples, how a start ends (Vita3K's "The app exited with code N" line, a
+time limit and a kill for what never gets there) and how to set a machine up.
+It was written on the project's Windows PC and is checked by hand there:
+`scripts/tests/test_vita3k_runner.py` covers only what a Linux host can run
+(the sealing script, the shell scripts' syntax, the README's examples).
