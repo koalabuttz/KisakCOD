@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 06:12:18 +0000
+Subject: [PATCH] fix: stop an OpenAL source before taking its buffer away
+
+SND_ReleaseChannelBuffer set AL_BUFFER to 0 on a source that could
+still be playing, then deleted the buffer. OpenAL refuses both on a
+playing or paused source (AL_INVALID_OPERATION), so a sound that was
+cut short or had its channel stolen kept playing, its buffer leaked,
+and the next sound on that channel never attached: alSourcePlay
+replayed the old one. In play this is heard as sounds that drop out or
+repeat.
+
+Rewind the source first, as AIL_end_sample does in the Miles driver.
+Rewind leaves it AL_INITIAL, so a start that is delayed or paused is
+not taken for a finished sound. Run against OpenAL Soft's loopback
+device, the old code keeps the old tone and the new code plays the next
+one. Part of upstream issue 76.
+---
+ src/sound/snd_driver_openal.cpp | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/sound/snd_driver_openal.cpp b/src/sound/snd_driver_openal.cpp
+index 7771d989..83c3e528 100644
+--- a/src/sound/snd_driver_openal.cpp
++++ b/src/sound/snd_driver_openal.cpp
+@@ -97,6 +97,8 @@ void SND_ReleaseChannelBuffer(int index)
+ {
+     if (alGlob.channelBuffer[index])
+     {
++        // A playing or paused source keeps its buffer; stop it first.
++        alSourceRewind(alGlob.source[index]);
+         alSourcei(alGlob.source[index], AL_BUFFER, 0);
+         alDeleteBuffers(1, &alGlob.channelBuffer[index]);
+         alGlob.channelBuffer[index] = 0;
