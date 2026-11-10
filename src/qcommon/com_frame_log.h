@@ -84,12 +84,16 @@ inline Summary Summarize(std::vector<float> framesMs, double seconds)
 // running its time ("stopped", "at the quit", "full").
 inline void Format(char *line, size_t size, const char *label, const Summary &summary, const char *why)
 {
+    // %u, not %zu: the PS Vita's C library prints "zu" for it and reads the
+    // arguments after it as the wrong types (seen in Vita3K, PC run of
+    // 2026-11-10: "zu frames", then a wild read where the last %s was).
     snprintf(line, size,
-             "frame log%s%s: %zu frames in %.3f s: %.2f fps; ms mean %.3f, median %.3f, p95 %.3f, p99 %.3f, "
-             "max %.3f; %zu over %.0f ms%s%s%s",
-             label && *label ? " " : "", label ? label : "", summary.frames, summary.seconds, summary.fps,
-             summary.meanMs, summary.medianMs, summary.p95Ms, summary.p99Ms, summary.maxMs, summary.longFrames,
-             kLongFrameMs, why && *why ? " (" : "", why ? why : "", why && *why ? ")" : "");
+             "frame log%s%s: %u frames in %.3f s: %.2f fps; ms mean %.3f, median %.3f, p95 %.3f, p99 %.3f, "
+             "max %.3f; %u over %.0f ms%s%s%s",
+             label && *label ? " " : "", label ? label : "", unsigned(summary.frames), summary.seconds, summary.fps,
+             summary.meanMs, summary.medianMs, summary.p95Ms, summary.p99Ms, summary.maxMs,
+             unsigned(summary.longFrames), kLongFrameMs, why && *why ? " (" : "", why ? why : "",
+             why && *why ? ")" : "");
 }
 
 class Recorder
