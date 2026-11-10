@@ -217,6 +217,28 @@ def test_recipes_refused(bench):
     check(status == 1 and "(NOT FOUND)" in printed, "--check says when the game is not there")
 
 
+def test_two_builds(bench):
+    print("two builds in one run")
+    other = bench.work / "other-build" / bench.game.name
+    other.parent.mkdir()
+    shutil.copy2(bench.game, other)
+    with open(other, "ab") as file:
+        file.write(b"another build")
+    recipe = bench.recipe(rows=["A", "B"])
+    recipe["variants"]["B"]["binary"] = "{other}/" + bench.game.name
+    status, _, _, printed = bench.run(recipe, "--check", "--set", f"other={other.parent}")
+    check(status == 0 and printed.count("game: ") == 2 and "NOT FOUND" not in printed,
+          f"--check names both builds ({printed.strip()})")
+    status, results, out, _ = bench.run(recipe, "--set", f"other={other.parent}")
+    rows = results["rows"]
+    check(status == 0 and rows[0]["binary"]["sha256"] != rows[1]["binary"]["sha256"]
+          and f"$ {other}" in (out / "B-1.log").read_text() and f"$ {bench.game}" in (out / "A-1.log").read_text(),
+          "a variant runs its own binary and the rows tell the builds apart")
+    check(f"binary sha256 {rows[1]['binary']['sha256']}" in run_report.render(results)
+          and run_report.compact(results)["rows"][1]["binary"] == rows[1]["binary"],
+          "the report and the short form say which build a row ran")
+
+
 def test_machine_names(bench):
     print("a machine's names")
     recipe = bench.recipe(rows=["A"], game={"binary": "{build}/" + bench.game.name, "home_template": "{template}"},
@@ -295,6 +317,8 @@ def test_whole_run(bench):
                                                         "profile": "power-saver", "changed": False},
           "the guard and the power are noted")
     check(rows[1].get("note") == "the slow one", "a variant's note travels with its rows")
+    check(len(first["binary"]["sha256"]) == 16 and first["binary"]["modified"].endswith("Z")
+          and rows[1]["binary"] == first["binary"], "each row notes which binary it ran")
     log = (out / "A-1.log").read_text()
     check("argument 2: fs_homepath" in log and f"argument 3: {out / 'A-1' / 'home'}" in log
           and "argument 6: A-1" in log and "> framelog 0.4 A-1" in log, "the log has the command line and the sends")
@@ -335,6 +359,28 @@ def test_whole_run(bench):
     pasted.write_text("no results here")
     with contextlib.redirect_stderr(io.StringIO()):
         check(run_report.main([str(pasted)]) == 2, "a file with no results is refused")
+
+    # The short form: what a machine pastes when the whole file is too long.
+    short_text = (out / "results-compact.json").read_text()
+    short = json.loads(short_text)
+    check(run_report.verify(short) is None and short["full_sha256"] == results["sha256"] and short["compact"],
+          "the short form has its own checksum and names the file it was cut from")
+    check(len(short_text) < len(text) / 3 and "\n" not in short_text.strip(),
+          f"the short form is a third of the file or less, on one line ({len(short_text)} of {len(text)})")
+    check(run_report.averages(short["rows"]) == run_report.averages(rows)
+          and run_report.summarize(short) == summary, "the averages and the summary from it are the same")
+    short_report = run_report.render(short)
+    check("| A | 2 | 100.0 |" in short_report and "frame log B-2: 20 frames" in short_report
+          and "From the short form" in short_report and "bots 12" in short_report,
+          "a report from the short form has the tables and the frame log lines")
+    pasted.write_text(text)
+    with contextlib.redirect_stdout(io.StringIO()) as printed:
+        status = run_report.main([str(pasted), "--compact"])
+    check(status == 0 and printed.getvalue() == short_text, "--compact prints the same short form")
+    pasted.write_text(short_text.replace("50.00 fps", "55.00 fps", 1))
+    with contextlib.redirect_stdout(io.StringIO()) as printed:
+        status = run_report.main([str(pasted), "--check"])
+    check(status == 1 and "does not match" in printed.getvalue(), "a retyped frame log line fails its checksum")
 
     status, _, _, printed = bench.run(recipe, out=out)
     check(status == 2 and "--resume" in printed, "a finished output folder is not overwritten")
@@ -554,7 +600,7 @@ def main() -> int:
             print("FAIL: the stand-in game did not build")
             return 1
         bench = Bench(work, game)
-        for test in (test_small_parts, test_recipes_refused, test_machine_names, test_whole_run, test_rows_that_fail, test_power,
+        for test in (test_small_parts, test_recipes_refused, test_machine_names, test_two_builds, test_whole_run, test_rows_that_fail, test_power,
                      test_load, test_pause_and_resume):
             test(bench)
     if FAILURES:

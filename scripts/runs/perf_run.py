@@ -9,6 +9,7 @@ lines wanted. The driver launches each row, plays the scene through the game's
 standard input, measures with the ``framelog`` console command, and writes
 
     <out>/results.json   everything, checksummed (scripts/runs/run_report.py)
+    <out>/results-compact.json  its short form, to paste when that is too long
     <out>/report.md      the tables and the verbatim lines
     <out>/<row>.log      each launch's console output (stays on the machine)
 
@@ -70,7 +71,9 @@ The recipe (JSON)::
       "guard": ["~/games/cod4", "~/games/cod4/main", "~/games/cod4/players/**"]
     }
 
-``game`` may also carry ``"args_after"`` (arguments that follow the variant's,
+A variant may name a ``"binary"`` of its own (two builds compared in one run);
+each row notes the SHA-256 and the time of the binary it ran. ``game`` may also
+carry ``"args_after"`` (arguments that follow the variant's,
 such as ``+devmap``), ``"wrap": ["taskset", "-c", "0,1"]`` (a command the game
 is started through), ``"cwd"`` and ``"quit_timeout"``. A guard folder
 ending in ``/**`` is listed with everything below it.
@@ -136,10 +139,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import run_report  # noqa: E402
 
 RECIPE_FORMAT = "kisak-run/1"
-FRAME_LOG = re.compile(
-    r"frame log(?: (?P<label>\S+))?: (?P<frames>\d+) frames in (?P<seconds>[\d.]+) s: (?P<fps>[\d.]+) fps; "
-    r"ms mean (?P<mean>[\d.]+), median (?P<median>[\d.]+), p95 (?P<p95>[\d.]+), p99 (?P<p99>[\d.]+), "
-    r"max (?P<max>[\d.]+); (?P<over50>\d+) over 50 ms(?: \((?P<why>[^)]*)\))?")
+FRAME_LOG = run_report.FRAME_LOG
 STANDARD_COUNTS = {
     "errors": re.compile(r"^(ERROR: |FATAL ERROR: |Sys_Error: )"),
     "warnings": re.compile(r"^(\^3)?WARNING", re.I),
@@ -270,6 +270,19 @@ def running_names(names, root=None):
     """Which of these process names run now (another emulator, a build)."""
     wanted = set(names)
     return sorted({name for name, _ in _process_times(root).values() if name in wanted})
+
+
+def binary_identity(path):
+    """Which build a row ran: the binary's SHA-256 (shortened) and its time."""
+    try:
+        digest = hashlib.sha256()
+        with open(path, "rb") as file:
+            for block in iter(lambda: file.read(1 << 20), b""):
+                digest.update(block)
+        modified = datetime.datetime.fromtimestamp(os.path.getmtime(path), datetime.timezone.utc)
+        return {"sha256": digest.hexdigest()[:16], "modified": modified.strftime("%Y-%m-%dT%H:%M:%SZ")}
+    except OSError:
+        return {}
 
 
 def snapshot(folders):
@@ -533,6 +546,7 @@ def missing_names(recipe, names):
     expect step reads from the log."""
     game = recipe["game"]
     texts = [game.get("binary", ""), game.get("home_template", ""), game.get("cwd", "")]
+    texts += [(spec or {}).get("binary", "") for spec in recipe.get("variants", {}).values()]
     texts += list(recipe.get("guard", []))
     holders = [game] + [spec or {} for spec in recipe.get("variants", {}).values()]
     for holder in holders:
@@ -606,6 +620,8 @@ class Run:
         self.results["finished"] = now_utc()
         sealed = run_report.seal(self.results)
         (self.out / "results.json").write_text(json.dumps(sealed, indent=1) + "\n", encoding="utf-8")
+        short = json.dumps(run_report.compact(sealed), sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        (self.out / "results-compact.json").write_text(short + "\n", encoding="utf-8")
         (self.out / "report.md").write_text(run_report.render(sealed), encoding="utf-8")
 
     def adopt(self, earlier):
@@ -685,7 +701,7 @@ class Run:
         for pattern in game.get("clear_env", []):
             for name in [name for name in env if fnmatch.fnmatchcase(name, pattern)]:
                 del env[name]
-        binary = expand(game["binary"], names)
+        binary = expand(spec.get("binary") or game["binary"], names)
         command = [expand(str(part), names) for part in game.get("wrap", [])] + [binary]
         if game.get("home_template"):
             home = row_dir / "home"
@@ -836,9 +852,7 @@ class Run:
         if not match:
             return False, (f"no frame log line for {label} within "
                            f"{seconds + float(step.get('slack', 30)):.0f} s" + beside_note)
-        summary = {key: float(match.group(key)) for key in ("seconds", "fps", "mean", "median", "p95", "p99", "max")}
-        summary.update(label=label, frames=int(match.group("frames")), over50=int(match.group("over50")),
-                       line=match.group(0))
+        summary = run_report.frame_summary(match)
         row["framelog"].append(summary)
         if match.group("why"):
             return False, f"the recording ended early ({match.group('why')})" + beside_note
@@ -861,6 +875,7 @@ class Run:
             row["note"] = self.recipe["variants"][variant]["note"]
         command, env, cwd, names, binary = self.command(row_name, variant)
         Path(cwd).mkdir(parents=True, exist_ok=True)
+        row["binary"] = binary_identity(binary)
         leftovers = running_copies(binary)
         if leftovers:
             row["status"] = f"failed: {len(leftovers)} process(es) of this binary were still running"
@@ -974,9 +989,17 @@ def main(argv=None):
         print(f"{recipe['id']}: {len(names)} launches: " + " ".join(name for name, _ in names))
         power = read_power()
         print(f"power now: ac {power['ac']}, battery {power['battery']}, profile {read_profile()}")
-        binary = expand(recipe["game"]["binary"], machine_names)
-        print(f"game: {binary}" + ("" if os.path.exists(binary) else " (NOT FOUND)"))
-        return 0 if os.path.exists(binary) else 1
+        binaries = []
+        for _, variant in names:
+            spec = recipe["variants"].get(variant) or {}
+            binary = expand(spec.get("binary") or recipe["game"]["binary"], machine_names)
+            if binary not in binaries:
+                binaries.append(binary)
+        for binary in binaries:
+            identity = binary_identity(binary)
+            print(f"game: {binary} " + (f"(sha256 {identity['sha256']}, built {identity['modified']})"
+                                        if identity else "(NOT FOUND)"))
+        return 0 if all(os.path.exists(binary) for binary in binaries) else 1
 
     out = Path(os.path.expanduser(args.out))
     out.mkdir(parents=True, exist_ok=True)

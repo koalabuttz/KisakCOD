@@ -116,7 +116,9 @@ those once in a names file (`~/.config/kisak/run-names.json`, or the file
     }
 
 `--set build=~/kisak-build/pr-160` overrides one name for one run, which is
-how a run picks the build of the branch it tests. A recipe that uses a name
+how a run picks the build of the branch it tests. A variant may name a
+`"binary"` of its own, so one run compares two builds, and every row notes the
+SHA-256 and the time of the binary it ran. A recipe that uses a name
 nobody gave is refused before anything starts, and `--check` says whether the
 game binary is there. `scripts/runs/recipes/vulkan-ab-mp-crash.json` is the
 Vulkan back end's standing comparison: a listen server on mp_crash, a fixed
@@ -151,8 +153,9 @@ quit, so it does not compete with the next launch's load.
 
 ### What a run leaves, and how it crosses
 
-    <out>/results.json   everything the report needs, with a checksum
-    <out>/report.md      the tables and the verbatim lines
+    <out>/results.json          everything the report needs, with a checksum
+    <out>/results-compact.json  its short form on one line, with its own checksum
+    <out>/report.md             the tables and the verbatim lines
     <out>/<row>.log      each launch's console output
 
 Only `results.json` (format `kisak-run-result/1`) has to leave the machine,
@@ -170,6 +173,15 @@ as JSON with sorted keys, no spaces and ASCII escapes. A file whose lines were
 shortened or reworded on the way fails it, and the report then says at its top
 that it is not the machine's own words. No table and no verbatim line is
 retyped at either end.
+
+When the whole file is too long to relay, the machine pastes
+`results-compact.json` instead (`run_report.py results.json --compact` prints
+it again): per row the status, the power, the counts that are not zero, what
+the scene read and the frame log line as the game printed it, a few hundred
+bytes a row. It carries a checksum of its own and the checksum of the file it
+was cut from, and `run_report.py` makes the same tables and summary from it.
+The other verbatim lines stay in the full file on the machine until someone
+asks for them.
 
 `scripts/tests/test_perf_run.py` checks both scripts on the host with a
 stand-in game (`tests/runs/fake_game.cpp`) and a made-up power-supply folder:

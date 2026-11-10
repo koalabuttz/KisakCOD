@@ -11,6 +11,14 @@ summary short enough for a thread message.
     run_report.py results.json --out report.md     write it
     run_report.py results.json --summary           print the short summary
     run_report.py results.json --check             only check the checksum
+    run_report.py results.json --compact           print the short form to paste
+
+The short form (``--compact``, and ``results-compact.json`` beside every
+results file) is what a machine pastes when the whole file is too long to
+relay: per row the status, the power, the counts that are not zero, what the
+scene read and the frame log line as the game printed it, with a checksum of
+its own and the checksum of the file it was cut from. Every table can be made
+from it; the other verbatim lines stay in the full file on the machine.
 
 The checksum is the SHA-256 of the results without their ``sha256`` entry,
 written as JSON with sorted keys, no spaces and ASCII escapes (``canonical``
@@ -26,11 +34,17 @@ Standard library only.
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
 RESULT_FORMAT = "kisak-run-result/1"
 SUMMARY_LIMIT = 2000
+# The line the framelog console command prints (src/qcommon/com_frame_log.h).
+FRAME_LOG = re.compile(
+    r"frame log(?: (?P<label>\S+))?: (?P<frames>\d+) frames in (?P<seconds>[\d.]+) s: (?P<fps>[\d.]+) fps; "
+    r"ms mean (?P<mean>[\d.]+), median (?P<median>[\d.]+), p95 (?P<p95>[\d.]+), p99 (?P<p99>[\d.]+), "
+    r"max (?P<max>[\d.]+); (?P<over50>\d+) over 50 ms(?: \((?P<why>[^)]*)\))?")
 
 FRAME_COLUMNS = (("fps", "fps", 1), ("mean", "mean ms", 3), ("median", "median", 3), ("p95", "p95", 3),
                  ("p99", "p99", 3), ("max", "max ms", 3))
@@ -95,9 +109,47 @@ def _power(row):
     return state
 
 
+def frame_summary(match):
+    """The figures of one frame log line, from its FRAME_LOG match."""
+    summary = {key: float(match.group(key)) for key in ("seconds", "fps", "mean", "median", "p95", "p99", "max")}
+    summary.update(label=match.group("label") or "", frames=int(match.group("frames")),
+                   over50=int(match.group("over50")), line=match.group(0))
+    return summary
+
+
 def _frames(row):
-    """The row's frame-log summaries (usually one)."""
-    return row.get("framelog") or []
+    """The row's frame-log summaries (usually one). The short form carries
+    only each line; its figures are read from it again."""
+    logs = []
+    for log in row.get("framelog") or []:
+        if "fps" not in log and log.get("line"):
+            match = FRAME_LOG.search(log["line"])
+            log = {**frame_summary(match), **log} if match else log
+        logs.append(log)
+    return logs
+
+
+def compact(results):
+    """The short form of a results file, sealed with a checksum of its own."""
+    short = {key: value for key, value in results.items() if key not in ("rows", "sha256")}
+    short["compact"] = True
+    short["full_sha256"] = results.get("sha256", "")
+    short["rows"] = []
+    for row in results.get("rows") or []:
+        kept = {key: row[key] for key in ("name", "variant", "status", "exit", "seconds", "power", "guard", "values",
+                                          "note", "binary") if row.get(key) not in (None, "", {})}
+        kept["framelog"] = [{"label": log.get("label", ""), "line": log.get("line", "")} for log in _frames(row)]
+        counts = {name: count for name, count in (row.get("counts") or {}).items() if count}
+        if counts:
+            kept["counts"] = counts
+        failed = [step for step in row.get("steps") or [] if not step[1]]
+        if failed:
+            kept["steps"] = failed
+        load_note = row.get("load") or {}
+        if load_note.get("waited") or load_note.get("over"):
+            kept["load"] = {key: load_note[key] for key in ("waited", "over") if key in load_note}
+        short["rows"].append(kept)
+    return seal(short)
 
 
 def frame_table(rows):
@@ -170,6 +222,9 @@ def render(results, problem=None):
         facts.append(f"asked for by {results['asker']}")
     out += [", ".join(facts) + ". Written by `scripts/runs/run_report.py` from the machine's results file "
             f"(checksum {'not verified' if problem else 'verified'}). Local results, not CI evidence.", ""]
+    if results.get("compact"):
+        out += ["From the short form of the results: the frame log lines are the machine's, the other verbatim "
+                f"lines are in the full file on the machine (checksum {results.get('full_sha256', '')[:12]}...).", ""]
     out += [f"**Status:** {results.get('status', 'unknown')}.", ""]
     if results.get("build"):
         out += ["## Build", ""]
@@ -205,6 +260,8 @@ def render(results, problem=None):
             facts.append("values: " + ", ".join(f"{name} {values[name]}" for name in sorted(values)))
         if row.get("note"):
             facts.append(f"note: {row['note']}")
+        if (row.get("binary") or {}).get("sha256"):
+            facts.append(f"binary sha256 {row['binary']['sha256']}..., built {row['binary'].get('modified', '?')}")
         if row.get("guard"):
             facts.append(f"guard {row['guard']}")
         if _counts(row):
@@ -263,6 +320,7 @@ def main(argv=None):
     parser.add_argument("--out", help="write the report here instead of printing it")
     parser.add_argument("--summary", action="store_true", help="print the short summary instead")
     parser.add_argument("--check", action="store_true", help="only check the checksum")
+    parser.add_argument("--compact", action="store_true", help="print the short form, to paste")
     parser.add_argument("--summary-limit", type=int, default=SUMMARY_LIMIT)
     args = parser.parse_args(argv)
 
@@ -275,7 +333,12 @@ def main(argv=None):
     if args.check:
         print("checksum ok" if not problem else problem)
         return 1 if problem else 0
-    if args.summary:
+    if args.compact:
+        if problem:
+            print(f"run_report.py: {args.results}: {problem}", file=sys.stderr)
+            return 1
+        print(json.dumps(compact(results), sort_keys=True, separators=(",", ":"), ensure_ascii=True))
+    elif args.summary:
         print(summarize(results, problem, args.summary_limit))
     else:
         report = render(results, problem)
