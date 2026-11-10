@@ -36,6 +36,12 @@ class Device;
 
 void HostLog(const Host &host, const char *format, ...);
 
+// Multisampling: the sample counts the front offers (2, 4 and 8; the adapter
+// makes a count the device lacks with 4, see legacy::UsableSamples), and none
+// on the PS Vita. Samples of a D3D9 multisample type: 1 for none.
+bool OffersSamples(D3DMULTISAMPLE_TYPE type);
+inline uint32_t SamplesOf(D3DMULTISAMPLE_TYPE type) { return type >= D3DMULTISAMPLE_2_SAMPLES ? uint32_t(type) : 1u; }
+
 // The lock every method of every front object holds for its whole call. One
 // for the process and recursive: a method calls others (Release from a
 // setter, a device method from a resource's), and it must outlive the

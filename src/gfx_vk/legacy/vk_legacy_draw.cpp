@@ -7,7 +7,7 @@
 
 namespace gfx_vk::legacy
 {
-static_assert(sizeof(PipelineKey) == 48 + 2 * kMaxStreams, "PipelineKey must have no padding: it is hashed and compared as bytes");
+static_assert(sizeof(PipelineKey) == 56 + 2 * kMaxStreams, "PipelineKey must have no padding: it is hashed and compared as bytes");
 
 namespace
 {
@@ -272,6 +272,18 @@ bool BeginTargetsPass(Device &device)
         WarnOnce(device, WarnNoTargets, "a draw or clear with no render target and no depth surface was skipped");
         return false;
     }
+    // Every target of a pass has the same samples (as in D3D9, where a
+    // multisampled render target needs a depth surface of its count).
+    const uint32_t samples = colors ? device.renderTargets[0]->texture->samples : device.depthStencil->texture->samples;
+    bool mismatch = device.depthStencil && device.depthStencil->texture->samples != samples;
+    for (uint32_t i = 0; i < colors; ++i)
+        mismatch = mismatch || device.renderTargets[i]->texture->samples != samples;
+    if (mismatch)
+    {
+        WarnOnce(device, WarnSampleMismatch,
+                 "a draw or clear whose render targets and depth surface have different samples was skipped");
+        return false;
+    }
     PassDesc pass;
     pass.name = "legacy";
     pass.colorCount = colors;
@@ -299,6 +311,7 @@ bool BeginTargetsPass(Device &device)
     device.passDepth = device.depthStencil;
     device.passWidth = width;
     device.passHeight = height;
+    device.passSamples = samples;
     device.keyStale = true;
     device.dynamicStale = true;
     ++device.stats.passes;
@@ -602,7 +615,7 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
     raster.lineWidth = 1.0f;
     VkPipelineMultisampleStateCreateInfo multisample{};
     multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisample.rasterizationSamples = static_cast<VkSampleCountFlagBits>(key.samples);
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     VkPipelineColorBlendAttachmentState blends[kMaxRenderTargets]{};
@@ -706,6 +719,7 @@ PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, co
     for (uint32_t i = 0; i < key.colorCount; ++i)
         key.colorFormats[i] = static_cast<uint32_t>(device.passTargets[i]->texture->vkFormat);
     key.depthFormat = device.passDepth ? static_cast<uint32_t>(device.depthFormat) : 0;
+    key.samples = static_cast<uint8_t>(device.passSamples);
     key.topologyClass = TopologyClass(type);
     const bool nonSolid = Features(device.core).fillModeNonSolid;
     key.polygonMode = static_cast<uint8_t>(!nonSolid ? VK_POLYGON_MODE_FILL
@@ -2130,6 +2144,41 @@ void DrawPrimitiveUP(Device *device, d3d::PrimitiveType type, uint32_t primitive
 
 // ---- Copies -------------------------------------------------------------------------------------
 
+namespace
+{
+// A multisampled colour texture resolved whole into resolveScratch, a
+// one-sample render target of its size and format; null on failure. Not
+// inside a pass.
+Texture *ResolveToScratch(Device &device, Texture *from)
+{
+    Texture *&scratch = device.resolveScratch;
+    if (scratch
+        && (scratch->desc.width != from->desc.width || scratch->desc.height != from->desc.height
+            || scratch->desc.format != from->desc.format))
+    {
+        ForgetTexture(device, scratch);
+        DestroyTextureNow(device, scratch); // the core keeps the image until the GPU is done with it
+        scratch = nullptr;
+    }
+    if (!scratch)
+    {
+        TextureDesc desc;
+        desc.width = from->desc.width;
+        desc.height = from->desc.height;
+        desc.levels = 1;
+        desc.usage = d3d::USAGE_RENDERTARGET;
+        desc.format = from->desc.format;
+        desc.pool = d3d::POOL_DEFAULT;
+        desc.name = "legacy resolve scratch";
+        scratch = CreateTextureInternal(device, desc, 0);
+        if (!scratch)
+            return nullptr;
+    }
+    ResolveImage(device.core, from->image, {0, 0}, scratch->image, {0, 0}, {from->desc.width, from->desc.height});
+    return Usable(device) ? scratch : nullptr;
+}
+} // namespace
+
 void StretchRect(Device *device_, Surface *src, const Rect *srcRect, Surface *dst, const Rect *dstRect, bool linear)
 {
     Device &device = *device_;
@@ -2141,6 +2190,13 @@ void StretchRect(Device *device_, Surface *src, const Rect *srcRect, Surface *ds
     {
         WarnOnce(device, WarnStretchRect, "StretchRect from %s to %s is not supported", from->name.c_str(),
                  to->name.c_str());
+        return;
+    }
+    if (to->samples > 1 || (from->samples > 1 && from->format->depth))
+    {
+        // D3D9 resolves a multisampled colour surface and nothing else.
+        WarnOnce(device, WarnStretchToSamples, "StretchRect from %s to %s: only a multisampled colour surface "
+                 "into a one-sample one is supported", from->name.c_str(), to->name.c_str());
         return;
     }
     EndPassIfOpen(device);
@@ -2159,6 +2215,24 @@ void StretchRect(Device *device_, Surface *src, const Rect *srcRect, Surface *ds
     if (srcBox[0].x == srcBox[1].x || srcBox[0].y == srcBox[1].y || dstBox[0].x == dstBox[1].x
         || dstBox[0].y == dstBox[1].y)
         return;
+    if (from->samples > 1)
+    {
+        const VkExtent2D extent = {uint32_t(srcBox[1].x - srcBox[0].x), uint32_t(srcBox[1].y - srcBox[0].y)};
+        if (extent.width == uint32_t(dstBox[1].x - dstBox[0].x) && extent.height == uint32_t(dstBox[1].y - dstBox[0].y)
+            && from->vkFormat == to->vkFormat)
+        {
+            // Same size and format: the resolve is the copy.
+            ResolveImage(device.core, from->image, {srcBox[0].x, srcBox[0].y}, to->image, {dstBox[0].x, dstBox[0].y},
+                         extent, dst->level, dst->face);
+            Usable(device);
+            return;
+        }
+        // Scaled or converted: resolved whole first, then blitted as any
+        // one-sample surface is.
+        from = ResolveToScratch(device, from);
+        if (!from)
+            return;
+    }
     const VkFilter filter = linear && !from->format->depth ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
     BlitImage(device.core, from->image, srcBox, to->image, dstBox, filter, src->level, src->face, dst->level,
               dst->face);
@@ -2184,6 +2258,10 @@ bool GetRenderTargetData(Device *device_, Surface *renderTarget, Surface *dst)
         return false;
     }
     EndPassIfOpen(device);
+    // D3D9 refuses a multisampled source; here it gives the resolved
+    // picture, which is what a screenshot of it wants.
+    if (from->samples > 1 && !(from = ResolveToScratch(device, from)))
+        return false;
     Readback *readback = ReadImage(device.core, from->image, renderTarget->level, renderTarget->face);
     ReadbackData data{};
     if (!readback || !WaitReadback(device.core, readback, &data))
@@ -2254,24 +2332,33 @@ PresentResult Present(Device *device_)
         return skipped ? PresentResult::Skipped : PresentResult::Failed;
     }
     EndPassIfOpen(device);
+    // A multisampled back buffer is resolved into the front buffer, which is
+    // what is shown; the back buffer stays the back buffer.
+    const bool multisampled = device.backBuffer->samples > 1;
+    const TextureDesc &back = device.backBuffer->desc;
+    if (multisampled)
+        ResolveImage(device.core, device.backBuffer->image, {0, 0}, device.frontBuffer->image, {0, 0},
+                     {back.width, back.height});
     // Acquired here, at the end of the frame (null when out of date: the
     // core's Present then skips the frame).
     if (Image *swapchain = SwapchainImage(device.core))
     {
         const ImageDesc &shown = ImageInfo(swapchain);
-        const TextureDesc &back = device.backBuffer->desc;
         const VkOffset3D src[2] = {{0, 0, 0}, {int32_t(back.width), int32_t(back.height), 1}};
         const VkOffset3D dst[2] = {{0, 0, 0}, {int32_t(shown.width), int32_t(shown.height), 1}};
         const bool scaled = shown.width != back.width || shown.height != back.height;
-        BlitImage(device.core, device.backBuffer->image, src, swapchain, dst,
+        BlitImage(device.core, (multisampled ? device.frontBuffer : device.backBuffer)->image, src, swapchain, dst,
                   scaled ? VK_FILTER_LINEAR : VK_FILTER_NEAREST);
     }
     // Flip: the image just shown becomes the front buffer, and the next frame
     // draws into the other one. Render target 0 and every other use of the
     // back buffer go through backBufferSurface, which keeps its address.
-    std::swap(device.backBuffer, device.frontBuffer);
-    device.backBufferSurface.texture = device.backBuffer;
-    device.frontBufferSurface.texture = device.frontBuffer;
+    if (!multisampled)
+    {
+        std::swap(device.backBuffer, device.frontBuffer);
+        device.backBufferSurface.texture = device.backBuffer;
+        device.frontBufferSurface.texture = device.frontBuffer;
+    }
     const FrameResult result = gfx_vk::Present(device.core);
     device.frameOpen = false;
     ForgetRecordingState(device);

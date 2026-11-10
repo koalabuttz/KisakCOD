@@ -193,8 +193,9 @@ Everything in `r_rhi.h`, and the getters D3D9 pairs with each setter:
 
 * `IDirect3D9`: one adapter with a fixed identifier, modes from the host,
   `CheckDeviceFormat` from the adapter's format table (sRGB reads, volume render
-  targets and cube depth refused), no multisampling, caps as DXVK 2.7.1 reports them
-  for shader model 3 (zlib licence).
+  targets and cube depth refused), multisampling at 2, 4 and 8 samples with one
+  quality level (see below), caps as DXVK 2.7.1 reports them for shader model 3
+  (zlib licence).
 * Device: render and sampler state with getters, textures (2D, cube, volume)
   with their levels, surfaces and locks, render targets and depth surfaces,
   offscreen plain surfaces, static and dynamic buffers with D3D9's lock flags,
@@ -233,9 +234,21 @@ so a run can show that the renderer reached none of them:
 
 Other limits:
 
-* No multisampling: `CreateDevice`, `Reset`, `CreateRenderTarget` and
-  `CreateDepthStencilSurface` refuse it, and `CheckDeviceMultiSampleType`
-  offers none, so the renderer keeps `r_aaSamples` at 1.
+* Multisampling: `CheckDeviceMultiSampleType` offers 2, 4 and 8 samples with
+  one quality level, as DXVK does on most GPUs, and refuses the others and
+  `D3DMULTISAMPLE_NONMASKABLE`. `CreateDevice` and `Reset` take the offered
+  counts for the back buffer, and `CreateRenderTarget` and
+  `CreateDepthStencilSurface` for their surfaces. A count the GPU does not
+  have becomes 4, which every Vulkan device has for colour and depth, and
+  `GetDesc` reports the count the surface has; the device line says
+  `back buffer WxH, N sample(s)`. A multisampled surface is resolved, not
+  sampled: `StretchRect` from it resolves (same size and format straight into
+  the destination, otherwise through a scratch image and a blit), and so do
+  `GetRenderTargetData` and `Present`. A draw whose render target and depth
+  surface have different counts is skipped and logged once (D3D9 requires
+  them to match). `StretchRect` into a multisampled surface and of a
+  multisampled depth surface are refused. The Vita's GXM back end offers no
+  multisampling.
 * The adapter identity and formats are static (the GPU is chosen at
   `CreateDevice`); the only identifier check in the renderer compares with
   NVPerfHUD's name.
@@ -287,6 +300,7 @@ a usage error.
 | `tuning` | What a program changes and asks for while its device runs. Five frames of 600 draws, each under a GPU feed setting handed over through `Host::tuning` and taken up by the `Present` before it: off (no parts), after every draw (600 parts), 50 draws a part (2 to 12), 300 draws with an idle count of 10 (the frame starts with the GPU read back, so its first part goes after 10 draws; one to five parts go early, and the picture of that frame is checked on both sides of them), and an idle count no smaller than the plain one (no early part). Every change is logged, the last one back to the device's own setting. `LogDeviceStats` then reports exactly the frames, draws and parts the scene counted since it started the statistics, a second report repeats them and starts again, and a third has no frame in it. Last, another thread changes the setting and asks for the statistics eight times while this one draws and presents, as the engine's main thread does beside its render thread, and the last frame comes out whole. |
 | `slow_frames` | The statistics' `slow frame` lines. Eight frames, of which the second makes the only blended draws of the check (so a pipeline is built) and then stands still for 400 ms, and the third uploads a texture and stands still for 250 ms. A report after the first frame has one line, for frame 1 with its 10 draws. The report after the eighth has three, the longest first, and names frames 2 and 3 with their times, their draws, the pipeline and the upload, and with the GPU's times where the device has timestamps. A report that starts the statistics again is followed by one with no such line. The two frames are found by number and not by rank, so a machine busy enough to hold another frame up for longer still passes. |
 | `kept_state` | The switch for what a draw takes up from the draw before it (`Tuning::keepDrawState`, the game's `r_vkKeepDrawState`). The same frame of 600 draws, in runs of eight that share a texture and with a vertex shader constant set to another value for every draw, is drawn with the state kept, not kept and kept again. Each change is taken up by the `Present` after it and logged once, the first frame logs none, and the statistics count 600 draws in each. The three pictures are the same to the pixel and every one of the 600 cells has its run's texture (a draw that took the constant of the one before would land in another cell). The frame drawn without the kept state writes close to twice the constants of the other two or more, which write the same as each other. |
+| `multisample` | Multisampled targets. A one-sample triangle is drawn first as the yardstick: no pixel of its edge is between the two colours. A render target of 64x64 at 4 samples is drawn with a 4-sample depth surface of 128x128 (larger, as D3D9 allows) and the triangle in front of a far green quad; `GetDesc` reports 4 samples, an 8-sample target is made with 8 or 4 (`edge_pixels`, `eight_samples_made_with` are printed), and 3 samples are refused. An occlusion query of an 8x8 quad counts 256 samples, four a pixel. A draw with a one-sample depth surface is skipped. `StretchRect` resolves the target into a texture level: inside red, behind green, at least 32 pixels of the edge between the two, and a read of the target gives the same picture as the resolve. A scaled `StretchRect` into a corner of the back buffer. `Reset` to a 4-sample back buffer, a draw with a soft edge in the read back, `Present`, and `GetFrontBufferData` equal to the drawn picture; `Reset` back to one sample. |
 | `bench` | Only when named (`--scene bench`), never in a full run: 120 frames of 768 draws of four D3D9 calls each, ended as `frame_loop`'s are, while another thread polls the sync fence every 20 microseconds. Prints the time the drawing thread spent on its draw calls per frame and the polls made meanwhile; passes when its frames were presented. |
 | `bench_runs` | Only when named, as `bench`: 100 frames of 768 draws in runs of eight that share a texture, an alpha reference and a pixel shader constant, as the engine's draws sorted by material do; each draw sets one vertex shader constant and draws its own quad from one static vertex and index buffer. It measures what the adapter does for a draw like the one before ([adapter](vulkan-legacy-adapter.md)). The last frame is read back and ten of its cells checked. Prints what `bench` prints. |
 | `reset` | `Reset` to 96x96 and back: the new size, default state, nothing bound, drawing at the new size. |
@@ -383,6 +397,15 @@ it. The check also takes `--keep-draw-state 0`, which draws the `bench` and
 `bench_runs` scenes without the kept state, so their timings and instruction
 counts can be set beside the default's (the [adapter](vulkan-legacy-adapter.md)
 has the counts).
+
+The `multisample` scene (2026-11-10, same sandbox, lavapipe, which has 1 and
+4 samples) passes its 24 points on x86_64 Debug and RelWithDebInfo with
+validation, and the adapter scene answers 2, 4 and 8 samples with one quality
+level. The resolved triangle has 188 edge pixels between red and green; the
+top row and left column of a quad that fills the target are half covered,
+because the half-pixel shift of the viewport (the same as DXVK's) moves the
+clip volume by half a pixel. The 8-sample target is made with 4. No GPU has
+run it.
 
 ## In the game: r_backend vulkan
 
@@ -638,18 +661,22 @@ evidence):
   `scripts/runs/recipes/vulkan-settings-mp-crash.json` compares the settings
   with `perf_ab` instead, in windows of 9 s in the order A B B A, which a
   drift over minutes moves less.
-* Anti-aliasing: the back end has no multisampled targets yet. Its
-  `CheckDeviceMultiSampleType` offers none, so the engine draws one sample a
-  pixel on Vulkan whatever `r_aaSamples` says (`R_SetupAntiAliasing` steps
-  down to none), where DXVK gives the samples asked for. The laptop's
+* Anti-aliasing: up to laptop run 11 the back end had no multisampled
+  targets. Its `CheckDeviceMultiSampleType` offered none, so the engine drew
+  one sample a pixel on Vulkan whatever `r_aaSamples` said
+  (`R_SetupAntiAliasing` steps down to none), where DXVK gives the samples
+  asked for. The back end now has them (above), so a build with them prints
+  `Using 4x anti-aliasing` on Vulkan too. The laptop's
   profile has `r_aaSamples 4` (read in run 11), and the launch lines of the
-  runs above set no value of their own. If their DXVK launches drew four
-  samples, as that says they did, every frame rate above sets a Vulkan frame
-  of one sample beside a DXVK frame of four, and the gap is larger than it
-  reads. `scripts/runs/recipes/vulkan-aa-mp-crash.json` measures the two
-  alike: both with `r_aaSamples 1` on the command line, and DXVK with 4
-  beside them, each row keeping the engine's `Using 4x anti-aliasing` line
-  where there is one. The Windows PC's runs set `r_aaSamples 1` for both back
+  runs above set no value of their own. The DXVK rows of runs 10 and 11
+  print `Using 4x anti-aliasing` and the Vulkan rows print no such line, so
+  every frame rate above sets a Vulkan frame of one sample beside a DXVK
+  frame of four, and the gap is larger than it reads.
+  `scripts/runs/recipes/vulkan-aa-mp-crash.json` measures the two alike, in
+  the order V1 D1 V4 D4 D4 V4 D1 V1 (back end and `r_aaSamples` on the
+  command line), each row keeping the engine's anti-aliasing line where
+  there is one; on a build without multisampled targets the V4 rows draw one
+  sample. The Windows PC's runs set `r_aaSamples 1` for both back
   ends, so its numbers do compare.
 * Present mode: the laptop's swapchain still says `MAILBOX, 4 images` with
   vsync off now that the core asks for IMMEDIATE first (run 11), so its
@@ -708,8 +735,8 @@ time, and first a measurement of the two back ends with the same
 anti-aliasing (above); then what a pass split by the feed costs on its
 driver, and whether a feed setting is better than the default at all (laptop
 run 12 measures the settings in one launch, and the kept draw state with
-them). Multisampled targets, so that `r_aaSamples` means on Vulkan what it
-means on Direct3D 9. On the Windows PC the gap is the render thread's time
+them). A laptop run of Vulkan with `r_aaSamples 4` beside DXVK with 4,
+now that the back end has multisampled targets. On the Windows PC the gap is the render thread's time
 per draw: descriptor sets made again every frame, then the front's lock.
 Then the long frame the laptop sees about every two minutes, which the
 `slow frame` lines are there to name, and the second or so a launch spends

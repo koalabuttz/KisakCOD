@@ -480,6 +480,7 @@ public:
     void Tuning();
     void SlowFrames();
     void KeptState();
+    void Multisample();
     void Bench();
     void BenchRuns();
     void BenchFrames(bool runs);
@@ -531,8 +532,21 @@ void Check::Adapter()
     Equal("msaa_none", d3d->CheckDeviceMultiSampleType(0, D3DDEVTYPE_HAL, D3DFMT_A8R8G8B8, TRUE, D3DMULTISAMPLE_NONE,
                                                        nullptr),
           D3D_OK);
+    // 2, 4 and 8 samples are offered (the adapter makes a count the device
+    // lacks with 4); nothing else is.
+    DWORD qualities = 0;
     Equal("msaa_4x", d3d->CheckDeviceMultiSampleType(0, D3DDEVTYPE_HAL, D3DFMT_A8R8G8B8, TRUE, D3DMULTISAMPLE_4_SAMPLES,
+                                                     &qualities),
+          D3D_OK);
+    Equal("msaa_4x_qualities", qualities, DWORD(1));
+    Equal("msaa_8x", d3d->CheckDeviceMultiSampleType(0, D3DDEVTYPE_HAL, D3DFMT_A8R8G8B8, TRUE, D3DMULTISAMPLE_8_SAMPLES,
                                                      nullptr),
+          D3D_OK);
+    Equal("msaa_3x", d3d->CheckDeviceMultiSampleType(0, D3DDEVTYPE_HAL, D3DFMT_A8R8G8B8, TRUE, D3DMULTISAMPLE_3_SAMPLES,
+                                                     nullptr),
+          D3DERR_NOTAVAILABLE);
+    Equal("msaa_nonmaskable", d3d->CheckDeviceMultiSampleType(0, D3DDEVTYPE_HAL, D3DFMT_A8R8G8B8, TRUE,
+                                                              D3DMULTISAMPLE_NONMASKABLE, nullptr),
           D3DERR_NOTAVAILABLE);
     Equal("depth_match", d3d->CheckDepthStencilMatch(0, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, D3DFMT_A8R8G8B8, D3DFMT_D24S8),
           D3D_OK);
@@ -2337,6 +2351,214 @@ void Check::BenchFrames(bool runs)
 
 // Reset to another back buffer size and back: the new size, default state,
 // and drawing at that size.
+// Multisampled targets, as the renderer uses them with r_aaSamples above 1
+// (R_SetupAntiAliasing, r_rendertarget.cpp, R_Resolve): a back buffer and a
+// depth surface of 4 samples, drawn into, resolved into a texture with
+// StretchRect, read with GetRenderTargetData (D3D9 refuses that one; the
+// front gives the resolved picture, for screenshots), and presented. A
+// triangle's slanted edge is where samples show: with one sample a pixel is
+// in or out, with four a pixel the edge crosses takes a share of the colour.
+void Check::Multisample()
+{
+    constexpr UINT kTarget = 64;
+    // A triangle over the upper left half of a kTarget square: its long edge
+    // runs from the top right corner to the bottom left one.
+    auto drawTriangle = [&](uint32_t color) {
+        Vertex tri[3] = {
+            Vertex{ClipX(0, kTarget), ClipY(0, kTarget), 0.5f, 0.0f, 0.0f, color},
+            Vertex{ClipX(kTarget, kTarget), ClipY(0, kTarget), 0.5f, 0.0f, 0.0f, color},
+            Vertex{ClipX(0, kTarget), ClipY(kTarget, kTarget), 0.5f, 0.0f, 0.0f, color},
+        };
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, tri, sizeof(Vertex)), "DrawPrimitiveUP(triangle)");
+    };
+    // Pixels of the read picture whose red lies strictly between the two
+    // colours: along the slanted edge, and with several samples also the
+    // top row and left column, whose upper and left samples lie outside the
+    // clip volume once the viewport is moved by half a pixel (as DXVK moves
+    // it; a GPU that clips with a guard band may cover them).
+    auto partlyCovered = [&](UINT size) {
+        int count = 0;
+        for (UINT y = 0; y < size; ++y)
+        {
+            for (UINT x = 0; x < size; ++x)
+            {
+                const int red = pixels[(y * readSize + x) * 4 + 2];
+                count += red > 24 && red < 232;
+            }
+        }
+        return count;
+    };
+
+    // One sample first, as the yardstick: no pixel is partly covered.
+    Reset();
+    drawTriangle(Argb(255, 255, 0, 0));
+    int oneSample = -1;
+    if (Read())
+        oneSample = partlyCovered(kTarget);
+    Equal("one_sample_edge_hard", oneSample, 0);
+
+    IDirect3DSurface9 *target = nullptr, *depth = nullptr, *oneDepth = nullptr, *resolvedLevel = nullptr;
+    IDirect3DTexture9 *resolved = nullptr;
+    if (!Ok(device->CreateRenderTarget(kTarget, kTarget, D3DFMT_A8R8G8B8, D3DMULTISAMPLE_4_SAMPLES, 0, FALSE, &target,
+                                       nullptr),
+            "CreateRenderTarget(4 samples)")
+        // The back buffer's size: it serves both (D3D9 lets a depth surface be
+        // larger than the target).
+        || !Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_4_SAMPLES, 0, TRUE, &depth,
+                                                 nullptr),
+               "CreateDepthStencilSurface(4 samples)")
+        || !Ok(device->CreateDepthStencilSurface(kTarget, kTarget, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE,
+                                                 &oneDepth, nullptr),
+               "CreateDepthStencilSurface(1 sample)")
+        || !Ok(device->CreateTexture(kTarget, kTarget, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT,
+                                     &resolved, nullptr),
+               "CreateTexture(resolve target)")
+        || !Ok(resolved->GetSurfaceLevel(0, &resolvedLevel), "GetSurfaceLevel(resolve target)"))
+    {
+        SafeRelease(resolvedLevel);
+        SafeRelease(resolved);
+        SafeRelease(oneDepth);
+        SafeRelease(depth);
+        SafeRelease(target);
+        return;
+    }
+    D3DSURFACE_DESC desc{};
+    target->GetDesc(&desc);
+    Equal("target_samples", desc.MultiSampleType, D3DMULTISAMPLE_4_SAMPLES);
+    depth->GetDesc(&desc);
+    Equal("depth_samples", desc.MultiSampleType, D3DMULTISAMPLE_4_SAMPLES);
+    resolvedLevel->GetDesc(&desc);
+    Equal("texture_samples", desc.MultiSampleType, D3DMULTISAMPLE_NONE);
+    // 8 samples where the device has them, else 4 (lavapipe has 1 and 4).
+    IDirect3DSurface9 *eight = nullptr;
+    if (Ok(device->CreateRenderTarget(16, 16, D3DFMT_A8R8G8B8, D3DMULTISAMPLE_8_SAMPLES, 0, FALSE, &eight, nullptr),
+           "CreateRenderTarget(8 samples)"))
+    {
+        eight->GetDesc(&desc);
+        Equal("eight_or_four", desc.MultiSampleType == D3DMULTISAMPLE_8_SAMPLES
+                                   || desc.MultiSampleType == D3DMULTISAMPLE_4_SAMPLES,
+              true);
+        std::printf("d3d9_check.multisample=eight_samples_made_with=%u\n", unsigned(desc.MultiSampleType));
+        SafeRelease(eight);
+    }
+    Equal("three_refused", device->CreateRenderTarget(16, 16, D3DFMT_A8R8G8B8, D3DMULTISAMPLE_3_SAMPLES, 0, FALSE,
+                                                      &eight, nullptr),
+          D3DERR_NOTAVAILABLE);
+
+    // Drawn with depth: a far quad over all, the triangle in front of it.
+    Reset();
+    Ok(device->SetRenderTarget(0, target), "SetRenderTarget(4 samples)");
+    Ok(device->SetDepthStencilSurface(depth), "SetDepthStencilSurface(4 samples)");
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 255), 1.0f, 0), "Clear(4 samples)");
+    device->SetRenderState(D3DRS_ZENABLE, TRUE);
+    device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+    drawTriangle(Argb(255, 255, 0, 0));
+    DrawQuad(0, 0, kTarget, kTarget, 0.75f, Argb(255, 0, 255, 0), kTarget); // behind: shows below the edge only
+    // Its samples counted: a quad of 8 x 8 pixels in front of everything is
+    // 256 samples (or every sample where the device does not count them).
+    IDirect3DQuery9 *occlusion = nullptr;
+    if (Ok(device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &occlusion), "CreateQuery(occlusion)"))
+    {
+        device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+        Ok(occlusion->Issue(D3DISSUE_BEGIN), "Issue(begin)");
+        DrawQuad(48, 48, 56, 56, 0.25f, Argb(255, 255, 255, 255), kTarget);
+        Ok(occlusion->Issue(D3DISSUE_END), "Issue(end)");
+        device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xf);
+        DWORD samples = 0;
+        HRESULT hr = S_FALSE;
+        int polls = 0;
+        while ((hr = occlusion->GetData(&samples, sizeof(samples), D3DGETDATA_FLUSH)) == S_FALSE && polls < 100000)
+        {
+            ++polls;
+            SDL_Delay(polls > 100 ? 1 : 0);
+        }
+        Equal("occlusion_done", hr, S_OK);
+        Equal("occlusion_samples", samples, Counters().occlusionCounted ? DWORD(8 * 8 * 4) : DWORD(0xffffff));
+        SafeRelease(occlusion);
+    }
+
+    // A depth surface of another count beside it: the draw is skipped.
+    Ok(device->SetDepthStencilSurface(oneDepth), "SetDepthStencilSurface(1 sample beside 4)");
+    DrawQuad(0, 0, 8, 8, 0.1f, Argb(255, 255, 255, 255), kTarget);
+    Ok(device->SetDepthStencilSurface(depth), "SetDepthStencilSurface(4 samples)");
+
+    // Resolved into a texture of its size (the renderer's R_Resolve).
+    Ok(device->StretchRect(target, nullptr, resolvedLevel, nullptr, D3DTEXF_NONE), "StretchRect(resolve)");
+    int edge = -1;
+    if (Read(resolvedLevel, kTarget))
+    {
+        Expect("resolved_inside", 8, 8, 255, 0, 0);
+        Expect("resolved_behind", 56, 56, 0, 255, 0);
+        Expect("mismatched_draw_skipped", 2, 2, 255, 0, 0);
+        edge = partlyCovered(kTarget);
+    }
+    // Every pixel the edge crosses: about one in each row.
+    Equal("resolved_edge_soft", edge >= int(kTarget) / 2, true);
+    std::printf("d3d9_check.multisample=edge_pixels=%d\n", edge);
+
+    // Read directly: the same resolved picture.
+    std::vector<uint8_t> resolvedPixels = pixels;
+    if (Read(target, kTarget))
+        Equal("read_is_resolved", pixels == resolvedPixels, true);
+
+    // Into the corner of the back buffer at half size: resolved, then scaled.
+    Reset(Argb(255, 0, 0, 0));
+    RECT corner{0, 0, kTarget / 2, kTarget / 2};
+    Ok(device->StretchRect(target, nullptr, backBuffer, &corner, D3DTEXF_POINT), "StretchRect(resolve and scale)");
+    if (Read())
+    {
+        Expect("scaled_inside", 4, 4, 255, 0, 0);
+        Expect("scaled_behind", 28, 28, 0, 255, 0);
+        Expect("scaled_outside", 48, 48, 0, 0, 0);
+    }
+
+    // The back buffer itself with 4 samples, through Reset, as the renderer
+    // makes it: drawn, read, presented, and read from the front buffer.
+    SafeRelease(backBuffer);
+    D3DPRESENT_PARAMETERS multisampled = params;
+    multisampled.MultiSampleType = D3DMULTISAMPLE_4_SAMPLES;
+    if (Ok(device->Reset(&multisampled), "Reset(4 samples)")
+        && Ok(device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer), "GetBackBuffer(4 samples)"))
+    {
+        backBuffer->GetDesc(&desc);
+        Equal("back_buffer_samples", desc.MultiSampleType, D3DMULTISAMPLE_4_SAMPLES);
+        Equal("back_buffer_width", desc.Width, kSize);
+        Reset(Argb(255, 0, 0, 255));
+        Ok(device->SetDepthStencilSurface(depth), "SetDepthStencilSurface(4 samples, back buffer)");
+        device->SetRenderState(D3DRS_ZENABLE, TRUE);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, 1.0f, 0), "Clear(depth)");
+        drawTriangle(Argb(255, 255, 0, 0));
+        int backEdge = -1;
+        if (Read())
+        {
+            Expect("back_buffer_inside", 8, 8, 255, 0, 0);
+            Expect("back_buffer_outside", 100, 100, 0, 0, 255);
+            backEdge = partlyCovered(kTarget);
+        }
+        Equal("back_buffer_edge_soft", backEdge >= int(kTarget) / 2, true);
+        std::vector<uint8_t> drawn = pixels;
+        const uint64_t before = Counters().presents + Counters().presentsSkipped;
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present(4 samples)");
+        Equal("presented", Counters().presents + Counters().presentsSkipped, before + 1);
+        if (Ok(device->GetFrontBufferData(0, readSurface), "GetFrontBufferData(4 samples)") && ReadLocked(kSize))
+            Equal("front_buffer_is_resolved", pixels == drawn, true);
+        presented += Counters().presents > 0;
+    }
+    SafeRelease(backBuffer);
+    if (Ok(device->Reset(&params), "Reset(1 sample)")
+        && Ok(device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer), "GetBackBuffer"))
+    {
+        backBuffer->GetDesc(&desc);
+        Equal("back_buffer_one_sample_again", desc.MultiSampleType, D3DMULTISAMPLE_NONE);
+    }
+    Reset();
+    SafeRelease(resolvedLevel);
+    SafeRelease(resolved);
+    SafeRelease(oneDepth);
+    SafeRelease(depth);
+    SafeRelease(target);
+}
+
 void Check::ResetDevice()
 {
     SafeRelease(backBuffer);
@@ -2570,6 +2792,7 @@ int Run(const Options &options)
         {"tuning", &Check::Tuning, true},
         {"slow_frames", &Check::SlowFrames, true},
         {"kept_state", &Check::KeptState, true},
+        {"multisample", &Check::Multisample, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},

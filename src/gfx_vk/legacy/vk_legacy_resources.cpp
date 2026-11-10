@@ -310,7 +310,15 @@ uint32_t LevelSize(uint32_t size, uint32_t level) { return std::max(size >> leve
 
 // ---- Textures ----------------------------------------------------------------------------
 
-Texture *CreateTextureInternal(Device &device, const TextureDesc &desc, uint32_t extraUsage)
+uint32_t UsableSamples(const Device *device, uint32_t asked)
+{
+    if (asked <= 1)
+        return 1;
+    const bool oneBit = !(asked & (asked - 1));
+    return oneBit && (SampleCounts(device->core) & asked) ? asked : 4;
+}
+
+Texture *CreateTextureInternal(Device &device, const TextureDesc &desc, uint32_t extraUsage, uint32_t samples)
 {
     const FormatInfo *format = LookupFormat(desc.format);
     const char *name = desc.name ? desc.name : "legacy texture";
@@ -352,6 +360,11 @@ Texture *CreateTextureInternal(Device &device, const TextureDesc &desc, uint32_t
             Log(device, "texture %s: render targets and depth surfaces must be 2D with one level", name);
             return nullptr;
         }
+        if (samples > 1 && !(desc.usage & (d3d::USAGE_RENDERTARGET | d3d::USAGE_DEPTHSTENCIL)))
+        {
+            Log(device, "texture %s: only render targets and depth surfaces are multisampled", name);
+            return nullptr;
+        }
         const VkFormat chosen = ChooseVkFormat(device, *format, desc.usage);
         if (chosen == VK_FORMAT_UNDEFINED)
         {
@@ -372,6 +385,16 @@ Texture *CreateTextureInternal(Device &device, const TextureDesc &desc, uint32_t
             image.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         if (desc.usage & d3d::USAGE_DEPTHSTENCIL)
             image.usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        if (samples > 1)
+        {
+            // An attachment and the source of a resolve; nothing samples it
+            // or copies into it.
+            texture->samples = samples;
+            image.samples = samples;
+            image.usage = (desc.usage & d3d::USAGE_RENDERTARGET)
+                              ? VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+                              : VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        }
         image.sampleSwizzle = format->swizzle;
         image.name = texture->name.c_str();
         texture->image = CreateImage(device.core, image);
@@ -581,7 +604,7 @@ Surface *GetSurfaceLevel(Device *device, Texture *texture, uint32_t face, uint32
 namespace
 {
 Surface *Standalone(Device &device, uint32_t width, uint32_t height, d3d::Format format, uint32_t usage,
-                    d3d::Pool pool, const char *name)
+                    d3d::Pool pool, const char *name, uint32_t samples = 1)
 {
     if (!Usable(device))
         return nullptr;
@@ -593,7 +616,7 @@ Surface *Standalone(Device &device, uint32_t width, uint32_t height, d3d::Format
     desc.format = format;
     desc.pool = pool;
     desc.name = name;
-    Texture *texture = CreateTextureInternal(device, desc, 0);
+    Texture *texture = CreateTextureInternal(device, desc, 0, UsableSamples(&device, samples));
     if (!texture)
         return nullptr;
     Surface *surface = GetSurfaceLevel(&device, texture, 0, 0);
@@ -601,6 +624,22 @@ Surface *Standalone(Device &device, uint32_t width, uint32_t height, d3d::Format
     return surface;
 }
 } // namespace
+
+Surface *CreateMultisampledRenderTarget(Device *device, uint32_t width, uint32_t height, d3d::Format format,
+                                        uint32_t samples, const char *name)
+{
+    return Standalone(*device, width, height, format, d3d::USAGE_RENDERTARGET, d3d::POOL_DEFAULT,
+                      name ? name : "legacy multisampled render target", samples);
+}
+
+Surface *CreateMultisampledDepthStencil(Device *device, uint32_t width, uint32_t height, d3d::Format format,
+                                        uint32_t samples, const char *name)
+{
+    return Standalone(*device, width, height, format, d3d::USAGE_DEPTHSTENCIL, d3d::POOL_DEFAULT,
+                      name ? name : "legacy multisampled depth surface", samples);
+}
+
+uint32_t SurfaceSamples(const Surface *surface) { return surface->texture->samples; }
 
 Surface *CreateRenderTarget(Device *device, uint32_t width, uint32_t height, d3d::Format format, const char *name)
 {

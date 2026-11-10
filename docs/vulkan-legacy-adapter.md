@@ -178,6 +178,7 @@ buffer by the core's `Recording()` number.
 | Managed and default textures | A lock returns CPU memory for that level (or box); unlock uploads it through staging and frees the CPU copy. A level locked again without `DISCARD` is read back from the GPU once, and its CPU copy is kept from then on, so a lock keeps the texels it does not overwrite, as in D3D9 (the game's model lighting volume relies on this). Compressed formats lock whole 4x4 blocks. |
 | SYSTEMMEM and SCRATCH textures | CPU memory only, kept; the source of `UpdateTexture` and the destination of `GetRenderTargetData`. |
 | Render targets and depth surfaces | 2D, one level. A texture with RENDERTARGET usage can be drawn to and sampled. |
+| Multisampled targets | `CreateMultisampledRenderTarget`, `CreateMultisampledDepthStencil` and `DeviceDesc::backBufferSamples` (`SetBackBufferSamples` then `ResizeBackBuffer` to change it) take a sample count; `UsableSamples` keeps 1, and turns a count the device lacks into 4, which Vulkan requires of every device for colour and depth; `SurfaceSamples` says what a surface got. Such an image is drawn to and resolved, never sampled or locked. A pass takes its count from its targets and the pipeline key carries it (`rasterizationSamples`); a pass whose targets differ in count is skipped with a warning. `StretchRect` from a multisampled colour surface resolves it (`vkCmdResolveImage`): straight into the destination when size and format match, otherwise into a scratch image the device keeps and then a blit. `GetRenderTargetData` resolves into that scratch before the read back, and `Present` of a multisampled back buffer resolves it into the image `GetFrontBufferData` reads and blits that to the swapchain. A multisampled destination or depth source is refused with a warning. Not on the Vita: the GXM back end has none of these. |
 | Static buffers | Device memory with a CPU shadow; unlock uploads the locked range. |
 | Dynamic buffers | Mapped upload memory. `D3DLOCK_DISCARD` while the GPU still reads the old contents renames the buffer onto new memory; `NOOVERWRITE` writes in place; a plain lock of a busy buffer renames and copies the old contents. |
 | Queries | Event queries finish when the GPU passes the point they were issued at: the open recording's submission, or the last one submitted when nothing is being recorded (right after `Present`). Until laptop run 4, an event issued after `Present` waited for the next frame's submission instead. The engine polls such an event (its swap fence) before ending every frame, so the CPU and GPU never overlapped. A poll with `D3DGETDATA_FLUSH` that finds such a frame fence unfinished also submits what was recorded after it, once per issue: the engine has drawn the next frame by then and only waits, in steps of up to 1 ms, so the GPU gets that frame queued behind the one it is on instead of idling from the end of one until `Present` submits the next. `Present` then submits only the copy to the swapchain. `KISAK_VK_FENCE_FLUSH=0` turns this off, to compare; the front's `frame stats:` line counts these flushes. |
@@ -224,8 +225,9 @@ so the renderer hookup can see where it stands.
 * Shader model 1.x samplers without a declared type are treated as 2D.
 * Fog, user clip planes, integer and boolean constants and texture-stage state
   read as zero.
-* `StretchRect` covers what the core can blit: same-kind colour images, or
-  depth to depth with point filtering. Others are skipped with a warning.
+* `StretchRect` covers what the core can blit or resolve: same-kind colour
+  images, a multisampled colour image into a one-sample one, or depth to
+  depth with point filtering. Others are skipped with a warning.
 
 ## The validation layer and depth compare
 

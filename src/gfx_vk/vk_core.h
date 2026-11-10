@@ -353,6 +353,10 @@ bool FormatSupports(const Core *core, VkFormat format, VkFormatFeatureFlags feat
 // The depth-stencil format for depth targets: D24S8 where it can be a depth
 // attachment and sampled, else D32_SFLOAT_S8_UINT.
 VkFormat DepthStencilFormat(const Core *core);
+// The sample counts an attachment can have here, colour and depth-stencil
+// alike, as VkSampleCountFlags (bit N for N samples). Every device has 1
+// and 4.
+VkSampleCountFlags SampleCounts(const Core *core);
 
 // ---- Buffers and images (vk_memory.cpp) -----------------------------------------
 //
@@ -390,6 +394,10 @@ struct ImageDesc
     uint32_t height = 1;
     uint32_t depth = 1;    // Tex3D only
     uint32_t mipLevels = 1;
+    // Samples a texel: 1, or a count SampleCounts() has. A multisampled image
+    // is a Tex2D of one level that passes draw into and ResolveImage reads;
+    // it is not sampled, blitted, written with StageImageWrite or read back.
+    uint32_t samples = 1;
     VkImageUsageFlags usage = 0; // TRANSFER_DST is added when SAMPLED is set
     // Applied to the view shaders sample (ImageSampleView), never to
     // attachments: lets one-channel formats read as D3D9's L8 or A8 do.
@@ -651,6 +659,12 @@ VkDescriptorSet AllocateDescriptorSet(Core *core, VkDescriptorSetLayout layout);
 void BlitImage(Core *core, Image *src, const VkOffset3D srcBox[2], Image *dst, const VkOffset3D dstBox[2],
                VkFilter filter, uint32_t srcLevel = 0, uint32_t srcLayer = 0, uint32_t dstLevel = 0,
                uint32_t dstLayer = 0);
+
+// vkCmdResolveImage, with the barriers: a box of a multisampled colour image,
+// every texel the average of its samples, into a level of a one-sample image
+// of the same format. Not inside a pass.
+void ResolveImage(Core *core, Image *src, VkOffset2D srcOffset, Image *dst, VkOffset2D dstOffset, VkExtent2D extent,
+                  uint32_t dstLevel = 0, uint32_t dstLayer = 0);
 
 // Copies one level and layer of a colour image into host memory: every depth
 // slice of a 3D image, and rows of 4x4 blocks for block-compressed formats.
