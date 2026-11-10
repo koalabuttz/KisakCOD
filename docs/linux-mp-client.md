@@ -465,7 +465,7 @@ first map load with an existing retail profile drops once (see
 ### Map sweep
 
 Only mp_crash has been played by hand. `scripts/tests/run_linux_mp_map_sweep.py`
-runs `KisakCOD-mp` against an install on the other maps and writes a report. It
+runs `KisakCOD-mp` against an install on every map and writes a report. It
 is not run by CI; `scripts/tests/test_linux_mp_map_sweep.py` checks the tool
 itself against a stand-in game.
 
@@ -518,7 +518,18 @@ to the install's `main`, `zone` and `localization.txt`, `home/` as
 folder is not staged. The logs there hold the console output, asset names
 included, so keep the directory private.
 
-No laptop run of the sweep has been made yet.
+Results so far, on one laptop (Intel U300 graphics, DXVK, master 6e11f2b,
+2026-11-10; a local run, not CI evidence): all 21 stock maps passed every step
+on both builds. x86_64 ran one process per map (23 minutes), i386 ran all maps
+chained in one process (22 minutes). No assertion, error, script error or drop;
+every process exited 0. Sound went to OpenAL's null device, so the mixer ran
+and nobody listened: no OpenAL error and no stream underrun. The first map of a
+run takes longer to enter (21 to 37 s against 6 to 12 s). One frame stood
+apart: i386 mp_convoy in the chained run was nearly black (12% of it not
+black) where the x86_64 frame of that map was normal; whether that is the
+build, the chain or the place the player spawned is not known yet. Nobody has
+looked at these maps or played them by hand; the sweep shows they load, take
+a player and keep running, nothing more.
 
 ### Flashbang and concussion screen effects
 
