@@ -1,0 +1,201 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 09:49:53 +0000
+Subject: [PATCH] fix: keep physics object ids in a table on 64-bit builds
+
+A physics object id is a dxBody pointer in a 32-bit field, and
+DynEntityClient's 12-byte layout is stored in fastfiles, so the field
+cannot grow. In a 64-bit build Phys_IdFromObj() and Phys_ObjFromId()
+now map a body to a slot in a 2048 entry table (the body pool holds
+512). dBodyCreate() fills the slot; dBodyDestroy() and dWorldDestroy()
+empty it.
+
+The 32-bit build keeps the plain casts and compiles none of the table,
+so nothing changes there.
+---
+ scripts/common_files.cmake |  1 +
+ src/physics/ode/ode.cpp    | 13 ++++++
+ src/physics/phys_objid.cpp | 85 ++++++++++++++++++++++++++++++++++++++
+ src/physics/phys_objid.h   | 16 ++++++-
+ 4 files changed, 113 insertions(+), 2 deletions(-)
+ create mode 100644 src/physics/phys_objid.cpp
+
+diff --git a/scripts/common_files.cmake b/scripts/common_files.cmake
+index 6d4e30b1..e33779c1 100644
+--- a/scripts/common_files.cmake
++++ b/scripts/common_files.cmake
+@@ -329,6 +329,7 @@ set(PHYSICS
+     "${SRC_DIR}/physics/phys_coll_local.h"
+     "${SRC_DIR}/physics/phys_contacts.cpp"
+     "${SRC_DIR}/physics/phys_local.h"
++    "${SRC_DIR}/physics/phys_objid.cpp"
+     "${SRC_DIR}/physics/phys_objid.h"
+     "${SRC_DIR}/physics/phys_ode.cpp"
+     "${SRC_DIR}/physics/phys_world_collision.cpp"
+diff --git a/src/physics/ode/ode.cpp b/src/physics/ode/ode.cpp
+index 955a8f3e..7947062d 100644
+--- a/src/physics/ode/ode.cpp
++++ b/src/physics/ode/ode.cpp
+@@ -1470,6 +1470,16 @@ void __cdecl ODE_Init()
+ 
+ // MOD
+ #include <xanim/dobj.h>
++#include <physics/phys_objid.h>
++
++#if !(defined(__i386__) || defined(_M_IX86))
++#include <qcommon/qcommon.h>
++
++void Phys_ObjIdTableFull(int slots)
++{
++    Com_Error(ERR_DROP, "more than %i physics bodies", slots);
++}
++#endif
+ 
+ dxBody *dBodyCreate(dxWorld *w)
+ {
+@@ -1482,6 +1492,7 @@ dxBody *dBodyCreate(dxWorld *w)
+     dxBody *b = new dxBody;
+ #endif
+ 
++    Phys_RegisterObj(b);
+     initObject(b, w);
+     b->firstjoint = 0;
+     b->flags = 0;
+@@ -1601,6 +1612,7 @@ void dWorldDestroy(dxWorld* w)
+     while (b)
+     {
+         nextb = (dxBody*)b->next;
++        Phys_UnregisterObj(b);
+ #ifdef USE_POOL_ALLOCATOR
+         Pool_Free((freenode*)b, &odeGlob.bodyPool);
+ #else
+@@ -1657,6 +1669,7 @@ void dBodyDestroy(dxBody* b)
+ 
+     b->world->nb--;
+ 
++    Phys_UnregisterObj(b);
+ #ifdef USE_POOL_ALLOCATOR
+     Sys_EnterCriticalSection(CRITSECT_PHYSICS);
+     Pool_Free((freenode*)b, &odeGlob.bodyPool);
+diff --git a/src/physics/phys_objid.cpp b/src/physics/phys_objid.cpp
+new file mode 100644
+index 00000000..434f4c55
+--- /dev/null
++++ b/src/physics/phys_objid.cpp
+@@ -0,0 +1,85 @@
++// Physics object ids for 64-bit builds; see phys_objid.h. A 32-bit build keeps
++// the original pointer-in-an-int ids and compiles nothing here.
++
++#include "phys_objid.h"
++
++#if !(defined(__i386__) || defined(_M_IX86))
++
++#include <mutex>
++
++#include <universal/assertive.h>
++
++// Calls Com_Error; defined next to dBodyCreate so this file stays engine-free.
++void Phys_ObjIdTableFull(int slots);
++
++namespace
++{
++// The original body pool held 512 bodies; this leaves room for more.
++constexpr int PHYS_OBJ_ID_SLOTS = 2048;
++dxBody *s_physObjects[PHYS_OBJ_ID_SLOTS];
++int s_physObjectsNextSlot;
++std::mutex s_physObjectsLock;
++} // namespace
++
++void Phys_RegisterObj(dxBody *body)
++{
++    iassert(body);
++    {
++        std::lock_guard<std::mutex> lock(s_physObjectsLock);
++        for (int n = 0; n < PHYS_OBJ_ID_SLOTS; ++n)
++        {
++            const int slot = (s_physObjectsNextSlot + n) % PHYS_OBJ_ID_SLOTS;
++            if (!s_physObjects[slot])
++            {
++                s_physObjects[slot] = body;
++                s_physObjectsNextSlot = (slot + 1) % PHYS_OBJ_ID_SLOTS;
++                return;
++            }
++        }
++    }
++    Phys_ObjIdTableFull(PHYS_OBJ_ID_SLOTS);
++}
++
++void Phys_UnregisterObj(dxBody *body)
++{
++    std::lock_guard<std::mutex> lock(s_physObjectsLock);
++    for (dxBody *&slot : s_physObjects)
++    {
++        if (slot == body)
++        {
++            slot = nullptr;
++            return;
++        }
++    }
++}
++
++int32_t Phys_IdFromObj(dxBody *body)
++{
++    if (!body)
++        return 0;
++    {
++        std::lock_guard<std::mutex> lock(s_physObjectsLock);
++        for (int slot = 0; slot < PHYS_OBJ_ID_SLOTS; ++slot)
++        {
++            if (s_physObjects[slot] == body)
++                return slot + 1;
++        }
++    }
++    iassert(!"physics body was never registered");
++    return 0;
++}
++
++dxBody *Phys_ObjFromId(int32_t id)
++{
++    if (!id)
++        return nullptr;
++    iassert(id > 0 && id <= PHYS_OBJ_ID_SLOTS);
++    if (id <= 0 || id > PHYS_OBJ_ID_SLOTS)
++        return nullptr;
++    std::lock_guard<std::mutex> lock(s_physObjectsLock);
++    dxBody *body = s_physObjects[id - 1];
++    iassert(body);
++    return body;
++}
++
++#endif
+diff --git a/src/physics/phys_objid.h b/src/physics/phys_objid.h
+index 3d87d057..e65940b0 100644
+--- a/src/physics/phys_objid.h
++++ b/src/physics/phys_objid.h
+@@ -6,8 +6,11 @@ struct dxBody;
+ 
+ // A physics object id is a dxBody kept in a 32-bit field. DynEntityClient, the
+ // MP cpose_t, FxElem, FxUpdateElem and BreakablePiece hold one in an int, and
+-// DynEntityClient's 12-byte layout is stored in fastfiles. The id is the
+-// pointer itself. 0 is no body.
++// DynEntityClient's 12-byte layout is stored in fastfiles. In a 32-bit build
++// the id is the pointer itself, as in the original game. A 64-bit pointer does
++// not fit, so there the id is a slot in a table of live bodies that dBodyCreate
++// fills and dBodyDestroy (or dWorldDestroy) empties. 0 is no body on both.
++#if defined(__i386__) || defined(_M_IX86)
+ inline int32_t Phys_IdFromObj(dxBody *body)
+ {
+     return (int32_t)body;
+@@ -17,3 +20,12 @@ inline dxBody *Phys_ObjFromId(int32_t id)
+ {
+     return (dxBody *)id;
+ }
++
++inline void Phys_RegisterObj(dxBody *) {}
++inline void Phys_UnregisterObj(dxBody *) {}
++#else
++int32_t Phys_IdFromObj(dxBody *body);
++dxBody *Phys_ObjFromId(int32_t id);
++void Phys_RegisterObj(dxBody *body);
++void Phys_UnregisterObj(dxBody *body);
++#endif

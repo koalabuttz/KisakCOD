@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 09:46:15 +0000
+Subject: [PATCH] refactor: read the model mark context through its struct
+
+R_MarkModelCoreCallback_0_() took its five arguments from the context
+by byte offset (0, 4, 12, 16 and 24). They are the markInfo,
+markContext, markDir, clipPlanes and transformNormalMatrix fields of
+MarkModelCoreContext, which is what the caller passes in.
+
+No behaviour change in the 32-bit build. The offsets only held for
+four-byte pointers.
+---
+ src/gfx_d3d/r_marks.cpp | 11 ++++++-----
+ 1 file changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/src/gfx_d3d/r_marks.cpp b/src/gfx_d3d/r_marks.cpp
+index f273838b..c435a8a9 100644
+--- a/src/gfx_d3d/r_marks.cpp
++++ b/src/gfx_d3d/r_marks.cpp
+@@ -2076,17 +2076,18 @@ bool __cdecl R_MarkModelCoreCallback_0_(
+         vertWeights[2] = 0.0;
+         clipPoints[0][vertIndex].vertWeights[vertIndex] = 1.0;
+     }
++    const MarkModelCoreContext *context = static_cast<const MarkModelCoreContext *>(contextAsVoid);
+     return R_MarkFragment_IsTriangleRejected(
+-        *(const float**)((uintptr_t)contextAsVoid + 12),
++        context->markDir,
+         clipPoints[0][0].xyz,
+         clipPoints[0][1].xyz,
+         clipPoints[0][2].xyz)
+         || R_MarkFragment_DoTriangle_0_(
+-            *(MarkInfo**)contextAsVoid,
+-            *(const float(**)[4])((uintptr_t)contextAsVoid + 16),
+-            *(const GfxMarkContext**)((uintptr_t)contextAsVoid + 4),
++            context->markInfo,
++            context->clipPlanes,
++            context->markContext,
+             triVerts1,
+-            *(const float(**)[3])((uintptr_t)contextAsVoid + 24),
++            context->transformNormalMatrix,
+             clipPoints) != 0;
+ }
+ 
