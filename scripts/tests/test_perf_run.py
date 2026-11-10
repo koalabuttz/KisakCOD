@@ -575,14 +575,72 @@ def test_load(bench):
         check(status == 0 and printed.count("waiting: cc1plus") == 2 and row["load"]["top"] == [["other", 20.0]]
               and row["load"]["over"] is False and row["load"]["at_capture"] == [["other", 5.0]],
               f"a row waits for a busy process to end and notes the load ({row['load']})")
-        samples[:] = [[("cc1plus", 180.0)]] * 50
+        # Busy for as long as the wait before the launch lasts, quiet by the capture
+        # (only the checks inside a row leave the game's own process out).
+        perf_run.sample_load = lambda window, exclude=(), root=None: [] if exclude else [("cc1plus", 180.0)]
         status, results, _, _ = bench.run(bench.recipe(rows=["A"], load={"max_cpu_percent": 50, "wait": 0.3,
                                                                          "window": 0.05, "every": 0.05}))
         row = results["rows"][0]
-        check(status == 0 and row["load"]["over"] is True, "after its wait the row runs anyway, marked")
+        check(status == 0 and row["load"]["over"] is True and row["status"] == "ok",
+              f"after its wait the row runs anyway, marked ({row['status']}, {row['load']})")
         check("still over the limit" in run_report.render(results), "and the report says so")
+
+        # A process that starts inside the first row's capture (the laptop's
+        # java, 2026-11-10): the capture's own sample is the long one.
+        captures = [[("java", 234.0), ("other", 3.0)]]
+        perf_run.sample_load = lambda window, exclude=(), root=None: (
+            (captures.pop(0) if captures else [("other", 3.0)]) if window >= 0.3 else [("other", 2.0)])
+        recipe = bench.recipe(rows=["A", "B"], load={"max_cpu_percent": 50, "wait": 5, "window": 0.05, "every": 0.05})
+        status, results, _, printed = bench.run(recipe)
+        names = [row["name"] for row in results["rows"]]
+        check(status == 0 and results["status"] == "complete" and names == ["A-1.spoiled1", "A-1", "B-1"],
+              f"a row captured beside a busy process is run again ({status}, {names})\n{printed}")
+        if len(results["rows"]) == 3:
+            spoiled, again = results["rows"][0], results["rows"][1]
+            check(spoiled["status"] == "flagged: other load during the capture (java 234% of a core)"
+                  and spoiled["load"]["during_capture"][0] == ["java", 234.0] and again["status"] == "ok"
+                  and "busy" not in again["load"] and again["load"]["during_capture"] == [["other", 3.0]],
+                  f"the row says which process and how much ({spoiled['status']})")
+            check("java 234% of a core went to another process during the capture" in run_report.render(results),
+                  "the report marks it")
+            check(run_report.compact(results)["rows"][0]["load"].get("busy") == "java 234%",
+                  "the short form keeps the mark")
+            check([(variant, count) for variant, count, _, _ in run_report.averages(results["rows"])]
+                  == [("A", 1), ("B", 1)], "the averages leave the spoiled launch out")
+
+        # Busy when the capture is due, then quiet: the capture waits.
+        quiet_after = [0.0]
+
+        def busy_before_capture(window, exclude=(), root=None):
+            if not exclude or window >= 0.3:
+                return []
+            if not quiet_after[0]:
+                quiet_after[0] = time.monotonic() + 1.3
+            return [("updatedb", 90.0)] if time.monotonic() < quiet_after[0] else []
+        perf_run.sample_load = busy_before_capture
+        status, results, _, printed = bench.run(bench.recipe(rows=["A"], load={"max_cpu_percent": 50, "wait": 30,
+                                                                              "window": 0.05, "every": 0.05}))
+        row = results["rows"][0]
+        check(status == 0 and row["status"] == "ok" and row["load"].get("waited_at_capture", 0) >= 1.0
+              and "waiting before the capture: updatedb" in printed,
+              f"a capture waits for a busy process to end ({row['load']})")
     finally:
         perf_run.sample_load = real
+    # A process born inside the window is counted (it was skipped before).
+    proc = bench.work / "proc"
+    def stat(pid, name, ticks):
+        (proc / str(pid)).mkdir(parents=True, exist_ok=True)
+        (proc / str(pid) / "stat").write_text(f"{pid} ({name}) S " + " ".join(["0"] * 10) + f" {ticks} 0 " + "0 " * 30)
+    stat(4001, "old", 100)
+    def born():
+        time.sleep(0.1)
+        stat(4002, "newborn", 50)
+        stat(4001, "old", 100)
+    helper = threading.Thread(target=born, daemon=True)
+    helper.start()
+    load = perf_run.sample_load(0.4, root=proc)
+    helper.join(5)
+    check(bool(load) and load[0][0] == "newborn", f"a process that began inside the window counts ({load})")
 
 
 def test_pause_and_resume(bench):

@@ -135,9 +135,14 @@ What the driver does by itself, because each has spoiled a row before:
   during which the machine slept (a closed lid: the game wakes up and carries
   on, with wrong waits and frame times) is treated the same way, and says how
   many seconds it slept.
-- **Other load.** It waits while another process uses more than
-  `max_cpu_percent` of a core, and notes the busiest other processes before the
-  launch and at the capture.
+- **Other load.** Before a launch (`wait`) and again before a capture
+  (`wait_at_capture`, 120 seconds unless `wait` is shorter) it waits while
+  another process uses more than `max_cpu_percent` of a core, and it measures
+  the other processes over the capture itself. A row captured beside a
+  process over the limit is kept, marked `flagged: other load during the
+  capture (java 234% of a core)` and run again like a row whose power changed.
+  The first run on the laptop showed why: a process that was not ours started
+  inside a row, the row lost a sixth of its frame rate and still read "ok".
 - **Leftovers.** No launch while a process of the same binary still runs, and
   the run stops while a program named in `stop_if_running` does.
 - **The guard.** Listings (names, sizes, times, never contents) of the `guard`
