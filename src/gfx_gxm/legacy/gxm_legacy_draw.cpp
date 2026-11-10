@@ -273,6 +273,11 @@ struct DrawState
     uint64_t pipelineLookups = 0, pipelineHits = 0;
     const SceGxmVertexProgram *boundVertex = nullptr;
     const SceGxmFragmentProgram *boundFragment = nullptr;
+    // What each fragment texture unit holds in the open scene (bit set in
+    // unitBound), so that a draw does not set what is set already.
+    SceGxmTexture unitView[SCE_GXM_MAX_TEXTURE_UNITS];
+    uint32_t unitBound = 0;
+    uint64_t textureBinds = 0, textureBindsLeftOut = 0, textureViewsMade = 0;
     FixedState fixed{};
     bool fixedValid = false;
 
@@ -1122,6 +1127,7 @@ bool OpenScene(Device &device)
     d.boundVertex = nullptr;
     d.boundFragment = nullptr;
     d.fixedValid = false;
+    d.unitBound = 0;
     ++d.scenes;
     ++device.stats.passes;
     return true;
@@ -1339,14 +1345,45 @@ bool BindTextures(Device &device, const Variant &pixel, void *uniforms)
         }
         const bool linearMin = ss[d3d::SAMP_MINFILTER] >= d3d::TEXF_LINEAR;
         const bool linearMag = ss[d3d::SAMP_MAGFILTER] >= d3d::TEXF_LINEAR;
-        sceGxmTextureSetMagFilter(&view, linearMag ? SCE_GXM_TEXTURE_FILTER_LINEAR : SCE_GXM_TEXTURE_FILTER_POINT);
-        sceGxmTextureSetMinFilter(&view, linearMin ? SCE_GXM_TEXTURE_FILTER_LINEAR : SCE_GXM_TEXTURE_FILTER_POINT);
-        sceGxmTextureSetMipFilter(&view, ss[d3d::SAMP_MIPFILTER] == d3d::TEXF_LINEAR
-                                             ? SCE_GXM_TEXTURE_MIP_FILTER_ENABLED
-                                             : SCE_GXM_TEXTURE_MIP_FILTER_DISABLED);
-        sceGxmTextureSetUAddrMode(&view, AddressMode(ss[d3d::SAMP_ADDRESSU]));
-        sceGxmTextureSetVAddrMode(&view, AddressMode(ss[d3d::SAMP_ADDRESSV]));
-        sceGxmSetFragmentTexture(Gxm(), unsigned(pixel.textureUnit[i]), &view);
+        const bool linearMip = ss[d3d::SAMP_MIPFILTER] == d3d::TEXF_LINEAR;
+        // Everything the five calls below take from the sampler state.
+        const uint32_t bits = uint32_t(linearMin) | uint32_t(linearMag) << 1 | uint32_t(linearMip) << 2 |
+                              (ss[d3d::SAMP_ADDRESSU] & 0xffu) << 8 | (ss[d3d::SAMP_ADDRESSV] & 0xffu) << 16;
+        // Its own view, not a stand-in's: the one kept with the texture serves.
+        const bool own = texture && texture->sampleable;
+        if (own && texture->viewBits == bits && std::memcmp(&texture->viewOf, &view, sizeof(view)) == 0)
+            view = texture->view;
+        else
+        {
+            const SceGxmTexture plainView = view;
+            sceGxmTextureSetMagFilter(&view, linearMag ? SCE_GXM_TEXTURE_FILTER_LINEAR : SCE_GXM_TEXTURE_FILTER_POINT);
+            sceGxmTextureSetMinFilter(&view, linearMin ? SCE_GXM_TEXTURE_FILTER_LINEAR : SCE_GXM_TEXTURE_FILTER_POINT);
+            sceGxmTextureSetMipFilter(&view, linearMip ? SCE_GXM_TEXTURE_MIP_FILTER_ENABLED
+                                                       : SCE_GXM_TEXTURE_MIP_FILTER_DISABLED);
+            sceGxmTextureSetUAddrMode(&view, AddressMode(ss[d3d::SAMP_ADDRESSU]));
+            sceGxmTextureSetVAddrMode(&view, AddressMode(ss[d3d::SAMP_ADDRESSV]));
+            ++d.textureViewsMade;
+            if (own)
+            {
+                texture->viewOf = plainView;
+                texture->view = view;
+                texture->viewBits = bits;
+            }
+        }
+        const unsigned unit = unsigned(pixel.textureUnit[i]);
+        ++d.textureBinds;
+        if (unit < SCE_GXM_MAX_TEXTURE_UNITS && (d.unitBound & (1u << unit)) &&
+            std::memcmp(&d.unitView[unit], &view, sizeof(view)) == 0)
+            ++d.textureBindsLeftOut;
+        else
+        {
+            sceGxmSetFragmentTexture(Gxm(), unit, &view);
+            if (unit < SCE_GXM_MAX_TEXTURE_UNITS)
+            {
+                d.unitView[unit] = view;
+                d.unitBound |= 1u << unit;
+            }
+        }
         if (pixel.depth[i] && uniforms)
             sceGxmSetUniformDataF(uniforms, pixel.depth[i], 0, 1, &depth);
     }
@@ -2878,6 +2915,7 @@ void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const
     sceGxmTextureSetVAddrMode(&view, SCE_GXM_TEXTURE_ADDR_CLAMP);
     SceGxmContext *context = Gxm();
     sceGxmSetFragmentTexture(context, unsigned(d.copyUnit), &view);
+    d.unitBound = 0; // a unit's texture changed behind BindTextures
     sceGxmSetVertexStream(context, 0, quad);
     sceGxmDraw(context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, d.sequential, 4);
     ++d.copies;
@@ -2965,9 +3003,13 @@ void LogDrawSummary(Device &device)
         (unsigned long long)d->drawn, (unsigned long long)d->copies, (unsigned long long)d->scenes, unsigned(d->vertexPrograms.size()),
         unsigned(d->fragmentPrograms.size()), d->variantsMade, d->variantFailures, (unsigned long long)d->renames,
         (unsigned long long)d->ringOverflows, d->drawFailures);
-    // What the draws did not do again (Pipeline).
-    Log(device, "draw work left out: %llu of %llu draws found their programs in the table",
-        (unsigned long long)d->pipelineHits, (unsigned long long)d->pipelineLookups);
+    // What the draws did not do again (Pipeline, BindTextures).
+    Log(device,
+        "draw work left out: %llu of %llu draws found their programs in the table; of %llu texture binds %llu were "
+        "set already and %llu set their filters anew",
+        (unsigned long long)d->pipelineHits, (unsigned long long)d->pipelineLookups,
+        (unsigned long long)d->textureBinds, (unsigned long long)d->textureBindsLeftOut,
+        (unsigned long long)d->textureViewsMade);
     for (int i = 0; i < SkipCount; ++i)
         if (d->skipped[i])
             Log(device, "draws skipped: %llu x %s", (unsigned long long)d->skipped[i], kSkipNames[i]);

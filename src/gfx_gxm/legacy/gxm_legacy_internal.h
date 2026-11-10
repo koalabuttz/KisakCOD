@@ -156,6 +156,11 @@ struct Texture
     // sampleable false: draws bind a stand-in (cube and depth textures).
     SceGxmTexture sampled;
     bool sampleable = false;
+    // `sampled` with the filters and addressing of the last draw that bound
+    // it (viewBits), for as long as `sampled` is still viewOf. A texture is
+    // nearly always sampled one way, so most draws set none of that again.
+    mutable SceGxmTexture view, viewOf;
+    mutable uint32_t viewBits = ~0u;
     // Depth formats: the depth-stencil surface scenes use.
     SceGxmDepthStencilSurface depthSurface;
     // Swizzled textures (cubes, and block-compressed 2D textures, which
