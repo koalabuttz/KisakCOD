@@ -11,9 +11,9 @@ what is still missing. Build steps are in the
 - [Multiplayer client](linux-mp-client.md): `KisakCOD-mp`, the whole game in one
   native process; playable on a listen server (i386 and x86_64). It joins a
   remote server with a key code or, opt-in, through Steam
-- [Singleplayer game](linux-sp-game.md): `KisakCOD-sp` (i386), built like the
+- [Singleplayer game](linux-sp-game.md): `KisakCOD-sp`, built like the
   multiplayer client from the singleplayer lists; killhouse and cargoship load
-  and play
+  and play on i386, and the x86_64 build has not loaded a level yet
 - [Singleplayer levels](linux-sp-levels.md): what the other levels use, the
   level sweep tool and the laptop run plan
 - [Cinematics](linux-cinematics.md): Bink movies through an FFmpeg-backed shim
@@ -91,6 +91,13 @@ in a build with `KISAK_BUILD_VULKAN_BACKEND`. Bottom to top:
 - [Legacy adapter](vulkan-legacy-adapter.md): the part of D3D9 the renderer uses, on the core, with a pixel check
 - [D3D9 front](vulkan-d3d9-front.md): the D3D9 interfaces on the adapter, and [the back end in the game](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan) on Linux and Windows, its dvars, caches and the comparison with DXVK
 
+## Performance
+
+- [Measuring a change from inside the game](perf-ab.md): `perf_ab` and
+  `perf_sample` compare two settings in one launch (Linux and the other
+  native builds, not Windows yet), with the switches to measure:
+  `r_gpuSyncSleep` and `xanim_blendOnce`, both off by default
+
 ## Upstream
 
 - [Upstream patch queue](upstream/README.md): changes prepared for the
@@ -100,6 +107,12 @@ in a build with `KISAK_BUILD_VULKAN_BACKEND`. Bottom to top:
 ## Tests
 
 - [Asset-free tests](../scripts/tests/README.md)
+- [What hosted CI runs, and when](ci.md): what a pull request runs, what waits
+  for the merge, and why a draft runs nothing
+- [Runs on the test machines](runs.md): the `framelog` frame-rate line, the
+  recipe-driven frame-rate driver and its checksummed results file, short PS
+  Vita starts, and what a run on a machine with a GPU or game data may and may
+  not keep
 - [D3DX shader runtime check](../scripts/tests/d3dx_shader_runtime.md)
 
 ## History

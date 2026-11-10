@@ -263,6 +263,14 @@ struct DrawState
 
     uint64_t drawn = 0, skipped[SkipCount] = {};
     uint64_t renames = 0, ringOverflows = 0;
+    // Every wait for the GPU (FinishGpu): after one, nothing drawn before it
+    // is still read.
+    uint64_t gpuWaits = 0;
+    // Renames that found no room and waited for the GPU, renames a wait since
+    // the buffer's last draw made needless, and the bytes of renamed buffers'
+    // old memory the GPU may still read.
+    uint64_t renameWaits = 0, renamesSpared = 0;
+    uint32_t renamedWaiting = 0, renamedWaitingMost = 0;
     uint32_t drawFailures = 0, uniformFailures = 0;
     uint64_t copies = 0;
     uint32_t variantsMade = 0, variantFailures = 0;
@@ -588,39 +596,75 @@ uint64_t VariantKey(const gxm::cg::Options &options)
            (options.farPlaneInside ? 0x5a5a000000000000ull : 0) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
 }
 
-// The shader's program for these options: made, compiled and registered on
-// first use. Null when it cannot be had (logged once per variant).
-Variant *GetVariant(Device &device, Shader &shader, const gxm::cg::Options &options)
+// The shader's program for these options. It is asked for on first use and
+// made on the program cache's thread (the default one was asked for when the
+// shader was created); the first call that finds it ready registers it.
+// Null while it is being made, with waiting set: the draw is left out of
+// this frame and its program moves to the front of the queue, so no frame
+// waits for the card or the compiler. Null as well when it cannot be had
+// (the cache's failures are logged once a frame, LogProgramFailures).
+Variant *GetVariant(Device &device, Shader &shader, const gxm::cg::Options &options, bool &waiting)
 {
     const uint64_t key = VariantKey(options);
+    DrawState &d = *device.draw;
+    Variant *found = nullptr;
     for (const auto &variant : shader.variants)
         if (variant->key == key)
-            return variant->failed ? nullptr : variant.get();
-    DrawState &d = *device.draw;
-    std::unique_ptr<Variant> variant(new Variant);
-    variant->key = key;
-    if (key == 0)
+        {
+            found = variant.get();
+            break;
+        }
+    if (!found)
     {
-        variant->gxp = shader.program;
-        variant->cacheKey = shader.programCacheKey;
+        std::unique_ptr<Variant> variant(new Variant);
+        variant->key = key;
+        if (key == 0)
+            variant->request = shader.request;
+        else
+        {
+            const gxm::ShaderStage stage = shader.pixel ? gxm::ShaderStage::Fragment : gxm::ShaderStage::Vertex;
+            std::string cg, error;
+            if (gxm::cg::Emit(shader.parsed, options, cg, error))
+            {
+                char label[64];
+                std::snprintf(label, sizeof(label), "%s shader variant %016llx", shader.pixel ? "pixel" : "vertex",
+                              (unsigned long long)key);
+                variant->request = gxm::RequestProgram(std::move(cg), stage, label);
+            }
+            else if (d.variantFailures++ < 20)
+                Log(device, "%s shader variant %016llx was not translated: %s", shader.pixel ? "pixel" : "vertex",
+                    (unsigned long long)key, error.c_str());
+        }
+        if (variant->request)
+            variant->cacheKey = variant->request->key;
+        else
+            variant->failed = true;
+        ++d.variantsMade;
+        shader.variants.push_back(std::move(variant));
+        found = shader.variants.back().get();
     }
-    else
+    if (found->request)
     {
-        const gxm::ShaderStage stage = shader.pixel ? gxm::ShaderStage::Fragment : gxm::ShaderStage::Vertex;
-        std::string cg, error, log;
-        if (!gxm::cg::Emit(shader.parsed, options, cg, error))
-            log = error;
-        else if (variant->cacheKey = gxm::ProgramCacheKey(cg, stage); !gxm::GetProgram(cg, stage, variant->gxp, log))
-            variant->gxp.clear();
-        if (variant->gxp.empty() && d.variantFailures++ < 20)
-            Log(device, "%s shader variant %016llx did not compile: %s", shader.pixel ? "pixel" : "vertex",
-                (unsigned long long)key, log.substr(0, log.find('\n')).c_str());
+        switch (found->request->state.load(std::memory_order_acquire))
+        {
+        case gxm::ProgramState::Waiting:
+            gxm::HurryProgram(found->request);
+            waiting = true;
+            return nullptr;
+        case gxm::ProgramState::Ready:
+            // A copy: the default variant's request stays with its shader.
+            found->gxp = found->request->program;
+            Register(device, *found, "shader variant");
+            break;
+        case gxm::ProgramState::Failed:
+            found->failed = true;
+            if (key != 0)
+                ++d.variantFailures;
+            break;
+        }
+        found->request.reset();
     }
-    ++d.variantsMade;
-    Register(device, *variant, "shader variant");
-    shader.variants.push_back(std::move(variant));
-    Variant *made = shader.variants.back().get();
-    return made->failed ? nullptr : made;
+    return found->failed ? nullptr : found;
 }
 
 void ReleaseVertexProgram(Device &device, SceGxmVertexProgram *program)
@@ -1905,6 +1949,8 @@ void FinishGpu(Device &device)
 {
     EndScene(device);
     gxm::Finish();
+    if (device.draw)
+        ++device.draw->gpuWaits;
 }
 
 void FrameDone(Device &device)
@@ -1969,22 +2015,50 @@ void ForgetDecl(Device &device, VertexDecl &decl)
         DropProgramsIf(device, [&](const VertexProgramEntry &e) { return e.decl == &decl; }, nullptr);
 }
 
+// The engine locks most of its dynamic buffers with DISCARD every frame, and
+// the old memory of each rename waits kFramesInFlight frames. So a buffer can
+// hold four times its size, and the pools have no room for that in a game.
+// The fresh memory therefore comes from the pool the buffer belongs in (main
+// for dynamic buffers) and from no other: copies that spilled into CDRAM took
+// the room the game's render targets needed, in pieces. When that pool is
+// full, the lock waits for the GPU and writes in place. One such wait serves
+// every buffer drawn before it: until a draw reads one again, its locks
+// write in place too.
 void Rename(Device &device, GpuBuffer &buffer)
 {
-    Memory fresh;
-    const bool dynamic = (buffer.usage & d3d::USAGE_DYNAMIC) != 0;
-    if (!AllocateMemory(device, fresh, buffer.size, 16, buffer.pool, !dynamic, buffer.memory.use,
-                        buffer.name.c_str()))
+    DrawState &d = *device.draw;
+    if (buffer.drawnWait != d.gpuWaits)
     {
-        // No memory: wait for the GPU instead.
-        FinishGpu(device);
         buffer.drawn = false;
+        ++d.renamesSpared;
         return;
     }
-    Retire(device, buffer.memory);
+    Memory fresh;
+    const bool dynamic = (buffer.usage & d3d::USAGE_DYNAMIC) != 0;
+    if (!AllocateRenamed(fresh, buffer.size, 16, dynamic ? gxm::MemoryKind::Main : gxm::MemoryKind::Cdram,
+                         buffer.memory.use))
+    {
+        FinishGpu(device);
+        buffer.drawn = false;
+        ++d.renameWaits;
+        return;
+    }
+    {
+        const gxm::MemoryKind kind = buffer.memory.kind;
+        void *data = buffer.memory.data;
+        const MemoryUse use = buffer.memory.use;
+        const uint32_t bytes = buffer.memory.bytes;
+        DrawState *state = &d;
+        d.renamedWaiting += bytes;
+        d.renamedWaitingMost = std::max(d.renamedWaitingMost, d.renamedWaiting);
+        Defer(device, [state, kind, data, use, bytes] {
+            FreeGpuMemory(kind, data, use, bytes);
+            state->renamedWaiting -= bytes;
+        });
+    }
     buffer.memory = std::move(fresh);
     buffer.drawn = false;
-    ++device.draw->renames;
+    ++d.renames;
     ++device.stats.dynamicRenames;
 }
 
@@ -2234,6 +2308,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         }
         indexData = ib->memory.data + startIndex * bytes;
         ib->drawn = true;
+        ib->drawnWait = d.gpuWaits;
     }
     else if (indexCount > kSequentialIndices)
     {
@@ -2265,8 +2340,10 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
                 vsUsed = &synthetic;
         }
     }
+    // Both programs are asked for before either is waited on.
+    bool waiting = false;
     if (!vertex)
-        vertex = GetVariant(device, *vsUsed, plan.options);
+        vertex = GetVariant(device, *vsUsed, plan.options, waiting);
     gxm::cg::Options pixelOptions;
     if (device.renderStates[d3d::RS_ALPHATESTENABLE])
     {
@@ -2274,10 +2351,17 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         if (func >= d3d::CMP_NEVER && func < d3d::CMP_ALWAYS)
             pixelOptions.alphaFunc = gxm::cg::AlphaFunc(func);
     }
-    Variant *pixel = GetVariant(device, *ps, pixelOptions);
+    Variant *pixel = GetVariant(device, *ps, pixelOptions, waiting);
     if (!vertex || !pixel)
     {
-        CountSkip(device, SkipNoProgram);
+        if (waiting)
+        {
+            // Not a failure: the draw comes back once its program is made.
+            ++device.shaderCounts.drawsWaited;
+            device.shaderCounts.waitedThisFrame = true;
+        }
+        else
+            CountSkip(device, SkipNoProgram);
         return;
     }
     bool diagPixel = false;
@@ -2363,6 +2447,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             return;
         }
         vb->drawn = true;
+        vb->drawnWait = d.gpuWaits;
         streamData[i] = vb->memory.data + int64_t(device.streams[s].offset) + int64_t(baseVertex) * strides[s];
     }
 
@@ -2754,5 +2839,10 @@ void LogDrawSummary(Device &device)
     for (int i = 0; i < SkipCount; ++i)
         if (d->skipped[i])
             Log(device, "draws skipped: %llu x %s", (unsigned long long)d->skipped[i], kSkipNames[i]);
+    Log(device,
+        "buffer renames: %llu took fresh memory, %llu waited for the GPU instead (their pool was full) and %llu "
+        "needed neither (a wait since their last draw); old copies the GPU might still read took %u KB at most",
+        (unsigned long long)d->renames, (unsigned long long)d->renameWaits, (unsigned long long)d->renamesSpared,
+        d->renamedWaitingMost >> 10);
 }
 } // namespace gfx_vk::legacy

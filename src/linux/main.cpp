@@ -20,6 +20,7 @@
 #include "sys_critical.h"
 #include "sys_files.h"
 #include "sys_memory.h"
+#include "sys_perf.h"
 #include "sys_threads.h"
 #include "sys_time.h"
 #include "sys_events.h"
@@ -754,6 +755,8 @@ void Sys_Init()
     Cmd_AddCommandInternal("net_restart", Sys_Net_Restart_f, &Sys_Net_Restart_f_VAR);
     Cmd_AddCommandInternal("net_listen", Sys_Listen_f, &Sys_Listen_f_VAR);
 #endif
+    // perf_ab, perf_sample and perf_stop (docs/perf-ab.md).
+    Sys_PerfInit();
 
     Com_Printf(CON_CHANNEL_SYSTEM, "CPU vendor is \"%s\"\n", sys_info.cpuVendor);
     Com_Printf(CON_CHANNEL_SYSTEM, "CPU name is \"%s\"\n", sys_info.cpuName);
@@ -963,6 +966,8 @@ int main(int argc, char **argv)
         Vita_FrameBegin();
 #endif
         Com_Frame();
+        // Records the frame when a perf_ab or perf_sample run is on.
+        Sys_PerfFrame();
 #if defined(__vita__)
         Vita_FrameEnd();
 #endif

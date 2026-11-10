@@ -255,6 +255,7 @@ a usage error.
 | `draw` | Static vertex and index buffers, a draw from memory (stream 0 unbound after it), a textured quad, a vertex shader constant, `GetTexture`. |
 | `render_target` | A render-target texture's level with a depth surface (viewport follows the target), the getters, sampling it afterwards, `StretchRect` into the back buffer. |
 | `shadow_map` | The sun shadow's path: a D24S8 texture made with `D3DUSAGE_DEPTHSTENCIL` as the depth target beside a R5G6B5 colour target, then sampled with linear filtering as a hardware shadow map (0 behind the stored depth, 1 in front). |
+| `model_lighting` | The model lighting volume's two update paths (`r_altModelLightingUpdate` 0 and 1), with the renderer's own sizes, flags and call order: a MANAGED volume locked whole and patched in place, against a SYSTEMMEM volume locked with `D3DLOCK_NO_DIRTY_UPDATE`, `AddDirtyBox` per cell and `UpdateTexture` into a DEFAULT volume. Two frames of patches; every texel of four cells is drawn from both and must be the same: written cells, a cell written twice, a cell left alone by the second frame, a cell never written. |
 | `references` | Counts of textures and their levels, `GetContainer`, `QueryInterface`, a released texture that still draws while bound and goes when unbound, the back buffer's and swap chain's own counts (last `Release` returns 0) and the device reference they hold. |
 | `threads` | A worker thread creating and filling textures while this thread draws and presents; the last one drawn and read back; nothing left alive. |
 | `queries` | Support checks, an event query and an occlusion query finishing (with samples), and an event issued right after `Present` (the engine's swap fence) finishing without a flush while the next frame records; polled with `D3DGETDATA_FLUSH` while its frame is unfinished, it submits the next frame's work once, and the frame goes on with its state and contents. |
@@ -534,17 +535,38 @@ evidence):
 * Picture: models drew dark where the profile had
   `r_altModelLightingUpdate 0`, because the adapter dropped a texture's
   contents when it was locked again; fixed, and run 7 matches DXVK at 40.1 dB
-  there. With `r_altModelLightingUpdate 1` (the default) models are still 2.7
-  to 6.7 luma darker than through DXVK (33.6 dB); not explained yet.
+  there. With `r_altModelLightingUpdate 1` (the default) run 7 had models 2.7
+  to 6.7 luma darker than through DXVK (33.6 dB, one screenshot each). That is
+  not a fault of this back end: on the Windows PC (RTX 2080 SUPER, PC run 6)
+  real Direct3D 9 and Vulkan, each at 0 and at 1, draw the same brightness.
+  Five launches with three screenshots each gave a mean luma between 63.50
+  and 63.90 for all 15, and no cell of a 4x4 grid differs between any two
+  settings by more than it moves inside one launch. The laptop, measured
+  again the same way (model lighting laptop run 1: DXVK at 0, at 1 and at 1
+  again, Vulkan at 0 and at 1), shows no difference either: no cell of a 4x4
+  or an 8x8 grid is beyond its spread in any pair, and Vulkan against DXVK
+  at 1 (39.5 dB) is closer than DXVK against its own repeat (36.8 dB). Run
+  7's gap was the view moving: one launch's three shots there read a mean
+  luma of 65.70, 65.84 and 67.05. DXVK 2.7.1 itself gives the same texels on
+  both paths (a plain Direct3D 9 program with random patches,
+  `renderer/model-lighting/model_lighting_d3d9.cpp` in the project files:
+  0 of 9.8 million texels differ on the laptop's DXVK and Intel driver).
+* Comparing screenshots of that indoor view (`setviewpos 1504 512 200 90 0`
+  on mp_crash): one pair says little. Parts of the view move, and each launch
+  lands in one of a few states: on the PC a plain repeat of the same launch
+  was 31.1 dB from its twin, while two shots inside one launch are about 50
+  dB apart. Compare the mean luma per grid cell over several shots of each
+  launch, with a repeated launch as the baseline
+  (`renderer/model-lighting/luma_grid.py` in the project files).
 
-Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9}.md` in the project
-files.
+Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9}.md`,
+`renderer/vulkan-backend-pc-run-6.md` and
+`renderer/model-lighting/laptop-run-1.md` in the project files.
 
 ## Next
 
 The rest of the frame rate gap to DXVK (how often to feed the GPU, then the
-render thread's time per draw), the model lighting difference above, a look
-at the sun's flare on a GPU now that occlusion queries count samples (until
-2026-11-10 the adapter reported every sample as passed, which the engine
-reads as a sun in full view; the counting has run on lavapipe only), and a
-long frame about every two minutes.
+render thread's time per draw), a look at the sun's flare on a GPU now that
+occlusion queries count samples (until 2026-11-10 the adapter reported every
+sample as passed, which the engine reads as a sun in full view; the counting
+has run on lavapipe only), and a long frame about every two minutes.

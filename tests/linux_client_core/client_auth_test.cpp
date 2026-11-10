@@ -30,11 +30,17 @@ void _copyDWord(uint32_t *dest, uint32_t value, uint32_t count) { std::fill_n(de
 static int sends, authErrors;
 void MyAssertHandler(const char *, int, int, const char *, ...) { std::abort(); }
 void Com_Error(errorParm_t, const char *, ...) { std::abort(); }
-void Com_Printf(int, const char *, ...) {}
-void Com_PrintError(int, const char *format, ...) {
-    char text[256]; va_list args; va_start(args, format);
+static std::string printed; // everything the console was told, errors included
+void Com_Printf(int, const char *format, ...) {
+    char text[512]; va_list args; va_start(args, format);
     std::vsnprintf(text, sizeof(text), format, args); va_end(args);
-    iassert(std::strstr(text, "authentication unavailable")); ++authErrors;
+    printed += text;
+}
+void Com_PrintError(int, const char *format, ...) {
+    char text[512]; va_list args; va_start(args, format);
+    std::vsnprintf(text, sizeof(text), format, args); va_end(args);
+    iassert(std::strstr(text, "authentication unavailable") || std::strstr(text, "The key code was not saved"));
+    printed += text; ++authErrors;
 }
 bool Sys_IsLANAddress(netadr_t) { return true; }
 void CL_RequestAuthorization(int) { std::abort(); } // LAN configuration excludes legacy auth.
@@ -174,6 +180,86 @@ int main()
     unlink(keyPath.c_str());
     check(CL_PrepareRemoteAuth(server, home, true) == ClientAuthMethod::none && authErrors == 5,
         "no key file and no Steam: none");
+
+    // ---- the key code menu: save a typed key, report on the stored one ----
+    auto fileText = [](const std::string &path) {
+        std::string text;
+        if (std::FILE *in = std::fopen(path.c_str(), "rb"))
+        {
+            char block[256];
+            const size_t got = std::fread(block, 1, sizeof(block), in);
+            text.assign(block, got);
+            std::fclose(in);
+        }
+        return text;
+    };
+    auto fileMode = [](const std::string &path) {
+        struct stat info;
+        return lstat(path.c_str(), &info) == 0 ? static_cast<int>(info.st_mode & 07777) : -1;
+    };
+    const int errorsBeforeMenu = authErrors;
+    printed.clear();
+    check(CL_StoredKeyCodeStatus(home) == KeyCodeStatus::missing && printed.empty() && authErrors == errorsBeforeMenu,
+        "no stored key: missing, and asking prints nothing");
+    const mode_t oldMask = umask(0);
+    check(CL_SaveKeyCode(home, "k1sakc0dtestkey98b44") == KeyCodeStatus::ok, "a typed key code is saved");
+    umask(oldMask);
+    check(fileText(keyPath) == "K1SA-KC0D-TEST-KEY9-8B44\n", "saved as five dashed groups and a line ending");
+    check(fileMode(keyPath) == 0600, "saved readable by the user only, even with an open umask");
+    check(access((keyPath + ".tmp").c_str(), F_OK) != 0, "nothing is left beside the saved file");
+    check(printed.find("33e2463444a0b14224e9592469933bd1") != std::string::npos, "saving names the GUID");
+    check(printed.find("K1SA") == std::string::npos && printed.find("k1sa") == std::string::npos
+        && printed.find("8B44") == std::string::npos && printed.find("8b44") == std::string::npos,
+        "saving never prints the key");
+    check(CL_StoredKeyCodeStatus(home) == KeyCodeStatus::ok, "the saved key is the stored key");
+    check(CL_PrepareRemoteAuth(server, home, false) == ClientAuthMethod::keyCode, "a connect uses the saved key");
+    printed.clear();
+    check(CL_SaveKeyCode(home, "K1SAKC0DTESTKEY98B45") == KeyCodeStatus::badChecksum
+        && fileText(keyPath) == "K1SA-KC0D-TEST-KEY9-8B44\n" && authErrors == errorsBeforeMenu + 1,
+        "a mistyped key is refused and the stored key stays");
+    check(printed.find("K1SA") == std::string::npos && printed.find("8B45") == std::string::npos,
+        "a refused key is not printed either");
+    check(CL_SaveKeyCode(home, "K1SAKC0DTESTKEY9") == KeyCodeStatus::malformed
+        && CL_SaveKeyCode(home, "") == KeyCodeStatus::malformed
+        && fileText(keyPath) == "K1SA-KC0D-TEST-KEY9-8B44\n", "a short or empty entry is refused");
+    // A second made-up key replaces the first whole.
+    char second[21];
+    std::snprintf(second, sizeof(second), "SEC0NDMADEUPKEY2%04X", CL_KeyCodeCrc("SEC0NDMADEUPKEY2", 16));
+    check(CL_SaveKeyCode(home, second) == KeyCodeStatus::ok && fileText(keyPath).compare(0, 19, "SEC0-NDMA-DEUP-KEY2") == 0
+        && fileMode(keyPath) == 0600, "a new key replaces the stored one");
+    // A stored file others can read is replaced by one they cannot.
+    chmod(keyPath.c_str(), 0644);
+    check(CL_StoredKeyCodeStatus(home) == KeyCodeStatus::unsafePermissions, "a readable-by-others file is not a stored key");
+    check(CL_SaveKeyCode(home, "K1SAK-C0DTE-STKEY-98B44") == KeyCodeStatus::ok && fileMode(keyPath) == 0600,
+        "saving over it leaves a private file");
+    // A link is replaced, never written through.
+    const std::string elsewhere = std::string(home) + "/elsewhere.txt";
+    unlink(keyPath.c_str());
+    std::FILE *other = std::fopen(elsewhere.c_str(), "w");
+    std::fputs("untouched\n", other);
+    std::fclose(other);
+    check(symlink(elsewhere.c_str(), keyPath.c_str()) == 0, "link in place of the key file");
+    check(CL_SaveKeyCode(home, "K1SAK-C0DTE-STKEY-98B44") == KeyCodeStatus::ok && fileText(elsewhere) == "untouched\n"
+        && fileMode(keyPath) == 0600, "a link is replaced by the file, and its target is not written");
+    // A leftover from an interrupted save, even a link, does not get in the way.
+    check(symlink(elsewhere.c_str(), (keyPath + ".tmp").c_str()) == 0, "stale link beside the key file");
+    check(CL_SaveKeyCode(home, "K1SAK-C0DTE-STKEY-98B44") == KeyCodeStatus::ok && fileText(elsewhere) == "untouched\n",
+        "a stale leftover link is removed, not followed");
+    unlink(elsewhere.c_str());
+    unlink(keyPath.c_str());
+    // The home folder is made when it is missing (one level), private.
+    const std::string freshHome = std::string(home) + "/fresh";
+    check(CL_SaveKeyCode(freshHome.c_str(), "K1SAK-C0DTE-STKEY-98B44") == KeyCodeStatus::ok
+        && fileMode(freshHome) == 0700 && fileMode(freshHome + "/codkey.txt") == 0600, "a missing home folder is created private");
+    unlink((freshHome + "/codkey.txt").c_str());
+    rmdir(freshHome.c_str());
+    // Nowhere to write: fails closed, says so, stores nothing.
+    const int errorsBeforeUnwritable = authErrors;
+    check(CL_SaveKeyCode((std::string(home) + "/no/such/folder").c_str(), "K1SAK-C0DTE-STKEY-98B44") == KeyCodeStatus::unwritable
+        && CL_SaveKeyCode("", "K1SAK-C0DTE-STKEY-98B44") == KeyCodeStatus::unwritable
+        && CL_SaveKeyCode(nullptr, "K1SAK-C0DTE-STKEY-98B44") == KeyCodeStatus::unwritable
+        && authErrors == errorsBeforeUnwritable + 3, "an unwritable place is reported");
+    check(!std::strcmp(CL_KeyCodeStatusName(KeyCodeStatus::unwritable), "unwritable"), "unwritable has a name");
     rmdir(home);
     clientUIActives[0].connectionState = CA_DISCONNECTED;
 

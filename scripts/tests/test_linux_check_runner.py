@@ -230,6 +230,7 @@ class PlannedCommandTests(unittest.TestCase):
             "assert_continue",
             "sl_trace",
             "phys_objid",
+            "perf_ab",
         ]
         self.assertEqual([check.name for check in self.checks], known)
 

@@ -12,7 +12,9 @@ platform code.
 
 - `BASE`: the upstream commit every patch is made on.
 - `patches/NNNN-topic.patch`: one `git format-patch` file per future pull
-  request. Each applies to `BASE` alone.
+  request. Each applies to `BASE` alone, unless `DEPENDS` lists it.
+- `DEPENDS`: the few patches made on top of another patch. A line
+  `0015: 0014` says 0015 can only be offered once 0014 is in.
 
 ## The queue
 
@@ -28,9 +30,30 @@ platform code.
 | 0008 | The cached tag name's string reference is lost on every map change | commit `5195157` |
 | 0009 | `deactivateReverb` and `deactivateChannelVolumes` send a format the client does not read | commit `f662443` |
 | 0010 | The script debugger reports a known field as unknown when its id has a zero low byte | commit `b39e6b9` |
+| 0011 | Every operator of a menu expression scans an 84-entry list for its handler (upstream issue 27) | commit `9a5768a` |
+| 0012 | A script with 32 chained `else if` branches or 200 nested parentheses crashes the script compiler | commit `31370c7` |
+| 0013 | Script parser error recovery reads in front of a grammar table | commit `27a760f` |
+| 0014 | Four `DvarFlags` names do not match what their bits do; two are swapped (upstream issue 30) | commits `d813766`, `f8ffa8b` |
+| 0015 | Dvars a script marks as serverinfo never reach the multiplayer serverinfo string | commit `88103e0` |
 
-Patches 0001 to 0004 are the proposed first batch; the rest follow in a
-second one.
+Patches 0001 to 0004 are the proposed first batch and 0005 to 0010 the
+second. 0011 to 0015 answer open upstream issues or sit next to one, and
+come after those.
+
+Open points on single patches, to settle before each is offered:
+
+- 0011 gives the same results as the scan, but its effect on menu frame time
+  has not been measured. Upstream issue 27 comes with profiler pictures, so
+  it needs a profile of a real menu first.
+- 0012 may be the crash in upstream issue 89 (mods that crash a listen
+  server): mod scripts often hold long `else if` chains. Nobody has run the
+  two mods named there, so the patch does not claim it.
+- 0014 is a rename across 16 files and has to be regenerated if upstream
+  touches a dvar registration first. Every use keeps its numeric value.
+- 0015 rests on retail 1.7 `iw3mp.exe` passing `0x404` as the mask. It has
+  not been run against a live server.
+- Upstream issue 36 needs nothing from the fork: upstream has already
+  commented out the copies it names.
 
 ## Rules
 
@@ -53,8 +76,9 @@ second one.
 # Rules only; needs nothing but this checkout.
 python3 scripts/tools/upstream_queue.py lint
 
-# Rules, and that every patch applies to the pinned base alone and all apply
-# in order. Fetching upstream is a read of a public repository.
+# Rules, and that every patch applies to the pinned base alone (or on the
+# patches DEPENDS names for it) and all apply in order. Fetching upstream is a
+# read of a public repository.
 git init -q /tmp/upstream
 git -C /tmp/upstream fetch -q --depth 1 https://github.com/SwagSoftware/KisakCOD.git "$(cat docs/upstream/BASE)"
 git -C /tmp/upstream checkout -q --detach FETCH_HEAD
@@ -71,6 +95,11 @@ own workflow. That build is of all patches together.
 2. Make the change there and commit it with a message that keeps the rules.
 3. `git format-patch -1 --zero-commit -N --no-signature --stdout > docs/upstream/patches/NNNN-topic.patch`
 4. Add a row to the table above and run the checks.
+
+A patch that cannot be made on `BASE` alone, because it changes lines another
+patch changes, is made on top of that patch's commit instead and gets a line
+in `DEPENDS`. Keep those rare: every one is a pull request that has to wait
+for another.
 
 When upstream moves, update `BASE` and refresh any patch that no longer
 applies.

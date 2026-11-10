@@ -1,0 +1,1091 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 05:23:57 +0000
+Subject: [PATCH] refactor: name the DvarFlags bits above 0x80 by what the code
+ does
+
+DVAR_AUTOEXEC and DVAR_CHANGEABLE_RESET sat on each other's bits:
+Dvar_SetCommand adds 0x8000 while an autoexec config loads, and
+Dvar_ChangeResetValue asserts on 0x200. DVAR_TEMP (0x100) is the bit
+the server sends as the CS_CODINFO configstrings, so it becomes
+DVAR_CODINFO. DVAR_NORESTART (0x400) is the serverinfo bit that script
+setDvar adds and Dvar_ResetScriptInfo clears on map load, so it becomes
+DVAR_SCRIPTINFO.
+
+Rename only: every use keeps its numeric value. The literals 256, 1024,
+0x404, 0x9200 and 0x8000 at those sites now use the names. This answers
+the naming question in upstream issue 30.
+---
+ src/bgame/bg_jump.cpp             |  10 +--
+ src/bgame/bg_mantle.cpp           |  12 +--
+ src/bgame/bg_misc.cpp             | 122 +++++++++++++++---------------
+ src/client/cl_devgui.cpp          |  16 ++--
+ src/game_mp/g_main_mp.cpp         |  42 +++++-----
+ src/game_mp/g_scr_main_mp.cpp     |   6 +-
+ src/gfx_d3d/r_dvars.cpp           |  14 ++--
+ src/gfx_d3d/r_init.cpp            |   2 +-
+ src/qcommon/com_playerprofile.cpp |   2 +-
+ src/qcommon/common.cpp            |   2 +-
+ src/server_mp/sv_init_mp.cpp      |   4 +-
+ src/server_mp/sv_main_mp.cpp      |  10 +--
+ src/universal/com_files.cpp       |   4 +-
+ src/universal/dvar.cpp            |   8 +-
+ src/universal/dvar_cmds.cpp       |   2 +-
+ src/universal/q_shared.h          |  14 ++--
+ 16 files changed, 136 insertions(+), 134 deletions(-)
+
+diff --git a/src/bgame/bg_jump.cpp b/src/bgame/bg_jump.cpp
+index 573695b7..b8a4ee28 100644
+--- a/src/bgame/bg_jump.cpp
++++ b/src/bgame/bg_jump.cpp
+@@ -21,23 +21,23 @@ void __cdecl Jump_RegisterDvars()
+ #ifdef KISAK_MP
+     min.value.max = 1000.0;
+     min.value.min = 0.0;
+-    jump_height = Dvar_RegisterFloat("jump_height", 39.0, min, DVAR_CHEAT | DVAR_TEMP, "The maximum height of a player's jump");
++    jump_height = Dvar_RegisterFloat("jump_height", 39.0, min, DVAR_CHEAT | DVAR_CODINFO, "The maximum height of a player's jump");
+     mina.value.max = 64.0;
+     mina.value.min = 0.0;
+     jump_stepSize = Dvar_RegisterFloat(
+         "jump_stepSize",
+         18.0,
+         mina,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The maximum step up to the top of a jump arc");
+-    jump_slowdownEnable = Dvar_RegisterBool("jump_slowdownEnable", 1, DVAR_CHEAT | DVAR_TEMP, "Slow player movement after jumping");
++    jump_slowdownEnable = Dvar_RegisterBool("jump_slowdownEnable", 1, DVAR_CHEAT | DVAR_CODINFO, "Slow player movement after jumping");
+     minb.value.max = 1024.0;
+     minb.value.min = 0.0;
+     jump_ladderPushVel = Dvar_RegisterFloat(
+         "jump_ladderPushVel",
+         128.0,
+         minb,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The velocity of a jump off of a ladder");
+     minc.value.max = 512.0;
+     minc.value.min = 0.0;
+@@ -45,7 +45,7 @@ void __cdecl Jump_RegisterDvars()
+         "jump_spreadAdd",
+         64.0,
+         minc,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The amount of spread scale to add as a side effect of jumping");
+ #elif KISAK_SP
+     min.value.max = 1000.0;
+diff --git a/src/bgame/bg_mantle.cpp b/src/bgame/bg_mantle.cpp
+index d2f31b6f..16ff38f0 100644
+--- a/src/bgame/bg_mantle.cpp
++++ b/src/bgame/bg_mantle.cpp
+@@ -66,15 +66,15 @@ void __cdecl Mantle_RegisterDvars()
+     DvarLimits minb; // [esp+4h] [ebp-14h]
+     DvarLimits minc; // [esp+4h] [ebp-14h]
+ 
+-    mantle_enable = Dvar_RegisterBool("mantle_enable", 1, DVAR_CHEAT | DVAR_TEMP, "Enable player mantling");
+-    mantle_debug = Dvar_RegisterBool("mantle_debug", 0, DVAR_CHEAT | DVAR_TEMP, "Show debug information for mantling");
++    mantle_enable = Dvar_RegisterBool("mantle_enable", 1, DVAR_CHEAT | DVAR_CODINFO, "Enable player mantling");
++    mantle_debug = Dvar_RegisterBool("mantle_debug", 0, DVAR_CHEAT | DVAR_CODINFO, "Show debug information for mantling");
+     min.value.max = 128.0f;
+     min.value.min = 0.0f;
+     mantle_check_range = Dvar_RegisterFloat(
+         "mantle_check_range",
+         20.0f,
+         min,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The minimum distance from a player to a mantle surface to allow a mantle");
+     mina.value.max = 15.0f;
+     mina.value.min = 0.0f;
+@@ -82,7 +82,7 @@ void __cdecl Mantle_RegisterDvars()
+         "mantle_check_radius",
+         0.1f,
+         mina,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The player radius to test against while mantling");
+     minb.value.max = 180.0f;
+     minb.value.min = 0.0f;
+@@ -90,7 +90,7 @@ void __cdecl Mantle_RegisterDvars()
+         "mantle_check_angle",
+         60.0f,
+         minb,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The minimum angle from the player to a mantle surface to allow a mantle");
+     minc.value.max = 180.0f;
+     minc.value.min = 0.0f;
+@@ -98,7 +98,7 @@ void __cdecl Mantle_RegisterDvars()
+         "mantle_view_yawcap",
+         60.0f,
+         minc,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The angle at which to restrict a sideways turn while mantling");
+ }
+ 
+diff --git a/src/bgame/bg_misc.cpp b/src/bgame/bg_misc.cpp
+index 2ab6faad..c22c87ea 100644
+--- a/src/bgame/bg_misc.cpp
++++ b/src/bgame/bg_misc.cpp
+@@ -357,7 +357,7 @@ void __cdecl BG_RegisterDvars()
+         "player_view_pitch_up",
+         85.0f,
+         mind,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "Maximum angle that the player can look up");
+     mine.value.max = 90.0f;
+     mine.value.min = 0.0f;
+@@ -365,7 +365,7 @@ void __cdecl BG_RegisterDvars()
+         "player_view_pitch_down",
+         85.0f,
+         mine,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "Maximum angle that the player can look down");
+     minf.value.max = 20.0f;
+     minf.value.min = 0.0f;
+@@ -373,7 +373,7 @@ void __cdecl BG_RegisterDvars()
+         "player_lean_shift_left",
+         5.0f,
+         minf,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "Amount to shift the player 3rd person model when leaning left");
+     ming.value.max = 20.0f;
+     ming.value.min = 0.0f;
+@@ -381,7 +381,7 @@ void __cdecl BG_RegisterDvars()
+         "player_lean_shift_right",
+         2.5f,
+         ming,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "Amount to shift the player 3rd person model when leaning right");
+     minh.value.max = 20.0f;
+     minh.value.min = 0.0f;
+@@ -389,7 +389,7 @@ void __cdecl BG_RegisterDvars()
+         "player_lean_shift_crouch_left",
+         12.5f,
+         minh,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "Amount to shift the player 3rd person model when crouch leaning left");
+     mini.value.max = 20.0f;
+     mini.value.min = 0.0f;
+@@ -397,7 +397,7 @@ void __cdecl BG_RegisterDvars()
+         "player_lean_shift_crouch_right",
+         13.0f,
+         mini,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "Amount to shift the player 3rd person model when crouch leaning right");
+     minj.value.max = 3.0f;
+     minj.value.min = 0.0f;
+@@ -405,7 +405,7 @@ void __cdecl BG_RegisterDvars()
+         "player_lean_rotate_left",
+         1.25f,
+         minj,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "Amount to rotate the player 3rd person model when leaning left");
+     mink.value.max = 3.0f;
+     mink.value.min = 0.0f;
+@@ -413,7 +413,7 @@ void __cdecl BG_RegisterDvars()
+         "player_lean_rotate_right",
+         1.25f,
+         mink,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "Amount to rotate the player 3rd person model when leaning right");
+     minl.value.max = 3.0f;
+     minl.value.min = 0.0f;
+@@ -421,7 +421,7 @@ void __cdecl BG_RegisterDvars()
+         "player_lean_rotate_crouch_left",
+         1.25f,
+         minl,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "Amount to rotate the player 3rd person model when crouch leaning left");
+     minm.value.max = 3.0f;
+     minm.value.min = 0.0f;
+@@ -429,7 +429,7 @@ void __cdecl BG_RegisterDvars()
+         "player_lean_rotate_crouch_right",
+         1.0f,
+         minm,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "Amount to rotate the player 3rd person model when crouch leaning right");
+ #ifdef KISAK_MP
+     minn.value.max = 360.0f;
+@@ -438,7 +438,7 @@ void __cdecl BG_RegisterDvars()
+         "bg_ladder_yawcap",
+         100.0f,
+         minn,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The maximum angle that a player can look around while on a ladder");
+     mino.value.max = 360.0f;
+     mino.value.min = 0.0f;
+@@ -446,7 +446,7 @@ void __cdecl BG_RegisterDvars()
+         "bg_prone_yawcap",
+         85.0f,
+         mino,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The maximum angle that a player can look around quickly while prone");
+     minp.value.max = FLT_MAX;
+     minp.value.min = 0.0f;
+@@ -454,7 +454,7 @@ void __cdecl BG_RegisterDvars()
+         "bg_foliagesnd_minspeed",
+         40.0f,
+         minp,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The speed that a player must be going to make minimum noise while moving through foliage");
+     minq.value.max = FLT_MAX;
+     minq.value.min = 0.0f;
+@@ -462,25 +462,25 @@ void __cdecl BG_RegisterDvars()
+         "bg_foliagesnd_maxspeed",
+         180.0f,
+         minq,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The speed that a player must be going to make maximum noise while moving through foliage");
+     bg_foliagesnd_slowinterval = Dvar_RegisterInt(
+         "bg_foliagesnd_slowinterval",
+         1500,
+         (DvarLimits)0x7FFFFFFF00000000LL,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The time between each foliage sound when moving slowly");
+     bg_foliagesnd_fastinterval = Dvar_RegisterInt(
+         "bg_foliagesnd_fastinterval",
+         500,
+         (DvarLimits)0x7FFFFFFF00000000LL,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The time between each foliage sound when moving quickly");
+     bg_foliagesnd_resetinterval = Dvar_RegisterInt(
+         "bg_foliagesnd_resetinterval",
+         500,
+         (DvarLimits)0x7FFFFFFF00000000LL,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The time interval before foliage sounds are reset after the player has stopped moving");
+     minr.value.max = FLT_MAX;
+     minr.value.min = 1.0f;
+@@ -488,7 +488,7 @@ void __cdecl BG_RegisterDvars()
+         "bg_fallDamageMinHeight",
+         128.0f,
+         minr,
+-        DVAR_CHEAT | DVAR_TEMP | DVAR_SYSTEMINFO,
++        DVAR_CHEAT | DVAR_CODINFO | DVAR_SYSTEMINFO,
+         "The height that a player will start to take minimum damage if they fall");
+     mins.value.max = FLT_MAX;
+     mins.value.min = 1.0f;
+@@ -496,23 +496,23 @@ void __cdecl BG_RegisterDvars()
+         "bg_fallDamageMaxHeight",
+         300.0f,
+         mins,
+-        DVAR_CHEAT | DVAR_TEMP | DVAR_SYSTEMINFO,
++        DVAR_CHEAT | DVAR_CODINFO | DVAR_SYSTEMINFO,
+         "The height that a player will take maximum damage when falling");
+     mint.value.max = 1000.0f;
+     mint.value.min = 0.0f;
+-    inertiaMax = Dvar_RegisterFloat("inertiaMax", 50.0, mint, DVAR_CHEAT | DVAR_TEMP, "Maximum player inertia");
+-    inertiaDebug = Dvar_RegisterBool("inertiaDebug", 0, DVAR_CHEAT | DVAR_TEMP, "Show inertia debug information");
++    inertiaMax = Dvar_RegisterFloat("inertiaMax", 50.0, mint, DVAR_CHEAT | DVAR_CODINFO, "Maximum player inertia");
++    inertiaDebug = Dvar_RegisterBool("inertiaDebug", 0, DVAR_CHEAT | DVAR_CODINFO, "Show inertia debug information");
+     minu.value.max = 1.0f;
+     minu.value.min = -1.0f;
+     inertiaAngle = Dvar_RegisterFloat(
+         "inertiaAngle",
+         0.0f,
+         minu,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The cosine of the angle at which inertia occurs");
+     minv.value.max = 100.0f;
+     minv.value.min = 0.0f;
+-    friction = Dvar_RegisterFloat("friction", 5.5f, minv, DVAR_CHEAT | DVAR_TEMP, "Player friction");
++    friction = Dvar_RegisterFloat("friction", 5.5f, minv, DVAR_CHEAT | DVAR_CODINFO, "Player friction");
+ #elif KISAK_SP
+     minn.value.max = 360.0f;
+     minn.value.min = 0.0f;
+@@ -598,7 +598,7 @@ void __cdecl BG_RegisterDvars()
+ #endif
+     minw.value.max = 1000.0f;
+     minw.value.min = 0.0f;
+-    stopspeed = Dvar_RegisterFloat("stopspeed", 100.0f, minw, DVAR_CHEAT | DVAR_TEMP, "The player deceleration");
++    stopspeed = Dvar_RegisterFloat("stopspeed", 100.0f, minw, DVAR_CHEAT | DVAR_CODINFO, "The player deceleration");
+     minx.value.max = 1.0f;
+     minx.value.min = 0.0f;
+     bg_swingSpeed = Dvar_RegisterFloat(
+@@ -623,7 +623,7 @@ void __cdecl BG_RegisterDvars()
+         0.02f,
+         0.014f,
+         minz,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The multiplier to apply to the player's speed to get the bob amplitude while sprinting");
+     minba.value.max = 1.0f;
+     minba.value.min = 0.0f;
+@@ -632,7 +632,7 @@ void __cdecl BG_RegisterDvars()
+         0.0070000002f,
+         0.0070000002f,
+         minba,
+-        DVAR_CHEAT | DVAR_TEMP | DVAR_SAVED,
++        DVAR_CHEAT | DVAR_CODINFO | DVAR_SAVED,
+         "The multiplier to apply to the player's speed to get the bob amplitude while standing");
+     minbb.value.max = 1.0f;
+     minbb.value.min = 0.0f;
+@@ -641,7 +641,7 @@ void __cdecl BG_RegisterDvars()
+         0.0074999998f,
+         0.0074999998f,
+         minbb,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The multiplier to apply to the player's speed to get the bob amplitude while ducking");
+     minbc.value.max = 1.0f;
+     minbc.value.min = 0.0f;
+@@ -650,18 +650,18 @@ void __cdecl BG_RegisterDvars()
+         0.02f,
+         0.0049999999f,
+         minbc,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The multiplier to apply to the player's speed to get the bob amplitude while prone");
+     minbd.value.max = 36.0f;
+     minbd.value.min = 0.0f;
+-    bg_bobMax = Dvar_RegisterFloat("bg_bobMax", 8.0f, minbd, DVAR_CHEAT | DVAR_TEMP, "The maximum allowed bob amplitude");
++    bg_bobMax = Dvar_RegisterFloat("bg_bobMax", 8.0f, minbd, DVAR_CHEAT | DVAR_CODINFO, "The maximum allowed bob amplitude");
+     minbe.value.max = 300.0f;
+     minbe.value.min = 0.0f;
+     bg_aimSpreadMoveSpeedThreshold = Dvar_RegisterFloat(
+         "bg_aimSpreadMoveSpeedThreshold",
+         11.0f,
+         minbe,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "When player is moving faster than this speed, the aim spread will increase");
+     minbf.value.max = 1000.0f;
+     minbf.value.min = 0.0f;
+@@ -669,7 +669,7 @@ void __cdecl BG_RegisterDvars()
+         "bg_maxGrenadeIndicatorSpeed",
+         20.0f,
+         minbf,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "Maximum speed of grenade that will show up in indicator and can be thrown back.");
+ #elif KISAK_SP
+     bg_bobAmplitudeSprinting = Dvar_RegisterVec2(
+@@ -732,7 +732,7 @@ void __cdecl BG_RegisterDvars()
+         "player_breath_hold_time",
+         4.5f,
+         minbg,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The maximum time a player can hold his breath");
+     minbh.value.max = 30.0f;
+     minbh.value.min = 0.0f;
+@@ -740,7 +740,7 @@ void __cdecl BG_RegisterDvars()
+         "player_breath_gasp_time",
+         1.0f,
+         minbh,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The amount of time a player will gasp once they can breath again");
+     minbi.value.max = 30.0f;
+     minbi.value.min = 0.0f;
+@@ -748,7 +748,7 @@ void __cdecl BG_RegisterDvars()
+         "player_breath_fire_delay",
+         0.0f,
+         minbi,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The amount of time subtracted from the player remaining breath time when a weapon is fired");
+     minbj.value.max = 50.0f;
+     minbj.value.min = 0.0f;
+@@ -756,7 +756,7 @@ void __cdecl BG_RegisterDvars()
+         "player_breath_gasp_scale",
+         4.5f,
+         minbj,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "Scale value to apply to the target waver during a gasp");
+     minbk.value.max = 50.0f;
+     minbk.value.min = 0.0f;
+@@ -764,7 +764,7 @@ void __cdecl BG_RegisterDvars()
+         "player_breath_hold_lerp",
+         1.0f,
+         minbk,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The interpolation rate for the target waver amplitude when holding breath");
+     minbl.value.max = 50.0f;
+     minbl.value.min = 0.0f;
+@@ -772,7 +772,7 @@ void __cdecl BG_RegisterDvars()
+         "player_breath_gasp_lerp",
+         6.0f,
+         minbl,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The interpolation rate for the target waver amplitude when gasping");
+     minbm.value.max = 100.0f;
+     minbm.value.min = 0.0f;
+@@ -780,7 +780,7 @@ void __cdecl BG_RegisterDvars()
+         "player_breath_snd_lerp",
+         2.0f,
+         minbm,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The interpolation rate for the player hold breath sound");
+     minbn.value.max = 2.0f;
+     minbn.value.min = 0.0f;
+@@ -788,18 +788,18 @@ void __cdecl BG_RegisterDvars()
+         "player_breath_snd_delay",
+         1.0f,
+         minbn,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The delay before playing the breathe in sound");
+     player_scopeExitOnDamage = Dvar_RegisterBool(
+         "player_scopeExitOnDamage",
+         0,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "Exit the scope if the player takes damage");
+     player_adsExitDelay = Dvar_RegisterInt(
+         "player_adsExitDelay",
+         0,
+         (DvarLimits)0x3E800000000LL,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "Delay before exiting aim down sight");
+     minbo.value.max = 1.0f;
+     minbo.value.min = 0.0f;
+@@ -809,7 +809,7 @@ void __cdecl BG_RegisterDvars()
+         minbo,
+         DVAR_CHEAT,
+         "The contribution movement direction has on player torso direction(multi-player only)");
+-    player_debugHealth = Dvar_RegisterBool("player_debugHealth", 0, DVAR_CHEAT | DVAR_TEMP, "Turn on debugging info for player health");
++    player_debugHealth = Dvar_RegisterBool("player_debugHealth", 0, DVAR_CHEAT | DVAR_CODINFO, "Turn on debugging info for player health");
+     player_sustainAmmo = Dvar_RegisterBool("player_sustainAmmo", 0, DVAR_CHEAT, "Firing weapon will not decrease clip ammo.");
+     minbp.value.max = 20.0f;
+     minbp.value.min = 0.0000000099999999f;
+@@ -817,7 +817,7 @@ void __cdecl BG_RegisterDvars()
+         "player_moveThreshhold",
+         10.0f,
+         minbp,
+-        DVAR_ROM | DVAR_CHEAT | DVAR_TEMP,
++        DVAR_ROM | DVAR_CHEAT | DVAR_CODINFO,
+         "The speed at which the player is considered to be moving for the purposes of \n"
+         "view model bob and multiplayer model movement");
+     minbq.value.max = 50000.0f;
+@@ -826,7 +826,7 @@ void __cdecl BG_RegisterDvars()
+         "player_footstepsThreshhold",
+         0.0f,
+         minbq,
+-        DVAR_ROM | DVAR_CHEAT | DVAR_TEMP,
++        DVAR_ROM | DVAR_CHEAT | DVAR_CODINFO,
+         "The minimum speed at which the player makes loud footstep noises");
+     minbr.value.max = 20.0f;
+     minbr.value.min = 0.0f;
+@@ -834,7 +834,7 @@ void __cdecl BG_RegisterDvars()
+         "player_strafeSpeedScale",
+         0.80000001f,
+         minbr,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The scale applied to the player speed when strafing");
+     minbs.value.max = 20.0f;
+     minbs.value.min = 0.0f;
+@@ -842,7 +842,7 @@ void __cdecl BG_RegisterDvars()
+         "player_backSpeedScale",
+         0.69999999f,
+         minbs,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The scale applied to the player speed when moving backwards");
+     minbt.value.max = 1.0f;
+     minbt.value.min = 0.0f;
+@@ -850,7 +850,7 @@ void __cdecl BG_RegisterDvars()
+         "player_strafeAnimCosAngle",
+         0.5f,
+         minbt,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "Cosine of the angle which player starts using strafe animations");
+     minbu.value.max = 20.0f;
+     minbu.value.min = 0.0f;
+@@ -858,13 +858,13 @@ void __cdecl BG_RegisterDvars()
+         "player_spectateSpeedScale",
+         1.0f,
+         minbu,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The scale applied to the player speed when spectating");
+     player_sprintForwardMinimum = Dvar_RegisterInt(
+         "player_sprintForwardMinimum",
+         105,
+         (DvarLimits)0xFF00000000LL,
+-        DVAR_TEMP,
++        DVAR_CODINFO,
+         "The minimum forward deflection required to maintain a sprint");
+     minbv.value.max = 5.0f;
+     minbv.value.min = 0.0f;
+@@ -872,7 +872,7 @@ void __cdecl BG_RegisterDvars()
+         "player_sprintSpeedScale",
+         1.5f,
+         minbv,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The scale applied to the player speed when sprinting");
+     minbw.value.max = 12.8f;
+     minbw.value.min = 0.0f;
+@@ -880,7 +880,7 @@ void __cdecl BG_RegisterDvars()
+         "player_sprintTime",
+         4.0f,
+         minbw,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The base length of time a player can sprint");
+     minbx.value.max = 12.8f;
+     minbx.value.min = 0.0f;
+@@ -888,7 +888,7 @@ void __cdecl BG_RegisterDvars()
+         "player_sprintMinTime",
+         1.0f,
+         minbx,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The minimum sprint time needed in order to start sprinting");
+     minby.value.max = 9000.0f;
+     minby.value.min = 0.0f;
+@@ -896,7 +896,7 @@ void __cdecl BG_RegisterDvars()
+         "player_sprintRechargePause",
+         0.0f,
+         minby,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The length of time the meter will pause before starting to recharge after a player sprints");
+     minbz.value.max = 5000.0f;
+     minbz.value.min = 0.0f;
+@@ -904,7 +904,7 @@ void __cdecl BG_RegisterDvars()
+         "player_sprintStrafeSpeedScale",
+         0.667f,
+         minbz,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The speed at which you can strafe while sprinting");
+     minca.value.max = 2.0f;
+     minca.value.min = 0.0f;
+@@ -912,12 +912,12 @@ void __cdecl BG_RegisterDvars()
+         "player_sprintCameraBob",
+         0.5f,
+         minca,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The speed the camera bobs while you sprint");
+     player_turnAnims = Dvar_RegisterBool(
+         "player_turnAnims",
+         0,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "Use animations to turn a player's model in multiplayer");
+     xanim_debug = Dvar_RegisterBool("xanim_debug", false, DVAR_NOFLAG, "Turn on Xanim Debugging information");
+ #ifdef KISAK_MP
+@@ -930,7 +930,7 @@ void __cdecl BG_RegisterDvars()
+         "player_dmgtimer_timePerPoint",
+         100.0f,
+         mincb,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The time in milliseconds that the player is slowed down per point of damage");
+     mincc.value.max = FLT_MAX;
+     mincc.value.min = 0.0f;
+@@ -938,7 +938,7 @@ void __cdecl BG_RegisterDvars()
+         "player_dmgtimer_maxTime",
+         750.0f,
+         mincc,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The maximum time that the player is slowed due to damage");
+     mincd.value.max = 1.0f;
+     mincd.value.min = 0.0f;
+@@ -946,19 +946,19 @@ void __cdecl BG_RegisterDvars()
+         "player_dmgtimer_minScale",
+         0.0f,
+         mincd,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "The minimum scale value to slow the player by when damaged");
+     player_dmgtimer_stumbleTime = Dvar_RegisterInt(
+         "player_dmgtimer_stumbleTime",
+         500,
+         (DvarLimits)0x7D000000000LL,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "Maximum time to play stumble animations");
+     player_dmgtimer_flinchTime = Dvar_RegisterInt(
+         "player_dmgtimer_flinchTime",
+         500,
+         (DvarLimits)0x7D000000000LL,
+-        DVAR_CHEAT | DVAR_TEMP,
++        DVAR_CHEAT | DVAR_CODINFO,
+         "Maximum time to play flinch animations");
+     bg_shock_soundLoop = Dvar_RegisterString("bg_shock_soundLoop", "shellshock_loop", DVAR_CHEAT, "Shellshock loop alias");
+     bg_shock_soundLoopSilent = Dvar_RegisterString(
+diff --git a/src/client/cl_devgui.cpp b/src/client/cl_devgui.cpp
+index 0cf48522..f72081ce 100644
+--- a/src/client/cl_devgui.cpp
++++ b/src/client/cl_devgui.cpp
+@@ -56,14 +56,14 @@ const dvar_s *CL_RegisterDevGuiDvars()
+ {
+     const dvar_s *result; // eax
+ 
+-    clGuiGlob.mapEnumDvar[0] = Dvar_RegisterEnum("mapEnum0", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_NORESTART, "");
+-    clGuiGlob.mapEnumDvar[1] = Dvar_RegisterEnum("mapEnum1", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_NORESTART, "");
+-    clGuiGlob.mapEnumDvar[2] = Dvar_RegisterEnum("mapEnum2", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_NORESTART, "");
+-    clGuiGlob.mapEnumDvar[3] = Dvar_RegisterEnum("mapEnum3", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_NORESTART, "");
+-    clGuiGlob.mapEnumDvar[4] = Dvar_RegisterEnum("mapEnum4", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_NORESTART, "");
+-    clGuiGlob.mapEnumDvar[5] = Dvar_RegisterEnum("mapEnum5", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_NORESTART, "");
+-    clGuiGlob.mapEnumDvar[6] = Dvar_RegisterEnum("mapEnum6", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_NORESTART, "");
+-    result = Dvar_RegisterEnum("mapEnum7", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_NORESTART, "");
++    clGuiGlob.mapEnumDvar[0] = Dvar_RegisterEnum("mapEnum0", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_SCRIPTINFO, "");
++    clGuiGlob.mapEnumDvar[1] = Dvar_RegisterEnum("mapEnum1", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_SCRIPTINFO, "");
++    clGuiGlob.mapEnumDvar[2] = Dvar_RegisterEnum("mapEnum2", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_SCRIPTINFO, "");
++    clGuiGlob.mapEnumDvar[3] = Dvar_RegisterEnum("mapEnum3", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_SCRIPTINFO, "");
++    clGuiGlob.mapEnumDvar[4] = Dvar_RegisterEnum("mapEnum4", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_SCRIPTINFO, "");
++    clGuiGlob.mapEnumDvar[5] = Dvar_RegisterEnum("mapEnum5", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_SCRIPTINFO, "");
++    clGuiGlob.mapEnumDvar[6] = Dvar_RegisterEnum("mapEnum6", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_SCRIPTINFO, "");
++    result = Dvar_RegisterEnum("mapEnum7", emptyEnumList, 0, DVAR_SERVERINFO | DVAR_ROM | DVAR_SCRIPTINFO, "");
+     clGuiGlob.mapEnumDvar[7] = result;
+     return result;
+ }
+diff --git a/src/game_mp/g_main_mp.cpp b/src/game_mp/g_main_mp.cpp
+index 78b5dbb9..c49ee3f1 100644
+--- a/src/game_mp/g_main_mp.cpp
++++ b/src/game_mp/g_main_mp.cpp
+@@ -509,22 +509,22 @@ const dvar_s *G_RegisterDvars()
+     g_TeamIcon_Allies = Dvar_RegisterString(
+         "g_TeamIcon_Allies",
+         "faction_128_usmc",
+-        DVAR_TEMP,
++        DVAR_CODINFO,
+         "Shader name for the allied scores banner");
+     g_TeamIcon_Axis = Dvar_RegisterString(
+         "g_TeamIcon_Axis",
+         "faction_128_arab",
+-        DVAR_TEMP,
++        DVAR_CODINFO,
+         "Shader name for the axis scores banner");
+     g_TeamIcon_Free = Dvar_RegisterString(
+         "g_TeamIcon_Free",
+         (char *)"",
+-        DVAR_TEMP,
++        DVAR_CODINFO,
+         "Shader name for the scores of players with no team");
+     g_TeamIcon_Spectator = Dvar_RegisterString(
+         "g_TeamIcon_Spectator",
+         (char *)"",
+-        DVAR_TEMP,
++        DVAR_CODINFO,
+         "Shader name for the scores of players who are spectators");
+     g_ScoresColor_MyTeam = Dvar_RegisterColor(
+         "g_ScoresColor_MyTeam",
+@@ -532,7 +532,7 @@ const dvar_s *G_RegisterDvars()
+         0.72000003f,
+         0.25f,
+         1.0f,
+-        DVAR_TEMP,
++        DVAR_CODINFO,
+         "Player team color on scoreboard");
+     g_ScoresColor_EnemyTeam = Dvar_RegisterColor(
+         "g_ScoresColor_EnemyTeam",
+@@ -540,7 +540,7 @@ const dvar_s *G_RegisterDvars()
+         0.07f,
+         0.05f,
+         1.0f,
+-        DVAR_TEMP,
++        DVAR_CODINFO,
+         "Enemy team color on scoreboard");
+     g_ScoresColor_Spectator = Dvar_RegisterColor(
+         "g_ScoresColor_Spectator",
+@@ -548,7 +548,7 @@ const dvar_s *G_RegisterDvars()
+         0.25f,
+         0.25f,
+         1.0f,
+-        DVAR_TEMP,
++        DVAR_CODINFO,
+         "Spectator team color on scoreboard");
+     g_ScoresColor_Free = Dvar_RegisterColor(
+         "g_ScoresColor_Free",
+@@ -556,7 +556,7 @@ const dvar_s *G_RegisterDvars()
+         0.77999997f,
+         0.1f,
+         1.0f,
+-        DVAR_TEMP,
++        DVAR_CODINFO,
+         "Free Team color on scoreboard");
+     g_ScoresColor_Allies = Dvar_RegisterColor(
+         "g_ScoresColor_Allies",
+@@ -564,7 +564,7 @@ const dvar_s *G_RegisterDvars()
+         0.46000001f,
+         0.07f,
+         1.0f,
+-        DVAR_TEMP,
++        DVAR_CODINFO,
+         "Allies team color on scoreboard");
+     g_ScoresColor_Axis = Dvar_RegisterColor(
+         "g_ScoresColor_Axis",
+@@ -572,17 +572,17 @@ const dvar_s *G_RegisterDvars()
+         0.07f,
+         0.05f,
+         1.0f,
+-        DVAR_TEMP,
++        DVAR_CODINFO,
+         "Axis team color on scoreboard");
+-    g_TeamName_Allies = Dvar_RegisterString("g_TeamName_Allies", "GAME_ALLIES", DVAR_TEMP, "Allied team name");
+-    g_TeamName_Axis = Dvar_RegisterString("g_TeamName_Axis", "GAME_AXIS", DVAR_TEMP, "Axis team name");
++    g_TeamName_Allies = Dvar_RegisterString("g_TeamName_Allies", "GAME_ALLIES", DVAR_CODINFO, "Allied team name");
++    g_TeamName_Axis = Dvar_RegisterString("g_TeamName_Axis", "GAME_AXIS", DVAR_CODINFO, "Axis team name");
+     g_TeamColor_Allies = Dvar_RegisterColor(
+         "g_TeamColor_Allies",
+         0.60000002f,
+         0.63999999f,
+         0.69f,
+         1.0f,
+-        DVAR_TEMP,
++        DVAR_CODINFO,
+         "Allies team color");
+     g_TeamColor_Axis = Dvar_RegisterColor(
+         "g_TeamColor_Axis",
+@@ -590,7 +590,7 @@ const dvar_s *G_RegisterDvars()
+         0.56999999f,
+         0.41f,
+         1.0f,
+-        DVAR_TEMP,
++        DVAR_CODINFO,
+         "Axis team color");
+     g_TeamColor_MyTeam = Dvar_RegisterColor(
+         "g_TeamColor_MyTeam",
+@@ -598,18 +598,18 @@ const dvar_s *G_RegisterDvars()
+         0.60000002f,
+         0.85000002f,
+         1.0f,
+-        DVAR_TEMP,
++        DVAR_CODINFO,
+         "Player team color");
+-    g_TeamColor_EnemyTeam = Dvar_RegisterColor("g_TeamColor_EnemyTeam", 0.75f, 0.25f, 0.25f, 1.0f, DVAR_TEMP, "Enemy team color");
++    g_TeamColor_EnemyTeam = Dvar_RegisterColor("g_TeamColor_EnemyTeam", 0.75f, 0.25f, 0.25f, 1.0f, DVAR_CODINFO, "Enemy team color");
+     g_TeamColor_Spectator = Dvar_RegisterColor(
+         "g_TeamColor_Spectator",
+         0.25f,
+         0.25f,
+         0.25f,
+         1.0f,
+-        DVAR_TEMP,
++        DVAR_CODINFO,
+         "Spectator team color");
+-    g_TeamColor_Free = Dvar_RegisterColor("g_TeamColor_Free", 0.75f, 0.25f, 0.25f, 1.0f, DVAR_TEMP, "Free Team color");
++    g_TeamColor_Free = Dvar_RegisterColor("g_TeamColor_Free", 0.75f, 0.25f, 0.25f, 1.0f, DVAR_CODINFO, "Free Team color");
+     g_smoothClients = Dvar_RegisterBool("g_smoothClients", true, DVAR_NOFLAG, "Enable extrapolation between client states");
+     g_antilag = Dvar_RegisterBool("g_antilag", true, DVAR_ARCHIVE | DVAR_SERVERINFO, "Turn on antilag checks for weapon hits");
+     g_oldVoting = Dvar_RegisterBool("g_oldVoting", true, DVAR_ARCHIVE, "Use old voting method");
+@@ -728,7 +728,7 @@ const dvar_s *G_RegisterDvars()
+         0.0f,
+         0.0f,
+         1.0f,
+-        DVAR_ROM | DVAR_CHEAT | DVAR_TEMP | DVAR_SAVED,
++        DVAR_ROM | DVAR_CHEAT | DVAR_CODINFO | DVAR_SAVED,
+         "Fog color that was set in the most recent call to \"setexpfog\"");
+     mino.value.max = FLT_MAX;
+     mino.value.min = 0.0f;
+@@ -736,7 +736,7 @@ const dvar_s *G_RegisterDvars()
+         "g_fogStartDistReadOnly",
+         0.0f,
+         mino,
+-        DVAR_ROM | DVAR_CHEAT | DVAR_TEMP | DVAR_SAVED,
++        DVAR_ROM | DVAR_CHEAT | DVAR_CODINFO | DVAR_SAVED,
+         "Fog start distance that was set in the most recent call to \"setexpfog\"");
+     minp.value.max = FLT_MAX;
+     minp.value.min = 0.0f;
+@@ -744,7 +744,7 @@ const dvar_s *G_RegisterDvars()
+         "g_fogHalfDistReadOnly",
+         0.1f,
+         minp,
+-        DVAR_ROM | DVAR_CHEAT | DVAR_TEMP | DVAR_SAVED,
++        DVAR_ROM | DVAR_CHEAT | DVAR_CODINFO | DVAR_SAVED,
+         "Fog start distance that was set in the most recent call to \"setexpfog\"");
+     g_fogHalfDistReadOnly = result;
+     return result;
+diff --git a/src/game_mp/g_scr_main_mp.cpp b/src/game_mp/g_scr_main_mp.cpp
+index e46c3460..8865d024 100644
+--- a/src/game_mp/g_scr_main_mp.cpp
++++ b/src/game_mp/g_scr_main_mp.cpp
+@@ -959,7 +959,7 @@ void GScr_SetDvar()
+             dvar = Dvar_FindVar(dvarName);
+             if (!dvar)
+                 MyAssertHandler(".\\game_mp\\g_scr_main_mp.cpp", 778, 0, "%s", "dvar");
+-            Dvar_AddFlags(dvar, 1024);
++            Dvar_AddFlags(dvar, DVAR_SCRIPTINFO);
+         }
+     }
+     else
+@@ -5338,7 +5338,7 @@ void GScr_MakeDvarServerInfo()
+     dvar = Dvar_FindVar(dvarName);
+     if (dvar)
+     {
+-        Dvar_AddFlags(dvar, 256);
++        Dvar_AddFlags(dvar, DVAR_CODINFO);
+     }
+     else
+     {
+@@ -5366,7 +5366,7 @@ void GScr_MakeDvarServerInfo()
+             ++pCh;
+         }
+         *pCh = 0;
+-        Dvar_RegisterString(dvarName, (char *)dvarValue, DVAR_TEMP | DVAR_EXTERNAL, "Script defined user info dvar");
++        Dvar_RegisterString(dvarName, (char *)dvarValue, DVAR_CODINFO | DVAR_EXTERNAL, "Script defined user info dvar");
+     }
+ }
+ 
+diff --git a/src/gfx_d3d/r_dvars.cpp b/src/gfx_d3d/r_dvars.cpp
+index b6c4a89e..30fdc484 100644
+--- a/src/gfx_d3d/r_dvars.cpp
++++ b/src/gfx_d3d/r_dvars.cpp
+@@ -780,34 +780,34 @@
+          "Speed up model lighting by caching previous results");
+      minn.value.max = 4.0f;
+      minn.value.min = 0.0f;
+-     r_lightTweakAmbient = Dvar_RegisterFloat("r_lightTweakAmbient", 0.1f, minn, DVAR_ROM | DVAR_AUTOEXEC, "Ambient light strength");
++     r_lightTweakAmbient = Dvar_RegisterFloat("r_lightTweakAmbient", 0.1f, minn, DVAR_ROM | DVAR_CHANGEABLE_RESET, "Ambient light strength");
+      mino.value.max = 1.0f;
+      mino.value.min = 0.0f;
+      r_lightTweakDiffuseFraction = Dvar_RegisterFloat(
+          "r_lightTweakDiffuseFraction",
+          0.5f,
+          mino,
+-         DVAR_ROM | DVAR_AUTOEXEC,
++         DVAR_ROM | DVAR_CHANGEABLE_RESET,
+          "diffuse light fraction");
+      minp.value.max = 4.0f;
+      minp.value.min = 0.0f;
+-     r_lightTweakSunLight = Dvar_RegisterFloat("r_lightTweakSunLight", 1.0f, minp, DVAR_CHEAT | DVAR_AUTOEXEC, "Sunlight strength");
++     r_lightTweakSunLight = Dvar_RegisterFloat("r_lightTweakSunLight", 1.0f, minp, DVAR_CHEAT | DVAR_CHANGEABLE_RESET, "Sunlight strength");
+      r_lightTweakAmbientColor = Dvar_RegisterColor(
+          "r_lightTweakAmbientColor",
+          1.0f,
+          0.0f,
+          0.0f,
+          1.0f,
+-         DVAR_ROM | DVAR_AUTOEXEC,
++         DVAR_ROM | DVAR_CHANGEABLE_RESET,
+          "Light ambient color");
+-     r_lightTweakSunColor = Dvar_RegisterColor("r_lightTweakSunColor", 0.0f, 1.0f, 0.0f, 1.0f, DVAR_CHEAT | DVAR_AUTOEXEC, "Sun color");
++     r_lightTweakSunColor = Dvar_RegisterColor("r_lightTweakSunColor", 0.0f, 1.0f, 0.0f, 1.0f, DVAR_CHEAT | DVAR_CHANGEABLE_RESET, "Sun color");
+      r_lightTweakSunDiffuseColor = Dvar_RegisterColor(
+          "r_lightTweakSunDiffuseColor",
+          0.0f,
+          0.0f,
+          1.0f,
+          1.0f,
+-         DVAR_ROM | DVAR_AUTOEXEC,
++         DVAR_ROM | DVAR_CHANGEABLE_RESET,
+          "Sun diffuse color");
+      minq.value.max = 360.0f;
+      minq.value.min = -360.0f;
+@@ -817,7 +817,7 @@
+          0.0f,
+          0.0f,
+          minq,
+-         DVAR_CHEAT | DVAR_AUTOEXEC | DVAR_SAVED,
++         DVAR_CHEAT | DVAR_CHANGEABLE_RESET | DVAR_SAVED,
+          "Sun direction in degrees");
+      r_envMapOverride = Dvar_RegisterBool("r_envMapOverride", false, DVAR_NOFLAG, "Min reflection intensity based on glancing angle.");
+      minr.value.max = 2.0f;
+diff --git a/src/gfx_d3d/r_init.cpp b/src/gfx_d3d/r_init.cpp
+index d43b1377..ac09e5e5 100644
+--- a/src/gfx_d3d/r_init.cpp
++++ b/src/gfx_d3d/r_init.cpp
+@@ -3180,7 +3180,7 @@ void __cdecl R_EnumDisplayModes(uint32_t adapterIndex)
+         "r_displayRefresh",
+         dx.refreshRateNameTable,
+         defaultRefreshRateIndex,
+-        DVAR_ARCHIVE | DVAR_LATCH | DVAR_AUTOEXEC,
++        DVAR_ARCHIVE | DVAR_LATCH | DVAR_CHANGEABLE_RESET,
+         "Refresh rate");
+ 
+     r_noborder = Dvar_RegisterBool("r_noborder", false, DVAR_ARCHIVE, "Do not use a border in windowed mode");
+diff --git a/src/qcommon/com_playerprofile.cpp b/src/qcommon/com_playerprofile.cpp
+index ee3a6db7..3c0efaee 100644
+--- a/src/qcommon/com_playerprofile.cpp
++++ b/src/qcommon/com_playerprofile.cpp
+@@ -182,7 +182,7 @@ void __cdecl Com_InitPlayerProfiles(int localClientNum)
+         "ui_playerProfileAlreadyChosen",
+         0,
+         (DvarLimits)0x100000000LL,
+-        DVAR_AUTOEXEC,
++        DVAR_CHANGEABLE_RESET,
+         "true if player profile has been selected.");
+     Dvar_ChangeResetValue((dvar_t*)ui_playerProfileAlreadyChosen, 1);
+     com_playerProfile = Dvar_RegisterString("com_playerProfile", (char *)"", DVAR_ROM, "Player profile");
+diff --git a/src/qcommon/common.cpp b/src/qcommon/common.cpp
+index e79e6d28..4cefcf7d 100644
+--- a/src/qcommon/common.cpp
++++ b/src/qcommon/common.cpp
+@@ -1568,7 +1568,7 @@ void Com_InitDvars()
+         "Write to log file - 0 = disabled, 1 = async file write, 2 = Sync every write");
+     com_statmon = Dvar_RegisterBool("com_statmon", 0, 0, "Draw stats monitor");
+ #ifdef KISAK_MP
+-    com_timescale = Dvar_RegisterFloat("com_timescale", 1.0, 0.001f, 1000.0f, DVAR_SYSTEMINFO | DVAR_ROM | DVAR_CHEAT | DVAR_TEMP | DVAR_SAVED, "Scale time of each frame");
++    com_timescale = Dvar_RegisterFloat("com_timescale", 1.0, 0.001f, 1000.0f, DVAR_SYSTEMINFO | DVAR_ROM | DVAR_CHEAT | DVAR_CODINFO | DVAR_SAVED, "Scale time of each frame");
+ #elif KISAK_SP
+     com_timescale = Dvar_RegisterFloat("com_timescale", 1.0, 0.001f, 1000.0f, DVAR_SAVED | DVAR_CHEAT | DVAR_ROM | DVAR_SYSTEMINFO, "Scale time of each frame");
+ #endif
+diff --git a/src/server_mp/sv_init_mp.cpp b/src/server_mp/sv_init_mp.cpp
+index 39ff86eb..74df5372 100644
+--- a/src/server_mp/sv_init_mp.cpp
++++ b/src/server_mp/sv_init_mp.cpp
+@@ -651,8 +651,8 @@ void SV_SaveSystemInfo()
+     SV_SetSystemInfoConfig();
+     v0 = Dvar_InfoString(0, 4);
+     SV_SetConfigstring(CS_SERVERINFO, v0);
+-    dvar_modifiedFlags &= 0xFFFFFBFB;
+-    SV_SetConfig(CS_CODINFO, CS_CODINFO_COUNT, 256);
++    dvar_modifiedFlags &= ~(DVAR_SERVERINFO | DVAR_SCRIPTINFO);
++    SV_SetConfig(CS_CODINFO, CS_CODINFO_COUNT, DVAR_CODINFO);
+     dvar_modifiedFlags &= ~0x100u;
+ }
+ 
+diff --git a/src/server_mp/sv_main_mp.cpp b/src/server_mp/sv_main_mp.cpp
+index 61482056..cde7f759 100644
+--- a/src/server_mp/sv_main_mp.cpp
++++ b/src/server_mp/sv_main_mp.cpp
+@@ -1158,18 +1158,18 @@ void __cdecl SV_PreFrame()
+     PROF_SCOPED("SV_PreFrame");
+     KISAK_NULLSUB();
+     SV_UpdateBots();
+-    if ((dvar_modifiedFlags & 0x404) != 0)
++    if ((dvar_modifiedFlags & (DVAR_SERVERINFO | DVAR_SCRIPTINFO)) != 0)
+     {
+         v0 = Dvar_InfoString(0, 4);
+         SV_SetConfigstring(CS_SERVERINFO, v0);
+-        dvar_modifiedFlags &= 0xFFFFFBFB;
++        dvar_modifiedFlags &= ~(DVAR_SERVERINFO | DVAR_SCRIPTINFO);
+     }
+     if ((dvar_modifiedFlags & 8) != 0)
+         SV_SetSystemInfoConfig();
+-    if ((dvar_modifiedFlags & 0x100) != 0)
++    if ((dvar_modifiedFlags & DVAR_CODINFO) != 0)
+     {
+-        SV_SetConfig(CS_CODINFO, CS_CODINFO_COUNT, 256);
+-        dvar_modifiedFlags &= ~0x100u;
++        SV_SetConfig(CS_CODINFO, CS_CODINFO_COUNT, DVAR_CODINFO);
++        dvar_modifiedFlags &= ~DVAR_CODINFO;
+     }
+ }
+ 
+diff --git a/src/universal/com_files.cpp b/src/universal/com_files.cpp
+index 7e7ea0b3..c67a10e1 100644
+--- a/src/universal/com_files.cpp
++++ b/src/universal/com_files.cpp
+@@ -1306,7 +1306,7 @@ void FS_RegisterDvars()
+             v2 = (char *)"F:\\SteamLibrary\\steamapps\\common\\Call of Duty 4";
+     }
+ #endif
+-    fs_basepath = Dvar_RegisterString("fs_basepath", v2, DVAR_INIT | DVAR_AUTOEXEC, "Base game path");
++    fs_basepath = Dvar_RegisterString("fs_basepath", v2, DVAR_INIT | DVAR_CHANGEABLE_RESET, "Base game path");
+     fs_basegame = Dvar_RegisterString("fs_basegame", (char *)"", DVAR_INIT, "Base game name");
+     fs_gameDirVar = Dvar_RegisterString(
+         "fs_game",
+@@ -1318,7 +1318,7 @@ void FS_RegisterDvars()
+     homePath = (char *)RETURN_ZERO32();
+     if (!homePath || !*homePath)
+         homePath = (char *)fs_basepath->reset.integer;
+-    fs_homepath = Dvar_RegisterString("fs_homepath", homePath, DVAR_INIT | DVAR_AUTOEXEC, "Game home path");
++    fs_homepath = Dvar_RegisterString("fs_homepath", homePath, DVAR_INIT | DVAR_CHANGEABLE_RESET, "Game home path");
+     fs_restrict = Dvar_RegisterBool("fs_restrict", 0, DVAR_INIT, "Restrict file access for demos etc.");
+ }
+ 
+diff --git a/src/universal/dvar.cpp b/src/universal/dvar.cpp
+index 0e0eeb72..430ef970 100644
+--- a/src/universal/dvar.cpp
++++ b/src/universal/dvar.cpp
+@@ -1231,7 +1231,7 @@ void __cdecl Dvar_ChangeResetValue(dvar_s *dvar, DvarValue value)
+         MyAssertHandler(".\\universal\\dvar.cpp", 1379, 0, "%s", "dvar");
+     if (!dvar->name)
+         MyAssertHandler(".\\universal\\dvar.cpp", 1380, 0, "%s", "dvar->name");
+-    if ((dvar->flags & 0x200) == 0)
++    if ((dvar->flags & DVAR_CHANGEABLE_RESET) == 0)
+         MyAssertHandler(
+             ".\\universal\\dvar.cpp",
+             1381,
+@@ -1738,7 +1738,7 @@ void __cdecl Dvar_Reregister(
+     }
+     if (dvar->type != type)
+         MyAssertHandler(".\\universal\\dvar.cpp", 1560, 0, "%s\n\t(dvarName) = %s", "(dvar->type == type)", dvarName);
+-    if ((dvar->flags & 0x9200) == 0 && !Dvar_ValuesEqual(type, dvar->reset, resetValue))
++    if ((dvar->flags & (DVAR_CHANGEABLE_RESET | DVAR_SAVED | DVAR_AUTOEXEC)) == 0 && !Dvar_ValuesEqual(type, dvar->reset, resetValue))
+     {
+         v11 = Dvar_ValueToString(dvar, resetValue);
+         v9 = Dvar_DisplayableResetValue(dvar);
+@@ -2701,7 +2701,7 @@ void __cdecl Dvar_SetCommand(const char *dvarName, char *string)
+     {
+         if (isLoadingAutoExecGlobalFlag)
+         {
+-            Dvar_AddFlags(dvar, 0x8000);
++            Dvar_AddFlags(dvar, DVAR_AUTOEXEC);
+             Dvar_UpdateResetValue(dvar, dvar->current);
+         }
+     }
+@@ -2793,7 +2793,7 @@ void __cdecl Dvar_ResetScriptInfo()
+     while (g_dvarCritSect.writeCount)
+         NET_Sleep(0);
+     for (dvarIter = 0; dvarIter < dvarCount; ++dvarIter)
+-        dvarPool[dvarIter].flags &= ~0x400u;
++        dvarPool[dvarIter].flags &= ~DVAR_SCRIPTINFO;
+     if (g_dvarCritSect.readCount <= 0)
+         MyAssertHandler(
+             "c:\\trees\\cod3\\src\\universal\\../qcommon/threads_interlock.h",
+diff --git a/src/universal/dvar_cmds.cpp b/src/universal/dvar_cmds.cpp
+index 2ca6fa6a..ca1ae1ad 100644
+--- a/src/universal/dvar_cmds.cpp
++++ b/src/universal/dvar_cmds.cpp
+@@ -372,7 +372,7 @@ void __cdecl Dvar_ListSingle(const dvar_s *dvar, const char *userData)
+ 
+     if (!userData || Com_Filter(userData, (char *)dvar->name, 0))
+     {
+-        if ((dvar->flags & 0x404) != 0)
++        if ((dvar->flags & (DVAR_SERVERINFO | DVAR_SCRIPTINFO)) != 0)
+             Com_Printf(CON_CHANNEL_DONT_FILTER, "S");
+         else
+             Com_Printf(CON_CHANNEL_DONT_FILTER, " ");
+diff --git a/src/universal/q_shared.h b/src/universal/q_shared.h
+index 40b74432..f85115fb 100644
+--- a/src/universal/q_shared.h
++++ b/src/universal/q_shared.h
+@@ -661,13 +661,15 @@ enum DvarFlags : uint16
+ 	DVAR_ROM                = 0x40, // display only, cannot be set by user at all (can be set by code)
+ 	DVAR_CHEAT              = 0x80, // can not be changed if cheats are disabled
+ 
+-	// DVAR_AUTOEXEC, DVAR_SAVED, and DVAR_CHANGEABLE_RESET are not 100% sure
+-	DVAR_TEMP               = 0x100,
+-	DVAR_AUTOEXEC           = 0x200,
+-	DVAR_NORESTART          = 0x400,    // do not clear when a cvar_restart is issued
+-	DVAR_SAVED              = 0x1000,
++	// CHANGEABLE_RESET, SAVED and AUTOEXEC are the names in the original assert
++	// in Dvar_Reregister (0x9200); which bit each one is follows from the code
++	// that sets and tests it.
++	DVAR_CODINFO            = 0x100,    // sent to clients in the CS_CODINFO configstrings
++	DVAR_CHANGEABLE_RESET   = 0x200,    // Dvar_ChangeResetValue may change the reset value
++	DVAR_SCRIPTINFO         = 0x400,    // serverinfo dvar set by script; cleared on map load
++	DVAR_SAVED              = 0x1000,   // written to SP savegames
+ 	DVAR_EXTERNAL           = 0x4000,   // created by a set command or setclientdvar
+-	DVAR_CHANGEABLE_RESET   = 0x8000,
++	DVAR_AUTOEXEC           = 0x8000,   // set while an autoexec config runs
+ };
+ 
+ union DvarValue 

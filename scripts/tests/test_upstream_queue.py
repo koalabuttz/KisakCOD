@@ -33,14 +33,14 @@ index 1111111..2222222 100644
 +++ b/%(path)s
 @@ -1,3 +1,3 @@
  one
--two
+-%(old)s
 +%(new)s
  three
 """
 
 
-def patch(subject='fix: count to three', body='The second line was wrong.', path='src/a.cpp', new='2'):
-    return PATCH % {'subject': subject, 'body': body, 'path': path, 'new': new}
+def patch(subject='fix: count to three', body='The second line was wrong.', path='src/a.cpp', old='two', new='2'):
+    return PATCH % {'subject': subject, 'body': body, 'path': path, 'old': old, 'new': new}
 
 
 def git(directory, *args):
@@ -130,6 +130,32 @@ class ApplyTests(unittest.TestCase):
         self.add('0001-a.patch')
         self.add('0002-a-again.patch', new='zwei')
         self.assertEqual(self.run_tool('check'), 1)
+
+    def test_a_patch_made_on_another_needs_a_depends_line(self):
+        self.add('0001-a.patch')
+        self.add('0002-a-again.patch', old='2', new='zwei')
+        self.assertEqual(self.run_tool('check'), 1)
+        (self.queue / 'DEPENDS').write_text('# made on top of the first\n0002: 0001\n')
+        self.assertEqual(self.run_tool('check'), 0)
+        self.assertEqual((self.upstream / 'src/a.cpp').read_text(), 'one\ntwo\nthree\n')
+        self.assertEqual(self.run_tool('apply'), 0)
+        self.assertEqual((self.upstream / 'src/a.cpp').read_text(), 'one\nzwei\nthree\n')
+
+    def test_depends_follows_a_chain(self):
+        self.add('0001-a.patch')
+        self.add('0002-a-again.patch', old='2', new='zwei')
+        self.add('0003-a-once-more.patch', old='zwei', new='deux')
+        (self.queue / 'DEPENDS').write_text('0002: 0001\n0003: 0002\n')
+        self.assertEqual(self.run_tool('check'), 0)
+
+    def test_a_bad_depends_file_fails(self):
+        self.add('0001-a.patch')
+        self.add('0002-b.patch', path='src/b.cpp')
+        for text in ('0001: 0002\n', '0002: 0007\n', '0003: 0001\n', '0002 after 0001\n', '0002: 0001\n0002: 0001\n'):
+            with self.subTest(text=text):
+                (self.queue / 'DEPENDS').write_text(text)
+                self.assertEqual(self.run_tool('check'), 1)
+                self.assertEqual(self.run_tool('lint'), 1)
 
     def test_a_patch_that_does_not_apply_fails(self):
         (self.upstream / 'src/a.cpp').write_text('1\n2\n3\n')

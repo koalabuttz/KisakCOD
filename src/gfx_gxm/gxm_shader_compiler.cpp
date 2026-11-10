@@ -4,6 +4,7 @@
 #include <psp2/kernel/modulemgr.h>
 #include <psp2/shacccg.h>
 
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -45,8 +46,10 @@ static_assert(sizeof(Block) == 16, "the header keeps malloc's alignment");
 constexpr uint32_t kBlockMark = 0x53484343; // 'SHCC'
 
 Block g_blocks{&g_blocks, &g_blocks, 0, 0};
-size_t g_heldBytes = 0, g_heldPeak = 0;
-uint32_t g_refusedAllocations = 0;
+// One thread at a time compiles, but another may read these for a log line
+// meanwhile (ShaderCompilerMemory).
+std::atomic<size_t> g_heldBytes{0}, g_heldPeak{0};
+std::atomic<uint32_t> g_refusedAllocations{0};
 
 void *CompilerAlloc(unsigned int size)
 {
@@ -62,9 +65,10 @@ void *CompilerAlloc(unsigned int size)
     block->next = g_blocks.next;
     g_blocks.next->previous = block;
     g_blocks.next = block;
-    g_heldBytes += sizeof(Block) + size;
-    if (g_heldBytes > g_heldPeak)
-        g_heldPeak = g_heldBytes;
+    const size_t held = g_heldBytes.load(std::memory_order_relaxed) + sizeof(Block) + size;
+    g_heldBytes.store(held, std::memory_order_relaxed);
+    if (held > g_heldPeak.load(std::memory_order_relaxed))
+        g_heldPeak.store(held, std::memory_order_relaxed);
     return block + 1;
 }
 
@@ -78,7 +82,8 @@ void CompilerFree(void *memory)
     block->mark = 0;
     block->previous->next = block->next;
     block->next->previous = block->previous;
-    g_heldBytes -= sizeof(Block) + block->size;
+    g_heldBytes.store(g_heldBytes.load(std::memory_order_relaxed) - (sizeof(Block) + block->size),
+                      std::memory_order_relaxed);
     std::free(block);
 }
 

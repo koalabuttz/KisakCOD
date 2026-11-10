@@ -41,7 +41,9 @@
 #include <gfx_d3d/r_dvars.h>
 #include "mem_track.h"
 #include <universal/profile.h>
+#include "com_frame_log.h"
 
+#include <chrono>
 #include <setjmp.h>
 #ifdef KISAK_UI_ASSET_EXPORT_ONLY
 #include <linux/tools/font_asset_export.h>
@@ -775,10 +777,57 @@ void Com_Error(errorParm_t code, const char* fmt, ...)
     }
 }
 
+// "framelog <seconds> [label]": frame times of a stretch of play in one log
+// line, for frame-rate comparisons without a profiler (com_frame_log.h).
+static kisak::frame_log::Recorder s_frameLog;
+static cmd_function_s Com_FrameLog_f_VAR;
+
+static uint64_t Com_FrameLogMicros()
+{
+    return (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+static void Com_FrameLogPrint(const char *why)
+{
+    char label[kisak::frame_log::kMaxLabel];
+    I_strncpyz(label, s_frameLog.Label(), sizeof(label));
+    char line[512];
+    kisak::frame_log::Format(line, sizeof(line), label, s_frameLog.Take(), why);
+    Com_Printf(CON_CHANNEL_DONT_FILTER, "%s\n", line);
+}
+
+static void Com_FrameLog_f()
+{
+    const char *const first = Cmd_Argc() >= 2 ? Cmd_Argv(1) : "";
+    if (!I_stricmp(first, "stop"))
+    {
+        if (s_frameLog.Recording())
+            Com_FrameLogPrint("stopped");
+        else
+            Com_Printf(CON_CHANNEL_DONT_FILTER, "frame log: nothing is being recorded\n");
+        return;
+    }
+    const double seconds = atof(first);
+    if (!(seconds > 0.0) || seconds > 3600.0)
+    {
+        Com_Printf(CON_CHANNEL_DONT_FILTER,
+            "USAGE: framelog <seconds, up to 3600> [label]\n       framelog stop\n");
+        return;
+    }
+    if (s_frameLog.Recording())
+        Com_FrameLogPrint("stopped");
+    s_frameLog.Start(seconds, Cmd_Argc() >= 3 ? Cmd_Argv(2) : "");
+    Com_Printf(CON_CHANNEL_DONT_FILTER, "frame log%s%s: recording %.3f s\n", *s_frameLog.Label() ? " " : "",
+        s_frameLog.Label(), seconds);
+}
+
 void Com_Quit_f()
 {
     int localClientNum; // [esp+0h] [ebp-4h]
 
+    if (s_frameLog.Recording())
+        Com_FrameLogPrint("at the quit");
     Com_Printf(CON_CHANNEL_DONT_FILTER, "quitting...\n");
     R_PopRemoteScreenUpdate();
     Com_SyncThreads();
@@ -1415,6 +1464,7 @@ void Com_Init_Try_Block_Function(char* commandLine)
         Cmd_AddCommandInternal("assert", Com_Assert_f, &Com_Assert_f_VAR);
     }
     Cmd_AddCommandInternal("quit", Com_Quit_f, &Com_Quit_f_VAR);
+    Cmd_AddCommandInternal("framelog", Com_FrameLog_f, &Com_FrameLog_f_VAR);
     Cmd_AddCommandInternal("writeconfig", Com_WriteConfig_f, &Com_WriteConfig_f_VAR);
     Cmd_AddCommandInternal("writedefaults", Com_WriteDefaults_f, &Com_WriteDefaults_f_VAR);
 #ifdef KISAK_MP
@@ -2251,6 +2301,8 @@ void Com_Frame()
 #ifdef TRACY_ENABLE
     TracyCFrameMarkStart("Com_Frame");
 #endif
+    if (s_frameLog.Recording() && s_frameLog.Frame(Com_FrameLogMicros()))
+        Com_FrameLogPrint(s_frameLog.Full() ? "full" : "");
     void* Value; // eax
 
     KISAK_NULLSUB();

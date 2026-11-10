@@ -7,6 +7,7 @@
 #include <universal/profile.h>
 
 #include "sys_critical.h"
+#include "sys_perf.h"
 #include "sys_posix.h"
 
 #include <sched.h>
@@ -34,6 +35,10 @@ void Sys_EnterCriticalSection(int critSect)
     PROF_SCOPED("Sys_EnterCriticalSection");
 
     iassert(critSect >= 0 && critSect < CRITSECT_COUNT);
+
+    // How long getting in takes, per section, while a perf run is active.
+    static_assert((uint32_t)CRITSECT_COUNT <= SYS_PERF_LOCK_SLOTS, "more critical sections than perf probe slots");
+    SysPerfScope perfScope(SYS_PERF_PROBE_LOCK + (uint32_t)critSect);
 
     // Sections are recursive: Com_Printf takes CRITSECT_CONSOLE and is called
     // from code that already holds it.
