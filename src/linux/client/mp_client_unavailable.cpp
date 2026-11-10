@@ -69,31 +69,6 @@ void Sys_Listen_f()
                      "net_listen: the remote script debugger is not available on native Linux.\n");
 }
 
-// src/qcommon/dl_main.cpp is the libcurl HTTP downloader, which this target
-// links only with KISAK_LINUX_HTTP_DOWNLOADS. Without it, these are its answers
-// when curl could not be initialized: nothing is in progress, cancelling does
-// nothing, and a download cannot begin, so the client tells the server
-// "wwwdl fail" and falls back to the UDP download.
-#ifndef KISAK_LINUX_HTTP_DOWNLOADS
-void DL_CancelDownload()
-{
-}
-
-int DL_BeginDownload(char *localName, char *remoteName)
-{
-    DL_CancelDownload();
-    if (!localName || !*localName || !remoteName || !*remoteName)
-        return 0;
-    Com_Printf(CON_CHANNEL_CLIENT, "Could not initialize HTTP downloads\n");
-    return 0;
-}
-
-bool DL_InProgress()
-{
-    return false;
-}
-#endif // !KISAK_LINUX_HTTP_DOWNLOADS
-
 // src/win32/win_voice.cpp with no voice device: Voice_Init fails, so
 // g_voice_initialized stays 0 and every other entry point takes its
 // "not initialized" branch. No voice data is captured, sent or played, no level
@@ -134,6 +109,31 @@ bool Voice_IsClientTalking(uint32_t clientNum)
     iassert(clientNum < 64);
     return false;
 }
+
+// src/qcommon/dl_main.cpp is the libcurl HTTP downloader, which this target
+// links only with KISAK_LINUX_HTTP_DOWNLOADS. Without it, these are its answers
+// when curl could not be initialized: nothing is in progress, cancelling does
+// nothing, and a download cannot begin, so the client tells the server
+// "wwwdl fail" and falls back to the UDP download.
+#ifndef KISAK_LINUX_HTTP_DOWNLOADS
+void DL_CancelDownload()
+{
+}
+
+int DL_BeginDownload(char *localName, char *remoteName)
+{
+    DL_CancelDownload();
+    if (!localName || !*localName || !remoteName || !*remoteName)
+        return 0;
+    Com_Printf(CON_CHANNEL_CLIENT, "Could not initialize HTTP downloads\n");
+    return 0;
+}
+
+bool DL_InProgress()
+{
+    return false;
+}
+#endif // !KISAK_LINUX_HTTP_DOWNLOADS
 
 #endif // KISAK_MP
 
@@ -185,9 +185,11 @@ KISAK_UNREACHABLE(void, Sys_WriteDebugSocketInt, (int), KISAK_REMOTE_DEBUGGER)
 KISAK_UNREACHABLE(void, Sys_WriteDebugSocketMessageType, (unsigned __int8), KISAK_REMOTE_DEBUGGER)
 KISAK_UNREACHABLE(void, Sys_WriteDebugSocketString, (char *), KISAK_REMOTE_DEBUGGER)
 
-#if defined(KISAK_MP) && !defined(KISAK_LINUX_HTTP_DOWNLOADS)
+#ifdef KISAK_MP
+#ifndef KISAK_LINUX_HTTP_DOWNLOADS
 // HTTP download progress, reached only while a download that began is running.
 #define KISAK_HTTP "an HTTP download in progress (libcurl)"
 KISAK_UNREACHABLE(int, DL_DownloadLoop, (), KISAK_HTTP)
 KISAK_UNREACHABLE(bool, DL_DLIsMotd, (), KISAK_HTTP)
-#endif // KISAK_MP && !KISAK_LINUX_HTTP_DOWNLOADS
+#endif // !KISAK_LINUX_HTTP_DOWNLOADS
+#endif // KISAK_MP
