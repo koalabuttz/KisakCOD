@@ -945,7 +945,12 @@ const FragmentProgramEntry *GetFragmentProgram(Device &device, const Variant &pi
     Append(key, d.color.output);
     auto found = d.fragmentPrograms.find(key);
     if (found != d.fragmentPrograms.end())
+    {
+        // Refused before: every draw that asks again is a draw left out.
+        if (!found->second.program)
+            CountSkip(device, SkipFragmentProgram);
         return found->second.program ? &found->second : nullptr;
+    }
     FragmentProgramEntry entry;
     entry.pixel = &pixel;
     entry.vertex = &vertex;
