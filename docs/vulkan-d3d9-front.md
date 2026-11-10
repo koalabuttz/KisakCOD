@@ -613,6 +613,24 @@ busy for about 0.9 ms in passes of a 5.8 ms frame, so the PC still waits for
 the CPU. The slowest frame of the four Vulkan launches was 126 ms, one
 pipeline built in the window in 116.75 ms; every other slow frame was 13 to
 18 ms. Report: `renderer/vulkan-backend-pc-run-8.md`.
+PC run 9 (2026-11-10, 1883bf69, same PC and scene, the machine alone) is the
+first in an optimised build: the Win32 Release artifact of a manual `vulkan`
+run. Vulkan runs at 451.2 and 462.0 frames a second and the real `d3d9.dll`
+at 479.6 and 481.9, so Vulkan is about 5% behind, where the Debug build of
+run 8 put it about 20% behind: most of that gap was the back end's own code
+running unoptimised. With `r_vkKeepDrawState 0` Vulkan runs at 435.6, about
+4% below its default, writing 281 descriptor sets and 595 KB of constants a
+frame against none and 129 KB. A frame holds about 700 draws and 10.5
+passes; the GPU is busy for 0.4 ms in passes and idle for 1.3 ms before the
+frame, so the PC still waits for the CPU. The slowest frame of a window was
+7 to 12 ms (one pipeline built during play in 7.41 ms). A launch's first
+frame takes about 1.08 s, of which 45 to 50 ms is its 6,200 or so texture
+uploads (about 190 MB) and nearly all the rest the GPU waiting for work, and
+the 71 pipelines of the first view take 340 ms with an empty cache and 89 ms
+from it. Over a launch the device uploads 14 to 17 GB of textures in about
+27,000 to 30,000 uploads, most of them 1 MB, which is close to one every
+other frame during play. Every launch quit cleanly. Report:
+`renderer/vulkan-backend-pc-run-9.md`.
 
 The device probe with `--backend vulkan` runs `r_init.cpp`'s device start
 unchanged (`R_PreCreateWindow`, `R_CreateWindow`, `R_CreateDevice`), clears,
@@ -756,7 +774,7 @@ evidence):
   (`renderer/model-lighting/luma_grid.py` in the project files).
 
 Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11}.md`,
-`renderer/vulkan-backend-pc-run-{6,7,8}.md` and
+`renderer/vulkan-backend-pc-run-{6,7,8,9}.md` and
 `renderer/model-lighting/laptop-run-1.md` in the project files.
 
 ## Next
@@ -767,12 +785,12 @@ anti-aliasing (above); then what a pass split by the feed costs on its
 driver, and whether a feed setting is better than the default at all (laptop
 run 12 measures the settings in one launch, and the kept draw state with
 them). Laptop run 13 sets Vulkan with `r_aaSamples 4`, now that the back
-end has multisampled targets, beside DXVK with 4. On the Windows PC the gap
-is the CPU's time per frame (PC run 8: about 80% of Direct3D 9 in the Debug
-build). The PC's runs so far used the hosted Debug build, where the back end's
-own work runs unoptimised and the system's `d3d9.dll` does not, so the next
-PC run compares the two in the Release build of a manual `vulkan` run (above)
-before more work goes into the time per draw (the front's lock, a clean flag
-for textures). Then the long frame the laptop sees about every two minutes,
-which the `slow frame` lines are there to name, and the pipelines built
-during play: one took 117 ms on the PC.
+end has multisampled targets, beside DXVK with 4. On the Windows PC, in a
+Release build, Vulkan is about 5% behind Direct3D 9 (PC run 9) and the PC
+waits for the CPU: what is left is the time per frame, first the texture
+uploads during play (about one 1 MB upload every other frame: which texture
+the game locks and whether the upload can be skipped or made smaller), then
+the front's lock. Measure the PC in the Release build of a manual `vulkan`
+run from now on. Then the long frame the laptop sees about every two
+minutes, which the `slow frame` lines are there to name, and the pipelines
+built during play.

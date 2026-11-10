@@ -399,7 +399,9 @@ kept anything it was 4,626: a draw without kept state writes and records what
 it did then, and the newer code spends a little less on doing so. On the
 Windows PC (PC run 8, RTX 2080 SUPER, hosted Win32 Debug build, mp_crash with
 12 bots) the game ran at 171.2 frames a second with the state kept and 160.8
-without, writing 101 KB and 454 KB of constants a frame.
+without, writing 101 KB and 454 KB of constants a frame. In the Release
+build (PC run 9) it ran at 451.2 and 462.0 with the state kept and 435.6
+without.
 
 Descriptor sets kept across frames (2026-11-10, same sandbox): `bench_runs`
 writes no set a frame with the kept state where it wrote 95 of its 768 draws'
