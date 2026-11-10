@@ -438,9 +438,16 @@ evidence):
   real Direct3D 9 and Vulkan, each at 0 and at 1, draw the same brightness.
   Five launches with three screenshots each gave a mean luma between 63.50
   and 63.90 for all 15, and no cell of a 4x4 grid differs between any two
-  settings by more than it moves inside one launch. Whether DXVK at 1 really
-  is brighter on the laptop is a question about DXVK, being rechecked the
-  same way (model lighting laptop run 1).
+  settings by more than it moves inside one launch. The laptop, measured
+  again the same way (model lighting laptop run 1: DXVK at 0, at 1 and at 1
+  again, Vulkan at 0 and at 1), shows no difference either: no cell of a 4x4
+  or an 8x8 grid is beyond its spread in any pair, and Vulkan against DXVK
+  at 1 (39.5 dB) is closer than DXVK against its own repeat (36.8 dB). Run
+  7's gap was the view moving: one launch's three shots there read a mean
+  luma of 65.70, 65.84 and 67.05. DXVK 2.7.1 itself gives the same texels on
+  both paths (a plain Direct3D 9 program with random patches,
+  `renderer/model-lighting/model_lighting_d3d9.cpp` in the project files:
+  0 of 9.8 million texels differ on the laptop's DXVK and Intel driver).
 * Comparing screenshots of that indoor view (`setviewpos 1504 512 200 90 0`
   on mp_crash): one pair says little. Parts of the view move, and each launch
   lands in one of a few states: on the PC a plain repeat of the same launch
@@ -449,8 +456,9 @@ evidence):
   launch, with a repeated launch as the baseline
   (`renderer/model-lighting/luma_grid.py` in the project files).
 
-Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9}.md` and
-`renderer/vulkan-backend-pc-run-6.md` in the project files.
+Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9}.md`,
+`renderer/vulkan-backend-pc-run-6.md` and
+`renderer/model-lighting/laptop-run-1.md` in the project files.
 
 ## Next
 
