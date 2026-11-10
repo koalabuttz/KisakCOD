@@ -157,5 +157,7 @@ What the game's shaders use:
 - Samplers declare 2D 2682 times, 3D 332 times and cube 218 times. 4 ps 1.x
   samplers have no declared type.
 
-**Not yet run:** shaders executed on a GPU. The Legacy adapter's draw tests
-will cover that.
+Shaders executed on a GPU are covered by the layers above: the
+[Legacy adapter](vulkan-legacy-adapter.md)'s pixel check, and the game drawn
+with `r_backend vulkan` on an Intel and an NVIDIA GPU
+([vulkan-d3d9-front.md](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan)).
