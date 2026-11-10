@@ -50,6 +50,12 @@ static_assert(BlockFrames(256, 0) == 0 && BlockFrames(256, 3) == 0);
 static_assert(BlockBytes(505, 1) == 256 && BlockBytes(505, 2) == 512 && BlockBytes(1, 2) == 8 && BlockBytes(9, 1) == 8);
 static_assert(IsWholeBlock(256, 1) && IsWholeBlock(2048, 2) && IsWholeBlock(4, 1));
 static_assert(!IsWholeBlock(258, 1) && !IsWholeBlock(3, 1) && !IsWholeBlock(516, 2) && !IsWholeBlock(256, 3));
+// The longest block read. One byte more is not a block, and neither are the
+// sizes whose frame count used to wrap round to 1 (mono) or come out near 4 GB.
+static_assert(BlockFrames(kMaxBlockBytes, 1) == 1 + (kMaxBlockBytes - 4) / 4 * 8 && BlockFrames(kMaxBlockBytes, 2) != 0);
+static_assert(BlockFrames(kMaxBlockBytes + 1, 1) == 0 && BlockFrames(kMaxBlockBytes + 1, 2) == 0);
+static_assert(BlockFrames(0x80000004u, 1) == 0 && BlockFrames(0xFFFFFFFFu, 1) == 0 && BlockFrames(0xFFFFFFFFu, 2) == 0);
+static_assert(!IsWholeBlock(0x80000004u, 1));
 
 // ---- the reference decoder ------------------------------------------------------
 
@@ -193,6 +199,10 @@ void DecoderLimits()
     EXPECT(DecodeBlock(block, 12, 1, out, 5) == 5 && out[5] == 0x5555);
     // Code 7 at step 7 adds 7/8 + 7/4 + 7/2 + 7 = 11 (each term rounded down).
     EXPECT(out[1] == 0x1234 + 11);
+
+    // A block longer than any file can name is not decoded.
+    EXPECT(DecodeBlock(block, kMaxBlockBytes + 1, 1, out, 32) == 0);
+    EXPECT(DecodeBlock(block, 0x80000004u, 1, out, 32) == 0);
 
     // A step index past the table is the last step, not a read past the table.
     const uint8_t damaged[8] = {0, 0, 200, 0, 0, 0, 0, 0};
@@ -417,6 +427,24 @@ void PackPlans()
     EXPECT(ReadableFrames(Sound{kFormatPcm, 16, 2, 22050, 5, 4, 40}) == 5);
     EXPECT(ReadableFrames(Sound{kFormatPcm, 8, 2, 22050, 5, 2, 40}) == 20);
     EXPECT(ReadableFrames(Sound{kFormatImaAdpcm, 4, 1, 22050, 0xFFFFFFFFu, 4, 0xFFFFFFFCu}) == 0x3FFFFFFFu);
+
+    // A block size no file can name holds no frames, so nothing is planned and
+    // Pack is never asked to step through the sound at that size. 0x80000004
+    // used to count as blocks of one frame each, read 2 GB apart.
+    for (const uint32_t blockBytes : {kMaxBlockBytes + 1, 0x80000004u, 0xFFFFFFFFu})
+    {
+        for (const uint32_t channels : {1u, 2u})
+        {
+            const Sound sound = {kFormatImaAdpcm, 4, channels, 22050, 4000, blockBytes, 2048};
+            EXPECT(ReadableFrames(sound) == 0);
+            EXPECT(!PlanPack(sound, 33075).possible);
+            EXPECT(!PlanPack(Sound{kFormatImaAdpcm, 4, channels, 44100, 4000, blockBytes, 2048}, 33075).possible);
+        }
+    }
+    // The longest block is still read, and its scratch is sized for it.
+    plan = PlanPack(Sound{kFormatImaAdpcm, 4, 1, 44100, 0xFFFFFFFFu, kMaxBlockBytes, 2 * kMaxBlockBytes}, 33075);
+    EXPECT(plan.possible && !plan.asLoaded && plan.scratchSamples == BlockFrames(kMaxBlockBytes, 1));
+    EXPECT(plan.packed.frames == BlockFrames(kMaxBlockBytes, 1));
 }
 
 void PackedSounds()

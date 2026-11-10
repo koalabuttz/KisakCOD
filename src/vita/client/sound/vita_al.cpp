@@ -935,6 +935,13 @@ void AL_APIENTRY alBufferData(ALuint name, ALenum format, const ALvoid *data, AL
             return;
         }
         blockBytes = kisak::ima_adpcm::BlockBytes(blockFrames, static_cast<uint32_t>(channels));
+        // A block the decoder does not read (longer than kMaxBlockBytes) would
+        // play as whatever the decoded block's memory held.
+        if (kisak::ima_adpcm::BlockFrames(blockBytes, static_cast<uint32_t>(channels)) != blockFrames)
+        {
+            SetError(AL_INVALID_VALUE);
+            return;
+        }
         const uint64_t all = static_cast<uint64_t>(static_cast<uint32_t>(size) / blockBytes) * blockFrames;
         if (static_cast<uint32_t>(size) % blockBytes != 0 || all > 0x7FFFFFFFu)
         {

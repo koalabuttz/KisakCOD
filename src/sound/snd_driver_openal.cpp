@@ -1889,7 +1889,13 @@ static int16_t *SND_ConvertToPcm16(_AILSOUNDINFO_COD4 *info, const void *srcData
     if (format == SND_FORMAT_PCM && info->bits == 8)
         frames = info->data_len / channels;
 
-    int16_t *pcm = (int16_t *)Z_Malloc(frames * channels * sizeof(int16_t) + sizeof(int16_t), "SND_ConvertToPcm16", 15);
+    // The frame count is the file's claim. Times the channels it could pass 4 GB and
+    // wrap round to a buffer of a few bytes, which the decoder then filled with every
+    // frame the data did hold. A sound that large is refused like one with no memory.
+    const uint64_t pcmBytes = (uint64_t)frames * channels * sizeof(int16_t);
+    if (pcmBytes > 0x7FFFFFFFu - sizeof(int16_t))
+        return nullptr;
+    int16_t *pcm = (int16_t *)Z_Malloc((int)(pcmBytes + sizeof(int16_t)), "SND_ConvertToPcm16", 15);
     if (!pcm)
         return nullptr;
     uint32_t written = 0;
