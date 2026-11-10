@@ -41,13 +41,16 @@ platform code.
 | 0019 | The 16-bit angle factors are bare numbers in 16 files (upstream issue 53) | commit `7fc5013` |
 | 0020 | 1/360 is a bare number on 90 lines of 23 files (upstream issue 45) | commit `8569b17`, first half |
 | 0021 | The wrap of an angle into [-180, 180] is written out 19 times (upstream issue 45) | commit `8569b17`, second half |
+| 0022 | The origin codec rounds the map centre with a bare `+ 0.5` and a cast in six places (upstream issue 56) | commit `431c9d9` |
+| 0023 | Eight vector snaps are three `(float)(int)` casts each (upstream issue 52) | commit `f783b2e` |
 
 Patches 0001 to 0004 are the proposed first batch and 0005 to 0010 the
 second. 0011 to 0015 answer open upstream issues or sit next to one, and
 come after those. 0016 belongs with the second batch; 0017 and 0018 go with
 the other fixes for open issues. 0019 to 0021 are the first of the cleanup
 issues; they form a chain (0021 on 0020 on 0019) because all three change
-neighbouring lines of the same angle code.
+neighbouring lines of the same angle code. 0022 and 0023 are the rounding
+issues; neither changes behaviour.
 
 Open points on single patches, to settle before each is offered:
 
@@ -87,6 +90,20 @@ Open points on single patches, to settle before each is offered:
   adds a double 0.5 before the floor (about 8.4 million inputs differ), one
   that scales by 7200, and the single-player actor, turret, vehicle path,
   pose and model previewer copies.
+- 0022 keeps the rounding upstream issue 56 asks to reconsider, and says
+  why: retail 1.7 adds 0.5 and truncates, and both ends of the origin codec
+  have to agree on the centre. The issue's author may still want
+  `std::round`; that would break play against retail clients and servers on
+  maps whose centre has a negative coordinate with a fraction below one
+  half.
+- 0023 gives upstream issue 52 the retail addresses that show the game's
+  vector snaps truncate. Upstream already switched the rounding sites to
+  `SnapFloat()` itself and left the issue open; this patch only names what
+  is left. A contributor also named `SnapAngles` and
+  `SnapPointToIntersectingPlanes` on the issue; the fork has not checked
+  those two against retail.
+- The retail addresses in 0022 and 0023 come from the fork's scan of a
+  retail 1.7 `iw3mp.exe` (`scripts/audit/retail_float_int_scan.py`).
 - Upstream issue 36 needs nothing from the fork: upstream has already
   commented out the copies it names.
 
