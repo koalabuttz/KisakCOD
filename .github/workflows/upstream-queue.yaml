@@ -15,6 +15,9 @@ on:
   workflow_dispatch:
   pull_request:
     branches: [ "master" ]
+    # A draft pull request runs nothing; marking it ready starts the checks
+    # (docs/ci.md).
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - docs/upstream/**
       - scripts/tools/upstream_queue.py
@@ -43,6 +46,7 @@ env:
 
 jobs:
   check:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: Patches apply to upstream
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -65,6 +69,7 @@ jobs:
         run: python3 scripts/tools/upstream_queue.py check --upstream "$RUNNER_TEMP/upstream"
 
   build:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: MSVC build of patched upstream
     needs: check
     runs-on: windows-2022

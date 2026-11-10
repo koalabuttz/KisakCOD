@@ -617,6 +617,8 @@ def main() -> int:
     parser.add_argument("--allow", type=Path, default=DEFAULT_ALLOW)
     parser.add_argument("--only", nargs="*", default=None)
     parser.add_argument("--include-raw-loaders", action="store_true")
+    parser.add_argument("--changed-since", metavar="COMMIT",
+                        help="scan only the units a change since this commit can reach (changed_units.py)")
     args = parser.parse_args()
     load_clang()
     allowed = load_allow(args.allow)
@@ -633,6 +635,12 @@ def main() -> int:
             if not args.include_raw_loaders and raw_asset_loader(p):
                 continue
             jobs.append((p, a, d))
+    if args.changed_since:
+        import changed_units
+        reach, why = changed_units.select({job[0] for job in jobs}, [build.resolve() for build in args.build_dir], args.changed_since)
+        print(f"--changed-since {args.changed_since}: " + (why if reach is not None else f"scanning everything, {why}"))
+        if reach is not None:
+            jobs = [job for job in jobs if job[0] in reach]
     hits, failures, used = {}, [], set()
     with Pool(args.jobs) as pool:
         for path, found, errors in pool.imap_unordered(scan, jobs):
