@@ -246,7 +246,8 @@ evidence. All three pass as of master `998344d`:
    minutes of play printed about 140 prediction misses, 1.2 units on average
    and 7.7 at most, and about 190 prediction errors. The Windows build over
    similar play (2026-11-04, a desktop PC) printed 32 misses, 0.47 units on
-   average, and 34 errors; the gap is being investigated.
+   average, and 34 errors. Later runs put that gap down to what happened in
+   play, not to the Linux build ([status](status.md#prediction)).
 
 The x86_64 build passed the same steps on the same laptop on 2026-11-04,
 including a clean quit ([linux-x64.md](linux-x64.md#x86_64-multiplayer-client)).
