@@ -24,6 +24,11 @@ spill   a member array (or the address of a member) indexed by a constant past
 pun     a pointer cast from U* to T* where U and T have the same i386 size but
         different x86_64 sizes, such as (int *)&pointerField or
         (VariableUnion *)&int32Field.
+void    a `void *` (a callback's user data, a union's untyped member) cast to
+        T* and moved by a constant, such as *((const char **)userData + 2):
+        there is no record to place the offset in, so every such line is
+        reported. A struct read this way in four-byte and pointer-sized slots
+        at once is right on i386 only; name the struct and use its fields.
 
 Each report is a place to read; the allow file lists lines read and found to
 be fine, by file and source text (same format as check_32bit_size_literals).
@@ -297,11 +302,17 @@ class Scanner:
                 hit = self.arith(node)
                 if hit:
                     found.append(hit)
+                hit = self.void_base(node)
+                if hit:
+                    found.append(hit)
                 hit = self.union_copy(node)
                 if hit:
                     found.append(hit)
             elif node.kind == K.ARRAY_SUBSCRIPT_EXPR:
                 hit = self.subscript(node)
+                if hit:
+                    found.append(hit)
+                hit = self.void_base(node)
                 if hit:
                     found.append(hit)
             if is_cast(K, node):
@@ -310,6 +321,27 @@ class Scanner:
                     found.append(hit)
             stack.extend(node.get_children())
         return found
+
+    def void_base(self, node):
+        """(T *)voidPointer + c or ((T *)voidPointer)[c], c a non-zero constant."""
+        K, T = self.K, self.T
+        if node.kind == K.BINARY_OPERATOR and operator_token(node) not in ("+", "-"):
+            return None
+        children = list(node.get_children())
+        if len(children) != 2:
+            return None
+        cast = strip(K, children[0])
+        if cast is None or not is_cast(K, cast) or not const_value(K, children[1]):
+            return None
+        target = cast.type.get_canonical()
+        operand = cast_operand(K, cast)
+        if target.kind != T.POINTER or operand is None or operand.kind == K.CALL_EXPR:
+            return None
+        source = operand.type.get_canonical()
+        if source.kind != T.POINTER or source.get_pointee().get_canonical().kind != T.VOID:
+            return None
+        return {"line": node.location.line, "column": node.location.column, "kind": "void",
+                "to": target.get_pointee().spelling, "value": const_value(K, children[1])}
 
     def chain(self, node):
         """Flatten a + / - chain: returns (bottom pointer operand, [(sign, term)])."""
@@ -562,6 +594,10 @@ def scan(job):
             if w is not None and w["to_size"] != h["to_size"]:
                 out.append((f"{rel}: {text}", f"{where}: {h['to']} (i386 {h['to_size']} bytes, x86_64 "
                             f"{w['to_size']}) read or written at a byte offset: {text}"))
+            continue
+        if h["kind"] == "void":
+            out.append((f"{rel}: {text}", f"{where}: void pointer read as {h['to']} at element {h['value']}, "
+                        f"with no record to place it in: {text}"))
             continue
         if h["kind"] == "union":
             if w is not None and h["field_size"] == h["union_size"] and w["field_size"] != w["union_size"]:

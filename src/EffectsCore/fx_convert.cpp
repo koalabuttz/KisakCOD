@@ -2,6 +2,7 @@
 #include "fx_system.h"
 #include <gfx_d3d/r_material.h>
 #include <universal/com_math.h>
+#include <xanim/xmodel.h>
 
 bool FX_ElemUsesMaterial(const FxEditorElemDef *edElemDef)
 {
@@ -1615,14 +1616,14 @@ const FxEffectDef *FX_Convert(const FxEditorEffectDef *editorEffect, void *(*All
                 elemVisual = &edElemDef->visuals[visualIndex];
                 if (elemVisual->anonymous)
                 {
-                    if (!*((_DWORD *)elemVisual->anonymous + 53))
+                    if (!elemVisual->model->physPreset)
                     {
                         v2 = FX_RegisterPhysPreset("default");
-                        *((_DWORD *)elemVisual->anonymous + 53) = (_DWORD)v2;
+                        elemVisual->model->physPreset = v2;
                         Com_PrintError(
                             CON_CHANNEL_PHYS,
                             "ERROR: no physics preset specified for the FX model [%s]\n",
-                            *(const char **)elemVisual->anonymous);
+                            elemVisual->model->name);
                     }
                 }
             }

@@ -11,8 +11,11 @@ Status: killhouse and cargoship load and play on a developer laptop (Intel
 GPU, DXVK, cinematics on): the pregame ends by itself, about a minute of play,
 clean quit. Without game files it stops where the engine needs them (the
 autoconfigure step's `configure.csv`), which is how CI runs it. Those runs
-were the i386 game; the x86_64 game builds and starts but has not loaded a
-level yet.
+were the i386 game. The x86_64 game loads all 21 levels in the sweep tool on
+the same laptop (2026-11-10, cinematics on, nobody watching the screen),
+including the level chain and save and load; by hand it has not been played
+yet. On i386 every level also draws a frame and comes back from a death
+through its last save (sweep run 2).
 
 ## Building
 
@@ -36,6 +39,16 @@ through the FFmpeg shim when libavcodec and libavutil are found at configure
 time, or always with `-DKISAK_LINUX_CINEMATICS=ON`
 ([linux-cinematics.md](linux-cinematics.md)); without the shim no movie plays.
 Both games can be switched on in one build directory.
+
+The Vulkan back end is linked in the way the multiplayer client links it: add
+`-DKISAK_BUILD_VULKAN_PROBE=ON -DKISAK_BUILD_VULKAN_SHADERS=ON
+-DKISAK_BUILD_VULKAN_LEGACY=ON -DKISAK_BUILD_VULKAN_BACKEND=ON` (Vulkan
+headers needed; the loader is opened at run time through SDL, never linked),
+and `+set r_backend vulkan` then draws through it instead of DXVK
+([vulkan-d3d9-front.md](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan)).
+The default stays `r_backend d3d9`. This is build proof only so far: the game
+compiles and links with the back end and starts as before without game files,
+but no singleplayer level has been drawn through Vulkan yet.
 
 For x86_64, add `-DKISAK_LINUX_ARCH=x86_64` in a build directory of its own
 and point the three libraries at x86_64 builds, as for the x86_64 multiplayer
@@ -71,7 +84,10 @@ drivers: an empty base path is refused at the file system check, and a one-line
 stub of `fileSysCheck.cfg` gets through the file system to autoconfigure and
 stops there. CI builds and runs it in the device-probe job (i386, Debug and
 RelWithDebInfo) and in the x86_64 client job (Debug), where the 32-bit layout
-checks also read the singleplayer sources.
+checks also read the singleplayer sources. The Vulkan engine job builds the
+i386 game with the Vulkan back end linked in and runs the same check on it:
+without game files the game stops before the renderer, so this shows that the
+back end builds, links and leaves the start alone, not that it draws.
 
 ## Fixes the first level loads found
 
@@ -87,15 +103,41 @@ checks also read the singleplayer sources.
   not decompiled code.
 - The Linux CPU benchmark is now the Windows one, so autoconfigure picks
   its CPU row on the same scale.
+- A game built without movies (`KISAK_LINUX_CINEMATICS` off) loaded no level:
+  the loading screen samples the movie's images, the build's stand-in never
+  set them, and the frame stopped with "Tried to use 'cinematicY' when it
+  isn't valid" behind a render thread assert. The stand-in now sets them to
+  the black picture the full build shows while no movie has a frame. Found
+  by the first x86_64 sweep on the laptop. With the fix, an x86_64 build
+  without movies loads killhouse and cargoship and quits cleanly (Linux in
+  WSL on the PC, software rendering, 2026-11-10).
+- Four structs were read through a void pointer in slots that fit the 32-bit
+  layout only. One of them crashed the 64-bit game 4.5 s into airlift (an
+  effect model's physics preset read as null; seen on Windows x64). They are
+  read by their fields now, and `check_32bit_layout_offsets.py` reports the
+  shape. With the fix the Windows x64 game holds airlift for 60 s and quits
+  with exit code 0, three launches of three, where it crashed three of three
+  before. The x86_64 Linux game holds airlift with the fix too, but it did
+  not crash there without it either (Linux in WSL on the PC), so only the
+  Windows runs show the fix works.
+- Loading a save stored the body of a dynamic entity that was still moving
+  as the pointer itself in the 32-bit `physObjId` field
+  (`DynEnt_LoadEntities`). A 64-bit pointer does not fit, and every later
+  reader takes the field for an object id, so on x86_64 the body was lost
+  (an assert in a Debug build). The load stores the object id now. Found by
+  reading the source; no run has shown the fault or the fix, which needs a
+  save taken while a dynamic entity is awake.
 
 ## Next
 
 1. Longer play and more levels, with sound: what the other levels use, the
    sweep tool (`scripts/tests/run_linux_sp_level_sweep.py`) and the run plan
    are in [linux-sp-levels.md](linux-sp-levels.md).
-2. The x86_64 game's first level loads: the same sweep on the laptop with an
-   x86_64 build.
-3. Compare with the Windows `KisakCOD-sp` build on the same data, to tell
+2. The x86_64 game by hand (its level chain and save and load pass in the
+   sweep tool).
+3. A first level through `r_backend vulkan` on the laptop, to find what the
+   singleplayer levels ask of the D3D9 front that multiplayer maps do not.
+4. Compare with the Windows `KisakCOD-sp` build on the same data, to tell
    port bugs from bugs the Windows build shares. Linux keeps assertions on in
    every configuration and the Windows Release build does not, so compare
    assertions with a Windows Debug build.

@@ -25,6 +25,21 @@ cheat-protected command devmap allows), a check that the save file appeared
 under the profile, ``loadgame sweep`` and a second hold. A death's "retry"
 (``loadgame_continue``) goes through the same load.
 
+``--screenshot`` adds a ``screenshot sweep_<level>`` and reads the image the
+game wrote under its home path: the step "frame drawn" is seen when the file is
+there and is not nearly all one colour, and the report gets a table that
+describes each frame in numbers (size, brightness, colour count, mean colour
+of the top, middle and bottom third). That catches a black or one-colour
+screen with nobody watching; it does not say the picture is right. The images
+stay under the work directory (``--delete-screenshots`` removes each one once
+measured); they are game output and never leave the machine.
+
+``--death-retry`` adds, last in each level: ``kill`` (the player dies), a wait
+for the retry's load ("=== G_LoadGame ===", which the game starts by itself
+3 seconds after the death), a hold and the ``mapname`` question again. The
+retry loads the last save: the level's own start save or autosave, or
+``--save-load``'s when both are asked for.
+
 Isolation
 ---------
 Everything the game writes goes under one work directory:
@@ -54,6 +69,8 @@ Examples
       --levels killhouse,cargoship,coup --hold 60 --work-dir ~/kisak-private/sp-sweep1
   python3 scripts/tests/run_linux_sp_level_sweep.py "$GAME" --binary "$BUILD/KisakCOD-sp" \\
       --plan chain --levels killhouse,cargoship --hold 30
+  python3 scripts/tests/run_linux_sp_level_sweep.py "$GAME" --binary "$BUILD/KisakCOD-sp" \\
+      --levels all --hold 30 --screenshot --death-retry
   python3 scripts/tests/run_linux_sp_level_sweep.py --list-levels
 
 Exit status: 0 when every step of every level was seen, 1 when any was not,
@@ -67,6 +84,7 @@ import queue
 import re
 import shlex
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -121,6 +139,102 @@ WARNING = re.compile(r"^(WARNING|\^3WARNING)", re.I)
 GDB_EXITED = re.compile(r"^\[Inferior \d+ \(process \d+\) exited (normally|with code (\d+))\]")
 GDB_SIGNAL = re.compile(r"^(?:Thread \d+ .*|Program) received signal (SIG\w+)")
 SIGNALS = {"SIGABRT": 6, "SIGSEGV": 11, "SIGBUS": 7, "SIGFPE": 8, "SIGILL": 4, "SIGKILL": 9, "SIGTERM": 15}
+
+
+class Frame:
+    """Numbers that describe a screenshot without showing it, from every 4th
+    pixel of every 4th row. Colours are counted in 32 steps per channel."""
+
+    FLAT_SHARE = 0.98  # one colour on this much of the frame: nothing was drawn
+
+    def __init__(self, path):
+        data = path.read_bytes()
+        if len(data) < 18:
+            raise ValueError(f"{path.name}: too short for a TGA header")
+        id_length, colour_map, kind = data[0], data[1], data[2]
+        width, height, depth, descriptor = struct.unpack_from("<HHBB", data, 12)
+        if colour_map != 0 or kind != 2 or depth not in (24, 32) or not width or not height:
+            raise ValueError(f"{path.name}: not an uncompressed 24 or 32-bit TGA")
+        step = depth // 8
+        start = 18 + id_length
+        if len(data) < start + width * height * step:
+            raise ValueError(f"{path.name}: pixel data is cut short")
+        top_first = bool(descriptor & 0x20)
+        colours = {}
+        thirds = [[0, 0, 0, 0] for _ in range(3)]  # red, green, blue, samples
+        luma = 0.0
+        lit = 0
+        count = 0
+        for row in range(0, height, 4):
+            third = thirds[min((row if top_first else height - 1 - row) * 3 // height, 2)]
+            base = start + row * width * step
+            for column in range(0, width, 4):
+                blue, green, red = data[base + column * step:base + column * step + 3]
+                brightness = 0.299 * red + 0.587 * green + 0.114 * blue
+                luma += brightness
+                lit += brightness > 16
+                count += 1
+                key = (red >> 3, green >> 3, blue >> 3)
+                colours[key] = colours.get(key, 0) + 1
+                third[0] += red
+                third[1] += green
+                third[2] += blue
+                third[3] += 1
+        self.size = f"{width}x{height}"
+        self.mean = luma / count
+        self.lit = lit / count
+        self.colours = len(colours)
+        self.commonest = max(colours.values()) / count
+        self.thirds = ["#%02x%02x%02x" % tuple(round(total / max(third[3], 1)) for total in third[:3])
+                       for third in thirds]
+
+    def flat(self):
+        return self.commonest >= self.FLAT_SHARE
+
+
+def take_screenshot(game, result, home, options, name):
+    """Asks the game for a screenshot and measures it; the "frame drawn" step.
+
+    The game writes screenshots/<name>.tga under its home path. The step is
+    seen when the file is there and is not nearly all one colour.
+    """
+    path = home / "main" / "screenshots" / f"{name}.tga"
+    if path.exists():
+        path.unlink()
+    game.send(f"screenshot {name}")
+    deadline = time.monotonic() + options.probe_timeout
+    while not path.is_file() and time.monotonic() < deadline and game.hold(0.5):
+        pass
+    game.hold(1)  # let the write finish
+    if not path.is_file():
+        return result.step("frame drawn", False, f"no {path.relative_to(home)}")
+    try:
+        frame = Frame(path)
+    except (OSError, ValueError) as error:
+        return result.step("frame drawn", False, str(error))
+    result.frame = frame
+    if options.delete_screenshots:
+        path.unlink()
+    return result.step("frame drawn", not frame.flat(),
+                       f"mean brightness {frame.mean:.0f} of 255, {frame.colours} colours"
+                       + (f", one colour on {frame.commonest:.0%} of it" if frame.flat() else ""))
+
+
+def frame_table(results, what):
+    """The report's table of screenshot numbers; empty when no frame was measured."""
+    if not any(result.frame for result in results):
+        return []
+    lines = ["", "Screenshots as numbers (every 4th pixel of every 4th row; colours counted in 32 steps per "
+             f"channel). A {what} whose row stands apart from the others is worth a look:", "",
+             f"| {what.capitalize()} | Size | Mean brightness | Not black | Colours | Commonest colour | "
+             "Mean colour, top third | Middle | Bottom |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    for result in results:
+        frame = result.frame
+        if frame:
+            lines.append(f"| {result.level} | {frame.size} | {frame.mean:.0f} | {frame.lit:.0%} | {frame.colours} | "
+                         f"{frame.commonest:.0%} | {frame.thirds[0]} | {frame.thirds[1]} | {frame.thirds[2]} |")
+    return lines
 
 
 def dvar_answer(name):
@@ -313,6 +427,7 @@ class LevelResult:
         self.warnings = 0
         self.log = None
         self.tail = []
+        self.frame = None
 
     def step(self, name, ok, detail=""):
         self.steps.append((name, ok, detail))
@@ -371,6 +486,32 @@ def run_level_steps(game, result, options, home, expect_load=True):
         game.send(MAP_DVAR)
         match = game.wait_for(answer, options.probe_timeout)
         if not result.step("console answers after loadgame", match is not None and match.group(1) == result.level):
+            return False
+    if options.screenshot and not take_screenshot(game, result, home, options, f"sweep_{result.level}") and game.ended:
+        return False
+    if options.death_retry:
+        # kill is the game's own client command: the player dies as from any
+        # other damage. respawn() then waits g_deathDelay (3 s) and runs
+        # loadgame_continue, which loads the last save (sv_lastSaveGame: the
+        # level-start save, an autosave, or --save-load's own), as after a
+        # real death. With no save at all the game stops with "Save '' not
+        # available", which the report lists as an error.
+        game.send("kill")
+        loaded = game.wait_for(LOADGAME_STARTED, options.death_timeout)
+        if loaded:
+            detail = ""
+        elif game.ended:
+            detail = "the process ended first"
+        else:
+            detail = f"no '=== G_LoadGame ===' in {options.death_timeout} s after kill"
+        if not result.step("retry loaded after death", loaded is not None, detail):
+            return False
+        alive = game.hold(options.hold_after_load)
+        if not result.step(f"held {options.hold_after_load} s after the retry", alive, "" if alive else "process ended"):
+            return False
+        game.send(MAP_DVAR)
+        match = game.wait_for(answer, options.probe_timeout)
+        if not result.step("console answers after the retry", match is not None and match.group(1) == result.level):
             return False
     return True
 
@@ -431,6 +572,8 @@ def write_report(path, options, results, missing):
     lines = ["# Linux singleplayer level sweep", ""]
     lines.append(f"- Binary: `{options.binary}`")
     lines.append(f"- Plan: {options.plan}; hold {options.hold} s; save/load: {'yes' if options.save_load else 'no'}; "
+                 f"screenshot: {'yes' if options.screenshot else 'no'}; "
+                 f"death and retry: {'yes' if options.death_retry else 'no'}; "
                  f"assertions {'reported and continued (KISAK_ASSERT_CONTINUE=1)' if options.assert_continue else 'fatal'}")
     lines.append(f"- Window {options.mode}, snd_volume {options.volume}"
                  + (", extra: " + ", ".join(f"{n}={v}" for n, v in options.set) if options.set else ""))
@@ -445,6 +588,7 @@ def write_report(path, options, results, missing):
         load = f"{result.load_ms / 1000:.1f} s" if result.load_ms is not None else "-"
         lines.append(f"| {result.level} | {verdict} | {load} | {result.status} | {len(result.assertions)} | "
                      f"{len(result.errors)} | {result.warnings} |")
+    lines += frame_table(results, "level")
     for result in results:
         if result.ok() and not result.assertions and not result.errors:
             continue
@@ -479,7 +623,17 @@ def main(argv=None):
     parser.add_argument("--plan", choices=("levels", "chain"), default="levels")
     parser.add_argument("--hold", type=int, default=45, help="seconds to keep each level running (default 45)")
     parser.add_argument("--save-load", action="store_true", help="devsave, then loadgame, in each level")
-    parser.add_argument("--hold-after-load", type=int, default=15, help="seconds to hold after loadgame (default 15)")
+    parser.add_argument("--hold-after-load", type=int, default=15,
+                        help="seconds to hold after loadgame and after a retry (default 15)")
+    parser.add_argument("--screenshot", action="store_true",
+                        help="take one screenshot per level into the work directory, describe it in numbers and "
+                        "report a missing or one-colour frame")
+    parser.add_argument("--delete-screenshots", action="store_true",
+                        help="with --screenshot: delete each image once its numbers are taken")
+    parser.add_argument("--death-retry", action="store_true",
+                        help="kill the player in each level and wait for the retry to load the last save")
+    parser.add_argument("--death-timeout", type=int, default=60,
+                        help="seconds to wait for the retry's load after kill (default 60)")
     parser.add_argument("--load-timeout", type=int, default=240, help="seconds to wait for a load (default 240)")
     parser.add_argument("--probe-timeout", type=int, default=20, help="seconds to wait for a console answer")
     parser.add_argument("--quit-timeout", type=int, default=30, help="seconds to wait for exit after quit")
@@ -503,8 +657,10 @@ def main(argv=None):
         levels = parse_levels(options.levels)
     except ValueError as error:
         parser.error(str(error))
-    if options.hold <= 0 or options.load_timeout <= 0:
-        parser.error("--hold and --load-timeout must be positive")
+    if options.hold <= 0 or options.load_timeout <= 0 or options.death_timeout <= 0:
+        parser.error("--hold, --load-timeout and --death-timeout must be positive")
+    if options.delete_screenshots and not options.screenshot:
+        parser.error("--delete-screenshots needs --screenshot")
     game_dir = options.game_dir.expanduser().resolve()
     if not (game_dir / "main").is_dir() or not (game_dir / "zone").is_dir():
         parser.error(f"{game_dir} has no main/ and zone/")

@@ -2790,9 +2790,10 @@ jobs:
   vulkan_engine:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # The engine's renderer on the Vulkan back end (docs/vulkan-d3d9-front.md):
-    # the device probe, the world draw probe and the multiplayer client built
-    # i386 with KISAK_BUILD_VULKAN_BACKEND, so r_backend vulkan makes
-    # R_HW_Direct3DCreate9 return the Vulkan D3D9 front. The device probe then
+    # the device probe, the world draw probe, the multiplayer client and the
+    # singleplayer game built i386 with KISAK_BUILD_VULKAN_BACKEND, so
+    # r_backend vulkan makes R_HW_Direct3DCreate9 return the Vulkan D3D9 front.
+    # The device probe then
     # runs the engine's own r_init.cpp (R_PreCreateWindow, R_CreateWindow,
     # R_CreateDevice) on Mesa's i386 lavapipe through SDL's offscreen driver,
     # clears, reads back, presents and releases, and must reach no method the
@@ -2801,7 +2802,9 @@ jobs:
     # (x86_64) only. The programs link the same stand-in D3D9 and OpenAL
     # libraries as device_probe; no DXVK library is built and no game data is
     # read. Drawing a map needs a GPU and a game install and runs on a
-    # developer machine.
+    # developer machine. The singleplayer game is only built, linked and started
+    # without game data (scripts/tests/test_linux_sp_game.py), where it stops
+    # before the renderer: that the back end does not change how it starts.
     name: Engine on the Vulkan back end (i386, lavapipe)
     runs-on: ubuntu-24.04
     timeout-minutes: 75
@@ -2929,33 +2932,35 @@ jobs:
             -DKISAK_OPENAL_LIBRARY="$stubs/libopenal_unavailable.so" \
             -DKISAK_BUILD_DEVICE_PROBE=ON -DKISAK_BUILD_WORLD_FRONTEND_PROBE=ON \
             -DKISAK_BUILD_WORLD_DEVICE_PROBE=ON -DKISAK_BUILD_WORLD_DRAW_PROBE=ON \
-            -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_LINUX_CINEMATICS=OFF \
+            -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_BUILD_LINUX_SP_GAME=ON \
+            -DKISAK_LINUX_CINEMATICS=OFF \
             -DKISAK_BUILD_VULKAN_PROBE=ON -DKISAK_BUILD_VULKAN_SHADERS=ON \
             -DKISAK_BUILD_VULKAN_LEGACY=ON -DKISAK_BUILD_VULKAN_BACKEND=ON \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3" \
             2>&1 | tee "$RUNNER_TEMP/configure.log"
-          for program in KisakCOD-device-probe KisakCOD-world-draw-probe KisakCOD-mp; do
+          for program in KisakCOD-device-probe KisakCOD-world-draw-probe KisakCOD-mp KisakCOD-sp; do
             grep -qx -- "-- Vulkan back end: linked into $program" "$RUNNER_TEMP/configure.log"
           done
           # The r_vkStats command is registered by a file outside the objects
           # that make D3D9 calls (src/gfx_d3d/r_cmds.cpp), so the back end's
           # definition has to reach that file's objects as well.
-          for program in KisakCOD-world-draw-probe KisakCOD-mp; do
+          for program in KisakCOD-world-draw-probe KisakCOD-mp KisakCOD-sp; do
             grep -qx -- "-- Vulkan back end: r_vkStats registered in $program" "$RUNNER_TEMP/configure.log"
           done
           cmake --build "$BUILD_DIR" \
             --target KisakCOD-device-probe KisakCOD-vulkan-d3d9-check KisakCOD-world-draw-probe KisakCOD-mp \
+            KisakCOD-sp \
             --parallel "$(nproc)"
           # No game data means no console to type it into here, so the
           # command is looked for in the programs: a build that left it out
           # has no trace of this message (laptop run 11 met one).
-          for program in KisakCOD-world-draw-probe KisakCOD-mp; do
+          for program in KisakCOD-world-draw-probe KisakCOD-mp KisakCOD-sp; do
             if ! grep -aq 'r_vkStats: there is no Vulkan device' "$OUT_DIR/$program"; then
               echo "$program was built without the r_vkStats command" >&2
               exit 1
             fi
           done
-          for program in KisakCOD-device-probe KisakCOD-vulkan-d3d9-check KisakCOD-world-draw-probe KisakCOD-mp; do
+          for program in KisakCOD-device-probe KisakCOD-vulkan-d3d9-check KisakCOD-world-draw-probe KisakCOD-mp KisakCOD-sp; do
             readelf -h "$OUT_DIR/$program" | grep -Eq 'Machine:[[:space:]]+Intel 80386'
             # The Vulkan loader is opened at run time through SDL, never linked.
             if readelf -d "$OUT_DIR/$program" | grep -q 'libvulkan'; then
@@ -3000,6 +3005,20 @@ jobs:
           python3 -u scripts/tests/test_vulkan_d3d9_front.py \
             --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
             --video-driver offscreen --validation off
+
+      - name: Start the singleplayer game built with the Vulkan back end
+        timeout-minutes: 10
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/stand-ins"
+          # No game data: the game must stop where it does without the back
+          # end, at the file system check or at autoconfigure.
+          python3 -u scripts/tests/test_linux_sp_game.py --binary "$OUT_DIR/KisakCOD-sp"
 
       - name: Save compiler cache
         if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}

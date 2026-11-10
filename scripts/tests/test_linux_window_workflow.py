@@ -1233,7 +1233,8 @@ class VulkanEngineWorkflowTests(unittest.TestCase):
         # gave the back end's definition to those objects only, and the game
         # had no r_vkStats (found by a laptop run, not by CI).
         module = (ROOT / 'scripts/vulkan_probe/vulkan_backend.cmake').read_text()
-        for pair in ('KisakCOD-world-draw-probe KisakCOD-world-draw-standin', 'KisakCOD-mp KisakCOD-mp-standin'):
+        for pair in ('KisakCOD-world-draw-probe KisakCOD-world-draw-standin', 'KisakCOD-mp KisakCOD-mp-standin',
+                     'KisakCOD-sp KisakCOD-sp-standin'):
             self.assertIn(pair, module)
         self.assertIn('target_compile_definitions(${command_objects} PRIVATE KISAK_VULKAN_BACKEND)', module)
         self.assertIn('message(FATAL_ERROR\n                "${command_objects} does not compile src/gfx_d3d/r_cmds.cpp',
@@ -1242,7 +1243,7 @@ class VulkanEngineWorkflowTests(unittest.TestCase):
         self.assertIn('#if defined(KISAK_VULKAN_BACKEND)\n\tCmd_AddCommandInternal("r_vkStats"', commands)
         self.assertIn('"r_vkStats: there is no Vulkan device', commands)
         build = self.step(self.BUILD_STEP)['run']
-        self.assertIn('for program in KisakCOD-world-draw-probe KisakCOD-mp; do\n'
+        self.assertIn('for program in KisakCOD-world-draw-probe KisakCOD-mp KisakCOD-sp; do\n'
                       'grep -qx -- "-- Vulkan back end: r_vkStats registered in $program" "$RUNNER_TEMP/configure.log"',
                       '\n'.join(line.strip() for line in build.splitlines()))
         self.assertIn('if ! grep -aq \'r_vkStats: there is no Vulkan device\' "$OUT_DIR/$program"; then', build)

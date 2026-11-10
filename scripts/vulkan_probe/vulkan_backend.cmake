@@ -16,13 +16,14 @@
 #   KisakCOD-device-probe       --backend vulkan
 #   KisakCOD-world-draw-probe   +set r_backend vulkan
 #   KisakCOD-mp                 +set r_backend vulkan
+#   KisakCOD-sp                 +set r_backend vulkan
 #
 # Each one that is configured gets it; the others are left alone. Needs
 # KISAK_BUILD_VULKAN_LEGACY (with the native D3D9 boundary, which the programs
 # need anyway). See docs/vulkan-d3d9-front.md.
 # ---------------------------------------------------------------------------
 option(KISAK_BUILD_VULKAN_BACKEND
-    "Link the Vulkan back end (r_backend vulkan) into the device probe, the world draw probe and the multiplayer client; needs KISAK_BUILD_VULKAN_LEGACY and KISAK_BUILD_LINUX_NATIVE_D3D9" OFF)
+    "Link the Vulkan back end (r_backend vulkan) into the device probe, the world draw probe, the multiplayer client and the singleplayer game; needs KISAK_BUILD_VULKAN_LEGACY and KISAK_BUILD_LINUX_NATIVE_D3D9" OFF)
 if(NOT KISAK_BUILD_VULKAN_BACKEND)
     return()
 endif()
@@ -50,7 +51,8 @@ endfunction()
 set(kisak_vulkan_backend_programs
     KisakCOD-device-probe-native KisakCOD-device-probe-own-native KisakCOD-device-probe
     KisakCOD-world-draw-native KisakCOD-world-draw-own-native KisakCOD-world-draw-probe
-    KisakCOD-mp-native KisakCOD-mp-own KisakCOD-mp)
+    KisakCOD-mp-native KisakCOD-mp-own KisakCOD-mp
+    KisakCOD-sp-native KisakCOD-sp-own KisakCOD-sp)
 set(kisak_vulkan_backend_linked 0)
 list(LENGTH kisak_vulkan_backend_programs program_fields)
 math(EXPR last_program "${program_fields} - 1")
@@ -75,7 +77,8 @@ endforeach()
 # Each program and its stand-in objects.
 set(kisak_vulkan_backend_command_objects
     KisakCOD-world-draw-probe KisakCOD-world-draw-standin
-    KisakCOD-mp KisakCOD-mp-standin)
+    KisakCOD-mp KisakCOD-mp-standin
+    KisakCOD-sp KisakCOD-sp-standin)
 list(LENGTH kisak_vulkan_backend_command_objects command_fields)
 math(EXPR last_command "${command_fields} - 1")
 foreach(index RANGE 0 ${last_command} 2)
@@ -101,5 +104,6 @@ endforeach()
 if(kisak_vulkan_backend_linked EQUAL 0)
     message(WARNING
         "KISAK_BUILD_VULKAN_BACKEND is on but no program it serves is configured "
-        "(KISAK_BUILD_DEVICE_PROBE, KISAK_BUILD_WORLD_DRAW_PROBE or KISAK_BUILD_LINUX_MP_CLIENT)")
+        "(KISAK_BUILD_DEVICE_PROBE, KISAK_BUILD_WORLD_DRAW_PROBE, KISAK_BUILD_LINUX_MP_CLIENT "
+        "or KISAK_BUILD_LINUX_SP_GAME)")
 endif()

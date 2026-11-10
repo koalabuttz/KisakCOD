@@ -1317,7 +1317,17 @@ void R_Cinematic_Shutdown() { /* THUNK */ }
 void R_Cinematic_StartPlayback(char *name, uint32_t playbackFlags, float volume) { /* THUNK */ }
 void R_Cinematic_StartNextPlayback() { /* THUNK */ }
 void R_Cinematic_StopPlayback() { /* THUNK */ }
-void R_Cinematic_UpdateFrame() { /* THUNK */ }
+// What R_Cinematic_UpdateRendererImages does while no movie has a frame: the
+// four cinematic code images are a black picture. Materials sample them
+// whether or not a movie plays (the singleplayer loading screen does), and an
+// unset one stops the frame with "Tried to use 'cinematicY' when it isn't valid".
+void R_Cinematic_UpdateFrame()
+{
+    gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_Y] = rgp.blackImage;
+    gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_CR] = rgp.grayImage;
+    gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_CB] = rgp.grayImage;
+    gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_A] = rgp.blackImage;
+}
 void R_Cinematic_SyncNow() { /* THUNK */ }
 void R_Cinematic_DrawStretchPic_Letterboxed() { /* THUNK */ }
 bool R_Cinematic_IsFinished() { /* THUNK */ return true; }

@@ -71,6 +71,21 @@ python3 scripts/tests/run_linux_sp_level_sweep.py "$GAME" --binary "$BUILD/Kisak
 - `--save-load` adds `devsave sweep`, a check that
   `home/players/profiles/sweep/save/sweep.svg` appeared, `loadgame sweep` and a
   second hold.
+- `--screenshot` adds `screenshot sweep_<level>` and reads the image the game
+  wrote under `home/main/screenshots/`. The step "frame drawn" is seen when
+  the file is there and is not nearly all one colour, and the report gets a
+  table of numbers for each frame: size, mean brightness, share that is not
+  black, colour count, and the mean colour of the top, middle and bottom
+  third. A black or one-colour screen shows up with nobody watching, and a
+  level whose row stands apart from the others is worth a look. The images
+  are game output: they stay on the machine (`--delete-screenshots` removes
+  each one once it is measured).
+- `--death-retry` adds, last in each level, `kill`, a wait for the retry's
+  load (the game starts `loadgame_continue` by itself 3 seconds after the
+  death), a hold and the `mapname` question again. The retry loads the last
+  save: the level's own start save or autosave, or `--save-load`'s when both
+  are asked for. A level with no save at all stops with "Save '' not
+  available", which the report lists.
 - `--assert-continue` sets `KISAK_ASSERT_CONTINUE=1`. `--gdb` runs the game
   under `gdb -batch` and keeps the backtraces in the log.
 - `--set DVAR VALUE` adds a `+set`. Default window 1280x720, `snd_volume 0.8`.
@@ -84,7 +99,8 @@ writes only under the work directory. Each level's console output is in
 
 The report says which steps were seen, the load time, how the process
 ended, and the assertions, errors and warning count. It does not say that a
-level looks or plays right. Screenshots and hand play do that.
+level looks or plays right: the frame numbers only rule out a blank screen.
+Looking at the screen and hand play do the rest.
 
 ## Laptop run plan
 
@@ -108,6 +124,10 @@ rebuilt at the commit under test. Sound on: the sweep sets `snd_volume 0.8`.
    the gunship in ac130, the Javelin in launchfacility_a, the slow-motion
    breach in airplane, one death and retry, and one real mission end through
    the victory screen (the sweep cannot click it).
+7. **Frames and deaths:** all 21 levels with `--hold 30 --screenshot
+   --death-retry`. This says whether each level draws something and whether a
+   death brings the level back, with nobody at the laptop, so it can run
+   before step 6. Run on i386 (sweep run 2 below): every level passes.
 
 Report back the `report.md` tables and the failing levels' logs. Report
 console lines and file names, never game file contents.
@@ -128,10 +148,98 @@ Commit 0ce99b9 (master with PR 98), i386 `sp-rel-al`, sound off, 1280x720.
   probe asked `sv_mapname` (never set in singleplayer; the server's dvar is
   `mapname`), and the save check took the "time to write" line of the
   level-start save being flushed again for the `devsave` one.
-- Engine messages worth a later look: hunted prints "Max scene drawsurfs
+- Engine messages (the Windows x64 game prints the same ones, see the tour
+  below): hunted prints "Max scene drawsurfs
   exceed" 5 times, ac130 "Too many visible static models" twice, airplane "AI
   couldn't find path to goal" twice. Six levels print the "computer changed"
   profile warning at start: the CPU estimate (`sys_configureGHz`) varies
   between processes by more than the profile's 10 % check. The profile is left
   unchanged.
 - Nobody watched the screen. Hand play (step 6) is next.
+
+## x86_64 sweep run 1 (laptop, 2026-11-10)
+
+The first runs of the x86_64 game with game data, RelWithDebInfo, sound off,
+1280x720, the same laptop. Local runs, not CI evidence.
+
+- **Built without movies** (`KISAK_LINUX_CINEMATICS` off, commit b1a8f06):
+  killhouse and cargoship both ended with signal 6 while the loading screen
+  was up (`!r_glob.screenUpdateNotify`, `rb_backend.cpp`). The error under it
+  was "Tried to use 'cinematicY' when it isn't valid": the loading screen
+  samples the movie's images and that build never set them. Fixed
+  ([linux-sp-game.md](linux-sp-game.md#fixes-the-first-level-loads-found)).
+  With the fix (commit a418999), killhouse and cargoship load and pass every
+  step in a build without movies (PC, Linux in WSL, below). The i386 runs
+  never met this because they always had movies on.
+- **Built with movies** (the same commit): killhouse and cargoship load in 13
+  and 11 s and pass every step.
+- **Step 1, all 21 levels** (commit 3019927, movies on): every level loads,
+  holds 45 s, answers the console and quits with exit 0. airlift is among
+  them. Without that commit's fix the Windows x64 game crashes there
+  (below); the x86_64 Linux game does not (PC, Linux in WSL, below).
+- **Step 4, chain** killhouse, cargoship, coup, blackout in one process, and
+  **step 5, save and load** on killhouse, cargoship, blackout and ac130
+  (commit 3019927, movies on): all steps seen, exit 0.
+
+## Windows x64 tour (PC, 2026-11-10)
+
+The hosted x64 Release build of commit 65bd0e3 on the Windows PC, as a
+comparison on the same game data. A local run, not CI evidence.
+
+- 20 of 21 levels load, run 45 s and quit with exit code 0. **airlift crashed
+  4.5 s into the level, three launches of three** (and with the x64 build of
+  7 November): a read of address 0xc in `Phys_ObjCreate`, called from
+  `FX_SpawnModelPhysics`. The cause is a 64-bit-only wrong read, fixed in
+  shared code. With the fix (the hosted x64 Release build of commit
+  a418999), airlift held 60 s in the level and quit with exit code 0 three
+  launches of three, and killhouse 45 s.
+- The level chain (killhouse, cargoship, coup, blackout in one process), a
+  save loaded in the same process and in a fresh one, and a death with its
+  retry all work there.
+- The engine messages of sweep run 1 are not port bugs: Windows prints them
+  too. hunted "Max scene drawsurfs exceed" 5 times, ac130 "Too many visible
+  static models" twice, "couldn't find path to goal" in airplane twice and in
+  armada 19 times.
+
+## x86_64 fix checks (PC, Linux in WSL, 2026-11-10)
+
+Three runs of the level sweep on the Windows PC's Linux (WSL, Xvfb, Mesa's
+software Vulkan device, sound off), each level held 30 to 60 s. Local runs,
+not CI evidence.
+
+| Build | Levels | Result |
+| --- | --- | --- |
+| master 85dad4f7, before both fixes | killhouse, airlift | all steps seen, exit 0 |
+| a418999, both fixes | killhouse, airlift | all steps seen, exit 0 |
+| a418999, built without movies | killhouse, cargoship | all steps seen, exit 0 |
+
+No assertion, error or warning in any of the six logs. The unfixed build
+holding airlift means the wrong read lands on harmless bytes in this Linux
+build; the Windows runs above are what show the fix. Under software
+rendering a level took 25 to 54 s to load, against 5 to 9 s with a GPU on
+Windows; the sweep's default load timeout (240 s) covers that.
+
+## Sweep run 2, frames and deaths (laptop, i386, 2026-11-10)
+
+Commit 3019927, i386 `sp-rel-al`, movies on, sound off, step 7 above
+(`--hold 30 --screenshot --death-retry`). The first run of both options on
+the game. A local run, not CI evidence.
+
+- **All 21 levels** pass every step: loaded, held 30 s, frame drawn, console
+  answers, `kill`, the game loads its last save by itself, held 15 s,
+  console answers again, exit 0. No assertion, no error.
+- **Frames** (mean brightness 0 to 255): 29 (hunted) to 143 (ambush) for 20
+  levels. launchfacility_b was 226, nearly white. That is the level's own
+  picture: its opening film plays from the start of the load for about
+  52 s, then the game shows plain white for about a second and a half and
+  fades into the level. The Windows x64 game does the same (a series of
+  frames on the PC). The laptop's load took 22.7 s, so 30 s after it fell in
+  that white. A frame taken a fixed time after the load can land in a
+  level's opening film on any level that has one.
+- In a two-level warm-up before the full run, cargoship's frame was black
+  (mean 0) and "frame drawn" failed; in the full run it was 36, and Windows
+  shows 21 to 27 at the same point (its opening film, dark). Read it as the
+  film's timing, not a drawing fault.
+- Engine messages as in run 1: hunted "Max scene drawsurfs exceed" twice,
+  ac130 "Too many visible static models" 5 times, airplane "couldn't find
+  path to goal" 3 times.
