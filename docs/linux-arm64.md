@@ -58,7 +58,7 @@ python3 scripts/tests/test_db_record_conversion.py --arch aarch64
 which is how the page-size work below was checked.
 
 Hosted CI: the Linux workflow's **aarch64 dedicated server** job builds Debug and
-RelWithDebInfo natively on `ubuntu-24.04-arm` (free for public repositories) and
+RelWithDebInfo, one after the other in the one job (`scripts/ci/each-config.sh`), natively on `ubuntu-24.04-arm` (free for public repositories) and
 runs both checks, plus `run_linux_checks.py --arch aarch64` (the platform
 self-tests built natively: runtime wrappers, network deadlines, UDP, file I/O,
 virtual memory). It does not load a map: there is no game data in CI.

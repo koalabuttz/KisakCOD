@@ -121,8 +121,9 @@ class RunnerPlanTests(unittest.TestCase):
         cls.runner = load_runner()
 
     def test_configurations_are_exactly_two_and_state_their_own_optimization(self):
-        # The workflow matrix and this table have to agree: a configuration named
-        # here without a flag would silently compile at the compiler default.
+        # scripts/ci/each-config.sh, which the workflow runs this with, and this
+        # table have to agree: a configuration named here without a flag would
+        # silently compile at the compiler default.
         self.assertEqual(sorted(self.runner.CONFIG_FLAGS), ["Debug", "RelWithDebInfo"])
         self.assertEqual(self.runner.CONFIG_FLAGS["Debug"], ("-O0",))
         self.assertEqual(self.runner.CONFIG_FLAGS["RelWithDebInfo"], ("-O2",))

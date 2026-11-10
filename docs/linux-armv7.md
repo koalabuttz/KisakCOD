@@ -71,7 +71,7 @@ arm-linux-gnueabihf-objdump -d bin/KisakCOD-dedi | grep -cE $'\tv[a-z0-9]+\.f(32
 ```
 
 Hosted CI: the Linux workflow's **armv7 dedicated server** job builds Debug and
-RelWithDebInfo on the x86 runner, runs both objdump checks and the bootstrap
+RelWithDebInfo, one after the other in the one job (`scripts/ci/each-config.sh`), on the x86 runner, runs both objdump checks and the bootstrap
 test under qemu-arm.
 
 ## State
