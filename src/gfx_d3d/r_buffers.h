@@ -11,6 +11,7 @@
 void TRACK_r_buffers();
 void *R_AllocDynamicVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeInBytes);
 void *R_AllocStaticVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeInBytes);
+void *R_AllocWriteOnlyVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeInBytes);
 void *R_AllocDynamicIndexBuffer(IDirect3DIndexBuffer9 **ib, uint32_t sizeInBytes);
 void *R_AllocStaticIndexBuffer(IDirect3DIndexBuffer9 **ib, int sizeInBytes);
 void Load_VertexBuffer(IDirect3DVertexBuffer9 **vb, uint8_t *bufferData, int sizeInBytes);
@@ -46,6 +47,8 @@ void R_NotePreTessUse(uint32_t indices);         // a frame's total
 void R_NotePreTessFull();                        // a batch was drawn unbatched
 void R_NoteDynamicIndices(uint32_t indices);     // one write
 void R_NoteDynamicVertices(uint32_t bytes);      // one write
+void R_NoteStaticModelCacheUse(uint32_t verts);  // what the static model cache holds now
+void R_NoteStaticModelCacheFull();               // a model found it full and is drawn by itself
 void R_DynamicBufferFrameDone();                 // the back end, once a frame
 
 extern GfxBuffers gfxBuf;

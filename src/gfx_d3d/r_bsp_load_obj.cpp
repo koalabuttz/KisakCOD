@@ -3815,8 +3815,9 @@ static BOOL R_CompareSModelStats_Score(const GfxSModelSurfStats &s0, const GfxSM
 
 uint32_t R_GetEntryCount(GfxSModelSurfStats *stats)
 {
-    if (1 << (16 - LOBYTE(stats->smcAllocBits)) < stats->useCount)
-        return 1 << (16 - LOBYTE(stats->smcAllocBits));
+    // No more than a section of the cache holds (r_staticmodelcache_sizes.h).
+    if (R_StaticModelCacheSectionEntries(LOBYTE(stats->smcAllocBits)) < stats->useCount)
+        return R_StaticModelCacheSectionEntries(LOBYTE(stats->smcAllocBits));
     else
         return stats->useCount;
 }

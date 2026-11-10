@@ -3,7 +3,7 @@
 #include "r_rendercmds.h"
 
 #define SMODEL_INDEX_NONE 0xFFFF
-#define SMC_MAX_INDEX_IN_CACHE 0x100000
+// SMC_MAX_INDEX_IN_CACHE and the cache's other sizes: r_staticmodelcache_sizes.h.
 
 struct SkinCachedStaticModelCmd // sizeof=0x4
 {                                       // ...
@@ -45,10 +45,10 @@ union static_model_leaf_t // sizeof=0x8
     GfxCachedSModelSurf cachedSurf;
     static_model_node_list_t freenode;
 };
-struct static_model_cache_t // sizeof=0x410E0
+struct static_model_cache_t // sizeof=0x410E0 with the retail sizes
 {                                       // ...
-    static_model_tree_t trees[512];
-    static_model_leaf_t leafs[512][32]; // ...
+    static_model_tree_t trees[R_SMC_TREE_COUNT];
+    static_model_leaf_t leafs[R_SMC_TREE_COUNT][R_SMC_TREE_LEAFS]; // ...
     static_model_node_list_t freelist[4][6]; // ...
     static_model_tree_list_t usedlist[4]; // ...
 };

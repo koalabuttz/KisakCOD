@@ -26,6 +26,8 @@ struct DynamicBufferUse
     std::atomic<uint32_t> preTessFull{0};
     std::atomic<uint32_t> dynamicIndices{0};
     std::atomic<uint32_t> dynamicVertexBytes{0};
+    std::atomic<uint32_t> smodelCacheVerts{0};
+    std::atomic<uint32_t> smodelCacheFull{0};
 };
 DynamicBufferUse s_dynamicUse;
 // The back end's own: what the frame being drawn has written so far.
@@ -63,6 +65,16 @@ void R_NotePreTessFull()
     s_dynamicUse.preTessFull.fetch_add(1, std::memory_order_relaxed);
 }
 
+void R_NoteStaticModelCacheUse(uint32_t verts)
+{
+    RaiseTo(s_dynamicUse.smodelCacheVerts, verts);
+}
+
+void R_NoteStaticModelCacheFull()
+{
+    s_dynamicUse.smodelCacheFull.fetch_add(1, std::memory_order_relaxed);
+}
+
 void R_NoteDynamicIndices(uint32_t indices)
 {
     s_frameDynamicIndices += indices;
@@ -97,12 +109,15 @@ void R_DynamicBufferFrameDone()
     const uint32_t preTessFull = s_dynamicUse.preTessFull.exchange(0, std::memory_order_relaxed);
     const uint32_t indices = s_dynamicUse.dynamicIndices.exchange(0, std::memory_order_relaxed);
     const uint32_t vertexBytes = s_dynamicUse.dynamicVertexBytes.exchange(0, std::memory_order_relaxed);
+    const uint32_t smodelVerts = s_dynamicUse.smodelCacheVerts.exchange(0, std::memory_order_relaxed);
+    const uint32_t smodelFull = s_dynamicUse.smodelCacheFull.exchange(0, std::memory_order_relaxed);
     const uint32_t frames = s_dynamicUseFrames;
     s_dynamicUseFrames = 0;
     Com_Printf(
         CON_CHANNEL_GFX,
         "dynamic buffers, the most one frame asked for in %u frames: skinned cache %u of %u KB (%u models left out), "
-        "pretess %u of %u indices (%u batches left unbatched), dynamic indices %u of %i, dynamic vertices %u of %i KB\n",
+        "pretess %u of %u indices (%u batches left unbatched), dynamic indices %u of %i, dynamic vertices %u of %i KB; "
+        "static model cache %u of %u KB at most (%u times a model found it full and was drawn by itself)\n",
         frames,
         skinned >> 10,
         (uint32_t)R_SKINNED_CACHE_BYTES >> 10,
@@ -113,7 +128,10 @@ void R_DynamicBufferFrameDone()
         indices,
         gfxBuf.dynamicIndexBuffer ? gfxBuf.dynamicIndexBuffer->total : 0,
         vertexBytes >> 10,
-        gfxBuf.dynamicVertexBuffer ? gfxBuf.dynamicVertexBuffer->total >> 10 : 0);
+        gfxBuf.dynamicVertexBuffer ? gfxBuf.dynamicVertexBuffer->total >> 10 : 0,
+        smodelVerts * 32 >> 10,
+        gfxBuf.smodelCacheVb ? (uint32_t)R_SMC_VERTEX_BYTES >> 10 : 0,
+        smodelFull);
 }
 
 void TRACK_r_buffers()
@@ -135,6 +153,26 @@ void *R_AllocDynamicVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeInBytes)
     if (hr < 0)
     {
         R_FatalInitError(va("DirectX didn't create a %i-byte dynamic vertex buffer: %s\n", sizeInBytes, R_ErrorDescription(hr)));
+    }
+    return 0;
+}
+
+// A buffer written in pieces over time and never discarded: write-only, not
+// dynamic. Nothing is written here; the caller locks it as it fills it.
+void *R_AllocWriteOnlyVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeInBytes)
+{
+    int hr;
+
+    iassert(vb);
+    iassert(sizeInBytes > 0);
+
+    if (!r_loadForRenderer->current.enabled)
+        return 0;
+
+    hr = R_HW_CreateVertexBuffer(dx.device, sizeInBytes, 8, 0, D3DPOOL_DEFAULT, vb, 0);
+    if (hr < 0)
+    {
+        R_FatalInitError(va("DirectX didn't create a %i-byte write-only vertex buffer: %s\n", sizeInBytes, R_ErrorDescription(hr)));
     }
     return 0;
 }

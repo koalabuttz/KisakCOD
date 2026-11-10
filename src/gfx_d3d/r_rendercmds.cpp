@@ -209,7 +209,7 @@ void R_InitRenderBuffers()
     }
     R_InitSpotShadowMeshes();
 #if R_STATIC_MODEL_CACHE
-    R_InitDynamicIndices(&gfxBuf.smodelCache, 0x100000);
+    R_InitDynamicIndices(&gfxBuf.smodelCache, SMC_MAX_INDEX_IN_CACHE);
 #endif
 }
 
