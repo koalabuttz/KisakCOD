@@ -39,11 +39,15 @@ platform code.
 | 0017 | The OpenAL driver detaches a buffer from a source that is still playing, so cut sounds keep playing and the next one is lost (upstream issue 76) | commit `0b48d2e` |
 | 0018 | An OpenAL stream that runs out of queued audio stays silent (upstream issue 76) | commit `0b48d2e` |
 | 0019 | The 16-bit angle factors are bare numbers in 16 files (upstream issue 53) | commit `7fc5013` |
+| 0020 | 1/360 is a bare number on 90 lines of 23 files (upstream issue 45) | commit `8569b17`, first half |
+| 0021 | The wrap of an angle into [-180, 180] is written out 19 times (upstream issue 45) | commit `8569b17`, second half |
 
 Patches 0001 to 0004 are the proposed first batch and 0005 to 0010 the
 second. 0011 to 0015 answer open upstream issues or sit next to one, and
 come after those. 0016 belongs with the second batch; 0017 and 0018 go with
-the other fixes for open issues. 0019 is the first of the cleanup issues.
+the other fixes for open issues. 0019 to 0021 are the first of the cleanup
+issues; they form a chain (0021 on 0020 on 0019) because all three change
+neighbouring lines of the same angle code.
 
 Open points on single patches, to settle before each is offered:
 
@@ -69,6 +73,20 @@ Open points on single patches, to settle before each is offered:
   Quake's `ANGLE2SHORT` formula would change results, because the game
   multiplies by the float factor; the names can still be changed before this
   is offered. Upstream issue 59 was a duplicate of 53 and is closed.
+- 0020 and 0021 split upstream issue 45 in two so the rename, which cannot
+  change a result, can go in without the fold. The issue's title asks for
+  `AngleNormalize180()`. Upstream's `AngleNormalize180()` uses `fmodf`, and
+  over every float it gives a different last bit than the inlined wrap for
+  most inputs (up to 0.00006 degrees between -720 and 720), so 0021 adds
+  `AngleWrap180()` with the inlined body instead. Giving
+  `AngleNormalize180()` that body and one name is the other way to do it; it
+  changes the three places that call it today. That choice is the
+  maintainers'.
+- 0021 leaves written out: the 36 lines that multiply by the double factor
+  (two inputs out of 2^32 differ from the float form), one vehicle wrap that
+  adds a double 0.5 before the floor (about 8.4 million inputs differ), one
+  that scales by 7200, and the single-player actor, turret, vehicle path,
+  pose and model previewer copies.
 - Upstream issue 36 needs nothing from the fork: upstream has already
   commented out the copies it names.
 
