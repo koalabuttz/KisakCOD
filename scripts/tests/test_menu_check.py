@@ -102,6 +102,15 @@ def test_matching():
     check([item["item"] for item in fields] == [2], "a dvar pattern matches the whole name")
     check(menu_check.find_items(listing, action=r"pc_join", visible_only=False).__len__() == 2,
           "visible_only=False includes hidden items")
+    named = menu_check.parse_listing([
+        "menustack count=1 top=pc_join_unranked cursor=0,0",
+        'menuitem menu=pc_join_unranked item=38 type=8 name=sourcefield visible=1 rect=0,0,10,10 click=680,14 '
+        'dvar=- text="" action="play mouse_click"',
+        'menuitem menu=pc_join_unranked item=43 type=1 name=refreshFilter visible=1 rect=0,0,10,10 click=1032,44 '
+        'dvar=- text="Quick Refresh" action="uiScript RefreshFilter"',
+    ])
+    found = menu_check.find_items(named, name=r"source(field)?")
+    check([item["item"] for item in found] == [38], "the source control is found by its name, not Quick Refresh")
     check(menu_check.parse_listing(["menuitem broken"])["items"] == [], "a broken line is ignored")
 
 

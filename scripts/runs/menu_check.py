@@ -103,7 +103,7 @@ def parse_listing(lines):
     return listing
 
 
-def find_items(listing, action=None, text=None, dvar=None, menu=None, visible_only=True):
+def find_items(listing, action=None, text=None, dvar=None, menu=None, name=None, visible_only=True):
     """Items of the listing that match every pattern given (case-insensitive regexes)."""
     found = []
     for item in listing["items"]:
@@ -116,6 +116,8 @@ def find_items(listing, action=None, text=None, dvar=None, menu=None, visible_on
         if text is not None and not re.search(text, plain(item["text"]), re.I):
             continue
         if dvar is not None and not re.fullmatch(dvar, item["dvar"], re.I):
+            continue
+        if name is not None and not re.fullmatch(name, item["name"], re.I):
             continue
         found.append(item)
     return found
@@ -534,8 +536,11 @@ class Run:
             if value is not None and value.strip() == str(wanted):
                 return True
             listing = self.listing()
+            # The source is an owner-drawn control with no text and no action
+            # of its own (pc_join_unranked's "sourcefield"); a click moves it
+            # on by one, Local -> Internet -> Favourites -> Local.
             if not (self.click_item(listing, "source", dvar=r"ui_netSource")
-                    or self.click_item(listing, "source", action=r"RefreshFilter")):
+                    or self.click_item(listing, "source", name=r"source(field)?")):
                 break
         return self.check(f"the source can be set to {label}", False, f"ui_netSource {value}")
 
