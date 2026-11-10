@@ -78,6 +78,8 @@ what is still missing. Build steps are in the
 ## Tests
 
 - [Asset-free tests](../scripts/tests/README.md)
+- [What hosted CI runs, and when](ci.md): what a pull request runs, what waits
+  for the merge, and why a draft runs nothing
 - [Runs on the test machines](runs.md): the `framelog` frame-rate line, the
   recipe-driven frame-rate driver and its checksummed results file, short PS
   Vita starts, and what a run on a machine with a GPU or game data may and may

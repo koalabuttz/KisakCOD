@@ -1,0 +1,39 @@
+# What hosted CI runs, and when
+
+Hosted runners cost this public repository nothing, but the account runs about
+20 jobs at a time (5 on macOS). One full run is about 48 jobs and 150 runner
+minutes (Linux 74, Windows 43, macOS 30), so with a dozen pull requests open
+the checks of each wait for the others. The rules below keep a pull request's
+run to what is likely to tell something new, and leave the full run to master.
+`scripts/tests/test_linux_window_workflow.py` (`CiTriggerTests`) pins every one
+of them.
+
+| | Pull request | After a merge to master, and manual runs |
+| --- | --- | --- |
+| Draft pull request | nothing runs | |
+| Linux workflow | every job; the window jobs on SDL3 only | every job, SDL2 and SDL3 |
+| Windows | Win32 Debug and Release, Vulkan probe, regression checks | also MSVC x64 and MSVC ARM64 |
+| macOS | Apple silicon (arm64) | also Intel (x86_64) |
+| PS Vita | dedicated server and client, Debug and RelWithDebInfo | the same |
+
+- **Drafts.** No job runs while a pull request is a draft. Marking it ready for
+  review starts the checks, and so does every later push. Open a pull request
+  as a draft while its work is not ready to be checked, and mark it ready when
+  it is; a draft cannot be merged on hosted evidence, because it has none.
+- **After-merge platforms.** Windows ARM64, Windows x64 and Intel macOS build
+  the same sources as their pull-request neighbours and rarely break alone, so
+  they run once per merge. A break there shows on master after the merge:
+  whoever merged looks at master's run, and a failure is fixed forward in a new
+  pull request. A manual run of a workflow on a branch (`workflow_dispatch`)
+  runs everything, for a change that is about one of those platforms.
+- **Paths.** A workflow starts only when a changed path can reach it. The
+  Windows workflow skips documentation, the Linux, macOS and PS Vita ports' own
+  sources and tests, and the test machines' run scripts; the macOS workflow
+  skips the PS Vita port's sources. The filters look at the whole pull request,
+  not the last push.
+- **Newer pushes.** A newer push to a pull request cancels that pull request's
+  older run, and a newer push to master cancels the older master run.
+
+Decided by the project owner on 2026-11-10 (drafts, Windows ARM64, Intel macOS)
+and 2026-11-03 (SDL2 after a merge, path filters, cancelling). Both build
+configurations stay on every pull request.

@@ -46,6 +46,7 @@ on:
       - .github/workflows/build-kisakcod-linux.yaml
       - .github/workflows/build-kisarcod-win.yaml
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [ "master" ]
     paths:
       - CMakeLists.txt
@@ -85,6 +86,7 @@ concurrency:
 
 jobs:
   window:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: Linux SDL${{ matrix.sdl }} window ${{ matrix.config }}
     runs-on: ubuntu-24.04
     timeout-minutes: 75
@@ -204,6 +206,7 @@ jobs:
           key: ccache-window-sdl${{ matrix.sdl }}-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   native:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: Native Linux ${{ matrix.config }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -358,6 +361,7 @@ jobs:
           key: ccache-native-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   client_census:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Asset-free compile proof for the multiplayer client sources: one syntax-only
     # -m32 front-end pass per production .cpp with the client definitions, checked
     # against scripts/tests/client_compile_census_blocked.txt in both directions.
@@ -450,6 +454,7 @@ jobs:
           retention-days: 7
 
   x64_census:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Opt-in 64-bit track, step one (docs/linux-x64.md): one syntax-only x86_64
     # Clang pass over every KisakCOD-dedi unit (exact commands from a
     # -DKISAK_LINUX_ARCH=x86_64 configure) and every client census source, with
@@ -521,6 +526,7 @@ jobs:
           retention-days: 7
 
   x64_dedicated:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Opt-in 64-bit track, step two (docs/linux-x64.md): check the generated
     # fastfile record layout tables against the struct definitions, run the
     # asset-free 64-bit record conversion test, build KisakCOD-dedi with
@@ -653,6 +659,7 @@ jobs:
           key: ccache-x64-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   arm64_dedicated:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Opt-in 64-bit Arm track, step one (docs/linux-arm64.md): on GitHub's
     # native Arm runner, build KisakCOD-dedi with -DKISAK_LINUX_ARCH=aarch64, run
     # the asset-free fastfile record conversion test for aarch64 and the
@@ -764,6 +771,7 @@ jobs:
           key: ccache-arm64-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   armv7_dedicated:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Opt-in 32-bit Arm track, the first step toward a PS Vita port
     # (docs/linux-armv7.md): cross-compile KisakCOD-dedi with
     # -DKISAK_LINUX_ARCH=armv7 on the x86 runner, check that engine code keeps
@@ -871,6 +879,7 @@ jobs:
           key: ccache-armv7-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   vita_dedicated:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Opt-in PS Vita track (docs/vita.md): build KisakCOD-dedi with Clang
     # against the pinned VitaSDK (scripts/ci/install-vitasdk.sh), pack the
     # .vpk, and check that the server keeps x86's float results (no fused
@@ -1006,6 +1015,7 @@ jobs:
           key: ccache-vita-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   vita_mp_client:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Opt-in PS Vita client, stage 1 (docs/vita-client.md): build KisakCOD-mp
     # with Clang against the pinned VitaSDK and pack its .vpk. The D3D9
     # declarations come from DXVK Native's headers (nothing of DXVK is built)
@@ -1191,6 +1201,7 @@ jobs:
           key: ccache-vita-mp-client-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   x64_client:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Opt-in 64-bit track, step three (docs/linux-x64.md): build the multiplayer
     # client KisakCOD-mp with -DKISAK_LINUX_ARCH=x86_64 against x86_64 SDL3 and
     # the D3D9 and OpenAL stand-ins (built -m64), then run the same asset-free
@@ -1439,6 +1450,7 @@ jobs:
           key: ccache-x64-mp-client-${{ github.run_id }}-${{ github.run_attempt }}
 
   arm64_client:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Opt-in 64-bit Arm track, step three (docs/linux-arm64.md): on GitHub's
     # native Arm runner, build the multiplayer client KisakCOD-mp with
     # -DKISAK_LINUX_ARCH=aarch64 against aarch64 SDL3 and the D3D9 and OpenAL
@@ -1646,6 +1658,7 @@ jobs:
           key: ccache-arm64-mp-client-${{ github.run_id }}-${{ github.run_attempt }}
 
   world_frontend:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Asset-free CPU test of the production renderer world front end: scene and
     # view setup, DPVS cell/portal visibility, the AABB-tree and cull-group walk,
     # BSP draw-surface batching and the merge, run against a synthetic world. The
@@ -1748,6 +1761,7 @@ jobs:
           retention-days: 7
 
   world_surface:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Asset-free: builds seven standalone -m32 test cases directly
     # and runs the bundle prepare tests. No DXVK, no SDL, no GPU, no game assets,
     # no CMake configure. tests/linux_renderer/CMakeLists.txt is deliberately not
@@ -1827,6 +1841,7 @@ jobs:
           retention-days: 7
 
   native_d3d9_boundary:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # The opt-in native D3D9 boundary (src/linux/d3d9_native.h) against the pinned
     # DXVK Native 2.7.1 *headers*. DXVK is fetched as source and only its headers
     # are used: no DXVK build, no libdxvk_d3d9.so, no Vulkan, no SDL, no GPU, no
@@ -2020,6 +2035,7 @@ jobs:
           key: ccache-native-d3d9-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   device_probe:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # The opt-in D3D9 device probe (scripts/platform/linux/device_probe.cmake)
     # without a GPU: the engine's r_init.cpp linked through the native D3D9
     # boundary (pinned DXVK Native 2.7.1 *headers*) with the Win32 window layer
@@ -2456,6 +2472,7 @@ jobs:
           key: ccache-device-probe-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   free_camera:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Asset-free: the host free camera and its frame owner, compiled as two
     # standalone -m32 tests with Clang and the production Linux flags, linked
     # against the unmodified production AnglesToAxis unit. The renderer is a
@@ -2530,6 +2547,7 @@ jobs:
           retention-days: 7
 
   vulkan_window:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Opt-in Vulkan back end (docs/vulkan-core.md): the shared Vulkan core in
     # src/gfx_vk and KisakCOD-vulkan-probe, which opens an SDL3 window and
     # clears, presents and resizes it through the core, then draws a small
@@ -2817,6 +2835,7 @@ jobs:
           key: ccache-vulkan-window-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   vulkan_engine:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # The engine's renderer on the Vulkan back end (docs/vulkan-d3d9-front.md):
     # the device probe, the world draw probe and the multiplayer client built
     # i386 with KISAK_BUILD_VULKAN_BACKEND, so r_backend vulkan makes

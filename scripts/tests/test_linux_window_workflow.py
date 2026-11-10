@@ -713,6 +713,15 @@ class CiTriggerTests(unittest.TestCase):
         'build-linux.sh',
         '.github/workflows/build-kisakcod-linux.yaml',
         '.github/workflows/build-kisakcod-macos.yaml',
+        'src/vita/vita_stats.cpp',
+        'src/vita/client/sound/vita_al_output.cpp',
+        'src/gfx_gxm/legacy/gxm_legacy.cpp',
+        'tests/vita_client/run_plan_test.cpp',
+        'tests/vita_gxm/README.md',
+        'scripts/platform/vita/CMakeLists.txt',
+        'scripts/runs/perf_run.py',
+        'scripts/runs/recipes/vulkan-ab-mp-crash.json',
+        'tests/runs/fake_game.cpp',
     )
     # Changes that must still build Windows.
     WINDOWS_RUNS = (
@@ -728,6 +737,30 @@ class CiTriggerTests(unittest.TestCase):
         'scripts/tests/test_voice_lifecycle.py',
         'deps/some_library/source.c',
         '.github/workflows/build-kisarcod-win.yaml',
+        'src/qcommon/com_frame_log.h',
+        'src/gfx_vk/vk_device.cpp',
+    )
+    # Changes that cannot reach a Mac build, and changes that must still build one.
+    MACOS_SKIPS = (
+        'README.md',
+        'docs/vita.md',
+        'src/vita/vita_stats.cpp',
+        'src/gfx_gxm/legacy/gxm_legacy.cpp',
+        'tests/vita_client/run_plan_test.cpp',
+        'scripts/platform/vita/CMakeLists.txt',
+        'scripts/runs/perf_run.py',
+        'scripts/tests/test_perf_run.py',
+    )
+    MACOS_RUNS = (
+        'CMakeLists.txt',
+        'src/qcommon/common.cpp',
+        'src/linux/main.cpp',
+        'src/gfx_vk/vk_device.cpp',
+        'src/gfx_d3d/r_image.cpp',
+        'scripts/platform/macos/platform.cmake',
+        'scripts/platform/linux/CMakeLists.txt',
+        'deps/some_library/source.c',
+        '.github/workflows/build-kisakcod-macos.yaml',
     )
 
     @classmethod
@@ -766,6 +799,66 @@ class CiTriggerTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertFalse(_selected(path, self.windows_paths))
 
+    DRAFT_RULE = "github.event_name != 'pull_request' || github.event.pull_request.draft == false"
+    AFTER_MERGE_RULE = "github.event_name != 'pull_request'"
+    MACOS_ARCHS = ("${{ fromJSON(github.event_name == 'pull_request' && '[\"arm64\"]' "
+                   "|| '[\"arm64\", \"x86_64\"]') }}")
+
+    def test_no_check_runs_while_a_pull_request_is_a_draft(self):
+        # Every workflow a pull request starts: its jobs wait while the pull
+        # request is a draft, and marking it ready for review starts them.
+        seen = 0
+        for path in sorted((ROOT / '.github/workflows').glob('*.y*ml')):
+            workflow = yaml.load(path.read_text(), Loader=yaml.BaseLoader)
+            if 'pull_request' not in workflow['on']:
+                continue
+            seen += 1
+            with self.subTest(workflow=path.name):
+                self.assertEqual(workflow['on']['pull_request'].get('types'),
+                                 ['opened', 'synchronize', 'reopened', 'ready_for_review'])
+                for key, job in workflow['jobs'].items():
+                    with self.subTest(job=key):
+                        condition = job.get('if', '')
+                        self.assertTrue(
+                            condition == self.DRAFT_RULE or condition == self.AFTER_MERGE_RULE
+                            or "github.event_name == 'workflow_dispatch'" in condition,
+                            f'{path.name}: job {key} would run on a draft pull request')
+        self.assertGreaterEqual(seen, 3)
+
+    def test_windows_arm64_and_intel_macs_build_after_a_merge(self):
+        self.assertEqual(self.windows['jobs']['arm64']['if'], self.AFTER_MERGE_RULE)
+        for key in ('runtime-regressions', 'build', 'vulkan-probe'):
+            self.assertEqual(self.windows['jobs'][key]['if'], self.DRAFT_RULE, key)
+        for key in ('dedicated', 'client', 'vulkan_probe'):
+            with self.subTest(job=key):
+                job = self.macos['jobs'][key]
+                self.assertEqual(job['strategy']['matrix']['arch'], self.MACOS_ARCHS)
+                # An include entry for an architecture the list leaves out would
+                # bring that job back, so the runner comes from the architecture.
+                self.assertNotIn('include', job['strategy']['matrix'])
+                self.assertEqual(job['runs-on'],
+                                 "${{ matrix.arch == 'arm64' && 'macos-26' || 'macos-15-intel' }}")
+        found = re.fullmatch(
+            r"\$\{\{ fromJSON\(github\.event_name == 'pull_request' && '([^']*)' \|\| '([^']*)'\) \}\}",
+            self.MACOS_ARCHS)
+        self.assertEqual(json.loads(found.group(1)), ['arm64'])
+        self.assertEqual(json.loads(found.group(2)), ['arm64', 'x86_64'])
+
+    def test_macos_paths_are_the_same_for_both_events(self):
+        self.assertEqual(self.macos['on']['push']['paths'], self.macos['on']['pull_request']['paths'])
+
+    def test_macos_skips_vita_only_and_run_tool_changes(self):
+        paths = self.macos['on']['pull_request']['paths']
+        for path in self.MACOS_SKIPS:
+            with self.subTest(path=path):
+                self.assertFalse(_selected(path, paths))
+
+    def test_macos_still_runs_for_shared_and_mac_changes(self):
+        paths = self.macos['on']['pull_request']['paths']
+        for path in self.MACOS_RUNS:
+            with self.subTest(path=path):
+                self.assertTrue(_selected(path, paths))
+
     def test_windows_still_runs_for_shared_and_windows_changes(self):
         for path in self.WINDOWS_RUNS:
             with self.subTest(path=path):
@@ -790,11 +883,13 @@ class CiTriggerTests(unittest.TestCase):
                     self.assertTrue(_selected(path, self.windows_paths), path)
 
     def test_no_shared_source_is_skipped(self):
-        # Only src/linux is skipped under src/; every other tracked source builds.
+        # Only the native ports' own folders are skipped under src/ (src/linux,
+        # and the PS Vita's src/vita and src/gfx_gxm); every other tracked
+        # source builds.
         tracked = subprocess.run(['git', 'ls-files', 'src'], cwd=ROOT, check=True,
                                  capture_output=True, text=True).stdout.split()
         skipped = [path for path in tracked
-                   if not path.startswith('src/linux/') and not path.endswith('.md')
+                   if not path.startswith(('src/linux/', 'src/vita/', 'src/gfx_gxm/')) and not path.endswith('.md')
                    and not _selected(path, self.windows_paths)]
         self.assertEqual(skipped, [])
 

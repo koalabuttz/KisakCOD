@@ -28,6 +28,15 @@ on:
       - 'src/linux/client/cinematic/**'
       - '!tests/linux_*/**'
       - '!tests/skinning/**'
+      # ...nor the PS Vita port's own sources, tests and CMake (shared sources
+      # include its headers only in Vita builds), nor the test machines' run
+      # scripts and their stand-in game.
+      - '!src/vita/**'
+      - '!src/gfx_gxm/**'
+      - '!tests/vita_*/**'
+      - '!scripts/platform/vita/**'
+      - '!scripts/runs/**'
+      - '!tests/runs/**'
       - '!scripts/platform/linux/**'
       - '!build-linux.sh'
       - '!.github/workflows/build-kisakcod-linux.yaml'
@@ -52,6 +61,7 @@ on:
       - 'scripts/tests/test_windows_tracy_option.py'
       - 'scripts/tests/test_windows_vulkan_backend_option.py'
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [ "master" ]
     paths:
       - '**'
@@ -66,6 +76,15 @@ on:
       - 'src/linux/client/cinematic/**'
       - '!tests/linux_*/**'
       - '!tests/skinning/**'
+      # ...nor the PS Vita port's own sources, tests and CMake (shared sources
+      # include its headers only in Vita builds), nor the test machines' run
+      # scripts and their stand-in game.
+      - '!src/vita/**'
+      - '!src/gfx_gxm/**'
+      - '!tests/vita_*/**'
+      - '!scripts/platform/vita/**'
+      - '!scripts/runs/**'
+      - '!tests/runs/**'
       - '!scripts/platform/linux/**'
       - '!build-linux.sh'
       - '!.github/workflows/build-kisakcod-linux.yaml'
@@ -104,6 +123,7 @@ permissions:
 
 jobs:
   runtime-regressions:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: Runtime regression checks
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -137,6 +157,7 @@ jobs:
         run: python3 scripts/ci/test_summarize_msvc_x64.py
 
   build:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: Build with DirectX SDK
     runs-on: windows-2022
     timeout-minutes: 30
@@ -442,6 +463,9 @@ jobs:
           retention-days: 3
 
   arm64:
+    # After a merge and on manual runs only, like the x64 build: pull
+    # requests build Win32 Debug and Release (docs/ci.md).
+    if: github.event_name != 'pull_request'
     # Windows on Arm (docs/linux-arm64.md): MSVC ARM64 build of the SP, MP and
     # dedicated games on GitHub's native Arm runner (free for public
     # repositories), the same missing-game-assets start-up check as the other
@@ -551,6 +575,7 @@ jobs:
           retention-days: 3
 
   vulkan-probe:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # The Vulkan window probe (docs/vulkan-core.md) built with MSVC for x64 on
     # its own (scripts/vulkan_probe/CMakeLists.txt): no game, no DirectX SDK
     # (the D3D9 front's check compiles against the Windows SDK's d3d9.h and
