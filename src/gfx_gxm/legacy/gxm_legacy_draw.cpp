@@ -1685,7 +1685,8 @@ bool InitDraw(Device &device, std::string &error)
                     "uniform buffers anew");
     }
     if (gxm::ProgramCacheMarker("cg-opt0"))
-        Log(device, "diag: cg-opt0 is there: the game's programs are compiled with optimisation 0 and no fast maths");
+        Log(device, "diag: cg-opt0 is there: the programs it lists (all if it is empty) are compiled with "
+                    "optimisation 0 and no fast maths");
     if (!MakeStandIns(device, error) || !MakeClearPrograms(device, error) || !MakeCopyPrograms(device, error))
         return false;
     // Run diagnostics: opaque green (no inputs, so it links with any vertex
