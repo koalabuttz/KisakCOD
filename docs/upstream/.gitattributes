@@ -1,0 +1,3 @@
+# Patches are stored byte for byte: no line ending conversion on any platform,
+# and their context lines are not whitespace errors.
+patches/*.patch -text -whitespace

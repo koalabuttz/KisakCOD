@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 04:21:04 +0000
+Subject: [PATCH] security: bound server fastfile references by the array size
+
+FS_ServerSetReferencedFFs passed 1024 as the capacity of
+fs_serverReferencedFFNames and fs_serverReferencedFFCheckSums, which
+hold 32 entries each. A server that lists more than 32 fastfiles made
+the client write past both arrays.
+
+Pass the array size.
+---
+ src/qcommon/files.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/qcommon/files.cpp b/src/qcommon/files.cpp
+index 67e28798..84c7b20e 100644
+--- a/src/qcommon/files.cpp
++++ b/src/qcommon/files.cpp
+@@ -353,7 +353,7 @@ void __cdecl FS_ServerSetReferencedFFs(char *FFSums, char *FFNames)
+     fs_numServerReferencedFFs = FS_ServerSetReferencedFiles(
+         FFSums,
+         FFNames,
+-        1024,
++        ARRAY_COUNT(fs_serverReferencedFFNames),
+         fs_serverReferencedFFCheckSums,
+         fs_serverReferencedFFNames);
+ }

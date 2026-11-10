@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 04:15:33 +0000
+Subject: [PATCH] fix: pass the missing va() arguments in where and callvote
+
+Cmd_Where_f formatted "%c ... %s" with only the origin string, so %c
+took the pointer and %s read past the arguments. The invalid-map vote
+reply had "%s" with no map name.
+
+Pass 101 (the print command) and the map that was checked.
+---
+ src/game_mp/g_cmds_mp.cpp | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/src/game_mp/g_cmds_mp.cpp b/src/game_mp/g_cmds_mp.cpp
+index 511ee016..2bb4ba94 100644
+--- a/src/game_mp/g_cmds_mp.cpp
++++ b/src/game_mp/g_cmds_mp.cpp
+@@ -771,7 +771,7 @@ void __cdecl G_SayTo(
+ 
+ void __cdecl Cmd_Where_f(gentity_s *ent)
+ {
+-    SV_GameSendServerCommand(ent - g_entities, SV_CMD_CAN_IGNORE, va("%c \"\x15%s\n\"", vtos(ent->r.currentOrigin)));
++    SV_GameSendServerCommand(ent - g_entities, SV_CMD_CAN_IGNORE, va("%c \"\x15%s\n\"", 101, vtos(ent->r.currentOrigin)));
+ }
+ 
+ void __cdecl Cmd_CallVote_f(gentity_s *ent)
+@@ -888,7 +888,10 @@ void __cdecl Cmd_CallVote_f(gentity_s *ent)
+             arg2[0] = 0;
+         SV_Cmd_ArgvBuffer(3, arg3, 256);
+         if (!IsFastFileLoad() && !SV_MapExists(arg3))
+-            goto LABEL_36;
++        {
++            SV_GameSendServerCommand(ent - g_entities, SV_CMD_CAN_IGNORE, va("%c \"GAME_VOTEMAPINVALID\x15%s\"", 101, arg3));
++            return;
++        }
+         mapname = Dvar_RegisterString("mapname", (char *)"", DVAR_SERVERINFO | DVAR_ROM, "Current map name");
+         if (!I_stricmp(arg3, mapname->current.string))
+             arg3[0] = 0;
+@@ -964,8 +967,7 @@ void __cdecl Cmd_CallVote_f(gentity_s *ent)
+     {
+         if (!IsFastFileLoad() && !SV_MapExists(arg2))
+         {
+-        LABEL_36:
+-            SV_GameSendServerCommand(ent - g_entities, SV_CMD_CAN_IGNORE, va("%c \"GAME_VOTEMAPINVALID\x15%s\"", 101));
++            SV_GameSendServerCommand(ent - g_entities, SV_CMD_CAN_IGNORE, va("%c \"GAME_VOTEMAPINVALID\x15%s\"", 101, arg2));
+             return;
+         }
+         Com_sprintf(level.voteString, 0x400u, "%s %s", arg1, arg2);
