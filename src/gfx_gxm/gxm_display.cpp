@@ -9,6 +9,7 @@
 #endif
 #include <psp2/display.h>
 
+#include <atomic>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -19,6 +20,10 @@ namespace gfx_gxm
 {
 namespace
 {
+// SetBeforeFlip's hook. Its own variable: the thread that sets it is not the
+// one that draws.
+std::atomic<BeforeFlip> g_beforeFlip{nullptr};
+
 // What the display queue hands its callback: the buffer to show.
 struct DisplayData
 {
@@ -408,12 +413,19 @@ bool InScene()
     return g.inScene;
 }
 
+void SetBeforeFlip(BeforeFlip hook)
+{
+    g_beforeFlip.store(hook, std::memory_order_release);
+}
+
 bool Present()
 {
     if (!DisplayReady())
         return false;
     if (g.inScene)
         EndScene();
+    if (const BeforeFlip hook = g_beforeFlip.load(std::memory_order_acquire))
+        hook(FlipInfo{g.displayData[g.back], g.depthData, g.displaySync[g.back]});
     // The heartbeat marks the end of a frame for the system (sceGxm's
     // samples call it once per displayed frame).
     sceGxmPadHeartbeat(&g.displaySurface[g.back], g.displaySync[g.back]);

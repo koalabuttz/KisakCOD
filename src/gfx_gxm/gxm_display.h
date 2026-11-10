@@ -74,6 +74,20 @@ bool InScene();
 // Ends an open scene, queues the back buffer for display and moves on to the
 // next buffer.
 bool Present();
+
+// What Present is about to show, for the hook below.
+struct FlipInfo
+{
+    void *colorData;        // the back buffer: A8B8G8R8, linear, kDisplayStride texels a row
+    void *depthStencilData; // the display's own depth-stencil buffer
+    SceGxmSyncObject *sync; // the back buffer's
+};
+// Present calls the hook on the drawing thread once the frame's last scene has
+// ended and before the buffer is queued. That is where the system draws its
+// own dialogs over a frame (sceCommonDialogUpdate). Null: none. Any thread may
+// set it.
+using BeforeFlip = void (*)(const FlipInfo &info);
+void SetBeforeFlip(BeforeFlip hook);
 // Waits until the GPU has finished everything submitted.
 void Finish();
 
