@@ -2094,6 +2094,20 @@ void Retire(Device &device, Memory &memory)
     FreeMemory(memory);
 }
 
+size_t FreeRetiredNow(Device &device)
+{
+    DrawState *d = device.draw;
+    if (!d || d->deferred.empty())
+        return 0;
+    FinishGpu(device);
+    // Moved out first, in case the work defers more.
+    auto work = std::move(d->deferred);
+    d->deferred.clear();
+    for (auto &[frame, item] : work)
+        item();
+    return work.size();
+}
+
 void EndScene(Device &device)
 {
     DrawState *d = device.draw;

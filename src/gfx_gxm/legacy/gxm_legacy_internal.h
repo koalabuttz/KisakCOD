@@ -395,6 +395,9 @@ void WriteSwizzled(Texture &texture, uint32_t face, uint32_t level, const uint8_
 void ReadSwizzled(const Texture &texture, uint32_t face, uint32_t level, uint8_t *to, uint32_t pitch);
 // GPU memory the GPU may still read: freed once the frames using it are done.
 void Retire(Device &device, Memory &memory);
+// Out of GPU memory: waits for the GPU and frees everything retired. Returns
+// how many pieces of work ran (0 when nothing was waiting).
+size_t FreeRetiredNow(Device &device);
 // The open scene, if any, goes to the GPU; Finish also waits for it.
 void EndScene(Device &device);
 void FinishGpu(Device &device);

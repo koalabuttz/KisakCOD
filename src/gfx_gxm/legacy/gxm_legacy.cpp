@@ -228,18 +228,35 @@ bool AllocateMemory(Device &device, Memory &memory, uint32_t bytes, uint32_t ali
     }
     const gxm::MemoryKind first = preferCdram ? gxm::MemoryKind::Cdram : gxm::MemoryKind::Main;
     const gxm::MemoryKind second = preferCdram ? gxm::MemoryKind::Main : gxm::MemoryKind::Cdram;
-    for (const gxm::MemoryKind kind : {first, second})
+    for (int attempt = 0; attempt < 2; ++attempt)
     {
-        if (void *data = gxm::Allocate(kind, bytes, align))
+        for (const gxm::MemoryKind kind : {first, second})
         {
-            memory.data = static_cast<uint8_t *>(data);
-            memory.kind = kind;
-            memory.gpu = true;
-            memory.use = use;
-            memory.bytes = bytes;
-            Account(kind, use, bytes, true);
-            return true;
+            if (void *data = gxm::Allocate(kind, bytes, align))
+            {
+                memory.data = static_cast<uint8_t *>(data);
+                memory.kind = kind;
+                memory.gpu = true;
+                memory.use = use;
+                memory.bytes = bytes;
+                Account(kind, use, bytes, true);
+                return true;
+            }
         }
+        // Memory freed in the last few frames waits for the GPU to be done
+        // with it. A map change frees the old map's buffers and asks for the
+        // new map's before a frame is shown, so they are all still waiting:
+        // wait for the GPU and free them now.
+        if (attempt > 0)
+            break;
+        const std::string before = gxm::DescribeMemory();
+        const size_t freed = FreeRetiredNow(device);
+        if (!freed)
+            break;
+        Log(device, "no room for %s (%s, %u KB): waited for the GPU and freed %u retired pieces; before: %s; "
+            "after: %s",
+            name && *name ? name : "a resource", MemoryUseName(use), bytes >> 10, unsigned(freed), before.c_str(),
+            gxm::DescribeMemory().c_str());
     }
     Log(device, "out of GPU memory for %s (%s, %u KB); %s", name && *name ? name : "a resource", MemoryUseName(use),
         bytes >> 10, gxm::DescribeMemory().c_str());
