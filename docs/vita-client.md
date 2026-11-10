@@ -37,11 +37,14 @@ cmake --build build-vita-mp --target KisakCOD-mp-vpk
 # -> out/vita-mp/KisakCOD-mp (ELF with symbols) and out/vita-mp/KisakCOD-mp.vpk
 ```
 
-Hosted CI: the Linux workflow's **PS Vita multiplayer client** job builds Debug
+Hosted CI: the **PS Vita multiplayer client** job of the PS Vita workflow
+(`.github/workflows/build-kisakcod-vita.yaml`) builds Debug
 and RelWithDebInfo. It runs the server's float checks (no fused multiply-add, no
 NEON float) and link checks (weak pthread references, the main stack size), and
 uploads the RelWithDebInfo `.vpk`. It also runs the controls' and the sound's
-host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`).
+host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`), the run
+plan's, the GPU heap's and the shader translator's (`test_vita_run_plan.py`,
+`test_vita_gxm_heap.py`, `test_vita_cg_translate.py`).
 
 ## Running
 

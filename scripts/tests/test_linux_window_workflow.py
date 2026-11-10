@@ -318,10 +318,10 @@ class NativeD3D9BoundaryWorkflowTests(unittest.TestCase):
     # against the renderer's D3D9 declarations, linking no D3D9 library
     # (VulkanWindowWorkflowTests); vulkan_engine does it to build the engine's
     # programs with the Vulkan back end against the stand-ins
-    # (VulkanEngineWorkflowTests); vita_mp_client builds the PS Vita client
-    # through the boundary with DXVK's headers, linking no D3D9 library.
+    # (VulkanEngineWorkflowTests). The PS Vita client, which builds through
+    # the boundary too, is in build-kisakcod-vita.yaml.
     BOUNDARY_JOBS = ('native_d3d9_boundary', 'device_probe', 'x64_client', 'arm64_client', 'vulkan_window',
-                     'vulkan_engine', 'vita_mp_client')
+                     'vulkan_engine')
 
     def test_other_jobs_keep_their_defaults(self):
         # The boundary stays opt-in: no other job turns the CMake option on, and
@@ -771,12 +771,88 @@ class CiTriggerTests(unittest.TestCase):
         cls.linux = load('build-kisakcod-linux.yaml')
         cls.windows = load('build-kisarcod-win.yaml')
         cls.macos = load('build-kisakcod-macos.yaml')
+        cls.vita = load('build-kisakcod-vita.yaml')
         cls.windows_paths = cls.windows['on']['pull_request']['paths']
 
     def test_a_newer_push_cancels_only_the_same_branchs_older_run(self):
-        for name, workflow in (('linux', self.linux), ('windows', self.windows), ('macos', self.macos)):
+        for name, workflow in (('linux', self.linux), ('windows', self.windows), ('macos', self.macos),
+                               ('vita', self.vita)):
             with self.subTest(workflow=name):
                 self.assertEqual(workflow['concurrency'], self.CONCURRENCY)
+
+    # The PS Vita port's own files: only its workflow builds or reads them.
+    VITA_ONLY = (
+        'src/vita/vita_main.cpp',
+        'src/vita/client/sound/vita_al_output.cpp',
+        'src/gfx_gxm/legacy/gxm_legacy.cpp',
+        'scripts/platform/vita/mp_client.cmake',
+        'scripts/tests/test_vita_run_plan.py',
+        'scripts/ci/install-vitasdk.sh',
+        'tests/vita_client/run_plan_test.cpp',
+        'tests/vita_gxm/heap_test.cpp',
+    )
+    # Shared with the other builds: both workflows run.
+    VITA_AND_LINUX = (
+        'src/qcommon/common.cpp',
+        'src/linux/sys_assert.cpp',
+        'src/gfx_vk/d3d9/vk_d3d9_backend.h',
+        'CMakeLists.txt',
+        'scripts/ci/apt-install.sh',
+        'scripts/platform/linux/CMakeLists.txt',
+        'deps/some_library/source.c',
+    )
+
+    def test_vita_only_changes_start_the_vita_workflow_alone(self):
+        for event in ('push', 'pull_request'):
+            for path in self.VITA_ONLY:
+                with self.subTest(event=event, path=path):
+                    self.assertTrue(_selected(path, self.vita['on'][event]['paths']))
+                    self.assertFalse(_selected(path, self.linux['on'][event]['paths']))
+                    self.assertFalse(_selected(path, self.windows['on'][event]['paths']))
+                    self.assertFalse(_selected(path, self.macos['on'][event]['paths']))
+            for path in ('docs/vita.md', 'README.md'):
+                with self.subTest(event=event, path=path):
+                    self.assertFalse(_selected(path, self.vita['on'][event]['paths']))
+
+    def test_shared_changes_start_the_vita_and_the_linux_workflow(self):
+        for event in ('push', 'pull_request'):
+            for path in self.VITA_AND_LINUX:
+                with self.subTest(event=event, path=path):
+                    self.assertTrue(_selected(path, self.vita['on'][event]['paths']))
+                    self.assertTrue(_selected(path, self.linux['on'][event]['paths']))
+        self.assertEqual(self.vita['on']['push']['branches'], ['master'])
+        self.assertEqual(self.vita['on']['pull_request']['branches'], ['master'])
+        self.assertIn('workflow_dispatch', self.vita['on'])
+
+    def test_no_linux_job_builds_or_reads_what_only_the_vita_workflow_watches(self):
+        # The Linux workflow skips the port's own files, so nothing in it may
+        # depend on them: the port's jobs and host tests are in the Vita
+        # workflow, and every file under scripts/tests the Vita workflow runs
+        # starts it.
+        linux_commands = '\n'.join(step.get('run', '')
+                                   for job in self.linux['jobs'].values() for step in job['steps'])
+        for word in ('test_vita_', 'install-vitasdk', 'KISAK_PLATFORM=vita', 'src/vita', 'src/gfx_gxm',
+                     'tests/vita_'):
+            with self.subTest(word=word):
+                self.assertNotIn(word, linux_commands)
+        self.assertEqual(sorted(self.vita['jobs']), ['vita_dedicated', 'vita_mp_client'])
+        vita_commands = '\n'.join(step.get('run', '')
+                                  for job in self.vita['jobs'].values() for step in job['steps'])
+        tracked = subprocess.run(['git', 'ls-files', 'scripts/tests/test_vita_*.py'], cwd=ROOT, check=True,
+                                 capture_output=True, text=True).stdout.split()
+        self.assertGreaterEqual(len(tracked), 5)
+        for path in tracked:
+            with self.subTest(test=path):
+                self.assertIn(f'python3 {path}', vita_commands)
+        self.assertIn('python3 scripts/tools/strip_cdecl.py --check', vita_commands)
+
+    def test_the_linux_workflow_runs_when_the_vita_workflow_changes(self):
+        # This file checks the Vita workflow, and the Linux native job runs it.
+        for event in ('push', 'pull_request'):
+            with self.subTest(event=event):
+                self.assertIn('.github/workflows/build-kisakcod-vita.yaml', self.linux['on'][event]['paths'])
+                self.assertFalse(_selected('.github/workflows/build-kisakcod-vita.yaml',
+                                           self.windows['on'][event]['paths']))
 
     def test_window_jobs_run_sdl3_on_pull_requests_and_both_after_a_merge(self):
         sdl = self.linux['jobs']['window']['strategy']['matrix']['sdl']
@@ -1117,9 +1193,16 @@ class CiCacheTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # The Linux workflow's jobs and the PS Vita workflow's, which were
+        # part of it and keep its cache rules.
         cls.workflow = yaml.load(
             (ROOT / '.github/workflows/build-kisakcod-linux.yaml').read_text(),
             Loader=yaml.BaseLoader)
+        vita = yaml.load(
+            (ROOT / '.github/workflows/build-kisakcod-vita.yaml').read_text(),
+            Loader=yaml.BaseLoader)
+        assert not set(vita['jobs']) & set(cls.workflow['jobs'])
+        cls.workflow['jobs'].update(vita['jobs'])
 
     def step(self, job, name):
         return next(step for step in self.workflow['jobs'][job]['steps'] if step.get('name') == name)

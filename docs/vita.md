@@ -39,7 +39,8 @@ cmake --build build-vita --target KisakCOD-dedi-vpk
 # -> bin/KisakCOD-dedi (ELF with symbols) and bin/KisakCOD-dedi.vpk
 ```
 
-Hosted CI: the Linux workflow's **PS Vita dedicated server** job builds Debug
+Hosted CI: the **PS Vita dedicated server** job of the PS Vita workflow
+(`.github/workflows/build-kisakcod-vita.yaml`, [what runs when](ci.md)) builds Debug
 and RelWithDebInfo, checks the binary for fused multiply-add and NEON float
 instructions, and uploads the RelWithDebInfo `.vpk` as an artifact.
 

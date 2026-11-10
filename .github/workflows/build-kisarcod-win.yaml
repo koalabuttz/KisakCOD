@@ -35,12 +35,14 @@ on:
       - '!src/gfx_gxm/**'
       - '!tests/vita_*/**'
       - '!scripts/platform/vita/**'
+      - '!scripts/ci/install-vitasdk.sh'
       - '!scripts/runs/**'
       - '!tests/runs/**'
       - '!scripts/platform/linux/**'
       - '!build-linux.sh'
       - '!.github/workflows/build-kisakcod-linux.yaml'
       - '!.github/workflows/build-kisakcod-macos.yaml'
+      - '!.github/workflows/build-kisakcod-vita.yaml'
       # scripts/tests holds the Linux runners too. Only the scripts and the
       # D3DX project this workflow runs are its own; add any new one here.
       - '!scripts/tests/**'
@@ -83,12 +85,14 @@ on:
       - '!src/gfx_gxm/**'
       - '!tests/vita_*/**'
       - '!scripts/platform/vita/**'
+      - '!scripts/ci/install-vitasdk.sh'
       - '!scripts/runs/**'
       - '!tests/runs/**'
       - '!scripts/platform/linux/**'
       - '!build-linux.sh'
       - '!.github/workflows/build-kisakcod-linux.yaml'
       - '!.github/workflows/build-kisakcod-macos.yaml'
+      - '!.github/workflows/build-kisakcod-vita.yaml'
       # scripts/tests holds the Linux runners too. Only the scripts and the
       # D3DX project this workflow runs are its own; add any new one here.
       - '!scripts/tests/**'

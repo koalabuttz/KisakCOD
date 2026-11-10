@@ -200,4 +200,5 @@ its symbols beside the `.vpk` (`KisakCOD-mp.elf` in the artifact
 `KisakCOD-mp-vita-RelWithDebInfo`), so a crash dump's addresses can be named
 with `arm-vita-eabi-addr2line -f -C -i -e KisakCOD-mp.elf <address>` on the
 machine that fetched the artifact. The artifact can be downloaded as soon as
-that job has finished; the rest of the workflow run need not be done.
+that job has finished; the rest of the workflow run need not be done. The job
+is in the **PS Vita server and client** workflow (`build-kisakcod-vita.yaml`).

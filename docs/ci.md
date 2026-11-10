@@ -14,7 +14,7 @@ of them.
 | Linux workflow | every job; the window jobs on SDL3 only | every job, SDL2 and SDL3 |
 | Windows | Win32 Debug and Release, Vulkan probe, regression checks | also MSVC x64 and MSVC ARM64 |
 | macOS | Apple silicon (arm64) | also Intel (x86_64) |
-| PS Vita | dedicated server and client, Debug and RelWithDebInfo | the same |
+| PS Vita workflow | dedicated server and client, Debug and RelWithDebInfo, and the port's host tests | the same |
 
 - **Drafts.** No job runs while a pull request is a draft. Marking it ready for
   review starts the checks, and so does every later push. Open a pull request
@@ -31,6 +31,18 @@ of them.
   sources and tests, and the test machines' run scripts; the macOS workflow
   skips the PS Vita port's sources. The filters look at the whole pull request,
   not the last push.
+- **PS Vita.** The port's four build jobs and its host tests are their own
+  workflow (`build-kisakcod-vita.yaml`; they were part of the Linux one). A
+  change to the port's own files only (`src/vita`, `src/gfx_gxm`,
+  `scripts/platform/vita`, `tests/vita_*`, `scripts/tests/test_vita_*.py`,
+  `scripts/ci/install-vitasdk.sh`) starts that workflow alone: four jobs
+  where a push used to start about thirty Linux jobs that neither compile nor
+  read those files. A change to shared source starts both. The `.vpk`
+  artifacts keep their names; fetch them from the run of the **PS Vita server
+  and client** workflow (`gh run list --workflow build-kisakcod-vita.yaml`).
+  A new host test for the port goes in the Vita client job, and a file a
+  Linux job needs must not sit under those paths; `CiTriggerTests` checks
+  both.
 - **Source scans.** The x86_64 client job's two whole-tree scans
   (`check_32bit_size_literals.py`, `check_32bit_layout_offsets.py`) parse every
   translation unit twice with libclang, about eight minutes each. On a pull

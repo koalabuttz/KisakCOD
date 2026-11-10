@@ -27,6 +27,13 @@ on:
       - build-linux.sh
       - scripts/**
       - src/**
+      # The PS Vita port's own files are built and checked by
+      # build-kisakcod-vita.yaml; no job here compiles or reads them.
+      - '!src/vita/**'
+      - '!src/gfx_gxm/**'
+      - '!scripts/platform/vita/**'
+      - '!scripts/tests/test_vita_*.py'
+      - '!scripts/ci/install-vitasdk.sh'
       - deps/**
       - tests/linux_net/**
       - tests/linux_client_core/**
@@ -44,6 +51,8 @@ on:
       - tests/linux_steam/**
       - tests/skinning/**
       - .github/workflows/build-kisakcod-linux.yaml
+      # For the workflow contract tests of the native job, which read it.
+      - .github/workflows/build-kisakcod-vita.yaml
       - .github/workflows/build-kisarcod-win.yaml
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -53,6 +62,13 @@ on:
       - build-linux.sh
       - scripts/**
       - src/**
+      # The PS Vita port's own files are built and checked by
+      # build-kisakcod-vita.yaml; no job here compiles or reads them.
+      - '!src/vita/**'
+      - '!src/gfx_gxm/**'
+      - '!scripts/platform/vita/**'
+      - '!scripts/tests/test_vita_*.py'
+      - '!scripts/ci/install-vitasdk.sh'
       - deps/**
       - tests/linux_net/**
       - tests/linux_client_core/**
@@ -70,6 +86,8 @@ on:
       - tests/linux_steam/**
       - tests/skinning/**
       - .github/workflows/build-kisakcod-linux.yaml
+      # For the workflow contract tests of the native job, which read it.
+      - .github/workflows/build-kisakcod-vita.yaml
       - .github/workflows/build-kisarcod-win.yaml
 
 permissions:
@@ -310,8 +328,6 @@ jobs:
           python3 scripts/tests/test_openal_stream_seek.py
           python3 scripts/tests/test_linux_sp_level_sweep.py
           python3 scripts/tests/test_shader_spike.py
-          python3 scripts/tests/test_vita_gxm_heap.py
-          python3 scripts/tests/test_vita_cg_translate.py --require-glslang
 
       - name: Run asset-free native checks
         timeout-minutes: 30
@@ -878,328 +894,6 @@ jobs:
         with:
           path: ${{ runner.temp }}/ccache
           key: ccache-armv7-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
-
-  vita_dedicated:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    # Opt-in PS Vita track (docs/vita.md): build KisakCOD-dedi with Clang
-    # against the pinned VitaSDK (scripts/ci/install-vitasdk.sh), pack the
-    # .vpk, and check that the server keeps x86's float results (no fused
-    # multiply-add, no NEON float math). Nothing runs: there is no Vita here,
-    # so start-up and map loading are checked on David's console.
-    name: PS Vita dedicated server ${{ matrix.config }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 40
-
-    strategy:
-      fail-fast: false
-      matrix:
-        config: [Debug, RelWithDebInfo]
-
-    env:
-      BUILD_DIR: build-vita/${{ matrix.config }}
-      CMAKE_RUNTIME_OUTPUT_DIRECTORY: ${{ github.workspace }}/out/vita-${{ matrix.config }}
-      BINARY: out/vita-${{ matrix.config }}/KisakCOD-dedi
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Restore downloaded apt packages
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/apt-archives
-          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
-
-      - name: Install build tools
-        timeout-minutes: 20
-        shell: bash
-        run: |
-          set -euo pipefail
-          scripts/ci/apt-install.sh cmake ninja-build clang python3 ccache
-
-      - name: Restore VitaSDK
-        id: vitasdk_cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/vitasdk
-          key: vitasdk-${{ hashFiles('scripts/ci/install-vitasdk.sh') }}
-
-      - name: Install VitaSDK
-        timeout-minutes: 10
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "VITASDK=$(scripts/ci/install-vitasdk.sh "$RUNNER_TEMP/vitasdk")" >> "$GITHUB_ENV"
-
-      - name: Restore compiler cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/ccache
-          key: ccache-vita-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: ccache-vita-dedicated-${{ matrix.config }}-
-      - name: Use compiler cache
-        id: ccache
-        shell: bash
-        run: |
-          set -euo pipefail
-          scripts/ci/use-ccache.sh
-
-      - name: Configure PS Vita ${{ matrix.config }}
-        timeout-minutes: 15
-        shell: bash
-        run: |
-          set -euo pipefail
-          clang++ --version
-          cmake -S . -B "$BUILD_DIR" -G Ninja \
-            -DKISAK_PLATFORM=vita \
-            -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$CMAKE_RUNTIME_OUTPUT_DIRECTORY"
-
-      - name: Build PS Vita KisakCOD-dedi and its .vpk
-        timeout-minutes: 30
-        shell: bash
-        run: |
-          set -euo pipefail
-          cmake --build "$BUILD_DIR" --target KisakCOD-dedi-vpk --parallel "$(nproc)"
-          ls -l "$BINARY" "$BINARY.vpk"
-          # Float results have to match x86 (docs/vita.md): no fused
-          # multiply-adds, and no NEON float math on Q or D registers (NEON
-          # flushes denormals to zero); scalar VFP uses S registers for floats.
-          "$VITASDK/bin/arm-vita-eabi-objdump" -d "$BINARY" > "$RUNNER_TEMP/vita-dedi.dis"
-          if grep -Eq $'\t(vfma|vfms|vfnma|vfnms)' "$RUNNER_TEMP/vita-dedi.dis"; then
-            echo "the server contains fused multiply-add instructions" >&2
-            exit 1
-          fi
-          if grep -Eq $'\tv[a-z0-9]+\.f(32|64)\tq|\tv[a-z0-9]+\.f32\td' "$RUNNER_TEMP/vita-dedi.dis"; then
-            echo "the server contains NEON float instructions" >&2
-            exit 1
-          fi
-          # Symbols the link must keep (scripts/platform/vita/CMakeLists.txt):
-          # libgcc's weak pthread references (an unresolved one switches its
-          # thread support off, and every thread_local becomes shared), and
-          # sceUserMainThreadStackSize, which sets the main thread's stack.
-          "$VITASDK/bin/arm-vita-eabi-nm" "$BINARY" > "$RUNNER_TEMP/vita-dedi.sym"
-          if grep -Eq '^ +w pthread_' "$RUNNER_TEMP/vita-dedi.sym"; then
-            grep -E '^ +w pthread_' "$RUNNER_TEMP/vita-dedi.sym" >&2
-            echo "the server leaves weak pthread references unresolved" >&2
-            exit 1
-          fi
-          for symbol in pthread_cancel pthread_once sceUserMainThreadStackSize; do
-            if ! grep -Eq " [TD] $symbol\$" "$RUNNER_TEMP/vita-dedi.sym"; then
-              echo "the server does not link $symbol" >&2
-              exit 1
-            fi
-          done
-
-      - name: Upload the .vpk
-        if: ${{ matrix.config == 'RelWithDebInfo' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: KisakCOD-dedi-vita-${{ matrix.config }}
-          path: ${{ env.BINARY }}.vpk
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Report compiler cache
-        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          ccache --show-stats
-      - name: Save compiler cache
-        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ runner.temp }}/ccache
-          key: ccache-vita-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
-
-  vita_mp_client:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    # Opt-in PS Vita client, stage 1 (docs/vita-client.md): build KisakCOD-mp
-    # with Clang against the pinned VitaSDK and pack its .vpk. The D3D9
-    # declarations come from DXVK Native's headers (nothing of DXVK is built)
-    # and the OpenAL ones from libopenal-dev; the client links no D3D9 or OpenAL
-    # library. The same float and link checks as the Vita server. The client
-    # does not run here: start-up is checked on David's Vita. Its control
-    # mapping and its small OpenAL do, as host tests.
-    name: PS Vita multiplayer client ${{ matrix.config }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-
-    strategy:
-      fail-fast: false
-      matrix:
-        config: [Debug, RelWithDebInfo]
-
-    env:
-      DXVK_REVISION: c3dd74be6baec53786d4e064a572185b70347a17
-      DXVK_DIRECTX_HEADERS_REVISION: 9df86f2341616ef1888ae59919feaa6d4fad693d
-      BUILD_DIR: build-vita-mp/${{ matrix.config }}
-      CMAKE_RUNTIME_OUTPUT_DIRECTORY: ${{ github.workspace }}/out/vita-mp-${{ matrix.config }}
-      BINARY: out/vita-mp-${{ matrix.config }}/KisakCOD-mp
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Restore downloaded apt packages
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/apt-archives
-          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
-
-      - name: Install build tools
-        timeout-minutes: 20
-        shell: bash
-        run: |
-          set -euo pipefail
-          # libopenal-dev only for its headers, copied below on their own.
-          scripts/ci/apt-install.sh cmake ninja-build clang python3 ccache libopenal-dev
-          mkdir -p "$RUNNER_TEMP/al-include"
-          cp -r /usr/include/AL "$RUNNER_TEMP/al-include/"
-
-      - name: Restore VitaSDK
-        id: vitasdk_cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/vitasdk
-          key: vitasdk-${{ hashFiles('scripts/ci/install-vitasdk.sh') }}
-
-      - name: Install VitaSDK
-        timeout-minutes: 10
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "VITASDK=$(scripts/ci/install-vitasdk.sh "$RUNNER_TEMP/vitasdk")" >> "$GITHUB_ENV"
-
-      - name: Fetch pinned DXVK Native 2.7.1 headers
-        timeout-minutes: 10
-        shell: bash
-        run: |
-          set -euo pipefail
-          # The same source-only fetch as the Linux client jobs. Nothing is built.
-          src="$RUNNER_TEMP/dxvk-source"
-          git init "$src"
-          git -C "$src" remote add origin https://github.com/doitsujin/dxvk.git
-          git -C "$src" fetch --depth 1 origin "$DXVK_REVISION"
-          git -C "$src" checkout --detach FETCH_HEAD
-          test "$(git -C "$src" rev-parse HEAD)" = "$DXVK_REVISION"
-          recorded="$(git -C "$src" ls-tree HEAD include/native/directx | awk '{print $3}')"
-          test "$recorded" = "$DXVK_DIRECTX_HEADERS_REVISION"
-          headers="$src/include/native/directx"
-          git init "$headers"
-          git -C "$headers" remote add origin https://github.com/Joshua-Ashton/mingw-directx-headers.git
-          git -C "$headers" fetch --depth 1 origin "$DXVK_DIRECTX_HEADERS_REVISION"
-          git -C "$headers" checkout --detach FETCH_HEAD
-          test "$(git -C "$headers" rev-parse HEAD)" = "$DXVK_DIRECTX_HEADERS_REVISION"
-          grep -q "version : '2.7.1'" "$src/meson.build"
-          python3 scripts/tests/run_native_d3d9_boundary_checks.py \
-            --dxvk-source "$src" --stage-dxvk-headers "$RUNNER_TEMP/dxvk-include/dxvk"
-
-      - name: Restore compiler cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/ccache
-          key: ccache-vita-mp-client-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: ccache-vita-mp-client-${{ matrix.config }}-
-      - name: Use compiler cache
-        id: ccache
-        shell: bash
-        run: |
-          set -euo pipefail
-          scripts/ci/use-ccache.sh
-
-      - name: Check the client's controls and sound on the host
-        # The control mapping, the small OpenAL and the plan of a run nobody
-        # watches make no Vita call: the host compiler builds them with
-        # sanitizers and runs their checks.
-        timeout-minutes: 10
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/tests/test_vita_run_plan.py
-          python3 scripts/tests/test_vita_input.py
-          python3 scripts/tests/test_vita_sound.py --al-include "$RUNNER_TEMP/al-include"
-
-      - name: Configure PS Vita client ${{ matrix.config }}
-        timeout-minutes: 15
-        shell: bash
-        run: |
-          set -euo pipefail
-          clang++ --version
-          cmake -S . -B "$BUILD_DIR" -G Ninja \
-            -DKISAK_PLATFORM=vita \
-            -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$CMAKE_RUNTIME_OUTPUT_DIRECTORY" \
-            -DKISAK_BUILD_VITA_MP_CLIENT=ON \
-            -DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk" \
-            -DKISAK_OPENAL_INCLUDE_DIR="$RUNNER_TEMP/al-include"
-
-      - name: Build PS Vita KisakCOD-mp and its .vpk
-        timeout-minutes: 40
-        shell: bash
-        run: |
-          set -euo pipefail
-          cmake --build "$BUILD_DIR" --target KisakCOD-mp-vpk KisakCOD-gxm-probe-vpk --parallel "$(nproc)"
-          ls -l "$BINARY" "$BINARY.vpk" "$(dirname "$BINARY")/KisakCOD-gxm-probe.vpk"
-          "$VITASDK/bin/arm-vita-eabi-size" -A "$BINARY" | grep -E '^\.(text|rodata|data|bss) '
-          # Float results have to match x86 (docs/vita.md): client prediction
-          # replays the server's movement math.
-          "$VITASDK/bin/arm-vita-eabi-objdump" -d "$BINARY" > "$RUNNER_TEMP/vita-mp.dis"
-          if grep -Eq $'\t(vfma|vfms|vfnma|vfnms)' "$RUNNER_TEMP/vita-mp.dis"; then
-            echo "the client contains fused multiply-add instructions" >&2
-            exit 1
-          fi
-          if grep -Eq $'\tv[a-z0-9]+\.f(32|64)\tq|\tv[a-z0-9]+\.f32\td' "$RUNNER_TEMP/vita-mp.dis"; then
-            echo "the client contains NEON float instructions" >&2
-            exit 1
-          fi
-          "$VITASDK/bin/arm-vita-eabi-nm" "$BINARY" > "$RUNNER_TEMP/vita-mp.sym"
-          if grep -Eq '^ +w pthread_' "$RUNNER_TEMP/vita-mp.sym"; then
-            grep -E '^ +w pthread_' "$RUNNER_TEMP/vita-mp.sym" >&2
-            echo "the client leaves weak pthread references unresolved" >&2
-            exit 1
-          fi
-          for symbol in pthread_cancel pthread_once sceUserMainThreadStackSize; do
-            if ! grep -Eq " [TD] $symbol\$" "$RUNNER_TEMP/vita-mp.sym"; then
-              echo "the client does not link $symbol" >&2
-              exit 1
-            fi
-          done
-          # The ELF with its symbols goes beside the .vpk it was packed from,
-          # so a crash dump's addresses can be named with arm-vita-eabi-addr2line
-          # on whatever machine fetched the artifact.
-          cp "$BINARY" "$BINARY.elf"
-          sha256sum "$BINARY.vpk" "$BINARY.elf"
-
-      - name: Upload the .vpk and its ELF
-        if: ${{ matrix.config == 'RelWithDebInfo' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: KisakCOD-mp-vita-${{ matrix.config }}
-          path: |
-            ${{ env.BINARY }}.vpk
-            ${{ env.BINARY }}.elf
-            ${{ env.CMAKE_RUNTIME_OUTPUT_DIRECTORY }}/KisakCOD-gxm-probe.vpk
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Report compiler cache
-        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          ccache --show-stats
-      - name: Save compiler cache
-        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ runner.temp }}/ccache
-          key: ccache-vita-mp-client-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   x64_client:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
