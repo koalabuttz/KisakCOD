@@ -278,6 +278,14 @@ struct DrawState
     SceGxmTexture unitView[SCE_GXM_MAX_TEXTURE_UNITS];
     uint32_t unitBound = 0;
     uint64_t textureBinds = 0, textureBindsLeftOut = 0, textureViewsMade = 0;
+    // The default uniform buffers the bound programs last reserved hold these
+    // constants: a draw with the same two programs and the same constants
+    // reserves and writes neither again. Both end when either program is set
+    // (SetPrograms) and with the scene.
+    bool vertexUniformsLive = false, fragmentUniformsLive = false;
+    uint64_t vertexUniformsVersion = 0, fragmentUniformsVersion = 0;
+    uint32_t fragmentAlphaRef = 0;
+    uint64_t uniformWrites = 0, uniformWritesLeftOut = 0;
     FixedState fixed{};
     bool fixedValid = false;
 
@@ -633,6 +641,7 @@ bool Register(Device &device, Variant &variant, const char *what)
                 variant.textureUnit[i] = int8_t(sceGxmProgramParameterGetResourceIndex(sampler));
         std::snprintf(name, sizeof(name), "kisak_depth_s%d", i);
         variant.depth[i] = sceGxmProgramFindParameterByName(program, name);
+        variant.depthUniforms |= variant.depth[i] != nullptr;
         std::snprintf(name, sizeof(name), "in_v%d", i);
         variant.inputs[i] = sceGxmProgramFindParameterByName(program, name);
     }
@@ -1128,6 +1137,8 @@ bool OpenScene(Device &device)
     d.boundFragment = nullptr;
     d.fixedValid = false;
     d.unitBound = 0;
+    d.vertexUniformsLive = false;
+    d.fragmentUniformsLive = false;
     ++d.scenes;
     ++device.stats.passes;
     return true;
@@ -1554,6 +1565,8 @@ SceGxmFragmentProgram *ClearFragmentProgram(Device &device)
 void SetPrograms(Device &device, const SceGxmVertexProgram *vertex, const SceGxmFragmentProgram *fragment)
 {
     DrawState &d = *device.draw;
+    if (d.boundVertex == vertex && d.boundFragment == fragment)
+        return;
     if (d.boundVertex != vertex)
     {
         sceGxmSetVertexProgram(Gxm(), vertex);
@@ -1564,6 +1577,11 @@ void SetPrograms(Device &device, const SceGxmVertexProgram *vertex, const SceGxm
         sceGxmSetFragmentProgram(Gxm(), fragment);
         d.boundFragment = fragment;
     }
+    // A reserved default uniform buffer is its program's until the program
+    // is set anew. Both end here when one program changes: the pair is what
+    // other sceGxm code is known to rely on.
+    d.vertexUniformsLive = false;
+    d.fragmentUniformsLive = false;
 }
 
 uint32_t IndexCount(d3d::PrimitiveType type, uint32_t primitives)
@@ -1597,6 +1615,8 @@ void DropProgramsIf(Device &device, const std::function<bool(const VertexProgram
 {
     DrawState &d = *device.draw;
     ForgetPipelines(d);
+    d.vertexUniformsLive = false;
+    d.fragmentUniformsLive = false;
     for (auto it = d.vertexPrograms.begin(); it != d.vertexPrograms.end();)
     {
         if (!vertexMatch(it->second))
@@ -2675,7 +2695,14 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     SetPrograms(device, vertexGxm, fragmentProgram->program);
 
     SceGxmContext *context = Gxm();
-    if (vertex->uniforms && vertexGxm == vertexProgram->program)
+    // The buffers the last draw reserved still hold this draw's constants
+    // when the programs and the constants are the last draw's.
+    const bool ownProgram = vertexGxm == vertexProgram->program;
+    const bool vertexKept = plain && ownProgram && d.vertexUniformsLive &&
+                            d.vertexUniformsVersion == device.vsConstantsVersion;
+    d.uniformWrites += vertex->uniforms && ownProgram;
+    d.uniformWritesLeftOut += vertex->uniforms && vertexKept;
+    if (vertex->uniforms && ownProgram && !vertexKept)
     {
         void *uniforms = nullptr;
         const int reserved = sceGxmReserveVertexDefaultUniformBuffer(context, &uniforms);
@@ -2689,6 +2716,8 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         if ((reserved < 0 || set < 0) && d.uniformFailures++ < 5)
             Log(device, "vertex constants not set: reserve 0x%08x, set 0x%08x (%u constants)", unsigned(reserved),
                 unsigned(set), unsigned(count));
+        d.vertexUniformsLive = reserved >= 0 && set >= 0;
+        d.vertexUniformsVersion = device.vsConstantsVersion;
         if (d.diagnosedDraws && vertex->constants)
         {
             const float *u = static_cast<const float *>(uniforms);
@@ -2749,17 +2778,28 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             Log(device, "diag: mimic constants not set: reserve 0x%08x, set 0x%08x", unsigned(reserved), unsigned(set));
     }
     void *pixelUniforms = nullptr;
-    if (pixel->uniforms)
+    // Not kept for a program that takes a texture's depth as a uniform
+    // (BindTextures writes those).
+    const uint32_t alphaRef = device.renderStates[d3d::RS_ALPHAREF] & 0xff;
+    const bool pixelKept = plain && d.fragmentUniformsLive && !pixel->depthUniforms &&
+                           d.fragmentUniformsVersion == device.psConstantsVersion &&
+                           (!pixel->alphaRef || d.fragmentAlphaRef == alphaRef);
+    d.uniformWrites += pixel->uniforms;
+    d.uniformWritesLeftOut += pixel->uniforms && pixelKept;
+    if (pixel->uniforms && !pixelKept)
     {
-        sceGxmReserveFragmentDefaultUniformBuffer(context, &pixelUniforms);
+        const int reserved = sceGxmReserveFragmentDefaultUniformBuffer(context, &pixelUniforms);
         const uint16_t count = ps->parsed.reflection.floatConstants;
         if (pixel->constants && count)
             sceGxmSetUniformDataF(pixelUniforms, pixel->constants, 0, count * 4u, device.psConstants.data());
         if (pixel->alphaRef)
         {
-            const float ref = float(device.renderStates[d3d::RS_ALPHAREF] & 0xff) / 255.0f;
+            const float ref = float(alphaRef) / 255.0f;
             sceGxmSetUniformDataF(pixelUniforms, pixel->alphaRef, 0, 1, &ref);
         }
+        d.fragmentUniformsLive = reserved >= 0 && pixelUniforms != nullptr;
+        d.fragmentUniformsVersion = device.psConstantsVersion;
+        d.fragmentAlphaRef = alphaRef;
     }
     Texture *const target = SceneTexture(d);
     if (!BindTextures(device, *pixel, pixelUniforms))
@@ -3003,13 +3043,15 @@ void LogDrawSummary(Device &device)
         (unsigned long long)d->drawn, (unsigned long long)d->copies, (unsigned long long)d->scenes, unsigned(d->vertexPrograms.size()),
         unsigned(d->fragmentPrograms.size()), d->variantsMade, d->variantFailures, (unsigned long long)d->renames,
         (unsigned long long)d->ringOverflows, d->drawFailures);
-    // What the draws did not do again (Pipeline, BindTextures).
+    // What the draws did not do again (Pipeline, BindTextures, the uniform
+    // buffers in Draw).
     Log(device,
         "draw work left out: %llu of %llu draws found their programs in the table; of %llu texture binds %llu were "
-        "set already and %llu set their filters anew",
+        "set already and %llu set their filters anew; of %llu uniform buffers %llu were the last draw's",
         (unsigned long long)d->pipelineHits, (unsigned long long)d->pipelineLookups,
         (unsigned long long)d->textureBinds, (unsigned long long)d->textureBindsLeftOut,
-        (unsigned long long)d->textureViewsMade);
+        (unsigned long long)d->textureViewsMade, (unsigned long long)d->uniformWrites,
+        (unsigned long long)d->uniformWritesLeftOut);
     for (int i = 0; i < SkipCount; ++i)
         if (d->skipped[i])
             Log(device, "draws skipped: %llu x %s", (unsigned long long)d->skipped[i], kSkipNames[i]);

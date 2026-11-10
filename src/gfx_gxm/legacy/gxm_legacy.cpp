@@ -1275,12 +1275,18 @@ void SetPixelShader(Device *device, Shader *shader)
 
 namespace
 {
-void SetConstants(std::vector<float> &constants, uint32_t start, const float *data, uint32_t count)
+// True when a value changed: a draw whose program and constants are the last
+// draw's uploads neither again (the versions below).
+bool SetConstants(std::vector<float> &constants, uint32_t start, const float *data, uint32_t count)
 {
     if (!data || start * 4 >= constants.size())
-        return;
+        return false;
     const size_t floats = std::min<size_t>(size_t(count) * 4, constants.size() - start * 4);
-    std::memcpy(constants.data() + start * 4, data, floats * sizeof(float));
+    float *to = constants.data() + start * 4;
+    if (std::memcmp(to, data, floats * sizeof(float)) == 0)
+        return false;
+    std::memcpy(to, data, floats * sizeof(float));
+    return true;
 }
 } // namespace
 
@@ -1288,7 +1294,8 @@ void SetVertexShaderConstantF(Device *device, uint32_t start, const float *data,
 {
     if (device)
     {
-        SetConstants(device->vsConstants, start, data, count);
+        if (SetConstants(device->vsConstants, start, data, count))
+            ++device->vsConstantsVersion;
         device->stats.constantBytes += uint64_t(count) * 16;
     }
 }
@@ -1297,7 +1304,8 @@ void SetPixelShaderConstantF(Device *device, uint32_t start, const float *data, 
 {
     if (device)
     {
-        SetConstants(device->psConstants, start, data, count);
+        if (SetConstants(device->psConstants, start, data, count))
+            ++device->psConstantsVersion;
         device->stats.constantBytes += uint64_t(count) * 16;
     }
 }

@@ -230,6 +230,7 @@ struct Variant
     const SceGxmProgramParameter *inputs[16] = {};     // "in_v<n>"
     int8_t textureUnit[16];                            // sampler s<n>'s unit, -1 none
     bool uniforms = false; // has a default uniform buffer
+    bool depthUniforms = false; // any of depth[] is there: its uniforms follow the textures
 
     const SceGxmProgram *program() const { return reinterpret_cast<const SceGxmProgram *>(gxp.data()); }
 };
@@ -288,6 +289,8 @@ struct Device
     Viewport viewport{};
     Rect scissor{};
     std::vector<float> vsConstants, psConstants;
+    // Count the calls that changed a value (SetConstants).
+    uint64_t vsConstantsVersion = 0, psConstantsVersion = 0;
 
     // Things the back end does not do yet, each logged once.
     std::vector<const char *> notYet;
