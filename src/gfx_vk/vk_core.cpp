@@ -1155,6 +1155,15 @@ void ResetFrameTimings(Core *core)
     core->stats.framePasses = PassTimings{};
     core->stats.frameGap = PassTimings{};
 }
+
+bool FrameGpuTime(const Core *core, uint64_t frame, FrameGpuTimes &out)
+{
+    const Core::FrameGpuEntry &entry = core->frameGpuTimes[frame % std::size(core->frameGpuTimes)];
+    if (!frame || entry.frame != frame)
+        return false;
+    out = entry.times;
+    return true;
+}
 void NotifyResize(Core *core) { core->resizePending = true; }
 
 const Dispatch &Functions(const Core *core) { return core->vk; }
@@ -1164,6 +1173,13 @@ const VkPhysicalDeviceLimits &Limits(const Core *core) { return core->properties
 VkFormat DepthStencilFormat(const Core *core) { return core->depthStencilFormat; }
 
 const OptionalFeatures &Features(const Core *core) { return core->optional; }
+
+VkSampleCountFlags SampleCounts(const Core *core)
+{
+    const VkPhysicalDeviceLimits &limits = core->properties.limits;
+    return limits.framebufferColorSampleCounts & limits.framebufferDepthSampleCounts
+        & limits.framebufferStencilSampleCounts;
+}
 
 bool FormatSupports(const Core *core, VkFormat format, VkFormatFeatureFlags features)
 {

@@ -24,6 +24,7 @@
 #include <SDL3/SDL_vulkan.h>
 
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -66,11 +67,16 @@ struct Options
     gfx_vk::Validation validation = gfx_vk::Validation::IfFound;
     int device = -1;
     std::string only;
+    // --keep-draw-state 0: the bench scenes draw with front::Tuning's
+    // keepDrawState off, to set their timings beside the default's.
+    bool benchKeepsDrawState = true;
 };
 
 void Usage(const char *argv0)
 {
-    std::fprintf(stderr, "usage: %s [--validation off|auto|require] [--device N] [--scene NAME]\n", argv0);
+    std::fprintf(stderr,
+                 "usage: %s [--validation off|auto|require] [--device N] [--scene NAME] [--keep-draw-state 0|1]\n",
+                 argv0);
 }
 
 bool ParseOptions(int argc, char **argv, Options &options)
@@ -106,6 +112,11 @@ bool ParseOptions(int argc, char **argv, Options &options)
             options.only = next;
             ++i;
         }
+        else if (arg == "--keep-draw-state" && next && (!std::strcmp(next, "0") || !std::strcmp(next, "1")))
+        {
+            options.benchKeepsDrawState = next[0] == '1';
+            ++i;
+        }
         else
         {
             return false;
@@ -136,6 +147,7 @@ struct SdlHost
     std::mutex mutex;
     front::Tuning tuning{};
     std::vector<std::string> *logKept = nullptr;
+    bool benchKeepsDrawState = true; // Options::benchKeepsDrawState
 };
 
 void LogLine(void *user, const char *line)
@@ -466,7 +478,12 @@ public:
     void FrameLoop();
     void GpuFeed();
     void Tuning();
+    void SlowFrames();
+    void KeptState();
+    void Multisample();
     void Bench();
+    void BenchRuns();
+    void BenchFrames(bool runs);
     void ResetDevice();
     void Present();
 };
@@ -515,8 +532,21 @@ void Check::Adapter()
     Equal("msaa_none", d3d->CheckDeviceMultiSampleType(0, D3DDEVTYPE_HAL, D3DFMT_A8R8G8B8, TRUE, D3DMULTISAMPLE_NONE,
                                                        nullptr),
           D3D_OK);
+    // 2, 4 and 8 samples are offered (the adapter makes a count the device
+    // lacks with 4); nothing else is.
+    DWORD qualities = 0;
     Equal("msaa_4x", d3d->CheckDeviceMultiSampleType(0, D3DDEVTYPE_HAL, D3DFMT_A8R8G8B8, TRUE, D3DMULTISAMPLE_4_SAMPLES,
+                                                     &qualities),
+          D3D_OK);
+    Equal("msaa_4x_qualities", qualities, DWORD(1));
+    Equal("msaa_8x", d3d->CheckDeviceMultiSampleType(0, D3DDEVTYPE_HAL, D3DFMT_A8R8G8B8, TRUE, D3DMULTISAMPLE_8_SAMPLES,
                                                      nullptr),
+          D3D_OK);
+    Equal("msaa_3x", d3d->CheckDeviceMultiSampleType(0, D3DDEVTYPE_HAL, D3DFMT_A8R8G8B8, TRUE, D3DMULTISAMPLE_3_SAMPLES,
+                                                     nullptr),
+          D3DERR_NOTAVAILABLE);
+    Equal("msaa_nonmaskable", d3d->CheckDeviceMultiSampleType(0, D3DDEVTYPE_HAL, D3DFMT_A8R8G8B8, TRUE,
+                                                              D3DMULTISAMPLE_NONMASKABLE, nullptr),
           D3DERR_NOTAVAILABLE);
     Equal("depth_match", d3d->CheckDepthStencilMatch(0, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, D3DFMT_A8R8G8B8, D3DFMT_D24S8),
           D3D_OK);
@@ -1789,6 +1819,331 @@ void Check::Tuning()
                 first.gpuTime ? "yes" : "no");
 }
 
+// The statistics' `slow frame` lines: the frames that took longest since the
+// statistics were last reset, each with what the device did in it. Eight
+// frames are presented, of which the second builds a pipeline (the only
+// blended draws of the whole check) and then stands still for 400 ms, and the
+// third uploads a texture and stands still for 250 ms. The report must name
+// those two by their numbers, with their draws, the pipeline and the upload,
+// and with the GPU's times where the device timed its frames; it holds one
+// line after one frame, three after eight, the longest first, and none after
+// a reset. The two frames are looked up by number and not by rank: a machine
+// busy enough to hold another frame up for longer still passes.
+void Check::SlowFrames()
+{
+    constexpr int kFrames = 8;
+    constexpr int kPipelineFrame = 2, kPipelineDraws = 20, kPipelineMs = 400;
+    constexpr int kUploadFrame = 3, kUploadDraws = 5, kUploadMs = 250;
+    std::vector<std::string> lines;
+    bool timed = false;
+    // The `slow frame` lines of one report.
+    const auto report = [&](bool reset) {
+        {
+            const std::lock_guard<std::mutex> lock(host->mutex);
+            lines.clear();
+            host->logKept = &lines;
+        }
+        const uint32_t devices = front::LogDeviceStats(reset);
+        std::vector<std::string> slow;
+        const std::lock_guard<std::mutex> lock(host->mutex);
+        host->logKept = nullptr;
+        for (const std::string &line : lines)
+        {
+            if (devices == 1 && line.find("vulkan d3d9: slow frame ") != std::string::npos)
+                slow.push_back(line);
+            const size_t over = line.find(" max over ");
+            if (over != std::string::npos && line.find("vulkan d3d9: frame stats: ") != std::string::npos)
+                timed = std::strtoull(line.c_str() + over + 10, nullptr, 10) > 0;
+        }
+        return slow;
+    };
+    // The number a line has in front of `unit`, or behind `label`; -1 without it.
+    const auto before = [](const std::string &line, const char *unit) {
+        const size_t at = line.find(unit);
+        if (at == std::string::npos)
+            return -1.0;
+        size_t start = at;
+        while (start > 0 && (std::isdigit(static_cast<unsigned char>(line[start - 1])) || line[start - 1] == '.'))
+            --start;
+        return start < at ? std::strtod(line.c_str() + start, nullptr) : -1.0;
+    };
+    const auto behind = [](const std::string &line, const char *label) {
+        const size_t at = line.find(label);
+        return at == std::string::npos ? -1.0 : std::strtod(line.c_str() + at + std::strlen(label), nullptr);
+    };
+    const auto numbered = [&](const std::vector<std::string> &slow, int number) -> const std::string * {
+        for (const std::string &line : slow)
+        {
+            if (behind(line, " ms, frame ") == double(number))
+                return &line;
+        }
+        return nullptr;
+    };
+    const auto draw = [&](int draws) {
+        for (int i = 0; i < draws; ++i)
+            DrawQuad(float(4 * i), 0, float(4 * i + 4), 4, 0.5f, Argb(128, 255, uint32_t(8 * i), 0));
+    };
+
+    // Frames count from a Present, and the statistics from here.
+    Reset(Argb(255, 0, 64, 0));
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    report(true);
+    Equal("lines_after_reset", report(false).size(), size_t(0));
+
+    IDirect3DTexture9 *texture = nullptr;
+    std::vector<std::string> first;
+    for (int frame = 1; frame <= kFrames; ++frame)
+    {
+        Reset(Argb(255, 0, 64, 0));
+        if (frame == kPipelineFrame)
+        {
+            // No other scene blends: the first of these draws builds a pipeline.
+            Ok(device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE), "SetRenderState");
+            Ok(device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_INVDESTCOLOR), "SetRenderState");
+            Ok(device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR), "SetRenderState");
+            draw(kPipelineDraws);
+            SDL_Delay(kPipelineMs);
+        }
+        else if (frame == kUploadFrame)
+        {
+            texture = FilledTexture(64, 64, [](UINT x, UINT y) { return Argb(255, 4 * x, 4 * y, 128); });
+            if (!texture)
+                return;
+            Ok(device->SetTexture(0, texture), "SetTexture");
+            Ok(device->SetPixelShader(psTexture), "SetPixelShader");
+            draw(kUploadDraws);
+            SDL_Delay(kUploadMs);
+        }
+        else
+            draw(frame == 1 ? 10 : 3);
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        if (frame == 1)
+            first = report(false);
+    }
+    const std::vector<std::string> slow = report(false);
+    const bool gpuTimed = timed; // by that report's frame stats line
+    device->SetTexture(0, nullptr);
+    SafeRelease(texture);
+
+    Equal("first_frame_lines", first.size(), size_t(1));
+    if (first.size() == 1)
+    {
+        Equal("first_frame_rank", behind(first[0], "slow frame "), 1);
+        Equal("first_frame_number", behind(first[0], " ms, frame "), 1);
+        Equal("first_frame_draws", before(first[0], " draws"), 10);
+    }
+    Equal("lines", slow.size(), size_t(3));
+    double longest = 0.0, second = 0.0;
+    bool ordered = true;
+    for (size_t i = 0; i < slow.size(); ++i)
+    {
+        const double ms = before(slow[i], " ms, frame ");
+        ordered = ordered && behind(slow[i], "slow frame ") == double(i + 1) && ms > 0.0
+                  && (i == 0 || ms <= before(slow[i - 1], " ms, frame "));
+        if (i == 0)
+            longest = ms;
+        else if (i == 1)
+            second = ms;
+    }
+    Equal("longest_first", ordered, true);
+    const std::string *pipelineLine = numbered(slow, kPipelineFrame);
+    Equal("pipeline_frame_named", pipelineLine != nullptr, true);
+    if (pipelineLine)
+    {
+        Equal("pipeline_frame_time", before(*pipelineLine, " ms, frame ") >= double(kPipelineMs), true);
+        Equal("pipeline_frame_draws", before(*pipelineLine, " draws"), kPipelineDraws);
+        Equal("pipeline_frame_pipelines", before(*pipelineLine, " pipelines") >= 1.0, true);
+        Equal("pipeline_frame_uploads", before(*pipelineLine, " texture uploads"), 0);
+        // Its timestamps were read frames ago, where the device has them.
+        Equal("pipeline_frame_gpu_time", pipelineLine->find("; GPU time not read") == std::string::npos, gpuTimed);
+        if (gpuTimed)
+            Equal("pipeline_frame_gpu_values",
+                  behind(*pipelineLine, "; GPU ") >= before(*pipelineLine, " in passes")
+                      && before(*pipelineLine, " in passes") >= 0.0
+                      && before(*pipelineLine, " without work before it") >= 0.0,
+                  true);
+    }
+    const std::string *uploadLine = numbered(slow, kUploadFrame);
+    Equal("upload_frame_named", uploadLine != nullptr, true);
+    if (uploadLine)
+    {
+        Equal("upload_frame_time", before(*uploadLine, " ms, frame ") >= double(kUploadMs), true);
+        Equal("upload_frame_draws", before(*uploadLine, " draws"), kUploadDraws);
+        Equal("upload_frame_uploads", before(*uploadLine, " texture uploads") >= 1.0, true);
+        Equal("upload_frame_megabytes", behind(*uploadLine, " texture uploads (") > 0.0, true);
+    }
+    // Asked for again with a new start: the same three, and then none.
+    Equal("kept_lines", report(true).size(), size_t(3));
+    Equal("lines_after_second_reset", report(false).size(), size_t(0));
+    std::printf("d3d9_check.slow_frames=frames=%d longest_ms=%.2f second_ms=%.2f gpu_time=%s\n", kFrames, longest,
+                second, gpuTimed ? "yes" : "no");
+}
+
+// The switch for what a draw takes up from the draw before it
+// (front::Tuning::keepDrawState, the engine's r_vkKeepDrawState). The same
+// frame of 600 draws, in runs of eight that share a texture and with a vertex
+// shader constant set to another value for every draw, is drawn with the
+// state kept, not kept, and kept again. Each change is taken up by the
+// Present after it and logged once. The three pictures are the same to the
+// pixel, and the statistics say what the switch did: every draw of the frame
+// in the middle wrote all its constants again, close to twice the bytes of
+// the frames around it or more.
+void Check::KeptState()
+{
+    constexpr int kDraws = 600;
+    constexpr int kRun = 8;
+    constexpr int kCell = 4;
+    constexpr int kAcross = int(kSize) / kCell;
+    std::vector<std::string> lines;
+    const auto set = [&](bool keep) {
+        const std::lock_guard<std::mutex> lock(host->mutex);
+        host->tuning = front::Tuning{};
+        host->tuning.keepDrawState = keep;
+    };
+    // The number the line has behind `label`, or in front of `unit`; -1 without it.
+    const auto behind = [](const std::string &line, const char *label) {
+        const size_t at = line.find(label);
+        return at == std::string::npos ? -1.0 : std::strtod(line.c_str() + at + std::strlen(label), nullptr);
+    };
+    const auto before = [](const std::string &line, const char *unit) {
+        const size_t at = line.find(unit);
+        if (at == std::string::npos)
+            return -1.0;
+        size_t start = at;
+        while (start > 0 && (std::isdigit(static_cast<unsigned char>(line[start - 1])) || line[start - 1] == '.'))
+            --start;
+        return start < at ? std::strtod(line.c_str() + start, nullptr) : -1.0;
+    };
+    struct Frame
+    {
+        double frames = -1, draws = -1, constantKb = -1, sets = -1;
+        size_t saidOn = 0, saidOff = 0;
+        std::vector<uint8_t> picture;
+    };
+    IDirect3DTexture9 *textures[2] = {
+        FilledTexture(2, 2, [](UINT, UINT) { return Argb(255, 255, 255, 255); }),
+        FilledTexture(2, 2, [](UINT, UINT) { return Argb(255, 255, 128, 0); }),
+    };
+    if (!textures[0] || !textures[1])
+    {
+        SafeRelease(textures[0]);
+        SafeRelease(textures[1]);
+        return;
+    }
+    // The Present takes the setting up; the statistics then count the one
+    // frame drawn under it.
+    const auto frame = [&](bool keep) {
+        Frame out;
+        set(keep);
+        {
+            const std::lock_guard<std::mutex> lock(host->mutex);
+            lines.clear();
+            host->logKept = &lines;
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        front::LogDeviceStats(true);
+        {
+            const std::lock_guard<std::mutex> lock(host->mutex);
+            for (const std::string &line : lines)
+            {
+                out.saidOn += line.find("draw state kept from one draw to the next: now on") != std::string::npos;
+                out.saidOff += line.find("draw state kept from one draw to the next: now off") != std::string::npos;
+            }
+            lines.clear();
+        }
+        Reset(Argb(255, 0, 64, 0));
+        Ok(device->SetPixelShader(psTexture), "SetPixelShader");
+        for (int draw = 0; draw < kDraws; ++draw)
+        {
+            if (draw % kRun == 0)
+                Ok(device->SetTexture(0, textures[draw / kRun % 2]), "SetTexture");
+            // The quad is made one to three cells to the left of its place
+            // and the constant, which the vertex shader adds, brings it
+            // back: a draw that took the constant of the one before would
+            // land in another cell and leave its own as the Clear made it.
+            const int shift = 1 + draw % 3;
+            const float back[4] = {float(shift) * 2.0f * kCell / float(kSize), 0, 0, 0};
+            Ok(device->SetVertexShaderConstantF(0, back, 1), "SetVertexShaderConstantF");
+            const float x = float((draw % kAcross - shift) * kCell);
+            const float y = float(draw / kAcross * kCell);
+            DrawQuad(x, y, x + kCell, y + kCell, 0.5f, 0xffffffffu);
+        }
+        if (Read())
+            out.picture = pixels;
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        if (front::LogDeviceStats(true) == 1)
+        {
+            const std::lock_guard<std::mutex> lock(host->mutex);
+            for (const std::string &line : lines)
+            {
+                if (line.find("vulkan d3d9: frame stats: ") == std::string::npos)
+                    continue;
+                out.frames = behind(line, "frame stats: ");
+                out.draws = before(line, " draws, ");
+                out.constantKb = before(line, " KB constants");
+                out.sets = before(line, " descriptor sets (");
+            }
+        }
+        const std::lock_guard<std::mutex> lock(host->mutex);
+        host->logKept = nullptr;
+        return out;
+    };
+
+    const Frame kept = frame(true);
+    const Frame unkept = frame(false);
+    const Frame again = frame(true);
+    set(true);
+    device->SetTexture(0, nullptr);
+    SafeRelease(textures[0]);
+    SafeRelease(textures[1]);
+
+    Equal("kept_frames", kept.frames, 1);
+    Equal("kept_draws", kept.draws, kDraws);
+    Equal("unkept_frames", unkept.frames, 1);
+    Equal("unkept_draws", unkept.draws, kDraws);
+    Equal("again_draws", again.draws, kDraws);
+    // The device begins with the state kept: the first frame logs no change.
+    Equal("kept_logs_nothing", kept.saidOn + kept.saidOff, size_t(0));
+    Equal("off_logged_once", unkept.saidOff, size_t(1));
+    Equal("off_logged_alone", unkept.saidOn, size_t(0));
+    Equal("on_logged_once", again.saidOn, size_t(1));
+    Equal("on_logged_alone", again.saidOff, size_t(0));
+    // Kept, a draw writes the vertex shader's constants; not kept, the pixel
+    // shader's sampler states and alpha test with them.
+    Equal("kept_writes_constants", kept.constantKb > 0.0, true);
+    Equal("unkept_writes_more", unkept.constantKb >= 1.9 * kept.constantKb, true);
+    Equal("again_writes_as_before", again.constantKb, kept.constantKb);
+    // Not kept, a draw takes its sets from the frame's pools; kept, the sets
+    // the first frame wrote last across frames, so the third writes none.
+    // Under plain uniform buffers (KISAK_VK_UNIFORMS=static) a set 0 holds
+    // the draw's offsets and is written for every draw: one a draw, and no
+    // texture set.
+    Equal("unkept_writes_sets", unkept.sets > 0.0, true);
+    Equal("again_writes_no_kept_set", again.sets == 0.0 || again.sets == double(kDraws), true);
+    Equal("kept_picture_read", kept.picture.size(), size_t(kSize) * kSize * 4);
+    Equal("unkept_picture_same", unkept.picture == kept.picture, true);
+    Equal("again_picture_same", again.picture == kept.picture, true);
+    if (kept.picture.size() == size_t(kSize) * kSize * 4)
+    {
+        // Every cell has its run's texture: white, then orange.
+        int wrong = 0;
+        for (int draw = 0; draw < kDraws; ++draw)
+        {
+            const uint8_t *p = &kept.picture[((draw / kAcross * kCell + kCell / 2) * kSize
+                                              + draw % kAcross * kCell + kCell / 2) * 4];
+            const bool orange = draw / kRun % 2 == 1;
+            wrong += !(p[2] == 255 && p[1] == (orange ? 128 : 255) && p[0] == (orange ? 0 : 255));
+        }
+        Equal("cells_wrong", wrong, 0);
+        pixels = kept.picture;
+        Expect("first_cell", kCell / 2, kCell / 2, 255, 255, 255);
+        Expect("second_run", 8 * kCell + kCell / 2, kCell / 2, 255, 128, 0);
+        Expect("clear_kept", kSize - 6, kSize - 2, 0, 64, 0);
+    }
+    std::printf("d3d9_check.kept_state=draws=%d kept_kb=%.1f unkept_kb=%.1f\n", kDraws, kept.constantKb,
+                unkept.constantKb);
+}
+
 // Not part of a full run: --scene bench. What a frame of the engine's size
 // costs the thread that draws it, with the engine's other habits around it:
 // 768 draws of four D3D9 calls each (a constant, a texture, a render state,
@@ -1800,26 +2155,88 @@ void Check::Tuning()
 // lock with the poller is in it) and the polls made meanwhile. The numbers
 // depend on the machine and on what else runs on it; the scene passes when
 // its frames were presented.
-void Check::Bench()
+//
+// --scene bench_runs is the same frame in the order the engine draws one:
+// sorted by material. Eight draws in a row share a texture, an alpha
+// reference and a pixel shader constant (three calls for the run), and each
+// draw is one vertex shader constant and two indexed triangles from static
+// buffers (two calls). It measures what a draw costs when most of its state
+// is the last draw's, which is the usual case in the game and the one the
+// adapter can do least for in `bench`, where every draw changes everything.
+// Its last frame is read back: every cell must hold its run's texture.
+void Check::Bench() { BenchFrames(false); }
+void Check::BenchRuns() { BenchFrames(true); }
+
+void Check::BenchFrames(bool runs)
 {
     constexpr int kFrames = 120;
     constexpr int kWarmUp = 20;
     constexpr int kDraws = 768;
     constexpr int kCell = 4;
     constexpr int kAcross = int(kSize) / kCell;
+    constexpr int kRun = 8;
+    constexpr int kTextures = 4;
     using Clock = std::chrono::steady_clock;
+    static const uint32_t kColours[kTextures] = {Argb(255, 255, 255, 255), Argb(255, 128, 128, 128),
+                                                 Argb(255, 255, 0, 0), Argb(255, 0, 0, 255)};
     IDirect3DQuery9 *swapFence = nullptr, *syncFence = nullptr;
-    IDirect3DTexture9 *textures[2] = {FilledTexture(2, 2, [](UINT, UINT) { return Argb(255, 255, 255, 255); }),
-                                      FilledTexture(2, 2, [](UINT, UINT) { return Argb(255, 128, 128, 128); })};
-    if (!textures[0] || !textures[1]
-        || !Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &swapFence), "CreateQuery(swap fence)")
-        || !Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &syncFence), "CreateQuery(sync fence)"))
+    IDirect3DTexture9 *textures[kTextures] = {};
+    IDirect3DVertexBuffer9 *vb = nullptr;
+    IDirect3DIndexBuffer9 *ib = nullptr;
+    bool made = true;
+    for (int i = 0; i < kTextures; ++i)
+    {
+        const uint32_t colour = kColours[i];
+        textures[i] = FilledTexture(2, 2, [colour](UINT, UINT) { return colour; });
+        made = made && textures[i];
+    }
+    made = made && Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &swapFence), "CreateQuery(swap fence)")
+        && Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &syncFence), "CreateQuery(sync fence)");
+    if (made && runs)
+    {
+        // One cell at the top left, moved by the vertex shader constant; the
+        // index buffer holds it once for each draw of a run.
+        made = Ok(device->CreateVertexBuffer(4 * sizeof(Vertex), D3DUSAGE_WRITEONLY, 0, D3DPOOL_DEFAULT, &vb, nullptr),
+                  "CreateVertexBuffer")
+            && Ok(device->CreateIndexBuffer(kRun * 6 * sizeof(uint16_t), D3DUSAGE_WRITEONLY, D3DFMT_INDEX16,
+                                            D3DPOOL_DEFAULT, &ib, nullptr),
+                  "CreateIndexBuffer");
+        void *data = nullptr;
+        if (made && Ok(vb->Lock(0, 0, &data, 0), "Lock(vertex buffer)"))
+        {
+            QuadCorners(static_cast<Vertex *>(data), 0, 0, kCell, kCell, 0.5f, Argb(255, 255, 255, 255));
+            vb->Unlock();
+        }
+        if (made && Ok(ib->Lock(0, 0, &data, 0), "Lock(index buffer)"))
+        {
+            const uint16_t quad[6] = {0, 1, 2, 0, 2, 3};
+            for (int i = 0; i < kRun; ++i)
+                std::memcpy(static_cast<uint8_t *>(data) + i * sizeof(quad), quad, sizeof(quad));
+            ib->Unlock();
+        }
+    }
+    if (!made)
     {
         SafeRelease(swapFence);
-        SafeRelease(textures[0]);
-        SafeRelease(textures[1]);
+        SafeRelease(syncFence);
+        SafeRelease(vb);
+        SafeRelease(ib);
+        for (IDirect3DTexture9 *&texture : textures)
+            SafeRelease(texture);
         return;
     }
+    // --keep-draw-state 0: a Present takes the setting up before the first
+    // frame is drawn, and the scene leaves the device as it found it.
+    const bool keepDrawState = host->benchKeepsDrawState;
+    const auto keep = [&](bool on) {
+        {
+            const std::lock_guard<std::mutex> lock(host->mutex);
+            host->tuning.keepDrawState = on;
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    };
+    if (!keepDrawState)
+        keep(false);
     std::atomic<bool> stop{false};
     std::atomic<uint64_t> polls{0};
     IDirect3DQuery9 *const polled = syncFence;
@@ -1839,20 +2256,42 @@ void Check::Bench()
     const front::DeviceCounters before = Counters();
     double totalMs = 0.0, minMs = 1e9;
     uint64_t pollsCounted = 0;
+    bool lastFrameRead = false;
     for (int frame = 0; frame < kFrames; ++frame)
     {
         Reset(Argb(255, 0, 64, 0));
         Ok(device->SetPixelShader(psTexture), "SetPixelShader");
         const uint64_t pollsBefore = polls.load(std::memory_order_relaxed);
         const Clock::time_point start = Clock::now();
+        if (runs)
+        {
+            device->SetStreamSource(0, vb, 0, sizeof(Vertex));
+            device->SetIndices(ib);
+        }
         for (int draw = 0; draw < kDraws; ++draw)
         {
+            const float x = float(draw % kAcross * kCell);
+            const float y = float(draw / kAcross * kCell);
+            if (runs)
+            {
+                const int run = draw / kRun;
+                if (draw % kRun == 0)
+                {
+                    const float tint[4] = {float(run), 0.0f, 0.0f, 1.0f};
+                    device->SetTexture(0, textures[run % kTextures]);
+                    device->SetRenderState(D3DRS_ALPHAREF, DWORD(run & 0xff));
+                    device->SetPixelShaderConstantF(0, tint, 1);
+                }
+                // Clip space is two units across: the cell moves x pixels right and y down.
+                const float offset[4] = {2.0f * x / kSize, -2.0f * y / kSize, 0.0f, 0.0f};
+                device->SetVertexShaderConstantF(0, offset, 1);
+                device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, 4, UINT(6 * (draw % kRun)), 2);
+                continue;
+            }
             const float offset[4] = {0.0f, 0.0f, 0.0f, 0.0f};
             device->SetVertexShaderConstantF(0, offset, 1);
             device->SetTexture(0, textures[draw & 1]);
             device->SetRenderState(D3DRS_ALPHAREF, DWORD(draw & 0xff));
-            const float x = float(draw % kAcross * kCell);
-            const float y = float(draw / kAcross * kCell);
             Vertex quad[6];
             QuadList(quad, x, y, x + kCell, y + kCell, 0.5f, Argb(255, 255, 255, 255), kSize);
             device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, quad, sizeof(Vertex));
@@ -1874,29 +2313,263 @@ void Check::Bench()
             else
                 std::this_thread::yield();
         }
+        if (runs && frame == kFrames - 1)
+            lastFrameRead = Read();
         Ok(syncFence->Issue(D3DISSUE_END), "Issue(sync fence)");
         Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
         Ok(swapFence->Issue(D3DISSUE_END), "Issue(swap fence)");
     }
     stop = true;
     mainThread.join();
-    device->SetTexture(0, nullptr);
     const front::DeviceCounters after = Counters();
-    Equal("bench_frames_presented",
+    if (!keepDrawState)
+        keep(true);
+    Equal(runs ? "bench_runs_frames_presented" : "bench_frames_presented",
           (after.presents - before.presents) + (after.presentsSkipped - before.presentsSkipped), uint64_t(kFrames));
     const int counted = kFrames - kWarmUp;
-    std::printf("d3d9_check.bench=frames=%d draws=%d calls=%d draw_ms_average=%.3f draw_ms_min=%.3f "
+    const int calls = runs ? 2 * kDraws + 3 * (kDraws / kRun) : 4 * kDraws;
+    std::printf("d3d9_check.%s=frames=%d draws=%d calls=%d draw_ms_average=%.3f draw_ms_min=%.3f "
                 "polls_per_frame=%.0f submissions_per_frame=%.2f\n",
-                counted, kDraws, 4 * kDraws, totalMs / counted, minMs, double(pollsCounted) / counted,
-                double(after.submissions - before.submissions) / kFrames);
+                runs ? "bench_runs" : "bench", counted, kDraws, calls, totalMs / counted, minMs,
+                double(pollsCounted) / counted, double(after.submissions - before.submissions) / kFrames);
+    if (runs && lastFrameRead)
+    {
+        // The first and last cell of some runs, and the cells either side of
+        // a run's end: each holds its own run's texture.
+        const int cells[] = {0, kRun - 1, kRun, 2 * kRun - 1, 2 * kRun, 3 * kRun, 37 * kRun + 3, kDraws - kRun - 1,
+                             kDraws - kRun, kDraws - 1};
+        for (const int cell : cells)
+        {
+            const uint32_t colour = kColours[cell / kRun % kTextures];
+            const std::string name = "bench_runs_cell_" + std::to_string(cell);
+            Expect(name.c_str(), cell % kAcross * kCell + kCell / 2, cell / kAcross * kCell + kCell / 2,
+                   (colour >> 16) & 0xff, (colour >> 8) & 0xff, colour & 0xff);
+        }
+    }
+    device->SetTexture(0, nullptr);
+    device->SetStreamSource(0, nullptr, 0, 0);
+    device->SetIndices(nullptr);
     SafeRelease(swapFence);
     SafeRelease(syncFence);
-    SafeRelease(textures[0]);
-    SafeRelease(textures[1]);
+    SafeRelease(vb);
+    SafeRelease(ib);
+    for (IDirect3DTexture9 *&texture : textures)
+        SafeRelease(texture);
 }
 
 // Reset to another back buffer size and back: the new size, default state,
 // and drawing at that size.
+// Multisampled targets, as the renderer uses them with r_aaSamples above 1
+// (R_SetupAntiAliasing, r_rendertarget.cpp, R_Resolve): a back buffer and a
+// depth surface of 4 samples, drawn into, resolved into a texture with
+// StretchRect, read with GetRenderTargetData (D3D9 refuses that one; the
+// front gives the resolved picture, for screenshots), and presented. A
+// triangle's slanted edge is where samples show: with one sample a pixel is
+// in or out, with four a pixel the edge crosses takes a share of the colour.
+void Check::Multisample()
+{
+    constexpr UINT kTarget = 64;
+    // A triangle over the upper left half of a kTarget square: its long edge
+    // runs from the top right corner to the bottom left one.
+    auto drawTriangle = [&](uint32_t color) {
+        Vertex tri[3] = {
+            Vertex{ClipX(0, kTarget), ClipY(0, kTarget), 0.5f, 0.0f, 0.0f, color},
+            Vertex{ClipX(kTarget, kTarget), ClipY(0, kTarget), 0.5f, 0.0f, 0.0f, color},
+            Vertex{ClipX(0, kTarget), ClipY(kTarget, kTarget), 0.5f, 0.0f, 0.0f, color},
+        };
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, tri, sizeof(Vertex)), "DrawPrimitiveUP(triangle)");
+    };
+    // Pixels of the read picture whose red lies strictly between the two
+    // colours: along the slanted edge, and with several samples also the
+    // top row and left column, whose upper and left samples lie outside the
+    // clip volume once the viewport is moved by half a pixel (as DXVK moves
+    // it; a GPU that clips with a guard band may cover them).
+    auto partlyCovered = [&](UINT size) {
+        int count = 0;
+        for (UINT y = 0; y < size; ++y)
+        {
+            for (UINT x = 0; x < size; ++x)
+            {
+                const int red = pixels[(y * readSize + x) * 4 + 2];
+                count += red > 24 && red < 232;
+            }
+        }
+        return count;
+    };
+
+    // One sample first, as the yardstick: no pixel is partly covered.
+    Reset();
+    drawTriangle(Argb(255, 255, 0, 0));
+    int oneSample = -1;
+    if (Read())
+        oneSample = partlyCovered(kTarget);
+    Equal("one_sample_edge_hard", oneSample, 0);
+
+    IDirect3DSurface9 *target = nullptr, *depth = nullptr, *oneDepth = nullptr, *resolvedLevel = nullptr;
+    IDirect3DTexture9 *resolved = nullptr;
+    if (!Ok(device->CreateRenderTarget(kTarget, kTarget, D3DFMT_A8R8G8B8, D3DMULTISAMPLE_4_SAMPLES, 0, FALSE, &target,
+                                       nullptr),
+            "CreateRenderTarget(4 samples)")
+        // The back buffer's size: it serves both (D3D9 lets a depth surface be
+        // larger than the target).
+        || !Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_4_SAMPLES, 0, TRUE, &depth,
+                                                 nullptr),
+               "CreateDepthStencilSurface(4 samples)")
+        || !Ok(device->CreateDepthStencilSurface(kTarget, kTarget, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE,
+                                                 &oneDepth, nullptr),
+               "CreateDepthStencilSurface(1 sample)")
+        || !Ok(device->CreateTexture(kTarget, kTarget, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT,
+                                     &resolved, nullptr),
+               "CreateTexture(resolve target)")
+        || !Ok(resolved->GetSurfaceLevel(0, &resolvedLevel), "GetSurfaceLevel(resolve target)"))
+    {
+        SafeRelease(resolvedLevel);
+        SafeRelease(resolved);
+        SafeRelease(oneDepth);
+        SafeRelease(depth);
+        SafeRelease(target);
+        return;
+    }
+    D3DSURFACE_DESC desc{};
+    target->GetDesc(&desc);
+    Equal("target_samples", desc.MultiSampleType, D3DMULTISAMPLE_4_SAMPLES);
+    depth->GetDesc(&desc);
+    Equal("depth_samples", desc.MultiSampleType, D3DMULTISAMPLE_4_SAMPLES);
+    resolvedLevel->GetDesc(&desc);
+    Equal("texture_samples", desc.MultiSampleType, D3DMULTISAMPLE_NONE);
+    // 8 samples where the device has them, else 4 (lavapipe has 1 and 4).
+    IDirect3DSurface9 *eight = nullptr;
+    if (Ok(device->CreateRenderTarget(16, 16, D3DFMT_A8R8G8B8, D3DMULTISAMPLE_8_SAMPLES, 0, FALSE, &eight, nullptr),
+           "CreateRenderTarget(8 samples)"))
+    {
+        eight->GetDesc(&desc);
+        Equal("eight_or_four", desc.MultiSampleType == D3DMULTISAMPLE_8_SAMPLES
+                                   || desc.MultiSampleType == D3DMULTISAMPLE_4_SAMPLES,
+              true);
+        std::printf("d3d9_check.multisample=eight_samples_made_with=%u\n", unsigned(desc.MultiSampleType));
+        SafeRelease(eight);
+    }
+    Equal("three_refused", device->CreateRenderTarget(16, 16, D3DFMT_A8R8G8B8, D3DMULTISAMPLE_3_SAMPLES, 0, FALSE,
+                                                      &eight, nullptr),
+          D3DERR_NOTAVAILABLE);
+
+    // Drawn with depth: a far quad over all, the triangle in front of it.
+    Reset();
+    Ok(device->SetRenderTarget(0, target), "SetRenderTarget(4 samples)");
+    Ok(device->SetDepthStencilSurface(depth), "SetDepthStencilSurface(4 samples)");
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 255), 1.0f, 0), "Clear(4 samples)");
+    device->SetRenderState(D3DRS_ZENABLE, TRUE);
+    device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+    drawTriangle(Argb(255, 255, 0, 0));
+    DrawQuad(0, 0, kTarget, kTarget, 0.75f, Argb(255, 0, 255, 0), kTarget); // behind: shows below the edge only
+    // Its samples counted: a quad of 8 x 8 pixels in front of everything is
+    // 256 samples (or every sample where the device does not count them).
+    IDirect3DQuery9 *occlusion = nullptr;
+    if (Ok(device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &occlusion), "CreateQuery(occlusion)"))
+    {
+        device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+        Ok(occlusion->Issue(D3DISSUE_BEGIN), "Issue(begin)");
+        DrawQuad(48, 48, 56, 56, 0.25f, Argb(255, 255, 255, 255), kTarget);
+        Ok(occlusion->Issue(D3DISSUE_END), "Issue(end)");
+        device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xf);
+        DWORD samples = 0;
+        HRESULT hr = S_FALSE;
+        int polls = 0;
+        while ((hr = occlusion->GetData(&samples, sizeof(samples), D3DGETDATA_FLUSH)) == S_FALSE && polls < 100000)
+        {
+            ++polls;
+            SDL_Delay(polls > 100 ? 1 : 0);
+        }
+        Equal("occlusion_done", hr, S_OK);
+        Equal("occlusion_samples", samples, Counters().occlusionCounted ? DWORD(8 * 8 * 4) : DWORD(0xffffff));
+        SafeRelease(occlusion);
+    }
+
+    // A depth surface of another count beside it: the draw is skipped.
+    Ok(device->SetDepthStencilSurface(oneDepth), "SetDepthStencilSurface(1 sample beside 4)");
+    DrawQuad(0, 0, 8, 8, 0.1f, Argb(255, 255, 255, 255), kTarget);
+    Ok(device->SetDepthStencilSurface(depth), "SetDepthStencilSurface(4 samples)");
+
+    // Resolved into a texture of its size (the renderer's R_Resolve).
+    Ok(device->StretchRect(target, nullptr, resolvedLevel, nullptr, D3DTEXF_NONE), "StretchRect(resolve)");
+    int edge = -1;
+    if (Read(resolvedLevel, kTarget))
+    {
+        Expect("resolved_inside", 8, 8, 255, 0, 0);
+        Expect("resolved_behind", 56, 56, 0, 255, 0);
+        Expect("mismatched_draw_skipped", 2, 2, 255, 0, 0);
+        edge = partlyCovered(kTarget);
+    }
+    // Every pixel the edge crosses: about one in each row.
+    Equal("resolved_edge_soft", edge >= int(kTarget) / 2, true);
+    std::printf("d3d9_check.multisample=edge_pixels=%d\n", edge);
+
+    // Read directly: the same resolved picture.
+    std::vector<uint8_t> resolvedPixels = pixels;
+    if (Read(target, kTarget))
+        Equal("read_is_resolved", pixels == resolvedPixels, true);
+
+    // Into the corner of the back buffer at half size: resolved, then scaled.
+    Reset(Argb(255, 0, 0, 0));
+    RECT corner{0, 0, kTarget / 2, kTarget / 2};
+    Ok(device->StretchRect(target, nullptr, backBuffer, &corner, D3DTEXF_POINT), "StretchRect(resolve and scale)");
+    if (Read())
+    {
+        Expect("scaled_inside", 4, 4, 255, 0, 0);
+        Expect("scaled_behind", 28, 28, 0, 255, 0);
+        Expect("scaled_outside", 48, 48, 0, 0, 0);
+    }
+
+    // The back buffer itself with 4 samples, through Reset, as the renderer
+    // makes it: drawn, read, presented, and read from the front buffer.
+    SafeRelease(backBuffer);
+    D3DPRESENT_PARAMETERS multisampled = params;
+    multisampled.MultiSampleType = D3DMULTISAMPLE_4_SAMPLES;
+    if (Ok(device->Reset(&multisampled), "Reset(4 samples)")
+        && Ok(device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer), "GetBackBuffer(4 samples)"))
+    {
+        backBuffer->GetDesc(&desc);
+        Equal("back_buffer_samples", desc.MultiSampleType, D3DMULTISAMPLE_4_SAMPLES);
+        Equal("back_buffer_width", desc.Width, kSize);
+        Reset(Argb(255, 0, 0, 255));
+        Ok(device->SetDepthStencilSurface(depth), "SetDepthStencilSurface(4 samples, back buffer)");
+        device->SetRenderState(D3DRS_ZENABLE, TRUE);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, 1.0f, 0), "Clear(depth)");
+        // The viewport is the whole back buffer here, so the triangle covers
+        // the upper left half of it and its slanted edge crosses all of it.
+        drawTriangle(Argb(255, 255, 0, 0));
+        int backEdge = -1;
+        if (Read())
+        {
+            Expect("back_buffer_inside", 8, 8, 255, 0, 0);
+            Expect("back_buffer_outside", 100, 100, 0, 0, 255);
+            backEdge = partlyCovered(kSize);
+        }
+        Equal("back_buffer_edge_soft", backEdge >= int(kSize) / 2, true);
+        std::printf("d3d9_check.multisample=back_buffer_edge_pixels=%d\n", backEdge);
+        std::vector<uint8_t> drawn = pixels;
+        const uint64_t before = Counters().presents + Counters().presentsSkipped;
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present(4 samples)");
+        Equal("presented", Counters().presents + Counters().presentsSkipped, before + 1);
+        if (Ok(device->GetFrontBufferData(0, readSurface), "GetFrontBufferData(4 samples)") && ReadLocked(kSize))
+            Equal("front_buffer_is_resolved", pixels == drawn, true);
+        presented += Counters().presents > 0;
+    }
+    SafeRelease(backBuffer);
+    if (Ok(device->Reset(&params), "Reset(1 sample)")
+        && Ok(device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer), "GetBackBuffer"))
+    {
+        backBuffer->GetDesc(&desc);
+        Equal("back_buffer_one_sample_again", desc.MultiSampleType, D3DMULTISAMPLE_NONE);
+    }
+    Reset();
+    SafeRelease(resolvedLevel);
+    SafeRelease(resolved);
+    SafeRelease(oneDepth);
+    SafeRelease(depth);
+    SafeRelease(target);
+}
+
 void Check::ResetDevice()
 {
     SafeRelease(backBuffer);
@@ -2082,6 +2755,7 @@ int Run(const Options &options)
     if (!SDL_Vulkan_LoadLibrary(nullptr))
         return Failed("loader", SDL_GetError());
     SdlHost sdl;
+    sdl.benchKeepsDrawState = options.benchKeepsDrawState;
     sdl.window = SDL_CreateWindow("KisakCOD Vulkan D3D9 check", int(kSize) * 4, int(kSize) * 4, SDL_WINDOW_VULKAN);
     if (!sdl.window)
         return Failed("window", SDL_GetError());
@@ -2127,7 +2801,11 @@ int Run(const Options &options)
         {"frame_loop", &Check::FrameLoop, true},
         {"gpu_feed", &Check::GpuFeed, true},
         {"tuning", &Check::Tuning, true},
+        {"slow_frames", &Check::SlowFrames, true},
+        {"kept_state", &Check::KeptState, true},
+        {"multisample", &Check::Multisample, true},
         {"bench", &Check::Bench, true, true},
+        {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},
         {"present", &Check::Present, true},
     };

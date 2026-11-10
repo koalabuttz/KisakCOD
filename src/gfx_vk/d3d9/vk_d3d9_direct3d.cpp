@@ -16,6 +16,16 @@
 
 namespace gfx_vk::d3d9
 {
+bool OffersSamples(D3DMULTISAMPLE_TYPE type)
+{
+#if defined(KISAK_GFX_GXM)
+    return type == D3DMULTISAMPLE_NONE;
+#else
+    return type == D3DMULTISAMPLE_NONE || type == D3DMULTISAMPLE_2_SAMPLES || type == D3DMULTISAMPLE_4_SAMPLES
+        || type == D3DMULTISAMPLE_8_SAMPLES;
+#endif
+}
+
 namespace
 {
 std::vector<Device *> &LiveDevices()
@@ -337,8 +347,10 @@ HRESULT STDMETHODCALLTYPE Direct3D::CheckDeviceMultiSampleType(UINT adapter, D3D
     const FrontLock lock;
     if (adapter != 0 || type != D3DDEVTYPE_HAL)
         return D3DERR_INVALIDCALL;
-    // No multisampled targets yet: only "none".
-    if (samples != D3DMULTISAMPLE_NONE)
+    // Asked before any device exists, so the answer is the counts the front
+    // offers on every GPU, for every format (OffersSamples); a GPU without
+    // the count gets 4 samples, which every Vulkan GPU has. One quality level.
+    if (!OffersSamples(samples))
         return D3DERR_NOTAVAILABLE;
     if (qualityLevels)
         *qualityLevels = 1;
@@ -516,9 +528,10 @@ HRESULT STDMETHODCALLTYPE Direct3D::CreateDevice(UINT adapter, D3DDEVTYPE type, 
     *out = nullptr;
     if (adapter != 0 || type != D3DDEVTYPE_HAL || !params)
         return D3DERR_INVALIDCALL;
-    if (params->MultiSampleType != D3DMULTISAMPLE_NONE)
+    if (!OffersSamples(params->MultiSampleType))
     {
-        HostLog(host_, "vulkan d3d9: CreateDevice: multisampled back buffers are not supported");
+        HostLog(host_, "vulkan d3d9: CreateDevice: no back buffer of multisample type %u",
+                unsigned(params->MultiSampleType));
         return D3DERR_NOTAVAILABLE;
     }
     D3D9Window window = params->hDeviceWindow ? static_cast<D3D9Window>(params->hDeviceWindow) : focusWindow;

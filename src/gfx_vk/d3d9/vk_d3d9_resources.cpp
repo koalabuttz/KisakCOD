@@ -294,7 +294,12 @@ HRESULT STDMETHODCALLTYPE Surface::GetDesc(D3DSURFACE_DESC *desc)
     desc->Type = D3DRTYPE_SURFACE;
     desc->Usage = usage_;
     desc->Pool = pool_;
+#if !defined(KISAK_GFX_GXM)
+    const uint32_t samples = lg::SurfaceSamples(surface_);
+    desc->MultiSampleType = samples > 1 ? static_cast<D3DMULTISAMPLE_TYPE>(samples) : D3DMULTISAMPLE_NONE;
+#else
     desc->MultiSampleType = D3DMULTISAMPLE_NONE;
+#endif
     desc->MultiSampleQuality = 0;
     desc->Width = width;
     desc->Height = height;

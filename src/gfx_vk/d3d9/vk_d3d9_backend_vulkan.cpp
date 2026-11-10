@@ -10,6 +10,42 @@
 
 namespace gfx_vk::d3d9
 {
+namespace
+{
+// One of the frames that took longest (BackendLogStats' `slow frame` lines):
+// the time from one Present to the next, and what the device did in it.
+struct SlowFrame
+{
+    double ms = 0.0;          // 0: no frame
+    uint64_t number = 0;      // among the frames since the statistics were reset, from 1
+    double seconds = 0.0;     // since then, at its end
+    uint64_t presentedAs = 0; // the core's number for it (FrameGpuTime)
+    uint64_t draws = 0;
+    uint64_t passes = 0;
+    uint64_t submissions = 0;
+    uint64_t dynamicRenames = 0;
+    uint32_t pipelines = 0;
+    uint32_t pipelineCacheHits = 0;
+    double pipelineMs = 0.0;
+    uint32_t shaders = 0;
+    double shaderMs = 0.0;
+    uint64_t uploads = 0;
+    double uploadMegabytes = 0.0;
+    double uploadMs = 0.0;
+    uint64_t readbacks = 0;
+    uint64_t memoryAllocations = 0;
+    double memoryAllocateMs = 0.0;
+    uint32_t swapchainBuilds = 0;
+    double imageWaitMs = 0.0;
+    double frameLimitWaitMs = 0.0;
+    double otherGpuWaitMs = 0.0;
+    double recordWaitMs = 0.0;
+    bool gpuKnown = false;
+    FrameGpuTimes gpu{};
+};
+constexpr uint32_t kSlowFrames = 3;
+} // namespace
+
 struct Backend
 {
     const Host *host = nullptr;
@@ -25,7 +61,119 @@ struct Backend
     lg::DeviceStats statsBase{};
     CoreStats coreBase{};
     std::chrono::steady_clock::time_point statsSince = std::chrono::steady_clock::now();
+    // The frames that took longest since then, the longest first, and what
+    // tells them: when the last Present began, the counters as they stood
+    // there, and the frames counted since the reset (TrackFrame).
+    SlowFrame slowFrames[kSlowFrames]{};
+    bool presentSeen = false;
+    std::chrono::steady_clock::time_point presentAt{};
+    lg::DeviceStats presentStats{};
+    CoreStats presentCore{};
+    uint64_t framesTracked = 0;
 };
+
+namespace
+{
+// Called as a Present begins. The time since the Present before is a frame as
+// the player sees it: the engine's work on it, the device's, and every wait
+// in between (the Present before included). The longest few are kept with
+// what the device's counters say happened in them, so that one long frame in
+// a run of thousands can be told from its cause: a pipeline built, a shader
+// translated, a texture uploaded or read back, memory allocated, a wait for
+// the GPU, the swapchain or the record thread, or none of those, which
+// leaves the engine and the driver.
+void TrackFrame(Backend &backend)
+{
+    const auto now = std::chrono::steady_clock::now();
+    const lg::DeviceStats &stats = lg::Stats(backend.legacy);
+    const CoreStats &core = Stats(backend.core);
+    // A frame's GPU times can be read a few frames after it.
+    for (SlowFrame &frame : backend.slowFrames)
+    {
+        if (frame.ms > 0.0 && !frame.gpuKnown)
+            frame.gpuKnown = FrameGpuTime(backend.core, frame.presentedAs, frame.gpu);
+    }
+    if (backend.presentSeen)
+    {
+        ++backend.framesTracked;
+        const double ms = std::chrono::duration<double, std::milli>(now - backend.presentAt).count();
+        if (ms > backend.slowFrames[kSlowFrames - 1].ms)
+        {
+            const lg::DeviceStats &was = backend.presentStats;
+            const CoreStats &coreWas = backend.presentCore;
+            SlowFrame frame;
+            frame.ms = ms;
+            frame.number = backend.framesTracked;
+            frame.seconds = std::chrono::duration<double>(now - backend.statsSince).count();
+            // The Present that begins now gives the frame this number, unless
+            // it shows nothing (a minimised window): then the next frame gets
+            // it, and the GPU times printed are that frame's.
+            frame.presentedAs = core.framesPresented + 1;
+            frame.draws = stats.draws - was.draws;
+            frame.passes = stats.passes - was.passes;
+            frame.submissions = core.submissions - coreWas.submissions;
+            frame.dynamicRenames = stats.dynamicRenames - was.dynamicRenames;
+            frame.pipelines = stats.pipelines - was.pipelines;
+            frame.pipelineCacheHits = core.pipelineCacheHits - coreWas.pipelineCacheHits;
+            frame.pipelineMs = double(stats.pipelineMicros - was.pipelineMicros) / 1000.0;
+            frame.shaders = stats.shaders - was.shaders;
+            frame.shaderMs = double(stats.shaderMicros - was.shaderMicros) / 1000.0;
+            frame.uploads = stats.textureUploads - was.textureUploads;
+            frame.uploadMegabytes = double(stats.uploadBytes - was.uploadBytes) / (1024.0 * 1024.0);
+            frame.uploadMs = double(stats.uploadMicros - was.uploadMicros) / 1000.0;
+            frame.readbacks = stats.textureReadbacks - was.textureReadbacks;
+            frame.memoryAllocations = core.memoryAllocations - coreWas.memoryAllocations;
+            frame.memoryAllocateMs = core.memoryAllocateMs - coreWas.memoryAllocateMs;
+            frame.swapchainBuilds = core.swapchainBuilds - coreWas.swapchainBuilds;
+            frame.imageWaitMs = core.imageWaitMs - coreWas.imageWaitMs;
+            frame.frameLimitWaitMs = core.frameLimitWaitMs - coreWas.frameLimitWaitMs;
+            frame.otherGpuWaitMs =
+                std::max(0.0, (core.gpuWaitMs - coreWas.gpuWaitMs) - frame.frameLimitWaitMs);
+            frame.recordWaitMs = core.recordWaitMs - coreWas.recordWaitMs;
+            uint32_t place = kSlowFrames - 1;
+            for (; place > 0 && backend.slowFrames[place - 1].ms < ms; --place)
+                backend.slowFrames[place] = backend.slowFrames[place - 1];
+            backend.slowFrames[place] = frame;
+        }
+    }
+    backend.presentSeen = true;
+    backend.presentAt = now;
+    backend.presentStats = stats;
+    backend.presentCore = core;
+}
+
+void LogSlowFrames(const Backend &backend)
+{
+    const Host &h = *backend.host;
+    for (uint32_t i = 0; i < kSlowFrames && backend.slowFrames[i].ms > 0.0; ++i)
+    {
+        const SlowFrame &frame = backend.slowFrames[i];
+        char gpu[160];
+        if (frame.gpuKnown)
+            std::snprintf(gpu, sizeof(gpu),
+                          "GPU %.2f ms: %.2f in passes, %.2f between them, %.2f without work before it",
+                          frame.gpu.frameMs, frame.gpu.passesMs,
+                          std::max(0.0, frame.gpu.frameMs - frame.gpu.passesMs), frame.gpu.gapMs);
+        else
+            std::snprintf(gpu, sizeof(gpu), "GPU time not read");
+        HostLog(h,
+                "vulkan d3d9: slow frame %u: %.2f ms, frame %llu at %.2f s; %llu draws, %llu passes, %llu submissions, "
+                "%llu dynamic renames, %u swapchains built; of the time: %u pipelines (%u from the cache) %.2f ms, "
+                "%u shaders %.2f ms, %llu texture uploads (%.2f MB) %.2f ms, %llu memory blocks %.2f ms; waits: "
+                "swapchain image %.2f ms, frames in flight %.2f ms, GPU otherwise %.2f ms (%llu textures read back), "
+                "record thread %.2f ms; %s",
+                i + 1, frame.ms, static_cast<unsigned long long>(frame.number), frame.seconds,
+                static_cast<unsigned long long>(frame.draws), static_cast<unsigned long long>(frame.passes),
+                static_cast<unsigned long long>(frame.submissions),
+                static_cast<unsigned long long>(frame.dynamicRenames), frame.swapchainBuilds, frame.pipelines,
+                frame.pipelineCacheHits, frame.pipelineMs, frame.shaders, frame.shaderMs,
+                static_cast<unsigned long long>(frame.uploads), frame.uploadMegabytes, frame.uploadMs,
+                static_cast<unsigned long long>(frame.memoryAllocations), frame.memoryAllocateMs, frame.imageWaitMs,
+                frame.frameLimitWaitMs, frame.otherGpuWaitMs, static_cast<unsigned long long>(frame.readbacks),
+                frame.recordWaitMs, gpu);
+    }
+}
+} // namespace
 
 Backend *OpenBackend(const BackendDesc &desc, std::string &error)
 {
@@ -64,6 +212,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     legacyDesc.log = h.log;
     legacyDesc.logUser = h.user;
     legacyDesc.shaderCachePath = h.shaderCachePath;
+    legacyDesc.backBufferSamples = desc.samples;
     backend->legacy = lg::CreateDevice(backend->core, legacyDesc, error);
     if (!backend->legacy)
     {
@@ -76,11 +225,20 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
 
 void BackendFrame(Backend *backend)
 {
-    if (!backend || !backend->legacy || !backend->host->tuning)
+    if (!backend || !backend->legacy)
+        return;
+    if (backend->core)
+        TrackFrame(*backend);
+    if (!backend->host->tuning)
         return;
     Tuning tuning;
     backend->host->tuning(backend->host->user, tuning);
     Tuning &old = backend->tuning;
+    if (tuning.keepDrawState != old.keepDrawState)
+    {
+        old.keepDrawState = tuning.keepDrawState;
+        lg::SetKeepDrawState(backend->legacy, tuning.keepDrawState);
+    }
     if (tuning.gpuFeed == old.gpuFeed && tuning.gpuFeedDraws == old.gpuFeedDraws
         && tuning.gpuFeedIdleDraws == old.gpuFeedIdleDraws)
         return;
@@ -146,6 +304,7 @@ void BackendLogStats(Backend *backend, bool reset)
                 average(core.framePasses), std::max(0.0, average(core.frame) - average(core.framePasses)),
                 average(core.frameGap), core.frameGap.samples ? core.frameGap.maxMs : 0.0,
                 static_cast<unsigned long long>(stats.feedIdleFlushes - was.feedIdleFlushes));
+    LogSlowFrames(*backend);
     if (core.recordThread)
         HostLog(h,
                 "vulkan d3d9: record thread: per frame %.0f commands in %.1f blocks; render thread waited "
@@ -183,6 +342,9 @@ void BackendLogStats(Backend *backend, bool reset)
         backend->coreBase = core;
         backend->statsSince = now;
         ResetFrameTimings(backend->core);
+        for (SlowFrame &frame : backend->slowFrames)
+            frame = SlowFrame();
+        backend->framesTracked = 0;
     }
 }
 

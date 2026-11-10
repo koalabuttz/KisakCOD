@@ -237,9 +237,11 @@ void CollectTimestamps(Core &core, uint32_t slotIndex)
     // collected in the order their frames were presented.
     uint64_t frameTicks[2] = {};
     const bool presented = slot.frameTimed && ReadTicks(core, base, frameTicks);
+    FrameGpuTimes times{};
     if (presented)
     {
-        AddTimings(core.stats.frame, TicksToMs(core, (frameTicks[1] - frameTicks[0]) & core.timestampMask));
+        times.frameMs = TicksToMs(core, (frameTicks[1] - frameTicks[0]) & core.timestampMask);
+        AddTimings(core.stats.frame, times.frameMs);
         if (core.lastFrameEndKnown)
         {
             // The GPU reads a frame's first timestamp when it reaches the
@@ -247,7 +249,8 @@ void CollectTimestamps(Core &core, uint32_t slotIndex)
             // left the pipeline: a difference in the upper half of the
             // counter's range is that, and no gap.
             const uint64_t gap = (frameTicks[0] - core.lastFrameEndTicks) & core.timestampMask;
-            AddTimings(core.stats.frameGap, gap > core.timestampMask / 2 ? 0.0 : TicksToMs(core, gap));
+            times.gapMs = gap > core.timestampMask / 2 ? 0.0 : TicksToMs(core, gap);
+            AddTimings(core.stats.frameGap, times.gapMs);
         }
         core.lastFrameEndTicks = frameTicks[1];
         core.lastFrameEndKnown = true;
@@ -274,7 +277,17 @@ void CollectTimestamps(Core &core, uint32_t slotIndex)
             AddTimings(core.stats.clearPass, ms);
     }
     if (presented)
+    {
         AddTimings(core.stats.framePasses, passesMs);
+        if (slot.frameNumber)
+        {
+            // Kept by the frame's number for FrameGpuTime.
+            times.passesMs = passesMs;
+            Core::FrameGpuEntry &entry = core.frameGpuTimes[slot.frameNumber % std::size(core.frameGpuTimes)];
+            entry.frame = slot.frameNumber;
+            entry.times = times;
+        }
+    }
 }
 
 // Waits for the slot's last submission and makes the slot ready to record.
@@ -545,7 +558,12 @@ bool WaitSerial(Core &core, uint64_t serial)
     info.semaphoreCount = 1;
     info.pSemaphores = &core.timeline;
     info.pValues = &serial;
-    if (!Check(core, core.vk.vkWaitSemaphores(core.dev, &info, UINT64_MAX), "vkWaitSemaphores"))
+    VkResult result;
+    {
+        const StandStill wait(core.stats.gpuWaitMs);
+        result = core.vk.vkWaitSemaphores(core.dev, &info, UINT64_MAX);
+    }
+    if (!Check(core, result, "vkWaitSemaphores"))
         return false;
     core.completedSerial = std::max(core.completedSerial, serial);
     return true;
@@ -627,6 +645,11 @@ void DestroyFrameResources(Core &core)
         delete readback;
     }
     core.readbacks.clear();
+    for (VkDescriptorPool pool : core.lastingPools)
+        core.vk.vkDestroyDescriptorPool(core.dev, pool, nullptr);
+    core.lastingPools.clear();
+    core.lastingPoolsUsed = 0;
+    core.lastingSets = 0;
     for (FrameSlot &slot : core.frames)
     {
         DestroyArena(core, slot.staging);
@@ -698,6 +721,7 @@ FrameResult BeginFrame(Core *core_)
     if (!EnsureRecording(core))
         return FrameResult::Failed;
     FrameSlot &slot = CurrentSlot(core);
+    slot.frameNumber = 0;
     if (core.timestamps)
     {
         WriteTimestamp(core, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, SlotQueryBase(core));
@@ -719,8 +743,12 @@ Image *AcquireImage(Core &core)
     // frame's present goes first.
     if (!WaitPresents(core))
         return nullptr;
-    const VkResult result = core.vk.vkAcquireNextImageKHR(core.dev, core.swapchain, UINT64_MAX,
-                                                          CurrentSlot(core).acquired, VK_NULL_HANDLE, &core.imageIndex);
+    VkResult result;
+    {
+        const StandStill wait(core.stats.imageWaitMs);
+        result = core.vk.vkAcquireNextImageKHR(core.dev, core.swapchain, UINT64_MAX, CurrentSlot(core).acquired,
+                                               VK_NULL_HANDLE, &core.imageIndex);
+    }
     if (result == VK_ERROR_OUT_OF_DATE_KHR)
     {
         // Nothing was signalled. This frame shows nothing; rebuild next time.
@@ -799,12 +827,15 @@ FrameResult Present(Core *core_)
     ++core.recorder.presentsQueued;
     HandOff(core);
     ++core.stats.framesPresented;
+    slot.frameNumber = core.stats.framesPresented;
 
     // The next slot becomes current: wait for its previous frame (the frames in
     // flight limit) and recycle what it owns.
     core.frameIndex = (core.frameIndex + 1) % kFramesInFlight;
+    const double waited = core.stats.gpuWaitMs;
     if (!RecycleSlot(core, core.frameIndex))
         return FrameResult::Failed;
+    core.stats.frameLimitWaitMs += core.stats.gpuWaitMs - waited;
     return FrameResult::Ok;
 }
 
@@ -914,6 +945,15 @@ bool BeginPass(Core *core_, const PassDesc &desc)
     }
     if (!first)
         return Fail(core, "BeginPass %s: no attachments", desc.name);
+    for (uint32_t i = 0; i < desc.colorCount; ++i)
+    {
+        if (desc.color[i].image->desc.samples != first->desc.samples)
+            return Fail(core, "BeginPass %s: %s has %u samples and %s has %u", desc.name, first->name.c_str(),
+                        first->desc.samples, desc.color[i].image->name.c_str(), desc.color[i].image->desc.samples);
+    }
+    if (depthImage && depthImage->desc.samples != first->desc.samples)
+        return Fail(core, "BeginPass %s: %s has %u samples and %s has %u", desc.name, first->name.c_str(),
+                    first->desc.samples, depthImage->name.c_str(), depthImage->desc.samples);
     if (core.failed)
         return false;
 
@@ -1169,8 +1209,9 @@ void *StageImageWrite(Core *core_, Image *image, const ImageRegion &region, uint
     const uint32_t mipWidth = std::max(desc.width >> region.mipLevel, 1u);
     const uint32_t mipHeight = std::max(desc.height >> region.mipLevel, 1u);
     const uint32_t mipDepth = desc.kind == ImageKind::Tex3D ? std::max(desc.depth >> region.mipLevel, 1u) : 1u;
-    if (!blockBytes || image->aspect != VK_IMAGE_ASPECT_COLOR_BIT || region.mipLevel >= desc.mipLevels
-        || region.layer >= image->layers || !region.width || !region.height || !region.depth
+    if (!blockBytes || image->aspect != VK_IMAGE_ASPECT_COLOR_BIT || desc.samples != 1
+        || region.mipLevel >= desc.mipLevels || region.layer >= image->layers || !region.width || !region.height
+        || !region.depth
         || region.x + region.width > mipWidth || region.y + region.height > mipHeight
         || region.z + region.depth > mipDepth)
     {
@@ -1252,53 +1293,101 @@ Transient AllocateTransient(Core *core_, VkDeviceSize size, VkDeviceSize alignme
     return result;
 }
 
-VkDescriptorSet AllocateDescriptorSet(Core *core_, VkDescriptorSetLayout layout)
+namespace
 {
-    Core &core = *core_;
-    FrameSlot &slot = CurrentSlot(core);
+VkDescriptorPool CreateDescriptorPool(Core &core)
+{
+    const VkDescriptorPoolSize sizes[] = {
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kDescriptorSetsPerPool},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, kDescriptorSetsPerPool},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 * kDescriptorSetsPerPool},
+        {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kDescriptorSetsPerPool},
+        {VK_DESCRIPTOR_TYPE_SAMPLER, kDescriptorSetsPerPool},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kDescriptorSetsPerPool / 4},
+        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, kDescriptorSetsPerPool / 4},
+    };
+    VkDescriptorPoolCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    info.maxSets = kDescriptorSetsPerPool;
+    info.poolSizeCount = static_cast<uint32_t>(sizeof(sizes) / sizeof(sizes[0]));
+    info.pPoolSizes = sizes;
+    VkDescriptorPool pool = VK_NULL_HANDLE;
+    if (!Check(core, core.vk.vkCreateDescriptorPool(core.dev, &info, nullptr, &pool), "vkCreateDescriptorPool"))
+        return VK_NULL_HANDLE;
+    return pool;
+}
+
+// From pools[used] on, adding a pool when the last is full.
+VkDescriptorSet AllocateFromPools(Core &core, std::vector<VkDescriptorPool> &pools, uint32_t &used,
+                                  VkDescriptorSetLayout layout)
+{
     for (;;)
     {
-        if (slot.descriptorPoolsUsed == slot.descriptorPools.size())
+        if (used == pools.size())
         {
-            const VkDescriptorPoolSize sizes[] = {
-                {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kDescriptorSetsPerPool},
-                {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, kDescriptorSetsPerPool},
-                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 * kDescriptorSetsPerPool},
-                {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kDescriptorSetsPerPool},
-                {VK_DESCRIPTOR_TYPE_SAMPLER, kDescriptorSetsPerPool},
-                {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kDescriptorSetsPerPool / 4},
-                {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, kDescriptorSetsPerPool / 4},
-            };
-            VkDescriptorPoolCreateInfo info{};
-            info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-            info.maxSets = kDescriptorSetsPerPool;
-            info.poolSizeCount = static_cast<uint32_t>(sizeof(sizes) / sizeof(sizes[0]));
-            info.pPoolSizes = sizes;
-            VkDescriptorPool pool = VK_NULL_HANDLE;
-            if (!Check(core, core.vk.vkCreateDescriptorPool(core.dev, &info, nullptr, &pool), "vkCreateDescriptorPool"))
+            const VkDescriptorPool pool = CreateDescriptorPool(core);
+            if (!pool)
                 return VK_NULL_HANDLE;
-            slot.descriptorPools.push_back(pool);
+            pools.push_back(pool);
         }
         VkDescriptorSetAllocateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        info.descriptorPool = slot.descriptorPools[slot.descriptorPoolsUsed];
+        info.descriptorPool = pools[used];
         info.descriptorSetCount = 1;
         info.pSetLayouts = &layout;
         VkDescriptorSet set = VK_NULL_HANDLE;
         const VkResult result = core.vk.vkAllocateDescriptorSets(core.dev, &info, &set);
         if (result == VK_SUCCESS)
-        {
-            ++core.stats.descriptorSets;
             return set;
-        }
         if (result != VK_ERROR_OUT_OF_POOL_MEMORY && result != VK_ERROR_FRAGMENTED_POOL)
         {
             Check(core, result, "vkAllocateDescriptorSets");
             return VK_NULL_HANDLE;
         }
-        ++slot.descriptorPoolsUsed; // full: the next pool
+        ++used; // full: the next pool
     }
 }
+} // namespace
+
+VkDescriptorSet AllocateDescriptorSet(Core *core_, VkDescriptorSetLayout layout)
+{
+    Core &core = *core_;
+    FrameSlot &slot = CurrentSlot(core);
+    const VkDescriptorSet set = AllocateFromPools(core, slot.descriptorPools, slot.descriptorPoolsUsed, layout);
+    if (set)
+        ++core.stats.descriptorSets;
+    return set;
+}
+
+VkDescriptorSet AllocateLastingDescriptorSet(Core *core_, VkDescriptorSetLayout layout)
+{
+    Core &core = *core_;
+    if (core.failed)
+        return VK_NULL_HANDLE;
+    const VkDescriptorSet set = AllocateFromPools(core, core.lastingPools, core.lastingPoolsUsed, layout);
+    if (set)
+    {
+        ++core.stats.lastingDescriptorSets;
+        ++core.lastingSets;
+    }
+    return set;
+}
+
+void RetireLastingDescriptorSets(Core *core_)
+{
+    Core &core = *core_;
+    if (core.lastingPools.empty())
+        return;
+    const uint64_t serial = PendingSerial(core);
+    for (VkDescriptorPool pool : core.lastingPools)
+        core.deferred.push_back({DeferredKind::DescriptorPool, serial, nullptr, (uint64_t)pool});
+    core.lastingPools.clear();
+    core.lastingPoolsUsed = 0;
+    core.lastingSets = 0;
+    ++core.stats.lastingRetires;
+}
+
+uint32_t LastingDescriptorSets(const Core *core) { return core->lastingSets; }
 
 // ---- Public API: copies and read-back ---------------------------------------------------
 
@@ -1319,6 +1408,11 @@ void BlitImage(Core *core_, Image *src, const VkOffset3D srcBox[2], Image *dst, 
         Fail(core, "BlitImage: no such level or layer, or %s onto itself", src->name.c_str());
         return;
     }
+    if (src->desc.samples != 1 || dst->desc.samples != 1)
+    {
+        Fail(core, "BlitImage: %s is multisampled", (src->desc.samples != 1 ? src : dst)->name.c_str());
+        return;
+    }
     UseImage(&core, src, ImageUse::TransferSrc);
     UseImage(&core, dst, ImageUse::TransferDst);
     VkImageBlit blit{};
@@ -1336,6 +1430,50 @@ void BlitImage(Core *core_, Image *src, const VkOffset3D srcBox[2], Image *dst, 
     });
 }
 
+void ResolveImage(Core *core_, Image *src, VkOffset2D srcOffset, Image *dst, VkOffset2D dstOffset, VkExtent2D extent,
+                  uint32_t dstLevel, uint32_t dstLayer)
+{
+    Core &core = *core_;
+    if (core.failed)
+        return;
+    if (core.inPass)
+    {
+        Fail(core, "ResolveImage inside a pass");
+        return;
+    }
+    if (src->desc.samples == 1 || dst->desc.samples != 1 || src->desc.format != dst->desc.format
+        || src->aspect != VK_IMAGE_ASPECT_COLOR_BIT || dstLevel >= dst->desc.mipLevels || dstLayer >= dst->layers)
+    {
+        Fail(core, "ResolveImage: %s to %s is not a multisampled colour image to a one-sample level of its format",
+             src->name.c_str(), dst->name.c_str());
+        return;
+    }
+    const uint32_t dstWidth = std::max(dst->desc.width >> dstLevel, 1u);
+    const uint32_t dstHeight = std::max(dst->desc.height >> dstLevel, 1u);
+    if (!extent.width || !extent.height || srcOffset.x < 0 || srcOffset.y < 0 || dstOffset.x < 0 || dstOffset.y < 0
+        || uint32_t(srcOffset.x) + extent.width > src->desc.width
+        || uint32_t(srcOffset.y) + extent.height > src->desc.height || uint32_t(dstOffset.x) + extent.width > dstWidth
+        || uint32_t(dstOffset.y) + extent.height > dstHeight)
+    {
+        Fail(core, "ResolveImage: the box lies outside %s or %s", src->name.c_str(), dst->name.c_str());
+        return;
+    }
+    UseImage(&core, src, ImageUse::TransferSrc);
+    UseImage(&core, dst, ImageUse::TransferDst);
+    VkImageResolve region{};
+    region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    region.srcOffset = {srcOffset.x, srcOffset.y, 0};
+    region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, dstLevel, dstLayer, 1};
+    region.dstOffset = {dstOffset.x, dstOffset.y, 0};
+    region.extent = {extent.width, extent.height, 1};
+    const VkImage from = src->image;
+    const VkImage to = dst->image;
+    Record(&core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
+        vk.vkCmdResolveImage(cmd, from, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, to, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                             &region);
+    });
+}
+
 Readback *ReadImage(Core *core_, Image *image, uint32_t mipLevel, uint32_t layer)
 {
     Core &core = *core_;
@@ -1350,9 +1488,9 @@ Readback *ReadImage(Core *core_, Image *image, uint32_t mipLevel, uint32_t layer
     uint32_t blockHeight = 1;
     const uint32_t blockBytes = FormatBlockBytes(image->desc.format, &blockWidth, &blockHeight);
     if (!blockBytes || image->aspect != VK_IMAGE_ASPECT_COLOR_BIT || mipLevel >= image->desc.mipLevels
-        || layer >= image->layers)
+        || layer >= image->layers || image->desc.samples != 1)
     {
-        Fail(core, "ReadImage: %s is not a colour image or has no such level", image->name.c_str());
+        Fail(core, "ReadImage: %s is not a one-sample colour image or has no such level", image->name.c_str());
         return nullptr;
     }
     if (!(image->desc.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT))

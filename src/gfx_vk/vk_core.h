@@ -160,11 +160,22 @@ struct CoreStats
     double recordWaitMs;      // time the calling thread waited for that thread
     uint64_t flushes;         // Flush() calls and flushes forced by staging use
 
+    // Where the calling thread stood still, in milliseconds since the core
+    // was created (take a difference for a stretch): for a swapchain image
+    // (vkAcquireNextImageKHR), for a submission to finish (vkWaitSemaphores,
+    // every wait), and the part of that which was a Present waiting for the
+    // frame before the one it shows (the two frames in flight).
+    double imageWaitMs;
+    double gpuWaitMs;
+    double frameLimitWaitMs;
+
     // Memory, in bytes, as allocated from the driver (blocks, not suballocations):
     // Device buffers and images, and mapped Upload and Readback memory.
     uint64_t deviceMemoryBytes;
     uint64_t hostMemoryBytes;
     uint32_t memoryBlocks;
+    uint64_t memoryAllocations; // blocks ever allocated (memoryBlocks is those alive)
+    double memoryAllocateMs;    // in vkAllocateMemory and vkMapMemory for them
     uint32_t buffersAlive;
     uint32_t imagesAlive;
     uint64_t deferredDestroyed; // objects destroyed after their last frame finished
@@ -172,6 +183,8 @@ struct CoreStats
     uint64_t stagingBytes;      // copied through staging memory, all frames
     uint64_t transientBytes;    // handed out by AllocateTransient, all frames
     uint64_t descriptorSets;    // allocated by AllocateDescriptorSet, all frames
+    uint64_t lastingDescriptorSets; // allocated by AllocateLastingDescriptorSet, all frames
+    uint32_t lastingRetires;    // RetireLastingDescriptorSets calls that gave up any set
     uint32_t barriers;          // image barriers recorded, all frames
     uint64_t occlusionCounts;   // begun by BeginOcclusionCount, all frames
     uint32_t occlusionPools;    // query pools made for them (256 counts each)
@@ -220,6 +233,20 @@ const CoreStats &Stats(const Core *core);
 // caller that measures a stretch of a run (the counters are left alone: take
 // their difference).
 void ResetFrameTimings(Core *core);
+
+// The GPU's times for one presented frame: what CoreStats::frame, framePasses
+// and frameGap add up, for the frame alone.
+struct FrameGpuTimes
+{
+    double frameMs;  // first to last timestamp
+    double passesMs; // of that, in its passes
+    double gapMs;    // from the end of the frame before to its first timestamp
+};
+// Looks a frame up by its number, which is CoreStats::framesPresented as its
+// Present left it. False while the frame's timestamps have not been read (they
+// are a few frames after its Present), once 16 newer frames have been read,
+// and on a queue without timestamps.
+bool FrameGpuTime(const Core *core, uint64_t frame, FrameGpuTimes &out);
 
 // The window may have changed size (or was minimised or restored): the next
 // frame checks the surface and rebuilds the swapchain if the size differs.
@@ -328,6 +355,10 @@ bool FormatSupports(const Core *core, VkFormat format, VkFormatFeatureFlags feat
 // The depth-stencil format for depth targets: D24S8 where it can be a depth
 // attachment and sampled, else D32_SFLOAT_S8_UINT.
 VkFormat DepthStencilFormat(const Core *core);
+// The sample counts an attachment can have here, colour and depth-stencil
+// alike, as VkSampleCountFlags (bit N for N samples). Every device has 1
+// and 4.
+VkSampleCountFlags SampleCounts(const Core *core);
 
 // ---- Buffers and images (vk_memory.cpp) -----------------------------------------
 //
@@ -365,6 +396,10 @@ struct ImageDesc
     uint32_t height = 1;
     uint32_t depth = 1;    // Tex3D only
     uint32_t mipLevels = 1;
+    // Samples a texel: 1, or a count SampleCounts() has. A multisampled image
+    // is a Tex2D of one level that passes draw into and ResolveImage reads;
+    // it is not sampled, blitted, written with StageImageWrite or read back.
+    uint32_t samples = 1;
     VkImageUsageFlags usage = 0; // TRANSFER_DST is added when SAMPLED is set
     // Applied to the view shaders sample (ImageSampleView), never to
     // attachments: lets one-channel formats read as D3D9's L8 or A8 do.
@@ -618,6 +653,20 @@ Transient AllocateTransient(Core *core, VkDeviceSize size, VkDeviceSize alignmen
 // the slot comes round again). Null on failure.
 VkDescriptorSet AllocateDescriptorSet(Core *core, VkDescriptorSetLayout layout);
 
+// A descriptor set that lasts across frames, from pools the core keeps until
+// RetireLastingDescriptorSets: the caller decides when what such a set points
+// at is gone (ImagesDestroyed) and retires them all. Null on failure.
+VkDescriptorSet AllocateLastingDescriptorSet(Core *core, VkDescriptorSetLayout layout);
+// Gives up every lasting set: their pools go once the GPU has finished the
+// work recorded so far, so sets bound in it stay valid until then.
+void RetireLastingDescriptorSets(Core *core);
+// The sets AllocateLastingDescriptorSet has handed out since the last retire.
+uint32_t LastingDescriptorSets(const Core *core);
+// Counts DestroyImage calls. An image view handle can be handed out again
+// once its image is destroyed, so a set kept by view handles is stale once
+// this has moved on.
+uint64_t ImagesDestroyed(const Core *core);
+
 // ---- Copies and read-back ---------------------------------------------------------
 
 // vkCmdBlitImage between two images, with the barriers. Not inside a pass.
@@ -626,6 +675,12 @@ VkDescriptorSet AllocateDescriptorSet(Core *core, VkDescriptorSetLayout layout);
 void BlitImage(Core *core, Image *src, const VkOffset3D srcBox[2], Image *dst, const VkOffset3D dstBox[2],
                VkFilter filter, uint32_t srcLevel = 0, uint32_t srcLayer = 0, uint32_t dstLevel = 0,
                uint32_t dstLayer = 0);
+
+// vkCmdResolveImage, with the barriers: a box of a multisampled colour image,
+// every texel the average of its samples, into a level of a one-sample image
+// of the same format. Not inside a pass.
+void ResolveImage(Core *core, Image *src, VkOffset2D srcOffset, Image *dst, VkOffset2D dstOffset, VkExtent2D extent,
+                  uint32_t dstLevel = 0, uint32_t dstLayer = 0);
 
 // Copies one level and layer of a colour image into host memory: every depth
 // slice of a 3D image, and rows of 4x4 blocks for block-compressed formats.

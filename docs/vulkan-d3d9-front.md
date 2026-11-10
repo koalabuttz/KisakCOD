@@ -66,7 +66,8 @@ instead (`vk_d3d9.h`), which the program fills once:
   validation counts here).
 * `tuning`: settings the program may change while the device exists
   (`Tuning`: the GPU feed on, off or after every draw, its draws to a part,
-  and the idle rule's count, see the [adapter](vulkan-legacy-adapter.md)).
+  the idle rule's count, and whether a draw takes up the state the draw
+  before it left, see the [adapter](vulkan-legacy-adapter.md)).
   The front asks at every `Present` and takes up what changed, so a change
   shows in the next frame. In the game these are dvars.
 
@@ -86,6 +87,27 @@ since the device was made or since the last call that started them again.
   shows next to nothing in the last two. It also counts the parts the idle
   rule sent early. The line needs GPU timestamps and is left out without
   them.
+* `vulkan d3d9: slow frame N:` (up to three lines, the longest first) names
+  the frames of the stretch that took longest, for the one long frame among
+  thousands that an average hides. A frame here runs from the start of one
+  `Present` to the start of the next, so it holds the engine's work, the
+  device's, and every wait in between. Each line gives the time, the frame's
+  number in the stretch and the second it ended at, and what the device's
+  counters say happened in it: draws, passes, submissions, buffer renames and
+  swapchains built; the pipelines built (and how many of them the pipeline
+  cache held), the shaders made, the texture levels uploaded and the memory
+  blocks allocated, each with its milliseconds; and the milliseconds the
+  calling thread waited for a swapchain image, for the frames in flight (with
+  two frames in flight, a `Present` waits for the frame before the one it
+  shows), for the GPU otherwise (a texture read back, a flush that waits) and
+  for the record thread. The parts are measured where they happen and can
+  overlap (an upload that needed a memory block counts in both). What they
+  leave of the frame's time is the engine's own work and the driver's inside
+  ordinary calls. The line ends with the GPU's times for that frame (its
+  length, the part in passes, the rest between them, and the time without work
+  before it) once they have been read, which is a few frames after the frame.
+  On lavapipe a submission runs inside `vkQueueSubmit`, on the record thread,
+  so waiting for the GPU shows there as waiting for the record thread.
 * `vulkan d3d9: record thread:` is as described under Threads.
 * `vulkan d3d9: occlusion queries:` says whether they count, the Vulkan
   queries and pools they took, and what they answered in the stretch: the
@@ -171,8 +193,9 @@ Everything in `r_rhi.h`, and the getters D3D9 pairs with each setter:
 
 * `IDirect3D9`: one adapter with a fixed identifier, modes from the host,
   `CheckDeviceFormat` from the adapter's format table (sRGB reads, volume render
-  targets and cube depth refused), no multisampling, caps as DXVK 2.7.1 reports them
-  for shader model 3 (zlib licence).
+  targets and cube depth refused), multisampling at 2, 4 and 8 samples with one
+  quality level (see below), caps as DXVK 2.7.1 reports them for shader model 3
+  (zlib licence).
 * Device: render and sampler state with getters, textures (2D, cube, volume)
   with their levels, surfaces and locks, render targets and depth surfaces,
   offscreen plain surfaces, static and dynamic buffers with D3D9's lock flags,
@@ -211,9 +234,21 @@ so a run can show that the renderer reached none of them:
 
 Other limits:
 
-* No multisampling: `CreateDevice`, `Reset`, `CreateRenderTarget` and
-  `CreateDepthStencilSurface` refuse it, and `CheckDeviceMultiSampleType`
-  offers none, so the renderer keeps `r_aaSamples` at 1.
+* Multisampling: `CheckDeviceMultiSampleType` offers 2, 4 and 8 samples with
+  one quality level, as DXVK does on most GPUs, and refuses the others and
+  `D3DMULTISAMPLE_NONMASKABLE`. `CreateDevice` and `Reset` take the offered
+  counts for the back buffer, and `CreateRenderTarget` and
+  `CreateDepthStencilSurface` for their surfaces. A count the GPU does not
+  have becomes 4, which every Vulkan device has for colour and depth, and
+  `GetDesc` reports the count the surface has; the device line says
+  `back buffer WxH, N sample(s)`. A multisampled surface is resolved, not
+  sampled: `StretchRect` from it resolves (same size and format straight into
+  the destination, otherwise through a scratch image and a blit), and so do
+  `GetRenderTargetData` and `Present`. A draw whose render target and depth
+  surface have different counts is skipped and logged once (D3D9 requires
+  them to match). `StretchRect` into a multisampled surface and of a
+  multisampled depth surface are refused. The Vita's GXM back end offers no
+  multisampling.
 * The adapter identity and formats are static (the GPU is chosen at
   `CreateDevice`); the only identifier check in the renderer compares with
   NVPerfHUD's name.
@@ -263,14 +298,20 @@ a usage error.
 | `frame_loop` | The engine's frame for 48 frames: draw, poll the swap fence with `D3DGETDATA_FLUSH` until the frame before has finished, issue the GPU sync fence, `Present`, issue the swap fence, while another thread polls the sync fence as the main thread does. At most three submissions a frame, at most one swap fence flush, and the last frame, drawn on both sides of its wait, comes out whole. |
 | `gpu_feed` | A frame of 600 draws, each filling a cell of its own, with a scissor rectangle set once that cuts the last column. The adapter submits such a frame in parts while it is drawn ([adapter](vulkan-legacy-adapter.md)): every draw must show whichever part it fell in, the cells no draw touches must keep the clear colour, and the scissor must hold in every part. Prints the number of parts. |
 | `tuning` | What a program changes and asks for while its device runs. Five frames of 600 draws, each under a GPU feed setting handed over through `Host::tuning` and taken up by the `Present` before it: off (no parts), after every draw (600 parts), 50 draws a part (2 to 12), 300 draws with an idle count of 10 (the frame starts with the GPU read back, so its first part goes after 10 draws; one to five parts go early, and the picture of that frame is checked on both sides of them), and an idle count no smaller than the plain one (no early part). Every change is logged, the last one back to the device's own setting. `LogDeviceStats` then reports exactly the frames, draws and parts the scene counted since it started the statistics, a second report repeats them and starts again, and a third has no frame in it. Last, another thread changes the setting and asks for the statistics eight times while this one draws and presents, as the engine's main thread does beside its render thread, and the last frame comes out whole. |
+| `slow_frames` | The statistics' `slow frame` lines. Eight frames, of which the second makes the only blended draws of the check (so a pipeline is built) and then stands still for 400 ms, and the third uploads a texture and stands still for 250 ms. A report after the first frame has one line, for frame 1 with its 10 draws. The report after the eighth has three, the longest first, and names frames 2 and 3 with their times, their draws, the pipeline and the upload, and with the GPU's times where the device has timestamps. A report that starts the statistics again is followed by one with no such line. The two frames are found by number and not by rank, so a machine busy enough to hold another frame up for longer still passes. |
+| `kept_state` | The switch for what a draw takes up from the draw before it (`Tuning::keepDrawState`, the game's `r_vkKeepDrawState`). The same frame of 600 draws, in runs of eight that share a texture and with a vertex shader constant set to another value for every draw, is drawn with the state kept, not kept and kept again. Each change is taken up by the `Present` after it and logged once, the first frame logs none, and the statistics count 600 draws in each. The three pictures are the same to the pixel and every one of the 600 cells has its run's texture (a draw that took the constant of the one before would land in another cell). The frame drawn without the kept state writes close to twice the constants of the other two or more, which write the same as each other, and writes descriptor sets, where the third, kept again, writes none: the sets the first frame wrote last across frames. |
+| `multisample` | Multisampled targets. A one-sample triangle is drawn first as the yardstick: no pixel of its edge is between the two colours. A render target of 64x64 at 4 samples is drawn with a 4-sample depth surface of 128x128 (larger, as D3D9 allows) and the triangle in front of a far green quad; `GetDesc` reports 4 samples, an 8-sample target is made with 8 or 4 (`edge_pixels`, `eight_samples_made_with` are printed), and 3 samples are refused. An occlusion query of an 8x8 quad counts 256 samples, four a pixel. A draw with a one-sample depth surface is skipped. `StretchRect` resolves the target into a texture level: inside red, behind green, at least 32 pixels of the edge between the two, and a read of the target gives the same picture as the resolve. A scaled `StretchRect` into a corner of the back buffer. `Reset` to a 4-sample back buffer, a draw with a soft edge in the read back, `Present`, and `GetFrontBufferData` equal to the drawn picture; `Reset` back to one sample. |
 | `bench` | Only when named (`--scene bench`), never in a full run: 120 frames of 768 draws of four D3D9 calls each, ended as `frame_loop`'s are, while another thread polls the sync fence every 20 microseconds. Prints the time the drawing thread spent on its draw calls per frame and the polls made meanwhile; passes when its frames were presented. |
+| `bench_runs` | Only when named, as `bench`: 100 frames of 768 draws in runs of eight that share a texture, an alpha reference and a pixel shader constant, as the engine's draws sorted by material do; each draw sets one vertex shader constant and draws its own quad from one static vertex and index buffer. It measures what the adapter does for a draw like the one before ([adapter](vulkan-legacy-adapter.md)). The last frame is read back and ten of its cells checked. Prints what `bench` prints. |
 | `reset` | `Reset` to 96x96 and back: the new size, default state, nothing bound, drawing at the new size. |
 | `present` | `Present` through the device and the swap chain, then `GetFrontBufferData` halfway through the next frame: it must give the frame last shown. |
 
 `scripts/tests/test_vulkan_d3d9_front.py --binary <check>` runs it the way the
 adapter's runner does: usage errors, an unknown scene, one scene alone (with no
 unsupported call), a run with `KISAK_VK_PRESENT_MODE=fifo` (its swapchain must
-be FIFO although the device asks for no vsync), the `bench` scene, and a full run in which every scene
+be FIFO although the device asks for no vsync), the `bench` scene, the
+`bench_runs` scene with the validation layer (where the adapter checks every
+block, pipeline and dynamic state it keeps between draws), and a full run in which every scene
 matches, the only unsupported call is the deliberate one, frames are presented,
 no object outlives its release, the device is destroyed at its last release and
 the validation layer reports no errors. It reads the GPU feed's setting from
@@ -320,8 +361,8 @@ x86_64 Debug and RelWithDebInfo with validation and on i386 without: every
 count exact with the record thread on and off and the GPU feed off, at its
 default and after every draw (717 or 718 Vulkan queries for its 700 queries,
 from two pools), and 0xffffff from every query with
-`KISAK_VK_OCCLUSION_QUERIES=0`. In the game the queries have not run on a GPU
-yet.
+`KISAK_VK_OCCLUSION_QUERIES=0`. In the game the queries have since run on two
+GPUs (laptop run 11 and PC run 7, below); the scene itself has not.
 
 The `tuning` scene (2026-11-10, same sandbox, 14 scenes by then) passes on
 x86_64 Debug and RelWithDebInfo with validation and on i386 without, with the
@@ -329,9 +370,42 @@ device's own feed off, at its default, at 1, 50 and 300 draws a part and
 after every draw, and with the record thread on and off. With the record
 thread on, lavapipe took one or two early parts in the idle rule's frame; with
 it off, where lavapipe has finished every submission before the call returns,
-four or five. ThreadSanitizer finds nothing in the scene. No GPU has run it,
-and the present mode a real surface gets (IMMEDIATE where it is offered) has
-not been seen: lavapipe's offscreen surface offers MAILBOX and FIFO only.
+four or five. ThreadSanitizer finds nothing in the scene. No GPU has run the
+scene. The settings have run in the game on two (laptop run 11 and PC run 7,
+below), where a real surface also showed its present mode: lavapipe's
+offscreen surface offers MAILBOX and FIFO only.
+
+The `slow_frames` scene (2026-11-10, same sandbox) passes its 21 points on
+x86_64 Debug and RelWithDebInfo with validation in the seven configurations
+the script is run in (the feed at its default, off and after every draw, the
+record thread off, static uniforms, static strides with fixed depth compare
+and wide targets, occlusion counting off) and on i386 without validation;
+alone 20 times in each build, and 20 times beside eight busy loops on the
+sandbox's four cores, without a failure. ThreadSanitizer finds nothing in it
+with the record thread on or off. On an idle sandbox the two frames it holds
+up read 406 to 413 ms and 257 to 265 ms, and beside the busy loops up to 520
+ms and 300 ms; nearly all of it shows as GPU time without work before the
+frame. No GPU has run it: what the lines say about the long frame the laptop
+sees about every two minutes is for its next measuring run.
+
+The `kept_state` scene (2026-11-10, same sandbox) passes its 20 points on
+x86_64 Debug and RelWithDebInfo with validation in the same seven
+configurations and on i386 without validation, and ThreadSanitizer finds
+nothing in it with the record thread on or off. Its frame of 600 draws writes
+10.0 KB of constants with the state kept and 365.6 KB without. No GPU has run
+it. The check also takes `--keep-draw-state 0`, which draws the `bench` and
+`bench_runs` scenes without the kept state, so their timings and instruction
+counts can be set beside the default's (the [adapter](vulkan-legacy-adapter.md)
+has the counts).
+
+The `multisample` scene (2026-11-10, same sandbox, lavapipe, which has 1 and
+4 samples) passes its 24 points on x86_64 Debug and RelWithDebInfo with
+validation, and the adapter scene answers 2, 4 and 8 samples with one quality
+level. The resolved triangle has 188 edge pixels between red and green; the
+top row and left column of a quad that fills the target are half covered,
+because the half-pixel shift of the viewport (the same as DXVK's) moves the
+clip volume by half a pixel. The 8-sample target is made with 4. No GPU has
+run it.
 
 ## In the game: r_backend vulkan
 
@@ -364,7 +438,7 @@ archived and latched (a change applies at the next `vid_restart`):
   ignored when another device or driver wrote it). 0 translates every shader
   and builds every pipeline from scratch at every start.
 
-Three more are for measuring. They are not saved and take effect in the next
+Four more are for measuring. They are not saved and take effect in the next
 frame (the front's `Tuning`), so one launch can compare settings, by hand, in
 a config script or with `perf_ab`:
 
@@ -373,6 +447,13 @@ a config script or with `perf_ab`:
 * `r_vkGpuFeedDraws`: the draws to a part of a frame; 0 (default) leaves the
   device's own count, 128 unless `KISAK_VK_GPU_FEED_DRAWS` says otherwise.
 * `r_vkGpuFeedIdleDraws`: the idle rule's count; 0 (default) for no rule.
+* `r_vkKeepDrawState`: 1 (default) lets a draw take up the pipeline, the
+  constants and the binds the draw before it left (the
+  [adapter](vulkan-legacy-adapter.md)'s work per draw); 0 makes every draw
+  set them all again. The `frame stats` line shows which is in effect by its
+  constants per frame. It is also the switch to try when a picture is wrong
+  in a way a stale state would explain: if 0 puts it right, the fault is in
+  what is kept.
 
 The `r_vkStats` command (`src/gfx_d3d/r_cmds.cpp`, in the game and the world
 draw probe) prints the device's statistics lines since it last ran, or since
@@ -386,6 +467,16 @@ build gives the definition to each program's stand-in objects for it (the
 first build with the command did not, and the Linux game had the dvars
 without the command until laptop run 11 typed it), and CI's `vulkan_engine`
 job looks for the command in the programs it builds.
+
+`scripts/runs/recipes/vulkan-settings-mp-crash.json` measures these settings
+on a machine with `perf_run.py` ([runs](runs.md)), in the standing scene
+(mp_crash, a fixed view, 12 bots, a slow turn). Each of its two launches
+takes the statistics over 120 seconds, with their `slow frame` lines, and
+then compares inside the launch, with `perf_ab` in windows of one full turn:
+the kept draw state on and off, the GPU feed at its default and off, the idle
+rule at 0 and 16 draws, 128 and 32 draws to a part, and last a setting
+against itself, which says how far two equal settings sit apart on that
+machine. A launch takes about twelve minutes.
 
 With `r_backend vulkan`, `R_HW_Direct3DCreate9`
 (`src/gfx_d3d/rhi/r_rhi_d3d9_calls.cpp`, built with `KISAK_VULKAN_BACKEND`)
@@ -473,8 +564,28 @@ about them, though: every Vulkan row sat at exactly 75 frames a second, the
 display's rate, in a window with vsync off (`swapchain 1024x768
 B8G8R8A8_UNORM MAILBOX, 3 images`), while the real `d3d9.dll` ran the scene
 at 215. The core asked for MAILBOX before IMMEDIATE then; it now asks for
-IMMEDIATE first ([vulkan-core.md](vulkan-core.md)), which no run on that PC
-has tried yet. Report: `renderer/vulkan-backend-pc-run-6.md`.
+IMMEDIATE first ([vulkan-core.md](vulkan-core.md)). Report:
+`renderer/vulkan-backend-pc-run-6.md`.
+PC run 7 (2026-11-10, 2b8fde19, same PC, the hosted Win32 Debug artifact, the
+machine alone) confirmed that the cap sat on the present mode. The swapchain
+line says `IMMEDIATE, 3 images` and the scene runs at 154.6 frames a second
+over 60 s; with `KISAK_VK_PRESENT_MODE=mailbox` it is back at 74.9; the real
+`d3d9.dll` read about 203 (182 to 230 in twelve overlay samples). So in that
+Debug build Vulkan reaches about three quarters of Direct3D 9. What the frame
+holds there: 526 draws, 9.1 passes, 231 descriptor sets and 467 KB of
+constants, with the GPU busy for 1.0 ms in passes of a 6.5 ms frame, so that
+PC waits for the CPU and not for the GPU. The feed settings, in windows of
+20 s inside one launch, two each: off 163.8 frames a second, the default
+(every 128 draws) 161.1, which is inside the spread of its own two windows,
+and the idle rule at 16 draws 150.2, about 8% lower. A launch builds 132
+pipelines in 1.09 s. The sun's occlusion query gives the answers real
+Direct3D 9 draws by (see [the laptop](#the-game-on-the-laptop) for the
+method): 256.0 samples on average and no empty result with the sun in the
+open (`setviewpos -257 177 219 240 -50`), every result empty indoors, one
+result a frame, and screenshots whose mean colour, in the centre and over
+the whole picture, is within one level of Direct3D 9's at both places.
+Nobody watched the window, so tearing with IMMEDIATE is not judged. Report:
+`renderer/vulkan-backend-pc-run-7.md`.
 
 The device probe with `--backend vulkan` runs `r_init.cpp`'s device start
 unchanged (`R_PreCreateWindow`, `R_CreateWindow`, `R_CreateDevice`), clears,
@@ -536,6 +647,60 @@ evidence):
   [adapter](vulkan-legacy-adapter.md#how-a-draw-works)), run 9 measured 140.9
   fps against DXVK's 151.3, on mains in power-saver mode, where the code
   before them gave 117.6 (run 8).
+* Feed settings side by side (run 11, 2026-11-10, 2b8fde19, on mains in
+  power-saver mode, twelve windows of 27 s in one launch, two for each
+  setting): the idle rule at 16 draws 137.8 fps and at 32 draws 135.8 (each
+  beside the default's part every 128 draws), a part every 32 draws 137.4,
+  every 64 draws 125.8, every 128 draws (the default) 127.4, off 125.5; DXVK
+  in a launch of its own 137.5. The two windows of a
+  setting lie 4 to 12 fps apart for every setting but off, whose two were
+  next to each other: as far as the settings lie from one another, so this
+  is no ranking. The GPU lines say more: with the feed off the GPU is busy
+  for 6.36 ms in passes and without work for 1.69 ms before a frame; at the
+  default it is without work for 0.71 ms but busy for 7.04 ms. The feed ends
+  a pass to submit and begins it again, so a frame has more of them (6.4 with
+  the feed off and 8.6 at the default in the launches of runs 9 and 10). It
+  gets back a millisecond of idle GPU and the passes take 0.7 ms longer; why
+  they do on this driver is not known.
+  `scripts/runs/recipes/vulkan-settings-mp-crash.json` compares the settings
+  with `perf_ab` instead, in windows of 9 s in the order A B B A, which a
+  drift over minutes moves less.
+* Anti-aliasing: up to laptop run 11 the back end had no multisampled
+  targets. Its `CheckDeviceMultiSampleType` offered none, so the engine drew
+  one sample a pixel on Vulkan whatever `r_aaSamples` said
+  (`R_SetupAntiAliasing` steps down to none), where DXVK gives the samples
+  asked for. The back end now has them (above), so a build with them prints
+  `Using 4x anti-aliasing` on Vulkan too. The laptop's
+  profile has `r_aaSamples 4` (read in run 11), and the launch lines of the
+  runs above set no value of their own. The DXVK rows of runs 10 and 11
+  print `Using 4x anti-aliasing` and the Vulkan rows print no such line, so
+  every frame rate above sets a Vulkan frame of one sample beside a DXVK
+  frame of four, and the gap is larger than it reads.
+  `scripts/runs/recipes/vulkan-aa-mp-crash.json` measures the two alike, in
+  the order V1 D1 V4 D4 D4 V4 D1 V1 (back end and `r_aaSamples` on the
+  command line), each row keeping the engine's anti-aliasing line where
+  there is one; on a build without multisampled targets the V4 rows draw one
+  sample. The Windows PC's runs set `r_aaSamples 1` for both back
+  ends, so its numbers do compare.
+* Present mode: the laptop's swapchain still says `MAILBOX, 4 images` with
+  vsync off now that the core asks for IMMEDIATE first (run 11), so its
+  surface does not offer IMMEDIATE.
+* The sun (run 11): the engine draws a sprite of 16 by 16 pixels at the sun's
+  place inside one occlusion query a frame and takes the share of its samples
+  that pass as how much of the sun is in view (`rb_sky.cpp`). `r_vkStats`
+  prints what the queries returned, so the check needs no picture: look
+  along `r_lightTweakSunDirection` (`-50 240 0` on mp_crash: yaw 240, pitch
+  -50) and read the `occlusion queries:` line of a stretch of five seconds.
+  With the sun in the open (`setviewpos -716 461 600 240 -50`)
+  every result is 256 samples, also with `r_aaSamples 4`; indoors
+  (`setviewpos 1504 512 200 240 -50`) and under a roof slab (the same place
+  at z 295) every result is empty; one result a frame. Screenshots reduced to
+  numbers on the laptop match DXVK's within 0.1 in mean brightness and 0.5 in
+  every cell of a 5x5 grid, and with `KISAK_VK_OCCLUSION_QUERIES=0` the
+  indoor view shows the old fault: an almost black frame with a bright
+  centre. Neither back end draws a visible flare at those places (on the PC
+  real Direct3D 9 does not either), so the pictures prove that the two agree
+  and the line proves the count.
 * Picture: models drew dark where the profile had
   `r_altModelLightingUpdate 0`, because the adapter dropped a texture's
   contents when it was locked again; fixed, and run 7 matches DXVK at 40.1 dB
@@ -563,14 +728,23 @@ evidence):
   launch, with a repeated launch as the baseline
   (`renderer/model-lighting/luma_grid.py` in the project files).
 
-Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9}.md`,
-`renderer/vulkan-backend-pc-run-6.md` and
+Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11}.md`,
+`renderer/vulkan-backend-pc-run-{6,7}.md` and
 `renderer/model-lighting/laptop-run-1.md` in the project files.
 
 ## Next
 
-The rest of the frame rate gap to DXVK (how often to feed the GPU, then the
-render thread's time per draw), a look at the sun's flare on a GPU now that
-occlusion queries count samples (until 2026-11-10 the adapter reported every
-sample as passed, which the engine reads as a sun in full view; the counting
-has run on lavapipe only), and a long frame about every two minutes.
+The rest of the frame rate gap to DXVK. On the laptop that is the GPU's
+time, and first a measurement of the two back ends with the same
+anti-aliasing (above); then what a pass split by the feed costs on its
+driver, and whether a feed setting is better than the default at all (laptop
+run 12 measures the settings in one launch, and the kept draw state with
+them). Laptop run 13 sets Vulkan with `r_aaSamples 4`, now that the back
+end has multisampled targets, beside DXVK with 4. On the Windows PC the gap
+is the render thread's time per draw: a run of a build that keeps
+descriptor sets across frames (the frame stats line should show close to
+none written), then the front's lock. The PC's runs so far used the hosted
+Debug build, whose render thread is slower than a release build's.
+Then the long frame the laptop sees about every two minutes, which the
+`slow frame` lines are there to name, and the second or so a launch spends
+building pipelines on the PC.

@@ -72,6 +72,7 @@ bool NewBlock(Core &core, MemoryPool &pool, VkDeviceSize size, bool dedicated, u
     MemoryBlock block;
     block.size = size;
     block.dedicated = dedicated;
+    const StandStill allocating(core.stats.memoryAllocateMs);
     if (!Check(core, core.vk.vkAllocateMemory(core.dev, &info, nullptr, &block.memory), "vkAllocateMemory"))
         return false;
     if (pool.host
@@ -80,6 +81,7 @@ bool NewBlock(Core &core, MemoryPool &pool, VkDeviceSize size, bool dedicated, u
         core.vk.vkFreeMemory(core.dev, block.memory, nullptr);
         return false;
     }
+    ++core.stats.memoryAllocations;
     block.freeRanges[0] = size;
     if (pool.host)
         core.stats.hostMemoryBytes += size;
@@ -400,6 +402,9 @@ void RunDeferred(Core &core, bool everything)
         case DeferredKind::ShaderModule:
             core.vk.vkDestroyShaderModule(core.dev, (VkShaderModule)item.handle, nullptr);
             break;
+        case DeferredKind::DescriptorPool:
+            core.vk.vkDestroyDescriptorPool(core.dev, (VkDescriptorPool)item.handle, nullptr);
+            break;
         }
         ++core.stats.deferredDestroyed;
     }
@@ -483,6 +488,20 @@ Image *CreateImage(Core *core, const ImageDesc &desc)
         Fail(*core, "CreateImage: empty size, no levels or no format (%s)", name);
         return nullptr;
     }
+    if (desc.samples != 1)
+    {
+        // One bit, and one the device has for colour and depth alike.
+        if ((desc.samples & (desc.samples - 1)) || !(SampleCounts(core) & desc.samples))
+        {
+            Fail(*core, "CreateImage: the device has no attachments of %u samples (%s)", desc.samples, name);
+            return nullptr;
+        }
+        if (desc.kind != ImageKind::Tex2D || desc.mipLevels != 1 || (desc.usage & VK_IMAGE_USAGE_SAMPLED_BIT))
+        {
+            Fail(*core, "CreateImage: a multisampled image is a 2D image of one level that is not sampled (%s)", name);
+            return nullptr;
+        }
+    }
     Image *image = new Image();
     image->desc = desc;
     image->name = name;
@@ -500,7 +519,7 @@ Image *CreateImage(Core *core, const ImageDesc &desc)
     info.extent = {desc.width, desc.height, desc.kind == ImageKind::Tex3D ? desc.depth : 1};
     info.mipLevels = desc.mipLevels;
     info.arrayLayers = image->layers;
-    info.samples = VK_SAMPLE_COUNT_1_BIT;
+    info.samples = static_cast<VkSampleCountFlagBits>(desc.samples);
     info.tiling = VK_IMAGE_TILING_OPTIMAL;
     info.usage = image->desc.usage;
     info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -557,9 +576,13 @@ Image *CreateImage(Core *core, const ImageDesc &desc)
 
 void DestroyImage(Core *core, Image *image)
 {
-    if (image)
-        core->deferred.push_back({DeferredKind::Image, PendingSerial(*core), image, 0});
+    if (!image)
+        return;
+    ++core->imagesDestroyed;
+    core->deferred.push_back({DeferredKind::Image, PendingSerial(*core), image, 0});
 }
+
+uint64_t ImagesDestroyed(const Core *core) { return core->imagesDestroyed; }
 
 const ImageDesc &ImageInfo(const Image *image) { return image->desc; }
 VkImage ImageHandle(const Image *image) { return image->image; }

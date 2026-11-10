@@ -53,6 +53,7 @@ const char *s_gpuFeedNames[] = {"default", "off", "on", "always", nullptr};
 const dvar_s *r_vkGpuFeed;
 const dvar_s *r_vkGpuFeedDraws;
 const dvar_s *r_vkGpuFeedIdleDraws;
+const dvar_s *r_vkKeepDrawState;
 
 struct DisplayMode
 {
@@ -290,6 +291,7 @@ std::string CacheDirectory()
 // The dvars the front takes up while a device exists (front::Tuning).
 void HostTuning(void *, front::Tuning &out)
 {
+    out.keepDrawState = r_vkKeepDrawState->current.enabled;
     out.gpuFeed = r_vkGpuFeed->current.integer - 1;
     out.gpuFeedDraws = uint32_t(std::max(0, r_vkGpuFeedDraws->current.integer));
     out.gpuFeedIdleDraws = uint32_t(std::max(0, r_vkGpuFeedIdleDraws->current.integer));
@@ -332,6 +334,9 @@ void Kisak_VulkanRegisterDvars()
     r_vkGpuFeedIdleDraws = Dvar_RegisterInt("r_vkGpuFeedIdleDraws", 0, 0, 65535, DVAR_NOFLAG,
                                             "Vulkan: draws to a part when the GPU has nothing left (the next "
                                             "such part of the frame takes twice as many); 0 for no such parts");
+    r_vkKeepDrawState = Dvar_RegisterBool("r_vkKeepDrawState", true, DVAR_NOFLAG,
+                                          "Vulkan: a draw takes up the pipeline, constants and binds the draw "
+                                          "before it left; off makes every draw set them all again");
 }
 
 int Kisak_VulkanBackendSelected()

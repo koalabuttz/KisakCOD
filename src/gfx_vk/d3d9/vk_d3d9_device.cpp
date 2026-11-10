@@ -101,6 +101,7 @@ bool Device::Init()
     desc.vsync = params_.PresentationInterval != D3DPRESENT_INTERVAL_IMMEDIATE;
     desc.width = params_.BackBufferWidth;
     desc.height = params_.BackBufferHeight;
+    desc.samples = SamplesOf(params_.MultiSampleType);
     std::string error;
     backend_ = OpenBackend(desc, error);
     if (!backend_)
@@ -127,8 +128,15 @@ bool Device::Init()
     if (params_.EnableAutoDepthStencil)
         HostLog(h, "vulkan d3d9: CreateDevice: no automatic depth-stencil surface (the renderer creates its own)");
 
-    HostLog(h, "vulkan d3d9: device %s, back buffer %ux%u, vsync %s", BackendDeviceName(backend_), width, height,
-            desc.vsync ? "on" : "off");
+    params_.MultiSampleQuality = 0;
+#if !defined(KISAK_GFX_GXM)
+    const uint32_t samples = lg::SurfaceSamples(backBuffer_->handle());
+    params_.MultiSampleType = samples > 1 ? static_cast<D3DMULTISAMPLE_TYPE>(samples) : D3DMULTISAMPLE_NONE;
+#else
+    const uint32_t samples = 1;
+#endif
+    HostLog(h, "vulkan d3d9: device %s, back buffer %ux%u, %u %s, vsync %s", BackendDeviceName(backend_), width,
+            height, samples, samples == 1 ? "sample" : "samples", desc.vsync ? "on" : "off");
     DefaultState();
     return true;
 }
@@ -239,12 +247,13 @@ void Device::Destroy()
         HostLog(host(),
                 "vulkan d3d9: device stats: %llu draws, %u shaders (%u translated in %.1f ms), "
                 "%u pipelines (%.1f ms building), %llu texture uploads (%.1f MB, %.1f ms), %llu read back to lock "
-                "again",
+                "again, %llu descriptor sets kept across frames (all given up %u times)",
                 static_cast<unsigned long long>(stats.draws), stats.shaders,
                 stats.shaders - std::min(stats.shaders, stats.shadersCached), stats.shaderMicros / 1000.0,
                 stats.pipelines, stats.pipelineMicros / 1000.0, static_cast<unsigned long long>(stats.textureUploads),
                 stats.uploadBytes / (1024.0 * 1024.0), stats.uploadMicros / 1000.0,
-                static_cast<unsigned long long>(stats.textureReadbacks));
+                static_cast<unsigned long long>(stats.textureReadbacks),
+                static_cast<unsigned long long>(stats.lastingSets), stats.lastingRetires);
     }
     // The back end's statistics, then the Legacy device and the GPU go.
     CloseBackend(backend_);
@@ -373,9 +382,9 @@ HRESULT STDMETHODCALLTYPE Device::Reset(D3DPRESENT_PARAMETERS *params)
     const FrontLock lock;
     if (!params)
         return D3DERR_INVALIDCALL;
-    if (params->MultiSampleType != D3DMULTISAMPLE_NONE)
+    if (!OffersSamples(params->MultiSampleType))
     {
-        HostLog(host(), "vulkan d3d9: Reset: multisampled back buffers are not supported");
+        HostLog(host(), "vulkan d3d9: Reset: no back buffer of multisample type %u", unsigned(params->MultiSampleType));
         return D3DERR_NOTAVAILABLE;
     }
     if ((params->PresentationInterval == D3DPRESENT_INTERVAL_IMMEDIATE)
@@ -393,7 +402,16 @@ HRESULT STDMETHODCALLTYPE Device::Reset(D3DPRESENT_PARAMETERS *params)
         return D3DERR_INVALIDCALL;
 
     UnbindAll();
-    if (width != params_.BackBufferWidth || height != params_.BackBufferHeight)
+    uint32_t samples = 1;
+#if !defined(KISAK_GFX_GXM)
+    const bool newSamples = lg::UsableSamples(legacy_, SamplesOf(params->MultiSampleType))
+                            != lg::SurfaceSamples(backBuffer_->handle());
+    if (newSamples)
+        lg::SetBackBufferSamples(legacy_, SamplesOf(params->MultiSampleType));
+#else
+    const bool newSamples = false;
+#endif
+    if (width != params_.BackBufferWidth || height != params_.BackBufferHeight || newSamples)
     {
         if (!lg::ResizeBackBuffer(legacy_, width, height))
         {
@@ -401,6 +419,9 @@ HRESULT STDMETHODCALLTYPE Device::Reset(D3DPRESENT_PARAMETERS *params)
             return D3DERR_INVALIDCALL;
         }
     }
+#if !defined(KISAK_GFX_GXM)
+    samples = lg::SurfaceSamples(backBuffer_->handle());
+#endif
     const D3DPRESENT_PARAMETERS old = params_;
     params_ = *params;
     params_.BackBufferWidth = params->BackBufferWidth = width;
@@ -412,6 +433,8 @@ HRESULT STDMETHODCALLTYPE Device::Reset(D3DPRESENT_PARAMETERS *params)
     if (!params_.hDeviceWindow)
         params_.hDeviceWindow = old.hDeviceWindow;
     params_.PresentationInterval = old.PresentationInterval;
+    params_.MultiSampleType = samples > 1 ? static_cast<D3DMULTISAMPLE_TYPE>(samples) : D3DMULTISAMPLE_NONE;
+    params_.MultiSampleQuality = 0;
     DefaultState();
     return D3D_OK;
 }
@@ -632,9 +655,17 @@ HRESULT STDMETHODCALLTYPE Device::CreateRenderTarget(UINT width, UINT height, D3
     *surface = nullptr;
     if (shared)
         return Unsupported("shared resource handles");
-    if (samples != D3DMULTISAMPLE_NONE)
+    if (!OffersSamples(samples))
         return D3DERR_NOTAVAILABLE;
+#if !defined(KISAK_GFX_GXM)
+    lg::Surface *handle = samples != D3DMULTISAMPLE_NONE
+                              ? lg::CreateMultisampledRenderTarget(legacy_, width, height,
+                                                                   static_cast<lg::d3d::Format>(format), SamplesOf(samples),
+                                                                   nullptr)
+                              : lg::CreateRenderTarget(legacy_, width, height, static_cast<lg::d3d::Format>(format), nullptr);
+#else
     lg::Surface *handle = lg::CreateRenderTarget(legacy_, width, height, static_cast<lg::d3d::Format>(format), nullptr);
+#endif
     if (!handle)
         return D3DERR_INVALIDCALL;
     *surface = new Surface(this, handle, D3DUSAGE_RENDERTARGET, D3DPOOL_DEFAULT);
@@ -651,9 +682,17 @@ HRESULT STDMETHODCALLTYPE Device::CreateDepthStencilSurface(UINT width, UINT hei
     *surface = nullptr;
     if (shared)
         return Unsupported("shared resource handles");
-    if (samples != D3DMULTISAMPLE_NONE)
+    if (!OffersSamples(samples))
         return D3DERR_NOTAVAILABLE;
+#if !defined(KISAK_GFX_GXM)
+    lg::Surface *handle = samples != D3DMULTISAMPLE_NONE
+                              ? lg::CreateMultisampledDepthStencil(legacy_, width, height,
+                                                                   static_cast<lg::d3d::Format>(format), SamplesOf(samples),
+                                                                   nullptr)
+                              : lg::CreateDepthStencil(legacy_, width, height, static_cast<lg::d3d::Format>(format), nullptr);
+#else
     lg::Surface *handle = lg::CreateDepthStencil(legacy_, width, height, static_cast<lg::d3d::Format>(format), nullptr);
+#endif
     if (!handle)
         return D3DERR_INVALIDCALL;
     *surface = new Surface(this, handle, D3DUSAGE_DEPTHSTENCIL, D3DPOOL_DEFAULT);
