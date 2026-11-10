@@ -121,6 +121,52 @@ else()
     set(KISAK_LINUX_SIMD_OPTIONS -msse2 -mfpmath=sse)
 endif()
 
+# Opt-in speed builds, for measuring (docs/linux-speed-builds.md). Both are
+# off by default, and both apply to every target of the build directory, so
+# the checks built there test the same code generation as the games.
+#
+# KISAK_LINUX_CPU names the CPU the compiler may assume (-march), on x86 only.
+# Empty keeps the baseline, which runs on every x86-64 CPU (every SSE2 CPU for
+# i386). A newer CPU level brings fused multiply-add, which Clang would use
+# for a * b + c, rounding once instead of twice; -ffp-contract=off keeps the
+# baseline's floats, as the Arm builds do (client prediction replays the
+# server's movement math and must land on the same floats).
+set(KISAK_LINUX_CPU "" CACHE STRING
+    "x86 only: the CPU the build may assume, as a Clang -march value (x86-64-v3, haswell, native ...). Empty keeps the baseline that runs on every CPU")
+if(KISAK_LINUX_CPU)
+    if(NOT KISAK_NATIVE_ARCH MATCHES "^(i386|x86_64)$")
+        message(FATAL_ERROR "KISAK_LINUX_CPU is for x86 builds; this build targets ${KISAK_NATIVE_ARCH}")
+    endif()
+    add_compile_options("-march=${KISAK_LINUX_CPU}" -ffp-contract=off)
+    message(STATUS "KISAK_LINUX_CPU: built for -march=${KISAK_LINUX_CPU} (no fused multiply-add). "
+        "The games stop with an illegal instruction on an older CPU")
+endif()
+
+# KISAK_LINUX_LTO links with ThinLTO: the compiler sees the whole program at
+# link time and can inline across source files. The link takes minutes instead
+# of seconds. ELF builds link with lld, which reads the compiler's bitcode
+# without a plugin; Apple's linker does that itself.
+option(KISAK_LINUX_LTO "Link every target with ThinLTO (ELF: needs lld). For measuring" OFF)
+if(KISAK_LINUX_LTO)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+    if(NOT APPLE)
+        add_link_options(-fuse-ld=lld)
+    endif()
+    message(STATUS "KISAK_LINUX_LTO: ThinLTO on for every target")
+endif()
+
+# KISAK_LINUX_CLIENT_ASSERTS=OFF builds the games (KisakCOD-mp, KisakCOD-sp)
+# without the engine's assertions, as the Windows release builds and the Linux
+# dedicated server already are. On, the default, every iassert of the client
+# and renderer is checked while playing, which is how the port finds its bugs.
+option(KISAK_LINUX_CLIENT_ASSERTS "Keep the engine's assertions in KisakCOD-mp and KisakCOD-sp. OFF is for measuring" ON)
+if(KISAK_LINUX_CLIENT_ASSERTS)
+    set(KISAK_LINUX_CLIENT_ASSERT_DEFINITIONS RELEASE_ASSERTS)
+else()
+    set(KISAK_LINUX_CLIENT_ASSERT_DEFINITIONS "")
+    message(STATUS "KISAK_LINUX_CLIENT_ASSERTS: off, the games are built without assertions")
+endif()
+
 # Hardening for the shipped Linux games and server (security audit finding 6):
 # stack canaries in functions with local arrays, probes so a large stack frame
 # cannot step over the guard page, and a read-only relocation table resolved at
