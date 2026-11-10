@@ -38,6 +38,7 @@ UNAVAILABLE = SRC / "linux" / "client" / "mp_client_unavailable.cpp"
 THREADS = SRC / "linux" / "sys_threads.cpp"
 MAIN = SRC / "linux" / "main.cpp"
 SP_BLOCKED = ROOT / "scripts" / "tests" / "sp_compile_census_blocked.txt"
+VULKAN_BACKEND_MODULE = ROOT / "scripts" / "vulkan_probe" / "vulkan_backend.cmake"
 RUN_TIMEOUT = 120
 STUB_TEXT = "// stub written by the check; no game data\n"
 
@@ -96,6 +97,18 @@ def source_checks(checker):
                     "it links MSVC's rand (effects assume a 15-bit rand)")
     checker.require('"${SRC_DIR}/linux/client/mp_client_unavailable.cpp"' in module,
                     "it links the client stand-ins")
+
+    # The opt-in Vulkan back end (r_backend vulkan) names each program as its
+    # engine objects, its own objects and itself.
+    backend = VULKAN_BACKEND_MODULE.read_text(encoding="utf-8")
+    programs = backend[backend.index("set(kisak_vulkan_backend_programs"):]
+    programs = programs[:programs.index(")")].split()
+    checker.require("KisakCOD-sp" in programs
+                    and programs[programs.index("KisakCOD-sp") - 2:programs.index("KisakCOD-sp")]
+                    == ["KisakCOD-sp-native", "KisakCOD-sp-own"],
+                    "the Vulkan back end option serves the singleplayer game")
+    for target in ("KisakCOD-sp-native", "KisakCOD-sp-own"):
+        checker.require(f"add_library({target} OBJECT" in module, f"{target} is still an object library of the game")
 
     unavailable = UNAVAILABLE.read_text(encoding="utf-8")
     for marker in ("void Sys_Listen_f()", "bool DL_InProgress()", "bool Voice_Init()",

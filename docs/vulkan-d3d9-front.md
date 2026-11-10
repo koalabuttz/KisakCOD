@@ -272,8 +272,12 @@ into whichever of these programs the build configures:
 | `KisakCOD-device-probe` | `--backend vulkan [--validation off\|auto\|require]` |
 | `KisakCOD-world-draw-probe` | `+set r_backend vulkan` |
 | `KisakCOD-mp` | `+set r_backend vulkan` |
+| `KisakCOD-sp` | `+set r_backend vulkan` |
 
-The probes are i386, as before; `KisakCOD-mp` is any client architecture. The
+The probes are i386, as before; `KisakCOD-mp` is any client architecture and
+`KisakCOD-sp` is i386 or x86_64. The singleplayer game builds and links with
+the back end; no level has been drawn through it yet
+([linux-sp-game.md](linux-sp-game.md#building)). The
 programs still link the system's D3D9 (DXVK Native) and use it by default.
 `src/linux/client/vulkan/vulkan_backend.cpp` registers four dvars, all
 archived and latched (a change applies at the next `vid_restart`):
