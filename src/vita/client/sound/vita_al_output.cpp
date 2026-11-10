@@ -76,9 +76,10 @@ void Report(const char *when)
 {
     const kisak::vita_al::Stats stats = kisak::vita_al::TakeStats();
     Log("vita sound: %s%u updates, mixing %u us each on average and %u at most, %u sources at most, "
-        "%u clipped frames, %u refused updates\n",
+        "%u clipped frames, %u refused updates, %u packed frames decoded, buffers %u KB at most\n",
         when, stats.updates, stats.updates ? stats.mixMicros / stats.updates : 0, stats.maxMixMicros,
-        stats.peakVoices, stats.clippedFrames, stats.outputErrors);
+        stats.peakVoices, stats.clippedFrames, stats.outputErrors, stats.packedFrames,
+        (stats.peakBufferBytes + 1023) / 1024);
 }
 
 bool IsBgmRate(int rate)

@@ -14,7 +14,12 @@
 //     looping, gain, pitch, the play offset, and the buffer and queue rules the
 //     engine depends on (a buffer in use cannot be deleted, a playing source
 //     cannot change its buffer, only played buffers leave a queue);
-//   * mono and stereo buffers of 8 or 16 bits, at any rate.
+//   * mono and stereo buffers of 8 or 16 bits, at any rate;
+//   * IMA ADPCM buffers (AL_EXT_IMA4, with AL_SOFT_block_alignment for the
+//     block size): they stay packed, a quarter of the size, and the mixer
+//     decodes the block under the play position;
+//   * a buffer's loop points (AL_SOFT_loop_points), which the engine sets when
+//     a sound ends inside its last block.
 // What it leaves out:
 //   * distance models: the engine sets AL_NONE and puts its own falloff into
 //     AL_GAIN;
@@ -50,6 +55,8 @@ struct Stats
     uint32_t mixMicros;     // time the output reported through NoteMixTime
     uint32_t maxMixMicros;  // slowest update
     uint32_t outputErrors;  // updates the device refused (NoteOutputError)
+    uint32_t packedFrames;  // frames decoded from IMA ADPCM buffers
+    uint32_t peakBufferBytes; // most memory all buffers held at once
 };
 // What happened since the last call. Any thread.
 Stats TakeStats();
