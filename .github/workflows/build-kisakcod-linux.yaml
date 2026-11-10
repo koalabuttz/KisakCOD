@@ -96,13 +96,15 @@ permissions:
   contents: read
 
 # A newer push to a pull request cancels that pull request's older run, so a
-# quick fix does not wait behind a run that no longer matters. A newer push to
-# master does the same to an older master run: it checks everything merged so
-# far, so the older run only held runners. Manual runs get a group of their own
-# and always finish.
+# quick fix does not wait behind a run that no longer matters. A master run is
+# never cancelled once it is in progress: with merges coming faster than the
+# queue, cancelling meant no master run ever finished. Later merges wait in
+# the same group, where GitHub keeps only the newest one waiting, so master
+# runs do not pile up either; the newest checks everything merged so far.
+# Manual runs get a group of their own and always finish.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   window:
@@ -322,6 +324,7 @@ jobs:
           python3 scripts/tests/test_summarize_alignment_report.py
           python3 scripts/tests/test_frame_log.py
           python3 scripts/tests/test_perf_run.py
+          python3 scripts/tests/test_vita3k_runner.py
           python3 scripts/tests/test_changed_units.py
           python3 scripts/tests/test_float_int_rounding.py
           python3 scripts/tests/test_retail_float_int_scan.py
