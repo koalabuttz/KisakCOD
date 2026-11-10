@@ -252,6 +252,8 @@ protected:
     HRESULT LevelSurface(UINT face, UINT level, IDirect3DSurface9 **surface);
     HRESULT Lock(UINT face, UINT level, D3DLOCKED_RECT *locked, const RECT *rect, DWORD flags);
     HRESULT Unlock(UINT face, UINT level);
+    // AddDirtyRect: rect null marks the whole face.
+    HRESULT Dirty(UINT face, const RECT *rect);
 };
 
 class Texture final : public BaseTexture<IDirect3DTexture9>

@@ -426,6 +426,8 @@ void BackendCounters(const Backend *backend, DeviceCounters &out)
     out.occlusionResults = backend && backend->legacy ? lg::Stats(backend->legacy).occlusionResults : 0;
     out.occlusionResultsZero = backend && backend->legacy ? lg::Stats(backend->legacy).occlusionResultsZero : 0;
     out.occlusionSamples = backend && backend->legacy ? lg::Stats(backend->legacy).occlusionSamples : 0;
+    out.textureUploads = backend && backend->legacy ? lg::Stats(backend->legacy).textureUploads : 0;
+    out.textureUploadBytes = backend && backend->legacy ? lg::Stats(backend->legacy).uploadBytes : 0;
 }
 
 void BackendPollProgress(Backend *backend)

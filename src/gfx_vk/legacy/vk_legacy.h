@@ -208,6 +208,7 @@ enum Pool : uint32_t { POOL_DEFAULT = 0, POOL_MANAGED, POOL_SYSTEMMEM, POOL_SCRA
 constexpr uint32_t LOCK_READONLY = 0x10;
 constexpr uint32_t LOCK_DISCARD = 0x2000;
 constexpr uint32_t LOCK_NOOVERWRITE = 0x1000;
+constexpr uint32_t LOCK_NO_DIRTY_UPDATE = 0x8000;
 constexpr uint32_t CLEAR_TARGET = 0x1;
 constexpr uint32_t CLEAR_ZBUFFER = 0x2;
 constexpr uint32_t CLEAR_STENCIL = 0x4;
@@ -288,7 +289,7 @@ struct DeviceStats
     uint32_t shadersCached;    // of those, served by the shader cache (not translated)
     uint64_t shaderMicros;     // translating them (vertex modules included)
     uint64_t pipelineMicros;   // building pipelines (pixel modules included)
-    uint64_t textureUploads;   // texture levels uploaded by UnlockRect
+    uint64_t textureUploads;   // copy commands of UnlockRect and UpdateTexture, of one or more regions of a level
     uint64_t textureReadbacks; // levels read back to lock a texture again (once each)
     uint64_t uploadBytes;
     uint64_t uploadMicros;     // staging those uploads
@@ -528,8 +529,14 @@ void StretchRect(Device *device, Surface *src, const Rect *srcRect, Surface *dst
 // GetRenderTargetData: waits for the GPU and copies a render target into a
 // SYSTEMMEM surface of the same size and format (4 bytes per pixel formats).
 bool GetRenderTargetData(Device *device, Surface *renderTarget, Surface *dst);
-// UpdateTexture: every level of a SYSTEMMEM texture into a matching texture.
+// UpdateTexture: a SYSTEMMEM texture into a matching texture, as D3D9 does it:
+// only what is dirty, in every level, and then nothing is. A new texture is
+// dirty all over; a lock without LOCK_NO_DIRTY_UPDATE or LOCK_READONLY marks
+// its region, and AddDirtyRegion marks one (AddDirtyRect, AddDirtyBox).
 void UpdateTexture(Device *device, Texture *src, Texture *dst);
+// box in level 0's texels; null marks the whole face. Only SYSTEMMEM and
+// SCRATCH textures keep it: other textures upload at every unlock.
+void AddDirtyRegion(Device *device, Texture *texture, uint32_t face, const Box *box);
 
 // D3D9's BeginScene/EndScene bracket nothing here; Present shows the back
 // buffer (scaled to the window when their sizes differ), then makes it the

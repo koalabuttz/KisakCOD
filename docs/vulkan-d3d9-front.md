@@ -202,7 +202,9 @@ Everything in `r_rhi.h`, and the getters D3D9 pairs with each setter:
   shaders from bytecode (with `GetFunction`), vertex declarations,
   shader float constants, viewport and scissor, `Clear`, `DrawPrimitive`,
   `DrawIndexedPrimitive`, `DrawPrimitiveUP` (stream 0 unbound afterwards, as in
-  D3D9), `StretchRect`, `UpdateTexture`, `GetRenderTargetData`,
+  D3D9), `StretchRect`, `UpdateTexture` (only what is dirty, as in D3D9:
+  `AddDirtyRect`, `AddDirtyBox` and locks without `D3DLOCK_NO_DIRTY_UPDATE`
+  mark it), `GetRenderTargetData`,
   `GetFrontBufferData` (the last frame shown, kept apart from the back buffer),
   event and occlusion
   queries, the implicit swap chain, `Reset` (new back buffer size, every state
@@ -290,7 +292,8 @@ a usage error.
 | `draw` | Static vertex and index buffers, a draw from memory (stream 0 unbound after it), a textured quad, a vertex shader constant, `GetTexture`. |
 | `render_target` | A render-target texture's level with a depth surface (viewport follows the target), the getters, sampling it afterwards, `StretchRect` into the back buffer. |
 | `shadow_map` | The sun shadow's path: a D24S8 texture made with `D3DUSAGE_DEPTHSTENCIL` as the depth target beside a R5G6B5 colour target, then sampled with linear filtering as a hardware shadow map (0 behind the stored depth, 1 in front). |
-| `model_lighting` | The model lighting volume's two update paths (`r_altModelLightingUpdate` 0 and 1), with the renderer's own sizes, flags and call order: a MANAGED volume locked whole and patched in place, against a SYSTEMMEM volume locked with `D3DLOCK_NO_DIRTY_UPDATE`, `AddDirtyBox` per cell and `UpdateTexture` into a DEFAULT volume. Two frames of patches; every texel of four cells is drawn from both and must be the same: written cells, a cell written twice, a cell left alone by the second frame, a cell never written. |
+| `model_lighting` | The model lighting volume's two update paths (`r_altModelLightingUpdate` 0 and 1), with the renderer's own sizes, flags and call order: a MANAGED volume locked whole and patched in place, against a SYSTEMMEM volume locked with `D3DLOCK_NO_DIRTY_UPDATE`, `AddDirtyBox` per cell and `UpdateTexture` into a DEFAULT volume. Two frames of patches; every texel of four cells is drawn from both and must be the same: written cells, a cell written twice, a cell left alone by the second frame, a cell written in the second frame with no `AddDirtyBox` (so it reaches neither). The first `UpdateTexture` uploads the whole new volume, the second only its two cells in one copy, and one with nothing written since uploads nothing. |
+| `dirty_update` | `UpdateTexture` copies only what is dirty, in every level: a 16x16 A8R8G8B8 texture of two levels and a 16x16 DXT1 texture, SYSTEMMEM into DEFAULT. A new texture is copied whole; texels written under `D3DLOCK_NO_DIRTY_UPDATE` arrive only inside an `AddDirtyRect`, which reaches level 1 halved and a DXT1 texture grown to whole 4x4 blocks; a lock without the flag marks its own rect. The bytes each update uploads are counted, and each level is drawn 1:1 and read back. |
 | `references` | Counts of textures and their levels, `GetContainer`, `QueryInterface`, a released texture that still draws while bound and goes when unbound, the back buffer's and swap chain's own counts (last `Release` returns 0) and the device reference they hold. |
 | `threads` | A worker thread creating and filling textures while this thread draws and presents; the last one drawn and read back; nothing left alive. |
 | `queries` | Support checks, an event query and an occlusion query finishing (with samples), and an event issued right after `Present` (the engine's swap fence) finishing without a flush while the next frame records; polled with `D3DGETDATA_FLUSH` while its frame is unfinished, it submits the next frame's work once, and the frame goes on with its state and contents. |
@@ -400,6 +403,16 @@ the scene; the game has run with the state kept and without on the Windows PC
 `bench_runs` scenes without the kept state, so their timings and instruction
 counts can be set beside the default's (the [adapter](vulkan-legacy-adapter.md)
 has the counts).
+
+The `dirty_update` scene and the new points of `model_lighting` (2026-11-10,
+same sandbox) pass on x86_64 Debug and RelWithDebInfo with validation in the
+script's configurations, and on i386 without validation. With `UpdateTexture`
+copying everything, as it did before, both fail: the unmarked cells and texels
+arrive and the byte counts are the whole level's; with a DXT1 rect not grown
+to whole blocks, validation fails. In the game this is the model lighting
+volume (`r_altModelLightingUpdate 1`, the default): every frame that patched
+a few 4x4x4 cells uploaded the whole 1 MB volume, about one 1 MB upload every
+other frame in PC run 9; now it uploads the patched cells, 256 bytes each.
 
 The `multisample` scene (2026-11-10, same sandbox, lavapipe, which has 1 and
 4 samples) passes its 24 points on x86_64 Debug and RelWithDebInfo with
@@ -787,10 +800,10 @@ run 12 measures the settings in one launch, and the kept draw state with
 them). Laptop run 13 sets Vulkan with `r_aaSamples 4`, now that the back
 end has multisampled targets, beside DXVK with 4. On the Windows PC, in a
 Release build, Vulkan is about 5% behind Direct3D 9 (PC run 9) and the PC
-waits for the CPU: what is left is the time per frame, first the texture
-uploads during play (about one 1 MB upload every other frame: which texture
-the game locks and whether the upload can be skipped or made smaller), then
-the front's lock. Measure the PC in the Release build of a manual `vulkan`
+waits for the CPU: what is left is the time per frame. The 1 MB uploads
+during play were the model lighting volume, which `UpdateTexture` now copies
+only in its patched cells; the next PC run measures that, then the front's
+lock. Measure the PC in the Release build of a manual `vulkan`
 run from now on. Then the long frame the laptop sees about every two
 minutes, which the `slow frame` lines are there to name, and the pipelines
 built during play.

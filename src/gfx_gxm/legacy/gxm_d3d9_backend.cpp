@@ -109,6 +109,8 @@ void BackendCounters(const Backend *, DeviceCounters &out)
     out.occlusionResults = 0;
     out.occlusionResultsZero = 0;
     out.occlusionSamples = 0;
+    out.textureUploads = 0;
+    out.textureUploadBytes = 0;
 }
 
 // sceGxm's queries need no system call under the front's lock.

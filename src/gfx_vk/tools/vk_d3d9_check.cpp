@@ -471,6 +471,7 @@ public:
     void RenderTarget();
     void ShadowMap();
     void ModelLighting();
+    void DirtyUpdate();
     void References();
     void Threads();
     void Queries();
@@ -809,7 +810,11 @@ void Check::ShadowMap()
 //      (made with usage 0, as Image_Create3DTexture_PC makes it), which is
 //      the one that is drawn with.
 // Two frames of patches go through both; after each, every cell is drawn
-// slice by slice from both volumes and read back.
+// slice by slice from both volumes and read back. As in D3D9, UpdateTexture
+// copies only what is dirty: the whole new volume the first time, then only
+// the cells given to AddDirtyBox. A cell written in the second frame without
+// one stays out of the drawn volume, and that frame's update uploads two
+// cells' bytes in one copy.
 void Check::ModelLighting()
 {
     Reset();
@@ -840,7 +845,8 @@ void Check::ModelLighting()
         return Argb(255, seed, 30 + 70 * x, 15 + 60 * y + 15 * z);
     };
     // The renderer's own addressing and call order for one frame's patches.
-    const auto patch = [&](bool alt, const Patch *patches, size_t count) {
+    // stray: a cell written in the system memory volume with no AddDirtyBox.
+    const auto patch = [&](bool alt, const Patch *patches, size_t count, const Patch *stray = nullptr) {
         IDirect3DVolumeTexture9 *texture = alt ? staging : managed;
         D3DLOCKED_BOX locked{};
         if (!Ok(texture->LockBox(0, &locked, nullptr, alt ? D3DLOCK_NO_DIRTY_UPDATE : 0), "LockBox"))
@@ -872,10 +878,39 @@ void Check::ModelLighting()
                                     &value, 4);
                     }
         }
+        if (alt && stray)
+        {
+            const UINT x0 = kCell * (stray->cell & 0x3f);
+            const UINT y0 = (stray->cell >> 4) & ~3u;
+            for (UINT z = 0; z < kDepth; ++z)
+                for (UINT y = 0; y < kCell; ++y)
+                    for (UINT x = 0; x < kCell; ++x)
+                    {
+                        const uint32_t value = texel(stray->seed, x, y, z);
+                        std::memcpy(static_cast<uint8_t *>(locked.pBits) + z * locked.SlicePitch
+                                        + (y0 + y) * locked.RowPitch + 4 * (x0 + x),
+                                    &value, 4);
+                    }
+        }
         if (!Ok(texture->UnlockBox(0), "UnlockBox"))
             return false;
         return !alt || Ok(device->UpdateTexture(staging, shown), "UpdateTexture");
     };
+    // What one UpdateTexture uploaded: copies and bytes.
+    const auto updateUploads = [&](const char *frame, const Patch *patches, size_t count, const Patch *stray,
+                                   uint64_t wantBytes) {
+        const front::DeviceCounters was = Counters();
+        const bool done = patch(true, patches, count, stray);
+        const front::DeviceCounters now = Counters();
+        char name[64];
+        std::snprintf(name, sizeof(name), "%s_update_uploads", frame);
+        Equal(name, now.textureUploads - was.textureUploads, uint64_t(1));
+        std::snprintf(name, sizeof(name), "%s_update_bytes", frame);
+        Equal(name, now.textureUploadBytes - was.textureUploadBytes, wantBytes);
+        return done;
+    };
+    constexpr uint64_t kVolumeBytes = uint64_t(kWidth) * kHeight * kDepth * 4;
+    constexpr uint64_t kCellBytes = uint64_t(kCell) * kCell * kDepth * 4;
     // Draws the four watched cells from both volumes, one 16x16 block per
     // slice (each texel 4x4 pixels): the managed volume in columns 0 to 3, the
     // updated one in columns 4 to 7, a row per cell. Then checks every texel
@@ -930,15 +965,21 @@ void Check::ModelLighting()
     // Frame 1: the first and the last cell of row 0.
     const Patch first[] = {{0, 60}, {63, 120}};
     // Frame 2: a cell of row 1, and cell 0 again. Cell 63 is not written and
-    // must keep frame 1's texels; cell 70 is never written.
+    // must keep frame 1's texels; cell 70 is written only in the system memory
+    // volume, with no AddDirtyBox, so it never reaches either drawn volume.
     const Patch second[] = {{69, 180}, {0, 240}};
-    bool ok = patch(false, first, 2) && patch(true, first, 2);
+    const Patch stray = {70, 99};
+    bool ok = patch(false, first, 2) && updateUploads("frame1", first, 2, nullptr, kVolumeBytes);
     if (ok)
     {
         const Patch watched[4] = {{0, 60}, {63, 120}, {69, 0}, {70, 0}};
         drawAndExpect("frame1", watched);
         Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
-        ok = patch(false, second, 2) && patch(true, second, 2);
+        ok = patch(false, second, 2) && updateUploads("frame2", second, 2, &stray, 2 * kCellBytes);
+        // Nothing written since: nothing to copy.
+        const front::DeviceCounters was = Counters();
+        ok = ok && Ok(device->UpdateTexture(staging, shown), "UpdateTexture");
+        Equal("clean_update_uploads", Counters().textureUploads - was.textureUploads, uint64_t(0));
     }
     if (ok)
     {
@@ -949,6 +990,141 @@ void Check::ModelLighting()
     SafeRelease(shown);
     SafeRelease(staging);
     SafeRelease(managed);
+}
+
+// UpdateTexture copies only what is dirty, in every level, as D3D9 does: a
+// 16x16 A8R8G8B8 texture of two levels and a 16x16 DXT1 texture, each from
+// SYSTEMMEM into DEFAULT. A new texture is copied whole. Then texels written
+// under D3DLOCK_NO_DIRTY_UPDATE reach the drawn texture only inside an
+// AddDirtyRect, which reaches level 1 halved and a DXT1 texture grown to
+// whole 4x4 blocks, and a lock without the flag marks its own region. Each
+// level is drawn 1:1 (level 1 as an 8x8 quad, point mip filter) and read back.
+void Check::DirtyUpdate()
+{
+    Reset();
+    IDirect3DTexture9 *staging = nullptr, *shown = nullptr, *blockStaging = nullptr, *blockShown = nullptr;
+    if (!Ok(device->CreateTexture(16, 16, 2, 0, D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &staging, nullptr),
+            "CreateTexture(system memory)")
+        || !Ok(device->CreateTexture(16, 16, 2, 0, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &shown, nullptr),
+               "CreateTexture(default)")
+        || !Ok(device->CreateTexture(16, 16, 1, 0, D3DFMT_DXT1, D3DPOOL_SYSTEMMEM, &blockStaging, nullptr),
+               "CreateTexture(DXT1 system memory)")
+        || !Ok(device->CreateTexture(16, 16, 1, 0, D3DFMT_DXT1, D3DPOOL_DEFAULT, &blockShown, nullptr),
+               "CreateTexture(DXT1 default)"))
+    {
+        SafeRelease(blockStaging);
+        SafeRelease(shown);
+        SafeRelease(staging);
+        return;
+    }
+    const uint32_t red = Argb(255, 255, 0, 0), green = Argb(255, 0, 255, 0), blue = Argb(255, 0, 0, 255),
+                   white = Argb(255, 255, 255, 255), yellow = Argb(255, 255, 255, 0);
+    // Writes value over [x0, x1) x [y0, y1) of a level, locked with flags and
+    // an optional rect.
+    const auto write = [&](UINT level, const RECT *rect, DWORD flags, UINT x0, UINT y0, UINT x1, UINT y1,
+                           uint32_t value) {
+        D3DLOCKED_RECT locked{};
+        if (!Ok(staging->LockRect(level, &locked, rect, flags), "LockRect"))
+            return;
+        uint8_t *base = static_cast<uint8_t *>(locked.pBits);
+        const UINT left = rect ? UINT(rect->left) : 0, top = rect ? UINT(rect->top) : 0;
+        for (UINT y = y0; y < y1; ++y)
+            for (UINT x = x0; x < x1; ++x)
+                std::memcpy(base + (y - top) * locked.Pitch + 4 * (x - left), &value, 4);
+        staging->UnlockRect(level);
+    };
+    // One DXT1 block of one colour (RGB565, every index 0).
+    const auto block = [](uint16_t colour) {
+        uint8_t bytes[8] = {uint8_t(colour), uint8_t(colour >> 8), uint8_t(colour), uint8_t(colour >> 8), 0, 0, 0, 0};
+        uint64_t value = 0;
+        std::memcpy(&value, bytes, 8);
+        return value;
+    };
+    const auto writeBlocks = [&](DWORD flags, UINT bx0, UINT by0, UINT bx1, UINT by1, uint16_t colour) {
+        D3DLOCKED_RECT locked{};
+        if (!Ok(blockStaging->LockRect(0, &locked, nullptr, flags), "LockRect(DXT1)"))
+            return;
+        const uint64_t value = block(colour);
+        for (UINT by = by0; by < by1; ++by)
+            for (UINT bx = bx0; bx < bx1; ++bx)
+                std::memcpy(static_cast<uint8_t *>(locked.pBits) + by * locked.Pitch + 8 * bx, &value, 8);
+        blockStaging->UnlockRect(0);
+    };
+    const auto update = [&](const char *name, IDirect3DTexture9 *from, IDirect3DTexture9 *to, uint64_t uploads,
+                            uint64_t bytes) {
+        const front::DeviceCounters was = Counters();
+        Ok(device->UpdateTexture(from, to), "UpdateTexture");
+        const front::DeviceCounters now = Counters();
+        char label[64];
+        std::snprintf(label, sizeof(label), "%s_uploads", name);
+        Equal(label, now.textureUploads - was.textureUploads, uploads);
+        std::snprintf(label, sizeof(label), "%s_bytes", name);
+        Equal(label, now.textureUploadBytes - was.textureUploadBytes, bytes);
+    };
+    // Level 0 at (0,0), level 1 at (32,0), the DXT1 texture at (64,0).
+    const auto draw = [&]() {
+        Reset();
+        Ok(device->SetPixelShader(psTexture), "SetPixelShader");
+        device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+        device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+        device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_POINT);
+        Ok(device->SetTexture(0, shown), "SetTexture");
+        DrawQuad(0, 0, 16, 16, 0.5f, 0xffffffffu);
+        DrawQuad(32, 0, 40, 8, 0.5f, 0xffffffffu);
+        Ok(device->SetTexture(0, blockShown), "SetTexture(DXT1)");
+        DrawQuad(64, 0, 80, 16, 0.5f, 0xffffffffu);
+        device->SetTexture(0, nullptr);
+        device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+        return Read();
+    };
+
+    // New: everything is copied.
+    write(0, nullptr, 0, 0, 0, 16, 16, red);
+    write(1, nullptr, 0, 0, 0, 8, 8, green);
+    update("new", staging, shown, 2, 16 * 16 * 4 + 8 * 8 * 4);
+    writeBlocks(0, 0, 0, 4, 4, 0xf800);
+    update("new_dxt1", blockStaging, blockShown, 1, 16 * 8);
+
+    // Marked: blue inside the rect on both levels, white outside it.
+    write(0, nullptr, D3DLOCK_NO_DIRTY_UPDATE, 8, 8, 12, 12, blue);
+    write(0, nullptr, D3DLOCK_NO_DIRTY_UPDATE, 0, 0, 4, 4, white);
+    write(1, nullptr, D3DLOCK_NO_DIRTY_UPDATE, 4, 4, 6, 6, blue);
+    write(1, nullptr, D3DLOCK_NO_DIRTY_UPDATE, 0, 0, 2, 2, white);
+    const RECT dirty = {8, 8, 12, 12};
+    Ok(staging->AddDirtyRect(&dirty), "AddDirtyRect");
+    update("marked", staging, shown, 2, 4 * 4 * 4 + 2 * 2 * 4);
+    // A rect inside one block grows to the block: green there, a stray green
+    // block outside.
+    writeBlocks(D3DLOCK_NO_DIRTY_UPDATE, 1, 1, 2, 2, 0x07e0);
+    writeBlocks(D3DLOCK_NO_DIRTY_UPDATE, 2, 2, 3, 3, 0x07e0);
+    const RECT inBlock = {5, 5, 7, 7};
+    Ok(blockStaging->AddDirtyRect(&inBlock), "AddDirtyRect(DXT1)");
+    update("marked_dxt1", blockStaging, blockShown, 1, 8);
+    // Nothing dirty since: nothing copied.
+    update("clean", staging, shown, 0, 0);
+
+    // A lock without the flag marks its rect, on level 0 and halved on level 1.
+    const RECT corner = {12, 0, 16, 4};
+    write(0, &corner, 0, 12, 0, 16, 4, yellow);
+    update("locked", staging, shown, 2, 4 * 4 * 4 + 2 * 2 * 4);
+
+    if (draw())
+    {
+        Expect("level0_marked", 9, 9, 0, 0, 255);
+        Expect("level0_unmarked", 1, 1, 255, 0, 0);
+        Expect("level0_untouched", 14, 14, 255, 0, 0);
+        Expect("level0_locked", 13, 1, 255, 255, 0);
+        Expect("level1_marked", 32 + 4, 4, 0, 0, 255);
+        Expect("level1_unmarked", 32 + 0, 0, 0, 255, 0);
+        Expect("level1_untouched", 32 + 7, 7, 0, 255, 0);
+        Expect("dxt1_marked_block", 64 + 4, 4, 0, 255, 0);
+        Expect("dxt1_marked_block_edge", 64 + 7, 7, 0, 255, 0);
+        Expect("dxt1_unmarked_block", 64 + 9, 9, 255, 0, 0);
+    }
+    SafeRelease(blockShown);
+    SafeRelease(blockStaging);
+    SafeRelease(shown);
+    SafeRelease(staging);
 }
 
 // D3D9's reference counts: levels share their texture's count, objects the
@@ -2794,6 +2970,7 @@ int Run(const Options &options)
         {"render_target", &Check::RenderTarget, true},
         {"shadow_map", &Check::ShadowMap, true},
         {"model_lighting", &Check::ModelLighting, true},
+        {"dirty_update", &Check::DirtyUpdate, true},
         {"references", &Check::References, true},
         {"threads", &Check::Threads, true},
         {"queries", &Check::Queries, true},

@@ -1192,87 +1192,139 @@ void *StageBufferWrite(Core *core_, Buffer *target, VkDeviceSize offset, VkDevic
     return core.failed ? nullptr : data;
 }
 
-void *StageImageWrite(Core *core_, Image *image, const ImageRegion &region, uint32_t *rowPitch, uint32_t *slicePitch)
+void *StageImageWrite(Core *core, Image *image, const ImageRegion &region, uint32_t *rowPitch, uint32_t *slicePitch)
+{
+    void *data = nullptr;
+    if (!StageImageWrites(core, image, &region, 1, &data, rowPitch, slicePitch))
+        return nullptr;
+    return data;
+}
+
+bool StageImageWrites(Core *core_, Image *image, const ImageRegion *regions, uint32_t count, void **data,
+                      uint32_t *rowPitch, uint32_t *slicePitch)
 {
     Core &core = *core_;
-    if (core.failed)
-        return nullptr;
+    if (core.failed || !count)
+        return false;
     if (core.inPass)
     {
         Fail(core, "StageImageWrite inside a pass (%s)", image->name.c_str());
-        return nullptr;
+        return false;
     }
     const ImageDesc &desc = image->desc;
     uint32_t blockWidth = 1;
     uint32_t blockHeight = 1;
     const uint32_t blockBytes = FormatBlockBytes(desc.format, &blockWidth, &blockHeight);
-    const uint32_t mipWidth = std::max(desc.width >> region.mipLevel, 1u);
-    const uint32_t mipHeight = std::max(desc.height >> region.mipLevel, 1u);
-    const uint32_t mipDepth = desc.kind == ImageKind::Tex3D ? std::max(desc.depth >> region.mipLevel, 1u) : 1u;
-    if (!blockBytes || image->aspect != VK_IMAGE_ASPECT_COLOR_BIT || desc.samples != 1
-        || region.mipLevel >= desc.mipLevels || region.layer >= image->layers || !region.width || !region.height
-        || !region.depth
-        || region.x + region.width > mipWidth || region.y + region.height > mipHeight
-        || region.z + region.depth > mipDepth)
-    {
-        Fail(core, "StageImageWrite: unsupported format or region outside image %s (mip %u)", image->name.c_str(),
-             region.mipLevel);
-        return nullptr;
-    }
-    const uint32_t blocksWide = (region.width + blockWidth - 1) / blockWidth;
-    const uint32_t blocksHigh = (region.height + blockHeight - 1) / blockHeight;
-    const uint32_t row = blocksWide * blockBytes;
-    const uint32_t slice = row * blocksHigh;
-    const VkDeviceSize size = static_cast<VkDeviceSize>(slice) * region.depth;
     // Copy offsets: a multiple of 4 and of the texel block size.
     const VkDeviceSize alignment =
         std::max<VkDeviceSize>({16, blockBytes, core.properties.limits.optimalBufferCopyOffsetAlignment});
+    const auto alignUp = [alignment](VkDeviceSize value) { return (value + alignment - 1) / alignment * alignment; };
+
+    std::vector<VkBufferImageCopy> copies(count);
+    VkDeviceSize total = 0;
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        const ImageRegion &region = regions[i];
+        const uint32_t mipWidth = std::max(desc.width >> region.mipLevel, 1u);
+        const uint32_t mipHeight = std::max(desc.height >> region.mipLevel, 1u);
+        const uint32_t mipDepth =
+            desc.kind == ImageKind::Tex3D ? std::max(desc.depth >> region.mipLevel, 1u) : 1u;
+        if (!blockBytes || image->aspect != VK_IMAGE_ASPECT_COLOR_BIT || desc.samples != 1
+            || region.mipLevel >= desc.mipLevels || region.layer >= image->layers || !region.width
+            || !region.height || !region.depth || region.x + region.width > mipWidth
+            || region.y + region.height > mipHeight || region.z + region.depth > mipDepth)
+        {
+            Fail(core, "StageImageWrite: unsupported format or region outside image %s (mip %u)",
+                 image->name.c_str(), region.mipLevel);
+            return false;
+        }
+        const uint32_t blocksWide = (region.width + blockWidth - 1) / blockWidth;
+        const uint32_t blocksHigh = (region.height + blockHeight - 1) / blockHeight;
+        const uint32_t row = blocksWide * blockBytes;
+        const uint32_t slice = row * blocksHigh;
+        if (rowPitch)
+            rowPitch[i] = row;
+        if (slicePitch)
+            slicePitch[i] = slice;
+        VkBufferImageCopy &copy = copies[i];
+        copy.bufferOffset = total; // made absolute below
+        copy.bufferRowLength = blocksWide * blockWidth;
+        copy.bufferImageHeight = blocksHigh * blockHeight;
+        copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, region.mipLevel, region.layer, 1};
+        copy.imageOffset = {static_cast<int32_t>(region.x), static_cast<int32_t>(region.y),
+                            static_cast<int32_t>(region.z)};
+        copy.imageExtent = {region.width, region.height, region.depth};
+        total += alignUp(static_cast<VkDeviceSize>(slice) * region.depth);
+    }
 
     VkBuffer staging = VK_NULL_HANDLE;
     VkDeviceSize stagingOffset = 0;
-    void *data = StageAllocate(core, size, alignment, staging, stagingOffset);
-    if (!data)
-        return nullptr;
+    uint8_t *block = static_cast<uint8_t *>(StageAllocate(core, total, alignment, staging, stagingOffset));
+    if (!block)
+        return false;
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        data[i] = block + copies[i].bufferOffset;
+        copies[i].bufferOffset += stagingOffset;
+    }
 
     // Writes to a level and layer already written since the last barrier get
-    // one first (write after write); different subresources need none.
-    const uint32_t subresource = region.mipLevel * image->layers + region.layer;
-    const bool rewrite = std::find(image->writtenSubresources.begin(), image->writtenSubresources.end(), subresource)
-        != image->writtenSubresources.end();
-    if (image->layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL || rewrite)
+    // one first (write after write); different subresources need none. The
+    // regions of one call do not overlap, so they need none between them.
+    bool barrier = image->layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    for (uint32_t i = 0; i < count && !barrier; ++i)
     {
-        const bool whole = region.x == 0 && region.y == 0 && region.z == 0 && region.width == mipWidth
-            && region.height == mipHeight && region.depth == mipDepth && desc.mipLevels == 1 && image->layers == 1;
+        const uint32_t subresource = regions[i].mipLevel * image->layers + regions[i].layer;
+        barrier = std::find(image->writtenSubresources.begin(), image->writtenSubresources.end(), subresource)
+            != image->writtenSubresources.end();
+    }
+    if (barrier)
+    {
+        const ImageRegion &region = regions[0];
+        const bool whole = count == 1 && region.x == 0 && region.y == 0 && region.z == 0
+            && region.width == std::max(desc.width >> region.mipLevel, 1u)
+            && region.height == std::max(desc.height >> region.mipLevel, 1u)
+            && region.depth
+                == (desc.kind == ImageKind::Tex3D ? std::max(desc.depth >> region.mipLevel, 1u) : 1u)
+            && desc.mipLevels == 1 && image->layers == 1;
         if (whole)
             image->layout = VK_IMAGE_LAYOUT_UNDEFINED; // everything is replaced
         Transition(core, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
                    VK_ACCESS_2_TRANSFER_WRITE_BIT);
     }
-    image->writtenSubresources.push_back(subresource);
-    VkBufferImageCopy copy{};
-    copy.bufferOffset = stagingOffset;
-    copy.bufferRowLength = blocksWide * blockWidth;
-    copy.bufferImageHeight = blocksHigh * blockHeight;
-    copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, region.mipLevel, region.layer, 1};
-    copy.imageOffset = {static_cast<int32_t>(region.x), static_cast<int32_t>(region.y),
-                        static_cast<int32_t>(region.z)};
-    copy.imageExtent = {region.width, region.height, region.depth};
+    // After the barrier, which forgets what was written before it.
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        const uint32_t subresource = regions[i].mipLevel * image->layers + regions[i].layer;
+        if (std::find(image->writtenSubresources.begin(), image->writtenSubresources.end(), subresource)
+            == image->writtenSubresources.end())
+            image->writtenSubresources.push_back(subresource);
+    }
+    // A recorded packet holds only trivially destructible values, so the
+    // copies go in fixed batches.
+    constexpr uint32_t kBatch = 16;
+    struct Batch
+    {
+        VkBufferImageCopy copies[kBatch];
+    };
     const VkImage target = image->image;
-    Record(&core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
-        vk.vkCmdCopyBufferToImage(cmd, staging, target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
-    });
+    for (uint32_t first = 0; first < count; first += kBatch)
+    {
+        const uint32_t n = std::min(kBatch, count - first);
+        Batch batch;
+        std::copy(copies.begin() + first, copies.begin() + first + n, batch.copies);
+        Record(&core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
+            vk.vkCmdCopyBufferToImage(cmd, staging, target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, n, batch.copies);
+        });
+    }
     if (core.failed)
-        return nullptr;
+        return false;
     if ((desc.usage & VK_IMAGE_USAGE_SAMPLED_BIT) && !image->uploadPending)
     {
         image->uploadPending = true;
         core.pendingUploads.push_back(image);
     }
-    if (rowPitch)
-        *rowPitch = row;
-    if (slicePitch)
-        *slicePitch = slice;
-    return data;
+    return true;
 }
 
 Transient AllocateTransient(Core *core_, VkDeviceSize size, VkDeviceSize alignment)
