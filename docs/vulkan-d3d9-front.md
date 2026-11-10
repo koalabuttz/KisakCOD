@@ -425,9 +425,10 @@ into whichever of these programs the build configures:
 | `KisakCOD-sp` | `+set r_backend vulkan` |
 
 The probes are i386, as before; `KisakCOD-mp` is any client architecture and
-`KisakCOD-sp` is i386 or x86_64. The singleplayer game builds and links with
-the back end; no level has been drawn through it yet
-([linux-sp-game.md](linux-sp-game.md#building)). The
+`KisakCOD-sp` is i386 or x86_64. The x86_64 singleplayer game loads and
+draws killhouse, cargoship, blackout, ac130 and airplane through the back end
+on the laptop and quits cleanly, with no unsupported call reported
+([linux-sp-levels.md](linux-sp-levels.md#vulkan-run-1-laptop-x86_64-2026-11-10)). The
 programs still link the system's D3D9 (DXVK Native) and use it by default.
 `src/linux/client/vulkan/vulkan_backend.cpp` registers four dvars that are
 archived and latched (a change applies at the next `vid_restart`):
