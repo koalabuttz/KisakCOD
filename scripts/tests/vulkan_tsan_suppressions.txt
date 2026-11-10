@@ -1,0 +1,14 @@
+# ThreadSanitizer suppressions for the Vulkan checks' runs on Mesa's lavapipe
+# (the step "Check the D3D9 front's lock with ThreadSanitizer" in
+# .github/workflows/build-kisakcod-linux.yaml; docs/vulkan-core.md).
+#
+# Lavapipe is not built with ThreadSanitizer, which then sees only the libc
+# calls the driver makes and reports races between the driver's own threads:
+# one of them destroys a fence's mutex that an llvmpipe rasterizer thread
+# locked, and two rasterizer threads copy to and from the same block.
+#
+# The line below drops a report when a frame of the driver is in the stack of
+# either access, or in the stack that created one of the threads the report
+# names. A race between two accesses made in our own code, on threads of
+# ours, is still reported.
+race:libvulkan_lvp.so

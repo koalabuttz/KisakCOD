@@ -20,10 +20,17 @@
 
 struct IDirect3D9;
 
-// Registers the back end's dvars (latched and archived; harmless to call again):
+// Registers the back end's dvars (harmless to call again). Latched and archived:
 //   r_backend       d3d9 (the system's D3D9: DXVK on Linux) or vulkan
 //   r_vkValidation  off, auto (when installed) or require (Vulkan validation layer)
 //   r_vkDevice      -1 picks the GPU; N picks the Nth Vulkan device
+//   r_vkShaderCache keep translated shaders and pipelines between runs
+// For measuring, not saved, and in effect from the next frame (the front's
+// Tuning, read at every Present), so one launch can compare settings:
+//   r_vkGpuFeed          default (by the kind of GPU), off, on or always
+//   r_vkGpuFeedDraws     draws to a part of a frame; 0 is the default, 128
+//   r_vkGpuFeedIdleDraws draws to a part while the GPU has nothing left; 0
+//                        for no such parts
 void Kisak_VulkanRegisterDvars();
 
 // Registers the dvars; whether r_backend is vulkan.
@@ -34,6 +41,13 @@ int Kisak_VulkanBackendSelected();
 // reason printed; R_PreCreateWindow then reports that Direct3D failed to
 // initialize. There is no fallback to DXVK: the setting asked for Vulkan.
 IDirect3D9 *Kisak_VulkanDirect3DCreate9();
+
+// Logs the Vulkan device's frame statistics (the `frame stats:` lines of
+// docs/vulkan-d3d9-front.md) since it was made or since they were last
+// started again; with reset they start again here. Returns how many devices
+// there were: 0 with r_backend d3d9. The renderer's r_vkStats command
+// (src/gfx_d3d/r_cmds.cpp) calls it. Any thread.
+unsigned int Kisak_VulkanLogStats(bool reset);
 
 // The last Vulkan device's final statistics, as its core reported them at
 // teardown (validation messages about the teardown included). False until a

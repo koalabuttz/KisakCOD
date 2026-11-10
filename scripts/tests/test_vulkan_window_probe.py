@@ -12,8 +12,10 @@ server or game data is involved. The checks:
                  a driver) or the "core" stage, instead of crashing
   frames         a full run (resize halfway, capture of the last frame) passes,
                  the swapchain followed the resize, the captured frame is the
-                 cleared colour, the clear pass was timed, and the validation
-                 layer (when loaded) reported no errors
+                 cleared colour, the clear pass was timed, the core's choice
+                 of present mode was checked against a table of surfaces
+                 (IMMEDIATE before MAILBOX before FIFO without vsync), and
+                 the validation layer (when loaded) reported no errors
   draw           --draw runs twice with a pipeline cache file: the scene's
                  points have their colours in the offscreen target and in the
                  swapchain the target was blitted into, no pipeline was built
@@ -114,6 +116,8 @@ def main():
                   found.get('vulkan_probe.capture', 'missing'))
     checks.expect('clear pass timed', found.get('vulkan_probe.clear_pass_gpu_ms', '').startswith('avg '),
                   found.get('vulkan_probe.clear_pass_gpu_ms', 'missing'))
+    checks.expect('present mode choice checked', found.get('vulkan_probe.present_mode_choice') == 'checked',
+                  found.get('vulkan_probe.present_mode_choice', 'missing'))
     if args.validation == 'require':
         checks.expect('validation with synchronisation checks was on',
                       found.get('vulkan_probe.validation') == 'on+sync', found.get('vulkan_probe.validation'))

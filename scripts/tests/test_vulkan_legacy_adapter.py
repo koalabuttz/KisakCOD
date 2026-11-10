@@ -10,8 +10,11 @@ involved. The checks:
   one-scene      --scene runs that scene alone and passes
   full           a full run passes: every scene in SCENES ran, had points and
                  no mismatched pixel, every scene was presented, the dynamic
-                 buffer was renamed, the event query finished, pipelines were
-                 built and the validation layer reported no errors
+                 buffer was renamed, the event query finished, occlusion
+                 queries were counted (always on lavapipe, never with
+                 KISAK_VK_OCCLUSION_QUERIES=0, else as the device can),
+                 pipelines were built and the validation layer reported no
+                 errors
 
 Usage:
   test_vulkan_legacy_adapter.py --binary build/bin/KisakCOD-vulkan-legacy-check
@@ -28,7 +31,7 @@ import sys
 SCENES = (
     'clear', 'vertex_color', 'half_pixel', 'texture_levels', 'formats', 'alpha_test', 'blend', 'depth',
     'stencil', 'cull', 'render_to_texture', 'dynamic_buffer', 'static_buffers', 'cube_volume',
-    'shader_model_2', 'partial_precision', 'missing_input', 'event_query', 'shader_cache',
+    'shader_model_2', 'partial_precision', 'missing_input', 'event_query', 'occlusion_query', 'shader_cache',
 )
 
 
@@ -113,6 +116,16 @@ def main():
     checks.expect('dynamic buffer renamed', renames.isdigit() and int(renames) > 0, renames)
     polls = found.get('legacy_check.event_query_polls', '')
     checks.expect('event query finished', polls.isdigit(), polls or 'missing')
+    # The occlusion scene's exact counts are its own points; here, which path
+    # it took: counting, unless the GPU cannot or the switch says not to.
+    occlusion = found.get('legacy_check.occlusion_query', 'missing')
+    if env.get('KISAK_VK_OCCLUSION_QUERIES') == '0':
+        checks.expect('KISAK_VK_OCCLUSION_QUERIES=0 turns counting off', occlusion == 'not counted', occlusion)
+    elif found.get('legacy_check.device', '').startswith('llvmpipe'):
+        checks.expect('lavapipe counts occlusion queries', occlusion == 'counted', occlusion)
+    else:
+        checks.expect('the occlusion scene says whether it counted', occlusion in ('counted', 'not counted'),
+                      occlusion)
     stats = re.search(r'pipelines (\d+) in_frame (\d+)', found.get('legacy_check.stats', ''))
     checks.expect('pipelines built', bool(stats) and int(stats.group(1)) > 0, found.get('legacy_check.stats', 'missing'))
     if args.validation == 'require':

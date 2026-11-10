@@ -2657,13 +2657,35 @@ jobs:
             --binary "$OUT_DIR/KisakCOD-vulkan-legacy-check" \
             --video-driver offscreen --validation require
 
+      - name: Run the checks again without occlusion counts
+        if: ${{ matrix.config == 'Debug' }}
+        timeout-minutes: 15
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          # Occlusion queries count samples where the device can
+          # (docs/vulkan-legacy-adapter.md, Queries), which lavapipe can: the
+          # runs above check the counts. Switched off, the adapter takes the
+          # path of a device that cannot: no Vulkan query is made and every
+          # finished query reports all samples passed.
+          KISAK_VK_OCCLUSION_QUERIES=0 python3 -u scripts/tests/test_vulkan_d3d9_front.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
+            --video-driver offscreen --validation require
+          KISAK_VK_OCCLUSION_QUERIES=0 python3 -u scripts/tests/test_vulkan_legacy_adapter.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-legacy-check" \
+            --video-driver offscreen --validation require
+
       - name: Check the D3D9 front's lock with ThreadSanitizer
         if: ${{ matrix.config == 'Debug' }}
         timeout-minutes: 15
         shell: bash
         env:
           SDL_VIDEODRIVER: offscreen
-          TSAN_OPTIONS: halt_on_error=1
+          # The suppressions drop reports of races inside the lavapipe driver
+          # (see below). A missing file stops the first run.
+          TSAN_OPTIONS: halt_on_error=1 suppressions=${{ github.workspace }}/scripts/tests/vulkan_tsan_suppressions.txt
           # llvmpipe rasterizes on the thread that runs the commands, with no
           # worker threads of its own (see below).
           LP_NUM_THREADS: "0"
@@ -2676,13 +2698,19 @@ jobs:
           #
           # Lavapipe itself is not instrumented, so ThreadSanitizer sees only
           # the libc calls it makes (locks, memcpy), and it reports races
-          # between the driver's own threads. In some frame_loop runs one of
-          # lavapipe's threads destroys a mutex and a condition variable that
-          # an llvmpipe rasterizer thread locked and signalled; in every run
-          # of the adapter check two rasterizer threads copy to and from the
-          # same block. LP_NUM_THREADS=0 takes the rasterizer threads away and
+          # between the driver's own threads. In some runs one of lavapipe's
+          # threads destroys a mutex and a condition variable that an llvmpipe
+          # rasterizer thread locked and signalled; in every run of the
+          # adapter check two rasterizer threads copy to and from the same
+          # block. LP_NUM_THREADS=0 takes the rasterizer threads away and
           # leaves lavapipe's other threads and every thread of ours as they
-          # are.
+          # are. That alone was not enough: a hosted run of the threads scene
+          # still failed on the mutex, with a thread named llvmpipe-1 in the
+          # report. So scripts/tests/vulkan_tsan_suppressions.txt drops the
+          # reports that have the driver in either access's stack or in the
+          # stack that created one of their threads. A race between two
+          # accesses in the front, the adapter or the core is reported as
+          # before.
           tsan_build="build-x64/vulkan-probe-tsan"
           cmake -S . -B "$tsan_build" -G Ninja \
             -DKISAK_PLATFORM=linux -DKISAK_LINUX_ARCH=x86_64 \
@@ -2721,6 +2749,18 @@ jobs:
           "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene bench --validation off \
             | tee "$RUNNER_TEMP/tsan-bench.log"
           grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan-bench.log"
+          # Occlusion queries: this thread resets and reads Vulkan queries
+          # while the record thread begins and ends them.
+          "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene occlusion --validation off \
+            | tee "$RUNNER_TEMP/tsan-occlusion.log"
+          grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan-occlusion.log"
+          # What a program changes and asks for while its device runs, as the
+          # engine's main thread does (the r_vkGpuFeed dvars, r_vkStats):
+          # another thread changes the GPU feed and asks for the frame
+          # statistics while this one draws and presents.
+          "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene tuning --validation off \
+            | tee "$RUNNER_TEMP/tsan-tuning.log"
+          grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan-tuning.log"
           # Frames, draws, read-back and swapchain rebuilds with the record
           # thread on.
           KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-probe" --draw --frames 60 --resize \
@@ -2897,9 +2937,24 @@ jobs:
           for program in KisakCOD-device-probe KisakCOD-world-draw-probe KisakCOD-mp; do
             grep -qx -- "-- Vulkan back end: linked into $program" "$RUNNER_TEMP/configure.log"
           done
+          # The r_vkStats command is registered by a file outside the objects
+          # that make D3D9 calls (src/gfx_d3d/r_cmds.cpp), so the back end's
+          # definition has to reach that file's objects as well.
+          for program in KisakCOD-world-draw-probe KisakCOD-mp; do
+            grep -qx -- "-- Vulkan back end: r_vkStats registered in $program" "$RUNNER_TEMP/configure.log"
+          done
           cmake --build "$BUILD_DIR" \
             --target KisakCOD-device-probe KisakCOD-vulkan-d3d9-check KisakCOD-world-draw-probe KisakCOD-mp \
             --parallel "$(nproc)"
+          # No game data means no console to type it into here, so the
+          # command is looked for in the programs: a build that left it out
+          # has no trace of this message (laptop run 11 met one).
+          for program in KisakCOD-world-draw-probe KisakCOD-mp; do
+            if ! grep -aq 'r_vkStats: there is no Vulkan device' "$OUT_DIR/$program"; then
+              echo "$program was built without the r_vkStats command" >&2
+              exit 1
+            fi
+          done
           for program in KisakCOD-device-probe KisakCOD-vulkan-d3d9-check KisakCOD-world-draw-probe KisakCOD-mp; do
             readelf -h "$OUT_DIR/$program" | grep -Eq 'Machine:[[:space:]]+Intel 80386'
             # The Vulkan loader is opened at run time through SDL, never linked.

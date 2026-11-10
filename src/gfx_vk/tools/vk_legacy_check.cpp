@@ -403,6 +403,7 @@ public:
     void PartialPrecision();
     void MissingInput();
     void EventQuery();
+    void OcclusionQuery();
     void ShaderCache();
 };
 
@@ -1003,6 +1004,87 @@ void Check::EventQuery()
     Expect("drawn", 32, 32, 255, 255, 255);
 }
 
+// An occlusion query reports the samples its draws passed the depth test
+// with: a quad's pixels, the visible half of one behind another, none of a
+// hidden one. Two queries that overlap each count the draws between their
+// own BEGIN and END, across a change of targets, which ends the pass (and
+// with it the Vulkan query that was counting). A device that cannot count
+// samples reports 0xffffff for every finished query.
+void Check::OcclusionQuery()
+{
+    Reset();
+    const bool counted = gfx_vk::Features(core).occlusionCounts;
+    lg::Query *a = lg::CreateQuery(device, lg::QueryKind::Occlusion);
+    lg::Query *b = lg::CreateQuery(device, lg::QueryKind::Occlusion);
+    lg::Surface *depth = DepthSurface();
+    if (!a || !b || !depth)
+    {
+        lg::DestroyQuery(device, a);
+        lg::DestroyQuery(device, b);
+        return Fail("CreateQuery or CreateDepthStencil failed");
+    }
+    auto expect = [&](const char *name, lg::Query *query, uint32_t want) {
+        uint32_t samples = 0;
+        int polls = 0;
+        while (!lg::GetQueryData(device, query, true, samples) && polls < 100000)
+        {
+            ++polls;
+            SDL_Delay(polls > 100 ? 1 : 0);
+        }
+        const uint32_t expected = counted ? want : 0xffffffu;
+        ++result->points;
+        if (polls < 100000 && samples == expected)
+            return;
+        ++result->mismatched;
+        char line[120];
+        std::snprintf(line, sizeof(line), " %s=%u expected=%u", name, samples, expected);
+        result->detail += line;
+    };
+
+    lg::IssueQuery(device, a, true);
+    DrawQuadPx(0, 0, 64, 64, 0.5f, Argb(255, 255, 255, 255));
+    lg::IssueQuery(device, a, false);
+    expect("quad", a, 64 * 64);
+
+    lg::SetDepthStencilSurface(device, depth);
+    lg::Clear(device, 0, nullptr, d3d::CLEAR_TARGET | d3d::CLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0);
+    lg::SetRenderState(device, d3d::RS_ZENABLE, 1);
+    lg::SetRenderState(device, d3d::RS_ZWRITEENABLE, 1);
+    DrawQuadPx(0, 0, 64, 128, 0.25f, Argb(255, 255, 0, 0)); // near: the left half
+    lg::IssueQuery(device, a, true);
+    DrawQuadPx(32, 0, 96, 64, 0.75f, Argb(255, 0, 255, 0)); // far: its right half shows
+    lg::IssueQuery(device, a, false);
+    lg::IssueQuery(device, b, true);
+    DrawQuadPx(0, 64, 64, 128, 0.75f, Argb(255, 0, 0, 255)); // far: hidden
+    lg::IssueQuery(device, b, false);
+    expect("half_hidden", a, 32 * 64);
+    expect("hidden", b, 0);
+
+    lg::SetRenderState(device, d3d::RS_ZENABLE, 0);
+    lg::SetRenderState(device, d3d::RS_ZWRITEENABLE, 0);
+    lg::IssueQuery(device, a, true);
+    DrawQuadPx(96, 96, 128, 128, 0.5f, Argb(255, 255, 255, 0));
+    lg::IssueQuery(device, b, true);
+    lg::SetDepthStencilSurface(device, nullptr); // other targets: the next draw is in a new pass
+    DrawQuadPx(96, 64, 112, 80, 0.5f, Argb(255, 0, 255, 255));
+    lg::IssueQuery(device, a, false);
+    DrawQuadPx(64, 64, 72, 72, 0.5f, Argb(255, 255, 0, 255));
+    lg::IssueQuery(device, b, false);
+    expect("overlap_first", a, 32 * 32 + 16 * 16);
+    expect("overlap_second", b, 16 * 16 + 8 * 8);
+    lg::DestroyQuery(device, a);
+    lg::DestroyQuery(device, b);
+    std::printf("legacy_check.occlusion_query=%s\n", counted ? "counted" : "not counted");
+    if (!Read())
+        return;
+    Expect("near", 48, 32, 255, 0, 0);
+    Expect("far_shown", 80, 32, 0, 255, 0);
+    Expect("far_hidden", 32, 96, 255, 0, 0);
+    Expect("first", 120, 120, 255, 255, 0);
+    Expect("both", 104, 72, 0, 255, 255);
+    Expect("second", 68, 68, 255, 0, 255);
+}
+
 // Translated shaders come back from the process's cache and from the cache
 // file, and draw like freshly translated ones; a damaged file is ignored.
 void Check::ShaderCache()
@@ -1236,6 +1318,7 @@ int Run(const Options &options)
         {"partial_precision", &Check::PartialPrecision},
         {"missing_input", &Check::MissingInput},
         {"event_query", &Check::EventQuery},
+        {"occlusion_query", &Check::OcclusionQuery},
         {"shader_cache", &Check::ShaderCache},
     };
     const char *failedStage = nullptr;
