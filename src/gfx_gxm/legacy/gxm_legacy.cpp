@@ -741,6 +741,12 @@ void LogShaderSummary(Device &device, const char *when)
         "%u failed to compile; %u compiled in %.1f s, %u read from the card in %.1f ms, %u not written",
         when, c.created, c.refused, c.translateMicros / 1000.0, c.compiled, c.failed, p.compiled,
         p.compileMicros / 1e6, p.fromFiles, p.readMicros / 1000.0, p.writeFailures);
+    size_t held = 0, peak = 0;
+    uint32_t refused = 0;
+    gxm::ShaderCompilerMemory(held, peak, refused);
+    if (p.compiled || refused)
+        Log(device, "shader compiler memory %s: %.1f MB of the heap held, %.1f MB at most, %u allocations refused",
+            when, held / 1048576.0, peak / 1048576.0, refused);
     if (std::strcmp(when, "in all") == 0)
         for (const auto &[reason, count] : c.refusals)
             Log(device, "shaders not translated: %u x %s", count, reason.c_str());

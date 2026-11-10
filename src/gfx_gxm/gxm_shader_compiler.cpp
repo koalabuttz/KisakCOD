@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <malloc.h>
 
 namespace gfx_gxm
 {
@@ -29,13 +30,29 @@ SceShaccCgSourceFile *OpenSource(const char *, const SceShaccCgSourceLocation *,
     return &g_source;
 }
 
+// What the compiler holds of the heap, for the logs: it allocates through
+// these two and keeps working memory between programs.
+size_t g_heldBytes = 0, g_heldPeak = 0;
+uint32_t g_refusedAllocations = 0;
+
 void *CompilerAlloc(unsigned int size)
 {
-    return std::malloc(size);
+    void *memory = std::malloc(size);
+    if (memory)
+    {
+        g_heldBytes += malloc_usable_size(memory);
+        if (g_heldBytes > g_heldPeak)
+            g_heldPeak = g_heldBytes;
+    }
+    else
+        ++g_refusedAllocations;
+    return memory;
 }
 
 void CompilerFree(void *memory)
 {
+    if (memory)
+        g_heldBytes -= malloc_usable_size(memory);
     std::free(memory);
 }
 
@@ -102,6 +119,13 @@ void ReleaseShaderCompiler()
 {
     if (g_module >= 0)
         sceShaccCgReleaseCompiler();
+}
+
+void ShaderCompilerMemory(size_t &held, size_t &peak, uint32_t &refused)
+{
+    held = g_heldBytes;
+    peak = g_heldPeak;
+    refused = g_refusedAllocations;
 }
 
 bool CompileCg(const char *source, size_t length, ShaderStage stage, std::vector<uint8_t> &program,

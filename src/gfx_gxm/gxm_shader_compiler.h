@@ -31,6 +31,9 @@ bool LoadShaderCompiler(std::string &message);
 bool ShaderCompilerLoaded();
 // Frees the compiler's working memory (it stays loaded).
 void ReleaseShaderCompiler();
+// Heap bytes the compiler holds now and at most so far, and how many of its
+// allocations the heap refused.
+void ShaderCompilerMemory(size_t &held, size_t &peak, uint32_t &refused);
 
 enum class ShaderStage : uint8_t
 {
