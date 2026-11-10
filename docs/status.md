@@ -1,8 +1,9 @@
 # Linux port status
 
-Last updated 2026-11-10 10:34 UTC (master `eeb8367`, the Linux client's
-setup tool, portable folder, movies default and controllers, PR 187; the
-first two 64-bit steps in the upstream patch queue, PR 195). This page is the current state of
+Last updated 2026-11-10 10:57 UTC (master `7eabc4a`, the Linux client's
+setup tool, portable folder, movies default and controllers, PR 187, and
+the setup tool's first run on the PC's WSL; the first two 64-bit steps in
+the upstream patch queue, PR 195). This page is the current state of
 the native Linux port and the other platform builds, the open pull requests and
 the roadmap. The [docs index](README.md) lists the detailed guides;
 older handoffs are in [history](history/README.md) and are not current.
@@ -22,7 +23,7 @@ Vulkan checks run on lavapipe and MoltenVK).
 | Dedicated server, i386 | `build-linux.sh` (default) | Loads all 21 stock maps, hosts bots through map cycles, clean shutdown (laptop). Retail CoD4 1.7 and CoD4x 21.1 clients have each played a brief local session through the authentication opt-ins. [Guide](linux-dedicated.md) |
 | Dedicated server, x86_64 | `-DKISAK_LINUX_ARCH=x86_64` | Same as i386: 21 of 21 stock maps, bots through map cycles, clean quit (laptop). [Guide](linux-x64.md#x86_64-dedicated-server) |
 | Multiplayer client `KisakCOD-mp`, i386 | `-DKISAK_BUILD_LINUX_MP_CLIENT=ON` | Playable on a listen server (laptop): `+devmap mp_crash`, team and class menus, spawn, move, shoot, grenades, OpenAL sound, flashbang white-out, clean quit. All 21 stock maps load, take a player and keep running on i386 and x86_64 in an unattended sweep (laptop, 2026-11-10, master `6e11f2b`: listen server, team and class joined, key presses, one frame measured, a death, clean quit; no assertion, error, script error or dropped connection). Only mp_crash has been played by hand, the sweep's sound went to a silent device, and one of its 42 frames, i386 mp_convoy, was nearly black; a follow-up run is queued ([map sweep](linux-mp-client.md#map-sweep)). Client prediction misses as often as the Windows build (see [Prediction](#prediction)). [Guide](linux-mp-client.md) |
-| Multiplayer client, x86_64 | the same, with `-DKISAK_LINUX_ARCH=x86_64` | Playable on the same terms as i386 (laptop), including sprint and mantle animations and a clean quit; all 21 stock maps pass the unattended sweep (see the i386 row). Since PR 187 one command (`scripts/tools/setup_linux_client.py`) fetches and builds the pinned SDL3 and DXVK, with the DXVK fix fullscreen on native Wayland needs, and builds the client; a tool packs it into a folder that starts on another PC with no library path; and `-DKISAK_LINUX_GAMEPAD=ON` (off by default, on in the setup tool) maps a controller to keys and mouse. Hosted CI runs the setup tool end to end on a fresh runner; it has not run on the laptop or PC yet, and no real controller has been used in the game. [Guide](linux-x64.md#x86_64-multiplayer-client) |
+| Multiplayer client, x86_64 | the same, with `-DKISAK_LINUX_ARCH=x86_64` | Playable on the same terms as i386 (laptop), including sprint and mantle animations and a clean quit; all 21 stock maps pass the unattended sweep (see the i386 row). Since PR 187 one command (`scripts/tools/setup_linux_client.py`) fetches and builds the pinned SDL3 and DXVK, with the DXVK fix fullscreen on native Wayland needs, and builds the client; a tool packs it into a folder that starts on another PC with no library path; and `-DKISAK_LINUX_GAMEPAD=ON` (off by default, on in the setup tool) maps a controller to keys and mouse. Hosted CI runs the setup tool end to end on a fresh runner. On the PC's WSL (local, 2026-11-10) it built and packed the client in about 9 minutes, the packed folder played mp_crash with no library path set (Xvfb, software Vulkan), and a second run reused the SDKs and packed a byte-identical client in 5 seconds; it stops if the `--package` folder is not empty. A real GPU and monitor and a real controller in the game are still untried. [Guide](linux-x64.md#x86_64-multiplayer-client) |
 | Dedicated server, aarch64 (64-bit Arm) | `-DKISAK_LINUX_ARCH=aarch64` | Builds natively on Arm or cross-compiled from x86, boots without game data (qemu and hosted Arm CI). Not yet run with game data. [Guide](linux-arm64.md) |
 | Multiplayer client, aarch64 | the client options with `-DKISAK_LINUX_ARCH=aarch64` | Builds and passes the asset-free client checks (qemu and hosted Arm CI) against a D3D9 stand-in; no aarch64 DXVK build yet, so it has not drawn a frame. [Guide](linux-arm64.md#building-the-aarch64-client) |
 | Dedicated server, armv7 (32-bit Arm) | `-DKISAK_LINUX_ARCH=armv7` | Cross-compiled from x86, boots without game data under qemu-arm (hosted CI). First step toward a PS Vita port. Not yet run with game data. [Guide](linux-armv7.md) |
@@ -165,7 +166,7 @@ These came before the playable client and still build and run in CI:
 
 ## Open pull requests
 
-As of 2026-11-10 10:34 UTC, seven. They change by the hour; the
+As of 2026-11-10 10:57 UTC, seven. They change by the hour; the
 [list on GitHub](https://github.com/koalabuttz/KisakCOD/pulls) is the current
 one. A machine run a pull request waits on is named where its author has
 said so.
@@ -208,8 +209,8 @@ PR 168.
   x86_64 ([guide](linux-mp-client.md#map-sweep)). Next: a follow-up on the
   nearly black i386 mp_convoy frame (queued), hand play beyond mp_crash, and
   a 30-minute session on one map. A real HTTP download (PR 170, merged: none has been made end to end).
-  The setup tool's first run on a real machine (PR 187, merged; queued on
-  the PC's WSL), and a real controller in the game.
+  The setup tool on a real GPU and monitor (its first run, on the PC's WSL,
+  passed with software rendering), and a real controller in the game.
 - Finding servers (PR 163, merged): the Join Game menu on a real client, and
   a real dedicated server, the test master and a client together (laptop run
   queued; [guide](server-browser.md#what-is-checked)). A scan of a real
