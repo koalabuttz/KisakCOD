@@ -184,7 +184,13 @@ the scene read and the frame log line as the game printed it, a few hundred
 bytes a row. It carries a checksum of its own and the checksum of the file it
 was cut from, and `run_report.py` makes the same tables and summary from it.
 The other verbatim lines stay in the full file on the machine until someone
-asks for them.
+asks for them, unless the run says how many of them should cross:
+`"compact_lines": 4` in a recipe (or in any results file) keeps up to four
+lines per pattern and row in the short form, the first and the last ones with
+the number left out between them, each cut at 300 characters;
+`run_report.py results.json --compact --lines 4` does the same afterwards. A
+run whose point is a handful of log lines (a memory line, a refusal) then
+needs no prose beside its short form.
 
 `scripts/tests/test_perf_run.py` checks both scripts on the host with a
 stand-in game (`tests/runs/fake_game.cpp`) and a made-up power-supply folder:
