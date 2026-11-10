@@ -1174,6 +1174,13 @@ VkFormat DepthStencilFormat(const Core *core) { return core->depthStencilFormat;
 
 const OptionalFeatures &Features(const Core *core) { return core->optional; }
 
+VkSampleCountFlags SampleCounts(const Core *core)
+{
+    const VkPhysicalDeviceLimits &limits = core->properties.limits;
+    return limits.framebufferColorSampleCounts & limits.framebufferDepthSampleCounts
+        & limits.framebufferStencilSampleCounts;
+}
+
 bool FormatSupports(const Core *core, VkFormat format, VkFormatFeatureFlags features)
 {
     VkFormatProperties props{};

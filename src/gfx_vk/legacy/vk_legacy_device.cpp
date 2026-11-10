@@ -20,7 +20,8 @@ void VLog(Device &device, const char *prefix, const char *format, va_list args)
 }
 
 // The back buffer and the front buffer: two render targets that Present
-// swaps (see FrontBuffer in vk_legacy.h).
+// swaps (see FrontBuffer in vk_legacy.h), or with a multisampled back buffer
+// a multisampled one that Present resolves into a one-sample front buffer.
 bool CreateBackBuffer(Device &device, uint32_t width, uint32_t height)
 {
     TextureDesc desc;
@@ -31,9 +32,10 @@ bool CreateBackBuffer(Device &device, uint32_t width, uint32_t height)
     desc.format = d3d::FMT_A8R8G8B8;
     desc.pool = d3d::POOL_DEFAULT;
     desc.name = "back buffer";
-    device.backBuffer = CreateTextureInternal(device, desc, 0);
+    device.backBuffer = CreateTextureInternal(device, desc, 0, device.backBufferSamples);
     if (!device.backBuffer)
-        return Fail(device, "cannot create the %ux%u back buffer", width, height);
+        return Fail(device, "cannot create the %ux%u back buffer with %u samples", width, height,
+                    device.backBufferSamples);
     desc.name = "front buffer";
     device.frontBuffer = CreateTextureInternal(device, desc, 0);
     if (!device.frontBuffer)
@@ -45,7 +47,7 @@ bool CreateBackBuffer(Device &device, uint32_t width, uint32_t height)
 
 void DestroyBackBuffer(Device &device)
 {
-    for (Texture **texture : {&device.backBuffer, &device.frontBuffer})
+    for (Texture **texture : {&device.backBuffer, &device.frontBuffer, &device.resolveScratch})
     {
         ForgetTexture(device, *texture);
         DestroyTextureNow(device, *texture);
@@ -216,6 +218,10 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     device->dynamicUniforms = !Features(core).staticUniforms;
     device->uniformAlignment = static_cast<uint32_t>(std::max<VkDeviceSize>(16, Limits(core).minUniformBufferOffsetAlignment));
     device->verifyShortcuts = ValidationEnabled(core);
+    device->backBufferSamples = UsableSamples(device.get(), desc.backBufferSamples);
+    if (device->backBufferSamples != std::max(desc.backBufferSamples, 1u))
+        Log(*device, "a back buffer of %u samples is made with %u: the device has no %u", desc.backBufferSamples,
+            device->backBufferSamples, desc.backBufferSamples);
     DefaultStates(*device);
 
     uint32_t width = desc.width ? desc.width : Swapchain(core).width;
@@ -256,9 +262,10 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
             char feed[64];
             GpuFeedText(device->feed, feed, sizeof(feed));
             Log(*device,
-                "device ready: back buffer %ux%u, depth %s, vertex stride %s, depth compare %s, 16-bit targets %s, "
-                "occlusion queries %s, GPU feed %s",
-                width, height, FormatName(device->depthFormat), features.dynamicVertexStride ? "dynamic" : "static",
+                "device ready: back buffer %ux%u, %u %s, depth %s, vertex stride %s, depth compare %s, "
+                "16-bit targets %s, occlusion queries %s, GPU feed %s",
+                width, height, device->backBufferSamples, device->backBufferSamples == 1 ? "sample" : "samples",
+                FormatName(device->depthFormat), features.dynamicVertexStride ? "dynamic" : "static",
                 features.fixedDepthCompare ? "fixed" : "dynamic", packedTargets ? "packed" : "wide",
                 features.occlusionCounts ? "counted" : "not counted", feed);
             return device.release();
@@ -337,6 +344,15 @@ void SetKeepDrawState(Device *device, bool keep)
 Surface *BackBuffer(Device *device) { return &device->backBufferSurface; }
 
 Surface *FrontBuffer(Device *device) { return &device->frontBufferSurface; }
+
+uint32_t SetBackBufferSamples(Device *device, uint32_t samples)
+{
+    const uint32_t used = UsableSamples(device, samples);
+    if (used != std::max(samples, 1u))
+        Log(*device, "a back buffer of %u samples is made with %u: the device has no %u", samples, used, samples);
+    device->backBufferSamples = used;
+    return used;
+}
 
 bool ResizeBackBuffer(Device *device, uint32_t width, uint32_t height)
 {

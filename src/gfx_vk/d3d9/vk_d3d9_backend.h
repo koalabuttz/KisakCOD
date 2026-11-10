@@ -36,6 +36,9 @@ struct BackendDesc
     // The back buffer the program asked for; 0 takes the window's size.
     uint32_t width = 0;
     uint32_t height = 0;
+    // Its samples a pixel (D3DPRESENT_PARAMETERS::MultiSampleType); 1 on a
+    // back end that has none.
+    uint32_t samples = 1;
 };
 
 // Brings up the GPU for the window and a Legacy device on it. Null with the

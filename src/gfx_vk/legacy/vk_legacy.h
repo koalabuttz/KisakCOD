@@ -242,6 +242,9 @@ struct DeviceDesc
     // The PS Vita's GXM back end reads it as a folder, one compiled program
     // per file (src/gfx_gxm/gxm_program_cache.h).
     const char *shaderCachePath = nullptr;
+    // Samples a pixel of the back buffer (see "Multisampled targets" below).
+    // The GXM back end has one.
+    uint32_t backBufferSamples = 1;
 };
 
 // The device draws through an existing core, which keeps owning the window,
@@ -399,6 +402,31 @@ Surface *CreatePlainSurface(Device *device, uint32_t width, uint32_t height, d3d
 // Surfaces from GetSurfaceLevel go away with their texture; this releases
 // standalone ones (and is a no-op for texture levels and the back buffer).
 void DestroySurface(Device *device, Surface *surface);
+
+#if !defined(KISAK_GFX_GXM)
+// Multisampled targets: the back buffer (DeviceDesc::backBufferSamples,
+// SetBackBufferSamples) and standalone render targets and depth surfaces, as
+// D3D9 has them. A draw's targets must all have the same count. A
+// multisampled colour surface is drawn into and cleared, and is the source
+// of StretchRect, which resolves it (every pixel the average of its
+// samples), and of GetRenderTargetData, which reads the resolved picture
+// (D3D9 refuses that; a screenshot gets the picture it shows). It is not the
+// destination of StretchRect and is not locked. Present resolves a
+// multisampled back buffer into the front buffer and shows that.
+//
+// A count the device does not have is made with 4 samples, which every
+// Vulkan device has for colour and depth: UsableSamples says what a count
+// becomes (1 stays 1).
+uint32_t UsableSamples(const Device *device, uint32_t asked);
+Surface *CreateMultisampledRenderTarget(Device *device, uint32_t width, uint32_t height, d3d::Format format,
+                                        uint32_t samples, const char *name);
+Surface *CreateMultisampledDepthStencil(Device *device, uint32_t width, uint32_t height, d3d::Format format,
+                                        uint32_t samples, const char *name);
+uint32_t SurfaceSamples(const Surface *surface);
+// The back buffer's count from the next ResizeBackBuffer on (which a call
+// with the size it has also takes up). Returns the count it will have.
+uint32_t SetBackBufferSamples(Device *device, uint32_t samples);
+#endif
 Surface *BackBuffer(Device *device);
 // The image the last Present showed (D3D9's front buffer). Present flips the
 // two, as D3D9's DISCARD swap effect allows, so drawing the next frame never
@@ -492,7 +520,8 @@ void DrawPrimitiveUP(Device *device, d3d::PrimitiveType type, uint32_t primitive
 // ---- Copies, frames and queries -------------------------------------------------------
 
 // StretchRect: a scaled copy between render-target surfaces or texture levels.
-// Rects null: the whole surface. linear: D3DTEXF_LINEAR (else point).
+// Rects null: the whole surface. linear: D3DTEXF_LINEAR (else point). From a
+// multisampled surface it is the resolve.
 void StretchRect(Device *device, Surface *src, const Rect *srcRect, Surface *dst, const Rect *dstRect, bool linear);
 // GetRenderTargetData: waits for the GPU and copies a render target into a
 // SYSTEMMEM surface of the same size and format (4 bytes per pixel formats).
@@ -517,7 +546,8 @@ PresentResult Present(Device *device);
 // vk_core.h). Everything else stays usable; Present skips from now on.
 void DetachWindow(Device *device);
 // Changes the back buffer size (D3D9's Reset); the window's swapchain follows
-// on its own. Every resource stays valid.
+// on its own. Every resource stays valid. The back buffer is made again even
+// at the size it has, with the samples SetBackBufferSamples asked for.
 bool ResizeBackBuffer(Device *device, uint32_t width, uint32_t height);
 // Puts every state back to D3D9's defaults and unbinds everything, with the
 // back buffer as render target 0 (what D3D9's Reset does to state).

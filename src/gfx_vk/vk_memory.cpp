@@ -485,6 +485,20 @@ Image *CreateImage(Core *core, const ImageDesc &desc)
         Fail(*core, "CreateImage: empty size, no levels or no format (%s)", name);
         return nullptr;
     }
+    if (desc.samples != 1)
+    {
+        // One bit, and one the device has for colour and depth alike.
+        if ((desc.samples & (desc.samples - 1)) || !(SampleCounts(core) & desc.samples))
+        {
+            Fail(*core, "CreateImage: the device has no attachments of %u samples (%s)", desc.samples, name);
+            return nullptr;
+        }
+        if (desc.kind != ImageKind::Tex2D || desc.mipLevels != 1 || (desc.usage & VK_IMAGE_USAGE_SAMPLED_BIT))
+        {
+            Fail(*core, "CreateImage: a multisampled image is a 2D image of one level that is not sampled (%s)", name);
+            return nullptr;
+        }
+    }
     Image *image = new Image();
     image->desc = desc;
     image->name = name;
@@ -502,7 +516,7 @@ Image *CreateImage(Core *core, const ImageDesc &desc)
     info.extent = {desc.width, desc.height, desc.kind == ImageKind::Tex3D ? desc.depth : 1};
     info.mipLevels = desc.mipLevels;
     info.arrayLayers = image->layers;
-    info.samples = VK_SAMPLE_COUNT_1_BIT;
+    info.samples = static_cast<VkSampleCountFlagBits>(desc.samples);
     info.tiling = VK_IMAGE_TILING_OPTIMAL;
     info.usage = image->desc.usage;
     info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;

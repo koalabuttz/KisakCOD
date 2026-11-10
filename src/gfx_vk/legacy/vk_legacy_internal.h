@@ -77,6 +77,9 @@ struct Texture
     const FormatInfo *format = nullptr;
     VkFormat vkFormat = VK_FORMAT_UNDEFINED;
     Image *image = nullptr; // null for SYSTEMMEM and SCRATCH textures
+    // Over 1: a multisampled render target or depth surface (the back buffer
+    // or a standalone surface). No shader reads one and no texture is one.
+    uint32_t samples = 1;
     uint32_t faces = 1;
     std::vector<Subresource> subresources;          // face * levels + level
     std::vector<std::unique_ptr<Surface>> surfaces; // GetSurfaceLevel views, same index
@@ -183,6 +186,10 @@ struct PipelineKey
     // Each stream's stride when the device has no dynamic vertex stride
     // (OptionalFeatures::dynamicVertexStride); all zero otherwise.
     uint16_t strides[kMaxStreams] = {};
+    // The samples of the pass's targets. The key is compared and hashed as
+    // bytes, in 8-byte words: the rest of this word stays zero.
+    uint8_t samples = 1;
+    uint8_t unused[7] = {};
     bool operator==(const PipelineKey &other) const { return std::memcmp(this, &other, sizeof(*this)) == 0; }
 };
 struct PipelineKeyHash
@@ -343,10 +350,19 @@ struct Device
     Texture *nullTexture[3] = {}; // 2D, cube, volume (TextureKind order)
 
     // Present swaps the two textures; the surfaces keep their addresses.
+    // With a multisampled back buffer (backBufferSamples over 1) it resolves
+    // the back buffer into the front buffer instead, which has one sample,
+    // and the two stay what they are.
     Texture *backBuffer = nullptr;
     Surface backBufferSurface;
     Texture *frontBuffer = nullptr;
     Surface frontBufferSurface;
+    uint32_t backBufferSamples = 1;
+    // A one-sample render target of a multisampled surface's size and
+    // format: what StretchRect resolves into before it scales or converts,
+    // and what GetRenderTargetData reads. Made at first need, replaced when
+    // another size or format is needed.
+    Texture *resolveScratch = nullptr;
 
     // D3D9 state.
     uint32_t renderStates[d3d::RS_COUNT] = {};
@@ -373,6 +389,7 @@ struct Device
     Surface *passTargets[kMaxRenderTargets] = {};
     Surface *passDepth = nullptr;
     uint32_t passWidth = 0, passHeight = 0;
+    uint32_t passSamples = 1; // of every target of the open pass
     // What the command buffer being recorded (stateRecording, the core's
     // Recording()) has bound and set. A draw records only what differs, and a
     // new command buffer starts with nothing (ForgetRecordingState).
@@ -456,13 +473,17 @@ enum Warning : uint32_t
     WarnRenderTargetGap,
     WarnStretchRect,
     WarnReadBackLayout,
+    WarnSampleMismatch,
+    WarnStretchToSamples,
 };
 // One message per kind for the device's life (bit 0-31).
 void WarnOnce(Device &device, uint32_t bit, const char *format, ...);
 bool Usable(Device &device);
 
 // vk_legacy_resources.cpp
-Texture *CreateTextureInternal(Device &device, const TextureDesc &desc, uint32_t extraUsage);
+// samples over 1 makes a multisampled render target or depth surface; the
+// count is one the device has (UsableSamples).
+Texture *CreateTextureInternal(Device &device, const TextureDesc &desc, uint32_t extraUsage, uint32_t samples = 1);
 void DestroyTextureNow(Device &device, Texture *texture);
 // The GPU buffer and offset a draw reads, marking it used by this submission.
 VkBuffer DrawBuffer(Device &device, GpuBuffer &buffer);

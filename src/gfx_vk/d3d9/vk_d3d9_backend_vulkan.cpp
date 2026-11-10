@@ -212,6 +212,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     legacyDesc.log = h.log;
     legacyDesc.logUser = h.user;
     legacyDesc.shaderCachePath = h.shaderCachePath;
+    legacyDesc.backBufferSamples = desc.samples;
     backend->legacy = lg::CreateDevice(backend->core, legacyDesc, error);
     if (!backend->legacy)
     {

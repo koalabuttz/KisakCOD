@@ -105,6 +105,7 @@
     X(vkCmdCopyBufferToImage) \
     X(vkCmdCopyBuffer) \
     X(vkCmdBlitImage) \
+    X(vkCmdResolveImage) \
     X(vkCreateSampler) \
     X(vkDestroySampler) \
     X(vkCreateShaderModule) \

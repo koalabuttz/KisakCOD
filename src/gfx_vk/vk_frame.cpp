@@ -940,6 +940,15 @@ bool BeginPass(Core *core_, const PassDesc &desc)
     }
     if (!first)
         return Fail(core, "BeginPass %s: no attachments", desc.name);
+    for (uint32_t i = 0; i < desc.colorCount; ++i)
+    {
+        if (desc.color[i].image->desc.samples != first->desc.samples)
+            return Fail(core, "BeginPass %s: %s has %u samples and %s has %u", desc.name, first->name.c_str(),
+                        first->desc.samples, desc.color[i].image->name.c_str(), desc.color[i].image->desc.samples);
+    }
+    if (depthImage && depthImage->desc.samples != first->desc.samples)
+        return Fail(core, "BeginPass %s: %s has %u samples and %s has %u", desc.name, first->name.c_str(),
+                    first->desc.samples, depthImage->name.c_str(), depthImage->desc.samples);
     if (core.failed)
         return false;
 
@@ -1195,8 +1204,9 @@ void *StageImageWrite(Core *core_, Image *image, const ImageRegion &region, uint
     const uint32_t mipWidth = std::max(desc.width >> region.mipLevel, 1u);
     const uint32_t mipHeight = std::max(desc.height >> region.mipLevel, 1u);
     const uint32_t mipDepth = desc.kind == ImageKind::Tex3D ? std::max(desc.depth >> region.mipLevel, 1u) : 1u;
-    if (!blockBytes || image->aspect != VK_IMAGE_ASPECT_COLOR_BIT || region.mipLevel >= desc.mipLevels
-        || region.layer >= image->layers || !region.width || !region.height || !region.depth
+    if (!blockBytes || image->aspect != VK_IMAGE_ASPECT_COLOR_BIT || desc.samples != 1
+        || region.mipLevel >= desc.mipLevels || region.layer >= image->layers || !region.width || !region.height
+        || !region.depth
         || region.x + region.width > mipWidth || region.y + region.height > mipHeight
         || region.z + region.depth > mipDepth)
     {
@@ -1345,6 +1355,11 @@ void BlitImage(Core *core_, Image *src, const VkOffset3D srcBox[2], Image *dst, 
         Fail(core, "BlitImage: no such level or layer, or %s onto itself", src->name.c_str());
         return;
     }
+    if (src->desc.samples != 1 || dst->desc.samples != 1)
+    {
+        Fail(core, "BlitImage: %s is multisampled", (src->desc.samples != 1 ? src : dst)->name.c_str());
+        return;
+    }
     UseImage(&core, src, ImageUse::TransferSrc);
     UseImage(&core, dst, ImageUse::TransferDst);
     VkImageBlit blit{};
@@ -1362,6 +1377,50 @@ void BlitImage(Core *core_, Image *src, const VkOffset3D srcBox[2], Image *dst, 
     });
 }
 
+void ResolveImage(Core *core_, Image *src, VkOffset2D srcOffset, Image *dst, VkOffset2D dstOffset, VkExtent2D extent,
+                  uint32_t dstLevel, uint32_t dstLayer)
+{
+    Core &core = *core_;
+    if (core.failed)
+        return;
+    if (core.inPass)
+    {
+        Fail(core, "ResolveImage inside a pass");
+        return;
+    }
+    if (src->desc.samples == 1 || dst->desc.samples != 1 || src->desc.format != dst->desc.format
+        || src->aspect != VK_IMAGE_ASPECT_COLOR_BIT || dstLevel >= dst->desc.mipLevels || dstLayer >= dst->layers)
+    {
+        Fail(core, "ResolveImage: %s to %s is not a multisampled colour image to a one-sample level of its format",
+             src->name.c_str(), dst->name.c_str());
+        return;
+    }
+    const uint32_t dstWidth = std::max(dst->desc.width >> dstLevel, 1u);
+    const uint32_t dstHeight = std::max(dst->desc.height >> dstLevel, 1u);
+    if (!extent.width || !extent.height || srcOffset.x < 0 || srcOffset.y < 0 || dstOffset.x < 0 || dstOffset.y < 0
+        || uint32_t(srcOffset.x) + extent.width > src->desc.width
+        || uint32_t(srcOffset.y) + extent.height > src->desc.height || uint32_t(dstOffset.x) + extent.width > dstWidth
+        || uint32_t(dstOffset.y) + extent.height > dstHeight)
+    {
+        Fail(core, "ResolveImage: the box lies outside %s or %s", src->name.c_str(), dst->name.c_str());
+        return;
+    }
+    UseImage(&core, src, ImageUse::TransferSrc);
+    UseImage(&core, dst, ImageUse::TransferDst);
+    VkImageResolve region{};
+    region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    region.srcOffset = {srcOffset.x, srcOffset.y, 0};
+    region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, dstLevel, dstLayer, 1};
+    region.dstOffset = {dstOffset.x, dstOffset.y, 0};
+    region.extent = {extent.width, extent.height, 1};
+    const VkImage from = src->image;
+    const VkImage to = dst->image;
+    Record(&core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
+        vk.vkCmdResolveImage(cmd, from, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, to, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                             &region);
+    });
+}
+
 Readback *ReadImage(Core *core_, Image *image, uint32_t mipLevel, uint32_t layer)
 {
     Core &core = *core_;
@@ -1376,9 +1435,9 @@ Readback *ReadImage(Core *core_, Image *image, uint32_t mipLevel, uint32_t layer
     uint32_t blockHeight = 1;
     const uint32_t blockBytes = FormatBlockBytes(image->desc.format, &blockWidth, &blockHeight);
     if (!blockBytes || image->aspect != VK_IMAGE_ASPECT_COLOR_BIT || mipLevel >= image->desc.mipLevels
-        || layer >= image->layers)
+        || layer >= image->layers || image->desc.samples != 1)
     {
-        Fail(core, "ReadImage: %s is not a colour image or has no such level", image->name.c_str());
+        Fail(core, "ReadImage: %s is not a one-sample colour image or has no such level", image->name.c_str());
         return nullptr;
     }
     if (!(image->desc.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT))

@@ -1,7 +1,7 @@
 {
   "format": "kisak-run/1",
   "id": "vulkan-aa-mp-crash",
-  "title": "Vulkan back end against DXVK with the same anti-aliasing: frame rate on mp_crash with 12 bots, r_aaSamples 1 on both, and DXVK at 4 beside it",
+  "title": "Vulkan back end against DXVK with the same anti-aliasing: frame rate on mp_crash with 12 bots, r_aaSamples 1 and 4 on both",
   "asker": "Develop the Vulkan renderer",
   "game": {
     "binary": "{build}/bin/KisakCOD-mp",
@@ -104,14 +104,16 @@
         "r_aaSamples",
         "4"
       ],
-      "note": "Vulkan asked for 4 samples; it has none to give"
+      "note": "Vulkan, 4 samples (a build without multisampled targets steps down to 1 and prints no anti-aliasing line)"
     }
   },
   "rows": [
     "V1",
     "D1",
+    "V4",
     "D4",
     "D4",
+    "V4",
     "D1",
     "V1"
   ],
