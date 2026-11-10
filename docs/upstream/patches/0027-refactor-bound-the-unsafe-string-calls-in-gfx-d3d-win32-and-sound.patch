@@ -1,0 +1,308 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 08:52:55 +0000
+Subject: [PATCH] refactor: bound the unsafe string calls in gfx_d3d, win32 and
+ sound
+
+strcpy, strcat, sprintf and unterminated _snprintf/_vsnprintf calls in
+src/gfx_d3d, src/win32 and src/sound write without knowing how large
+the destination is. Part 4 of 4 for upstream issue 8; src/radiant is
+not covered.
+
+The replacements are the engine's own bounded forms (I_strncpyz,
+I_strncat, Com_sprintf, Com_sprintfPos) and C99 snprintf/vsnprintf,
+each given the destination's size. No MSVC *_s functions, so the code
+stays portable.
+---
+ src/gfx_d3d/r_cinematic.cpp         | 20 ++++++++++----------
+ src/gfx_d3d/r_debug.cpp             |  3 +--
+ src/gfx_d3d/r_material_load_obj.cpp | 12 ++++++++----
+ src/gfx_d3d/r_material_override.cpp |  3 +--
+ src/gfx_d3d/r_warn.cpp              |  2 +-
+ src/gfx_d3d/rb_light.cpp            |  2 +-
+ src/sound/snd.cpp                   |  2 +-
+ src/win32/win_configure.cpp         |  9 +++++----
+ src/win32/win_steam.cpp             |  2 +-
+ src/win32/win_syscon.cpp            | 11 +++++++----
+ src/win32/win_voice.cpp             |  2 +-
+ 11 files changed, 37 insertions(+), 31 deletions(-)
+
+diff --git a/src/gfx_d3d/r_cinematic.cpp b/src/gfx_d3d/r_cinematic.cpp
+index a4d731a7..7a0cad50 100644
+--- a/src/gfx_d3d/r_cinematic.cpp
++++ b/src/gfx_d3d/r_cinematic.cpp
+@@ -754,12 +754,12 @@ bool __cdecl R_Cinematic_BinkOpen(
+                 "%s\n\t(playbackFlags) = %i",
+                 "(playbackFlags & 0x00000008)",
+                 playbackFlags);
+-        _snprintf(filepath[0], 0x100u, "video/%s.%s", filename, "bik");
++        snprintf(filepath[0], 0x100u, "video/%s.%s", filename, "bik");
+     }
+     else
+     {
+-        _snprintf(filepath[0], 0x100u, "%s\\main\\video\\%s.%s", cwd, filename, "bik");
+-        _snprintf(filepath[1], 0x100u, "%s\\raw\\video\\%s.%s", cwd, filename, "bik");
++        snprintf(filepath[0], 0x100u, "%s\\main\\video\\%s.%s", cwd, filename, "bik");
++        snprintf(filepath[1], 0x100u, "%s\\raw\\video\\%s.%s", cwd, filename, "bik");
+     }
+     if (R_Cinematic_BinkOpenPath(filepath[0], playbackFlags, errText, errTextSize))
+         return 1;
+@@ -792,7 +792,7 @@ char __cdecl R_Cinematic_BinkOpenPath(
+             if (!rawfile)
+             {
+                 if (errText)
+-                    _snprintf(errText, errTextSize, "Couldn't find rawfile '%s' in db", filepath);
++                    snprintf(errText, errTextSize, "Couldn't find rawfile '%s' in db", filepath);
+                 return 0;
+             }
+             filledBuffer = rawfile->buffer;
+@@ -842,7 +842,7 @@ char __cdecl R_Cinematic_BinkOpenPath(
+     if (errText)
+     {
+         Error = (const char *)BinkGetError();
+-        _snprintf(errText, errTextSize, "BinkOpen: %s", Error);
++        snprintf(errText, errTextSize, "BinkOpen: %s", Error);
+     }
+     return 0;
+ }
+@@ -887,7 +887,7 @@ char __cdecl R_Cinematic_BinkOpenPath_MemoryResident(
+     if (!fileHandle)
+     {
+         if (errText)
+-            _snprintf(errText, errTextSize, "Open failed");
++            snprintf(errText, errTextSize, "Open failed");
+         return 0;
+     }
+     fileSize = FileWrapper_GetFileSize(fileHandle);
+@@ -896,9 +896,9 @@ char __cdecl R_Cinematic_BinkOpenPath_MemoryResident(
+         if (errText)
+         {
+             if (fileSize)
+-                _snprintf(errText, errTextSize, "GetFileSize failed (%i)", fileSize);
++                snprintf(errText, errTextSize, "GetFileSize failed (%i)", fileSize);
+             else
+-                _snprintf(errText, errTextSize, "Zero file size");
++                snprintf(errText, errTextSize, "Zero file size");
+         }
+     LABEL_14:
+         fclose(fileHandle);
+@@ -908,7 +908,7 @@ char __cdecl R_Cinematic_BinkOpenPath_MemoryResident(
+     if (fileSize > freeBufferSpace)
+     {
+         if (errText)
+-            _snprintf(errText, errTextSize, "Cinematic too big (%i > %i)", fileSize, freeBufferSpace);
++            snprintf(errText, errTextSize, "Cinematic too big (%i > %i)", fileSize, freeBufferSpace);
+         goto LABEL_14;
+     }
+     allocedBuffer = (void *)CinematicHunk_Alloc(&cinematicGlob.residentHunk, fileSize);
+@@ -918,7 +918,7 @@ char __cdecl R_Cinematic_BinkOpenPath_MemoryResident(
+     if (numberOfBytesRead == fileSize)
+         return 1;
+     if (errText)
+-        _snprintf(errText, errTextSize, "Read was short (wanted %i got %i)", fileSize, numberOfBytesRead);
++        snprintf(errText, errTextSize, "Read was short (wanted %i got %i)", fileSize, numberOfBytesRead);
+     CinematicHunk_Reset(&cinematicGlob.residentHunk);
+     return 0;
+ }
+diff --git a/src/gfx_d3d/r_debug.cpp b/src/gfx_d3d/r_debug.cpp
+index 7fa7da78..2a0c36e6 100644
+--- a/src/gfx_d3d/r_debug.cpp
++++ b/src/gfx_d3d/r_debug.cpp
+@@ -142,8 +142,7 @@ void __cdecl R_AddDebugString(
+             pDebugString->color[2] = color[2];
+             pDebugString->color[3] = color[3];
+             pDebugString->scale = scale;
+-            strncpy(pDebugString->text, string, sizeof(pDebugString->text) - 1);
+-            pDebugString->text[95] = 0;
++            I_strncpyz(pDebugString->text, string, sizeof(pDebugString->text));
+             ++debugGlobalsEntry->stringCount;
+             Sys_LeaveCriticalSection(CRITSECT_DEBUG_LINE);
+         }
+diff --git a/src/gfx_d3d/r_material_load_obj.cpp b/src/gfx_d3d/r_material_load_obj.cpp
+index 635404bd..d275e903 100644
+--- a/src/gfx_d3d/r_material_load_obj.cpp
++++ b/src/gfx_d3d/r_material_load_obj.cpp
+@@ -924,7 +924,7 @@ const MtlStateMapBitName *__cdecl Material_ParseValueForState(const char **text,
+         v2 = Com_Parse(text);
+         Com_sprintf(signedToken, 0x100u, "-%s", v2->token);
+         //token = signedToken;
+-        strcpy(token->token, signedToken);
++        I_strncpyz(token->token, signedToken, sizeof(token->token));
+     }
+     for (valueIndex = 0; bitNames[valueIndex].name; ++valueIndex)
+     {
+@@ -4778,7 +4778,7 @@ Material *__cdecl R_GetBspMaterial(uint32_t materialIndex)
+         MyAssertHandler(".\\r_bsp_load_obj.cpp", 230, 0, "%s", "strcmp( name, \"noshader\" )");
+     if (!strcmp(name->material, "$default"))
+     {
+-        strcpy((char*)&name->material[0], "$default3d");
++        I_strncpyz((char*)&name->material[0], "$default3d", sizeof(name->material));
+         //name = "$default3d";
+     }
+     if (name->material[0] == 42)
+@@ -6149,13 +6149,17 @@ void __cdecl Material_PreLoadSingleShaderText(const char *filename, const char *
+     int fileHandle; // [esp+28h] [ebp-50h] BYREF
+     int fileSize; // [esp+2Ch] [ebp-4Ch]
+     char filepath[68]; // [esp+30h] [ebp-48h] BYREF
++    uint32_t nameSize;
+ 
+     Com_sprintf(filepath, 0x40u, "shaders/%s%s", subdir, filename);
+     fileSize = FS_FOpenFileRead(filepath, &fileHandle);
+     iassert( fileSize >= 0 );
+-    buffer = (char*)Hunk_AllocAlign(strlen(subdir) + fileSize + strlen(filename) + 2, 1, "Material_PreLoadSingleShaderText", 22);
++    // The name, its terminator, then the shader text and its terminator.
++    nameSize = strlen(subdir) + strlen(filename) + 1;
++    buffer = (char*)Hunk_AllocAlign(nameSize + fileSize + 1, 1, "Material_PreLoadSingleShaderText", 22);
+     cached->name = buffer;
+-    buffera = &buffer[sprintf(buffer, "%s%s", subdir, filename) + 1]; // TODO: wth, change to snprintf with proper calculations
++    Com_sprintf(buffer, nameSize, "%s%s", subdir, filename);
++    buffera = &buffer[nameSize];
+     cached->text = buffera;
+     FS_Read((unsigned char*)buffera, fileSize, fileHandle);
+     FS_FCloseFile(fileHandle);
+diff --git a/src/gfx_d3d/r_material_override.cpp b/src/gfx_d3d/r_material_override.cpp
+index daf8f999..25bd16e4 100644
+--- a/src/gfx_d3d/r_material_override.cpp
++++ b/src/gfx_d3d/r_material_override.cpp
+@@ -313,8 +313,7 @@ void __cdecl Material_OriginalRemapTechniqueSet(MaterialTechniqueSet *techSet)
+     else
+     {
+         *(_DWORD *)remapName = *(_DWORD *)"sm2/";
+-        strncpy(&remapName[4], techSet->name, 0x3Cu);
+-        remapName[63] = 0;
++        I_strncpyz(&remapName[4], techSet->name, 60);
+         techSet->remappedTechniqueSet = Material_FindTechniqueSet(remapName, MTL_TECHSET_NOT_FOUND_RETURN_DEFAULT);
+         AssertValidRemappedTechniqueSet(techSet);
+     }
+diff --git a/src/gfx_d3d/r_warn.cpp b/src/gfx_d3d/r_warn.cpp
+index 7f22d6ad..fef5c0b4 100644
+--- a/src/gfx_d3d/r_warn.cpp
++++ b/src/gfx_d3d/r_warn.cpp
+@@ -64,7 +64,7 @@ void R_WarnOncePerFrame(GfxWarningType warnType, ...)
+     {
+         s_warnCount[warnType] = rg.frontEndFrameCount + (int)(frameRate * r_warningRepeatDelay->current.value);
+         va_copy(vargs, va);
+-        _vsnprintf(message, 0x400u, s_warnFormat[warnType], va);
++        vsnprintf(message, 0x400u, s_warnFormat[warnType], va);
+         vargs = 0;
+         Com_PrintWarning(CON_CHANNEL_GFX, "%s\n", message);
+     }
+diff --git a/src/gfx_d3d/rb_light.cpp b/src/gfx_d3d/rb_light.cpp
+index 18389cd6..489e3ef4 100644
+--- a/src/gfx_d3d/rb_light.cpp
++++ b/src/gfx_d3d/rb_light.cpp
+@@ -1287,7 +1287,7 @@ void __cdecl R_LightVisHistoryFilename(char *bspName, char *filename)
+     Com_StripExtension(bspName, filename);
+     if (strlen(filename) + 5 >= 0x40)
+         Com_Error(ERR_DROP, "light grid log filename %s.grid is too long", filename);
+-    strcat(filename, ".grid");
++    I_strncat(filename, 64, ".grid");
+ }
+ 
+ void __cdecl R_SaveLightVisHistory()
+diff --git a/src/sound/snd.cpp b/src/sound/snd.cpp
+index a6c0b1aa..66eb87b2 100644
+--- a/src/sound/snd.cpp
++++ b/src/sound/snd.cpp
+@@ -3085,7 +3085,7 @@ void __cdecl DebugDrawWorldSound3D(
+                 iassert(chaninfo->alias0->soundFile);
+ 
+                 org[2] = org[2] - fontsize * 12.0;
+-                strcpy(buffer, "File: ");
++                I_strncpyz(buffer, "File: ", sizeof(buffer));
+                 Com_GetSoundFileName(
+                     chaninfo->alias0,
+                     &buffer[&buffer[strlen(buffer) + 1] - &buffer[1]],
+diff --git a/src/win32/win_configure.cpp b/src/win32/win_configure.cpp
+index 136479b9..f7c5f9d1 100644
+--- a/src/win32/win_configure.cpp
++++ b/src/win32/win_configure.cpp
+@@ -11,12 +11,12 @@ void Sys_DetectVideoCard(int descLimit, char* description)
+     _D3DADAPTER_IDENTIFIER9 id;
+     vassert(descLimit  == sizeof(id.Description), "descLimit = %d", descLimit);
+ 
+-    strcpy(description, "Unknown video card");
++    I_strncpyz(description, "Unknown video card", descLimit);
+     IDirect3D9 *d3d9 = Direct3DCreate9(D3D_SDK_VERSION);
+     if (d3d9)
+     {
+         if (d3d9->GetAdapterIdentifier(0, 0, &id) >= 0)
+-            strcpy_s(description, descLimit - 1, id.Description);
++            I_strncpyz(description, id.Description, descLimit);
+         d3d9->Release();
+     }
+ }
+@@ -236,8 +236,9 @@ void Sys_SetAutoConfigureGHz(SysInfo* sysInfo)
+ 
+ void __cdecl Sys_DetectCpuVendorAndName(char *vendor, char *name)
+ {
+-    strcpy(vendor, "KisakTech");
+-    strcpy(name, "KSK-2900x 5.0khz (No AMD PSP or Intel ME)");
++    // The sizes of sys_info.cpuVendor and sys_info.cpuName.
++    I_strncpyz(vendor, "KisakTech", 13);
++    I_strncpyz(name, "KSK-2900x 5.0khz (No AMD PSP or Intel ME)", 49);
+ }
+ #if 0 // KISAKTODO gotta do this ourselves
+ void __cdecl Sys_DetectCpuVendorAndName(char* vendor, char* name)
+diff --git a/src/win32/win_steam.cpp b/src/win32/win_steam.cpp
+index 1c58817d..3f988636 100644
+--- a/src/win32/win_steam.cpp
++++ b/src/win32/win_steam.cpp
+@@ -194,7 +194,7 @@ void Steam_Init()
+ 
+ 	SteamClient()->SetWarningMessageHook(&SteamAPIDebugTextHook);
+ 
+-	strncpy(g_steamName, SteamFriends()->GetPersonaName(), 63);
++	I_strncpyz(g_steamName, SteamFriends()->GetPersonaName(), sizeof(g_steamName));
+ 	g_steamID = SteamUser()->GetSteamID().ConvertToUint64();
+ 
+ 	callbackHandler = new SteamCallbackHandler();
+diff --git a/src/win32/win_syscon.cpp b/src/win32/win_syscon.cpp
+index 3b3d5e62..4da8ee7c 100644
+--- a/src/win32/win_syscon.cpp
++++ b/src/win32/win_syscon.cpp
+@@ -68,7 +68,7 @@ LRESULT __stdcall ConWndProc(HWND__ *hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
+ 		if (com_dedicated && com_dedicated->current.integer)
+ 		{
+ 			cmdString = (char*)Com_AllocEvent(5);
+-			strcpy(cmdString, "quit");
++			I_strncpyz(cmdString, "quit", 5);
+ 			Sys_QueEvent(0, SE_CONSOLE, 0, 0, strlen(cmdString) + 1, cmdString);
+ 		}
+ 		else
+@@ -100,8 +100,11 @@ LRESULT __stdcall InputLineWndProc(HWND__ *hWnd, UINT uMsg, HWND__ *wParam, LPAR
+ 	else if (uMsg == 258 && (int)wParam == 13)
+ 	{
+ 		GetWindowTextA(s_wcd.hwndInputLine, inputBuffer, 1024);
+-		strncat(s_wcd.consoleText, inputBuffer, 512 - strlen(s_wcd.consoleText) - 5);
+-		strcat(s_wcd.consoleText, "\n");
++		// Keep at most 507 characters of text, as before. The old count underflowed
++		// once earlier lines had filled the buffer, letting strncat run past it.
++		if (strlen(s_wcd.consoleText) < sizeof(s_wcd.consoleText) - 5)
++			I_strncat(s_wcd.consoleText, sizeof(s_wcd.consoleText) - 4, inputBuffer);
++		I_strncat(s_wcd.consoleText, sizeof(s_wcd.consoleText), "\n");
+ 		SetWindowTextA(s_wcd.hwndInputLine, "");
+ 		Com_sprintf(displayBuffer, 0x400u, "]%s\n", inputBuffer);
+ 		Sys_Print(displayBuffer);
+@@ -283,7 +286,7 @@ char *Sys_ConsoleInput( void )
+ 		return NULL;
+ 	}
+ 		
+-	strcpy( s_wcd.returnedText, s_wcd.consoleText );
++	I_strncpyz( s_wcd.returnedText, s_wcd.consoleText, sizeof( s_wcd.returnedText ) );
+ 	s_wcd.consoleText[0] = 0;
+ 	
+ 	return s_wcd.returnedText;
+diff --git a/src/win32/win_voice.cpp b/src/win32/win_voice.cpp
+index a034e0d3..f1b56f81 100644
+--- a/src/win32/win_voice.cpp
++++ b/src/win32/win_voice.cpp
+@@ -277,7 +277,7 @@ int __cdecl mixerGetRecordSource(char *srcName)
+                         for (jj = 0; jj < iMultipleItems; ++jj)
+                         {
+                             if (lpListBool[jj].fValue == 1)
+-                                strncpy(srcName, lpListText[jj].szName, 0xFFu);
++                                I_strncpyz(srcName, lpListText[jj].szName, 256); // old_rec_source[256]
+                         }
+                         if (lpmxc)
+                             free(lpmxc);

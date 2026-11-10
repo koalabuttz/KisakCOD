@@ -1,0 +1,340 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 08:52:54 +0000
+Subject: [PATCH] refactor: bound the unsafe string calls in the game and
+ server
+
+strcpy, strcat, sprintf and unterminated _snprintf/_vsnprintf calls in
+src/game, src/game_mp, src/server and src/server_mp write without
+knowing how large the destination is. Part 2 of 4 for upstream issue 8.
+
+The replacements are the engine's own bounded forms (I_strncpyz,
+I_strncat, Com_sprintf, Com_sprintfPos) and C99 snprintf/vsnprintf,
+each given the destination's size. No MSVC *_s functions, so the code
+stays portable.
+---
+ src/game/actor_aim.cpp                   |  2 +-
+ src/game/actor_cover.cpp                 |  4 ++--
+ src/game/g_cmds.cpp                      |  2 +-
+ src/game/g_hudelem.cpp                   |  3 ++-
+ src/game/g_scr_main.cpp                  |  2 +-
+ src/game_mp/g_client_mp.cpp              |  2 +-
+ src/game_mp/g_client_script_cmd_mp.cpp   | 28 ++++++++++++------------
+ src/game_mp/g_cmds_mp.cpp                |  2 +-
+ src/game_mp/g_main_mp.cpp                |  2 +-
+ src/game_mp/g_scr_main_mp.cpp            |  2 +-
+ src/server/sv_game.cpp                   |  2 +-
+ src/server/sv_main.cpp                   |  2 +-
+ src/server_mp/sv_ccmds_mp.cpp            |  2 +-
+ src/server_mp/sv_main_mp.cpp             |  2 +-
+ src/server_mp/sv_snapshot_profile_mp.cpp |  3 +--
+ 15 files changed, 30 insertions(+), 30 deletions(-)
+
+diff --git a/src/game/actor_aim.cpp b/src/game/actor_aim.cpp
+index 5e03802c..e6e5b5d9 100644
+--- a/src/game/actor_aim.cpp
++++ b/src/game/actor_aim.cpp
+@@ -1171,7 +1171,7 @@ void __cdecl Actor_AccuracyGraphTextCallback(
+     char *text,
+     const int textLength)
+ {
+-    sprintf(text, "Distance: %.2f, Accuracy: %.4f", inputX * ACTOR_MAX_ACCURAY_DISTANCE, inputY);
++    Com_sprintf(text, textLength, "Distance: %.2f, Accuracy: %.4f", inputX * ACTOR_MAX_ACCURAY_DISTANCE, inputY);
+ }
+ 
+ void __cdecl G_SwapAccuracyBuffers()
+diff --git a/src/game/actor_cover.cpp b/src/game/actor_cover.cpp
+index e3e924a8..e8f18bce 100644
+--- a/src/game/actor_cover.cpp
++++ b/src/game/actor_cover.cpp
+@@ -148,8 +148,8 @@ void DebugDrawNodePicking(const char *msg, actor_s *self, const pathnode_t *node
+ 
+         if (msg)
+         {
+-            strncpy(debugCoverNodeMsg[debugNodeIndex], msg, 19);
+-            debugCoverNodeMsg[debugNodeIndex][19] = '\0'; // ensure null-termination
++            // Keeps at most 19 characters, as before.
++            I_strncpyz(debugCoverNodeMsg[debugNodeIndex], msg, 20);
+         }
+         else
+         {
+diff --git a/src/game/g_cmds.cpp b/src/game/g_cmds.cpp
+index 9e237fd7..da67d8b7 100644
+--- a/src/game/g_cmds.cpp
++++ b/src/game/g_cmds.cpp
+@@ -838,7 +838,7 @@ void __cdecl Cmd_MenuResponse_f(gentity_s *pEnt)
+     else
+     {
+         v4[0] = 0;
+-        strcpy(v5, "bad");
++        I_strncpyz(v5, "bad", sizeof(v5));
+     }
+     Scr_AddString(v5);
+     Scr_AddString(v4);
+diff --git a/src/game/g_hudelem.cpp b/src/game/g_hudelem.cpp
+index c6f10721..d3b45353 100644
+--- a/src/game/g_hudelem.cpp
++++ b/src/game/g_hudelem.cpp
+@@ -472,7 +472,8 @@ void __cdecl HudElem_SetEnumString(
+     for (nameIndex = 0; nameIndex < nameCount; ++nameIndex)
+     {
+         v4 = va(" %s", names[nameIndex]);
+-        strncat(errormsg, v4, 0x800u);
++        // strncat's count limited the appended characters, not the buffer.
++        I_strncat(errormsg, sizeof(errormsg), v4);
+         errormsg[2047] = 0;
+     }
+     Scr_Error(errormsg);
+diff --git a/src/game/g_scr_main.cpp b/src/game/g_scr_main.cpp
+index b49b0cf4..9fd8b6c9 100644
+--- a/src/game/g_scr_main.cpp
++++ b/src/game/g_scr_main.cpp
+@@ -7583,7 +7583,7 @@ void __cdecl Scr_FxParamError(unsigned int paramIndex, const char *errorString,
+     if (fxId)
+         SV_GetConfigstring(fxId + 2147, v7, 1024); // CS_EFFECT_NAMES (PC SP, was Xbox 2179)
+     else
+-        strcpy(v7, "not successfully loaded");
++        I_strncpyz(v7, "not successfully loaded", sizeof(v7));
+     v6 = va("%s (effect = %s)\n", errorString, v7);
+     Scr_ParamError(paramIndex, v6);
+ }
+diff --git a/src/game_mp/g_client_mp.cpp b/src/game_mp/g_client_mp.cpp
+index d96a0904..ce3021f4 100644
+--- a/src/game_mp/g_client_mp.cpp
++++ b/src/game_mp/g_client_mp.cpp
+@@ -160,7 +160,7 @@ void __cdecl ClientUserinfoChanged(uint32_t clientNum)
+             64);
+     SV_GetUserinfo(clientNum, userinfo, 1024);
+     if (!Info_Validate(userinfo))
+-        strcpy(userinfo, "\\name\\badinfo");
++        I_strncpyz(userinfo, "\\name\\badinfo", sizeof(userinfo));
+     client->sess.localClient = SV_IsLocalClient(clientNum);
+     s = Info_ValueForKey(userinfo, "cg_predictItems");
+     if (atoi(s))
+diff --git a/src/game_mp/g_client_script_cmd_mp.cpp b/src/game_mp/g_client_script_cmd_mp.cpp
+index 4e7f8b19..b7ec3eab 100644
+--- a/src/game_mp/g_client_script_cmd_mp.cpp
++++ b/src/game_mp/g_client_script_cmd_mp.cpp
+@@ -66,7 +66,7 @@ void __cdecl PlayerCmd_giveWeapon(scr_entref_t entref)
+ LABEL_20:
+     if (wasGivenWeapon)
+     {
+-        _snprintf(svcmd, 0x40u, "%c \"%i\"", 74, 1);
++        snprintf(svcmd, 0x40u, "%c \"%i\"", 74, 1);
+         svcmd[63] = 0;
+         SV_GameSendServerCommand(pSelf - g_entities, SV_CMD_CAN_IGNORE, svcmd);
+         G_InitializeAmmo(pSelf, weaponIndex, weaponModel, hadWeapon);
+@@ -1537,7 +1537,7 @@ void __cdecl PlayerCmd_OpenMenu(scr_entref_t entref)
+                 0,
+                 "%s",
+                 "(iMenuIndex >= 0) && (iMenuIndex < MAX_SCRIPT_MENUS)");
+-        _snprintf(svcmd, 0x40u, "%c %i", 116, iMenuIndex);
++        snprintf(svcmd, 0x40u, "%c %i", 116, iMenuIndex);
+         svcmd[63] = 0;
+         SV_GameSendServerCommand(entref.entnum, SV_CMD_RELIABLE, svcmd);
+         Scr_AddInt(1);
+@@ -1578,7 +1578,7 @@ void __cdecl PlayerCmd_OpenMenuNoMouse(scr_entref_t entref)
+                 0,
+                 "%s",
+                 "(iMenuIndex >= 0) && (iMenuIndex < MAX_SCRIPT_MENUS)");
+-        _snprintf(svcmd, 0x40u, "%c %i 1", 116, iMenuIndex);
++        snprintf(svcmd, 0x40u, "%c %i 1", 116, iMenuIndex);
+         svcmd[63] = 0;
+         SV_GameSendServerCommand(entref.entnum, SV_CMD_RELIABLE, svcmd);
+         Scr_AddInt(1);
+@@ -1608,7 +1608,7 @@ void __cdecl PlayerCmd_CloseMenu(scr_entref_t entref)
+             Scr_ObjectError(v1);
+         }
+     }
+-    _snprintf(svcmd, 0x40u, "%c", 117);
++    snprintf(svcmd, 0x40u, "%c", 117);
+     svcmd[63] = 0;
+     SV_GameSendServerCommand(entref.entnum, SV_CMD_RELIABLE, svcmd);
+ }
+@@ -1632,7 +1632,7 @@ void __cdecl PlayerCmd_CloseInGameMenu(scr_entref_t entref)
+             Scr_ObjectError(v1);
+         }
+     }
+-    _snprintf(svcmd, 0x20u, "%c", 76);
++    snprintf(svcmd, 0x20u, "%c", 76);
+     svcmd[31] = 0;
+     SV_GameSendServerCommand(entref.entnum, SV_CMD_RELIABLE, svcmd);
+ }
+@@ -1896,7 +1896,7 @@ void __cdecl iclientprintln(scr_entref_t entref)
+             Scr_ObjectError(v1);
+         }
+     }
+-    _snprintf(svcmd, 0x20u, "%c", 102);
++    snprintf(svcmd, 0x20u, "%c", 102);
+     svcmd[31] = 0;
+     Scr_MakeGameMessage(entref.entnum, svcmd);
+ }
+@@ -1920,7 +1920,7 @@ void __cdecl iclientprintlnbold(scr_entref_t entref)
+             Scr_ObjectError(v1);
+         }
+     }
+-    _snprintf(svcmd, 0x20u, "%c", 103);
++    snprintf(svcmd, 0x20u, "%c", 103);
+     svcmd[31] = 0;
+     Scr_MakeGameMessage(entref.entnum, svcmd);
+ }
+@@ -2194,7 +2194,7 @@ void __cdecl PlayerCmd_SetClientDvars(scr_entref_t entref)
+     if (Scr_GetNumParam() % 2)
+         Scr_Error(
+             "Not enough parameters to setclientdvar() - must be an even number of parameters (dvar, value, dvar, value, etc.)\n");
+-    strcpy(finalString, "v");
++    I_strncpyz(finalString, "v", sizeof(finalString));
+     for (i = 0; i < Scr_GetNumParam(); i += 2)
+     {
+         dvarName = Scr_GetString(i);
+@@ -2570,7 +2570,7 @@ void __cdecl ScrCmd_PlayLocalSound(scr_entref_t entref)
+     }
+     pszSoundName = Scr_GetString(0);
+     soundIndex = G_SoundAliasIndex((char*)pszSoundName);
+-    _snprintf(svcmd, 0x40u, "%c %i", 115, soundIndex);
++    snprintf(svcmd, 0x40u, "%c %i", 115, soundIndex);
+     svcmd[63] = 0;
+     SV_GameSendServerCommand(entref.entnum, SV_CMD_CAN_IGNORE, svcmd);
+ }
+@@ -2596,7 +2596,7 @@ void __cdecl ScrCmd_StopLocalSound(scr_entref_t entref)
+     }
+     pszSoundName = Scr_GetString(0);
+     soundIndex = G_SoundAliasIndex((char*)pszSoundName);
+-    _snprintf(svcmd, 0x40u, "%c %i", 107, soundIndex);
++    snprintf(svcmd, 0x40u, "%c %i", 107, soundIndex);
+     svcmd[63] = 0;
+     SV_GameSendServerCommand(entref.entnum, SV_CMD_CAN_IGNORE, svcmd);
+ }
+@@ -3384,10 +3384,10 @@ void __cdecl PlayerCmd_UpdateScores(scr_entref_t entref)
+             Scr_ObjectError(v1);
+         }
+     }
+-    _snprintf(svcmd, 0x40u, "%c %i", 72, level.teamScores[TEAM_ALLIES]);
++    snprintf(svcmd, 0x40u, "%c %i", 72, level.teamScores[TEAM_ALLIES]);
+     svcmd[63] = 0;
+     SV_GameSendServerCommand(pSelf - g_entities, SV_CMD_CAN_IGNORE, svcmd);
+-    _snprintf(svcmd, 0x40u, "%c %i", 71, level.teamScores[TEAM_AXIS]);
++    snprintf(svcmd, 0x40u, "%c %i", 71, level.teamScores[TEAM_AXIS]);
+     svcmd[63] = 0;
+     SV_GameSendServerCommand(pSelf - g_entities, SV_CMD_CAN_IGNORE, svcmd);
+ }
+@@ -3429,12 +3429,12 @@ void __cdecl PlayerCmd_UpdateDMScores(scr_entref_t entref)
+             break;
+         }
+     }
+-    _snprintf(svcmd, 0x40u, "%c %i %i", 73, selfClientIndex, level.clients[selfClientIndex].sess.score);
++    snprintf(svcmd, 0x40u, "%c %i %i", 73, selfClientIndex, level.clients[selfClientIndex].sess.score);
+     svcmd[63] = 0;
+     SV_GameSendServerCommand(pSelf - g_entities, SV_CMD_CAN_IGNORE, svcmd);
+     if (nextBestClientIndex >= 0)
+     {
+-        _snprintf(svcmd, 0x40u, "%c %i %i", 73, nextBestClientIndex, level.clients[nextBestClientIndex].sess.score);
++        snprintf(svcmd, 0x40u, "%c %i %i", 73, nextBestClientIndex, level.clients[nextBestClientIndex].sess.score);
+         svcmd[63] = 0;
+         SV_GameSendServerCommand(pSelf - g_entities, SV_CMD_CAN_IGNORE, svcmd);
+     }
+diff --git a/src/game_mp/g_cmds_mp.cpp b/src/game_mp/g_cmds_mp.cpp
+index 511ee016..fa6ecd99 100644
+--- a/src/game_mp/g_cmds_mp.cpp
++++ b/src/game_mp/g_cmds_mp.cpp
+@@ -1157,7 +1157,7 @@ void __cdecl Cmd_MenuResponse_f(gentity_s *pEnt)
+     else
+     {
+         szMenuName[0] = 0;
+-        strcpy(szResponse, "bad");
++        I_strncpyz(szResponse, "bad", sizeof(szResponse));
+     }
+     Scr_AddString(szResponse);
+     Scr_AddString(szMenuName);
+diff --git a/src/game_mp/g_main_mp.cpp b/src/game_mp/g_main_mp.cpp
+index 78b5dbb9..08f71b3b 100644
+--- a/src/game_mp/g_main_mp.cpp
++++ b/src/game_mp/g_main_mp.cpp
+@@ -995,7 +995,7 @@ void G_LogPrintf(const char *fmt, ...)
+     va_start(va, fmt);
+     if (level.logFile)
+     {
+-        _vsnprintf(string2, 0x400u, fmt, va);
++        vsnprintf(string2, 0x400u, fmt, va);
+         argptr = 0;
+         min = level.time / 1000 / 60;
+         tens = level.time / 1000 % 60 / 10;
+diff --git a/src/game_mp/g_scr_main_mp.cpp b/src/game_mp/g_scr_main_mp.cpp
+index e46c3460..64702c52 100644
+--- a/src/game_mp/g_scr_main_mp.cpp
++++ b/src/game_mp/g_scr_main_mp.cpp
+@@ -4213,7 +4213,7 @@ void __cdecl Scr_FxParamError(uint32_t  paramIndex, const char *errorString, int
+     if (fxId)
+         SV_GetConfigstring(fxId + CS_EFFECT_NAMES, fxName, 1024);
+     else
+-        strcpy(fxName, "not successfully loaded");
++        I_strncpyz(fxName, "not successfully loaded", sizeof(fxName));
+     v3 = va("%s (effect = %s)\n", errorString, fxName);
+     Scr_ParamError(paramIndex, v3);
+ }
+diff --git a/src/server/sv_game.cpp b/src/server/sv_game.cpp
+index bbe893eb..3fe07b9e 100644
+--- a/src/server/sv_game.cpp
++++ b/src/server/sv_game.cpp
+@@ -838,7 +838,7 @@ void __cdecl SV_SetGametype()
+     if (!Scr_IsValidGameType(gametype))
+     {
+         Com_Printf(CON_CHANNEL_SERVER, "g_gametype %s is not a valid gametype, defaulting to dm\n", gametype);
+-        strcpy(gametype, "dm");
++        I_strncpyz(gametype, "dm", sizeof(gametype));
+     }
+     Dvar_SetString((dvar_s *)sv_gametype, gametype);
+ }
+diff --git a/src/server/sv_main.cpp b/src/server/sv_main.cpp
+index bbc4f781..426577dc 100644
+--- a/src/server/sv_main.cpp
++++ b/src/server/sv_main.cpp
+@@ -318,7 +318,7 @@ void SV_SendServerCommand(client_t *cl, const char *fmt, ...)
+ 
+     va_start(va, fmt);
+ 
+-    _vsnprintf((char *)tempServerCommandBuf, 0x20000u, fmt, va);
++    vsnprintf((char *)tempServerCommandBuf, sizeof(tempServerCommandBuf), fmt, va);
+ 
+     if (cl)
+     {
+diff --git a/src/server_mp/sv_ccmds_mp.cpp b/src/server_mp/sv_ccmds_mp.cpp
+index f7c1f32e..8626d047 100644
+--- a/src/server_mp/sv_ccmds_mp.cpp
++++ b/src/server_mp/sv_ccmds_mp.cpp
+@@ -1139,7 +1139,7 @@ void __cdecl SV_AssembleConSayMessage(int firstArg, char *text, int sizeofText)
+ {
+     uint32_t textLen; // [esp+10h] [ebp-4h]
+ 
+-    strcpy(text, "console: ");
++    I_strncpyz(text, "console: ", sizeofText);
+     textLen = 9;
+     if (strlen(text) != 9)
+         MyAssertHandler(".\\server_mp\\sv_ccmds_mp.cpp", 827, 1, "%s", "textLen == strlen( text )");
+diff --git a/src/server_mp/sv_main_mp.cpp b/src/server_mp/sv_main_mp.cpp
+index 61482056..aa448ce6 100644
+--- a/src/server_mp/sv_main_mp.cpp
++++ b/src/server_mp/sv_main_mp.cpp
+@@ -258,7 +258,7 @@ void SV_SendServerCommand(client_t *cl, svscmd_type type, const char *fmt, ...)
+     va_list va; // [esp+20h] [ebp+14h] BYREF
+ 
+     va_start(va, fmt);
+-    _vsnprintf((char *)tempServerCommandBuf, 0x20000u, fmt, va);
++    vsnprintf((char *)tempServerCommandBuf, sizeof(tempServerCommandBuf), fmt, va);
+     if (cl)
+     {
+         SV_AddServerCommand(cl, type, (char *)tempServerCommandBuf);
+diff --git a/src/server_mp/sv_snapshot_profile_mp.cpp b/src/server_mp/sv_snapshot_profile_mp.cpp
+index 5f541b5f..b4d3182f 100644
+--- a/src/server_mp/sv_snapshot_profile_mp.cpp
++++ b/src/server_mp/sv_snapshot_profile_mp.cpp
+@@ -1197,8 +1197,7 @@ void __cdecl SV_Netchan_PrintProfileStats(int bPrintToConsole)
+     {
+         if (pClient->header.state)
+         {
+-            strncpy(szClientName, pClient->name, 0x11u);
+-            szClientName[16] = 0;
++            I_strncpyz(szClientName, pClient->name, 17);
+             pStream = &pClient->header.netchan.prof;
+             if (pClient->header.netchan.prof.recieve.iCountedPackets + pClient->header.netchan.prof.send.iCountedPackets <= 0
+                 || pStream->recieve.iCountedFragments + pStream->send.iCountedFragments <= 0)

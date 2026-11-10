@@ -333,6 +333,8 @@ namespace
         int gate;
         volatile int *workCount;
         volatile bool *sawSuspend;
+        volatile bool *hold;
+        volatile bool *holding;
     };
 
     void *SuspendedWorker(void *raw)
@@ -341,8 +343,18 @@ namespace
 
         for (int i = 0; i < 200; ++i)
         {
-            if (Posix_IsSuspendRequested(args->gate))
-                *args->sawSuspend = true;
+            // A request that lands between a look and the checkpoint parks
+            // this thread before it could report the request. The test
+            // holds the worker here, short of the checkpoint, until it has
+            // looked with the request outstanding.
+            while (*args->hold && !*args->sawSuspend)
+            {
+                *args->holding = true;
+                if (Posix_IsSuspendRequested(args->gate))
+                    *args->sawSuspend = true;
+                else
+                    usleep(200);
+            }
 
             // Checkpoint blocks while a suspend is outstanding.
             Posix_SuspendCheckpoint(args->gate);
@@ -361,19 +373,33 @@ namespace
 
         volatile int workCount = 0;
         volatile bool sawSuspend = false;
+        volatile bool hold = false;
+        volatile bool holding = false;
 
         SuspendedWorkerArgs args;
         args.gate = 1;
         args.workCount = &workCount;
         args.sawSuspend = &sawSuspend;
+        args.hold = &hold;
+        args.holding = &holding;
 
         pthread_t worker;
         pthread_create(&worker, nullptr, SuspendedWorker, &args);
 
         usleep(20 * 1000);
 
+        // Stop the worker short of its checkpoint first, so the request below
+        // cannot slip in between its look and the checkpoint.
+        hold = true;
+        for (int i = 0; i < 2000 && !holding; ++i)
+            usleep(1000);
+        Check(holding, "worker reached the hold before its checkpoint");
+
         Posix_RequestSuspend(1);
         Check(Posix_IsSuspendRequested(1), "suspend request is visible");
+        for (int i = 0; i < 2000 && !sawSuspend; ++i)
+            usleep(1000);
+        hold = false;
         usleep(30 * 1000);
 
         // The worker must be parked inside the checkpoint: its counter stops.

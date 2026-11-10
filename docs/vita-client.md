@@ -10,8 +10,9 @@ platform layer and memory rules. Started 2026-11-09.
 showed on David's Vita and worked, with touch, buttons and music (run K).
 A map load failed on the console in that run. Since then a map loads, a
 player spawns and the world is drawn in Vita3K on the console's heap size
-(runs U and BW). The GPU's memory is still full in a game there ("Memory"
-below), and no map load has been tried on a console since run K.**
+(runs U, BW and V), and since run V nothing is refused GPU memory in a game
+there ("Memory" below). No map load has been tried on a console since
+run K.**
 - The whole client compiles, links and packs into a `.vpk`: client, cgame, UI, sound, renderer and its own listen server.
 - Stage 1 had no graphics back end, so the client stopped at the renderer through `Sys_Error`. Stage 2 replaces that: the renderer gets the D3D9 front on the GXM back end ("Graphics" below).
 - Stage 3 (controls and sound) runs on the console: on run 1 (2026-11-09) the menu music and the menu's sounds were heard, and every button arrived as its key. The screen's touch and the layout in a game are not confirmed yet: see "Controls" and "Sound" below.
@@ -89,8 +90,21 @@ from the game's shaders, so keep them on that machine like the game's files.
 A file named `run-tests` in the same folder turns on the draw tests of
 `gxm_legacy_draw.cpp` (`kGuessEdits`): for the first minute and a half the
 screen shows test pictures, mostly plain green, and the log says what each
-left in the back buffer. Without the file the client only logs frame 300's
-first draws and what frames 300 and 700 left in the back buffer.
+left in the back buffer. A file named `read-back` there has the client log
+only what frames 300 and 700 left in the back buffer (`diag frame 300 ... back
+buffer: N of 522240 pixels not black`), which on a console says whether a
+picture was drawn. Without either file the client logs frame 300's first
+draws and reads nothing back. Leave both files out in Vita3K unless a run is
+about them: once the game has read a display buffer, the emulator draws every
+later frame into that buffer slowly. Up to PC run H1 the two reads were made
+in every run, and the menu there fell from 43 frames a second to 12 after
+frame 300 and to 6 after frame 700 (a frame of 250 ms in every three), while
+the read itself counted no lit pixel. Without the reads (PC run H2,
+2026-11-10) the same menu start drew 5135 frames in 120 s where it had drawn
+1174, and a map start with a filled cache drew 4473 frames in 180 s, 25 a
+second by the game's counter, where H1's had drawn 868 and shown 2. Frame
+times from Vita3K runs before that are therefore the emulator's, not the
+game's.
 
 Two switches are for measuring in an emulator what the game would take if it
 had the room; a console has no memory for either:
@@ -116,6 +130,7 @@ Around them:
 | Platform layer | `src/linux/*.cpp` + `src/vita/*.cpp` | The server's, minus its stand-ins for client systems |
 | Win32 window calls | `src/vita/client/vita_win32_window.cpp` | One window: the 960 x 544 screen. One monitor |
 | Window procedure, input | `src/vita/client/vita_client_input.cpp`, `input/vita_input_map.cpp` | Sets `g_wv.hWnd`; the pad and the touch panels become engine keys and mouse motion ("Controls") |
+| On-screen keyboard | `src/vita/client/vita_keyboard.cpp`, `input/vita_text_entry.cpp` | The system's keyboard for menu text fields, chat and console commands ("Typing") |
 | Graphics device | `src/vita/client/vita_d3d9.cpp` | The D3D9 front's host: one 960 x 544 mode, one monitor, the log |
 | D3D9 front | `src/gfx_vk/d3d9` | The Vulkan work's IDirect3D9, unchanged, over the seam in `vk_d3d9_backend.h` |
 | GXM back end | `src/gfx_gxm` | The Legacy API on sceGxm (`legacy/gxm_legacy.cpp`), the screen, GPU memory |
@@ -127,7 +142,7 @@ Vita's CPU), because the renderer's headers declare the Bink API.
 
 **Run K on David's Vita (2026-11-10, commit d4a03fa):**
 - The menu showed and worked: frame 300 left 480359 of 522240 pixels not black, the first frame came 44.5 s after the start, touch and buttons reached the menu and the music played.
-- The menu froze several times, once for 23.6 s, with the music paused. Programs were compiling while the menu was up: 139 in 94 s, about 0.7 s each, and 672 more were read from the card in 16 s. The game was still loading `common_mp` behind the menu, and its loading thread compiled each shader inside the renderer's lock, so the frame being drawn waited ("Programs in the background" below, which takes that work off both threads; not yet run on a console).
+- The menu froze several times, once for 23.6 s, with the music paused. Programs were compiling while the menu was up: 139 in 94 s, about 0.7 s each, and 672 more were read from the card in 16 s. The game was still loading `common_mp` behind the menu, and its loading thread compiled each shader inside the renderer's lock, so the frame being drawn waited ("Programs in the background" below, which takes that work off both threads; run in Vita3K, not yet on a console).
 - Starting a listen server on mp_crash stopped the game 58 ms into the map's fastfile: `out of GPU memory` for a 13 MB vertex buffer, then the renderer's fatal error ("Memory" below).
 
 ## Memory
@@ -169,7 +184,7 @@ The main pool is too small for the dynamic buffers, so 14.5 MB of them spill int
 - **A reserve for the targets a game frame needs.** In a map, first use comes after the map's textures and vertices have filled the pools: in runs M and U the two screen-sized targets were refused with 4.5 MB of CDRAM free in pieces, none of them 2 MB long. The back end sets 4.5 MB of CDRAM aside at start-up for colour targets alone (`target reserve` in the log): room for two screen-sized targets and the four quarter-size ones of glow, depth of field and blur. Colour targets take from it first and from the pools after that. A file named `no-target-reserve` in the program cache folder leaves the reserve out, for checking in an emulator what a full pool does.
 - **A target without memory.** A refused target tries again each second; the log names the first refusal and the moment it gets its memory. Until then draws into it are skipped and counted (`its colour target has no GPU memory`), clears of the depth bound with it still happen, and a draw or copy that samples it is skipped too (`it samples a render target that has no GPU memory or was not filled`), which passes the mark on to its own target. So a missing target costs the effects that need it (film colour, glow, depth of field, blur, soft particles, distortion) and not the frame. In Vita3K runs M and U mp_crash loaded and a player spawned, but the world was black behind a correct HUD: the two screen-sized colour targets of a game frame were refused. One is the copy of the scene the post effects read, and the film colour pass painted the frame from it. The other is the depth copy (`r_floatz`, R32F) that soft particles and depth of field read; the renderer clears the frame's depth while that target is bound, and nothing cleared it.
 - **No shadow maps.** `sm_enable` is 0 and read-only in the Vita build. The back end cannot sample depth textures yet, so the shadow maps would be drawn and never read. With the change above, their 18 MB of targets are never taken.
-- **Smaller dynamic buffers** (built, not run yet). The engine's dynamic buffers are sized for the PC game: 25.5 MB before any copy. The Vita build (`KISAK_GFX_GXM`, the sizes in `r_gfx.h`) makes them 12.5 MB:
+- **Smaller dynamic buffers** (run V). The engine's dynamic buffers are sized for the PC game: 25.5 MB before any copy. The Vita build (`KISAK_GFX_GXM`, the sizes in `r_gfx.h`) makes them 12.5 MB:
 
 | Buffer | Retail | Vita | When it is full or absent |
 |---|---:|---:|---|
@@ -180,28 +195,31 @@ The main pool is too small for the dynamic buffers, so 14.5 MB of them spill int
 | Dynamic vertex buffer | 1 MB | 1 MB | |
 | Code and mark meshes, two of each | 1.5 MB | 1.5 MB | |
 
-- **The sizes are guesses until a run reports them.** Once a minute the log says how full each got (`r_dynamicBufferReport`, in seconds; 60 on the Vita, 0 and so silent elsewhere): `dynamic buffers, the most one frame asked for in N frames: skinned cache X of 3072 KB (N models left out), pretess X of 524288 indices (N batches left unbatched), dynamic indices X of 1048576, dynamic vertices X of 1024 KB`. A skinned cache figure above its size is what the frame wanted.
-- **A renamed buffer's copies stay in its own pool.** The engine locks most dynamic buffers with DISCARD every frame. The back end then gives the buffer fresh memory (a rename) and frees the old once the frames that might read it are done, up to three frames later, so a buffer can hold four times its size. Those copies used to spill from the main pool into CDRAM, where they took the room the scene's render targets needed. Now a rename takes memory from the buffer's own pool only (main, for dynamic buffers). With no room there, the lock ends the scene, waits for the GPU and writes in place, which costs time and no memory. One wait serves every buffer drawn before it: after it the GPU reads none of them, so until a draw reads one again its locks write in place without a rename or another wait. The draw summary counts all three: `buffer renames: N took fresh memory, N waited for the GPU instead (their pool was full) and N needed neither (a wait since their last draw); old copies the GPU might still read took N KB at most`. A refused rename no longer writes two lines to the log each time. What the waits cost in frame time on a console is not known.
+- **The sizes are estimates, and the log reports them.** Once a minute the log says how full each got (`r_dynamicBufferReport`, in seconds; 60 on the Vita, 0 and so silent elsewhere): `dynamic buffers, the most one frame asked for in N frames: skinned cache X of 3072 KB (N models left out), pretess X of 524288 indices (N batches left unbatched), dynamic indices X of 1048576, dynamic vertices X of 1024 KB`. A skinned cache figure above its size is what the frame wanted. In run V (one player on mp_crash) the most a frame asked for was 100 KB of skinned cache, 178056 pretess indices, 5904 dynamic indices and 107 KB of dynamic vertices, and nothing was left out or left unbatched. A full game's players have not been measured.
+- **A renamed buffer's copies stay in its own pool.** The engine locks most dynamic buffers with DISCARD every frame. The back end then gives the buffer fresh memory (a rename) and frees the old once the frames that might read it are done, up to three frames later, so a buffer can hold four times its size. Those copies used to spill from the main pool into CDRAM, where they took the room the scene's render targets needed. Now a rename takes memory from the buffer's own pool only (main, for dynamic buffers). With no room there, the lock ends the scene, waits for the GPU and writes in place, which costs time and no memory. One wait serves every buffer drawn before it: after it the GPU reads none of them, so until a draw reads one again its locks write in place without a rename or another wait. The draw summary counts all three: `buffer renames: N took fresh memory, N waited for the GPU instead (their pool was full) and N needed neither (a wait since their last draw); old copies the GPU might still read took N KB at most`. A refused rename no longer writes two lines to the log each time. In run V's 1356 frames 248 renames took fresh memory, 953 waited and 2013 needed neither, and old copies took 3072 KB at most. What the waits cost in frame time on a console is not known.
 
 **In a game.** No map has loaded on a console yet. In Vita3K on the Windows PC (builds made on that PC, 2026-11-10; not a console):
 - **Run M** (before `snd_adpcm`): on the 64 MB heap the mp_crash fastfile loads and then the heap runs out. On a 128 MB heap the map loads and a player spawns, with 71 MB of heap in use.
 - **Run U** (with `snd_adpcm`, targets taking memory at first use and no shadow maps; before the target reserve and the smaller buffers): the map loads on the 64 MB heap and a player spawns. Heap 31.8 MB after the load and 32.9 MB in the game; zone arena 46 MB free. Menus and the HUD are drawn. The world is black.
 - **Why black in run U:** both pools were full, CDRAM at 103.5 of the 108 MB Vita3K offers (a console has 104) and main at 19.3 of 20. The scene's two screen-sized render targets, 2040 KB each, found no room 0.7 s after the game's own start-up (`CL_InitCGame`), and every draw to them was skipped: 571753 draws, against 997449 drawn. 2308 allocations were refused in seven minutes. All but those two were fresh copies for renamed dynamic buffers.
 - **Run BW** (run U's build with the target reserve and the rule for a target without memory; still before the smaller buffers): the world is drawn. Ground, buildings and the held weapon are in colour under the HUD at five looks while turning and walking. Both screen-sized targets take their memory from the reserve, no draw is skipped, and 842866 draws and 1172 copies are made in five minutes. The pools are as full as in run U: 1667 allocations refused, 1666 of them fresh copies for renamed dynamic buffers and one a cube map of 4104 KB, which gets a grey stand-in. About 2 frames a second, as in run U. With the marker `no-target-reserve` the same build draws the world without its film colour, the two targets refused as in run U.
-- The smaller buffers and the reserve have not run together yet.
+- **Run V** (run BW's build with the smaller dynamic buffers and renames kept to the buffer's own pool): the world is drawn as in run BW, with the weapon, trees, cars and the HUD, over six minutes of walking and looking around. No allocation is refused at all, where run BW had 1667. The 4 MB cube map gets its memory. Every dynamic buffer is in the main pool. CDRAM peaks at 95.5 of 108 MB and the main pool at 19.8 of 20. 1395563 draws, none skipped. Heap 32.9 MB in the game.
+- **The sky in run V** is a flat, very bright white. In run BW it was the grey stand-in of the cube map that run V finds room for, so no run has shown a sky picture yet. Whether that is a fault of this build is not known: nobody has put the same view beside the Windows build. The same goes for the strong yellow of sunlit ground in runs BW and V.
+- **Frame rate.** The game's counter shows 2 frames a second in runs U, BW and V. Do not read the game's speed from it, even for an emulator: those builds read the back buffer at frames 300 and 700 for their diagnostics, and after such a read Vita3K draws every later frame slowly (in run H1 the menu drew about 43 frames a second up to frame 300, about 12 up to frame 700 and about 6 after it). A build that leaves the reads out (run H2, 2026-11-10) drew the same map at 25 frames a second by the game's counter. That build did not have run V's buffer changes, so what the waits for the GPU cost a frame there is not measured yet.
 
-| Use in the game (run U) | CDRAM + main, MB | Note |
-|---|---:|---|
-| Compressed textures | 34.9 | 1569 pieces |
-| Static vertices | 29.0 | `common_mp` 9.2, mp_crash 12.8 and 7.0 |
-| Dynamic vertices | 4.5 + 15.5 | one skinned cache did not fit the main pool |
-| Dynamic indices | 8.0 | three buffers of 2 MB and one copy |
-| Other textures | 6.5 | |
-| Cubes | 6.5 | 21; one of 4 MB |
-| Static indices | 3.1 | |
-| Depth | 2.0 | |
-| Volumes | 1.0 | |
-| Render targets | 0.4 | three small ones; the screen-sized ones got none |
+| Use in the game, CDRAM + main, MB | Run U | Run V | Note |
+|---|---:|---:|---|
+| Compressed textures | 34.9 | 34.9 | 1569 pieces |
+| Static vertices | 29.0 | 29.0 | `common_mp` 9.2, mp_crash 12.8 and 7.0 |
+| Dynamic vertices | 4.5 + 15.5 | 0 + 8.5 | in run U one skinned cache did not fit the main pool |
+| Dynamic indices | 8.0 | 0 + 4.0 | run U: three buffers of 2 MB and one copy; run V: one of 2 MB and two of 1 MB |
+| Other textures | 6.5 | 6.5 | |
+| Cubes | 6.5 | 6.5 | 21; one of 4 MB |
+| Static indices | 3.1 | 3.1 | |
+| Depth | 2.0 | 2.0 | |
+| Volumes | 1.0 | 1.0 | |
+| Render targets | 0.4 | 4.4 | run U: three small ones, the screen-sized ones got none; run V: those and the two screen-sized ones |
+| Both pools, in use | 103.5 + 19.3 | 95.5 + 16.8 | of 108 + 20 in Vita3K; a console has 104 of CDRAM |
 
 The display's buffers (8 MB of CDRAM) and the context's ring buffers (in the main pool) are not in the by-use line.
 
@@ -222,6 +240,10 @@ source changes.
   the menu cursor or the look motion to `CL_MouseEvent`. That call's answer
   says who has the mouse, a menu or the game, and that decides how the next
   reading is mapped.
+- `src/vita/client/input/vita_text_entry.cpp` decides when the on-screen
+  keyboard opens and what the game gets when it closes; the same host test
+  runs it. `src/vita/client/vita_keyboard.cpp` is the system's keyboard
+  itself ("Typing" below).
 
 **On the console.** Run 1 (2026-11-09, in the menus, with nothing drawn yet
 and `vita_inputDebug 1`): every button arrived as the key in the tables
@@ -232,21 +254,22 @@ up to starting a server, and the log has nine touches, each a `MOUSE1` press
 and release within about 20 ms. Touches in the top-left, top-right and
 bottom-left corners of the panel landed in the same corners of the engine's
 960 by 544 screen. Not confirmed yet: the
-screen's three areas in a game, which side of the rear pad is which, and the
-look speed and the layout in a game, which need a game on the screen.
+screen's four areas in a game, which side of the rear pad is which, the
+look speed and the layout in a game, which need a game on the screen, and
+the on-screen keyboard.
 
 ### In the game
 
-Every control is a key of its own: AUX1 to AUX16 and the keypad arrows, which
-no PC keyboard or mouse sends. The default layout is the console game's where
-the Vita has the button.
+Every control is a key of its own: AUX1 to AUX16, the keypad arrows and the
+keypad's 5, which nothing else on a Vita sends. The default layout is the
+console game's where the Vita has the button.
 
 | Control | Engine key | Default binding | Does |
 |---|---|---|---|
 | Left stick | `AUX9` up, `AUX10` down, `AUX11` left, `AUX12` right | `+forward`, `+back`, `+moveleft`, `+moveright` | Move |
 | Right stick | mouse motion | | Look |
-| R | `AUX6` | `+attack` | Fire |
-| L | `AUX5` | `+speed_throw` | Aim down the sight |
+| R button | `AUX6` | `+attack` | Fire |
+| L button | `AUX5` | `+speed_throw` | Aim down the sight |
 | Cross | `AUX1` | `+gostand` | Jump, stand up |
 | Circle | `AUX2` | `+stance` | Crouch; hold for prone |
 | Square | `AUX3` | `+usereload` | Use, reload |
@@ -254,10 +277,11 @@ the Vita has the button.
 | D-pad up, down, left, right | `KP_UPARROW`, `KP_DOWNARROW`, `KP_LEFTARROW`, `KP_RIGHTARROW` | `+actionslot 1` to `4` | The console game's d-pad |
 | Select | `AUX7` | `+scores` | Scoreboard |
 | Start | `ESCAPE` | fixed | Menu |
-| Rear touch pad, a tap on the left or right half | `AUX8`, `AUX16` | `+breath_sprint` | Sprint (the left stick's click on a console) |
+| Rear touch pad, a tap on the left or right half | `AUX8`, `AUX16` | `+breath_sprint` | Sprint (the left stick's click on a console); while aiming, hold your breath |
 | Screen, left third | `AUX13` | `+smoke` | Special grenade |
 | Screen, right third, top half | `AUX14` | `+frag` | Frag grenade |
 | Screen, right third, bottom half | `AUX15` | `+melee` | Knife |
+| Screen, middle third, top third | `KP_5` | `chatmodepublic` | Chat: opens the on-screen keyboard ("Typing") |
 
 - **Moving** is four keys, so it is full speed in eight directions. A
   direction takes hold at 40% of the stick's travel past the dead zone and
@@ -269,16 +293,21 @@ the Vita has the button.
   (`vita_lookPitchRatio`), and the response is a curve (`vita_lookCurve`), so
   a small push turns slowly.
 - **Touch.** A finger keeps the area of the screen it landed in until it
-  lifts, wherever it slides. The middle third of the screen is no key.
+  lifts, wherever it slides. The outer thirds are where the thumbs reach.
+  The top third of the middle is a key too, small and out of the thumbs' way
+  so that a keyboard does not open in a fight; the rest of the middle is no
+  key. Team chat has no area: bind `chatmodeteam` to a control to have it.
 - **The rear pad** is a tap. The fingers that hold the console lie on it: the
   first console run logged 30 touches in 40 seconds where two taps were asked
   for. So a finger that stays longer than 0.3 s is resting and does nothing. A
   tap presses its half's key when the finger leaves, and the key stays down
   while the left stick is pushed forward and for a quarter of a second after.
   With the default binding that is the console game's sprint: tap, and run
-  until you stop. A tap while standing still is a short press, and a tap while
-  the key is down presses it again. Holding your breath behind a scope wants a
-  held key, so give `+holdbreath` a control of its own.
+  until you stop. The key also stays down while L is held, and the same
+  binding holds the breath behind a scope: aim with L, tap, and the breath is
+  held until L is let go. That follows the button, not the action, so it
+  assumes aiming stays on L. A tap while standing still without L is a short
+  press, and a tap while the key is down presses it again.
 
 ### In a menu
 
@@ -297,14 +326,39 @@ the Vita has the button.
 ### Binding
 
 The controls menu works: while it waits for a key, every control sends its
-game key, and Start cancels. The menu and the game's hints show the engine's
-names (`AUX6`, not "R"); the table above translates.
+game key, and Start cancels.
+
+The menu and the game's hints ("Press ... to use") name the controls: "R
+button", "Square", "Rear touch (left)", "Screen (top right)". The shoulder
+buttons are "L button" and "R button" there because the menu lists a profile's
+PC keys beside them, and its plain "R" is the keyboard's (run KB1 showed
+"Left Mouse or R" for firing and "R" for reloading). The engine keeps two
+tables of key names, one for `bind` and the config files and one for what it
+shows. Only the second is changed, when the input starts, so configs still
+say `AUX6` and read the same on a PC. The engine shows a key's name as it is
+when the game's texts have no entry under it, which is what makes this work
+without an engine change. `vita_buttonNames 0` shows the engine's names.
+
+The controls menu is the PC game's and has a row only for the PC's actions.
+Square's `+usereload`, the console game's one button for both, has none: the
+"Use" and "Reload Weapon" rows are `+activate` and `+reload` and show the
+profile's PC keys alone (run KB1: "F" and "R"). A row shows two keys at
+most, so the rear pad's second half is not named beside "Shift or Rear touch
+(left)". Binding a control in a row works and replaces the control's default.
 
 A profile from a PC, a new profile and the menu's "reset to default" all
 leave the AUX keys bound to nothing. While none of AUX1 to AUX16 has a
 binding, the default layout is set (`vita_defaultBinds`, on by default; the
 log says so). One control unbound on purpose stays unbound. `vita_binddefaults`
 sets the whole default layout at any time.
+
+The default layout can grow. A profile's `vita_layout` says which default
+layout its controls were last given: 1 is the first, and a config that does
+not say is 1. A control that came with a later layout gets its default action
+once in an older profile, if it is bound to nothing there, and the profile is
+then marked with today's number (2: the chat area). Nothing the player has
+bound is changed. To change the defaults, edit `kControls` in
+`vita_input_map.cpp`; a new control gets the next layout number there.
 
 | Dvar | Default | |
 |---|---|---|
@@ -313,17 +367,99 @@ sets the whole default layout at any time.
 | `vita_lookPitchRatio` | 0.65 | Up and down, as a part of `vita_lookSpeed` |
 | `vita_lookCurve` | 2 | 1 is linear; higher is finer near the centre |
 | `vita_cursorSpeed` | 700 | Left stick in a menu, pixels a second |
-| `vita_frontTouch` | 1 | The screen's three areas are keys in the game |
+| `vita_frontTouch` | 1 | The screen's four areas are keys in the game |
 | `vita_rearTouch` | 1 | A tap on either half of the rear pad is a key in the game |
-| `vita_defaultBinds` | 1 | Set the default layout while no AUX key is bound |
+| `vita_defaultBinds` | 1 | Set the default layout while no AUX key is bound, and give an older profile the controls that came since |
+| `vita_layout` | 1 | The default layout the profile's controls were last given (kept in the profile) |
+| `vita_buttonNames` | 1 | The controls menu and the hints name the Vita's controls, not the engine's keys |
+| `vita_keyboard` | 1 | Open the on-screen keyboard when a menu's text field or the chat line waits for text |
+| `vita_keyboardAnswer` | empty | For a run with nobody to type: no keyboard is shown, and every keyboard asked for is answered with this text after half a second (not kept in the profile) |
 | `vita_inputDebug` | 0 | Log every key sent, every finger that lands (with its panel and screen position) and how long it stayed |
+
+### Typing
+
+When the game waits for typed text, the Vita's own on-screen keyboard opens
+(the system's IME dialog), and what was typed goes to the game as the
+characters and the Enter a PC keyboard would send.
+
+- **A menu's text field** (a profile name, a server address, a password):
+  touch it, or move to it with the d-pad and press Cross. The keyboard opens
+  with what the field holds. Enter replaces the field's text and ends the
+  edit; closing the keyboard without Enter leaves the field as it was.
+  Number fields get the number keyboard. A field that a menu puts into
+  editing by itself opens the keyboard by itself: the "create profile" box
+  does (run KB1), so a first start opens on a keyboard for the name.
+- **Chat:** a touch on the top middle of the screen opens the chat line and
+  the keyboard. Enter says it; closing the keyboard closes the chat line.
+- **A console command:** the command `vita_typecommand` opens the keyboard,
+  and what is entered runs as a command. It has no control by default; bind
+  it, or put it in the command line file.
+
+How it is built:
+- The keyboard is the system's, drawn over the game's frame. So it needs the
+  frame: `gfx_gxm::SetBeforeFlip` (`gxm_display.h`) calls back on the thread
+  that draws, between a frame's last scene and its flip, with the back
+  buffer, the depth buffer and the sync object, and `sceCommonDialogUpdate`
+  runs there. Every call of the dialog is made on that thread
+  (`vita_keyboard.cpp`); the main thread asks for a keyboard and takes the
+  result through a small mailbox.
+- The game runs on under the keyboard. While it is up the controls belong to
+  it: the pad and the panels are read and nothing is sent. A button or a
+  finger that is still down when it closes does nothing until it is let go,
+  so the touch that pressed the keyboard's Enter does not click the menu
+  under it (in Vita3K it did: run KB1).
+- One keyboard for each wait: after it closed, the game has to stop waiting,
+  or wait in another field, before another opens. If the field goes away
+  while the keyboard is up (the menu closed, the match ended), the keyboard
+  is closed and its text dropped.
+- The engine's text is one byte a character. Letters outside ASCII and
+  Latin-1 are left out of what was typed.
+- If the system refuses the keyboard, the log says so, none is asked for
+  again in that run, and a chat line that opens is closed again. With no
+  keyboard (refused, or `vita_keyboard 0`) and no player profile, the "create
+  profile" box is offered the name `Vita` to accept, as before the keyboard.
+- A run nobody watches should start with `+set vita_keyboard 0` if a text
+  field may take the focus: an open keyboard waits for someone. Or with
+  `+set vita_keyboardAnswer <text>`, which answers every keyboard asked for
+  with that text and shows none; the log then has the "keyboard asked for"
+  and "keyboard closed" lines without `vita_inputDebug`. That is how a run
+  checks what the game does with entered text. It does not go through the
+  system's dialog.
+
+**Run so far.** The host tests cover when the keyboard opens and what the
+game gets. Two runs in Vita3K on the Windows PC (2026-11-10, builds made on
+that PC, by hand):
+
+- **KB1** (a build of 9625bbad): the keyboard was asked for by
+  `vita_typecommand` at start-up, by the "create profile" box's name field (by
+  itself and again on a touch), and by the chat line after a touch on the top
+  middle of the screen in a game; closing it with and without Enter was told
+  apart each time; an older profile got the chat area's binding once. The
+  click that closed Vita3K's dialog also clicked the game, which is what the
+  resting controls are for.
+- **KB2** (a build of df2902fa, with `vita_keyboardAnswer`): a typed command
+  ran; a menu field (the server name, 20 characters at most) took the text
+  and left editing; the chat line was said, and the log has it. The controls
+  worked after each. Without the switch, the click that closed Vita3K's
+  dialog was no longer a `MOUSE1` press. The controls menu read "Left Mouse
+  or R button" and "L button".
+
+No error in either, and every start ended by itself. Vita3K draws a dialog
+of its own, its `sceCommonDialogUpdate` does nothing, and its text field took
+no scripted typing, so **no entered text has come back from the system's
+dialog yet**, in Vita3K or anywhere. Also not run: everything on a console
+(the dialog drawn into the frame, which thread may call it, the memory it
+takes beside a loaded map, and whether a console hands the game any touch
+while the keyboard is up).
+
+Run KB2 also showed the game's chat font drawing no underscore, and the
+profile's `config_mp.cfg` keeping its old length when a shorter one was
+written, which left a stray last line. That is Vita3K: the port opens the
+file to be cut and a console cuts it, and Vita3K's file layer ignores the
+flag (the Vita client thread's reading of both sources).
 
 ### Not done yet
 
-- **The on-screen keyboard** for text fields (names, server addresses, chat).
-  It needs a hook in the frame's present, so it follows the first drawn
-  frames. Until then one field is filled in: with no player profile, the
-  "create profile" box is offered the name `Vita` to accept.
 - Walking speed from how far the stick is pushed. The engine moves by keys.
 - A stray touch on the rear pad that is as short as a tap still counts as
   one. `vita_rearTouch 0` turns the pad off. Run K's log, from the menus where
@@ -459,9 +595,11 @@ took 1232 ms in the emulator. 26 of them claim more frames than their bytes
 hold, and every one the log printed is a 16-bit stereo sound at 44100 Hz that
 claims exactly twice its frames, so a stereo sound's frame count seems to
 count both channels. Where sounds are not halved (the desktop's default) the
-driver still works out such a sound's length from that count; not looked at
-yet. Run U loaded Crash: 749 sounds in 12184 KB, where 16-bit PCM would take
-47675 KB, and the heap in the game held 32.9 MB.
+driver worked out such a sound's length from that count, so it counted as
+twice as long as it plays; the copying path now lowers the count to the frames
+the bytes hold, as the other two paths did. Nobody has listened for a
+difference on the desktop. Run U loaded Crash: 749 sounds in 12184 KB, where
+16-bit PCM would take 47675 KB, and the heap in the game held 32.9 MB.
 
 Not measured yet: all of this on a console (Vita3K's memory figures are not a
 console's), what the encoding adds to a load there, the path that keeps a
@@ -652,10 +790,22 @@ first 60), with the shaders created, texture levels filled and programs made
 meanwhile. "programs ready" in the `shaders` line now counts every program
 the cache made, variants and built-in ones included. The queue itself makes
 no Vita call and is checked on the host with the address and thread
-sanitizers (`scripts/tests/test_vita_program_queue.py`). Status: builds for
-the Vita; not yet run in Vita3K or on a console. Music still stops in any
-other stall of the main thread longer than the 0.7 s it queues ahead (a map
-load); that needs the stream fed from another thread.
+sanitizers (`scripts/tests/test_vita_program_queue.py`). Music still stops
+in any other stall of the main thread longer than the 0.7 s it queues ahead
+(a map load); that needs the stream fed from another thread.
+
+In Vita3K on the Windows PC (run H1, 2026-11-10, c5a28eba merged with master
+6e11f2b3; an emulator's timing, not a console's): a start with an empty cache
+drew its first frame 6.9 s after the launch, where the build before drew it
+after 35.2 s, and its slowest frame was 484 ms, where the build before had
+frames of 19.2, 8.5, 27.1 and 17.9 s. The 421 programs compiled in 267 s in
+the background (as long as before), 1209 draws were left out of 34 frames,
+and the window showed the whole menu 44 s after the launch. A start with the
+cache filled compiled nothing, read 837 programs in the background in 1.3 s
+and left 8 draws out of 2 frames. A map start (mp_crash) whose cache held
+only the menu's programs loaded and drew the world while 238 programs
+compiled: 70165 draws were left out of 147 frames, none after the first half
+minute in the map. Not yet run on a console.
 
 **The compiler folds `x * 0 + 1` to 0.** HLSL writes `float4(v.xyz, 1)` as
 one multiply-add with the constant (1, 0, 0, 0): `mad r0, v0.xyzx, c8.xxxy,
@@ -742,6 +892,6 @@ The plan, with reasons and risks: `vita-client-plan.md` in the project files.
 
 1. **Build and boot** (this page).
 2. **Screen:** a GXM back end for the Legacy adapter API (`src/gfx_vk/legacy/vk_legacy.h`), under the existing D3D9 front (`src/gfx_vk/d3d9`). Game shaders are translated to Cg, compiled on the Vita by `libshacccg.suprx` (each user extracts it from their own firmware) and cached as `.gxp`.
-3. **Controls and sound:** buttons, sticks and touch become engine input, and sound gets a Vita output. Built and tested on the host ("Controls", "Sound"); the on-screen keyboard follows the first drawn frames.
+3. **Controls and sound:** buttons, sticks and touch become engine input, and sound gets a Vita output. Built and tested on the host ("Controls", "Sound"). Text is typed on the system's on-screen keyboard ("Typing"): it opens and closes in Vita3K, and a text given by a switch reaches the game there (runs KB1 and KB2); it has not run on a console.
 4. **Join and play:** connect to a server and play, with the visual cuts from the feasibility study.
 5. **Make it fast:** profile on the Vita, then cut the hot spots.

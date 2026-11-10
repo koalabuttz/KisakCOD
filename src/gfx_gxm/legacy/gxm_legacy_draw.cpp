@@ -283,6 +283,7 @@ struct DrawState
     // folder holds a file named "run-tests"; frame 300's log and the two
     // read-backs always do.
     bool diagTests = false;
+    bool diagReadBack = false; // frames 300 and 700 (and the tests) read the back buffer
     Variant diagGreen; // a fragment program that writes opaque green
     // A vertex program that takes the game's POSITION as screen pixels.
     Variant diagPass;
@@ -305,10 +306,25 @@ struct DrawState
 };
 
 // Run diagnostics (DiagnoseDraw, DiagnoseFrame). Frame 300's first 8 draws
-// are logged at length and its back buffer read; a magenta rectangle is
-// drawn from frame 600 and read at 700. Then come the tests on the game's
-// own draws: one every 300 frames from frame 900, on for 180 frames, 2 draws
+// are logged at length. With a file named read-back in the program cache
+// folder the back buffer is read at frames 300 and 700. With one named
+// run-tests it is read there too, a magenta rectangle is drawn from frame 600
+// to show in frame 700's count, and then come the tests on the game's own
+// draws: one every 300 frames from frame 900, on for 180 frames, 2 draws
 // logged 60 frames in and the back buffer read 100 frames in.
+//
+// The back buffer is only read when asked because of what a read costs in
+// Vita3K. Up to PC run H1 frames 300 and 700 were read in every run, and the
+// menu went from 43 frames a second to 12 after frame 300 and to 6 after
+// frame 700, with a frame of 250 ms in every three: the two reads touched
+// two of the three display buffers, and from then on every frame drawn into
+// a buffer the game had once read was slow (the emulator, it seems, then
+// keeps the buffer's memory up to date for the game). The read told nothing
+// there either: it counted no lit pixel while the window showed the menu.
+// Without the reads (PC run H2) the same menu start drew 5135 frames in
+// 120 s where it had drawn 1174.
+// On a console it costs its own time only and counts what is shown (run K:
+// 480359 of 522240 pixels lit).
 //
 // Runs H to J: the menu's translated vertex shader computed a position
 // whose every w term was missing. A shader written here in its shape (the
@@ -1579,8 +1595,11 @@ bool InitDraw(Device &device, std::string &error)
             Log(device, "diag: synthetic shader %d not translated: %s", i + 1, reason.c_str());
     }
     d.diagTests = gxm::ProgramCacheMarker("run-tests");
-    Log(device, "diag: draw tests %s (a file named run-tests in the program cache folder turns them on)",
-        d.diagTests ? "on" : "off");
+    d.diagReadBack = d.diagTests || gxm::ProgramCacheMarker("read-back");
+    Log(device,
+        "diag: draw tests %s, back buffer read at frames 300 and 700 %s (files named run-tests and read-back in the "
+        "program cache folder turn them on)",
+        d.diagTests ? "on" : "off", d.diagReadBack ? "on" : "off");
     if (!d.diagTests)
         return true;
     // The guess translated for the menu's vertex layout (a D3DCOLOR colour,
@@ -2155,11 +2174,11 @@ namespace
 // display problem from a draw-state one:
 // - frame 300 and each test (kDiagTests): the first draws' state, the first
 //   vertex's position and the first vertex shader constants;
-// - frames 300 and 700 and each test: what the back buffer holds before it
-//   is shown;
-// - frames 600 to 779: a magenta rectangle (the top-left quarter) drawn
-//   through the clear path after the game's frame, so it shows on screen
-//   for three seconds and in frame 700's count.
+// - when asked for (a file named read-back or run-tests), frames 300 and
+//   700, and each test: what the back buffer holds before it is shown;
+// - with the tests on, frames 600 to 779: a magenta rectangle (the top-left
+//   quarter) drawn through the clear path after the game's frame, so it
+//   shows on screen for three seconds and in frame 700's count.
 
 
 void DiagnoseDraw(Device &device, d3d::PrimitiveType type, uint32_t indexCount, const void *indexData, bool index32,
@@ -2784,6 +2803,10 @@ void DiagnoseFrame(Device &device)
             Log(device, "diag: drawing a magenta rectangle over the top-left quarter until frame %llu",
                 (unsigned long long)kTestRectLast);
     }
+    // Only when asked for: reading a display buffer makes Vita3K slow for
+    // the rest of the run (above).
+    if (!d->diagReadBack)
+        return;
     uint64_t into = 0;
     bool readBack = d->diagTests && DiagModeFor(d->frame, &into) && into == kTestRead;
     for (const uint64_t frame : kReadBackFrames)

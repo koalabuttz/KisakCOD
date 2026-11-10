@@ -2,3 +2,5 @@
 # "NNNN: MMMM" says patch NNNN was made on top of patch MMMM, so it can only
 # be offered once MMMM is in.
 0015: 0014
+0020: 0019
+0021: 0020
