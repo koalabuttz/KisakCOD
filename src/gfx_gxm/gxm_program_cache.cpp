@@ -190,6 +190,14 @@ void DumpSource(const std::string &folder, const std::string &cg, ShaderStage st
 // makes any other.
 bool MakeRequested(void *, const std::string &cg, ShaderStage stage, std::vector<uint8_t> &program, std::string &log)
 {
+    // Run diagnostic: a file named cg-opt0 beside the programs makes the
+    // compiler build the game's programs with no optimisation and no fast
+    // maths. A first line of their own keeps them apart in the folder from
+    // the programs built the usual way.
+    static const bool plain = ProgramCacheMarker("cg-opt0");
+    if (plain)
+        return GetProgram("// KisakCOD: diagnostics, optimisation 0, no fast maths\n" + cg, stage, program, log,
+                          false, 0);
     return GetProgram(cg, stage, program, log);
 }
 
