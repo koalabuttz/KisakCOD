@@ -207,37 +207,23 @@ void Steam_CheckClients()
 		SteamAPI_RunCallbacks();
 	}
 
-	std::lock_guard<std::mutex> _(kickPlayerMutex);
-
-	if (steamIDsToKick.empty())
+	// KISAK: taken out under the lock and acted on outside it. SV_OnSteamAuthRejected
+	// drops the connected players holding the SteamID64 (free and zombie slots keep
+	// stale identities and are left alone) and forgets its challenges, so the
+	// verdict also holds for a connect that comes after it.
+	std::vector<uint64_t> rejected;
 	{
-		return;
+		std::lock_guard<std::mutex> _(kickPlayerMutex);
+		rejected.swap(steamIDsToKick);
 	}
 
-	int clientNum = 0;
-	client_t *client = &svs.clients[0];
-	while (clientNum < sv_maxclients->current.integer)
+	if (com_sv_running && com_sv_running->current.enabled)
 	{
-		// Only a strict Steam identity can match a pending Steam callback.  GUIDs
-		// (including all-digit retail GUIDs) and the native Linux "local-test-"
-		// labels are not Steam IDs: skip them, but keep advancing the iteration.
-		uint64_t steamID64 = 0;
-		if (SV_ParseSteamIdentity(client->cdkeyHash, &steamID64))
+		for (uint64_t steamID64 : rejected)
 		{
-			for (int i = 0; i < steamIDsToKick.size(); i++)
-			{
-				if (steamID64 == steamIDsToKick[i])
-				{
-					SV_DropClient(client, "Steam Auth Timed out", true);
-				}
-			}
+			SV_OnSteamAuthRejected(steamID64);
 		}
-
-		clientNum++;
-		client++;
 	}
-
-	steamIDsToKick.clear();
 #endif
 }
 

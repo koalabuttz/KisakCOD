@@ -15,7 +15,13 @@ decide what the server believes about a client's identity:
   ``SV_DirectConnect``  consumes a challenge token and copies the stored
                         identity onto a ``client_t``, after deciding which kinds
                         of identity this process accepts at all.
-  ``SV_DropClient``     tells the Steam backend about a departing client.
+  ``SV_DropClient``     tells the Steam backend about a departing client and
+                        forgets the challenge records of that client's identity.
+  ``SV_OnSteamAuthRejected``  is what the Steam backend calls when a SteamID64
+                        no longer has a ticket Steam stands behind: it drops the
+                        players holding it and forgets its challenge records
+                        (``SV_ForgetChallengesForIdentity``,
+                        ``SV_FindClientWithIdentity``).
 
 Everything here runs the real code. The three functions above are extracted from
 production together with ``SV_IsTempBannedGuid``, ``SV_BanGuidBriefly``,
@@ -108,6 +114,9 @@ CLIENT_FUNCTIONS = (
     ("SV_RejectUnsafeTestHandshake", "static bool SV_RejectUnsafeTestHandshake("),
     ("SV_IsTempBannedGuid", "int SV_IsTempBannedGuid("),
     ("SV_NewChallengeValue", "static int SV_NewChallengeValue()"),
+    ("SV_ForgetChallengesForIdentity", "void SV_ForgetChallengesForIdentity("),
+    ("SV_FindClientWithIdentity", "client_t *SV_FindClientWithIdentity("),
+    ("SV_OnSteamAuthRejected", "void SV_OnSteamAuthRejected("),
     ("SV_GetChallenge", "void SV_GetChallenge("),
     ("SV_DirectConnect", "void SV_DirectConnect("),
     ("SV_DropClient", "void SV_DropClient("),
@@ -500,6 +509,10 @@ static Recorder R;
 static bool g_loopbackAuthTestFrozenEnabled = false;
 static bool g_loopbackAuthTestCanBypass = false;
 static bool g_steamAcceptsTicket = true;
+// The backend replaced an auth session and the new ticket did not start one
+// (the Linux backend's answer to a duplicate request): it reports the SteamID64
+// as rejected from inside the ticket check, then refuses the ticket.
+static bool g_steamRejectsDuringCheck = false;
 static bool g_bannedGuid = false;
 static const char *g_clientConnectDenial = NULL;
 static uint32_t g_scrNextId = 1;
@@ -847,6 +860,8 @@ static bool NET_CanBypassLoopbackAuth(netadr_t from)
 
 // ---- Steam backend ---------------------------------------------------------
 
+void SV_OnSteamAuthRejected(uint64_t steamID64);
+
 static bool Steam_CheckClientTicket(const void *pAuthTicket, uint32_t authTicketLen, uint64_t steamID64)
 {
     R.steamChecks += 1;
@@ -855,6 +870,11 @@ static bool Steam_CheckClientTicket(const void *pAuthTicket, uint32_t authTicket
     Record(FormatVa("steam_check:%llu:%u", static_cast<unsigned long long>(steamID64),
                     static_cast<unsigned>(authTicketLen)));
     (void)pAuthTicket;
+    if (g_steamRejectsDuringCheck)
+    {
+        SV_OnSteamAuthRejected(steamID64);
+        return false;
+    }
     return g_steamAcceptsTicket;
 }
 
@@ -1165,6 +1185,7 @@ static void ResetWorld()
     g_loopbackAuthTestFrozenEnabled = false;
     g_loopbackAuthTestCanBypass = false;
     g_steamAcceptsTicket = true;
+    g_steamRejectsDuringCheck = false;
     g_bannedGuid = false;
     g_clientConnectDenial = NULL;
     g_scrNextId = 1;
@@ -2240,6 +2261,11 @@ static void TestDirectConnectReconnectLimit()
     Check(svs.time - svs.clients[0].lastConnectTime < limitMs,
           "the reconnect below happens inside the limit");
 
+    // A Steam getchallenge for a connected SteamID64 is only answered once
+    // that client has gone silent (SV_SteamReconnectMayReplaceSession, covered
+    // by "SV_GetChallenge: SteamID64 already connected"), so this client has.
+    // The reconnect limit below reads lastConnectTime, which is left alone.
+    svs.clients[0].lastPacketTime = svs.time - SV_STEAM_RECONNECT_SILENCE_MSEC;
     token = IssueChallenge(from);
     Check(token > 0, "the reconnect obtains a challenge");
     connectsBefore = R.clientConnectCalls;
@@ -2262,6 +2288,7 @@ static void TestDirectConnectReconnectLimit()
     svs.time += limitMs;
     Check(svs.time - svs.clients[0].lastConnectTime >= limitMs,
           "the reconnect below happens at the edge of the limit");
+    svs.clients[0].lastPacketTime = svs.time - SV_STEAM_RECONNECT_SILENCE_MSEC;
     token = IssueChallenge(from);
     Check(token > 0, "the late reconnect obtains a challenge");
     R.oob.clear();
@@ -3181,6 +3208,374 @@ static void TestBothSwitchesFailClosed()
     Check(!ClientIsConnected(0), "no client connects when both switches are on");
 }
 #endif
+
+// ---- a challenge is only as good as the proof behind it ---------------------
+
+static const char *const kOtherIdentity = "76561197960287931";
+static const unsigned long long kGoodSteamId = 76561197960287930ULL;
+
+static int CountSlotsWithIdentity(const char *identity)
+{
+    int count = 0;
+    for (int i = 0; i < 1024; ++i)
+        if (SV_IdentitiesMatch(svs.challenges[i].cdkeyHash, identity))
+            ++count;
+    return count;
+}
+
+// Issues a challenge and connects with it; returns the token.
+static int ConnectPlayer(netadr_t from, int qport, const char *identity = kGoodIdentity)
+{
+    int token = IssueChallenge(from, kGoodTicket, identity);
+    ConnectArgs args = { "1", token, qport, "" };
+    ConnectAttempt(from, MakeUserinfo(args).c_str());
+    return token;
+}
+
+static void TestIdentitiesMatch()
+{
+    Check(SV_IdentitiesMatch("76561197960287930", "76561197960287930"), "the same SteamID64 matches");
+    Check(SV_IdentitiesMatch("076561197960287930", "76561197960287930"), "a zero-padded spelling is the same SteamID64");
+    Check(SV_IdentitiesMatch("00000000000000000001", "1"), "twenty digits with zeros is the same SteamID64");
+    Check(!SV_IdentitiesMatch("76561197960287930", "76561197960287931"), "different SteamID64s do not match");
+    Check(SV_IdentitiesMatch(kRetailGuid, kRetailGuid), "the same GUID matches");
+    Check(!SV_IdentitiesMatch(kRetailGuid, "9fa4b618b026886e7fe966bb184ae771"), "different GUIDs do not match");
+    Check(!SV_IdentitiesMatch("12345678901234567890123456789012", "12345678901234567890123456789013"),
+          "all-digit GUIDs are compared as text");
+    Check(SV_IdentitiesMatch("12345678901234567890123456789012", "12345678901234567890123456789012"),
+          "the same all-digit GUID matches");
+    Check(!SV_IdentitiesMatch("76561197960287930", kRetailGuid), "a SteamID64 never matches a GUID");
+    Check(!SV_IdentitiesMatch("1", "local-test-00000001abcd"), "a SteamID64 never matches a test label");
+    Check(SV_IdentitiesMatch("local-test-00001234abcd", "local-test-00001234abcd"), "the same test label matches");
+    Check(!SV_IdentitiesMatch("", ""), "empty identities (local and bot clients) match nothing");
+    Check(!SV_IdentitiesMatch("", "76561197960287930"), "an empty identity does not match a SteamID64");
+    Check(!SV_IdentitiesMatch(NULL, "76561197960287930") && !SV_IdentitiesMatch("76561197960287930", NULL),
+          "null matches nothing");
+}
+
+static void TestSteamReconnectRule()
+{
+    Check(!SV_SteamReconnectMayReplaceSession(false, 100000, 0), "another address never replaces a session");
+    Check(!SV_SteamReconnectMayReplaceSession(true, 1000, 1000), "the same address, heard from just now: refused");
+    Check(!SV_SteamReconnectMayReplaceSession(true, 1000 + SV_STEAM_RECONNECT_SILENCE_MSEC - 1, 1000),
+          "the same address, one millisecond short of the silence: refused");
+    Check(SV_SteamReconnectMayReplaceSession(true, 1000 + SV_STEAM_RECONNECT_SILENCE_MSEC, 1000),
+          "the same address after the silence: allowed");
+    Check(!SV_SteamReconnectMayReplaceSession(false, 1000 + SV_STEAM_RECONNECT_SILENCE_MSEC, 1000),
+          "another address after the silence: still refused");
+}
+
+static void TestDropForgetsChallenges()
+{
+    netadr_t from = MakeAdr(203, 0, 113, 7, 28000);
+    int token = ConnectPlayer(from, 49001);
+    Check(ClientIsConnected(0), "the player connected");
+    CheckEq(CountSlotsWithIdentity(kGoodIdentity), 1, "one challenge record while connected");
+
+    SV_DropClient(&svs.clients[0], "EXE_PLAYERKICKED", true);
+    CheckEq(CountSlotsWithIdentity(kGoodIdentity), 0, "the drop forgot the player's challenge record");
+    Check(AllChallengesZeroed(), "nothing else was left in the table");
+
+    // The old token no longer admits anyone, and no ticket check is skipped.
+    svs.time += 60000;
+    int checksBefore = R.steamChecks;
+    ConnectArgs args = { "1", token, 49001, "" };
+    ConnectAttempt(from, MakeUserinfo(args).c_str());
+    CheckText(LastOob(), "error\nEXE_BAD_CHALLENGE", "the old token is refused after a drop");
+    CheckEq(R.steamChecks, checksBefore, "no ticket was checked for the refused connect");
+    Check(svs.clients[0].header.state != CS_CONNECTED && svs.clients[1].header.state != CS_CONNECTED,
+          "nobody was connected by the old token");
+
+    // Coming back the proper way works, with a new ticket check.
+    int again = ConnectPlayer(from, 49001);
+    Check(again > 0, "a new getchallenge is answered");
+    CheckEq(R.steamChecks, checksBefore + 1, "the new getchallenge checked a ticket");
+    CheckText(LastOob(), "connectResponse mods/kisak", "the new token connects");
+
+    // The same holds for a key-code (GUID) player: a kick is followed by a new
+    // getchallenge, where the ban checks are.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    int guidToken = IssueRetailChallenge(from, kRetailGuid);
+    ConnectArgs guidArgs = { "1", guidToken, 49001, "" };
+    ConnectAttempt(from, MakeUserinfo(guidArgs).c_str());
+    Check(ClientIsConnected(0), "the GUID player connected");
+    SV_DropClient(&svs.clients[0], "EXE_PLAYERKICKED", true);
+    CheckEq(CountSlotsWithIdentity(kRetailGuid), 0, "the drop forgot the GUID player's challenge record");
+    svs.time += 60000;
+    ConnectAttempt(from, MakeUserinfo(guidArgs).c_str());
+    CheckText(LastOob(), "error\nEXE_BAD_CHALLENGE", "the GUID player's old token is refused after a drop");
+
+    // A local or bot client has no identity: dropping one forgets nothing.
+    ResetWorld();
+    netadr_t other = MakeAdr(198, 51, 100, 9, 28001);
+    IssueChallenge(other, kGoodTicket, kOtherIdentity);
+    client_t *local = PrepareDropClient("", CS_ACTIVE);
+    SV_DropClient(local, "EXE_DISCONNECTED", false);
+    CheckEq(CountSlotsWithIdentity(kOtherIdentity), 1, "dropping a client without identity forgets nobody's record");
+}
+
+static void TestSteamRejectionAfterConnect()
+{
+    netadr_t from = MakeAdr(203, 0, 113, 7, 28000);
+    netadr_t other = MakeAdr(198, 51, 100, 9, 28001);
+    int token = ConnectPlayer(from, 49001);
+    ConnectPlayer(other, 49002, kOtherIdentity);
+    Check(ClientIsConnected(0) && ClientIsConnected(1), "two players connected");
+    R.steamDropped.clear();
+
+    SV_OnSteamAuthRejected(kGoodSteamId);
+    Check(svs.clients[0].header.state == CS_ZOMBIE, "the rejected player was dropped");
+    CheckText(R.lastDisconnectReason, "Steam Auth Timed out", "the drop carries the Steam reason");
+    Check(ClientIsConnected(1), "the other player is untouched");
+    CheckEq(CountSlotsWithIdentity(kGoodIdentity), 0, "the rejected SteamID64's challenge record is gone");
+    CheckEq(CountSlotsWithIdentity(kOtherIdentity), 1, "the other player's challenge record is kept");
+    Check(!R.steamDropped.empty(), "the backend was told to end the rejected session");
+    for (size_t i = 0; i < R.steamDropped.size(); ++i)
+        Check(R.steamDropped[i] == "76561197960287930", "only the rejected session was ended");
+
+    // The finding: after sv_reconnectlimit the kicked player resent connect with
+    // the old token and stayed, with no auth session.
+    svs.time += 60000;
+    int checksBefore = R.steamChecks;
+    ConnectArgs args = { "1", token, 49001, "" };
+    ConnectAttempt(from, MakeUserinfo(args).c_str());
+    CheckText(LastOob(), "error\nEXE_BAD_CHALLENGE", "the rejected player's old token is refused");
+    Check(svs.clients[0].header.state != CS_CONNECTED, "the rejected player is not back");
+    CheckEq(R.steamChecks, checksBefore, "no ticket was checked for the refused connect");
+}
+
+static void TestSteamRejectionBeforeConnect()
+{
+    // The finding's second half: wait for the verdict, then connect.
+    netadr_t from = MakeAdr(203, 0, 113, 7, 28000);
+    int token = IssueChallenge(from);
+    Check(token > 0, "a challenge was issued on a ticket Steam accepted for checking");
+
+    SV_OnSteamAuthRejected(kGoodSteamId);
+    CheckEq(CountSlotsWithIdentity(kGoodIdentity), 0, "the verdict forgot the pending challenge record");
+    CheckEq(static_cast<long long>(R.steamDropped.size()), 1, "the pending session was ended once");
+    Check(R.steamDropped.size() == 1 && R.steamDropped[0] == "76561197960287930", "it was the rejected SteamID64's");
+    CheckEq(R.freeClient, 0, "nobody was connected, so nobody was dropped");
+
+    ConnectArgs args = { "1", token, 49001, "" };
+    ConnectAttempt(from, MakeUserinfo(args).c_str());
+    CheckText(LastOob(), "error\nEXE_BAD_CHALLENGE", "a connect after the negative verdict is refused");
+    Check(!ClientIsConnected(0), "nobody connected after the negative verdict");
+
+    // A zero-padded spelling of the same SteamID64 is the same player.
+    ResetWorld();
+    token = IssueChallenge(from, kGoodTicket, "076561197960287930");
+    Check(token > 0, "a challenge was issued for the zero-padded spelling");
+    SV_OnSteamAuthRejected(kGoodSteamId);
+    Check(AllChallengesZeroed(), "the verdict forgot the zero-padded record too");
+
+    // It never touches GUID players or other SteamID64s.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    netadr_t guidFrom = MakeAdr(198, 51, 100, 9, 28001);
+    IssueRetailChallenge(guidFrom, "76561197960287930000000000000000");
+    IssueChallenge(from, kGoodTicket, kOtherIdentity);
+    SV_OnSteamAuthRejected(kGoodSteamId);
+    CheckEq(CountSlotsWithIdentity("76561197960287930000000000000000"), 1, "a GUID that starts with the digits is kept");
+    CheckEq(CountSlotsWithIdentity(kOtherIdentity), 1, "another SteamID64's record is kept");
+}
+
+static void TestSteamRejectionSkipsStaleSlots()
+{
+    // Free and zombie client slots keep the last identity they held. A verdict
+    // for that SteamID64 must not drop them again (SV_DropClient asserts on a
+    // free slot, and a zombie is already on its way out).
+    PrepareDropClient(kGoodIdentity, CS_FREE);
+    memset(&svs.clients[1], 0, sizeof(client_t));
+    svs.clients[1].header.state = CS_ZOMBIE;
+    I_strncpyz(svs.clients[1].cdkeyHash, kGoodIdentity, sizeof(svs.clients[1].cdkeyHash));
+
+    SV_OnSteamAuthRejected(kGoodSteamId);
+    Check(g_asserts == 0, "no assert for a stale identity on a free slot");
+    CheckEq(R.freeClient, 0, "no free or zombie slot was dropped");
+    CheckEq(R.sendDisconnects, 0, "no disconnect was sent to a stale slot");
+    Check(svs.clients[0].header.state == CS_FREE && svs.clients[1].header.state == CS_ZOMBIE,
+          "the stale slots are as they were");
+
+    // Clients beyond sv_maxclients are not looked at.
+    ResetWorld();
+    dvar_maxclients.current.integer = 1;
+    memset(&svs.clients[1], 0, sizeof(client_t));
+    svs.clients[1].header.state = CS_ACTIVE;
+    I_strncpyz(svs.clients[1].cdkeyHash, kGoodIdentity, sizeof(svs.clients[1].cdkeyHash));
+    SV_OnSteamAuthRejected(kGoodSteamId);
+    Check(svs.clients[1].header.state == CS_ACTIVE, "a slot beyond sv_maxclients is not touched");
+}
+
+static void TestGetChallengeForConnectedSteamId()
+{
+    netadr_t holder = MakeAdr(203, 0, 113, 7, 28000);
+    netadr_t stranger = MakeAdr(198, 51, 100, 9, 28001);
+    netadr_t sameHost = MakeAdr(203, 0, 113, 7, 31337);
+    ConnectPlayer(holder, 49001);
+    Check(ClientIsConnected(0), "the player connected");
+    int checksBefore = R.steamChecks;
+    R.steamDropped.clear();
+
+    // Anyone can claim a SteamID64. From another address it never reaches the
+    // backend, so it cannot end the connected player's session.
+    svs.time += 60000;
+    svs.clients[0].lastPacketTime = svs.time - 100000;
+    int token = IssueChallenge(stranger);
+    Check(token < 0, "no challenge for a connected SteamID64 from another address");
+    CheckText(LastOob(), "error\nThis Steam account is already connected to this server.", "the refusal says why");
+    CheckEq(R.steamChecks, checksBefore, "the backend was not asked");
+    Check(FindSlot(stranger) < 0, "no challenge record was left for the stranger");
+    Check(ClientIsConnected(0), "the connected player is untouched");
+    Check(R.steamDropped.empty(), "no session was ended");
+
+    // From the same address while the player is being heard from: refused too.
+    svs.clients[0].lastPacketTime = svs.time - (SV_STEAM_RECONNECT_SILENCE_MSEC - 1);
+    // It gets no answer at all: an "error" would end a returning player's
+    // connection attempt, and the client asks again every three seconds.
+    R.oob.clear();
+    token = IssueChallenge(sameHost);
+    Check(token < 0, "no challenge from the same address while the player is live");
+    Check(R.oob.empty(), "the same address is sent no reply");
+    CheckEq(R.steamChecks, checksBefore, "the backend was still not asked");
+    Check(FindSlot(sameHost) < 0, "no challenge record was left for the same address");
+    Check(ClientIsConnected(0), "the live player is untouched");
+    Check(R.steamDropped.empty(), "still no session was ended");
+
+    // From the same address once the connected client has gone silent (a
+    // crashed game coming back): the new ticket goes to the backend.
+    svs.clients[0].lastPacketTime = svs.time - SV_STEAM_RECONNECT_SILENCE_MSEC;
+    token = IssueChallenge(sameHost);
+    Check(token > 0, "the returning player gets a challenge");
+    CheckEq(R.steamChecks, checksBefore + 1, "the returning player's ticket was checked");
+
+    // A GUID request is another kind of identity.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    ConnectPlayer(holder, 49001);
+    token = IssueRetailChallenge(stranger, kRetailGuid);
+    Check(token > 0, "a key-code player is not affected by connected Steam players");
+
+    // A zombie or free slot with the identity does not block the player.
+    ResetWorld();
+    PrepareDropClient(kGoodIdentity, CS_ZOMBIE);
+    token = IssueChallenge(stranger);
+    Check(token > 0, "a zombie slot with the identity does not block a new challenge");
+}
+
+static void TestSteamRejectionDuringTicketCheck()
+{
+    // The player's game died and came back at the same address, but the new
+    // ticket is no good, and the backend had to end the old session to find
+    // that out. Nothing stands behind the SteamID64 now: the silent client is
+    // dropped, no record is left, and the refusal still reaches the sender.
+    netadr_t holder = MakeAdr(203, 0, 113, 7, 28000);
+    netadr_t sameHost = MakeAdr(203, 0, 113, 7, 31337);
+    ConnectPlayer(holder, 49001);
+    Check(ClientIsConnected(0), "the player connected");
+    svs.time += 60000;
+    svs.clients[0].lastPacketTime = svs.time - SV_STEAM_RECONNECT_SILENCE_MSEC;
+
+    g_steamRejectsDuringCheck = true;
+    R.oob.clear();
+    R.oobFrom.clear();
+    R.steamDropped.clear();
+    int token = IssueChallenge(sameHost);
+    Check(token < 0, "no challenge on a ticket the backend refused");
+    Check(!ClientIsConnected(0), "the client whose session was ended is dropped");
+    CheckEq(CountSlotsWithIdentity(kGoodIdentity), 0, "no challenge record is left for the SteamID64");
+    Check(!R.steamDropped.empty(), "the backend was told the session is over");
+    // (The text differs in a native Linux build without the Steam backend.)
+    Check(!R.oob.empty() && R.oob.back().compare(0, 6, "error\n") == 0, "the sender is told it was refused");
+    Check(!R.oobFrom.empty() && NET_CompareAdr(R.oobFrom.back(), sameHost),
+          "the refusal goes to the sender's address, not to a forgotten record's");
+
+    // The same with nobody connected yet: the pending record goes, and so does
+    // the token it carried.
+    ResetWorld();
+    int firstToken = IssueChallenge(holder);
+    Check(firstToken > 0, "a first challenge is pending");
+    g_steamRejectsDuringCheck = true;
+    R.oobFrom.clear();
+    token = IssueChallenge(sameHost);
+    Check(token < 0, "the second request is refused");
+    Check(AllChallengesZeroed(), "the pending record is forgotten with the session");
+    Check(!R.oobFrom.empty() && NET_CompareAdr(R.oobFrom.back(), sameHost), "the refusal goes to the second sender");
+    g_steamRejectsDuringCheck = false;
+    ConnectArgs args = { "1", firstToken, 49001, "" };
+    ConnectAttempt(holder, MakeUserinfo(args).c_str());
+    CheckText(LastOob(), "error\nEXE_BAD_CHALLENGE", "the first token no longer connects");
+    Check(!ClientIsConnected(0), "nobody connected without a session");
+}
+
+static void TestOnePendingChallengePerSteamId()
+{
+    // Two requests for one SteamID64 from two addresses, both with tickets the
+    // backend accepts. The backend holds one session per SteamID64, so only the
+    // newer request's challenge is backed by it.
+    netadr_t first = MakeAdr(203, 0, 113, 7, 28000);
+    netadr_t second = MakeAdr(198, 51, 100, 9, 28001);
+    int firstToken = IssueChallenge(first);
+    int secondToken = IssueChallenge(second);
+    Check(firstToken > 0 && secondToken > 0, "both requests were answered");
+    CheckEq(CountSlotsWithIdentity(kGoodIdentity), 1, "one challenge record is left for the SteamID64");
+    Check(FindSlot(first) < 0, "the older record is gone");
+    Check(FindSlot(second) >= 0, "the newer record is kept");
+
+    ConnectArgs firstArgs = { "1", firstToken, 49001, "" };
+    ConnectAttempt(first, MakeUserinfo(firstArgs).c_str());
+    CheckText(LastOob(), "error\nEXE_BAD_CHALLENGE", "the older token is refused");
+    ConnectArgs secondArgs = { "1", secondToken, 49002, "" };
+    ConnectAttempt(second, MakeUserinfo(secondArgs).c_str());
+    CheckText(LastOob(), "connectResponse mods/kisak", "the newer token connects");
+
+    // A request the backend refuses forgets nothing of anyone else's.
+    ResetWorld();
+    IssueChallenge(first);
+    g_steamAcceptsTicket = false;
+    IssueChallenge(second);
+    g_steamAcceptsTicket = true;
+    CheckEq(CountSlotsWithIdentity(kGoodIdentity), 1, "a refused request leaves the pending record alone");
+    Check(FindSlot(first) >= 0, "it is still the first requester's");
+
+    // GUIDs prove nothing, so a second claimant must not be able to cancel the
+    // first one's pending connection.
+    ResetWorld();
+    EnableUnverifiedGuids();
+    IssueRetailChallenge(first, kRetailGuid);
+    IssueRetailChallenge(second, kRetailGuid);
+    CheckEq(CountSlotsWithIdentity(kRetailGuid), 2, "two GUID requests keep both records");
+}
+
+static void TestDropKeepsSharedSession()
+{
+    // The returning player took a new slot before the old one timed out: two
+    // clients, one SteamID64, one auth session.
+    PrepareDropClient(kGoodIdentity, CS_ACTIVE);
+    memset(&svs.clients[1], 0, sizeof(client_t));
+    svs.clients[1].header.state = CS_ACTIVE;
+    svs.clients[1].header.netchan.remoteAddress = MakeAdr(203, 0, 113, 7, 28002);
+    I_strncpyz(svs.clients[1].name, "player", sizeof(svs.clients[1].name));
+    I_strncpyz(svs.clients[1].cdkeyHash, "076561197960287930", sizeof(svs.clients[1].cdkeyHash));
+    dvar_dedicated.current.integer = 1;
+
+    SV_DropClient(&svs.clients[0], "EXE_TIMEDOUT", false);
+    Check(R.steamDropped.empty(), "the session stays open while another client holds the SteamID64");
+    Check(svs.clients[1].header.state == CS_ACTIVE, "the other client plays on");
+
+    SV_DropClient(&svs.clients[1], "EXE_DISCONNECTED", false);
+    CheckEq(static_cast<long long>(R.steamDropped.size()), 1, "the session ends with the last client holding it");
+
+    // A zombie with the same identity does not keep a session open.
+    ResetWorld();
+    PrepareDropClient(kGoodIdentity, CS_ACTIVE);
+    memset(&svs.clients[1], 0, sizeof(client_t));
+    svs.clients[1].header.state = CS_ZOMBIE;
+    I_strncpyz(svs.clients[1].cdkeyHash, kGoodIdentity, sizeof(svs.clients[1].cdkeyHash));
+    SV_DropClient(&svs.clients[0], "EXE_DISCONNECTED", false);
+    CheckEq(static_cast<long long>(R.steamDropped.size()), 1, "a zombie does not keep the session open");
+}
 '''
 
 DRIVER_MAIN = r'''
@@ -3240,6 +3635,16 @@ int main(void)
     Run("SV_DropClient: Steam notification", TestDropClientSteamNotification);
     Run("SV_DropClient: identity classification", TestDropClientIdentityClassification);
     Run("SV_DropClient: zombie client", TestDropClientZombie);
+    Run("identities: SV_IdentitiesMatch", TestIdentitiesMatch);
+    Run("Steam reconnect rule", TestSteamReconnectRule);
+    Run("SV_DropClient: forgets the challenge", TestDropForgetsChallenges);
+    Run("SV_DropClient: shared Steam session", TestDropKeepsSharedSession);
+    Run("Steam rejection: after connecting", TestSteamRejectionAfterConnect);
+    Run("Steam rejection: before connecting", TestSteamRejectionBeforeConnect);
+    Run("Steam rejection: stale slots", TestSteamRejectionSkipsStaleSlots);
+    Run("SV_GetChallenge: SteamID64 already connected", TestGetChallengeForConnectedSteamId);
+    Run("Steam rejection: during the ticket check", TestSteamRejectionDuringTicketCheck);
+    Run("SV_GetChallenge: one pending challenge per SteamID64", TestOnePendingChallengePerSteamId);
 
     printf("\n%i checks, %i failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
@@ -3267,6 +3672,12 @@ def build_harness(client_functions: dict, base64_functions: dict) -> str:
     extracted_client += client_functions["SV_BanGuidBriefly"] + "\n"
     extracted_client += client_functions["SV_IsTempBannedGuid"] + "\n"
     extracted_client += client_functions["SV_NewChallengeValue"] + "\n"
+    # SV_OnSteamAuthRejected() drops clients; production declares SV_DropClient()
+    # in server_mp.h and defines it further down.
+    extracted_client += "void SV_DropClient(client_t *drop, const char *reason, bool tellThem);\n"
+    extracted_client += client_functions["SV_ForgetChallengesForIdentity"] + "\n"
+    extracted_client += client_functions["SV_FindClientWithIdentity"] + "\n"
+    extracted_client += client_functions["SV_OnSteamAuthRejected"] + "\n"
     extracted_client += client_functions["SV_GetChallenge"] + "\n"
     extracted_client += client_functions["SV_DirectConnect"] + "\n"
     extracted_client += client_functions["SV_DropClient"]

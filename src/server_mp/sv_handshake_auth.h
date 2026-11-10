@@ -29,6 +29,38 @@ inline bool SV_ParseSteamIdentity(const char* text, uint64_t* identity)
     return true;
 }
 
+// Two stored identities name the same player when they are the same SteamID64,
+// whatever its spelling ("0123" and "123" both pass SV_ParseSteamIdentity), or
+// otherwise the same text.  An empty identity (a local or bot client) matches
+// nothing, not even another empty one.
+inline bool SV_IdentitiesMatch(const char* a, const char* b)
+{
+    if (!a || !b || !*a || !*b)
+        return false;
+    uint64_t steamA = 0;
+    uint64_t steamB = 0;
+    const bool aIsSteam = SV_ParseSteamIdentity(a, &steamA);
+    const bool bIsSteam = SV_ParseSteamIdentity(b, &steamB);
+    if (aIsSteam || bIsSteam)
+        return aIsSteam && bIsSteam && steamA == steamB;
+    return strcmp(a, b) == 0;
+}
+
+// A getchallenge for a SteamID64 that a connected client already holds would
+// have the Steam backend replace that client's auth session.  It is refused
+// unless it can only be that same player coming back: it comes from the same
+// address and the connected client has been silent for a while (a crashed or
+// closed game; a running one sends packets all the time).  So a packet with a
+// claimed SteamID64, which costs nothing to send, never ends the session of
+// someone who is playing.  The client repeats its getchallenge every three
+// seconds, so a returning player waits for the second or third one.
+constexpr int SV_STEAM_RECONNECT_SILENCE_MSEC = 5000;
+
+inline bool SV_SteamReconnectMayReplaceSession(bool sameBaseAddress, int serverTime, int holderLastPacketTime)
+{
+    return sameBaseAddress && serverTime - holderLastPacketTime >= SV_STEAM_RECONNECT_SILENCE_MSEC;
+}
+
 // A retail CoD4 client authenticates with
 //
 //     getchallenge <clientChallenge> "<32 hex digits>"

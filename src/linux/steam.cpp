@@ -193,32 +193,22 @@ void Steam_CheckClients()
         return;
     s_steam.Pump(&Steam_OnVerdict, nullptr, &Steam_OnServerEvent);
 
-    std::lock_guard<std::mutex> _(kickPlayerMutex);
-    if (steamIDsToKick.empty())
-        return;
+    // Taken out under the lock and acted on outside it: dropping a player ends
+    // their auth session, which must not run inside the verdict list's lock.
+    std::vector<uint64_t> rejected;
+    {
+        std::lock_guard<std::mutex> _(kickPlayerMutex);
+        rejected.swap(steamIDsToKick);
+    }
 #ifdef KISAK_MP
     if (com_sv_running && com_sv_running->current.enabled && sv_maxclients)
     {
-        client_t *client = &svs.clients[0];
-        for (int clientNum = 0; clientNum < sv_maxclients->current.integer; ++clientNum, ++client)
-        {
-            // Only a strict Steam identity can match a pending Steam verdict.
-            // GUIDs and the "local-test-" labels are not Steam IDs.
-            uint64_t steamID64 = 0;
-            if (client->header.state < CS_CONNECTED || !SV_ParseSteamIdentity(client->cdkeyHash, &steamID64))
-                continue;
-            for (uint64_t kick : steamIDsToKick)
-            {
-                if (steamID64 == kick)
-                {
-                    SV_DropClient(client, "Steam Auth Timed out", true);
-                    break;
-                }
-            }
-        }
+        // Drops the players holding the SteamID64 and forgets its challenges,
+        // so the verdict also holds for a connect that comes after it.
+        for (uint64_t steamID64 : rejected)
+            SV_OnSteamAuthRejected(steamID64);
     }
 #endif
-    steamIDsToKick.clear();
 }
 
 void Steam_Frame()
@@ -382,6 +372,15 @@ bool Steam_CheckClientTicket(const void *pAuthTicket, uint32 authTicketLen, uint
         s_steam.EndAuth(steamID64);
         Steam_ForgetAuthSession(steamID64);
         result = s_steam.BeginAuth(pAuthTicket, authTicketLen, steamID64);
+#ifdef KISAK_MP
+        // The old session is gone. If the new ticket did not start another,
+        // nothing stands behind this SteamID64 any more: nobody keeps playing
+        // or connects on the strength of the old one. (SV_GetChallenge lets a
+        // request get here only when no connected player holds the SteamID64,
+        // or the one who does has gone silent at the same address.)
+        if (result != linux_steam::kBeginAuthOK)
+            SV_OnSteamAuthRejected(steamID64);
+#endif
     }
     if (result != linux_steam::kBeginAuthOK)
         return false;
