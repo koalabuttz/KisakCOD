@@ -172,6 +172,10 @@ source changes.
   the menu cursor or the look motion to `CL_MouseEvent`. That call's answer
   says who has the mouse, a menu or the game, and that decides how the next
   reading is mapped.
+- `src/vita/client/input/vita_text_entry.cpp` decides when the on-screen
+  keyboard opens and what the game gets when it closes; the same host test
+  runs it. `src/vita/client/vita_keyboard.cpp` is the system's keyboard
+  itself ("Typing" below).
 
 **On the console.** Run 1 (2026-11-09, in the menus, with nothing drawn yet
 and `vita_inputDebug 1`): every button arrived as the key in the tables
@@ -182,14 +186,15 @@ up to starting a server, and the log has nine touches, each a `MOUSE1` press
 and release within about 20 ms. Touches in the top-left, top-right and
 bottom-left corners of the panel landed in the same corners of the engine's
 960 by 544 screen. Not confirmed yet: the
-screen's three areas in a game, which side of the rear pad is which, and the
-look speed and the layout in a game, which need a game on the screen.
+screen's four areas in a game, which side of the rear pad is which, the
+look speed and the layout in a game, which need a game on the screen, and
+the on-screen keyboard.
 
 ### In the game
 
-Every control is a key of its own: AUX1 to AUX16 and the keypad arrows, which
-no PC keyboard or mouse sends. The default layout is the console game's where
-the Vita has the button.
+Every control is a key of its own: AUX1 to AUX16, the keypad arrows and the
+keypad's 5, which nothing else on a Vita sends. The default layout is the
+console game's where the Vita has the button.
 
 | Control | Engine key | Default binding | Does |
 |---|---|---|---|
@@ -204,10 +209,11 @@ the Vita has the button.
 | D-pad up, down, left, right | `KP_UPARROW`, `KP_DOWNARROW`, `KP_LEFTARROW`, `KP_RIGHTARROW` | `+actionslot 1` to `4` | The console game's d-pad |
 | Select | `AUX7` | `+scores` | Scoreboard |
 | Start | `ESCAPE` | fixed | Menu |
-| Rear touch pad, a tap on the left or right half | `AUX8`, `AUX16` | `+breath_sprint` | Sprint (the left stick's click on a console) |
+| Rear touch pad, a tap on the left or right half | `AUX8`, `AUX16` | `+breath_sprint` | Sprint (the left stick's click on a console); while aiming, hold your breath |
 | Screen, left third | `AUX13` | `+smoke` | Special grenade |
 | Screen, right third, top half | `AUX14` | `+frag` | Frag grenade |
 | Screen, right third, bottom half | `AUX15` | `+melee` | Knife |
+| Screen, middle third, top third | `KP_5` | `chatmodepublic` | Chat: opens the on-screen keyboard ("Typing") |
 
 - **Moving** is four keys, so it is full speed in eight directions. A
   direction takes hold at 40% of the stick's travel past the dead zone and
@@ -219,16 +225,21 @@ the Vita has the button.
   (`vita_lookPitchRatio`), and the response is a curve (`vita_lookCurve`), so
   a small push turns slowly.
 - **Touch.** A finger keeps the area of the screen it landed in until it
-  lifts, wherever it slides. The middle third of the screen is no key.
+  lifts, wherever it slides. The outer thirds are where the thumbs reach.
+  The top third of the middle is a key too, small and out of the thumbs' way
+  so that a keyboard does not open in a fight; the rest of the middle is no
+  key. Team chat has no area: bind `chatmodeteam` to a control to have it.
 - **The rear pad** is a tap. The fingers that hold the console lie on it: the
   first console run logged 30 touches in 40 seconds where two taps were asked
   for. So a finger that stays longer than 0.3 s is resting and does nothing. A
   tap presses its half's key when the finger leaves, and the key stays down
   while the left stick is pushed forward and for a quarter of a second after.
   With the default binding that is the console game's sprint: tap, and run
-  until you stop. A tap while standing still is a short press, and a tap while
-  the key is down presses it again. Holding your breath behind a scope wants a
-  held key, so give `+holdbreath` a control of its own.
+  until you stop. The key also stays down while L is held, and the same
+  binding holds the breath behind a scope: aim with L, tap, and the breath is
+  held until L is let go. That follows the button, not the action, so it
+  assumes aiming stays on L. A tap while standing still without L is a short
+  press, and a tap while the key is down presses it again.
 
 ### In a menu
 
@@ -247,14 +258,29 @@ the Vita has the button.
 ### Binding
 
 The controls menu works: while it waits for a key, every control sends its
-game key, and Start cancels. The menu and the game's hints show the engine's
-names (`AUX6`, not "R"); the table above translates.
+game key, and Start cancels.
+
+The menu and the game's hints ("Press ... to use") name the controls: "R",
+"Square", "Rear touch (left)", "Screen (top right)". The engine keeps two
+tables of key names, one for `bind` and the config files and one for what it
+shows. Only the second is changed, when the input starts, so configs still
+say `AUX6` and read the same on a PC. The engine shows a key's name as it is
+when the game's texts have no entry under it, which is what makes this work
+without an engine change. `vita_buttonNames 0` shows the engine's names.
 
 A profile from a PC, a new profile and the menu's "reset to default" all
 leave the AUX keys bound to nothing. While none of AUX1 to AUX16 has a
 binding, the default layout is set (`vita_defaultBinds`, on by default; the
 log says so). One control unbound on purpose stays unbound. `vita_binddefaults`
 sets the whole default layout at any time.
+
+The default layout can grow. A profile's `vita_layout` says which default
+layout its controls were last given: 1 is the first, and a config that does
+not say is 1. A control that came with a later layout gets its default action
+once in an older profile, if it is bound to nothing there, and the profile is
+then marked with today's number (2: the chat area). Nothing the player has
+bound is changed. To change the defaults, edit `kControls` in
+`vita_input_map.cpp`; a new control gets the next layout number there.
 
 | Dvar | Default | |
 |---|---|---|
@@ -263,17 +289,63 @@ sets the whole default layout at any time.
 | `vita_lookPitchRatio` | 0.65 | Up and down, as a part of `vita_lookSpeed` |
 | `vita_lookCurve` | 2 | 1 is linear; higher is finer near the centre |
 | `vita_cursorSpeed` | 700 | Left stick in a menu, pixels a second |
-| `vita_frontTouch` | 1 | The screen's three areas are keys in the game |
+| `vita_frontTouch` | 1 | The screen's four areas are keys in the game |
 | `vita_rearTouch` | 1 | A tap on either half of the rear pad is a key in the game |
-| `vita_defaultBinds` | 1 | Set the default layout while no AUX key is bound |
+| `vita_defaultBinds` | 1 | Set the default layout while no AUX key is bound, and give an older profile the controls that came since |
+| `vita_layout` | 1 | The default layout the profile's controls were last given (kept in the profile) |
+| `vita_buttonNames` | 1 | The controls menu and the hints name the Vita's controls, not the engine's keys |
+| `vita_keyboard` | 1 | Open the on-screen keyboard when a menu's text field or the chat line waits for text |
 | `vita_inputDebug` | 0 | Log every key sent, every finger that lands (with its panel and screen position) and how long it stayed |
+
+### Typing
+
+When the game waits for typed text, the Vita's own on-screen keyboard opens
+(the system's IME dialog), and what was typed goes to the game as the
+characters and the Enter a PC keyboard would send.
+
+- **A menu's text field** (a profile name, a server address, a password):
+  touch it, or move to it with the d-pad and press Cross. The keyboard opens
+  with what the field holds. Enter replaces the field's text and ends the
+  edit; closing the keyboard without Enter leaves the field as it was.
+  Number fields get the number keyboard. A field that a menu puts into
+  editing by itself opens the keyboard by itself; whether the "create
+  profile" box at the first start does is not known until a run shows it.
+- **Chat:** a touch on the top middle of the screen opens the chat line and
+  the keyboard. Enter says it; closing the keyboard closes the chat line.
+- **A console command:** the command `vita_typecommand` opens the keyboard,
+  and what is entered runs as a command. It has no control by default; bind
+  it, or put it in the command line file.
+
+How it is built:
+- The keyboard is the system's, drawn over the game's frame. So it needs the
+  frame: `gfx_gxm::SetBeforeFlip` (`gxm_display.h`) calls back on the thread
+  that draws, between a frame's last scene and its flip, with the back
+  buffer, the depth buffer and the sync object, and `sceCommonDialogUpdate`
+  runs there. Every call of the dialog is made on that thread
+  (`vita_keyboard.cpp`); the main thread asks for a keyboard and takes the
+  result through a small mailbox.
+- The game runs on under the keyboard. While it is up the controls belong to
+  it: nothing is read from the pad or the panels.
+- One keyboard for each wait: after it closed, the game has to stop waiting,
+  or wait in another field, before another opens. If the field goes away
+  while the keyboard is up (the menu closed, the match ended), the keyboard
+  is closed and its text dropped.
+- The engine's text is one byte a character. Letters outside ASCII and
+  Latin-1 are left out of what was typed.
+- If the system refuses the keyboard, the log says so, none is asked for
+  again in that run, and a chat line that opens is closed again. With no
+  keyboard (refused, or `vita_keyboard 0`) and no player profile, the "create
+  profile" box is offered the name `Vita` to accept, as before the keyboard.
+- A run nobody watches should start with `+set vita_keyboard 0` if a text
+  field may take the focus: an open keyboard waits for someone.
+
+**Not run yet.** The host tests cover when the keyboard opens and what the
+game gets. The system's part (the dialog, drawing it into the frame, which
+thread may call it, the memory it takes beside a loaded map) has not run in
+Vita3K or on a console.
 
 ### Not done yet
 
-- **The on-screen keyboard** for text fields (names, server addresses, chat).
-  It needs a hook in the frame's present, so it follows the first drawn
-  frames. Until then one field is filled in: with no player profile, the
-  "create profile" box is offered the name `Vita` to accept.
 - Walking speed from how far the stick is pushed. The engine moves by keys.
 - A stray touch on the rear pad that is as short as a tap still counts as
   one. `vita_rearTouch 0` turns the pad off. Run K's log, from the menus where
