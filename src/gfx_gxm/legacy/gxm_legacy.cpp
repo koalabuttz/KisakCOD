@@ -376,6 +376,16 @@ gxm::MemorySizes PoolSizes(Device &device)
     // 16 MB peaked at 15.1 in the menus before drawing; draws add the
     // transient ring and renamed buffers.
     sizes.main = 20u << 20;
+    // For measuring in an emulator what a map would take if it fitted: a file
+    // named big-gpu-pool beside the compiled programs adds 96 MB to the main
+    // pool. A console has no such memory to give (the device is then not
+    // created), and Vita3K reports more free memory than a console has.
+    if (gxm::ProgramCacheMarker("big-gpu-pool"))
+    {
+        sizes.main += 96u << 20;
+        Log(device, "diag: big-gpu-pool is there: the main pool is %u MB (for emulator measurements only)",
+            sizes.main >> 20);
+    }
     sizes.vertexUsse = 1u << 20;
     sizes.fragmentUsse = 1u << 20;
     Log(device, "system memory free before the GPU: %d MB main, %d MB CDRAM", system.size_user >> 20,

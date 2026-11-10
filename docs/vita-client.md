@@ -78,6 +78,14 @@ screen shows test pictures, mostly plain green, and the log says what each
 left in the back buffer. Without the file the client only logs frame 300's
 first draws and what frames 300 and 700 left in the back buffer.
 
+Two switches are for measuring in an emulator what the game would take if it
+had the room; a console has no memory for either:
+- a file named `big-gpu-pool` in the same folder adds 96 MB to the GPU's main
+  pool, so a map's buffers and textures can all be made and the
+  `gpu memory by use` line says what they come to;
+- `-DKISAK_VITA_HEAP_MB=128` at configure time builds a client with a 128 MB
+  heap instead of 64.
+
 ## What it builds
 
 `scripts/platform/vita/mp_client.cmake` takes the same engine sources as the
