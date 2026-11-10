@@ -99,6 +99,17 @@ back end builds, links and leaves the start alone, not that it draws.
   not decompiled code.
 - The Linux CPU benchmark is now the Windows one, so autoconfigure picks
   its CPU row on the same scale.
+- A game built without movies (`KISAK_LINUX_CINEMATICS` off) loaded no level:
+  the loading screen samples the movie's images, the build's stand-in never
+  set them, and the frame stopped with "Tried to use 'cinematicY' when it
+  isn't valid" behind a render thread assert. The stand-in now sets them to
+  the black picture the full build shows while no movie has a frame. Found
+  by the first x86_64 sweep on the laptop; not re-run on a level yet.
+- Four structs were read through a void pointer in slots that fit the 32-bit
+  layout only. One of them crashed the 64-bit game 4.5 s into airlift (an
+  effect model's physics preset read as null; seen on Windows x64). They are
+  read by their fields now, and `check_32bit_layout_offsets.py` reports the
+  shape. No 64-bit build with the fix has loaded airlift yet.
 
 ## Next
 
