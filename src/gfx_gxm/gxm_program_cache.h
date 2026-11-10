@@ -30,10 +30,32 @@ struct ProgramCacheStats
     uint32_t writeFailures;
     uint64_t compileMicros;
     uint64_t readMicros;
+    // Times the compiler was unloaded to give its memory back, and the heap
+    // bytes that gave back.
+    uint32_t compilerUnloads;
+    uint64_t compilerGaveBack;
 };
 
 // The program for this source, from its file or compiled now (and then
 // written). False with the compiler's log (or why the compiler is missing).
-bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &program, std::string &log);
+// fastMath and optimization are CompileCg's: a caller that changes them
+// gives the source a different text (a comment will do), since the file is
+// found by the source alone.
+bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &program, std::string &log,
+                bool fastMath = true, int optimization = 3);
+// Once a frame: unloads the compiler when it has been idle for a while, so
+// that it holds no memory while the game runs. It is loaded again when a
+// program has to be compiled.
+void ProgramCacheFrame();
+// Whether the folder holds a file of this name: switches for runs on a
+// console or an emulator ("dump-cg" below, the draw tests' "run-tests").
+bool ProgramCacheMarker(const char *name);
+// The 16 hex digits of this source's file name, for logs.
+uint64_t ProgramCacheKey(const std::string &cg, ShaderStage stage);
+//
+// For finding out what a program does on a console or an emulator: when the
+// folder holds a file named "dump-cg", every program asked for also leaves
+// its Cg source there as <16 hex digits>.cg. The sources come from the
+// game's shaders, so they stay on that machine like the game's files.
 const ProgramCacheStats &GetProgramCacheStats();
 } // namespace gfx_gxm

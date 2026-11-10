@@ -6,12 +6,13 @@ multiplayer client, `KisakCOD-mp`, for a hacked PS Vita and packs it as
 it follows the [Vita dedicated server](vita.md), which shares its toolchain,
 platform layer and memory rules. Started 2026-11-09.
 
-**State: stage 1 done (build and boot); stage 2 (graphics) under way: the
-GXM probe ran at 60 fps, the device runs the menu loop without drawing, and
-shaders are translated and compiled on the Vita.**
+**State: stages 1 to 3 run on the console. On 2026-11-10 the main menu
+showed on David's Vita and worked, with touch, buttons and music (run K).
+Starting a map does not work yet: the GPU's memory is full before the map
+loads ("Memory" below), which is the next piece of work.**
 - The whole client compiles, links and packs into a `.vpk`: client, cgame, UI, sound, renderer and its own listen server.
-- Stage 1 had no graphics back end, so the client stopped at the renderer through `Sys_Error`. Stage 2 replaces that: the renderer gets the D3D9 front on the GXM back end ("Graphics" below), which does everything but draw.
-- Sound links the OpenAL stand-in ("no device").
+- Stage 1 had no graphics back end, so the client stopped at the renderer through `Sys_Error`. Stage 2 replaces that: the renderer gets the D3D9 front on the GXM back end ("Graphics" below).
+- Stage 3 (controls and sound) runs on the console: on run 1 (2026-11-09) the menu music and the menu's sounds were heard, and every button arrived as its key. The screen's touch and the layout in a game are not confirmed yet: see "Controls" and "Sound" below.
 
 **Runs on David's Vita (2026-11-09):**
 - Run 1 reached the renderer, but its log was empty. A game client's `Sys_Print` was silent: on Linux `Com_PrintMessage` copies lines to stderr, which the Vita lacks. It then aborted on an assert, because `R_SetWndParms` read an empty display-mode list after the "no device" answer. Both are fixed.
@@ -23,7 +24,7 @@ shaders are translated and compiled on the Vita.**
 
 As for the server (see [vita.md](vita.md)), plus two header directories:
 - **DXVK Native's headers** supply the D3D9 declarations: the types and interface layouts only. No DXVK code is built or linked. The pinned 2.7.1 headers come from `scripts/tests/run_native_d3d9_boundary_checks.py --stage-dxvk-headers`, as in the Linux client jobs.
-- **OpenAL's `AL/al.h`** comes from libopenal-dev or the OpenAL Soft source.
+- **OpenAL's headers** (`AL/al.h`, `AL/alc.h`, `AL/efx.h`) come from libopenal-dev or the OpenAL Soft source, for the declarations only. No OpenAL library is linked ("Sound" below).
 
 ```sh
 export VITASDK="$(scripts/ci/install-vitasdk.sh "$HOME/vitasdk-pinned")"
@@ -39,7 +40,8 @@ cmake --build build-vita-mp --target KisakCOD-mp-vpk
 Hosted CI: the Linux workflow's **PS Vita multiplayer client** job builds Debug
 and RelWithDebInfo. It runs the server's float checks (no fused multiply-add, no
 NEON float) and link checks (weak pthread references, the main stack size), and
-uploads the RelWithDebInfo `.vpk`.
+uploads the RelWithDebInfo `.vpk`. It also runs the controls' and the sound's
+host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`).
 
 ## Running
 
@@ -51,17 +53,30 @@ uploads the RelWithDebInfo `.vpk`.
    as the PC game does.
 3. Start the bubble. The log is `ux0:data/KisakCOD/console-mp.log`. Configs
    and the player profile go to the same folder (`fs_homepath`).
-4. Expected now (stage 2, step 2c part 1): start-up, the file system, then
+4. Expected now (stage 2, step 2d): start-up, the file system, then
    `Graphics back end: GXM`, the GPU memory lines (`gxm legacy:`, `gxm:`),
-   the front-end zones and the menu loop. Every shader the game creates is
-   translated to Cg and compiled (`gxm legacy: shaders so far: ...` every
-   100 shaders, `shaders in all` at the end), and the compiled programs are
-   kept in `ux0:data/KisakCOD/gxp`. The screen shows clear colours only,
-   since nothing is drawn yet. The client needs `ur0:data/libshacccg.suprx`
-   for this, as the GXM probe does; without it the log says so and the
-   shaders are counted as failed.
+   the front-end zones and the menu loop, drawn. Every shader the game
+   creates is translated to Cg and compiled (`gxm legacy: shaders so far: ...`
+   every 100 shaders, `shaders in all` at the end), and the compiled programs
+   are kept in `ux0:data/KisakCOD/gxp`. `gxm legacy: draws: ...` lines at the
+   first frame, after ten seconds and every minute count what was drawn and
+   what was skipped, and why. The client needs
+   `ur0:data/libshacccg.suprx`, as the GXM probe does; without it the log
+   says so and nothing is drawn.
 
-START + SELECT quits.
+START + SELECT quits. For a run nobody watches, `+set vita_quitAfter 90` in
+the command line file quits by itself 90 seconds after start-up (the
+dedicated server takes it too).
+
+To see what a translated shader looks like, put an empty file named
+`dump-cg` in `ux0:data/KisakCOD/gxp`: every program asked for then also
+leaves its Cg source there as `<same 16 hex digits>.cg`. Those sources come
+from the game's shaders, so keep them on that machine like the game's files.
+A file named `run-tests` in the same folder turns on the draw tests of
+`gxm_legacy_draw.cpp` (`kGuessEdits`): for the first minute and a half the
+screen shows test pictures, mostly plain green, and the log says what each
+left in the back buffer. Without the file the client only logs frame 300's
+first draws and what frames 300 and 700 left in the back buffer.
 
 ## What it builds
 
@@ -78,15 +93,20 @@ Around them:
 |---|---|---|
 | Platform layer | `src/linux/*.cpp` + `src/vita/*.cpp` | The server's, minus its stand-ins for client systems |
 | Win32 window calls | `src/vita/client/vita_win32_window.cpp` | One window: the 960 x 544 screen. One monitor |
-| Window procedure, input | `src/vita/client/vita_client_input.cpp` | Sets `g_wv.hWnd`; buttons are not mapped yet |
+| Window procedure, input | `src/vita/client/vita_client_input.cpp`, `input/vita_input_map.cpp` | Sets `g_wv.hWnd`; the pad and the touch panels become engine keys and mouse motion ("Controls") |
 | Graphics device | `src/vita/client/vita_d3d9.cpp` | The D3D9 front's host: one 960 x 544 mode, one monitor, the log |
 | D3D9 front | `src/gfx_vk/d3d9` | The Vulkan work's IDirect3D9, unchanged, over the seam in `vk_d3d9_backend.h` |
 | GXM back end | `src/gfx_gxm` | The Legacy API on sceGxm (`legacy/gxm_legacy.cpp`), the screen, GPU memory |
-| Sound | `tests/linux_mp_client/openal_unavailable.cpp` | OpenAL stand-in until the Vita has an OpenAL |
+| Sound | `src/vita/client/sound/vita_al.cpp`, `vita_al_output.cpp` | The OpenAL calls the engine makes, on a small mixer, played through SceAudioOut ("Sound") |
 | Linux client pieces | `msvc_rand.cpp`, `mp_client_unavailable.cpp`, `texture_memory.cpp`, the Material_Sort span | As on Linux |
 
 `deps/binklib/radbase.h` gains a `__vita__` branch (the Linux one, with the
 Vita's CPU), because the renderer's headers declare the Bink API.
+
+**Run K on David's Vita (2026-11-10, commit d4a03fa):**
+- The menu showed and worked: frame 300 left 480359 of 522240 pixels not black, the first frame came 44.5 s after the start, touch and buttons reached the menu and the music played.
+- The menu froze several times, once for 23.6 s, with the music paused. Those were shaders compiling the first time they were drawn: 139 programs in 94 s, about 0.7 s each. They are on the card afterwards, so a later start does not compile them again.
+- Starting a listen server on mp_crash stopped the game 58 ms into the map's fastfile: `out of GPU memory` for a 13 MB vertex buffer, then the renderer's fatal error ("Memory" below).
 
 ## Memory
 
@@ -103,7 +123,214 @@ Other large static arrays in the client:
 - `cls` 2.9 MB, `odeGlob` 2.8 MB, `gfxBuf` 2.3 MB, `s_backEndData` 2.2 MB, `tess` 2.2 MB;
 - `clients` 1.7 MB, `g_streamState` 1.7 MB.
 
-The heap and the engine reservations are the server's for now: a 64 MB heap, the 128 MB zone arena and the hunks. Stage 1's run measures what is left. Textures will go to the GPU's own memory (CDRAM, about 112 MB), not main memory.
+The heap and the engine reservations are the server's for now: a 64 MB heap, the 128 MB zone arena and the hunks. Textures go to the GPU's own memory (CDRAM, about 112 MB), not main memory.
+
+What the menu takes (run K on the console, and the same build in Vita3K, 2026-11-10):
+- **Heap:** 55 of 64 MB once `common_mp` is loaded. About 41 MB of that is the loaded sounds, which are decoded to 16-bit PCM in the heap. At the failed map load the console's heap stood at 60.7 MB.
+- **System memory:** 15 MB free on the console beyond the heap and the reservations, so the heap cannot simply grow. Vita3K reports far more free system memory than a console has (107 MB at the same point); never size memory from its number.
+- **Zone arena:** 72 MB of 128 free in the menu, 46 MB at the failed map load.
+- **GPU:** 95 of 104 MB of CDRAM and 18 to 19 of the 20 MB main pool. By use, from the `gpu memory by use` log line:
+
+| Use | MB | Note |
+|---|---:|---|
+| Compressed textures | 33.7 | 899 textures at picmip 2; only five are 1 MB or more |
+| Dynamic vertices | 19.5 | the static model cache (8), the two skinned caches (4.5 each), smaller ones |
+| Depth | 14.1 | the sun's shadow map (8), the spot shadow map (4), the scene's (2) |
+| Render targets | 12.6 | the shadow maps' colour targets (4 and 2), three screen-sized ones (2 each) |
+| Dynamic indices | 10.0 | five of 2 MB |
+| Static vertices | 9.2 | `common_mp`'s vertex buffer |
+| The display's buffers | 8.0 | |
+| Static indices, volumes, other textures | 2.7 | |
+
+The main pool is too small for the dynamic buffers, so 14.5 MB of them spill into CDRAM. mp_crash's first vertex buffer alone is 13.4 MB, and neither pool had that much left. Making a map fit is the next piece of work: the shadow maps (18 MB) are not usable on the Vita yet, and the dynamic buffers are sized for a PC.
+
+## Controls (stage 3)
+
+The multiplayer engine takes keys and a mouse. It has no gamepad path. So the
+Vita's controls become engine keys and mouse motion, and the game's own
+`bind`, controls menu, sensitivity and pitch inversion work on them. No engine
+source changes.
+
+- `src/vita/client/input/vita_input_map.cpp` is the mapping. It makes no
+  engine call and no Vita call, so `scripts/tests/test_vita_input.py` builds
+  it on the host with sanitizers and drives it with made-up readings.
+- `src/vita/client/vita_client_input.cpp` reads the pad
+  (`sceCtrlPeekBufferPositive`) and both touch panels (`sceTouchPeek`) on the
+  main thread whenever the engine asks for events, at most every 4 ms. Keys
+  go into the event queue as `SE_KEY`, as on every platform. `IN_Frame` hands
+  the menu cursor or the look motion to `CL_MouseEvent`. That call's answer
+  says who has the mouse, a menu or the game, and that decides how the next
+  reading is mapped.
+
+**On the console** (run 1, 2026-11-09, in the menus, with nothing drawn yet
+and `vita_inputDebug 1`): every button arrived as the key in the tables
+below, the right stick as the wheel, and a start-up without a profile got the
+default layout and the profile name. Not confirmed yet: a touch on the screen
+(the log has none), which side of the rear pad is which, and the look speed
+and the layout in a game, which need a game on the screen.
+
+### In the game
+
+Every control is a key of its own: AUX1 to AUX16 and the keypad arrows, which
+no PC keyboard or mouse sends. The default layout is the console game's where
+the Vita has the button.
+
+| Control | Engine key | Default binding | Does |
+|---|---|---|---|
+| Left stick | `AUX9` up, `AUX10` down, `AUX11` left, `AUX12` right | `+forward`, `+back`, `+moveleft`, `+moveright` | Move |
+| Right stick | mouse motion | | Look |
+| R | `AUX6` | `+attack` | Fire |
+| L | `AUX5` | `+speed_throw` | Aim down the sight |
+| Cross | `AUX1` | `+gostand` | Jump, stand up |
+| Circle | `AUX2` | `+stance` | Crouch; hold for prone |
+| Square | `AUX3` | `+usereload` | Use, reload |
+| Triangle | `AUX4` | `weapnext` | Next weapon |
+| D-pad up, down, left, right | `KP_UPARROW`, `KP_DOWNARROW`, `KP_LEFTARROW`, `KP_RIGHTARROW` | `+actionslot 1` to `4` | The console game's d-pad |
+| Select | `AUX7` | `+scores` | Scoreboard |
+| Start | `ESCAPE` | fixed | Menu |
+| Rear touch pad, a tap on the left or right half | `AUX8`, `AUX16` | `+breath_sprint` | Sprint (the left stick's click on a console) |
+| Screen, left third | `AUX13` | `+smoke` | Special grenade |
+| Screen, right third, top half | `AUX14` | `+frag` | Frag grenade |
+| Screen, right third, bottom half | `AUX15` | `+melee` | Knife |
+
+- **Moving** is four keys, so it is full speed in eight directions. A
+  direction takes hold at 40% of the stick's travel past the dead zone and
+  lets go at 30%.
+- **Looking** goes through the engine's mouse path, so `sensitivity`, pitch
+  inversion and the slowdown while aiming apply. At full deflection the stick
+  sends `vita_lookSpeed` mouse counts a second: 1400, which is about 150
+  degrees a second at the default sensitivity. Up and down is slower
+  (`vita_lookPitchRatio`), and the response is a curve (`vita_lookCurve`), so
+  a small push turns slowly.
+- **Touch.** A finger keeps the area of the screen it landed in until it
+  lifts, wherever it slides. The middle third of the screen is no key.
+- **The rear pad** is a tap. The fingers that hold the console lie on it: the
+  first console run logged 30 touches in 40 seconds where two taps were asked
+  for. So a finger that stays longer than 0.3 s is resting and does nothing. A
+  tap presses its half's key when the finger leaves, and the key stays down
+  while the left stick is pushed forward and for a quarter of a second after.
+  With the default binding that is the console game's sprint: tap, and run
+  until you stop. A tap while standing still is a short press, and a tap while
+  the key is down presses it again. Holding your breath behind a scope wants a
+  held key, so give `+holdbreath` a control of its own.
+
+### In a menu
+
+- A finger on the screen moves the cursor there and clicks. The click is sent
+  after the engine has been told where the cursor is.
+- The left stick moves the cursor. Cross clicks.
+- The d-pad is the arrow keys, which move the menu's focus, and repeat while
+  held. It hides the cursor, which would otherwise take the focus back; the
+  stick or a finger brings it back. While the cursor is hidden, Cross is
+  Enter: it accepts the focused item.
+- Circle and Start are Escape. The right stick is the mouse wheel.
+- When a menu opens or closes, the sticks' and the panels' keys are let go,
+  and a finger already on the screen does nothing until it lifts. A button
+  keeps the key it pressed until it is released.
+
+### Binding
+
+The controls menu works: while it waits for a key, every control sends its
+game key, and Start cancels. The menu and the game's hints show the engine's
+names (`AUX6`, not "R"); the table above translates.
+
+A profile from a PC, a new profile and the menu's "reset to default" all
+leave the AUX keys bound to nothing. While none of AUX1 to AUX16 has a
+binding, the default layout is set (`vita_defaultBinds`, on by default; the
+log says so). One control unbound on purpose stays unbound. `vita_binddefaults`
+sets the whole default layout at any time.
+
+| Dvar | Default | |
+|---|---|---|
+| `vita_stickDeadzone` | 0.2 | Part of a stick's travel around the centre that does nothing |
+| `vita_lookSpeed` | 1400 | Right stick at full deflection, in mouse counts a second |
+| `vita_lookPitchRatio` | 0.65 | Up and down, as a part of `vita_lookSpeed` |
+| `vita_lookCurve` | 2 | 1 is linear; higher is finer near the centre |
+| `vita_cursorSpeed` | 700 | Left stick in a menu, pixels a second |
+| `vita_frontTouch` | 1 | The screen's three areas are keys in the game |
+| `vita_rearTouch` | 1 | A tap on either half of the rear pad is a key in the game |
+| `vita_defaultBinds` | 1 | Set the default layout while no AUX key is bound |
+| `vita_inputDebug` | 0 | Log every key sent, every finger that lands (with its panel and screen position) and how long it stayed |
+
+### Not done yet
+
+- **The on-screen keyboard** for text fields (names, server addresses, chat).
+  It needs a hook in the frame's present, so it follows the first drawn
+  frames. Until then one field is filled in: with no player profile, the
+  "create profile" box is offered the name `Vita` to accept.
+- Walking speed from how far the stick is pushed. The engine moves by keys.
+- A stray touch on the rear pad that is as short as a tap still counts as
+  one. `vita_rearTouch 0` turns the pad off. The tap has not been tried on the
+  console; the next run logs how long each touch lasts, which will say whether
+  it needs a tighter rule.
+
+## Sound (stage 3)
+
+The engine's sound driver (`src/sound/snd_openal.cpp`,
+`snd_driver_openal.cpp`) talks OpenAL 1.1 with a few EFX calls, 44 entry
+points in all. The Vita client answers them itself:
+
+- `src/vita/client/sound/vita_al.cpp` is a small OpenAL on an integer mixer.
+  It uses no Vita call and no engine header, so
+  `scripts/tests/test_vita_sound.py` builds it on the host under
+  AddressSanitizer, UBSan and ThreadSanitizer.
+- `src/vita/client/sound/vita_al_output.cpp` opens a SceAudioOut port and runs
+  the thread that pulls the mixer.
+
+OpenAL Soft was the other choice. Its float mixer, HRTF and reverb cost more
+of the Vita's CPU than sound should, and it would be one more dependency to
+build for the Vita. The engine needs little of it.
+
+What the small OpenAL keeps:
+- sources with one buffer or a queue of buffers, the four source states,
+  looping, gain, pitch and the play offset;
+- the buffer and queue rules the engine depends on: a buffer in use cannot be
+  deleted, a playing source cannot change its buffer, only played buffers
+  leave a queue;
+- mono and stereo buffers of 8 or 16 bits at any rate, resampled with linear
+  interpolation.
+
+What it leaves out:
+- **Distance models.** The engine sets `AL_NONE` and puts its own falloff
+  into the gain.
+- **The listener.** The engine keeps it at the origin and hands every
+  position in listener space, so a position only pans, left to right with
+  equal power.
+- **Reverb and filters.** Effects, filters and slots get names and nothing
+  else, so there is no reverb.
+
+The mixer adds every playing source into 32-bit sums and clips to 16 bits.
+Gains are Q15 and move toward their targets every 64 frames, so a volume or
+position change does not click. One lock guards all of it; the mixer holds it
+for one update.
+
+**Output.** The engine asks for 11025, 22050 or 44100 Hz (`snd_khz`, default
+44). SceAudioOut's main ports play 48000 Hz only, so the client opens the one
+background-music port, which takes the engine's rates, and mixes at the rate
+asked for. If that port does not open, it takes a main port and mixes at
+48000 Hz. One update is about 23 ms (512 frames at 22050 Hz, 1024 at 44100),
+and `sceAudioOutOutput` blocks until the port has taken it, which paces the
+thread.
+
+**In the log** (`console-mp.log`): `vita sound: port ..., ... Hz stereo, ...
+frames per update` when sound starts, then after ten seconds, once a minute
+and once more when sound stops `vita sound: ... updates, mixing ... us each on
+average and ... at most, ... sources at most, ... clipped frames, ... refused
+updates`.
+
+**On the console** (run 1, 2026-11-09): the menu music and the menu's sounds
+were heard. The port opened at 22050 Hz with 512 frames per update (that
+console's `snd_khz` is 22). An update with nothing playing took 34 µs on
+average and 89 at most. What an update costs with sources playing was not
+captured: the run ended before the second line, and the line at the end came
+after it.
+
+Known limits:
+- The engine decodes streamed sounds (music) on its main thread, 8192 frames
+  at a time. On the Vita that may show as a frame hitch; a run with a picture
+  will tell.
+- The background-music port is the one the system's own music player takes
+  over when the user plays music from the home screen.
 
 ## Graphics (stage 2)
 
@@ -120,23 +347,64 @@ when it creates and destroys a device. That seam has two implementations:
 Builds with `KISAK_GFX_GXM` leave the Vulkan parts of `vk_d3d9.h` and
 `vk_legacy.h` out.
 
-What the GXM back end does so far (step 2b):
+What the GXM back end does so far (step 2d):
 - The device owns the screen and reserves the GPU memory pools: nearly all of
-  CDRAM, 16 MB of main memory, and an 8 MB parameter buffer.
+  CDRAM, 20 MB of main memory, and an 8 MB parameter buffer.
 - Textures, surfaces and buffers live in those pools with D3D9's lock rules.
   Textures go to CDRAM first, dynamic buffers to main memory first.
-- Clears of 16- and 32-bit colour targets use `sceGxmTransferFill`.
-- Present shows the back buffer with vsync.
-- Shaders are translated to Cg and compiled on the Vita (below). Vertex
-  declarations are kept.
-- Draws are counted and skipped.
-- StretchRect, depth clears and locks of the back buffer are logged once as
-  not done yet.
+- Shaders are translated to Cg and compiled on the Vita (below).
+- Clears and draws happen in sceGxm scenes (`legacy/gxm_legacy_draw.cpp`,
+  below). Present ends the scene and shows the back buffer with vsync.
+- StretchRect draws a textured quad into the destination.
+- Locks of the back buffer, depth textures as shader inputs,
+  two-sided stencil and the blend factor colour are logged once as not done
+  yet.
 
-The screen shows only clear colours. The client should run its menus, and
-the log shows the GPU memory taken and how the shaders fared. Next is
-drawing: sceGxm's texture layouts, vertex streams, blend state and the
-draws themselves.
+### Draws (step 2d)
+
+`src/gfx_gxm/legacy/gxm_legacy_draw.cpp` turns the D3D9 state into sceGxm's:
+- **Scenes.** A scene opens on render target 0 and the depth-stencil surface
+  at the first clear or draw after they change, and closes when they change,
+  before the CPU reads a target, and at Present. sceGxm wants a render target
+  object per surface size; `gxm_display` keeps one per size. Depth-stencil
+  surfaces (tiled S8D24) load and store their contents every scene, so a
+  frame can come back to a target.
+- **StretchRect** (the renderer's resolves and cinematic frames) draws the
+  source, the back buffer or a texture level, as a textured quad into the
+  destination with two more built-in programs.
+- **Clears** are quads drawn in the scene with two small built-in programs:
+  colour by the fragment program, depth and stencil by an always-pass depth
+  test. sceGxm has no clear call, and fills on the transfer queue would race
+  the scenes.
+- **Programs.** Each draw picks its shaders' variants: the vertex
+  declaration decides which inputs are D3DCOLOR (swapped), missing (read as
+  0, 0, 0, 1) or narrower than four components, and the alpha test picks the
+  pixel shader's. A variant other than the default compiles on first use
+  (through the cache) and is registered with the shader patcher. Vertex
+  programs are kept per variant, declaration and stream strides; fragment
+  programs per variant, vertex program, blend state and target format.
+- **Textures** are linear: rows of whole multiples of 8 texels, and the
+  levels of a mipmapped texture sized from the power of two above the base,
+  which is how sceGxm reads them and also a layout LockRect can hand out.
+  Render-target textures are strided (rows of 32 texels, as colour surfaces
+  want). Volume textures are their slices stacked. sceGxm samples cube
+  textures only swizzled, and refuses linear DXT textures (run D:
+  `sceGxmTextureInit... failed (0x805b0009)` for every DXT1/3/5), so cube and
+  DXT textures are swizzled: the GPU holds only the swizzled copy, LockRect
+  hands out a scratch level in D3D9's layout (filled from the GPU's copy for
+  partial or read-only locks), and UnlockRect swizzles it in. DXT textures
+  whose sides are not powers of two use sceGxm's arbitrary swizzled layout,
+  padded to the powers of two. Depth textures are not sampled yet: draws
+  bind a white texture.
+- **State.** The viewport moves half a pixel (D3D9 samples pixel centres at
+  whole coordinates); the viewport and scissor rect become the region clip;
+  depth, stencil, cull, fill mode and depth bias map to sceGxm's; blending
+  goes into the fragment program.
+- **Memory.** DISCARD on a buffer a draw read takes fresh memory. Memory the
+  GPU may still read (old buffers, destroyed resources, released programs) is
+  freed three frames later, since the display queue lets the CPU run at most
+  two frames ahead. DrawPrimitiveUP and the clear quads copy their vertices
+  into a 512 KB per-frame ring.
 
 ### Shaders (step 2c)
 
@@ -160,12 +428,35 @@ program meets the back end through:
 
 `src/gfx_gxm/gxm_program_cache.cpp` keeps each compiled program in
 `ux0:data/KisakCOD/gxp/<hash>.gxp`, named by a hash of its Cg source, so a
-console compiles a program once (about 0.1 s each). A program that does not
+console compiles a program once (about 0.7 s each for the game's programs
+on a console; the probe's small ones took 0.1 s). A program that does not
 compile is logged with the compiler's first error (the first 40 failures;
 each reason a shader is not translated is logged once and counted at the end)
 and its Cg is left beside the cache as `failed-<hash>.cg`. A shader that
 cannot be translated or compiled is still created, as D3D9 would; draws with
-it will be skipped.
+it are skipped and counted.
+
+The compiler is loaded when the first program has to be compiled, so a start
+that finds every program on the card never loads it. It allocates from the
+game's heap and keeps working memory between programs, so the cache unloads
+it once it holds more than 2 MB of the heap and once it has compiled nothing
+for 5 s, and loads it again for the next program (0.4 s on a console; vitaGL
+does the same). A first start compiled 421 programs across 15 loads in
+Vita3K, with the compiler never above 4.1 MB; before that, such a start ran
+the heap out while the sounds loaded. The `shader compiler memory` log lines
+count what it held and gave back.
+
+**The compiler folds `x * 0 + 1` to 0.** HLSL writes `float4(v.xyz, 1)` as
+one multiply-add with the constant (1, 0, 0, 0): `mad r0, v0.xyzx, c8.xxxy,
+c8.yyyx`. Written to Cg as `r0 = v0.xyzx * k8.xxxy + k8.yyyx`, the Vita's
+compiler drops the w lane's 1, at every optimisation level but 0 and with or
+without fast maths. Every position then lost its w terms, which left the
+screen black until run K. The translator now takes the lanes whose factor is
+a constant zero out of the product (`WithoutZeroProducts`): they take the
+addend, or 0.0 for a plain multiply. Literals in place of the constant and
+one component per statement also compile right; a non-const or static
+constant, two statements, a function, and constructors around the swizzles
+do not.
 
 The client is packed unsafe for the compiler, like the probe.
 
@@ -224,6 +515,11 @@ host by `scripts/tests/test_vita_gxm_heap.py`. The kinds are:
 - uncached main memory: vertex data, ring buffers;
 - the two USSE kinds: shader code.
 
+The Legacy back end counts each pool's use by what it is for and logs it
+once a minute and at every failed allocation (`gpu memory by use (cdram +
+main MB, pieces): ...`), and logs each piece of 1 MB or more as it is made
+(`gpu memory piece N: ...`, with its size, format and usage).
+
 The display's own buffers take about 9 MB of CDRAM and 2.6 MB of main memory.
 The parameter buffer, which sceGxm takes from main memory itself, adds 16 MB.
 The probe measures what is left.
@@ -234,6 +530,6 @@ The plan, with reasons and risks: `vita-client-plan.md` in the project files.
 
 1. **Build and boot** (this page).
 2. **Screen:** a GXM back end for the Legacy adapter API (`src/gfx_vk/legacy/vk_legacy.h`), under the existing D3D9 front (`src/gfx_vk/d3d9`). Game shaders are translated to Cg, compiled on the Vita by `libshacccg.suprx` (each user extracts it from their own firmware) and cached as `.gxp`.
-3. **Controls and sound:** buttons, sticks and touch become engine input, and sound gets a Vita output.
+3. **Controls and sound:** buttons, sticks and touch become engine input, and sound gets a Vita output. Built and tested on the host ("Controls", "Sound"); the on-screen keyboard follows the first drawn frames.
 4. **Join and play:** connect to a server and play, with the visual cuts from the feasibility study.
 5. **Make it fast:** profile on the Vita, then cut the hot spots.

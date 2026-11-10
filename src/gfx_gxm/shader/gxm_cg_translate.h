@@ -118,9 +118,31 @@ struct Options
     // Vertex shaders: inputs v<n> no vertex element feeds. D3D9 reads them
     // as (0, 0, 0, 1); the program then has no in_v<n> parameter.
     uint16_t absentInputs = 0;
+    // Vertex shaders: how many components the vertex element feeding v<n>
+    // has (1 to 4; 0 means 4). The parameter is declared that wide and the
+    // rest filled as D3D9 does: y and z 0, w 1.
+    uint8_t inputComponents[16] = {};
     // Pixel shaders: D3DRS_ALPHATESTENABLE's test, done in the program
     // since GXM has none. Always is no test.
     AlphaFunc alphaFunc = AlphaFunc::Always;
+    // Vertex shaders: keep the position's z just inside the far plane
+    // (z <= w * 0.99999). D3D9 draws z == w; a run-diagnostic option while
+    // finding out whether GXM clips it.
+    bool farPlaneInside = false;
+    // Vertex shaders, run diagnostics: replace part of the position the
+    // program computed, to find which part a console gets wrong.
+    //   1: all of it, from the POSITION input read as 960x544 pixels
+    //   2: x and y from dot(position, c[0]) and dot(position, c[1]); z 0.5, w 1
+    //   3: z 0.5 and w 1; x and y as computed
+    //   4: z half of the computed w
+    // 5 to 8 draw at the POSITION input's pixels (as 1) and, when the
+    // program writes TEXCOORD0, put numbers there for a fragment program
+    // to show as a colour:
+    //   5: the computed position: x / 2 + 0.5, y / 2 + 0.5, w / 2
+    //   6: constants: c[1].w - 0.5, c[3].w / 2, c[7].w / 2
+    //   7: constants: c[4].x / 2, c[5].y / 2, c[6].z / 2
+    //   8: the computed position: z / 4 + 0.5, w / 4 + 0.5, 0.25
+    uint8_t diagPosition = 0;
 };
 
 // ---- Parsed form ---------------------------------------------------------------------------

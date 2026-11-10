@@ -950,7 +950,7 @@ int main(int argc, char **argv)
     while (true)
     {
 #if defined(__vita__)
-        if (Vita_QuitRequested())
+        if (Vita_QuitRequested() || Vita_QuitAfterDue())
             s_quitRequested = 1;
 #endif
         if (s_quitRequested)

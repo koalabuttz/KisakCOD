@@ -54,7 +54,7 @@ void CloseBackend(Backend *backend)
         if (backend->host->log)
         {
             char line[256];
-            std::snprintf(line, sizeof(line), "gxm d3d9: %llu frames, %llu draws (not drawn yet), %llu clears",
+            std::snprintf(line, sizeof(line), "gxm d3d9: %llu frames, %llu draws, %llu clears",
                           static_cast<unsigned long long>(display.frames),
                           static_cast<unsigned long long>(stats.draws),
                           static_cast<unsigned long long>(stats.clears));

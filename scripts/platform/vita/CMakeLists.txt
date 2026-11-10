@@ -94,9 +94,16 @@ target_compile_options(KisakCOD-dedi PRIVATE
 # threads, which crashed the first map load on a Vita. CI checks that no weak
 # pthread reference is left unresolved, and the server refuses to start
 # without per-thread copies.
+#
+# vita-elf-create writes the import and export tables (a few KB, growing with
+# every imported function) just past the end of the code segment and stops if
+# the data segment starts there. VitaSDK's linker script starts the data on
+# the next 64 KB boundary, so whether they fit was luck; __sce_headroom moves
+# the data segment at least 32 KB further.
 set(KISAK_VITA_LINK_OPTIONS -Wl,--gc-sections -Wl,--no-enum-size-warning
     -Wl,--undefined=sceUserMainThreadStackSize
-    -Wl,--undefined=pthread_cancel -Wl,--undefined=pthread_once)
+    -Wl,--undefined=pthread_cancel -Wl,--undefined=pthread_once
+    -Wl,--defsym=__sce_headroom=0x8000)
 set(KISAK_VITA_LINK_LIBRARIES
     pthread
     SceNet_stub SceNetCtl_stub SceSysmodule_stub SceKernelThreadMgr_stub
