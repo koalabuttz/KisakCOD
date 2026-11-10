@@ -44,6 +44,15 @@ no `..`, `:`, `;`, `"`, leading separator or component ending in `.` or a space
 `src/server_mp/sv_query_limit.h` leaky buckets that rate-limit `getstatus`,
 `getinfo`, `getchallenge` and `rcon` replies per address and globally.
 
+`test_open_url.py` compiles the production `src/qcommon/url_check.h` rule 64-
+and 32-bit: `Sys_OpenURL`, which on Windows is `ShellExecute` "open", is given
+only a plain `http://` or `https://` address made of bytes a URL can hold. A
+game server chooses that address when it redirects a download, and retail
+opened whatever it sent, a program or a file on a share included. The check
+also reads `src/win32/win_main.cpp` to see the rule applied before
+`ShellExecuteA`, and that no other `ShellExecute` call opens anything but a
+fixed string.
+
 `test_server_test_clients.py` checks the extracted internal bot functions with
 controlled connection and movement services; the native runner runs its 32-bit
 sanitizer configuration. The opt-in `test_linux_bots.py` uses stock bot/team/class setup, requires repeated healthy
