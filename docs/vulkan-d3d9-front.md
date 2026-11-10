@@ -638,6 +638,19 @@ evidence):
   `scripts/runs/recipes/vulkan-settings-mp-crash.json` compares the settings
   with `perf_ab` instead, in windows of 9 s in the order A B B A, which a
   drift over minutes moves less.
+* Anti-aliasing: the back end has no multisampled targets yet. Its
+  `CheckDeviceMultiSampleType` offers none, so the engine draws one sample a
+  pixel on Vulkan whatever `r_aaSamples` says (`R_SetupAntiAliasing` steps
+  down to none), where DXVK gives the samples asked for. The laptop's
+  profile has `r_aaSamples 4` (read in run 11), and the launch lines of the
+  runs above set no value of their own. If their DXVK launches drew four
+  samples, as that says they did, every frame rate above sets a Vulkan frame
+  of one sample beside a DXVK frame of four, and the gap is larger than it
+  reads. `scripts/runs/recipes/vulkan-aa-mp-crash.json` measures the two
+  alike: both with `r_aaSamples 1` on the command line, and DXVK with 4
+  beside them, each row keeping the engine's `Using 4x anti-aliasing` line
+  where there is one. The Windows PC's runs set `r_aaSamples 1` for both back
+  ends, so its numbers do compare.
 * Present mode: the laptop's swapchain still says `MAILBOX, 4 images` with
   vsync off now that the core asks for IMMEDIATE first (run 11), so its
   surface does not offer IMMEDIATE.
@@ -691,10 +704,13 @@ Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11}.md`,
 ## Next
 
 The rest of the frame rate gap to DXVK. On the laptop that is the GPU's
-time: what a pass split by the feed costs on its driver, and whether a feed
-setting is better than the default at all (laptop run 12 measures the
-settings in one launch, and the kept draw state with them). On the Windows
-PC it is the render thread's time per draw: descriptor sets made again every
-frame, then the front's lock. Then the long frame the laptop sees about every
-two minutes, which the `slow frame` lines are there to name, and the second
-or so a launch spends building pipelines on the PC.
+time, and first a measurement of the two back ends with the same
+anti-aliasing (above); then what a pass split by the feed costs on its
+driver, and whether a feed setting is better than the default at all (laptop
+run 12 measures the settings in one launch, and the kept draw state with
+them). Multisampled targets, so that `r_aaSamples` means on Vulkan what it
+means on Direct3D 9. On the Windows PC the gap is the render thread's time
+per draw: descriptor sets made again every frame, then the front's lock.
+Then the long frame the laptop sees about every two minutes, which the
+`slow frame` lines are there to name, and the second or so a launch spends
+building pipelines on the PC.
