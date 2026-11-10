@@ -185,8 +185,9 @@ retyped at either end.
 When the whole file is too long to relay, the machine pastes
 `results-compact.json` instead (`run_report.py results.json --compact` prints
 it again): per row the status, the power, the counts that are not zero, what
-the scene read and the frame log line as the game printed it, a few hundred
-bytes a row. It carries a checksum of its own and the checksum of the file it
+the scene read, the frame log line as the game printed it and the row's
+load note (the three busiest other processes before the launch, at the
+capture and during it, and any wait), a few hundred bytes a row. It carries a checksum of its own and the checksum of the file it
 was cut from, and `run_report.py` makes the same tables and summary from it.
 The other verbatim lines stay in the full file on the machine until someone
 asks for them, unless the run says how many of them should cross:

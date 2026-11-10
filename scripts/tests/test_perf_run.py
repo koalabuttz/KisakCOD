@@ -575,6 +575,13 @@ def test_load(bench):
         check(status == 0 and printed.count("waiting: cc1plus") == 2 and row["load"]["top"] == [["other", 20.0]]
               and row["load"]["over"] is False and row["load"]["at_capture"] == [["other", 5.0]],
               f"a row waits for a busy process to end and notes the load ({row['load']})")
+        # A quiet row keeps its note in the short form too (driver proof 2, 2026-11-10).
+        quiet = dict(row, load={"waited": 0, "over": False, "top": [["a", 9.0], ["b", 8.0], ["c", 7.0], ["d", 6.0]],
+                                "at_capture": [["a", 4.0]], "during_capture": [["e", 30.6]]})
+        short_load = run_report.compact(run_report.seal(dict(results, rows=[quiet])))["rows"][0].get("load")
+        check(short_load == {"waited": 0, "over": False, "top": [["a", 9.0], ["b", 8.0], ["c", 7.0]],
+                             "at_capture": [["a", 4.0]], "during_capture": [["e", 30.6]]},
+              f"the short form keeps a quiet row's load, three processes per list ({short_load})")
         # Busy for as long as the wait before the launch lasts, quiet by the capture
         # (only the checks inside a row leave the game's own process out).
         perf_run.sample_load = lambda window, exclude=(), root=None: [] if exclude else [("cc1plus", 180.0)]

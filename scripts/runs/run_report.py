@@ -16,8 +16,8 @@ summary short enough for a thread message.
 The short form (``--compact``, and ``results-compact.json`` beside every
 results file) is what a machine pastes when the whole file is too long to
 relay: per row the status, the power, the counts that are not zero, what the
-scene read and the frame log line as the game printed it, with a checksum of
-its own and the checksum of the file it was cut from. Every table can be made
+scene read, the frame log line as the game printed it and the load note (three
+busiest other processes per sample), with a checksum of its own and the checksum of the file it was cut from. Every table can be made
 from it; the other verbatim lines stay in the full file on the machine.
 
 The checksum is the SHA-256 of the results without their ``sha256`` entry,
@@ -175,10 +175,16 @@ def compact(results, lines=None):
         failed = [step for step in row.get("steps") or [] if not step[1]]
         if failed:
             kept["steps"] = failed
+        # Every row keeps its load note, quiet or not: a row with no note
+        # cannot be told from a row that was never checked. The lists keep
+        # their three busiest processes.
         load_note = row.get("load") or {}
-        if any(load_note.get(key) for key in ("waited", "over", "waited_at_capture", "busy")):
-            kept["load"] = {key: load_note[key] for key in ("waited", "over", "waited_at_capture", "busy")
-                            if key in load_note}
+        short_load = {key: load_note[key] for key in ("waited", "over", "waited_at_capture", "busy")
+                      if key in load_note}
+        short_load.update({key: load_note[key][:3] for key in ("top", "at_capture", "during_capture")
+                           if load_note.get(key)})
+        if short_load:
+            kept["load"] = short_load
         short["rows"].append(kept)
     return seal(short)
 
