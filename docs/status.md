@@ -150,7 +150,7 @@ These came before the playable client and still build and run in CI:
 
 ## Open pull requests
 
-As of 2026-11-10 07:40 UTC, ten. They change by the hour; the
+As of 2026-11-10 07:40 UTC, eleven. They change by the hour; the
 [list on GitHub](https://github.com/koalabuttz/KisakCOD/pulls) is the current
 one. A machine run a pull request waits on is named where its author has
 said so.
@@ -161,6 +161,7 @@ said so.
 | 165 | Vulkan back end: a check of both model lighting update paths through the D3D9 front | |
 | 162 | PS Vita client: an on-screen keyboard and a chat control | None named: PC runs KB1 and KB2 checked the game's side in Vita3K. No text has come back from the system's keyboard yet, and nothing has run on a console. |
 | 174 | PS Vita client: read the back buffer for the log only when a run asks, which makes Vita3K runs several times faster | None named: PC run H2 measured it in Vita3K (menu: 5135 frames in 120 s against 1174). Not run on a console. |
+| 175 | A copied sound counts the frames it holds (some stereo sounds claimed twice their length; this is the desktop's default sound path too), and the Vita build removes a file before it rewrites it, because Vita3K does not cut a rewritten file | PC run W: a Vita3K start that leaves no old lines in rewritten files, and the first map with PRs 164 and 166 in one build. Nobody has listened for the sound change. |
 | 159 | Save a key code typed into the game's key code menu as `codkey.txt` | Nobody has typed a key into the menu yet. |
 | 170 | Linux client: opt-in HTTP downloads (`-DKISAK_LINUX_HTTP_DOWNLOADS=ON`) through the engine's own libcurl downloader | A laptop run of a real download is planned; none has been made. |
 | 167 | Build the singleplayer game for x86_64 Linux | It has not loaded a level; a laptop sweep of the 21 levels is queued. |
@@ -181,8 +182,8 @@ As of 2026-11-10. Each machine does one run at a time.
   standalone Legacy adapter and D3D9 front checks have no recorded PC run
   either (the game itself draws through both there).
 - PS Vita client: a map on the console with master's build (it loads and
-  draws in Vita3K); master's build in Vita3K, where PRs 164 and 166 have not
-  run together; the sky and the sunlit ground beside the Windows build (PC
+  draws in Vita3K); PRs 164 and 166 together in Vita3K, which PC run W
+  does first (with PR 175); the sky and the sunlit ground beside the Windows build (PC
   run Y); a listen of the compressed sounds; the controls' layout in a game.
 - PS Vita dedicated server with bots (it has taken one player).
 - Sound listening run for the OpenAL fix (PR 102, merged): plan in
