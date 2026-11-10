@@ -8,10 +8,10 @@ platform layer and memory rules. Started 2026-11-09.
 
 **State: stages 1 to 3 run on the console. On 2026-11-10 the main menu
 showed on David's Vita and worked, with touch, buttons and music (run K).
-A map load failed on the console in that run. Since then a map loads and a
-player spawns in Vita3K on the console's heap size (run U), but the world is
-drawn black there, because the GPU's memory is full in a game ("Memory"
-below). No map load has been tried on a console since run K.**
+A map load failed on the console in that run. Since then a map loads, a
+player spawns and the world is drawn in Vita3K on the console's heap size
+(runs U and BW). The GPU's memory is still full in a game there ("Memory"
+below), and no map load has been tried on a console since run K.**
 - The whole client compiles, links and packs into a `.vpk`: client, cgame, UI, sound, renderer and its own listen server.
 - Stage 1 had no graphics back end, so the client stopped at the renderer through `Sys_Error`. Stage 2 replaces that: the renderer gets the D3D9 front on the GXM back end ("Graphics" below).
 - Stage 3 (controls and sound) runs on the console: on run 1 (2026-11-09) the menu music and the menu's sounds were heard, and every button arrived as its key. The screen's touch and the layout in a game are not confirmed yet: see "Controls" and "Sound" below.
@@ -173,8 +173,10 @@ The main pool is too small for the dynamic buffers, so 14.5 MB of them spill int
 
 **In a game.** No map has loaded on a console yet. In Vita3K on the Windows PC (builds made on that PC, 2026-11-10; not a console):
 - **Run M** (before `snd_adpcm`): on the 64 MB heap the mp_crash fastfile loads and then the heap runs out. On a 128 MB heap the map loads and a player spawns, with 71 MB of heap in use.
-- **Run U** (with `snd_adpcm` and the first two changes above, before the smaller buffers): the map loads on the 64 MB heap and a player spawns. Heap 31.8 MB after the load and 32.9 MB in the game; zone arena 46 MB free. Menus and the HUD are drawn. The world is black.
-- **Why black:** both pools are full, CDRAM at 103.5 of the 108 MB Vita3K offers (a console has 104) and main at 19.3 of 20. The scene's two screen-sized render targets, 2040 KB each, find no room 0.7 s after the game's own start-up (`CL_InitCGame`), and every draw to them is skipped: 571753 draws, against 997449 drawn. 2308 allocations were refused in seven minutes. All but those two were fresh copies for renamed dynamic buffers.
+- **Run U** (with `snd_adpcm`, targets taking memory at first use and no shadow maps; before the target reserve and the smaller buffers): the map loads on the 64 MB heap and a player spawns. Heap 31.8 MB after the load and 32.9 MB in the game; zone arena 46 MB free. Menus and the HUD are drawn. The world is black.
+- **Why black in run U:** both pools were full, CDRAM at 103.5 of the 108 MB Vita3K offers (a console has 104) and main at 19.3 of 20. The scene's two screen-sized render targets, 2040 KB each, found no room 0.7 s after the game's own start-up (`CL_InitCGame`), and every draw to them was skipped: 571753 draws, against 997449 drawn. 2308 allocations were refused in seven minutes. All but those two were fresh copies for renamed dynamic buffers.
+- **Run BW** (run U's build with the target reserve and the rule for a target without memory; still before the smaller buffers): the world is drawn. Ground, buildings and the held weapon are in colour under the HUD at five looks while turning and walking. Both screen-sized targets take their memory from the reserve, no draw is skipped, and 842866 draws and 1172 copies are made in five minutes. The pools are as full as in run U: 1667 allocations refused, 1666 of them fresh copies for renamed dynamic buffers and one a cube map of 4104 KB, which gets a grey stand-in. About 2 frames a second, as in run U. With the marker `no-target-reserve` the same build draws the world without its film colour, the two targets refused as in run U.
+- The smaller buffers and the reserve have not run together yet.
 
 | Use in the game (run U) | CDRAM + main, MB | Note |
 |---|---:|---|
