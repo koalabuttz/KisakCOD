@@ -226,6 +226,7 @@
 #if !defined(_WIN32)
  const dvar_t *r_gpuSyncSleep;
  const dvar_t *r_gpuSyncSleepThreads;
+ const dvar_t *r_gpuSyncSleepUnlocked;
 #endif
  const dvar_t *r_multiGpu;
  const dvar_t *r_skinCache;
@@ -603,6 +604,11 @@
          3,
          DVAR_NOFLAG,
          "Which waits r_gpuSyncSleep applies to: 1 the main thread's, 2 the render thread's, 3 both");
+     r_gpuSyncSleepUnlocked = Dvar_RegisterBool(
+         "r_gpuSyncSleepUnlocked",
+         false,
+         DVAR_NOFLAG,
+         "The main thread lets go of the GPU fence lock while r_gpuSyncSleep sleeps, so the render thread can end its frame");
 #endif
      r_multiGpu = Dvar_RegisterBool("r_multiGpu", false, DVAR_ARCHIVE, "Use multiple GPUs");
      r_skinCache = Dvar_RegisterBool("r_skinCache", true, DVAR_NOFLAG, "Enable cache for vertices of animated models");

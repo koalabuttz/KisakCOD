@@ -119,6 +119,25 @@ launch) measured:
 
 50 and 200 were no better than 100. Vita and macOS have had no such run.
 
+### `r_gpuSyncSleepUnlocked`
+
+`R_SyncGpu` holds the GPU fence lock for the whole of its wait. The render
+thread takes the same lock at the end of each frame to issue the next fence,
+so it waits for the main thread's wait to end. `lock GPU_FENCE` in the
+`timed` line is the time both threads spend getting the lock (the main
+thread also waits while the render thread holds it for its own wait): 0.9 to
+1.2 ms/frame at 1280x800 and 2.5 to 3.7 ms/frame at 1920x1200 in run 5.
+Which thread pays how much is not measured. `r_gpuSync 0`, which has no waits and no lock, gained
+16.6 % fps at 1280x800 but gives up the limit on how far the CPU runs ahead
+of the GPU (mouse latency).
+
+`r_gpuSyncSleepUnlocked 1` (default 0) keeps that limit: the main thread lets
+go of the lock while `r_gpuSyncSleep` sleeps, and its wait ends when the fence
+has passed, as before, or when the render thread has issued a new fence. The
+render thread issues one only after the previous fence passed, so the wait
+never ends sooner than before. It does nothing with `r_gpuSyncSleep 0` or
+`r_gpuSyncSleepThreads 2`. It stays off until a laptop run compares it.
+
 ## `xanim_blendOnce`
 
 When an animation tree node blends several children, `XAnimCalc` calculated
