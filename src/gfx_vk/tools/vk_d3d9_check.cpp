@@ -2535,15 +2535,18 @@ void Check::Multisample()
         Ok(device->SetDepthStencilSurface(depth), "SetDepthStencilSurface(4 samples, back buffer)");
         device->SetRenderState(D3DRS_ZENABLE, TRUE);
         Ok(device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, 1.0f, 0), "Clear(depth)");
+        // The viewport is the whole back buffer here, so the triangle covers
+        // the upper left half of it and its slanted edge crosses all of it.
         drawTriangle(Argb(255, 255, 0, 0));
         int backEdge = -1;
         if (Read())
         {
             Expect("back_buffer_inside", 8, 8, 255, 0, 0);
             Expect("back_buffer_outside", 100, 100, 0, 0, 255);
-            backEdge = partlyCovered(kTarget);
+            backEdge = partlyCovered(kSize);
         }
-        Equal("back_buffer_edge_soft", backEdge >= int(kTarget) / 2, true);
+        Equal("back_buffer_edge_soft", backEdge >= int(kSize) / 2, true);
+        std::printf("d3d9_check.multisample=back_buffer_edge_pixels=%d\n", backEdge);
         std::vector<uint8_t> drawn = pixels;
         const uint64_t before = Counters().presents + Counters().presentsSkipped;
         Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present(4 samples)");
