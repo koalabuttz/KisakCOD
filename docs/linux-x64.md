@@ -526,6 +526,10 @@ an effect model's physics preset read through a void pointer at an offset
 that is right on i386 only (airlift crashed on Windows x64; the **void**
 report above now finds the shape), and a game built without movies loading
 no level at all ([linux-sp-game.md](linux-sp-game.md#fixes-the-first-level-loads-found)).
+A third was found by reading: loading a save put a dynamic entity's physics
+body into the 32-bit `physObjId` field as a pointer, not as the object id the
+readers expect. No tool here reports that shape; clang's
+`-Wshorten-64-to-32` does (the line converts a `uintptr_t` to `int32_t`).
 
 Both layout checks above now read a source once for each game that compiles
 it, because a shared source's `KISAK_SP` branches are different code. Run on

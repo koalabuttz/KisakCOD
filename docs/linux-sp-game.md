@@ -114,6 +114,13 @@ back end builds, links and leaves the start alone, not that it draws.
   read by their fields now, and `check_32bit_layout_offsets.py` reports the
   shape. With the fix the x86_64 Linux game holds airlift for 45 s and quits
   cleanly (laptop sweep); the Windows x64 game has not been re-run yet.
+- Loading a save stored the body of a dynamic entity that was still moving
+  as the pointer itself in the 32-bit `physObjId` field
+  (`DynEnt_LoadEntities`). A 64-bit pointer does not fit, and every later
+  reader takes the field for an object id, so on x86_64 the body was lost
+  (an assert in a Debug build). The load stores the object id now. Found by
+  reading the source; no run has shown the fault or the fix, which needs a
+  save taken while a dynamic entity is awake.
 
 ## Next
 
