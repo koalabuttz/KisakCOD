@@ -342,6 +342,9 @@ class Run:
         command = [str(self.args.server), *self.common_args(home),
                    "+set", "net_port", "28960", "+set", "dedicated", "2",
                    "+set", "sv_allowUnverifiedGuids", "1", "+set", "sv_hostname", HOSTNAME,
+                   # The browser's default filter shows pure servers only, and
+                   # sv_pure is off unless a server config turns it on.
+                   "+set", "sv_pure", "1",
                    "+set", "sv_maprotation", "gametype war map mp_crash",
                    *shlex.split(self.args.server_args), "+map", "mp_crash"]
         self.server = Game(command, home, dict(os.environ), self.out / "server.log")

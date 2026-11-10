@@ -230,6 +230,10 @@ player profile" pop-ups over everything. In WSL `/tmp/.X11-unix` is a
 read-only mount and `Xvfb -displayfd` finds no display, so the script then
 starts Xvfb on an explicit free number from `:90` up.
 
+The server is started with `sv_pure 1`: the browser's default filter
+(`ui_browserShowPure 1`) lists pure servers only, and `sv_pure` defaults to 0, so a
+server without it answers the LAN scan but is filtered out of the list.
+
 The client's `listmenuitems` console command is what makes this possible: it
 prints every item of the open menus with its action script, dvar, text and the
 window pixel to click, and the rows of each list. Items are found by what they
