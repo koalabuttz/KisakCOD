@@ -232,6 +232,9 @@ struct UniformBlock
     uint32_t size = 0;
 };
 constexpr uint32_t kMaxUniformBlocks = 2 * ls::kUniformCount;
+// Transient buffers a pipeline keeps a lasting set 0 for (the frame slots'
+// chunks a frame's uniforms go to).
+constexpr uint32_t kLastingUniformSets = 6;
 
 struct Pipeline
 {
@@ -243,10 +246,20 @@ struct Pipeline
     UniformBlock blocks[kMaxUniformBlocks];
     uint32_t blockCount = 0;
     // With dynamic uniforms: the set 0 written for this frame and transient
-    // buffer.
+    // buffer (without the kept draw state).
     uint64_t uniformFrame = 0; // Device::frameSerial
     VkBuffer uniformBuffer = VK_NULL_HANDLE;
     VkDescriptorSet uniformSet = VK_NULL_HANDLE;
+    // With dynamic uniforms and the kept draw state: sets 0 that last across
+    // frames, one per transient buffer the blocks were in, while their
+    // generation is Device::lastingGeneration. Replaced in turn.
+    struct LastingUniformSet
+    {
+        uint64_t generation = 0;
+        VkBuffer buffer = VK_NULL_HANDLE;
+        VkDescriptorSet set = VK_NULL_HANDLE;
+    } lastingUniforms[kLastingUniformSets];
+    uint32_t lastingUniformNext = 0;
 };
 
 // ---- The device ------------------------------------------------------------------------
@@ -453,6 +466,20 @@ struct Device
         VkImageView views[kSamplerSlots] = {};
         VkSampler samplers[kSamplerSlots] = {};
     } lastTextureSet;
+    // With the kept draw state, texture sets last across frames: found by
+    // their contents in this open-addressed table (slots hold an index + 1
+    // into entries, 0 when empty). A set holds view handles, which can be
+    // handed out again once their image is destroyed, so every lasting set,
+    // texture and uniform, is given up when the core's ImagesDestroyed has
+    // moved on from imagesDestroyed, or when there are too many; pipelines'
+    // lasting sets 0 count only while their generation is lastingGeneration.
+    struct LastingTextureSets
+    {
+        std::vector<TextureSetCache> entries;
+        std::vector<uint32_t> slots;
+        uint64_t imagesDestroyed = 0;
+    } lastingTextures;
+    uint64_t lastingGeneration = 1;
     uint32_t warnedOnce = 0; // bit per one-time warning
 };
 

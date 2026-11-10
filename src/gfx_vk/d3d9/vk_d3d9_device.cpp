@@ -247,12 +247,13 @@ void Device::Destroy()
         HostLog(host(),
                 "vulkan d3d9: device stats: %llu draws, %u shaders (%u translated in %.1f ms), "
                 "%u pipelines (%.1f ms building), %llu texture uploads (%.1f MB, %.1f ms), %llu read back to lock "
-                "again",
+                "again, %llu descriptor sets kept across frames (all given up %u times)",
                 static_cast<unsigned long long>(stats.draws), stats.shaders,
                 stats.shaders - std::min(stats.shaders, stats.shadersCached), stats.shaderMicros / 1000.0,
                 stats.pipelines, stats.pipelineMicros / 1000.0, static_cast<unsigned long long>(stats.textureUploads),
                 stats.uploadBytes / (1024.0 * 1024.0), stats.uploadMicros / 1000.0,
-                static_cast<unsigned long long>(stats.textureReadbacks));
+                static_cast<unsigned long long>(stats.textureReadbacks),
+                static_cast<unsigned long long>(stats.lastingSets), stats.lastingRetires);
     }
     // The back end's statistics, then the Legacy device and the GPU go.
     CloseBackend(backend_);

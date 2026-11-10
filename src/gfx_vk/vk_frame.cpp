@@ -645,6 +645,11 @@ void DestroyFrameResources(Core &core)
         delete readback;
     }
     core.readbacks.clear();
+    for (VkDescriptorPool pool : core.lastingPools)
+        core.vk.vkDestroyDescriptorPool(core.dev, pool, nullptr);
+    core.lastingPools.clear();
+    core.lastingPoolsUsed = 0;
+    core.lastingSets = 0;
     for (FrameSlot &slot : core.frames)
     {
         DestroyArena(core, slot.staging);
@@ -1288,53 +1293,101 @@ Transient AllocateTransient(Core *core_, VkDeviceSize size, VkDeviceSize alignme
     return result;
 }
 
-VkDescriptorSet AllocateDescriptorSet(Core *core_, VkDescriptorSetLayout layout)
+namespace
 {
-    Core &core = *core_;
-    FrameSlot &slot = CurrentSlot(core);
+VkDescriptorPool CreateDescriptorPool(Core &core)
+{
+    const VkDescriptorPoolSize sizes[] = {
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kDescriptorSetsPerPool},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, kDescriptorSetsPerPool},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 * kDescriptorSetsPerPool},
+        {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kDescriptorSetsPerPool},
+        {VK_DESCRIPTOR_TYPE_SAMPLER, kDescriptorSetsPerPool},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kDescriptorSetsPerPool / 4},
+        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, kDescriptorSetsPerPool / 4},
+    };
+    VkDescriptorPoolCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    info.maxSets = kDescriptorSetsPerPool;
+    info.poolSizeCount = static_cast<uint32_t>(sizeof(sizes) / sizeof(sizes[0]));
+    info.pPoolSizes = sizes;
+    VkDescriptorPool pool = VK_NULL_HANDLE;
+    if (!Check(core, core.vk.vkCreateDescriptorPool(core.dev, &info, nullptr, &pool), "vkCreateDescriptorPool"))
+        return VK_NULL_HANDLE;
+    return pool;
+}
+
+// From pools[used] on, adding a pool when the last is full.
+VkDescriptorSet AllocateFromPools(Core &core, std::vector<VkDescriptorPool> &pools, uint32_t &used,
+                                  VkDescriptorSetLayout layout)
+{
     for (;;)
     {
-        if (slot.descriptorPoolsUsed == slot.descriptorPools.size())
+        if (used == pools.size())
         {
-            const VkDescriptorPoolSize sizes[] = {
-                {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kDescriptorSetsPerPool},
-                {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, kDescriptorSetsPerPool},
-                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 * kDescriptorSetsPerPool},
-                {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kDescriptorSetsPerPool},
-                {VK_DESCRIPTOR_TYPE_SAMPLER, kDescriptorSetsPerPool},
-                {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kDescriptorSetsPerPool / 4},
-                {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, kDescriptorSetsPerPool / 4},
-            };
-            VkDescriptorPoolCreateInfo info{};
-            info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-            info.maxSets = kDescriptorSetsPerPool;
-            info.poolSizeCount = static_cast<uint32_t>(sizeof(sizes) / sizeof(sizes[0]));
-            info.pPoolSizes = sizes;
-            VkDescriptorPool pool = VK_NULL_HANDLE;
-            if (!Check(core, core.vk.vkCreateDescriptorPool(core.dev, &info, nullptr, &pool), "vkCreateDescriptorPool"))
+            const VkDescriptorPool pool = CreateDescriptorPool(core);
+            if (!pool)
                 return VK_NULL_HANDLE;
-            slot.descriptorPools.push_back(pool);
+            pools.push_back(pool);
         }
         VkDescriptorSetAllocateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        info.descriptorPool = slot.descriptorPools[slot.descriptorPoolsUsed];
+        info.descriptorPool = pools[used];
         info.descriptorSetCount = 1;
         info.pSetLayouts = &layout;
         VkDescriptorSet set = VK_NULL_HANDLE;
         const VkResult result = core.vk.vkAllocateDescriptorSets(core.dev, &info, &set);
         if (result == VK_SUCCESS)
-        {
-            ++core.stats.descriptorSets;
             return set;
-        }
         if (result != VK_ERROR_OUT_OF_POOL_MEMORY && result != VK_ERROR_FRAGMENTED_POOL)
         {
             Check(core, result, "vkAllocateDescriptorSets");
             return VK_NULL_HANDLE;
         }
-        ++slot.descriptorPoolsUsed; // full: the next pool
+        ++used; // full: the next pool
     }
 }
+} // namespace
+
+VkDescriptorSet AllocateDescriptorSet(Core *core_, VkDescriptorSetLayout layout)
+{
+    Core &core = *core_;
+    FrameSlot &slot = CurrentSlot(core);
+    const VkDescriptorSet set = AllocateFromPools(core, slot.descriptorPools, slot.descriptorPoolsUsed, layout);
+    if (set)
+        ++core.stats.descriptorSets;
+    return set;
+}
+
+VkDescriptorSet AllocateLastingDescriptorSet(Core *core_, VkDescriptorSetLayout layout)
+{
+    Core &core = *core_;
+    if (core.failed)
+        return VK_NULL_HANDLE;
+    const VkDescriptorSet set = AllocateFromPools(core, core.lastingPools, core.lastingPoolsUsed, layout);
+    if (set)
+    {
+        ++core.stats.lastingDescriptorSets;
+        ++core.lastingSets;
+    }
+    return set;
+}
+
+void RetireLastingDescriptorSets(Core *core_)
+{
+    Core &core = *core_;
+    if (core.lastingPools.empty())
+        return;
+    const uint64_t serial = PendingSerial(core);
+    for (VkDescriptorPool pool : core.lastingPools)
+        core.deferred.push_back({DeferredKind::DescriptorPool, serial, nullptr, (uint64_t)pool});
+    core.lastingPools.clear();
+    core.lastingPoolsUsed = 0;
+    core.lastingSets = 0;
+    ++core.stats.lastingRetires;
+}
+
+uint32_t LastingDescriptorSets(const Core *core) { return core->lastingSets; }
 
 // ---- Public API: copies and read-back ---------------------------------------------------
 
