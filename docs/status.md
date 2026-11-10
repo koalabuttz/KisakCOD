@@ -1,10 +1,11 @@
 # Linux port status
 
-Last updated 2026-11-10 15:54 UTC (master `8a76716`: the Vulkan back end's
+Last updated 2026-11-10 15:58 UTC (master `d42c92d`: the Vulkan back end's
 multisampling and kept draw state, PR 203, and its Release build on demand,
 PR 208; the PS Vita static model cache, literal shader constants and map
 change memory, PRs 202, 211 and 212; fewer Linux CI jobs, PR 196; Steam
-Windows run 3 and the PC's server browser and HTTP download runs). This page is the current state of
+Windows run 3 and the PC's server browser and HTTP download runs; the Steam
+verdict fix, PR 194). This page is the current state of
 the native Linux port and the other platform builds, the open pull requests and
 the roadmap. The [docs index](README.md) lists the detailed guides;
 older handoffs are in [history](history/README.md) and are not current.
@@ -146,8 +147,11 @@ since that audit; its fixes are PR 191 (merged: sound sizes that wrap in
 32-bit math are refused, Windows opens only http and https addresses for a
 server, and the Vita reads its text run settings once at start-up so a
 server cannot have them run commands; compiled and checked on hosted CI,
-not run on Windows, in Vita3K or on a console) and PR 194 (a Steam
-ticket's later verdict, open).
+not run on Windows, in Vita3K or on a console) and PR 194 (merged: a
+server acts on Steam's later verdict for a ticket, so a dropped or refused
+player needs a new challenge and ticket; Steam verdict run 1 passed with a
+Linux server and with a Windows server on the PC, each with the laptop's
+Linux Steam player).
 
 ## Other Linux pieces
 
@@ -178,14 +182,13 @@ These came before the playable client and still build and run in CI:
 
 ## Open pull requests
 
-As of 2026-11-10 15:54 UTC, four. They change by the hour; the
+As of 2026-11-10 15:58 UTC, three. They change by the hour; the
 [list on GitHub](https://github.com/koalabuttz/KisakCOD/pulls) is the current
 one. A machine run a pull request waits on is named where its author has
 said so.
 
 | PR | What | Machine run it waits on |
 | --- | --- | --- |
-| 194 | Steam: a server acts on Steam's later verdict for a ticket | A run with a real Steam player: join, leave and join again, then a kick and an attempt to come back. |
 | 209 | Linux client: 64-bit clients load a modded server's map (weapon file fields at their real offsets), and the HTTP fallback line names the URL | A PC WSL rerun with the game. |
 | 213 | Fewer Linux CI jobs per push: five more jobs run both configurations in one job (17 instead of 22) | |
 | 214 | PS Vita client: build fragment programs without fast maths, for the speckle on the ground under decals | Vita3K run Z11 with every fragment program rebuilt, against Windows and run Z8. |
@@ -223,8 +226,6 @@ PR 168.
 - Finding servers (PR 163, merged): the Join Game menu on a real client, and
   a LAN scan across two machines ([guide](server-browser.md#what-is-checked));
   server browser run 1 and LAN scan probe 1 in WSL are done.
-- Steam: Part B of Steam verdict run 1 (PR 194; a Windows server on the PC,
-  running); Part A on the laptop passed. Steam Windows run 3 is done.
 - Key code menu (PR 159, merged): a key typed into the menu on screen
   ([guide](key-codes.md#the-key-code-menu)).
 - CPU measuring: `r_gpuSyncSleepUnlocked` (PR 197, merged, off by
@@ -280,7 +281,7 @@ no fixed order.
    Windows client joined a Linux server logged on as an anonymous game server
    (PR 133), and a client without Steam joins servers that accept key code
    GUIDs (PR 134). A Linux Steam client has joined anonymous-login servers
-   on Linux and on Windows (Steam Windows run 3, Steam verdict run 1). Next:
+   on Linux and on Windows (Steam Windows run 3, Steam verdict run 1, PR 194). Next:
    a Windows key code client, a Steam player and a key code player on one
    server, two Steam accounts, and the internet list seen working in the
    Join Game menu (PR 163 made the master a setting).
@@ -290,7 +291,7 @@ no fixed order.
    through `r_backend vulkan` (first run on an Intel MacBook Pro; a release
    bundle also needs MoltenVK and the Vulkan loader), and bots on the PS Vita
    dedicated server ([guide](vita.md)).
-9. **Security**: the daily check's first fixes (PR 191 merged, PR 194 open).
+9. **Security**: the daily check's first fixes are merged (PRs 191 and 194).
 
 ## Checks before a push
 
