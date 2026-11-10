@@ -7,7 +7,7 @@ an aarch64 build compiles and passes the asset-free checks, see
 server, game, cgame, client, UI, sound and renderer, as the Windows `KisakCOD-mp`
 target builds them. It is opt-in and off by default. It reached the
 player-spawn milestone: a listen server whose own client joins it over the
-engine's in-process loopback (see [linux-client.md](linux-client.md#joining-servers-local-yes-remote-no)).
+engine's in-process loopback (see [linux-client.md](linux-client.md#joining-servers)).
 
 Status: it links and starts, and its game window takes keyboard and mouse
 input. Without game files it stops where the engine needs them. On a developer
@@ -38,6 +38,11 @@ CI links stand-ins for the last two parts instead: the device probe's
 whose `alcOpenDevice` finds no device. For an x86_64 build, add
 `-DKISAK_LINUX_ARCH=x86_64` and use x86_64 builds of the same libraries
 ([linux-x64.md](linux-x64.md#x86_64-multiplayer-client)).
+
+The client draws through DXVK Native by default. `-DKISAK_BUILD_VULKAN_BACKEND=ON`
+(with the Vulkan options it needs) also links this project's own Vulkan back
+end, chosen at start with `+set r_backend vulkan`; DXVK stays the default
+([vulkan-d3d9-front.md](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan)).
 
 For profiling, add `-DKISAK_LINUX_TRACY=ON`. It builds `KisakCOD-mp`,
 `KisakCOD-sp` and `KisakCOD-dedi` with the Tracy profiler (the version
@@ -175,9 +180,11 @@ Functions that only raw-asset loading (`useFastFile 0`) or an attached remote
 debugger reaches abort with their name. `Material_FreeAll` runs its fast-file
 branch: it releases the technique sets and nothing else.
 
-Joining a remote server is refused, because the default build has no Steam
-ticket provider
-([linux-client.md](linux-client.md#joining-servers-local-yes-remote-no)).
+The default build has no Steam ticket provider, so it joins a remote server
+only with a key code, and only where the server accepts unverified GUIDs
+(`sv_allowUnverifiedGuids 1`, [key-codes.md](key-codes.md)). With no key code
+the join is refused before any packet is sent
+([linux-client.md](linux-client.md#joining-servers)).
 Build with `-DKISAK_LINUX_STEAM=ON` to authenticate through the running Steam
 client instead ([linux-steam.md](linux-steam.md)).
 
@@ -246,7 +253,10 @@ evidence. All three pass as of master `998344d`:
    minutes of play printed about 140 prediction misses, 1.2 units on average
    and 7.7 at most, and about 190 prediction errors. The Windows build over
    similar play (2026-11-04, a desktop PC) printed 32 misses, 0.47 units on
-   average, and 34 errors; the gap is being investigated.
+   average, and 34 errors. Later laptop runs put the difference down to what
+   happened in play (concussion grenades, obstacles), not to the Linux build:
+   by hand both builds miss about as often per minute
+   ([status](status.md#prediction)).
 
 The x86_64 build passed the same steps on the same laptop on 2026-11-04,
 including a clean quit ([linux-x64.md](linux-x64.md#x86_64-multiplayer-client)).
@@ -256,6 +266,64 @@ Run it with `+set net_ip 127.0.0.1`, and windowed
 fullscreen fix above. The listen server then opens no outside port. The
 first map load with an existing retail profile drops once (see
 [Where it writes](#where-it-writes)).
+
+### Map sweep
+
+Only mp_crash has been played by hand. `scripts/tests/run_linux_mp_map_sweep.py`
+runs `KisakCOD-mp` against an install on the other maps and writes a report. It
+is not run by CI; `scripts/tests/test_linux_mp_map_sweep.py` checks the tool
+itself against a stand-in game.
+
+```sh
+python3 scripts/tests/run_linux_mp_map_sweep.py "$GAME" --binary "$BUILD/KisakCOD-mp" \
+    --work-dir ~/kisak-private/mp-sweep1 --screenshot --sound-debug
+```
+
+For each of the 21 stock maps (or `--maps a,b`) it starts a listen server with
+`+devmap`, bound to 127.0.0.1, and then:
+
+1. waits for `Server: <map>` and for `clientinfo` to answer `state: 9`. A first
+   load that drops back to the menu is asked for once more and counted;
+2. reads `sv_serverId` and the script menus from the `configstrings` listing,
+   and sends the two menu responses of step 2 above. The menus are taken by
+   position on the first map (`--team-menu 8 --class-menu 15`) and by the names
+   found there on the later ones;
+3. presses buttons through the console for about 25 seconds: fire, grenade,
+   run, sprint, jump, reload, next weapon, crouch, strafe (`--no-exercise`
+   skips this);
+4. holds until `--hold` seconds have passed since the join (default 45), then
+   checks that `mapname` answers with the map and the client is still in
+   state 9;
+5. with `--screenshot`, takes one screenshot with the game's own command and
+   fails the step when the file is missing or nearly all one colour. The
+   report describes each image in numbers (mean brightness, the share that is
+   not black, how many colours, the share of the commonest colour, the mean
+   colour of the top, middle and bottom third), so a map that stands apart
+   from the others shows without the images leaving the machine.
+   `--delete-screenshots` removes each image once it is measured; otherwise
+   they stay in the work directory for someone to look at;
+6. sends `kill`, which only acts on a playing client, and looks for the death
+   the stock scripts log (a `K;` line in `games_mp.log`). That shows the join
+   really spawned the player;
+7. quits and records the exit status.
+
+`--plan chain` runs every map in one process, changing with `devmap` as a map
+rotation does. `--hold 1800 --maps mp_crash` is a long soak of one map.
+`--sound-debug` sets `snd_alDebug 1` and adds the OpenAL driver's counts per
+map (sounds started, cut while playing, stream underruns, OpenAL errors, the
+longest gap between sound updates). `--assert-continue`, `--gdb` and
+`--set DVAR VALUE` work as in the
+[singleplayer sweep](linux-sp-levels.md#the-sweep-tool).
+
+The report counts assertions, errors, script errors and warnings per map and
+names the step a map stopped at. It does not say a map looks or sounds right.
+Everything the game writes goes under the work directory (`base/` with symlinks
+to the install's `main`, `zone` and `localization.txt`, `home/` as
+`fs_homepath` with a profile named `sweep`), and the install's `players/`
+folder is not staged. The logs there hold the console output, asset names
+included, so keep the directory private.
+
+No laptop run of the sweep has been made yet.
 
 ### Flashbang and concussion screen effects
 

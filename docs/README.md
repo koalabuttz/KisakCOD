@@ -9,8 +9,8 @@ what is still missing. Build steps are in the
 ## Playing on Linux (opt-in)
 
 - [Multiplayer client](linux-mp-client.md): `KisakCOD-mp`, the whole game in one
-  native process; playable on a listen server (i386 and x86_64), remote servers
-  refused without Steam authentication
+  native process; playable on a listen server (i386 and x86_64). It joins a
+  remote server with a key code or, opt-in, through Steam
 - [Singleplayer game](linux-sp-game.md): `KisakCOD-sp` (i386), built like the
   multiplayer client from the singleplayer lists; killhouse and cargoship load
   and play
@@ -19,7 +19,10 @@ what is still missing. Build steps are in the
 - [Cinematics](linux-cinematics.md): Bink movies through an FFmpeg-backed shim
   (`KISAK_LINUX_CINEMATICS`)
 - [Steam authentication](linux-steam.md): join and host Steam-authenticated
-  servers through the running Steam client (`KISAK_LINUX_STEAM`)
+  servers through the running Steam client (`KISAK_LINUX_STEAM`), or host as
+  an anonymous Steam game server
+- [Key codes](key-codes.md): join a server that accepts unverified GUIDs with
+  a CoD4 key code and no Steam (all platforms)
 
 ## Linux dedicated server
 
@@ -27,22 +30,24 @@ what is still missing. Build steps are in the
 - [Server-side test clients](server-test-clients.md)
 - [Retail CoD4 client compatibility evidence](retail-client-compatibility.md)
 
-## 64-bit track (opt-in)
+## Other architectures and platforms (opt-in)
 
 - [x86_64 track](linux-x64.md): the 64-bit dedicated server and multiplayer
-  client, the checks that catch 32-bit assumptions, and the Linux and MSVC x64
-  compile censuses
-- [64-bit Arm track](linux-arm64.md): the aarch64 Linux dedicated server, the
-  x86 assumptions it needed fixed (including pages over 4 KiB), and the census
-  for the arm64 client and Windows ARM64
+  client, the checks that catch 32-bit assumptions, the Linux and MSVC x64
+  compile censuses, and the Windows x64 build
+- [64-bit Arm track](linux-arm64.md): the aarch64 Linux dedicated server and
+  client build, the x86 assumptions they needed fixed (including pages over
+  4 KiB), and the Windows ARM64 build
 - [32-bit Arm track](linux-armv7.md): the armv7 Linux dedicated server, the
   first step toward a PS Vita port
 - [PS Vita dedicated server](vita.md): `KISAK_PLATFORM=vita`, Clang with
-  VitaSDK, packed as a `.vpk`
-- [PS Vita multiplayer client](vita-client.md): `KISAK_BUILD_VITA_MP_CLIENT`,
-  stage 1 (builds and packs; no graphics back end yet)
-- [macOS track](macos.md): the opt-in macOS dedicated server (arm64 and
-  x86_64), what differs from the Linux build, and its hosted CI checks
+  VitaSDK, packed as a `.vpk`; runs on a console and has taken a player
+- [PS Vita multiplayer client](vita-client.md): `KISAK_BUILD_VITA_MP_CLIENT`;
+  the menu draws through a sceGxm back end on a console, with controls and
+  sound, and fitting a map into memory is in progress
+- [macOS track](macos.md): the opt-in macOS dedicated server and multiplayer
+  client build (arm64 and x86_64), the app bundle, what differs from the Linux
+  build, and the hosted CI checks, including the Vulkan back end on MoltenVK
 
 ## Linux client foundations (opt-in)
 
@@ -73,7 +78,16 @@ what is still missing. Build steps are in the
 - [World draw probe](linux-world-draw-probe.md) (opt-in): views of that map drawn through the engine's own renderer (`R_Init`, `R_LoadWorld`, `R_RenderScene`, the backend's material passes), read back and checked
 - [Free camera](linux-free-camera.md) (opt-in): a host camera flown through the engine renderer on a real map, live or by a checked script, with the frame owner that sequences input, device reset, resize, map reload and shutdown
 - [Standalone renderer build/run](../tests/linux_renderer/README.md)
-- [Vulkan core and window probe](vulkan-core.md) (opt-in): the first piece of the Vulkan back end; opens an SDL3 window and clears, presents and resizes it through `src/gfx_vk`
+
+## Vulkan back end (opt-in)
+
+The game's D3D9 renderer drawn through Vulkan without DXVK: `r_backend vulkan`
+in a build with `KISAK_BUILD_VULKAN_BACKEND`. Bottom to top:
+
+- [Vulkan core and window probe](vulkan-core.md): `src/gfx_vk`, the device, swapchain, memory, uploads, passes and pipelines, with a probe that clears, draws, presents and resizes an SDL3 window
+- [Legacy shader translator](vulkan-legacy-shaders.md): the game's D3D9 shader bytecode to SPIR-V through dxbc-spirv ([how the converter was picked](shader-translator-spike.md))
+- [Legacy adapter](vulkan-legacy-adapter.md): the part of D3D9 the renderer uses, on the core, with a pixel check
+- [D3D9 front](vulkan-d3d9-front.md): the D3D9 interfaces on the adapter, and [the back end in the game](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan) on Linux and Windows, its dvars, caches and the comparison with DXVK
 
 ## Tests
 

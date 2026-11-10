@@ -16,8 +16,9 @@ The track is staged:
    playable on a developer laptop, see
    [below](#x86_64-multiplayer-client)).
 
-Steps 2 and 3 are done for multiplayer. Still open: an x86_64 singleplayer
-game and a Windows x64 build (see [the MSVC x64 census](#windows-msvc-x64-census)).
+Steps 2 and 3 are done for multiplayer. Still open: an x86_64 Linux
+singleplayer game. The Windows x64 build is done and runs
+(see [Windows MSVC x64 build](#windows-msvc-x64-build)).
 
 ## Upstream alignment
 
@@ -521,7 +522,16 @@ What the x64 Windows build does differently:
 - Vertex skinning uses SSE2 in place of MMX (`KISAK_SKIN_SSE2`), checked
   byte for byte against the MMX form by `KisakCOD-skin-sse2-test`.
 
-It has not been run on a Windows machine yet.
+Runs on a Windows desktop PC with the game files (2026-11-05 to 2026-11-08,
+x64 builds from CI; not CI evidence): the multiplayer game loads mp_crash to
+class select, and the dedicated server hosts bots. Singleplayer needed a
+series of 32-bit layout fixes in SP-only code (field tables, pathnode strides,
+the script reference check), then killhouse and cargoship loaded and played
+with autosaves and a checkpoint load (PR 95), the level-start save stopped
+crashing (PR 111), and a 12-level tour (blackout, armada, bog_a, hunted,
+ac130, coup, village_assault, scoutsniper, sniperescape, icbm,
+launchfacility_a, killhouse) loaded, saved and played without a crash or
+script error (PR 114).
 
 ### Census history
 
