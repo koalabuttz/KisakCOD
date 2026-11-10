@@ -303,6 +303,7 @@ jobs:
           python3 scripts/tests/test_sound_ima_adpcm.py
           python3 scripts/tests/test_openal_stream_seek.py
           python3 scripts/tests/test_linux_sp_level_sweep.py
+          python3 scripts/tests/test_linux_mp_map_sweep.py
           python3 scripts/tests/test_shader_spike.py
           python3 scripts/tests/test_vita_gxm_heap.py
           python3 scripts/tests/test_vita_cg_translate.py --require-glslang
