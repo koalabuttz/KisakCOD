@@ -1,0 +1,136 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 05:28:07 +0000
+Subject: [PATCH] fix: build multiplayer serverinfo from script serverinfo
+ dvars too
+
+Retail 1.7 iw3mp.exe passes 0x404 as the Dvar_InfoString mask wherever
+it builds serverinfo: SV_PreFrame, SV_SaveSystemInfo, the getstatus and
+game-complete status replies, the serverinfo command and
+SV_GetServerinfo. The parameter was declared as char, so the mask came
+out as 4, and a dvar that a script marks with setDvar(name, value, 1)
+never reached serverinfo, although SV_PreFrame already resends
+serverinfo when one changes. Dvar_InfoString also read that char
+through a uint32_t pointer.
+
+The mask is an int now and the multiplayer server passes
+DVAR_SERVERINFO | DVAR_SCRIPTINFO. Singleplayer keeps DVAR_SERVERINFO;
+its code only ever tests 4.
+---
+ src/qcommon/qcommon.h         | 4 ++--
+ src/server/sv_game.cpp        | 6 +++++-
+ src/server_mp/sv_ccmds_mp.cpp | 2 +-
+ src/server_mp/sv_init_mp.cpp  | 2 +-
+ src/server_mp/sv_main_mp.cpp  | 6 +++---
+ src/universal/dvar.cpp        | 2 +-
+ 6 files changed, 13 insertions(+), 9 deletions(-)
+
+diff --git a/src/qcommon/qcommon.h b/src/qcommon/qcommon.h
+index 1d1a0069..5f27cc3e 100644
+--- a/src/qcommon/qcommon.h
++++ b/src/qcommon/qcommon.h
+@@ -365,7 +365,7 @@ void __cdecl Dvar_List_f();
+ void __cdecl Dvar_ListSingle(const dvar_s *dvar, const char *userData);
+ void __cdecl Dvar_Dump_f();
+ void __cdecl PBdvar_set(const char *var_name, char *value);
+-char *__cdecl Dvar_InfoString(int localClientNum, char bit);
++char *__cdecl Dvar_InfoString(int localClientNum, int bit);
+ void __cdecl Dvar_InfoStringSingle(const dvar_s *dvar, uint32_t *userData);
+ char *__cdecl Dvar_InfoString_Big(int bit);
+ void __cdecl Dvar_InfoStringSingle_Big(const dvar_s *dvar, uint32_t *userData);
+@@ -673,7 +673,7 @@ void __cdecl Com_DvarDumpSingle(const dvar_s *dvar, void *userData);
+ void __cdecl Dvar_Dump_f();
+ void __cdecl SV_SetConfig(int start, int max, int bit);
+ void __cdecl SV_SetConfigDvar(const dvar_s *dvar, int *userData);
+-char *__cdecl Dvar_InfoString(int localClientNum, char bit);
++char *__cdecl Dvar_InfoString(int localClientNum, int bit);
+ void __cdecl Dvar_InfoStringSingle(const dvar_s *dvar, uint32_t *userData);
+ char *__cdecl Dvar_InfoString_Big(int bit);
+ void __cdecl Dvar_InfoStringSingle_Big(const dvar_s *dvar, uint32_t *userData);
+diff --git a/src/server/sv_game.cpp b/src/server/sv_game.cpp
+index bbe893eb..58d8f64e 100644
+--- a/src/server/sv_game.cpp
++++ b/src/server/sv_game.cpp
+@@ -141,7 +141,11 @@ void __cdecl SV_GetServerinfo(char *buffer, int bufferSize)
+     if (bufferSize < 1)
+         Com_Error(ERR_DROP, "SV_GetServerinfo: bufferSize == %i", bufferSize);
+ 
+-    I_strncpyz(buffer, Dvar_InfoString(0, 4), bufferSize);
++#ifdef KISAK_MP
++    I_strncpyz(buffer, Dvar_InfoString(0, DVAR_SERVERINFO | DVAR_SCRIPTINFO), bufferSize);
++#else
++    I_strncpyz(buffer, Dvar_InfoString(0, DVAR_SERVERINFO), bufferSize);
++#endif
+ }
+ 
+ void __cdecl SV_LocateGameData(
+diff --git a/src/server_mp/sv_ccmds_mp.cpp b/src/server_mp/sv_ccmds_mp.cpp
+index f7c1f32e..a4fd90c8 100644
+--- a/src/server_mp/sv_ccmds_mp.cpp
++++ b/src/server_mp/sv_ccmds_mp.cpp
+@@ -982,7 +982,7 @@ void __cdecl SV_Serverinfo_f()
+     char *v0; // eax
+ 
+     Com_Printf(CON_CHANNEL_DONT_FILTER, "Server info settings:\n");
+-    v0 = Dvar_InfoString(0, 4);
++    v0 = Dvar_InfoString(0, DVAR_SERVERINFO | DVAR_SCRIPTINFO);
+     Info_Print(v0);
+ }
+ 
+diff --git a/src/server_mp/sv_init_mp.cpp b/src/server_mp/sv_init_mp.cpp
+index 74df5372..0321e0ac 100644
+--- a/src/server_mp/sv_init_mp.cpp
++++ b/src/server_mp/sv_init_mp.cpp
+@@ -649,7 +649,7 @@ void SV_SaveSystemInfo()
+     char *v0; // eax
+ 
+     SV_SetSystemInfoConfig();
+-    v0 = Dvar_InfoString(0, 4);
++    v0 = Dvar_InfoString(0, DVAR_SERVERINFO | DVAR_SCRIPTINFO);
+     SV_SetConfigstring(CS_SERVERINFO, v0);
+     dvar_modifiedFlags &= ~(DVAR_SERVERINFO | DVAR_SCRIPTINFO);
+     SV_SetConfig(CS_CODINFO, CS_CODINFO_COUNT, DVAR_CODINFO);
+diff --git a/src/server_mp/sv_main_mp.cpp b/src/server_mp/sv_main_mp.cpp
+index cde7f759..760885c9 100644
+--- a/src/server_mp/sv_main_mp.cpp
++++ b/src/server_mp/sv_main_mp.cpp
+@@ -338,7 +338,7 @@ void __cdecl SVC_Status(netadr_t from)
+     int v26; // [esp+485Ch] [ebp-8h]
+ 
+     v22 = 0;
+-    v11 = Dvar_InfoString(0, 4);
++    v11 = Dvar_InfoString(0, DVAR_SERVERINFO | DVAR_SCRIPTINFO);
+     v10 = s;
+     do
+     {
+@@ -441,7 +441,7 @@ void __cdecl SVC_GameCompleteStatus(netadr_t from)
+     playerState_s *ps; // [esp+844h] [ebp-40Ch]
+     char player[1028]; // [esp+848h] [ebp-408h] BYREF
+ 
+-    v12 = Dvar_InfoString(0, 4);
++    v12 = Dvar_InfoString(0, DVAR_SERVERINFO | DVAR_SCRIPTINFO);
+     v11 = infostring;
+     do
+     {
+@@ -1160,7 +1160,7 @@ void __cdecl SV_PreFrame()
+     SV_UpdateBots();
+     if ((dvar_modifiedFlags & (DVAR_SERVERINFO | DVAR_SCRIPTINFO)) != 0)
+     {
+-        v0 = Dvar_InfoString(0, 4);
++        v0 = Dvar_InfoString(0, DVAR_SERVERINFO | DVAR_SCRIPTINFO);
+         SV_SetConfigstring(CS_SERVERINFO, v0);
+         dvar_modifiedFlags &= ~(DVAR_SERVERINFO | DVAR_SCRIPTINFO);
+     }
+diff --git a/src/universal/dvar.cpp b/src/universal/dvar.cpp
+index 430ef970..2f34922f 100644
+--- a/src/universal/dvar.cpp
++++ b/src/universal/dvar.cpp
+@@ -158,7 +158,7 @@ void __cdecl PBdvar_set(const char *var_name, char *value)
+         Dvar_SetFromStringByName(var_name, value);
+ }
+ 
+-char *__cdecl Dvar_InfoString(int localClientNum, char bit)
++char *__cdecl Dvar_InfoString(int localClientNum, int bit)
+ {
+     const char *UsernameForLocalClient; // eax
+ 
