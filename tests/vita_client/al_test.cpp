@@ -4,6 +4,8 @@
 
 #include <vita/client/sound/vita_al.h>
 
+#include <sound/snd_ima_adpcm.h>
+
 #include <AL/al.h>
 #include <AL/alc.h>
 #define AL_ALEXT_PROTOTYPES
@@ -13,9 +15,25 @@
 #include <sched.h>
 
 #include <atomic>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <functional>
 #include <vector>
+
+// From alext.h, which the engine's sound units do not include either.
+#ifndef AL_FORMAT_MONO_IMA4
+#define AL_FORMAT_MONO_IMA4 0x1300
+#define AL_FORMAT_STEREO_IMA4 0x1301
+#endif
+#ifndef AL_UNPACK_BLOCK_ALIGNMENT_SOFT
+#define AL_UNPACK_BLOCK_ALIGNMENT_SOFT 0x200C
+#define AL_PACK_BLOCK_ALIGNMENT_SOFT 0x200D
+#endif
+#ifndef AL_LOOP_POINTS_SOFT
+#define AL_LOOP_POINTS_SOFT 0x2015
+#endif
 
 namespace
 {
@@ -729,6 +747,417 @@ void GainsAndClipping()
     EXPECT(alGetError() == AL_NO_ERROR);
 }
 
+// ---- packed buffers ------------------------------------------------------------
+
+// A sound with something at every scale: two tones and a little noise.
+std::vector<int16_t> Wave(int frames, int channels)
+{
+    std::vector<int16_t> pcm;
+    unsigned seed = 99u + static_cast<unsigned>(frames) + static_cast<unsigned>(channels);
+    for (int i = 0; i < frames; ++i)
+        for (int c = 0; c < channels; ++c)
+        {
+            seed = seed * 1103515245u + 12345u;
+            const double noise = static_cast<double>((seed >> 16) & 0xFF) - 128.0;
+            pcm.push_back(static_cast<int16_t>(7000.0 * std::sin(i * (0.021 + 0.013 * c)) +
+                                               3000.0 * std::sin(i * 0.33) + noise));
+        }
+    return pcm;
+}
+
+// `pcm` as IMA ADPCM in whole blocks of `blockFrames` frames.
+std::vector<uint8_t> Pack(const std::vector<int16_t> &pcm, int channels, int blockFrames)
+{
+    using namespace kisak::ima_adpcm;
+    const uint32_t frames = static_cast<uint32_t>(pcm.size()) / static_cast<uint32_t>(channels);
+    const uint32_t blockBytes = BlockBytes(static_cast<uint32_t>(blockFrames), static_cast<uint32_t>(channels));
+    std::vector<uint8_t> blocks;
+    int32_t index[kMaxChannels] = {20, 20};
+    for (uint32_t first = 0; first < frames; first += static_cast<uint32_t>(blockFrames))
+    {
+        blocks.resize(blocks.size() + blockBytes);
+        EncodeBlock(pcm.data() + static_cast<size_t>(first) * static_cast<size_t>(channels),
+                    std::min<uint32_t>(static_cast<uint32_t>(blockFrames), frames - first),
+                    static_cast<uint32_t>(blockFrames), static_cast<uint32_t>(channels), index,
+                    blocks.data() + blocks.size() - blockBytes);
+    }
+    return blocks;
+}
+
+// What `blocks` decode to, every frame of every block.
+std::vector<int16_t> Unpack(const std::vector<uint8_t> &blocks, int channels, int blockFrames)
+{
+    using namespace kisak::ima_adpcm;
+    const uint32_t blockBytes = BlockBytes(static_cast<uint32_t>(blockFrames), static_cast<uint32_t>(channels));
+    std::vector<int16_t> pcm(blocks.size() / blockBytes * static_cast<size_t>(blockFrames) * static_cast<size_t>(channels));
+    for (size_t block = 0; block < blocks.size() / blockBytes; ++block)
+        DecodeBlock(blocks.data() + block * blockBytes, blockBytes, static_cast<uint32_t>(channels),
+                    pcm.data() + block * static_cast<size_t>(blockFrames) * static_cast<size_t>(channels),
+                    static_cast<uint32_t>(blockFrames));
+    return pcm;
+}
+
+ALuint PackedBuffer(const std::vector<uint8_t> &blocks, int channels, int blockFrames, int rate)
+{
+    ALuint buffer = 0;
+    alGenBuffers(1, &buffer);
+    alBufferi(buffer, AL_UNPACK_BLOCK_ALIGNMENT_SOFT, blockFrames);
+    alBufferData(buffer, channels == 2 ? AL_FORMAT_STEREO_IMA4 : AL_FORMAT_MONO_IMA4, blocks.data(),
+                 static_cast<ALsizei>(blocks.size()), rate);
+    return buffer;
+}
+
+// What a fresh source plays of `buffer`: `setUp` before it starts, then
+// `chunks` uneven updates with `during` called before each. The source's
+// last state and offset are appended, so two renders compare whole.
+std::vector<int16_t> Render(ALuint buffer, const std::function<void(ALuint)> &setUp, int chunks,
+                            const std::function<void(ALuint, int)> &during = {})
+{
+    static const int sizes[] = {1, 7, 64, 100, 513, 3, 250};
+    ALuint source = 0;
+    alGenSources(1, &source);
+    alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
+    if (setUp)
+        setUp(source);
+    alSourcePlay(source);
+    std::vector<int16_t> out;
+    for (int chunk = 0; chunk < chunks; ++chunk)
+    {
+        if (during)
+            during(source, chunk);
+        const Frames frames = MixFrames(sizes[chunk % 7]);
+        out.insert(out.end(), frames.samples.begin(), frames.samples.end());
+    }
+    out.push_back(static_cast<int16_t>(SourceInt(source, AL_SOURCE_STATE)));
+    out.push_back(static_cast<int16_t>(SourceFloat(source, AL_SEC_OFFSET) * 1000.0f));
+    alDeleteSources(1, &source);
+    return out;
+}
+
+bool Audible(const std::vector<int16_t> &out)
+{
+    // The shortest sounds here are a few frames long.
+    int loud = 0;
+    for (size_t i = 0; i + 2 < out.size(); ++i)
+        loud += out[i] > 500 || out[i] < -500;
+    return loud >= 4;
+}
+
+void PackedBuffers()
+{
+    Session session(22050);
+
+    // The three extensions the engine asks for before it keeps sounds packed.
+    EXPECT(alIsExtensionPresent("AL_EXT_IMA4") == AL_TRUE);
+    EXPECT(alIsExtensionPresent("AL_SOFT_block_alignment") == AL_TRUE);
+    EXPECT(alIsExtensionPresent("al_soft_LOOP_points") == AL_TRUE);
+    EXPECT(alIsExtensionPresent("AL_EXT_IMA") == AL_FALSE && alIsExtensionPresent("AL_EXT_IMA44") == AL_FALSE);
+    EXPECT(alIsExtensionPresent("AL_EXT_float32") == AL_FALSE && alIsExtensionPresent("") == AL_FALSE);
+    EXPECT(alGetError() == AL_NO_ERROR);
+    EXPECT(alIsExtensionPresent(nullptr) == AL_FALSE);
+    EXPECT(alGetError() == AL_INVALID_VALUE);
+    const char *const extensions = alGetString(AL_EXTENSIONS);
+    EXPECT(extensions && std::strstr(extensions, "AL_EXT_IMA4") && std::strstr(extensions, "AL_SOFT_block_alignment") &&
+           std::strstr(extensions, "AL_SOFT_loop_points"));
+
+    // The block size and the data's size, by OpenAL Soft's rules.
+    {
+        ALuint buffer = 0;
+        alGenBuffers(1, &buffer);
+        const std::vector<uint8_t> zeros(4096, 0);
+        // With no block size: 65 frames a block, 36 bytes a channel.
+        alBufferData(buffer, AL_FORMAT_MONO_IMA4, zeros.data(), 72, 22050);
+        EXPECT(alGetError() == AL_NO_ERROR);
+        alBufferData(buffer, AL_FORMAT_STEREO_IMA4, zeros.data(), 72, 22050);
+        EXPECT(alGetError() == AL_NO_ERROR);
+        alBufferData(buffer, AL_FORMAT_MONO_IMA4, zeros.data(), 73, 22050);
+        EXPECT(alGetError() == AL_INVALID_VALUE);
+        alBufferData(buffer, AL_FORMAT_STEREO_IMA4, zeros.data(), 36, 22050);
+        EXPECT(alGetError() == AL_INVALID_VALUE);
+        // A block of 8 k + 1 frames only.
+        alBufferi(buffer, AL_UNPACK_BLOCK_ALIGNMENT_SOFT, 504);
+        EXPECT(alGetError() == AL_NO_ERROR);
+        alBufferData(buffer, AL_FORMAT_MONO_IMA4, zeros.data(), 256, 22050);
+        EXPECT(alGetError() == AL_INVALID_VALUE);
+        const ALint blockFrames = 505;
+        alBufferiv(buffer, AL_UNPACK_BLOCK_ALIGNMENT_SOFT, &blockFrames);
+        alBufferData(buffer, AL_FORMAT_MONO_IMA4, zeros.data(), 512, 22050);
+        EXPECT(alGetError() == AL_NO_ERROR);
+        alBufferData(buffer, AL_FORMAT_MONO_IMA4, zeros.data(), 300, 22050);
+        EXPECT(alGetError() == AL_INVALID_VALUE);
+        // No data is an empty buffer, which plays as nothing.
+        alBufferData(buffer, AL_FORMAT_MONO_IMA4, nullptr, 0, 22050);
+        EXPECT(alGetError() == AL_NO_ERROR);
+        const std::vector<int16_t> nothing = Render(buffer, {}, 3);
+        EXPECT(nothing[0] == 0 && nothing[nothing.size() - 2] == AL_STOPPED);
+        // The block size is of IMA ADPCM data alone.
+        const int16_t pcm[4] = {1, 2, 3, 4};
+        alBufferData(buffer, AL_FORMAT_MONO16, pcm, sizeof(pcm), 22050);
+        EXPECT(alGetError() == AL_NO_ERROR);
+
+        alBufferi(buffer, AL_UNPACK_BLOCK_ALIGNMENT_SOFT, -1);
+        EXPECT(alGetError() == AL_INVALID_VALUE);
+        alBufferi(buffer, AL_PACK_BLOCK_ALIGNMENT_SOFT, 65);
+        EXPECT(alGetError() == AL_NO_ERROR);
+        alBufferi(buffer, AL_PACK_BLOCK_ALIGNMENT_SOFT, -1);
+        EXPECT(alGetError() == AL_INVALID_VALUE);
+        alBufferi(buffer, AL_FREQUENCY, 1);
+        EXPECT(alGetError() == AL_INVALID_ENUM);
+        alBufferi(9999, AL_UNPACK_BLOCK_ALIGNMENT_SOFT, 65);
+        EXPECT(alGetError() == AL_INVALID_NAME);
+
+        // Loop points: inside the buffer, and not while a source holds it.
+        ALint points[2] = {0, 4};
+        alBufferiv(buffer, AL_LOOP_POINTS_SOFT, points);
+        EXPECT(alGetError() == AL_NO_ERROR);
+        points[1] = 5;
+        alBufferiv(buffer, AL_LOOP_POINTS_SOFT, points);
+        EXPECT(alGetError() == AL_INVALID_VALUE);
+        points[0] = 2, points[1] = 2;
+        alBufferiv(buffer, AL_LOOP_POINTS_SOFT, points);
+        EXPECT(alGetError() == AL_INVALID_VALUE);
+        points[0] = -1, points[1] = 3;
+        alBufferiv(buffer, AL_LOOP_POINTS_SOFT, points);
+        EXPECT(alGetError() == AL_INVALID_VALUE);
+        alBufferiv(buffer, AL_LOOP_POINTS_SOFT, nullptr);
+        EXPECT(alGetError() == AL_INVALID_VALUE);
+        alBufferiv(buffer, AL_FREQUENCY, points);
+        EXPECT(alGetError() == AL_INVALID_ENUM);
+        alBufferiv(9999, AL_LOOP_POINTS_SOFT, points);
+        EXPECT(alGetError() == AL_INVALID_NAME);
+        ALuint source = 0;
+        alGenSources(1, &source);
+        alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
+        points[0] = 1, points[1] = 3;
+        alBufferiv(buffer, AL_LOOP_POINTS_SOFT, points);
+        EXPECT(alGetError() == AL_INVALID_OPERATION);
+        alDeleteSources(1, &source);
+        alDeleteBuffers(1, &buffer);
+        EXPECT(alGetError() == AL_NO_ERROR);
+    }
+
+    // Loop points on a ramp: frame i holds 100 i on the left. A looping source
+    // turns from frame 5 back to frame 2 and never plays 6 and 7; without
+    // looping the buffer plays to its end.
+    {
+        const ALuint ramp = RampStereo(8, 22050);
+        const ALint points[2] = {2, 6};
+        alBufferiv(ramp, AL_LOOP_POINTS_SOFT, points);
+        ALuint source = 0;
+        alGenSources(1, &source);
+        alSourcei(source, AL_BUFFER, static_cast<ALint>(ramp));
+        alSourcei(source, AL_LOOPING, AL_TRUE);
+        alSourcePlay(source);
+        Frames out = MixFrames(13);
+        const int expected[13] = {0, 100, 200, 300, 400, 500, 200, 300, 400, 500, 200, 300, 400};
+        bool same = true;
+        for (int i = 0; i < 13; ++i)
+            same = same && out.Left(i) == expected[i] && out.Right(i) == -expected[i];
+        EXPECT(same);
+        // Looping ends: on through the rest of the buffer, and done.
+        alSourcei(source, AL_LOOPING, AL_FALSE);
+        out = MixFrames(8);
+        EXPECT(out.Left(0) == 500 && out.Left(1) == 600 && out.Left(2) == 700 && out.Left(3) == 0);
+        EXPECT(SourceInt(source, AL_SOURCE_STATE) == AL_STOPPED);
+        // A start past the loop's end goes back into the loop at once.
+        alSourcei(source, AL_LOOPING, AL_TRUE);
+        alSourcef(source, AL_SEC_OFFSET, 7.5f / 22050.0f);
+        alSourcePlay(source);
+        out = MixFrames(3);
+        EXPECT(out.Left(0) == 300 && out.Left(1) == 400 && out.Left(2) == 500);
+        // At half speed the sample between the loop's last frame and its first
+        // lies midway between those two: frame 5 leads to frame 2, not to 0 or 6.
+        alSourceRewind(source);
+        alSourcef(source, AL_PITCH, 0.5f);
+        alSourcef(source, AL_SEC_OFFSET, 5.5f / 22050.0f);
+        alSourcePlay(source);
+        out = MixFrames(5);
+        EXPECT(out.Left(0) == 500 && out.Left(1) == 350 && out.Left(2) == 200 && out.Left(3) == 250 && out.Left(4) == 300);
+        EXPECT(out.Right(1) == -350);
+        alSourcef(source, AL_PITCH, 1.0f);
+        // New data plays whole again.
+        alSourceRewind(source);
+        alSourcei(source, AL_BUFFER, 0);
+        const int16_t four[8] = {10, -10, 20, -20, 30, -30, 40, -40};
+        alBufferData(ramp, AL_FORMAT_STEREO16, four, sizeof(four), 22050);
+        alSourcei(source, AL_BUFFER, static_cast<ALint>(ramp));
+        alSourcePlay(source);
+        out = MixFrames(6);
+        EXPECT(out.Left(3) == 40 && out.Left(4) == 10 && out.Left(5) == 20);
+        alDeleteSources(1, &source);
+        EXPECT(alGetError() == AL_NO_ERROR);
+    }
+
+    // A packed buffer plays exactly as a PCM buffer of the frames it decodes
+    // to, through every way a source reads a buffer.
+    const struct
+    {
+        int channels, blockFrames, frames, rate;
+    } shapes[] = {{1, 505, 2600, 22050}, {2, 505, 2600, 22050}, {1, 65, 700, 11025}, {2, 9, 300, 44100},
+                  {1, 1017, 2100, 44100}, {1, 505, 505, 22050}, {2, 1, 40, 22050}};
+    for (const auto &shape : shapes)
+    {
+        const std::vector<uint8_t> blocks = Pack(Wave(shape.frames, shape.channels), shape.channels, shape.blockFrames);
+        const std::vector<int16_t> pcm = Unpack(blocks, shape.channels, shape.blockFrames);
+        const int held = static_cast<int>(pcm.size()) / shape.channels;
+        const ALenum pcmFormat = shape.channels == 2 ? AL_FORMAT_STEREO16 : AL_FORMAT_MONO16;
+        const ALuint packed = PackedBuffer(blocks, shape.channels, shape.blockFrames, shape.rate);
+        const ALuint plain = MakeBuffer(pcmFormat, pcm, shape.rate);
+        EXPECT(alGetError() == AL_NO_ERROR);
+        const float seconds = static_cast<float>(held) / static_cast<float>(shape.rate);
+
+        // Once through, at the buffer's pitch and off it, panned.
+        for (const float pitch : {1.0f, 0.37f, 1.9f, 7.3f})
+        {
+            const auto setUp = [pitch](ALuint source) {
+                alSourcef(source, AL_PITCH, pitch);
+                alSourcef(source, AL_GAIN, 0.8f);
+                alSource3f(source, AL_POSITION, 1.0f, 0.0f, -2.0f);
+            };
+            const std::vector<int16_t> a = Render(packed, setUp, 60), b = Render(plain, setUp, 60);
+            EXPECT(a == b);
+            EXPECT(Audible(a));
+        }
+
+        // Looping, whole and between loop points: the engine's are 0 and the
+        // sound's own length, inside the last block.
+        const auto looping = [](ALuint source) {
+            alSourcei(source, AL_LOOPING, AL_TRUE);
+            alSourcef(source, AL_PITCH, 1.3f);
+        };
+        EXPECT(Render(packed, looping, 80) == Render(plain, looping, 80));
+        if (held >= 40)
+        {
+            for (const int start : {0, shape.blockFrames > 9 ? 7 : 1, held / 2})
+            {
+                const ALint points[2] = {start, held - (shape.blockFrames > 9 ? 5 : 1)};
+                alBufferiv(packed, AL_LOOP_POINTS_SOFT, points);
+                alBufferiv(plain, AL_LOOP_POINTS_SOFT, points);
+                EXPECT(alGetError() == AL_NO_ERROR);
+                const std::vector<int16_t> a = Render(packed, looping, 120);
+                EXPECT(a == Render(plain, looping, 120));
+                if (start == 0)
+                {
+                    // And as a PCM buffer that simply ends there.
+                    const std::vector<int16_t> cut(pcm.begin(), pcm.begin() + static_cast<long>(points[1]) * shape.channels);
+                    const ALuint shorter = MakeBuffer(pcmFormat, cut, shape.rate);
+                    EXPECT(a == Render(shorter, looping, 120));
+                    alDeleteBuffers(1, &shorter);
+                }
+            }
+            const ALint whole[2] = {0, held};
+            alBufferiv(packed, AL_LOOP_POINTS_SOFT, whole);
+            alBufferiv(plain, AL_LOOP_POINTS_SOFT, whole);
+        }
+
+        // A start inside the sound, a jump while it plays, a pause, and a
+        // stretch at no volume, which must decode nothing and lose no time.
+        const auto offset = [seconds](ALuint source) { alSourcef(source, AL_SEC_OFFSET, seconds * 0.6f); };
+        const auto busy = [seconds](ALuint source, int chunk) {
+            if (chunk == 3)
+                alSourcef(source, AL_SEC_OFFSET, seconds * 0.1f);
+            else if (chunk == 5)
+                alSourcePause(source);
+            else if (chunk == 6)
+                alSourcePlay(source);
+            else if (chunk == 7)
+                alSourcef(source, AL_GAIN, 0.0f);
+            else if (chunk == 10)
+                alSourcef(source, AL_GAIN, 1.0f);
+        };
+        const auto slow = [](ALuint source) { alSourcef(source, AL_PITCH, 0.21f); };
+        EXPECT(Render(packed, offset, 30) == Render(plain, offset, 30));
+        EXPECT(Render(packed, slow, 40, busy) == Render(plain, slow, 40, busy));
+
+        // In a queue, between PCM buffers, twice.
+        {
+            const auto queue = [plain](ALuint middle) {
+                ALuint source = 0;
+                alGenSources(1, &source);
+                const ALuint buffers[4] = {plain, middle, middle, plain};
+                alSourceQueueBuffers(source, 4, buffers);
+                alSourcef(source, AL_PITCH, 1.7f);
+                alSourcePlay(source);
+                std::vector<int16_t> out;
+                for (int chunk = 0; chunk < 40; ++chunk)
+                {
+                    const Frames frames = MixFrames(1 + (chunk * 37) % 300);
+                    out.insert(out.end(), frames.samples.begin(), frames.samples.end());
+                }
+                out.push_back(static_cast<int16_t>(SourceInt(source, AL_BUFFERS_PROCESSED)));
+                alDeleteSources(1, &source);
+                return out;
+            };
+            EXPECT(queue(packed) == queue(plain));
+        }
+
+        // Two sources on one packed buffer take turns decoding and play right.
+        {
+            const auto pair = [](ALuint buffer) {
+                ALuint sources[2] = {};
+                alGenSources(2, sources);
+                alSourcei(sources[0], AL_BUFFER, static_cast<ALint>(buffer));
+                alSourcei(sources[1], AL_BUFFER, static_cast<ALint>(buffer));
+                alSourcef(sources[1], AL_PITCH, 0.6f);
+                alSourcef(sources[0], AL_GAIN, 0.4f);
+                alSourcef(sources[1], AL_GAIN, 0.4f);
+                alSourcePlay(sources[0]);
+                MixFrames(33);
+                alSourcePlay(sources[1]);
+                std::vector<int16_t> out;
+                for (int chunk = 0; chunk < 12; ++chunk)
+                {
+                    const Frames frames = MixFrames(200);
+                    out.insert(out.end(), frames.samples.begin(), frames.samples.end());
+                }
+                alDeleteSources(2, sources);
+                return out;
+            };
+            EXPECT(pair(packed) == pair(plain));
+        }
+        alDeleteBuffers(1, &packed);
+        alDeleteBuffers(1, &plain);
+        EXPECT(alGetError() == AL_NO_ERROR);
+    }
+
+    // The cost: a sound played through once decodes each of its blocks once,
+    // nothing while it is silent, and its buffer holds the packed bytes and
+    // one decoded block.
+    {
+        const std::vector<uint8_t> blocks = Pack(Wave(505 * 6, 1), 1, 505);
+        EXPECT(blocks.size() == 6 * 256);
+        // The second call's peak is what the buffers hold now.
+        kisak::vita_al::Stats stats = kisak::vita_al::TakeStats();
+        stats = kisak::vita_al::TakeStats();
+        const uint32_t before = stats.peakBufferBytes;
+        const ALuint buffer = PackedBuffer(blocks, 1, 505, 22050);
+        ALuint source = 0;
+        alGenSources(1, &source);
+        alSourcei(source, AL_BUFFER, static_cast<ALint>(buffer));
+        alSourcef(source, AL_GAIN, 0.0f);
+        alSourcePlay(source);
+        MixFrames(700);
+        stats = kisak::vita_al::TakeStats();
+        EXPECT(stats.packedFrames == 0);
+        EXPECT(stats.peakBufferBytes == before + 6 * 256 + 505 * 2);
+        EXPECT(SourceFloat(source, AL_SEC_OFFSET) > 699.5f / 22050.0f && SourceFloat(source, AL_SEC_OFFSET) < 700.5f / 22050.0f);
+        alSourcef(source, AL_GAIN, 1.0f);
+        alSourcePlay(source);
+        for (int i = 0; i < 60; ++i)
+            MixFrames(64);
+        EXPECT(SourceInt(source, AL_SOURCE_STATE) == AL_STOPPED);
+        stats = kisak::vita_al::TakeStats();
+        EXPECT(stats.packedFrames == 6 * 505);
+        EXPECT(stats.peakBufferBytes == before + 6 * 256 + 505 * 2);
+        alDeleteSources(1, &source);
+        alDeleteBuffers(1, &buffer);
+        stats = kisak::vita_al::TakeStats();
+        stats = kisak::vita_al::TakeStats();
+        EXPECT(stats.peakBufferBytes == before);
+        EXPECT(alGetError() == AL_NO_ERROR);
+    }
+}
+
 // The mixer on its own thread against a busy engine thread: what the Vita
 // runs. The sanitizers judge it.
 //
@@ -795,7 +1224,18 @@ void Threads()
             alGetSourcei(source, AL_BUFFERS_QUEUED, &queued);
             if (held[index])
                 alDeleteBuffers(1, &held[index]);
-            held[index] = ConstantMono(static_cast<int>(64 + next() % 4000), 3000, static_cast<int>(11025 << (next() % 3)));
+            if (next() % 2)
+                held[index] = ConstantMono(static_cast<int>(64 + next() % 4000), 3000, static_cast<int>(11025 << (next() % 3)));
+            else
+            {
+                // Packed, as the engine hands loaded sounds over, with the loop
+                // ending inside the last block.
+                const int frames = static_cast<int>(64 + next() % 4000);
+                held[index] = PackedBuffer(Pack(std::vector<int16_t>(static_cast<size_t>(frames), 3000), 1, 505), 1, 505,
+                                           static_cast<int>(11025 << (next() % 3)));
+                const ALint points[2] = {0, frames};
+                alBufferiv(held[index], AL_LOOP_POINTS_SOFT, points);
+            }
             alSourcei(source, AL_BUFFER, static_cast<ALint>(held[index]));
             alSourcei(source, AL_LOOPING, next() % 4 == 0);
             alSourcePlay(source);
@@ -852,6 +1292,7 @@ int main()
     Queues();
     EngineChannelCycle();
     GainsAndClipping();
+    PackedBuffers();
     Threads();
     // Without a context every call is a no-op, not a crash.
     alSourcePlay(1);
@@ -860,6 +1301,11 @@ int main()
     alGenBuffers(1, &none);
     alDeleteSources(1, &none);
     alBufferData(1, AL_FORMAT_MONO16, "ab", 2, 22050);
+    alBufferi(1, AL_UNPACK_BLOCK_ALIGNMENT_SOFT, 505);
+    const ALint points[2] = {0, 1};
+    alBufferiv(1, AL_LOOP_POINTS_SOFT, points);
+    if (alIsExtensionPresent("AL_EXT_IMA4") != AL_FALSE)
+        Expect(false, "no extension without a context", __LINE__);
     if (none != 5)
         Expect(false, "calls without a context left their arguments alone", __LINE__);
     if (g_failures)

@@ -1184,7 +1184,14 @@
          minbm,
          DVAR_CHEAT,
          "Shadow cookie off-screen caster level of detail scale");
+#ifdef KISAK_GFX_GXM
+     // The GXM back end cannot sample depth textures yet, so shadow maps
+     // would cost their drawing and 18 MB of targets for nothing: off, and
+     // not for a saved config to turn on (docs/vita-client.md).
+     sm_enable = Dvar_RegisterBool("sm_enable", 0, DVAR_ROM, "Enable shadow mapping");
+#else
      sm_enable = Dvar_RegisterBool("sm_enable", 1, 1u, "Enable shadow mapping");
+#endif
      sm_sunEnable = Dvar_RegisterBool("sm_sunEnable", 1, DVAR_SAVED | DVAR_CHEAT, "Enable sun shadow mapping from script");
      sm_spotEnable = Dvar_RegisterBool("sm_spotEnable", 1, DVAR_SAVED | DVAR_CHEAT, "Enable spot shadow mapping from script");
      sm_maxLights = Dvar_RegisterInt(

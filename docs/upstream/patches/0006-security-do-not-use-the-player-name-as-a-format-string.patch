@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 04:21:14 +0000
+Subject: [PATCH] security: do not use the player name as a format string
+
+SV_ClientThink built its "Invalid command time" message with va() and
+passed the result to Com_PrintError as the format. The message contains
+the client's name, so a name with % conversions was formatted again.
+
+Pass the format and its arguments to Com_PrintError directly.
+---
+ src/server_mp/sv_client_mp.cpp | 5 +----
+ 1 file changed, 1 insertion(+), 4 deletions(-)
+
+diff --git a/src/server_mp/sv_client_mp.cpp b/src/server_mp/sv_client_mp.cpp
+index 0d706792..4e841e24 100644
+--- a/src/server_mp/sv_client_mp.cpp
++++ b/src/server_mp/sv_client_mp.cpp
+@@ -1308,8 +1308,6 @@ void __cdecl SV_UpdateUserinfo_f(client_t *cl)
+ 
+ void __cdecl SV_ClientThink(client_t *cl, usercmd_s *cmd)
+ {
+-    char *v2; // eax
+-
+     if (cmd->serverTime - svs.time <= 20000)
+     {
+         memcpy(&cl->lastUsercmd, cmd, sizeof(cl->lastUsercmd));
+@@ -1329,8 +1327,7 @@ void __cdecl SV_ClientThink(client_t *cl, usercmd_s *cmd)
+     }
+     else
+     {
+-        v2 = va("Invalid command time %i from client %s, current server time is %i", cmd->serverTime, cl->name, svs.time);
+-        Com_PrintError(CON_CHANNEL_SERVER, v2);
++        Com_PrintError(CON_CHANNEL_SERVER, "Invalid command time %i from client %s, current server time is %i", cmd->serverTime, cl->name, svs.time);
+     }
+ }
+ 

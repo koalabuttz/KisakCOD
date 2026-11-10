@@ -12,6 +12,7 @@
 #include <cgame_mp/cg_local_mp.h>
 #include <universal/com_files.h>
 #include "cl_auth.h"
+#include "cl_master.h"
 
 bool s_playerMute[64];
 
@@ -437,47 +438,64 @@ bool CL_CDKeyValidate(netadr_t addr)
 
 void CL_GlobalServers_f()
 {
-    const char *v0; // eax
-    const char *v1; // eax
+    const char *masterName;
     int commandLen;
-    netadr_t to; // [esp+14h] [ebp-428h] BYREF
-    int i; // [esp+28h] [ebp-414h]
-    char command[1028]; // [esp+2Ch] [ebp-410h] BYREF
-    serverInfo_t *server; // [esp+434h] [ebp-8h]
-    int count; // [esp+438h] [ebp-4h]
+    netadr_t to;
+    int i;
+    char command[1028];
+    serverInfo_t *server;
+    int count;
 
-    if (Cmd_Argc() >= 3)
-    {
-        for (i = 0; i < cls.numglobalservers; ++i)
-        {
-            server = &cls.globalServers[i];
-            if (!++server->requestCount)
-                --server->requestCount;
-        }
-        Com_Printf(CON_CHANNEL_DONT_FILTER, "Requesting servers from the master...\n");
-        NET_StringToAdr((char *)com_masterServerName->current.string, &to);
-        cls.waitglobalserverresponse = 1;
-        cls.pingUpdateSource = 1;
-        to.type = NA_IP;
-        to.port = BigShort(com_masterPort->current.integer);
-        v0 = Cmd_Argv(2);
-        snprintf(command, ARRAYSIZE(command), "getservers %s", v0);
-        // Append the keywords, bounded by the command buffer.
-        commandLen = strlen(command);
-        count = Cmd_Argc();
-        for (i = 3; i < count; ++i)
-        {
-            v1 = Cmd_Argv(i);
-            Com_sprintfPos(command, sizeof(command), &commandLen, " %s", v1);
-        }
-        if (Dvar_GetBool("fs_restrict"))
-            Com_sprintfPos(command, sizeof(command), &commandLen, " demo");
-        NET_OutOfBandPrint(NS_SERVER, to, command);
-    }
-    else
+    if (Cmd_Argc() < 3)
     {
         Com_Printf(CON_CHANNEL_DONT_FILTER, "usage: globalservers <master# 0-1> <protocol> [keywords]\n");
+        return;
     }
+
+    // Nobody is asked unless the player named a master: retail's
+    // cod4master.activision.com is gone and there is no default.
+    masterName = com_masterServerName->current.string;
+    if (!Master_NameIsSet(masterName))
+    {
+        cls.waitglobalserverresponse = 0;
+        Com_Printf(
+            CON_CHANNEL_DONT_FILTER,
+            "No master server is set, so there is no internet game list. Set masterServerName to a master's "
+            "address, or use the local list, favourites or connect <address>.\n");
+        return;
+    }
+
+    // Retail ignored a failed lookup and sent the request to whatever the
+    // address held. The in-process "localhost" address is not a master either.
+    memset(&to, 0, sizeof(to));
+    if (!NET_StringToAdr((char *)masterName, &to) || to.type != NA_IP)
+    {
+        cls.waitglobalserverresponse = 0;
+        Com_Printf(CON_CHANNEL_DONT_FILTER, "Couldn't resolve master server address: %s\n", masterName);
+        return;
+    }
+    if (!Master_NameHasPort(masterName))
+        to.port = BigShort(com_masterPort->current.integer);
+
+    for (i = 0; i < cls.numglobalservers; ++i)
+    {
+        server = &cls.globalServers[i];
+        if (!++server->requestCount)
+            --server->requestCount;
+    }
+    Com_Printf(CON_CHANNEL_DONT_FILTER, "Requesting servers from the master...\n");
+    cls.waitglobalserverresponse = 1;
+    cls.pingUpdateSource = 1;
+    Master_QueryAsked(&cl_masterQuery, to.ip, to.port, Sys_Milliseconds());
+    snprintf(command, ARRAYSIZE(command), "getservers %s", Cmd_Argv(2));
+    // Append the keywords, bounded by the command buffer.
+    commandLen = strlen(command);
+    count = Cmd_Argc();
+    for (i = 3; i < count; ++i)
+        Com_sprintfPos(command, sizeof(command), &commandLen, " %s", Cmd_Argv(i));
+    if (Dvar_GetBool("fs_restrict"))
+        Com_sprintfPos(command, sizeof(command), &commandLen, " demo");
+    NET_OutOfBandPrint(NS_SERVER, to, command);
 }
 
 void CL_ServerStatusResponse(netadr_t from, msg_t *msg)

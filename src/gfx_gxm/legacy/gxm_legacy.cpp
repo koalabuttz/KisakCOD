@@ -26,6 +26,7 @@
 #include <gfx_vk/legacy/vk_legacy.h>
 
 #include <gfx_gxm/gxm_display.h>
+#include <gfx_gxm/gxm_heap.h>
 #include <gfx_gxm/gxm_memory.h>
 #include <gfx_gxm/gxm_program_cache.h>
 #include <gfx_gxm/shader/gxm_cg_translate.h>
@@ -376,6 +377,16 @@ gxm::MemorySizes PoolSizes(Device &device)
     // 16 MB peaked at 15.1 in the menus before drawing; draws add the
     // transient ring and renamed buffers.
     sizes.main = 20u << 20;
+    // For measuring in an emulator what a map would take if it fitted: a file
+    // named big-gpu-pool beside the compiled programs adds 96 MB to the main
+    // pool. A console has no such memory to give (the device is then not
+    // created), and Vita3K reports more free memory than a console has.
+    if (gxm::ProgramCacheMarker("big-gpu-pool"))
+    {
+        sizes.main += 96u << 20;
+        Log(device, "diag: big-gpu-pool is there: the main pool is %u MB (for emulator measurements only)",
+            sizes.main >> 20);
+    }
     sizes.vertexUsse = 1u << 20;
     sizes.fragmentUsse = 1u << 20;
     Log(device, "system memory free before the GPU: %d MB main, %d MB CDRAM", system.size_user >> 20,
@@ -388,6 +399,109 @@ void DisplayLog(void *user, const char *line)
     Device *device = static_cast<Device *>(user);
     if (device->desc.log)
         device->desc.log(device->desc.logUser, line);
+}
+} // namespace
+
+// ---- The target reserve ------------------------------------------------------------------
+//
+// The renderer makes its targets at start-up, and they take their memory when
+// they are first drawn to (EnsureTargetMemory). In a map that is after the
+// map's textures and vertices have filled the pools: mp_crash in Vita3K (runs
+// M and U) refused the two screen-sized targets a game frame needs with 4.5 MB
+// of CDRAM free, none of it 2 MB in one piece. One of them is the copy of the
+// scene that the post effects read, and the film colour pass then painted the
+// world black behind the HUD; the other is the depth copy (R32F) that soft
+// particles and depth of field read.
+//
+// So a piece of CDRAM is set aside at start-up for colour targets alone, with
+// room for two screen-sized ones and the four of a quarter the size (glow,
+// depth of field, blur). Colour targets take from it first; what does not fit
+// there comes from the pools as before.
+namespace
+{
+struct TargetReserve
+{
+    uint8_t *base = nullptr;
+    gxm::Heap heap;
+} g_targetReserve;
+
+constexpr uint32_t kTargetAlign = 256;
+constexpr uint64_t kTargetRetryMicros = 1000 * 1000;
+
+uint32_t TargetReserveBytes()
+{
+    // As LayoutTexture lays out a 32-bit colour target: rows of whole 32 texels.
+    const uint32_t full = AlignUp(gxm::kDisplayWidth, 32) * 4 * gxm::kDisplayHeight;
+    const uint32_t quarter = AlignUp(gxm::kDisplayWidth / 4, 32) * 4 * (gxm::kDisplayHeight / 4);
+    return AlignUp(2 * full + 4 * quarter, 4096);
+}
+
+void InitTargetReserve(Device &device)
+{
+    // For checking in an emulator what a full pool does to a frame: a file
+    // named no-target-reserve beside the compiled programs leaves the reserve
+    // out.
+    if (gxm::ProgramCacheMarker("no-target-reserve"))
+    {
+        Log(device, "diag: no-target-reserve is there: render targets take what the pools have left");
+        return;
+    }
+    const uint32_t bytes = TargetReserveBytes();
+    g_targetReserve.base = static_cast<uint8_t *>(gxm::Allocate(gxm::MemoryKind::Cdram, bytes, 4096));
+    if (!g_targetReserve.base)
+    {
+        Log(device, "no CDRAM for the target reserve (%u KB): render targets take what the pools have left",
+            bytes >> 10);
+        return;
+    }
+    g_targetReserve.heap.Reset(bytes);
+    Log(device, "target reserve: %u KB of CDRAM kept for colour render targets", bytes >> 10);
+}
+
+bool TakeFromTargetReserve(Texture &texture, uint32_t bytes, MemoryUse use)
+{
+    if (!g_targetReserve.base)
+        return false;
+    const uint32_t offset = g_targetReserve.heap.Allocate(bytes, kTargetAlign);
+    if (offset == gxm::Heap::kNoSpace)
+        return false;
+    Memory &memory = texture.memory;
+    memory.data = g_targetReserve.base + offset;
+    memory.kind = gxm::MemoryKind::Cdram;
+    memory.gpu = true;
+    memory.use = use;
+    memory.bytes = bytes;
+    Account(memory.kind, use, bytes, true);
+    texture.reserved = true;
+    return true;
+}
+
+// A reserved target's memory goes back to the reserve. The GPU must be idle.
+void ReturnToTargetReserve(Texture &texture)
+{
+    Memory &memory = texture.memory;
+    if (g_targetReserve.heap.Free(uint32_t(memory.data - g_targetReserve.base)))
+        Account(memory.kind, memory.use, memory.bytes, false);
+    memory = Memory{};
+    texture.reserved = false;
+}
+
+// AllocateMemory for a target's later tries, which say nothing: the first
+// refusal was logged with the pools' state.
+bool TakeFromPoolsQuietly(Memory &memory, uint32_t bytes, MemoryUse use)
+{
+    for (const gxm::MemoryKind kind : {gxm::MemoryKind::Cdram, gxm::MemoryKind::Main})
+        if (void *data = gxm::Allocate(kind, bytes, kTargetAlign))
+        {
+            memory.data = static_cast<uint8_t *>(data);
+            memory.kind = kind;
+            memory.gpu = true;
+            memory.use = use;
+            memory.bytes = bytes;
+            Account(kind, use, bytes, true);
+            return true;
+        }
+    return false;
 }
 } // namespace
 
@@ -434,6 +548,7 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
         gxm::ShutdownDisplay();
         return nullptr;
     }
+    InitTargetReserve(*device);
     Log(*device, "%s", gxm::DescribeMemory().c_str());
     SetDefaultState(*device);
     return device.release();
@@ -450,7 +565,8 @@ void DestroyDevice(Device *device)
     LogDrawSummary(*device);
     ShutdownDraw(*device);
     Log(*device, "%s", gxm::DescribeMemory().c_str());
-    gxm::ShutdownDisplay();
+    gxm::ShutdownDisplay(); // the pools go, the reserve with them
+    g_targetReserve = TargetReserve{};
     delete device;
 }
 
@@ -497,6 +613,58 @@ bool FormatSupported(Device *, d3d::Format format, uint32_t usage)
     return !info->depth;
 }
 
+namespace
+{
+void LogLargeTexture(Device &device, const Texture &texture)
+{
+    const TextureDesc &desc = texture.desc;
+    char what[96];
+    std::snprintf(what, sizeof(what), "%ux%ux%u, %u levels, format %u, usage 0x%x", desc.width, desc.height,
+                  desc.kind == TextureKind::Cube ? 6u : desc.kind == TextureKind::Volume ? desc.depth : 1u,
+                  desc.levels, unsigned(desc.format), desc.usage);
+    LogLargePiece(device, texture.swizzledLayout ? texture.swizzled : texture.memory, what);
+}
+} // namespace
+
+bool EnsureTargetMemory(Device &device, Texture &texture)
+{
+    if (!texture.deferredBytes)
+        return texture.memory.data != nullptr;
+    // A target that found no memory tries again, but not at every draw.
+    if (texture.deferFailed && Micros() < texture.deferRetryAt)
+        return false;
+    const uint32_t bytes = texture.deferredBytes;
+    const TextureDesc &desc = texture.desc;
+    const MemoryUse use = TextureUse(desc, *texture.format);
+    bool got = (desc.usage & d3d::USAGE_RENDERTARGET) && TakeFromTargetReserve(texture, bytes, use);
+    if (!got)
+        got = texture.deferFailed
+                  ? TakeFromPoolsQuietly(texture.memory, bytes, use)
+                  : AllocateMemory(device, texture.memory, bytes, kTargetAlign, desc.pool, true, use,
+                                   texture.name.c_str());
+    if (!got)
+    {
+        texture.deferFailed = true;
+        texture.deferRetryAt = Micros() + kTargetRetryMicros;
+        if (texture.deferRefusals++ == 0)
+            Log(device,
+                "target %ux%u (format %u, usage 0x%x) has no GPU memory: it tries again each second; until then "
+                "draws into it are skipped, and so is what samples it",
+                desc.width, desc.height, unsigned(desc.format), desc.usage);
+        return false;
+    }
+    if (texture.deferRefusals)
+        Log(device, "target %ux%u (format %u, usage 0x%x) has its GPU memory now, after %u refusals", desc.width,
+            desc.height, unsigned(desc.format), desc.usage, texture.deferRefusals);
+    texture.deferFailed = false;
+    texture.deferRefusals = 0;
+    std::memset(texture.memory.data, 0, bytes);
+    texture.deferredBytes = 0;
+    SetUpTexture(device, texture);
+    LogLargeTexture(device, texture);
+    return true;
+}
+
 Texture *CreateTexture(Device *device, const TextureDesc &desc)
 {
     const FormatInfo *format = LookupFormat(desc.format);
@@ -524,16 +692,16 @@ Texture *CreateTexture(Device *device, const TextureDesc &desc)
     // textures (cubes, block-compressed) have only their swizzled copy, which
     // SetUpTexture makes.
     texture->swizzledLayout = SwizzledTexture(texture->desc, *format);
-    if (!texture->swizzledLayout && !AllocateMemory(*device, texture->memory, total, 256, desc.pool, true,
-                                                    TextureUse(texture->desc, *format), desc.name))
-        return nullptr;
-    SetUpTexture(*device, *texture);
+    const bool target = (desc.usage & (d3d::USAGE_RENDERTARGET | d3d::USAGE_DEPTHSTENCIL)) != 0;
+    if (target && !texture->swizzledLayout && desc.pool != d3d::POOL_SYSTEMMEM && desc.pool != d3d::POOL_SCRATCH)
+        texture->deferredBytes = total; // EnsureTargetMemory, at its first use
+    else
     {
-        char what[96];
-        std::snprintf(what, sizeof(what), "%ux%ux%u, %u levels, format %u, usage 0x%x", texture->desc.width,
-                      texture->desc.height, texture->desc.kind == TextureKind::Cube ? 6u : depth,
-                      texture->desc.levels, unsigned(desc.format), desc.usage);
-        LogLargePiece(*device, texture->swizzledLayout ? texture->swizzled : texture->memory, what);
+        if (!texture->swizzledLayout && !AllocateMemory(*device, texture->memory, total, 256, desc.pool, true,
+                                                        TextureUse(texture->desc, *format), desc.name))
+            return nullptr;
+        SetUpTexture(*device, *texture);
+        LogLargeTexture(*device, *texture);
     }
     texture->surfaces.resize(texture->levels.size());
     ++device->live;
@@ -559,6 +727,13 @@ void DestroyTexture(Device *device, Texture *texture)
                 target = nullptr;
         if (device->depthStencil == surface.get())
             device->depthStencil = nullptr;
+    }
+    if (texture->reserved)
+    {
+        // Targets go at a renderer restart or at shutdown: waiting for the GPU
+        // here costs nothing that matters.
+        FinishGpu(*device);
+        ReturnToTargetReserve(*texture);
     }
     Retire(*device, texture->memory);
     Retire(*device, texture->swizzled);
@@ -598,6 +773,8 @@ bool LockRect(Device *device, Texture *texture, uint32_t face, uint32_t level, c
             y /= 4;
         }
     }
+    if (!EnsureTargetMemory(*device, *texture) && !texture->swizzledLayout)
+        return false;
     lock.locked = true;
     uint8_t *base = texture->memory.data + lock.offset;
     if (texture->swizzledLayout)
@@ -1184,7 +1361,12 @@ void StretchRect(Device *device, Surface *src, const Rect *srcRect, Surface *dst
 bool GetRenderTargetData(Device *device, Surface *renderTarget, Surface *dst)
 {
     Target source, destination;
-    if (!device || !Describe(renderTarget, source) || !Describe(dst, destination))
+    if (!device)
+        return false;
+    for (Surface *surface : {renderTarget, dst})
+        if (surface && surface->kind == SurfaceKind::TextureLevel && surface->texture)
+            EnsureTargetMemory(*device, *surface->texture);
+    if (!Describe(renderTarget, source) || !Describe(dst, destination))
         return false;
     if (source.width != destination.width || source.height != destination.height ||
         source.format->blockBytes != 4 || destination.format->blockBytes != 4)

@@ -257,7 +257,9 @@ Laptop run 1 (2026-11-08, Intel RPL-U iGPU, Mesa 25.0.7 ANV, x86_64 and i386
 RelWithDebInfo, SDL offscreen and Wayland, no validation layer installed): all
 17 scenes match in all four runs, with identical scene lines; no adapter
 warnings; the probe test still passes on both builds (report in the project
-files, `renderer/vulkan-legacy-laptop-run-1.md`). Not yet run on the PC.
+files, `renderer/vulkan-legacy-laptop-run-1.md`). This standalone check has
+no recorded run on the PC; the game itself draws through the adapter there
+([vulkan-d3d9-front.md](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan)).
 
 The translator computes `_pp` (partial precision) at 32 bits:
 `vk_legacy_shader.cpp` turns off dxbc-spirv's mapping of minimum-precision
@@ -275,7 +277,8 @@ timeline semaphores). The read-back barrier now covers later commands too.
 ## Next
 
 The [D3D9 front](vulkan-d3d9-front.md) implements the D3D9 interfaces on the
-adapter, so the renderer's `R_HW_*` calls reach it unchanged. Next is
-`r_backend vulkan`, which hands the renderer the front at device creation, then
-mp_crash drawn through it and compared image by image with DXVK on the laptop
-and the PC.
+adapter, so the renderer's `R_HW_*` calls reach it unchanged. `r_backend
+vulkan` hands the renderer the front at device creation; mp_crash drawn
+through it has been compared image by image with DXVK on the laptop and with
+real D3D9 on the PC
+([vulkan-d3d9-front.md](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan)).

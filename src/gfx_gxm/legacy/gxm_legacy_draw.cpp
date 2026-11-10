@@ -4,7 +4,9 @@
 //   depth-stencil surface each. The scene opens at the first draw or clear
 //   after the targets change and closes when they change again, before the
 //   CPU reads a target, and at Present. Depth-stencil surfaces load and store
-//   their contents every scene, so a frame may come back to a target.
+//   their contents every scene, so a frame may come back to a target. When
+//   the colour target has no GPU memory the scene opens on the depth surface
+//   alone: clears of the depth still happen, draws do not.
 // - Clears are quads drawn in the scene (sceGxm has no clear call), with the
 //   depth and stencil written by the depth test. StretchRect draws a
 //   textured quad into the destination.
@@ -19,6 +21,10 @@
 //   block-compressed (DXT) textures are swizzled, since sceGxm refuses linear
 //   DXT: LockRect hands out a scratch level that UnlockRect swizzles in.
 //   Depth textures are not sampled yet: draws bind a stand-in.
+// - A colour target that found no GPU memory (EnsureTargetMemory), or whose
+//   own source had none, is unfilled: draws and copies that sample it are
+//   skipped and counted, and leave their own target as it was. A full-screen
+//   post effect then does not happen instead of painting the frame black.
 // - Memory the GPU may still read (a DISCARD's old buffer, a destroyed
 //   resource, released programs) is freed three frames later: the display
 //   queue lets the CPU run at most two frames ahead.
@@ -173,6 +179,9 @@ enum Skip : uint8_t
     SkipPrimitive,
     SkipNoIndices,
     SkipEmptyClip,
+    SkipNoTargetMemory,
+    SkipUnfilledSource,
+    SkipCopy,
     SkipCount,
 };
 const char *const kSkipNames[SkipCount] = {
@@ -187,6 +196,9 @@ const char *const kSkipNames[SkipCount] = {
     "a primitive type sceGxm lacks (line strips)",
     "no index buffer in GPU memory",
     "the viewport and scissor leave nothing to draw",
+    "its colour target has no GPU memory",
+    "it samples a render target that has no GPU memory or was not filled",
+    "a StretchRect whose source or destination has no GPU memory or was not filled",
 };
 
 // The fixed state sceGxm keeps in the context, as last set.
@@ -902,6 +914,11 @@ bool OpenScene(Device &device)
         return true;
     EndScene(device);
 
+    // Targets take their memory when a scene first draws to them.
+    for (Surface *surface : {color, depth})
+        if (surface && surface->kind == SurfaceKind::TextureLevel && surface->texture)
+            EnsureTargetMemory(device, *surface->texture);
+
     d.hasColor = false;
     uint32_t width = 0, height = 0;
     SceGxmSyncObject *sync = nullptr;
@@ -937,6 +954,14 @@ bool OpenScene(Device &device)
         width = level.width;
         height = level.height;
         d.hasColor = true;
+    }
+    else if (color && color->kind == SurfaceKind::TextureLevel && color->texture->deferredBytes)
+    {
+        // No GPU memory for it now (EnsureTargetMemory said so, and tries
+        // again). The scene opens on the depth surface alone, so that clears
+        // of the depth still happen: the renderer clears a frame's depth
+        // while its depth copy (the float-Z target) is the colour target, and
+        // a frame drawn on depth nobody cleared is black.
     }
     else if (color)
     {
@@ -1153,7 +1178,8 @@ SceGxmTextureAddrMode AddressMode(uint32_t address)
     }
 }
 
-void BindTextures(Device &device, const Variant &pixel, void *uniforms)
+// False when the draw samples an unfilled colour target and must not happen.
+bool BindTextures(Device &device, const Variant &pixel, void *uniforms)
 {
     DrawState &d = *device.draw;
     for (int i = 0; i < 16; ++i)
@@ -1166,12 +1192,16 @@ void BindTextures(Device &device, const Variant &pixel, void *uniforms)
         float depth = 1.0f;
         if (!texture)
             view = d.black;
+        else if (Unfilled(*texture))
+            return false;
         else if (texture->sampleable)
         {
             view = texture->sampled;
             if (texture->desc.kind == TextureKind::Volume)
                 depth = float(texture->desc.depth);
         }
+        else if (texture->deferredBytes && !texture->format->depth)
+            view = d.black; // a render target nothing has drawn to yet
         else if (texture->desc.kind == TextureKind::Cube)
         {
             NotYet(device, "sampling a cube texture sceGxm cannot take (a grey stand-in is bound)");
@@ -1198,6 +1228,13 @@ void BindTextures(Device &device, const Variant &pixel, void *uniforms)
         if (pixel.depth[i] && uniforms)
             sceGxmSetUniformDataF(uniforms, pixel.depth[i], 0, 1, &depth);
     }
+    return true;
+}
+
+// The colour target of the open scene, when it is a texture.
+Texture *SceneTexture(const DrawState &d)
+{
+    return d.sceneColor && d.sceneColor->kind == SurfaceKind::TextureLevel ? d.sceneColor->texture : nullptr;
 }
 
 bool MakeStandIns(Device &device, std::string &error)
@@ -2030,6 +2067,8 @@ void ClearTargets(Device &device, uint32_t rectCount, const Rect *rects, uint32_
         sceGxmSetUniformDataF(uniforms, d.clearColor, 0, 4, rgba);
         sceGxmSetVertexStream(context, 0, quad);
         sceGxmDraw(context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, d.sequential, 4);
+        if (Texture *target = writeColor ? SceneTexture(d) : nullptr)
+            target->unfilled = false;
     }
 }
 
@@ -2277,7 +2316,10 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     }
     if (!d.hasColor)
     {
-        NotYet(device, "drawing with no colour target (depth only; skipped)");
+        if (const Texture *wanted = SceneTexture(d); wanted && wanted->deferredBytes)
+            CountSkip(device, SkipNoTargetMemory);
+        else
+            NotYet(device, "drawing with no colour target (depth only; skipped)");
         return;
     }
     uint32_t strides[kMaxStreams];
@@ -2472,7 +2514,14 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             sceGxmSetUniformDataF(pixelUniforms, pixel->alphaRef, 0, 1, &ref);
         }
     }
-    BindTextures(device, *pixel, pixelUniforms);
+    Texture *const target = SceneTexture(d);
+    if (!BindTextures(device, *pixel, pixelUniforms))
+    {
+        CountSkip(device, SkipUnfilledSource);
+        if (target)
+            target->unfilled = true;
+        return;
+    }
     for (uint8_t i = 0; i < drawStreams; ++i)
         sceGxmSetVertexStream(context, i, streamData[i]);
     if (d.diagnosedDraws)
@@ -2490,6 +2539,8 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         return;
     }
     ++d.drawn;
+    if (target)
+        target->unfilled = false;
 }
 
 void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const Rect *dstRect, bool linear)
@@ -2497,10 +2548,26 @@ void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const
     DrawState &d = *device.draw;
     if (!src || !dst || src == dst)
         return;
+    // A copy that cannot happen leaves its destination unfilled.
+    Texture *const dstTexture = dst->kind == SurfaceKind::TextureLevel ? dst->texture : nullptr;
+    const auto skip = [&] {
+        CountSkip(device, SkipCopy);
+        if (dstTexture)
+            dstTexture->unfilled = true;
+    };
     // The source as a texture: the back buffer, or one level of a texture.
     SceGxmTexture view;
     uint32_t width = 0, height = 0;
     int result = -1;
+    if (src->kind == SurfaceKind::TextureLevel && src->texture)
+    {
+        EnsureTargetMemory(device, *src->texture);
+        if (Unfilled(*src->texture))
+        {
+            skip();
+            return;
+        }
+    }
     if (src->kind == SurfaceKind::BackBuffer)
     {
         width = gxm::kDisplayWidth;
@@ -2530,6 +2597,7 @@ void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const
     if (result < 0)
     {
         NotYet(device, "StretchRect from this kind of surface (skipped)");
+        skip();
         return;
     }
     Rect from = srcRect ? *srcRect : Rect{0, 0, int32_t(width), int32_t(height)};
@@ -2544,7 +2612,10 @@ void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const
     device.renderTargets[0] = targets;
     device.depthStencil = depth;
     if (!open || !d.hasColor)
+    {
+        skip();
         return;
+    }
     const FragmentProgramEntry *fragment = GetFragmentProgram(device, d.copyFragment, d.copyVertex, nullptr);
     if (!fragment)
         return;
@@ -2600,6 +2671,8 @@ void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const
     sceGxmSetVertexStream(context, 0, quad);
     sceGxmDraw(context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, d.sequential, 4);
     ++d.copies;
+    if (dstTexture)
+        dstTexture->unfilled = false;
 }
 
 void DiagnoseFrame(Device &device)
