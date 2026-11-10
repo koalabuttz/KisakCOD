@@ -94,7 +94,7 @@ if ($useInstalled) {
         $folder = "$v\local-builds\$(if ($buildName) { $buildName } else { $sha })"
         $build['commit'] = $sha
         $build['name'] = Split-Path $folder -Leaf
-        if (Test-Path "$folder\COMMIT.txt") { $p = (Get-Content "$folder\COMMIT.txt" | Select-String '^parents (.+)$'); if ($p -and $p.Matches[0].Groups[1].Value.Trim().Contains(' ')) { $build['merge_commit'] = "$sha (local) of $($p.Matches[0].Groups[1].Value.Trim())" } }
+        if (Test-Path "$folder\COMMIT.txt") { $p = (Get-Content "$folder\COMMIT.txt" | Select-String '^parents (.+)$'); if ($p -and $p.Matches[0].Groups[1].Value.Trim().Contains(' ')) { $build['merge_commit'] = "$sha$(if (Has $d 'merge') { ' (local)' }) of $($p.Matches[0].Groups[1].Value.Trim())" } }
         if (Test-Path "$folder\BUILD.txt") { $build['compiler'] = (Get-Content "$folder\BUILD.txt" | Select-String 'clang' | Select-Object -First 1).Line }
         $checks = @($log | Select-String -Pattern '^(check: |CHECK FAILED)')
         $bad = @($checks | Where-Object { $_.Line -like 'CHECK FAILED*' })
