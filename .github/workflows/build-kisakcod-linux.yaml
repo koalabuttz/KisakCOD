@@ -306,6 +306,7 @@ jobs:
           python3 scripts/tests/test_linux_mp_map_sweep.py
           python3 scripts/tests/test_package_linux_client.py
           python3 scripts/tests/test_setup_linux_client.py
+          python3 scripts/tests/test_linux_gamepad.py
           python3 scripts/tests/test_shader_spike.py
           python3 scripts/tests/test_vita_gxm_heap.py
           python3 scripts/tests/test_vita_cg_translate.py --require-glslang
@@ -1110,6 +1111,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/tests/test_vita_input.py
+          # The desktop client's controller support sits on the same mapping.
+          python3 scripts/tests/test_linux_gamepad.py
           python3 scripts/tests/test_vita_sound.py --al-include "$RUNNER_TEMP/al-include"
 
       - name: Configure PS Vita client ${{ matrix.config }}
@@ -1322,6 +1325,7 @@ jobs:
             -DKISAK_DXVK_NATIVE_LIBRARY="$d3d9" \
             -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY="$openal" \
             -DKISAK_LINUX_PORTABLE_RUNPATH=ON \
+            -DKISAK_LINUX_GAMEPAD=ON \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3" \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 2>&1 | tee "$RUNNER_TEMP/x64-mp-client-configure.log"
           # Movies are not asked for: with libavcodec-dev and libavutil-dev
@@ -1329,7 +1333,7 @@ jobs:
           grep -q -- '-- KisakCOD movies: on ' "$RUNNER_TEMP/x64-mp-client-configure.log"
           cmake --build "$BUILD_DIR" --target KisakCOD-mp KisakCOD-mp-client-window-test \
             KisakCOD-native-d3d9-proofs KisakCOD-bink-shim-test KisakCOD-skin-sse2-test \
-            KisakCOD-skin-scalar-test \
+            KisakCOD-skin-scalar-test KisakCOD-mp-gamepad-test \
             --parallel "$(nproc)"
           for binary in "$OUT_DIR/KisakCOD-mp" "$OUT_DIR/KisakCOD-mp-client-window-test"; do
             readelf -h "$binary" | grep -Eq 'Class:[[:space:]]+ELF64'
@@ -1391,6 +1395,9 @@ jobs:
           set -euo pipefail
           export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/stand-ins"
           "$OUT_DIR/KisakCOD-mp-client-window-test"
+          # The controller reader against this SDL3, with one of SDL's virtual
+          # controllers; the client above is built with KISAK_LINUX_GAMEPAD.
+          "$OUT_DIR/KisakCOD-mp-gamepad-test"
           python3 -u scripts/tests/test_linux_mp_client.py --binary "$OUT_DIR/KisakCOD-mp"
 
       # The client was built with KISAK_LINUX_PORTABLE_RUNPATH, so its run path

@@ -27,8 +27,9 @@ python3 scripts/tools/setup_linux_client.py
 
 fetches SDL3 and DXVK Native at the revisions this project pins, builds both
 into `kisak-sdk` next to the repository (`--prefix` moves it), and builds the
-x86_64 `KisakCOD-mp` against them in `build-linux/mp-x64`. It ends by printing
-the line that starts the client. Its DXVK is 2.7.1 plus the one upstream commit
+x86_64 `KisakCOD-mp` against them in `build-linux/mp-x64`, with
+[controller support](#game-controllers) on. It ends by printing the line that
+starts the client. Its DXVK is 2.7.1 plus the one upstream commit
 that fullscreen on a Wayland session needs (see
 [The game window and input](#the-game-window-and-input)), so that works without
 patching anything by hand.
@@ -184,7 +185,64 @@ The engine's own `SIGINT`/`SIGTERM` handling stays in place: the client tells
 SDL not to install its signal handlers. Pointer boundaries the adapter queues
 (`SE_POINTER`) are dropped before `Com_EventLoop`, which has no case for them.
 Joysticks, MIDI and DirectInput are not ported; the Windows build does not use
-them either.
+them either. A game controller is separate, optional code:
+
+## Game controllers
+
+`-DKISAK_LINUX_GAMEPAD=ON` (off by default; `scripts/tools/setup_linux_client.py`
+turns it on) builds controller support into `KisakCOD-mp` through SDL3's
+gamepad API, which also covers a Steam Deck's own controls. The retail PC game
+has none, and the engine takes keys and a mouse only, so the controller is
+turned into those, with the mapping the PS Vita client already uses
+([vita-client.md](vita-client.md#controls)):
+
+| Control | In the game (default) | In a menu |
+| --- | --- | --- |
+| Left stick | Move (`AUX9` to `AUX12`) | Moves the cursor |
+| Right stick | Look (mouse motion, with the game's sensitivity) | Scrolls |
+| A / B / X / Y | Jump, stance, use and reload, next weapon (`AUX1` to `AUX4`) | A clicks, B goes back |
+| Left / right trigger | Aim down the sight, fire (`AUX5`, `AUX6`) | |
+| Left / right bumper | Special grenade, frag grenade (`AUX13`, `AUX14`) | |
+| Left stick click | Sprint, hold breath (`AUX8`) | |
+| Right stick click | Melee (`AUX15`) | |
+| D-pad | Action slots 1 to 4 (keypad arrows) | Moves the focus; A then accepts |
+| Back (View) | Scores (`AUX7`) | |
+| Start (Menu) | The menu (Escape) | Back |
+
+Every control is an engine key of its own, so `bind` and the controls menu
+rebind them like any PC key. Sprint follows the console game: click the left
+stick while pushing forward and the key stays down until the stick comes back.
+Face buttons go by position, so the bottom one jumps whatever letter it has.
+
+The first time a controller is connected while no `AUX` key has a binding, the
+default layout above is bound, and the console says so; a profile that never
+sees a controller is not touched. `gamepad_binddefaults` sets the layout again,
+and `in_gamepadDefaultBinds 0` stops the automatic part. The mouse and keyboard
+keep working alongside: look motion adds up, and in a menu the cursor belongs
+to whichever of the mouse and the left stick moved last.
+
+| Dvar | Default | Meaning |
+| --- | --- | --- |
+| `in_gamepad` | 1 | Use a connected controller. 0 also stops asking SDL for one. |
+| `in_gamepadLookSpeed` | 1400 | Right stick at full deflection, in mouse counts a second. |
+| `in_gamepadLookPitchRatio` | 0.65 | Up and down, as a part of the look speed. |
+| `in_gamepadLookCurve` | 2 | 1 is linear; higher is finer near the centre. |
+| `in_gamepadDeadzone` | 0.2 | Part of a stick's travel around the centre that does nothing. |
+| `in_gamepadTrigger` | 0.3 | How far a trigger is pulled before its key goes down. |
+| `in_gamepadCursorSpeed` | 1000 | Left stick in a menu, in pixels a second. |
+| `in_gamepadDebug` | 0 | Logs every key the controller sends. |
+
+The first controller SDL lists is used; when it is unplugged everything it held
+is let go, and the next one is picked up within a second. Not there: rumble,
+aim assist, a second controller, and button pictures in the menus (bindings
+show as `AUX` key names).
+
+What has been checked: the mapping on the host with made-up readings
+(`scripts/tests/test_linux_gamepad.py`), and the reader against SDL3 itself
+with one of SDL's virtual controllers (`KisakCOD-mp-gamepad-test`, in the
+hosted x86_64 client job). **No real controller has been tried in the game
+yet**, so the feel of the sticks, the menus and the default speeds are untested
+by hand.
 
 ## Where it writes
 
