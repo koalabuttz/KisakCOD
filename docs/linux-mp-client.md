@@ -257,6 +257,60 @@ fullscreen fix above. The listen server then opens no outside port. The
 first map load with an existing retail profile drops once (see
 [Where it writes](#where-it-writes)).
 
+### Map sweep
+
+Only mp_crash has been played by hand. `scripts/tests/run_linux_mp_map_sweep.py`
+runs `KisakCOD-mp` against an install on the other maps and writes a report. It
+is not run by CI; `scripts/tests/test_linux_mp_map_sweep.py` checks the tool
+itself against a stand-in game.
+
+```sh
+python3 scripts/tests/run_linux_mp_map_sweep.py "$GAME" --binary "$BUILD/KisakCOD-mp" \
+    --work-dir ~/kisak-private/mp-sweep1 --screenshot --sound-debug
+```
+
+For each of the 21 stock maps (or `--maps a,b`) it starts a listen server with
+`+devmap`, bound to 127.0.0.1, and then:
+
+1. waits for `Server: <map>` and for `clientinfo` to answer `state: 9`. A first
+   load that drops back to the menu is asked for once more and counted;
+2. reads `sv_serverId` and the script menus from the `configstrings` listing,
+   and sends the two menu responses of step 2 above. The menus are taken by
+   position on the first map (`--team-menu 8 --class-menu 15`) and by the names
+   found there on the later ones;
+3. presses buttons through the console for about 25 seconds: fire, grenade,
+   run, sprint, jump, reload, next weapon, crouch, strafe (`--no-exercise`
+   skips this);
+4. holds until `--hold` seconds have passed since the join (default 45), then
+   checks that `mapname` answers with the map and the client is still in
+   state 9;
+5. with `--screenshot`, takes one screenshot with the game's own command and
+   fails the step when the file is missing or one flat colour. The report
+   gives the mean brightness; the images stay in the work directory for
+   someone to look at;
+6. sends `kill`, which only acts on a playing client, and looks for the death
+   the stock scripts log (a `K;` line in `games_mp.log`). That shows the join
+   really spawned the player;
+7. quits and records the exit status.
+
+`--plan chain` runs every map in one process, changing with `devmap` as a map
+rotation does. `--hold 1800 --maps mp_crash` is a long soak of one map.
+`--sound-debug` sets `snd_alDebug 1` and adds the OpenAL driver's counts per
+map (sounds started, cut while playing, stream underruns, OpenAL errors, the
+longest gap between sound updates). `--assert-continue`, `--gdb` and
+`--set DVAR VALUE` work as in the
+[singleplayer sweep](linux-sp-levels.md#the-sweep-tool).
+
+The report counts assertions, errors, script errors and warnings per map and
+names the step a map stopped at. It does not say a map looks or sounds right.
+Everything the game writes goes under the work directory (`base/` with symlinks
+to the install's `main`, `zone` and `localization.txt`, `home/` as
+`fs_homepath` with a profile named `sweep`), and the install's `players/`
+folder is not staged. The logs there hold the console output, asset names
+included, so keep the directory private.
+
+No laptop run of the sweep has been made yet.
+
 ### Flashbang and concussion screen effects
 
 `scripts/tools/shellshock_screenshot_check.py` checks the flashbang white-out

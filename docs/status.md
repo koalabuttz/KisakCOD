@@ -143,6 +143,10 @@ As of 2026-11-08.
 
 - Sound listening run for the OpenAL fix (PR 102, merged): plan in
   `sound/laptop-sound-run-1.md`, with `+set snd_alDebug 1`.
+- Multiplayer client map sweep on the laptop, i386 and x86_64: every stock map
+  as a listen server, joined and exercised from the console
+  ([tool](linux-mp-client.md#map-sweep)); only mp_crash has been played so far.
+  Then a 30-minute soak of one map.
 - Singleplayer hand play on the levels the sweep passed (step 6 in
   [linux-sp-levels.md](linux-sp-levels.md)); sweep run 1 is done.
 - Vulkan Legacy adapter check on the PC (the laptop passed, PR 130); the D3D9
