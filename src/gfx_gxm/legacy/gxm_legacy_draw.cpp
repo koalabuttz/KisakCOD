@@ -271,6 +271,10 @@ struct DrawState
     std::map<std::string, FragmentProgramEntry> fragmentPrograms;
     Pipeline pipelines[kPipelines] = {};
     uint64_t pipelineLookups = 0, pipelineHits = 0;
+    // The per-draw savings (Pipeline, kept texture views and binds, uniform
+    // buffers left out). A file named no-draw-reuse beside the compiled
+    // programs turns them off, to tell a fault of theirs on a console.
+    bool reuse = true;
     const SceGxmVertexProgram *boundVertex = nullptr;
     const SceGxmFragmentProgram *boundFragment = nullptr;
     // What each fragment texture unit holds in the open scene (bit set in
@@ -1361,7 +1365,7 @@ bool BindTextures(Device &device, const Variant &pixel, void *uniforms)
         const uint32_t bits = uint32_t(linearMin) | uint32_t(linearMag) << 1 | uint32_t(linearMip) << 2 |
                               (ss[d3d::SAMP_ADDRESSU] & 0xffu) << 8 | (ss[d3d::SAMP_ADDRESSV] & 0xffu) << 16;
         // Its own view, not a stand-in's: the one kept with the texture serves.
-        const bool own = texture && texture->sampleable;
+        const bool own = d.reuse && texture && texture->sampleable;
         if (own && texture->viewBits == bits && std::memcmp(&texture->viewOf, &view, sizeof(view)) == 0)
             view = texture->view;
         else
@@ -1383,7 +1387,7 @@ bool BindTextures(Device &device, const Variant &pixel, void *uniforms)
         }
         const unsigned unit = unsigned(pixel.textureUnit[i]);
         ++d.textureBinds;
-        if (unit < SCE_GXM_MAX_TEXTURE_UNITS && (d.unitBound & (1u << unit)) &&
+        if (d.reuse && unit < SCE_GXM_MAX_TEXTURE_UNITS && (d.unitBound & (1u << unit)) &&
             std::memcmp(&d.unitView[unit], &view, sizeof(view)) == 0)
             ++d.textureBindsLeftOut;
         else
@@ -1662,6 +1666,12 @@ bool InitDraw(Device &device, std::string &error)
     }
     for (uint32_t i = 0; i < kSequentialIndices; ++i)
         d.sequential[i] = uint16_t(i);
+    if (gxm::ProgramCacheMarker("no-draw-reuse"))
+    {
+        d.reuse = false;
+        Log(device, "diag: no-draw-reuse is there: every draw finds its programs, sets its textures and writes its "
+                    "uniform buffers anew");
+    }
     if (!MakeStandIns(device, error) || !MakeClearPrograms(device, error) || !MakeCopyPrograms(device, error))
         return false;
     // Run diagnostics: opaque green (no inputs, so it links with any vertex
@@ -2477,7 +2487,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     }
     // The programs this combination last drew with (Pipeline), unless a
     // run diagnostic wants to see or change how they are found.
-    const bool plain = !test && !d.diagnosedDraws;
+    const bool plain = d.reuse && !test && !d.diagnosedDraws;
     PipelineKey pipelineKey;
     Pipeline *pipeline = nullptr;
     bool known = false;

@@ -753,8 +753,10 @@ What the GXM back end does so far (step 2d):
   summary says how often each applied: `draw work left out: N of N draws
   found their programs in the table; of N texture binds N were set already
   and N set their filters anew; of N uniform buffers N were the last
-  draw's`. What it saves in a frame's time is not measured yet, in Vita3K
-  or on a console.
+  draw's`. A file named `no-draw-reuse` in the folder of the compiled
+  programs turns all three off (the log says so at start-up), so that a
+  console run can tell a fault of theirs without another build. What they
+  save in a frame's time is not measured yet, in Vita3K or on a console.
 - **Textures** are linear: rows of whole multiples of 8 texels, and the
   levels of a mipmapped texture sized from the power of two above the base,
   which is how sceGxm reads them and also a layout LockRect can hand out.
