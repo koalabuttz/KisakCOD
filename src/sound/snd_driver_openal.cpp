@@ -1992,9 +1992,22 @@ static SndStored SND_SetPcmData(MssSoundCOD4 *mssSound, const void *srcData)
     {
         mssSound->data = MSS_Alloc(mssSound->info.data_len, mssSound->info.rate);
         if (!mssSound->data && mssSound->info.data_len)
+        {
             stored = SND_NO_MEMORY;
+        }
         else
+        {
             Com_Memcpy(mssSound->data, srcData, mssSound->info.data_len);
+            // The bytes are all played (SND_SetBufferData), but a sound's length is
+            // worked out from its frame count, and some fastfile sounds claim more
+            // frames than their bytes hold: every one a Vita3K run printed was a
+            // stereo sound claiming exactly twice its frames. Uncorrected, such a
+            // sound counts as twice as long as it plays.
+            const uint32_t channels = mssSound->info.channels > 0 ? (uint32_t)mssSound->info.channels : 0;
+            const uint32_t heldFrames = channels ? mssSound->info.data_len / (channels * (uint32_t)sizeof(int16_t)) : 0;
+            if (channels && mssSound->info.samples > heldFrames)
+                mssSound->info.samples = heldFrames;
+        }
     }
 
     if (converted)

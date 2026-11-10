@@ -60,6 +60,14 @@ void XAnimInit()
 {
     int i; // [esp+0h] [ebp-4h]
 
+    xanim_blendOnce = Dvar_RegisterInt(
+        "xanim_blendOnce",
+        0,
+        0,
+        2,
+        DVAR_NOFLAG,
+        "Calculate the first of several blended animations once instead of twice (2: twice, and compare the results)");
+
     for (i = 0; i < 4096; ++i)
     {
         g_xAnimInfo[i].prev = (i + 4095) % 4096;

@@ -338,6 +338,25 @@ static void CheckSetData() {
         if (failures) std::printf("     %%s", printed.c_str());
     }
     {
+        // The same claim at a rate the mixer plays. The sound is copied whole, and its
+        // frame count must come out as the frames it holds: the driver works out a
+        // sound's length from that count, so the claim would make it twice as long as
+        // it plays. The report below would also count it as 48000 bytes of PCM.
+        MssSoundCOD4 sound = Sound(SND_FORMAT_PCM, 16, 2, 22050, 12000, 4, 24000);
+        std::vector<int16_t> exact(stereo);
+        SND_SetData(&sound, (void *)exact.data());
+        Check(sound.info.format == SND_FORMAT_PCM && sound.info.rate == 22050 && sound.info.samples == 6000
+                  && sound.info.data_len == 24000 && StoredSnr(sound, stereo, 0) > 90,
+              "by default a sound at the mixer's rate that claims more frames than it holds counts the frames it holds");
+    }
+    {
+        // A sound that claims fewer frames than its bytes hold keeps its count.
+        MssSoundCOD4 sound = Sound(SND_FORMAT_PCM, 16, 1, 22050, 5000, 2, 12000);
+        SND_SetData(&sound, (void *)mono.data());
+        Check(sound.info.samples == 5000 && sound.info.data_len == 12000,
+              "  and one that claims fewer keeps its count");
+    }
+    {
         // Three channels are more than the frame count above is worked out for: such
         // a sound is copied as it is and is not counted as claiming too much.
         MssSoundCOD4 sound = Sound(SND_FORMAT_PCM, 16, 3, 22050, 2000, 6, 12000);
@@ -375,15 +394,17 @@ static void CheckSetData() {
         SND_SetData(&sound, (void *)mono.data());
         Check(warnings == before && sound.info.data_len == 0, "an empty sound loads without a warning");
     }
-    // Four sounds of 12000 bytes and the 6000 of the one stored as silence.
+    // Five sounds of 12000 bytes, one of 24000 and the 6000 of the one stored as silence:
+    // 90000 bytes. As PCM the report counts frames, so the sound that claims 5000 of
+    // its 6000 frames counts 2000 bytes less: 88000.
     printed.clear();
     g_snd.time = 1000;
     SND_ReportLoadedData();
     g_snd.time = 5000;
     SND_ReportLoadedData();
-    Check(printed == "sound data: 9 sounds loaded, in 53 KB (53 KB as 16-bit PCM); they came as 4 IMA ADPCM, 5 16-bit and 0 8-bit; "
+    Check(printed == "sound data: 11 sounds loaded, in 88 KB (86 KB as 16-bit PCM); they came as 4 IMA ADPCM, 7 16-bit and 0 8-bit; "
                      "0 kept as IMA ADPCM, 0 encoded to it in 0 ms, 3 found no memory, "
-                     "1 claimed more frames than their bytes hold\n",
+                     "2 claimed more frames than their bytes hold\n",
           "the report counts what loaded, and is printed when a sound found no memory");
     if (failures) std::printf("     %%s", printed.c_str());
 

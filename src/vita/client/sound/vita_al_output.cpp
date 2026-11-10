@@ -11,8 +11,9 @@
 // the thread: one update of about 23 ms is always queued behind the one that
 // plays.
 //
-// Ten seconds after it starts, then once a minute, and once more when it
-// stops, one line goes to console-mp.log: how long the mixer took, how many
+// Ten seconds after it starts, then with the engine's other figures (once a
+// minute by default, vita_statsEvery), and once more when it stops, one line
+// goes to console-mp.log: how long the mixer took, how many
 // sources played at once, and what clipped or failed.
 
 #if !defined(__vita__)
@@ -112,10 +113,13 @@ void *OutputThread(void *)
     if (sceKernelGetThreadInfo(self, &info) >= 0)
         sceKernelChangeThreadPriority(self, info.currentPriority - 1);
 
-    // The first report comes early, so a short run has one.
+    // The first report comes early, so a short run has one. The later ones
+    // come with the engine's other figures (Vita_StatsGeneration).
     const int updatesASecond = g_rate / g_updateFrames;
-    int nextReport = updatesASecond * 10;
+    const int firstReport = updatesASecond * 10;
     int updates = 0;
+    bool first = true;
+    unsigned int reported = Vita_StatsGeneration();
     while (!g_stop.load(std::memory_order_relaxed))
     {
         const uint64_t before = sceKernelGetProcessTimeWide();
@@ -127,10 +131,11 @@ void *OutputThread(void *)
             kisak::vita_al::NoteOutputError();
             sceKernelDelayThread(20 * 1000);
         }
-        if (++updates >= nextReport)
+        const unsigned int asked = Vita_StatsGeneration();
+        if ((first && ++updates >= firstReport) || asked != reported)
         {
-            updates = 0;
-            nextReport = updatesASecond * 60;
+            first = false;
+            reported = asked;
             Report("");
         }
     }

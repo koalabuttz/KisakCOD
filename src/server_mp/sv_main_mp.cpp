@@ -21,6 +21,10 @@
 #include <script/scr_debugger.h>
 #include <universal/profile.h>
 
+#if !defined(_WIN32)
+#include <linux/sys_perf.h>
+#endif
+
 #include <ctime>
 
 #if defined(WIN32) || defined(__linux__) || defined(__APPLE__) || defined(__vita__)
@@ -1287,6 +1291,9 @@ void SV_FrameInternal(int msec)
     sv.timeResidual += msec;
     if (sv.timeResidual >= frameMsec && !SV_CheckOverflow())
     {
+#if !defined(_WIN32)
+        SysPerfScope perfScope(SYS_PERF_PROBE_SERVER_FRAME);
+#endif
         SV_CalcPings();
         SV_PreFrame();
         while (1)

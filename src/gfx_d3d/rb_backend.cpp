@@ -87,6 +87,8 @@ void TRACK_rb_backend()
 }
 
 #if !defined(_WIN32)
+#include <linux/sys_perf.h> // the sleep and the wait counters perf_ab reads
+
 // R_SyncGpu calls R_GpuFenceTimeout in a tight loop, and between worker
 // commands, until the previous frame's GPU fence passes or the adaptive delay
 // runs out. On Windows each poll is a cheap D3D9 query. Through DXVK each
@@ -116,6 +118,44 @@ static bool R_ShouldPollGpuFence()
     __asm__ __volatile__("yield");
 #endif
     return false;
+}
+
+// With r_gpuSyncSleep above 0 the two waits for the fence sleep between checks
+// instead of keeping a core busy: R_SyncGpu on the main thread and
+// RB_AdaptiveGpuSyncFinal on the render thread. When the GPU is the limit they
+// are most of the frame (9 ms of a 14.8 ms frame on the main thread at
+// 1920x1200 on a laptop, perf run 1), and a busy core takes power the GPU
+// could use. A wait then ends up to one sleep after the fence passes.
+// r_gpuSyncSleepThreads picks the waits it applies to, to tell their effects
+// apart in a measuring run.
+void R_GpuSyncMainIdle()
+{
+    const int sleepUsec = r_gpuSyncSleep->current.integer;
+    if (sleepUsec <= 0 || !(r_gpuSyncSleepThreads->current.integer & 1))
+        return;
+    const uint64_t elapsed = __rdtsc() - dx.gpuSyncStart;
+    if (elapsed >= dx.gpuSyncDelay)
+        return;
+    // Never sleep past the end of the adaptive delay, and poll instead of
+    // sleeping when what is left is shorter than a sleep can be.
+    const double remainingUsec = (double)(dx.gpuSyncDelay - elapsed) * msecPerRawTimerTick * 1000.0;
+    if (remainingUsec < 30.0)
+        return;
+    Sys_PerfSleepMicroseconds(remainingUsec < (double)sleepUsec ? (uint32_t)remainingUsec : (uint32_t)sleepUsec);
+}
+
+void R_GpuSyncMainDone()
+{
+    Sys_PerfAddMicroseconds(
+        SYS_PERF_GPU_WAIT_MAIN,
+        (uint32_t)((double)(__rdtsc() - dx.gpuSyncStart) * msecPerRawTimerTick * 1000.0));
+}
+
+static void R_GpuSyncBackendIdle()
+{
+    const int sleepUsec = r_gpuSyncSleep->current.integer;
+    if (sleepUsec > 0 && (r_gpuSyncSleepThreads->current.integer & 2))
+        Sys_PerfSleepMicroseconds((uint32_t)sleepUsec);
 }
 #endif
 
@@ -2838,9 +2878,18 @@ int RB_AdaptiveGpuSyncFinal()
                 RB_AbandonGpuFence();
                 break;
             }
+#if !defined(_WIN32)
+            R_GpuSyncBackendIdle();
+#endif
         }
         LODWORD(v0) = __rdtsc() - startTime;
         waitedTime = v0;
+#if !defined(_WIN32)
+        if (waitedTime > 0)
+            Sys_PerfAddMicroseconds(
+                SYS_PERF_GPU_WAIT_BACKEND,
+                (uint32_t)((double)waitedTime * msecPerRawTimerTick * 1000.0));
+#endif
         if ((v0 & 0x80000000) == 0LL)
         {
             LODWORD(v0) = LODWORD(dx.gpuSyncDelay) + v0 / 16;

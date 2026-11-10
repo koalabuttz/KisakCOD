@@ -22,6 +22,8 @@ void Steam_Shutdown()
     g_steamInitialized = false;
 }
 
+void Steam_ShutdownGameServer() {}
+
 bool Steam_UpdateClientAuthTicket(netadr_t)
 {
     return false;

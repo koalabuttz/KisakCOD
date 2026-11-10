@@ -148,10 +148,50 @@ Commit 0ce99b9 (master with PR 98), i386 `sp-rel-al`, sound off, 1280x720.
   probe asked `sv_mapname` (never set in singleplayer; the server's dvar is
   `mapname`), and the save check took the "time to write" line of the
   level-start save being flushed again for the `devsave` one.
-- Engine messages worth a later look: hunted prints "Max scene drawsurfs
+- Engine messages (the Windows x64 game prints the same ones, see the tour
+  below): hunted prints "Max scene drawsurfs
   exceed" 5 times, ac130 "Too many visible static models" twice, airplane "AI
   couldn't find path to goal" twice. Six levels print the "computer changed"
   profile warning at start: the CPU estimate (`sys_configureGHz`) varies
   between processes by more than the profile's 10 % check. The profile is left
   unchanged.
 - Nobody watched the screen. Hand play (step 6) is next.
+
+## x86_64 sweep run 1 (laptop, 2026-11-10)
+
+The first runs of the x86_64 game with game data, RelWithDebInfo, sound off,
+1280x720, the same laptop. Local runs, not CI evidence.
+
+- **Built without movies** (`KISAK_LINUX_CINEMATICS` off, commit b1a8f06):
+  killhouse and cargoship both ended with signal 6 while the loading screen
+  was up (`!r_glob.screenUpdateNotify`, `rb_backend.cpp`). The error under it
+  was "Tried to use 'cinematicY' when it isn't valid": the loading screen
+  samples the movie's images and that build never set them. Fixed
+  ([linux-sp-game.md](linux-sp-game.md#fixes-the-first-level-loads-found));
+  the fix has not been run on a level yet. The i386 runs never met this
+  because they always had movies on.
+- **Built with movies** (the same commit): killhouse and cargoship load in 13
+  and 11 s and pass every step.
+- **Step 1, all 21 levels** (commit 3019927, movies on): every level loads,
+  holds 45 s, answers the console and quits with exit 0. airlift is among
+  them; without that commit's fix the Windows x64 game crashes there (below),
+  and the x86_64 Linux game was not run on airlift without it.
+- Steps 4 and 5 (chain, save and load) on x86_64 have not been run yet.
+
+## Windows x64 tour (PC, 2026-11-10)
+
+The hosted x64 Release build of commit 65bd0e3 on the Windows PC, as a
+comparison on the same game data. A local run, not CI evidence.
+
+- 20 of 21 levels load, run 45 s and quit with exit code 0. **airlift crashed
+  4.5 s into the level, three launches of three** (and with the x64 build of
+  7 November): a read of address 0xc in `Phys_ObjCreate`, called from
+  `FX_SpawnModelPhysics`. The cause is a 64-bit-only wrong read, fixed in
+  shared code; the Windows game has not been re-run with the fix yet.
+- The level chain (killhouse, cargoship, coup, blackout in one process), a
+  save loaded in the same process and in a fresh one, and a death with its
+  retry all work there.
+- The engine messages of sweep run 1 are not port bugs: Windows prints them
+  too. hunted "Max scene drawsurfs exceed" 5 times, ac130 "Too many visible
+  static models" twice, "couldn't find path to goal" in airplane twice and in
+  armada 19 times.

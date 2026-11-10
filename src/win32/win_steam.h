@@ -7,6 +7,10 @@
 void Steam_Init();
 void Steam_Shutdown();
 
+// KISAK: Windows dedicated server, at quit: logs an anonymous Steam game server
+// (KISAK_STEAM_SERVER_LOGIN=anonymous) off. Does nothing in any other mode.
+void Steam_ShutdownGameServer();
+
 // Called by Client to get a Ticket to send to the Dedicated Server
 bool Steam_UpdateClientAuthTicket(netadr_t serverIpv4);
 

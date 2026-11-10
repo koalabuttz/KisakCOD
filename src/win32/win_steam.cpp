@@ -28,9 +28,25 @@
 
 #include <functional>
 
+#ifdef KISAK_DEDICATED
+#include <steamsdk/steam/steam_gameserver.h>
+#endif
+
 // 7940 = COD4 APPID
 #define APPID 7940
 #define APPID_STR "7940"
+
+// KISAK: a dedicated server can log on to Steam as an anonymous game server
+// (KISAK_STEAM_SERVER_LOGIN=anonymous, see Steam_Init) rather than as the Steam
+// client's signed-in user, as the Linux server can (src/linux/steam.cpp). It
+// then checks tickets with ISteamGameServer, and nobody's account is in use on
+// its machine. Only the dedicated server has this mode.
+#ifdef KISAK_DEDICATED
+static bool s_gameServer = false;
+static bool s_gameServerLogonReported = false;
+#else
+static const bool s_gameServer = false;
+#endif
 
 
 bool g_steamInitialized = false;
@@ -66,7 +82,7 @@ bool Steam_GetRawClientTicket(unsigned char **pBuffer, uint32 *pSize)
 
 void Steam_CancelClientTicket()
 {
-	if (steamClientAuthTicket)
+	if (steamClientAuthTicket && !s_gameServer)
 	{
 		SteamUser()->CancelAuthTicket(steamClientAuthTicket);
 		steamClientAuthTicket = 0;
@@ -91,7 +107,8 @@ SteamCallbackHandler::SteamCallbackHandler()
 static SteamCallbackHandler *callbackHandler;
 
 
-void SteamCallbackHandler::Callback_BeginAuthResponse(ValidateAuthTicketResponse_t *pCallback)
+// Steam's verdict on a ticket this process began checking.
+static void Steam_OnAuthVerdict(const ValidateAuthTicketResponse_t *pCallback)
 {
 	uint64_t id64 = pCallback->m_SteamID.ConvertToUint64();
 
@@ -109,10 +126,86 @@ void SteamCallbackHandler::Callback_BeginAuthResponse(ValidateAuthTicketResponse
 	}
 }
 
+void SteamCallbackHandler::Callback_BeginAuthResponse(ValidateAuthTicketResponse_t *pCallback)
+{
+	Steam_OnAuthVerdict(pCallback);
+}
+
+#ifdef KISAK_DEDICATED
+// The same verdicts, delivered on the game server's own connection to Steam
+// (SteamGameServer_RunCallbacks), plus what becomes of that connection.
+class SteamGameServerCallbackHandler
+{
+public:
+	SteamGameServerCallbackHandler();
+	~SteamGameServerCallbackHandler() = default;
+
+	STEAM_GAMESERVER_CALLBACK(SteamGameServerCallbackHandler, Callback_AuthResponse, ValidateAuthTicketResponse_t, m_CallbackAuthResponse);
+	STEAM_GAMESERVER_CALLBACK(SteamGameServerCallbackHandler, Callback_ConnectFailure, SteamServerConnectFailure_t, m_CallbackConnectFailure);
+	STEAM_GAMESERVER_CALLBACK(SteamGameServerCallbackHandler, Callback_Disconnected, SteamServersDisconnected_t, m_CallbackDisconnected);
+};
+
+SteamGameServerCallbackHandler::SteamGameServerCallbackHandler()
+	: m_CallbackAuthResponse(this, &SteamGameServerCallbackHandler::Callback_AuthResponse)
+	, m_CallbackConnectFailure(this, &SteamGameServerCallbackHandler::Callback_ConnectFailure)
+	, m_CallbackDisconnected(this, &SteamGameServerCallbackHandler::Callback_Disconnected)
+{
+}
+static SteamGameServerCallbackHandler *gameServerCallbackHandler;
+
+void SteamGameServerCallbackHandler::Callback_AuthResponse(ValidateAuthTicketResponse_t *pCallback)
+{
+	Steam_OnAuthVerdict(pCallback);
+}
+
+void SteamGameServerCallbackHandler::Callback_ConnectFailure(SteamServerConnectFailure_t *pCallback)
+{
+	// Reported once per outage; Steam keeps retrying by itself. Until it is
+	// logged on, Steam_CheckClientTicket rejects every ticket.
+	if (s_gameServerLogonReported || pCallback->m_bStillRetrying)
+	{
+		return;
+	}
+	s_gameServerLogonReported = true;
+	Com_Printf(CON_CHANNEL_DONT_FILTER,
+		"[Kisak] Steam: the anonymous game server could not log on (result %d). Tickets are rejected until it does.\n",
+		(int)pCallback->m_eResult);
+}
+
+void SteamGameServerCallbackHandler::Callback_Disconnected(SteamServersDisconnected_t *pCallback)
+{
+	s_gameServerLogonReported = false;
+	Com_Printf(CON_CHANNEL_DONT_FILTER,
+		"[Kisak] Steam: the anonymous game server lost its connection to Steam (result %d). Tickets are rejected until it is back.\n",
+		(int)pCallback->m_eResult);
+}
+
+// Prints the logon once it has happened (and again after an outage).
+static void Steam_ReportGameServerLogon()
+{
+	if (s_gameServerLogonReported || !SteamGameServer()->BLoggedOn())
+	{
+		return;
+	}
+	s_gameServerLogonReported = true;
+	Com_Printf(CON_CHANNEL_DONT_FILTER, "[Kisak] Steam: logged on as an anonymous game server for app %d\n", APPID);
+}
+#endif
+
 void Steam_CheckClients()
 {
 #ifdef KISAK_MP
-	SteamAPI_RunCallbacks();
+#ifdef KISAK_DEDICATED
+	if (s_gameServer)
+	{
+		SteamGameServer_RunCallbacks();
+		Steam_ReportGameServerLogon();
+	}
+	else
+#endif
+	{
+		SteamAPI_RunCallbacks();
+	}
 
 	std::lock_guard<std::mutex> _(kickPlayerMutex);
 
@@ -176,12 +269,65 @@ static void CreateAppIdFile()
 	fclose(fp);
 }
 
+#ifdef KISAK_DEDICATED
+// KISAK_STEAM_SERVER_LOGIN=anonymous. It is an environment variable because
+// Steam starts before the command line runs (as on Linux). Any other value
+// turns the backend off: a mistyped setting must not fall back to using the
+// machine's Steam account.
+static void Steam_InitGameServer(const char *login)
+{
+	if (strcmp(login, "anonymous"))
+	{
+		Com_Printf(CON_CHANNEL_DONT_FILTER,
+			"[Kisak] Steam: KISAK_STEAM_SERVER_LOGIN must be \"anonymous\" or unset, not \"%s\". Steam authentication is off.\n",
+			login);
+		return;
+	}
+
+	// The game port only describes the server to Steam. With the query port
+	// shared and nothing passing Steam's queries on, and with advertising left
+	// off (SetAdvertiseServerActive is never called), the server is not listed.
+	SteamErrMsg error = {};
+	if (SteamGameServer_InitEx(0, 28960, STEAMGAMESERVER_QUERY_PORT_SHARED, eServerModeAuthentication, "1.7.0.0", &error)
+		!= k_ESteamAPIInitResult_OK)
+	{
+		Com_Printf(CON_CHANNEL_DONT_FILTER,
+			"[Kisak] Steam: could not start an anonymous game server (%s). Is Steam installed? Steam authentication is off.\n",
+			error);
+		return;
+	}
+
+	SteamGameServer()->SetProduct("cod4");
+	SteamGameServer()->SetGameDescription("Call of Duty 4");
+	SteamGameServer()->SetModDir("main");
+	SteamGameServer()->SetDedicatedServer(true);
+	SteamGameServer()->LogOnAnonymous();
+
+	gameServerCallbackHandler = new SteamGameServerCallbackHandler();
+	s_gameServerLogonReported = false;
+	s_gameServer = true;
+	g_steamInitialized = true;
+	Com_Printf(CON_CHANNEL_DONT_FILTER, "[Kisak] Steam: logging on as an anonymous game server for app %d\n", APPID);
+}
+#endif
+
 void Steam_Init()
 {
 	CreateAppIdFile();
 	SetEnvironmentVariableA("SteamAppId", APPID_STR);
 	SetEnvironmentVariableA("SteamGameId", APPID_STR);
 	SetEnvironmentVariableA("SteamOverlayGameId", APPID_STR);
+
+#ifdef KISAK_DEDICATED
+	char serverLogin[32] = {};
+	const DWORD serverLoginLength = GetEnvironmentVariableA("KISAK_STEAM_SERVER_LOGIN", serverLogin, sizeof(serverLogin));
+	if (serverLoginLength)
+	{
+		// A value too long for the buffer is not "anonymous" either.
+		Steam_InitGameServer(serverLoginLength < sizeof(serverLogin) ? serverLogin : "(too long)");
+		return;
+	}
+#endif
 
 	if (!SteamAPI_Init())
 	{
@@ -205,6 +351,24 @@ void Steam_Init()
 	callbackHandler = new SteamCallbackHandler();
 }
 
+// KISAK: Sys_Quit calls this. It logs a dedicated server's anonymous game
+// server off Steam, and does nothing in the Steam user's mode.
+void Steam_ShutdownGameServer()
+{
+#ifdef KISAK_DEDICATED
+	if (!s_gameServer)
+	{
+		return;
+	}
+	g_steamInitialized = false;
+	s_gameServer = false;
+	delete gameServerCallbackHandler;
+	gameServerCallbackHandler = nullptr;
+	SteamGameServer()->LogOff();
+	SteamGameServer_Shutdown();
+#endif
+}
+
 // (Currently Unused)
 void Steam_Shutdown()
 {
@@ -219,7 +383,8 @@ void Steam_Shutdown()
 
 bool Steam_UpdateClientAuthTicket(netadr_t serverIpv4)
 {
-	if (!g_steamInitialized)
+	// A game server has no Steam user to ask for a ticket.
+	if (!g_steamInitialized || s_gameServer)
 	{
 		return false;
 	}
@@ -250,7 +415,22 @@ bool Steam_CheckClientTicket(const void* pAuthTicket, uint32 authTicketLen, uint
 	CSteamID id;
 	id.SetFromUint64(steamID64);
 
-	EBeginAuthSessionResult res = SteamUser()->BeginAuthSession(pAuthTicket, authTicketLen, id);
+	EBeginAuthSessionResult res;
+#ifdef KISAK_DEDICATED
+	if (s_gameServer)
+	{
+		// No verdict can arrive while the game server is not logged on.
+		if (!SteamGameServer()->BLoggedOn())
+		{
+			return false;
+		}
+		res = SteamGameServer()->BeginAuthSession(pAuthTicket, authTicketLen, id);
+	}
+	else
+#endif
+	{
+		res = SteamUser()->BeginAuthSession(pAuthTicket, authTicketLen, id);
+	}
 
 	if (res != k_EBeginAuthSessionResultOK)
 	{
@@ -265,8 +445,21 @@ void Steam_OnClientDropped(uint64_t steamID64)
 {
 	iassert(steamID64);
 
+	// KISAK: no session is open once Steam is off (after Steam_ShutdownGameServer).
+	if (!g_steamInitialized)
+	{
+		return;
+	}
+
 	CSteamID sid;
 	sid.SetFromUint64(steamID64);
+#ifdef KISAK_DEDICATED
+	if (s_gameServer)
+	{
+		SteamGameServer()->EndAuthSession(sid);
+		return;
+	}
+#endif
 	SteamUser()->EndAuthSession(sid);
 }
 

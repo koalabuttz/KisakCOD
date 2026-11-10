@@ -3,6 +3,27 @@
 
 #include "qcommon.h"
 
+#if defined(__vita__)
+#include <unistd.h>
+#endif
+
+// A file opened to be written anew must start empty. On the PS Vita the open
+// asks the system for that (newlib passes O_TRUNC on as SCE_O_TRUNC) and a
+// console obeys, but the Vita3K emulator opens the old file as it is and does
+// not cut it. A file that got shorter then kept the tail of its old contents:
+// a profile's config ended in a stray line, which the next start ran as a
+// command (PC run KB2, 2026-11-10). Taking the old file away first gives the
+// same result on a console and in the emulator. A file that is not there is
+// not an error.
+static void FS_FileRemoveBeforeRewrite(const char *filename)
+{
+#if defined(__vita__)
+    unlink(filename);
+#else
+    (void)filename;
+#endif
+}
+
 int FS_FileGetFileSize(FILE *file)
 {
     return FileWrapper_GetFileSize(file);
@@ -58,6 +79,7 @@ FILE *FS_FileOpenWriteBinary(const char *filename)
     FILE *file; // [esp+0h] [ebp-4h]
 
     ProfLoad_BeginTrackedValue(MAP_PROFILE_FILE_OPEN);
+    FS_FileRemoveBeforeRewrite(filename);
     file = fopen(filename, "wb");
     ProfLoad_EndTrackedValue(MAP_PROFILE_FILE_OPEN);
     return file;
@@ -78,6 +100,7 @@ FILE *FS_FileOpenWriteText(const char *filename)
     FILE *file; // [esp+0h] [ebp-4h]
 
     ProfLoad_BeginTrackedValue(MAP_PROFILE_FILE_OPEN);
+    FS_FileRemoveBeforeRewrite(filename);
     file = fopen(filename, "w+t");
     ProfLoad_EndTrackedValue(MAP_PROFILE_FILE_OPEN);
     return file;
@@ -88,6 +111,7 @@ FILE *FS_FileOpenWriteReadBinary(const char *filename)
     FILE *file;
 
     ProfLoad_BeginTrackedValue(MAP_PROFILE_FILE_OPEN);
+    FS_FileRemoveBeforeRewrite(filename);
     file = fopen(filename, "w+b"); // KISAKTODO: unsure if flag is accurate, it uses CreateFileA()
     ProfLoad_EndTrackedValue(MAP_PROFILE_FILE_OPEN);
     return file;

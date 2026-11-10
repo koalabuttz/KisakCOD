@@ -248,6 +248,15 @@ void CL_ServerInfoPacket(netadr_t from, msg_t *msg, int time)
         }
         if (!cls.pingUpdateSource)
         {
+            // KISAK: nobody asked this address by name, so it is listed only as
+            // an answer to the last LAN scan (qcommon/master_server.h).  Retail
+            // listed whoever sent an infoResponse.
+            if (!Master_LanScanAccepts(&cl_lanScan, Info_ValueForKey(infoString, "challenge"), Sys_Milliseconds()))
+            {
+                Com_DPrintf(CON_CHANNEL_CLIENT, "infoResponse from %s is not an answer to a LAN scan, ignored\n",
+                    NET_AdrToString(from));
+                return;
+            }
             for (i = 0; i < 128 && cls.localServers[i].adr.port; ++i)
             {
                 if (NET_CompareAdr(from, cls.localServers[i].adr))
@@ -382,12 +391,30 @@ void CL_Connect_f()
 
 const dvar_t *cl_keyCodeOnly;
 
+// KISAK: the key code menu's five edit fields are dvars, and a server's own
+// menus can make a client report or copy any dvar
+// (scriptMenuRespondOnDvarStringValue, setfromdvar into userinfo). So what is
+// typed there does not outlive the menu's use of it: the fields are emptied
+// when the menu opens, after a save, after any check made while on someone
+// else's server, and before a remote connection starts.
+void CL_ClearKeyCodeMenuFields()
+{
+    static const char *const fields[] = { "cdkey1", "cdkey2", "cdkey3", "cdkey4", "cdkey5" };
+    for (const char *field : fields)
+    {
+        if (Dvar_FindVar(field))
+            Dvar_SetStringByName(field, "");
+    }
+}
+
 // This is called by the Client to see if the Auth is even valid before sending to the Server.
 // KISAK: Steam when it is running (src/win32/win_steam.cpp, or src/linux/steam.cpp in a
 // KISAK_LINUX_STEAM build), otherwise the player's key code (cl_auth.cpp). CL_Connect_f only
 // asks for a non-local address, so joining the in-process server ("localhost") is unaffected.
 bool CL_CDKeyValidate(netadr_t addr)
 {
+    // Nothing typed into the key code menu goes along to a remote server.
+    CL_ClearKeyCodeMenuFields();
     const char *homePath = fs_homepath ? fs_homepath->current.string : "";
     const bool keyCodeOnly = cl_keyCodeOnly && cl_keyCodeOnly->current.enabled;
     return CL_PrepareRemoteAuth(addr, homePath, keyCodeOnly) != ClientAuthMethod::none;

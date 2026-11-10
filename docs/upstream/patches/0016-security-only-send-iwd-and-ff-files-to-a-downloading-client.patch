@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 06:11:06 +0000
+Subject: [PATCH] security: only send iwd and ff files to a downloading client
+
+With sv_allowDownload on, the server opened whatever name the client's
+"download" command gave, relative to fs_homepath, and only refused the
+stock iwds. A client could fetch the server config with its rcon
+password, logs, or a path with ".." outside the game folder.
+
+Refuse a name that does not end in .iwd or .ff, starts with a slash,
+or holds ".." or ":". The client gets the reply it gets for a missing
+file. This is stricter than retail 1.7, which has the same hole; mod and
+usermap downloads only ever ask for those two kinds of file.
+---
+ src/server_mp/sv_snapshot_mp.cpp | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/src/server_mp/sv_snapshot_mp.cpp b/src/server_mp/sv_snapshot_mp.cpp
+index ffa9c618..e9ec9775 100644
+--- a/src/server_mp/sv_snapshot_mp.cpp
++++ b/src/server_mp/sv_snapshot_mp.cpp
+@@ -1507,6 +1507,17 @@ int __cdecl SV_WWWRedirectClient(client_t *cl, msg_t *msg)
+     }
+ }
+ 
++// Game content is a relative .iwd or .ff path. Anything else a client names
++// (a config file, a path with "..", a drive) is not sent.
++static bool SV_IsDownloadNameAllowed(const char *name)
++{
++    const char *extension = strrchr(name, '.');
++
++    if (!extension || (I_stricmp(extension, ".iwd") && I_stricmp(extension, ".ff")))
++        return false;
++    return name[0] != '/' && name[0] != '\\' && !strstr(name, "..") && !strchr(name, ':');
++}
++
+ void __cdecl SV_WriteDownloadToClient(client_t *cl, msg_t *msg)
+ {
+     int v2; // edx
+@@ -1583,6 +1594,13 @@ void __cdecl SV_WriteDownloadToClient(client_t *cl, msg_t *msg)
+         {
+             if (sv_allowDownload->current.enabled)
+             {
++                if (!SV_IsDownloadNameAllowed(cl->downloadName))
++                {
++                    Com_Printf(CON_CHANNEL_SERVER, "clientDownload: %d : \"%s\" is not an iwd or ff file\n", cl - svs.clients, cl->downloadName);
++                    Com_sprintf(errorMessage, 0x400u, "EXE_AUTODL_FILENOTONSERVER %s", cl->downloadName);
++                    SV_WriteDownloadErrorMessage(cl, msg, errorMessage);
++                    return;
++                }
+                 if (FS_iwIwd(cl->downloadName, (char*)"main"))
+                 {
+                     Com_Printf(

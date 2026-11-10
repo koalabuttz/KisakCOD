@@ -10,7 +10,8 @@ ticket verification is still unimplemented, so a retail client on this build nee
 one of the explicit authentication opt-ins from that guide. The retail 1.7 and
 CoD4x 21.1 sessions were separate brief single-player tests on loopback; no
 two-human or mixed-client session has been run. The native Linux client
-(`KisakCOD-mp`) plays only on its own listen server and does not change this
+(`KisakCOD-mp`) joins KisakCOD servers (with [Steam](linux-steam.md) or a
+[key code](key-codes.md)), not retail ones, and does not change this
 evidence. Current status: [status](status.md).
 
 ## Targets and method

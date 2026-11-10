@@ -1,0 +1,446 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 06:16:34 +0000
+Subject: [PATCH] refactor: name the 16-bit angle factors
+
+0.0054931640625 (360/65536) and 182.04445 (65536/360 as a float) turn
+up as bare numbers wherever an angle is packed into 16 bits or read
+back. com_math.h now names them DEGREES_PER_SHORT and SHORTS_PER_DEGREE,
+each as a float (_F) and a double so every use keeps the type it
+multiplied by, with static_asserts that each equals the literal it
+replaces. cg_pose.cpp's local SHORT2ANGLE gives way to the shared name.
+
+No value changes: the double SHORTS_PER_DEGREE stays 182.0444488525391,
+the number the code multiplied by, which is not 65536.0 / 360.0. This
+answers upstream issue 53.
+---
+ src/bgame/bg_pmove.cpp          | 10 +++++-----
+ src/bgame/bg_weapons.cpp        |  4 ++--
+ src/cgame/cg_ents.cpp           | 10 +++++-----
+ src/cgame/cg_pose.cpp           | 12 +++++-------
+ src/cgame/cg_view.cpp           |  6 +++---
+ src/cgame_mp/cg_pose_mp.cpp     | 10 +++++-----
+ src/cgame_mp/cg_vehicles_mp.cpp | 10 +++++-----
+ src/client/cl_input.cpp         |  6 +++---
+ src/client_mp/cl_input.cpp      |  6 +++---
+ src/game/g_client.cpp           |  2 +-
+ src/game_mp/g_client_mp.cpp     |  2 +-
+ src/game_mp/g_vehicles_mp.cpp   |  2 +-
+ src/qcommon/msg.cpp             |  4 ++--
+ src/qcommon/msg_mp.cpp          | 14 +++++++-------
+ src/qcommon/sv_msg_write_mp.cpp |  2 +-
+ src/server_mp/sv_client_mp.cpp  |  6 +++---
+ src/universal/com_math.h        | 12 ++++++++++++
+ 17 files changed, 64 insertions(+), 54 deletions(-)
+
+diff --git a/src/bgame/bg_pmove.cpp b/src/bgame/bg_pmove.cpp
+index 8a61aed0..5b75a75d 100644
+--- a/src/bgame/bg_pmove.cpp
++++ b/src/bgame/bg_pmove.cpp
+@@ -676,9 +676,9 @@ void __cdecl PM_UpdateViewAngles(playerState_s *ps, float msec, usercmd_s *cmd,
+     {
+         if (ps->stats[STAT_DEAD_YAW] == 999)
+         {
+-            angle = (double)cmd->angles[1] * 0.0054931640625 + ps->delta_angles[1];
++            angle = (double)cmd->angles[1] * DEGREES_PER_SHORT + ps->delta_angles[1];
+             temp = AngleNormalize360(angle);
+-            ps->stats[STAT_DEAD_YAW] = (int)(temp * 0.0054931640625);
++            ps->stats[STAT_DEAD_YAW] = (int)(temp * DEGREES_PER_SHORT);
+         }
+     LABEL_21:
+         PM_UpdateLean(
+@@ -739,7 +739,7 @@ void __cdecl PM_UpdateViewAngles_Clamp(playerState_s *ps, usercmd_s *cmd)
+     maxPitch = player_view_pitch_down->current.value;
+     for (i = 0; i < 3; ++i)
+     {
+-        v7 = ps->delta_angles[i] + (double)cmd->angles[i] * 0.0054931640625;
++        v7 = ps->delta_angles[i] + (double)cmd->angles[i] * DEGREES_PER_SHORT;
+         v8 = v7 * 0.002777777845039964;
+         v5 = v8 + 0.5;
+         v4 = floor(v5);
+@@ -750,13 +750,13 @@ void __cdecl PM_UpdateViewAngles_Clamp(playerState_s *ps, usercmd_s *cmd)
+             {
+                 if (temp < -minPitch)
+                 {
+-                    ps->delta_angles[0] = -minPitch - (double)cmd->angles[0] * 0.0054931640625;
++                    ps->delta_angles[0] = -minPitch - (double)cmd->angles[0] * DEGREES_PER_SHORT;
+                     temp = -minPitch;
+                 }
+             }
+             else
+             {
+-                ps->delta_angles[0] = maxPitch - (double)cmd->angles[0] * 0.0054931640625;
++                ps->delta_angles[0] = maxPitch - (double)cmd->angles[0] * DEGREES_PER_SHORT;
+                 temp = maxPitch;
+             }
+         }
+diff --git a/src/bgame/bg_weapons.cpp b/src/bgame/bg_weapons.cpp
+index ea4e060a..66b420f1 100644
+--- a/src/bgame/bg_weapons.cpp
++++ b/src/bgame/bg_weapons.cpp
+@@ -1164,8 +1164,8 @@ void __cdecl PM_AdjustAimSpreadScale(pmove_t *pm, pml_t *pml)
+                 {
+                     for (i = 0; i < 2; ++i)
+                     {
+-                        a2 = (double)pm->oldcmd.angles[i] * 0.0054931640625;
+-                        a1 = (double)pm->cmd.angles[i] * 0.0054931640625;
++                        a2 = (double)pm->oldcmd.angles[i] * DEGREES_PER_SHORT;
++                        a1 = (double)pm->cmd.angles[i] * DEGREES_PER_SHORT;
+                         v8 = AngleDelta(a1, a2);
+                         v5 = I_fabs(v8);
+                         viewchange = v5 * (float)0.0099999998 * weapDef->fHipSpreadTurnAdd / pml->frametime + viewchange;
+diff --git a/src/cgame/cg_ents.cpp b/src/cgame/cg_ents.cpp
+index c6fbcd35..e1de4cf8 100644
+--- a/src/cgame/cg_ents.cpp
++++ b/src/cgame/cg_ents.cpp
+@@ -1032,11 +1032,11 @@ void __cdecl CG_Vehicle_PreControllers(int localClientNum, const DObj_s *obj, ce
+ 
+     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
+ 
+-    cent->pose.vehicle.pitch = (int)floor(LerpAngle(cent->currentState.u.vehicle.bodyPitch, cent->nextState.lerp.u.vehicle.bodyPitch, cgameGlob->frameInterpolation) * 182.04445f + 0.5f);
+-    cent->pose.vehicle.roll = (int)floor(LerpAngle(cent->currentState.u.vehicle.bodyRoll, cent->nextState.lerp.u.vehicle.bodyRoll, cgameGlob->frameInterpolation) * 182.04445f + 0.5f);
+-    cent->pose.vehicle.barrelPitch = (int)floor(LerpAngle(cent->currentState.u.vehicle.gunPitch, cent->nextState.lerp.u.vehicle.gunPitch, cgameGlob->frameInterpolation) * 182.04445f + 0.5f);
+-    cent->pose.vehicle.yaw = (int)floor(LerpAngle(cent->currentState.u.vehicle.gunYaw, cent->nextState.lerp.u.vehicle.gunYaw, cgameGlob->frameInterpolation) * 182.04445f + 0.5f);
+-    cent->pose.vehicle.steerYaw = (int)floor( LerpAngle(cent->currentState.u.vehicle.steerYaw, cent->nextState.lerp.u.vehicle.steerYaw, cgameGlob->frameInterpolation) * 182.04445f + 0.5f);
++    cent->pose.vehicle.pitch = (int)floor(LerpAngle(cent->currentState.u.vehicle.bodyPitch, cent->nextState.lerp.u.vehicle.bodyPitch, cgameGlob->frameInterpolation) * SHORTS_PER_DEGREE_F + 0.5f);
++    cent->pose.vehicle.roll = (int)floor(LerpAngle(cent->currentState.u.vehicle.bodyRoll, cent->nextState.lerp.u.vehicle.bodyRoll, cgameGlob->frameInterpolation) * SHORTS_PER_DEGREE_F + 0.5f);
++    cent->pose.vehicle.barrelPitch = (int)floor(LerpAngle(cent->currentState.u.vehicle.gunPitch, cent->nextState.lerp.u.vehicle.gunPitch, cgameGlob->frameInterpolation) * SHORTS_PER_DEGREE_F + 0.5f);
++    cent->pose.vehicle.yaw = (int)floor(LerpAngle(cent->currentState.u.vehicle.gunYaw, cent->nextState.lerp.u.vehicle.gunYaw, cgameGlob->frameInterpolation) * SHORTS_PER_DEGREE_F + 0.5f);
++    cent->pose.vehicle.steerYaw = (int)floor( LerpAngle(cent->currentState.u.vehicle.steerYaw, cent->nextState.lerp.u.vehicle.steerYaw, cgameGlob->frameInterpolation) * SHORTS_PER_DEGREE_F + 0.5f);
+ 
+     cent->pose.vehicle.time = (float)cent->nextState.time2 * 0.001f;
+     DObjGetBoneIndex(obj, scr_const.tag_body, &cent->pose.vehicle.tag_body);
+diff --git a/src/cgame/cg_pose.cpp b/src/cgame/cg_pose.cpp
+index 3c60ebfb..aca5cc9d 100644
+--- a/src/cgame/cg_pose.cpp
++++ b/src/cgame/cg_pose.cpp
+@@ -126,8 +126,6 @@ void __cdecl CG_mg42_DoControllers(const cpose_t *pose, const DObj_s *obj, int *
+ 
+ void CG_Vehicle_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partBits)
+ {
+-    const float SHORT2ANGLE = 0.0054931641f;
+-
+     float bodyAngles[3];   // tag_body:   pitch (X), 0, roll (Z)
+     float turretAngles[3]; // tag_turret: 0, yaw (Y), 0
+     float barrelAngles[3]; // tag_barrel: barrelPitch (X), 0, 0
+@@ -138,17 +136,17 @@ void CG_Vehicle_DoControllers(const cpose_t *pose, const DObj_s *obj, int *partB
+ 
+     iassert(obj);
+ 
+-    bodyAngles[0]   = (float)pose->vehicle.pitch       * SHORT2ANGLE;
++    bodyAngles[0]   = (float)pose->vehicle.pitch       * DEGREES_PER_SHORT_F;
+     bodyAngles[1]   = 0.0f;
+-    bodyAngles[2]   = (float)pose->vehicle.roll        * SHORT2ANGLE;
++    bodyAngles[2]   = (float)pose->vehicle.roll        * DEGREES_PER_SHORT_F;
+     turretAngles[0] = 0.0f;
+-    turretAngles[1] = (float)pose->vehicle.yaw         * SHORT2ANGLE;
++    turretAngles[1] = (float)pose->vehicle.yaw         * DEGREES_PER_SHORT_F;
+     turretAngles[2] = 0.0f;
+-    barrelAngles[0] = (float)pose->vehicle.barrelPitch * SHORT2ANGLE;
++    barrelAngles[0] = (float)pose->vehicle.barrelPitch * DEGREES_PER_SHORT_F;
+     barrelAngles[1] = 0.0f;
+     barrelAngles[2] = 0.0f;
+     steerAngles[0]  = 0.0f;
+-    steerAngles[1]  = (float)pose->vehicle.steerYaw    * SHORT2ANGLE;
++    steerAngles[1]  = (float)pose->vehicle.steerYaw    * DEGREES_PER_SHORT_F;
+     steerAngles[2]  = 0.0f;
+ 
+     DObjSetLocalTag((DObj_s *)obj, partBits, pose->vehicle.tag_body,   vec3_origin, bodyAngles);
+diff --git a/src/cgame/cg_view.cpp b/src/cgame/cg_view.cpp
+index 5c2e5db3..72c460ce 100644
+--- a/src/cgame/cg_view.cpp
++++ b/src/cgame/cg_view.cpp
+@@ -1055,9 +1055,9 @@ int __cdecl PausedClientFreeMove(int localClientNum)
+     {
+         LocalClientGlobals = CG_GetLocalClientGlobals(localClientNum);
+ 
+-        angles[0] = (float)usercmd.angles[0] * 0.0054931641f;
+-        angles[1] = (float)usercmd.angles[1] * 0.0054931641f;
+-        angles[2] = (float)usercmd.angles[2] * 0.0054931641f;
++        angles[0] = (float)usercmd.angles[0] * DEGREES_PER_SHORT_F;
++        angles[1] = (float)usercmd.angles[1] * DEGREES_PER_SHORT_F;
++        angles[2] = (float)usercmd.angles[2] * DEGREES_PER_SHORT_F;
+         angles[0] = LocalClientGlobals->predictedPlayerState.delta_angles[0] + angles[0];
+         angles[1] = LocalClientGlobals->predictedPlayerState.delta_angles[1] + angles[1];
+         angles[2] = LocalClientGlobals->predictedPlayerState.delta_angles[2] + angles[2];
+diff --git a/src/cgame_mp/cg_pose_mp.cpp b/src/cgame_mp/cg_pose_mp.cpp
+index 18286ee8..321db6c2 100644
+--- a/src/cgame_mp/cg_pose_mp.cpp
++++ b/src/cgame_mp/cg_pose_mp.cpp
+@@ -84,17 +84,17 @@ void CG_VehPoseControllers(const cpose_t *pose, const DObj_s *obj, int32_t *part
+     v51 = 0.0;
+     v52 = 0.0;
+     pitch = pose->vehicle.pitch;
+-    steerAngles[0] = pitch * 0.0054931640625;
++    steerAngles[0] = pitch * DEGREES_PER_SHORT;
+     roll = pose->vehicle.roll;
+-    steerAngles[2] = roll * 0.0054931640625;
++    steerAngles[2] = roll * DEGREES_PER_SHORT;
+     suspTravel = pose->vehicle.barrelPitch;
+-    bodyAngles[0] = suspTravel * 0.0054931640625;
++    bodyAngles[0] = suspTravel * DEGREES_PER_SHORT;
+     if (pose->eType == ET_HELICOPTER)
+         bodyAngles[2] = pose->turret.barrelPitch;
+     yaw = pose->vehicle.yaw;
+-    barrelAngles[1] = yaw * 0.0054931640625;
++    barrelAngles[1] = yaw * DEGREES_PER_SHORT;
+     tempAxis_44 = pose->vehicle.steerYaw;
+-    v51 = tempAxis_44 * 0.0054931640625;
++    v51 = tempAxis_44 * DEGREES_PER_SHORT;
+     DObjSetLocalTag((DObj_s*)obj, partBits, pose->vehicle.tag_body, vec3_origin, steerAngles);
+     DObjSetLocalTag((DObj_s*)obj, partBits, pose->vehicle.tag_turret, vec3_origin, barrelAngles);
+     DObjSetLocalTag((DObj_s*)obj, partBits, pose->vehicle.tag_barrel, vec3_origin, bodyAngles);
+diff --git a/src/cgame_mp/cg_vehicles_mp.cpp b/src/cgame_mp/cg_vehicles_mp.cpp
+index a95b6883..2d9f0fd1 100644
+--- a/src/cgame_mp/cg_vehicles_mp.cpp
++++ b/src/cgame_mp/cg_vehicles_mp.cpp
+@@ -451,7 +451,7 @@ void __cdecl SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s
+     v38 = floor(v40);
+     v37 = (v56 - v38) * 360.0;
+     v54 = v37 * frameInterpolation + v55;
+-    v36 = v54 * 182.0444488525391 + 0.5;
++    v36 = v54 * SHORTS_PER_DEGREE + 0.5;
+     v35 = floor(v36);
+     cent->pose.vehicle.pitch = (int)v35;
+     v52 = p_currentState->u.vehicle.bodyRoll;
+@@ -462,7 +462,7 @@ void __cdecl SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s
+     v31 = floor(v33);
+     v30 = (v53 - v31) * 360.0;
+     v51 = v30 * v32 + v52;
+-    v29 = v51 * 182.0444488525391 + 0.5;
++    v29 = v51 * SHORTS_PER_DEGREE + 0.5;
+     v28 = floor(v29);
+     cent->pose.vehicle.roll = (int)v28;
+     gunPitch = p_currentState->u.vehicle.gunPitch;
+@@ -473,7 +473,7 @@ void __cdecl SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s
+     v24 = floor(v26);
+     v23 = (v50 - v24) * 360.0;
+     v48 = v23 * v25 + gunPitch;
+-    v22 = v48 * 182.0444488525391 + 0.5;
++    v22 = v48 * SHORTS_PER_DEGREE + 0.5;
+     v21 = floor(v22);
+     cent->pose.vehicle.barrelPitch = (int)v21;
+     gunYaw = p_currentState->u.vehicle.gunYaw;
+@@ -484,7 +484,7 @@ void __cdecl SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s
+     v17 = floor(v19);
+     v16 = (v47 - v17) * 360.0;
+     v45 = v16 * v18 + gunYaw;
+-    v15 = v45 * 182.0444488525391 + 0.5;
++    v15 = v45 * SHORTS_PER_DEGREE + 0.5;
+     v14 = floor(v15);
+     cent->pose.vehicle.yaw = (int)v14;
+     cent->pose.turret.barrelPitch = Veh_GetTurretBarrelRoll(localClientNum, cent);
+@@ -496,7 +496,7 @@ void __cdecl SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s
+     v10 = floor(v12);
+     v9 = (v44 - v10) * 360.0;
+     v42 = v9 * v11 + v43;
+-    v8 = v42 * 182.0444488525391 + 0.5;
++    v8 = v42 * SHORTS_PER_DEGREE + 0.5;
+     v7 = floor(v8);
+     cent->pose.vehicle.steerYaw = (int)v7;
+     cent->pose.vehicle.time = (double)ns->time2 * EQUAL_EPSILON;
+diff --git a/src/client/cl_input.cpp b/src/client/cl_input.cpp
+index e9ab8fe7..af23d544 100644
+--- a/src/client/cl_input.cpp
++++ b/src/client/cl_input.cpp
+@@ -1410,9 +1410,9 @@ void __cdecl CL_FinishMove(usercmd_s *cmd)
+     cmd->weapon = clients[0].cgameUserCmdWeapon;
+     cmd->offHandIndex = clients[0].cgameUserCmdOffHandIndex;
+     cmd->serverTime = clients[0].serverTime;
+-    cmd->angles[0] = (unsigned __int16)(int)(clients[0].viewangles[0] * (float)182.04445);
+-    cmd->angles[1] = (unsigned __int16)(int)(clients[0].viewangles[1] * (float)182.04445);
+-    cmd->angles[KEY_FORWARD] = (unsigned __int16)(int)(clients[0].viewangles[KEY_FORWARD] * (float)182.04445);
++    cmd->angles[0] = (unsigned __int16)(int)(clients[0].viewangles[0] * SHORTS_PER_DEGREE_F);
++    cmd->angles[1] = (unsigned __int16)(int)(clients[0].viewangles[1] * SHORTS_PER_DEGREE_F);
++    cmd->angles[KEY_FORWARD] = (unsigned __int16)(int)(clients[0].viewangles[KEY_FORWARD] * SHORTS_PER_DEGREE_F);
+     buttons = cmd->buttons;
+     cmd->gunPitch = clients[0].cgameUserCmdGunPitch;
+     cmd->gunYaw = clients[0].cgameUserCmdGunYaw;
+diff --git a/src/client_mp/cl_input.cpp b/src/client_mp/cl_input.cpp
+index ee694d6f..d12b7bce 100644
+--- a/src/client_mp/cl_input.cpp
++++ b/src/client_mp/cl_input.cpp
+@@ -779,13 +779,13 @@ void __cdecl CL_FinishMove(int localClientNum, usercmd_s *cmd)
+     cmd->serverTime = serverTime;
+     for (i = 0; i < 3; ++i)
+         cmd->angles[i] = (uint16_t)(int)((LocalClientGlobals->viewangles[i] + LocalClientGlobals->cgameKickAngles[i])
+-            * 182.0444488525391);
++            * SHORTS_PER_DEGREE);
+     cmd->buttons |= LocalClientGlobals->cgameExtraButtons;
+     LocalClientGlobals->cgameExtraButtons = 0;
+     if (CG_VehLocalClientDriving(localClientNum))
+     {
+-        cmd->angles[1] = (uint16_t)(int)(LocalClientGlobals->vehicleViewYaw * 182.0444488525391);
+-        cmd->angles[0] = (uint16_t)(int)(LocalClientGlobals->vehicleViewPitch * 182.0444488525391);
++        cmd->angles[1] = (uint16_t)(int)(LocalClientGlobals->vehicleViewYaw * SHORTS_PER_DEGREE);
++        cmd->angles[0] = (uint16_t)(int)(LocalClientGlobals->vehicleViewPitch * SHORTS_PER_DEGREE);
+         cmd->angles[2] = 0;
+     }
+ }
+diff --git a/src/game/g_client.cpp b/src/game/g_client.cpp
+index 235cf6ba..cca1b22e 100644
+--- a/src/game/g_client.cpp
++++ b/src/game/g_client.cpp
+@@ -288,7 +288,7 @@ void __cdecl InitClientDeltaAngles(gclient_s *client)
+ 
+     for (int i = 0; i < 3; ++i)
+     {
+-        const float cmdDeg = (float)cmdAngles[i] * 0.0054931641f;
++        const float cmdDeg = (float)cmdAngles[i] * DEGREES_PER_SHORT_F;
+         const float diff   = viewangles[i] - cmdDeg;
+         const float turns  = diff * 0.0027777778f;
+         const float frac   = turns - floorf(turns + 0.5f);
+diff --git a/src/game_mp/g_client_mp.cpp b/src/game_mp/g_client_mp.cpp
+index d96a0904..dd5c95e7 100644
+--- a/src/game_mp/g_client_mp.cpp
++++ b/src/game_mp/g_client_mp.cpp
+@@ -108,7 +108,7 @@ void __cdecl SetClientViewAngle(gentity_s *ent, const float *angle)
+     }
+     for (i = 0; i < 3; ++i)
+     {
+-        v18 = newAngle[i] - (float)ent->client->sess.cmd.angles[i] * 0.0054931640625f;
++        v18 = newAngle[i] - (float)ent->client->sess.cmd.angles[i] * DEGREES_PER_SHORT_F;
+         v19 = v18 * 0.002777777845039964f;
+         v5 = v19 + 0.5f;
+         v4 = floor(v5);
+diff --git a/src/game_mp/g_vehicles_mp.cpp b/src/game_mp/g_vehicles_mp.cpp
+index 3343279b..a0c61977 100644
+--- a/src/game_mp/g_vehicles_mp.cpp
++++ b/src/game_mp/g_vehicles_mp.cpp
+@@ -1128,7 +1128,7 @@ char __cdecl VEH_PlayerRotation(gentity_s *player, vehicle_physic_t *phys)
+     char sign; // [esp+33h] [ebp-5h]
+     float yawWanted; // [esp+34h] [ebp-4h]
+ 
+-    angle = (double)player->client->sess.cmd.angles[1] * 0.0054931640625 + 180.0;
++    angle = (double)player->client->sess.cmd.angles[1] * DEGREES_PER_SHORT + 180.0;
+     yawWanted = AngleNormalize360(angle);
+     v7 = phys->angles[1] + 90.0;
+     yawCurrent = AngleNormalize360(v7);
+diff --git a/src/qcommon/msg.cpp b/src/qcommon/msg.cpp
+index 3c661576..ec4e8d5f 100644
+--- a/src/qcommon/msg.cpp
++++ b/src/qcommon/msg.cpp
+@@ -503,7 +503,7 @@ void __cdecl MSG_WriteAngle16(msg_t *sb, double f)
+     }
+     else
+     {
+-        *(_WORD *)&sb->data[cursize] = (int)(float)((float)f * (float)182.04445);
++        *(_WORD *)&sb->data[cursize] = (int)(float)((float)f * SHORTS_PER_DEGREE_F);
+         sb->cursize = cursize + 2;
+     }
+ }
+@@ -661,7 +661,7 @@ float __cdecl MSG_ReadAngle16(msg_t *msg)
+         raw = *(int16_t *)&msg->data[readcount];
+         msg->readcount = readcount + 2;
+     }
+-    return (float)raw * 0.0054931641f;
++    return (float)raw * DEGREES_PER_SHORT_F;
+ }
+ 
+ void __cdecl MSG_ReadData(msg_t *msg, _BYTE *data, int len)
+diff --git a/src/qcommon/msg_mp.cpp b/src/qcommon/msg_mp.cpp
+index edd18698..20f66f53 100644
+--- a/src/qcommon/msg_mp.cpp
++++ b/src/qcommon/msg_mp.cpp
+@@ -383,7 +383,7 @@ void __cdecl MSG_WriteBigString(msg_t *sb, char *s)
+ void __cdecl MSG_WriteAngle16(msg_t *sb, float f)
+ {
+     iassert( !sb->readOnly );
+-    MSG_WriteShort(sb, (int)(f * 182.0444488525391));
++    MSG_WriteShort(sb, (int)(f * SHORTS_PER_DEGREE));
+ }
+ 
+ int __cdecl MSG_ReadByte(msg_t *msg)
+@@ -527,7 +527,7 @@ char *__cdecl MSG_ReadStringLine(msg_t *msg)
+ 
+ double __cdecl MSG_ReadAngle16(msg_t *msg)
+ {
+-    return (float)((double)MSG_ReadShort(msg) * 0.0054931640625);
++    return (float)((double)MSG_ReadShort(msg) * DEGREES_PER_SHORT);
+ }
+ 
+ void __cdecl MSG_ReadData(msg_t *msg, uint8_t *data, int len)
+@@ -662,7 +662,7 @@ void __cdecl MSG_SetDefaultUserCmd(playerState_s *ps, usercmd_s *cmd)
+     cmd->weapon = ps->weapon;
+     cmd->offHandIndex = ps->offHandIndex;
+     for (i = 0; i < 2; ++i)
+-        cmd->angles[i] = (uint16_t)(int)((ps->viewangles[i] - ps->delta_angles[i]) * 182.0444488525391);
++        cmd->angles[i] = (uint16_t)(int)((ps->viewangles[i] - ps->delta_angles[i]) * SHORTS_PER_DEGREE);
+     if ((ps->otherFlags & 4) != 0)
+     {
+         if ((ps->eFlags & 8) != 0)
+@@ -814,8 +814,8 @@ void __cdecl MSG_WriteDeltaUsercmdKey(msg_t *msg, int key, const usercmd_s *from
+             MSG_WriteDeltaKeyShort(
+                 msg,
+                 keya,
+-                (int)(from->meleeChargeYaw * 182.0444488525391),
+-                (int)(to->meleeChargeYaw * 182.0444488525391));
++                (int)(from->meleeChargeYaw * SHORTS_PER_DEGREE),
++                (int)(to->meleeChargeYaw * SHORTS_PER_DEGREE));
+             MSG_WriteDeltaKey(msg, keya, from->meleeChargeDist, to->meleeChargeDist, 8u);
+         }
+     }
+@@ -865,8 +865,8 @@ void __cdecl MSG_ReadDeltaUsercmdKey(msg_t *msg, int key, const usercmd_s *from,
+                 to->meleeChargeYaw = (double)MSG_ReadDeltaKeyShort(
+                     msg,
+                     keya,
+-                    (uint16_t)(int)(from->meleeChargeYaw * 182.0444488525391))
+-                    * 0.0054931640625;
++                    (uint16_t)(int)(from->meleeChargeYaw * SHORTS_PER_DEGREE))
++                    * DEGREES_PER_SHORT;
+                 to->meleeChargeDist = MSG_ReadDeltaKey(msg, keya, from->meleeChargeDist, 8u);
+             }
+             if (to->buttons >= (1 << BUTTON_BIT_COUNT))
+diff --git a/src/qcommon/sv_msg_write_mp.cpp b/src/qcommon/sv_msg_write_mp.cpp
+index 9833f6fc..43750a5b 100644
+--- a/src/qcommon/sv_msg_write_mp.cpp
++++ b/src/qcommon/sv_msg_write_mp.cpp
+@@ -1162,7 +1162,7 @@ bool __cdecl MSG_ValuesAreEqual(const SnapshotInfo_s *snapInfo, int bits, const
+     {
+     case -100:
+     case -87:
+-        result = (uint16_t)(int)(*(float *)fromF * 182.0444488525391) == (uint16_t)(int)(*(float *)toF * 182.0444488525391);
++        result = (uint16_t)(int)(*(float *)fromF * SHORTS_PER_DEGREE) == (uint16_t)(int)(*(float *)toF * SHORTS_PER_DEGREE);
+         break;
+     case -95:
+         result = *fromF / 100 == *toF / 100;
+diff --git a/src/server_mp/sv_client_mp.cpp b/src/server_mp/sv_client_mp.cpp
+index 0d706792..10a27896 100644
+--- a/src/server_mp/sv_client_mp.cpp
++++ b/src/server_mp/sv_client_mp.cpp
+@@ -1428,9 +1428,9 @@ void __cdecl SV_UserMove(client_t *cl, msg_t *msg, int delta)
+                         Com_Printf(CON_CHANNEL_SERVER, "---- Corrupt user command data:\n");
+                         Com_Printf(CON_CHANNEL_SERVER, "Command was %i of %i in the packet.\n", i, cmdCount);
+                         Com_Printf(CON_CHANNEL_SERVER, "serverTime = %i\n", cmd->serverTime);
+-                        Com_Printf(CON_CHANNEL_SERVER, "angles[0] = %i(%f)\n", cmd->angles[0], (double)cmd->angles[0] * 0.0054931640625);
+-                        Com_Printf(CON_CHANNEL_SERVER, "angles[1] = %i(%f)\n", cmd->angles[1], (double)cmd->angles[1] * 0.0054931640625);
+-                        Com_Printf(CON_CHANNEL_SERVER, "angles[2] = %i(%f)\n", cmd->angles[2], (double)cmd->angles[2] * 0.0054931640625);
++                        Com_Printf(CON_CHANNEL_SERVER, "angles[0] = %i(%f)\n", cmd->angles[0], (double)cmd->angles[0] * DEGREES_PER_SHORT);
++                        Com_Printf(CON_CHANNEL_SERVER, "angles[1] = %i(%f)\n", cmd->angles[1], (double)cmd->angles[1] * DEGREES_PER_SHORT);
++                        Com_Printf(CON_CHANNEL_SERVER, "angles[2] = %i(%f)\n", cmd->angles[2], (double)cmd->angles[2] * DEGREES_PER_SHORT);
+                         Com_Printf(CON_CHANNEL_SERVER, "forwardmove = %i\n", cmd->forwardmove);
+                         Com_Printf(CON_CHANNEL_SERVER, "rightmove = %i\n", cmd->rightmove);
+                         Com_Printf(CON_CHANNEL_SERVER, "buttons = %i\n", cmd->buttons);
+diff --git a/src/universal/com_math.h b/src/universal/com_math.h
+index 4287708b..785240f4 100644
+--- a/src/universal/com_math.h
++++ b/src/universal/com_math.h
+@@ -197,6 +197,18 @@ float AngleNormalize360(float angle);
+ float AngleNormalize180(float angle);
+ float AngleSubtract(float a1, float a2);
+ 
++// A 16-bit angle splits a turn into 65536 steps. The _F constants are floats,
++// the plain ones doubles, so each use keeps the type it multiplied by.
++// SHORTS_PER_DEGREE is the float factor as the code has always written it in
++// double, not 65536.0 / 360.0.
++inline constexpr float DEGREES_PER_SHORT_F = 360.0f / 65536.0f;
++inline constexpr double DEGREES_PER_SHORT = 360.0 / 65536.0;
++inline constexpr float SHORTS_PER_DEGREE_F = 65536.0f / 360.0f;
++inline constexpr double SHORTS_PER_DEGREE = 182.0444488525391;
++static_assert(DEGREES_PER_SHORT_F == 0.0054931641f && DEGREES_PER_SHORT == 0.0054931640625);
++static_assert(SHORTS_PER_DEGREE_F == 182.04445f && SHORTS_PER_DEGREE_F == (float)182.04445);
++static_assert((float)SHORTS_PER_DEGREE == SHORTS_PER_DEGREE_F);
++
+ void FastSinCos(float radians, float *s, float *c);
+ void MatrixRotationX(float mat[3][3], float degree);
+ void MatrixRotationY(float mat[3][3], float degree);

@@ -5,15 +5,28 @@
 // second the server spends working. The main loop wraps each Com_Frame
 // (Vita_FrameBegin/End) and NET_Sleep reports the time it waited for packets;
 // the rest is work: packet handling, game frames, snapshots, bots.
+//
+// It also times the runs nobody watches (vita_run_plan.h): the period of the
+// figures, the quit timers counted from start-up, from the menu or from the
+// map, and the commands sent after the menu or the map came up.
 
 #include "vita_platform.h"
 #include "vita_mman.h"
+#include "vita_run_plan.h"
 
 #include <universal/q_shared.h>
 #include <qcommon/qcommon.h>
 #include <qcommon/cmd.h>
 #include <qcommon/threads.h>
 #include <universal/physicalmemory.h>
+
+#if defined(KISAK_VITA_MP_CLIENT)
+#include <client/client.h>
+#include <client_mp/client_mp.h>
+#include <ui_mp/ui_mp.h>
+#endif
+
+#include <atomic>
 
 #include <malloc.h>
 #include <stdint.h>
@@ -25,9 +38,9 @@
 
 namespace
 {
-    // One summary line a minute: often enough to see a map load or bots
-    // joining, rare enough to keep console.log short over a long session.
-    constexpr uint64_t kReportInterval = 60u * 1000000u;
+    // One summary line a minute by default (vita_statsEvery): often enough to
+    // see a map load or bots joining, rare enough to keep console.log short
+    // over a long session.
     // One server frame at the default sv_fps 20. A Com_Frame that works
     // longer than this (it runs at most one or two server frames) makes the
     // server fall behind.
@@ -48,9 +61,20 @@ namespace
 
     cmd_function_s s_statsCommand;
 
-    // Unattended runs: quit this many seconds after start-up (0: never).
+    // Runs nobody watches (vita_run_plan.h).
     const dvar_t *vita_quitAfter;
-    bool s_quitAfterDone;
+    const dvar_t *vita_quitAfterMenu;
+    const dvar_t *vita_quitAfterMap;
+    const dvar_t *vita_statsEvery;
+    const dvar_t *vita_atMenu;
+    const dvar_t *vita_atMap;
+    const dvar_t *vita_assertExit;
+    kisak::vita_run::Plan s_plan;
+    bool s_quitDue;
+
+    // Counts the times every figure was asked for. The renderer and the
+    // sound thread print theirs when they see it change.
+    std::atomic<unsigned int> s_statsGeneration;
 
     uint64_t Now()
     {
@@ -105,6 +129,127 @@ namespace
         if (s_started)
             PrintLoad(s_window, Now());
         PrintMemory("now");
+        s_statsGeneration.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    // The load since the last line, memory, and a nudge for the renderer's
+    // and the sound's own lines.
+    void ReportAll(uint64_t now)
+    {
+        PrintLoad(s_window, now);
+        PrintMemory("now");
+        s_window = Window();
+        s_window.start = now;
+        s_statsGeneration.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    // What the run plan waits for. The server alone has no menu; its map is
+    // "up" once it runs one.
+    bool MenuIsUp()
+    {
+#if defined(KISAK_VITA_MP_CLIENT)
+        return cls.uiStarted && CL_GetLocalClientConnectionState(0) == CA_DISCONNECTED && UI_IsFullscreen(0);
+#else
+        return false;
+#endif
+    }
+
+    bool MapIsUp()
+    {
+#if defined(KISAK_VITA_MP_CLIENT)
+        return CL_GetLocalClientConnectionState(0) == CA_ACTIVE;
+#else
+        return com_sv_running && com_sv_running->current.enabled;
+#endif
+    }
+
+    // The script menus the server named, by number: what "openscriptmenu
+    // <name> <response>" and "cmd mr {serverid} <number> <response>" address,
+    // so a run can pick a team and a class without anyone at the screen.
+    void PrintScriptMenus()
+    {
+#if defined(KISAK_VITA_MP_CLIENT)
+        char line[1024];
+        size_t used = 0;
+        line[0] = '\0';
+        for (int index = 0; index < CS_SCRIPT_MENUS_COUNT; ++index)
+        {
+            const char *const name = CL_GetConfigString(0, index + CS_SCRIPT_MENUS);
+            if (!name || !*name)
+                continue;
+            const int wrote = snprintf(line + used, sizeof(line) - used, "%s%d %s", used ? ", " : "", index, name);
+            if (wrote < 0 || size_t(wrote) >= sizeof(line) - used)
+            {
+                line[used] = '\0';
+                break;
+            }
+            used += size_t(wrote);
+        }
+        Com_Printf(CON_CHANNEL_SYSTEM, "Vita: script menus: %s\n", used ? line : "none");
+#endif
+    }
+
+    // A timed command goes to the console as it is, with "{serverid}"
+    // replaced by the server id a menu response has to carry.
+    void SendCommand(const char *command)
+    {
+        char text[kisak::vita_run::kMaxCommandLength + 32];
+        size_t used = 0;
+        static const char kToken[] = "{serverid}";
+        for (const char *from = command; *from && used + 16 < sizeof(text);)
+        {
+            if (!strncmp(from, kToken, sizeof(kToken) - 1))
+            {
+                used += size_t(snprintf(text + used, sizeof(text) - used, "%d", Dvar_GetInt("sv_serverId")));
+                from += sizeof(kToken) - 1;
+            }
+            else
+                text[used++] = *from++;
+        }
+        text[used] = '\0';
+        Com_Printf(CON_CHANNEL_SYSTEM, "Vita: sending \"%s\"\n", text);
+        Cbuf_AddText(0, text);
+        Cbuf_AddText(0, "\n");
+    }
+
+    unsigned int Seconds(const dvar_t *dvar)
+    {
+        return dvar && dvar->current.integer > 0 ? (unsigned int)dvar->current.integer : 0;
+    }
+
+    void RunPlan(uint64_t now)
+    {
+        kisak::vita_run::Settings settings;
+        settings.quitAfter = Seconds(vita_quitAfter);
+        settings.quitAfterMenu = Seconds(vita_quitAfterMenu);
+        settings.quitAfterMap = Seconds(vita_quitAfterMap);
+        settings.statsEvery = Seconds(vita_statsEvery);
+        settings.atMenu = vita_atMenu ? vita_atMenu->current.string : "";
+        settings.atMap = vita_atMap ? vita_atMap->current.string : "";
+        const kisak::vita_run::Step step = s_plan.Frame(now, MenuIsUp(), MapIsUp(), settings);
+
+        if (step.menuCameUp)
+            Com_Printf(CON_CHANNEL_SYSTEM, "Vita: the menu is up\n");
+        if (step.mapCameUp)
+        {
+            Com_Printf(CON_CHANNEL_SYSTEM, "Vita: the map is up\n");
+            PrintScriptMenus();
+        }
+        if (step.commandError[0])
+            Com_PrintError(CON_CHANNEL_SYSTEM, "Vita: %s; none of its commands will be sent\n", step.commandError);
+        for (size_t i = 0; i < step.commandCount; ++i)
+            SendCommand(step.commands[i]);
+        if (step.report)
+        {
+            if (step.quitDvar)
+                Com_Printf(CON_CHANNEL_SYSTEM, "Vita: %s %u reached, last figures:\n", step.quitDvar, step.quitSeconds);
+            ReportAll(now);
+        }
+        if (step.quit)
+        {
+            Com_Printf(CON_CHANNEL_SYSTEM, "Vita: quitting as asked\n");
+            s_quitDue = true;
+        }
     }
 }
 
@@ -113,9 +258,35 @@ void Vita_StatsInit()
     Cmd_AddCommandInternal("vitastats", Stats_f, &s_statsCommand);
     vita_quitAfter = Dvar_RegisterInt("vita_quitAfter", 0, 0, 86400, DVAR_NOFLAG,
         "Quit this many seconds after start-up, for runs nobody watches (0: never)");
+    vita_quitAfterMenu = Dvar_RegisterInt("vita_quitAfterMenu", 0, 0, 86400, DVAR_NOFLAG,
+        "Quit this many seconds after the main menu first showed (0: never)");
+    vita_quitAfterMap = Dvar_RegisterInt("vita_quitAfterMap", 0, 0, 86400, DVAR_NOFLAG,
+        "Quit this many seconds after the map was first in play (0: never)");
+    vita_statsEvery = Dvar_RegisterInt("vita_statsEvery", 60, 1, 86400, DVAR_NOFLAG,
+        "Seconds between the load, memory and sound lines in the log");
+    vita_atMenu = Dvar_RegisterString("vita_atMenu", "", DVAR_NOFLAG,
+        "Console commands to send after the main menu first showed: \"<seconds> <command> | <seconds> <command>\"");
+    vita_atMap = Dvar_RegisterString("vita_atMap", "", DVAR_NOFLAG,
+        "Console commands to send after the map was first in play: \"<seconds> <command> | <seconds> <command>\"; "
+        "{serverid} stands for the server id");
+    vita_assertExit = Dvar_RegisterBool("vita_assertExit", Vita_AssertExits(), DVAR_NOFLAG,
+        "A failed assertion or an uncaught exception ends the process with exit code 1 and no core dump "
+        "(for emulator runs)");
+    // The log does not hold the command line (it may carry a key), so a run's
+    // report could not show what the start was asked to do.
+    Com_Printf(CON_CHANNEL_SYSTEM,
+        "Vita: run switches: vita_quitAfter %u, vita_quitAfterMenu %u, vita_quitAfterMap %u, vita_statsEvery %u, "
+        "vita_assertExit %d\n",
+        Seconds(vita_quitAfter), Seconds(vita_quitAfterMenu), Seconds(vita_quitAfterMap), Seconds(vita_statsEvery),
+        vita_assertExit && vita_assertExit->current.enabled ? 1 : 0);
+    if (vita_atMenu && vita_atMenu->current.string[0])
+        Com_Printf(CON_CHANNEL_SYSTEM, "Vita: vita_atMenu \"%s\"\n", vita_atMenu->current.string);
+    if (vita_atMap && vita_atMap->current.string[0])
+        Com_Printf(CON_CHANNEL_SYSTEM, "Vita: vita_atMap \"%s\"\n", vita_atMap->current.string);
     PrintMemory("after start-up");
     s_window = Window();
     s_window.start = Now();
+    s_plan.Start(0, s_window.start);
     s_started = true;
 }
 
@@ -138,25 +309,22 @@ void Vita_FrameEnd()
     if (work > kFrameBudget)
         ++s_window.framesOverBudget;
 
-    if (now - s_window.start >= kReportInterval)
-    {
-        PrintLoad(s_window, now);
-        PrintMemory("now");
-        s_window = Window();
-        s_window.start = now;
-    }
+    if (vita_assertExit)
+        Vita_SetAssertExits(vita_assertExit->current.enabled);
+    RunPlan(now);
 }
 
 bool Vita_QuitAfterDue()
 {
-    if (!s_started || s_quitAfterDone || !vita_quitAfter || vita_quitAfter->current.integer <= 0)
-        return false;
-    if (Now() < (uint64_t)vita_quitAfter->current.integer * 1000000u)
-        return false;
     // Once: quitting takes a few frames.
-    s_quitAfterDone = true;
-    Com_Printf(CON_CHANNEL_SYSTEM, "Vita: vita_quitAfter %d reached, quitting\n", vita_quitAfter->current.integer);
-    return true;
+    const bool due = s_quitDue;
+    s_quitDue = false;
+    return due;
+}
+
+unsigned int Vita_StatsGeneration()
+{
+    return s_statsGeneration.load(std::memory_order_relaxed);
 }
 
 void Vita_AddIdleTime(uint64_t microseconds)
@@ -174,4 +342,7 @@ void Vita_LogMemoryAtError()
     char line[256];
     FormatMemory(line, sizeof(line), "at the error");
     Vita_ConsoleWrite(line, strlen(line));
+    // An emulator echoes this; it survives when the file's tail does not.
+    fputs(line, stdout);
+    fflush(stdout);
 }

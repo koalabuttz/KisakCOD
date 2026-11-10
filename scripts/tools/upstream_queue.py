@@ -10,7 +10,8 @@ local checkout of upstream.
       Check every patch's message and paths against the queue rules.
   upstream_queue.py check --upstream DIR
       lint, then check that DIR is at the pinned base commit, that every patch
-      applies to it alone, and that the whole queue applies in order.
+      applies to it alone (or on top of the patches DEPENDS names for it), and
+      that the whole queue applies in order.
   upstream_queue.py apply --upstream DIR
       Apply the whole queue to DIR in order and leave it applied (for a build).
 """
@@ -62,6 +63,49 @@ def read_base(queue):
     return base[0]
 
 
+def read_depends(queue, patches):
+    """Return {patch number: [numbers it is made on top of]} from DEPENDS.
+
+    Most patches are made on the base alone and are not listed. A line
+    "0015: 0014" says 0015 was made on top of 0014 and can only be offered
+    once 0014 is in.
+    """
+    path = queue / 'DEPENDS'
+    depends = {}
+    if not path.exists():
+        return depends
+    known = [patch.name[:4] for patch in patches]
+    for line in path.read_text().splitlines():
+        line = line.split('#', 1)[0].strip()
+        if not line:
+            continue
+        match = re.fullmatch(r'(\d{4}):((?: \d{4})+)', line)
+        if not match:
+            raise QueueError('DEPENDS: cannot read %r' % line)
+        number, needs = match.group(1), match.group(2).split()
+        if number not in known:
+            raise QueueError('DEPENDS: there is no patch %s' % number)
+        if number in depends:
+            raise QueueError('DEPENDS: %s is listed twice' % number)
+        for need in needs:
+            if need not in known or need >= number:
+                raise QueueError('DEPENDS: %s can only be made on an earlier patch, not %s' % (number, need))
+        depends[number] = needs
+    return depends
+
+
+def needed_before(number, depends):
+    """Every patch NUMBER is made on top of, directly or not, in queue order."""
+    found = set()
+    todo = list(depends.get(number, ()))
+    while todo:
+        need = todo.pop()
+        if need not in found:
+            found.add(need)
+            todo.extend(depends.get(need, ()))
+    return sorted(found)
+
+
 def split_patch(text):
     """Return (subject, body lines, touched paths) of one format-patch file."""
     message = email.message_from_string(text, policy=email.policy.default)
@@ -111,6 +155,7 @@ def lint(queue):
             print('%s: %s' % (patch.name, problem))
     if failed:
         raise QueueError('the queue breaks its rules')
+    read_depends(queue, patches)
     return patches
 
 
@@ -135,19 +180,35 @@ def apply_all(patches, upstream):
             raise QueueError('%s does not apply after the patches before it:\n%s' % (patch.name, result.stdout))
 
 
+def reset(upstream):
+    git(upstream, 'reset', '--hard', '-q', 'HEAD')
+    git(upstream, 'clean', '-fdq')
+
+
 def check(queue, upstream):
     patches = lint(queue)
+    depends = read_depends(queue, patches)
+    by_number = {patch.name[:4]: patch for patch in patches}
     require_clean_base(queue, upstream)
+    stacked = 0
     for patch in patches:
-        result = git(upstream, 'apply', '--check', '--whitespace=nowarn', str(patch), check=False)
+        before = needed_before(patch.name[:4], depends)
+        try:
+            apply_all([by_number[number] for number in before], upstream)
+            result = git(upstream, 'apply', '--check', '--whitespace=nowarn', str(patch), check=False)
+        finally:
+            if before:
+                reset(upstream)
         if result.returncode:
-            raise QueueError('%s does not apply to the base alone:\n%s' % (patch.name, result.stdout))
+            on = 'the base plus %s' % ', '.join(before) if before else 'the base alone'
+            raise QueueError('%s does not apply to %s:\n%s' % (patch.name, on, result.stdout))
+        stacked += bool(before)
     try:
         apply_all(patches, upstream)
     finally:
-        git(upstream, 'reset', '--hard', '-q', 'HEAD')
-        git(upstream, 'clean', '-fdq')
-    print('%d patches: rules kept, each applies to %s alone, all apply in order' % (len(patches), read_base(queue)[:7]))
+        reset(upstream)
+    print('%d patches: rules kept, %d apply to %s alone, %d on the patches DEPENDS names, all apply in order'
+          % (len(patches), len(patches) - stacked, read_base(queue)[:7], stacked))
 
 
 def main(argv=None):

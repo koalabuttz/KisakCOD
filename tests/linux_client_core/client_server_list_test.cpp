@@ -21,6 +21,8 @@
 //   * A server list is accepted only from the master that was asked, only soon
 //     after asking, and addresses a master must not send are dropped.
 //   * A LAN server's infoResponse is listed; one for another protocol is not.
+//   * Only an answer to the last LAN scan is listed: the reply has to echo that
+//     scan's random token and arrive soon after it.
 //   * A remote game server cannot change the master settings.
 #include <client_mp/client_mp.h>
 #include <client_mp/cl_master.h>
@@ -299,32 +301,56 @@ int main()
     check(cls.numglobalservers == 3, "late reply: a list long after the request is ignored");
 
     // ---- LAN scan ------------------------------------------------------------
-    cls.pingUpdateSource = 1;
-    cls.numlocalservers = 5;
-    command(runtime, "localservers\n");
-    check(cls.numlocalservers == 0 && cls.pingUpdateSource == 0, "localservers: the local list is cleared for a new scan");
-
-    lanServer.send(clientAddress, oob("infoResponse\n\\protocol\\6\\hostname\\Other game\\mapname\\mp_crash"));
-    check(enginePacket(from, message), "LAN reply, other protocol: reaches the engine socket");
-    MSG_BeginReading(&message);
-    MSG_ReadLong(&message);
-    MSG_ReadStringLine(&message);
-    CL_ServerInfoPacket(from, &message, Sys_Milliseconds());
-    check(cls.numlocalservers == 0, "LAN reply, other protocol: not listed");
-
-    for (int repeat = 0; repeat < 2; ++repeat)
-    {
-        lanServer.send(clientAddress,
-            oob("infoResponse\n\\protocol\\1\\hostname\\KisakCOD test\\mapname\\mp_crash\\sv_maxclients\\24\\gametype\\war"));
-        check(enginePacket(from, message), "LAN reply: reaches the engine socket");
+    // Delivers one infoResponse from `sender` to the production handler.
+    const auto lanReply = [&](Udp &sender, const std::string &info, const char *name) {
+        sender.send(clientAddress, oob("infoResponse\n" + info));
+        check(enginePacket(from, message), name);
         MSG_BeginReading(&message);
         MSG_ReadLong(&message);
         MSG_ReadStringLine(&message);
         CL_ServerInfoPacket(from, &message, Sys_Milliseconds());
-    }
+    };
+    const std::string serverInfo = "\\hostname\\KisakCOD test\\mapname\\mp_crash\\sv_maxclients\\24\\gametype\\war";
+
+    // The browser starts on Local (source 0) before anyone has scanned.
+    cls.pingUpdateSource = 0;
+    cls.numlocalservers = 0;
+    check(!cl_lanScan.asked, "no scan yet: no token exists");
+    lanReply(rogue, "\\protocol\\1\\challenge\\xxx" + serverInfo, "no scan yet: an unasked reply reaches the engine socket");
+    lanReply(rogue, "\\protocol\\1\\challenge\\" + serverInfo, "no scan yet: a reply with an empty challenge reaches the engine socket");
+    check(cls.numlocalservers == 0 && !cls.localServers[0].adr.port, "no scan yet: nobody is listed");
+
+    cls.pingUpdateSource = 1;
+    cls.numlocalservers = 5;
+    command(runtime, "localservers\n");
+    check(cls.numlocalservers == 0 && cls.pingUpdateSource == 0, "localservers: the local list is cleared for a new scan");
+    const std::string token = cl_lanScan.token;
+    check(cl_lanScan.asked && token.size() == 16 && token.find_first_not_of("0123456789abcdef") == std::string::npos,
+        "localservers: the scan has a 16 digit token");
+    command(runtime, "localservers\n");
+    check(token != cl_lanScan.token, "localservers: each scan has its own token");
+    const std::string challenge = std::string("\\challenge\\") + cl_lanScan.token;
+
+    lanReply(lanServer, "\\protocol\\6" + challenge + serverInfo, "LAN reply, other protocol: reaches the engine socket");
+    check(cls.numlocalservers == 0, "LAN reply, other protocol: not listed");
+
+    lanReply(rogue, "\\protocol\\1" + serverInfo, "unasked reply, no challenge: reaches the engine socket");
+    lanReply(rogue, "\\protocol\\1\\challenge\\xxx" + serverInfo, "unasked reply, retail's fixed challenge: reaches the engine socket");
+    lanReply(rogue, "\\protocol\\1\\challenge\\" + token + serverInfo, "unasked reply, the previous scan's token: reaches the engine socket");
+    lanReply(rogue, "\\protocol\\1" + challenge + "0" + serverInfo, "unasked reply, token with a digit added: reaches the engine socket");
+    lanReply(rogue, "\\protocol\\1" + challenge.substr(0, challenge.size() - 1) + serverInfo,
+        "unasked reply, token cut short: reaches the engine socket");
+    check(cls.numlocalservers == 0 && !cls.localServers[0].adr.port, "unasked replies without this scan's token: nobody is listed");
+
+    for (int repeat = 0; repeat < 2; ++repeat)
+        lanReply(lanServer, "\\protocol\\1" + challenge + serverInfo, "LAN reply: reaches the engine socket");
     check(cls.numlocalservers == 1 && cls.localServers[0].adr.type == NA_IP
         && ntohs(cls.localServers[0].adr.port) == lanServer.port() && cls.localServers[0].adr.ip[0] == 127,
         "LAN reply: the server is listed once, at the address it answered from");
+
+    cl_lanScan.askedTime = Sys_Milliseconds() - (LAN_SCAN_RESPONSE_WINDOW_MS + 1000);
+    lanReply(rogue, "\\protocol\\1" + challenge + serverInfo, "late reply with the token: reaches the engine socket");
+    check(cls.numlocalservers == 1, "late reply with the token: not listed long after the scan");
 
     // ---- a game server cannot choose the master ------------------------------
     clientUIActives[0].connectionState = CA_ACTIVE;

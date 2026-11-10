@@ -16,21 +16,31 @@
 //     IN_MouseMove does on Windows. Its answer says who has the mouse, which
 //     is how the next reading is mapped;
 //   * IN_SetCursorPos moves the cursor the mapping keeps.
-// The Vita's controls are engine keys of their own (AUX1 to AUX16 and the
-// keypad arrows), so `bind` and the controls menu work on them. A profile has
-// no bindings for them at first; the default layout is set once, while none of
-// the AUX keys is bound to anything (vita_defaultBinds, vita_binddefaults).
+// The Vita's controls are engine keys of their own (AUX1 to AUX16, the keypad
+// arrows and the keypad's 5), so `bind` and the controls menu work on them. A
+// profile has no bindings for them at first; the default layout is set once,
+// while none of the AUX keys is bound to anything (vita_defaultBinds,
+// vita_binddefaults). A profile that got an earlier default layout is given
+// the controls that came since, once (vita_layout). The controls menu and the
+// game's hints show the controls by name, "Square" for AUX3 (NameControls).
 //
 // START + SELECT still quits, from the main loop (Vita_QuitRequested): both
 // readers peek at the pad, so neither takes the other's samples.
 //
-// Not here yet: the on-screen keyboard for text fields. Until it is, the one
-// field a new install cannot get past, the new profile's name, is filled in
-// (OfferProfileName).
+// Text: when a menu's text field is being edited or the chat line is open, the
+// system's on-screen keyboard comes up (vita_keyboard.h), and what was typed
+// goes to the game as SE_CHAR events and an Enter, the way WM_CHAR does on
+// Windows. When it opens and what the game gets is input/vita_text_entry.cpp,
+// which the host tests run too. `vita_typecommand` opens it for a console
+// command. If the system refuses the keyboard, the one field a new install
+// cannot get past, the new profile's name, is filled in (OfferProfileName).
 
 #include "vita_client.h"
 
+#include "vita_keyboard.h"
+
 #include "input/vita_input_map.h"
+#include "input/vita_text_entry.h"
 
 #include <linux/client/mp_client_input.h>
 
@@ -43,6 +53,7 @@
 #include <client_mp/client_mp.h>
 #include <sound/snd_public.h>
 #include <ui/keycodes.h>
+#include <ui/ui_input_core.h>
 #include <ui/ui_shared.h>
 #include <win32/win_input.h>
 #include <win32/win_local.h>
@@ -54,6 +65,7 @@
 #include <cstring>
 
 namespace vi = kisak::vita_input;
+namespace vt = kisak::vita_text;
 
 // The mapping names the engine's keys by number, to stay free of the engine.
 constexpr bool SameKey(int mapped, int engine)
@@ -65,10 +77,17 @@ static_assert(SameKey(vi::kKeyUpArrow, K_UPARROW) && SameKey(vi::kKeyDownArrow, 
 static_assert(SameKey(vi::kKeyLeftArrow, K_LEFTARROW) && SameKey(vi::kKeyRightArrow, K_RIGHTARROW));
 static_assert(SameKey(vi::kKeyKpUpArrow, K_KP_UPARROW) && SameKey(vi::kKeyKpDownArrow, K_KP_DOWNARROW));
 static_assert(SameKey(vi::kKeyKpLeftArrow, K_KP_LEFTARROW) && SameKey(vi::kKeyKpRightArrow, K_KP_RIGHTARROW));
+static_assert(SameKey(vi::kKeyKp5, K_KP_5));
 static_assert(SameKey(vi::kKeyMouse1, K_MOUSE1) && SameKey(vi::kKeyWheelDown, K_MWHEELDOWN));
 static_assert(SameKey(vi::kKeyWheelUp, K_MWHEELUP) && SameKey(vi::kKeyAux1, K_AUX1));
 static_assert(SameKey(vi::kKeyAux1 + 15, K_AUX16));
 static_assert(SameKey(vi::kMaxFrontTouches, 6) && SameKey(vi::kMaxRearTouches, 4) && SCE_TOUCH_MAX_REPORT >= 6);
+static_assert(SameKey(vt::kKeyEnter, K_ENTER) && SameKey(vt::kKeyEscape, K_ESCAPE));
+static_assert(SameKey(vt::kMaxText, kVitaKeyboardMaxText));
+
+// The names the engine shows for keys (cl_keys.cpp); it has no header for
+// them. The names `bind` and the config files use are another table.
+extern keyname_t keynames_localized[96];
 
 namespace {
 
@@ -76,8 +95,14 @@ namespace {
 // costs system calls. Win_GetEvent asks several times a frame.
 constexpr uint32_t kPollEveryMs = 4;
 constexpr uint32_t kHousekeepingEveryMs = 1000;
-// The name the "create profile" box offers while no keyboard can type one.
+// The name the "create profile" box offers when no keyboard can type one.
 constexpr char kProfileName[] = "Vita";
+// The longest chat line the keyboard takes.
+constexpr int kChatLength = 120;
+constexpr uint32_t kAnswerAfterMs = 500; // vita_keyboardAnswer: how long its keyboard stays "up"
+// The menus' text field types (Item_IsTextField) that take digits only.
+constexpr int kItemNumericField = 9;
+constexpr int kItemDecimalField = 17;
 
 struct Button
 {
@@ -108,8 +133,13 @@ const dvar_t *vita_cursorSpeed;
 const dvar_t *vita_frontTouch;
 const dvar_t *vita_rearTouch;
 const dvar_t *vita_defaultBinds;
+const dvar_t *vita_layout;
+const dvar_t *vita_buttonNames;
 const dvar_t *vita_inputDebug;
+const dvar_t *vita_keyboard;
+const dvar_t *vita_keyboardAnswer;
 cmd_function_s s_bindDefaultsCommand;
+cmd_function_s s_typeCommandCommand;
 bool s_commandAdded;
 
 qboolean in_appactive;
@@ -125,6 +155,14 @@ Panel s_front = {0, 0, 1919, 1087, false};
 Panel s_rear = {0, 108, 1919, 889, false};
 vi::Mapper s_mapper;
 vi::Settings s_settings;
+vt::Entry s_text;
+bool s_keyboardRefused; // the system did not open the keyboard
+bool s_restOnce;        // the keyboard closed: the next reading still does nothing
+// vita_keyboardAnswer stands in for the keyboard that was asked for.
+bool s_answering;
+bool s_answerDropped;
+uint32_t s_answerSinceMs;
+int s_answerLength;
 // Fingers seen at the last reading and when each landed, for vita_inputDebug.
 uint8_t s_debugIds[2][SCE_TOUCH_MAX_REPORT];
 uint32_t s_debugSince[2][SCE_TOUCH_MAX_REPORT];
@@ -276,6 +314,15 @@ void Poll()
     ReadPanel(SCE_TOUCH_PORT_BACK, s_rear, now, state.rear, &state.rearCount, vi::kMaxRearTouches);
 
     s_eventTime = now;
+    // The on-screen keyboard has the controls while it is up. The touch or
+    // the button that closed it is still down in the reading after: that one
+    // does nothing either.
+    if (s_text.KeyboardUp() || s_restOnce)
+    {
+        s_restOnce = false;
+        s_mapper.Rest(state, now, s_keys);
+        return;
+    }
     s_mapper.Update(state, now, !s_look, Display_KeyBindPending() != 0, s_settings, s_keys);
 }
 
@@ -292,8 +339,9 @@ bool Unbound(int key)
 }
 
 // Gives the Vita's controls their default actions: all of them, or only
-// those bound to nothing.
-int BindDefaults(bool all)
+// those bound to nothing, and of those only the ones that came after the
+// default layout `since`.
+int BindDefaults(bool all, int since = 0)
 {
     int bound = 0;
     for (int i = 0; i < vi::kControlCount; ++i)
@@ -301,7 +349,7 @@ int BindDefaults(bool all)
         const vi::Control control = static_cast<vi::Control>(i);
         const char *const command = vi::DefaultBinding(control);
         const int key = vi::GameKey(control);
-        if (!command || (!all && !Unbound(key)))
+        if (!command || vi::LayoutOf(control) <= since || (!all && !Unbound(key)))
             continue;
         char binding[64];
         snprintf(binding, sizeof(binding), "%s", command);
@@ -311,44 +359,288 @@ int BindDefaults(bool all)
     return bound;
 }
 
+void SetLayout(int layout)
+{
+    if (vita_layout && vita_layout->current.integer != layout)
+        Dvar_SetInt(vita_layout, layout);
+}
+
 void BindDefaults_f()
 {
     Com_Printf(CON_CHANNEL_SYSTEM, "vita input: %d controls set to the default layout\n", BindDefaults(true));
+    SetLayout(vi::kCurrentLayout);
 }
 
 // A profile made on a PC, a new profile and the controls menu's "reset" all
 // start from `unbindall` and the PC's keys, which leave every AUX key bound to
 // nothing: the Vita's layout is set then. One control left unbound on purpose
 // stays so, as long as another AUX key has a binding.
+//
+// A profile that has bindings got them from the default layout its vita_layout
+// names, the first one if its config does not say (the engine sets every dvar
+// back to its default before it reads another profile's config). The controls
+// that came with later layouts get their default actions there once, where
+// they are bound to nothing, and the profile is marked as having today's.
 void CheckDefaultBinds()
 {
     if (!vita_defaultBinds || !vita_defaultBinds->current.enabled || Display_KeyBindPending())
         return;
+    bool anyBound = false;
     for (int key = K_AUX1; key <= K_AUX16; ++key)
+        anyBound = anyBound || !Unbound(key);
+    if (!anyBound)
     {
-        if (!Unbound(key))
-            return;
+        const int bound = BindDefaults(false);
+        SetLayout(vi::kCurrentLayout);
+        Com_Printf(CON_CHANNEL_SYSTEM,
+                   "vita input: the Vita's controls had no bindings; %d set to the default layout (docs/vita-client.md)\n",
+                   bound);
+        return;
     }
-    const int bound = BindDefaults(false);
+    const int layout = vita_layout ? vita_layout->current.integer : vi::kCurrentLayout;
+    if (layout >= vi::kCurrentLayout)
+        return;
+    const int bound = BindDefaults(false, layout);
+    SetLayout(vi::kCurrentLayout);
     Com_Printf(CON_CHANNEL_SYSTEM,
-               "vita input: the Vita's controls had no bindings; %d set to the default layout (docs/vita-client.md)\n",
-               bound);
+               "vita input: the profile's controls were default layout %d; %d newer controls set to layout %d's actions\n",
+               layout, bound, vi::kCurrentLayout);
 }
 
-// A new install opens on "create profile", whose name field needs a keyboard
-// the Vita client does not have yet. The menu's OK takes the name from
-// ui_playerProfileNameNew, so while there is no profile and the field is
-// empty, a name is put there to accept. Goes when the on-screen keyboard
-// comes.
+// The engine's names for the Vita's keys are the PC's: "AUX3", and from the
+// game's own texts something like it. The controls menu and the hints on the
+// screen ("Press ... to use") take a key's name from keynames_localized and
+// show it as it is when the game's texts have no entry under it, so the
+// controls' own names go there: "Square". The table `bind` and the configs use
+// is not touched, so a profile reads the same with and without.
+void NameControls()
+{
+    static const char *s_engineNames[vi::kControlCount];
+    const bool named = vita_buttonNames && vita_buttonNames->current.enabled;
+    for (int i = 0; i < vi::kControlCount; ++i)
+    {
+        const vi::Control control = static_cast<vi::Control>(i);
+        const int key = vi::GameKey(control);
+        if (key == K_ESCAPE)
+            continue; // Start is the engine's Escape, under that name
+        for (keyname_t *entry = keynames_localized; entry->name; ++entry)
+        {
+            if (entry->keynum != key)
+                continue;
+            if (!s_engineNames[i])
+                s_engineNames[i] = entry->name;
+            entry->name = named ? vi::ControlName(control) : s_engineNames[i];
+            break;
+        }
+    }
+}
+
+bool KeyboardWanted()
+{
+    return vita_keyboard && vita_keyboard->current.enabled && !s_keyboardRefused;
+}
+
+// A run with nobody to type: vita_keyboardAnswer's text is what every keyboard
+// asked for hands back, and no keyboard is shown.
+bool AnswerSet()
+{
+    return vita_keyboardAnswer && *vita_keyboardAnswer->current.string;
+}
+
+// What the game waits for typed text in.
+vt::Waiting TextWaiting()
+{
+    if (!KeyboardWanted())
+        return {};
+    if (Key_IsCatcherActive(0, KEYCATCH_MESSAGE))
+        return {vt::Target::Chat, &playerKeys[0].chatField};
+    if (Key_IsCatcherActive(0, KEYCATCH_UI) && g_editingField && g_editItem && g_editItem->dvar
+        && Item_IsTextField(g_editItem) && Item_GetEditFieldDef(g_editItem))
+        return {vt::Target::MenuField, g_editItem};
+    return {};
+}
+
+// The text entry's side of the engine: the keyboard is asked for with what the
+// field holds, and what comes back goes into the event queue.
+class EngineText final : public vt::Sink
+{
+public:
+    bool OpenKeyboard(vt::Target target) override
+    {
+        VitaKeyboardRequest request;
+        memset(&request, 0, sizeof(request));
+        request.maxLength = vt::kMaxText;
+        request.kind = VitaKeyboardKind::Text;
+        const char *title = "";
+        const char *initial = "";
+        switch (target)
+        {
+        case vt::Target::MenuField:
+        {
+            // TextWaiting saw the field this frame.
+            const editFieldDef_s *const edit = Item_GetEditFieldDef(g_editItem);
+            if (edit && edit->maxChars > 0 && edit->maxChars < vt::kMaxText)
+                request.maxLength = edit->maxChars;
+            if (g_editItem->type == kItemNumericField)
+                request.kind = VitaKeyboardKind::Number;
+            else if (g_editItem->type == kItemDecimalField)
+                request.kind = VitaKeyboardKind::Decimal;
+            initial = Dvar_GetVariantString(g_editItem->dvar);
+            break;
+        }
+        case vt::Target::Chat:
+            title = playerKeys[0].chat_team ? "Say to team" : "Say";
+            request.maxLength = kChatLength;
+            break;
+        case vt::Target::Console:
+            title = "Command";
+            break;
+        default:
+            return false;
+        }
+        vt::ToKeyboard(title, request.title, kVitaKeyboardMaxTitle + 1);
+        vt::ToKeyboard(initial, request.initial, kVitaKeyboardMaxText + 1);
+        const bool answered = AnswerSet();
+        if (answered)
+        {
+            s_answering = true;
+            s_answerDropped = false;
+            s_answerSinceMs = s_eventTime;
+            s_answerLength = request.maxLength;
+        }
+        else if (!Vita_AskKeyboard(request))
+        {
+            return false;
+        }
+        // Nothing stays held under the keyboard.
+        ReleaseAll();
+        if (Debugging() || answered)
+            Com_Printf(CON_CHANNEL_SYSTEM, "vita input: keyboard asked for (%s, %d characters at most)%s\n",
+                       target == vt::Target::MenuField ? "a menu field" : target == vt::Target::Chat ? "chat" : "a command",
+                       request.maxLength, answered ? "; vita_keyboardAnswer answers, none is shown" : "");
+        return true;
+    }
+
+    void ClearField(vt::Target target) override
+    {
+        if (target == vt::Target::Chat)
+        {
+            Field_Clear(&playerKeys[0].chatField);
+        }
+        else if (target == vt::Target::MenuField && g_editItem && g_editItem->dvar)
+        {
+            // As backspace over the whole field does on a PC.
+            Dvar_SetFromStringByName(g_editItem->dvar, "");
+            g_editItem->cursorPos[0] = 0;
+            if (Item_IsTextField(g_editItem))
+            {
+                if (editFieldDef_s *const edit = Item_GetEditFieldDef(g_editItem))
+                    edit->paintOffset = 0;
+            }
+        }
+    }
+
+    void Char(int character) override
+    {
+        Sys_QueEvent(s_eventTime, SE_CHAR, character, 0, 0, nullptr);
+    }
+
+    void Key(int key) override
+    {
+        Sys_QueEvent(s_eventTime, SE_KEY, key, 1, 0, nullptr);
+        Sys_QueEvent(s_eventTime, SE_KEY, key, 0, 0, nullptr);
+    }
+
+    void Command(const char *text) override
+    {
+        Com_Printf(CON_CHANNEL_SYSTEM, "vita input: typed command: %s\n", text);
+        Cbuf_AddText(0, text);
+        Cbuf_AddText(0, "\n");
+    }
+};
+EngineText s_engineText;
+
+// The keyboard's result: the system's, or after half a second
+// vita_keyboardAnswer's, cut to the length the field takes as the keyboard
+// would have cut it.
+VitaKeyboardResult TakeKeyboard(uint16_t *typed, uint32_t now)
+{
+    if (!s_answering)
+        return Vita_TakeKeyboard(typed);
+    if (!s_answerDropped && now - s_answerSinceMs < kAnswerAfterMs)
+        return VitaKeyboardResult::Waiting;
+    s_answering = false;
+    if (s_answerDropped || !AnswerSet())
+        return VitaKeyboardResult::Cancelled;
+    vt::ToKeyboard(vita_keyboardAnswer->current.string, typed, kVitaKeyboardMaxText + 1);
+    if (s_answerLength >= 0 && s_answerLength < kVitaKeyboardMaxText)
+        typed[s_answerLength] = 0;
+    return VitaKeyboardResult::Entered;
+}
+
+// Once a frame: the keyboard's result, if it closed, and what the game waits
+// for now.
+void TextFrame(uint32_t now)
+{
+    s_eventTime = now;
+    if (s_text.KeyboardUp())
+    {
+        uint16_t typed[kVitaKeyboardMaxText + 1];
+        const bool answered = s_answering;
+        const VitaKeyboardResult result = TakeKeyboard(typed, now);
+        if (result == VitaKeyboardResult::Waiting)
+        {
+            // The menu closed under the keyboard, or the match ended: the
+            // keyboard goes too. What it held is dropped when it has closed.
+            if (s_text.Orphaned(TextWaiting()))
+            {
+                s_answerDropped = s_answering;
+                if (!s_answering)
+                    Vita_AbortKeyboard();
+            }
+            return;
+        }
+        s_restOnce = true;
+        if (result == VitaKeyboardResult::Failed)
+        {
+            s_keyboardRefused = true;
+            Com_Printf(CON_CHANNEL_SYSTEM, "vita input: no on-screen keyboard; text fields stay as they are\n");
+        }
+        if (Debugging() || answered)
+            Com_Printf(CON_CHANNEL_SYSTEM, "vita input: keyboard closed (%s)\n",
+                       result == VitaKeyboardResult::Entered ? "entered" : "not entered");
+        s_text.KeyboardClosed(result == VitaKeyboardResult::Entered, typed);
+    }
+    s_text.Frame(TextWaiting(), s_engineText);
+    // Without a keyboard nothing can type into the chat line, and it would
+    // keep the keys: it is closed again.
+    if (!KeyboardWanted() && Key_IsCatcherActive(0, KEYCATCH_MESSAGE))
+        s_engineText.Key(K_ESCAPE);
+}
+
+void TypeCommand_f()
+{
+    if (!KeyboardWanted())
+    {
+        Com_Printf(CON_CHANNEL_SYSTEM, "vita input: the on-screen keyboard is off (vita_keyboard) or was refused\n");
+        return;
+    }
+    s_text.AskForCommand();
+}
+
+// A new install opens on "create profile", whose name field needs a keyboard.
+// The menu's OK takes the name from ui_playerProfileNameNew, so when the
+// on-screen keyboard is off or the system refused it, and there is no profile
+// and the field is empty, a name is put there to accept.
 void OfferProfileName()
 {
-    if (Com_HasPlayerProfile())
+    if (KeyboardWanted() || Com_HasPlayerProfile())
         return;
     const dvar_t *const name = Dvar_FindVar("ui_playerProfileNameNew");
     if (!name || name->type != DVAR_TYPE_STRING || *name->current.string)
         return;
     Dvar_SetString(name, kProfileName);
-    Com_Printf(CON_CHANNEL_SYSTEM, "vita input: no player profile and no keyboard yet; the new profile's name is offered as %s\n",
+    Com_Printf(CON_CHANNEL_SYSTEM, "vita input: no player profile and no keyboard; the new profile's name is offered as %s\n",
                kProfileName);
 }
 
@@ -360,6 +652,11 @@ void Housekeeping(uint32_t now)
     s_lastHousekeepingMs = now;
     CheckDefaultBinds();
     OfferProfileName();
+    if (vita_buttonNames && vita_buttonNames->modified)
+    {
+        Dvar_ClearModified(const_cast<dvar_s *>(vita_buttonNames));
+        NameControls();
+    }
 }
 
 } // namespace
@@ -416,16 +713,32 @@ void IN_Init()
     vita_cursorSpeed = Dvar_RegisterFloat("vita_cursorSpeed", 700.0f, 100.0f, 4000.0f, DVAR_ARCHIVE,
                                           "Left stick at full deflection in a menu, in pixels a second");
     vita_frontTouch = Dvar_RegisterBool("vita_frontTouch", 1, DVAR_ARCHIVE,
-                                        "The screen's left and right thirds are keys in the game (AUX13 to AUX15)");
+                                        "The screen's left and right thirds and the top of its middle are keys in "
+                                        "the game (AUX13 to AUX15 and KP_5)");
     vita_rearTouch = Dvar_RegisterBool("vita_rearTouch", 1, DVAR_ARCHIVE,
                                        "A tap on the rear touch pad's left or right half is a key in the game "
                                        "(AUX8 and AUX16)");
     vita_defaultBinds = Dvar_RegisterBool("vita_defaultBinds", 1, DVAR_ARCHIVE,
                                           "Set the default layout while no AUX key has a binding");
+    vita_layout = Dvar_RegisterInt("vita_layout", vi::kFirstLayout, vi::kFirstLayout, vi::kCurrentLayout, DVAR_ARCHIVE,
+                                   "The default layout this profile's controls were last given; controls that "
+                                   "came with a later one get their default actions once");
+    vita_buttonNames = Dvar_RegisterBool("vita_buttonNames", 1, DVAR_ARCHIVE,
+                                         "The controls menu and the hints name the Vita's controls (Square), not "
+                                         "the engine's keys (AUX3)");
+    Dvar_ClearModified(const_cast<dvar_s *>(vita_buttonNames));
+    NameControls();
     vita_inputDebug = Dvar_RegisterBool("vita_inputDebug", 0, 0, "Log every key the controls send and every touch");
+    vita_keyboard = Dvar_RegisterBool("vita_keyboard", 1, DVAR_ARCHIVE,
+                                      "Open the on-screen keyboard when a menu's text field or the chat line waits "
+                                      "for text");
+    vita_keyboardAnswer = Dvar_RegisterString("vita_keyboardAnswer", "", DVAR_NOFLAG,
+                                              "For a run with nobody to type: when not empty, no keyboard is shown "
+                                              "and every keyboard asked for is answered with this text");
     if (!s_commandAdded)
     {
         Cmd_AddCommandInternal("vita_binddefaults", BindDefaults_f, &s_bindDefaultsCommand);
+        Cmd_AddCommandInternal("vita_typecommand", TypeCommand_f, &s_typeCommandCommand);
         s_commandAdded = true;
         Com_Printf(CON_CHANNEL_SYSTEM,
                    "vita input: front panel %d..%d by %d..%d (%s), rear pad %d..%d by %d..%d (%s)\n", s_front.minX,
@@ -436,6 +749,7 @@ void IN_Init()
 
 void IN_Shutdown()
 {
+    Vita_AbortKeyboard();
     if (s_installed && Sys_IsMainThread())
         ReleaseAll();
 }
@@ -462,7 +776,9 @@ void IN_Frame()
     Poll();
     const vi::Motion motion = s_mapper.Take();
     s_look = CL_MouseEvent(motion.x, motion.y, motion.dx, motion.dy) != 0;
-    Housekeeping(Sys_Milliseconds());
+    const uint32_t now = Sys_Milliseconds();
+    TextFrame(now);
+    Housekeeping(now);
 }
 
 void IN_ShowSystemCursor(BOOL)

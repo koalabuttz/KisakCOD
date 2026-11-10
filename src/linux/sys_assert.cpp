@@ -133,6 +133,11 @@ void MyAssertHandler(const char *filename, int line, int type, const char *fmt, 
 #if defined(__vita__)
     // Which pool ran out, if any, before the dump (vita_stats.cpp).
     Vita_LogMemoryAtError();
+    Vita_ConsoleSync();
+    // An emulator hangs on abort() and loses the log's tail; a run there asks
+    // for a plain exit with "+set vita_assertExit 1". A console keeps its dump.
+    if (Vita_AssertExits())
+        Vita_Exit(1);
 #endif
 
     // type is non-zero for "fatal" assertions in the engine's convention; every
