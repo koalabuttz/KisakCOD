@@ -561,6 +561,20 @@ int main() {
         Check(out && out[0] == 0 && out[7] == 0 && warnings == before + 1, "an ADPCM block too small for its header plays as silence");
         Z_Free(out, 15);
     }
+    {
+        // The file's frame count is a claim. 0x80000001 frames of two channels is
+        // 2 samples in 32-bit arithmetic: the buffer used to be sized by that and
+        // then filled with all 505 frames the block holds.
+        const std::vector<int16_t> pcm = Sine(505, 2);
+        const std::vector<uint8_t> blocks = EncodeIma(pcm, 2, 512, 505);
+        _AILSOUNDINFO_COD4 info{};
+        info.format = SND_FORMAT_IMA_ADPCM; info.bits = 4; info.channels = 2; info.rate = 22050;
+        info.samples = 0x80000001u; info.data_len = (uint32_t)blocks.size(); info.block_size = 512;
+        int16_t *out = SND_ConvertToPcm16(&info, blocks.data());
+        Check(out == nullptr && info.format == SND_FORMAT_IMA_ADPCM && info.samples == 0x80000001u,
+              "a claimed length too large to hold is refused, and the sound left as it was");
+        Z_Free(out, 15);
+    }
     Check(liveAllocations == 0, "temporary buffers are freed");
 
     CheckSetData();

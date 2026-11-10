@@ -120,6 +120,27 @@ static bool R_ShouldPollGpuFence()
     return false;
 }
 
+// Counts the fences R_InsertGpuFence issues, under CRITSECT_GPU_FENCE. The
+// render thread issues a new fence only after the previous one has passed
+// (RB_AdaptiveGpuSyncFinal waits for it), so a count that changed during the
+// main thread's wait means the fence it waits for has passed, and the query
+// now holds the next one. Only r_gpuSyncSleepUnlocked lets that happen.
+static uint32_t s_gpuFenceGeneration;
+static uint32_t s_gpuFenceWaitGeneration;
+static uint64_t s_gpuFenceWaitStart;
+
+static bool R_GpuFenceReplaced()
+{
+    if (s_gpuFenceWaitStart != dx.gpuSyncStart)
+    {
+        // First check of this R_SyncGpu: remember the fence it waits for.
+        s_gpuFenceWaitStart = dx.gpuSyncStart;
+        s_gpuFenceWaitGeneration = s_gpuFenceGeneration;
+        return false;
+    }
+    return s_gpuFenceGeneration != s_gpuFenceWaitGeneration;
+}
+
 // With r_gpuSyncSleep above 0 the two waits for the fence sleep between checks
 // instead of keeping a core busy: R_SyncGpu on the main thread and
 // RB_AdaptiveGpuSyncFinal on the render thread. When the GPU is the limit they
@@ -141,7 +162,23 @@ void R_GpuSyncMainIdle()
     const double remainingUsec = (double)(dx.gpuSyncDelay - elapsed) * msecPerRawTimerTick * 1000.0;
     if (remainingUsec < 30.0)
         return;
-    Sys_PerfSleepMicroseconds(remainingUsec < (double)sleepUsec ? (uint32_t)remainingUsec : (uint32_t)sleepUsec);
+    const uint32_t usec = remainingUsec < (double)sleepUsec ? (uint32_t)remainingUsec : (uint32_t)sleepUsec;
+    // R_SyncGpu holds the fence lock for its whole wait, so the render thread,
+    // which needs it to issue the next fence at the end of its frame, waits
+    // for the main thread's wait to end (lock GPU_FENCE in perf_ab, 0.9 to
+    // 3.7 ms/frame in laptop perf run 5). r_gpuSyncSleepUnlocked lets it go
+    // while sleeping; R_GpuFenceReplaced then ends the wait when the render
+    // thread has issued a new fence.
+    if (r_gpuSyncSleepUnlocked->current.enabled)
+    {
+        R_ReleaseGpuFenceLock();
+        Sys_PerfSleepMicroseconds(usec);
+        R_AcquireGpuFenceLock();
+    }
+    else
+    {
+        Sys_PerfSleepMicroseconds(usec);
+    }
 }
 
 void R_GpuSyncMainDone()
@@ -162,6 +199,8 @@ static void R_GpuSyncBackendIdle()
 bool R_GpuFenceTimeout()
 {
 #if !defined(_WIN32)
+    if (R_GpuFenceReplaced())
+        return 1;
     if (R_ShouldPollGpuFence())
 #endif
     {
@@ -216,6 +255,9 @@ void R_InsertGpuFence()
     } while (alwaysfails);
     dx.flushGpuQueryIssued = 1;
     ++dx.flushGpuQueryCount;
+#if !defined(_WIN32)
+    ++s_gpuFenceGeneration;
+#endif
 }
 
 void RB_AbandonGpuFence()

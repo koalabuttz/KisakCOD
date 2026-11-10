@@ -28,6 +28,7 @@
 #include <qcommon/cmd.h>
 #include <qcommon/threads.h>
 #include <qcommon/mem_track.h>
+#include <qcommon/url_check.h>
 
 #include <universal/com_memory.h>
 #include <universal/q_parse.h>
@@ -360,6 +361,19 @@ void Sys_OpenURL(const char *url, int doexit)
 {
 	const char *v2; // eax
 	HWND__ *wnd; // [esp+0h] [ebp-4h]
+
+	// The address can be a game server's choice (a download redirect, or the
+	// update dvar a server may set), and "open" runs whatever it is given: a
+	// program, a file on a share, any registered protocol. Only a web address
+	// goes to the desktop (qcommon/url_check.h).
+	if (!Com_IsWebUrl(url))
+	{
+		char shown[128];
+		Com_CopyPrintable(url, shown, sizeof(shown));
+		Com_PrintError(CON_CHANNEL_SYSTEM, "Sys_OpenURL: refused to open '%s'\n", shown);
+		Com_Error(ERR_DROP, "Refused to open an address that is not a plain http:// or https:// web address");
+		return;
+	}
 
 	if (!ShellExecuteA(0, "open", url, 0, 0, 9))
 	{

@@ -152,6 +152,14 @@ struct Query
     // GetQueryData.
     bool frameFence = false;
     bool flushedAhead = false; // a poll has submitted the work recorded after it
+    // Occlusion queries, where the core counts samples
+    // (OptionalFeatures::occlusionCounts). A query is a sum of the core's
+    // counts: one for each run of draws between its BEGIN and its END that
+    // no pass end, submission or other query's BEGIN or END interrupts.
+    bool counting = false;        // BEGIN issued, END not yet
+    std::vector<uint32_t> counts; // not added up yet
+    bool counted = false;         // samples holds the result
+    uint32_t samples = 0;
 };
 
 // ---- Pipelines (vk_legacy_draw.cpp) --------------------------------------------------
@@ -321,11 +329,18 @@ struct Device
     VkPipeline boundPipeline = VK_NULL_HANDLE;
     DynamicState dynamic{};
     bool dynamicValid = false;
-    // Feeding the GPU (FeedGpu): the draws recorded in command buffer
-    // feedRecording, and the count at which to look at the GPU again.
+    // Feeding the GPU (FeedGpu): the setting, the draws recorded in command
+    // buffer feedRecording, and the count at which to look at the GPU again.
+    GpuFeed feed{};
     uint64_t feedRecording = 0;
     uint32_t feedDraws = 0;
     uint32_t feedCheckAt = 0;
+    // The idle rule: the draws its next part of frame feedIdleFrame needs.
+    uint64_t feedIdleFrame = 0;
+    uint32_t feedIdleNeed = 0;
+    // Occlusion queries between BEGIN and END: the draws recorded now count
+    // for each of them (CountDraw).
+    std::vector<Query *> countingQueries;
     // The texture descriptor set the last draw wrote, and what it holds. A
     // draw that needs the same views and samplers in a set of the same layout
     // binds it again instead of allocating and writing a new one. Sets come
@@ -344,6 +359,9 @@ struct Device
 // vk_legacy_device.cpp
 bool Fail(Device &device, const char *format, ...);
 void Log(Device &device, const char *format, ...);
+// "off", "after every draw", "every 128 draws" or "every 128 draws (16 when
+// the GPU has nothing left)": a feed setting as the log lines word it.
+void GpuFeedText(const GpuFeed &feed, char *text, size_t size);
 // One-time warnings (Device::warnedOnce bits).
 enum Warning : uint32_t
 {

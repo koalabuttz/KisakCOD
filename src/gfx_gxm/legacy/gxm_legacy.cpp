@@ -125,6 +125,7 @@ namespace
 {
 void LogShaderSummary(Device &device, const char *when); // with CreateShader
 void LogProgramFailures(Device &device);
+void LogFrameTime(Device &device); // with Present
 } // namespace
 
 // GPU memory in use by what it is for, in each of the two pools it can be in.
@@ -568,6 +569,7 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     InitTargetReserve(*device);
     Log(*device, "%s", gxm::DescribeMemory().c_str());
     SetDefaultState(*device);
+    device->frameTime.since = Micros();
     return device.release();
 }
 
@@ -580,6 +582,7 @@ void DestroyDevice(Device *device)
     LogProgramFailures(*device);
     LogShaderSummary(*device, "in all");
     FinishGpu(*device);
+    LogFrameTime(*device);
     LogDrawSummary(*device);
     ShutdownDraw(*device);
     Log(*device, "%s", gxm::DescribeMemory().c_str());
@@ -1352,13 +1355,41 @@ void SetDepthStencilSurface(Device *device, Surface *surface)
 
 // ---- Drawing --------------------------------------------------------------------------------
 
+namespace
+{
+// Runs a draw and, for the `frame time` line, times some of them.
+template <typename Call> void TimedDraw(Device &device, Call &&call)
+{
+    gxm::FrameTime &time = device.frameTime;
+    if (!time.PickDraw())
+    {
+        call();
+        return;
+    }
+    const uint64_t inner = time.Inner();
+    const uint64_t from = Micros();
+    call();
+    time.TimedDraw(Micros() - from, inner);
+}
+
+// The same for a clear or a copy: few enough to time every one.
+template <typename Call> void TimedOther(Device &device, Call &&call)
+{
+    gxm::FrameTime &time = device.frameTime;
+    const uint64_t inner = time.Inner();
+    const uint64_t from = Micros();
+    call();
+    time.Other(Micros() - from, inner);
+}
+} // namespace
+
 void Clear(Device *device, uint32_t rectCount, const Rect *rects, uint32_t flags, uint32_t color, float z,
            uint32_t stencil)
 {
     if (!device || device->detached)
         return;
     ++device->stats.clears;
-    ClearTargets(*device, rectCount, rects, flags, color, z, stencil);
+    TimedOther(*device, [&] { ClearTargets(*device, rectCount, rects, flags, color, z, stencil); });
 }
 
 void DrawIndexedPrimitive(Device *device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t, uint32_t,
@@ -1367,7 +1398,7 @@ void DrawIndexedPrimitive(Device *device, d3d::PrimitiveType type, int32_t baseV
     if (!device || device->detached)
         return;
     ++device->stats.draws;
-    Draw(*device, type, baseVertex, startIndex, primitiveCount, true, nullptr, 0);
+    TimedDraw(*device, [&] { Draw(*device, type, baseVertex, startIndex, primitiveCount, true, nullptr, 0); });
 }
 
 void DrawPrimitive(Device *device, d3d::PrimitiveType type, uint32_t startVertex, uint32_t primitiveCount)
@@ -1375,7 +1406,7 @@ void DrawPrimitive(Device *device, d3d::PrimitiveType type, uint32_t startVertex
     if (!device || device->detached)
         return;
     ++device->stats.draws;
-    Draw(*device, type, int32_t(startVertex), 0, primitiveCount, false, nullptr, 0);
+    TimedDraw(*device, [&] { Draw(*device, type, int32_t(startVertex), 0, primitiveCount, false, nullptr, 0); });
 }
 
 void DrawPrimitiveUP(Device *device, d3d::PrimitiveType type, uint32_t primitiveCount, const void *vertices,
@@ -1385,7 +1416,7 @@ void DrawPrimitiveUP(Device *device, d3d::PrimitiveType type, uint32_t primitive
         return;
     ++device->stats.draws;
     if (!device->detached && vertices)
-        Draw(*device, type, 0, 0, primitiveCount, false, vertices, stride);
+        TimedDraw(*device, [&] { Draw(*device, type, 0, 0, primitiveCount, false, vertices, stride); });
     device->streams[0] = Device::Stream{};
 }
 
@@ -1394,7 +1425,7 @@ void DrawPrimitiveUP(Device *device, d3d::PrimitiveType type, uint32_t primitive
 void StretchRect(Device *device, Surface *src, const Rect *srcRect, Surface *dst, const Rect *dstRect, bool linear)
 {
     if (device && !device->detached)
-        Copy(*device, src, srcRect, dst, dstRect, linear);
+        TimedOther(*device, [&] { Copy(*device, src, srcRect, dst, dstRect, linear); });
 }
 
 bool GetRenderTargetData(Device *device, Surface *renderTarget, Surface *dst)
@@ -1498,6 +1529,35 @@ void LogLongFrame(Device &device)
             unsigned(gxm::ProgramsWaiting()), (unsigned long long)(now.drawsWaited - last.drawsWaited));
     }
 }
+
+// What a clock read costs here. The `frame time` line says so, because its
+// own timing is made of clock reads.
+double ClockReadMicros()
+{
+    static double cost = -1.0;
+    if (cost < 0.0)
+    {
+        constexpr int kReads = 256;
+        const uint64_t from = Micros();
+        uint64_t last = from;
+        for (int i = 0; i < kReads; ++i)
+            last = Micros();
+        cost = double(last - from) / kReads;
+    }
+    return cost;
+}
+
+// Where a frame's time went since the last such line (gxm_frame_time.h). A
+// console run should say whether a slow frame is the game's, the draws' or
+// the GPU's.
+void LogFrameTime(Device &device)
+{
+    const uint64_t now = Micros();
+    const std::string line = device.frameTime.Describe(now, ClockReadMicros());
+    device.frameTime.Restart(now);
+    if (!line.empty())
+        Log(device, "%s", line.c_str());
+}
 } // namespace
 
 PresentResult Present(Device *device)
@@ -1508,7 +1568,9 @@ PresentResult Present(Device *device)
         return PresentResult::Skipped;
     DiagnoseFrame(*device);
     EndScene(*device);
+    const uint64_t from = Micros();
     const bool shown = gxm::Present();
+    device->frameTime.Shown(Micros() - from);
     FrameDone(*device);
     gxm::ProgramCacheFrame();
     LogProgramFailures(*device);
@@ -1526,6 +1588,7 @@ PresentResult Present(Device *device)
         memoryLogged = asked;
         Log(*device, "%s", gxm::DescribeMemory().c_str());
         Log(*device, "%s", DescribeMemoryUse().c_str());
+        LogFrameTime(*device);
     }
     if (!shown)
     {

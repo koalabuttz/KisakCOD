@@ -157,6 +157,18 @@ void Log(Device &device, const char *format, ...)
     va_end(args);
 }
 
+void GpuFeedText(const GpuFeed &feed, char *text, size_t size)
+{
+    if (!feed.on)
+        std::snprintf(text, size, "off");
+    else if (feed.always)
+        std::snprintf(text, size, "after every draw");
+    else if (feed.idleDraws && feed.idleDraws < feed.draws)
+        std::snprintf(text, size, "every %u draws (%u when the GPU has nothing left)", feed.draws, feed.idleDraws);
+    else
+        std::snprintf(text, size, "every %u draws", feed.draws);
+}
+
 void WarnOnce(Device &device, uint32_t bit, const char *format, ...)
 {
     if (device.warnedOnce & (1u << bit))
@@ -236,18 +248,18 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
                                                              | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
             // How a frame reaches the GPU (FeedGpu in vk_legacy_draw.cpp).
             const OptionalFeatures &features = Features(device->core);
-            char feed[48];
-            if (!features.gpuFeed)
-                std::snprintf(feed, sizeof(feed), "off");
-            else if (features.gpuFeedAlways)
-                std::snprintf(feed, sizeof(feed), "after every draw");
-            else
-                std::snprintf(feed, sizeof(feed), "every %u draws", features.gpuFeedDraws);
+            device->feed.on = features.gpuFeed;
+            device->feed.always = features.gpuFeedAlways;
+            device->feed.draws = std::max(1u, features.gpuFeedDraws);
+            device->feed.idleDraws = 0;
+            char feed[64];
+            GpuFeedText(device->feed, feed, sizeof(feed));
             Log(*device,
                 "device ready: back buffer %ux%u, depth %s, vertex stride %s, depth compare %s, 16-bit targets %s, "
-                "GPU feed %s",
+                "occlusion queries %s, GPU feed %s",
                 width, height, FormatName(device->depthFormat), features.dynamicVertexStride ? "dynamic" : "static",
-                features.fixedDepthCompare ? "fixed" : "dynamic", packedTargets ? "packed" : "wide", feed);
+                features.fixedDepthCompare ? "fixed" : "dynamic", packedTargets ? "packed" : "wide",
+                features.occlusionCounts ? "counted" : "not counted", feed);
             return device.release();
         }
         Fail(*device, "core: %s", LastError(core));
@@ -290,6 +302,24 @@ void DestroyDevice(Device *device)
 const char *DeviceError(const Device *device) { return device->error.c_str(); }
 
 const DeviceStats &Stats(const Device *device) { return device->stats; }
+
+GpuFeed GetGpuFeed(const Device *device) { return device->feed; }
+
+void SetGpuFeed(Device *device, const GpuFeed &feed)
+{
+    GpuFeed set = feed;
+    set.draws = std::max(1u, set.draws);
+    const GpuFeed &old = device->feed;
+    if (set.on == old.on && set.always == old.always && set.draws == old.draws && set.idleDraws == old.idleDraws)
+        return;
+    device->feed = set;
+    // The draws counted so far were counted for the old setting.
+    device->feedRecording = 0;
+    device->feedIdleFrame = 0;
+    char text[64];
+    GpuFeedText(set, text, sizeof(text));
+    Log(*device, "GPU feed now %s", text);
+}
 
 Surface *BackBuffer(Device *device) { return &device->backBufferSurface; }
 

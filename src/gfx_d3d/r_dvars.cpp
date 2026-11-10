@@ -226,6 +226,7 @@
 #if !defined(_WIN32)
  const dvar_t *r_gpuSyncSleep;
  const dvar_t *r_gpuSyncSleepThreads;
+ const dvar_t *r_gpuSyncSleepUnlocked;
 #endif
  const dvar_t *r_multiGpu;
  const dvar_t *r_skinCache;
@@ -581,9 +582,17 @@
          DVAR_NOFLAG,
          "GPU synchronization type (used to improve mouse responsiveness)");
 #if !defined(_WIN32)
+     // Linux sleeps 100 us by default: laptop perf run 5 measured +2.8 % fps
+     // at 1280x800 and +12.6 % at 1920x1200, with 2.7 and 8.2 ms less CPU per
+     // frame, against 0. Vita and macOS have no such run yet and keep 0.
+#if defined(__linux__)
+     constexpr int gpuSyncSleepDefault = 100;
+#else
+     constexpr int gpuSyncSleepDefault = 0;
+#endif
      r_gpuSyncSleep = Dvar_RegisterInt(
          "r_gpuSyncSleep",
-         0,
+         gpuSyncSleepDefault,
          0,
          1000,
          DVAR_NOFLAG,
@@ -595,6 +604,11 @@
          3,
          DVAR_NOFLAG,
          "Which waits r_gpuSyncSleep applies to: 1 the main thread's, 2 the render thread's, 3 both");
+     r_gpuSyncSleepUnlocked = Dvar_RegisterBool(
+         "r_gpuSyncSleepUnlocked",
+         false,
+         DVAR_NOFLAG,
+         "The main thread lets go of the GPU fence lock while r_gpuSyncSleep sleeps, so the render thread can end its frame");
 #endif
      r_multiGpu = Dvar_RegisterBool("r_multiGpu", false, DVAR_ARCHIVE, "Use multiple GPUs");
      r_skinCache = Dvar_RegisterBool("r_skinCache", true, DVAR_NOFLAG, "Enable cache for vertices of animated models");
@@ -925,7 +939,16 @@
          1,
          DVAR_ARCHIVE | DVAR_LATCH,
          "Enable v-sync before drawing the next frame to avoid 'tearing' artifacts.");
+#ifdef KISAK_GFX_GXM
+     // "steady": the Vita clears a scene's colour to r_clearColor before it
+     // draws. The retail game clears it only when a frame has no float-Z
+     // pass, because a scene covers every pixel. The Vita leaves draws out
+     // while their program is being made, and what shows through is what
+     // that display buffer held three frames before. 1 is the retail game's.
+     r_clear = Dvar_RegisterEnum("r_clear", r_clearNames, 3, DVAR_NOFLAG, "Controls how the color buffer is cleared");
+#else
      r_clear = Dvar_RegisterEnum("r_clear", r_clearNames, 1, DVAR_NOFLAG, "Controls how the color buffer is cleared");
+#endif
 #ifdef KISAK_XBOX
      r_clearColor = Dvar_RegisterColor(
          "r_clearColor",

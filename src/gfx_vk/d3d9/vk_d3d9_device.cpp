@@ -262,6 +262,11 @@ void Device::DetachWindow()
     DetachBackendWindow(backend_);
 }
 
+void Device::LogStats(bool reset)
+{
+    BackendLogStats(backend_, reset);
+}
+
 DeviceCounters Device::counters() const
 {
     const FrontLock lock;
@@ -416,6 +421,7 @@ HRESULT STDMETHODCALLTYPE Device::Present(const RECT *src, const RECT *dst, D3D9
     const FrontLock lock;
     if (src || dst || dirty || (window && window != window_))
         Unsupported("IDirect3DDevice9::Present with rects, a dirty region or another window (presented whole)");
+    BackendFrame(backend_);
     switch (lg::Present(legacy_))
     {
     case lg::PresentResult::Ok:

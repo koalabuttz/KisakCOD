@@ -1,0 +1,435 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 09:49:41 +0000
+Subject: [PATCH] refactor: name the physics object id casts
+
+A physics body is kept in int fields (DynEntityClient, the MP cpose_t,
+FxElem, BreakablePiece) and cast back with (dxBody *) at each use. The
+casts now go through Phys_IdFromObj() and Phys_ObjFromId() in the new
+physics/phys_objid.h, 38 uses in nine files.
+
+No behaviour change: both helpers are the same casts. It leaves one
+place to change when a pointer no longer fits the field. The SP
+cpose_t keeps its pointer sized field and is not touched.
+---
+ scripts/common_files.cmake           |  1 +
+ src/DynEntity/DynEntity_client.cpp   | 39 ++++++++++++++++------------
+ src/DynEntity/DynEntity_load_obj.cpp |  6 ++---
+ src/DynEntity/DynEntity_pieces.cpp   |  9 ++++---
+ src/EffectsCore/fx_archive.cpp       |  6 ++---
+ src/EffectsCore/fx_draw.cpp          |  2 +-
+ src/EffectsCore/fx_system.cpp        | 10 +++----
+ src/cgame_mp/cg_ents_mp.cpp          | 10 +++----
+ src/cgame_mp/cg_main_mp.cpp          |  3 ++-
+ src/cgame_mp/cg_snapshot_mp.cpp      |  2 +-
+ src/physics/phys_local.h             |  1 +
+ src/physics/phys_objid.h             | 19 ++++++++++++++
+ 12 files changed, 68 insertions(+), 40 deletions(-)
+ create mode 100644 src/physics/phys_objid.h
+
+diff --git a/scripts/common_files.cmake b/scripts/common_files.cmake
+index 5a0e6153..6d4e30b1 100644
+--- a/scripts/common_files.cmake
++++ b/scripts/common_files.cmake
+@@ -329,6 +329,7 @@ set(PHYSICS
+     "${SRC_DIR}/physics/phys_coll_local.h"
+     "${SRC_DIR}/physics/phys_contacts.cpp"
+     "${SRC_DIR}/physics/phys_local.h"
++    "${SRC_DIR}/physics/phys_objid.h"
+     "${SRC_DIR}/physics/phys_ode.cpp"
+     "${SRC_DIR}/physics/phys_world_collision.cpp"
+ )
+diff --git a/src/DynEntity/DynEntity_client.cpp b/src/DynEntity/DynEntity_client.cpp
+index ef30669f..5475cc8b 100644
+--- a/src/DynEntity/DynEntity_client.cpp
++++ b/src/DynEntity/DynEntity_client.cpp
+@@ -1,3 +1,4 @@
++#include <physics/phys_objid.h>
+ #include <universal/q_shared.h>
+ #include <universal/surfaceflags.h>
+ #include <qcommon/qcommon.h>
+@@ -455,12 +456,12 @@ void __cdecl DynEntCl_ProcessEntities(int32_t localClientNum)
+                 dynEntPose = DynEnt_GetClientPose(dynEntId, DYNENT_DRAW_MODEL);
+                 Phys_ObjGetInterpolatedState(
+                     PHYS_WORLD_DYNENT,
+-                    (dxBody *)dynEntClient->physObjId,
++                    Phys_ObjFromId(dynEntClient->physObjId),
+                     origin,
+                     dynEntPose->pose.quat);
+-                if (Phys_ObjIsAsleep((dxBody *)dynEntClient->physObjId))
++                if (Phys_ObjIsAsleep(Phys_ObjFromId(dynEntClient->physObjId)))
+                 {
+-                    Phys_ObjDestroy(PHYS_WORLD_DYNENT, (dxBody *)dynEntClient->physObjId);
++                    Phys_ObjDestroy(PHYS_WORLD_DYNENT, Phys_ObjFromId(dynEntClient->physObjId));
+                     dynEntClient->physObjId = 0;
+                 }
+                 if (!VecNCompareCustomEpsilon(origin, dynEntPose->pose.origin, 0.0099999998f, 3))
+@@ -481,12 +482,12 @@ void __cdecl DynEntCl_ProcessEntities(int32_t localClientNum)
+                 dynEntPosea = DynEnt_GetClientPose(dynEntId, DYNENT_DRAW_BRUSH);
+                 Phys_ObjGetInterpolatedState(
+                     PHYS_WORLD_DYNENT,
+-                    (dxBody *)dynEntClient->physObjId,
++                    Phys_ObjFromId(dynEntClient->physObjId),
+                     origin,
+                     dynEntPosea->pose.quat);
+-                if (Phys_ObjIsAsleep((dxBody *)dynEntClient->physObjId))
++                if (Phys_ObjIsAsleep(Phys_ObjFromId(dynEntClient->physObjId)))
+                 {
+-                    Phys_ObjDestroy(PHYS_WORLD_DYNENT, (dxBody *)dynEntClient->physObjId);
++                    Phys_ObjDestroy(PHYS_WORLD_DYNENT, Phys_ObjFromId(dynEntClient->physObjId));
+                     dynEntClient->physObjId = 0;
+                 }
+                 if (!VecNCompareCustomEpsilon(origin, dynEntPosea->pose.origin, 0.0099999998f, 3))
+@@ -524,7 +525,7 @@ void __cdecl DynEntCl_Shutdown(int32_t localClientNum)
+             {
+                 if (dynEntClient->physObjId)
+                 {
+-                    Phys_ObjDestroy(PHYS_WORLD_DYNENT, (dxBody *)dynEntClient->physObjId);
++                    Phys_ObjDestroy(PHYS_WORLD_DYNENT, Phys_ObjFromId(dynEntClient->physObjId));
+                     dynEntClient->physObjId = 0;
+                     dynEntClient->flags &= ~1u;
+                 }
+@@ -536,7 +537,7 @@ void __cdecl DynEntCl_Shutdown(int32_t localClientNum)
+             dynEntClienta = DynEnt_GetClientEntity(dynEntIda, DYNENT_DRAW_BRUSH);
+             if ((dynEntClienta->flags & 1) != 0 && dynEntClienta->physObjId)
+             {
+-                Phys_ObjDestroy(PHYS_WORLD_DYNENT, (dxBody *)dynEntClienta->physObjId);
++                Phys_ObjDestroy(PHYS_WORLD_DYNENT, Phys_ObjFromId(dynEntClienta->physObjId));
+                 dynEntClienta->physObjId = 0;
+                 dynEntClienta->flags &= ~1u;
+             }
+@@ -1007,7 +1008,11 @@ void __cdecl DynEntCl_EntityImpactEvent(
+                 MyAssertHandler(".\\DynEntity\\DynEntity_client.cpp", 1013, 0, "%s", "physPreset");
+             Phys_ObjBulletImpact(
+                 PHYS_WORLD_DYNENT,
+-                (dxBody *)cent->pose.physObjId,
++#ifdef KISAK_SP
++                (dxBody *)cent->pose.physObjId, // the SP cpose_t keeps the body pointer itself
++#else
++                Phys_ObjFromId(cent->pose.physObjId),
++#endif
+                 hitPos,
+                 hitDir,
+                 dynEnt_bulletForce->current.value,
+@@ -1192,12 +1197,12 @@ char __cdecl DynEntCl_DynEntImpactEvent(
+         if (!dynEntClient->physObjId)
+         {
+             PhysObj = DynEntCl_CreatePhysObj(dynEntDef, &dynEntPose->pose);
+-            dynEntClient->physObjId = (int)PhysObj;
++            dynEntClient->physObjId = Phys_IdFromObj(PhysObj);
+         }
+         if (dynEntClient->physObjId)
+             Phys_ObjBulletImpact(
+                 PHYS_WORLD_DYNENT,
+-                (dxBody *)dynEntClient->physObjId,
++                Phys_ObjFromId(dynEntClient->physObjId),
+                 hitPos,
+                 hitDir,
+                 dynEnt_bulletForce->current.value,
+@@ -1296,7 +1301,7 @@ void __cdecl DynEntCl_Damage(
+         dynEntClient->flags &= 0xFFFCu;
+         if (dynEntClient->physObjId)
+         {
+-            Phys_ObjDestroy(PHYS_WORLD_DYNENT, (dxBody *)dynEntClient->physObjId);
++            Phys_ObjDestroy(PHYS_WORLD_DYNENT, Phys_ObjFromId(dynEntClient->physObjId));
+             dynEntClient->physObjId = 0;
+         }
+         DynEntCl_UnlinkEntity(dynEntId, drawType);
+@@ -1493,18 +1498,18 @@ void __cdecl DynEntCl_ExplosionEvent(
+                         if (!dynEntClient->physObjId)
+                         {
+                             PhysObj = DynEntCl_CreatePhysObj(dynEntDef, &dynEntPose->pose);
+-                            dynEntClient->physObjId = (int)PhysObj;
++                            dynEntClient->physObjId = Phys_IdFromObj(PhysObj);
+                         }
+                         if (dynEntClient->physObjId)
+                         {
+-                            Phys_ObjGetCenterOfMass((dxBody *)dynEntClient->physObjId, outPosition);
++                            Phys_ObjGetCenterOfMass(Phys_ObjFromId(dynEntClient->physObjId), outPosition);
+                             v10 = flrand(-1.0, 1.0);
+                             outPosition[0] = v10 * dynEnt_explodeSpinScale->current.value + outPosition[0];
+                             v11 = flrand(-1.0, 1.0);
+                             outPosition[1] = v11 * dynEnt_explodeSpinScale->current.value + outPosition[1];
+                             v12 = flrand(-1.0, 1.0);
+                             outPosition[2] = v12 * dynEnt_explodeSpinScale->current.value + outPosition[2];
+-                            Phys_ObjAddForce(PHYS_WORLD_DYNENT, (dxBody *)dynEntClient->physObjId, outPosition, result);
++                            Phys_ObjAddForce(PHYS_WORLD_DYNENT, Phys_ObjFromId(dynEntClient->physObjId), outPosition, result);
+                         }
+                     }
+                     if (DynEnt_GetEntityProps(dynEntDef->type)->destroyable)
+@@ -1657,7 +1662,7 @@ void __cdecl DynEntCl_JitterEvent(
+                 {
+                     dynEntPosea = DynEnt_GetClientPose(dynEntList[i], drawType);
+                     PhysObj = DynEntCl_CreatePhysObj(dynEntDef, &dynEntPosea->pose);
+-                    ClientEntity->physObjId = (int)PhysObj;
++                    ClientEntity->physObjId = Phys_IdFromObj(PhysObj);
+                 }
+             }
+         }
+@@ -1752,7 +1757,7 @@ void DynEntCl_WakeUpAroundPlayer(int localClientNum)
+                 if (DynEnt_GetEntityProps(EntityDef->type)->usePhysics && !dynEntClient->physObjId)
+                 {
+                     ClientPose = DynEnt_GetClientPose(dynEntId, drawType);
+-                    dynEntClient->physObjId = (int32_t)DynEntCl_CreatePhysObj(EntityDef, &ClientPose->pose);
++                    dynEntClient->physObjId = Phys_IdFromObj(DynEntCl_CreatePhysObj(EntityDef, &ClientPose->pose));
+                 }
+             }
+ 
+diff --git a/src/DynEntity/DynEntity_load_obj.cpp b/src/DynEntity/DynEntity_load_obj.cpp
+index 26d471ca..b020d5eb 100644
+--- a/src/DynEntity/DynEntity_load_obj.cpp
++++ b/src/DynEntity/DynEntity_load_obj.cpp
+@@ -630,10 +630,10 @@ void __cdecl DynEnt_LoadEntities(MemoryFile *memFile)
+             MemFile_ReadData(memFile, 1, &hasPhys);
+             if (hasPhys)
+             {
+-                cm.dynEntClientList[drawType][dynEntId].physObjId = (uintptr_t)Phys_ObjLoad(PHYS_WORLD_DYNENT, memFile);
++                cm.dynEntClientList[drawType][dynEntId].physObjId = Phys_IdFromObj(Phys_ObjLoad(PHYS_WORLD_DYNENT, memFile));
+                 DynEnt_SetPhysObjCollision(
+                     &cm.dynEntDefList[drawType][dynEntId],
+-                    (dxBody *)cm.dynEntClientList[drawType][dynEntId].physObjId);
++                    Phys_ObjFromId(cm.dynEntClientList[drawType][dynEntId].physObjId));
+             }
+             else
+             {
+@@ -799,7 +799,7 @@ void DynEnt_SaveEntities(MemoryFile *memFile)
+                     v6 = (*dynEntClientList)[v5].physObjId != 0;
+                     MemFile_WriteData(memFile, 1, &v6);
+                     if (v6)
+-                        Phys_ObjSave((dxBody*)(*dynEntClientList)[v5].physObjId, memFile);
++                        Phys_ObjSave(Phys_ObjFromId((*dynEntClientList)[v5].physObjId), memFile);
+                     v5 = (uint16_t)(v5 + 1);
+                 } while (v5 < *dynEntCount);
+             }
+diff --git a/src/DynEntity/DynEntity_pieces.cpp b/src/DynEntity/DynEntity_pieces.cpp
+index ac20d779..defd8118 100644
+--- a/src/DynEntity/DynEntity_pieces.cpp
++++ b/src/DynEntity/DynEntity_pieces.cpp
+@@ -1,3 +1,4 @@
++#include <physics/phys_objid.h>
+ #include <universal/q_shared.h>
+ #include "DynEntity_client.h"
+ #include <win32/win_local.h>
+@@ -60,7 +61,7 @@ void __cdecl DynEntPieces_AddDrawSurfs()
+             Sys_EnterCriticalSection(CRITSECT_PHYSICS);
+             Phys_ObjGetInterpolatedState(
+                 PHYS_WORLD_FX,
+-                (dxBody *)g_breakablePieces[i].physObjId,
++                Phys_ObjFromId(g_breakablePieces[i].physObjId),
+                 placement.base.origin,
+                 placement.base.quat);
+             placement.scale = 1.0;
+@@ -133,7 +134,7 @@ bool __cdecl DynEntPieces_SpawnPhysicsModel(
+         angularVelocity[2] = dynEntPieces_angularVelocity->current.vector[2];
+         velocity[2] = velocity[2] + model->physPreset->piecesUpwardVelocity;
+         Sys_EnterCriticalSection(CRITSECT_PHYSICS);
+-        physObjId = (int)DynEntPieces_SpawnPhysObj(
++        physObjId = Phys_IdFromObj(DynEntPieces_SpawnPhysObj(
+             model->name,
+             mins,
+             maxs,
+@@ -141,14 +142,14 @@ bool __cdecl DynEntPieces_SpawnPhysicsModel(
+             quat,
+             velocity,
+             angularVelocity,
+-            model->physPreset);
++            model->physPreset));
+         Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
+         if (physObjId)
+         {
+             DynEntPieces_CalcForceDir(hitDir, model->physPreset->piecesSpreadFraction, forceDir);
+             Phys_ObjBulletImpact(
+                 PHYS_WORLD_DYNENT,
+-                (dxBody *)physObjId,
++                Phys_ObjFromId(physObjId),
+                 hitPos,
+                 forceDir,
+                 dynEntPieces_impactForce->current.value,
+diff --git a/src/EffectsCore/fx_archive.cpp b/src/EffectsCore/fx_archive.cpp
+index 3b62c9ea..db114975 100644
+--- a/src/EffectsCore/fx_archive.cpp
++++ b/src/EffectsCore/fx_archive.cpp
+@@ -152,11 +152,11 @@ void __cdecl FX_RestorePhysicsData(FxSystem *system, MemoryFile *memFile)
+             elemHandleNext = elem->item.nextElemHandleInEffect;
+             if (elemDef->elemType == 5 && (elemDef->flags & 0x8000000) != 0)
+             {
+-                elem->item.physObjId = (int)Phys_ObjLoad(PHYS_WORLD_FX, memFile);
++                elem->item.physObjId = Phys_IdFromObj(Phys_ObjLoad(PHYS_WORLD_FX, memFile));
+                 visuals = FX_GetElemVisuals(
+                     elemDef,
+                     (296 * elem->item.sequence + elem->item.msecBegin + (uint32_t)effect->randomSeed) % 0x1DF).model;
+-                Phys_ObjSetCollisionFromXModel(visuals, PHYS_WORLD_FX, (dxBody *)elem->item.physObjId);
++                Phys_ObjSetCollisionFromXModel(visuals, PHYS_WORLD_FX, Phys_ObjFromId(elem->item.physObjId));
+             }
+         }
+     }
+@@ -265,7 +265,7 @@ void __cdecl FX_SavePhysicsData(FxSystem *system, MemoryFile *memFile)
+             elemDef = &effect->def->elemDefs[elem->item.defIndex];
+             elemHandleNext = elem->item.nextElemHandleInEffect;
+             if (elemDef->elemType == 5 && (elemDef->flags & 0x8000000) != 0)
+-                Phys_ObjSave((dxBody *)elem->item.physObjId, memFile);
++                Phys_ObjSave(Phys_ObjFromId(elem->item.physObjId), memFile);
+         }
+     }
+ }
+diff --git a/src/EffectsCore/fx_draw.cpp b/src/EffectsCore/fx_draw.cpp
+index c73945f9..f16a348a 100644
+--- a/src/EffectsCore/fx_draw.cpp
++++ b/src/EffectsCore/fx_draw.cpp
+@@ -846,7 +846,7 @@ void __cdecl FX_DrawElem_Model(FxDrawState *draw)
+ void __cdecl FX_SetPlacementFromPhysics(const FxDrawState *draw, GfxPlacement *placement)
+ {
+     Sys_EnterCriticalSection(CRITSECT_PHYSICS);
+-    Phys_ObjGetInterpolatedState(PHYS_WORLD_FX, (dxBody *)draw->elem->physObjId, placement->origin, placement->quat);
++    Phys_ObjGetInterpolatedState(PHYS_WORLD_FX, Phys_ObjFromId(draw->elem->physObjId), placement->origin, placement->quat);
+     Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
+ }
+ 
+diff --git a/src/EffectsCore/fx_system.cpp b/src/EffectsCore/fx_system.cpp
+index 52fb52ef..f00b6cc2 100644
+--- a/src/EffectsCore/fx_system.cpp
++++ b/src/EffectsCore/fx_system.cpp
+@@ -1829,16 +1829,16 @@ bool __cdecl FX_SpawnModelPhysics(
+     visuals.anonymous = FX_GetElemVisuals(elemDef, randomSeed).anonymous;
+     if (!*((_DWORD*)visuals.anonymous + 53))
+         MyAssertHandler(".\\EffectsCore\\fx_system.cpp", 1853, 0, "%s", "visuals.model->physPreset");
+-    elem->physObjId = (int)Phys_ObjCreate(
++    elem->physObjId = Phys_IdFromObj(Phys_ObjCreate(
+         PHYS_WORLD_FX,
+         worldOrigin,
+         quat,
+         velocity,
+-        *((const PhysPreset**)visuals.anonymous + 53));
++        *((const PhysPreset**)visuals.anonymous + 53)));
+     if (elem->physObjId)
+     {
+-        Phys_ObjSetCollisionFromXModel(visuals.model, PHYS_WORLD_FX, (dxBody*)elem->physObjId);
+-        Phys_ObjSetAngularVelocity((dxBody*)elem->physObjId, angularVelocity);
++        Phys_ObjSetCollisionFromXModel(visuals.model, PHYS_WORLD_FX, Phys_ObjFromId(elem->physObjId));
++        Phys_ObjSetAngularVelocity(Phys_ObjFromId(elem->physObjId), angularVelocity);
+     }
+     Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
+     return elem->physObjId != 0;
+@@ -1964,7 +1964,7 @@ void __cdecl FX_FreeElem(FxSystem* system, uint16_t elemHandle, FxEffect* effect
+     if (elemDef->elemType == 5 && (elemDef->flags & 0x8000000) != 0 && elem->item.physObjId)
+     {
+         Sys_EnterCriticalSection(CRITSECT_PHYSICS);
+-        Phys_ObjDestroy(PHYS_WORLD_FX, (dxBody*)elem->item.physObjId);
++        Phys_ObjDestroy(PHYS_WORLD_FX, Phys_ObjFromId(elem->item.physObjId));
+         Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
+     }
+     elem->nextFree = 0;
+diff --git a/src/cgame_mp/cg_ents_mp.cpp b/src/cgame_mp/cg_ents_mp.cpp
+index f0805677..8b0df5bf 100644
+--- a/src/cgame_mp/cg_ents_mp.cpp
++++ b/src/cgame_mp/cg_ents_mp.cpp
+@@ -1090,17 +1090,17 @@ void __cdecl CG_CreatePhysicsObject(int32_t localClientNum, centity_s *cent)
+     if (physPreset)
+     {
+         Sys_EnterCriticalSection(CRITSECT_PHYSICS);
+-        physObjId = (int)Phys_ObjCreate(PHYS_WORLD_FX, position, quat, velocity, physPreset);
++        physObjId = Phys_IdFromObj(Phys_ObjCreate(PHYS_WORLD_FX, position, quat, velocity, physPreset));
+         if (physObjId)
+         {
+-            DObjPhysicsSetCollisionFromXModel(obj, PHYS_WORLD_FX, (dxBody *)physObjId);
++            DObjPhysicsSetCollisionFromXModel(obj, PHYS_WORLD_FX, Phys_ObjFromId(physObjId));
+             direction[0] = cent->currentState.apos.trDelta[0];
+             direction[1] = cent->currentState.apos.trDelta[1];
+             direction[2] = cent->currentState.apos.trDelta[2];
+             speed = Vec3Normalize(direction);
+             Phys_ObjBulletImpact(
+                 PHYS_WORLD_FX,
+-                (dxBody *)physObjId,
++                Phys_ObjFromId(physObjId),
+                 cent->currentState.pos.trDelta,
+                 direction,
+                 speed,
+@@ -1136,7 +1136,7 @@ void __cdecl CG_UpdatePhysicsPose(centity_s *cent)
+             "%s",
+             "cent->pose.physObjId != PHYS_OBJ_ID_NULL && cent->pose.physObjId != PHYS_OBJ_ID_DEAD");
+     Sys_EnterCriticalSection(CRITSECT_PHYSICS);
+-    Phys_ObjGetInterpolatedState(PHYS_WORLD_FX, (dxBody *)cent->pose.physObjId, cent->pose.origin, quat);
++    Phys_ObjGetInterpolatedState(PHYS_WORLD_FX, Phys_ObjFromId(cent->pose.physObjId), cent->pose.origin, quat);
+     Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
+     UnitQuatToAngles(quat, cent->pose.angles);
+ }
+@@ -1233,7 +1233,7 @@ DObj_s *__cdecl CG_PreProcess_GetDObj(int32_t localClientNum, int32_t entIndex,
+         {
+             if (CG_IsEntityLinked(localClientNum, cent->nextState.number))
+                 CG_UnlinkEntity(localClientNum, cent->nextState.number);
+-            Phys_ObjDestroy(PHYS_WORLD_FX, (dxBody *)cent->pose.physObjId);
++            Phys_ObjDestroy(PHYS_WORLD_FX, Phys_ObjFromId(cent->pose.physObjId));
+             cent->pose.physObjId = 0;
+         }
+         FX_MarkEntDetachAll(localClientNum, entIndex);
+diff --git a/src/cgame_mp/cg_main_mp.cpp b/src/cgame_mp/cg_main_mp.cpp
+index 32e37e14..8cf80ea5 100644
+--- a/src/cgame_mp/cg_main_mp.cpp
++++ b/src/cgame_mp/cg_main_mp.cpp
+@@ -2,6 +2,7 @@
+ #error This File is MultiPlayer Only
+ #endif
+ 
++#include <physics/phys_objid.h>
+ #include <universal/q_shared.h>
+ #include "cg_local_mp.h"
+ #include "cg_public_mp.h"
+@@ -2135,7 +2136,7 @@ void __cdecl CG_Shutdown(int32_t localClientNum)
+         {
+             if (cent->pose.physObjId != -1)
+             {
+-                Phys_ObjDestroy(PHYS_WORLD_FX, (dxBody*)cent->pose.physObjId);
++                Phys_ObjDestroy(PHYS_WORLD_FX, Phys_ObjFromId(cent->pose.physObjId));
+                 cent->pose.physObjId = 0;
+             }
+         }
+diff --git a/src/cgame_mp/cg_snapshot_mp.cpp b/src/cgame_mp/cg_snapshot_mp.cpp
+index 5865f401..657a8374 100644
+--- a/src/cgame_mp/cg_snapshot_mp.cpp
++++ b/src/cgame_mp/cg_snapshot_mp.cpp
+@@ -40,7 +40,7 @@ void __cdecl CG_ShutdownEntity(int localClientNum, centity_s *cent)
+         {
+             if (CG_IsEntityLinked(localClientNum, cent->nextState.number))
+                 CG_UnlinkEntity(localClientNum, cent->nextState.number);
+-            Phys_ObjDestroy(PHYS_WORLD_FX, (dxBody *)cent->pose.physObjId);
++            Phys_ObjDestroy(PHYS_WORLD_FX, Phys_ObjFromId(cent->pose.physObjId));
+         }
+         cent->currentState.pos.trType = TR_STATIONARY;
+         cent->currentState.apos.trType = TR_STATIONARY;
+diff --git a/src/physics/phys_local.h b/src/physics/phys_local.h
+index 3bfa99ec..b695ed56 100644
+--- a/src/physics/phys_local.h
++++ b/src/physics/phys_local.h
+@@ -9,6 +9,7 @@
+ 
+ #include <universal/memfile.h>
+ #include <universal/pool_allocator.h>
++#include <physics/phys_objid.h>
+ 
+ enum $B7C75F5EC8C61F46B3FEFC285D8D85F1 : __int32
+ {
+diff --git a/src/physics/phys_objid.h b/src/physics/phys_objid.h
+new file mode 100644
+index 00000000..3d87d057
+--- /dev/null
++++ b/src/physics/phys_objid.h
+@@ -0,0 +1,19 @@
++#pragma once
++
++#include <cstdint>
++
++struct dxBody;
++
++// A physics object id is a dxBody kept in a 32-bit field. DynEntityClient, the
++// MP cpose_t, FxElem, FxUpdateElem and BreakablePiece hold one in an int, and
++// DynEntityClient's 12-byte layout is stored in fastfiles. The id is the
++// pointer itself. 0 is no body.
++inline int32_t Phys_IdFromObj(dxBody *body)
++{
++    return (int32_t)body;
++}
++
++inline dxBody *Phys_ObjFromId(int32_t id)
++{
++    return (dxBody *)id;
++}

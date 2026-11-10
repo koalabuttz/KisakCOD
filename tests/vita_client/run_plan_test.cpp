@@ -293,6 +293,84 @@ void TestNothingBeforeStart()
     CHECK(!plan.Quitting());
 }
 
+// A text setting is what the start gave it. A game server sets a client's
+// dvars by name, so text read from the dvar while a game is on could be the
+// server's, and these settings' text is run as console commands.
+void TestStartTextIsReadOnce()
+{
+    g_test = "start text";
+    {
+        StartText<32> text;
+        CHECK(text.Get()[0] == '\0');
+        char dvar[32] = "3 vitastats";
+        CHECK(text.Take(dvar));
+        CHECK(!strcmp(text.Get(), "3 vitastats"));
+        // The dvar changes later, and the start-up code runs a second time.
+        strcpy(dvar, "0 quit");
+        CHECK(!strcmp(text.Get(), "3 vitastats"));
+        CHECK(text.Take(dvar));
+        CHECK(!strcmp(text.Get(), "3 vitastats"));
+    }
+    {
+        // Empty at the start stays empty.
+        StartText<32> text;
+        CHECK(text.Take(""));
+        CHECK(text.Take("0 quit"));
+        CHECK(text.Get()[0] == '\0');
+    }
+    {
+        StartText<32> text;
+        CHECK(text.Take(nullptr));
+        CHECK(text.Take("0 quit"));
+        CHECK(text.Get()[0] == '\0');
+    }
+    {
+        // 31 characters fit in 32. 32 do not, and are left out whole.
+        StartText<32> fits, tooLong;
+        const std::string longest(31, 'a');
+        CHECK(fits.Take(longest.c_str()) && longest == fits.Get());
+        const std::string over(32, 'a');
+        CHECK(!tooLong.Take(over.c_str()) && tooLong.Get()[0] == '\0');
+        CHECK(!tooLong.Take("0 quit") && tooLong.Get()[0] == '\0');
+    }
+    {
+        // A whole run: the map's commands are the start's, whatever the dvar
+        // holds by the time the map comes up.
+        StartText<kMaxTimedListLength> atMap;
+        char dvar[64] = "2 openscriptmenu team autoassign";
+        CHECK(atMap.Take(dvar));
+        strcpy(dvar, "0 bind SPACE quit | 1 quit");
+        Settings settings;
+        settings.atMap = atMap.Get();
+        const Run run = Play(settings, 0, 20 * kSecond, kSecond / 10, 0, 0, 5 * kSecond);
+        CHECK(run.errors.empty());
+        CHECK(run.commands.size() == 1);
+        CHECK(!run.commands.empty() && run.commands[0].find("openscriptmenu team autoassign") != std::string::npos);
+    }
+    {
+        // With nothing at the start, a dvar set later sends nothing.
+        StartText<kMaxTimedListLength> atMap;
+        char dvar[64] = "";
+        CHECK(atMap.Take(dvar));
+        strcpy(dvar, "0 quit");
+        Settings settings;
+        settings.atMap = atMap.Get();
+        const Run run = Play(settings, 0, 20 * kSecond, kSecond / 10, 0, 0, 5 * kSecond);
+        CHECK(run.commands.empty() && run.errors.empty());
+    }
+    {
+        // A full list fits: every command at its longest.
+        std::string list;
+        for (size_t i = 0; i < kMaxTimedCommands; ++i)
+            list += std::string(i ? " | " : "") + std::to_string(i) + " " + std::string(kMaxCommandLength - 1, 'c');
+        StartText<kMaxTimedListLength> text;
+        CHECK(text.Take(list.c_str()) && list == text.Get());
+        TimedCommands commands;
+        char error[128];
+        CHECK(ParseTimedCommands(text.Get(), &commands, error, sizeof(error)) && commands.count == kMaxTimedCommands);
+    }
+}
+
 } // namespace
 
 int main()
@@ -305,6 +383,7 @@ int main()
     TestQuitAfterMapAtEmulatorSpeed();
     TestBadCommandsAreReportedOnce();
     TestNothingBeforeStart();
+    TestStartTextIsReadOnce();
     if (g_failures)
     {
         printf("%d vita run plan check(s) failed\n", g_failures);

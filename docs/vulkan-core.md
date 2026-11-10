@@ -28,8 +28,8 @@ Start-up (`vk_core.cpp`):
 | --- | --- |
 | Loader | Not linked. The window system hands the core `vkGetInstanceProcAddr` (SDL3 opens the loader), and every function is looked up through it (`vk_dispatch.h`). A machine without Vulkan fails with a message, not a dynamic-linker error. |
 | Instance | Vulkan 1.3. The window system's surface extensions, portability enumeration where offered (MoltenVK), and the Khronos validation layer on request. With validation on, synchronisation validation is on too. |
-| Device | Needs Vulkan 1.3, dynamic rendering, synchronization2, timeline semaphores, scalar block layout (for the [Legacy shaders](vulkan-legacy-shaders.md)' uniform blocks), the Vulkan memory model, buffer device addresses and demote-to-helper (all three used by the Legacy shaders' SPIR-V and required by Vulkan 1.3), `VK_KHR_swapchain` and one queue that draws and presents to the window. Picks discrete, then integrated, then virtual, then CPU devices, or the index given. Turns on anisotropic filtering, wireframe fill, independent blend, clip distances and 16-bit shader floats where the device has them (`Features` says which). Picks the depth-stencil format: D24S8 where it can be an attachment and sampled, else D32S8. |
-| Swapchain | `B8G8R8A8_UNORM` or `R8G8B8A8_UNORM` in sRGB-nonlinear colour space: UNORM because the retail renderer writes gamma-space values and never asks for sRGB conversion. FIFO with vsync, otherwise mailbox, then immediate. Rebuilt when the surface is out of date or suboptimal, or when the window reports a new size; a minimised window skips frames. |
+| Device | Needs Vulkan 1.3, dynamic rendering, synchronization2, timeline semaphores, scalar block layout (for the [Legacy shaders](vulkan-legacy-shaders.md)' uniform blocks), the Vulkan memory model, buffer device addresses and demote-to-helper (all three used by the Legacy shaders' SPIR-V and required by Vulkan 1.3), `VK_KHR_swapchain` and one queue that draws and presents to the window. Picks discrete, then integrated, then virtual, then CPU devices, or the index given. Turns on anisotropic filtering, wireframe fill, independent blend, clip distances, 16-bit shader floats and occlusion queries that count samples (precise queries with host query reset) where the device has them (`Features` says which). Picks the depth-stencil format: D24S8 where it can be an attachment and sampled, else D32S8. |
+| Swapchain | `B8G8R8A8_UNORM` or `R8G8B8A8_UNORM` in sRGB-nonlinear colour space: UNORM because the retail renderer writes gamma-space values and never asks for sRGB conversion. FIFO with vsync; otherwise IMMEDIATE (what D3D9's immediate presentation interval means, and DXVK's first choice), then MAILBOX, then FIFO. `KISAK_VK_PRESENT_MODE=immediate`, `mailbox` or `fifo` takes that mode wherever the surface offers it, vsync or not, to compare them on one machine. MAILBOX came first until 2026-11-10: in a window on an RTX 2080 Super under Windows it held the game at the display's 75 frames a second, where D3D9 ran the scene at 215 (PC run 6). Rebuilt when the surface is out of date or suboptimal, or when the window reports a new size; a minimised window skips frames. |
 | Swapchain images | Wrapped as core images, so passes, blits and read-back treat them like any other image. Copyable and blit targets where the surface allows. |
 
 Memory (`vk_memory.cpp`):
@@ -55,7 +55,8 @@ Frames (`vk_frame.cpp`):
 | Transient memory | Per-frame host-visible memory for vertex, index and uniform data. |
 | Descriptor sets | Allocated from per-frame pools, reset when the slot comes round again. |
 | Copies and read-back | Blits between any level and layer of two images (scaling and format conversion), and read-back of a level of any colour image (every slice of a 3D one, compressed formats as blocks), the swapchain image included, waited on by `WaitReadback`. |
-| Timing | GPU timestamps around every pass, kept per pass name (min, max, average), and around each whole frame. |
+| Timing | GPU timestamps around every pass, kept per pass name (min, max, average), and around each whole frame. Of each presented frame the core also keeps its passes' times added up (`CoreStats::framePasses`: the GPU at work on the frame; what the whole frame has beyond that is time between its passes, which is the GPU waiting for the frame's next part when the frame is submitted in parts) and the time from the last timestamp of the frame before to its first (`frameGap`: the GPU with neither frame to work on). `ResetFrameTimings` starts the three again, for a caller that measures one stretch of a run. |
+| Occlusion counts | `BeginOcclusionCount` and `EndOcclusionCount` count the samples that pass the depth and stencil tests in the draws between them, with a precise occlusion query; `ReadOcclusionCount` gives the number once the GPU has finished the submission that holds the count, and never waits for it. A Vulkan query cannot outlive its pass, so a count begins inside a pass and `EndPass` ends one that is still open: a user that counts across passes, or across the parts of a frame, adds several counts up. One can be open at a time (Vulkan allows one occlusion query at once), so users that overlap share a count (`ShareOcclusionCount`); the last `ReleaseOcclusionCount` gives it up. The queries come from pools of 256, made as they are needed. A query is reset from the host when it is handed out, since a command buffer cannot reset one inside a pass, and Vulkan allows that only once every command that used the query has run: a count that was given up is handed out again only after the GPU has finished its submission. Without precise queries or host query reset on the device, and with `KISAK_VK_OCCLUSION_QUERIES=0`, `Features().occlusionCounts` is off and no count begins. |
 
 Recording (`vk_record.cpp`):
 
@@ -72,7 +73,7 @@ recording, which was about 2.5 ms of each laptop frame
 
 | Piece | How |
 | --- | --- |
-| Split | The owning thread keeps everything that decides what is recorded: layouts and barriers, staging and transient memory, descriptor sets (allocated and written there, bound by a packet), serials, timestamps' bookkeeping and deferred destruction. The record thread owns the command pools' use: allocating, beginning, recording, ending, resetting; and the queue: `vkQueueSubmit2` and `vkQueuePresentKHR`. |
+| Split | The owning thread keeps everything that decides what is recorded: layouts and barriers, staging and transient memory, descriptor sets (allocated and written there, bound by a packet), serials, timestamps' bookkeeping, the reset and read of occlusion queries, and deferred destruction. The record thread owns the command pools' use: allocating, beginning, recording, ending, resetting; and the queue: `vkQueueSubmit2` and `vkQueuePresentKHR`. |
 | Packets | `f` is captured by value and must be trivially destructible; structures holding pointers (`VkDependencyInfo`, `VkRenderingInfo`) are built inside it, pointing at the captured copies. A chunk goes to the thread when it fills and at every submission. |
 | Waiting | `WaitSerial` first waits until the thread has submitted that serial; `WaitIdle`, swapchain rebuilds, `DetachWindow` and `DestroyCore` wait until it has run everything. The swapchain is the thread's while it presents, so the acquire waits until the previous frame's present has been made: late in the frame, so normally not at all. The time the owning thread waits is `CoreStats::recordWaitMs`. |
 | Errors | A failed call on the thread stops it running packets; the owning thread fails with that message at its next wait, submission or frame. Validation messages raised on the thread are kept and logged, and counted, by the owning thread at its next sync; every other caller's are logged at once. |
@@ -177,8 +178,12 @@ KisakCOD-vulkan-probe [--frames N] [--size WxH] [--validation off|auto|require]
 Output is `key=value` lines on stdout ending in `vulkan_probe=passed` or
 `vulkan_probe=failed stage=<stage>` with a `vulkan_probe.reason=` line. Exit
 status 0 is a pass, 1 a failed stage, 2 a usage error. The stages are `sdl`,
-`loader`, `window`, `core`, `frames`, `resize`, `draw`, `capture` and
-`validation`. Each run also prints its pass and frame GPU times, submissions,
+`loader`, `window`, `core`, `present_mode`, `frames`, `resize`, `draw`,
+`capture` and `validation`. The `present_mode` stage holds the core's choice
+of present mode (`ChoosePresentMode`) to a table of surfaces this machine's
+own surface does not stand for: IMMEDIATE before MAILBOX before FIFO without
+vsync, FIFO with it, and a mode asked for by name taken where it is offered
+(`vulkan_probe.present_mode_choice=checked`). Each run also prints its pass and frame GPU times, submissions,
 memory, upload and descriptor counts, and pipeline counts.
 
 To see it on a desktop, run it with no options: a 960x540 window cycles colours
@@ -190,7 +195,8 @@ for 300 frames (about five seconds with vsync).
 several ways: bad arguments exit 2; `--list-devices` finds a usable device; with
 no Vulkan driver visible it fails closed (stage `loader` or `core`); a full run
 with `--resize --check-capture` passes, follows the resize, reads back the
-cleared colour, times the pass and has no validation errors; and two `--draw`
+cleared colour, times the pass, checked the present mode choice and has no
+validation errors; and two `--draw`
 runs sharing a pipeline cache file pass every point in the target and the
 swapchain, build their pipeline before the first frame, time the scene pass,
 run uploads, transient memory, descriptor sets and deferred destruction, and
@@ -239,9 +245,10 @@ probe, the Legacy adapter check and the D3D9 front check pass with the thread
 on and off, x86_64 with validation and synchronisation checks and i386 without;
 the device probe draws its frames through the engine with it on. The CI job
 runs each check again with the thread switched the other way, and under
-ThreadSanitizer the D3D9 front's `threads`, `frame_loop`, `gpu_feed` and
-`bench` scenes (the last two since the GPU feed and the front's lock change,
-2026-11-10), a probe run with draws, read-back and swapchain rebuilds and the
+ThreadSanitizer the D3D9 front's `threads`, `frame_loop`, `gpu_feed`, `bench`
+and `occlusion` scenes (the last three since the GPU feed, the front's lock
+change and the occlusion counts, 2026-11-10), a probe run with draws,
+read-back and swapchain rebuilds and the
 Legacy adapter check, all with the thread on: no races in the core, the
 adapter or the front. Those runs set `LP_NUM_THREADS=0`. Lavapipe is not built
 with ThreadSanitizer, which then
@@ -252,6 +259,37 @@ condition variable that an llvmpipe rasterizer thread locked and signalled
 the same block (every run of the adapter check, with or without the record
 thread). Without rasterizer threads lavapipe's other threads and every thread
 of ours are still there.
+
+The variable turned out not to be enough (2026-11-10): a hosted run of the
+`threads` scene failed on that mutex with a thread named `llvmpipe-1` in the
+report, although the step sets the variable and the hosted driver is the build
+used here, where the variable does take those threads away. Why is not known.
+Since then the ThreadSanitizer runs also load
+`scripts/tests/vulkan_tsan_suppressions.txt`, whose one rule,
+`race:libvulkan_lvp.so`, drops a report that has the driver in the stack of
+either access or in the stack that created one of the threads it names. Here,
+with the rasterizer threads on, 8 of 36 runs of the step's nine commands fail
+without the rule (the adapter check every time, the `threads`, `frame_loop`
+and `bench` scenes now and then) and 0 of 54 with it; with the threads off and
+the rule, as CI runs them, 0 of 72. What the rule gives up: a race between the
+driver and a thread of ours on the same memory, and one between two threads of
+ours that are both inside driver calls, are no longer reported, where
+ThreadSanitizer saw them at all (only through the driver's libc calls). A race
+between two accesses in our own code is reported as before:
+with it loaded, a counter that the `threads` scene's two threads were made to
+write without a lock, and the front's lock taken away, each failed that scene
+in 10 runs of 10 with a report that names our code (neither change is in the
+tree).
+
+Occlusion counts (2026-11-10, cloud sandbox, lavapipe from Mesa 25.2.8, which
+has precise queries and host query reset): the adapter's `occlusion_query`
+scene and the front's `occlusion` scene get every sample count exactly, with
+the record thread on and off, the GPU feed off, at its default and submitting
+after every draw, and validation with synchronisation checks reporting
+nothing. The host reset of a query the record thread has yet to begin is
+legal (Vulkan asks for no external synchronisation of the pool in
+`vkResetQueryPool`, `vkCmdBeginQuery` or `vkCmdEndQuery`), and ThreadSanitizer
+agrees. No GPU has run them yet, and MoltenVK only in hosted CI.
 
 The clear-and-present probe has run on both physical GPUs (2026-11-07): the
 Windows PC's RTX 2080 Super and the laptop's Intel ANV, i386 and x86_64 (report

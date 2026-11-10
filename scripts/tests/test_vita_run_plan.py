@@ -17,6 +17,12 @@ not know (``%zu``, ``%jd``, ``%td``): it prints the letters and reads every
 later argument as the wrong type. That is how the first frame log line on the
 Vita came out as "zu frames" with a wild read behind it.
 
+And it reads them for the text settings (``vita_atMenu``, ``vita_atMap``,
+``vita_keyboardAnswer``): their text is run as console commands or typed for the
+player, and a game server sets a client's dvars by name, so each dvar may be
+read in one place only, where start-up hands it to a ``StartText`` that keeps
+the first value it is given.
+
 Built with AddressSanitizer and UBSan.
 
 Usage:
@@ -59,6 +65,54 @@ def unknown_formats(root=ROOT):
     return found
 
 
+# The dvars whose text is run as commands or typed for the player.
+START_TEXT_DVARS = ("vita_atMenu", "vita_atMap", "vita_keyboardAnswer")
+TEXT_READ = re.compile(
+    r"\b(" + "|".join(START_TEXT_DVARS) + r")\s*->\s*(current|latched|reset)\b"
+    r"|Dvar_Get\w*\s*\(\s*\"(" + "|".join(START_TEXT_DVARS) + r")\"")
+# The one read allowed: "<start text>.Take(<dvar> ? <dvar>->current.string : "")".
+TAKEN_AT_START = re.compile(r"\.Take\(\s*(\w+)\s*\?\s*(\w+)\s*->\s*current\.string\s*:\s*\"\"\s*\)")
+
+
+def text_setting_reads(root=ROOT):
+    """(problems, dvars taken at start-up) for the text settings in the Vita's sources."""
+    problems = []
+    taken = []
+    for path in sorted(path for path in (root / "src" / "vita").rglob("*") if path.suffix in (".cpp", ".h", ".c", ".inl")):
+        for number, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+            code = line.split("//", 1)[0]
+            reads = [match.group(1) or match.group(3) for match in TEXT_READ.finditer(code)]
+            if not reads:
+                continue
+            allowed = TAKEN_AT_START.search(code)
+            if allowed and allowed.group(1) == allowed.group(2) and reads == [allowed.group(1)]:
+                taken.append(allowed.group(1))
+            else:
+                problems.append(f"{path.relative_to(root)}:{number}: {line.strip()}")
+    return problems, taken
+
+
+def check_text_settings() -> bool:
+    # The rule finds what it is for, and lets the one allowed read through.
+    assert TEXT_READ.search('settings.atMap = vita_atMap ? vita_atMap->current.string : "";')
+    assert TEXT_READ.search("return vita_keyboardAnswer && *vita_keyboardAnswer->current.string;")
+    assert TEXT_READ.search('const char *text = Dvar_GetString("vita_atMenu");')
+    assert not TEXT_READ.search("if (vita_atMenu && s_atMenu.Get()[0])")
+    assert TAKEN_AT_START.search('if (!s_atMap.Take(vita_atMap ? vita_atMap->current.string : ""))')
+    assert not TAKEN_AT_START.search("s_atMap.Take(vita_atMap->current.string)")
+
+    problems, taken = text_setting_reads()
+    if problems:
+        print("\n".join(problems))
+        print("FAIL: a text setting is read outside its start-up StartText; a game server can set the dvar later, "
+              "and its text is run as commands or typed for the player")
+        return False
+    if sorted(taken) != sorted(START_TEXT_DVARS):
+        print(f"FAIL: expected one start-up read of each of {', '.join(START_TEXT_DVARS)}, found {', '.join(taken) or 'none'}")
+        return False
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--cxx", default=shutil.which("c++") or "g++")
@@ -71,6 +125,8 @@ def main() -> int:
     if found:
         print("\n".join(found))
         print("FAIL: the Vita's printf does not know these length modifiers; cast and use %u or %llu")
+        return 1
+    if not check_text_settings():
         return 1
 
     with tempfile.TemporaryDirectory(prefix="kisak-vita-run-plan-") as work:

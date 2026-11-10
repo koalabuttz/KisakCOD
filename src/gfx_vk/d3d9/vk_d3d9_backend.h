@@ -44,6 +44,12 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error);
 // Logs the back end's statistics, destroys the Legacy device and then the GPU
 // side. Null is ignored.
 void CloseBackend(Backend *backend);
+// Logs the back end's frame statistics since it was opened or since they
+// were last reset (vk_d3d9.h LogDeviceStats); with reset, starts them again.
+void BackendLogStats(Backend *backend, bool reset);
+// Called at every Present, before the frame is presented: the back end takes
+// up the host's settings (Host::tuning) if they changed.
+void BackendFrame(Backend *backend);
 
 lg::Device *LegacyDevice(Backend *backend);
 // "<GPU name>" for the device line the front logs.

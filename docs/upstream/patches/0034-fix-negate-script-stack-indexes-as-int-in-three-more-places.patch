@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 09:47:21 +0000
+Subject: [PATCH] fix: negate script stack indexes as int in three more places
+
+VM_Execute(), Scr_GetFunc() and Scr_GetAnimTree() index back from
+scrVmPub.top with a negated uint32_t. The negation stays unsigned, so
+on a 64-bit build the index is a huge positive number. The other
+readers in this file already write top[-(int)index]. These three now
+do too.
+
+No behaviour change in the 32-bit build.
+---
+ src/script/scr_vm.cpp | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/script/scr_vm.cpp b/src/script/scr_vm.cpp
+index 44a3d96a..89a3a68c 100644
+--- a/src/script/scr_vm.cpp
++++ b/src/script/scr_vm.cpp
+@@ -3492,7 +3492,7 @@ uint32_t __cdecl VM_Execute(uint32_t localId, const char *pos, uint32_t paramcou
+ 
+     iassert(paramcount <= scrVmPub.inparamcount);
+     Scr_ClearOutParams();
+-    startTop = &scrVmPub.top[-paramcount];
++    startTop = &scrVmPub.top[-(int)paramcount];
+     paramcounta = scrVmPub.inparamcount - paramcount;
+     if (scrVmPub.function_count >= 30)
+     {
+@@ -5094,7 +5094,7 @@ uint32_t Scr_GetFunc(uint32_t index)
+ 
+     if (index < scrVmPub.outparamcount)
+     {
+-        value = &scrVmPub.top[-index];
++        value = &scrVmPub.top[-(int)index];
+         if (value->type == VAR_FUNCTION)
+         {
+             if (!Scr_IsInOpcodeMemory(value->u.codePosValue))
+@@ -5148,7 +5148,7 @@ XAnim_s * Scr_GetAnimTree(uint32_t index)
+ 
+     if (index < scrVmPub.outparamcount)
+     {
+-        v3 = &scrVmPub.top[-index];
++        v3 = &scrVmPub.top[-(int)index];
+         type = v3->type;
+         if (type == VAR_INTEGER)
+         {

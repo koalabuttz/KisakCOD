@@ -668,7 +668,8 @@ bool CreateDevice(Core &core)
 
     // Optional features D3D9 content uses where the device has them:
     // anisotropic filtering, wireframe fill, independent blend for MRT, clip
-    // distances (user clip planes) and 16-bit floats in translated shaders.
+    // distances (user clip planes), 16-bit floats in translated shaders, and
+    // occlusion queries that count samples.
     VkPhysicalDeviceFeatures supported{};
     VkPhysicalDeviceVulkan12Features supported12{};
     // On a portability device (MoltenVK) every subset feature it has is
@@ -707,6 +708,8 @@ bool CreateDevice(Core &core)
     core.optional.gpuFeed =
         core.optional.gpuFeedAlways || EnvEquals("KISAK_VK_GPU_FEED", "1") || (!tiled && !EnvEquals("KISAK_VK_GPU_FEED", "0"));
     core.optional.gpuFeedDraws = EnvCount("KISAK_VK_GPU_FEED_DRAWS", 128);
+    core.optional.occlusionCounts = supported.occlusionQueryPrecise && supported12.hostQueryReset
+        && !EnvEquals("KISAK_VK_OCCLUSION_QUERIES", "0");
 
     VkPhysicalDeviceVulkan13Features features13{};
     features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
@@ -723,6 +726,7 @@ bool CreateDevice(Core &core)
     features12.vulkanMemoryModel = VK_TRUE;
     features12.bufferDeviceAddress = VK_TRUE;
     features12.shaderFloat16 = supported12.shaderFloat16;
+    features12.hostQueryReset = core.optional.occlusionCounts ? VK_TRUE : VK_FALSE;
     VkPhysicalDeviceFeatures2 features{};
     features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     features.pNext = &features12;
@@ -730,6 +734,7 @@ bool CreateDevice(Core &core)
     features.features.fillModeNonSolid = supported.fillModeNonSolid;
     features.features.independentBlend = supported.independentBlend;
     features.features.shaderClipDistance = supported.shaderClipDistance;
+    features.features.occlusionQueryPrecise = core.optional.occlusionCounts ? VK_TRUE : VK_FALSE;
 
     VkDeviceCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -822,19 +827,41 @@ VkSurfaceFormatKHR ChooseFormat(const std::vector<VkSurfaceFormatKHR> &formats)
     return formats[0];
 }
 
-VkPresentModeKHR ChoosePresentMode(const std::vector<VkPresentModeKHR> &modes, bool vsync)
+// KISAK_VK_PRESENT_MODE, when it names a mode (ChoosePresentMode's `wanted`).
+const char *WantedPresentMode()
 {
-    if (vsync)
-        return VK_PRESENT_MODE_FIFO_KHR; // always available
-    const VkPresentModeKHR preferred[] = {VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR};
-    for (VkPresentModeKHR mode : preferred)
+    for (const char *mode : {"immediate", "mailbox", "fifo"})
     {
-        if (std::find(modes.begin(), modes.end(), mode) != modes.end())
+        if (EnvEquals("KISAK_VK_PRESENT_MODE", mode))
+            return mode;
+    }
+    return nullptr;
+}
+} // namespace
+
+// IMMEDIATE first without vsync: it is what D3D9's immediate presentation
+// interval means (a frame is shown at once and may tear) and what DXVK asks
+// for first. MAILBOX, tried first until 2026-11-10, held the game to the
+// display's 75 frames a second in a window on an RTX 2080 Super under Windows
+// (PC run 6), where D3D9 ran at 215.
+VkPresentModeKHR ChoosePresentMode(const VkPresentModeKHR *offered, uint32_t count, bool vsync, const char *wanted)
+{
+    const auto has = [&](VkPresentModeKHR mode) {
+        return std::find(offered, offered + count, mode) != offered + count;
+    };
+    if (wanted && !std::strcmp(wanted, "immediate") && has(VK_PRESENT_MODE_IMMEDIATE_KHR))
+        return VK_PRESENT_MODE_IMMEDIATE_KHR;
+    if (wanted && !std::strcmp(wanted, "mailbox") && has(VK_PRESENT_MODE_MAILBOX_KHR))
+        return VK_PRESENT_MODE_MAILBOX_KHR;
+    if (vsync || (wanted && !std::strcmp(wanted, "fifo")))
+        return VK_PRESENT_MODE_FIFO_KHR; // every surface has it
+    for (VkPresentModeKHR mode : {VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_MAILBOX_KHR})
+    {
+        if (has(mode))
             return mode;
     }
     return VK_PRESENT_MODE_FIFO_KHR;
 }
-} // namespace
 
 bool SurfaceExtent(Core &core, VkSurfaceCapabilitiesKHR &caps, VkExtent2D &extent)
 {
@@ -882,7 +909,8 @@ BuildResult BuildSwapchain(Core &core)
     }
 
     const VkSurfaceFormatKHR format = ChooseFormat(formats);
-    const VkPresentModeKHR mode = ChoosePresentMode(modes, core.desc.vsync);
+    const VkPresentModeKHR mode =
+        ChoosePresentMode(modes.data(), static_cast<uint32_t>(modes.size()), core.desc.vsync, WantedPresentMode());
     uint32_t imageCount = caps.minImageCount + 1;
     if (caps.maxImageCount && imageCount > caps.maxImageCount)
         imageCount = caps.maxImageCount;
@@ -1040,6 +1068,8 @@ void DestroyCore(Core *core, CoreStats *finalStats)
             vk.vkDestroySwapchainKHR(core->dev, core->swapchain, nullptr);
         if (core->timestamps)
             vk.vkDestroyQueryPool(core->dev, core->timestamps, nullptr);
+        for (VkQueryPool pool : core->occlusionPools)
+            vk.vkDestroyQueryPool(core->dev, pool, nullptr);
         if (core->timeline)
             vk.vkDestroySemaphore(core->dev, core->timeline, nullptr);
         DestroyMemoryPools(*core);
@@ -1118,6 +1148,13 @@ bool SynchronizationValidationEnabled(const Core *core) { return core->syncValid
 const DeviceInfo &Device(const Core *core) { return core->device; }
 const SwapchainInfo &Swapchain(const Core *core) { return core->swapInfo; }
 const CoreStats &Stats(const Core *core) { return core->stats; }
+
+void ResetFrameTimings(Core *core)
+{
+    core->stats.frame = PassTimings{};
+    core->stats.framePasses = PassTimings{};
+    core->stats.frameGap = PassTimings{};
+}
 void NotifyResize(Core *core) { core->resizePending = true; }
 
 const Dispatch &Functions(const Core *core) { return core->vk; }

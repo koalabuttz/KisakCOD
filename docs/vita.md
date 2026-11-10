@@ -125,8 +125,8 @@ types. Cast and use `%u` or `%llu`; the same test reads `src/vita` and
 | `vita_quitAfterMap <s>` | Quit this many seconds after the map was first in play: the client is in the game, or the dedicated server runs a map. |
 | `vita_quitAfter <s>` | Quit this many seconds after start-up. Set it as well, as the safety net for a start whose menu or map never comes. |
 | `vita_statsEvery <s>` | The period of the load, memory, GPU memory and sound lines (60 by default). The lines also come the moment the menu or the map is up, and the period counts from there. |
-| `vita_atMenu "<s> <command> \| <s> <command>"` | Console commands to send that many seconds after the menu first showed. |
-| `vita_atMap "..."` | The same after the map was first in play. `{serverid}` in a command stands for the server id. |
+| `vita_atMenu "<s> <command> \| <s> <command>"` | Console commands to send that many seconds after the menu first showed. Read at start-up only. |
+| `vita_atMap "..."` | The same after the map was first in play. `{serverid}` in a command stands for the server id. Read at start-up only. |
 | `vita_assertExit 1` | A failed assertion or an exception nothing caught ends the process with exit code 1 where it would stop for a core dump. Vita3K hangs on that stop and loses the log's tail. Off by default: a console's dump is worth keeping. |
 
 Every quit timer first prints all figures (`Vita: vita_quitAfterMenu 15
@@ -176,6 +176,12 @@ each with its own "Client ...'s snapshot" dump of about 40 lines, the
 engine's note of the largest snapshot so far. A timed-command list that cannot be read is reported once (`Vita:
 vita_atMap: part 2 ... does not start with a time in seconds`) and none of
 its commands is sent.
+
+`vita_atMenu` and `vita_atMap` are taken from the command line (`+set`) when
+the game starts and not read again. A game server sets a client's dvars by
+name, and what these two hold is run as console commands, so a value that
+arrives later, from a server or from the console, sends nothing. The same
+goes for the client's `vita_keyboardAnswer`.
 
 ## Testing in Vita3K
 

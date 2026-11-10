@@ -40,6 +40,20 @@ using D3D9Window = KisakDxvkHWND;
 using D3D9Point = KisakDxvkPOINT;
 #endif
 
+// Settings the program may change while a device exists, so that one run can
+// compare them (the engine's r_vkGpuFeed dvars; perf_ab flips those). The
+// front asks for them at every Present. The PS Vita's GXM back end has none.
+struct Tuning
+{
+    // The GPU feed (lg::GpuFeed): -1 the device's own choice (its kind of
+    // GPU, KISAK_VK_GPU_FEED), 0 off, 1 on, 2 a part after every draw.
+    int gpuFeed = -1;
+    // Draws to a part; 0 the device's own (KISAK_VK_GPU_FEED_DRAWS, else 128).
+    uint32_t gpuFeedDraws = 0;
+    // The idle rule's first part (lg::GpuFeed::idleDraws); 0 for no such rule.
+    uint32_t gpuFeedIdleDraws = 0;
+};
+
 // What the front needs from the program around it: the window system, display
 // modes and the monitor. D3D9 answers these from the OS; the front asks.
 struct Host
@@ -79,6 +93,9 @@ struct Host
     // Called when a device's core is destroyed, with its final statistics
     // (validation messages about the teardown included). Null: not called.
     void (*coreDestroyed)(void *user, const CoreStats &stats) = nullptr;
+    // Fills in the settings above, which arrive at their defaults. Called
+    // under the front's lock on the thread that presents. Null: defaults.
+    void (*tuning)(void *user, Tuning &out) = nullptr;
 #endif
 };
 
@@ -98,8 +115,30 @@ struct DeviceCounters
     uint64_t submissions;      // queue submissions so far (Vulkan back end)
     uint64_t fenceFlushes;     // of those, frames submitted ahead of their Present by a swap fence poll
     uint64_t feedFlushes;      // of those, parts of frames submitted while the frame was being drawn
+    uint64_t feedIdleFlushes;  // of those, parts sent early to a GPU with nothing left (Tuning::gpuFeedIdleDraws)
+    // Occlusion queries count samples. False where the back end cannot, and
+    // with KISAK_VK_OCCLUSION_QUERIES=0: a finished query then reports every
+    // sample as passed (0xffffff on Vulkan).
+    bool occlusionCounted;
+    // Vulkan queries begun for them (a query takes one for every run of its
+    // draws that no pass end interrupts), and the pools of 256 made for them.
+    uint64_t occlusionCounts;
+    uint32_t occlusionPools;
+    // What they answered where they count: results worked out for issued
+    // queries, those of them with no sample, and all their samples.
+    uint64_t occlusionResults;
+    uint64_t occlusionResultsZero;
+    uint64_t occlusionSamples;
 };
 bool Counters(IDirect3DDevice9 *device, DeviceCounters &out);
+
+// Logs every live device's frame statistics through its host (the lines a
+// device logs when it is destroyed: `frame stats:`, `record thread:`,
+// `occlusion queries:`), counted since the device was created or since the
+// last call that reset them. With reset, the next count starts here, so a
+// program can measure one stretch of a run (the engine's r_vkStats command).
+// Any thread. Returns how many devices there were.
+uint32_t LogDeviceStats(bool reset);
 
 // The window is about to be destroyed (WM_DESTROY on Windows, before
 // SDL_DestroyWindow elsewhere). Every device the front made for it lets go of

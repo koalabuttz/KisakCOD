@@ -69,6 +69,10 @@ namespace
     const dvar_t *vita_atMenu;
     const dvar_t *vita_atMap;
     const dvar_t *vita_assertExit;
+    // vita_atMenu and vita_atMap as the start gave them: their commands go to
+    // the console, so the dvars are read once (kisak::vita_run::StartText).
+    kisak::vita_run::StartText<kisak::vita_run::kMaxTimedListLength> s_atMenu;
+    kisak::vita_run::StartText<kisak::vita_run::kMaxTimedListLength> s_atMap;
     kisak::vita_run::Plan s_plan;
     bool s_quitDue;
 
@@ -224,8 +228,8 @@ namespace
         settings.quitAfterMenu = Seconds(vita_quitAfterMenu);
         settings.quitAfterMap = Seconds(vita_quitAfterMap);
         settings.statsEvery = Seconds(vita_statsEvery);
-        settings.atMenu = vita_atMenu ? vita_atMenu->current.string : "";
-        settings.atMap = vita_atMap ? vita_atMap->current.string : "";
+        settings.atMenu = s_atMenu.Get();
+        settings.atMap = s_atMap.Get();
         const kisak::vita_run::Step step = s_plan.Frame(now, MenuIsUp(), MapIsUp(), settings);
 
         if (step.menuCameUp)
@@ -265,10 +269,19 @@ void Vita_StatsInit()
     vita_statsEvery = Dvar_RegisterInt("vita_statsEvery", 60, 1, 86400, DVAR_NOFLAG,
         "Seconds between the load, memory and sound lines in the log");
     vita_atMenu = Dvar_RegisterString("vita_atMenu", "", DVAR_NOFLAG,
-        "Console commands to send after the main menu first showed: \"<seconds> <command> | <seconds> <command>\"");
+        "Console commands to send after the main menu first showed: \"<seconds> <command> | <seconds> <command>\" "
+        "(read at start-up only)");
     vita_atMap = Dvar_RegisterString("vita_atMap", "", DVAR_NOFLAG,
         "Console commands to send after the map was first in play: \"<seconds> <command> | <seconds> <command>\"; "
-        "{serverid} stands for the server id");
+        "{serverid} stands for the server id (read at start-up only)");
+    // Read here and nowhere else: a game server can set either dvar later, and
+    // what they hold is run as console commands.
+    if (!s_atMenu.Take(vita_atMenu ? vita_atMenu->current.string : ""))
+        Com_PrintError(CON_CHANNEL_SYSTEM, "Vita: vita_atMenu is longer than %u characters; none of its commands will be sent\n",
+            (unsigned int)(kisak::vita_run::kMaxTimedListLength - 1));
+    if (!s_atMap.Take(vita_atMap ? vita_atMap->current.string : ""))
+        Com_PrintError(CON_CHANNEL_SYSTEM, "Vita: vita_atMap is longer than %u characters; none of its commands will be sent\n",
+            (unsigned int)(kisak::vita_run::kMaxTimedListLength - 1));
     vita_assertExit = Dvar_RegisterBool("vita_assertExit", Vita_AssertExits(), DVAR_NOFLAG,
         "A failed assertion or an uncaught exception ends the process with exit code 1 and no core dump "
         "(for emulator runs)");
@@ -279,10 +292,10 @@ void Vita_StatsInit()
         "vita_assertExit %d\n",
         Seconds(vita_quitAfter), Seconds(vita_quitAfterMenu), Seconds(vita_quitAfterMap), Seconds(vita_statsEvery),
         vita_assertExit && vita_assertExit->current.enabled ? 1 : 0);
-    if (vita_atMenu && vita_atMenu->current.string[0])
-        Com_Printf(CON_CHANNEL_SYSTEM, "Vita: vita_atMenu \"%s\"\n", vita_atMenu->current.string);
-    if (vita_atMap && vita_atMap->current.string[0])
-        Com_Printf(CON_CHANNEL_SYSTEM, "Vita: vita_atMap \"%s\"\n", vita_atMap->current.string);
+    if (s_atMenu.Get()[0])
+        Com_Printf(CON_CHANNEL_SYSTEM, "Vita: vita_atMenu \"%s\"\n", s_atMenu.Get());
+    if (s_atMap.Get()[0])
+        Com_Printf(CON_CHANNEL_SYSTEM, "Vita: vita_atMap \"%s\"\n", s_atMap.Get());
     PrintMemory("after start-up");
     s_window = Window();
     s_window.start = Now();

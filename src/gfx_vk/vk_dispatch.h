@@ -83,6 +83,9 @@
     X(vkCmdResetQueryPool) \
     X(vkCmdWriteTimestamp2) \
     X(vkGetQueryPoolResults) \
+    X(vkResetQueryPool) \
+    X(vkCmdBeginQuery) \
+    X(vkCmdEndQuery) \
     X(vkCreateBuffer) \
     X(vkDestroyBuffer) \
     X(vkGetBufferMemoryRequirements) \

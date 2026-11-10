@@ -486,6 +486,8 @@ public:
     D3D9Window window() const { return window_; }
     // The window is going: the core lets go of its swapchain and surface.
     void DetachWindow();
+    // Under FrontLock (LogDeviceStats).
+    void LogStats(bool reset);
     const Host &host() const { return parent_->host(); }
     HRESULT Unsupported(const char *method);
     DeviceCounters counters() const;

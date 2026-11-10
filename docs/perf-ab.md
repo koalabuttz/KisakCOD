@@ -102,12 +102,41 @@ When the GPU is the limit they are most of the frame: at 1920x1200 on the
 laptop the main thread waited 9 ms of a 14.8 ms frame (perf run 1). On a
 laptop the CPU cores and the GPU share one power budget.
 
-`r_gpuSyncSleep <microseconds>` (non-Windows builds, default 0 = unchanged)
-makes both waits sleep that long between checks of the fence. A wait then ends
-up to one sleep late. `r_gpuSyncSleepThreads` picks the waits it applies to
-(1 the main thread's, 2 the render thread's, 3 both, the default), to tell
-their effects apart. The sleep is off until a laptop run shows what it does
-to frame rate and power; `perf_ab` was written to measure it.
+`r_gpuSyncSleep <microseconds>` (non-Windows builds) makes both waits sleep
+that long between checks of the fence. A wait then ends up to one sleep late.
+`r_gpuSyncSleepThreads` picks the waits it applies to (1 the main thread's, 2
+the render thread's, 3 both, the default), to tell their effects apart. 0
+keeps a core busy as before.
+
+The default is 100 on Linux and 0 elsewhere. Laptop perf run 5 (Intel U300,
+battery, power saver, mp_crash with 12 bots, `perf_ab` 0 against 100 in one
+launch) measured:
+
+| | fps | CPU ms/frame, whole game | battery |
+|---|---|---|---|
+| 1280x800 windowed | +2.8 % | -2.75 | -0.54 W |
+| 1920x1200 fullscreen | +12.6 % | -8.25 | -0.23 W |
+
+50 and 200 were no better than 100. Vita and macOS have had no such run.
+
+### `r_gpuSyncSleepUnlocked`
+
+`R_SyncGpu` holds the GPU fence lock for the whole of its wait. The render
+thread takes the same lock at the end of each frame to issue the next fence,
+so it waits for the main thread's wait to end. `lock GPU_FENCE` in the
+`timed` line is the time both threads spend getting the lock (the main
+thread also waits while the render thread holds it for its own wait): 0.9 to
+1.2 ms/frame at 1280x800 and 2.5 to 3.7 ms/frame at 1920x1200 in run 5.
+Which thread pays how much is not measured. `r_gpuSync 0`, which has no waits and no lock, gained
+16.6 % fps at 1280x800 but gives up the limit on how far the CPU runs ahead
+of the GPU (mouse latency).
+
+`r_gpuSyncSleepUnlocked 1` (default 0) keeps that limit: the main thread lets
+go of the lock while `r_gpuSyncSleep` sleeps, and its wait ends when the fence
+has passed, as before, or when the render thread has issued a new fence. The
+render thread issues one only after the previous fence passed, so the wait
+never ends sooner than before. It does nothing with `r_gpuSyncSleep 0` or
+`r_gpuSyncSleepThreads 2`. It stays off until a laptop run compares it.
 
 ## `xanim_blendOnce`
 

@@ -36,6 +36,7 @@
 IDirect3D9 *Kisak_VulkanDirect3DCreate9();
 int Kisak_VulkanBackendSelected();
 void Kisak_VulkanWindowDestroying(HWND window);
+unsigned int Kisak_VulkanLogStats(bool reset);
 
 namespace
 {
@@ -53,6 +54,11 @@ const dvar_s *r_backend;
 const dvar_s *r_vkValidation;
 const dvar_s *r_vkDevice;
 const dvar_s *r_vkShaderCache;
+// Read at every Present (HostTuning), so a change shows in the next frame.
+const char *s_gpuFeedNames[] = {"default", "off", "on", "always", nullptr};
+const dvar_s *r_vkGpuFeed;
+const dvar_s *r_vkGpuFeedDraws;
+const dvar_s *r_vkGpuFeedIdleDraws;
 
 const char *const s_instanceExtensions[] = {
     VK_KHR_SURFACE_EXTENSION_NAME,
@@ -280,6 +286,15 @@ std::string CacheDirectory()
     return directory;
 }
 
+// The dvars the front takes up while a device exists (front::Tuning).
+void HostTuning(void *, front::Tuning &out)
+{
+    out.gpuFeed = r_vkGpuFeed->current.integer - 1;
+    // In parentheses: <windows.h> defines max as a macro here.
+    out.gpuFeedDraws = static_cast<uint32_t>((std::max)(0, r_vkGpuFeedDraws->current.integer));
+    out.gpuFeedIdleDraws = static_cast<uint32_t>((std::max)(0, r_vkGpuFeedIdleDraws->current.integer));
+}
+
 gfx_vk::Validation ValidationSetting()
 {
     switch (r_vkValidation->current.integer)
@@ -306,6 +321,17 @@ void RegisterDvars()
     r_vkShaderCache = Dvar_RegisterBool("r_vkShaderCache", true, DVAR_ARCHIVE | DVAR_LATCH,
                                         "Keep translated shaders and Vulkan pipelines in fs_homepath/vulkan "
                                         "(shaders.bin, pipelines.bin) between runs");
+    // Measuring switches: not saved, and in effect from the next frame, so
+    // one launch can compare settings.
+    r_vkGpuFeed = Dvar_RegisterEnum("r_vkGpuFeed", s_gpuFeedNames, 0, DVAR_NOFLAG,
+                                    "Vulkan: hand the GPU a frame in parts while it is drawn: default (by the "
+                                    "kind of GPU), off, on, or always (after every draw, for testing)");
+    r_vkGpuFeedDraws = Dvar_RegisterInt("r_vkGpuFeedDraws", 0, 0, 65535, DVAR_NOFLAG,
+                                        "Vulkan: draws to each part of a frame handed to the GPU; 0 is the "
+                                        "default, 128");
+    r_vkGpuFeedIdleDraws = Dvar_RegisterInt("r_vkGpuFeedIdleDraws", 0, 0, 65535, DVAR_NOFLAG,
+                                            "Vulkan: draws to a part when the GPU has nothing left (the next "
+                                            "such part of the frame takes twice as many); 0 for no such parts");
 }
 } // namespace
 
@@ -334,6 +360,7 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
     host.validation = ValidationSetting();
     host.deviceIndex = r_vkDevice->current.integer;
     host.coreDestroyed = HostCoreDestroyed;
+    host.tuning = HostTuning;
     const std::string cacheDirectory = CacheDirectory();
     s_vkHost.shaderCachePath = cacheDirectory.empty() ? std::string() : cacheDirectory + "\\shaders.bin";
     s_vkHost.pipelineCachePath = cacheDirectory.empty() ? std::string() : cacheDirectory + "\\pipelines.bin";
@@ -351,4 +378,13 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
 void Kisak_VulkanWindowDestroying(HWND window)
 {
     front::WindowDestroying(window);
+}
+
+// For the renderer's r_vkStats command (src/gfx_d3d/r_cmds.cpp): logs the
+// device's frame statistics since it was made or since they were last started
+// again, and with reset starts them again. Returns how many devices there
+// were: 0 with r_backend d3d9.
+unsigned int Kisak_VulkanLogStats(bool reset)
+{
+    return front::LogDeviceStats(reset);
 }

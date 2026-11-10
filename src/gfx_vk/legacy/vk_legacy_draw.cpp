@@ -1323,6 +1323,34 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
     return Usable(device);
 }
 
+// Called for a draw about to be recorded, in its pass. While occlusion
+// queries are between BEGIN and END, draws are inside one of the core's
+// counts, which every such query shares. The count ends with the pass (a
+// target change, a part handed to the GPU, Present) or when a query begins
+// or ends, and the next draw starts another.
+void CountDraw(Device &device)
+{
+    if (device.countingQueries.empty() || OpenOcclusionCount(device.core) != kNoOcclusionCount)
+        return;
+    const uint32_t count = BeginOcclusionCount(device.core);
+    if (count == kNoOcclusionCount)
+        return;
+    for (Query *query : device.countingQueries)
+    {
+        // The first query has the count from BeginOcclusionCount.
+        if (query != device.countingQueries.front())
+            ShareOcclusionCount(device.core, count);
+        query->counts.push_back(count);
+    }
+}
+
+void ReleaseCounts(Device &device, Query &query)
+{
+    for (uint32_t count : query.counts)
+        ReleaseOcclusionCount(device.core, count);
+    query.counts.clear();
+}
+
 // Called after every draw recorded. Submits what the frame has recorded so
 // far once that is worth a submission and the GPU is about to run out of
 // work, so the GPU draws the frame while the rest of it is recorded.
@@ -1336,36 +1364,63 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
 // DXVK, which submits during the frame, kept the GPU busy throughout.
 //
 // The rule is DXVK's (GpuFlushTracker), counted in draws instead of command
-// chunks: submit after gpuFeedDraws draws while the GPU has fewer than two
+// chunks: submit after GpuFeed::draws draws while the GPU has fewer than two
 // submissions left to finish, and wait for that many again for each further
 // one, up to four times. A GPU that is behind is left alone, and a frame is
-// never cut into more than its draws divided by gpuFeedDraws.
+// never cut into more than its draws divided by that count.
+//
+// The idle rule (GpuFeed::idleDraws, off unless set) is for the GPU that has
+// nothing left at all, which under r_gpuSync is every frame's start: the
+// engine lets the render thread begin a frame about when the GPU finishes
+// the one before, and every draw recorded before the first part goes out is
+// time the GPU stands still. A part then goes out after idleDraws draws, the
+// frame's next such part after twice as many, and so on up to the plain
+// count, so the rule adds a few parts to a frame and no more.
 //
 // The draws that follow start a new command buffer and a new pass on the
 // same targets, which loads what the last one stored: the result is the same.
 void FeedGpu(Device &device)
 {
-    const OptionalFeatures &features = Features(device.core);
-    if (!features.gpuFeed)
+    const GpuFeed &feed = device.feed;
+    if (!feed.on)
         return;
+    const bool idleRule = feed.idleDraws && feed.idleDraws < feed.draws;
+    if (idleRule && device.feedIdleFrame != device.frameSerial)
+    {
+        device.feedIdleFrame = device.frameSerial;
+        device.feedIdleNeed = feed.idleDraws;
+    }
+    // Under the idle rule the GPU is looked at that often; a look costs a
+    // system call at most every 10 microseconds (RefreshProgress).
+    const bool idleLooks = idleRule && device.feedIdleNeed < feed.draws;
     if (device.feedRecording != device.stateRecording)
     {
         // The frame's first command buffer, or the first draw since a flush.
         device.feedRecording = device.stateRecording;
         device.feedDraws = 0;
-        device.feedCheckAt = features.gpuFeedDraws;
+        device.feedCheckAt = idleLooks ? device.feedIdleNeed : feed.draws;
     }
     ++device.feedDraws;
-    if (!features.gpuFeedAlways)
+    if (!feed.always)
     {
         if (device.feedDraws < device.feedCheckAt)
             return;
         constexpr uint32_t kMaxBacklog = 4;
-        const uint32_t backlog = std::clamp(PendingSubmissions(device.core), 1u, kMaxBacklog);
-        if (device.feedDraws < features.gpuFeedDraws * backlog)
+        const uint32_t pending = PendingSubmissions(device.core);
+        if (idleLooks && !pending && device.feedDraws >= device.feedIdleNeed)
         {
-            // The GPU has work: look again a quarter of a part later.
-            device.feedCheckAt = device.feedDraws + std::max(1u, features.gpuFeedDraws / 4);
+            // The GPU has run dry: this part goes now, the next waits longer.
+            device.feedIdleNeed = std::min(feed.draws, device.feedIdleNeed * 2);
+            ++device.stats.feedIdleFlushes;
+        }
+        else if (device.feedDraws < feed.draws * std::clamp(pending, 1u, kMaxBacklog))
+        {
+            // The GPU has work: look again a quarter of a part later, or as
+            // soon as the idle rule could apply.
+            uint32_t step = std::max(1u, feed.draws / 4);
+            if (idleLooks)
+                step = std::min(step, std::max(1u, feed.idleDraws));
+            device.feedCheckAt = device.feedDraws + step;
             return;
         }
     }
@@ -1745,6 +1800,7 @@ void DrawIndexedPrimitive(Device *device, d3d::PrimitiveType type, int32_t baseV
         return;
     const VkBuffer indices = DrawBuffer(*device, *device->indices);
     const VkIndexType indexType = device->indices->indexType;
+    CountDraw(*device);
     Record(device->core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
         vk.vkCmdBindIndexBuffer(cmd, indices, 0, indexType);
         vk.vkCmdDrawIndexed(cmd, indexCount, 1, startIndex, baseVertex, 0);
@@ -1758,6 +1814,7 @@ void DrawPrimitive(Device *device, d3d::PrimitiveType type, uint32_t startVertex
     const uint32_t count = VertexCount(type, primitiveCount);
     if (!count || !PrepareDraw(*device, type))
         return;
+    CountDraw(*device);
     Record(device->core, [=](VkCommandBuffer cmd, const Dispatch &vk) { vk.vkCmdDraw(cmd, count, 1, startVertex, 0); });
     ++device->stats.draws;
     FeedGpu(*device);
@@ -1784,6 +1841,7 @@ void DrawPrimitiveUP(Device *device, d3d::PrimitiveType type, uint32_t primitive
         stream.stride = stride;
         if (PrepareDraw(*device, type))
         {
+            CountDraw(*device);
             Record(device->core, [count](VkCommandBuffer cmd, const Dispatch &vk) { vk.vkCmdDraw(cmd, count, 1, 0, 0); });
             ++device->stats.draws;
             FeedGpu(*device);
@@ -1967,38 +2025,104 @@ Query *CreateQuery(Device *device, QueryKind kind)
 
 void DestroyQuery(Device *device, Query *query)
 {
-    (void)device;
+    if (!query)
+        return;
+    auto &counting = device->countingQueries;
+    counting.erase(std::remove(counting.begin(), counting.end(), query), counting.end());
+    ReleaseCounts(*device, *query);
     delete query;
 }
 
 void IssueQuery(Device *device, Query *query, bool begin)
 {
+    if (!query)
+        return;
+    if (query->kind == QueryKind::Occlusion && Features(device->core).occlusionCounts)
+    {
+        // The count that is open belongs to the queries open until now.
+        EndOcclusionCount(device->core);
+        auto &counting = device->countingQueries;
+        counting.erase(std::remove(counting.begin(), counting.end(), query), counting.end());
+        const bool begun = query->counting;
+        query->counting = begin;
+        if (begin || !begun)
+        {
+            // A query issued again starts from nothing, whether it was read
+            // or not; so does an END that no BEGIN came before.
+            ReleaseCounts(*device, *query);
+            query->counted = false;
+            query->samples = 0;
+        }
+        if (begin)
+            counting.push_back(query);
+    }
     // An event marks everything recorded before it. Right after Present
     // nothing is being recorded, so it is the frame just submitted, not the
     // next one: the engine's swap fence (RB_SwapBuffers) then finishes with
     // its frame, and the render thread no longer waits for the next frame's
     // GPU work as well before it ends that frame.
-    if (query && !begin)
+    if (!begin)
     {
         query->serial = RecordedSerial(device->core);
         // Between frames with nothing recorded: the end of the frame just
         // presented. (Not an event issued inside a frame after a flush.)
-        query->frameFence = !device->frameOpen && query->serial != SubmissionSerial(device->core);
+        query->frameFence = query->kind == QueryKind::Event && !device->frameOpen
+            && query->serial != SubmissionSerial(device->core);
         query->flushedAhead = false;
     }
 }
 
+namespace
+{
+// An occlusion query whose end the GPU has passed: adds its counts up. False
+// if one of them cannot be read yet.
+bool AddCounts(Device &device, Query &query)
+{
+    if (query.counted)
+        return true;
+    uint64_t total = 0;
+    for (uint32_t count : query.counts)
+    {
+        uint64_t samples = 0;
+        if (!ReadOcclusionCount(device.core, count, samples))
+            return false;
+        total += samples;
+    }
+    ReleaseCounts(device, query);
+    query.samples = static_cast<uint32_t>(std::min<uint64_t>(total, UINT32_MAX));
+    query.counted = true;
+    if (query.serial) // not one that was never issued
+    {
+        ++device.stats.occlusionResults;
+        device.stats.occlusionResultsZero += total ? 0 : 1;
+        device.stats.occlusionSamples += total;
+        device.stats.occlusionLast = query.samples;
+    }
+    return true;
+}
+} // namespace
+
 bool GetQueryData(Device *device_, Query *query, bool flush, uint32_t &result)
 {
     Device &device = *device_;
-    // Occlusion queries are not counted yet: every sample passed.
-    const uint32_t done = query && query->kind == QueryKind::Occlusion ? 0xffffffu : 1u;
     result = 0;
     if (!query || !Usable(device))
         return true; // a lost device reports done, as D3D9's does
+    const bool occlusion = query->kind == QueryKind::Occlusion;
+    const bool counts = occlusion && Features(device.core).occlusionCounts;
+    // Between BEGIN and END there is no result.
+    if (counts && query->counting)
+        return false;
     if (!query->serial || SerialFinished(device.core, query->serial))
     {
-        result = done;
+        if (!occlusion)
+            result = 1;
+        else if (!counts)
+            result = 0xffffffu; // a device that cannot count: every sample passed
+        else if (AddCounts(device, *query))
+            result = query->samples;
+        else
+            return false;
         return true;
     }
     if (!flush)
