@@ -1,0 +1,771 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 08:52:54 +0000
+Subject: [PATCH] refactor: bound the unsafe string calls in the core engine
+
+strcpy, strcat, sprintf and unterminated _snprintf/_vsnprintf calls in
+src/universal, src/qcommon, src/script and src/stringed write without
+knowing how large the destination is. Part 1 of 4 for upstream issue 8.
+
+The replacements are the engine's own bounded forms (I_strncpyz,
+I_strncat, Com_sprintf, Com_sprintfPos) and C99 snprintf/vsnprintf,
+each given the destination's size. No MSVC *_s functions, so the code
+stays portable.
+
+This also fixes an off-by-one overflow in Info_SetValueForKey_Big and
+bounds the assert report. va(), Com_sprintf and Com_sprintfPos keep
+_vsnprintf, because their callers rely on -1 when the text is cut.
+---
+ src/qcommon/common.cpp                  | 12 ++--
+ src/qcommon/graph.cpp                   |  4 +-
+ src/qcommon/graph.h                     |  2 +-
+ src/qcommon/net_chan_mp.cpp             |  2 +-
+ src/script/scr_evaluate.cpp             |  3 +-
+ src/script/scr_parser.cpp               |  6 +-
+ src/stringed/stringed_hooks.cpp         |  7 +-
+ src/stringed/stringed_hooks.h           |  1 +
+ src/stringed/stringed_ingame.cpp        |  3 +-
+ src/stringed/stringed_ingame.h          |  2 +-
+ src/universal/assertive.cpp             | 90 +++++++++++++------------
+ src/universal/com_files.cpp             |  2 +-
+ src/universal/com_sndalias.cpp          |  3 +-
+ src/universal/com_sndalias_load_obj.cpp |  9 +--
+ src/universal/com_stringtable.cpp       | 10 +--
+ src/universal/dvar.cpp                  | 44 ++++++------
+ src/universal/q_parse.cpp               |  4 +-
+ src/universal/q_shared.cpp              |  5 +-
+ 18 files changed, 110 insertions(+), 99 deletions(-)
+
+diff --git a/src/qcommon/common.cpp b/src/qcommon/common.cpp
+index e79e6d28..eafe3e6e 100644
+--- a/src/qcommon/common.cpp
++++ b/src/qcommon/common.cpp
+@@ -326,7 +326,7 @@ void QDECL Com_Printf(int channel, const char* fmt, ...)
+ 	va_list va;
+ 
+ 	va_start(va, fmt);
+-	_vsnprintf(string, 0x1000u, fmt, va);
++	vsnprintf(string, 0x1000u, fmt, va);
+ 	string[4095] = 0;
+ 	Com_PrintMessage(channel, string, 0);
+ }
+@@ -470,7 +470,7 @@ void Com_DPrintf(int channel, const char* fmt, ...)
+     {
+         if (com_developer->current.integer)
+         {
+-            _vsnprintf(string, 0x1000u, fmt, va);
++            vsnprintf(string, 0x1000u, fmt, va);
+             string[4095] = 0;
+             Com_Printf(channel, "%s", string);
+         }
+@@ -490,7 +490,7 @@ void Com_PrintError(int channel, const char *fmt, ...)
+     else
+         I_strncpyz(dest, "^1Error: ", 4096);
+     v3 = &dest[strlen(dest) + 1] - &dest[1];
+-    _vsnprintf(&dest[v3], 4096 - v3, fmt, va);
++    vsnprintf(&dest[v3], 4096 - v3, fmt, va);
+     dest[4095] = 0;
+     ++com_errorPrintsCount;
+     Com_PrintMessage(channel, dest, 3);
+@@ -514,7 +514,7 @@ void Com_PrintWarning(int channel, const char *fmt, ...)
+     va_start(va, fmt);
+     I_strncpyz(dest, "^3", 4096);
+     v3 = &dest[strlen(dest) + 1] - &dest[1];
+-    _vsnprintf(&dest[v3], 4096 - v3, fmt, va);
++    vsnprintf(&dest[v3], 4096 - v3, fmt, va);
+     dest[4095] = 0;
+     Com_PrintMessage(channel, dest, 2);
+ }
+@@ -665,7 +665,7 @@ void Com_Error(errorParm_t code, const char* fmt, ...)
+     if (com_errorEntered)
+         Sys_Error("recursive error after: %s", com_errorMessage);
+     com_errorEntered = 1;
+-    _vsnprintf(com_errorMessage, 0x1000u, fmt, va);
++    vsnprintf(com_errorMessage, 0x1000u, fmt, va);
+     com_errorMessage[4095] = 0;
+     iassert( com_errorMessage[0] );
+     if (code == ERR_SCRIPT || code == ERR_LOCALIZATION)
+@@ -2338,7 +2338,7 @@ void __cdecl Com_LocalizedFloatToString(float f, char* buffer, uint32_t maxlen,
+     uint32_t charPos; // [esp+8h] [ebp-8h]
+     char delimiter; // [esp+Fh] [ebp-1h]
+ 
+-    _snprintf(buffer, maxlen - 1, "%.*f", numDecimalPlaces, f);
++    snprintf(buffer, maxlen, "%.*f", numDecimalPlaces, f);
+     buffer[maxlen - 1] = 0;
+     delimiter = Com_GetDecimalDelimiter();
+     if (delimiter != 46)
+diff --git a/src/qcommon/graph.cpp b/src/qcommon/graph.cpp
+index 2c48e2da..aa9b6a13 100644
+--- a/src/qcommon/graph.cpp
++++ b/src/qcommon/graph.cpp
+@@ -111,11 +111,11 @@ void __cdecl GraphFloat_SaveToFile(const GraphFloat *graph)
+     }
+ }
+ 
+-void __cdecl GraphFloat_DevGuiCB_Text(const DevGraph *devGuiGraph, float inputX, float inputY, char *text)
++void __cdecl GraphFloat_DevGuiCB_Text(const DevGraph *devGuiGraph, float inputX, float inputY, char *text, const int textLength)
+ {
+     float inputYa; // [esp+24h] [ebp+10h]
+ 
+     inputYa = inputY * *((float *)devGuiGraph->data + 81);
+-    sprintf(text, "Fraction: %.3f, Value: %.3f", inputX, inputYa);
++    Com_sprintf(text, textLength, "Fraction: %.3f, Value: %.3f", inputX, inputYa);
+ }
+ 
+diff --git a/src/qcommon/graph.h b/src/qcommon/graph.h
+index 250cc605..5c50f714 100644
+--- a/src/qcommon/graph.h
++++ b/src/qcommon/graph.h
+@@ -38,4 +38,4 @@ void __cdecl GraphFloat_ParseBuffer(GraphFloat *graph, const char *buffer, char
+ void __cdecl GraphFloat_CreateDevGui(GraphFloat *graph, const char *devguiPath);
+ void __cdecl GraphFloat_DevGuiCB_Event(const DevGraph *graph, DevEventType event);
+ void __cdecl GraphFloat_SaveToFile(const GraphFloat *graph);
+-void __cdecl GraphFloat_DevGuiCB_Text(const DevGraph *devGuiGraph, float inputX, float inputY, char *text);
+\ No newline at end of file
++void __cdecl GraphFloat_DevGuiCB_Text(const DevGraph *devGuiGraph, float inputX, float inputY, char *text, const int textLength);
+\ No newline at end of file
+diff --git a/src/qcommon/net_chan_mp.cpp b/src/qcommon/net_chan_mp.cpp
+index d7731533..282d02df 100644
+--- a/src/qcommon/net_chan_mp.cpp
++++ b/src/qcommon/net_chan_mp.cpp
+@@ -1180,7 +1180,7 @@ bool __cdecl NET_OutOfBandPrint(netsrc_t sock, netadr_t adr, const char *data)
+     }
+     if (strlen(data) + 1 <= 0x1FFFC)
+     {
+-        strcpy((char *)&tempNetchanPacketBuf[4], data);
++        I_strncpyz((char *)&tempNetchanPacketBuf[4], data, sizeof(tempNetchanPacketBuf) - 4);
+         v6 = strlen((const char *)tempNetchanPacketBuf);
+         res = (int)FakeLag_SendPacket(sock, v6, tempNetchanPacketBuf, adr) >= -1;
+ 
+diff --git a/src/script/scr_evaluate.cpp b/src/script/scr_evaluate.cpp
+index f30fc88c..2e61aa9f 100644
+--- a/src/script/scr_evaluate.cpp
++++ b/src/script/scr_evaluate.cpp
+@@ -302,8 +302,9 @@ void __cdecl Scr_GetValueString(uint32_t localId, VariableValue *value, int len,
+         Com_sprintf(s, len, "&\"%s\"", SL_ConvertToString(value->u.intValue));
+         break;
+     case VAR_VECTOR:
+-        sprintf(
++        Com_sprintf(
+             s,
++            len,
+             "(%g, %g, %g)",
+             *(float *)value->u.intValue,
+             *(float *)(value->u.intValue + 4),
+diff --git a/src/script/scr_parser.cpp b/src/script/scr_parser.cpp
+index 6d351a38..b7045d08 100644
+--- a/src/script/scr_parser.cpp
++++ b/src/script/scr_parser.cpp
+@@ -546,7 +546,7 @@ void __cdecl Scr_AddSourceBufferInternal(
+     {
+         size = strlen(extFilename) + 1;
+         dest = (char *)Hunk_AllocDebugMem(size + len + 2);
+-        strcpy(dest, extFilename);
++        memcpy(dest, extFilename, size);
+ 
+         if (sourceBuf)
+             source = &dest[size];
+@@ -1389,7 +1389,7 @@ void CompileError(uint32_t sourcePos, const char *msg, ...)
+     va_list va; // [esp+81Ch] [ebp+10h] BYREF
+ 
+     va_start(va, msg);
+-    _vsnprintf(text, 0x400u, msg, va);
++    vsnprintf(text, 0x400u, msg, va);
+     if (scrVarPub.evaluate)
+     {
+         if (!scrVarPub.error_message)
+@@ -1446,7 +1446,7 @@ void CompileError2(char *codePos, const char *msg, ...)
+     Scr_IgnoreLeaks();
+     Com_PrintError(CON_CHANNEL_PARSERSCRIPT, "\n");
+     Com_PrintError(CON_CHANNEL_PARSERSCRIPT, "******* script compile error *******\n");
+-    _vsnprintf(text, 0x400u, msg, va);
++    vsnprintf(text, 0x400u, msg, va);
+     Com_PrintError(CON_CHANNEL_PARSERSCRIPT, "%s: ", text);
+     Scr_PrintPrevCodePos(CON_CHANNEL_PARSERSCRIPT, codePos, 0);
+     Com_Printf(CON_CHANNEL_PARSERSCRIPT, "************************************\n");
+diff --git a/src/stringed/stringed_hooks.cpp b/src/stringed/stringed_hooks.cpp
+index f9d2351d..973ea9bf 100644
+--- a/src/stringed/stringed_hooks.cpp
++++ b/src/stringed/stringed_hooks.cpp
+@@ -117,7 +117,7 @@ char *__cdecl SEH_SafeTranslateString(char *pszReference)
+                 Com_Error(ERR_LOCALIZATION, "Could not translate exe string \"%s\"", pszReference);
+             else
+                 Com_PrintWarning(CON_CHANNEL_SYSTEM, "WARNING: Could not translate exe string \"%s\"\n", pszReference);
+-            strcpy(szErrorString, "^1UNLOCALIZED(^7");
++            I_strncpyz(szErrorString, "^1UNLOCALIZED(^7", sizeof(szErrorString));
+             I_strncat(szErrorString, 1024, pszReference);
+             I_strncat(szErrorString, 1024, "^1)^7");
+         }
+@@ -183,7 +183,7 @@ char *__cdecl SEH_LocalizeTextMessage(const char *pszInputBuffer, const char *ps
+                 I_strncpyz(szTokenBuf, (char *)pszTokenStart, pszIn - pszTokenStart + 1);
+                 if (bLocOn)
+                 {
+-                    if (!SEH_GetLocalizedTokenReference(szTokenBuf, szTokenBuf, pszMessageType, errType))
++                    if (!SEH_GetLocalizedTokenReference(szTokenBuf, sizeof(szTokenBuf), szTokenBuf, pszMessageType, errType))
+                         return 0;
+                     iTokenLen = &szTokenBuf[strlen(szTokenBuf) + 1] - &szTokenBuf[1];
+                 }
+@@ -305,6 +305,7 @@ char *__cdecl SEH_LocalizeTextMessage(const char *pszInputBuffer, const char *ps
+ 
+ int __cdecl SEH_GetLocalizedTokenReference(
+     char *token,
++    int tokenSize,
+     const char *reference,
+     const char *messageType,
+     msgLocErrType_t errType)
+@@ -330,7 +331,7 @@ int __cdecl SEH_GetLocalizedTokenReference(
+             return 0;
+     }
+ 
+-    strcpy(token, translation);
++    I_strncpyz(token, translation, tokenSize);
+     
+     return 1;
+ }
+diff --git a/src/stringed/stringed_hooks.h b/src/stringed/stringed_hooks.h
+index a6c6b9a0..c248a4d9 100644
+--- a/src/stringed/stringed_hooks.h
++++ b/src/stringed/stringed_hooks.h
+@@ -24,6 +24,7 @@ char *__cdecl SEH_SafeTranslateString(char *pszReference);
+ char *__cdecl SEH_LocalizeTextMessage(const char *pszInputBuffer, const char *pszMessageType, msgLocErrType_t errType);
+ int __cdecl SEH_GetLocalizedTokenReference(
+     char *token,
++    int tokenSize,
+     const char *reference,
+     const char *messageType,
+     msgLocErrType_t errType);
+diff --git a/src/stringed/stringed_ingame.cpp b/src/stringed/stringed_ingame.cpp
+index c1613c22..d025c760 100644
+--- a/src/stringed/stringed_ingame.cpp
++++ b/src/stringed/stringed_ingame.cpp
+@@ -147,8 +147,7 @@ char *__cdecl SE_GetFoundFile(std::string *strResult)
+         return NULL;
+     }
+ 
+-    strncpy(sTemp, strResult->data(), 63);
+-    sTemp[63] = 0;
++    I_strncpyz(sTemp, strResult->data(), sizeof(sTemp));
+     v2 = (_BYTE *)strchr(sTemp, ';');
+     if (v2)
+     {
+diff --git a/src/stringed/stringed_ingame.h b/src/stringed/stringed_ingame.h
+index e4b57aaf..488dec69 100644
+--- a/src/stringed/stringed_ingame.h
++++ b/src/stringed/stringed_ingame.h
+@@ -325,7 +325,7 @@ struct CStringEdPackage // sizeof=0x78
+                             v13 = i - v11;
+                             if (v13 > 1023)
+                                 v13 = 1023;
+-                            strncpy(sThisLanguage, (char*)v11, v13);
++                            I_strncpyz(sThisLanguage, (char*)v11, v13 + 1);
+                             CStringEdPackage::InsideQuotes(&v19, (const char *)&v11[strlen(sThisLanguage)]);
+                             CStringEdPackage::ConvertCRLiterals_Read(&sentence, v19);
+                             //v14 = (std::string *)sentence._Bx._Ptr;
+diff --git a/src/universal/assertive.cpp b/src/universal/assertive.cpp
+index 767caa34..5a12c6d7 100644
+--- a/src/universal/assertive.cpp
++++ b/src/universal/assertive.cpp
+@@ -102,12 +102,15 @@ HINSTANCE__* __cdecl GetModuleBase(char* name)
+     }
+     if (nameIndex >= 0 && name[nameIndex] == 46)
+         nameLength = nameIndex;
++    // Leave room for the ".exe"/".dll" suffix and the terminator.
++    if (nameLength > (int)sizeof(moduleName) - 5)
++        return 0;
+     memcpy((uint8_t*)moduleName, (uint8_t*)name, nameLength);
+-    strcpy(&moduleName[nameLength], ".exe");
++    I_strncpyz(&moduleName[nameLength], ".exe", sizeof(moduleName) - nameLength);
+     moduleHandle = GetModuleHandleA(moduleName);
+     if (moduleHandle)
+         return moduleHandle;
+-    strcpy(&moduleName[nameLength], ".dll");
++    I_strncpyz(&moduleName[nameLength], ".dll", sizeof(moduleName) - nameLength);
+     return GetModuleHandleA(moduleName);
+ }
+ 
+@@ -234,7 +237,7 @@ char __cdecl ParseMapFile(FILE* fp, uint32_t baseAddress, char* mapName)
+             return 0;
+         if (!lineBuffer[0])
+             break;
+-        if (sscanf(lineBuffer, "%x:%x %xH %s %s", &group, &offset, &address, function, filenameBuffer) != 5)
++        if (sscanf(lineBuffer, "%x:%x %xH %1023s %1023s", &group, &offset, &address, function, filenameBuffer) != 5)
+         {
+             ParseError("Unknown line format in the segments section");
+             return 0;
+@@ -262,14 +265,14 @@ char __cdecl ParseMapFile(FILE* fp, uint32_t baseAddress, char* mapName)
+             return 0;
+         if (!lineBuffer[0])
+             break;
+-        if (sscanf(lineBuffer, "%x:%x %s %x", &group, &offset, function, &address) != 4)
++        if (sscanf(lineBuffer, "%x:%x %1023s %x", &group, &offset, function, &address) != 4)
+         {
+             ParseError("Unknown line format in the public symbols section");
+             return 0;
+         }
+         v5 = strrchr(lineBuffer, 0x20u);
+         filenameSubStr = v5;
+-        if (!v5 || sscanf(filenameSubStr + 1, "%s", filenameBuffer) != 1)
++        if (!v5 || sscanf(filenameSubStr + 1, "%1023s", filenameBuffer) != 1)
+         {
+             ParseError("Couldn't parse file name in the public symbols section");
+             return 0;
+@@ -312,14 +315,14 @@ char __cdecl ParseMapFile(FILE* fp, uint32_t baseAddress, char* mapName)
+         return 0;
+     while (ReadLine(fp) && lineBuffer[0])
+     {
+-        if (sscanf(lineBuffer, "%x:%x %s %x", &group, &offset, function, &address) != 4)
++        if (sscanf(lineBuffer, "%x:%x %1023s %x", &group, &offset, function, &address) != 4)
+         {
+             ParseError("Unknown line format in the static symbols section");
+             return 0;
+         }
+         v8 = strrchr(lineBuffer, 0x20u);
+         filenameSubStr = v8;
+-        if (!v8 || sscanf(filenameSubStr + 1, "%s", filenameBuffer) != 1)
++        if (!v8 || sscanf(filenameSubStr + 1, "%1023s", filenameBuffer) != 1)
+         {
+             ParseError("Couldn't parse file name in the static symbols section");
+             return 0;
+@@ -374,8 +377,7 @@ LABEL_90:
+             ParseError("Couldn't find ')' for the name of the source file in line number section");
+             return 0;
+         }
+-        strncpy(filenameBuffer, pszNameStart + 1, v12 - pszNameStart - 1);
+-        filenameBuffer[pszNameStop - pszNameStart - 1] = 0;
++        I_strncpyz(filenameBuffer, pszNameStart + 1, pszNameStop - pszNameStart);
+         filenameSubStr = filenameBuffer;
+         if (!SkipLines(1, fp))
+             return 0;
+@@ -484,50 +486,49 @@ void __cdecl LoadMapFilesForDir(const char* dir)
+     }
+ }
+ 
+-int __cdecl LoadMapFiles(char* msg)
++int __cdecl LoadMapFiles(char* msg, int msgSize)
+ {
+-    int v1; // eax
+     int j; // [esp+0h] [ebp-Ch]
+     AddressInfo* addressInfo; // [esp+4h] [ebp-8h]
+-    char* curPos; // [esp+8h] [ebp-4h]
+-    char* curPosa; // [esp+8h] [ebp-4h]
+-    char* curPosb; // [esp+8h] [ebp-4h]
++    int curPos;
+ 
+     LoadMapFilesForDir("");
+-    curPos = msg;
++    curPos = 0;
+     for (j = 0; j < g_assertAddressCount; ++j)
+     {
+         addressInfo = &g_assertAddress[j];
+         if (addressInfo->moduleName[0])
+         {
+-            curPosa = &curPos[sprintf(curPos, "%s:    ", addressInfo->moduleName)];
++            Com_sprintfPos(msg, msgSize, &curPos, "%s:    ", addressInfo->moduleName);
+             if (addressInfo->bestLineFilename[0])
+             {
+-                curPosb = &curPosa[sprintf(
+-                    curPosa,
++                Com_sprintfPos(
++                    msg,
++                    msgSize,
++                    &curPos,
+                     "%s        ...%s, line %i",
+                     addressInfo->bestFunction,
+                     addressInfo->bestLineFilename,
+-                    addressInfo->bestLineNumber)];
+-                v1 = sprintf(curPosb, "\n");
++                    addressInfo->bestLineNumber);
+             }
+             else
+             {
+                 if (addressInfo->bestFunction[0])
+-                    curPosb = &curPosa[sprintf(
+-                        curPosa,
++                    Com_sprintfPos(
++                        msg,
++                        msgSize,
++                        &curPos,
+                         "%s        ...%s, address %x",
+                         addressInfo->bestFunction,
+                         addressInfo->bestFunctionFilename,
+-                        addressInfo->address)];
++                        addressInfo->address);
+                 else
+-                    curPosb = &curPosa[sprintf(curPosa, "%s, address %x", addressInfo->bestFunction, addressInfo->address)];
+-                v1 = sprintf(curPosb, "\n");
++                    Com_sprintfPos(msg, msgSize, &curPos, "%s, address %x", addressInfo->bestFunction, addressInfo->address);
+             }
+-            curPos = &curPosb[v1];
++            Com_sprintfPos(msg, msgSize, &curPos, "\n");
+         }
+     }
+-    return curPos - msg;
++    return curPos;
+ }
+ 
+ char g_module[MAX_PATH];
+@@ -536,7 +537,7 @@ char g_module[MAX_PATH];
+ 
+ // KISAKX64
+ // this is broken right now
+-int __cdecl DoStackTrace(char* msg, int nIgnore)
++int __cdecl DoStackTrace(char* msg, int msgSize, int nIgnore)
+ {
+     int* v2; // ecx
+     int* reg_ebp; // [esp+4h] [ebp-10h]
+@@ -561,33 +562,36 @@ int __cdecl DoStackTrace(char* msg, int nIgnore)
+                 break;
+         }
+     }
+-    return LoadMapFiles(msg);
++    return LoadMapFiles(msg, msgSize);
+ }
+ 
+-void __cdecl BuildAssertMessage(const char* expr, const char* filename, int line, int type, int skipLevels, char* message)
++void __cdecl BuildAssertMessage(const char* expr, const char* filename, int line, int type, int skipLevels, char* message, int messageSize)
+ {
+     const char* String; // eax
+-    int v7; // eax
+-    char* curPos; // [esp+0h] [ebp-14h]
++    int curPos;
+     char unknown[12]; // [esp+4h] [ebp-10h] BYREF
+ 
+-    strcpy(unknown, "<unknown>");
++    I_strncpyz(unknown, "<unknown>", sizeof(unknown));
+     if (!filename)
+         filename = unknown;
+     if (!expr)
+         expr = unknown;
+     if (!GetModuleFileNameA(0, g_module, sizeof(g_module)))
+-        strcpy(g_module, "<unknown application>");
++        I_strncpyz(g_module, "<unknown application>", sizeof(g_module));
+     String = Dvar_GetString("version");
+-    curPos = &message[sprintf(message, "Build: %s\n", String)];
+-    v7 = sprintf(
+-        curPos,
++    message[0] = 0;
++    curPos = 0;
++    Com_sprintfPos(message, messageSize, &curPos, "Build: %s\n", String);
++    Com_sprintfPos(
++        message,
++        messageSize,
++        &curPos,
+         "Expression:\n    %s\n\nModule:    %s\nFile:    %s\nLine:    %d\n\n",
+         expr,
+         g_module,
+         filename,
+         line);
+-    DoStackTrace(&curPos[v7], skipLevels + 1);
++    DoStackTrace(&message[curPos], messageSize - curPos, skipLevels + 1);
+ }
+ 
+ HWND g_hwndGame[4];
+@@ -651,7 +655,7 @@ void MyAssertHandler(const char *filename, int line, int type, const char *fmt,
+     
+     va_start(va, fmt);
+     Sys_EnterCriticalSection(CRITSECT_ASSERT);
+-    _vsnprintf(message, 0x400u, fmt, va);
++    vsnprintf(message, 0x400u, fmt, va);
+     message[1023] = 0;
+ 
+     fprintf(stderr, "\x1b[31mASSERTION FAIL AT \x1b[33m%s:%d (TYPE: %d)\x1b[m:\n\t%s\n", filename, line, type, message);
+@@ -660,7 +664,7 @@ void MyAssertHandler(const char *filename, int line, int type, const char *fmt,
+     {
+         CopyMessageToClipboard();
+         AssertNotify(lastAssertType, RECURSIVE);
+-        BuildAssertMessage(message, filename, line, type, 1, assertMessage);
++        BuildAssertMessage(message, filename, line, type, 1, assertMessage, sizeof(assertMessage));
+         if (isHandlingAssert == 1)
+         {
+             isHandlingAssert = 2;
+@@ -673,7 +677,7 @@ void MyAssertHandler(const char *filename, int line, int type, const char *fmt,
+     lastAssertType = type;
+     isHandlingAssert = 1;
+     FixWindowsDesktop();
+-    BuildAssertMessage(message, filename, line, type, 1, assertMessage);
++    BuildAssertMessage(message, filename, line, type, 1, assertMessage, sizeof(assertMessage));
+     Com_Printf(CON_CHANNEL_SYSTEM, "ASSERTBEGIN -------------------------------------------------------------------\n");
+     Com_Printf(CON_CHANNEL_SYSTEM, "%s", assertMessage);
+     Com_Printf(CON_CHANNEL_SYSTEM, "ASSERTEND ---------------------------------------------------------------------\n");
+@@ -698,12 +702,12 @@ void MyAssertHandler(const char *filename, int line, int type, const char *fmt,
+         char m[1024];
+         va_list va;
+         va_start( va, fmt );
+-        _vsnprintf( m, sizeof( m ), fmt ? fmt : "", va );
++        vsnprintf( m, sizeof( m ), fmt ? fmt : "", va );
+         va_end( va );
+         m[1023] = 0;
+         char tmp[MAX_PATH], p2[MAX_PATH];
+         GetTempPathA( sizeof( tmp ), tmp );
+-        _snprintf( p2, sizeof( p2 ), "%sradiant_firstlight.log", tmp );
++        snprintf( p2, sizeof( p2 ), "%sradiant_firstlight.log", tmp );
+         FILE *f = fopen( p2, "a" );
+         if ( f )
+         {
+diff --git a/src/universal/com_files.cpp b/src/universal/com_files.cpp
+index 7e7ea0b3..a465099e 100644
+--- a/src/universal/com_files.cpp
++++ b/src/universal/com_files.cpp
+@@ -1041,7 +1041,7 @@ void FS_Printf(int h, const char *fmt, ...)
+     va_list va; // [esp+102Ch] [ebp+10h] BYREF
+ 
+     va_start(va, fmt);
+-    _vsnprintf(string, 0x1000u, fmt, va);
++    vsnprintf(string, 0x1000u, fmt, va);
+     FS_Write(string, &string[strlen(string) + 1] - &string[1], h);
+ }
+ 
+diff --git a/src/universal/com_sndalias.cpp b/src/universal/com_sndalias.cpp
+index 5e7f6dc6..7b1aef6c 100644
+--- a/src/universal/com_sndalias.cpp
++++ b/src/universal/com_sndalias.cpp
+@@ -1280,8 +1280,7 @@ void Com_InitSpeakerMaps()
+         len = strlen(fileNames[fileIndex]) - 8;
+         if (len >= 64)
+             Com_Error(ERR_DROP, "Speaker map %s name too long", fileNames[fileIndex]);
+-        strncpy(name, fileNames[fileIndex], len);
+-        name[len] = 0;
++        I_strncpyz(name, fileNames[fileIndex], len + 1);
+         if (!Com_LoadSpkrMapFile(name, &g_sa.speakerMaps[fileIndex + 1]))
+             Com_Error(ERR_DROP, "Failed to load speaker map %s", fileNames[fileIndex]);
+     }
+diff --git a/src/universal/com_sndalias_load_obj.cpp b/src/universal/com_sndalias_load_obj.cpp
+index 2e131246..4ca46ea9 100644
+--- a/src/universal/com_sndalias_load_obj.cpp
++++ b/src/universal/com_sndalias_load_obj.cpp
+@@ -30,7 +30,7 @@ void __cdecl Com_LoadVolumeModGroups(VolumeModGroup *volumeModGroups)
+     len = strlen("VOLUMEMODGROUPS");
+     if (!volumeModGroups)
+         MyAssertHandler(".\\universal\\com_sndalias_load_obj.cpp", 1042, 0, "%s", "volumeModGroups");
+-    strcpy(filename, "soundaliases/volumemodgroups.def");
++    I_strncpyz(filename, "soundaliases/volumemodgroups.def", sizeof(filename));
+     v6 = FS_FOpenFileRead(filename, &file);
+     if (v6 >= 0)
+     {
+@@ -283,17 +283,18 @@ void __cdecl Com_SoundAliasChannelForName(char *name, const char *sourceFile, sn
+         }
+     }
+     v3 = 0;
++    string[0] = 0;
+     for (i = 0; i < saLoadObjGlob.entChannelCount; ++i)
+     {
+-        v3 += sprintf(&string[v3], "%s", saLoadObjGlob.entChannels[i]);
++        Com_sprintfPos(string, sizeof(string), &v3, "%s", saLoadObjGlob.entChannels[i]);
+         if (i >= saLoadObjGlob.entChannelCount - 2)
+         {
+             if (i == saLoadObjGlob.entChannelCount - 2)
+-                v3 += sprintf(&string[v3], " or ");
++                Com_sprintfPos(string, sizeof(string), &v3, " or ");
+         }
+         else
+         {
+-            v3 += sprintf(&string[v3], ", ");
++            Com_sprintfPos(string, sizeof(string), &v3, ", ");
+         }
+     }
+     Com_PrintError(CON_CHANNEL_SOUND, "ERROR: Sound alias file %s: Unknown sound channel '%s'; should be %s\n", sourceFile, name, string);
+diff --git a/src/universal/com_stringtable.cpp b/src/universal/com_stringtable.cpp
+index 630c843b..cc906456 100644
+--- a/src/universal/com_stringtable.cpp
++++ b/src/universal/com_stringtable.cpp
+@@ -130,8 +130,9 @@ void __cdecl StringTable_GetAsset(const char *filename, StringTable **tablePtr)
+ 
+             if (token->token[0])
+             {
+-                char *text = (char *)Z_Malloc(strlen(token->token) + 1, "Kisak stringtable->value (text)", 21);
+-                strcpy((char *)text, token->token);
++                const size_t textSize = strlen(token->token) + 1;
++                char *text = (char *)Z_Malloc(textSize, "Kisak stringtable->value (text)", 21);
++                memcpy(text, token->token, textSize);
+                 ptrs[totalcells] = text;
+             }
+ 
+@@ -148,8 +149,9 @@ void __cdecl StringTable_GetAsset(const char *filename, StringTable **tablePtr)
+         table.rowCount = newlines;
+         table.columnCount = (totalcells / table.rowCount);
+ 
+-        table.name = (const char *)Z_Malloc(strlen(filename) + 1, "Kisak stringtable->name", 21);
+-        strcpy((char*)table.name, filename);
++        const size_t nameSize = strlen(filename) + 1;
++        table.name = (const char *)Z_Malloc(nameSize, "Kisak stringtable->name", 21);
++        memcpy((char *)table.name, filename, nameSize);
+ 
+         g_stringTableCache[g_numStringTables] = table;
+         *tablePtr = &g_stringTableCache[g_numStringTables];
+diff --git a/src/universal/dvar.cpp b/src/universal/dvar.cpp
+index 0e0eeb72..3a44d26f 100644
+--- a/src/universal/dvar.cpp
++++ b/src/universal/dvar.cpp
+@@ -566,23 +566,23 @@ const char *__cdecl Dvar_DomainToString_Internal(
+     switch (type)
+     {
+     case 0u:
+-        _snprintf((char *)outBuffer, outBufferLen, "Domain is 0 or 1");
++        snprintf((char *)outBuffer, outBufferLen, "Domain is 0 or 1");
+         break;
+     case 1u:
+         if (domain.value.min == -FLT_MAX)
+         {
+             if (domain.value.max == FLT_MAX)
+-                _snprintf((char *)outBuffer, outBufferLen, "Domain is any number");
++                snprintf((char *)outBuffer, outBufferLen, "Domain is any number");
+             else
+-                _snprintf((char *)outBuffer, outBufferLen, "Domain is any number %g or smaller", domain.value.max);
++                snprintf((char *)outBuffer, outBufferLen, "Domain is any number %g or smaller", domain.value.max);
+         }
+         else if (domain.value.max == FLT_MAX)
+         {
+-            _snprintf((char *)outBuffer, outBufferLen, "Domain is any number %g or bigger", domain.value.min);
++            snprintf((char *)outBuffer, outBufferLen, "Domain is any number %g or bigger", domain.value.min);
+         }
+         else
+         {
+-            _snprintf(
++            snprintf(
+                 (char *)outBuffer,
+                 outBufferLen,
+                 "Domain is any number from %g to %g",
+@@ -603,13 +603,13 @@ const char *__cdecl Dvar_DomainToString_Internal(
+         if (domain.enumeration.stringCount == 0x80000000)
+         {
+             if (domain.integer.max == 0x7FFFFFFF)
+-                _snprintf((char *)outBuffer, outBufferLen, "Domain is any integer");
++                snprintf((char *)outBuffer, outBufferLen, "Domain is any integer");
+             else
+-                _snprintf((char *)outBuffer, outBufferLen, "Domain is any integer %i or smaller", domain.integer.max);
++                snprintf((char *)outBuffer, outBufferLen, "Domain is any integer %i or smaller", domain.integer.max);
+         }
+         else if (domain.integer.max == 0x7FFFFFFF)
+         {
+-            _snprintf(
++            snprintf(
+                 (char *)outBuffer,
+                 outBufferLen,
+                 "Domain is any integer %i or bigger",
+@@ -617,7 +617,7 @@ const char *__cdecl Dvar_DomainToString_Internal(
+         }
+         else
+         {
+-            _snprintf(
++            snprintf(
+                 (char *)outBuffer,
+                 outBufferLen,
+                 "Domain is any integer from %i to %i",
+@@ -626,19 +626,21 @@ const char *__cdecl Dvar_DomainToString_Internal(
+         }
+         break;
+     case 6u:
+-        charsWritten = _snprintf((char *)outBuffer, outBufferLen, "Domain is one of the following:");
+-        if (charsWritten >= 0)
++        charsWritten = snprintf((char *)outBuffer, outBufferLen, "Domain is one of the following:");
++        if (charsWritten >= 0 && (uint32_t)charsWritten < outBufferLen)
+         {
+             outBufferWalk = (char *)(charsWritten + outBuffer);
+             for (stringIndex = 0; stringIndex < domain.enumeration.stringCount; ++stringIndex)
+             {
+-                charsWrittena = _snprintf(
++                charsWrittena = snprintf(
+                     outBufferWalk,
+                     outBufferEnd - outBufferWalk,
+                     "\n  %2i: %s",
+                     stringIndex,
+                     *(const char **)(domain.integer.max + 4 * stringIndex));
+-                if (charsWrittena < 0)
++                // snprintf reports the length it needed, so a short buffer shows
++                // as a count that does not fit, where _snprintf returned -1.
++                if (charsWrittena < 0 || charsWrittena >= outBufferEnd - outBufferWalk)
+                     break;
+                 if (outLineCount)
+                     ++*outLineCount;
+@@ -647,10 +649,10 @@ const char *__cdecl Dvar_DomainToString_Internal(
+         }
+         break;
+     case 7u:
+-        _snprintf((char *)outBuffer, outBufferLen, "Domain is any text");
++        snprintf((char *)outBuffer, outBufferLen, "Domain is any text");
+         break;
+     case 8u:
+-        _snprintf((char *)outBuffer, outBufferLen, "Domain is any 4-component color, in RGBA format");
++        snprintf((char *)outBuffer, outBufferLen, "Domain is any 4-component color, in RGBA format");
+         break;
+     default:
+         if (!alwaysfails)
+@@ -679,9 +681,9 @@ void __cdecl Dvar_VectorDomainToString(int components, DvarLimits domain, char *
+     if (domain.value.min == -FLT_MAX)
+     {
+         if (domain.value.max == FLT_MAX)
+-            _snprintf(outBuffer, outBufferLen, "Domain is any %iD vector", components);
++            snprintf(outBuffer, outBufferLen, "Domain is any %iD vector", components);
+         else
+-            _snprintf(
++            snprintf(
+                 outBuffer,
+                 outBufferLen,
+                 "Domain is any %iD vector with components %g or smaller",
+@@ -690,7 +692,7 @@ void __cdecl Dvar_VectorDomainToString(int components, DvarLimits domain, char *
+     }
+     else if (domain.value.max == FLT_MAX)
+     {
+-        _snprintf(
++        snprintf(
+             outBuffer,
+             outBufferLen,
+             "Domain is any %iD vector with components %g or bigger",
+@@ -699,7 +701,7 @@ void __cdecl Dvar_VectorDomainToString(int components, DvarLimits domain, char *
+     }
+     else
+     {
+-        _snprintf(
++        snprintf(
+             outBuffer,
+             outBufferLen,
+             "Domain is any %iD vector with components from %g to %g",
+@@ -2872,8 +2874,8 @@ int __cdecl Com_SaveDvarsToBuffer(const char **dvarnames, uint32_t numDvars, cha
+         if (!dvar)
+             MyAssertHandler(".\\universal\\dvar.cpp", 2454, 0, "%s", "dvar");
+         string = Dvar_DisplayableValue(dvar);
+-        written = _snprintf(buffer, bufsize, "%s \"%s\"\n", dvar->name, string);
+-        if (written < 0)
++        written = snprintf(buffer, bufsize, "%s \"%s\"\n", dvar->name, string);
++        if (written < 0 || (uint32_t)written >= bufsize)
+             return 0;
+         buffer += written;
+         bufsize -= written;
+diff --git a/src/universal/q_parse.cpp b/src/universal/q_parse.cpp
+index f6c61762..6f40f055 100644
+--- a/src/universal/q_parse.cpp
++++ b/src/universal/q_parse.cpp
+@@ -160,7 +160,7 @@ void Com_ScriptErrorDrop(const char *msg, ...)
+     ParseThreadInfo = Com_GetParseThreadInfo();
+     v3 = &ParseThreadInfo->parseInfo[ParseThreadInfo->parseInfoNum];
+     va_copy(ap, va);
+-    _vsnprintf(string, 0x1000u, msg, va);
++    vsnprintf(string, 0x1000u, msg, va);
+     ap = 0;
+     if (ParseThreadInfo->parseInfoNum)
+         Com_Error(ERR_DROP, "%sFile %s, line %i: %s", v3->errorPrefix, v3->parseFile, v3->lines, string);
+@@ -180,7 +180,7 @@ void Com_ScriptError(const char *msg, ...)
+     ParseThreadInfo = Com_GetParseThreadInfo();
+     v3 = &ParseThreadInfo->parseInfo[ParseThreadInfo->parseInfoNum];
+     va_copy(ap, va);
+-    _vsnprintf(string, 0x1000u, msg, va);
++    vsnprintf(string, 0x1000u, msg, va);
+     ap = 0;
+     if (ParseThreadInfo->parseInfoNum)
+         Com_PrintError(CON_CHANNEL_PARSERSCRIPT, "%sFile %s, line %i: %s", v3->warningPrefix, v3->parseFile, v3->lines, string);
+diff --git a/src/universal/q_shared.cpp b/src/universal/q_shared.cpp
+index 5c27a0d6..059bf1ac 100644
+--- a/src/universal/q_shared.cpp
++++ b/src/universal/q_shared.cpp
+@@ -921,8 +921,9 @@ void __cdecl Info_SetValueForKey_Big(char *s, const char *key, const char *value
+         return;
+     }
+ 
+-    if (strlen(s) + strlen(newi) <= BIG_INFO_STRING)
+-        strcat(s, newi);
++    // The sum must leave room for the terminator: s holds BIG_INFO_STRING bytes.
++    if (strlen(s) + strlen(newi) < BIG_INFO_STRING)
++        I_strncat(s, BIG_INFO_STRING, newi);
+     else
+         Com_Printf(CON_CHANNEL_SYSTEM, "Info string length exceeded. key: %s value: %s Info string: %s", key, value, s);
+ }

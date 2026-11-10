@@ -51,14 +51,67 @@
 # The link uses --gc-sections like the dedicated target. See
 # docs/linux-mp-client.md.
 # ---------------------------------------------------------------------------
-option(KISAK_LINUX_CINEMATICS
-    "Play Bink movies in KisakCOD-mp through the Linux Bink shim (needs libavcodec and libavutil, found with pkg-config)" OFF)
+set(KISAK_LINUX_CINEMATICS "AUTO" CACHE STRING
+    "Play Bink movies in KisakCOD-mp and KisakCOD-sp through the Linux Bink shim (libavcodec and libavutil, found with pkg-config). ON, OFF, or AUTO: on when both are found and link for the target architecture")
+set_property(CACHE KISAK_LINUX_CINEMATICS PROPERTY STRINGS AUTO ON OFF)
 option(KISAK_LINUX_HTTP_DOWNLOADS
     "Fetch a server's map and mod files over HTTP(S) in KisakCOD-mp with the engine's libcurl downloader (needs libcurl 7.85 or newer, found with pkg-config)" OFF)
 option(KISAK_LINUX_TRACY
     "Build KisakCOD-dedi, KisakCOD-mp and KisakCOD-sp with the Tracy profiler: idle until a profiler connects, localhost only. For profiling runs" OFF)
+option(KISAK_LINUX_GAMEPAD
+    "Game controller support in KisakCOD-mp through SDL3's gamepad API: buttons become bindable keys (AUX1 to AUX16), the right stick looks, the left stick moves and steers the menu cursor" OFF)
+option(KISAK_LINUX_PORTABLE_RUNPATH
+    "Give KisakCOD-mp the run path $ORIGIN/lib instead of the build machine's SDK folders, for a folder made with scripts/tools/package_linux_client.py. The build tree then needs LD_LIBRARY_PATH to run it" OFF)
 option(KISAK_BUILD_LINUX_MP_CLIENT
     "Build the native Linux multiplayer client KisakCOD-mp (needs KISAK_BUILD_LINUX_NATIVE_D3D9, KISAK_DXVK_NATIVE_LIBRARY, KISAK_OPENAL_LIBRARY and SDL3)" OFF)
+
+# Movies: the cache holds what was asked for (AUTO unless the command line says
+# ON or OFF); from here on KISAK_LINUX_CINEMATICS is a plain ON or OFF, which
+# is also what scripts/platform/linux/sp_game.cmake reads. AUTO looks only when
+# a game client is being built, so a dedicated-server configure never asks
+# pkg-config for anything.
+set(kisak_cinematics_asked "${KISAK_LINUX_CINEMATICS}")
+if(NOT kisak_cinematics_asked STREQUAL "AUTO")
+    if(kisak_cinematics_asked)
+        set(KISAK_LINUX_CINEMATICS ON)
+    else()
+        set(KISAK_LINUX_CINEMATICS OFF)
+    endif()
+elseif(NOT KISAK_BUILD_LINUX_MP_CLIENT AND NOT KISAK_BUILD_LINUX_SP_GAME)
+    set(KISAK_LINUX_CINEMATICS OFF)
+else()
+    set(KISAK_LINUX_CINEMATICS OFF)
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(KISAK_FFMPEG QUIET IMPORTED_TARGET libavcodec libavutil)
+    endif()
+    if(KISAK_FFMPEG_FOUND)
+        # pkg-config answers for the host's own architecture unless it is
+        # pointed elsewhere, so an i386 build on an x86_64 host finds x86_64
+        # libraries. Only a link with the target's own flags shows that what
+        # was found can be used.
+        include(CheckCXXSourceCompiles)
+        set(CMAKE_REQUIRED_LIBRARIES PkgConfig::KISAK_FFMPEG)
+        check_cxx_source_compiles("
+            extern \"C\" {
+            #include <libavcodec/avcodec.h>
+            #include <libavutil/avutil.h>
+            }
+            int main() { return (avcodec_version() != 0 && avutil_version() != 0) ? 0 : 1; }"
+            KISAK_FFMPEG_LINKS_FOR_TARGET)
+        unset(CMAKE_REQUIRED_LIBRARIES)
+        if(KISAK_FFMPEG_LINKS_FOR_TARGET)
+            set(KISAK_LINUX_CINEMATICS ON)
+        endif()
+    endif()
+    if(KISAK_LINUX_CINEMATICS)
+        message(STATUS "KisakCOD movies: on (libavcodec and libavutil found; -DKISAK_LINUX_CINEMATICS=OFF leaves them out)")
+    elseif(KISAK_FFMPEG_FOUND)
+        message(STATUS "KisakCOD movies: off (pkg-config found libavcodec and libavutil, but a test program does not link with them in this build; they are probably for another architecture, see docs/linux-cinematics.md)")
+    else()
+        message(STATUS "KisakCOD movies: off (no libavcodec and libavutil development files found with pkg-config; see docs/linux-cinematics.md)")
+    endif()
+endif()
 if(NOT KISAK_BUILD_LINUX_MP_CLIENT)
     return()
 endif()
@@ -230,10 +283,23 @@ set(mp_client_own_sources
 if(KISAK_LINUX_STEAM)
     list(APPEND mp_client_own_sources ${KISAK_LINUX_STEAM_SOURCES})
 endif()
+# The controller (KISAK_LINUX_GAMEPAD): the PS Vita client's control mapping,
+# which is plain C++ with no Vita call in it, a full-size controller on top of
+# it, SDL3's gamepad API underneath, and the engine's side. The test below
+# links the first three.
+set(KISAK_MP_CLIENT_GAMEPAD_SOURCES
+    "${SRC_DIR}/vita/client/input/vita_input_map.cpp"
+    "${SRC_DIR}/linux/client/input/gamepad_map.cpp"
+    "${SRC_DIR}/linux/client/input/gamepad_sdl.cpp")
+if(KISAK_LINUX_GAMEPAD)
+    list(APPEND mp_client_own_sources
+        ${KISAK_MP_CLIENT_GAMEPAD_SOURCES}
+        "${SRC_DIR}/linux/client/mp_client_gamepad.cpp")
+endif()
 
 # The Windows client's definitions without CINEMA (see r_cinematic.cpp above).
 set(KISAK_MP_CLIENT_DEFINITIONS
-    KISAK_MP USE_SEPARATE_BLIT_TEXTURE KISAK_OPENAL RELEASE_ASSERTS
+    KISAK_MP USE_SEPARATE_BLIT_TEXTURE KISAK_OPENAL ${KISAK_LINUX_CLIENT_ASSERT_DEFINITIONS}
     KISAK_LINUX_MP_CLIENT
     _FILE_OFFSET_BITS=64 _GNU_SOURCE
     $<$<CONFIG:Debug>:_DEBUG>
@@ -320,7 +386,15 @@ if(KISAK_LINUX_CINEMATICS)
         target_compile_options(KisakCOD-mp-cinematic PRIVATE "-idirafter${KISAK_FFMPEG_INCLUDEDIR}")
     endif()
 endif()
-target_compile_definitions(KisakCOD-mp-own PRIVATE KISAK_LINUX_SDL_MAJOR=3)
+target_compile_definitions(KisakCOD-mp-own PRIVATE KISAK_LINUX_SDL_MAJOR=3
+    $<$<BOOL:${KISAK_LINUX_GAMEPAD}>:KISAK_LINUX_GAMEPAD>)
+if(KISAK_LINUX_GAMEPAD)
+    # Warnings are errors in the engine-free units; mp_client_gamepad.cpp
+    # includes the engine's headers and keeps the client's flags.
+    set_property(SOURCE ${KISAK_MP_CLIENT_GAMEPAD_SOURCES}
+        TARGET_DIRECTORY KisakCOD-mp-own APPEND PROPERTY COMPILE_OPTIONS -Wall -Wextra -Werror)
+    message(STATUS "KisakCOD-mp: game controller support on")
+endif()
 target_link_libraries(KisakCOD-mp-own PRIVATE kisak_linux_native_d3d9 SDL3::SDL3)
 
 # Bundled C libraries, with the dedicated target's rules.
@@ -353,6 +427,21 @@ endif()
 target_link_libraries(KisakCOD-mp PRIVATE
     "${KISAK_DXVK_NATIVE_LIBRARY}" "${KISAK_OPENAL_LIBRARY}" SDL3::SDL3 Threads::Threads ${CMAKE_DL_LIBS})
 add_dependencies(KisakCOD-mp update_build_number)
+if(KISAK_LINUX_PORTABLE_RUNPATH)
+    if(APPLE)
+        message(FATAL_ERROR "KISAK_LINUX_PORTABLE_RUNPATH is for ELF targets; macOS has its own bundle rules")
+    endif()
+    # CMake's default run path lists every folder a linked library came from:
+    # the SDL3 and DXVK SDK folders of this machine. A copy of the binary on
+    # another PC would still search those names first, and there they are
+    # folders anyone may be able to create. A packaged client looks only in
+    # the lib folder next to itself (and then in the system's own folders).
+    set_target_properties(KisakCOD-mp PROPERTIES
+        SKIP_BUILD_RPATH OFF
+        BUILD_WITH_INSTALL_RPATH ON
+        INSTALL_RPATH "\$ORIGIN/lib")
+    target_link_options(KisakCOD-mp PRIVATE -Wl,--enable-new-dtags)
+endif()
 if(KISAK_LINUX_CINEMATICS)
     target_link_libraries(KisakCOD-mp PRIVATE PkgConfig::KISAK_FFMPEG)
 endif()
@@ -397,6 +486,19 @@ else()
         -Wl,--as-needed -Wl,--gc-sections -Wl,--wrap=SDL_CreateWindowWithProperties)
 endif()
 target_link_libraries(KisakCOD-mp-client-window-test PRIVATE kisak_linux_native_d3d9 SDL3::SDL3 Threads::Threads)
+
+# The controller reader against SDL3 itself (KISAK_LINUX_GAMEPAD), with one of
+# SDL's virtual controllers: no hardware, no window, no engine.
+if(KISAK_LINUX_GAMEPAD)
+    add_executable(KisakCOD-mp-gamepad-test
+        "${TESTS_DIR}/linux_mp_client/gamepad_sdl_test.cpp"
+        ${KISAK_MP_CLIENT_GAMEPAD_SOURCES})
+    target_compile_features(KisakCOD-mp-gamepad-test PRIVATE cxx_std_20)
+    target_compile_definitions(KisakCOD-mp-gamepad-test PRIVATE KISAK_LINUX_SDL_MAJOR=3)
+    target_compile_options(KisakCOD-mp-gamepad-test PRIVATE -Wall -Wextra -Werror ${KISAK_LINUX_HARDENING_OPTIONS})
+    target_include_directories(KisakCOD-mp-gamepad-test PRIVATE "${SRC_DIR}")
+    target_link_libraries(KisakCOD-mp-gamepad-test PRIVATE SDL3::SDL3)
+endif()
 
 # The Bink shim's asset-free test (KISAK_LINUX_CINEMATICS): the file reader on
 # made-up files, the Bink API on a stand-in decoder and clock, and libavcodec's

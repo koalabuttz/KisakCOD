@@ -1,0 +1,109 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 09:46:45 +0000
+Subject: [PATCH] fix: align skeleton and model memory with pointer sized masks
+
+The skeleton caches, the model prefetch loops and the collision tree
+allocation round addresses with 0xFFFFFFF0 or 0xFFFFFF80, some after a
+cast to a 32-bit integer. That clears the upper half of a 64-bit
+address. The masks are now ~(uintptr_t)15 and ~(uintptr_t)127 on a
+uintptr_t.
+
+No behaviour change in the 32-bit build.
+---
+ src/client/cl_main.cpp        |  2 +-
+ src/client_mp/cl_main_mp.cpp  |  2 +-
+ src/server/sv_game.cpp        |  2 +-
+ src/xanim/xmodel.cpp          | 12 ++++++------
+ src/xanim/xmodel_load_obj.cpp |  2 +-
+ 5 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/src/client/cl_main.cpp b/src/client/cl_main.cpp
+index b9009d80..e639c261 100644
+--- a/src/client/cl_main.cpp
++++ b/src/client/cl_main.cpp
+@@ -642,7 +642,7 @@ void __cdecl CL_ResetSkeletonCache()
+     //PIXSetMarker(0xFFFFFFFF, "CL_ResetSkeletonCache");
+     if (!++clients[0].skelTimeStamp)
+         clients[0].skelTimeStamp = 1;
+-    clients[0].skelMemoryStart = (char *)((unsigned int)&clients[0].skelMemory[15] & 0xFFFFFFF0);
++    clients[0].skelMemoryStart = (char *)((uintptr_t)&clients[0].skelMemory[15] & ~(uintptr_t)15);
+     clients[0].skelMemPos = 0;
+ }
+ 
+diff --git a/src/client_mp/cl_main_mp.cpp b/src/client_mp/cl_main_mp.cpp
+index 3aa30ef1..d4885964 100644
+--- a/src/client_mp/cl_main_mp.cpp
++++ b/src/client_mp/cl_main_mp.cpp
+@@ -392,7 +392,7 @@ void __cdecl CL_ResetSkeletonCache(int32_t localClientNum)
+     v1 = &clients[localClientNum];
+     if (!++v1->skelTimeStamp)
+         ++v1->skelTimeStamp;
+-    v1->skelMemoryStart = (char *)((uint32_t)&v1->skelMemory[15] & 0xFFFFFFF0);
++    v1->skelMemoryStart = (char *)((uintptr_t)&v1->skelMemory[15] & ~(uintptr_t)15);
+     v1->skelMemPos = 0;
+ }
+ 
+diff --git a/src/server/sv_game.cpp b/src/server/sv_game.cpp
+index bbe893eb..cf47e58c 100644
+--- a/src/server/sv_game.cpp
++++ b/src/server/sv_game.cpp
+@@ -569,7 +569,7 @@ void __cdecl SV_InitGameVM(uint32_t randomSeed, int restart, int savegame, SaveG
+     if (!++sv.skelTimeStamp)
+         sv.skelTimeStamp = 1;
+     sv.skelMemPos = 0;
+-    g_sv_skel_memory_start = (char *)((uint32_t)&g_sv_skel_memory[15] & 0xFFFFFFF0);
++    g_sv_skel_memory_start = (char *)((uintptr_t)&g_sv_skel_memory[15] & ~(uintptr_t)15);
+     SND_ErrorCleanup();
+ 
+     {
+diff --git a/src/xanim/xmodel.cpp b/src/xanim/xmodel.cpp
+index 67dd70b8..1a9a2501 100644
+--- a/src/xanim/xmodel.cpp
++++ b/src/xanim/xmodel.cpp
+@@ -333,8 +333,8 @@ void __cdecl PrefetchArray_XSurfaceCollisionNode_(const XSurfaceCollisionNode *m
+ 
+     if (!elementCount)
+         MyAssertHandler(".\\xanim\\xmodel.cpp", 883, 0, "%s", "elementCount");
+-    for (memIter = (const unsigned __int8 *)((uintptr_t)mem & 0xFFFFFF80); 
+-        memIter <= (const unsigned __int8 *)(((uintptr_t) & mem[elementCount - 1].childCount + 1) & 0xFFFFFF80);
++    for (memIter = (const unsigned __int8 *)((uintptr_t)mem & ~(uintptr_t)127); 
++        memIter <= (const unsigned __int8 *)(((uintptr_t) & mem[elementCount - 1].childCount + 1) & ~(uintptr_t)127);
+         memIter += 128)
+         ;
+ }
+@@ -444,8 +444,8 @@ void __cdecl PrefetchArray_GfxPackedVertex_(const GfxPackedVertex *mem, uint32_t
+ 
+     if (!elementCount)
+         MyAssertHandler(".\\xanim\\xmodel.cpp", 883, 0, "%s", "elementCount");
+-    for (memIter = (const unsigned __int8*)((uintptr_t)mem & 0xFFFFFF80); 
+-        memIter <= (const unsigned __int8*)(((uintptr_t) & mem[elementCount - 1].tangent + 3) & 0xFFFFFF80);
++    for (memIter = (const unsigned __int8*)((uintptr_t)mem & ~(uintptr_t)127); 
++        memIter <= (const unsigned __int8*)(((uintptr_t) & mem[elementCount - 1].tangent + 3) & ~(uintptr_t)127);
+         memIter += 128)
+         ;
+ }
+@@ -485,8 +485,8 @@ void __cdecl PrefetchArray_XSurfaceCollisionLeaf_(const XSurfaceCollisionLeaf *m
+ 
+     if (!elementCount)
+         MyAssertHandler(".\\xanim\\xmodel.cpp", 883, 0, "%s", "elementCount");
+-    for (memIter = (const unsigned __int8*)((uintptr_t)mem & 0xFFFFFF80);
+-        memIter <= (const unsigned __int8*)(((uintptr_t) & mem[elementCount - 1].triangleBeginIndex + 1) & 0xFFFFFF80);
++    for (memIter = (const unsigned __int8*)((uintptr_t)mem & ~(uintptr_t)127);
++        memIter <= (const unsigned __int8*)(((uintptr_t) & mem[elementCount - 1].triangleBeginIndex + 1) & ~(uintptr_t)127);
+         memIter += 128)
+     {
+         ;
+diff --git a/src/xanim/xmodel_load_obj.cpp b/src/xanim/xmodel_load_obj.cpp
+index d5a80731..85eb7b33 100644
+--- a/src/xanim/xmodel_load_obj.cpp
++++ b/src/xanim/xmodel_load_obj.cpp
+@@ -218,7 +218,7 @@ void __cdecl XModelReadSurface_BuildCollisionTree(
+     allocSize = 16 * nodeCount + 15;
+     v3 = (unsigned char*)Alloc(allocSize);
+     alloced = v3;
+-    alignedAddr = (uintptr_t)(v3 + 15) & 0xFFFFFFF0;
++    alignedAddr = (uintptr_t)(v3 + 15) & ~(uintptr_t)15;
+     tree->nodes = (XSurfaceCollisionNode*)alignedAddr;
+     if (((uintptr_t)tree->nodes & 0xF) != 0)
+         MyAssertHandler(".\\r_xsurface_load_obj.cpp", 352, 0, "%s", "!(reinterpret_cast< uint32_t >( tree->nodes ) & 0x0F)");

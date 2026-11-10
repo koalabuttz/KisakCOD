@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 09:47:29 +0000
+Subject: [PATCH] fix: read the last lod distance through lodInfo
+
+XModelGetLodOutDist() returned a float at parentList + 28 bytes per
+lod. With four-byte pointers that is lodInfo[numLods - 1].dist (lodInfo
+starts 28 bytes after parentList and an XModelLodInfo is 28 bytes). It
+now names the field, so it no longer depends on the pointer size.
+
+No behaviour change in the 32-bit build.
+---
+ src/xanim/xmodel_utils.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/xanim/xmodel_utils.cpp b/src/xanim/xmodel_utils.cpp
+index 802e19af..ef001bf4 100644
+--- a/src/xanim/xmodel_utils.cpp
++++ b/src/xanim/xmodel_utils.cpp
+@@ -76,7 +76,7 @@ int __cdecl XModelGetNumLods(const XModel *model)
+ 
+ double __cdecl XModelGetLodOutDist(const XModel *model)
+ {
+-    return *((float *)&model->parentList + 7 * XModelGetNumLods(model));
++    return model->lodInfo[XModelGetNumLods(model) - 1].dist;
+ }
+ 
+ int __cdecl XModelNumBones(const XModel *model)

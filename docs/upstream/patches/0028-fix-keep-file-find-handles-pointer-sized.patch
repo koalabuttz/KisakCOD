@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 09:46:03 +0000
+Subject: [PATCH] fix: keep file find handles pointer sized
+
+_findfirst64i32() returns an intptr_t. Four file scans kept it in an
+int, which is the same size on Win32 but cuts the handle short in a
+64-bit build.
+
+No behaviour change in the 32-bit build.
+---
+ src/universal/com_files.cpp  | 2 +-
+ src/universal/win_common.cpp | 6 +++---
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/universal/com_files.cpp b/src/universal/com_files.cpp
+index 7e7ea0b3..39dd51da 100644
+--- a/src/universal/com_files.cpp
++++ b/src/universal/com_files.cpp
+@@ -1611,7 +1611,7 @@ void __cdecl FS_AddIwdFilesForGameDirectory(char *path, char *pszGameFolder)
+ int __cdecl Sys_DirectoryHasContents(const char *directory)
+ {
+     _finddata64i32_t findinfo; // [esp+0h] [ebp-238h] BYREF
+-    int findhandle; // [esp+12Ch] [ebp-10Ch]
++    intptr_t findhandle; // [esp+12Ch] [ebp-10Ch]
+     char search[260]; // [esp+130h] [ebp-108h] BYREF
+ 
+     Com_sprintf(search, 0x100u, "%s\\*", directory);
+diff --git a/src/universal/win_common.cpp b/src/universal/win_common.cpp
+index 05cb8f20..e8de6964 100644
+--- a/src/universal/win_common.cpp
++++ b/src/universal/win_common.cpp
+@@ -160,7 +160,7 @@ void __cdecl Sys_Mkdir(const char *path)
+ BOOL __cdecl Sys_RemoveDirTree(const char *path)
+ {
+     bool v2; // [esp+8h] [ebp-250h]
+-    int handle; // [esp+1Ch] [ebp-23Ch]
++    intptr_t handle; // [esp+1Ch] [ebp-23Ch]
+     char childPath[256]; // [esp+20h] [ebp-238h] BYREF
+     _finddata64i32_t find; // [esp+120h] [ebp-138h] BYREF
+     bool hasError; // [esp+252h] [ebp-6h]
+@@ -206,7 +206,7 @@ void __cdecl Sys_ListFilteredFiles(
+ {
+     char filename[256]; // [esp+10h] [ebp-338h] BYREF
+     _finddata64i32_t findinfo; // [esp+110h] [ebp-238h] BYREF
+-    int findhandle; // [esp+23Ch] [ebp-10Ch]
++    intptr_t findhandle; // [esp+23Ch] [ebp-10Ch]
+     char search[260]; // [esp+240h] [ebp-108h] BYREF
+ 
+     if (*numfiles < 0x1FFF)
+@@ -274,7 +274,7 @@ char **__cdecl Sys_ListFiles(
+     _finddata64i32_t findinfo; // [esp+18h] [ebp-250h] BYREF
+     int flag; // [esp+140h] [ebp-128h]
+     char **listCopy; // [esp+144h] [ebp-124h]
+-    int findhandle; // [esp+148h] [ebp-120h]
++    intptr_t findhandle; // [esp+148h] [ebp-120h]
+     char *(*list)[8192]; // [esp+14Ch] [ebp-11Ch]
+     int nfiles; // [esp+150h] [ebp-118h] BYREF
+     HunkUser *user; // [esp+154h] [ebp-114h]

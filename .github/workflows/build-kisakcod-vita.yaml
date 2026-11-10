@@ -39,10 +39,12 @@ on:
 permissions:
   contents: read
 
-# As the Linux workflow: a newer push to a pull request or to master cancels
-# that branch's older run; manual runs always finish.
+# A newer push to a pull request cancels that pull request's older run. Every
+# master run and every manual run has a group of its own and always finishes:
+# console runs install master's vpk, so each merge that changes the port has
+# to keep one, and these four jobs are small.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:

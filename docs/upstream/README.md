@@ -43,6 +43,21 @@ platform code.
 | 0021 | The wrap of an angle into [-180, 180] is written out 19 times (upstream issue 45) | commit `8569b17`, second half |
 | 0022 | The origin codec rounds the map centre with a bare `+ 0.5` and a cast in six places (upstream issue 56) | commit `431c9d9` |
 | 0023 | Eight vector snaps are three `(float)(int)` casts each (upstream issue 52) | commit `f783b2e` |
+| 0024 | Unbounded string calls in `universal`, `qcommon`, `script` and `stringed` (upstream issue 8, part 1 of 4) | commit `85316f4` |
+| 0025 | Unbounded string calls in `game`, `game_mp`, `server` and `server_mp` (part 2) | merge `354d177` |
+| 0026 | Unbounded string calls in `client`, `client_mp`, `cgame`, `ui` and `ui_mp` (part 3) | merge `b415b29` |
+| 0027 | Unbounded string calls in `gfx_d3d`, `win32` and `sound` (part 4) | commit `acc81f6` |
+| 0028 | Four file scans keep the `_findfirst64i32` handle in an `int` (64-bit step 1) | merge `aa72434` |
+| 0029 | `HudElem_SetBoolean` writes an `int` field through a `VariableUnion` pointer | merge `e8dcc15` |
+| 0030 | The model mark callback reads its context by byte offset instead of through `MarkModelCoreContext` | merge `e8dcc15` |
+| 0031 | Skeleton cache, model prefetch and collision tree addresses are rounded with 32-bit masks | merge `c8bb98f` |
+| 0032 | `DamageNotify` reaches attachment names by indexing past one array and off a pointer field | merge `c8bb98f` |
+| 0033 | `G_GetClientSize` returns the number 12676 instead of `sizeof(gclient_s)` | merge `c8bb98f` |
+| 0034 | Three script stack reads negate an unsigned index | merge `c8bb98f` |
+| 0035 | `XModelGetLodOutDist` reads the last lod distance as an offset from `parentList` | merge `c8bb98f` |
+| 0036 | The weapon anim rate table holds `WeaponDef` byte offsets as numbers | merge `f06e241` |
+| 0037 | Physics object ids are cast to and from `dxBody *` at 38 places (64-bit step 2) | merge `dbe7988` |
+| 0038 | A 64-bit body pointer does not fit the 32-bit physics object id | merge `dbe7988` |
 
 Patches 0001 to 0004 are the proposed first batch and 0005 to 0010 the
 second. 0011 to 0015 answer open upstream issues or sit next to one, and
@@ -50,7 +65,11 @@ come after those. 0016 belongs with the second batch; 0017 and 0018 go with
 the other fixes for open issues. 0019 to 0021 are the first of the cleanup
 issues; they form a chain (0021 on 0020 on 0019) because all three change
 neighbouring lines of the same angle code. 0022 and 0023 are the rounding
-issues; neither changes behaviour.
+issues; neither changes behaviour. 0024 to 0027 are upstream issue 8 by
+directory; each applies to the base alone, so they can go in any order.
+0028 to 0038 are the first two steps of the 64-bit work: fixes that read as
+plain corrections on upstream's 32-bit build and change nothing there. 0028
+to 0037 each apply to the base alone; 0038 needs 0037.
 
 Open points on single patches, to settle before each is offered:
 
@@ -104,6 +123,38 @@ Open points on single patches, to settle before each is offered:
   those two against retail.
 - The retail addresses in 0022 and 0023 come from the fork's scan of a
   retail 1.7 `iw3mp.exe` (`scripts/audit/retail_float_int_scan.py`).
+- 0024 to 0027 are the fork's four changes for upstream issue 8, applied to
+  upstream's files. Two files are left out: `qcommon/dl_main.cpp`, where
+  the fork's version differs too much, and `client_mp/cl_connection_mp.cpp`,
+  which upstream does not have. `src/radiant` (about 250 sites) is not
+  covered. Where a text did not fit its buffer the old code overran it; the
+  new code cuts the text. On the issue a maintainer wrote that they would
+  post a list for a future pull request and has not yet, so ask before
+  offering these. At 30 to 110 changed lines each they are larger than
+  upstream usually takes; each can be split further by file.
+- 0028 to 0038 are only proved to compile on upstream's tree. Upstream has
+  no 64-bit build, so what they fix is shown by the fork's x86_64 builds and
+  runs, not by upstream's checks. Each message says the 32-bit build does
+  not change.
+- 0033 and 0036 add `static_assert`s on retail sizes and offsets without a
+  32-bit guard, as upstream's other layout asserts are written. They need
+  the same guard as the rest when a 64-bit build is added.
+- 0034 writes `top[-(int)index]`, the form upstream already uses for the
+  other readers in that file; the fork wrote `top - index`.
+- 0037 also changes three places the fork's own change did not: one cast in
+  `DynEntCl` that the fork fixed later, and the two lines of the
+  single-player `DynEnt_LoadEntities` that store a loaded body. The fork
+  still has the last two as a pointer cut to 32 bits on x86_64. The
+  single-player `cpose_t` keeps its pointer sized field in upstream and is
+  left alone.
+- 0038 is a design choice, not only a fix: a 2048 slot table behind a
+  mutex. Its table code is compiled only off 32-bit x86, so upstream's
+  build does not compile it. The fork's test for it is
+  `scripts/tests/test_linux_phys_objid.py`. Widening the field is not
+  possible for `DynEntityClient`, whose 12 bytes are stored in fastfiles.
+- The fork's change for the single-player level-start save (64-bit step 1
+  in an earlier list) is not here: it uses script stack helpers that come
+  with the fork's 64-bit script VM, so it belongs with that step.
 - Upstream issue 36 needs nothing from the fork: upstream has already
   commented out the copies it names.
 

@@ -17,7 +17,9 @@ client, credentials, or a listening game server:
   * the file I/O and virtual-memory self-tests shipped in the platform sources;
   * the script lexer EOF regression, which ends a scan with no local clients;
   * the random-helper ranges, which must stay 15-bit where Linux rand() is 31-bit;
-  * the MSVC CRT shims in ``src/linux/compat.h`` that client sources call.
+  * the MSVC CRT shims in ``src/linux/compat.h`` that client sources call;
+  * the opt-in speed build options (``KISAK_LINUX_CPU``, ``KISAK_LINUX_LTO``),
+    by configuring a temporary directory (the given build is not touched).
 
 ``--arch x86_64``, ``aarch64``, ``macos-arm64`` or ``macos-x86_64`` checks a
 64-bit or macOS build instead: the bootstrap and the platform self-tests
@@ -382,6 +384,14 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
             [Command([python, TESTS / "test_linux_phys_objid.py", "--cxx", cxx], timeout=300)],
         )
     )
+    # Opt-in KISAK_LINUX_CPU and KISAK_LINUX_LTO: configures only, builds nothing.
+    checks.append(
+        Check(
+            "speed_build",
+            "opt-in speed build options reach every compile and link, without fused multiply-add",
+            [Command([python, TESTS / "test_linux_speed_build.py", "--cxx", cxx], timeout=300)],
+        )
+    )
 
     # perf_ab and perf_sample: a laptop run costs battery and a place in a
     # queue, so what they compute is checked here first (docs/perf-ab.md).
@@ -601,7 +611,7 @@ def main():
     parser.add_argument("--list", action="store_true", help="print the command list and exit without running")
     options = parser.parse_args()
 
-    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "remote_input", "master_server", "open_url", "steam_session", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range", "gameplay_lifecycle", "server_test_clients", "weapon_def_ownership", "bot_driver", "database_publication", "crt_shims", "assert_continue", "sl_trace", "phys_objid", "perf_ab"]
+    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "remote_input", "master_server", "open_url", "steam_session", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range", "gameplay_lifecycle", "server_test_clients", "weapon_def_ownership", "bot_driver", "database_publication", "crt_shims", "assert_continue", "sl_trace", "phys_objid", "speed_build", "perf_ab"]
     options.only = parse_names(options.only)
     options.skip = parse_names(options.skip)
     for name in options.only | options.skip:

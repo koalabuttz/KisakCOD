@@ -31,10 +31,11 @@ cmake --build build-linux/sp --target KisakCOD-sp
 The libraries are the multiplayer client's: the native D3D9 boundary with a
 DXVK Native library, SDL3 3.2.10 or newer and an OpenAL library, all built for
 the game's architecture (i386 above). CI links
-the same stand-ins (no D3D9 device, no OpenAL device). Add
-`-DKISAK_LINUX_CINEMATICS=ON` to play the Bink movies through the FFmpeg shim
-([linux-cinematics.md](linux-cinematics.md)); without it no movie plays. Both
-games can be switched on in one build directory.
+the same stand-ins (no D3D9 device, no OpenAL device). The Bink movies play
+through the FFmpeg shim when libavcodec and libavutil are found at configure
+time, or always with `-DKISAK_LINUX_CINEMATICS=ON`
+([linux-cinematics.md](linux-cinematics.md)); without the shim no movie plays.
+Both games can be switched on in one build directory.
 
 For x86_64, add `-DKISAK_LINUX_ARCH=x86_64` in a build directory of its own
 and point the three libraries at x86_64 builds, as for the x86_64 multiplayer
