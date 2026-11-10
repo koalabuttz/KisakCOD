@@ -635,10 +635,11 @@ void DynEnt_LoadEntities(MemoryFile *memFile)
             MemFile_ReadData(memFile, 1, &hasPhys);
             if (hasPhys)
             {
-                cm.dynEntClientList[drawType][dynEntId].physObjId = (uintptr_t)Phys_ObjLoad(PHYS_WORLD_DYNENT, memFile);
-                DynEnt_SetPhysObjCollision(
-                    &cm.dynEntDefList[drawType][dynEntId],
-                    (dxBody *)cm.dynEntClientList[drawType][dynEntId].physObjId);
+                // The field holds an object id, as everywhere else: the
+                // pointer itself only fits where a pointer is four bytes.
+                dxBody *body = Phys_ObjLoad(PHYS_WORLD_DYNENT, memFile);
+                cm.dynEntClientList[drawType][dynEntId].physObjId = Phys_IdFromObj(body);
+                DynEnt_SetPhysObjCollision(&cm.dynEntDefList[drawType][dynEntId], body);
             }
             else
             {
