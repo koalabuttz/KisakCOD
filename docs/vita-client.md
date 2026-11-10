@@ -8,8 +8,10 @@ platform layer and memory rules. Started 2026-11-09.
 
 **State: stages 1 to 3 run on the console. On 2026-11-10 the main menu
 showed on David's Vita and worked, with touch, buttons and music (run K).
-Starting a map does not work yet: the GPU's memory is full before the map
-loads ("Memory" below), which is the next piece of work.**
+A map load failed on the console in that run. Since then a map loads and a
+player spawns in Vita3K on the console's heap size (run U), but the world is
+drawn black there, because the GPU's memory is full in a game ("Memory"
+below). No map load has been tried on a console since run K.**
 - The whole client compiles, links and packs into a `.vpk`: client, cgame, UI, sound, renderer and its own listen server.
 - Stage 1 had no graphics back end, so the client stopped at the renderer through `Sys_Error`. Stage 2 replaces that: the renderer gets the D3D9 front on the GXM back end ("Graphics" below).
 - Stage 3 (controls and sound) runs on the console: on run 1 (2026-11-09) the menu music and the menu's sounds were heard, and every button arrived as its key. The screen's touch and the layout in a game are not confirmed yet: see "Controls" and "Sound" below.
@@ -128,7 +130,7 @@ Static data of the RelWithDebInfo build (2026-11-09):
 | `.bss` | 66.2 MB | 88.7 MB |
 
 Other large static arrays in the client:
-- `cls` 2.9 MB, `odeGlob` 2.8 MB, `gfxBuf` 2.3 MB, `s_backEndData` 2.2 MB, `tess` 2.2 MB;
+- `cls` 2.9 MB, `odeGlob` 2.8 MB, `gfxBuf` 2.3 MB (1.5 MB since the smaller skinned caches below), `s_backEndData` 2.2 MB, `tess` 2.2 MB;
 - `clients` 1.7 MB, `g_streamState` 1.7 MB.
 
 The heap and the engine reservations are the server's for now: a 64 MB heap, the 128 MB zone arena and the hunks. Textures go to the GPU's own memory (CDRAM, about 112 MB), not main memory.
@@ -153,7 +155,39 @@ What the menu takes (run K on the console, and the same build in Vita3K, 2026-11
 The main pool is too small for the dynamic buffers, so 14.5 MB of them spill into CDRAM. mp_crash's first vertex buffer alone is 13.4 MB, and neither pool had that much left. Making a map fit is the work in progress. The table above is the state before it; so far:
 - **Targets take memory when first used.** The renderer makes every render target and depth texture it might use at start-up. On the Vita each one gets its GPU memory when a scene first draws to it, or when it is first locked or copied from (`EnsureTargetMemory`). Until then a draw that samples it reads black. The log names each one as it takes its memory (`gpu memory piece`).
 - **No shadow maps.** `sm_enable` is 0 and read-only in the Vita build. The back end cannot sample depth textures yet, so the shadow maps would be drawn and never read. With the change above, their 18 MB of targets are never taken.
-- Still to do: the dynamic buffers are sized for a PC (the static model cache 8 MB, the skinned caches 9 MB, the index buffers 10 MB).
+- **Smaller dynamic buffers** (built, not run yet). The engine's dynamic buffers are sized for the PC game: 25.5 MB before any copy. The Vita build (`KISAK_GFX_GXM`, the sizes in `r_gfx.h`) makes them 12.5 MB:
+
+| Buffer | Retail | Vita | When it is full or absent |
+|---|---:|---:|---|
+| Static model cache | 8 MB, and 2 MB of indices in main memory | none | `r_smc_enable` is 0 and read-only: each static model is drawn from the map's own buffers, one draw apiece |
+| Skinned caches, two taking turns | 4.5 MB each | 3 MB each | a model that finds no room is not drawn that frame |
+| Pretess index buffers, two taking turns | 2 MB each | 1 MB each | world surfaces that find no room are drawn unbatched |
+| Dynamic index buffer | 2 MB | 2 MB | |
+| Dynamic vertex buffer | 1 MB | 1 MB | |
+| Code and mark meshes, two of each | 1.5 MB | 1.5 MB | |
+
+- **The sizes are guesses until a run reports them.** Once a minute the log says how full each got (`r_dynamicBufferReport`, in seconds; 60 on the Vita, 0 and so silent elsewhere): `dynamic buffers, the most one frame asked for in N frames: skinned cache X of 3072 KB (N models left out), pretess X of 524288 indices (N batches left unbatched), dynamic indices X of 1048576, dynamic vertices X of 1024 KB`. A skinned cache figure above its size is what the frame wanted.
+- **A renamed buffer's copies stay in its own pool.** The engine locks most dynamic buffers with DISCARD every frame. The back end then gives the buffer fresh memory (a rename) and frees the old once the frames that might read it are done, up to three frames later, so a buffer can hold four times its size. Those copies used to spill from the main pool into CDRAM, where they took the room the scene's render targets needed. Now a rename takes memory from the buffer's own pool only (main, for dynamic buffers). With no room there, the lock ends the scene, waits for the GPU and writes in place, which costs time and no memory. One wait serves every buffer drawn before it: after it the GPU reads none of them, so until a draw reads one again its locks write in place without a rename or another wait. The draw summary counts all three: `buffer renames: N took fresh memory, N waited for the GPU instead (their pool was full) and N needed neither (a wait since their last draw); old copies the GPU might still read took N KB at most`. A refused rename no longer writes two lines to the log each time. What the waits cost in frame time on a console is not known.
+
+**In a game.** No map has loaded on a console yet. In Vita3K on the Windows PC (builds made on that PC, 2026-11-10; not a console):
+- **Run M** (before `snd_adpcm`): on the 64 MB heap the mp_crash fastfile loads and then the heap runs out. On a 128 MB heap the map loads and a player spawns, with 71 MB of heap in use.
+- **Run U** (with `snd_adpcm` and the first two changes above, before the smaller buffers): the map loads on the 64 MB heap and a player spawns. Heap 31.8 MB after the load and 32.9 MB in the game; zone arena 46 MB free. Menus and the HUD are drawn. The world is black.
+- **Why black:** both pools are full, CDRAM at 103.5 of the 108 MB Vita3K offers (a console has 104) and main at 19.3 of 20. The scene's two screen-sized render targets, 2040 KB each, find no room 0.7 s after the game's own start-up (`CL_InitCGame`), and every draw to them is skipped: 571753 draws, against 997449 drawn. 2308 allocations were refused in seven minutes. All but those two were fresh copies for renamed dynamic buffers.
+
+| Use in the game (run U) | CDRAM + main, MB | Note |
+|---|---:|---|
+| Compressed textures | 34.9 | 1569 pieces |
+| Static vertices | 29.0 | `common_mp` 9.2, mp_crash 12.8 and 7.0 |
+| Dynamic vertices | 4.5 + 15.5 | one skinned cache did not fit the main pool |
+| Dynamic indices | 8.0 | three buffers of 2 MB and one copy |
+| Other textures | 6.5 | |
+| Cubes | 6.5 | 21; one of 4 MB |
+| Static indices | 3.1 | |
+| Depth | 2.0 | |
+| Volumes | 1.0 | |
+| Render targets | 0.4 | three small ones; the screen-sized ones got none |
+
+The display's buffers (8 MB of CDRAM) and the context's ring buffers (in the main pool) are not in the by-use line.
 
 ## Controls (stage 3)
 
@@ -401,11 +435,22 @@ the count was 711 sounds in 9693 KB. The two columns disagree on the second
 row by 3477 KB: that is what the 16-bit path read from past the ends of
 sounds, as above.
 
+Run T (the same PC and Vita3K, the PC's build of the fix, 2026-11-10) has the
+fix's figures. With `snd_adpcm 0` the 702 sounds take 37405 KB by both figures
+of the log line, and the heap at the menu holds 51.3 MB. With
+`snd_adpcm 1` nothing changed: 9574 KB and 23.8 MB. Encoding the 702 sounds
+took 1232 ms in the emulator. 26 of them claim more frames than their bytes
+hold, and every one the log printed is a 16-bit stereo sound at 44100 Hz that
+claims exactly twice its frames, so a stereo sound's frame count seems to
+count both channels. Where sounds are not halved (the desktop's default) the
+driver still works out such a sound's length from that count; not looked at
+yet. Run U loaded Crash: 749 sounds in 12184 KB, where 16-bit PCM would take
+47675 KB, and the heap in the game held 32.9 MB.
+
 Not measured yet: all of this on a console (Vita3K's memory figures are not a
-console's), what the encoding adds to a load there, the claim count and which
-sounds claim too much, the path that keeps a sound's own IMA ADPCM blocks with
-real data, and how the encoded sounds sound. Nobody has listened to them: the
-runs had no listener.
+console's), what the encoding adds to a load there, the path that keeps a
+sound's own IMA ADPCM blocks with real data, and how the encoded sounds sound.
+Nobody has listened to them: the runs had no listener.
 
 **Output.** The engine asks for 11025, 22050 or 44100 Hz (`snd_khz`). The
 default is 44, and 22 on the Vita, where a saved config still wins: at 22 the
