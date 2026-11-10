@@ -2,8 +2,9 @@
 # Opt-in native Linux singleplayer game (KISAK_BUILD_LINUX_SP_GAME)
 #
 # Off by default. Builds KisakCOD-sp, the singleplayer game (server, AI, game,
-# cgame, client, UI, sound and renderer in one i386 process, as the Windows
-# KisakCOD-sp target is). It is built the way KisakCOD-mp is
+# cgame, client, UI, sound and renderer in one process, as the Windows
+# KisakCOD-sp target is; i386, or x86_64 under KISAK_LINUX_ARCH=x86_64, see
+# docs/linux-x64.md). It is built the way KisakCOD-mp is
 # (scripts/platform/linux/mp_client.cmake), from the Windows KisakCOD-sp source
 # lists instead of the multiplayer ones:
 #
@@ -35,9 +36,6 @@ if(NOT KISAK_BUILD_LINUX_SP_GAME)
 endif()
 
 message(STATUS "----- KisakCOD native Linux singleplayer game (opt-in) -----")
-if(KISAK_LINUX_ARCH STREQUAL "x86_64")
-    message(FATAL_ERROR "KISAK_BUILD_LINUX_SP_GAME is i386-only for now")
-endif()
 if(NOT TARGET kisak_linux_native_d3d9)
     message(FATAL_ERROR
         "KISAK_BUILD_LINUX_SP_GAME needs KISAK_BUILD_LINUX_NATIVE_D3D9=ON and KISAK_DXVK_NATIVE_INCLUDE_DIR")

@@ -1058,7 +1058,7 @@ bool SV_WriteHistory(_iobuf *fileHistory, const server_demo_history_t *history)
     if (!history)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_demo.cpp", 2005, 0, "%s", "history");
     FS_FileSeek(fileHistory, 0, 0);
-    if (FS_FileWrite(history, 0xACu, fileHistory) != 172)
+    if (FS_FileWrite(history, sizeof(*history), fileHistory) != sizeof(*history))
         return 0;
     bufLen = history->save.bufLen;
     if (bufLen != FS_FileWrite(history->save.buf, bufLen, fileHistory))
@@ -1485,7 +1485,7 @@ bool SV_ReadHistory(_iobuf *fileHistory, server_demo_history_t *history)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_demo.cpp", 2399, 0, "%s", "fileHistory");
     if (!history)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_demo.cpp", 2400, 0, "%s", "history");
-    if (FS_FileRead(history, 0xACu, fileHistory) != 172)
+    if (FS_FileRead(history, sizeof(*history), fileHistory) != sizeof(*history))
         return 0;
     bufLen = history->save.bufLen;
     if (!SV_HistoryAlloc(history, &history->save.buf, bufLen)

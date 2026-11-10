@@ -111,3 +111,39 @@ src/universal/com_memory.cpp: hdr = (hunkHeader_t*)(buf - 16);
 
 # a buffer length
 src/universal/com_sndalias.cpp: Com_sprintf(dest, 0x20u, "%.4f %.4f\n", graph->knots[i][0], graph->knots[i][1]);
+
+# --- Singleplayer (KisakCOD-sp) sources ---
+
+# entity types and entity, spawn and weapon-lock flag bits
+src/cgame/cg_ents.cpp: case 8u:
+src/cgame/cg_ents.cpp: if ((cent->nextState.lerp.eFlags & 0x20) == 0
+src/cgame/cg_snapshot.cpp: if (oldEType == 8 || oldEType == 7)
+src/game/actor_cover.cpp: if ((node->constant.spawnflags & 0x80) == 0 || Actor_GetTargetEntity(self) && self->hasThreateningEnemy)
+src/ui/ui_expressions.cpp: result->internals.intVal = CL_GetLocalClientConnectionState(localClientNum) >= CA_LOADING && (CG_GetLocalClientGlobals(localClientNum)->predictedPlayerState.weapLockFlags & 8) != 0;
+
+# i386 sizes asserted inside function bodies
+src/game/actor.cpp: static_assert(LAYOUT_32BIT(sizeof(sentient_info_t) == 40));
+src/game/actor.cpp: static_assert(LAYOUT_32BIT(sizeof(actor_goal_s) == 28));
+src/game/actor_badplace.cpp: static_assert(LAYOUT_32BIT(sizeof(badplace_t) == 40));
+src/game/g_main.cpp: static_assert(LAYOUT_32BIT(sizeof(gentity_s) == 628));
+src/game/sentient.cpp: static_assert(LAYOUT_32BIT(sizeof(sentient_s) == 116));
+src/server/sv_init.cpp: static_assert(LAYOUT_32BIT(sizeof(serverStatic_t) == 40));
+
+# corpses take the 16 prone-info slots after the 32 actors' (a slot number)
+src/game/g_main.cpp: static_assert(ARRAY_COUNT(level.cgData_actorProneInfo) == 32 + ARRAY_COUNT(g_scr_data.actorCorpseInfo));
+src/game/g_main.cpp: level.specialIndex[corpse->entnum] = 32 + corpseIndex;
+src/game/g_main.cpp: level.cgData_actorProneInfo[32 + corpseIndex] = corpse->proneInfo;
+
+# save game writer: the name and id sit above the low type byte of w.status
+# (shift by 8), and the type byte is written shifted by 3 bits
+src/script/scr_readwrite.cpp: VariableValue val = Scr_GetArrayIndexValue(child->w.status >> 8);
+src/script/scr_readwrite.cpp: v27[0] = (v27[0] & 0xFFFFFF00) | (((uint32_t)name >> 8) & 0xFF);
+src/script/scr_readwrite.cpp: VariableValue arrVal = Scr_GetArrayIndexValue((unsigned int)entryValue->w.status >> 8);
+src/script/scr_readwrite.cpp: v18[0].u.intValue = (unsigned int)v4->w.status >> 8;
+src/script/scr_readwrite.cpp: v18[0].u.intValue = (v18[0].u.intValue & 0xFFFF0000) | (((unsigned int)v4->w.status >> 8) & 0xFFFF);
+src/script/scr_readwrite.cpp: v18[0].u.intValue = (v18[0].u.intValue & 0xFFFFFF00) | ((uint32_t)(8 * v5) & 0xFF);
+src/script/scr_readwrite.cpp: DoSaveEntry(v18, (VariableValue *)((unsigned int)w.status >> 8), v9, memFile);
+
+# the length of the save screenshot's image name (char[64])
+src/ui/ui_main.cpp: if (!I_strnicmp(uiInfo.savegameList[v5].imageName, uiInfo.sshotImageName, 64))
+src/ui/ui_main.cpp: I_strncpyz(uiInfo.sshotImageName, uiInfo.savegameList[v5].imageName, 64);

@@ -2245,7 +2245,7 @@ void MdlPrvCloneModel(const cg_s *cgGlob)
     DObjClone(g_mdlprv.model.currentObj, (DObj_s*)pClone->objBuf);
     pClone->obj = (DObj_s *)pClone->objBuf;
     DObjSetTree((DObj_s *)pClone->objBuf, 0);
-    memcpy(pClone, &g_mdlprv.model.currentEntity, 0x7Cu);
+    memcpy(&pClone->ent, &g_mdlprv.model.currentEntity, sizeof(pClone->ent));
     AngleVectors(cgGlob->refdefViewAngles, forward, right, up);
     ++g_mdlprv.model.cloneNextIdx;
     g_mdlprv.model.initialOrigin[1] = g_mdlprv.model.initialOrigin[1] + (forward[0] * 16.0f);
@@ -3429,7 +3429,7 @@ void CG_ModPrvEnumerateModels_FastFile()
     if (g_mdlprv.system.modelCount)
     {
         v0 = Hunk_UserCreate(0x20000, "CG_ModPrvEnumerateModels", 0, 0, 0);
-        g_mdlprv.system.modelNames = (const char **)Hunk_UserAlloc(v0, 4 * (g_mdlprv.system.modelCount + 2), 4);
+        g_mdlprv.system.modelNames = (const char **)Hunk_UserAlloc(v0, sizeof(const char *) * (g_mdlprv.system.modelCount + 2), alignof(const char *));
         *g_mdlprv.system.modelNames = (const char *)v0;
         ++g_mdlprv.system.modelNames;
         v1[2] = (int)"CG_ModPrvEnumerateModels";
@@ -3468,7 +3468,7 @@ void CG_ModPrvEnumerateAnimations_FastFile()
     if (g_mdlprv.system.animCount)
     {
         v0 = Hunk_UserCreate(0x20000, "CG_ModPrvEnumerateAnimations", 0, 0, 0);
-        g_mdlprv.system.animNames = (const char **)Hunk_UserAlloc(v0, 4 * (g_mdlprv.system.animCount + 2), 4);
+        g_mdlprv.system.animNames = (const char **)Hunk_UserAlloc(v0, sizeof(const char *) * (g_mdlprv.system.animCount + 2), alignof(const char *));
         *g_mdlprv.system.animNames = (const char *)v0;
         v1[2] = (int)"CG_ModPrvEnumerateAnimations";
         ++g_mdlprv.system.animNames;

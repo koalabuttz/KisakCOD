@@ -2516,38 +2516,22 @@ char *UI_ReplaceConversionInts(
     int a6,
     __int64 a7)
 {
-    const char **args; // r30
-    int v9; // r28
-    char *v10; // r31
-    int v11; // r29
-    ConversionArguments v13; // [sp+50h] [-670h] BYREF
-    char v14; // [sp+80h] [-640h] BYREF
-    char v15[1088]; // [sp+280h] [-440h] BYREF
+    // replaceInts points at numInts ints. The decompile walked it with the
+    // stride of the argument pointers and wrote the digits through a one-byte
+    // local; nothing calls this yet.
+    ConversionArguments arguments{};
+    char intStrings[ARRAY_COUNT(arguments.args)][32];
+    char result[1024];
 
-    LODWORD(a7) = 0;
-    v13.args[0] = 0;
-    *(_QWORD *)&v13.args[1] = a7;
-    *(_QWORD *)&v13.args[3] = a7;
-    *(_QWORD *)&v13.args[5] = a7;
-    *(_QWORD *)&v13.args[7] = a7;
-    v13.argCount = numInts;
-    if (numInts > 0)
+    iassert(numInts >= 0 && numInts <= (int)ARRAY_COUNT(arguments.args));
+    arguments.argCount = numInts;
+    for (int argIndex = 0; argIndex < numInts; ++argIndex)
     {
-        args = v13.args;
-        v9 = replaceInts - (char *)v13.args;
-        v10 = &v14;
-        v11 = numInts;
-        do
-        {
-            snprintf(v10, 32, "%d", *(const char **)((char *)args + v9)); // TODO: Fix this
-            --v11;
-            *args = v10;
-            v10 += 32;
-            ++args;
-        } while (v11);
+        snprintf(intStrings[argIndex], sizeof(intStrings[argIndex]), "%d", ((const int *)replaceInts)[argIndex]);
+        arguments.args[argIndex] = intStrings[argIndex];
     }
-    UI_ReplaceConversions(sourceString, &v13, v15, 0x400u);
-    return va(v15);
+    UI_ReplaceConversions(sourceString, &arguments, result, sizeof(result));
+    return va(result);
 }
 
 int UI_Popup(int localClientNum, const char *menu)
