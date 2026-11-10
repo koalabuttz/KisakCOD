@@ -30,6 +30,8 @@
 #include <gfx_gxm/gxm_program_cache.h>
 #include <gfx_gxm/shader/gxm_cg_translate.h>
 
+#include <vita/vita_platform.h> // Vita_StatsGeneration
+
 #include <psp2/gxm.h>
 #include <psp2/kernel/processmgr.h>
 #include <psp2/kernel/sysmem.h>
@@ -1301,11 +1303,12 @@ PresentResult Present(Device *device)
     const bool shown = gxm::Present();
     FrameDone(*device);
     gxm::ProgramCacheFrame();
-    // Once a minute, beside the system's memory line (vita_stats.cpp).
-    static uint64_t memoryLogged = 0;
-    if (Micros() - memoryLogged > 60 * 1000 * 1000)
+    // Beside the system's memory line (vita_stats.cpp): once a minute by
+    // default, and whenever every figure is asked for.
+    static unsigned int memoryLogged = 0;
+    if (const unsigned int asked = Vita_StatsGeneration(); asked != memoryLogged)
     {
-        memoryLogged = Micros();
+        memoryLogged = asked;
         Log(*device, "%s", gxm::DescribeMemory().c_str());
         Log(*device, "%s", DescribeMemoryUse().c_str());
     }

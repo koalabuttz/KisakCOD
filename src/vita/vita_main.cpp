@@ -3,6 +3,8 @@
 
 #include "vita_platform.h"
 
+#include <atomic>
+
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
@@ -195,6 +197,23 @@ namespace
         return s_tlsProbe == 1;
     }
 
+    // vita_assertExit (vita_platform.h), read here because an assertion can
+    // fail before the engine has a dvar: true when the command line gives it
+    // a value other than 0.
+    std::atomic<bool> s_assertExits;
+
+    bool CommandLineSetsAssertExit(const char *line)
+    {
+        static const char kName[] = "vita_assertExit";
+        const char *at = strstr(line, kName);
+        if (!at)
+            return false;
+        at += sizeof(kName) - 1;
+        while (*at == ' ' || *at == '\t' || *at == '"')
+            ++at;
+        return atoi(at) != 0;
+    }
+
     void LoadCommandLine()
     {
         FILE *file = fopen(kCommandLinePath, "rb");
@@ -212,7 +231,27 @@ namespace
             LogFormat("Vita: no %s, using \"%s\"\n", kCommandLinePath, kDefaultCommandLine);
         }
         s_commandLine[length] = '\0';
+        s_assertExits.store(CommandLineSetsAssertExit(s_commandLine));
     }
+}
+
+bool Vita_AssertExits()
+{
+    return s_assertExits.load(std::memory_order_relaxed);
+}
+
+void Vita_SetAssertExits(bool exits)
+{
+    s_assertExits.store(exits, std::memory_order_relaxed);
+}
+
+void Vita_ConsoleSync()
+{
+    if (s_logFd < 0)
+        return;
+    pthread_mutex_lock(&s_logLock);
+    fsync(s_logFd);
+    pthread_mutex_unlock(&s_logLock);
 }
 
 void Vita_Exit(int status)

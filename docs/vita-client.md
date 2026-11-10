@@ -66,7 +66,12 @@ host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`).
 
 START + SELECT quits. For a run nobody watches, `+set vita_quitAfter 90` in
 the command line file quits by itself 90 seconds after start-up (the
-dedicated server takes it too).
+dedicated server takes it too), `+set vita_quitAfterMenu 15` 15 seconds after
+the main menu first showed, and `+set vita_quitAfterMap 30` 30 seconds after
+the map was first in play; each prints every figure first. `vita_atMap` sends
+timed console commands, for example to pick a team and a class, and
+`vita_assertExit 1` keeps an emulator from hanging on a failed assertion. See
+[Runs nobody watches](vita.md#runs-nobody-watches).
 
 To see what a translated shader looks like, put an empty file named
 `dump-cg` in `ux0:data/KisakCOD/gxp`: every program asked for then also
@@ -418,8 +423,9 @@ and `sceAudioOutOutput` blocks until the port has taken it, which paces the
 thread.
 
 **In the log** (`console-mp.log`): `vita sound: port ..., ... Hz stereo, ...
-frames per update` when sound starts, then after ten seconds, once a minute
-and once more when sound stops `vita sound: ... updates, mixing ... us each on
+frames per update` when sound starts, then after ten seconds, with the
+engine's other figures (once a minute by default, `vita_statsEvery`) and once
+more when sound stops `vita sound: ... updates, mixing ... us each on
 average and ... at most, ... sources at most, ... clipped frames, ... refused
 updates, ... packed frames decoded, buffers ... KB at most`.
 
@@ -629,7 +635,8 @@ host by `scripts/tests/test_vita_gxm_heap.py`. The kinds are:
 - the two USSE kinds: shader code.
 
 The Legacy back end counts each pool's use by what it is for and logs it
-once a minute and at every failed allocation (`gpu memory by use (cdram +
+with the engine's other figures (once a minute by default, `vita_statsEvery`,
+and before a timed quit) and at every failed allocation (`gpu memory by use (cdram +
 main MB, pieces): ...`), and logs each piece of 1 MB or more as it is made
 (`gpu memory piece N: ...`, with its size, format and usage).
 
