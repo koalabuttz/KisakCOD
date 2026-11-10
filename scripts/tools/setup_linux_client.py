@@ -273,6 +273,9 @@ def build_client(runner: Runner, args: argparse.Namespace, sdl3: Path, dxvk: Pat
         "-DKISAK_BUILD_LINUX_MP_CLIENT=ON", f"-DKISAK_OPENAL_LIBRARY={openal}",
         f"-DSDL3_DIR={sdl3 / 'lib' / 'cmake' / 'SDL3'}",
         f"-DKISAK_LINUX_PORTABLE_RUNPATH={'ON' if args.package else 'OFF'}",
+        # A build for playing: a connected game controller works. Nothing
+        # changes for a player who has none.
+        "-DKISAK_LINUX_GAMEPAD=ON",
     ]
     if openal_include is not None:
         configure.append(f"-DKISAK_OPENAL_INCLUDE_DIR={openal_include}")

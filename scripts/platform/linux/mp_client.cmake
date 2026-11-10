@@ -58,6 +58,8 @@ option(KISAK_LINUX_HTTP_DOWNLOADS
     "Fetch a server's map and mod files over HTTP(S) in KisakCOD-mp with the engine's libcurl downloader (needs libcurl 7.85 or newer, found with pkg-config)" OFF)
 option(KISAK_LINUX_TRACY
     "Build KisakCOD-dedi, KisakCOD-mp and KisakCOD-sp with the Tracy profiler: idle until a profiler connects, localhost only. For profiling runs" OFF)
+option(KISAK_LINUX_GAMEPAD
+    "Game controller support in KisakCOD-mp through SDL3's gamepad API: buttons become bindable keys (AUX1 to AUX16), the right stick looks, the left stick moves and steers the menu cursor" OFF)
 option(KISAK_LINUX_PORTABLE_RUNPATH
     "Give KisakCOD-mp the run path $ORIGIN/lib instead of the build machine's SDK folders, for a folder made with scripts/tools/package_linux_client.py. The build tree then needs LD_LIBRARY_PATH to run it" OFF)
 option(KISAK_BUILD_LINUX_MP_CLIENT
@@ -281,6 +283,19 @@ set(mp_client_own_sources
 if(KISAK_LINUX_STEAM)
     list(APPEND mp_client_own_sources ${KISAK_LINUX_STEAM_SOURCES})
 endif()
+# The controller (KISAK_LINUX_GAMEPAD): the PS Vita client's control mapping,
+# which is plain C++ with no Vita call in it, a full-size controller on top of
+# it, SDL3's gamepad API underneath, and the engine's side. The test below
+# links the first three.
+set(KISAK_MP_CLIENT_GAMEPAD_SOURCES
+    "${SRC_DIR}/vita/client/input/vita_input_map.cpp"
+    "${SRC_DIR}/linux/client/input/gamepad_map.cpp"
+    "${SRC_DIR}/linux/client/input/gamepad_sdl.cpp")
+if(KISAK_LINUX_GAMEPAD)
+    list(APPEND mp_client_own_sources
+        ${KISAK_MP_CLIENT_GAMEPAD_SOURCES}
+        "${SRC_DIR}/linux/client/mp_client_gamepad.cpp")
+endif()
 
 # The Windows client's definitions without CINEMA (see r_cinematic.cpp above).
 set(KISAK_MP_CLIENT_DEFINITIONS
@@ -371,7 +386,15 @@ if(KISAK_LINUX_CINEMATICS)
         target_compile_options(KisakCOD-mp-cinematic PRIVATE "-idirafter${KISAK_FFMPEG_INCLUDEDIR}")
     endif()
 endif()
-target_compile_definitions(KisakCOD-mp-own PRIVATE KISAK_LINUX_SDL_MAJOR=3)
+target_compile_definitions(KisakCOD-mp-own PRIVATE KISAK_LINUX_SDL_MAJOR=3
+    $<$<BOOL:${KISAK_LINUX_GAMEPAD}>:KISAK_LINUX_GAMEPAD>)
+if(KISAK_LINUX_GAMEPAD)
+    # Warnings are errors in the engine-free units; mp_client_gamepad.cpp
+    # includes the engine's headers and keeps the client's flags.
+    set_property(SOURCE ${KISAK_MP_CLIENT_GAMEPAD_SOURCES}
+        TARGET_DIRECTORY KisakCOD-mp-own APPEND PROPERTY COMPILE_OPTIONS -Wall -Wextra -Werror)
+    message(STATUS "KisakCOD-mp: game controller support on")
+endif()
 target_link_libraries(KisakCOD-mp-own PRIVATE kisak_linux_native_d3d9 SDL3::SDL3)
 
 # Bundled C libraries, with the dedicated target's rules.
@@ -463,6 +486,19 @@ else()
         -Wl,--as-needed -Wl,--gc-sections -Wl,--wrap=SDL_CreateWindowWithProperties)
 endif()
 target_link_libraries(KisakCOD-mp-client-window-test PRIVATE kisak_linux_native_d3d9 SDL3::SDL3 Threads::Threads)
+
+# The controller reader against SDL3 itself (KISAK_LINUX_GAMEPAD), with one of
+# SDL's virtual controllers: no hardware, no window, no engine.
+if(KISAK_LINUX_GAMEPAD)
+    add_executable(KisakCOD-mp-gamepad-test
+        "${TESTS_DIR}/linux_mp_client/gamepad_sdl_test.cpp"
+        ${KISAK_MP_CLIENT_GAMEPAD_SOURCES})
+    target_compile_features(KisakCOD-mp-gamepad-test PRIVATE cxx_std_20)
+    target_compile_definitions(KisakCOD-mp-gamepad-test PRIVATE KISAK_LINUX_SDL_MAJOR=3)
+    target_compile_options(KisakCOD-mp-gamepad-test PRIVATE -Wall -Wextra -Werror ${KISAK_LINUX_HARDENING_OPTIONS})
+    target_include_directories(KisakCOD-mp-gamepad-test PRIVATE "${SRC_DIR}")
+    target_link_libraries(KisakCOD-mp-gamepad-test PRIVATE SDL3::SDL3)
+endif()
 
 # The Bink shim's asset-free test (KISAK_LINUX_CINEMATICS): the file reader on
 # made-up files, the Bink API on a stand-in decoder and clock, and libavcodec's

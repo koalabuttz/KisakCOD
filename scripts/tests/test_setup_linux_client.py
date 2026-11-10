@@ -126,6 +126,7 @@ class PlanTests(unittest.TestCase):
         client = next(line for line in lines if "-DKISAK_BUILD_LINUX_MP_CLIENT=ON" in line)
         for flag in ("-DKISAK_PLATFORM=linux", "-DKISAK_LINUX_ARCH=x86_64", "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
                      "-DKISAK_BUILD_LINUX_NATIVE_D3D9=ON", "-DKISAK_LINUX_PORTABLE_RUNPATH=OFF",
+                     "-DKISAK_LINUX_GAMEPAD=ON",
                      f"-DKISAK_DXVK_NATIVE_LIBRARY={self.prefix / 'dxvk' / 'lib' / 'libdxvk_d3d9.so'}",
                      f"-DKISAK_DXVK_NATIVE_INCLUDE_DIR={self.prefix / 'dxvk' / 'include' / 'dxvk'}",
                      f"-DSDL3_DIR={self.prefix / 'sdl3' / 'lib' / 'cmake' / 'SDL3'}",

@@ -108,6 +108,35 @@ def source_checks(checker):
                     < movies.find("check_cxx_source_compiles(")
                     < movies.find("if(KISAK_FFMPEG_LINKS_FOR_TARGET)\n            set(KISAK_LINUX_CINEMATICS ON)"),
                     "AUTO looks for FFmpeg only when a game client is built and turns movies on only after a test link")
+    # Controller support is opt-in, and without the option the client has no
+    # controller code at all: the input unit names it only inside #ifdef blocks.
+    own = re.search(r"target_compile_definitions\(KisakCOD-mp-own PRIVATE(.*?)\)\n", module, re.S)
+    pad_sources = module.split("if(KISAK_LINUX_GAMEPAD)\n    list(APPEND mp_client_own_sources", 1)[-1].split("endif()", 1)[0]
+    checker.require(re.search(r'option\(KISAK_LINUX_GAMEPAD\s+"[^"]*"\s+OFF\)', module) is not None
+                    and own is not None and "$<$<BOOL:${KISAK_LINUX_GAMEPAD}>:KISAK_LINUX_GAMEPAD>" in own.group(1)
+                    and definitions is not None and "GAMEPAD" not in definitions.group(1)
+                    and module.count("mp_client_gamepad.cpp") == 2
+                    and "mp_client_gamepad.cpp" in pad_sources,
+                    "KISAK_LINUX_GAMEPAD is off by default and its sources and definition reach only the client's own units")
+    input_unit = (SRC / "linux" / "client" / "mp_client_input.cpp").read_text(encoding="utf-8")
+    without_pad = re.sub(r"#ifdef KISAK_LINUX_GAMEPAD\n.*?#endif\n", "", input_unit, flags=re.S)
+    checker.require(input_unit.count("#ifdef KISAK_LINUX_GAMEPAD\n") == 7
+                    and "Gamepad" not in without_pad and "mp_client_gamepad.h" not in without_pad
+                    and "#else\n    engine.mouse = CL_MouseEvent;\n#endif" in input_unit,
+                    "the input unit reaches the controller only under KISAK_LINUX_GAMEPAD and hands the mouse "
+                    "straight to CL_MouseEvent without it")
+    pad_map = (SRC / "linux" / "client" / "input" / "gamepad_map.cpp").read_text(encoding="utf-8") + (
+        SRC / "linux" / "client" / "input" / "gamepad_map.h").read_text(encoding="utf-8")
+    pad_sdl = (SRC / "linux" / "client" / "input" / "gamepad_sdl.cpp").read_text(encoding="utf-8") + (
+        SRC / "linux" / "client" / "input" / "gamepad_sdl.h").read_text(encoding="utf-8")
+    pad_includes = set(re.findall(r'#include [<"]([^>"]+)[>"]', pad_map + pad_sdl))
+    engine_headers = [name for name in pad_includes
+                      if name.split("/")[0] in ("qcommon", "client", "client_mp", "universal", "ui", "win32", "sound")]
+    map_includes = re.findall(r'#include [<"]([^>"]+)[>"]', pad_map)
+    checker.require(not engine_headers and not [name for name in map_includes if "sdl" in name.lower()]
+                    and "<vita/client/input/vita_input_map.h>" in pad_map,
+                    "the controller mapping and reader include no engine header, and the mapping no SDL",
+                    ", ".join(engine_headers))
     # The profiler is opt-in: player builds carry no Tracy, profiling builds turn it on.
     checker.require(re.search(r'option\(KISAK_LINUX_TRACY\s+"[^"]*"\s+OFF\)', module) is not None,
                     "KISAK_LINUX_TRACY is off by default")
