@@ -12,8 +12,10 @@ GPU, DXVK, cinematics on): the pregame ends by itself, about a minute of play,
 clean quit. Without game files it stops where the engine needs them (the
 autoconfigure step's `configure.csv`), which is how CI runs it. Those runs
 were the i386 game. The x86_64 game loads all 21 levels in the sweep tool on
-the same laptop (2026-11-10, cinematics on, nobody watching the screen); by
-hand it has not been played yet.
+the same laptop (2026-11-10, cinematics on, nobody watching the screen),
+including the level chain and save and load; by hand it has not been played
+yet. On i386 every level also draws a frame and comes back from a death
+through its last save (sweep run 2).
 
 ## Building
 
@@ -131,8 +133,8 @@ back end builds, links and leaves the start alone, not that it draws.
 1. Longer play and more levels, with sound: what the other levels use, the
    sweep tool (`scripts/tests/run_linux_sp_level_sweep.py`) and the run plan
    are in [linux-sp-levels.md](linux-sp-levels.md).
-2. The x86_64 game by hand, and its level chain and save and load in the
-   sweep tool.
+2. The x86_64 game by hand (its level chain and save and load pass in the
+   sweep tool).
 3. A first level through `r_backend vulkan` on the laptop, to find what the
    singleplayer levels ask of the D3D9 front that multiplayer maps do not.
 4. Compare with the Windows `KisakCOD-sp` build on the same data, to tell

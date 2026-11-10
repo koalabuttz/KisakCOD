@@ -127,7 +127,7 @@ rebuilt at the commit under test. Sound on: the sweep sets `snd_volume 0.8`.
 7. **Frames and deaths:** all 21 levels with `--hold 30 --screenshot
    --death-retry`. This says whether each level draws something and whether a
    death brings the level back, with nobody at the laptop, so it can run
-   before step 6. Not run yet.
+   before step 6. Run on i386 (sweep run 2 below): every level passes.
 
 Report back the `report.md` tables and the failing levels' logs. Report
 console lines and file names, never game file contents.
@@ -177,7 +177,9 @@ The first runs of the x86_64 game with game data, RelWithDebInfo, sound off,
   holds 45 s, answers the console and quits with exit 0. airlift is among
   them. Without that commit's fix the Windows x64 game crashes there
   (below); the x86_64 Linux game does not (PC, Linux in WSL, below).
-- Steps 4 and 5 (chain, save and load) on x86_64 have not been run yet.
+- **Step 4, chain** killhouse, cargoship, coup, blackout in one process, and
+  **step 5, save and load** on killhouse, cargoship, blackout and ac130
+  (commit 3019927, movies on): all steps seen, exit 0.
 
 ## Windows x64 tour (PC, 2026-11-10)
 
@@ -216,3 +218,28 @@ holding airlift means the wrong read lands on harmless bytes in this Linux
 build; the Windows runs above are what show the fix. Under software
 rendering a level took 25 to 54 s to load, against 5 to 9 s with a GPU on
 Windows; the sweep's default load timeout (240 s) covers that.
+
+## Sweep run 2, frames and deaths (laptop, i386, 2026-11-10)
+
+Commit 3019927, i386 `sp-rel-al`, movies on, sound off, step 7 above
+(`--hold 30 --screenshot --death-retry`). The first run of both options on
+the game. A local run, not CI evidence.
+
+- **All 21 levels** pass every step: loaded, held 30 s, frame drawn, console
+  answers, `kill`, the game loads its last save by itself, held 15 s,
+  console answers again, exit 0. No assertion, no error.
+- **Frames** (mean brightness 0 to 255): 29 (hunted) to 143 (ambush) for 20
+  levels. launchfacility_b was 226, nearly white. That is the level's own
+  picture: its opening film plays from the start of the load for about
+  52 s, then the game shows plain white for about a second and a half and
+  fades into the level. The Windows x64 game does the same (a series of
+  frames on the PC). The laptop's load took 22.7 s, so 30 s after it fell in
+  that white. A frame taken a fixed time after the load can land in a
+  level's opening film on any level that has one.
+- In a two-level warm-up before the full run, cargoship's frame was black
+  (mean 0) and "frame drawn" failed; in the full run it was 36, and Windows
+  shows 21 to 27 at the same point (its opening film, dark). Read it as the
+  film's timing, not a drawing fault.
+- Engine messages as in run 1: hunted "Max scene drawsurfs exceed" twice,
+  ac130 "Too many visible static models" 5 times, airplane "couldn't find
+  path to goal" 3 times.

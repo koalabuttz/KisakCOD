@@ -518,8 +518,8 @@ Status: it builds and passes the asset-free start test
 (`scripts/tests/test_linux_sp_game.py`) in the x86_64 client CI job. On the
 laptop it loads all 21 levels in the level sweep, each held 45 s with a clean
 quit ([linux-sp-levels.md](linux-sp-levels.md#x86_64-sweep-run-1-laptop-2026-11-10)).
-Nobody has played it by hand, and the level chain and save and load have not
-been run on it yet.
+The level chain and save and load pass there too. Nobody has played it by
+hand yet.
 
 The first runs with game data found two bugs the checks above could not see:
 an effect model's physics preset read through a void pointer at an offset
