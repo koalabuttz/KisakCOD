@@ -404,6 +404,7 @@ public:
     void MissingInput();
     void EventQuery();
     void OcclusionQuery();
+    void StateReuse();
     void ShaderCache();
 };
 
@@ -1087,6 +1088,327 @@ void Check::OcclusionQuery()
 
 // Translated shaders come back from the process's cache and from the cache
 // file, and draw like freshly translated ones; a damaged file is ignored.
+// A draw records only the binds its command buffer does not have yet, and
+// writes only the uniform blocks whose bytes changed since an earlier draw
+// of the frame wrote them. Every step here changes one thing, or nothing,
+// and draws one 16 pixel cell, which must come out as if everything had been
+// bound and written again; the counters say what was left out.
+void Check::StateReuse()
+{
+    Reset(Argb(255, 0, 0, 64));
+    constexpr float kCell = 16.0f;
+    constexpr float kStep = 2.0f * kCell / float(kSize); // a cell in clip space
+    lg::Texture *red = Texture(lg::TextureKind::Tex2D, 1, 1, 1, 1, d3d::FMT_A8R8G8B8, "reuse red");
+    lg::Texture *green = Texture(lg::TextureKind::Tex2D, 1, 1, 1, 1, d3d::FMT_A8R8G8B8, "reuse green");
+    if (!red || !green || !Fill(red, 0, 0, [](uint32_t, uint32_t, uint32_t) { return Argb(255, 255, 0, 0); })
+        || !Fill(green, 0, 0, [](uint32_t, uint32_t, uint32_t) { return Argb(255, 0, 255, 0); }))
+        return;
+    // Cell n of the frame, eight to a row; with `moved` it is drawn one cell
+    // to the left and vertex shader constant 0 has to bring it back.
+    auto draw = [&](uint32_t n, bool moved = false) {
+        const float x = float(n % 8) * kCell - (moved ? kCell : 0.0f);
+        const float y = float(n / 8) * kCell;
+        DrawQuadPx(x, y, x + kCell, y + kCell, 0.5f, 0xffffffffu);
+    };
+    uint64_t bytes = lg::Stats(device).constantBytes;
+    uint64_t skipped = lg::Stats(device).bindsSkipped;
+    // With KISAK_VK_GPU_FEED=always every draw is submitted at once: each has
+    // a command buffer to itself and binds everything.
+    const bool alone = gfx_vk::Features(core).gpuFeedAlways;
+    // What the draws since the last call wrote and left out.
+    auto written = [&] {
+        const uint64_t now = lg::Stats(device).constantBytes;
+        const uint64_t delta = now - bytes;
+        bytes = now;
+        return delta;
+    };
+    auto skips = [&] {
+        const uint64_t now = lg::Stats(device).bindsSkipped;
+        const uint64_t delta = now - skipped;
+        skipped = now;
+        return delta;
+    };
+    auto point = [&](const char *name, bool ok, uint64_t got) {
+        ++result->points;
+        if (!ok)
+        {
+            ++result->mismatched;
+            result->detail += " " + std::string(name) + "=" + std::to_string(got);
+        }
+    };
+
+    // 0: the first textured draw writes every block.
+    lg::SetTexture(device, 0, red);
+    lg::SetPixelShader(device, psTexture);
+    draw(0);
+    const uint64_t all = written();
+    point("first_draw_writes", all > 0, all);
+    skips();
+    // 1: nothing changed but the vertices. No block is written, and the
+    // texture set (and with dynamic uniforms set 0) is not bound again.
+    draw(1);
+    uint64_t wrote = written();
+    point("same_state_writes_nothing", wrote == 0, wrote);
+    uint64_t left = skips();
+    point("same_state_skips_binds", left == (alone ? 0u : dynamicUniforms ? 2u : 1u), left);
+    // 2: a vertex shader constant changes: its block alone is written.
+    SetConstant(true, 0, kStep, 0, 0, 0);
+    draw(2, true);
+    const uint64_t vertexBlock = written();
+    point("vertex_constant_writes_its_block", vertexBlock > 0 && vertexBlock < all, vertexBlock);
+    // 3: the same value again, and a register no shader here reads.
+    SetConstant(true, 0, kStep, 0, 0, 0);
+    SetConstant(true, 100, 1, 2, 3, 4);
+    SetConstant(false, 100, 1, 2, 3, 4);
+    draw(3, true);
+    wrote = written();
+    point("unchanged_constant_writes_nothing", wrote == 0, wrote);
+    SetConstant(true, 0, 0, 0, 0, 0);
+    // 4: another texture of the same kind: a new texture set, no block.
+    lg::SetTexture(device, 0, green);
+    draw(4);
+    wrote = written();
+    point("texture_change_writes_only_constants", wrote == vertexBlock, wrote);
+    // 5: no texture reads as opaque black, which the sampler block says.
+    lg::SetTexture(device, 0, nullptr);
+    draw(5);
+    wrote = written();
+    point("unbound_texture_writes_sampler_block", wrote > 0, wrote);
+    // 6: bound again.
+    lg::SetTexture(device, 0, red);
+    draw(6);
+    wrote = written();
+    point("rebound_texture_writes_sampler_block", wrote > 0, wrote);
+    // 7 and 8: the alpha test changes its block: on and passing, then failing
+    // (cell 8 keeps the background).
+    lg::SetRenderState(device, d3d::RS_ALPHATESTENABLE, 1);
+    lg::SetRenderState(device, d3d::RS_ALPHAREF, 128);
+    lg::SetRenderState(device, d3d::RS_ALPHAFUNC, d3d::CMP_GREATER);
+    draw(7);
+    wrote = written();
+    point("alpha_test_writes_its_block", wrote > 0, wrote);
+    lg::SetRenderState(device, d3d::RS_ALPHAFUNC, d3d::CMP_LESS);
+    draw(8);
+    wrote = written();
+    point("alpha_func_writes_its_block", wrote > 0, wrote);
+    lg::SetRenderState(device, d3d::RS_ALPHATESTENABLE, 0);
+    // 9 to 11: another pipeline layout (a pixel shader constant, no texture)
+    // and its own blocks: blue, then yellow, then yellow again with only the
+    // vertex shader's constant changed.
+    lg::SetPixelShader(device, psConstant);
+    SetConstant(false, 0, 0, 0, 1, 1);
+    draw(9);
+    written();
+    SetConstant(false, 0, 1, 1, 0, 1);
+    draw(10);
+    wrote = written();
+    point("pixel_constant_writes_its_block", wrote > 0, wrote);
+    SetConstant(true, 0, kStep, 0, 0, 0);
+    draw(11, true);
+    wrote = written();
+    point("pixel_block_kept", wrote == vertexBlock, wrote);
+    SetConstant(true, 0, 0, 0, 0, 0);
+    // 12: back to the textured layout with the texture it had. Its texture
+    // set is the one bound before the other layout's draws, which unbound
+    // it: both sets are bound again.
+    lg::SetPixelShader(device, psTexture);
+    draw(12);
+    // 13: a new command buffer starts with nothing bound.
+    lg::SetTexture(device, 0, green);
+    lg::WaitIdle(device);
+    written();
+    skips();
+    draw(13);
+    wrote = written();
+    point("new_command_buffer_writes_nothing", wrote == 0, wrote);
+    left = skips();
+    point("new_command_buffer_binds_everything", left == 0, left);
+
+    // 16 to 19: indexed draws from static buffers. The second keeps both
+    // buffers; a stream offset and other indices are bound.
+    lg::VertexBuffer *vertices =
+        lg::CreateVertexBuffer(device, 8 * sizeof(Vertex), d3d::USAGE_WRITEONLY, d3d::POOL_MANAGED, "reuse vertices");
+    lg::IndexBuffer *indices16 =
+        lg::CreateIndexBuffer(device, 12 * 2, d3d::USAGE_WRITEONLY, d3d::FMT_INDEX16, d3d::POOL_MANAGED, "reuse i16");
+    lg::IndexBuffer *indices32 =
+        lg::CreateIndexBuffer(device, 6 * 4, d3d::USAGE_WRITEONLY, d3d::FMT_INDEX32, d3d::POOL_MANAGED, "reuse i32");
+    if (!vertices || !indices16 || !indices32)
+        return Fail("buffer creation failed");
+    cleanup.push_back([this, vertices, indices16, indices32] {
+        lg::DestroyVertexBuffer(device, vertices);
+        lg::DestroyIndexBuffer(device, indices16);
+        lg::DestroyIndexBuffer(device, indices32);
+    });
+    Vertex *corners = static_cast<Vertex *>(lg::Lock(device, vertices, 0, 0, 0));
+    uint16_t *i16 = static_cast<uint16_t *>(lg::Lock(device, indices16, 0, 0, 0));
+    uint32_t *i32 = static_cast<uint32_t *>(lg::Lock(device, indices32, 0, 0, 0));
+    if (!corners || !i16 || !i32)
+        return Fail("buffer lock failed");
+    // Cells 16 and 17 (row 2), four corners each.
+    for (uint32_t q = 0; q < 2; ++q)
+    {
+        Vertex quad[6];
+        QuadPx(quad, float(q) * kCell, 2 * kCell, float(q + 1) * kCell, 3 * kCell, 0.5f, 0xffffffffu);
+        corners[4 * q + 0] = quad[0], corners[4 * q + 1] = quad[1], corners[4 * q + 2] = quad[2];
+        corners[4 * q + 3] = quad[5];
+    }
+    const uint32_t order[6] = {0, 1, 2, 0, 2, 3};
+    for (uint32_t i = 0; i < 12; ++i)
+        i16[i] = static_cast<uint16_t>(order[i % 6] + (i < 6 ? 0 : 4));
+    std::memcpy(i32, order, sizeof(order));
+    lg::Unlock(device, vertices);
+    lg::Unlock(device, indices16);
+    lg::Unlock(device, indices32);
+    lg::SetStreamSource(device, 0, vertices, 0, sizeof(Vertex));
+    lg::SetIndices(device, indices16);
+    lg::DrawIndexedPrimitive(device, d3d::PT_TRIANGLELIST, 0, 0, 8, 0, 2); // cell 16
+    skips();
+    lg::DrawIndexedPrimitive(device, d3d::PT_TRIANGLELIST, 0, 0, 8, 6, 2); // cell 17
+    left = skips();
+    // The vertex buffer, the index buffer, the texture set, and set 0 where it is kept.
+    point("indexed_draw_keeps_buffers", left == (alone ? 0u : dynamicUniforms ? 4u : 3u), left);
+    // The stream starts at the second quad, moved two cells right: cell 19.
+    SetConstant(true, 0, 2 * kStep, 0, 0, 0);
+    lg::SetStreamSource(device, 0, vertices, 4 * sizeof(Vertex), sizeof(Vertex));
+    lg::DrawIndexedPrimitive(device, d3d::PT_TRIANGLELIST, 0, 0, 4, 0, 2);
+    // 32-bit indices on the first quad, moved two cells right: cell 18.
+    lg::SetStreamSource(device, 0, vertices, 0, sizeof(Vertex));
+    lg::SetIndices(device, indices32);
+    lg::DrawIndexedPrimitive(device, d3d::PT_TRIANGLELIST, 0, 0, 4, 0, 2);
+    lg::SetStreamSource(device, 0, nullptr, 0, 0);
+    lg::SetIndices(device, nullptr);
+    SetConstant(true, 0, 0, 0, 0, 0);
+
+    // 24 and 25: the frame's memory moves on to another buffer (three draws
+    // of 1.5 MB of vertices outside the view fill a 4 MB one). With dynamic
+    // uniforms a set 0 points at one buffer, so the next draw that writes a
+    // block writes all of them; without, only the block that changed.
+    {
+        std::vector<Vertex> far(3 * 20832);
+        for (Vertex &vertex : far)
+            vertex = Vertex{4.0f, 4.0f, 0.5f, 0.0f, 0.0f, 0xffffffffu};
+        for (int i = 0; i < 3; ++i)
+            Draw(far.data(), static_cast<uint32_t>(far.size()));
+    }
+    written();
+    SetConstant(true, 0, kStep, 0, 0, 0);
+    draw(24, true);
+    wrote = written();
+    point("moved_memory_writes_blocks", wrote == (dynamicUniforms ? all : vertexBlock), wrote);
+    draw(25, true);
+    wrote = written();
+    point("moved_memory_then_nothing", wrote == 0, wrote);
+    SetConstant(true, 0, 0, 0, 0, 0);
+
+    // The pipeline and the dynamic state are kept until something they are
+    // made of is set. Each of these changes one such thing between two draws.
+    // 32 to 34: the viewport alone, at half the width: the quad of cells 36
+    // and 37 lands in cell 34. Setting the render target again puts the
+    // viewport back (cell 33).
+    draw(32);
+    lg::SetViewport(device, {0, 0, kSize / 2, kSize, 0.0f, 1.0f});
+    DrawQuadPx(4 * kCell, 4 * kCell, 6 * kCell, 5 * kCell, 0.5f, 0xffffffffu);
+    lg::SetRenderTarget(device, 0, lg::BackBuffer(device));
+    draw(33);
+    // 40 and 41: the scissor rectangle alone: the left half of cell 41.
+    lg::SetScissorRect(device, {0, 0, int32_t(kSize), int32_t(kSize)});
+    lg::SetRenderState(device, d3d::RS_SCISSORTESTENABLE, 1);
+    draw(40);
+    lg::SetScissorRect(device, {16, 80, 24, 96});
+    draw(41);
+    lg::SetRenderState(device, d3d::RS_SCISSORTESTENABLE, 0);
+    // 48 and 49: the vertex declaration alone: without its colour element
+    // the vertex colour reads zero.
+    lg::SetPixelShader(device, psColor);
+    draw(48);
+    lg::SetVertexDecl(device, declNoColor);
+    draw(49);
+    lg::SetVertexDecl(device, decl);
+    // 50 and 51: the vertex shader alone: the same code made again is
+    // another shader and another pipeline, with the same picture.
+    std::string reason;
+    lg::Shader *vsAgain = lg::CreateShader(device, shaders::kVsBasic, sizeof(shaders::kVsBasic), reason);
+    if (!vsAgain)
+        return Fail("CreateShader failed: " + reason);
+    cleanup.push_back([this, vsAgain] { lg::DestroyShader(device, vsAgain); });
+    draw(50);
+    lg::SetVertexShader(device, vsAgain);
+    draw(51);
+    lg::SetVertexShader(device, vsBasic);
+
+    // 56 to 59: a block kept from before the frame's memory moved. The pixel
+    // shader's constants are written for the constant layout (blue), and the
+    // memory moves on while the textured layout draws. When the constant
+    // layout draws again its kept block is in the old buffer; with dynamic
+    // uniforms it is written again, so that a later change of it (yellow)
+    // shows through the set written for the new buffer.
+    lg::SetPixelShader(device, psConstant);
+    SetConstant(false, 0, 0, 0, 1, 1);
+    draw(56);
+    {
+        std::vector<Vertex> far(3 * 20832);
+        for (Vertex &vertex : far)
+            vertex = Vertex{4.0f, 4.0f, 0.5f, 0.0f, 0.0f, 0xffffffffu};
+        for (int i = 0; i < 3; ++i)
+            Draw(far.data(), static_cast<uint32_t>(far.size()));
+    }
+    lg::SetPixelShader(device, psTexture);
+    SetConstant(true, 0, kStep, 0, 0, 0);
+    draw(57, true);
+    written();
+    lg::SetPixelShader(device, psConstant);
+    draw(58, true);
+    wrote = written();
+    point("kept_block_in_old_buffer_written_again", dynamicUniforms ? wrote > 0 : wrote == 0, wrote);
+    SetConstant(false, 0, 1, 1, 0, 1);
+    draw(59, true);
+    SetConstant(true, 0, 0, 0, 0, 0);
+    lg::SetPixelShader(device, psTexture);
+
+    if (!Read())
+        return;
+    const struct
+    {
+        const char *name;
+        uint32_t cell;
+        int r, g, b;
+    } cells[] = {
+        {"first", 0, 255, 0, 0},           {"same_state", 1, 255, 0, 0},     {"vertex_constant", 2, 255, 0, 0},
+        {"unchanged_constant", 3, 255, 0, 0}, {"other_texture", 4, 0, 255, 0},  {"no_texture", 5, 0, 0, 0},
+        {"texture_again", 6, 255, 0, 0},   {"alpha_passes", 7, 255, 0, 0},   {"alpha_fails", 8, 0, 0, 64},
+        {"pixel_constant", 9, 0, 0, 255},  {"pixel_constant_2", 10, 255, 255, 0}, {"pixel_block_kept", 11, 255, 255, 0},
+        {"layout_back", 12, 255, 0, 0},    {"new_command_buffer", 13, 0, 255, 0}, {"untouched", 14, 0, 0, 64},
+        {"indexed", 16, 0, 255, 0},        {"indexed_again", 17, 0, 255, 0}, {"other_indices", 18, 0, 255, 0},
+        {"stream_offset", 19, 0, 255, 0},  {"untouched_row", 20, 0, 0, 64},  {"moved_memory", 24, 0, 255, 0},
+        {"moved_memory_again", 25, 0, 255, 0},
+        {"viewport_before", 32, 0, 255, 0}, {"viewport_reset", 33, 0, 255, 0}, {"viewport_half", 34, 0, 255, 0},
+        {"viewport_old_place", 36, 0, 0, 64}, {"scissor_whole", 40, 0, 255, 0},
+        {"declaration", 48, 255, 255, 255}, {"declaration_without_colour", 49, 0, 0, 0},
+        {"vertex_shader_before", 50, 255, 255, 255}, {"vertex_shader_again", 51, 255, 255, 255},
+        {"old_buffer_before", 56, 0, 0, 255}, {"old_buffer_textured", 57, 0, 255, 0},
+        {"old_buffer_kept_block", 58, 0, 0, 255}, {"old_buffer_changed_block", 59, 255, 255, 0},
+    };
+    for (const auto &cell : cells)
+        Expect(cell.name, cell.cell % 8 * 16 + 8, cell.cell / 8 * 16 + 8, cell.r, cell.g, cell.b);
+    Expect("scissor_inside", 16 + 4, 88, 0, 255, 0);
+    Expect("scissor_outside", 16 + 12, 88, 0, 0, 64);
+
+    // The next frame has its own memory: the same state writes every block again. This frame is the scene's own
+    // and is not counted with the one each scene ends in.
+    const lg::PresentResult shown = lg::Present(device);
+    point("frame_presented", shown != lg::PresentResult::Failed, uint64_t(shown));
+    lg::SetRenderTarget(device, 0, lg::BackBuffer(device));
+    lg::Clear(device, 0, nullptr, d3d::CLEAR_TARGET, Argb(255, 0, 0, 64), 1.0f, 0);
+    written();
+    draw(0);
+    wrote = written();
+    point("next_frame_writes_every_block", wrote == all, wrote);
+    if (!Read())
+        return;
+    Expect("next_frame", 8, 8, 0, 255, 0);
+    Expect("next_frame_clear", 24, 8, 0, 0, 64);
+}
+
 void Check::ShaderCache()
 {
     const std::string path = (std::filesystem::temp_directory_path() / "kisak_legacy_check_shaders.bin").string();
@@ -1319,6 +1641,7 @@ int Run(const Options &options)
         {"missing_input", &Check::MissingInput},
         {"event_query", &Check::EventQuery},
         {"occlusion_query", &Check::OcclusionQuery},
+        {"state_reuse", &Check::StateReuse},
         {"shader_cache", &Check::ShaderCache},
     };
     const char *failedStage = nullptr;

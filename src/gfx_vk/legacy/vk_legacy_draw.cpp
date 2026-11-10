@@ -299,6 +299,8 @@ bool BeginTargetsPass(Device &device)
     device.passDepth = device.depthStencil;
     device.passWidth = width;
     device.passHeight = height;
+    device.keyStale = true;
+    device.dynamicStale = true;
     ++device.stats.passes;
     return true;
 }
@@ -312,9 +314,8 @@ bool SyncRecording(Device &device)
         return false;
     if (recording != device.stateRecording)
     {
+        ForgetRecordingState(device);
         device.stateRecording = recording;
-        device.boundPipeline = VK_NULL_HANDLE;
-        device.dynamicValid = false;
     }
     return true;
 }
@@ -469,6 +470,53 @@ VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t dept
             ++device.stats.shaderPairs;
     }
     return module;
+}
+
+// The blocks of set 0 a shader pair reads, in binding order, with their sizes.
+void ListUniformBlocks(Pipeline &pipeline, const Layout &layout, const Shader &vs, const Shader &ps)
+{
+    pipeline.blockCount = 0;
+    for (uint32_t bit = 0; bit < 32; ++bit)
+    {
+        if (!(layout.key.uniforms & (1u << bit)))
+            continue;
+        const ls::Uniform uniform = static_cast<ls::Uniform>(bit & 15);
+        const ls::Reflection &reflection = (bit < 16 ? vs : ps).translated.reflection;
+        uint32_t size = 0;
+        switch (uniform)
+        {
+        case ls::Uniform::FloatConstants:
+            size = 16 * std::max(1u, reflection.floatConstants);
+            break;
+        case ls::Uniform::IntConstants:
+            size = 16 * std::max(1u, reflection.intConstants);
+            break;
+        case ls::Uniform::BoolConstants:
+            size = 4 * std::max(16u, reflection.boolConstants);
+            break;
+        case ls::Uniform::AlphaTest:
+            size = sizeof(ls::AlphaTestBlock);
+            break;
+        case ls::Uniform::Fog:
+            size = sizeof(ls::FogBlock);
+            break;
+        case ls::Uniform::ClipPlanes:
+            size = sizeof(ls::ClipPlaneBlock);
+            break;
+        case ls::Uniform::PointArgs:
+            size = sizeof(ls::PointArgsBlock);
+            break;
+        case ls::Uniform::SamplerState:
+            size = sizeof(ls::SamplerStateBlock) * ls::kSamplerCount;
+            break;
+        case ls::Uniform::TextureStage:
+            size = sizeof(ls::TextureStageBlock) * ls::kSamplerCount;
+            break;
+        default:
+            break;
+        }
+        pipeline.blocks[pipeline.blockCount++] = {bit, size};
+    }
 }
 
 Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shader &ps, const VertexDecl &decl)
@@ -633,6 +681,7 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
     }
     pipeline.layout = layout;
     pipeline.bindings = bindingMask;
+    ListUniformBlocks(pipeline, *layout, vs, ps);
     ++device.stats.pipelines;
     if (device.frameOpen)
         ++device.stats.pipelinesInFrame;
@@ -791,10 +840,19 @@ struct DrawTextures
 {
     uint32_t mask = 0;              // LayoutKey::samplers bits
     Texture *bound[kSamplerSlots] = {}; // null: nothing usable bound
+    // Four bits for each sampler with a texture: bit 3 set, bit 2 for a depth
+    // format, and TextureTypeValue. With the shader they are everything a
+    // SamplerState block is built from, so two draws with the same shader and
+    // signature get the same block. Pixel samplers 0-15, vertex samplers 0-3.
+    uint64_t pixelSignature = 0;
+    uint32_t vertexSignature = 0;
 };
 
 // Slot for a LayoutKey::samplers bit: pixel samplers 0-15, vertex 16-19.
 uint32_t SlotForBit(uint32_t bit) { return bit; }
+
+// The number of the lowest bit set; bits is not 0.
+uint32_t LowestBit(uint32_t bits) { return static_cast<uint32_t>(std::countr_zero(bits)); }
 
 ls::TextureType DeclaredType(const Shader &vs, const Shader &ps, uint32_t bit)
 {
@@ -806,10 +864,9 @@ bool BindTextures(Device &device, const Shader &vs, const Shader &ps, DrawTextur
     textures.mask = LayoutFor(vs, ps).samplers;
     Image *settle[kSamplerSlots];
     uint32_t settleCount = 0;
-    for (uint32_t bit = 0; bit < kSamplerSlots; ++bit)
+    for (uint32_t left = textures.mask; left; left &= left - 1)
     {
-        if (!(textures.mask & (1u << bit)))
-            continue;
+        const uint32_t bit = LowestBit(left);
         const uint32_t slot = SlotForBit(bit);
         Texture *texture = device.textures[slot];
         if (texture && !texture->image)
@@ -824,6 +881,14 @@ bool BindTextures(Device &device, const Shader &vs, const Shader &ps, DrawTextur
             texture = nullptr;
         }
         textures.bound[slot] = texture;
+        if (texture)
+        {
+            const uint64_t signature = 8u | (texture->format->depth ? 4u : 0u) | TextureTypeValue(texture, {});
+            if (bit < 16)
+                textures.pixelSignature |= signature << (4 * bit);
+            else
+                textures.vertexSignature |= static_cast<uint32_t>(signature) << (4 * (bit - 16));
+        }
         Texture *sampled = texture ? texture : NullTexture(device, DeclaredType(vs, ps, bit));
         if (!ImageReadyToSample(sampled->image))
             settle[settleCount++] = sampled->image;
@@ -839,17 +904,124 @@ bool BindTextures(Device &device, const Shader &vs, const Shader &ps, DrawTextur
     return Usable(device);
 }
 
-// Fills this draw's uniform blocks in per-frame memory and binds set 0.
+// ---- Uniform blocks (set 0) -----------------------------------------------------------------
+//
+// A draw's blocks live in per-frame memory. Most draws differ from the one
+// before in the vertex shader's constants and nothing else, so each binding
+// remembers the block the frame's memory holds for it (Device::uniformSlots)
+// and a draw writes only the blocks whose bytes would differ:
+//
+// - float constants: let go when a register the block holds is set to
+//   another value (SetVertexShaderConstantF, SetPixelShaderConstantF);
+// - the alpha test and sampler state blocks: compared by what they are built
+//   from (UniformKey);
+// - the rest are the same for every draw (see FillUniformBlock).
+//
 // With dynamic uniform buffers a pipeline's set is written once per frame and
-// transient buffer, then bound again with this draw's offsets.
-// A uniform set bound with its dynamic offsets (none for plain uniform buffers).
-struct UniformBind
+// transient buffer and bound with each draw's offsets, so the blocks of a
+// draw must be in one buffer; when the frame's memory moves on to another
+// one, the first draw after that writes all its blocks again.
+
+struct UniformKey
 {
-    VkPipelineLayout layout;
-    VkDescriptorSet set;
-    uint32_t offsetCount;
-    uint32_t offsets[2 * ls::kUniformCount];
+    uint64_t key = 0;
+    uint32_t shader = 0;
 };
+
+UniformKey KeyForBlock(const Device &device, uint32_t binding, const Shader &vs, const Shader &ps,
+                       const DrawTextures &textures)
+{
+    UniformKey key;
+    switch (static_cast<ls::Uniform>(binding & 15))
+    {
+    case ls::Uniform::AlphaTest:
+    {
+        const uint32_t compare = device.renderStates[d3d::RS_ALPHATESTENABLE]
+            ? static_cast<uint32_t>(CompareOp(device.renderStates[d3d::RS_ALPHAFUNC]))
+            : static_cast<uint32_t>(ls::AlphaCompare::Always);
+        key.key = uint64_t(1) << 63 | uint64_t(compare) << 8 | (device.renderStates[d3d::RS_ALPHAREF] & 0xff);
+        break;
+    }
+    case ls::Uniform::SamplerState:
+        // The shader declares the type an unbound sampler reads as.
+        key.key = binding < 16 ? textures.vertexSignature : textures.pixelSignature;
+        key.shader = (binding < 16 ? vs : ps).id;
+        break;
+    default:
+        break;
+    }
+    return key;
+}
+
+// Writes one block: every byte of it.
+void FillUniformBlock(const Device &device, const UniformBlock &block, const UniformKey &key, const Shader &vs,
+                      const Shader &ps, const DrawTextures &textures, uint8_t *data)
+{
+    const bool vertex = block.binding < 16;
+    switch (static_cast<ls::Uniform>(block.binding & 15))
+    {
+    case ls::Uniform::FloatConstants:
+    {
+        const uint32_t registers = std::min(block.size / 16, vertex ? kVsFloatRegisters : kPsFloatRegisters);
+        std::memcpy(data, vertex ? &device.vsConstants[0][0] : &device.psConstants[0][0], registers * 16);
+        std::memset(data + registers * 16, 0, block.size - registers * 16);
+        break;
+    }
+    case ls::Uniform::AlphaTest:
+    {
+        ls::AlphaTestBlock alpha{};
+        alpha.compareOp = static_cast<uint32_t>(key.key >> 8) & 0xff;
+        alpha.alphaRef = static_cast<uint32_t>(key.key) & 0xff;
+        std::memcpy(data, &alpha, sizeof(alpha));
+        break;
+    }
+    case ls::Uniform::SamplerState:
+    {
+        std::memset(data, 0, block.size);
+        for (uint32_t sampler = 0; sampler < (vertex ? kVertexSamplers : ls::kSamplerCount); ++sampler)
+        {
+            const uint32_t bit = vertex ? 16 + sampler : sampler;
+            const Texture *texture = textures.bound[SlotForBit(bit)];
+            ls::SamplerStateBlock state{};
+            state.textureType = TextureTypeValue(texture, DeclaredType(vs, ps, bit));
+            state.useDepthCompare = texture && texture->format->depth;
+            state.isNull = texture == nullptr;
+            state.drefClamp = state.useDepthCompare && device.depthFormat != VK_FORMAT_D24_UNORM_S8_UINT;
+            state.drefScale = 1.0f / float((1u << 24) - 1);
+            std::memcpy(data + sampler * sizeof(state), &state, sizeof(state));
+        }
+        break;
+    }
+    case ls::Uniform::PointArgs:
+    {
+        // D3D9's defaults (D3DRS_POINTSIZE, _MIN, _MAX); no point sprites.
+        const ls::PointArgsBlock point{0, 1.0f, 1.0f, 64.0f};
+        std::memcpy(data, &point, sizeof(point));
+        break;
+    }
+    default:
+        // Int and bool constants, fog, clip planes and texture stages: not
+        // used by the game's shaders, read as zero (off).
+        std::memset(data, 0, block.size);
+        break;
+    }
+}
+
+// Device::verifyShortcuts: writes the block again, elsewhere, and compares.
+bool HeldBlockIsRight(const Device &device, const UniformBlock &block, const UniformKey &key, const Shader &vs,
+                      const Shader &ps, const DrawTextures &textures, const UniformSlot &slot)
+{
+    uint8_t room[16 * kVsFloatRegisters];
+    std::vector<uint8_t> more; // a shader that declares more registers than there are
+    uint8_t *fresh = room;
+    if (block.size > sizeof(room))
+    {
+        more.resize(block.size);
+        fresh = more.data();
+    }
+    FillUniformBlock(device, block, key, vs, ps, textures, fresh);
+    return std::memcmp(fresh, slot.data, block.size) == 0;
+}
 
 void RecordUniformBind(Device &device, const UniformBind &bind)
 {
@@ -859,171 +1031,135 @@ void RecordUniformBind(Device &device, const UniformBind &bind)
     });
 }
 
+// Puts this draw's uniform blocks in per-frame memory and binds set 0.
 bool BindUniforms(Device &device, const Shader &vs, const Shader &ps, const DrawTextures &textures,
                   Pipeline &pipeline)
 {
     const Layout &layout = *pipeline.layout;
-    struct Block
-    {
-        uint32_t binding;
-        uint32_t offset;
-        uint32_t size;
-        ls::Stage stage;
-        ls::Uniform uniform;
-    };
-    Block blocks[2 * ls::kUniformCount];
-    uint32_t count = 0;
+    const bool dynamic = layout.dynamicUniforms;
+    const uint32_t count = pipeline.blockCount;
+    const uint32_t alignment = device.uniformAlignment;
+    auto aligned = [alignment](uint32_t size) { return (size + alignment - 1) / alignment * alignment; };
+
+    // The blocks the frame's memory does not hold as this draw needs them.
+    UniformKey keys[kMaxUniformBlocks];
+    uint32_t place[kMaxUniformBlocks]; // where each of those goes in the new memory
+    uint32_t write = 0;                // bit per block
     uint32_t total = 0;
-    for (uint32_t bit = 0; bit < 32; ++bit)
-    {
-        if (!(layout.key.uniforms & (1u << bit)))
-            continue;
-        const ls::Stage stage = bit < 16 ? ls::Stage::Vertex : ls::Stage::Pixel;
-        const ls::Uniform uniform = static_cast<ls::Uniform>(bit & 15);
-        const ls::Reflection &reflection = (stage == ls::Stage::Vertex ? vs : ps).translated.reflection;
-        uint32_t size = 0;
-        switch (uniform)
-        {
-        case ls::Uniform::FloatConstants:
-            size = 16 * std::max(1u, reflection.floatConstants);
-            break;
-        case ls::Uniform::IntConstants:
-            size = 16 * std::max(1u, reflection.intConstants);
-            break;
-        case ls::Uniform::BoolConstants:
-            size = 4 * std::max(16u, reflection.boolConstants);
-            break;
-        case ls::Uniform::AlphaTest:
-            size = sizeof(ls::AlphaTestBlock);
-            break;
-        case ls::Uniform::Fog:
-            size = sizeof(ls::FogBlock);
-            break;
-        case ls::Uniform::ClipPlanes:
-            size = sizeof(ls::ClipPlaneBlock);
-            break;
-        case ls::Uniform::PointArgs:
-            size = sizeof(ls::PointArgsBlock);
-            break;
-        case ls::Uniform::SamplerState:
-            size = sizeof(ls::SamplerStateBlock) * ls::kSamplerCount;
-            break;
-        case ls::Uniform::TextureStage:
-            size = sizeof(ls::TextureStageBlock) * ls::kSamplerCount;
-            break;
-        default:
-            break;
-        }
-        blocks[count] = {bit, total, size, stage, uniform};
-        total += (size + device.uniformAlignment - 1) / device.uniformAlignment * device.uniformAlignment;
-        ++count;
-    }
-    const Transient memory = AllocateTransient(device.core, total, device.uniformAlignment);
-    if (!memory.data)
-        return Fail(device, "out of per-frame memory for uniforms: %s", LastError(device.core));
-    device.stats.constantBytes += total;
-    uint8_t *base = static_cast<uint8_t *>(memory.data);
-    std::memset(base, 0, total);
     for (uint32_t i = 0; i < count; ++i)
     {
-        const Block &block = blocks[i];
-        uint8_t *data = base + block.offset;
-        const bool vertex = block.stage == ls::Stage::Vertex;
-        switch (block.uniform)
+        const UniformBlock &block = pipeline.blocks[i];
+        const UniformSlot &slot = device.uniformSlots[block.binding];
+        keys[i] = KeyForBlock(device, block.binding, vs, ps, textures);
+        if (slot.size >= block.size && slot.frame == device.frameSerial && slot.key == keys[i].key
+            && slot.shader == keys[i].shader && (!dynamic || slot.buffer == device.uniformBuffer))
         {
-        case ls::Uniform::FloatConstants:
-        {
-            const uint32_t registers = std::min(block.size / 16, vertex ? kVsFloatRegisters : kPsFloatRegisters);
-            std::memcpy(data, vertex ? &device.vsConstants[0][0] : &device.psConstants[0][0], registers * 16);
-            break;
+            if (device.verifyShortcuts && !HeldBlockIsRight(device, block, keys[i], vs, ps, textures, slot))
+                return Fail(device, "uniform block %u kept from an earlier draw is not what this draw's state gives",
+                            block.binding);
+            continue;
         }
-        case ls::Uniform::AlphaTest:
+        write |= 1u << i;
+        place[i] = total;
+        total += aligned(block.size);
+    }
+    if (write)
+    {
+        Transient memory = AllocateTransient(device.core, total, alignment);
+        if (memory.data && dynamic && memory.buffer != device.uniformBuffer)
         {
-            ls::AlphaTestBlock alpha{};
-            alpha.compareOp = device.renderStates[d3d::RS_ALPHATESTENABLE]
-                ? static_cast<uint32_t>(CompareOp(device.renderStates[d3d::RS_ALPHAFUNC]))
-                : static_cast<uint32_t>(ls::AlphaCompare::Always);
-            alpha.alphaRef = device.renderStates[d3d::RS_ALPHAREF] & 0xff;
-            std::memcpy(data, &alpha, sizeof(alpha));
-            break;
-        }
-        case ls::Uniform::SamplerState:
-        {
-            for (uint32_t sampler = 0; sampler < ls::kSamplerCount; ++sampler)
+            // The frame's memory has moved on to another buffer, and a set 0
+            // points at one buffer: all of this draw's blocks go to the new
+            // one. One allocation is always in one buffer.
+            const uint32_t all = (1u << count) - 1;
+            if (write != all)
             {
-                const uint32_t bit = vertex ? (sampler < kVertexSamplers ? 16 + sampler : UINT32_MAX) : sampler;
-                if (bit == UINT32_MAX)
-                    break;
-                const Texture *texture = textures.bound[SlotForBit(bit)];
-                ls::SamplerStateBlock state{};
-                state.textureType = TextureTypeValue(texture, DeclaredType(vs, ps, bit));
-                state.useDepthCompare = texture && texture->format->depth;
-                state.isNull = texture == nullptr;
-                state.drefClamp = state.useDepthCompare && device.depthFormat != VK_FORMAT_D24_UNORM_S8_UINT;
-                state.drefScale = 1.0f / float((1u << 24) - 1);
-                std::memcpy(data + sampler * sizeof(state), &state, sizeof(state));
+                write = all;
+                total = 0;
+                for (uint32_t i = 0; i < count; ++i)
+                {
+                    place[i] = total;
+                    total += aligned(pipeline.blocks[i].size);
+                }
+                memory = AllocateTransient(device.core, total, alignment);
             }
-            break;
+            device.uniformBuffer = memory.buffer;
         }
-        case ls::Uniform::PointArgs:
+        if (!memory.data)
+            return Fail(device, "out of per-frame memory for uniforms: %s", LastError(device.core));
+        device.stats.constantBytes += total;
+        for (uint32_t i = 0; i < count; ++i)
         {
-            // D3D9's defaults (D3DRS_POINTSIZE, _MIN, _MAX); no point sprites.
-            const ls::PointArgsBlock point{0, 1.0f, 1.0f, 64.0f};
-            std::memcpy(data, &point, sizeof(point));
-            break;
-        }
-        default:
-            // Int and bool constants, fog, clip planes and texture stages:
-            // not used by the game's shaders, read as zero (off).
-            break;
+            if (!(write & (1u << i)))
+                continue;
+            const UniformBlock &block = pipeline.blocks[i];
+            FillUniformBlock(device, block, keys[i], vs, ps, textures, static_cast<uint8_t *>(memory.data) + place[i]);
+            UniformSlot &slot = device.uniformSlots[block.binding];
+            slot.frame = device.frameSerial;
+            slot.buffer = memory.buffer;
+            slot.offset = memory.offset + place[i];
+            slot.data = static_cast<const uint8_t *>(memory.data) + place[i];
+            slot.size = block.size;
+            slot.key = keys[i].key;
+            slot.shader = keys[i].shader;
         }
     }
 
-    const Dispatch &vk = *device.vk;
     // Offsets go in binding order, which is the order of blocks.
-    UniformBind bind{};
+    UniformBind bind;
     bind.layout = layout.pipeline;
-    if (layout.dynamicUniforms)
+    if (dynamic)
     {
         bind.offsetCount = count;
         for (uint32_t i = 0; i < count; ++i)
-            bind.offsets[i] = static_cast<uint32_t>(memory.offset + blocks[i].offset);
-        if (pipeline.uniformFrame == device.frameSerial && pipeline.uniformBuffer == memory.buffer)
+            bind.offsets[i] = static_cast<uint32_t>(device.uniformSlots[pipeline.blocks[i].binding].offset);
+        if (pipeline.uniformFrame == device.frameSerial && pipeline.uniformBuffer == device.uniformBuffer)
         {
             bind.set = pipeline.uniformSet;
-            RecordUniformBind(device, bind);
             ++device.stats.descriptorSetsReused;
-            return true;
         }
     }
-    const VkDescriptorSet set = AllocateDescriptorSet(device.core, layout.uniformSet);
-    if (!set)
-        return Fail(device, "cannot allocate a descriptor set: %s", LastError(device.core));
-    VkDescriptorBufferInfo infos[2 * ls::kUniformCount];
-    VkWriteDescriptorSet writes[2 * ls::kUniformCount];
-    for (uint32_t i = 0; i < count; ++i)
+    if (!bind.set)
     {
-        const Block &block = blocks[i];
-        // A dynamic buffer's offset is added at bind time.
-        infos[i] = {memory.buffer, layout.dynamicUniforms ? 0 : memory.offset + block.offset, block.size};
-        writes[i] = {};
-        writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writes[i].dstSet = set;
-        writes[i].dstBinding = block.binding;
-        writes[i].descriptorCount = 1;
-        writes[i].descriptorType =
-            layout.dynamicUniforms ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        writes[i].pBufferInfo = &infos[i];
+        bind.set = AllocateDescriptorSet(device.core, layout.uniformSet);
+        if (!bind.set)
+            return Fail(device, "cannot allocate a descriptor set: %s", LastError(device.core));
+        VkDescriptorBufferInfo infos[kMaxUniformBlocks];
+        VkWriteDescriptorSet writes[kMaxUniformBlocks];
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            const UniformBlock &block = pipeline.blocks[i];
+            const UniformSlot &slot = device.uniformSlots[block.binding];
+            // A dynamic buffer's offset is added at bind time.
+            infos[i] = {slot.buffer, dynamic ? 0 : slot.offset, block.size};
+            writes[i] = {};
+            writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[i].dstSet = bind.set;
+            writes[i].dstBinding = block.binding;
+            writes[i].descriptorCount = 1;
+            writes[i].descriptorType =
+                dynamic ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            writes[i].pBufferInfo = &infos[i];
+        }
+        device.vk->vkUpdateDescriptorSets(device.dev, count, writes, 0, nullptr);
+        ++device.stats.descriptorSets;
+        if (dynamic)
+        {
+            pipeline.uniformFrame = device.frameSerial;
+            pipeline.uniformBuffer = device.uniformBuffer;
+            pipeline.uniformSet = bind.set;
+        }
     }
-    vk.vkUpdateDescriptorSets(device.dev, count, writes, 0, nullptr);
-    ++device.stats.descriptorSets;
-    if (layout.dynamicUniforms)
+    // The command buffer has this set at these offsets already: a draw that
+    // changed no block.
+    const UniformBind &bound = device.boundUniforms;
+    if (bound.set == bind.set && bound.layout == bind.layout && bound.offsetCount == bind.offsetCount
+        && std::memcmp(bound.offsets, bind.offsets, bind.offsetCount * sizeof(uint32_t)) == 0)
     {
-        pipeline.uniformFrame = device.frameSerial;
-        pipeline.uniformBuffer = memory.buffer;
-        pipeline.uniformSet = set;
+        ++device.stats.bindsSkipped;
+        return true;
     }
-    bind.set = set;
+    device.boundUniforms = bind;
     RecordUniformBind(device, bind);
     return true;
 }
@@ -1033,12 +1169,9 @@ void TextureSetContents(Device &device, const Shader &vs, const Shader &ps, cons
                         Device::TextureSetCache &out)
 {
     out.mask = textures.mask;
-    for (uint32_t bit = 0; bit < kSamplerSlots; ++bit)
+    for (uint32_t left = textures.mask; left; left &= left - 1)
     {
-        out.views[bit] = VK_NULL_HANDLE;
-        out.samplers[bit] = VK_NULL_HANDLE;
-        if (!(textures.mask & (1u << bit)))
-            continue;
+        const uint32_t bit = LowestBit(left);
         const uint32_t slot = SlotForBit(bit);
         const Texture *bound = textures.bound[slot];
         const Texture *texture = bound ? bound : NullTexture(device, DeclaredType(vs, ps, bit));
@@ -1047,11 +1180,18 @@ void TextureSetContents(Device &device, const Shader &vs, const Shader &ps, cons
     }
 }
 
+// Only the entries of the mask's bits are filled in.
 bool SameTextureSet(const Device::TextureSetCache &a, const Device::TextureSetCache &b)
 {
-    return a.layout == b.layout && a.mask == b.mask
-        && std::memcmp(a.views, b.views, sizeof(a.views)) == 0
-        && std::memcmp(a.samplers, b.samplers, sizeof(a.samplers)) == 0;
+    if (a.layout != b.layout || a.mask != b.mask)
+        return false;
+    for (uint32_t left = a.mask; left; left &= left - 1)
+    {
+        const uint32_t bit = LowestBit(left);
+        if (a.views[bit] != b.views[bit] || a.samplers[bit] != b.samplers[bit])
+            return false;
+    }
+    return true;
 }
 
 void WriteTextures(Device &device, const Device::TextureSetCache &contents, VkDescriptorSet set)
@@ -1059,10 +1199,9 @@ void WriteTextures(Device &device, const Device::TextureSetCache &contents, VkDe
     VkDescriptorImageInfo images[2 * kSamplerSlots];
     VkWriteDescriptorSet writes[2 * kSamplerSlots];
     uint32_t count = 0;
-    for (uint32_t bit = 0; bit < kSamplerSlots; ++bit)
+    for (uint32_t left = contents.mask; left; left &= left - 1)
     {
-        if (!(contents.mask & (1u << bit)))
-            continue;
+        const uint32_t bit = LowestBit(left);
         const ls::Stage stage = bit < 16 ? ls::Stage::Pixel : ls::Stage::Vertex;
         const uint32_t sampler = bit < 16 ? bit : bit - 16;
         images[count] = {VK_NULL_HANDLE, contents.views[bit], VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL};
@@ -1109,7 +1248,7 @@ VkRect2D DrawArea(const Device &device)
     return ClampRect(left, top, right, bottom, device.passWidth, device.passHeight);
 }
 
-void ApplyDynamicState(Device &device, d3d::PrimitiveType type)
+DynamicState MakeDynamicState(const Device &device, d3d::PrimitiveType type)
 {
     const uint32_t *rs = device.renderStates;
     DynamicState state{};
@@ -1154,9 +1293,23 @@ void ApplyDynamicState(Device &device, d3d::PrimitiveType type)
     state.stencilMask = rs[d3d::RS_STENCILMASK] & 0xff;
     state.stencilWriteMask = rs[d3d::RS_STENCILWRITEMASK] & 0xff;
     UnpackColor(rs[d3d::RS_BLENDFACTOR], state.blendConstants);
+    return state;
+}
 
+// False when a shortcut is wrong (Device::verifyShortcuts).
+bool ApplyDynamicState(Device &device, d3d::PrimitiveType type)
+{
+    // Nothing it is built from has changed since the command buffer got it.
+    if (device.dynamicValid && !device.dynamicStale && device.dynamic.topology == uint32_t(Topology(type)))
+    {
+        if (device.verifyShortcuts && !(MakeDynamicState(device, type) == device.dynamic))
+            return Fail(device, "the dynamic state kept from an earlier draw is not what the D3D9 state gives");
+        return true;
+    }
+    const DynamicState state = MakeDynamicState(device, type);
+    device.dynamicStale = false;
     if (device.dynamicValid && state == device.dynamic)
-        return;
+        return true;
     Record(device.core, [state](VkCommandBuffer cmd, const Dispatch &vk) {
         vk.vkCmdSetViewport(cmd, 0, 1, &state.viewport);
         vk.vkCmdSetScissor(cmd, 0, 1, &state.scissor);
@@ -1182,6 +1335,7 @@ void ApplyDynamicState(Device &device, d3d::PrimitiveType type)
     });
     device.dynamic = state;
     device.dynamicValid = true;
+    return true;
 }
 
 // Everything a draw needs, up to the draw command. False: skip the draw.
@@ -1209,62 +1363,66 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
         if (!BeginTargetsPass(device))
             return false;
     }
-    // Where depth compare is fixed in the pixel shader, the samplers it reads
-    // that have a depth texture bound (the rule SamplerStateBlock follows).
-    uint32_t depthSamplers = 0;
-    if (Features(device.core).fixedDepthCompare)
+    // The last draw's pipeline, when nothing its key is made of has changed.
+    // Where the device fixes vertex strides or depth compare in the pipeline
+    // the key also holds stream strides and bound textures, so it is made
+    // for every draw there.
+    const OptionalFeatures &features = Features(device.core);
+    const bool dynamicStride = features.dynamicVertexStride;
+    Pipeline *pipeline = nullptr;
+    if (!device.keyStale && device.lastPipeline && dynamicStride && !features.fixedDepthCompare
+        && device.lastPipelineKey.topologyClass == TopologyClass(type))
     {
-        for (uint32_t sampler = 0; sampler < ls::kSamplerCount; ++sampler)
-        {
-            const Texture *texture = textures.bound[SlotForBit(sampler)];
-            if ((ps->translated.reflection.samplers & (1u << sampler)) && texture && texture->format->depth)
-                depthSamplers |= 1u << sampler;
-        }
+        pipeline = device.lastPipeline;
+        if (device.verifyShortcuts && !(MakeKey(device, *vs, *ps, *decl, type, 0) == device.lastPipelineKey))
+            return Fail(device, "the pipeline kept from an earlier draw is not the one the D3D9 state gives");
     }
-    const PipelineKey key = MakeKey(device, *vs, *ps, *decl, type, depthSamplers);
-    // Consecutive draws often keep their pipeline: compare before hashing.
-    Pipeline *pipeline = device.lastPipeline;
-    if (!pipeline || !(key == device.lastPipelineKey))
+    else
     {
-        auto found = device.pipelines.find(key);
-        pipeline = found != device.pipelines.end() ? &found->second : BuildPipeline(device, key, *vs, *ps, *decl);
-        if (!pipeline)
-            return false;
-        device.lastPipeline = pipeline;
-        device.lastPipelineKey = key;
+        // Where depth compare is fixed in the pixel shader, the samplers it
+        // reads that have a depth texture bound (the rule SamplerStateBlock
+        // follows).
+        uint32_t depthSamplers = 0;
+        if (features.fixedDepthCompare)
+        {
+            for (uint32_t sampler = 0; sampler < ls::kSamplerCount; ++sampler)
+            {
+                const Texture *texture = textures.bound[SlotForBit(sampler)];
+                if ((ps->translated.reflection.samplers & (1u << sampler)) && texture && texture->format->depth)
+                    depthSamplers |= 1u << sampler;
+            }
+        }
+        const PipelineKey key = MakeKey(device, *vs, *ps, *decl, type, depthSamplers);
+        // Consecutive draws often keep their pipeline: compare before hashing.
+        pipeline = device.lastPipeline;
+        if (!pipeline || !(key == device.lastPipelineKey))
+        {
+            auto found = device.pipelines.find(key);
+            pipeline = found != device.pipelines.end() ? &found->second : BuildPipeline(device, key, *vs, *ps, *decl);
+            if (!pipeline)
+                return false;
+            device.lastPipeline = pipeline;
+            device.lastPipelineKey = key;
+        }
+        device.keyStale = false;
     }
 
     // Vertex streams first: an unbound one skips the draw before anything is recorded.
-    VkBuffer buffers[kMaxStreams + 1];
-    VkDeviceSize offsets[kMaxStreams + 1];
-    VkDeviceSize strides[kMaxStreams + 1];
-    for (uint32_t binding = 0; binding <= kZeroBinding; ++binding)
+    for (uint32_t left = pipeline->bindings & ~(1u << kZeroBinding); left; left &= left - 1)
     {
-        buffers[binding] = BufferHandle(device.zeroVertices);
-        offsets[binding] = 0;
-        strides[binding] = 16;
-        if (binding == kZeroBinding || !(pipeline->bindings & (1u << binding)))
-            continue;
-        StreamBinding &stream = device.streams[binding];
-        if (stream.transient)
-        {
-            buffers[binding] = stream.transient;
-            offsets[binding] = stream.transientOffset;
-        }
-        else if (stream.buffer)
-        {
-            buffers[binding] = DrawBuffer(device, *stream.buffer);
-            offsets[binding] = stream.offset;
-        }
-        else
+        const uint32_t binding = LowestBit(left);
+        const StreamBinding &stream = device.streams[binding];
+        if (!stream.transient && !stream.buffer)
         {
             WarnOnce(device, WarnUnboundStream, "a draw reads vertex stream %u, which has no buffer; skipped",
                      binding);
             return false;
         }
-        strides[binding] = stream.stride;
     }
 
+    // From here on only what the command buffer does not have already is
+    // recorded: the engine draws sorted by material, so most draws keep the
+    // pipeline, the buffers and the textures of the one before.
     if (!SyncRecording(device))
         return false;
     if (device.boundPipeline != pipeline->pipeline)
@@ -1275,22 +1433,47 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
         });
         device.boundPipeline = bound;
     }
-    ApplyDynamicState(device, type);
+    if (!ApplyDynamicState(device, type))
+        return false;
     // Without dynamic strides the pipeline holds them (PipelineKey::strides).
-    const bool dynamicStride = Features(device.core).dynamicVertexStride;
-    for (uint32_t binding = 0; binding <= kZeroBinding; ++binding)
+    for (uint32_t left = pipeline->bindings; left; left &= left - 1)
     {
-        if (!(pipeline->bindings & (1u << binding)))
+        const uint32_t binding = LowestBit(left);
+        VertexBind bind;
+        if (binding == kZeroBinding)
+        {
+            bind = {BufferHandle(device.zeroVertices), 0, dynamicStride ? 16u : 0u};
+        }
+        else
+        {
+            StreamBinding &stream = device.streams[binding];
+            if (stream.transient)
+                bind = {stream.transient, stream.transientOffset, 0};
+            else
+                bind = {DrawBuffer(device, *stream.buffer), stream.offset, 0};
+            bind.stride = dynamicStride ? stream.stride : 0;
+        }
+        VertexBind &bound = device.boundVertices[binding];
+        if (bound.buffer == bind.buffer && bound.offset == bind.offset && bound.stride == bind.stride)
+        {
+            ++device.stats.bindsSkipped;
             continue;
-        const VkBuffer buffer = buffers[binding];
-        const VkDeviceSize offset = offsets[binding];
-        const VkDeviceSize stride = strides[binding];
+        }
+        bound = bind;
         Record(device.core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
-            vk.vkCmdBindVertexBuffers2(cmd, binding, 1, &buffer, &offset, nullptr, dynamicStride ? &stride : nullptr);
+            vk.vkCmdBindVertexBuffers2(cmd, binding, 1, &bind.buffer, &bind.offset, nullptr,
+                                       dynamicStride ? &bind.stride : nullptr);
         });
     }
 
     const Layout &layout = *pipeline->layout;
+    if (device.boundLayout != layout.pipeline)
+    {
+        // Sets bound with another pipeline layout may not carry over.
+        device.boundLayout = layout.pipeline;
+        device.boundUniforms.set = VK_NULL_HANDLE;
+        device.boundTextureSet = VK_NULL_HANDLE;
+    }
     if (layout.uniformSet && !BindUniforms(device, *vs, *ps, textures, *pipeline))
         return false;
     if (layout.textureSet)
@@ -1314,11 +1497,19 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
             device.lastTextureSet = contents;
             ++device.stats.descriptorSets;
         }
-        const VkPipelineLayout pipelineLayout = layout.pipeline;
-        Record(device.core, [pipelineLayout, set](VkCommandBuffer cmd, const Dispatch &vk) {
-            vk.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, ls::kTextureSet, 1, &set,
-                                       0, nullptr);
-        });
+        if (device.boundTextureSet == set)
+        {
+            ++device.stats.bindsSkipped;
+        }
+        else
+        {
+            device.boundTextureSet = set;
+            const VkPipelineLayout pipelineLayout = layout.pipeline;
+            Record(device.core, [pipelineLayout, set](VkCommandBuffer cmd, const Dispatch &vk) {
+                vk.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, ls::kTextureSet, 1,
+                                           &set, 0, nullptr);
+            });
+        }
     }
     return Usable(device);
 }
@@ -1484,6 +1675,19 @@ bool EnsureFrame(Device &device)
     }
 }
 
+void ForgetRecordingState(Device &device)
+{
+    device.stateRecording = 0;
+    device.boundPipeline = VK_NULL_HANDLE;
+    device.dynamicValid = false;
+    for (VertexBind &bind : device.boundVertices)
+        bind.buffer = VK_NULL_HANDLE;
+    device.boundIndices = VK_NULL_HANDLE;
+    device.boundUniforms.set = VK_NULL_HANDLE;
+    device.boundLayout = VK_NULL_HANDLE;
+    device.boundTextureSet = VK_NULL_HANDLE;
+}
+
 void EndPassIfOpen(Device &device)
 {
     if (!device.passOpen)
@@ -1586,8 +1790,15 @@ void ResetState(Device &device)
 
 void SetRenderState(Device *device, d3d::RenderState state, uint32_t value)
 {
-    if (state < d3d::RS_COUNT)
-        device->renderStates[state] = value;
+    if (state >= d3d::RS_COUNT || device->renderStates[state] == value)
+        return;
+    device->renderStates[state] = value;
+    // The alpha test is a uniform block's (KeyForBlock): it is in no pipeline
+    // key and no dynamic state. Every other state may be in either.
+    if (state == d3d::RS_ALPHATESTENABLE || state == d3d::RS_ALPHAFUNC || state == d3d::RS_ALPHAREF)
+        return;
+    device->keyStale = true;
+    device->dynamicStale = true;
 }
 
 uint32_t GetRenderState(const Device *device, d3d::RenderState state)
@@ -1621,6 +1832,7 @@ void SetVertexShader(Device *device, Shader *shader)
         return;
     }
     device->vertexShader = shader;
+    device->keyStale = true;
 }
 
 void SetPixelShader(Device *device, Shader *shader)
@@ -1631,14 +1843,33 @@ void SetPixelShader(Device *device, Shader *shader)
         return;
     }
     device->pixelShader = shader;
+    device->keyStale = true;
 }
+
+namespace
+{
+// Registers set to the values they have change nothing. Otherwise the block
+// of them in the frame's memory is stale, if it reaches these registers: a
+// later draw writes a new one (BindUniforms).
+void SetFloatConstants(Device &device, ls::Stage stage, float *registers, uint32_t start, const float *data,
+                       uint32_t count)
+{
+    const size_t bytes = size_t(count) * 4 * sizeof(float);
+    if (std::memcmp(registers, data, bytes) == 0)
+        return;
+    std::memcpy(registers, data, bytes);
+    UniformSlot &slot = device.uniformSlots[ls::UniformBinding(stage, ls::Uniform::FloatConstants)];
+    if (start * 16 < slot.size)
+        slot.size = 0;
+}
+} // namespace
 
 void SetVertexShaderConstantF(Device *device, uint32_t start, const float *data, uint32_t count)
 {
     if (start >= kVsFloatRegisters)
         return;
     count = std::min(count, kVsFloatRegisters - start);
-    std::memcpy(device->vsConstants[start], data, count * 4 * sizeof(float));
+    SetFloatConstants(*device, ls::Stage::Vertex, device->vsConstants[start], start, data, count);
 }
 
 void SetPixelShaderConstantF(Device *device, uint32_t start, const float *data, uint32_t count)
@@ -1646,10 +1877,14 @@ void SetPixelShaderConstantF(Device *device, uint32_t start, const float *data, 
     if (start >= kPsFloatRegisters)
         return;
     count = std::min(count, kPsFloatRegisters - start);
-    std::memcpy(device->psConstants[start], data, count * 4 * sizeof(float));
+    SetFloatConstants(*device, ls::Stage::Pixel, device->psConstants[start], start, data, count);
 }
 
-void SetVertexDecl(Device *device, VertexDecl *decl) { device->decl = decl; }
+void SetVertexDecl(Device *device, VertexDecl *decl)
+{
+    device->decl = decl;
+    device->keyStale = true;
+}
 
 void SetStreamSource(Device *device, uint32_t stream, VertexBuffer *buffer, uint32_t offset, uint32_t stride)
 {
@@ -1663,9 +1898,17 @@ void SetStreamSource(Device *device, uint32_t stream, VertexBuffer *buffer, uint
 
 void SetIndices(Device *device, IndexBuffer *buffer) { device->indices = buffer; }
 
-void SetViewport(Device *device, const Viewport &viewport) { device->viewport = viewport; }
+void SetViewport(Device *device, const Viewport &viewport)
+{
+    device->viewport = viewport;
+    device->dynamicStale = true;
+}
 
-void SetScissorRect(Device *device, const Rect &rect) { device->scissor = rect; }
+void SetScissorRect(Device *device, const Rect &rect)
+{
+    device->scissor = rect;
+    device->dynamicStale = true;
+}
 
 void SetRenderTarget(Device *device, uint32_t index, Surface *surface)
 {
@@ -1685,6 +1928,7 @@ void SetRenderTarget(Device *device, uint32_t index, Surface *surface)
         const uint32_t height = LevelSize(surface->texture->desc.height, surface->level);
         device->viewport = {0, 0, width, height, 0.0f, 1.0f};
         device->scissor = {0, 0, int32_t(width), int32_t(height)};
+        device->dynamicStale = true;
     }
 }
 
@@ -1801,10 +2045,22 @@ void DrawIndexedPrimitive(Device *device, d3d::PrimitiveType type, int32_t baseV
     const VkBuffer indices = DrawBuffer(*device, *device->indices);
     const VkIndexType indexType = device->indices->indexType;
     CountDraw(*device);
-    Record(device->core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
-        vk.vkCmdBindIndexBuffer(cmd, indices, 0, indexType);
-        vk.vkCmdDrawIndexed(cmd, indexCount, 1, startIndex, baseVertex, 0);
-    });
+    if (device->boundIndices == indices && device->boundIndexType == indexType)
+    {
+        ++device->stats.bindsSkipped;
+        Record(device->core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
+            vk.vkCmdDrawIndexed(cmd, indexCount, 1, startIndex, baseVertex, 0);
+        });
+    }
+    else
+    {
+        device->boundIndices = indices;
+        device->boundIndexType = indexType;
+        Record(device->core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
+            vk.vkCmdBindIndexBuffer(cmd, indices, 0, indexType);
+            vk.vkCmdDrawIndexed(cmd, indexCount, 1, startIndex, baseVertex, 0);
+        });
+    }
     ++device->stats.draws;
     FeedGpu(*device);
 }
@@ -1961,9 +2217,7 @@ void DetachWindow(Device *device_)
     gfx_vk::DetachWindow(device.core); // ends an open frame without showing it
     device.frameOpen = false;
     device.frameSkipped = false;
-    device.stateRecording = 0;
-    device.boundPipeline = VK_NULL_HANDLE;
-    device.dynamicValid = false;
+    ForgetRecordingState(device);
 }
 
 
@@ -1999,9 +2253,7 @@ PresentResult Present(Device *device_)
     device.frontBufferSurface.texture = device.frontBuffer;
     const FrameResult result = gfx_vk::Present(device.core);
     device.frameOpen = false;
-    device.stateRecording = 0;
-    device.boundPipeline = VK_NULL_HANDLE;
-    device.dynamicValid = false;
+    ForgetRecordingState(device);
     switch (result)
     {
     case FrameResult::Ok:

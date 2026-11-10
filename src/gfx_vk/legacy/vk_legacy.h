@@ -262,6 +262,9 @@ struct DeviceStats
     uint64_t descriptorSets;
     uint64_t descriptorSetsReused; // sets bound again instead of allocated and written
     uint64_t constantBytes;   // constant and render-state uniform data written
+    // Vertex buffer, index buffer and descriptor set binds a draw did not
+    // record because its command buffer had them from an earlier draw.
+    uint64_t bindsSkipped;
     uint64_t dynamicRenames;  // DISCARD locks that took a new buffer
     uint64_t fenceFlushes;    // frames submitted ahead of their Present by a frame fence poll (GetQueryData)
     uint64_t feedFlushes;     // parts of frames submitted while the frame was being drawn (GpuFeed)

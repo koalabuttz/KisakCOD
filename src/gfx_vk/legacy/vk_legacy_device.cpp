@@ -215,6 +215,7 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     device->depthBiasScale = device->depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ? float(1u << 24) : float(1u << 23);
     device->dynamicUniforms = !Features(core).staticUniforms;
     device->uniformAlignment = static_cast<uint32_t>(std::max<VkDeviceSize>(16, Limits(core).minUniformBufferOffsetAlignment));
+    device->verifyShortcuts = ValidationEnabled(core);
     DefaultStates(*device);
 
     uint32_t width = desc.width ? desc.width : Swapchain(core).width;
@@ -358,6 +359,11 @@ void ResetState(Device *device)
     device->indices = nullptr;
     std::memset(device->vsConstants, 0, sizeof(device->vsConstants));
     std::memset(device->psConstants, 0, sizeof(device->psConstants));
+    // The frame's uniform blocks were built from the old values.
+    for (UniformSlot &slot : device->uniformSlots)
+        slot.size = 0;
+    device->keyStale = true;
+    device->dynamicStale = true;
     for (Surface *&target : device->renderTargets)
         target = nullptr;
     device->depthStencil = nullptr;

@@ -45,15 +45,46 @@ buffer by the core's `Recording()` number.
   module is built at once; a pixel shader is linked to the vertex shader it is
   drawn with (outputs to inputs), and linked modules are kept per pair.
 * **Uniforms.** The translator turns float constants and the states shaders need
-  (alpha test, sampler state, point size) into uniform blocks. For each draw
-  the adapter writes them into one per-frame allocation. The blocks are
-  dynamic uniform buffers: each pipeline writes its descriptor set once per
-  frame (and per transient buffer), and later draws bind that set again with
-  their own offsets. A layout with more blocks than the device's
-  `maxDescriptorSetUniformBuffersDynamic` (8 on some drivers), or every layout
-  with `KISAK_VK_UNIFORMS=static`, gets plain uniform buffers and a new set
-  for each draw instead. Alpha test is D3D9 state, compared in the pixel
-  shader.
+  (alpha test, sampler state, point size) into uniform blocks, which live in
+  per-frame memory. The blocks are dynamic uniform buffers: each pipeline
+  writes its descriptor set once per frame (and per transient buffer), and
+  later draws bind that set again with their own offsets. A layout with more
+  blocks than the device's `maxDescriptorSetUniformBuffersDynamic` (8 on some
+  drivers), or every layout with `KISAK_VK_UNIFORMS=static`, gets plain
+  uniform buffers and a new set for each draw instead. Alpha test is D3D9
+  state, compared in the pixel shader.
+* **Less work for a draw like the one before.** The engine draws sorted by
+  material, so most draws differ from the one before in a few vertex shader
+  constants and nothing else. The adapter does and records only what changed:
+  * *Uniform blocks.* Each set 0 binding remembers the block the frame's
+    memory holds for it. A draw writes a block only when its bytes would
+    differ: the float constants when a register the block reaches was set to
+    another value (setting a register to the value it has changes nothing),
+    the alpha test block when the alpha test state differs, the sampler state
+    block when the shader or the kinds of the bound textures differ. The
+    other blocks are the same for every draw. A draw's blocks must share one
+    buffer under dynamic uniform buffers, so the first draw after the frame's
+    memory moves to another buffer writes all of its blocks again.
+  * *Binds.* The command buffer keeps its vertex buffers, index buffer and
+    descriptor sets between draws (and between passes), so a bind equal to
+    the one already there is not recorded. A new command buffer starts with
+    nothing bound, and a change of pipeline layout forgets the sets.
+    `DeviceStats::bindsSkipped` counts them.
+  * *Pipeline and dynamic state.* The pipeline key and the dynamic state are
+    made again only after something they are made of was set: a render state
+    (except the three of the alpha test, which are in a uniform block), a
+    shader, the vertex declaration, the viewport, the scissor rectangle, or
+    the targets of the pass. Where the device fixes vertex strides or depth
+    compare in the pipeline, the key also holds stream strides and bound
+    textures and is made for every draw.
+
+  With the validation layer on, the adapter checks every one of those
+  shortcuts as it takes it: the kept block is written again elsewhere and
+  compared, and the kept pipeline key and dynamic state are made again and
+  compared. A difference fails the device (`uniform block N kept from an
+  earlier draw...`, `the pipeline kept...`, `the dynamic state kept...`). So
+  every check run with validation, and the game with `r_vkValidation` on,
+  tests the rules above against what a draw without shortcuts would do.
 * **Textures.** Each sampler slot gets the bound texture's sample view (with the
   format's swizzle: L8, A8, A8L8, X8R8G8B8 and the rest read as D3D9 reads them)
   and a sampler cached per slot and state. Empty slots read a 1x1 black
@@ -273,6 +304,7 @@ statistics, the validation counts, and `legacy_check=passed` or
 | `missing_input` | A vertex shader input the declaration does not supply reads zero. |
 | `event_query` | An event query finishes after the GPU passes it. |
 | `occlusion_query` | Occlusion queries report exact sample counts: a quad's pixels, the visible half of a quad behind another, 0 for a hidden one, and two overlapping queries across a change of targets (0xffffff each where the device cannot count). |
+| `state_reuse` | What a draw writes and records when it is like the one before, by the constant bytes written and the binds skipped: the same state again (nothing written, set 0 and the vertex buffer not bound again), a vertex shader constant set to another value (its block alone), to the same value and outside the block (nothing), another texture, an unbound and a rebound texture (the sampler state block), the alpha test turned on and changed (its block), a layout with pixel shader constants and back, a new command buffer (binds recorded again, nothing written), indexed draws that keep their buffers, a stream offset and 32-bit indices, the frame's memory moving to another buffer (every block again under dynamic uniform buffers), a viewport, a scissor rectangle and a vertex declaration each changed alone between two draws, the same vertex shader code created a second time (another object, so its pipeline is looked up), a pixel shader constant block that was last written before the frame's memory moved (written again under dynamic uniform buffers, kept otherwise), and the next frame (every block again). Each step's pixel is read back. The counts follow the device: no bind is skipped with `KISAK_VK_GPU_FEED=always`, where every draw has a command buffer of its own. |
 
 The scenes' shaders are D3D9 assembly in
 `scripts/tools/vulkan/gen_legacy_check_shaders.py`, assembled with the shader
@@ -309,6 +341,23 @@ its sample counts exactly, in Debug and RelWithDebInfo, with the record thread
 on and off and the GPU feed off, at its default and after every draw, and
 reports 0xffffff for each query with `KISAK_VK_OCCLUSION_QUERIES=0`. No GPU
 has run it yet.
+
+Less work for a draw like the one before (2026-11-10, same sandbox, 21 scenes
+with `state_reuse`): its 59 points match in Debug and RelWithDebInfo with
+validation, with the GPU feed at its default, off and after every draw, the
+record thread on, static uniforms (also with a submission after every draw),
+static strides with fixed depth compare and wide targets, and occlusion
+counting off; the D3D9 front's check passes with the same switches and with
+its record thread off, and both checks under ThreadSanitizer. Measured with
+callgrind on the front check's `bench_runs` scene (frames of 768 draws in runs
+of eight that share their state), the drawing thread spends 2,914 instructions
+on a draw where it spent 4,626, and the constants written per frame fall from
+464 KB to 14 KB. Each of the 18 rules that say when something kept is stale
+was taken out in turn, and the checks fail on every one: 11 at the adapter's
+own cross-check, 7 by a wrong pixel, a wrong count or a validation error (5 of
+the 18 went unseen at first, and the scene got a step for each). No GPU has
+run it and no frame rate was measured: what it is worth in the game is for a
+laptop run to say.
 
 Laptop run 1 (2026-11-08, Intel RPL-U iGPU, Mesa 25.0.7 ANV, x86_64 and i386
 RelWithDebInfo, SDL offscreen and Wayland, no validation layer installed): all
