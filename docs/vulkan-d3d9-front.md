@@ -375,7 +375,12 @@ the device was made, and starts them again; `r_vkStats keep` prints them
 without starting again. To measure a setting: change the dvar, wait for the
 frame rate to settle, `r_vkStats`, wait as long as the measurement should
 take, `r_vkStats` again and read the second report. With `r_backend d3d9`
-the command says there is no Vulkan device.
+the command says there is no Vulkan device. The command exists only where
+`r_cmds.cpp` is compiled with `KISAK_VULKAN_BACKEND`: the Linux and macOS
+build gives the definition to each program's stand-in objects for it (the
+first build with the command did not, and the Linux game had the dvars
+without the command until laptop run 11 typed it), and CI's `vulkan_engine`
+job looks for the command in the programs it builds.
 
 With `r_backend vulkan`, `R_HW_Direct3DCreate9`
 (`src/gfx_d3d/rhi/r_rhi_d3d9_calls.cpp`, built with `KISAK_VULKAN_BACKEND`)

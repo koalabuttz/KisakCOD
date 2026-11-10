@@ -1035,6 +1035,27 @@ class VulkanEngineWorkflowTests(unittest.TestCase):
         for program in ('KisakCOD-device-probe', 'KisakCOD-world-draw-probe', 'KisakCOD-mp'):
             self.assertIn(program, build)
 
+    def test_the_programs_with_a_console_get_the_statistics_command(self):
+        # r_vkStats is registered by src/gfx_d3d/r_cmds.cpp, which is not in
+        # the objects that make D3D9 calls. The first build with the command
+        # gave the back end's definition to those objects only, and the game
+        # had no r_vkStats (found by a laptop run, not by CI).
+        module = (ROOT / 'scripts/vulkan_probe/vulkan_backend.cmake').read_text()
+        for pair in ('KisakCOD-world-draw-probe KisakCOD-world-draw-standin', 'KisakCOD-mp KisakCOD-mp-standin'):
+            self.assertIn(pair, module)
+        self.assertIn('target_compile_definitions(${command_objects} PRIVATE KISAK_VULKAN_BACKEND)', module)
+        self.assertIn('message(FATAL_ERROR\n                "${command_objects} does not compile src/gfx_d3d/r_cmds.cpp',
+                      module)
+        commands = (ROOT / 'src/gfx_d3d/r_cmds.cpp').read_text()
+        self.assertIn('#if defined(KISAK_VULKAN_BACKEND)\n\tCmd_AddCommandInternal("r_vkStats"', commands)
+        self.assertIn('"r_vkStats: there is no Vulkan device', commands)
+        build = self.step(self.BUILD_STEP)['run']
+        self.assertIn('for program in KisakCOD-world-draw-probe KisakCOD-mp; do\n'
+                      'grep -qx -- "-- Vulkan back end: r_vkStats registered in $program" "$RUNNER_TEMP/configure.log"',
+                      '\n'.join(line.strip() for line in build.splitlines()))
+        self.assertIn('if ! grep -aq \'r_vkStats: there is no Vulkan device\' "$OUT_DIR/$program"; then', build)
+        self.assertLess(build.index('cmake --build "$BUILD_DIR"'), build.index("grep -aq 'r_vkStats"))
+
     def test_the_device_probe_runs_through_the_back_end_on_lavapipe(self):
         install = next(step['run'] for step in self.job['steps'] if step.get('name', '').startswith('Install '))
         for package in ('libvulkan-dev', 'libvulkan1:i386', 'mesa-vulkan-drivers:i386'):

@@ -34,6 +34,9 @@ void R_Cmd_ApplyPicmip()
     Material_UpdatePicmipAll();
 }
 
+// KISAK_VULKAN_BACKEND reaches this file from scripts/vulkan_probe: on Linux
+// and macOS vulkan_backend.cmake gives it to the objects this file is in (not
+// the ones that make D3D9 calls), on Windows the whole program has it.
 #if defined(KISAK_VULKAN_BACKEND)
 // The Vulkan back end (src/linux/client/vulkan/vulkan_backend.h on Linux and
 // macOS, src/win32/vulkan/win_vulkan_backend.cpp on Windows).
