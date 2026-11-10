@@ -305,6 +305,7 @@ jobs:
           python3 scripts/tests/test_linux_sp_level_sweep.py
           python3 scripts/tests/test_linux_mp_map_sweep.py
           python3 scripts/tests/test_package_linux_client.py
+          python3 scripts/tests/test_setup_linux_client.py
           python3 scripts/tests/test_shader_spike.py
           python3 scripts/tests/test_vita_gxm_heap.py
           python3 scripts/tests/test_vita_cg_translate.py --require-glslang
