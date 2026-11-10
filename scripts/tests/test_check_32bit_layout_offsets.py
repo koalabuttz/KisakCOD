@@ -5,7 +5,8 @@ Scans a small generated C++ file with the tool's own scan() and checks which
 lines it reports: constant byte offsets that land on another field on x86_64,
 pointer-sized values read at a byte offset, unions copied through a 4-byte
 member, member arrays indexed past their end into a neighbour whose x86_64
-position differs, and `K * n` strides equal to a changed i386 size. Offsets
+position differs, `K * n` strides equal to a changed i386 size, and a
+`void *` cast and moved by a constant. Offsets
 into pointer-free structs, sizeof-based offsets and offsets before the first
 pointer must stay quiet. Needs the libclang Python bindings (python3-clang-18),
 like the tool; run it with the system Python.
@@ -43,6 +44,9 @@ float cases(void *raw, Context *ctx, Plain *plain, Table *table, Lods *lods, Spi
     s += lods->dist[4];
     s += *((float *)&lods->list + 2); // EXPECT
     s += *(int *)((char *)ctx + 0) + plain->b[3];
+    s += *((const float **)raw + 3) != 0; // EXPECT
+    s += ((int *)raw)[2]; // EXPECT
+    s += *(int *)raw + ((Plain *)raw)->a;
     Value a, b;
     a.i = b.i; // EXPECT
     a = b;
