@@ -321,7 +321,12 @@ class SweepRunTests(unittest.TestCase):
         status, report = self.run_sweep("--maps", "mp_crash,mp_backlot")
         self.assertEqual(status, 1)
         self.assertIn("| mp_crash | all steps seen |", report)
-        self.assertRegex(report, r"\| mp_backlot \| stopped at: joined \| \d+\.\d s \| 0 \| - \| signal 11 \| 1 \|")
+        # The stand-in dies on the class response. A starved machine can take
+        # longer than --menu-wait to end it, and then the join counts as seen
+        # and the next step finds the process gone; the crash and the
+        # assertion are reported either way.
+        self.assertRegex(report,
+                         r"\| mp_backlot \| stopped at: (?:joined|exercised) \| \d+\.\d s \| 0 \| - \| signal 11 \| 1 \|")
         self.assertIn("- `ent->health > 0`", report)
 
     def test_map_that_never_loads_stops_the_chain(self):
