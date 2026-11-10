@@ -109,6 +109,22 @@ up to one sleep late. `r_gpuSyncSleepThreads` picks the waits it applies to
 their effects apart. The sleep is off until a laptop run shows what it does
 to frame rate and power; `perf_ab` was written to measure it.
 
+## `xanim_blendOnce`
+
+When an animation tree node blends several children, `XAnimCalc` calculated
+the first of them twice in a row with the same arguments, and so on down the
+tree: a blend inside the first child of a blend ran four times. The second
+calculation clears and writes the same bones from the same state, so it should
+change nothing.
+
+`xanim_blendOnce` (default 0 = unchanged) picks what happens: 0 calculates
+twice, 1 once, 2 twice and compares the two results bone by bone. With 2 the
+console prints `xanim_blendOnce 2: <n> blends calculated twice, <m> differed`
+at 1024 blends and at every doubling after that, and a warning for each of
+the first eight that differ. The setting stays at 0 until a run on real
+animations has shown 0 differed; `perf_ab "set xanim_blendOnce 0" "set
+xanim_blendOnce 1"` measures what it saves.
+
 ## Checks
 
 `scripts/tests/test_linux_perf_ab.py` (the `perf_ab` check of
