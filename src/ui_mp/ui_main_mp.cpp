@@ -10,6 +10,8 @@
 #include <qcommon/cmd.h>
 #include <qcommon/mem_track.h>
 #include <client_mp/client_mp.h>
+#include <client_mp/cl_auth.h>
+#include <client_mp/cl_keycode.h>
 #include <gfx_d3d/r_rendercmds.h>
 #include <universal/q_parse.h>
 #include <client/client.h>
@@ -2582,13 +2584,6 @@ void UI_RunMenuScript(int localClientNum, const char **args, const char *actualS
 {
     char *v3; // eax
     const char *v4; // eax
-    char *v5; // eax
-    char *v6; // eax
-    char *v7; // eax
-    char *v8; // eax
-    char *v9; // eax
-    char *v10; // eax
-    char *v11; // eax
     const char *v12; // eax
     const char *v13; // eax
     const char *v14; // eax
@@ -2624,14 +2619,6 @@ void UI_RunMenuScript(int localClientNum, const char **args, const char *actualS
     char v44[1028]; // [esp+10ECh] [ebp-1940h] BYREF
     char value[264]; // [esp+14F4h] [ebp-1538h] BYREF
     char key[1024]; // [esp+15FCh] [ebp-1430h] BYREF
-    char checksum[1028]; // [esp+19FCh] [ebp-1030h] BYREF
-    char dest[20]; // [esp+1E00h] [ebp-C2Ch] BYREF
-    char buf = 0; // [esp+1E14h] [ebp-C18h] BYREF
-    _BYTE v51[3]; // [esp+1E15h] [ebp-C17h] BYREF
-    char src[4]; // [esp+1E18h] [ebp-C14h] BYREF
-    char v53[4]; // [esp+1E1Ch] [ebp-C10h] BYREF
-    char v54[1012]; // [esp+1E20h] [ebp-C0Ch] BYREF
-    char buf2[1030]; // [esp+2214h] [ebp-818h] BYREF
     bool v56; // [esp+261Ah] [ebp-412h]
     bool Bool; // [esp+261Bh] [ebp-411h]
     UiContext *dc; // [esp+261Ch] [ebp-410h]
@@ -3171,57 +3158,39 @@ void UI_RunMenuScript(int localClientNum, const char **args, const char *actualS
                 }
                 else
                 {
+                    // KISAK: the key code menu saves a correctly typed key as codkey.txt in the
+                    // home folder, where a connect to a server that accepts key codes reads it
+                    // (docs/key-codes.md). Nothing checks it against Activision. With the
+                    // fields empty it reports on the key already stored.
                     key[0] = 0;
-                    v5 = (char *)Dvar_GetVariantString("cdkey1");
-                    I_strncat(key, 1024, v5);
-                    v6 = (char *)Dvar_GetVariantString("cdkey2");
-                    I_strncat(key, 1024, v6);
-                    v7 = (char *)Dvar_GetVariantString("cdkey3");
-                    I_strncat(key, 1024, v7);
-                    v8 = (char *)Dvar_GetVariantString("cdkey4");
-                    I_strncat(key, 1024, v8);
-                    checksum[0] = 0;
-                    v9 = (char *)Dvar_GetVariantString("cdkey5");
-                    I_strncat(checksum, 1024, v9);
-
-                    //if (CL_CDKeyValidate(key, checksum)) // LWSS: this was just some settings UI Code that checks if your CD Key was valid.
-                    if (true)
-                    {
-                        v10 = UI_SafeTranslateString("EXE_CDKEYVALID");
-                        Dvar_SetStringByName("ui_cdkeyvalid", v10);
-                        //CLUI_SetCDKey(key, checksum); // KISAKKEY
-                    }
-                    else
-                    {
-                        v11 = UI_SafeTranslateString("EXE_CDKEYINVALID");
-                        Dvar_SetStringByName("ui_cdkeyvalid", v11);
-                    }
+                    I_strncat(key, 1024, Dvar_GetVariantString("cdkey1"));
+                    I_strncat(key, 1024, Dvar_GetVariantString("cdkey2"));
+                    I_strncat(key, 1024, Dvar_GetVariantString("cdkey3"));
+                    I_strncat(key, 1024, Dvar_GetVariantString("cdkey4"));
+                    I_strncat(key, 1024, Dvar_GetVariantString("cdkey5"));
+                    const bool typed = key[0] != 0;
+                    const char *homePath = fs_homepath ? fs_homepath->current.string : "";
+                    const KeyCodeStatus keyStatus = typed ? CL_SaveKeyCode(homePath, key) : CL_StoredKeyCodeStatus(homePath);
+                    CL_WipeKeyCode(key, sizeof(key));
+                    Dvar_SetStringByName("ui_cdkeyvalid",
+                        UI_SafeTranslateString(keyStatus == KeyCodeStatus::ok ? "EXE_CDKEYVALID" : "EXE_CDKEYINVALID"));
+                    // A saved key does not stay behind in the menu's dvars, where a server's
+                    // menus could read it. A refused one stays to be corrected, unless this
+                    // client is on someone else's server (CL_ClearKeyCodeMenuFields).
+                    const bool onRemoteServer = clientUIActives[0].connectionState >= CA_CONNECTING
+                        && !NET_IsLocalAddress(CL_GetLocalClientConnection(0)->serverAddress);
+                    if (typed && (keyStatus == KeyCodeStatus::ok || onRemoteServer))
+                        CL_ClearKeyCodeMenuFields();
                 }
             }
             else
             {
-                //CLUI_GetCDKey(&buf, 17, buf2, 5); // KISAKKEY
-                Dvar_SetStringByName("cdkey1", (char *)"");
-                Dvar_SetStringByName("cdkey2", (char *)"");
-                Dvar_SetStringByName("cdkey3", (char *)"");
-                Dvar_SetStringByName("cdkey4", (char *)"");
-                Dvar_SetStringByName("cdkey5", (char *)"");
-                if (&v51[strlen(&buf)] - v51 == 16)
-                {
-                    I_strncpyz(dest, &buf, 5);
-                    Dvar_SetStringByName("cdkey1", dest);
-                    I_strncpyz(dest, src, 5);
-                    Dvar_SetStringByName("cdkey2", dest);
-                    I_strncpyz(dest, v53, 5);
-                    Dvar_SetStringByName("cdkey3", dest);
-                    I_strncpyz(dest, v54, 5);
-                    Dvar_SetStringByName("cdkey4", dest);
-                }
-                if (strlen(buf2) == 4)
-                {
-                    I_strncpyz(dest, buf2, 5);
-                    Dvar_SetStringByName("cdkey5", dest);
-                }
+                // KISAK: retail filled the fields with the stored key. The stored key is never
+                // read back into dvars; the menu opens empty and says whether one is stored.
+                CL_ClearKeyCodeMenuFields();
+                const char *homePath = fs_homepath ? fs_homepath->current.string : "";
+                Dvar_SetStringByName("ui_cdkeyvalid",
+                    CL_StoredKeyCodeStatus(homePath) == KeyCodeStatus::ok ? UI_SafeTranslateString("EXE_CDKEYVALID") : "");
             }
         }
         else if (ui_dedicated->current.integer
