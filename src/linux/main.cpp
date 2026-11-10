@@ -148,9 +148,15 @@ namespace
     // Sentinel for "this argument cannot be appended", distinct from any length.
     constexpr size_t kArgDoesNotFit = (size_t)-1;
 
+    // Outside quotes the engine's tokenizer (qcommon/cmd.cpp) ends a token at
+    // whitespace and treats "//" and "/*" as the start of a comment, so
+    // "+set sv_wwwBaseURL http://host" would set the value "http:". On Windows
+    // the player's own quotes reach the engine; here the shell has removed them,
+    // so put them back.
     bool ArgumentNeedsQuotes(const char *argument)
     {
-        return strpbrk(argument, " \t\"") != nullptr;
+        return strpbrk(argument, " \t\"") != nullptr || strstr(argument, "//") != nullptr
+            || strstr(argument, "/*") != nullptr;
     }
 
     // Bytes needed to append 'argument' after 'limit' bytes may still be written,

@@ -646,7 +646,8 @@ namespace rt_test
     // instead of agreeing with itself.
     size_t ExpectedAppendedLength(const char *argument, bool first)
     {
-        const bool quoted = strpbrk(argument, " \t\"") != nullptr;
+        const bool quoted = strpbrk(argument, " \t\"") != nullptr || strstr(argument, "//") != nullptr
+            || strstr(argument, "/*") != nullptr;
 
         size_t total = first ? 0 : 1;
         if (quoted)
@@ -664,6 +665,9 @@ namespace rt_test
     // Mirrors Cmd_TokenizeStringInternal for the cases the command line can
     // produce: whitespace separates tokens, a leading '"' starts a quoted token
     // that ends at the next '"', and \" inside it yields a literal quote.
+    // Outside quotes "//" ends the line and "/*" starts a comment, so both end
+    // an unquoted token; the test stops at either, as the engine would drop or
+    // split the rest.
     std::vector<std::string> Tokenize(const char *text)
     {
         std::vector<std::string> tokens;
@@ -673,7 +677,7 @@ namespace rt_test
         {
             while (*cursor == ' ' || *cursor == '\t')
                 ++cursor;
-            if (!*cursor)
+            if (!*cursor || (cursor[0] == '/' && (cursor[1] == '/' || cursor[1] == '*')))
                 break;
 
             std::string token;
@@ -691,7 +695,8 @@ namespace rt_test
             }
             else
             {
-                while (*cursor && *cursor != ' ' && *cursor != '\t')
+                while (*cursor && *cursor != ' ' && *cursor != '\t'
+                    && !(cursor[0] == '/' && (cursor[1] == '/' || cursor[1] == '*')))
                     token += *cursor++;
             }
 
@@ -821,6 +826,8 @@ namespace rt_test
             {"prog", "say \"hi\" there", "+map", "mp_crash"},
             {"prog", "quoted \"word\"", "trailing\\", "+exec"},
             {"prog", "  spaced  ", "+set", "sv_hostname"},
+            {"prog", "sv_wwwBaseURL", "http://127.0.0.1:28970", "+map"},
+            {"prog", "a/*b", "c//d", "/*e*/"},
         };
 
         for (const auto &argv : argvs)
