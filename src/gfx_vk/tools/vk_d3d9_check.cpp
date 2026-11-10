@@ -467,6 +467,8 @@ public:
     void GpuFeed();
     void Tuning();
     void Bench();
+    void BenchRuns();
+    void BenchFrames(bool runs);
     void ResetDevice();
     void Present();
 };
@@ -1800,24 +1802,74 @@ void Check::Tuning()
 // lock with the poller is in it) and the polls made meanwhile. The numbers
 // depend on the machine and on what else runs on it; the scene passes when
 // its frames were presented.
-void Check::Bench()
+//
+// --scene bench_runs is the same frame in the order the engine draws one:
+// sorted by material. Eight draws in a row share a texture, an alpha
+// reference and a pixel shader constant (three calls for the run), and each
+// draw is one vertex shader constant and two indexed triangles from static
+// buffers (two calls). It measures what a draw costs when most of its state
+// is the last draw's, which is the usual case in the game and the one the
+// adapter can do least for in `bench`, where every draw changes everything.
+// Its last frame is read back: every cell must hold its run's texture.
+void Check::Bench() { BenchFrames(false); }
+void Check::BenchRuns() { BenchFrames(true); }
+
+void Check::BenchFrames(bool runs)
 {
     constexpr int kFrames = 120;
     constexpr int kWarmUp = 20;
     constexpr int kDraws = 768;
     constexpr int kCell = 4;
     constexpr int kAcross = int(kSize) / kCell;
+    constexpr int kRun = 8;
+    constexpr int kTextures = 4;
     using Clock = std::chrono::steady_clock;
+    static const uint32_t kColours[kTextures] = {Argb(255, 255, 255, 255), Argb(255, 128, 128, 128),
+                                                 Argb(255, 255, 0, 0), Argb(255, 0, 0, 255)};
     IDirect3DQuery9 *swapFence = nullptr, *syncFence = nullptr;
-    IDirect3DTexture9 *textures[2] = {FilledTexture(2, 2, [](UINT, UINT) { return Argb(255, 255, 255, 255); }),
-                                      FilledTexture(2, 2, [](UINT, UINT) { return Argb(255, 128, 128, 128); })};
-    if (!textures[0] || !textures[1]
-        || !Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &swapFence), "CreateQuery(swap fence)")
-        || !Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &syncFence), "CreateQuery(sync fence)"))
+    IDirect3DTexture9 *textures[kTextures] = {};
+    IDirect3DVertexBuffer9 *vb = nullptr;
+    IDirect3DIndexBuffer9 *ib = nullptr;
+    bool made = true;
+    for (int i = 0; i < kTextures; ++i)
+    {
+        const uint32_t colour = kColours[i];
+        textures[i] = FilledTexture(2, 2, [colour](UINT, UINT) { return colour; });
+        made = made && textures[i];
+    }
+    made = made && Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &swapFence), "CreateQuery(swap fence)")
+        && Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &syncFence), "CreateQuery(sync fence)");
+    if (made && runs)
+    {
+        // One cell at the top left, moved by the vertex shader constant; the
+        // index buffer holds it once for each draw of a run.
+        made = Ok(device->CreateVertexBuffer(4 * sizeof(Vertex), D3DUSAGE_WRITEONLY, 0, D3DPOOL_DEFAULT, &vb, nullptr),
+                  "CreateVertexBuffer")
+            && Ok(device->CreateIndexBuffer(kRun * 6 * sizeof(uint16_t), D3DUSAGE_WRITEONLY, D3DFMT_INDEX16,
+                                            D3DPOOL_DEFAULT, &ib, nullptr),
+                  "CreateIndexBuffer");
+        void *data = nullptr;
+        if (made && Ok(vb->Lock(0, 0, &data, 0), "Lock(vertex buffer)"))
+        {
+            QuadCorners(static_cast<Vertex *>(data), 0, 0, kCell, kCell, 0.5f, Argb(255, 255, 255, 255));
+            vb->Unlock();
+        }
+        if (made && Ok(ib->Lock(0, 0, &data, 0), "Lock(index buffer)"))
+        {
+            const uint16_t quad[6] = {0, 1, 2, 0, 2, 3};
+            for (int i = 0; i < kRun; ++i)
+                std::memcpy(static_cast<uint8_t *>(data) + i * sizeof(quad), quad, sizeof(quad));
+            ib->Unlock();
+        }
+    }
+    if (!made)
     {
         SafeRelease(swapFence);
-        SafeRelease(textures[0]);
-        SafeRelease(textures[1]);
+        SafeRelease(syncFence);
+        SafeRelease(vb);
+        SafeRelease(ib);
+        for (IDirect3DTexture9 *&texture : textures)
+            SafeRelease(texture);
         return;
     }
     std::atomic<bool> stop{false};
@@ -1839,20 +1891,42 @@ void Check::Bench()
     const front::DeviceCounters before = Counters();
     double totalMs = 0.0, minMs = 1e9;
     uint64_t pollsCounted = 0;
+    bool lastFrameRead = false;
     for (int frame = 0; frame < kFrames; ++frame)
     {
         Reset(Argb(255, 0, 64, 0));
         Ok(device->SetPixelShader(psTexture), "SetPixelShader");
         const uint64_t pollsBefore = polls.load(std::memory_order_relaxed);
         const Clock::time_point start = Clock::now();
+        if (runs)
+        {
+            device->SetStreamSource(0, vb, 0, sizeof(Vertex));
+            device->SetIndices(ib);
+        }
         for (int draw = 0; draw < kDraws; ++draw)
         {
+            const float x = float(draw % kAcross * kCell);
+            const float y = float(draw / kAcross * kCell);
+            if (runs)
+            {
+                const int run = draw / kRun;
+                if (draw % kRun == 0)
+                {
+                    const float tint[4] = {float(run), 0.0f, 0.0f, 1.0f};
+                    device->SetTexture(0, textures[run % kTextures]);
+                    device->SetRenderState(D3DRS_ALPHAREF, DWORD(run & 0xff));
+                    device->SetPixelShaderConstantF(0, tint, 1);
+                }
+                // Clip space is two units across: the cell moves x pixels right and y down.
+                const float offset[4] = {2.0f * x / kSize, -2.0f * y / kSize, 0.0f, 0.0f};
+                device->SetVertexShaderConstantF(0, offset, 1);
+                device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, 4, UINT(6 * (draw % kRun)), 2);
+                continue;
+            }
             const float offset[4] = {0.0f, 0.0f, 0.0f, 0.0f};
             device->SetVertexShaderConstantF(0, offset, 1);
             device->SetTexture(0, textures[draw & 1]);
             device->SetRenderState(D3DRS_ALPHAREF, DWORD(draw & 0xff));
-            const float x = float(draw % kAcross * kCell);
-            const float y = float(draw / kAcross * kCell);
             Vertex quad[6];
             QuadList(quad, x, y, x + kCell, y + kCell, 0.5f, Argb(255, 255, 255, 255), kSize);
             device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, quad, sizeof(Vertex));
@@ -1874,25 +1948,46 @@ void Check::Bench()
             else
                 std::this_thread::yield();
         }
+        if (runs && frame == kFrames - 1)
+            lastFrameRead = Read();
         Ok(syncFence->Issue(D3DISSUE_END), "Issue(sync fence)");
         Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
         Ok(swapFence->Issue(D3DISSUE_END), "Issue(swap fence)");
     }
     stop = true;
     mainThread.join();
-    device->SetTexture(0, nullptr);
     const front::DeviceCounters after = Counters();
-    Equal("bench_frames_presented",
+    Equal(runs ? "bench_runs_frames_presented" : "bench_frames_presented",
           (after.presents - before.presents) + (after.presentsSkipped - before.presentsSkipped), uint64_t(kFrames));
     const int counted = kFrames - kWarmUp;
-    std::printf("d3d9_check.bench=frames=%d draws=%d calls=%d draw_ms_average=%.3f draw_ms_min=%.3f "
+    const int calls = runs ? 2 * kDraws + 3 * (kDraws / kRun) : 4 * kDraws;
+    std::printf("d3d9_check.%s=frames=%d draws=%d calls=%d draw_ms_average=%.3f draw_ms_min=%.3f "
                 "polls_per_frame=%.0f submissions_per_frame=%.2f\n",
-                counted, kDraws, 4 * kDraws, totalMs / counted, minMs, double(pollsCounted) / counted,
-                double(after.submissions - before.submissions) / kFrames);
+                runs ? "bench_runs" : "bench", counted, kDraws, calls, totalMs / counted, minMs,
+                double(pollsCounted) / counted, double(after.submissions - before.submissions) / kFrames);
+    if (runs && lastFrameRead)
+    {
+        // The first and last cell of some runs, and the cells either side of
+        // a run's end: each holds its own run's texture.
+        const int cells[] = {0, kRun - 1, kRun, 2 * kRun - 1, 2 * kRun, 3 * kRun, 37 * kRun + 3, kDraws - kRun - 1,
+                             kDraws - kRun, kDraws - 1};
+        for (const int cell : cells)
+        {
+            const uint32_t colour = kColours[cell / kRun % kTextures];
+            const std::string name = "bench_runs_cell_" + std::to_string(cell);
+            Expect(name.c_str(), cell % kAcross * kCell + kCell / 2, cell / kAcross * kCell + kCell / 2,
+                   (colour >> 16) & 0xff, (colour >> 8) & 0xff, colour & 0xff);
+        }
+    }
+    device->SetTexture(0, nullptr);
+    device->SetStreamSource(0, nullptr, 0, 0);
+    device->SetIndices(nullptr);
     SafeRelease(swapFence);
     SafeRelease(syncFence);
-    SafeRelease(textures[0]);
-    SafeRelease(textures[1]);
+    SafeRelease(vb);
+    SafeRelease(ib);
+    for (IDirect3DTexture9 *&texture : textures)
+        SafeRelease(texture);
 }
 
 // Reset to another back buffer size and back: the new size, default state,
@@ -2128,6 +2223,7 @@ int Run(const Options &options)
         {"gpu_feed", &Check::GpuFeed, true},
         {"tuning", &Check::Tuning, true},
         {"bench", &Check::Bench, true, true},
+        {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},
         {"present", &Check::Present, true},
     };

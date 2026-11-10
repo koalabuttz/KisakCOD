@@ -264,13 +264,16 @@ a usage error.
 | `gpu_feed` | A frame of 600 draws, each filling a cell of its own, with a scissor rectangle set once that cuts the last column. The adapter submits such a frame in parts while it is drawn ([adapter](vulkan-legacy-adapter.md)): every draw must show whichever part it fell in, the cells no draw touches must keep the clear colour, and the scissor must hold in every part. Prints the number of parts. |
 | `tuning` | What a program changes and asks for while its device runs. Five frames of 600 draws, each under a GPU feed setting handed over through `Host::tuning` and taken up by the `Present` before it: off (no parts), after every draw (600 parts), 50 draws a part (2 to 12), 300 draws with an idle count of 10 (the frame starts with the GPU read back, so its first part goes after 10 draws; one to five parts go early, and the picture of that frame is checked on both sides of them), and an idle count no smaller than the plain one (no early part). Every change is logged, the last one back to the device's own setting. `LogDeviceStats` then reports exactly the frames, draws and parts the scene counted since it started the statistics, a second report repeats them and starts again, and a third has no frame in it. Last, another thread changes the setting and asks for the statistics eight times while this one draws and presents, as the engine's main thread does beside its render thread, and the last frame comes out whole. |
 | `bench` | Only when named (`--scene bench`), never in a full run: 120 frames of 768 draws of four D3D9 calls each, ended as `frame_loop`'s are, while another thread polls the sync fence every 20 microseconds. Prints the time the drawing thread spent on its draw calls per frame and the polls made meanwhile; passes when its frames were presented. |
+| `bench_runs` | Only when named, as `bench`: 100 frames of 768 draws in runs of eight that share a texture, an alpha reference and a pixel shader constant, as the engine's draws sorted by material do; each draw sets one vertex shader constant and draws its own quad from one static vertex and index buffer. It measures what the adapter does for a draw like the one before ([adapter](vulkan-legacy-adapter.md)). The last frame is read back and ten of its cells checked. Prints what `bench` prints. |
 | `reset` | `Reset` to 96x96 and back: the new size, default state, nothing bound, drawing at the new size. |
 | `present` | `Present` through the device and the swap chain, then `GetFrontBufferData` halfway through the next frame: it must give the frame last shown. |
 
 `scripts/tests/test_vulkan_d3d9_front.py --binary <check>` runs it the way the
 adapter's runner does: usage errors, an unknown scene, one scene alone (with no
 unsupported call), a run with `KISAK_VK_PRESENT_MODE=fifo` (its swapchain must
-be FIFO although the device asks for no vsync), the `bench` scene, and a full run in which every scene
+be FIFO although the device asks for no vsync), the `bench` scene, the
+`bench_runs` scene with the validation layer (where the adapter checks every
+block, pipeline and dynamic state it keeps between draws), and a full run in which every scene
 matches, the only unsupported call is the deliberate one, frames are presented,
 no object outlives its release, the device is destroyed at its last release and
 the validation layer reports no errors. It reads the GPU feed's setting from
