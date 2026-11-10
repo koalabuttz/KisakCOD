@@ -191,7 +191,7 @@ buffer by the core's `Recording()` number.
 | Resource | How |
 | --- | --- |
 | Managed and default textures | A lock returns CPU memory for that level (or box); unlock uploads it through staging and frees the CPU copy. A level locked again without `DISCARD` is read back from the GPU once, and its CPU copy is kept from then on, so a lock keeps the texels it does not overwrite, as in D3D9 (the game's model lighting volume relies on this). Compressed formats lock whole 4x4 blocks. |
-| SYSTEMMEM and SCRATCH textures | CPU memory only, kept; the source of `UpdateTexture` and the destination of `GetRenderTargetData`. |
+| SYSTEMMEM and SCRATCH textures | CPU memory only, kept; the source of `UpdateTexture` and the destination of `GetRenderTargetData`. Such a texture keeps what is dirty per face, in level 0's texels, as D3D9 does: all of it when new, the region of a lock without `LOCK_NO_DIRTY_UPDATE` or `LOCK_READONLY`, and what `AddDirtyRegion` (the front's `AddDirtyRect` and `AddDirtyBox`) marks. Boxes that overlap are merged; past 128 the whole face is dirty. `UpdateTexture` copies only that, in every level (halved per level, grown to whole blocks of a compressed format), in one copy command per level (`UploadRegions`), and then nothing is dirty. The game's model lighting volume patches a few 4x4x4 cells a frame this way. |
 | Render targets and depth surfaces | 2D, one level. A texture with RENDERTARGET usage can be drawn to and sampled. |
 | Multisampled targets | `CreateMultisampledRenderTarget`, `CreateMultisampledDepthStencil` and `DeviceDesc::backBufferSamples` (`SetBackBufferSamples` then `ResizeBackBuffer` to change it) take a sample count; `UsableSamples` keeps 1, and turns a count the device lacks into 4, which Vulkan requires of every device for colour and depth; `SurfaceSamples` says what a surface got. Such an image is drawn to and resolved, never sampled or locked. A pass takes its count from its targets and the pipeline key carries it (`rasterizationSamples`); a pass whose targets differ in count is skipped with a warning. `StretchRect` from a multisampled colour surface resolves it (`vkCmdResolveImage`): straight into the destination when size and format match, otherwise into a scratch image the device keeps and then a blit. `GetRenderTargetData` resolves into that scratch before the read back, and `Present` of a multisampled back buffer resolves it into the image `GetFrontBufferData` reads and blits that to the swapchain. A multisampled destination or depth source is refused with a warning. Not on the Vita: the GXM back end has none of these. |
 | Static buffers | Device memory with a CPU shadow; unlock uploads the locked range. |
@@ -399,7 +399,9 @@ kept anything it was 4,626: a draw without kept state writes and records what
 it did then, and the newer code spends a little less on doing so. On the
 Windows PC (PC run 8, RTX 2080 SUPER, hosted Win32 Debug build, mp_crash with
 12 bots) the game ran at 171.2 frames a second with the state kept and 160.8
-without, writing 101 KB and 454 KB of constants a frame.
+without, writing 101 KB and 454 KB of constants a frame. In the Release
+build (PC run 9) it ran at 451.2 and 462.0 with the state kept and 435.6
+without.
 
 Descriptor sets kept across frames (2026-11-10, same sandbox): `bench_runs`
 writes no set a frame with the kept state where it wrote 95 of its 768 draws'

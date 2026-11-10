@@ -638,6 +638,12 @@ struct ImageRegion
 // rowPitch and slicePitch receive the staging layout in bytes: a row of texels,
 // or of 4x4 blocks for block-compressed formats, and one depth slice.
 void *StageImageWrite(Core *core, Image *image, const ImageRegion &region, uint32_t *rowPitch, uint32_t *slicePitch);
+// Several regions of one image in one copy command, with at most one barrier
+// before it: what a texture's dirty boxes need. The regions must not overlap.
+// data, rowPitch and slicePitch receive one entry per region (the pitches may
+// be null). False, with nothing recorded, when any region is bad.
+bool StageImageWrites(Core *core, Image *image, const ImageRegion *regions, uint32_t count, void **data,
+                      uint32_t *rowPitch, uint32_t *slicePitch);
 
 // Host-visible memory for this frame only (vertex, index and uniform data),
 // valid until the frame slot comes round again.

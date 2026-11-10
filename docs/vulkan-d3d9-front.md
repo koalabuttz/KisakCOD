@@ -202,7 +202,9 @@ Everything in `r_rhi.h`, and the getters D3D9 pairs with each setter:
   shaders from bytecode (with `GetFunction`), vertex declarations,
   shader float constants, viewport and scissor, `Clear`, `DrawPrimitive`,
   `DrawIndexedPrimitive`, `DrawPrimitiveUP` (stream 0 unbound afterwards, as in
-  D3D9), `StretchRect`, `UpdateTexture`, `GetRenderTargetData`,
+  D3D9), `StretchRect`, `UpdateTexture` (only what is dirty, as in D3D9:
+  `AddDirtyRect`, `AddDirtyBox` and locks without `D3DLOCK_NO_DIRTY_UPDATE`
+  mark it), `GetRenderTargetData`,
   `GetFrontBufferData` (the last frame shown, kept apart from the back buffer),
   event and occlusion
   queries, the implicit swap chain, `Reset` (new back buffer size, every state
@@ -290,7 +292,8 @@ a usage error.
 | `draw` | Static vertex and index buffers, a draw from memory (stream 0 unbound after it), a textured quad, a vertex shader constant, `GetTexture`. |
 | `render_target` | A render-target texture's level with a depth surface (viewport follows the target), the getters, sampling it afterwards, `StretchRect` into the back buffer. |
 | `shadow_map` | The sun shadow's path: a D24S8 texture made with `D3DUSAGE_DEPTHSTENCIL` as the depth target beside a R5G6B5 colour target, then sampled with linear filtering as a hardware shadow map (0 behind the stored depth, 1 in front). |
-| `model_lighting` | The model lighting volume's two update paths (`r_altModelLightingUpdate` 0 and 1), with the renderer's own sizes, flags and call order: a MANAGED volume locked whole and patched in place, against a SYSTEMMEM volume locked with `D3DLOCK_NO_DIRTY_UPDATE`, `AddDirtyBox` per cell and `UpdateTexture` into a DEFAULT volume. Two frames of patches; every texel of four cells is drawn from both and must be the same: written cells, a cell written twice, a cell left alone by the second frame, a cell never written. |
+| `model_lighting` | The model lighting volume's two update paths (`r_altModelLightingUpdate` 0 and 1), with the renderer's own sizes, flags and call order: a MANAGED volume locked whole and patched in place, against a SYSTEMMEM volume locked with `D3DLOCK_NO_DIRTY_UPDATE`, `AddDirtyBox` per cell and `UpdateTexture` into a DEFAULT volume. Two frames of patches; every texel of four cells is drawn from both and must be the same: written cells, a cell written twice, a cell left alone by the second frame, a cell written in the second frame with no `AddDirtyBox` (so it reaches neither). The first `UpdateTexture` uploads the whole new volume, the second only its two cells in one copy, and one with nothing written since uploads nothing. |
+| `dirty_update` | `UpdateTexture` copies only what is dirty, in every level: a 16x16 A8R8G8B8 texture of two levels and a 16x16 DXT1 texture, SYSTEMMEM into DEFAULT. A new texture is copied whole; texels written under `D3DLOCK_NO_DIRTY_UPDATE` arrive only inside an `AddDirtyRect`, which reaches level 1 halved and a DXT1 texture grown to whole 4x4 blocks; a lock without the flag marks its own rect. The bytes each update uploads are counted, and each level is drawn 1:1 and read back. |
 | `references` | Counts of textures and their levels, `GetContainer`, `QueryInterface`, a released texture that still draws while bound and goes when unbound, the back buffer's and swap chain's own counts (last `Release` returns 0) and the device reference they hold. |
 | `threads` | A worker thread creating and filling textures while this thread draws and presents; the last one drawn and read back; nothing left alive. |
 | `queries` | Support checks, an event query and an occlusion query finishing (with samples), and an event issued right after `Present` (the engine's swap fence) finishing without a flush while the next frame records; polled with `D3DGETDATA_FLUSH` while its frame is unfinished, it submits the next frame's work once, and the frame goes on with its state and contents. |
@@ -400,6 +403,16 @@ the scene; the game has run with the state kept and without on the Windows PC
 `bench_runs` scenes without the kept state, so their timings and instruction
 counts can be set beside the default's (the [adapter](vulkan-legacy-adapter.md)
 has the counts).
+
+The `dirty_update` scene and the new points of `model_lighting` (2026-11-10,
+same sandbox) pass on x86_64 Debug and RelWithDebInfo with validation in the
+script's configurations, and on i386 without validation. With `UpdateTexture`
+copying everything, as it did before, both fail: the unmarked cells and texels
+arrive and the byte counts are the whole level's; with a DXT1 rect not grown
+to whole blocks, validation fails. In the game this is the model lighting
+volume (`r_altModelLightingUpdate 1`, the default): every frame that patched
+a few 4x4x4 cells uploaded the whole 1 MB volume, about one 1 MB upload every
+other frame in PC run 9; now it uploads the patched cells, 256 bytes each.
 
 The `multisample` scene (2026-11-10, same sandbox, lavapipe, which has 1 and
 4 samples) passes its 24 points on x86_64 Debug and RelWithDebInfo with
@@ -613,6 +626,24 @@ busy for about 0.9 ms in passes of a 5.8 ms frame, so the PC still waits for
 the CPU. The slowest frame of the four Vulkan launches was 126 ms, one
 pipeline built in the window in 116.75 ms; every other slow frame was 13 to
 18 ms. Report: `renderer/vulkan-backend-pc-run-8.md`.
+PC run 9 (2026-11-10, 1883bf69, same PC and scene, the machine alone) is the
+first in an optimised build: the Win32 Release artifact of a manual `vulkan`
+run. Vulkan runs at 451.2 and 462.0 frames a second and the real `d3d9.dll`
+at 479.6 and 481.9, so Vulkan is about 5% behind, where the Debug build of
+run 8 put it about 20% behind: most of that gap was the back end's own code
+running unoptimised. With `r_vkKeepDrawState 0` Vulkan runs at 435.6, about
+4% below its default, writing 281 descriptor sets and 595 KB of constants a
+frame against none and 129 KB. A frame holds about 700 draws and 10.5
+passes; the GPU is busy for 0.4 ms in passes and idle for 1.3 ms before the
+frame, so the PC still waits for the CPU. The slowest frame of a window was
+7 to 12 ms (one pipeline built during play in 7.41 ms). A launch's first
+frame takes about 1.08 s, of which 45 to 50 ms is its 6,200 or so texture
+uploads (about 190 MB) and nearly all the rest the GPU waiting for work, and
+the 71 pipelines of the first view take 340 ms with an empty cache and 89 ms
+from it. Over a launch the device uploads 14 to 17 GB of textures in about
+27,000 to 30,000 uploads, most of them 1 MB, which is close to one every
+other frame during play. Every launch quit cleanly. Report:
+`renderer/vulkan-backend-pc-run-9.md`.
 
 The device probe with `--backend vulkan` runs `r_init.cpp`'s device start
 unchanged (`R_PreCreateWindow`, `R_CreateWindow`, `R_CreateDevice`), clears,
@@ -756,7 +787,7 @@ evidence):
   (`renderer/model-lighting/luma_grid.py` in the project files).
 
 Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11}.md`,
-`renderer/vulkan-backend-pc-run-{6,7,8}.md` and
+`renderer/vulkan-backend-pc-run-{6,7,8,9}.md` and
 `renderer/model-lighting/laptop-run-1.md` in the project files.
 
 ## Next
@@ -767,12 +798,12 @@ anti-aliasing (above); then what a pass split by the feed costs on its
 driver, and whether a feed setting is better than the default at all (laptop
 run 12 measures the settings in one launch, and the kept draw state with
 them). Laptop run 13 sets Vulkan with `r_aaSamples 4`, now that the back
-end has multisampled targets, beside DXVK with 4. On the Windows PC the gap
-is the CPU's time per frame (PC run 8: about 80% of Direct3D 9 in the Debug
-build). The PC's runs so far used the hosted Debug build, where the back end's
-own work runs unoptimised and the system's `d3d9.dll` does not, so the next
-PC run compares the two in the Release build of a manual `vulkan` run (above)
-before more work goes into the time per draw (the front's lock, a clean flag
-for textures). Then the long frame the laptop sees about every two minutes,
-which the `slow frame` lines are there to name, and the pipelines built
-during play: one took 117 ms on the PC.
+end has multisampled targets, beside DXVK with 4. On the Windows PC, in a
+Release build, Vulkan is about 5% behind Direct3D 9 (PC run 9) and the PC
+waits for the CPU: what is left is the time per frame. The 1 MB uploads
+during play were the model lighting volume, which `UpdateTexture` now copies
+only in its patched cells; the next PC run measures that, then the front's
+lock. Measure the PC in the Release build of a manual `vulkan`
+run from now on. Then the long frame the laptop sees about every two
+minutes, which the `slow frame` lines are there to name, and the pipelines
+built during play.

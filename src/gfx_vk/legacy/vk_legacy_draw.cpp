@@ -2416,20 +2416,88 @@ void UpdateTexture(Device *device_, Texture *src, Texture *dst)
         return;
     }
     const uint32_t levels = std::min(src->desc.levels, dst->desc.levels);
+    const TextureDesc &desc = dst->desc;
+    const FormatInfo &format = *dst->format;
+    std::vector<Box> boxes;
     for (uint32_t face = 0; face < dst->faces; ++face)
     {
+        Texture::Dirty *dirty = face < src->dirty.size() ? &src->dirty[face] : nullptr;
+        const bool all = !dirty || dirty->all;
+        if (!all && dirty->boxes.empty())
+            continue; // nothing written since the last update
         for (uint32_t level = 0; level < levels; ++level)
         {
             const Subresource &from = src->subresources[face * src->desc.levels + level];
             if (from.cpu.empty())
                 continue; // never written
-            // The whole level is replaced, so nothing is read back.
-            LockedRect locked;
-            if (!LockRect(device_, dst, face, level, nullptr, d3d::LOCK_DISCARD, locked))
+            if (all)
+            {
+                // The whole level is replaced, so nothing is read back.
+                LockedRect locked;
+                if (!LockRect(device_, dst, face, level, nullptr, d3d::LOCK_DISCARD, locked))
+                    return;
+                Subresource &to = dst->subresources[face * dst->desc.levels + level];
+                std::memcpy(to.cpu.data(), from.cpu.data(), std::min(to.cpu.size(), from.cpu.size()));
+                UnlockRect(device_, dst, face, level);
+                continue;
+            }
+            // The dirty boxes in this level's texels, grown to whole blocks of
+            // a compressed format; two may meet once scaled down.
+            const uint32_t width = LevelSize(desc.width, level), height = LevelSize(desc.height, level);
+            const uint32_t depth = desc.kind == TextureKind::Volume ? LevelSize(desc.depth, level) : 1;
+            const uint32_t round = (1u << level) - 1;
+            boxes.clear();
+            for (const Box &top : dirty->boxes)
+            {
+                Box box;
+                box.left = std::min(top.left >> level, width - 1);
+                box.top = std::min(top.top >> level, height - 1);
+                box.front = std::min(top.front >> level, depth - 1);
+                box.right = std::min(std::max((top.right + round) >> level, box.left + 1), width);
+                box.bottom = std::min(std::max((top.bottom + round) >> level, box.top + 1), height);
+                box.back = std::min(std::max((top.back + round) >> level, box.front + 1), depth);
+                if (format.compressed)
+                {
+                    box.left &= ~3u;
+                    box.top &= ~3u;
+                    box.right = std::min((box.right + 3) & ~3u, width);
+                    box.bottom = std::min((box.bottom + 3) & ~3u, height);
+                }
+                AddBoxApart(boxes, box);
+            }
+            EndPassIfOpen(device);
+            if (!UploadRegions(device, *dst, face, level, boxes.data(), static_cast<uint32_t>(boxes.size()),
+                               from.cpu.data()))
                 return;
             Subresource &to = dst->subresources[face * dst->desc.levels + level];
-            std::memcpy(to.cpu.data(), from.cpu.data(), std::min(to.cpu.size(), from.cpu.size()));
-            UnlockRect(device_, dst, face, level);
+            to.uploaded = true;
+            if (!to.cpu.empty() && to.cpu.size() == from.cpu.size())
+            {
+                // A level kept on the CPU (locked again since) gets the same bytes.
+                uint32_t rowBytes = 0, rows = 0, slices = 0;
+                LevelLayout(*dst, level, rowBytes, rows, slices);
+                const size_t slice = static_cast<size_t>(rowBytes) * rows;
+                for (const Box &box : boxes)
+                {
+                    const size_t x = static_cast<size_t>(format.compressed ? box.left / 4 : box.left) * format.blockBytes;
+                    const size_t bytes =
+                        static_cast<size_t>(format.compressed ? (box.right - box.left + 3) / 4 : box.right - box.left)
+                        * format.blockBytes;
+                    const uint32_t y0 = format.compressed ? box.top / 4 : box.top;
+                    const uint32_t y1 = format.compressed ? (box.bottom + 3) / 4 : box.bottom;
+                    for (uint32_t z = box.front; z < box.back; ++z)
+                        for (uint32_t y = y0; y < y1; ++y)
+                        {
+                            const size_t at = z * slice + static_cast<size_t>(y) * rowBytes + x;
+                            std::memcpy(to.cpu.data() + at, from.cpu.data() + at, bytes);
+                        }
+                }
+            }
+        }
+        if (dirty)
+        {
+            dirty->all = false;
+            dirty->boxes.clear();
         }
     }
 }

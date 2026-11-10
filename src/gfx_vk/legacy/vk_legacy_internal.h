@@ -84,7 +84,17 @@ struct Texture
     std::vector<Subresource> subresources;          // face * levels + level
     std::vector<std::unique_ptr<Surface>> surfaces; // GetSurfaceLevel views, same index
     std::string name;
+    // SYSTEMMEM and SCRATCH textures: what the next UpdateTexture copies, per
+    // face, in level 0's texels. The boxes do not overlap; past
+    // kDirtyBoxLimit of them the whole face is dirty.
+    struct Dirty
+    {
+        bool all = true; // D3D9 counts a new texture dirty all over
+        std::vector<Box> boxes;
+    };
+    std::vector<Dirty> dirty;
 };
+constexpr size_t kDirtyBoxLimit = 128;
 
 struct Surface
 {
@@ -515,6 +525,18 @@ void DestroyTextureNow(Device &device, Texture *texture);
 // The GPU buffer and offset a draw reads, marking it used by this submission.
 VkBuffer DrawBuffer(Device &device, GpuBuffer &buffer);
 uint32_t LevelSize(uint32_t size, uint32_t level);
+// Bytes of one level of one face, as Subresource::cpu holds it: rows of
+// blocks tightly packed, rows a slice, depth slices.
+void LevelLayout(const Texture &texture, uint32_t level, uint32_t &rowBytes, uint32_t &rows, uint32_t &depth);
+// Copies regions of one level from data, the whole level laid out as
+// Subresource::cpu, to the texture's image in one copy command (one texture
+// upload in the statistics). The regions are in texels, cover whole blocks of
+// a compressed format, and do not overlap.
+bool UploadRegions(Device &device, Texture &texture, uint32_t face, uint32_t level, const Box *boxes,
+                   uint32_t count, const uint8_t *data);
+// Adds add to boxes so that none overlaps: a box it overlaps is merged into
+// it, again until none does.
+void AddBoxApart(std::vector<Box> &boxes, Box add);
 
 // vk_legacy_draw.cpp
 // Begins the core's frame on first use; false while the frame is skipped.

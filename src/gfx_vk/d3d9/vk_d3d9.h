@@ -133,6 +133,10 @@ struct DeviceCounters
     uint64_t occlusionResults;
     uint64_t occlusionResultsZero;
     uint64_t occlusionSamples;
+    // Texture uploads so far (each one copy command, of one or more regions
+    // of a level) and their bytes (Vulkan back end).
+    uint64_t textureUploads;
+    uint64_t textureUploadBytes;
 };
 bool Counters(IDirect3DDevice9 *device, DeviceCounters &out);
 
