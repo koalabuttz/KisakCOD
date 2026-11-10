@@ -167,15 +167,16 @@ The first runs of the x86_64 game with game data, RelWithDebInfo, sound off,
   was up (`!r_glob.screenUpdateNotify`, `rb_backend.cpp`). The error under it
   was "Tried to use 'cinematicY' when it isn't valid": the loading screen
   samples the movie's images and that build never set them. Fixed
-  ([linux-sp-game.md](linux-sp-game.md#fixes-the-first-level-loads-found));
-  the fix has not been run on a level yet. The i386 runs never met this
-  because they always had movies on.
+  ([linux-sp-game.md](linux-sp-game.md#fixes-the-first-level-loads-found)).
+  With the fix (commit a418999), killhouse and cargoship load and pass every
+  step in a build without movies (PC, Linux in WSL, below). The i386 runs
+  never met this because they always had movies on.
 - **Built with movies** (the same commit): killhouse and cargoship load in 13
   and 11 s and pass every step.
 - **Step 1, all 21 levels** (commit 3019927, movies on): every level loads,
   holds 45 s, answers the console and quits with exit 0. airlift is among
-  them; without that commit's fix the Windows x64 game crashes there (below),
-  and the x86_64 Linux game was not run on airlift without it.
+  them. Without that commit's fix the Windows x64 game crashes there
+  (below); the x86_64 Linux game does not (PC, Linux in WSL, below).
 - Steps 4 and 5 (chain, save and load) on x86_64 have not been run yet.
 
 ## Windows x64 tour (PC, 2026-11-10)
@@ -187,7 +188,9 @@ comparison on the same game data. A local run, not CI evidence.
   4.5 s into the level, three launches of three** (and with the x64 build of
   7 November): a read of address 0xc in `Phys_ObjCreate`, called from
   `FX_SpawnModelPhysics`. The cause is a 64-bit-only wrong read, fixed in
-  shared code; the Windows game has not been re-run with the fix yet.
+  shared code. With the fix (the hosted x64 Release build of commit
+  a418999), airlift held 60 s in the level and quit with exit code 0 three
+  launches of three, and killhouse 45 s.
 - The level chain (killhouse, cargoship, coup, blackout in one process), a
   save loaded in the same process and in a fresh one, and a death with its
   retry all work there.
@@ -195,3 +198,21 @@ comparison on the same game data. A local run, not CI evidence.
   too. hunted "Max scene drawsurfs exceed" 5 times, ac130 "Too many visible
   static models" twice, "couldn't find path to goal" in airplane twice and in
   armada 19 times.
+
+## x86_64 fix checks (PC, Linux in WSL, 2026-11-10)
+
+Three runs of the level sweep on the Windows PC's Linux (WSL, Xvfb, Mesa's
+software Vulkan device, sound off), each level held 30 to 60 s. Local runs,
+not CI evidence.
+
+| Build | Levels | Result |
+| --- | --- | --- |
+| master 85dad4f7, before both fixes | killhouse, airlift | all steps seen, exit 0 |
+| a418999, both fixes | killhouse, airlift | all steps seen, exit 0 |
+| a418999, built without movies | killhouse, cargoship | all steps seen, exit 0 |
+
+No assertion, error or warning in any of the six logs. The unfixed build
+holding airlift means the wrong read lands on harmless bytes in this Linux
+build; the Windows runs above are what show the fix. Under software
+rendering a level took 25 to 54 s to load, against 5 to 9 s with a GPU on
+Windows; the sweep's default load timeout (240 s) covers that.

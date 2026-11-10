@@ -526,6 +526,9 @@ an effect model's physics preset read through a void pointer at an offset
 that is right on i386 only (airlift crashed on Windows x64; the **void**
 report above now finds the shape), and a game built without movies loading
 no level at all ([linux-sp-game.md](linux-sp-game.md#fixes-the-first-level-loads-found)).
+Both fixes have since held on a level: airlift three launches of three on
+Windows x64, killhouse and cargoship in an x86_64 Linux build without movies
+([linux-sp-levels.md](linux-sp-levels.md#x86_64-fix-checks-pc-linux-in-wsl-2026-11-10)).
 A third was found by reading: loading a save put a dynamic entity's physics
 body into the 32-bit `physObjId` field as a pointer, not as the object id the
 readers expect. No tool here reports that shape; clang's
