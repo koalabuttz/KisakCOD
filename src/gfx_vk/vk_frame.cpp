@@ -5,6 +5,7 @@
 #include "vk_core_internal.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 
 namespace gfx_vk
@@ -445,14 +446,57 @@ uint32_t PendingSubmissions(Core *core)
     return submitted > done ? static_cast<uint32_t>(std::min<uint64_t>(submitted - done, UINT32_MAX)) : 0;
 }
 
-uint64_t PollCompletedSerial(Core &core)
+namespace
 {
-    if (core.timeline)
+// How long an answer about the GPU's progress stands for (RefreshProgress in
+// vk_core.h). Far under a frame, and under the 20 microseconds between the
+// engine's own polls of a fence (R_ShouldPollGpuFence), but long enough for
+// a thread to take the caller's lock after it asked.
+constexpr int64_t kProgressFreshNs = 10000;
+
+int64_t SteadyNs()
+{
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+
+// Any thread: touches nothing of the core but the two atomics, and what never
+// changes while the core exists (the device, its timeline, the dispatch).
+void AskProgress(Core &core)
+{
+    // Read before asking: the answer is then at least as new as the time
+    // kept with it. Never 0, which means never asked.
+    const int64_t asked = std::max<int64_t>(SteadyNs(), 1);
+    uint64_t value = 0;
+    if (core.timeline && core.vk.vkGetSemaphoreCounterValue(core.dev, core.timeline, &value) == VK_SUCCESS)
     {
-        uint64_t value = 0;
-        if (core.vk.vkGetSemaphoreCounterValue(core.dev, core.timeline, &value) == VK_SUCCESS)
-            core.completedSerial = std::max(core.completedSerial, value);
+        // Only upwards: two threads may ask at once and store out of order.
+        uint64_t seen = core.progress.load(std::memory_order_relaxed);
+        while (seen < value && !core.progress.compare_exchange_weak(seen, value, std::memory_order_relaxed))
+        {
+        }
     }
+    core.progressAskedNs.store(asked, std::memory_order_relaxed);
+}
+
+bool ProgressFresh(const Core &core)
+{
+    const int64_t asked = core.progressAskedNs.load(std::memory_order_relaxed);
+    return asked && SteadyNs() - asked < kProgressFreshNs;
+}
+} // namespace
+
+void RefreshProgress(Core *core)
+{
+    if (!ProgressFresh(*core))
+        AskProgress(*core);
+}
+
+uint64_t PollCompletedSerial(Core &core, bool fresh)
+{
+    if (fresh || !ProgressFresh(core))
+        AskProgress(core);
+    core.completedSerial = std::max(core.completedSerial, core.progress.load(std::memory_order_relaxed));
     return core.completedSerial;
 }
 
@@ -764,7 +808,7 @@ void WaitIdle(Core *core)
     DrainRecorder(*core);
     if (core->dev)
         core->vk.vkDeviceWaitIdle(core->dev);
-    PollCompletedSerial(*core);
+    PollCompletedSerial(*core, true);
     for (uint32_t slot = 0; slot < kFramesInFlight; ++slot)
     {
         if (core->frames[slot].lastSerial <= core->completedSerial && slot != core->frameIndex)

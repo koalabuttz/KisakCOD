@@ -24,6 +24,7 @@
 #include <SDL3/SDL_vulkan.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -436,6 +437,7 @@ public:
     void Queries();
     void FrameLoop();
     void GpuFeed();
+    void Bench();
     void ResetDevice();
     void Present();
 };
@@ -1116,6 +1118,112 @@ void Check::GpuFeed()
     std::printf("d3d9_check.gpu_feed=draws=%d parts=%llu\n", kDraws, static_cast<unsigned long long>(parts));
 }
 
+// Not part of a full run: --scene bench. What a frame of the engine's size
+// costs the thread that draws it, with the engine's other habits around it:
+// 768 draws of four D3D9 calls each (a constant, a texture, a render state,
+// the draw), while a second thread polls the GPU sync fence with FLUSH every
+// 20 microseconds, as the main thread does in R_SyncGpu for as long as the
+// GPU is behind (here all the time, whatever the GPU: the worst case). Each
+// frame ends as FrameLoop's do. Prints the time the drawing thread spent on
+// its draw calls per frame (wall clock, so the cost of sharing the front's
+// lock with the poller is in it) and the polls made meanwhile. The numbers
+// depend on the machine and on what else runs on it; the scene passes when
+// its frames were presented.
+void Check::Bench()
+{
+    constexpr int kFrames = 120;
+    constexpr int kWarmUp = 20;
+    constexpr int kDraws = 768;
+    constexpr int kCell = 4;
+    constexpr int kAcross = int(kSize) / kCell;
+    using Clock = std::chrono::steady_clock;
+    IDirect3DQuery9 *swapFence = nullptr, *syncFence = nullptr;
+    IDirect3DTexture9 *textures[2] = {FilledTexture(2, 2, [](UINT, UINT) { return Argb(255, 255, 255, 255); }),
+                                      FilledTexture(2, 2, [](UINT, UINT) { return Argb(255, 128, 128, 128); })};
+    if (!textures[0] || !textures[1]
+        || !Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &swapFence), "CreateQuery(swap fence)")
+        || !Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &syncFence), "CreateQuery(sync fence)"))
+    {
+        SafeRelease(swapFence);
+        SafeRelease(textures[0]);
+        SafeRelease(textures[1]);
+        return;
+    }
+    std::atomic<bool> stop{false};
+    std::atomic<uint64_t> polls{0};
+    IDirect3DQuery9 *const polled = syncFence;
+    std::thread mainThread([&] {
+        Clock::time_point last = Clock::now();
+        while (!stop.load(std::memory_order_relaxed))
+        {
+            const Clock::time_point now = Clock::now();
+            if (now - last < std::chrono::microseconds(20))
+                continue;
+            last = now;
+            BOOL done = FALSE;
+            polled->GetData(&done, sizeof(done), D3DGETDATA_FLUSH);
+            polls.fetch_add(1, std::memory_order_relaxed);
+        }
+    });
+    const front::DeviceCounters before = Counters();
+    double totalMs = 0.0, minMs = 1e9;
+    uint64_t pollsCounted = 0;
+    for (int frame = 0; frame < kFrames; ++frame)
+    {
+        Reset(Argb(255, 0, 64, 0));
+        Ok(device->SetPixelShader(psTexture), "SetPixelShader");
+        const uint64_t pollsBefore = polls.load(std::memory_order_relaxed);
+        const Clock::time_point start = Clock::now();
+        for (int draw = 0; draw < kDraws; ++draw)
+        {
+            const float offset[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+            device->SetVertexShaderConstantF(0, offset, 1);
+            device->SetTexture(0, textures[draw & 1]);
+            device->SetRenderState(D3DRS_ALPHAREF, DWORD(draw & 0xff));
+            const float x = float(draw % kAcross * kCell);
+            const float y = float(draw / kAcross * kCell);
+            Vertex quad[6];
+            QuadList(quad, x, y, x + kCell, y + kCell, 0.5f, Argb(255, 255, 255, 255), kSize);
+            device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, quad, sizeof(Vertex));
+        }
+        const double ms = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+        if (frame >= kWarmUp)
+        {
+            totalMs += ms;
+            minMs = ms < minMs ? ms : minMs;
+            pollsCounted += polls.load(std::memory_order_relaxed) - pollsBefore;
+        }
+        BOOL done = FALSE;
+        int waits = 0;
+        while (swapFence->GetData(&done, sizeof(done), D3DGETDATA_FLUSH) == S_FALSE && waits < 20000)
+        {
+            ++waits;
+            if (waits > 200)
+                SDL_Delay(1);
+            else
+                std::this_thread::yield();
+        }
+        Ok(syncFence->Issue(D3DISSUE_END), "Issue(sync fence)");
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        Ok(swapFence->Issue(D3DISSUE_END), "Issue(swap fence)");
+    }
+    stop = true;
+    mainThread.join();
+    device->SetTexture(0, nullptr);
+    const front::DeviceCounters after = Counters();
+    Equal("bench_frames_presented",
+          (after.presents - before.presents) + (after.presentsSkipped - before.presentsSkipped), uint64_t(kFrames));
+    const int counted = kFrames - kWarmUp;
+    std::printf("d3d9_check.bench=frames=%d draws=%d calls=%d draw_ms_average=%.3f draw_ms_min=%.3f "
+                "polls_per_frame=%.0f submissions_per_frame=%.2f\n",
+                counted, kDraws, 4 * kDraws, totalMs / counted, minMs, double(pollsCounted) / counted,
+                double(after.submissions - before.submissions) / kFrames);
+    SafeRelease(swapFence);
+    SafeRelease(syncFence);
+    SafeRelease(textures[0]);
+    SafeRelease(textures[1]);
+}
+
 // Reset to another back buffer size and back: the new size, default state,
 // and drawing at that size.
 void Check::ResetDevice()
@@ -1328,6 +1436,7 @@ int Run(const Options &options)
         const char *name;
         void (Check::*run)();
         bool needsDevice;
+        bool byNameOnly = false; // not part of a full run
     };
     const Scene scenes[] = {
         {"adapter", &Check::Adapter, false},
@@ -1340,6 +1449,7 @@ int Run(const Options &options)
         {"queries", &Check::Queries, true},
         {"frame_loop", &Check::FrameLoop, true},
         {"gpu_feed", &Check::GpuFeed, true},
+        {"bench", &Check::Bench, true, true},
         {"reset", &Check::ResetDevice, true},
         {"present", &Check::Present, true},
     };
@@ -1349,7 +1459,7 @@ int Run(const Options &options)
     std::string error;
     for (const Scene &scene : scenes)
     {
-        if (!options.only.empty() && options.only != scene.name)
+        if (options.only.empty() ? scene.byNameOnly : options.only != scene.name)
             continue;
         ++ran;
         if (scene.needsDevice && !check.device)

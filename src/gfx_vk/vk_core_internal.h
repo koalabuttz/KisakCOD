@@ -6,6 +6,7 @@
 
 #include "vk_core.h"
 
+#include <atomic>
 #include <condition_variable>
 #include <cstdarg>
 #include <cstring>
@@ -295,6 +296,10 @@ public:
     VkSemaphore timeline = VK_NULL_HANDLE;
     uint64_t nextSerial = 1;
     uint64_t completedSerial = 0; // last value seen finished
+    // The timeline's value when the device was last asked, and when that was
+    // (steady clock, nanoseconds; 0: never). Any thread asks (RefreshProgress).
+    std::atomic<uint64_t> progress{0};
+    std::atomic<int64_t> progressAskedNs{0};
 
     VkSwapchainKHR swapchain = VK_NULL_HANDLE;
     SwapchainInfo swapInfo{};
@@ -420,7 +425,9 @@ bool AbandonFrame(Core &core);
 void DestroyFrameResources(Core &core);
 // Waits until the timeline reaches serial (or it is already known done).
 bool WaitSerial(Core &core, uint64_t serial);
-uint64_t PollCompletedSerial(Core &core);
+// The last serial the GPU has finished, from an answer at most
+// kProgressFreshNs old; fresh asks the device now (after a wait for it).
+uint64_t PollCompletedSerial(Core &core, bool fresh = false);
 // The serial the work recorded now will be submitted under.
 uint64_t PendingSerial(const Core &core);
 void Transition(Core &core, Image *image, VkImageLayout layout, VkPipelineStageFlags2 stages, VkAccessFlags2 access);

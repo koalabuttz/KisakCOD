@@ -475,6 +475,15 @@ bool SerialFinished(Core *core, uint64_t serial);
 uint64_t RecordedSerial(const Core *core);
 // Submissions made (Flush, Present) that the GPU has not finished.
 uint32_t PendingSubmissions(Core *core);
+// SerialFinished and PendingSubmissions ask the device how far it has got,
+// which is a system call on most drivers. The answer is kept for 10
+// microseconds, so a thread that polls in a loop asks at most that often.
+// RefreshProgress is that question alone, and the one call here that any
+// thread may make at any time while the core exists, whatever another thread
+// is doing with the core: a caller that serialises its core calls with a lock
+// (the D3D9 front) asks before it takes the lock, and the poll that follows
+// under the lock then makes no system call.
+void RefreshProgress(Core *core);
 
 // ---- Passes and image state ------------------------------------------------------
 //

@@ -162,4 +162,12 @@ void BackendCounters(const Backend *backend, DeviceCounters &out)
     out.fenceFlushes = backend && backend->legacy ? lg::Stats(backend->legacy).fenceFlushes : 0;
     out.feedFlushes = backend && backend->legacy ? lg::Stats(backend->legacy).feedFlushes : 0;
 }
+
+void BackendPollProgress(Backend *backend)
+{
+    // The core's one call for any thread (vk_core.h). The core is created
+    // before the device has objects and destroyed after the last has gone.
+    if (backend && backend->core)
+        RefreshProgress(backend->core);
+}
 } // namespace gfx_vk::d3d9

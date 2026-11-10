@@ -20,6 +20,7 @@
 
 #include <gfx_vk/legacy/vk_legacy.h>
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -40,7 +41,41 @@ void HostLog(const Host &host, const char *format, ...);
 // setter, a device method from a resource's), and it must outlive the
 // objects, because a Release can destroy the device whose method is running.
 // The renderer has one device, so a lock per device would gain nothing.
-std::recursive_mutex &FrontMutex();
+//
+// A thread that finds the lock taken first tries again for a short while
+// without sleeping, as DXVK's device lock does: nearly every call holds it
+// for a microsecond or less, and a sleeping waiter costs the holder a system
+// call to wake it at the end of its own call. The engine's main thread polls
+// a fence thousands of times a second while the render thread draws
+// (R_SyncGpu), so with a plain mutex the render thread paid that on a good
+// part of its calls. A waiter that is still out of luck after kSpins tries
+// (tens of microseconds: the holder is waiting for the GPU, building a
+// pipeline or not running) sleeps on the mutex after all.
+// KISAK_VK_FRONT_SPIN=0 makes every waiter sleep at once, to compare.
+//
+// The PS Vita build keeps the plain recursive mutex: thread_local is emulated
+// there (a library call on every use), and its calls come from one thread.
+#if defined(__vita__)
+using FrontMutexType = std::recursive_mutex;
+#else
+class FrontMutexType
+{
+public:
+    FrontMutexType();
+    void lock();
+    void unlock();
+
+private:
+    static constexpr uint32_t kSpins = 2000;
+    std::mutex mutex_;
+    // The thread inside (a token of its own, see lock()), null when free.
+    // Only that thread stores its token, so a thread that reads its own is in.
+    std::atomic<const void *> owner_{nullptr};
+    uint32_t depth_ = 0; // the owner's
+    uint32_t spins_ = kSpins;
+};
+#endif
+FrontMutexType &FrontMutex();
 class FrontLock
 {
 public:
@@ -446,6 +481,8 @@ public:
     void ObjectCreated() { ++objects_; }
     void ObjectDestroyed();
     lg::Device *legacy() const { return legacy_; }
+    // Without FrontLock, from any thread (BackendPollProgress).
+    void PollProgress() { BackendPollProgress(backend_); }
     D3D9Window window() const { return window_; }
     // The window is going: the core lets go of its swapchain and surface.
     void DetachWindow();

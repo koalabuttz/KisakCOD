@@ -12,7 +12,8 @@
 //                                on Windows, Linux and macOS
 //   src/gfx_gxm (KISAK_GFX_GXM)  the PS Vita's sceGxm and its one screen
 //
-// A build links exactly one. Everything here is called under FrontLock.
+// A build links exactly one. Everything here is called under FrontLock,
+// except BackendPollProgress.
 
 #include "vk_d3d9.h"
 
@@ -56,4 +57,10 @@ uint64_t BackendTextureMemory(const Backend *backend);
 bool BackendWindowSize(const Backend *backend, uint32_t &width, uint32_t &height);
 // Fills the back end's part of DeviceCounters (validation, submissions).
 void BackendCounters(const Backend *backend, DeviceCounters &out);
+// Called without FrontLock, from any thread, before a query is asked for its
+// result under the lock: a back end whose answer takes a system call makes
+// it here, so that a thread polling a fence does not hold the lock every
+// other thread's D3D9 calls need while it is in the kernel. The back end
+// outlives the call (the query keeps its device alive). Null is ignored.
+void BackendPollProgress(Backend *backend);
 } // namespace gfx_vk::d3d9

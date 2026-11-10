@@ -9,6 +9,8 @@ involved. The checks:
   unknown-scene  --scene with a name no scene has fails at the "usage" stage
   one-scene      --scene runs that scene alone and passes, with no unsupported
                  call
+  bench          --scene bench, which a full run leaves out, passes and prints
+                 its timings (they depend on the machine and are not judged)
   full           a full run passes: every scene in SCENES ran, had points and
                  no mismatch; the only unsupported call is the one the states
                  scene makes on purpose; frames were presented; no object
@@ -101,6 +103,19 @@ def main():
     checks.expect('one scene made no unsupported call',
                   found.get('d3d9_check.unsupported_calls') == '0 expected=0',
                   found.get('d3d9_check.unsupported_calls', 'missing'))
+
+    # bench (timings: without the validation layer)
+    code, stdout, _ = run(binary, ['--scene', 'bench', '--validation', 'off'], env)
+    found, scenes = parse(stdout)
+    checks.expect('bench passes', code == 0 and found.get('d3d9_check') == 'passed', f'status {code}\n{stdout}')
+    checks.expect('bench ran alone', [s[0] for s in scenes] == ['bench'], repr(scenes))
+    bench = found.get('d3d9_check.bench', '')
+    checks.expect('bench prints its timings',
+                  re.match(r'frames=\d+ draws=\d+ calls=\d+ draw_ms_average=[\d.]+ draw_ms_min=[\d.]+ '
+                           r'polls_per_frame=\d+ submissions_per_frame=[\d.]+$', bench) is not None,
+                  bench or 'missing')
+    if bench:
+        print(f'bench: {bench}')
 
     # full
     code, stdout, stderr = run(binary, ['--validation', args.validation], env)

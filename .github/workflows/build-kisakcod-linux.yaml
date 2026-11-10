@@ -2856,6 +2856,12 @@ jobs:
           "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene gpu_feed --validation off \
             | tee "$RUNNER_TEMP/tsan-feed.log"
           grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan-feed.log"
+          # The lock itself under the engine's load: one thread makes 3072
+          # calls a frame while another polls a fence every 20 microseconds,
+          # asking the GPU's progress outside the lock.
+          "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene bench --validation off \
+            | tee "$RUNNER_TEMP/tsan-bench.log"
+          grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan-bench.log"
           # Frames, draws, read-back and swapchain rebuilds with the record
           # thread on.
           KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-probe" --draw --frames 60 --resize \

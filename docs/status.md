@@ -138,7 +138,7 @@ As of 2026-11-09.
 | PR | What | Waits on |
 | --- | --- | --- |
 | 120 | Record the Vulkan probe's first GPU runs (docs) | Review. |
-| 152 | Vulkan back end: record commands on a second thread, as DXVK does, and submit a frame ahead of its `Present` when the engine waits on its swap fence ([core](vulkan-core.md), [adapter](vulkan-legacy-adapter.md)) | Laptop run 8: frame rate against DXVK. |
+| 152 | Vulkan back end: record commands on a second thread, as DXVK does; submit a frame to the GPU in parts while it is drawn; keep the main thread's fence polls from holding up the render thread ([core](vulkan-core.md), [adapter](vulkan-legacy-adapter.md), [front](vulkan-d3d9-front.md#threads)) | Laptop run 9: frame rate against DXVK with the GPU feed. Run 8 (record thread only) had 121 fps against 150. |
 
 ## Laptop and PC runs still to do
 
@@ -153,10 +153,14 @@ As of 2026-11-09.
   Windows game needs a Win32 host for the front first).
 - Vulkan probe with the Khronos validation layer (synchronisation checks) on a
   real GPU; the laptop and PC runs so far had no layer installed.
-- Vulkan back end frame rate with the record thread (PR 152) on the laptop:
-  default, swap fence flush off, both off and DXVK, interleaved (steps in the
-  project files, `renderer/vulkan-backend-laptop-run-8-steps.md`). Run 6 had
-  Vulkan at 116 fps against 151 to 159 on DXVK. Then the same on the PC.
+- Vulkan back end frame rate (PR 152) on the laptop. Run 6 had Vulkan at 116
+  fps against 151 to 159 on DXVK. Run 8, with the record thread, had 121 fps
+  against 150 on battery: the GPU worked 6.3 ms of each 8.2 ms frame, because
+  a frame reached it only when it was fully drawn
+  (`renderer/vulkan-backend-laptop-run-8.md` in the project files). Run 9
+  measures the GPU feed and the front's lock change: default, feed off, lock
+  spin off and DXVK, interleaved (`renderer/vulkan-backend-laptop-run-9-steps.md`).
+  Then the same on the PC.
 
 ## Roadmap
 

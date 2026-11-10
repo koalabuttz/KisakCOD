@@ -948,11 +948,12 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
         self.assertIn('-DCMAKE_CXX_FLAGS=-fsanitize=thread', run)
         self.assertIn('--scene threads', run)
         self.assertIn('--scene frame_loop', run)
-        # The frame loop again with a submission after every draw, and a
-        # frame submitted in parts.
+        # The frame loop again with a submission after every draw, a frame
+        # submitted in parts, and the lock under a 20 microsecond poller.
         self.assertIn('KISAK_VK_GPU_FEED=always "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene frame_loop', run)
         self.assertIn('--scene gpu_feed', run)
-        self.assertEqual(run.count("grep -qx 'd3d9_check=passed'"), 4)
+        self.assertIn('--scene bench', run)
+        self.assertEqual(run.count("grep -qx 'd3d9_check=passed'"), 5)
         self.assertIn('KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-probe"', run)
         self.assertIn("grep -qx 'vulkan_probe=passed'", run)
         self.assertIn('KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-legacy-check"', run)
