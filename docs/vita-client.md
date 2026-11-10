@@ -88,7 +88,12 @@ about them: once the game has read a display buffer, the emulator draws every
 later frame into that buffer slowly. Up to PC run H1 the two reads were made
 in every run, and the menu there fell from 43 frames a second to 12 after
 frame 300 and to 6 after frame 700 (a frame of 250 ms in every three), while
-the read itself counted no lit pixel.
+the read itself counted no lit pixel. Without the reads (PC run H2,
+2026-11-10) the same menu start drew 5135 frames in 120 s where it had drawn
+1174, and a map start with a filled cache drew 4473 frames in 180 s, 25 a
+second by the game's counter, where H1's had drawn 868 and shown 2. Frame
+times from Vita3K runs before that are therefore the emulator's, not the
+game's.
 
 Two switches are for measuring in an emulator what the game would take if it
 had the room; a console has no memory for either:

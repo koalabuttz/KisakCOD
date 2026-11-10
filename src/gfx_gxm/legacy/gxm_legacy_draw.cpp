@@ -313,6 +313,8 @@ struct DrawState
 // a buffer the game had once read was slow (the emulator, it seems, then
 // keeps the buffer's memory up to date for the game). The read told nothing
 // there either: it counted no lit pixel while the window showed the menu.
+// Without the reads (PC run H2) the same menu start drew 5135 frames in
+// 120 s where it had drawn 1174.
 // On a console it costs its own time only and counts what is shown (run K:
 // 480359 of 522240 pixels lit).
 //
