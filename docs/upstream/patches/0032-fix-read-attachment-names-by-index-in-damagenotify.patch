@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 09:46:55 +0000
+Subject: [PATCH] fix: read attachment names by index in DamageNotify
+
+DamageNotify() reached the attachment's tag name as
+attachModelNames[modelIndex + 18] and its model as a uint16_t offset
+from tagChildren. Both only land on the right slots while the pointer
+before the arrays is four bytes. They are attachTagNames[modelIndex - 1]
+and attachModelNames[modelIndex - 1], as the assert text already said.
+
+No behaviour change in the 32-bit build.
+---
+ src/game_mp/g_combat_mp.cpp | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/game_mp/g_combat_mp.cpp b/src/game_mp/g_combat_mp.cpp
+index a24e16ac..70f11c3b 100644
+--- a/src/game_mp/g_combat_mp.cpp
++++ b/src/game_mp/g_combat_mp.cpp
+@@ -439,12 +439,12 @@ void __cdecl DamageNotify(
+         Scr_AddString((char *)"");
+     if (modelIndex)
+     {
+-        if (!targ->attachModelNames[modelIndex + 18])
+-            MyAssertHandler(".\\game_mp\\g_combat_mp.cpp", 515, 0, "%s", "targ->attachTagNames[modelIndex - 1]");
+-        modelName = SV_GetConfigstringConst(*((uint16_t *)&targ->tagChildren + modelIndex + 1) + CS_MODELS);
++        // modelIndex 0 is the entity's own model, attachment N is modelIndex N + 1.
++        iassert(targ->attachTagNames[modelIndex - 1]);
++        modelName = SV_GetConfigstringConst(targ->attachModelNames[modelIndex - 1] + CS_MODELS);
+         if (!modelName)
+             MyAssertHandler(".\\game_mp\\g_combat_mp.cpp", 518, 1, "%s", "modelName");
+-        Scr_AddConstString(targ->attachModelNames[modelIndex + 18]);
++        Scr_AddConstString(targ->attachTagNames[modelIndex - 1]);
+         Scr_AddConstString(modelName);
+     }
+     else
