@@ -38,8 +38,6 @@ struct ProgramCacheStats
     // bytes that gave back.
     uint32_t compilerUnloads;
     uint64_t compilerGaveBack;
-    // Failed compiles tried once more with the compiler loaded afresh.
-    uint32_t compilerRetries;
     // The slowest single compile and read from the card.
     uint64_t slowestCompileMicros;
     uint64_t slowestReadMicros;
@@ -56,8 +54,8 @@ struct ProgramCacheStats
 // written). False with the compiler's log (or why the compiler is missing).
 // fastMath and optimization are CompileCg's: a caller that changes them
 // gives the source a different text (a comment will do), since the file is
-// found by the source alone. Fragment programs are always built without
-// fast maths.
+// found by the source alone. Fragment programs that use texCUBElod are
+// built without fast maths whatever the caller asks.
 bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &program, std::string &log,
                 bool fastMath = true, int optimization = 3);
 // The same program without waiting for it: read or compiled on the cache's

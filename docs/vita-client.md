@@ -823,14 +823,10 @@ for 5 s, and loads it again for the next program (0.4 s on a console; vitaGL
 does the same). A first start compiled 421 programs across 15 loads in
 Vita3K, with the compiler never above 4.1 MB; before that, such a start ran
 the heap out while the sounds loaded. The `shader compiler memory` log lines
-count what it held and gave back. In PC run Z11 (Vita3K) the compiler
-stopped on the first program of a start with `error 403, line 0: fatal
-internal error`, failed the next 278 the same way within a fifth of a
-second, and then made nothing more for ten minutes. A program that fails to
-compile is now tried again with the compiler unloaded and loaded afresh; a
-fragment program that still fails gets a last try with fast maths, as it was
-built before run Z10; and a program that fails every try leaves the
-compiler unloaded for the next. The same lines count the retries.
+count what it held and gave back. After a failed compile the compiler is
+unloaded, so the next program gets a fresh one: in PC run Z11 (Vita3K) a
+compiler that had stopped with `error 403, line 0: fatal internal error`
+failed the next 278 programs the same way within a fifth of a second.
 
 **Programs in the background.** The game creates its shaders while a zone
 loads: on its loading thread, hundreds in a row, inside the lock every D3D9
@@ -910,10 +906,12 @@ specular lighting, and black specular maps did not remove it on the Vita
 cube map times the specular map times the vertex alpha times a Fresnel
 factor; the specular map's alpha also picks the cube's level. Built at the
 usual optimisation level with fast maths off, they drew the ground as
-Windows does, within 1 (run Z10). Fragment programs are therefore built
-without fast maths; vertex programs keep it. The cache key of a fragment
-program changed with it, so its first start compiles them again. What fast
-maths off costs on a console's GPU is not measured yet.
+Windows does, within 1 (run Z10). So fragment programs that sample a cube
+map at a level they give (`texCUBElod`), as these two do, are built
+without fast maths, with a cache key of their own. Building every fragment
+program that way was tried first: the compiler stopped on one of them with
+a fatal internal error and failed every program after it, and later starts
+that also retried failed compiles made none at all (run Z11).
 
 The client is packed unsafe for the compiler, like the probe.
 
