@@ -10,12 +10,18 @@ inline bool SV_ParseSteamIdentity(const char* text, uint64_t* identity)
 {
     if (!text || !*text || !identity)
         return false;
+    // KISAK: one spelling per identity. The ban lists and the challenge table
+    // compare the identity as text, so "0123" must not be a second name for
+    // the player "123" that the same ticket would pass for. No SteamID64
+    // starts with a zero.
+    if (*text == '0')
+        return false;
     uint64_t value = 0;
     size_t digits = 0;
     for (const unsigned char* p = reinterpret_cast<const unsigned char*>(text); *p; ++p)
     {
         // A uint64 decimal identity fits in 20 digits and in the existing
-        // 33-byte GUID field. Do not admit overlong zero-padded spellings.
+        // 33-byte GUID field.
         if (++digits > 20 || *p < '0' || *p > '9')
             return false;
         const uint64_t digit = *p - '0';
@@ -29,10 +35,10 @@ inline bool SV_ParseSteamIdentity(const char* text, uint64_t* identity)
     return true;
 }
 
-// Two stored identities name the same player when they are the same SteamID64,
-// whatever its spelling ("0123" and "123" both pass SV_ParseSteamIdentity), or
-// otherwise the same text.  An empty identity (a local or bot client) matches
-// nothing, not even another empty one.
+// Two stored identities name the same player when they are the same SteamID64
+// or otherwise the same text.  (SV_ParseSteamIdentity accepts one spelling per
+// SteamID64, so for those the two tests agree.)  An empty identity (a local or
+// bot client) matches nothing, not even another empty one.
 inline bool SV_IdentitiesMatch(const char* a, const char* b)
 {
     if (!a || !b || !*a || !*b)
