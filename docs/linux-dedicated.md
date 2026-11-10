@@ -533,7 +533,9 @@ arbitrary non-default ports are not covered by that broadcast scan. Network
 reachability and browser filters still apply. The stock 1.7 internet list targets
 `cod4master.activision.com`, which did not resolve during this investigation.
 Changing the advertised protocol cannot repair an unavailable master; use LAN
-browsing or a direct `/connect`.
+browsing or a direct `/connect`. This server reports to a master only when
+`masterServerName` is set (it is empty by default) and `dedicated` is 2; see
+[Finding servers](server-browser.md).
 
 #### Unverified retail GUIDs and `sv_allowUnverifiedGuids`
 

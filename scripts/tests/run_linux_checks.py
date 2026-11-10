@@ -153,6 +153,14 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
 
     checks.append(
         Check(
+            "master_server",
+            "opt-in master server rules, server list parsing and the local test master",
+            [Command([python, TESTS / "test_master_server.py", "--cxx", cxx, "--m32"], timeout=300)],
+        )
+    )
+
+    checks.append(
+        Check(
             "steam_session",
             "opt-in Steam backend against a stand-in steamclient.so, and its flag-on compile proof",
             [Command([python, TESTS / "test_linux_steam_session.py", "--cxx", cxx, "--m32"], timeout=300)],
@@ -574,7 +582,7 @@ def main():
     parser.add_argument("--list", action="store_true", help="print the command list and exit without running")
     options = parser.parse_args()
 
-    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "remote_input", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range", "gameplay_lifecycle", "server_test_clients", "weapon_def_ownership", "bot_driver", "database_publication", "crt_shims", "assert_continue", "sl_trace", "phys_objid"]
+    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "remote_input", "master_server", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range", "gameplay_lifecycle", "server_test_clients", "weapon_def_ownership", "bot_driver", "database_publication", "crt_shims", "assert_continue", "sl_trace", "phys_objid"]
     options.only = parse_names(options.only)
     options.skip = parse_names(options.skip)
     for name in options.only | options.skip:

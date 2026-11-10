@@ -23,6 +23,8 @@ what is still missing. Build steps are in the
   an anonymous Steam game server
 - [Key codes](key-codes.md): join a server that accepts unverified GUIDs with
   a CoD4 key code and no Steam (all platforms)
+- [Finding servers](server-browser.md): local list, favourites, `connect`, and
+  the opt-in internet list (`masterServerName`, empty by default)
 
 ## Linux dedicated server
 
