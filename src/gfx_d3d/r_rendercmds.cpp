@@ -124,7 +124,9 @@ void R_ShutdownRenderBuffers()
     for (viewIndexa = 0; viewIndexa < 4; ++viewIndexa)
         R_ShutdownDynamicMesh(&gfxMeshGlob.fullSceneViewMesh[viewIndexa].meshData);
     R_ShutdownSpotShadowMeshes();
+#if R_STATIC_MODEL_CACHE
     R_ShutdownDynamicIndices(&gfxBuf.smodelCache);
+#endif
 }
 
 void R_ShutdownDynamicMesh(GfxMeshData *mesh)
@@ -206,7 +208,9 @@ void R_InitRenderBuffers()
         R_SetQuadMesh(&gfxMeshGlob.fullSceneViewMesh[viewIndexa], 0.0, 0.0, w, h, 0.0, 0.0, 1.0, 1.0, 0xFFFFFFFF);
     }
     R_InitSpotShadowMeshes();
+#if R_STATIC_MODEL_CACHE
     R_InitDynamicIndices(&gfxBuf.smodelCache, 0x100000);
+#endif
 }
 
 void R_InitDynamicMesh(
@@ -330,7 +334,8 @@ bool R_UpdateSkinCacheUsage()
     bool result; // eax
 
     iassert( frontEndDataOut->skinnedCacheVb );
-    result = frontEndDataOut->skinnedCacheVb->used >= 0x410000u;
+    R_NoteSkinnedCacheUse(frontEndDataOut->skinnedCacheVb->used);
+    result = frontEndDataOut->skinnedCacheVb->used >= (uint32_t)R_SKINNED_CACHE_THRESHOLD;
     rg.skinnedCacheReachedThreshold = result;
     return result;
 }

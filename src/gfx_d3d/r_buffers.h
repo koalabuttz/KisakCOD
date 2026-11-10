@@ -37,4 +37,15 @@ void R_FinishStaticIndexBuffer(IDirect3DIndexBuffer9 *ib);
 
 void R_CreateWorldVertexBuffer(IDirect3DVertexBuffer9 **vb, int *srcData, uint32_t sizeInBytes);
 
+// How full the dynamic buffers get, for sizing them (r_gfx.h): the most one
+// frame asked of each since the last report. r_dynamicBufferReport sets the
+// seconds between log lines; 0 prints none.
+void R_NoteSkinnedCacheUse(uint32_t bytes);      // a frame's total, what found no room included
+void R_NoteSkinnedCacheFull();                   // a model was left out
+void R_NotePreTessUse(uint32_t indices);         // a frame's total
+void R_NotePreTessFull();                        // a batch was drawn unbatched
+void R_NoteDynamicIndices(uint32_t indices);     // one write
+void R_NoteDynamicVertices(uint32_t bytes);      // one write
+void R_DynamicBufferFrameDone();                 // the back end, once a frame
+
 extern GfxBuffers gfxBuf;

@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 06:12:18 +0000
+Subject: [PATCH] fix: restart an OpenAL stream that ran out of queued audio
+
+A streamed sound keeps about 0.7 seconds queued. When one frame took
+longer than that (a map load, a hitch), the source played everything it
+had and went to AL_STOPPED. The next refill queued new buffers, but
+OpenAL does not restart a stopped source, so the music or ambient track
+stayed silent until something started it again.
+
+SND_UpdateStreamChannel now plays the source again when it was stopped
+before a refill that queued audio. A stream still in its start delay
+and one that has ended are left alone. The starved case reproduces on
+OpenAL Soft's loopback device. Part of upstream issue 76.
+---
+ src/sound/snd_driver_openal.cpp | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/sound/snd_driver_openal.cpp b/src/sound/snd_driver_openal.cpp
+index 7771d989..251f9a76 100644
+--- a/src/sound/snd_driver_openal.cpp
++++ b/src/sound/snd_driver_openal.cpp
+@@ -1477,7 +1477,12 @@ void __cdecl SND_UpdateStreamChannel(int i, int frametime)
+         iassert(alias0);
+         iassert(alias1);
+         volume = chaninfo->basevolume;
++        ALint stateBefore;
++        alGetSourcei(alGlob.source[i], AL_SOURCE_STATE, &stateBefore);
+         bool hasMoreToPlay = SND_FillStreamBuffers(i);
++        // A source that played all it had is stopped, and new buffers do not restart it.
++        if (stateBefore == AL_STOPPED && hasMoreToPlay && !g_snd.chaninfo[i].startDelay)
++            alSourcePlay(alGlob.source[i]);
+         ALint state;
+         alGetSourcei(alGlob.source[i], AL_SOURCE_STATE, &state);
+         bool stillPlaying = g_snd.chaninfo[i].startDelay || hasMoreToPlay || state != AL_STOPPED;

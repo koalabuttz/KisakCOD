@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 05:26:43 +0000
+Subject: [PATCH] fix: refuse a negative index in the script parser's error
+ recovery
+
+yyerrlab1 looks up the error token at yycheck[yypact[state] + 1]. Eight
+states have a yypact value below -1 (down to -50), and the lower bound
+test was dropped, so recovery in one of them read up to 49 entries in
+front of yycheck. Put the "< 0" test back beside the upper bound.
+
+Recovery only runs when CompileError returns, which is the script
+debugger's expression evaluation; a normal compile leaves through
+Com_Error first.
+---
+ src/script/scr_yacc2.cpp | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/src/script/scr_yacc2.cpp b/src/script/scr_yacc2.cpp
+index ae07d668..0f49dc2e 100644
+--- a/src/script/scr_yacc2.cpp
++++ b/src/script/scr_yacc2.cpp
+@@ -2049,8 +2049,7 @@ yyerrlab1:
+ 			goto yyerrpop;
+ 		}
+ 
+-		//if (++yyn < 0 || yyn > 0x543 || yycheck[yyn] != 1) // 0x59B on t5
+-		if (++yyn >= 0x544 || yycheck[yyn] != 1) // LWSS CHANGE
++		if (++yyn < 0 || yyn >= 0x544 || yycheck[yyn] != 1) // 0x59B on t5
+ 		{
+ 			goto yyerrpop;
+ 		}

@@ -1359,26 +1359,12 @@ int GScr_GetVehicleNodeIndex(int index)
 
 void GScr_AddFieldsForVehicleNode()
 {
-    vn_field_t *v0; // r28
-    int v1; // r30
-
-    v0 = vn_fields;
-    if (vn_fields[0].name)
+    // Class fields are numbered by their place in vn_fields. The decompile
+    // counted that place in 12-byte (i386 vn_field_t) steps.
+    for (vn_field_t *f = vn_fields; f->name; ++f)
     {
-        v1 = 0;
-        do
-        {
-            if (v1 / 12 != (unsigned __int16)(v1 / 12))
-                MyAssertHandler(
-                    "c:\\trees\\cod3\\cod3src\\src\\universal\\g_vehicle_path.cpp",
-                    1436,
-                    0,
-                    "%s",
-                    "(f - vn_fields) == (unsigned short)( f - vn_fields )");
-            Scr_AddClassField(3u, (char*)v0->name, (unsigned __int16)(v1 / 12));
-            ++v0;
-            v1 += 12;
-        } while (v0->name);
+        iassert((f - vn_fields) == (unsigned short)(f - vn_fields));
+        Scr_AddClassField(3u, (char *)f->name, (unsigned __int16)(f - vn_fields));
     }
 }
 

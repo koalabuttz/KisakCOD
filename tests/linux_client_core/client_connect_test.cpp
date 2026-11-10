@@ -67,6 +67,29 @@ void Con_Close(int) {}
 bool Com_HasPlayerProfile() { ++profileQueries; return true; }
 void Cbuf_ExecuteBuffer(int, int, const char *) {}
 static std::string printed;
+// The key code menu's fields: three exist, as after the menu was used once
+// with a key typed into only some of them; cdkey4 and cdkey5 were never made.
+static dvar_t keyFieldDvars[3];
+static std::string keyFields[3];
+static int keyFieldsMade;
+static int KeyFieldIndex(const char *name)
+{
+    for (int i = 0; i < 3; ++i)
+        if (!std::strcmp(name, i == 0 ? "cdkey1" : i == 1 ? "cdkey2" : "cdkey3"))
+            return i;
+    return -1;
+}
+const dvar_s *Dvar_FindVar(const char *name)
+{
+    const int index = KeyFieldIndex(name);
+    return index < 0 ? nullptr : &keyFieldDvars[index];
+}
+void Dvar_SetStringByName(const char *name, char *value)
+{
+    const int index = KeyFieldIndex(name);
+    if (index < 0) { ++keyFieldsMade; return; } // would register a new dvar
+    keyFields[index] = value;
+}
 void UI_CloseAll(int) { ++closeAlls; }
 void SCR_UpdateLoadScreen() { ++loadScreens; }
 uint32_t Sys_Milliseconds() { return 4242; }
@@ -256,6 +279,26 @@ int main()
     reset();
     check(!connect("localhost") && authErrors == 0 && printed.find("key code") == std::string::npos,
         "key code: localhost still never asks for authentication");
+
+    // What was typed into the key code menu's fields does not travel to a
+    // remote server: its menus could read those dvars.
+    auto fillFields = [] { keyFields[0] = "K1SA"; keyFields[1] = "KC0D"; keyFields[2] = "TEST"; keyFieldsMade = 0; };
+    fillFields();
+    reset();
+    check(!connect("localhost") && keyFields[0] == "K1SA" && keyFields[2] == "TEST",
+        "key menu fields: joining the in-process server leaves them alone");
+    reset();
+    check(!connect("192.0.2.10:28960") && clientUIActives[0].connectionState == CA_CONNECTING
+        && keyFields[0].empty() && keyFields[1].empty() && keyFields[2].empty(),
+        "key menu fields: emptied before a remote connection starts");
+    check(keyFieldsMade == 0, "key menu fields: fields that were never made are not created");
+    fillFields();
+    unlink(keyPath.c_str());
+    reset();
+    connect("192.0.2.10:28960");
+    check(clientUIActives[0].connectionState == CA_DISCONNECTED && keyFields[0].empty() && keyFields[2].empty(),
+        "key menu fields: emptied even when the connection is refused");
+    writeKey(keyText, 0600);
 
     unlink(keyPath.c_str());
     rmdir(home);

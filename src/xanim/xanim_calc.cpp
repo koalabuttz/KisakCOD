@@ -3,6 +3,9 @@
 #include <qcommon/qcommon.h>
 #include <universal/profile.h>
 
+#include <atomic>
+#include <string.h>
+
 void Short2LerpAsVec2(const __int16 *from, const __int16 *to, float frac, float *out)
 {
     out[0] = frac * (to[0] - from[0]) + from[0];
@@ -18,6 +21,66 @@ void XAnim_GetTimeIndex(
     int tableSize,
     int *keyFrameIndex,
     float *keyFrameLerpFrac);
+
+// 0: the first of several blended children is calculated twice in a row, as it
+// always was. 1: once. 2: twice, and the two results are compared.
+const dvar_t *xanim_blendOnce;
+
+static std::atomic<uint32_t> s_blendChecks;
+static std::atomic<uint32_t> s_blendDiffers;
+
+// The first child of a node that blends several. XAnimCalc used to make this
+// call twice in a row with the same arguments. A call that clears writes every
+// bone it does not ignore from the tree's state alone and changes nothing else
+// (the only other write is an OR into animInfo->animPartBits), so the second
+// call wrote the same values again, and at every level of the tree: a blend
+// inside the first child of a blend ran four times. xanim_blendOnce 1 makes
+// the call once. It is off until a run with xanim_blendOnce 2 on real
+// animations has shown the two results equal.
+static void XAnimCalcFirstBlendChild(
+    const DObj_s *obj,
+    XAnimInfo *firstInfo,
+    float firstWeight,
+    XAnimCalcAnimInfo *animInfo,
+    int rotTransArrayIndex,
+    DObjAnimMat *calcBuffer)
+{
+    const int mode = xanim_blendOnce ? xanim_blendOnce->current.integer : 0;
+
+    XAnimCalc(obj, firstInfo, firstWeight, 1, 1, animInfo, rotTransArrayIndex, calcBuffer);
+    if (mode == 1)
+        return;
+    if (mode != 2 || obj->numBones > 128)
+    {
+        XAnimCalc(obj, firstInfo, firstWeight, 1, 1, animInfo, rotTransArrayIndex, calcBuffer);
+        return;
+    }
+
+    DObjAnimMat first[128];
+    const int numBones = obj->numBones;
+    memcpy(first, calcBuffer, sizeof(DObjAnimMat) * numBones);
+    XAnimCalc(obj, firstInfo, firstWeight, 1, 1, animInfo, rotTransArrayIndex, calcBuffer);
+    int differs = -1;
+    for (int bone = 0; bone < numBones; ++bone)
+    {
+        if (!animInfo->ignorePartBits.testBit(bone) && memcmp(&first[bone], &calcBuffer[bone], sizeof(DObjAnimMat)))
+        {
+            differs = bone;
+            break;
+        }
+    }
+    const uint32_t checks = s_blendChecks.fetch_add(1, std::memory_order_relaxed) + 1;
+    uint32_t differed = s_blendDiffers.load(std::memory_order_relaxed);
+    if (differs >= 0)
+    {
+        differed = s_blendDiffers.fetch_add(1, std::memory_order_relaxed) + 1;
+        if (differed <= 8)
+            Com_PrintWarning(CON_CHANNEL_ANIM, "xanim_blendOnce 2: bone %i of %i differs between the two calculations\n", differs, numBones);
+    }
+    // 1024, 2048, 4096, ...: a few lines however long the check stays on.
+    if (checks >= 1024 && (checks & (checks - 1)) == 0)
+        Com_Printf(CON_CHANNEL_ANIM, "xanim_blendOnce 2: %u blends calculated twice, %u differed\n", checks, differed);
+}
 
 void XAnimCalc(
     const DObj_s *obj,
@@ -92,7 +155,6 @@ void XAnimCalc(
                         if (bClear)
                         {
                             calcBuffer = rotTransArray;
-                            XAnimCalc(obj, firstInfo, firstWeight, 1, 1, animInfo, rotTransArrayIndex, rotTransArray); // LWSS: add from blops.
                         }
                         else
                         {
@@ -100,9 +162,8 @@ void XAnimCalc(
                             if (!calcBuffer)
                                 return;
                             allocedCalcBuffer = 1;
-                            XAnimCalc(obj, firstInfo, firstWeight, 1, 1, animInfo, rotTransArrayIndex, calcBuffer); // LWSS: add from blops.
                         }
-                        XAnimCalc(obj, firstInfo, firstWeight, 1, 1, animInfo, rotTransArrayIndex, calcBuffer);
+                        XAnimCalcFirstBlendChild(obj, firstInfo, firstWeight, animInfo, rotTransArrayIndex, calcBuffer);
                     }
                     iassert(calcBuffer);
                     XAnimCalc(obj, secondInfo, weight, 0, 1, animInfo, rotTransArrayIndex, calcBuffer);

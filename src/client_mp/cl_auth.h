@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
+enum class KeyCodeStatus;
 enum class ClientAuthResult { ready, unavailable, invalidTicket, bufferTooSmall };
 enum class ClientAuthMethod { none, steam, keyCode };
 
@@ -26,4 +27,11 @@ ClientAuthMethod CL_PrepareRemoteAuth(const netadr_t &server, const char *homePa
 // has only the key code.
 ClientAuthResult CL_GetPlatformChallenge(char *output, size_t capacity);
 void CL_CancelPlatformAuthTicket();
+// The game's key code menu (ui_main_mp.cpp, verifyCDKey and getCDKey).
+// CL_SaveKeyCode checks a key code the player typed and saves it as
+// <homePath>/codkey.txt, where CL_PrepareRemoteAuth reads it; it prints what
+// happened, with the GUID and never the key. CL_StoredKeyCodeStatus says
+// whether a connect would find a usable key code now, without printing.
+KeyCodeStatus CL_SaveKeyCode(const char *homePath, const char *keyText);
+KeyCodeStatus CL_StoredKeyCodeStatus(const char *homePath);
 const char *CL_AuthResultName(ClientAuthResult result);

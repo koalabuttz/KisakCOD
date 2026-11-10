@@ -40,6 +40,21 @@
 #include "cl_connection_mp.h"
 #include "cl_master.h"
 
+// KISAK: the operating system's random generator, for the LAN scan token (as
+// SV_NewChallengeValue in server_mp/sv_client_mp.cpp).
+#include <ctime>
+#if defined(_WIN32)
+// RtlGenRandom; advapi32 is already linked by every Windows target.
+extern "C" __declspec(dllimport) unsigned char __stdcall SystemFunction036(void *buffer, unsigned long length);
+#elif defined(__linux__)
+#include <sys/random.h>
+#include <cerrno>
+#elif defined(__APPLE__)
+#include <stdlib.h>
+#elif defined(__vita__)
+#include <psp2/kernel/rng.h>
+#endif
+
 const dvar_t *cl_conXOffset;
 const dvar_t *cl_hudDrawsBehindsUI;
 const dvar_t *cl_showSend;
@@ -1101,6 +1116,41 @@ void CL_SortGlobalServers()
 }
 
 MasterQuery cl_masterQuery;
+LanScan cl_lanScan;
+
+// Starts the scan whose replies CL_ServerInfoPacket will list; see
+// qcommon/master_server.h.  Returns the token to send as the getinfo challenge.
+static const char *CL_NewLanScanToken()
+{
+    uint8_t random[LAN_SCAN_TOKEN_BYTES] = {};
+    bool filled = false;
+#if defined(_WIN32)
+    filled = SystemFunction036(random, sizeof(random)) != 0;
+#elif defined(__linux__)
+    ssize_t generated;
+    do
+        generated = getrandom(random, sizeof(random), 0);
+    while (generated < 0 && errno == EINTR);
+    filled = generated == static_cast<ssize_t>(sizeof(random));
+#elif defined(__APPLE__)
+    arc4random_buf(random, sizeof(random));
+    filled = true;
+#elif defined(__vita__)
+    filled = sceKernelGetRandomNumber(random, sizeof(random)) >= 0;
+#endif
+    if (!filled)
+    {
+        // Guessable, but still a value an outsider has to guess for each scan.
+        uint32_t mixed = static_cast<uint32_t>(time(nullptr)) * 2654435761u ^ Sys_Milliseconds();
+        for (uint8_t &byte : random)
+        {
+            mixed = mixed * 1664525u + 1013904223u + static_cast<uint32_t>(rand());
+            byte = static_cast<uint8_t>(mixed >> 24);
+        }
+    }
+    Master_LanScanAsked(&cl_lanScan, random, Sys_Milliseconds());
+    return cl_lanScan.token;
+}
 
 // Refuses a new master address while a remote server is in control of the
 // client.  Game servers set client dvars by name (systeminfo, codinfo,
@@ -3214,13 +3264,17 @@ void CL_LocalServers_f()
         cls.localServers[i].dirty = b;
     }
     Com_Memset((uint32_t *)&to, 0, 20);
+    // KISAK: retail's challenge was "xxx"; each scan now sends its own token,
+    // and only replies that echo it are listed (qcommon/master_server.h).
+    char request[sizeof("getinfo ") + sizeof(cl_lanScan.token)];
+    Com_sprintf(request, sizeof(request), "getinfo %s", CL_NewLanScanToken());
     for (ia = 0; ia < 2; ++ia)
     {
         for (j = 0; j < 4; ++j)
         {
             to.port = BigShort(j + 28960);
             to.type = NA_BROADCAST;
-            NET_OutOfBandData(NS_CLIENT1, to, (const unsigned char*)"getinfo xxx", strlen("getinfo xxx"));
+            NET_OutOfBandData(NS_CLIENT1, to, (const unsigned char*)request, strlen(request));
         }
     }
 }

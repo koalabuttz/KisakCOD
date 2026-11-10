@@ -1,0 +1,820 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: koalabuttz <27229333+koalabuttz@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 07:58:11 +0000
+Subject: [PATCH] refactor: name the degrees-to-turns factor
+
+1/360 turns up as 0.0027777778f, (float)0.0027777778 and
+0.002777777845039964 wherever an angle is wrapped. com_math.h now names
+it TURNS_PER_DEGREE, as a float (_F) and a double so every use keeps the
+type it multiplied by, with static_asserts that each equals the literals
+it replaces.
+
+No value changes: the double TURNS_PER_DEGREE stays
+0.002777777845039964, the number the code multiplied by, which is not
+1.0 / 360.0. cg_pose.cpp multiplies once by the double 0.0027777778, a
+different value, and keeps it. First half of upstream issue 45.
+---
+ src/bgame/bg_animation_mp.cpp   |  2 +-
+ src/bgame/bg_misc.cpp           |  8 ++++----
+ src/bgame/bg_pmove.cpp          | 18 +++++++++---------
+ src/cgame/cg_modelpreviewer.cpp | 22 +++++++++++-----------
+ src/cgame/cg_pose.cpp           |  6 +++---
+ src/cgame_mp/cg_ents_mp.cpp     | 16 ++++++++--------
+ src/cgame_mp/cg_predict_mp.cpp  |  4 ++--
+ src/cgame_mp/cg_vehicles_mp.cpp | 10 +++++-----
+ src/cgame_mp/cg_view_mp.cpp     |  2 +-
+ src/game/actor.cpp              | 12 ++++++------
+ src/game/actor_orientation.cpp  | 12 ++++++------
+ src/game/actor_script_cmd.cpp   |  4 ++--
+ src/game/g_client.cpp           |  2 +-
+ src/game/g_helicopter.cpp       |  4 ++--
+ src/game/g_missile.cpp          |  2 +-
+ src/game/g_scr_mover.cpp        |  4 ++--
+ src/game/g_scr_vehicle.cpp      | 10 +++++-----
+ src/game/g_vehicle_path.cpp     |  4 ++--
+ src/game/turret.cpp             | 12 ++++++------
+ src/game_mp/g_client_mp.cpp     | 10 +++++-----
+ src/game_mp/g_misc_mp.cpp       |  2 +-
+ src/game_mp/g_vehicles_mp.cpp   |  4 ++--
+ src/universal/com_math.cpp      | 10 +++++-----
+ src/universal/com_math.h        |  7 +++++++
+ 24 files changed, 97 insertions(+), 90 deletions(-)
+
+diff --git a/src/bgame/bg_animation_mp.cpp b/src/bgame/bg_animation_mp.cpp
+index ef13fb83..756e4ab9 100644
+--- a/src/bgame/bg_animation_mp.cpp
++++ b/src/bgame/bg_animation_mp.cpp
+@@ -1304,7 +1304,7 @@ void __cdecl BG_Player_DoControllersInternal(const entityState_s *es, const clie
+             vTorsoAngles[0] = ci->torso.pitchAngle;
+             if ((es->lerp.eFlags & 8) != 0)
+             {
+-                v15 = vTorsoAngles[0] * 0.002777777845039964f;
++                v15 = vTorsoAngles[0] * TURNS_PER_DEGREE_F;
+                 v11 = v15 + 0.5f;
+                 v10 = floor(v11);
+                 vTorsoAngles[0] = (v15 - v10) * 360.0f;
+diff --git a/src/bgame/bg_misc.cpp b/src/bgame/bg_misc.cpp
+index 2ab6faad..589f7231 100644
+--- a/src/bgame/bg_misc.cpp
++++ b/src/bgame/bg_misc.cpp
+@@ -1743,12 +1743,12 @@ void __cdecl BG_PlayerToEntitySetPitchAngles(playerState_s *ps, entityState_s *s
+         {
+             fLerpFrac = 1.0;
+         }
+-        v9 = ps->fTorsoPitch * 0.002777777845039964;
++        v9 = ps->fTorsoPitch * TURNS_PER_DEGREE;
+         v7 = v9 + 0.5;
+         v6 = floor(v7);
+         v5 = (v9 - v6) * 360.0;
+         s->fTorsoPitch = v5 * fLerpFrac;
+-        v8 = ps->fWaistPitch * 0.002777777845039964;
++        v8 = ps->fWaistPitch * TURNS_PER_DEGREE;
+         v4 = v8 + 0.5;
+         v3 = floor(v4);
+         v2 = (v8 - v3) * 360.0;
+@@ -2019,13 +2019,13 @@ bool __cdecl BG_CheckProneValid(
+         vTorsoPos[2] = vPos[2];
+         Vec3Sub(vTorsoPos, vWaistPos, vDelta);
+         v23 = vectopitch(vDelta);
+-        v24 = v23 * 0.002777777845039964;
++        v24 = v23 * TURNS_PER_DEGREE;
+         v17 = v24 + 0.5;
+         v16 = floor(v17);
+         fTorsoPitch = (v24 - v16) * 360.0;
+         Vec3Sub(vWaistPos, vFeetPos, vDelta);
+         v21 = vectopitch(vDelta);
+-        v22 = v21 * 0.002777777845039964;
++        v22 = v21 * TURNS_PER_DEGREE;
+         v15 = v22 + 0.5;
+         v14 = floor(v15);
+         fWaistPitch = (v22 - v14) * 360.0;
+diff --git a/src/bgame/bg_pmove.cpp b/src/bgame/bg_pmove.cpp
+index 5b75a75d..fd1804fd 100644
+--- a/src/bgame/bg_pmove.cpp
++++ b/src/bgame/bg_pmove.cpp
+@@ -740,7 +740,7 @@ void __cdecl PM_UpdateViewAngles_Clamp(playerState_s *ps, usercmd_s *cmd)
+     for (i = 0; i < 3; ++i)
+     {
+         v7 = ps->delta_angles[i] + (double)cmd->angles[i] * DEGREES_PER_SHORT;
+-        v8 = v7 * 0.002777777845039964;
++        v8 = v7 * TURNS_PER_DEGREE;
+         v5 = v8 + 0.5;
+         v4 = floor(v5);
+         temp = (v8 - v4) * 360.0;
+@@ -760,7 +760,7 @@ void __cdecl PM_UpdateViewAngles_Clamp(playerState_s *ps, usercmd_s *cmd)
+                 temp = maxPitch;
+             }
+         }
+-        v6 = temp * 0.002777777845039964;
++        v6 = temp * TURNS_PER_DEGREE;
+         v3 = v6 + 0.5;
+         v2 = floor(v3);
+         ps->viewangles[i] = (v6 - v2) * 360.0;
+@@ -1033,13 +1033,13 @@ LABEL_46:
+ 
+ static float BG_PitchFromDelta(const float *delta)
+ {
+-	float turns = vectopitch(delta) * 0.002777777845039964;
++	float turns = vectopitch(delta) * TURNS_PER_DEGREE;
+ 	return (turns - floor(turns + 0.5)) * 360.0;
+ }
+ 
+ static float BG_PitchFromAngle(float pitch)
+ {
+-	float turns = pitch * 0.002777777845039964;
++	float turns = pitch * TURNS_PER_DEGREE;
+ 	return (turns - floor(turns + 0.5)) * 360.0;
+ }
+ 
+@@ -1392,7 +1392,7 @@ void __cdecl PM_UpdateViewAngles_PronePitchClamp(playerState_s *ps)
+         if (deltaa <= 0.0)
+         {
+             v6 = ps->proneTorsoPitch + 45.0;
+-            v7 = v6 * 0.002777777845039964;
++            v7 = v6 * TURNS_PER_DEGREE;
+             v3 = v7 + 0.5;
+             v2 = floor(v3);
+             ps->viewangles[0] = (v7 - v2) * 360.0;
+@@ -1400,7 +1400,7 @@ void __cdecl PM_UpdateViewAngles_PronePitchClamp(playerState_s *ps)
+         else
+         {
+             v8 = ps->proneTorsoPitch - 45.0;
+-            v9 = v8 * 0.002777777845039964;
++            v9 = v8 * TURNS_PER_DEGREE;
+             v5 = v9 + 0.5;
+             v4 = floor(v5);
+             ps->viewangles[0] = (v9 - v4) * 360.0;
+@@ -1530,7 +1530,7 @@ void __cdecl PM_UpdatePronePitch(pmove_t *pm, pml_t *pml)
+                     v12 = 1.0;
+                 ps->proneDirectionPitch = pml->frametime * 70.0 * v12 + ps->proneDirectionPitch;
+             }
+-            v16 = ps->proneDirectionPitch * 0.002777777845039964;
++            v16 = ps->proneDirectionPitch * TURNS_PER_DEGREE;
+             v11 = v16 + 0.5;
+             v10 = floor(v11);
+             ps->proneDirectionPitch = (v16 - v10) * 360.0;
+@@ -1561,7 +1561,7 @@ void __cdecl PM_UpdatePronePitch(pmove_t *pm, pml_t *pml)
+                     v7 = 1.0;
+                 ps->proneTorsoPitch = pml->frametime * 70.0 * v7 + ps->proneTorsoPitch;
+             }
+-            v15 = ps->proneTorsoPitch * 0.002777777845039964;
++            v15 = ps->proneTorsoPitch * TURNS_PER_DEGREE;
+             v6 = v15 + 0.5;
+             v5 = floor(v6);
+             ps->proneTorsoPitch = (v15 - v5) * 360.0;
+@@ -2589,7 +2589,7 @@ void __cdecl PM_SetMovementDir(pmove_t *pm, pml_t *pml)
+                 if (pm->cmd.forwardmove < 0)
+                 {
+                     v5 = (double)moveyaw + 180.0;
+-                    v6 = v5 * 0.002777777845039964;
++                    v6 = v5 * TURNS_PER_DEGREE;
+                     v4 = v6 + 0.5;
+                     v3 = floor(v4);
+                     v2 = (v6 - v3) * 360.0;
+diff --git a/src/cgame/cg_modelpreviewer.cpp b/src/cgame/cg_modelpreviewer.cpp
+index 5dc01a67..bc24c226 100644
+--- a/src/cgame/cg_modelpreviewer.cpp
++++ b/src/cgame/cg_modelpreviewer.cpp
+@@ -1869,16 +1869,16 @@ void __cdecl MdlPrvSpin_(unsigned int yprIdx, double deg)
+     AxisCopy((const mat3x3&)v14, (mat3x3&)v12);
+     AxisToQuat(v12, g_mdlprv.model.currentEntity.placement.base.quat);
+     AxisToAngles((const mat3x3&)v12, &v9);
+-    v2 = (float)((float)(v10 + (float)180.0) * (float)0.0027777778);
+-    *(double *)&v3 = (float)((float)((float)(v10 + (float)180.0) * (float)0.0027777778) + (float)0.5);
++    v2 = (float)((float)(v10 + (float)180.0) * TURNS_PER_DEGREE_F);
++    *(double *)&v3 = (float)((float)((float)(v10 + (float)180.0) * TURNS_PER_DEGREE_F) + (float)0.5);
+     v4 = floor(v3);
+-    v5 = (float)(v9 * (float)0.0027777778);
++    v5 = (float)(v9 * TURNS_PER_DEGREE_F);
+     v10 = (float)((float)v2 - (float)*(double *)&v4) * (float)360.0;
+-    *(double *)&v4 = (float)((float)(v9 * (float)0.0027777778) + (float)0.5);
++    *(double *)&v4 = (float)((float)(v9 * TURNS_PER_DEGREE_F) + (float)0.5);
+     v6 = floor(v4);
+-    v7 = (float)(v11 * (float)0.0027777778);
++    v7 = (float)(v11 * TURNS_PER_DEGREE_F);
+     v9 = (float)((float)v5 - (float)*(double *)&v6) * (float)360.0;
+-    *(double *)&v6 = (float)((float)(v11 * (float)0.0027777778) + (float)0.5);
++    *(double *)&v6 = (float)((float)(v11 * TURNS_PER_DEGREE_F) + (float)0.5);
+     v8 = floor(v6);
+     v11 = (float)((float)v7 - (float)*(double *)&v8) * (float)360.0;
+     Dvar_SetVec3((dvar_s*)modPrvRotationAngles, v9, v10, v11);
+@@ -2092,13 +2092,13 @@ void __cdecl MdlPrvFreeRot(double yaw, double pitch)
+     double v6; // fp31
+     long double v7; // fp2
+ 
+-    v3 = (float)((float)(g_mdlprv.viewer.freeModeAngles[1] + yaw) * (float)0.0027777778);
++    v3 = (float)((float)(g_mdlprv.viewer.freeModeAngles[1] + yaw) * TURNS_PER_DEGREE_F);
+     g_mdlprv.viewer.freeModeAngles[1] = g_mdlprv.viewer.freeModeAngles[1] + (float)yaw;
+     g_mdlprv.viewer.freeModeAngles[0] = g_mdlprv.viewer.freeModeAngles[0] + (float)pitch;
+     v4 = (float)((float)v3 + (float)0.5);
+-    v6 = (float)(g_mdlprv.viewer.freeModeAngles[0] * (float)0.0027777778);
++    v6 = (float)(g_mdlprv.viewer.freeModeAngles[0] * TURNS_PER_DEGREE_F);
+     g_mdlprv.viewer.freeModeAngles[1] = (float)((float)v3 - floorf(pitch) * (float)360.0);
+-    v7 = floor((float)((float)(g_mdlprv.viewer.freeModeAngles[0] * (float)0.0027777778) + (float)0.5));
++    v7 = floor((float)((float)(g_mdlprv.viewer.freeModeAngles[0] * TURNS_PER_DEGREE_F) + (float)0.5));
+     g_mdlprv.viewer.freeModeAngles[0] = (float)((float)v6 - (float)*(double *)&v7) * (float)360.0;
+ }
+ 
+@@ -3130,8 +3130,8 @@ void __cdecl CG_ModPrvLoadModel(const cg_s *cgameGlob, const char *modelFilename
+     g_mdlprv.model.currentEntity.placement.base.origin[1] = v47;
+     g_mdlprv.model.currentEntity.placement.base.origin[2] = v48;
+     Dvar_SetVec3((dvar_s*)modPrvOrigin, 0.0, 0.0, 0.0);
+-    v49 = (float)(*(float *)(v44 + 170872) * (float)0.0027777778);
+-    *(double *)&v50 = (float)((float)(*(float *)(v44 + 170872) * (float)0.0027777778) + (float)0.5);
++    v49 = (float)(*(float *)(v44 + 170872) * TURNS_PER_DEGREE_F);
++    *(double *)&v50 = (float)((float)(*(float *)(v44 + 170872) * TURNS_PER_DEGREE_F) + (float)0.5);
+     v51 = floor(v50);
+     g_mdlprv.model.initialYaw = (float)((float)v49 - (float)*(double *)&v51) * (float)360.0;
+     Dvar_SetVec3((dvar_s*)modPrvCenterOffset, 0.0, 0.0, 0.0);
+diff --git a/src/cgame/cg_pose.cpp b/src/cgame/cg_pose.cpp
+index aca5cc9d..4b06303d 100644
+--- a/src/cgame/cg_pose.cpp
++++ b/src/cgame/cg_pose.cpp
+@@ -107,9 +107,9 @@ void __cdecl CG_mg42_DoControllers(const cpose_t *pose, const DObj_s *obj, int *
+         turretViewAngles = (float*)pose->turret.viewAngles;
+         v9 = ((*turretViewAngles - pose->angles[0]) * 0.0027777778);
+         v11 = pose->angles[1];
+-        aimAngles[0] = (float)((float)v9 - floor((((*turretViewAngles - pose->angles[0]) * 0.0027777778f) + 0.5f))) * (float)360.0;
+-        v12 = (float)((float)(turretViewAngles[1] - (float)v11) * (float)0.0027777778);
+-        v13 = floor((((turretViewAngles[1] - (float)v11) * (float)0.0027777778) + (float)0.5));
++        aimAngles[0] = (float)((float)v9 - floor((((*turretViewAngles - pose->angles[0]) * TURNS_PER_DEGREE_F) + 0.5f))) * (float)360.0;
++        v12 = (float)((float)(turretViewAngles[1] - (float)v11) * TURNS_PER_DEGREE_F);
++        v13 = floor((((turretViewAngles[1] - (float)v11) * TURNS_PER_DEGREE_F) + (float)0.5));
+         flashAngles[0] = 0.0;
+         aimAngles[1] = (float)((float)v12 - (float)*(double *)&v13) * (float)360.0;
+     }
+diff --git a/src/cgame_mp/cg_ents_mp.cpp b/src/cgame_mp/cg_ents_mp.cpp
+index f0805677..3e77297a 100644
+--- a/src/cgame_mp/cg_ents_mp.cpp
++++ b/src/cgame_mp/cg_ents_mp.cpp
+@@ -97,7 +97,7 @@ void __cdecl CG_mg42_PreControllers(DObj_s *obj, centity_s *cent)
+         v21 = cent->currentState.u.turret.gunAngles[0];
+         frameInterpolation = cgameGlob->frameInterpolation;
+         v13 = cent->nextState.lerp.u.turret.gunAngles[0] - v21;
+-        v23 = v13 * 0.002777777845039964f;
++        v23 = v13 * TURNS_PER_DEGREE_F;
+         v12 = v23 + 0.5f;
+         v11 = floor(v12);
+         v10 = (v23 - v11) * 360.0f;
+@@ -105,7 +105,7 @@ void __cdecl CG_mg42_PreControllers(DObj_s *obj, centity_s *cent)
+         v18 = cent->currentState.u.turret.gunAngles[1];
+         v19 = cgameGlob->frameInterpolation;
+         v9 = cent->nextState.lerp.u.turret.gunAngles[1] - v18;
+-        v20 = v9 * 0.002777777845039964f;
++        v20 = v9 * TURNS_PER_DEGREE_F;
+         v8 = v20 + 0.5f;
+         v7 = floor(v8);
+         v6 = (v20 - v7) * 360.0f;
+@@ -114,7 +114,7 @@ void __cdecl CG_mg42_PreControllers(DObj_s *obj, centity_s *cent)
+     v15 = cent->currentState.u.turret.gunAngles[2];
+     v16 = cgameGlob->frameInterpolation;
+     v5 = cent->nextState.lerp.u.turret.gunAngles[2] - v15;
+-    v17 = v5 * 0.002777777845039964f;
++    v17 = v5 * TURNS_PER_DEGREE_F;
+     v4 = v17 + 0.5f;
+     v3 = floor(v4);
+     v2 = (v17 - v3) * 360.0f;
+@@ -972,21 +972,21 @@ void __cdecl CG_InterpolateEntityPosition(cg_s *cgameGlob, centity_s *cent)
+     BG_EvaluateTrajectory(&cent->nextState.lerp.apos, cgameGlob->nextSnap->serverTime, next);
+     v32 = current[0];
+     v21 = next[0] - current[0];
+-    v33 = v21 * 0.002777777845039964;
++    v33 = v21 * TURNS_PER_DEGREE;
+     v20 = v33 + 0.5;
+     v19 = floor(v20);
+     v18 = (v33 - v19) * 360.0;
+     cent->pose.angles[0] = v18 * f + v32;
+     v30 = current[1];
+     v17 = next[1] - current[1];
+-    v31 = v17 * 0.002777777845039964;
++    v31 = v17 * TURNS_PER_DEGREE;
+     v16 = v31 + 0.5;
+     v15 = floor(v16);
+     v14 = (v31 - v15) * 360.0;
+     cent->pose.angles[1] = v14 * f + v30;
+     v28 = current[2];
+     v13 = next[2] - current[2];
+-    v29 = v13 * 0.002777777845039964;
++    v29 = v13 * TURNS_PER_DEGREE;
+     v12 = v29 + 0.5;
+     v11 = floor(v12);
+     v10 = (v29 - v11) * 360.0;
+@@ -1005,7 +1005,7 @@ void __cdecl CG_InterpolateEntityPosition(cg_s *cgameGlob, centity_s *cent)
+         movementDir = (float)cent->currentState.u.player.movementDir;
+         v26 = (float)cent->nextState.lerp.u.player.movementDir;
+         v9 = v26 - movementDir;
+-        v27 = v9 * 0.002777777845039964;
++        v27 = v9 * TURNS_PER_DEGREE;
+         v8 = v27 + 0.5;
+         v7 = floor(v8);
+         v6 = (v27 - v7) * 360.0;
+@@ -1018,7 +1018,7 @@ void __cdecl CG_InterpolateEntityPosition(cg_s *cgameGlob, centity_s *cent)
+         cent->pose.angles[2] = 0.0;
+         v22 = cent->currentState.u.player.leanf;
+         v5 = cent->currentState.u.player.leanf - v22;
+-        v23 = v5 * 0.002777777845039964;
++        v23 = v5 * TURNS_PER_DEGREE;
+         v4 = v23 + 0.5;
+         v3 = floor(v4);
+         v2 = (v23 - v3) * 360.0;
+diff --git a/src/cgame_mp/cg_predict_mp.cpp b/src/cgame_mp/cg_predict_mp.cpp
+index 5e355993..1c2f44e9 100644
+--- a/src/cgame_mp/cg_predict_mp.cpp
++++ b/src/cgame_mp/cg_predict_mp.cpp
+@@ -455,14 +455,14 @@ void __cdecl CG_InterpolatePlayerState(int32_t localClientNum, int32_t grabAngle
+             {
+                 v12 = prevSnap->ps.viewangles[i];
+                 v9 = nextSnap->ps.viewangles[i] - v12;
+-                v13 = v9 * 0.002777777845039964;
++                v13 = v9 * TURNS_PER_DEGREE;
+                 v8 = v13 + 0.5;
+                 v7 = floor(v8);
+                 v6 = (v13 - v7) * 360.0;
+                 out->viewangles[i] = v6 * f + v12;
+                 v10 = prevSnap->ps.delta_angles[i];
+                 v5 = nextSnap->ps.delta_angles[i] - v10;
+-                v11 = v5 * 0.002777777845039964;
++                v11 = v5 * TURNS_PER_DEGREE;
+                 v4 = v11 + 0.5;
+                 v3 = floor(v4);
+                 v2 = (v11 - v3) * 360.0;
+diff --git a/src/cgame_mp/cg_vehicles_mp.cpp b/src/cgame_mp/cg_vehicles_mp.cpp
+index 2d9f0fd1..38ef0398 100644
+--- a/src/cgame_mp/cg_vehicles_mp.cpp
++++ b/src/cgame_mp/cg_vehicles_mp.cpp
+@@ -445,7 +445,7 @@ void __cdecl SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s
+         fxInfo->tireActive[tireIdx] = 0;
+     v55 = p_currentState->u.vehicle.bodyPitch;
+     v41 = ns->lerp.u.vehicle.bodyPitch - v55;
+-    v56 = v41 * 0.002777777845039964;
++    v56 = v41 * TURNS_PER_DEGREE;
+     v40 = v56 + 0.5;
+     frameInterpolation = cgameGlob->frameInterpolation;
+     v38 = floor(v40);
+@@ -456,7 +456,7 @@ void __cdecl SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s
+     cent->pose.vehicle.pitch = (int)v35;
+     v52 = p_currentState->u.vehicle.bodyRoll;
+     v34 = ns->lerp.u.vehicle.bodyRoll - v52;
+-    v53 = v34 * 0.002777777845039964;
++    v53 = v34 * TURNS_PER_DEGREE;
+     v33 = v53 + 0.5;
+     v32 = cgameGlob->frameInterpolation;
+     v31 = floor(v33);
+@@ -467,7 +467,7 @@ void __cdecl SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s
+     cent->pose.vehicle.roll = (int)v28;
+     gunPitch = p_currentState->u.vehicle.gunPitch;
+     v27 = ns->lerp.u.vehicle.gunPitch - gunPitch;
+-    v50 = v27 * 0.002777777845039964;
++    v50 = v27 * TURNS_PER_DEGREE;
+     v26 = v50 + 0.5;
+     v25 = cgameGlob->frameInterpolation;
+     v24 = floor(v26);
+@@ -478,7 +478,7 @@ void __cdecl SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s
+     cent->pose.vehicle.barrelPitch = (int)v21;
+     gunYaw = p_currentState->u.vehicle.gunYaw;
+     v20 = ns->lerp.u.vehicle.gunYaw - gunYaw;
+-    v47 = v20 * 0.002777777845039964;
++    v47 = v20 * TURNS_PER_DEGREE;
+     v19 = v47 + 0.5;
+     v18 = cgameGlob->frameInterpolation;
+     v17 = floor(v19);
+@@ -490,7 +490,7 @@ void __cdecl SetupPoseControllers(int32_t localClientNum, DObj_s *obj, centity_s
+     cent->pose.turret.barrelPitch = Veh_GetTurretBarrelRoll(localClientNum, cent);
+     v43 = p_currentState->u.vehicle.steerYaw;
+     v13 = ns->lerp.u.vehicle.steerYaw - v43;
+-    v44 = v13 * 0.002777777845039964;
++    v44 = v13 * TURNS_PER_DEGREE;
+     v12 = v44 + 0.5;
+     v11 = cgameGlob->frameInterpolation;
+     v10 = floor(v12);
+diff --git a/src/cgame_mp/cg_view_mp.cpp b/src/cgame_mp/cg_view_mp.cpp
+index 3b507a1a..b52c930a 100644
+--- a/src/cgame_mp/cg_view_mp.cpp
++++ b/src/cgame_mp/cg_view_mp.cpp
+@@ -1073,7 +1073,7 @@ void __cdecl CalcViewValuesVehicleDriver(int32_t localClientNum)
+     focusPoint[1] = cgameGlob->predictedPlayerState.origin[1];
+     focusPoint[2] = cgameGlob->predictedPlayerState.origin[2];
+     Vec3Add(focusPoint, TEMP_OFFSET, focusPoint);
+-    v4 = LocalClientGlobals->vehicleViewPitch * 0.002777777845039964;
++    v4 = LocalClientGlobals->vehicleViewPitch * TURNS_PER_DEGREE;
+     v3 = v4 + 0.5;
+     v2 = floor(v3);
+     pitch = (v4 - v2) * 360.0;
+diff --git a/src/game/actor.cpp b/src/game/actor.cpp
+index 2027ce77..e9dd0bae 100644
+--- a/src/game/actor.cpp
++++ b/src/game/actor.cpp
+@@ -645,8 +645,8 @@ void __cdecl Actor_Pain(
+             v18);
+     actor->iDamageTaken = iDamage;
+     v19 = vectoyaw(vDir);
+-    v20 = (float)((float)((float)v19 - self->r.currentAngles[1]) * (float)0.0027777778);
+-    *(double *)&v21 = (float)((float)((float)((float)v19 - self->r.currentAngles[1]) * (float)0.0027777778) + (float)0.5);
++    v20 = (float)((float)((float)v19 - self->r.currentAngles[1]) * TURNS_PER_DEGREE_F);
++    *(double *)&v21 = (float)((float)((float)((float)v19 - self->r.currentAngles[1]) * TURNS_PER_DEGREE_F) + (float)0.5);
+     v22 = floor(v21);
+     actor->iDamageYaw = (int)(float)((float)((float)v20 - (float)*(double *)&v22) * (float)360.0);
+     actor->damageDir[0] = *vDir;
+@@ -764,8 +764,8 @@ void __cdecl Actor_Die(
+         actor->damageDir[1] = vDir[1];
+         actor->damageDir[2] = vDir[2];
+         v18 = vectoyaw(vDir);
+-        v19 = (float)((float)((float)v18 - self->r.currentAngles[1]) * (float)0.0027777778);
+-        *(double *)&v20 = (float)((float)((float)((float)v18 - self->r.currentAngles[1]) * (float)0.0027777778) + (float)0.5);
++        v19 = (float)((float)((float)v18 - self->r.currentAngles[1]) * TURNS_PER_DEGREE_F);
++        *(double *)&v20 = (float)((float)((float)((float)v18 - self->r.currentAngles[1]) * TURNS_PER_DEGREE_F) + (float)0.5);
+         v21 = floor(v20);
+         actor->iDamageYaw = (int)(float)((float)((float)v19 - (float)*(double *)&v21) * (float)360.0);
+         HitLocationString = G_GetHitLocationString(hitLoc);
+@@ -1057,9 +1057,9 @@ void __cdecl Actor_UpdateProneInformation(actor_s *self, int bDoProneCheck)
+             50.0f);
+     else
+         self->fProneLastDiff = 360.0;
+-    v7 = (float)((float)(self->ProneInfo.fWaistPitch - self->ProneInfo.fTorsoPitch) * (float)0.0027777778);
++    v7 = (float)((float)(self->ProneInfo.fWaistPitch - self->ProneInfo.fTorsoPitch) * TURNS_PER_DEGREE_F);
+     v8 = floor((float)((float)((float)(self->ProneInfo.fWaistPitch - self->ProneInfo.fTorsoPitch)
+-        * (float)0.0027777778)
++        * TURNS_PER_DEGREE_F)
+         + (float)0.5));
+     v9 = (float)((float)((float)v7 - (float)*(double *)&v8) * (float)360.0);
+     if (self->fProneLastDiff != v9)
+diff --git a/src/game/actor_orientation.cpp b/src/game/actor_orientation.cpp
+index d5077946..08184a27 100644
+--- a/src/game/actor_orientation.cpp
++++ b/src/game/actor_orientation.cpp
+@@ -101,8 +101,8 @@ void __cdecl Actor_UpdateLookAngles(actor_s *self)
+     p_ScriptOrient = &self->ScriptOrient;
+     if (self->ScriptOrient.eMode == AI_ORIENT_INVALID)
+         p_ScriptOrient = &self->CodeOrient;
+-    v4 = (float)((float)(p_ScriptOrient->fDesiredLookPitch - self->fLookPitch) * (float)0.0027777778);
+-    a2 = (float)((float)((float)(p_ScriptOrient->fDesiredLookPitch - self->fLookPitch) * (float)0.0027777778) + (float)0.5);
++    v4 = (float)((float)(p_ScriptOrient->fDesiredLookPitch - self->fLookPitch) * TURNS_PER_DEGREE_F);
++    a2 = (float)((float)((float)(p_ScriptOrient->fDesiredLookPitch - self->fLookPitch) * TURNS_PER_DEGREE_F) + (float)0.5);
+     v5 = floor(a2);
+     v6 = (float)((float)((float)v4 - (float)*(double *)&v5) * (float)360.0);
+     if (v6 <= 40.0)
+@@ -115,8 +115,8 @@ void __cdecl Actor_UpdateLookAngles(actor_s *self)
+         v6 = 40.0;
+     }
+     v7 = (float)(self->fLookPitch + (float)v6);
+-    v8 = (float)((float)(p_ScriptOrient->fDesiredLookYaw - self->fLookYaw) * (float)0.0027777778);
+-    *(double *)&v5 = (float)((float)((float)(p_ScriptOrient->fDesiredLookYaw - self->fLookYaw) * (float)0.0027777778)
++    v8 = (float)((float)(p_ScriptOrient->fDesiredLookYaw - self->fLookYaw) * TURNS_PER_DEGREE_F);
++    *(double *)&v5 = (float)((float)((float)(p_ScriptOrient->fDesiredLookYaw - self->fLookYaw) * TURNS_PER_DEGREE_F)
+         + (float)0.5);
+     v9 = floor(v5);
+     v10 = (float)((float)((float)v8 - (float)*(double *)&v9) * (float)360.0);
+@@ -150,8 +150,8 @@ void __cdecl Actor_UpdateBodyAngle(actor_s *self)
+         fDesiredBodyYaw = self->CodeOrient.fDesiredBodyYaw;
+     ent = self->ent;
+     self->fDesiredBodyYaw = fDesiredBodyYaw;
+-    v5 = (float)((float)((float)fDesiredBodyYaw - ent->r.currentAngles[1]) * (float)0.0027777778);
+-    a2 = (float)((float)((float)((float)fDesiredBodyYaw - ent->r.currentAngles[1]) * (float)0.0027777778) + (float)0.5);
++    v5 = (float)((float)((float)fDesiredBodyYaw - ent->r.currentAngles[1]) * TURNS_PER_DEGREE_F);
++    a2 = (float)((float)((float)((float)fDesiredBodyYaw - ent->r.currentAngles[1]) * TURNS_PER_DEGREE_F) + (float)0.5);
+     v6 = floor(a2);
+     v7 = (float)((float)((float)v5 - (float)*(double *)&v6) * (float)360.0);
+     if (BG_ActorIsProne(&self->ProneInfo, level.time))
+diff --git a/src/game/actor_script_cmd.cpp b/src/game/actor_script_cmd.cpp
+index d82edefd..eece79df 100644
+--- a/src/game/actor_script_cmd.cpp
++++ b/src/game/actor_script_cmd.cpp
+@@ -1844,8 +1844,8 @@ void __cdecl ActorCmd_GetMotionAngle(scr_entref_t entref)
+     else
+     {
+         v2 = vectoyaw(v1->Physics.vVelocity);
+-        v3 = (float)((float)((float)v2 - v1->ent->r.currentAngles[1]) * (float)0.0027777778);
+-        *(double *)&v4 = (float)((float)((float)((float)v2 - v1->ent->r.currentAngles[1]) * (float)0.0027777778) + (float)0.5);
++        v3 = (float)((float)((float)v2 - v1->ent->r.currentAngles[1]) * TURNS_PER_DEGREE_F);
++        *(double *)&v4 = (float)((float)((float)((float)v2 - v1->ent->r.currentAngles[1]) * TURNS_PER_DEGREE_F) + (float)0.5);
+         v5 = floor(v4);
+         v6 = (float)((float)((float)v3 - (float)*(double *)&v5) * (float)360.0);
+     }
+diff --git a/src/game/g_client.cpp b/src/game/g_client.cpp
+index cca1b22e..844f14f5 100644
+--- a/src/game/g_client.cpp
++++ b/src/game/g_client.cpp
+@@ -290,7 +290,7 @@ void __cdecl InitClientDeltaAngles(gclient_s *client)
+     {
+         const float cmdDeg = (float)cmdAngles[i] * DEGREES_PER_SHORT_F;
+         const float diff   = viewangles[i] - cmdDeg;
+-        const float turns  = diff * 0.0027777778f;
++        const float turns  = diff * TURNS_PER_DEGREE_F;
+         const float frac   = turns - floorf(turns + 0.5f);
+         delta_angles[i]    = frac * 360.0f;
+     }
+diff --git a/src/game/g_helicopter.cpp b/src/game/g_helicopter.cpp
+index cc1a66bd..543de839 100644
+--- a/src/game/g_helicopter.cpp
++++ b/src/game/g_helicopter.cpp
+@@ -78,7 +78,7 @@ void __cdecl VEH_UpdateClientChopper(gentity_s *ent)
+     HELI_CalcAccel(ent, move, bodyAccel, rotAccel);
+     veh->phys.rotVel[1] = rotAccel[1] * 0.05000000074505806 + veh->phys.rotVel[1];
+     v5 = veh->phys.rotVel[1] * 0.05000000074505806 + veh->phys.prevAngles[1];
+-    v6 = v5 * 0.002777777845039964;
++    v6 = v5 * TURNS_PER_DEGREE;
+     v4 = v6 + 0.5;
+     v3 = floor(v4);
+     veh->phys.angles[1] = (v6 - v3) * 360.0;
+@@ -258,7 +258,7 @@ LABEL_27:
+     HELI_CalcAccel(ent, move, bodyAccel, rotAccel);
+     veh->phys.rotVel[1] = rotAccel[1] * 0.05000000074505806 + veh->phys.rotVel[1];
+     v5 = veh->phys.rotVel[1] * 0.05000000074505806 + veh->phys.prevAngles[1];
+-    v6 = v5 * 0.002777777845039964;
++    v6 = v5 * TURNS_PER_DEGREE;
+     v4 = v6 + 0.5;
+     v3 = floor(v4);
+     veh->phys.angles[1] = (v6 - v3) * 360.0;
+diff --git a/src/game/g_missile.cpp b/src/game/g_missile.cpp
+index 43ee9adb..70d040f6 100644
+--- a/src/game/g_missile.cpp
++++ b/src/game/g_missile.cpp
+@@ -1536,7 +1536,7 @@ void __cdecl MissileLandAngles(gentity_s *ent, trace_t *trace, float *vAngles, i
+             else
+                 ent->s.lerp.apos.trDelta[0] = (v4 * 0.300000011920929f + 0.8500000238418579f) * ent->s.lerp.apos.trDelta[0] * -1.0;
+         }
+-        v14 = *vAngles * 0.002777777845039964f;
++        v14 = *vAngles * TURNS_PER_DEGREE_F;
+         v12 = v14 + 0.5;
+         v11 = floor(v12);
+         *vAngles = (v14 - v11) * 360.0f;
+diff --git a/src/game/g_scr_mover.cpp b/src/game/g_scr_mover.cpp
+index e7ecccf1..908ee1a9 100644
+--- a/src/game/g_scr_mover.cpp
++++ b/src/game/g_scr_mover.cpp
+@@ -60,12 +60,12 @@ void __cdecl Reached_ScriptMover(gentity_s *pEnt)
+         SV_LinkEntity(pEnt);
+         if (bMoveFinisheda)
+         {
+-            v6 = pEnt->r.currentAngles[0] * 0.002777777845039964;
++            v6 = pEnt->r.currentAngles[0] * TURNS_PER_DEGREE;
+             v4 = v6 + 0.5;
+             v3 = floor(v4);
+             pEnt->r.currentAngles[0] = (v6 - v3) * 360.0;
+             pEnt->r.currentAngles[1] = AngleNormalize360(pEnt->r.currentAngles[1]);
+-            v5 = pEnt->r.currentAngles[2] * 0.002777777845039964;
++            v5 = pEnt->r.currentAngles[2] * TURNS_PER_DEGREE;
+             v2 = v5 + 0.5;
+             v1 = floor(v2);
+             pEnt->r.currentAngles[2] = (v5 - v1) * 360.0;
+diff --git a/src/game/g_scr_vehicle.cpp b/src/game/g_scr_vehicle.cpp
+index 4e2ac76d..6b848670 100644
+--- a/src/game/g_scr_vehicle.cpp
++++ b/src/game/g_scr_vehicle.cpp
+@@ -1510,7 +1510,7 @@ void __cdecl VEH_UpdateAngleAndAngularVel(
+         {
+             phys->rotVel[index] = VEH_AccelerateSpeed(phys->rotVel[index], targetAngleVel, effectiveAccel, 0.05f);
+             phys->angles[index] = phys->rotVel[index] * 0.05f + phys->angles[index];
+-            v12 = phys->angles[index] * 0.002777777845039964f;
++            v12 = phys->angles[index] * TURNS_PER_DEGREE_F;
+             v7 = v12 + 0.5f;
+             v6 = floor(v7);
+             phys->angles[index] = (v12 - v6) * 360.0f;
+@@ -1580,7 +1580,7 @@ float __cdecl VEH_UpdateMove_GetDesiredYaw(scr_vehicle_s *veh, float *desiredDir
+             timeToTurn = v2 + v2;
+             stopAngle = phys->maxAngleVel[1] * 0.5 * timeToTurn;
+             angleDiff = desiredYaw - phys->angles[1];
+-            v8 = angleDiff * 0.002777777845039964f;
++            v8 = angleDiff * TURNS_PER_DEGREE_F;
+             v6 = v8 + 0.5f;
+             v5 = floor(v6);
+             v7 = (v8 - v5) * 360.0f;
+@@ -3583,7 +3583,7 @@ void __cdecl VEH_CalcAccel(gentity_s *ent, char *move, float *bodyAccel, float *
+             MyAssertHandler(".\\game\\g_scr_vehicle.cpp", 1077, 0, "%s", "player->client");
+ 
+         // Wrap (viewYaw - prevYaw)/360 into [-0.5, 0.5], multiply by 7200 (= 20*360 deg/sec).
+-        angle = (player->client->ps.viewangles[1] - veh->phys.prevAngles[1]) * 0.0027777778f;
++        angle = (player->client->ps.viewangles[1] - veh->phys.prevAngles[1]) * TURNS_PER_DEGREE_F;
+         frac  = (float)floor(angle + 0.5f);
+         wish  = (angle - frac) * 7200.0f;
+     }
+@@ -3743,7 +3743,7 @@ void __cdecl VEH_UpdateClient(gentity_s *ent)
+     veh->phys.rotVel[2] = rotOrWorldAccel[2] * 0.05f + veh->phys.rotVel[2];
+ 
+     // Wrap yaw into [-180, 180): take (rotVel.y*0.05 + prevYaw)/360, fold by round, *360.
+-    angle = (veh->phys.rotVel[1] * 0.05f + veh->phys.prevAngles[1]) * 0.0027777778f; // 1/360
++    angle = (veh->phys.rotVel[1] * 0.05f + veh->phys.prevAngles[1]) * TURNS_PER_DEGREE_F; // 1/360
+     frac  = (float)floor(angle + 0.5);
+     veh->phys.angles[0] = 0.0f;
+     veh->phys.angles[2] = 0.0f;
+@@ -6254,7 +6254,7 @@ void __cdecl VEH_UpdateSteering(gentity_s *ent)
+     }
+ 
+     // Wrap (angles[1] - prevAngles[1]) / 360 into [-0.5, 0.5], multiply back to deg
+-    float angle = (veh->phys.angles[1] - veh->phys.prevAngles[1]) * 0.0027777778f; // 1/360
++    float angle = (veh->phys.angles[1] - veh->phys.prevAngles[1]) * TURNS_PER_DEGREE_F; // 1/360
+     float wrappedAngle = angle - (float)floor(angle + 0.5f);
+     float steer = (reverse ? -10.0f : 10.0f) * (wrappedAngle * 360.0f);
+ 
+diff --git a/src/game/g_vehicle_path.cpp b/src/game/g_vehicle_path.cpp
+index 2992e859..6ad7c0a4 100644
+--- a/src/game/g_vehicle_path.cpp
++++ b/src/game/g_vehicle_path.cpp
+@@ -705,9 +705,9 @@ LABEL_13:
+     for (i = 0; i < 3; ++i)
+     {
+         v8 = LerpAngle(anglesStart[i], anglesEnd[i], vpp->frac);
+-        v9 = (float)((float)v8 * (float)0.0027777778);
++        v9 = (float)((float)v8 * TURNS_PER_DEGREE_F);
+         angles[i] = v8;
+-        *(double *)&v10 = (float)((float)((float)v8 * (float)0.0027777778) + (float)0.5);
++        *(double *)&v10 = (float)((float)((float)v8 * TURNS_PER_DEGREE_F) + (float)0.5);
+         v11 = floor(v10);
+         angles[i] = (float)((float)v9 - (float)*(double *)&v11) * (float)360.0;
+     }
+diff --git a/src/game/turret.cpp b/src/game/turret.cpp
+index 3d9cacd0..c2f76ffb 100644
+--- a/src/game/turret.cpp
++++ b/src/game/turret.cpp
+@@ -437,7 +437,7 @@ void turret_CalculateConvergenceAngularVelocity(
+     float diffX = currX - desiredAngles[0];
+     float diffY = currY - desiredAngles[1];
+ 
+-    static constexpr float DEG_TO_TURNS = 0.0027777778f;
++    static constexpr float DEG_TO_TURNS = TURNS_PER_DEGREE_F;
+ 
+     float normX = floorf(diffX * DEG_TO_TURNS + 0.5f);
+     float normY = floorf(diffY * DEG_TO_TURNS + 0.5f);
+@@ -517,7 +517,7 @@ int turret_UpdateTargetAngles(
+         }
+ 
+         float rawDiff = targetAngles[channel] - lerp->turret.gunAngles[channel];
+-        const float DEG_TO_TURNS = 0.0027777778f; // = 1/360
++        const float DEG_TO_TURNS = TURNS_PER_DEGREE_F; // = 1/360
+         float turns = rawDiff * DEG_TO_TURNS;
+         float nearest = floorf(turns + 0.5f);
+         float wrappedDeg = (turns - nearest) * 360.0f;
+@@ -666,9 +666,9 @@ int __cdecl turret_CanTargetPoint(const gentity_s *self, const float *vPoint, fl
+         currentAngles = self->r.currentAngles;
+         while (1)
+         {
+-            v15 = (float)((float)(*(float *)((char *)localAngles + v12) - *currentAngles) * (float)0.0027777778);
++            v15 = (float)((float)(*(float *)((char *)localAngles + v12) - *currentAngles) * TURNS_PER_DEGREE_F);
+             v10 = (float)((float)((float)(*(float *)((char *)localAngles + v12) - *currentAngles)
+-                * (float)0.0027777778)
++                * TURNS_PER_DEGREE_F)
+                 + (float)0.5);
+             v10 = floor(v10);
+             v16 = (float)((float)((float)v15 - (float)v10) * (float)360.0);
+@@ -740,8 +740,8 @@ int __cdecl turret_CanTargetSentient(
+         vec[1] = targetPosition[1] - tagPos[1];
+         vec[2] = targetPosition[2] - tagPos[2];
+         vectosignedangles(vec, angles);
+-        v11 = (float)((float)(angles[1] - self->r.currentAngles[1]) * (float)0.0027777778);
+-        v12 = (float)((float)((float)(angles[1] - self->r.currentAngles[1]) * (float)0.0027777778) + (float)0.5);
++        v11 = (float)((float)(angles[1] - self->r.currentAngles[1]) * TURNS_PER_DEGREE_F);
++        v12 = (float)((float)((float)(angles[1] - self->r.currentAngles[1]) * TURNS_PER_DEGREE_F) + (float)0.5);
+         v13 = floor(v12);
+         v14 = (float)((float)((float)v11 - (float)v13) * (float)360.0);
+         localAngles[1] = (float)((float)v11 - (float)v13) * (float)360.0;
+diff --git a/src/game_mp/g_client_mp.cpp b/src/game_mp/g_client_mp.cpp
+index dd5c95e7..e82eea9f 100644
+--- a/src/game_mp/g_client_mp.cpp
++++ b/src/game_mp/g_client_mp.cpp
+@@ -52,7 +52,7 @@ void __cdecl SetClientViewAngle(gentity_s *ent, const float *angle)
+     if ((ent->client->ps.pm_flags & PMF_PRONE) != 0 && (ent->client->ps.eFlags & 0x300) == 0)
+     {
+         fDeltab = AngleDelta(ent->client->ps.proneDirection, newAngle[1]);
+-        v25 = fDeltab * 0.002777777845039964f;
++        v25 = fDeltab * TURNS_PER_DEGREE_F;
+         v15 = v25 + 0.5;
+         v14 = floor(v15);
+         fDelta = (v25 - v14) * 360.0;
+@@ -76,7 +76,7 @@ void __cdecl SetClientViewAngle(gentity_s *ent, const float *angle)
+             }
+         }
+         fDeltad = AngleDelta(ent->client->ps.proneTorsoPitch, newAngle[0]);
+-        v24 = fDeltad * 0.002777777845039964f;
++        v24 = fDeltad * TURNS_PER_DEGREE_F;
+         v11 = v24 + 0.5f;
+         v10 = floor(v11);
+         fDeltaa = (v24 - v10) * 360.0f;
+@@ -91,7 +91,7 @@ void __cdecl SetClientViewAngle(gentity_s *ent, const float *angle)
+             if (fDeltae <= 0.0f)
+             {
+                 v20 = ent->client->ps.proneTorsoPitch + 45.0f;
+-                v21 = v20 * 0.002777777845039964f;
++                v21 = v20 * TURNS_PER_DEGREE_F;
+                 v7 = v21 + 0.5f;
+                 v6 = floor(v7);
+                 newAngle[0] = (v21 - v6) * 360.0f;
+@@ -99,7 +99,7 @@ void __cdecl SetClientViewAngle(gentity_s *ent, const float *angle)
+             else
+             {
+                 v22 = ent->client->ps.proneTorsoPitch - 45.0f;
+-                v23 = v22 * 0.002777777845039964f;
++                v23 = v22 * TURNS_PER_DEGREE_F;
+                 v9 = v23 + 0.5f;
+                 v8 = floor(v9);
+                 newAngle[0] = (v23 - v8) * 360.0f;
+@@ -109,7 +109,7 @@ void __cdecl SetClientViewAngle(gentity_s *ent, const float *angle)
+     for (i = 0; i < 3; ++i)
+     {
+         v18 = newAngle[i] - (float)ent->client->sess.cmd.angles[i] * DEGREES_PER_SHORT_F;
+-        v19 = v18 * 0.002777777845039964f;
++        v19 = v18 * TURNS_PER_DEGREE_F;
+         v5 = v19 + 0.5f;
+         v4 = floor(v5);
+         v17 = (v19 - v4) * 360.0f;
+diff --git a/src/game_mp/g_misc_mp.cpp b/src/game_mp/g_misc_mp.cpp
+index a8a47cc2..df358584 100644
+--- a/src/game_mp/g_misc_mp.cpp
++++ b/src/game_mp/g_misc_mp.cpp
+@@ -913,7 +913,7 @@ bool __cdecl turret_behind(gentity_s *self, gentity_s *other)
+     v9 = I_fabs(pTurretInfo->arcmax[1]);
+     yawSpan = (v10 + v9) * 0.5;
+     v8 = yawSpan + minYaw;
+-    v12 = v8 * 0.002777777845039964;
++    v12 = v8 * TURNS_PER_DEGREE;
+     v7 = v12 + 0.5;
+     v6 = floor(v7);
+     centerYaw = (v12 - v6) * 360.0;
+diff --git a/src/game_mp/g_vehicles_mp.cpp b/src/game_mp/g_vehicles_mp.cpp
+index a0c61977..c2b9a33e 100644
+--- a/src/game_mp/g_vehicles_mp.cpp
++++ b/src/game_mp/g_vehicles_mp.cpp
+@@ -1133,7 +1133,7 @@ char __cdecl VEH_PlayerRotation(gentity_s *player, vehicle_physic_t *phys)
+     v7 = phys->angles[1] + 90.0;
+     yawCurrent = AngleNormalize360(v7);
+     v6 = yawWanted - yawCurrent;
+-    v9 = v6 * 0.002777777845039964;
++    v9 = v6 * TURNS_PER_DEGREE;
+     v5 = v9 + 0.5;
+     v4 = floor(v5);
+     yawDelta = (v9 - v4) * 360.0;
+@@ -1377,7 +1377,7 @@ void __cdecl AdvanceVehicleRotation(gentity_s *ent, float frameTime)
+     }
+     veh->phys.rotVel[1] = -veh->phys.driverSteer * 90.0f * turningMod;
+     v4 = frameTime * veh->phys.rotVel[1] + veh->phys.prevAngles[1];
+-    v5 = v4 * 0.002777777845039964f;
++    v5 = v4 * TURNS_PER_DEGREE_F;
+     v3 = v5 + 0.5f;
+     v2 = floor(v3);
+     veh->phys.angles[1] = (v5 - v2) * 360.0f;
+diff --git a/src/universal/com_math.cpp b/src/universal/com_math.cpp
+index a1a015e5..9a71a360 100644
+--- a/src/universal/com_math.cpp
++++ b/src/universal/com_math.cpp
+@@ -189,7 +189,7 @@ float __cdecl AngleDelta(float a1, float a2)
+     float v7; // [esp+18h] [ebp-4h]
+ 
+     v6 = a1 - a2;
+-    v7 = v6 * 0.002777777845039964;
++    v7 = v6 * TURNS_PER_DEGREE;
+     v5 = v7 + 0.5;
+     v4 = floor(v5);
+     return ((v7 - v4) * 360.0);
+@@ -293,7 +293,7 @@ float __cdecl LinearTrackAngle(float tgt, float cur, float rate, float deltaTime
+     while (tgt - cur < -180.0)
+         tgt = tgt + 360.0;
+     angle = LinearTrack(tgt, cur, rate, deltaTime);
+-    v8 = angle * 0.002777777845039964;
++    v8 = angle * TURNS_PER_DEGREE;
+     v7 = v8 + 0.5;
+     v6 = floor(v7);
+     return ((v8 - v6) * 360.0);
+@@ -331,7 +331,7 @@ float __cdecl DiffTrackAngle(float tgt, float cur, float rate, float deltaTime)
+     while (tgt - cur < -180.0)
+         tgt = tgt + 360.0;
+     angle = DiffTrack(tgt, cur, rate, deltaTime);
+-    v8 = angle * 0.002777777845039964;
++    v8 = angle * TURNS_PER_DEGREE;
+     v7 = v8 + 0.5;
+     v6 = floor(v7);
+     return ((v8 - v6) * 360.0);
+@@ -1765,7 +1765,7 @@ float __cdecl AngleNormalize360(float angle)
+     float result; // [esp+1Ch] [ebp-8h]
+     float result2; // [esp+20h] [ebp-4h]
+ 
+-    scaledAngle = angle * 0.002777777845039964;
++    scaledAngle = angle * TURNS_PER_DEGREE;
+     v3 = floor(scaledAngle);
+     result = (scaledAngle - v3) * 360.0;
+     result2 = result - 360.0;
+@@ -1785,7 +1785,7 @@ float AngleNormalize180(float angle)
+ 
+ float AngleSubtract(float a1, float a2)
+ {
+-    float scaled = (a1 - a2) * 0.0027777778f;
++    float scaled = (a1 - a2) * TURNS_PER_DEGREE_F;
+     return (scaled - floorf(scaled + 0.5f)) * 360.0f;
+ }
+ 
+diff --git a/src/universal/com_math.h b/src/universal/com_math.h
+index 785240f4..4751d9a3 100644
+--- a/src/universal/com_math.h
++++ b/src/universal/com_math.h
+@@ -197,6 +197,13 @@ float AngleNormalize360(float angle);
+ float AngleNormalize180(float angle);
+ float AngleSubtract(float a1, float a2);
+ 
++// 1/360 scales degrees to turns. TURNS_PER_DEGREE is the float factor as the
++// code has always written it in double, which is not 1.0 / 360.0.
++inline constexpr float TURNS_PER_DEGREE_F = 1.0f / 360.0f;
++inline constexpr double TURNS_PER_DEGREE = 0.002777777845039964;
++static_assert(TURNS_PER_DEGREE_F == 0.0027777778f && TURNS_PER_DEGREE_F == (float)0.0027777778);
++static_assert(TURNS_PER_DEGREE_F == 0.002777777845039964f && (float)TURNS_PER_DEGREE == TURNS_PER_DEGREE_F);
++
+ // A 16-bit angle splits a turn into 65536 steps. The _F constants are floats,
+ // the plain ones doubles, so each use keeps the type it multiplied by.
+ // SHORTS_PER_DEGREE is the float factor as the code has always written it in

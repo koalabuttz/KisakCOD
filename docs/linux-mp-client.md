@@ -173,7 +173,7 @@ engine answers on Windows when that service is missing:
 | Service | Windows owner | Answer on Linux |
 | --- | --- | --- |
 | Remote script debugger | `win_net_debug.cpp` | None attached. `net_listen` says it is unavailable. |
-| HTTP downloads | `dl_main.cpp` (libcurl) | A download cannot begin, so the client sends `wwwdl fail` and falls back to the UDP download. |
+| HTTP downloads | `dl_main.cpp` (libcurl) | Off by default: a download cannot begin, so the client sends `wwwdl fail` and falls back to the UDP download. `-DKISAK_LINUX_HTTP_DOWNLOADS=ON` links the real downloader ([below](#http-downloads)). |
 | Voice chat | `win_voice.cpp` (DirectSound) | No voice device: nothing is captured, sent or played. |
 
 Functions that only raw-asset loading (`useFastFile 0`) or an attached remote
@@ -187,6 +187,37 @@ the join is refused before any packet is sent
 ([linux-client.md](linux-client.md#joining-servers)).
 Build with `-DKISAK_LINUX_STEAM=ON` to authenticate through the running Steam
 client instead ([linux-steam.md](linux-steam.md)).
+
+### HTTP downloads
+
+A server can point the client at a web address for its map and mod files
+(`sv_wwwDownload`), which is much faster than the engine's own UDP transfer.
+The engine's downloader, `src/qcommon/dl_main.cpp`, does that with libcurl; the
+Windows build links a pinned static libcurl. On Linux it is opt-in:
+
+```sh
+cmake ... -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_LINUX_HTTP_DOWNLOADS=ON
+```
+
+That compiles `dl_main.cpp` unmodified into `KisakCOD-mp`, leaves its stand-ins
+out of `mp_client_unavailable.cpp`, and links the system's libcurl, found with
+pkg-config (7.85 or newer; `libcurl4-openssl-dev` on Debian and Ubuntu). For an
+i386 client on an x86_64 host install the i386 package and point pkg-config at
+it, as for the [movies](linux-cinematics.md):
+`PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig`.
+
+What the downloader does is the same as on Windows: `cl_wwwDownload 0` turns it
+off, only `http` and `https` addresses are fetched, an `https` download never
+follows a redirect to `http`, certificates and host names are checked against
+libcurl's default CA store (or `CURL_CA_BUNDLE` / `SSL_CERT_FILE`), and a file
+is installed only after a complete 2xx response; anything else falls back to
+the UDP download. `scripts/tests/test_http_downloads.py` runs that state
+machine against local HTTP and TLS servers ([notes](../scripts/tests/http_downloads.md)).
+
+Hosted CI builds the x86_64 client with the option on and checks that it links
+libcurl and still exports no names; the i386 client job keeps it off. No
+download from a real game server has been made with the Linux client yet: that
+needs a server with `sv_wwwDownload` set and a file the client lacks.
 
 ## Checks
 

@@ -49,6 +49,7 @@ int R_SetIndexData(GfxCmdBufPrimState *state, uint8_t *indices, int triCount)
 
     baseIndex = R_ReserveIndexData(state, triCount);
     indexDataSize = 6 * triCount;
+    R_NoteDynamicIndices(3 * triCount);
     ib = gfxBuf.dynamicIndexBuffer->buffer;
     iassert(ib);
 
@@ -859,6 +860,7 @@ int R_SetVertexData(GfxCmdBufState *state, const void *data, int vertexCount, in
     PROF_SCOPED("RB_SetVertexData");
 
     totalSize = stride * vertexCount;
+    R_NoteDynamicVertices(totalSize);
     if (stride * vertexCount > gfxBuf.dynamicVertexBuffer->total)
         MyAssertHandler(
             ".\\r_shade.cpp",

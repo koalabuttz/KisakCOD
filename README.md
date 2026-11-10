@@ -103,17 +103,20 @@ multiplayer game in one native process, for i386 or x86_64. It renders through
 the engine's own D3D9 renderer on DXVK Native, with SDL3 for the window and
 OpenAL for sound. On a developer laptop with the game files it hosts a listen
 server, spawns the player, and plays: moving, shooting, grenades, sound and a
-clean quit. Movies play with the opt-in FFmpeg shim
+clean quit. All 21 stock maps load and take a player in an unattended sweep of
+both builds; one map has been played by hand. Movies play with the opt-in FFmpeg shim
 ([cinematics](docs/linux-cinematics.md)). Build steps:
 [multiplayer client](docs/linux-mp-client.md). The singleplayer game
 ([guide](docs/linux-sp-game.md), i386) plays its first levels, killhouse and
 cargoship, and all 21 levels load and run unattended
-([levels](docs/linux-sp-levels.md)).
+([levels](docs/linux-sp-levels.md)); it also builds for x86_64, where it has
+not loaded a level yet.
 
 **Vulkan.** An opt-in back end (`-DKISAK_BUILD_VULKAN_BACKEND=ON`, then
 `+set r_backend vulkan`) draws the same renderer through Vulkan directly,
 without DXVK on Linux or `d3d9.dll` on Windows. It plays a map on a developer
-laptop and a Windows PC; on the laptop it is slower than DXVK for now
+laptop and a Windows PC; on the laptop one measured view runs at 141 frames
+a second against 151 through DXVK
 ([guide](docs/vulkan-d3d9-front.md#in-the-game-r_backend-vulkan)).
 
 **Authentication.** Steam authentication on Linux is opt-in

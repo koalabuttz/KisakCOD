@@ -156,7 +156,10 @@ uint16_t *R_AllocPreTessIndices(int count)
     iassert( gfxBuf.preTessIndexBuffer->indices != NULL );
     iassert( count );
     if (count + gfxBuf.preTessIndexBuffer->used > gfxBuf.preTessIndexBuffer->total)
+    {
+        R_NotePreTessFull();
         return 0;
+    }
     indices = &gfxBuf.preTessIndexBuffer->indices[gfxBuf.preTessIndexBuffer->used];
     gfxBuf.preTessIndexBuffer->used += count;
     return indices;
@@ -165,6 +168,7 @@ uint16_t *R_AllocPreTessIndices(int count)
 void R_EndPreTess()
 {
     iassert( gfxBuf.preTessIndexBuffer->indices != NULL );
+    R_NotePreTessUse(gfxBuf.preTessIndexBuffer->used);
     R_UnlockIndexBuffer(gfxBuf.preTessIndexBuffer->buffer);
     gfxBuf.preTessIndexBuffer->indices = 0;
 }

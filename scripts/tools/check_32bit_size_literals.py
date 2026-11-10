@@ -7,7 +7,9 @@ sizeof(GfxCmdDrawText2D) on i386. A struct that holds a pointer is larger on
 x86_64, so the literal allocates, copies or strides too few bytes there.
 
 This parses every source in a build's compile_commands.json twice with
-libclang, once as i386 (-m32) and once as x86_64 (-m64). In each statement it
+libclang, once as i386 (-m32) and once as x86_64 (-m64). A source that both
+the multiplayer and the singleplayer game compile is read once for each (its
+KISAK_MP and KISAK_SP branches differ). In each statement it
 looks at the record types the statement's expressions use (through pointers,
 arrays and references) and reports an integer literal of at least --min-size
 (or a 4 that multiplies a count, as in ``Alloc(4 * n)``) that equals one of
@@ -35,6 +37,8 @@ from pathlib import Path
 import shlex
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
 DEFAULT_ALLOW = ROOT / "scripts" / "tools" / "check_32bit_size_literals_allow.txt"
@@ -54,17 +58,25 @@ def load_clang():
     return ci
 
 
+def singleplayer_unit(args) -> bool:
+    """True for a source compiled for the singleplayer game (KISAK_SP)."""
+    return "-DKISAK_SP" in args
+
+
 def translation_units(build_dir: Path):
+    """Each source once per game: a source both games compile is read with KISAK_MP and with KISAK_SP."""
     database = build_dir / "compile_commands.json"
     if not database.is_file():
         sys.exit(f"{database} not found: configure the build with CMAKE_EXPORT_COMPILE_COMMANDS=ON")
     seen = set()
     for entry in json.loads(database.read_text(encoding="utf-8")):
         path = Path(entry["directory"], entry["file"]).resolve()
-        if path in seen or SRC not in path.parents:
+        if SRC not in path.parents:
             continue
-        seen.add(path)
         argv = shlex.split(entry["command"]) if "command" in entry else list(entry["arguments"])
+        if (path, singleplayer_unit(argv)) in seen:
+            continue
+        seen.add((path, singleplayer_unit(argv)))
         args, skip = [], False
         for arg in argv[1:]:
             if skip:
@@ -287,6 +299,8 @@ def main() -> int:
     parser.add_argument("--only", nargs="*", default=None, help="scan only sources whose path contains one of these")
     parser.add_argument("--include-raw-loaders", action="store_true",
                         help="also scan the raw asset loaders (*_load_obj.cpp), which the game never runs")
+    parser.add_argument("--changed-since", metavar="COMMIT",
+                        help="scan only the units a change since this commit can reach (changed_units.py)")
     args = parser.parse_args()
     load_clang()
     allowed = load_allow(args.allow)
@@ -294,6 +308,12 @@ def main() -> int:
             if (args.only is None or any(o in p for o in args.only))
             and str(Path(p).relative_to(ROOT)) not in RETAIL_RECORD_SOURCES
             and (args.include_raw_loaders or not raw_asset_loader(p))]
+    if args.changed_since:
+        import changed_units
+        reach, why = changed_units.select({job[0] for job in jobs}, [args.build_dir.resolve()], args.changed_since)
+        print(f"--changed-since {args.changed_since}: " + (why if reach is not None else f"scanning everything, {why}"))
+        if reach is not None:
+            jobs = [job for job in jobs if job[0] in reach]
     hits, failures, used = {}, [], set()
     with Pool(args.jobs) as pool:
         for path, found, errors in pool.imap_unordered(scan, jobs):

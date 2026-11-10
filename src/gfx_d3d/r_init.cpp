@@ -338,9 +338,15 @@ void R_SyncGpu(int(*WorkCallback)(uint64_t))
             else
             {
                 R_ProcessWorkerCmdsWithTimeout((int(*)())R_GpuFenceTimeout, 0);
+#if !defined(_WIN32)
+                R_GpuSyncMainIdle();
+#endif
             }
         }
         R_ReleaseGpuFenceLock();
+#if !defined(_WIN32)
+        R_GpuSyncMainDone();
+#endif
     }
 }
 

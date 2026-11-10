@@ -19,6 +19,10 @@
 #include <stringed/stringed_hooks.h>
 #include <universal/profile.h>
 
+#if !defined(_WIN32)
+#include <linux/sys_perf.h>
+#endif
+
 extern const dvar_t *ui_showEndOfGame;
 
 struct CenterPrint // sizeof=0x408
@@ -124,6 +128,10 @@ void CG_Draw2D(int32_t localClientNum)
     playerState_s *ps; // [esp+40h] [ebp-4h]
 
     const cg_s *cgameGlob;
+
+#if !defined(_WIN32)
+    SysPerfScope perfScope(SYS_PERF_PROBE_HUD);
+#endif
 
     cgameGlob = CG_GetLocalClientGlobals(0);
 

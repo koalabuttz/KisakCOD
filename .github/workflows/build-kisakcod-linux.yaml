@@ -27,6 +27,13 @@ on:
       - build-linux.sh
       - scripts/**
       - src/**
+      # The PS Vita port's own files are built and checked by
+      # build-kisakcod-vita.yaml; no job here compiles or reads them.
+      - '!src/vita/**'
+      - '!src/gfx_gxm/**'
+      - '!scripts/platform/vita/**'
+      - '!scripts/tests/test_vita_*.py'
+      - '!scripts/ci/install-vitasdk.sh'
       - deps/**
       - tests/linux_net/**
       - tests/linux_client_core/**
@@ -42,16 +49,27 @@ on:
       - tests/linux_mp_client/**
       - tests/linux_cinematic/**
       - tests/linux_steam/**
+      - tests/linux_perf/**
       - tests/skinning/**
       - .github/workflows/build-kisakcod-linux.yaml
+      # For the workflow contract tests of the native job, which read it.
+      - .github/workflows/build-kisakcod-vita.yaml
       - .github/workflows/build-kisarcod-win.yaml
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [ "master" ]
     paths:
       - CMakeLists.txt
       - build-linux.sh
       - scripts/**
       - src/**
+      # The PS Vita port's own files are built and checked by
+      # build-kisakcod-vita.yaml; no job here compiles or reads them.
+      - '!src/vita/**'
+      - '!src/gfx_gxm/**'
+      - '!scripts/platform/vita/**'
+      - '!scripts/tests/test_vita_*.py'
+      - '!scripts/ci/install-vitasdk.sh'
       - deps/**
       - tests/linux_net/**
       - tests/linux_client_core/**
@@ -67,8 +85,11 @@ on:
       - tests/linux_mp_client/**
       - tests/linux_cinematic/**
       - tests/linux_steam/**
+      - tests/linux_perf/**
       - tests/skinning/**
       - .github/workflows/build-kisakcod-linux.yaml
+      # For the workflow contract tests of the native job, which read it.
+      - .github/workflows/build-kisakcod-vita.yaml
       - .github/workflows/build-kisarcod-win.yaml
 
 permissions:
@@ -85,6 +106,7 @@ concurrency:
 
 jobs:
   window:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: Linux SDL${{ matrix.sdl }} window ${{ matrix.config }}
     runs-on: ubuntu-24.04
     timeout-minutes: 75
@@ -204,6 +226,7 @@ jobs:
           key: ccache-window-sdl${{ matrix.sdl }}-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   native:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: Native Linux ${{ matrix.config }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -297,6 +320,9 @@ jobs:
           python3 scripts/tests/test_strip_cdecl.py
           python3 scripts/tools/strip_cdecl.py --check
           python3 scripts/tests/test_summarize_alignment_report.py
+          python3 scripts/tests/test_frame_log.py
+          python3 scripts/tests/test_perf_run.py
+          python3 scripts/tests/test_changed_units.py
           python3 scripts/tests/test_float_int_rounding.py
           python3 scripts/tests/test_retail_float_int_scan.py
           python3 scripts/tests/test_openal_sound_formats.py
@@ -305,8 +331,6 @@ jobs:
           python3 scripts/tests/test_linux_sp_level_sweep.py
           python3 scripts/tests/test_linux_mp_map_sweep.py
           python3 scripts/tests/test_shader_spike.py
-          python3 scripts/tests/test_vita_gxm_heap.py
-          python3 scripts/tests/test_vita_cg_translate.py --require-glslang
 
       - name: Run asset-free native checks
         timeout-minutes: 30
@@ -357,6 +381,7 @@ jobs:
           key: ccache-native-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   client_census:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Asset-free compile proof for the multiplayer client sources: one syntax-only
     # -m32 front-end pass per production .cpp with the client definitions, checked
     # against scripts/tests/client_compile_census_blocked.txt in both directions.
@@ -449,6 +474,7 @@ jobs:
           retention-days: 7
 
   x64_census:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Opt-in 64-bit track, step one (docs/linux-x64.md): one syntax-only x86_64
     # Clang pass over every KisakCOD-dedi unit (exact commands from a
     # -DKISAK_LINUX_ARCH=x86_64 configure) and every client census source, with
@@ -520,6 +546,7 @@ jobs:
           retention-days: 7
 
   x64_dedicated:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Opt-in 64-bit track, step two (docs/linux-x64.md): check the generated
     # fastfile record layout tables against the struct definitions, run the
     # asset-free 64-bit record conversion test, build KisakCOD-dedi with
@@ -652,6 +679,7 @@ jobs:
           key: ccache-x64-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   arm64_dedicated:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Opt-in 64-bit Arm track, step one (docs/linux-arm64.md): on GitHub's
     # native Arm runner, build KisakCOD-dedi with -DKISAK_LINUX_ARCH=aarch64, run
     # the asset-free fastfile record conversion test for aarch64 and the
@@ -763,6 +791,7 @@ jobs:
           key: ccache-arm64-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   armv7_dedicated:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Opt-in 32-bit Arm track, the first step toward a PS Vita port
     # (docs/linux-armv7.md): cross-compile KisakCOD-dedi with
     # -DKISAK_LINUX_ARCH=armv7 on the x86 runner, check that engine code keeps
@@ -869,328 +898,19 @@ jobs:
           path: ${{ runner.temp }}/ccache
           key: ccache-armv7-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
-  vita_dedicated:
-    # Opt-in PS Vita track (docs/vita.md): build KisakCOD-dedi with Clang
-    # against the pinned VitaSDK (scripts/ci/install-vitasdk.sh), pack the
-    # .vpk, and check that the server keeps x86's float results (no fused
-    # multiply-add, no NEON float math). Nothing runs: there is no Vita here,
-    # so start-up and map loading are checked on David's console.
-    name: PS Vita dedicated server ${{ matrix.config }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 40
-
-    strategy:
-      fail-fast: false
-      matrix:
-        config: [Debug, RelWithDebInfo]
-
-    env:
-      BUILD_DIR: build-vita/${{ matrix.config }}
-      CMAKE_RUNTIME_OUTPUT_DIRECTORY: ${{ github.workspace }}/out/vita-${{ matrix.config }}
-      BINARY: out/vita-${{ matrix.config }}/KisakCOD-dedi
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Restore downloaded apt packages
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/apt-archives
-          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
-
-      - name: Install build tools
-        timeout-minutes: 20
-        shell: bash
-        run: |
-          set -euo pipefail
-          scripts/ci/apt-install.sh cmake ninja-build clang python3 ccache
-
-      - name: Restore VitaSDK
-        id: vitasdk_cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/vitasdk
-          key: vitasdk-${{ hashFiles('scripts/ci/install-vitasdk.sh') }}
-
-      - name: Install VitaSDK
-        timeout-minutes: 10
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "VITASDK=$(scripts/ci/install-vitasdk.sh "$RUNNER_TEMP/vitasdk")" >> "$GITHUB_ENV"
-
-      - name: Restore compiler cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/ccache
-          key: ccache-vita-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: ccache-vita-dedicated-${{ matrix.config }}-
-      - name: Use compiler cache
-        id: ccache
-        shell: bash
-        run: |
-          set -euo pipefail
-          scripts/ci/use-ccache.sh
-
-      - name: Configure PS Vita ${{ matrix.config }}
-        timeout-minutes: 15
-        shell: bash
-        run: |
-          set -euo pipefail
-          clang++ --version
-          cmake -S . -B "$BUILD_DIR" -G Ninja \
-            -DKISAK_PLATFORM=vita \
-            -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$CMAKE_RUNTIME_OUTPUT_DIRECTORY"
-
-      - name: Build PS Vita KisakCOD-dedi and its .vpk
-        timeout-minutes: 30
-        shell: bash
-        run: |
-          set -euo pipefail
-          cmake --build "$BUILD_DIR" --target KisakCOD-dedi-vpk --parallel "$(nproc)"
-          ls -l "$BINARY" "$BINARY.vpk"
-          # Float results have to match x86 (docs/vita.md): no fused
-          # multiply-adds, and no NEON float math on Q or D registers (NEON
-          # flushes denormals to zero); scalar VFP uses S registers for floats.
-          "$VITASDK/bin/arm-vita-eabi-objdump" -d "$BINARY" > "$RUNNER_TEMP/vita-dedi.dis"
-          if grep -Eq $'\t(vfma|vfms|vfnma|vfnms)' "$RUNNER_TEMP/vita-dedi.dis"; then
-            echo "the server contains fused multiply-add instructions" >&2
-            exit 1
-          fi
-          if grep -Eq $'\tv[a-z0-9]+\.f(32|64)\tq|\tv[a-z0-9]+\.f32\td' "$RUNNER_TEMP/vita-dedi.dis"; then
-            echo "the server contains NEON float instructions" >&2
-            exit 1
-          fi
-          # Symbols the link must keep (scripts/platform/vita/CMakeLists.txt):
-          # libgcc's weak pthread references (an unresolved one switches its
-          # thread support off, and every thread_local becomes shared), and
-          # sceUserMainThreadStackSize, which sets the main thread's stack.
-          "$VITASDK/bin/arm-vita-eabi-nm" "$BINARY" > "$RUNNER_TEMP/vita-dedi.sym"
-          if grep -Eq '^ +w pthread_' "$RUNNER_TEMP/vita-dedi.sym"; then
-            grep -E '^ +w pthread_' "$RUNNER_TEMP/vita-dedi.sym" >&2
-            echo "the server leaves weak pthread references unresolved" >&2
-            exit 1
-          fi
-          for symbol in pthread_cancel pthread_once sceUserMainThreadStackSize; do
-            if ! grep -Eq " [TD] $symbol\$" "$RUNNER_TEMP/vita-dedi.sym"; then
-              echo "the server does not link $symbol" >&2
-              exit 1
-            fi
-          done
-
-      - name: Upload the .vpk
-        if: ${{ matrix.config == 'RelWithDebInfo' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: KisakCOD-dedi-vita-${{ matrix.config }}
-          path: ${{ env.BINARY }}.vpk
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Report compiler cache
-        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          ccache --show-stats
-      - name: Save compiler cache
-        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ runner.temp }}/ccache
-          key: ccache-vita-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
-
-  vita_mp_client:
-    # Opt-in PS Vita client, stage 1 (docs/vita-client.md): build KisakCOD-mp
-    # with Clang against the pinned VitaSDK and pack its .vpk. The D3D9
-    # declarations come from DXVK Native's headers (nothing of DXVK is built)
-    # and the OpenAL ones from libopenal-dev; the client links no D3D9 or OpenAL
-    # library. The same float and link checks as the Vita server. The client
-    # does not run here: start-up is checked on David's Vita. Its control
-    # mapping and its small OpenAL do, as host tests.
-    name: PS Vita multiplayer client ${{ matrix.config }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-
-    strategy:
-      fail-fast: false
-      matrix:
-        config: [Debug, RelWithDebInfo]
-
-    env:
-      DXVK_REVISION: c3dd74be6baec53786d4e064a572185b70347a17
-      DXVK_DIRECTX_HEADERS_REVISION: 9df86f2341616ef1888ae59919feaa6d4fad693d
-      BUILD_DIR: build-vita-mp/${{ matrix.config }}
-      CMAKE_RUNTIME_OUTPUT_DIRECTORY: ${{ github.workspace }}/out/vita-mp-${{ matrix.config }}
-      BINARY: out/vita-mp-${{ matrix.config }}/KisakCOD-mp
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Restore downloaded apt packages
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/apt-archives
-          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
-
-      - name: Install build tools
-        timeout-minutes: 20
-        shell: bash
-        run: |
-          set -euo pipefail
-          # libopenal-dev only for its headers, copied below on their own.
-          scripts/ci/apt-install.sh cmake ninja-build clang python3 ccache libopenal-dev
-          mkdir -p "$RUNNER_TEMP/al-include"
-          cp -r /usr/include/AL "$RUNNER_TEMP/al-include/"
-
-      - name: Restore VitaSDK
-        id: vitasdk_cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/vitasdk
-          key: vitasdk-${{ hashFiles('scripts/ci/install-vitasdk.sh') }}
-
-      - name: Install VitaSDK
-        timeout-minutes: 10
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "VITASDK=$(scripts/ci/install-vitasdk.sh "$RUNNER_TEMP/vitasdk")" >> "$GITHUB_ENV"
-
-      - name: Fetch pinned DXVK Native 2.7.1 headers
-        timeout-minutes: 10
-        shell: bash
-        run: |
-          set -euo pipefail
-          # The same source-only fetch as the Linux client jobs. Nothing is built.
-          src="$RUNNER_TEMP/dxvk-source"
-          git init "$src"
-          git -C "$src" remote add origin https://github.com/doitsujin/dxvk.git
-          git -C "$src" fetch --depth 1 origin "$DXVK_REVISION"
-          git -C "$src" checkout --detach FETCH_HEAD
-          test "$(git -C "$src" rev-parse HEAD)" = "$DXVK_REVISION"
-          recorded="$(git -C "$src" ls-tree HEAD include/native/directx | awk '{print $3}')"
-          test "$recorded" = "$DXVK_DIRECTX_HEADERS_REVISION"
-          headers="$src/include/native/directx"
-          git init "$headers"
-          git -C "$headers" remote add origin https://github.com/Joshua-Ashton/mingw-directx-headers.git
-          git -C "$headers" fetch --depth 1 origin "$DXVK_DIRECTX_HEADERS_REVISION"
-          git -C "$headers" checkout --detach FETCH_HEAD
-          test "$(git -C "$headers" rev-parse HEAD)" = "$DXVK_DIRECTX_HEADERS_REVISION"
-          grep -q "version : '2.7.1'" "$src/meson.build"
-          python3 scripts/tests/run_native_d3d9_boundary_checks.py \
-            --dxvk-source "$src" --stage-dxvk-headers "$RUNNER_TEMP/dxvk-include/dxvk"
-
-      - name: Restore compiler cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/ccache
-          key: ccache-vita-mp-client-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: ccache-vita-mp-client-${{ matrix.config }}-
-      - name: Use compiler cache
-        id: ccache
-        shell: bash
-        run: |
-          set -euo pipefail
-          scripts/ci/use-ccache.sh
-
-      - name: Check the client's controls and sound on the host
-        # The control mapping and the small OpenAL make no Vita call: the host
-        # compiler builds them with sanitizers and runs their checks.
-        timeout-minutes: 10
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/tests/test_vita_input.py
-          python3 scripts/tests/test_vita_sound.py --al-include "$RUNNER_TEMP/al-include"
-
-      - name: Configure PS Vita client ${{ matrix.config }}
-        timeout-minutes: 15
-        shell: bash
-        run: |
-          set -euo pipefail
-          clang++ --version
-          cmake -S . -B "$BUILD_DIR" -G Ninja \
-            -DKISAK_PLATFORM=vita \
-            -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$CMAKE_RUNTIME_OUTPUT_DIRECTORY" \
-            -DKISAK_BUILD_VITA_MP_CLIENT=ON \
-            -DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk" \
-            -DKISAK_OPENAL_INCLUDE_DIR="$RUNNER_TEMP/al-include"
-
-      - name: Build PS Vita KisakCOD-mp and its .vpk
-        timeout-minutes: 40
-        shell: bash
-        run: |
-          set -euo pipefail
-          cmake --build "$BUILD_DIR" --target KisakCOD-mp-vpk KisakCOD-gxm-probe-vpk --parallel "$(nproc)"
-          ls -l "$BINARY" "$BINARY.vpk" "$(dirname "$BINARY")/KisakCOD-gxm-probe.vpk"
-          "$VITASDK/bin/arm-vita-eabi-size" -A "$BINARY" | grep -E '^\.(text|rodata|data|bss) '
-          # Float results have to match x86 (docs/vita.md): client prediction
-          # replays the server's movement math.
-          "$VITASDK/bin/arm-vita-eabi-objdump" -d "$BINARY" > "$RUNNER_TEMP/vita-mp.dis"
-          if grep -Eq $'\t(vfma|vfms|vfnma|vfnms)' "$RUNNER_TEMP/vita-mp.dis"; then
-            echo "the client contains fused multiply-add instructions" >&2
-            exit 1
-          fi
-          if grep -Eq $'\tv[a-z0-9]+\.f(32|64)\tq|\tv[a-z0-9]+\.f32\td' "$RUNNER_TEMP/vita-mp.dis"; then
-            echo "the client contains NEON float instructions" >&2
-            exit 1
-          fi
-          "$VITASDK/bin/arm-vita-eabi-nm" "$BINARY" > "$RUNNER_TEMP/vita-mp.sym"
-          if grep -Eq '^ +w pthread_' "$RUNNER_TEMP/vita-mp.sym"; then
-            grep -E '^ +w pthread_' "$RUNNER_TEMP/vita-mp.sym" >&2
-            echo "the client leaves weak pthread references unresolved" >&2
-            exit 1
-          fi
-          for symbol in pthread_cancel pthread_once sceUserMainThreadStackSize; do
-            if ! grep -Eq " [TD] $symbol\$" "$RUNNER_TEMP/vita-mp.sym"; then
-              echo "the client does not link $symbol" >&2
-              exit 1
-            fi
-          done
-
-      - name: Upload the .vpk
-        if: ${{ matrix.config == 'RelWithDebInfo' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: KisakCOD-mp-vita-${{ matrix.config }}
-          path: |
-            ${{ env.BINARY }}.vpk
-            ${{ env.CMAKE_RUNTIME_OUTPUT_DIRECTORY }}/KisakCOD-gxm-probe.vpk
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Report compiler cache
-        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          ccache --show-stats
-      - name: Save compiler cache
-        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ runner.temp }}/ccache
-          key: ccache-vita-mp-client-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
-
   x64_client:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Opt-in 64-bit track, step three (docs/linux-x64.md): build the multiplayer
     # client KisakCOD-mp with -DKISAK_LINUX_ARCH=x86_64 against x86_64 SDL3 and
     # the D3D9 and OpenAL stand-ins (built -m64), then run the same asset-free
     # checks as the i386 client: the game window test and the client's start
-    # from temporary trees with no game data. It is not playable yet; nothing
-    # here draws a frame. The i386 client job is untouched.
+    # from temporary trees with no game data. Nothing here draws a frame. The
+    # singleplayer game KisakCOD-sp is built in the same directory against the
+    # same stand-ins and started the same way, and the 32-bit layout checks
+    # read both games' sources. The i386 client job is untouched.
     name: x86_64 multiplayer client
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 110
 
     env:
       DXVK_REVISION: c3dd74be6baec53786d4e064a572185b70347a17
@@ -1202,6 +922,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # The merge commit and its parents: the two source scans below look
+          # only at what the pull request changed (HEAD^1 is the base).
+          fetch-depth: 2
 
       - name: Restore downloaded apt packages
         uses: actions/cache@v4
@@ -1218,9 +942,11 @@ jobs:
           # libopenal-dev only for <AL/al.h>; the client links the OpenAL stand-in.
           # libavcodec-dev and libavutil-dev for the Bink shim the client is
           # built with here (KISAK_LINUX_CINEMATICS, docs/linux-cinematics.md).
+          # libcurl4-openssl-dev for the HTTP downloader it is built with here
+          # (KISAK_LINUX_HTTP_DOWNLOADS, docs/linux-mp-client.md).
           scripts/ci/apt-install.sh \
             cmake ninja-build clang binutils python3 python3-clang-18 ccache libopenal-dev \
-            libavcodec-dev libavutil-dev
+            libavcodec-dev libavutil-dev libcurl4-openssl-dev
 
       # The size literal check parses every source as i386 and as x86_64, so it
       # needs the i386 C and C++ headers. Nothing in this job builds i386 code.
@@ -1319,7 +1045,7 @@ jobs:
             -DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk" \
             -DKISAK_DXVK_NATIVE_LIBRARY="$d3d9" \
             -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY="$openal" \
-            -DKISAK_LINUX_CINEMATICS=ON \
+            -DKISAK_LINUX_CINEMATICS=ON -DKISAK_LINUX_HTTP_DOWNLOADS=ON \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3" \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
           cmake --build "$BUILD_DIR" --target KisakCOD-mp KisakCOD-mp-client-window-test \
@@ -1338,16 +1064,50 @@ jobs:
           # Built with the Bink shim, which decodes movies with libavcodec.
           grep -Eqx 'libavcodec\.so\.[0-9]+' "$RUNNER_TEMP/x64-mp-client-needed.txt"
           grep -Eqx 'libavutil\.so\.[0-9]+' "$RUNNER_TEMP/x64-mp-client-needed.txt"
-          if grep -Ev '^(libSDL3\.so\.0|libd3d9_unavailable\.so|libopenal_unavailable\.so|libavcodec\.so\.[0-9]+|libavutil\.so\.[0-9]+|libstdc\+\+\.so\.6|libm\.so\.6|libgcc_s\.so\.1|libc\.so\.6|libpthread\.so\.0|libdl\.so\.2)$' \
+          # Built with the HTTP downloader (src/qcommon/dl_main.cpp), which
+          # uses the system's libcurl; without the option the client has
+          # stand-ins and no libcurl (the i386 client job).
+          grep -Eqx 'libcurl\.so\.4' "$RUNNER_TEMP/x64-mp-client-needed.txt"
+          nm -D --undefined-only "$OUT_DIR/KisakCOD-mp" | grep -Eq ' curl_multi_perform(@|$)'
+          if grep -Ev '^(libSDL3\.so\.0|libd3d9_unavailable\.so|libopenal_unavailable\.so|libavcodec\.so\.[0-9]+|libavutil\.so\.[0-9]+|libcurl\.so\.4|libstdc\+\+\.so\.6|libm\.so\.6|libgcc_s\.so\.1|libc\.so\.6|libpthread\.so\.0|libdl\.so\.2)$' \
               "$RUNNER_TEMP/x64-mp-client-needed.txt"; then
-            echo "the multiplayer client needs a library beyond SDL3, D3D9, OpenAL, libavcodec and the runtimes" >&2
+            echo "the multiplayer client needs a library beyond SDL3, D3D9, OpenAL, libavcodec, libcurl and the runtimes" >&2
             exit 1
           fi
-          # libavcodec refers to zlib names the game also defines; the client
-          # must not export them, or any other name, to the libraries it loads
+          # libavcodec and libcurl refer to zlib names the game also defines; the
+          # client must not export them, or any other name, to the libraries it loads
           # (scripts/platform/linux/mp_client_exports.map).
           if nm -D --defined-only "$OUT_DIR/KisakCOD-mp" | awk '{print $3}' | grep -vx '_IO_stdin_used'; then
             echo "the multiplayer client exports names to shared libraries" >&2
+            exit 1
+          fi
+
+      # KisakCOD-sp for x86_64 (scripts/platform/linux/sp_game.cmake), added to
+      # the client's build directory as the i386 device-probe job adds it to
+      # its own. It comes before the layout checks so that they read the
+      # singleplayer sources too.
+      - name: Build the x86_64 singleplayer game against the stand-ins
+        timeout-minutes: 40
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_LINUX_SP_GAME=ON
+          cmake --build "$BUILD_DIR" --target KisakCOD-sp --parallel "$(nproc)"
+          game="$OUT_DIR/KisakCOD-sp"
+          readelf -h "$game" | grep -Eq 'Class:[[:space:]]+ELF64'
+          readelf -h "$game" | grep -Eq 'Machine:[[:space:]]+Advanced Micro Devices X86-64'
+          readelf -d "$game" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' > "$RUNNER_TEMP/x64-sp-game-needed.txt"
+          cat "$RUNNER_TEMP/x64-sp-game-needed.txt"
+          grep -qx 'libSDL3.so.0' "$RUNNER_TEMP/x64-sp-game-needed.txt"
+          grep -qx 'libd3d9_unavailable.so' "$RUNNER_TEMP/x64-sp-game-needed.txt"
+          grep -qx 'libopenal_unavailable.so' "$RUNNER_TEMP/x64-sp-game-needed.txt"
+          if grep -Ev '^(libSDL3\.so\.0|libd3d9_unavailable\.so|libopenal_unavailable\.so|libavcodec\.so\.[0-9]+|libavutil\.so\.[0-9]+|libstdc\+\+\.so\.6|libm\.so\.6|libgcc_s\.so\.1|libc\.so\.6|libpthread\.so\.0|libdl\.so\.2)$' \
+              "$RUNNER_TEMP/x64-sp-game-needed.txt"; then
+            echo "the singleplayer game needs a library beyond SDL3, D3D9, OpenAL, libavcodec and the runtimes" >&2
+            exit 1
+          fi
+          if nm -D --defined-only "$game" | awk '{print $3}' | grep -vx '_IO_stdin_used'; then
+            echo "the singleplayer game exports names to shared libraries" >&2
             exit 1
           fi
 
@@ -1356,24 +1116,32 @@ jobs:
       # "Struct sizes written as numbers"). It runs after the build because
       # common.cpp includes the generated buildnumber.h.
       - name: Check for 32-bit struct sizes written as numbers
-        timeout-minutes: 20
+        timeout-minutes: 30
         shell: bash
         run: |
           set -euo pipefail
           /usr/bin/python3 scripts/tests/test_check_32bit_size_literals.py
-          /usr/bin/python3 scripts/tools/check_32bit_size_literals.py --build-dir "$BUILD_DIR"
+          # A pull request scans the units its change can reach
+          # (scripts/tools/changed_units.py); master and manual runs scan all.
+          since=()
+          if [ "${{ github.event_name }}" = pull_request ]; then since=(--changed-since HEAD^1); fi
+          /usr/bin/python3 scripts/tools/check_32bit_size_literals.py --build-dir "$BUILD_DIR" "${since[@]}"
 
       # A field reached through its i386 byte offset, a pointer read at a fixed
       # byte offset, or a union copied through a 4-byte member lands on the
       # wrong bytes on x86_64 (docs/linux-x64.md, "Byte offsets and union
       # copies").
       - name: Check for 32-bit byte offsets and union copies
-        timeout-minutes: 20
+        timeout-minutes: 30
         shell: bash
         run: |
           set -euo pipefail
           /usr/bin/python3 scripts/tests/test_check_32bit_layout_offsets.py
-          /usr/bin/python3 scripts/tools/check_32bit_layout_offsets.py --build-dir "$BUILD_DIR"
+          # A pull request scans the units its change can reach
+          # (scripts/tools/changed_units.py); master and manual runs scan all.
+          since=()
+          if [ "${{ github.event_name }}" = pull_request ]; then since=(--changed-since HEAD^1); fi
+          /usr/bin/python3 scripts/tools/check_32bit_layout_offsets.py --build-dir "$BUILD_DIR" "${since[@]}"
 
       - name: Run the x86_64 multiplayer client's fail-closed start
         timeout-minutes: 10
@@ -1387,6 +1155,21 @@ jobs:
           export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/stand-ins"
           "$OUT_DIR/KisakCOD-mp-client-window-test"
           python3 -u scripts/tests/test_linux_mp_client.py --binary "$OUT_DIR/KisakCOD-mp"
+
+      # From temporary trees with no game data: an empty one must be refused at
+      # the file system check, a stub one must stop at autoconfigure for want
+      # of configure.csv.
+      - name: Run the x86_64 singleplayer game's fail-closed start
+        timeout-minutes: 10
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/stand-ins"
+          python3 -u scripts/tests/test_linux_sp_game.py --binary "$OUT_DIR/KisakCOD-sp"
 
       # The Bink shim on made-up movies and a stand-in decoder, plus
       # libavcodec's Bink decoders opened as the shim opens them. No game
@@ -1430,6 +1213,7 @@ jobs:
           key: ccache-x64-mp-client-${{ github.run_id }}-${{ github.run_attempt }}
 
   arm64_client:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Opt-in 64-bit Arm track, step three (docs/linux-arm64.md): on GitHub's
     # native Arm runner, build the multiplayer client KisakCOD-mp with
     # -DKISAK_LINUX_ARCH=aarch64 against aarch64 SDL3 and the D3D9 and OpenAL
@@ -1637,6 +1421,7 @@ jobs:
           key: ccache-arm64-mp-client-${{ github.run_id }}-${{ github.run_attempt }}
 
   world_frontend:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Asset-free CPU test of the production renderer world front end: scene and
     # view setup, DPVS cell/portal visibility, the AABB-tree and cull-group walk,
     # BSP draw-surface batching and the merge, run against a synthetic world. The
@@ -1739,6 +1524,7 @@ jobs:
           retention-days: 7
 
   world_surface:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Asset-free: builds seven standalone -m32 test cases directly
     # and runs the bundle prepare tests. No DXVK, no SDL, no GPU, no game assets,
     # no CMake configure. tests/linux_renderer/CMakeLists.txt is deliberately not
@@ -1818,6 +1604,7 @@ jobs:
           retention-days: 7
 
   native_d3d9_boundary:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # The opt-in native D3D9 boundary (src/linux/d3d9_native.h) against the pinned
     # DXVK Native 2.7.1 *headers*. DXVK is fetched as source and only its headers
     # are used: no DXVK build, no libdxvk_d3d9.so, no Vulkan, no SDL, no GPU, no
@@ -2011,6 +1798,7 @@ jobs:
           key: ccache-native-d3d9-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   device_probe:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # The opt-in D3D9 device probe (scripts/platform/linux/device_probe.cmake)
     # without a GPU: the engine's r_init.cpp linked through the native D3D9
     # boundary (pinned DXVK Native 2.7.1 *headers*) with the Win32 window layer
@@ -2447,6 +2235,7 @@ jobs:
           key: ccache-device-probe-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   free_camera:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Asset-free: the host free camera and its frame owner, compiled as two
     # standalone -m32 tests with Clang and the production Linux flags, linked
     # against the unmodified production AnglesToAxis unit. The renderer is a
@@ -2521,6 +2310,7 @@ jobs:
           retention-days: 7
 
   vulkan_window:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # Opt-in Vulkan back end (docs/vulkan-core.md): the shared Vulkan core in
     # src/gfx_vk and KisakCOD-vulkan-probe, which opens an SDL3 window and
     # clears, presents and resizes it through the core, then draws a small
@@ -2944,6 +2734,7 @@ jobs:
           key: ccache-vulkan-window-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   vulkan_engine:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # The engine's renderer on the Vulkan back end (docs/vulkan-d3d9-front.md):
     # the device probe, the world draw probe and the multiplayer client built
     # i386 with KISAK_BUILD_VULKAN_BACKEND, so r_backend vulkan makes

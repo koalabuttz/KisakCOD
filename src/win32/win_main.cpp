@@ -400,6 +400,10 @@ void Sys_Quit()
 {
 	Sys_EnterCriticalSection(CRITSECT_COM_ERROR);
 	timeEndPeriod(1);
+#ifdef KISAK_DEDICATED
+	// KISAK: logs an anonymous Steam game server off; does nothing otherwise.
+	Steam_ShutdownGameServer();
+#endif
 	Sys_SpawnQuitProcess();
 	IN_Shutdown();
 	Key_Shutdown();

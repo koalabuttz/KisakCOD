@@ -7,20 +7,51 @@
 #include <psp2/io/stat.h>
 #include <psp2/kernel/processmgr.h>
 
+#include <atomic>
 #include <cstdio>
+#include <mutex>
 #include <string>
 
 namespace gfx_gxm
 {
 namespace
 {
-std::string g_folder;
+// The card and the compiler: one thread at a time, for as long as a read or
+// a compile takes. Nothing a frame needs waits for this lock.
+std::mutex g_work;
 bool g_folderMade = false;
 bool g_compilerTried = false;
 bool g_compilerReady = false;
 std::string g_compilerMessage;
-uint64_t g_lastCompile = 0;
+
+// The folder, the statistics and the two marks below: held for a moment only.
+std::mutex g_state;
+std::string g_folder;
 ProgramCacheStats g_stats{};
+bool g_dumpChecked = false;
+bool g_dump = false;
+// For ProgramCacheFrame, which must not wait for g_work.
+std::atomic<bool> g_compilerLoaded{false};
+std::atomic<uint64_t> g_lastCompile{0};
+
+// The compiler ran on the game's loading thread before, whose stack this is
+// (Sys_CreateThread).
+constexpr size_t kWorkerStack = 1024 * 1024;
+
+bool MakeRequested(void *, const std::string &cg, ShaderStage stage, std::vector<uint8_t> &program, std::string &log);
+void TidyOnWorker(void *);
+
+// Made at first use and never destroyed: nothing of it runs before main or
+// after it, and its worker thread may still be compiling when the game quits.
+ProgramQueue &Queue()
+{
+    static ProgramQueue *const queue = [] {
+        ProgramQueue *made = new ProgramQueue;
+        made->Configure(MakeRequested, TidyOnWorker, nullptr, kWorkerStack);
+        return made;
+    }();
+    return *queue;
+}
 
 // The compiler is unloaded once it holds this much of the heap, and once it
 // has had nothing to do for this long. The heap is the game's too: a first
@@ -34,12 +65,39 @@ uint64_t Micros()
     return sceKernelGetProcessTimeWide();
 }
 
+std::string Folder()
+{
+    const std::lock_guard<std::mutex> state(g_state);
+    return g_folder;
+}
+
+// With g_work held.
 void UnloadCompiler()
 {
-    g_stats.compilerGaveBack += UnloadShaderCompiler();
-    ++g_stats.compilerUnloads;
+    const size_t gaveBack = UnloadShaderCompiler();
+    {
+        const std::lock_guard<std::mutex> state(g_state);
+        g_stats.compilerGaveBack += gaveBack;
+        ++g_stats.compilerUnloads;
+    }
     if (!ShaderCompilerLoaded())
+    {
         g_compilerTried = false; // the next program to compile loads it again
+        g_compilerLoaded.store(false, std::memory_order_release);
+    }
+}
+
+bool CompilerIdle()
+{
+    return g_compilerLoaded.load(std::memory_order_acquire) &&
+           Micros() - g_lastCompile.load(std::memory_order_acquire) > kCompilerIdleMicros;
+}
+
+// With g_work held.
+void UnloadIdleCompiler()
+{
+    if (ShaderCompilerLoaded() && CompilerIdle())
+        UnloadCompiler();
 }
 
 uint64_t KeyFor(const std::string &cg, ShaderStage stage)
@@ -48,11 +106,12 @@ uint64_t KeyFor(const std::string &cg, ShaderStage stage)
     return cg::Hash(cg.data(), cg.size(), cg::Hash(&tag, 1));
 }
 
-std::string PathFor(const std::string &cg, ShaderStage stage, const char *extension = ".gxp")
+std::string PathFor(const std::string &folder, const std::string &cg, ShaderStage stage,
+                    const char *extension = ".gxp")
 {
     char name[32];
     std::snprintf(name, sizeof(name), "/%016llx%s", static_cast<unsigned long long>(KeyFor(cg, stage)), extension);
-    return g_folder + name;
+    return folder + name;
 }
 
 bool ReadFile(const std::string &path, std::vector<uint8_t> &data)
@@ -73,14 +132,15 @@ bool ReadFile(const std::string &path, std::vector<uint8_t> &data)
     return ok;
 }
 
-bool WriteFile(const std::string &path, const std::vector<uint8_t> &data)
+// With g_work held.
+bool WriteFile(const std::string &folder, const std::string &path, const std::vector<uint8_t> &data)
 {
     if (!g_folderMade)
     {
         // Each level in turn; an existing folder is fine.
-        for (size_t at = g_folder.find('/'); at != std::string::npos; at = g_folder.find('/', at + 1))
-            sceIoMkdir(g_folder.substr(0, at).c_str(), 0777);
-        sceIoMkdir(g_folder.c_str(), 0777);
+        for (size_t at = folder.find('/'); at != std::string::npos; at = folder.find('/', at + 1))
+            sceIoMkdir(folder.substr(0, at).c_str(), 0777);
+        sceIoMkdir(folder.c_str(), 0777);
         g_folderMade = true;
     }
     const std::string temporary = path + ".tmp";
@@ -98,20 +158,25 @@ bool WriteFile(const std::string &path, const std::vector<uint8_t> &data)
     return sceIoRename(temporary.c_str(), path.c_str()) >= 0;
 }
 
-bool g_dumpChecked = false;
-bool g_dump = false;
-
 // The program's source next to its file, when the folder asks for it.
-void DumpSource(const std::string &cg, ShaderStage stage)
+void DumpSource(const std::string &folder, const std::string &cg, ShaderStage stage)
 {
-    if (!g_dumpChecked)
+    bool checked = false, dump = false;
     {
-        g_dumpChecked = true;
-        g_dump = ProgramCacheMarker("dump-cg");
+        const std::lock_guard<std::mutex> state(g_state);
+        checked = g_dumpChecked;
+        dump = g_dump;
     }
-    if (!g_dump)
+    if (!checked)
+    {
+        dump = ProgramCacheMarker("dump-cg");
+        const std::lock_guard<std::mutex> state(g_state);
+        g_dumpChecked = true;
+        g_dump = dump;
+    }
+    if (!dump)
         return;
-    const std::string path = PathFor(cg, stage, ".cg");
+    const std::string path = PathFor(folder, cg, stage, ".cg");
     SceIoStat stat{};
     if (sceIoGetstat(path.c_str(), &stat) >= 0)
         return;
@@ -121,23 +186,48 @@ void DumpSource(const std::string &cg, ShaderStage stage)
         std::fclose(file);
     }
 }
+// The queue's worker thread makes a requested program the way GetProgram
+// makes any other.
+bool MakeRequested(void *, const std::string &cg, ShaderStage stage, std::vector<uint8_t> &program, std::string &log)
+{
+    return GetProgram(cg, stage, program, log);
+}
+
+void TidyOnWorker(void *)
+{
+    const std::lock_guard<std::mutex> work(g_work);
+    UnloadIdleCompiler();
+}
 } // namespace
 
 void SetProgramCacheFolder(const char *folder)
 {
-    g_folder = folder ? folder : "";
-    while (!g_folder.empty() && g_folder.back() == '/')
-        g_folder.pop_back();
+    std::string cleaned = folder ? folder : "";
+    while (!cleaned.empty() && cleaned.back() == '/')
+        cleaned.pop_back();
+    {
+        const std::lock_guard<std::mutex> state(g_state);
+        if (g_folder == cleaned)
+        {
+            g_dumpChecked = false; // the marker may have come or gone
+            return;
+        }
+    }
+    // A new folder: after the program being made for the old one.
+    const std::lock_guard<std::mutex> work(g_work);
+    const std::lock_guard<std::mutex> state(g_state);
+    g_folder = cleaned;
     g_folderMade = false;
     g_dumpChecked = false;
 }
 
 bool ProgramCacheMarker(const char *name)
 {
-    if (g_folder.empty())
+    const std::string folder = Folder();
+    if (folder.empty())
         return false;
     SceIoStat stat{};
-    return sceIoGetstat((g_folder + "/" + name).c_str(), &stat) >= 0;
+    return sceIoGetstat((folder + "/" + name).c_str(), &stat) >= 0;
 }
 
 uint64_t ProgramCacheKey(const std::string &cg, ShaderStage stage)
@@ -149,60 +239,116 @@ bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &
                 bool fastMath, int optimization)
 {
     log.clear();
+    const std::lock_guard<std::mutex> work(g_work);
+    const std::string folder = Folder();
     std::string path;
-    if (!g_folder.empty())
+    if (!folder.empty())
     {
-        DumpSource(cg, stage);
-        path = PathFor(cg, stage);
+        DumpSource(folder, cg, stage);
+        path = PathFor(folder, cg, stage);
         const uint64_t begin = Micros();
-        if (ReadFile(path, program) &&
-            sceGxmProgramCheck(reinterpret_cast<const SceGxmProgram *>(program.data())) >= 0)
+        const bool read = ReadFile(path, program) &&
+                          sceGxmProgramCheck(reinterpret_cast<const SceGxmProgram *>(program.data())) >= 0;
+        const uint64_t took = Micros() - begin;
+        const std::lock_guard<std::mutex> state(g_state);
+        g_stats.readMicros += took;
+        if (read)
         {
             ++g_stats.fromFiles;
-            g_stats.readMicros += Micros() - begin;
+            if (took > g_stats.slowestReadMicros)
+                g_stats.slowestReadMicros = took;
             return true;
         }
-        g_stats.readMicros += Micros() - begin;
     }
     if (!g_compilerTried)
     {
         g_compilerTried = true;
         g_compilerReady = LoadShaderCompiler(g_compilerMessage);
+        g_compilerLoaded.store(ShaderCompilerLoaded(), std::memory_order_release);
+        // The idle clock starts when it is loaded, not at its first compile.
+        g_lastCompile.store(Micros(), std::memory_order_release);
     }
     if (!g_compilerReady)
     {
+        const std::lock_guard<std::mutex> state(g_state);
         ++g_stats.failed;
         log = "no shader compiler: " + g_compilerMessage;
         return false;
     }
     const uint64_t begin = Micros();
     const bool compiled = CompileCg(cg.data(), cg.size(), stage, program, log, fastMath, optimization);
-    g_lastCompile = Micros();
-    g_stats.compileMicros += g_lastCompile - begin;
+    const uint64_t end = Micros();
+    g_lastCompile.store(end, std::memory_order_release);
     size_t held = 0, peak = 0;
     uint32_t refused = 0;
     ShaderCompilerMemory(held, peak, refused);
     if (held > kCompilerHeapLimit)
         UnloadCompiler();
-    if (!compiled)
     {
-        ++g_stats.failed;
-        return false;
+        const std::lock_guard<std::mutex> state(g_state);
+        g_stats.compileMicros += end - begin;
+        if (end - begin > g_stats.slowestCompileMicros)
+            g_stats.slowestCompileMicros = end - begin;
+        if (!compiled)
+        {
+            ++g_stats.failed;
+            return false;
+        }
+        ++g_stats.compiled;
     }
-    ++g_stats.compiled;
-    if (!path.empty() && !WriteFile(path, program))
+    if (!path.empty() && !WriteFile(folder, path, program))
+    {
+        const std::lock_guard<std::mutex> state(g_state);
         ++g_stats.writeFailures;
+    }
     return true;
+}
+
+ProgramRequestRef RequestProgram(std::string cg, ShaderStage stage, std::string label)
+{
+    const uint64_t key = KeyFor(cg, stage);
+    return Queue().Ask(std::move(cg), stage, key, std::move(label));
+}
+
+void HurryProgram(const ProgramRequestRef &request)
+{
+    Queue().Hurry(request);
+}
+
+size_t ProgramsWaiting()
+{
+    return Queue().Waiting();
+}
+
+void TakeProgramFailures(std::vector<ProgramRequestRef> &failures)
+{
+    Queue().TakeFailures(failures);
 }
 
 void ProgramCacheFrame()
 {
-    if (ShaderCompilerLoaded() && Micros() - g_lastCompile > kCompilerIdleMicros)
-        UnloadCompiler();
+    if (!CompilerIdle())
+        return;
+    // The worker unloads it between two programs. Without a worker (nothing
+    // was requested yet) this thread does, unless a program is being made.
+    if (Queue().AskTidy())
+        return;
+    if (g_work.try_lock())
+    {
+        UnloadIdleCompiler();
+        g_work.unlock();
+    }
 }
 
-const ProgramCacheStats &GetProgramCacheStats()
+ProgramCacheStats GetProgramCacheStats()
 {
-    return g_stats;
+    const ProgramQueue::Counts counts = Queue().GetCounts();
+    const std::lock_guard<std::mutex> state(g_state);
+    ProgramCacheStats stats = g_stats;
+    stats.requested = counts.asked;
+    stats.hurried = counts.hurried;
+    stats.dropped = counts.dropped;
+    stats.mostWaiting = uint32_t(counts.mostWaiting);
+    return stats;
 }
 } // namespace gfx_gxm

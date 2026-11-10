@@ -45,12 +45,16 @@
 #     have yet (remote script debugger, HTTP downloads, voice, mouse, window
 #     procedure). Each answers as the engine does on Windows when the service is
 #     missing, or refuses by name where only raw assets or a remote debugger go.
+#     With KISAK_LINUX_HTTP_DOWNLOADS the real downloader, src/qcommon/dl_main.cpp,
+#     links instead of its answers there, against the system's libcurl.
 #
 # The link uses --gc-sections like the dedicated target. See
 # docs/linux-mp-client.md.
 # ---------------------------------------------------------------------------
 option(KISAK_LINUX_CINEMATICS
     "Play Bink movies in KisakCOD-mp through the Linux Bink shim (needs libavcodec and libavutil, found with pkg-config)" OFF)
+option(KISAK_LINUX_HTTP_DOWNLOADS
+    "Fetch a server's map and mod files over HTTP(S) in KisakCOD-mp with the engine's libcurl downloader (needs libcurl 7.85 or newer, found with pkg-config)" OFF)
 option(KISAK_LINUX_TRACY
     "Build KisakCOD-dedi, KisakCOD-mp and KisakCOD-sp with the Tracy profiler: idle until a profiler connects, localhost only. For profiling runs" OFF)
 option(KISAK_BUILD_LINUX_MP_CLIENT
@@ -137,6 +141,26 @@ endif()
 list(REMOVE_ITEM mp_client_blocked_kept "${mp_client_cinematic_source}")
 list(REMOVE_ITEM mp_client_engine_sources ${mp_client_blocked_kept})
 
+# The HTTP downloader. The census blocks it for <curl/curl.h>, and the
+# dedicated server's lists (scripts/platform/linux/CMakeLists.txt) drop it
+# from QCOMMON before this file reads them. It links only with
+# KISAK_LINUX_HTTP_DOWNLOADS; without it mp_client_unavailable.cpp answers.
+set(mp_client_http_source "${SRC_DIR}/qcommon/dl_main.cpp")
+list(FIND mp_client_blocked "${mp_client_http_source}" mp_client_http_at)
+if(mp_client_http_at EQUAL -1)
+    message(FATAL_ERROR "the census no longer blocks dl_main.cpp; review how KisakCOD-mp builds HTTP downloads")
+endif()
+list(REMOVE_ITEM mp_client_engine_sources "${mp_client_http_source}")
+if(KISAK_LINUX_HTTP_DOWNLOADS)
+    find_package(PkgConfig REQUIRED)
+    # dl_main.cpp sets CURLOPT_PROTOCOLS_STR, which libcurl has from 7.85.
+    # For an i386 build on an x86_64 host, point pkg-config at the i386 files:
+    # PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
+    pkg_check_modules(KISAK_CURL REQUIRED IMPORTED_TARGET "libcurl>=7.85")
+    message(STATUS "KisakCOD-mp HTTP downloads: libcurl ${KISAK_CURL_VERSION}")
+    list(APPEND mp_client_engine_sources "${mp_client_http_source}")
+endif()
+
 if(KISAK_LINUX_CINEMATICS)
     # The Bink player draws into D3D9 textures it locks itself, so it compiles
     # through the boundary like the proof-list units.
@@ -214,6 +238,7 @@ set(KISAK_MP_CLIENT_DEFINITIONS
     _FILE_OFFSET_BITS=64 _GNU_SOURCE
     $<$<CONFIG:Debug>:_DEBUG>
     $<$<BOOL:${KISAK_LINUX_STEAM}>:KISAK_LINUX_STEAM>
+    $<$<BOOL:${KISAK_LINUX_HTTP_DOWNLOADS}>:KISAK_LINUX_HTTP_DOWNLOADS>
 )
 set(KISAK_MP_CLIENT_OPTIONS
     $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
@@ -249,6 +274,19 @@ endforeach()
 set_property(SOURCE "${SRC_DIR}/sound/snd_driver_load_obj.cpp" TARGET_DIRECTORY KisakCOD-mp-standin
     APPEND PROPERTY COMPILE_DEFINITIONS DR_WAV_IMPLEMENTATION DR_MP3_IMPLEMENTATION)
 target_link_libraries(KisakCOD-mp-native PRIVATE kisak_linux_native_d3d9)
+if(KISAK_LINUX_HTTP_DOWNLOADS)
+    # The HTTP downloader, as the Windows target compiles it, against the
+    # system's libcurl instead of the pinned static one (scripts/extern/curl.cmake).
+    target_link_libraries(KisakCOD-mp-standin PRIVATE PkgConfig::KISAK_CURL)
+    # libcurl's headers often sit in the compiler's own multiarch directory.
+    # Name it after the system directories, as for the FFmpeg headers below, so
+    # tools that parse this unit again for the other architecture find them.
+    pkg_get_variable(KISAK_CURL_INCLUDEDIR libcurl includedir)
+    if(KISAK_CURL_INCLUDEDIR)
+        set_property(SOURCE "${mp_client_http_source}" TARGET_DIRECTORY KisakCOD-mp-standin
+            APPEND PROPERTY COMPILE_OPTIONS "-idirafter${KISAK_CURL_INCLUDEDIR}")
+    endif()
+endif()
 
 # The Bink shim (KISAK_LINUX_CINEMATICS): the Bink API over a libavcodec
 # decoder and an OpenAL output, and RAD's texture lock functions over the
@@ -317,6 +355,9 @@ target_link_libraries(KisakCOD-mp PRIVATE
 add_dependencies(KisakCOD-mp update_build_number)
 if(KISAK_LINUX_CINEMATICS)
     target_link_libraries(KisakCOD-mp PRIVATE PkgConfig::KISAK_FFMPEG)
+endif()
+if(KISAK_LINUX_HTTP_DOWNLOADS)
+    target_link_libraries(KisakCOD-mp PRIVATE PkgConfig::KISAK_CURL)
 endif()
 if(KISAK_LINUX_TRACY)
     target_link_libraries(KisakCOD-mp PRIVATE TracyClient)

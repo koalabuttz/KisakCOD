@@ -135,6 +135,7 @@ set(vita_mp_own_sources
 # build the same files (scripts/tests/test_vita_input.py, test_vita_sound.py).
 set(vita_mp_input_sound_sources
     "${SRC_DIR}/vita/client/input/vita_input_map.cpp"
+    "${SRC_DIR}/vita/client/input/vita_text_entry.cpp"
     "${SRC_DIR}/vita/client/sound/vita_al.cpp"
     "${SRC_DIR}/vita/client/sound/vita_al_output.cpp")
 
@@ -174,6 +175,7 @@ set(vita_mp_gfx_sources
     "${SRC_DIR}/gfx_gxm/gxm_heap.cpp"
     "${SRC_DIR}/gfx_gxm/gxm_memory.cpp"
     "${SRC_DIR}/gfx_gxm/gxm_program_cache.cpp"
+    "${SRC_DIR}/gfx_gxm/gxm_program_queue.cpp"
     "${SRC_DIR}/gfx_gxm/gxm_shader_compiler.cpp"
     "${SRC_DIR}/gfx_gxm/shader/gxm_cg_translate.cpp"
     "${SRC_DIR}/gfx_gxm/legacy/gxm_d3d9_backend.cpp"
@@ -226,7 +228,7 @@ target_link_options(KisakCOD-mp PRIVATE ${KISAK_VITA_LINK_OPTIONS})
 # The shader compiler is the user's own libshacccg.suprx, loaded at run time
 # (gxm_shader_compiler.h): weak imports, so the client starts without it.
 target_link_libraries(KisakCOD-mp PRIVATE ${KISAK_VITA_LINK_LIBRARIES} SceCtrl_stub SceTouch_stub
-    SceAudio_stub SceGxm_stub SceDisplay_stub SceShaccCg_stub_weak)
+    SceAudio_stub SceGxm_stub SceDisplay_stub SceIme_stub SceCommonDialog_stub SceShaccCg_stub_weak)
 add_dependencies(KisakCOD-mp update_build_number)
 
 set(KISAK_VITA_MP_TITLE_ID "KSKD00002" CACHE STRING "PS Vita title ID of the multiplayer client .vpk (9 characters)")

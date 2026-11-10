@@ -33,9 +33,10 @@ elseif(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     message(FATAL_ERROR "KISAK_PLATFORM=linux requires a Linux target toolchain.")
 elseif(KISAK_LINUX_ARCH STREQUAL "x86_64")
     # Opt-in 64-bit track: KisakCOD-dedi loads retail maps and hosts bots, the
-    # multiplayer client KisakCOD-mp (with the native D3D9 boundary it needs)
-    # builds, and the compile census reads its compile commands. The other
-    # opt-in Linux targets still describe the i386 engine. See docs/linux-x64.md.
+    # multiplayer client KisakCOD-mp and the singleplayer game KisakCOD-sp
+    # (with the native D3D9 boundary they need) build, and the compile census
+    # reads its compile commands. The other opt-in Linux targets still describe
+    # the i386 engine. See docs/linux-x64.md.
     if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
         message(FATAL_ERROR "KISAK_LINUX_ARCH=x86_64 requires a 64-bit toolchain (-m64). Use a new build directory.")
     endif()
@@ -44,12 +45,13 @@ elseif(KISAK_LINUX_ARCH STREQUAL "x86_64")
             KISAK_BUILD_UI_ASSET_EXPORT KISAK_BUILD_WORLD_FRONTEND_PROBE KISAK_BUILD_DEVICE_PROBE
             KISAK_BUILD_WORLD_DEVICE_PROBE KISAK_BUILD_WORLD_DRAW_PROBE)
         if(${kisak_i386_only})
-            message(FATAL_ERROR "${kisak_i386_only} is i386-only; KISAK_LINUX_ARCH=x86_64 supports KisakCOD-dedi, KisakCOD-mp and the compile census")
+            message(FATAL_ERROR "${kisak_i386_only} is i386-only; KISAK_LINUX_ARCH=x86_64 supports KisakCOD-dedi, KisakCOD-mp, KisakCOD-sp and the compile census")
         endif()
     endforeach()
     message(WARNING "KISAK_LINUX_ARCH=x86_64 is the opt-in 64-bit track. KisakCOD-dedi loads the stock maps "
-        "and hosts bots; KisakCOD-mp builds but is not yet playable. Both have had far less testing than i386; "
-        "ship the i386 build. See docs/linux-x64.md.")
+        "and hosts bots, and KisakCOD-mp has been played on one laptop; KisakCOD-sp builds and starts but has "
+        "not loaded a level yet. All have had far less testing than i386; ship the i386 build. "
+        "See docs/linux-x64.md.")
 elseif(KISAK_LINUX_ARCH STREQUAL "aarch64")
     # Opt-in 64-bit Arm track: the dedicated server and the multiplayer client
     # (with the native D3D9 boundary it needs). It shares the
