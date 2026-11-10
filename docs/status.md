@@ -145,14 +145,17 @@ As of 2026-11-10.
 
 | PR | What | Waits on |
 | --- | --- | --- |
-| 152 | Vulkan back end: record commands on a second thread, as DXVK does, and submit a frame to the GPU in parts while it is drawn ([front](vulkan-d3d9-front.md#threads)) | Hosted CI is green. Laptop run 9 measured 141 fps against 151 to 155 through DXVK with an unchanged picture; a run of the feed interval on the laptop and a first run on the PC are queued. |
+| 152 | Vulkan back end: record commands on a second thread, as DXVK does, and submit a frame to the GPU in parts while it is drawn ([front](vulkan-d3d9-front.md#threads)) | Its hosted run on the current head. Laptop run 9 measured 141 fps against 151 to 155 through DXVK with an unchanged picture. |
+| 157 | Linux multiplayer client: a laptop tool that loads each of the 21 stock maps, spawns, presses buttons and reports (`scripts/tests/run_linux_mp_map_sweep.py`) | The first laptop sweep, i386 and x86_64. |
+| 158 | An upstream patch queue (`docs/upstream`): ten fixes prepared as patches on upstream's master, a tool that checks them, and a workflow that builds the patched upstream tree. Nothing in it is sent upstream. | Its hosted MSVC builds of the patched tree. |
 
 ## Laptop and PC runs still to do
 
 As of 2026-11-10. Each machine does one run at a time.
 
-- Vulkan back end, PR 152: the feed interval on the laptop (run 10), and the
-  same code on the PC (PC run 6), which also compares real D3D9 with
+- Vulkan back end, PR 152's code: the feed interval on the laptop (run 10,
+  queued), and a first run on the PC (PC run 6, queued), which also compares
+  real D3D9 with
   `r_altModelLightingUpdate` 0 and 1 from one view to settle the model
   lighting difference.
 - Vulkan probe with the Khronos validation layer (synchronisation checks) on a
@@ -169,8 +172,9 @@ As of 2026-11-10. Each machine does one run at a time.
   the laptop.
 - Singleplayer hand play on the levels the sweep passed (step 6 in
   [linux-sp-levels.md](linux-sp-levels.md)); sweep run 1 is done.
-- Multiplayer client beyond mp_crash: the other stock maps and a long session,
-  i386 and x86_64. Only mp_crash has been played.
+- Multiplayer client beyond mp_crash, which is the only map played so far:
+  the sweep of all 21 stock maps with PR 157's tool, i386 and x86_64, then a
+  30-minute session on one map.
 
 ## Roadmap
 
