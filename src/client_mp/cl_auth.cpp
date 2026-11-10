@@ -27,6 +27,37 @@ bool IsGuid(const char *guid)
     }
     return guid[32] == 0;
 }
+
+const char registrySource[] = "the registry (HKLM\\SOFTWARE\\Activision\\Call of Duty 4, codkey)";
+
+// Where a connect gets the key code: <homePath>/codkey.txt, else (when there
+// is no such file) the retail install's registry value on Windows. Fills the
+// file's path, and names the place the answer came from.
+KeyCodeStatus FindKeyCode(const char *homePath, char *path, size_t pathSize, char guid[33], const char **source)
+{
+    KeyCodeStatus status = KeyCodeStatus::missing;
+    path[0] = 0;
+    guid[0] = 0;
+    *source = path;
+    if (homePath && *homePath)
+    {
+        const int length = std::snprintf(path, pathSize, "%s/codkey.txt", homePath);
+        if (length < 0 || static_cast<size_t>(length) >= pathSize)
+        {
+            path[0] = 0;
+            return KeyCodeStatus::unreadable;
+        }
+        status = CL_ReadKeyCodeFile(path, guid);
+    }
+    if (status == KeyCodeStatus::missing)
+    {
+        status = CL_ReadKeyCodeRegistry(guid);
+        // Without a registry value the file is the place to put one.
+        if (status != KeyCodeStatus::missing)
+            *source = registrySource;
+    }
+    return status;
+}
 }
 
 ClientAuthResult CL_FormatSteamChallenge(const unsigned char *ticket, uint32_t size,
@@ -82,19 +113,8 @@ ClientAuthMethod CL_PrepareRemoteAuth(const netadr_t &server, const char *homePa
 #endif
 
     char path[1024] = {};
-    KeyCodeStatus fileStatus = KeyCodeStatus::missing;
-    if (homePath && *homePath)
-    {
-        std::snprintf(path, sizeof(path), "%s/codkey.txt", homePath);
-        fileStatus = CL_ReadKeyCodeFile(path, s_keyCodeGuid);
-    }
     const char *source = path;
-    KeyCodeStatus status = fileStatus;
-    if (status == KeyCodeStatus::missing)
-    {
-        status = CL_ReadKeyCodeRegistry(s_keyCodeGuid);
-        source = "the registry (HKLM\\SOFTWARE\\Activision\\Call of Duty 4, codkey)";
-    }
+    const KeyCodeStatus status = FindKeyCode(homePath, path, sizeof(path), s_keyCodeGuid, &source);
     if (status == KeyCodeStatus::ok)
     {
         Com_Printf(CON_CHANNEL_CLIENT,
@@ -156,6 +176,52 @@ void CL_CancelPlatformAuthTicket()
 #if defined(WIN32) || defined(KISAK_LINUX_STEAM)
     Steam_CancelClientTicket();
 #endif
+}
+
+KeyCodeStatus CL_SaveKeyCode(const char *homePath, const char *keyText)
+{
+    char path[1024] = {};
+    if (!homePath || !*homePath)
+    {
+        Com_PrintError(CON_CHANNEL_CLIENT, "The key code was not saved: there is no KisakCOD home folder (fs_homepath).\n");
+        return KeyCodeStatus::unwritable;
+    }
+    const int length = std::snprintf(path, sizeof(path), "%s/codkey.txt", homePath);
+    if (length < 0 || static_cast<size_t>(length) >= sizeof(path))
+    {
+        Com_PrintError(CON_CHANNEL_CLIENT, "The key code was not saved: the home folder's path is too long.\n");
+        return KeyCodeStatus::unwritable;
+    }
+    KeyCodeStatus status = CL_WriteKeyCodeFile(path, keyText);
+    char guid[33] = {};
+    // Read it back the way a connect will, so "saved" means usable.
+    if (status == KeyCodeStatus::ok)
+        status = CL_ReadKeyCodeFile(path, guid);
+    if (status == KeyCodeStatus::ok)
+    {
+        Com_Printf(CON_CHANNEL_CLIENT,
+            "[Kisak] Key code saved to %s. Servers that accept key codes will know you as GUID %s.\n", path, guid);
+    }
+    else if (status == KeyCodeStatus::malformed || status == KeyCodeStatus::badChecksum)
+    {
+        Com_PrintError(CON_CHANNEL_CLIENT,
+            "The key code was not saved: it is %s. It needs 20 letters and digits, as printed on the key "
+            "(the last four check the rest).\n",
+            status == KeyCodeStatus::badChecksum ? "mistyped (its check characters do not match)" : "not a key code");
+    }
+    else
+    {
+        Com_PrintError(CON_CHANNEL_CLIENT, "The key code was not saved: %s could not be written.\n", path);
+    }
+    return status;
+}
+
+KeyCodeStatus CL_StoredKeyCodeStatus(const char *homePath)
+{
+    char path[1024];
+    char guid[33];
+    const char *source = nullptr;
+    return FindKeyCode(homePath, path, sizeof(path), guid, &source);
 }
 
 const char *CL_AuthResultName(ClientAuthResult result)

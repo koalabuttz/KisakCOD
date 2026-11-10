@@ -20,6 +20,7 @@ enum class KeyCodeStatus
     unsafePermissions, // POSIX: readable by other users, not a regular file, or not ours
     malformed,         // not 20 letters and digits
     badChecksum,       // the last four characters do not match the first sixteen
+    unwritable,        // CL_WriteKeyCodeFile could not write the file
 };
 
 const char *CL_KeyCodeStatusName(KeyCodeStatus status);
@@ -43,6 +44,14 @@ KeyCodeStatus CL_KeyCodeGuidFromText(const char *text, char guid[33]);
 // Reads a key code file. On POSIX the file must be a regular file owned by the
 // user and not readable by group or others (chmod 600).
 KeyCodeStatus CL_ReadKeyCodeFile(const char *path, char guid[33]);
+
+// Checks a typed key code and writes it as a key code file CL_ReadKeyCodeFile
+// accepts: five dashed groups and a line ending. On POSIX the file is created
+// readable only by the user (mode 600). The text is written beside the file and
+// moved into place whole, so a failed write leaves an earlier file as it was;
+// the file's folder is created when it is missing. A malformed or mistyped
+// code touches nothing.
+KeyCodeStatus CL_WriteKeyCodeFile(const char *path, const char *text);
 
 // Windows: the retail install's HKLM\SOFTWARE\Activision\Call of Duty 4\codkey.
 // Elsewhere: always missing.

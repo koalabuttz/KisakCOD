@@ -10,8 +10,9 @@ stock retail 1.7 clients without Steam already join such servers the same way.
 The client sends `getchallenge 0 "<32 hex digits>"`, the retail two-field
 handshake. The 32 digits are a GUID derived from the key code with a one-way
 hash: the first half of SHA-256 over `KisakCOD key code GUID v1`, a zero byte,
-and the 16-character key. The key itself is never sent, printed or stored by
-the game.
+and the 16-character key. The key itself is never sent or printed by the
+game, and it is stored only where you put it: in `codkey.txt`, by hand or
+through the game's key code menu.
 
 Nothing checks the key against Activision, so a server can't tell a real key
 from a made-up one, and anyone can send another player's GUID. The GUID gives
@@ -24,7 +25,8 @@ authentication; unverified retail GUIDs are not accepted."
 
 ## Setting it up
 
-Put the key code in `codkey.txt` in the KisakCOD home folder (`fs_homepath`):
+Either type the key code into the game's own key code menu, or put it in
+`codkey.txt` in the KisakCOD home folder (`fs_homepath`) yourself:
 
 ```sh
 printf '%s\n' 'XXXX-XXXX-XXXX-XXXX-XXXX' > ~/path/to/home/codkey.txt
@@ -41,6 +43,23 @@ chmod 600 ~/path/to/home/codkey.txt
   `codkey`).
 - Steam owners find their key in the Steam library: right-click Call of Duty 4,
   Manage, CD keys.
+
+### The key code menu
+
+The menu's five fields take the key as printed. When the menu checks it:
+
+- A correctly typed key is saved as `codkey.txt` in the home folder, replacing
+  any earlier one, readable only by you (mode 600 on Linux and macOS; the home
+  folder is created if it is missing). The console prints where it went and the
+  GUID servers will see, never the key. The fields are then emptied, so the key
+  does not stay in the game's variables.
+- A mistyped or incomplete key is refused and nothing is written; the fields
+  keep what you typed so you can fix it.
+- With the fields empty, it reports whether a usable key is already stored.
+
+Unlike retail, the menu opens empty: a stored key is never read back into the
+fields. "Valid" here means the key's own check characters match, and nothing
+more; no key is checked against Activision.
 
 ## When it is used
 
@@ -71,7 +90,10 @@ disconnected and joined again with the same GUID. Without the opt-in the
 server refused it ("unverified retail GUIDs are not accepted"). With no key
 file, a group-readable file or a mistyped key, the client refused to connect
 and said why, and nothing reached the server. The key text appeared in no log.
-Not yet run: a Windows client (registry or file), a real key.
+Not yet run: a Windows client (registry or file), a real key, and the key code
+menu in the game. Its saving and refusing are covered by the checks below, with
+made-up keys, but nobody has typed a key into the menu on screen yet, and where
+the stock menus offer it has not been looked up.
 
 ## Checks
 
@@ -79,4 +101,10 @@ Not yet run: a Windows client (registry or file), a real key.
 resend loop against key files: a valid made-up key starts the connection and
 sends the GUID request; a mistyped, malformed or group-readable file is
 refused; the key never appears in the request or on the console. It also
-checks SHA-256 and the CRC-16 check value.
+checks SHA-256 and the CRC-16 check value. For the key code menu it checks that
+a typed key is saved in five dashed groups with mode 600 whatever the umask,
+that a mistyped or short entry leaves the stored key alone, that a file others
+can read, a link in the file's place and a leftover from an interrupted save
+are replaced and never written through, that a missing home folder is created
+private, that an unwritable place is reported, and that neither saving nor
+refusing prints the key.
