@@ -8,6 +8,7 @@
 #include <gfx_vk/shader/vk_legacy_shader.h>
 
 #include <algorithm>
+#include <bit>
 #include <chrono>
 #include <cstdarg>
 #include <cstring>
@@ -216,13 +217,26 @@ struct Layout
     VkPipelineLayout pipeline = VK_NULL_HANDLE;
 };
 
+// One uniform block a pipeline's shaders read: its set 0 binding
+// (ls::UniformBinding) and its size in bytes.
+struct UniformBlock
+{
+    uint32_t binding = 0;
+    uint32_t size = 0;
+};
+constexpr uint32_t kMaxUniformBlocks = 2 * ls::kUniformCount;
+
 struct Pipeline
 {
     VkPipeline pipeline = VK_NULL_HANDLE;
     Layout *layout = nullptr;
     uint32_t bindings = 0; // bit per vertex binding it reads (streams 0-15, kZeroBinding)
+    // The blocks of set 0 in binding order. A pipeline fixes the shader pair,
+    // so their sizes are fixed too.
+    UniformBlock blocks[kMaxUniformBlocks];
+    uint32_t blockCount = 0;
     // With dynamic uniforms: the set 0 written for this frame and transient
-    // buffer. A pipeline fixes the shader pair, so the block sizes match.
+    // buffer.
     uint64_t uniformFrame = 0; // Device::frameSerial
     VkBuffer uniformBuffer = VK_NULL_HANDLE;
     VkDescriptorSet uniformSet = VK_NULL_HANDLE;
@@ -247,6 +261,40 @@ struct StreamBinding
     // DrawPrimitiveUP: transient memory instead of a buffer.
     VkBuffer transient = VK_NULL_HANDLE;
     VkDeviceSize transientOffset = 0;
+};
+
+// What the frame's memory holds for one set 0 binding. A draw whose block
+// would get the same bytes points at them again instead of writing a copy:
+// most draws change the vertex shader's constants and nothing else.
+struct UniformSlot
+{
+    uint64_t frame = 0;                // Device::frameSerial of the upload
+    VkBuffer buffer = VK_NULL_HANDLE;  // the transient buffer it is in
+    VkDeviceSize offset = 0;
+    const uint8_t *data = nullptr;     // the bytes, for Device::verifyShortcuts
+    uint32_t size = 0;                 // bytes held; 0: nothing to use again
+    // What the bytes were built from, for the blocks that are not a copy of
+    // the float constants (those are let go by SetVertexShaderConstantF and
+    // SetPixelShaderConstantF instead): UniformKey in vk_legacy_draw.cpp.
+    uint64_t key = 0;
+    uint32_t shader = 0;               // Shader::id the key belongs to, or 0
+};
+
+// A set 0 bound with its dynamic offsets (none for plain uniform buffers).
+struct UniformBind
+{
+    VkPipelineLayout layout = VK_NULL_HANDLE;
+    VkDescriptorSet set = VK_NULL_HANDLE;
+    uint32_t offsetCount = 0;
+    uint32_t offsets[kMaxUniformBlocks] = {};
+};
+
+// A vertex buffer bound to one binding of the command buffer.
+struct VertexBind
+{
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VkDeviceSize offset = 0;
+    VkDeviceSize stride = 0;
 };
 
 // Pipeline state set with vkCmdSet*, remembered to skip repeats.
@@ -325,10 +373,41 @@ struct Device
     Surface *passTargets[kMaxRenderTargets] = {};
     Surface *passDepth = nullptr;
     uint32_t passWidth = 0, passHeight = 0;
-    uint64_t stateRecording = 0; // the command buffer (Recording()) boundPipeline and dynamic belong to
+    // What the command buffer being recorded (stateRecording, the core's
+    // Recording()) has bound and set. A draw records only what differs, and a
+    // new command buffer starts with nothing (ForgetRecordingState).
+    uint64_t stateRecording = 0;
     VkPipeline boundPipeline = VK_NULL_HANDLE;
     DynamicState dynamic{};
     bool dynamicValid = false;
+    VertexBind boundVertices[kMaxStreams + 1]; // by binding; a null buffer: nothing bound
+    VkBuffer boundIndices = VK_NULL_HANDLE;
+    VkIndexType boundIndexType = VK_INDEX_TYPE_UINT16;
+    UniformBind boundUniforms{};               // a null set: nothing bound
+    // The texture set and the pipeline layout it was bound with. Binding set
+    // 0 with another layout can unbind set 1, so both are forgotten together
+    // when a draw's layout is not boundLayout.
+    VkPipelineLayout boundLayout = VK_NULL_HANDLE;
+    VkDescriptorSet boundTextureSet = VK_NULL_HANDLE;
+    // What the last draw worked out from the D3D9 state, and whether that
+    // state has changed since. A draw whose inputs are all as they were takes
+    // lastPipeline and `dynamic` as they are instead of building and
+    // comparing them again. Every function that changes an input says so:
+    // render states stale both, shaders and the declaration the key, the
+    // viewport and scissor the dynamic state, a pass both (its targets are in
+    // the key, its size and depth surface in the dynamic state).
+    bool keyStale = true;
+    bool dynamicStale = true;
+    // Checks every shortcut a draw takes (these two, and uniform blocks kept
+    // from an earlier draw) against the full work, and fails the device when
+    // they differ. On whenever the validation layer is, so the check
+    // programs and any run made to hunt a drawing bug have it.
+    bool verifyShortcuts = false;
+    // Uniform blocks in this frame's memory, by set 0 binding, and the
+    // transient buffer the newest of them went to. With dynamic uniforms a
+    // set 0 points at one buffer, so only blocks in that buffer are used again.
+    UniformSlot uniformSlots[32];
+    VkBuffer uniformBuffer = VK_NULL_HANDLE;
     // Feeding the GPU (FeedGpu): the setting, the draws recorded in command
     // buffer feedRecording, and the count at which to look at the GPU again.
     GpuFeed feed{};
@@ -389,6 +468,9 @@ uint32_t LevelSize(uint32_t size, uint32_t level);
 // Begins the core's frame on first use; false while the frame is skipped.
 bool EnsureFrame(Device &device);
 void EndPassIfOpen(Device &device);
+// The command buffer the bound state belonged to is gone: the next draw
+// binds and sets everything.
+void ForgetRecordingState(Device &device);
 // Forgets every reference to a surface or texture that goes away.
 void ForgetTexture(Device &device, Texture *texture);
 // Destroys the pipelines built with a shader or declaration that goes away.
