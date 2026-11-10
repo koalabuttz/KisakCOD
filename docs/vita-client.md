@@ -125,7 +125,7 @@ Vita's CPU), because the renderer's headers declare the Bink API.
 
 **Run K on David's Vita (2026-11-10, commit d4a03fa):**
 - The menu showed and worked: frame 300 left 480359 of 522240 pixels not black, the first frame came 44.5 s after the start, touch and buttons reached the menu and the music played.
-- The menu froze several times, once for 23.6 s, with the music paused. Programs were compiling while the menu was up: 139 in 94 s, about 0.7 s each, and 672 more were read from the card in 16 s. The game was still loading `common_mp` behind the menu, and its loading thread compiled each shader inside the renderer's lock, so the frame being drawn waited ("Programs in the background" below, which takes that work off both threads; not yet run on a console).
+- The menu froze several times, once for 23.6 s, with the music paused. Programs were compiling while the menu was up: 139 in 94 s, about 0.7 s each, and 672 more were read from the card in 16 s. The game was still loading `common_mp` behind the menu, and its loading thread compiled each shader inside the renderer's lock, so the frame being drawn waited ("Programs in the background" below, which takes that work off both threads; run in Vita3K, not yet on a console).
 - Starting a listen server on mp_crash stopped the game 58 ms into the map's fastfile: `out of GPU memory` for a 13 MB vertex buffer, then the renderer's fatal error ("Memory" below).
 
 ## Memory
@@ -604,10 +604,22 @@ first 60), with the shaders created, texture levels filled and programs made
 meanwhile. "programs ready" in the `shaders` line now counts every program
 the cache made, variants and built-in ones included. The queue itself makes
 no Vita call and is checked on the host with the address and thread
-sanitizers (`scripts/tests/test_vita_program_queue.py`). Status: builds for
-the Vita; not yet run in Vita3K or on a console. Music still stops in any
-other stall of the main thread longer than the 0.7 s it queues ahead (a map
-load); that needs the stream fed from another thread.
+sanitizers (`scripts/tests/test_vita_program_queue.py`). Music still stops
+in any other stall of the main thread longer than the 0.7 s it queues ahead
+(a map load); that needs the stream fed from another thread.
+
+In Vita3K on the Windows PC (run H1, 2026-11-10, c5a28eba merged with master
+6e11f2b3; an emulator's timing, not a console's): a start with an empty cache
+drew its first frame 6.9 s after the launch, where the build before drew it
+after 35.2 s, and its slowest frame was 484 ms, where the build before had
+frames of 19.2, 8.5, 27.1 and 17.9 s. The 421 programs compiled in 267 s in
+the background (as long as before), 1209 draws were left out of 34 frames,
+and the window showed the whole menu 44 s after the launch. A start with the
+cache filled compiled nothing, read 837 programs in the background in 1.3 s
+and left 8 draws out of 2 frames. A map start (mp_crash) whose cache held
+only the menu's programs loaded and drew the world while 238 programs
+compiled: 70165 draws were left out of 147 frames, none after the first half
+minute in the map. Not yet run on a console.
 
 **The compiler folds `x * 0 + 1` to 0.** HLSL writes `float4(v.xyz, 1)` as
 one multiply-add with the constant (1, 0, 0, 0): `mad r0, v0.xyzx, c8.xxxy,
