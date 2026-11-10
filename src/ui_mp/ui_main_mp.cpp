@@ -3544,7 +3544,14 @@ void UI_BuildServerDisplayList(uiInfo_s *uiInfo, int force)
                         else
                         {
                         LABEL_55:
-                            LAN_MarkServerDirty(ui_netSource->current.integer, i, 0);
+                            // KISAK: a favourite is filtered before it has been
+                            // pinged (its info has no "pure" yet, and the
+                            // default filter wants pure servers), and a clean
+                            // server is never pinged, so it stayed hidden for
+                            // good. Leave an unpinged favourite dirty: the ping
+                            // brings its real info and the next build lists it.
+                            if (ping > 0 || ui_netSource->current.integer != 2)
+                                LAN_MarkServerDirty(ui_netSource->current.integer, i, 0);
                         }
                     }
                 }
