@@ -39,8 +39,8 @@ const ControlInfo kControls[kControlCount] = {
     {kKeyAux1 + 1, "Circle", "+stance"},
     {kKeyAux1 + 2, "Square", "+usereload"},
     {kKeyAux1 + 3, "Triangle", "weapnext"},
-    {kKeyAux1 + 4, "L", "+speed_throw"},
-    {kKeyAux1 + 5, "R", "+attack"},
+    {kKeyAux1 + 4, "L button", "+speed_throw"}, // not "L" and "R": the menu lists a PC's keys beside them
+    {kKeyAux1 + 5, "R button", "+attack"},
     {kKeyAux1 + 6, "Select", "+scores"},
     {kKeyEscape, "Start", nullptr}, // Escape opens and closes the menu in the engine itself
     {kKeyKpUpArrow, "D-pad up", "+actionslot 1"},
