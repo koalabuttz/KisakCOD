@@ -116,6 +116,27 @@ def source_checks(checker):
                     "no remote script debugger is ever attached")
     checker.require("bool DL_InProgress()\n{\n    return false;" in unavailable,
                     "no HTTP download is ever in progress")
+    # The real downloader (src/qcommon/dl_main.cpp, libcurl) is opt-in. Its
+    # stand-ins and it never link together.
+    checker.require(re.search(r'option\(KISAK_LINUX_HTTP_DOWNLOADS\s+"[^"]*"\s+OFF\)', module) is not None,
+                    "KISAK_LINUX_HTTP_DOWNLOADS is off by default")
+    http_block = re.search(r"\nif\(KISAK_LINUX_HTTP_DOWNLOADS\)\n(.*?)\nendif\(\)", module, re.S)
+    checker.require(module.count('"${mp_client_http_source}")') == 2
+                    and 'list(REMOVE_ITEM mp_client_engine_sources "${mp_client_http_source}")' in module
+                    and http_block is not None
+                    and 'list(APPEND mp_client_engine_sources "${mp_client_http_source}")' in http_block.group(1),
+                    "dl_main.cpp joins the client's sources only under KISAK_LINUX_HTTP_DOWNLOADS")
+    stand_ins = re.findall(r"^#(?:ifndef KISAK_LINUX_HTTP_DOWNLOADS|if defined\(KISAK_MP\) && "
+                           r"!defined\(KISAK_LINUX_HTTP_DOWNLOADS\))\n(.*?)^#endif", unavailable, re.S | re.M)
+    guarded = "".join(stand_ins)
+    unguarded = unavailable
+    for block in stand_ins:
+        unguarded = unguarded.replace(block, "")
+    checker.require(len(stand_ins) == 2
+                    and all(re.search(r"\b" + name + r"\b", guarded) for name in
+                            ("DL_CancelDownload", "DL_BeginDownload", "DL_InProgress", "DL_DownloadLoop", "DL_DLIsMotd"))
+                    and not re.search(r"\bDL_[A-Za-z]+\b", unguarded),
+                    "every HTTP download stand-in leaves the build under KISAK_LINUX_HTTP_DOWNLOADS")
     checker.require("bool Voice_Init()\n{\n    return false;" in unavailable, "voice never initializes")
     checker.require("Steam" not in unavailable and "CL_CDKeyValidate" not in unavailable,
                     "the stand-ins do not touch authentication")

@@ -942,9 +942,11 @@ jobs:
           # libopenal-dev only for <AL/al.h>; the client links the OpenAL stand-in.
           # libavcodec-dev and libavutil-dev for the Bink shim the client is
           # built with here (KISAK_LINUX_CINEMATICS, docs/linux-cinematics.md).
+          # libcurl4-openssl-dev for the HTTP downloader it is built with here
+          # (KISAK_LINUX_HTTP_DOWNLOADS, docs/linux-mp-client.md).
           scripts/ci/apt-install.sh \
             cmake ninja-build clang binutils python3 python3-clang-18 ccache libopenal-dev \
-            libavcodec-dev libavutil-dev
+            libavcodec-dev libavutil-dev libcurl4-openssl-dev
 
       # The size literal check parses every source as i386 and as x86_64, so it
       # needs the i386 C and C++ headers. Nothing in this job builds i386 code.
@@ -1043,7 +1045,7 @@ jobs:
             -DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk" \
             -DKISAK_DXVK_NATIVE_LIBRARY="$d3d9" \
             -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY="$openal" \
-            -DKISAK_LINUX_CINEMATICS=ON \
+            -DKISAK_LINUX_CINEMATICS=ON -DKISAK_LINUX_HTTP_DOWNLOADS=ON \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3" \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
           cmake --build "$BUILD_DIR" --target KisakCOD-mp KisakCOD-mp-client-window-test \
@@ -1062,13 +1064,18 @@ jobs:
           # Built with the Bink shim, which decodes movies with libavcodec.
           grep -Eqx 'libavcodec\.so\.[0-9]+' "$RUNNER_TEMP/x64-mp-client-needed.txt"
           grep -Eqx 'libavutil\.so\.[0-9]+' "$RUNNER_TEMP/x64-mp-client-needed.txt"
-          if grep -Ev '^(libSDL3\.so\.0|libd3d9_unavailable\.so|libopenal_unavailable\.so|libavcodec\.so\.[0-9]+|libavutil\.so\.[0-9]+|libstdc\+\+\.so\.6|libm\.so\.6|libgcc_s\.so\.1|libc\.so\.6|libpthread\.so\.0|libdl\.so\.2)$' \
+          # Built with the HTTP downloader (src/qcommon/dl_main.cpp), which
+          # uses the system's libcurl; without the option the client has
+          # stand-ins and no libcurl (the i386 client job).
+          grep -Eqx 'libcurl\.so\.4' "$RUNNER_TEMP/x64-mp-client-needed.txt"
+          nm -D --undefined-only "$OUT_DIR/KisakCOD-mp" | grep -Eq ' curl_multi_perform(@|$)'
+          if grep -Ev '^(libSDL3\.so\.0|libd3d9_unavailable\.so|libopenal_unavailable\.so|libavcodec\.so\.[0-9]+|libavutil\.so\.[0-9]+|libcurl\.so\.4|libstdc\+\+\.so\.6|libm\.so\.6|libgcc_s\.so\.1|libc\.so\.6|libpthread\.so\.0|libdl\.so\.2)$' \
               "$RUNNER_TEMP/x64-mp-client-needed.txt"; then
-            echo "the multiplayer client needs a library beyond SDL3, D3D9, OpenAL, libavcodec and the runtimes" >&2
+            echo "the multiplayer client needs a library beyond SDL3, D3D9, OpenAL, libavcodec, libcurl and the runtimes" >&2
             exit 1
           fi
-          # libavcodec refers to zlib names the game also defines; the client
-          # must not export them, or any other name, to the libraries it loads
+          # libavcodec and libcurl refer to zlib names the game also defines; the
+          # client must not export them, or any other name, to the libraries it loads
           # (scripts/platform/linux/mp_client_exports.map).
           if nm -D --defined-only "$OUT_DIR/KisakCOD-mp" | awk '{print $3}' | grep -vx '_IO_stdin_used'; then
             echo "the multiplayer client exports names to shared libraries" >&2

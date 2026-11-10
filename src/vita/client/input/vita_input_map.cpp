@@ -18,26 +18,29 @@ constexpr float kCursorCurve = 2.0f;     // the menu cursor's response: fine nea
 constexpr float kMaxLook = 30000.0f;     // look motion kept while nothing takes it
 constexpr uint32_t kRearTapMs = 300;     // a finger on the rear pad for longer is resting there
 constexpr uint32_t kRearKeepMs = 250;    // a tapped key stays down this long past its tap, or
-                                         // past the left stick's last push forward
+                                         // past the left stick's last push forward, or past L
 
 struct ControlInfo
 {
     int key;
     const char *name;
     const char *binding;
+    int layout = kFirstLayout; // the default layout the control came with
 };
 
 // In the order of Control. The layout is the console game's where the Vita has
 // the button: sprint (a click of the left stick there) is a tap on the rear
 // touch pad, melee (a click of the right stick) and the grenades (the upper
-// shoulder buttons) are areas of the screen.
+// shoulder buttons) are areas of the screen. The chat line, a key of the PC's
+// keyboard, is a small area at the top of the screen that no thumb rests on.
+// The names are what the controls menu and the game's hints show.
 const ControlInfo kControls[kControlCount] = {
     {kKeyAux1 + 0, "Cross", "+gostand"},
     {kKeyAux1 + 1, "Circle", "+stance"},
     {kKeyAux1 + 2, "Square", "+usereload"},
     {kKeyAux1 + 3, "Triangle", "weapnext"},
-    {kKeyAux1 + 4, "L", "+speed_throw"},
-    {kKeyAux1 + 5, "R", "+attack"},
+    {kKeyAux1 + 4, "L button", "+speed_throw"}, // not "L" and "R": the menu lists a PC's keys beside them
+    {kKeyAux1 + 5, "R button", "+attack"},
     {kKeyAux1 + 6, "Select", "+scores"},
     {kKeyEscape, "Start", nullptr}, // Escape opens and closes the menu in the engine itself
     {kKeyKpUpArrow, "D-pad up", "+actionslot 1"},
@@ -53,6 +56,7 @@ const ControlInfo kControls[kControlCount] = {
     {kKeyAux1 + 12, "Screen (left)", "+smoke"},
     {kKeyAux1 + 13, "Screen (top right)", "+frag"},
     {kKeyAux1 + 14, "Screen (bottom right)", "+melee"},
+    {kKeyKp5, "Screen (top middle)", "chatmodepublic", 2},
 };
 
 bool IsControl(int control)
@@ -106,14 +110,15 @@ bool Centred(Stick stick)
 }
 
 // The area of the screen a finger landed in, in the game: the outer thirds,
-// where the thumbs reach. The middle is no key.
+// where the thumbs reach, and the top third of the middle, where one has to
+// be sent. The rest of the middle is no key.
 int FrontArea(const Touch &touch, const Settings &settings)
 {
     if (touch.x < settings.screenWidth / 3)
         return kFrontLeft;
     if (touch.x >= settings.screenWidth - settings.screenWidth / 3)
         return touch.y < settings.screenHeight / 2 ? kFrontRightTop : kFrontRightBottom;
-    return -1;
+    return touch.y < settings.screenHeight / 3 ? kFrontTopMiddle : -1;
 }
 
 } // namespace
@@ -131,6 +136,11 @@ const char *ControlName(Control control)
 const char *DefaultBinding(Control control)
 {
     return IsControl(control) ? kControls[control].binding : nullptr;
+}
+
+int LayoutOf(Control control)
+{
+    return IsControl(control) ? kControls[control].layout : 0;
 }
 
 int Mapper::KeyFor(Control control) const
@@ -336,7 +346,7 @@ void Mapper::UpdateFront(const PadState &pad, const Settings &settings, KeySink 
     fingerCount_ = static_cast<uint8_t>(count);
 
     // A finger holds the area it landed in until it lifts, wherever it slides.
-    for (const Control control : {kFrontLeft, kFrontRightTop, kFrontRightBottom})
+    for (const Control control : {kFrontLeft, kFrontRightTop, kFrontRightBottom, kFrontTopMiddle})
         SetHeld(control, area[control], sink);
 
     touchHeld_ = pointer != nullptr;
@@ -362,8 +372,10 @@ void Mapper::UpdateFront(const PadState &pad, const Settings &settings, KeySink 
 // and one held its key for a second and a half before the menu was up. So a
 // finger that stays is nothing, and a tap is the key press. The key then
 // stays down for as long as the left stick is pushed forward, which makes the
-// default binding the console game's sprint: tap, and run until you stop. A
-// tap while the key is down is a new press.
+// default binding the console game's sprint: tap, and run until you stop. It
+// also stays down while L is held, the default for aiming down the sight,
+// where the same binding holds the breath: tap, and the breath is held until
+// the sight comes down. A tap while the key is down is a new press.
 void Mapper::UpdateRear(const PadState &pad, uint32_t nowMs, const Settings &settings, KeySink &sink)
 {
     const bool active = mode_ != Mode::Menu && settings.rearTouch;
@@ -415,7 +427,7 @@ void Mapper::UpdateRear(const PadState &pad, uint32_t nowMs, const Settings &set
             continue;
         if (!active)
             ReleaseHolder(control, sink);
-        else if (heldKey_[kStickUp])
+        else if (heldKey_[kStickUp] || heldKey_[kLeftShoulder])
             rearKeepMs_[half] = nowMs;
         else if (nowMs - rearKeepMs_[half] >= kRearKeepMs)
             ReleaseHolder(control, sink);
@@ -531,6 +543,19 @@ void Mapper::Release(KeySink &sink)
     lookX_ = lookY_ = 0.0f;
     scroll_ = 0.0f;
     stickWait_ = true;
+}
+
+void Mapper::Rest(const PadState &pad, uint32_t nowMs, KeySink &sink)
+{
+    Release(sink);
+    lastMs_ = nowMs;
+    lastButtons_ = pad.buttons & ((1u << kButtonCount) - 1);
+    fingerCount_ = static_cast<uint8_t>(std::min<int>(pad.frontCount, kMaxFrontTouches));
+    for (int i = 0; i < fingerCount_; ++i)
+        fingers_[i] = {pad.front[i].id, kFingerIdle};
+    rearFingerCount_ = static_cast<uint8_t>(std::min<int>(pad.rearCount, kMaxRearTouches));
+    for (int i = 0; i < rearFingerCount_; ++i)
+        rearFingers_[i] = {pad.rear[i].id, false, false, nowMs};
 }
 
 } // namespace kisak::vita_input
