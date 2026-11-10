@@ -1661,20 +1661,13 @@ void IssueQuery(Device *, Query *query, bool)
         query->issued = true;
 }
 
-// Every query is done at once. sceGxm counts samples only into a
-// visibility buffer the CPU reads once the scene is done, which this back
-// end does not use, so an occlusion query counts none. The engine's one
-// user is the sun: it calibrates with a sprite at start-up
-// (RB_CalcSunSpriteSamples), and a count of 0 makes it log "Sun sprite
-// occlusion query calibration failed" and judge the sun by a trace through
-// the world instead (RB_UpdateSunVisibilityWithoutQuery). The one sample
-// this used to report made the sun count as fully visible behind roofs
-// and walls, and its glare greyed the sky (PC run Z, 2026-11-10).
+// Nothing is drawn yet, so every query is done at once; occlusion queries
+// report one sample, as if what they cover were visible.
 bool GetQueryData(Device *, Query *query, bool, uint32_t &result)
 {
     if (!query)
         return false;
-    result = query->kind == QueryKind::Occlusion ? 0u : 1u;
+    result = 1;
     return true;
 }
 } // namespace gfx_vk::legacy

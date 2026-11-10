@@ -726,18 +726,6 @@ What the GXM back end does so far (step 2d):
   (`draws skipped: N x ...`). Logs from before 2026-11-10 counted only the
   first: a `1 x` there means one program, and it may be a clear that never
   happened.
-- **Occlusion queries count nothing**, and the log says once at start-up
-  `Sun sprite occlusion query calibration failed; reverting to low-quality
-  sun visibility test`. The sun is the engine's one user: it draws a
-  sprite where the sun is and reads how much of it passed the depth test,
-  and dims the scene and lays a glare over it as much as the sun shows.
-  sceGxm counts samples only into a visibility buffer read after the
-  scene, which the back end does not use. The queries used to report one
-  sample, so the sun counted as fully visible behind roofs and walls: in
-  PC run Z (Vita3K, 2026-11-10) the open sky read 228 where Windows reads
-  252, with a warm glow and a white glare over the weapon, and
-  `r_drawSun 0` took both away. With no count the engine judges the sun
-  by its own trace through the world.
 - **Programs.** Each draw picks its shaders' variants: the vertex
   declaration decides which inputs are D3DCOLOR (swapped), missing (read as
   0, 0, 0, 1) or narrower than four components, and the alpha test picks the
