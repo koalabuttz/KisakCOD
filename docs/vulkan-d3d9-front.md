@@ -347,8 +347,8 @@ x86_64 Debug and RelWithDebInfo with validation and on i386 without: every
 count exact with the record thread on and off and the GPU feed off, at its
 default and after every draw (717 or 718 Vulkan queries for its 700 queries,
 from two pools), and 0xffffff from every query with
-`KISAK_VK_OCCLUSION_QUERIES=0`. In the game the queries have not run on a GPU
-yet.
+`KISAK_VK_OCCLUSION_QUERIES=0`. In the game the queries have since run on two
+GPUs (laptop run 11 and PC run 7, below); the scene itself has not.
 
 The `tuning` scene (2026-11-10, same sandbox, 14 scenes by then) passes on
 x86_64 Debug and RelWithDebInfo with validation and on i386 without, with the
@@ -356,9 +356,10 @@ device's own feed off, at its default, at 1, 50 and 300 draws a part and
 after every draw, and with the record thread on and off. With the record
 thread on, lavapipe took one or two early parts in the idle rule's frame; with
 it off, where lavapipe has finished every submission before the call returns,
-four or five. ThreadSanitizer finds nothing in the scene. No GPU has run it,
-and the present mode a real surface gets (IMMEDIATE where it is offered) has
-not been seen: lavapipe's offscreen surface offers MAILBOX and FIFO only.
+four or five. ThreadSanitizer finds nothing in the scene. No GPU has run the
+scene. The settings have run in the game on two (laptop run 11 and PC run 7,
+below), where a real surface also showed its present mode: lavapipe's
+offscreen surface offers MAILBOX and FIFO only.
 
 The `slow_frames` scene (2026-11-10, same sandbox) passes its 21 points on
 x86_64 Debug and RelWithDebInfo with validation in the seven configurations
@@ -536,8 +537,28 @@ about them, though: every Vulkan row sat at exactly 75 frames a second, the
 display's rate, in a window with vsync off (`swapchain 1024x768
 B8G8R8A8_UNORM MAILBOX, 3 images`), while the real `d3d9.dll` ran the scene
 at 215. The core asked for MAILBOX before IMMEDIATE then; it now asks for
-IMMEDIATE first ([vulkan-core.md](vulkan-core.md)), which no run on that PC
-has tried yet. Report: `renderer/vulkan-backend-pc-run-6.md`.
+IMMEDIATE first ([vulkan-core.md](vulkan-core.md)). Report:
+`renderer/vulkan-backend-pc-run-6.md`.
+PC run 7 (2026-11-10, 2b8fde19, same PC, the hosted Win32 Debug artifact, the
+machine alone) confirmed that the cap sat on the present mode. The swapchain
+line says `IMMEDIATE, 3 images` and the scene runs at 154.6 frames a second
+over 60 s; with `KISAK_VK_PRESENT_MODE=mailbox` it is back at 74.9; the real
+`d3d9.dll` read about 203 (182 to 230 in twelve overlay samples). So in that
+Debug build Vulkan reaches about three quarters of Direct3D 9. What the frame
+holds there: 526 draws, 9.1 passes, 231 descriptor sets and 467 KB of
+constants, with the GPU busy for 1.0 ms in passes of a 6.5 ms frame, so that
+PC waits for the CPU and not for the GPU. The feed settings, in windows of
+20 s inside one launch, two each: off 163.8 frames a second, the default
+(every 128 draws) 161.1, which is inside the spread of its own two windows,
+and the idle rule at 16 draws 150.2, about 8% lower. A launch builds 132
+pipelines in 1.09 s. The sun's occlusion query gives the answers real
+Direct3D 9 draws by (see [the laptop](#the-game-on-the-laptop) for the
+method): 256.0 samples on average and no empty result with the sun in the
+open (`setviewpos -257 177 219 240 -50`), every result empty indoors, one
+result a frame, and screenshots whose mean colour, in the centre and over
+the whole picture, is within one level of Direct3D 9's at both places.
+Nobody watched the window, so tearing with IMMEDIATE is not judged. Report:
+`renderer/vulkan-backend-pc-run-7.md`.
 
 The device probe with `--backend vulkan` runs `r_init.cpp`'s device start
 unchanged (`R_PreCreateWindow`, `R_CreateWindow`, `R_CreateDevice`), clears,
@@ -599,6 +620,43 @@ evidence):
   [adapter](vulkan-legacy-adapter.md#how-a-draw-works)), run 9 measured 140.9
   fps against DXVK's 151.3, on mains in power-saver mode, where the code
   before them gave 117.6 (run 8).
+* Feed settings side by side (run 11, 2026-11-10, 2b8fde19, on mains in
+  power-saver mode, twelve windows of 27 s in one launch, two for each
+  setting): the idle rule at 16 draws 137.8 fps and at 32 draws 135.8 (each
+  beside the default's part every 128 draws), a part every 32 draws 137.4,
+  every 64 draws 125.8, every 128 draws (the default) 127.4, off 125.5; DXVK
+  in a launch of its own 137.5. The two windows of a
+  setting lie 4 to 12 fps apart for every setting but off, whose two were
+  next to each other: as far as the settings lie from one another, so this
+  is no ranking. The GPU lines say more: with the feed off the GPU is busy
+  for 6.36 ms in passes and without work for 1.69 ms before a frame; at the
+  default it is without work for 0.71 ms but busy for 7.04 ms. The feed ends
+  a pass to submit and begins it again, so a frame has more of them (6.4 with
+  the feed off and 8.6 at the default in the launches of runs 9 and 10). It
+  gets back a millisecond of idle GPU and the passes take 0.7 ms longer; why
+  they do on this driver is not known.
+  `scripts/runs/recipes/vulkan-settings-mp-crash.json` compares the settings
+  with `perf_ab` instead, in windows of 9 s in the order A B B A, which a
+  drift over minutes moves less.
+* Present mode: the laptop's swapchain still says `MAILBOX, 4 images` with
+  vsync off now that the core asks for IMMEDIATE first (run 11), so its
+  surface does not offer IMMEDIATE.
+* The sun (run 11): the engine draws a sprite of 16 by 16 pixels at the sun's
+  place inside one occlusion query a frame and takes the share of its samples
+  that pass as how much of the sun is in view (`rb_sky.cpp`). `r_vkStats`
+  prints what the queries returned, so the check needs no picture: look
+  along `r_lightTweakSunDirection` (`-50 240 0` on mp_crash: yaw 240, pitch
+  -50) and read the `occlusion queries:` line of a stretch of five seconds.
+  With the sun in the open (`setviewpos -716 461 600 240 -50`)
+  every result is 256 samples, also with `r_aaSamples 4`; indoors
+  (`setviewpos 1504 512 200 240 -50`) and under a roof slab (the same place
+  at z 295) every result is empty; one result a frame. Screenshots reduced to
+  numbers on the laptop match DXVK's within 0.1 in mean brightness and 0.5 in
+  every cell of a 5x5 grid, and with `KISAK_VK_OCCLUSION_QUERIES=0` the
+  indoor view shows the old fault: an almost black frame with a bright
+  centre. Neither back end draws a visible flare at those places (on the PC
+  real Direct3D 9 does not either), so the pictures prove that the two agree
+  and the line proves the count.
 * Picture: models drew dark where the profile had
   `r_altModelLightingUpdate 0`, because the adapter dropped a texture's
   contents when it was locked again; fixed, and run 7 matches DXVK at 40.1 dB
@@ -626,14 +684,17 @@ evidence):
   launch, with a repeated launch as the baseline
   (`renderer/model-lighting/luma_grid.py` in the project files).
 
-Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9}.md`,
-`renderer/vulkan-backend-pc-run-6.md` and
+Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11}.md`,
+`renderer/vulkan-backend-pc-run-{6,7}.md` and
 `renderer/model-lighting/laptop-run-1.md` in the project files.
 
 ## Next
 
-The rest of the frame rate gap to DXVK (how often to feed the GPU, then the
-render thread's time per draw), a look at the sun's flare on a GPU now that
-occlusion queries count samples (until 2026-11-10 the adapter reported every
-sample as passed, which the engine reads as a sun in full view; the counting
-has run on lavapipe only), and a long frame about every two minutes.
+The rest of the frame rate gap to DXVK. On the laptop that is the GPU's
+time: what a pass split by the feed costs on its driver, and whether a feed
+setting is better than the default at all (laptop run 12 measures the
+settings in one launch, and the kept draw state with them). On the Windows
+PC it is the render thread's time per draw: descriptor sets made again every
+frame, then the front's lock. Then the long frame the laptop sees about every
+two minutes, which the `slow frame` lines are there to name, and the second
+or so a launch spends building pipelines on the PC.
