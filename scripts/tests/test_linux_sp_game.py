@@ -3,10 +3,10 @@
 
 Two parts:
 
-* Source checks (always): the opt-in target stays off by default and i386-only,
-  builds from the singleplayer source lists with KISAK_SP and the singleplayer
-  census list, and links the same platform layer and stand-ins as KisakCOD-mp
-  with their multiplayer-only entries left out.
+* Source checks (always): the opt-in target stays off by default, is offered on
+  i386 and x86_64 only, builds from the singleplayer source lists with KISAK_SP
+  and the singleplayer census list, and links the same platform layer and
+  stand-ins as KisakCOD-mp with their multiplayer-only entries left out.
 * Run checks (with ``--binary``): start the game from temporary trees that hold
   no game data. ``--help`` and ``--version`` exit before the engine starts. With
   an empty base path the engine must refuse at the file system check. With only
@@ -32,6 +32,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
 TARGET_MODULE = ROOT / "scripts" / "platform" / "linux" / "sp_game.cmake"
+PLATFORM_MODULE = ROOT / "scripts" / "platform" / "linux" / "platform.cmake"
 LINUX_CMAKE = ROOT / "scripts" / "platform" / "linux" / "CMakeLists.txt"
 UNAVAILABLE = SRC / "linux" / "client" / "mp_client_unavailable.cpp"
 THREADS = SRC / "linux" / "sys_threads.cpp"
@@ -72,8 +73,17 @@ def source_checks(checker):
                     "KisakCOD-sp is opt-in and off by default")
     checker.require("include(${SCRIPTS_DIR}/platform/linux/sp_game.cmake)" in LINUX_CMAKE.read_text(encoding="utf-8"),
                     "the Linux build reads the singleplayer module")
-    checker.require('KISAK_LINUX_ARCH STREQUAL "x86_64"' in module and "i386-only" in module,
-                    "the singleplayer game is refused on the x86_64 track")
+    platform = PLATFORM_MODULE.read_text(encoding="utf-8")
+    x64_rules = platform[platform.index('elseif(KISAK_LINUX_ARCH STREQUAL "x86_64")'):
+                         platform.index('elseif(KISAK_LINUX_ARCH STREQUAL "aarch64")')]
+    checker.require("i386-only" not in module and "KISAK_BUILD_LINUX_SP_GAME" not in x64_rules,
+                    "the singleplayer game builds on the x86_64 track too")
+    other_rules = platform.replace(x64_rules, "")
+    for refused, name in (("kisak_not_on_macos", "macOS"), ("kisak_x86_only", "aarch64"),
+                          ("kisak_dedi_only", "armv7")):
+        rule = other_rules[other_rules.index(f"foreach({refused}"):]
+        rule = rule[:rule.index("endforeach()")]
+        checker.require("KISAK_BUILD_LINUX_SP_GAME" in rule, f"the singleplayer game is still refused on {name}")
     checker.require("sp/sp_files.cmake" in module and "sp_compile_census_blocked.txt" in module,
                     "it builds from the singleplayer lists and census")
     definitions = module[module.index("set(KISAK_SP_GAME_DEFINITIONS"):]

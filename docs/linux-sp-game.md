@@ -1,6 +1,7 @@
 # Native Linux singleplayer game (KisakCOD-sp)
 
-`KisakCOD-sp` is the singleplayer game in one native i386 Linux process: server
+`KisakCOD-sp` is the singleplayer game in one native Linux process (i386, or
+x86_64 on the [64-bit track](linux-x64.md#x86_64-singleplayer-game)): server
 (in its own thread, as on Windows), AI, game, cgame, client, UI, sound and
 renderer, from the Windows `KisakCOD-sp` source lists. It is opt-in and off by
 default, and built the way the multiplayer client is
@@ -9,7 +10,9 @@ default, and built the way the multiplayer client is
 Status: killhouse and cargoship load and play on a developer laptop (Intel
 GPU, DXVK, cinematics on): the pregame ends by itself, about a minute of play,
 clean quit. Without game files it stops where the engine needs them (the
-autoconfigure step's `configure.csv`), which is how CI runs it.
+autoconfigure step's `configure.csv`), which is how CI runs it. Those runs
+were the i386 game; the x86_64 game builds and starts but has not loaded a
+level yet.
 
 ## Building
 
@@ -26,12 +29,17 @@ cmake --build build-linux/sp --target KisakCOD-sp
 ```
 
 The libraries are the multiplayer client's: the native D3D9 boundary with a
-DXVK Native library, SDL3 3.2.10 or newer and an i386 OpenAL library. CI links
+DXVK Native library, SDL3 3.2.10 or newer and an OpenAL library, all built for
+the game's architecture (i386 above). CI links
 the same stand-ins (no D3D9 device, no OpenAL device). Add
 `-DKISAK_LINUX_CINEMATICS=ON` to play the Bink movies through the FFmpeg shim
-([linux-cinematics.md](linux-cinematics.md)); without it no movie plays. The
-64-bit configuration refuses the option for now. Both games can be switched on
-in one build directory.
+([linux-cinematics.md](linux-cinematics.md)); without it no movie plays. Both
+games can be switched on in one build directory.
+
+For x86_64, add `-DKISAK_LINUX_ARCH=x86_64` in a build directory of its own
+and point the three libraries at x86_64 builds, as for the x86_64 multiplayer
+client ([linux-x64.md](linux-x64.md#x86_64-multiplayer-client)). The aarch64,
+armv7 and macOS configurations refuse the option.
 
 ## What it compiles
 
@@ -60,8 +68,9 @@ in one build directory.
 `--binary`, starts the game from temporary trees with no game data on SDL's dummy
 drivers: an empty base path is refused at the file system check, and a one-line
 stub of `fileSysCheck.cfg` gets through the file system to autoconfigure and
-stops there. CI builds and runs it in the device-probe job, Debug and
-RelWithDebInfo.
+stops there. CI builds and runs it in the device-probe job (i386, Debug and
+RelWithDebInfo) and in the x86_64 client job (Debug), where the 32-bit layout
+checks also read the singleplayer sources.
 
 ## Fixes the first level loads found
 
@@ -83,7 +92,9 @@ RelWithDebInfo.
 1. Longer play and more levels, with sound: what the other levels use, the
    sweep tool (`scripts/tests/run_linux_sp_level_sweep.py`) and the run plan
    are in [linux-sp-levels.md](linux-sp-levels.md).
-2. Compare with the Windows `KisakCOD-sp` build on the same data, to tell
+2. The x86_64 game's first level loads: the same sweep on the laptop with an
+   x86_64 build.
+3. Compare with the Windows `KisakCOD-sp` build on the same data, to tell
    port bugs from bugs the Windows build shares. Linux keeps assertions on in
    every configuration and the Windows Release build does not, so compare
    assertions with a Windows Debug build.

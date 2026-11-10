@@ -16,8 +16,9 @@ The track is staged:
    playable on a developer laptop, see
    [below](#x86_64-multiplayer-client)).
 
-Steps 2 and 3 are done for multiplayer. Still open: an x86_64 Linux
-singleplayer game. The Windows x64 build is done and runs
+Steps 2 and 3 are done for multiplayer. The Linux singleplayer game builds
+and starts for x86_64 but has not loaded a level there yet (see
+[below](#x86_64-singleplayer-game)). The Windows x64 build is done and runs
 (see [Windows MSVC x64 build](#windows-msvc-x64-build)).
 
 ## Upstream alignment
@@ -499,6 +500,42 @@ non-pool record size. `scripts/tools/check_32bit_layout_offsets_allow.txt`
 lists the remaining reports and why each is fine (offsets rescaled at load,
 sizeof-based steps, handles in 4-byte units, int-only union copies). CI runs
 the check in the x86_64 client job after the size check.
+
+## x86_64 singleplayer game
+
+`-DKISAK_LINUX_ARCH=x86_64 -DKISAK_BUILD_LINUX_SP_GAME=ON` builds `KisakCOD-sp`
+for x86_64 from the same module as the i386 game
+([linux-sp-game.md](linux-sp-game.md)). Every unit compiled and the game
+linked on the first try: the multiplayer client's 64-bit work covers the
+shared engine, and the Windows x64 build had already taken the singleplayer
+sources (AI, path nodes, save games) through their pointer-size fixes.
+
+Status: it builds and passes the asset-free start test
+(`scripts/tests/test_linux_sp_game.py`) in the x86_64 client CI job. It has
+not loaded a level on Linux yet. The laptop level sweep
+([linux-sp-levels.md](linux-sp-levels.md)) is the next step.
+
+Both layout checks above now read a source once for each game that compiles
+it, because a shared source's `KISAK_SP` branches are different code. Run on
+the singleplayer sources, they found:
+
+- `Scr_LoadSource` sized the saved script source table with 8 bytes an entry
+  (`SaveSourceBufferInfo` is 16 on x86_64), so loading a save made with script
+  debugging on wrote past the table.
+- The server demo history (`sv_demo.cpp`) wrote and read back the first 172
+  bytes of a history record that is 192 bytes on x86_64, dropping its tail
+  (the message position and read type).
+- The model previewer (a developer tool that lists every model and animation
+  at each level start) sized its two name tables with 4-byte pointers, copied
+  the first 124 bytes of a 152-byte scene entity into a clone, and built
+  `DObj_s` objects (120 bytes on x86_64) in 100-byte buffers. A buffer sized
+  with a number and cast to a struct is a shape neither check sees.
+- Two functions nothing calls: a second decompile of `ClampScreenPosToEdges`
+  in `cg_vehicle_hud.cpp` that typed its point as a `Material` (removed; the
+  real one is in `cg_hudelem.cpp`), and `UI_ReplaceConversionInts`, which
+  walked an int array with the stride of a pointer array (rewritten).
+
+These are shared sources, so the Windows x64 build gets the same fixes.
 
 ## Windows MSVC x64 build
 
