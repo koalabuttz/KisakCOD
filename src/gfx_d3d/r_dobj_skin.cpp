@@ -36,6 +36,7 @@ static int R_AllocSkinnedCachedVerts(int vertCount)
     offset = InterlockedExchangeAdd(&frontEndDataOut->skinnedCacheVb->used, 32 * vertCount);
     if ((uint32_t)(32 * vertCount + offset) <= R_SKINNED_CACHE_BYTES)
         return offset;
+    R_NoteSkinnedCacheFull();
     R_WarnOncePerFrame(R_WARN_MAX_SKINNED_CACHE_VERTICES);
     return -1;
 }

@@ -9,9 +9,112 @@
 #include "r_utils.h"
 #include <universal/profile.h>
 
+#include <atomic>
+
 
 //struct GfxBuffers gfxBuf   85b3aa20     gfx_d3d : r_buffers.obj
 GfxBuffers gfxBuf;
+
+namespace
+{
+// Raised from the front end's and the back end's threads, read by the back end.
+struct DynamicBufferUse
+{
+    std::atomic<uint32_t> skinnedCacheBytes{0};
+    std::atomic<uint32_t> skinnedCacheFull{0};
+    std::atomic<uint32_t> preTessIndices{0};
+    std::atomic<uint32_t> preTessFull{0};
+    std::atomic<uint32_t> dynamicIndices{0};
+    std::atomic<uint32_t> dynamicVertexBytes{0};
+};
+DynamicBufferUse s_dynamicUse;
+// The back end's own: what the frame being drawn has written so far.
+uint32_t s_frameDynamicIndices;
+uint32_t s_frameDynamicVertexBytes;
+uint32_t s_dynamicUseFrames;
+int s_dynamicUseReported;
+
+void RaiseTo(std::atomic<uint32_t> &most, uint32_t value)
+{
+    uint32_t seen = most.load(std::memory_order_relaxed);
+    while (value > seen && !most.compare_exchange_weak(seen, value, std::memory_order_relaxed))
+    {
+    }
+}
+} // namespace
+
+void R_NoteSkinnedCacheUse(uint32_t bytes)
+{
+    RaiseTo(s_dynamicUse.skinnedCacheBytes, bytes);
+}
+
+void R_NoteSkinnedCacheFull()
+{
+    s_dynamicUse.skinnedCacheFull.fetch_add(1, std::memory_order_relaxed);
+}
+
+void R_NotePreTessUse(uint32_t indices)
+{
+    RaiseTo(s_dynamicUse.preTessIndices, indices);
+}
+
+void R_NotePreTessFull()
+{
+    s_dynamicUse.preTessFull.fetch_add(1, std::memory_order_relaxed);
+}
+
+void R_NoteDynamicIndices(uint32_t indices)
+{
+    s_frameDynamicIndices += indices;
+}
+
+void R_NoteDynamicVertices(uint32_t bytes)
+{
+    s_frameDynamicVertexBytes += bytes;
+}
+
+void R_DynamicBufferFrameDone()
+{
+    RaiseTo(s_dynamicUse.dynamicIndices, s_frameDynamicIndices);
+    RaiseTo(s_dynamicUse.dynamicVertexBytes, s_frameDynamicVertexBytes);
+    s_frameDynamicIndices = 0;
+    s_frameDynamicVertexBytes = 0;
+    ++s_dynamicUseFrames;
+
+    const int seconds = r_dynamicBufferReport ? r_dynamicBufferReport->current.integer : 0;
+    const int now = Sys_Milliseconds();
+    if (seconds <= 0)
+    {
+        s_dynamicUseReported = now;
+        return;
+    }
+    if (now - s_dynamicUseReported < seconds * 1000)
+        return;
+    s_dynamicUseReported = now;
+    const uint32_t skinned = s_dynamicUse.skinnedCacheBytes.exchange(0, std::memory_order_relaxed);
+    const uint32_t skinnedFull = s_dynamicUse.skinnedCacheFull.exchange(0, std::memory_order_relaxed);
+    const uint32_t preTess = s_dynamicUse.preTessIndices.exchange(0, std::memory_order_relaxed);
+    const uint32_t preTessFull = s_dynamicUse.preTessFull.exchange(0, std::memory_order_relaxed);
+    const uint32_t indices = s_dynamicUse.dynamicIndices.exchange(0, std::memory_order_relaxed);
+    const uint32_t vertexBytes = s_dynamicUse.dynamicVertexBytes.exchange(0, std::memory_order_relaxed);
+    const uint32_t frames = s_dynamicUseFrames;
+    s_dynamicUseFrames = 0;
+    Com_Printf(
+        CON_CHANNEL_GFX,
+        "dynamic buffers, the most one frame asked for in %u frames: skinned cache %u of %u KB (%u models left out), "
+        "pretess %u of %u indices (%u batches left unbatched), dynamic indices %u of %i, dynamic vertices %u of %i KB\n",
+        frames,
+        skinned >> 10,
+        (uint32_t)R_SKINNED_CACHE_BYTES >> 10,
+        skinnedFull,
+        preTess,
+        (uint32_t)R_PRETESS_INDEX_COUNT,
+        preTessFull,
+        indices,
+        gfxBuf.dynamicIndexBuffer ? gfxBuf.dynamicIndexBuffer->total : 0,
+        vertexBytes >> 10,
+        gfxBuf.dynamicVertexBuffer ? gfxBuf.dynamicVertexBuffer->total >> 10 : 0);
+}
 
 void TRACK_r_buffers()
 {

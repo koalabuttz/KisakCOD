@@ -2740,6 +2740,7 @@ GfxIndexBufferState *RB_SwapBuffers()
     }
 
     R_HW_InsertFence(&dx.swapFence);
+    R_DynamicBufferFrameDone();
     result = gfxBuf.dynamicIndexBuffer;
     gfxBuf.dynamicIndexBuffer->used = 0;
     return result;

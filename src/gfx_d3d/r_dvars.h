@@ -239,6 +239,7 @@ extern const dvar_t *r_skinCache;
 extern const dvar_t *r_fastSkin;
 extern const dvar_t *r_smc_enable;
 extern const dvar_t *r_pretess;
+extern const dvar_t *r_dynamicBufferReport;
 extern const dvar_t *r_picmip_manual;
 extern const dvar_t *r_picmip;
 extern const dvar_t *r_picmip_bump;

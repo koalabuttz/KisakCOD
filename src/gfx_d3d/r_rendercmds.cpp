@@ -334,6 +334,7 @@ bool R_UpdateSkinCacheUsage()
     bool result; // eax
 
     iassert( frontEndDataOut->skinnedCacheVb );
+    R_NoteSkinnedCacheUse(frontEndDataOut->skinnedCacheVb->used);
     result = frontEndDataOut->skinnedCacheVb->used >= (uint32_t)R_SKINNED_CACHE_THRESHOLD;
     rg.skinnedCacheReachedThreshold = result;
     return result;
