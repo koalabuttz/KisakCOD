@@ -78,6 +78,9 @@ what is still missing. Build steps are in the
 ## Tests
 
 - [Asset-free tests](../scripts/tests/README.md)
+- [Runs on the test machines](runs.md): the `framelog` frame-rate line, short
+  PS Vita starts, and what a run on a machine with a GPU or game data may and
+  may not keep
 - [D3DX shader runtime check](../scripts/tests/d3dx_shader_runtime.md)
 
 ## History
