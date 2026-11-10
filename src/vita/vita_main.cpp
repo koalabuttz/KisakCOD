@@ -283,6 +283,10 @@ bool Vita_Startup(int *argc, char ***argv)
     s_startTime = sceKernelGetProcessTimeWide();
     mkdir("ux0:data", 0777);
     mkdir(kDataPath, 0777);
+    // Vita3K does not cut a file an open asks to truncate, so a shorter log
+    // would keep the end of the last run's (com_fileaccess.cpp has the same
+    // for the engine's files). The old log goes first.
+    unlink(kLogPath);
     s_logFd = open(kLogPath, O_WRONLY | O_CREAT | O_TRUNC, 0666);
 
     LogFormat("Vita: KisakCOD %s starting, CPU at %d MHz\n", kProgramKind, scePowerGetArmClockFrequency());
