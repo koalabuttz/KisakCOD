@@ -131,8 +131,32 @@ def _frames(row):
     return logs
 
 
-def compact(results):
-    """The short form of a results file, sealed with a checksum of its own."""
+LINE_LIMIT = 300  # characters of one wanted line in the short form
+
+
+def _short_lines(lines, keep):
+    """The wanted lines of a row for the short form: at most `keep` per
+    pattern (the first and the last ones, with the number left out between
+    them), each cut at LINE_LIMIT characters."""
+    short = {}
+    for pattern, found in (lines or {}).items():
+        found = [line if len(line) <= LINE_LIMIT else line[:LINE_LIMIT] + " [cut]" for line in found]
+        if len(found) > keep:
+            head = (keep + 1) // 2
+            tail = keep - head
+            found = found[:head] + [f"[{len(found) - keep} more]"] + (found[-tail:] if tail else [])
+        if found:
+            short[pattern] = found
+    return short
+
+
+def compact(results, lines=None):
+    """The short form of a results file, sealed with a checksum of its own.
+    lines: how many of a row's wanted log lines to keep per pattern; None
+    takes the results' own "compact_lines" (0 when it has none: a frame-rate
+    run's short form stays a few hundred bytes a row)."""
+    if lines is None:
+        lines = int(results.get("compact_lines") or 0)
     short = {key: value for key, value in results.items() if key not in ("rows", "sha256")}
     short["compact"] = True
     short["full_sha256"] = results.get("sha256", "")
@@ -144,6 +168,10 @@ def compact(results):
         counts = {name: count for name, count in (row.get("counts") or {}).items() if count}
         if counts:
             kept["counts"] = counts
+        if lines > 0:
+            wanted = _short_lines(row.get("lines"), lines)
+            if wanted:
+                kept["lines"] = wanted
         failed = [step for step in row.get("steps") or [] if not step[1]]
         if failed:
             kept["steps"] = failed
@@ -225,8 +253,11 @@ def render(results, problem=None):
     out += [", ".join(facts) + ". Written by `scripts/runs/run_report.py` from the machine's results file "
             f"(checksum {'not verified' if problem else 'verified'}). Local results, not CI evidence.", ""]
     if results.get("compact"):
-        out += ["From the short form of the results: the frame log lines are the machine's, the other verbatim "
-                f"lines are in the full file on the machine (checksum {results.get('full_sha256', '')[:12]}...).", ""]
+        some = any(row.get("lines") for row in results.get("rows") or [])
+        out += [("From the short form of the results: the lines below are the machine's (a few per pattern), all "
+                 if some else
+                 "From the short form of the results: the frame log lines are the machine's, the other verbatim ")
+                + f"lines are in the full file on the machine (checksum {results.get('full_sha256', '')[:12]}...).", ""]
     out += [f"**Status:** {results.get('status', 'unknown')}.", ""]
     if results.get("build"):
         out += ["## Build", ""]
@@ -323,6 +354,9 @@ def main(argv=None):
     parser.add_argument("--summary", action="store_true", help="print the short summary instead")
     parser.add_argument("--check", action="store_true", help="only check the checksum")
     parser.add_argument("--compact", action="store_true", help="print the short form, to paste")
+    parser.add_argument("--lines", type=int, default=None, metavar="N",
+                        help="with --compact: keep up to N wanted log lines per pattern and row "
+                             "(default: the results' own compact_lines, or none)")
     parser.add_argument("--summary-limit", type=int, default=SUMMARY_LIMIT)
     args = parser.parse_args(argv)
 
@@ -339,7 +373,7 @@ def main(argv=None):
         if problem:
             print(f"run_report.py: {args.results}: {problem}", file=sys.stderr)
             return 1
-        print(json.dumps(compact(results), sort_keys=True, separators=(",", ":"), ensure_ascii=True))
+        print(json.dumps(compact(results, args.lines), sort_keys=True, separators=(",", ":"), ensure_ascii=True))
     elif args.summary:
         print(summarize(results, problem, args.summary_limit))
     else:

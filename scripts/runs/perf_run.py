@@ -66,6 +66,7 @@ The recipe (JSON)::
         {"framelog": 120}
       ],
       "lines": ["^Vulkan: legacy: device ready:", "frame stats:"],
+      "compact_lines": 0,
       "counts": {"validation": "validation error"},
       "power": {"require": "same", "battery_floor": 10, "battery_per_launch": 8,
                 "profile": "power-saver", "wait": 300, "retries": 1},
@@ -79,7 +80,8 @@ each row notes the SHA-256 and the time of the binary it ran. ``game`` may also
 carry ``"args_after"`` (arguments that follow the variant's,
 such as ``+devmap``), ``"wrap": ["taskset", "-c", "0,1"]`` (a command the game
 is started through), ``"cwd"`` and ``"quit_timeout"``. A guard folder
-ending in ``/**`` is listed with everything below it.
+ending in ``/**`` is listed with everything below it. ``compact_lines`` is how many of a
+row's wanted lines per pattern the short form of the results carries (0: none).
 
 ``~`` and ``{name}`` are expanded in paths, arguments, environment values and
 console lines: ``{row}``, ``{variant}``, ``{out}``, ``{home}``, and every named
@@ -623,6 +625,8 @@ class Run:
             "kind": "perf",
             "machine": socket.gethostname(),
             "recipe_sha256": hashlib.sha256(recipe_text.encode("utf-8")).hexdigest(),
+            # How many wanted lines per pattern the short form keeps (0: none).
+            "compact_lines": int(recipe.get("compact_lines", 0)),
             "started": now_utc(),
             "finished": "",
             "status": "running",

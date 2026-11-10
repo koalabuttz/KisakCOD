@@ -377,6 +377,22 @@ def test_whole_run(bench):
     with contextlib.redirect_stdout(io.StringIO()) as printed:
         status = run_report.main([str(pasted), "--compact"])
     check(status == 0 and printed.getvalue() == short_text, "--compact prints the same short form")
+    # The wanted lines cross in the short form only when asked for, a few per pattern.
+    check(all("lines" not in row for row in short["rows"]), "the short form has no wanted lines unless asked")
+    made_up = json.loads(json.dumps(results))
+    made_up["rows"][0]["lines"] = {"^memory": [f"memory line {index}" for index in range(9)],
+                                   "^long": ["x" * 400], "^none": []}
+    with_lines = run_report.compact(run_report.seal({k: v for k, v in made_up.items() if k != "sha256"}), lines=4)
+    kept = with_lines["rows"][0].get("lines", {})
+    check(kept.get("^memory") == ["memory line 0", "memory line 1", "[5 more]", "memory line 7", "memory line 8"]
+          and kept.get("^long") == ["x" * 300 + " [cut]"] and "^none" not in kept
+          and run_report.verify(with_lines) is None, f"the short form keeps a few wanted lines per pattern ({kept})")
+    made_up["compact_lines"] = 1
+    own = run_report.compact(run_report.seal({k: v for k, v in made_up.items() if k != "sha256"}))
+    check(own["rows"][0]["lines"]["^memory"] == ["memory line 0", "[8 more]"],
+          "the results' own compact_lines is the default")
+    check("memory line 0" in run_report.render(with_lines) and "a few per pattern" in run_report.render(with_lines),
+          "the report shows the kept lines and says they are a selection")
     pasted.write_text(short_text.replace("50.00 fps", "55.00 fps", 1))
     with contextlib.redirect_stdout(io.StringIO()) as printed:
         status = run_report.main([str(pasted), "--check"])
