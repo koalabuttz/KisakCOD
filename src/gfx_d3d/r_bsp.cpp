@@ -86,8 +86,10 @@ void R_UpdateLightsFromDvars()
             || r_lightTweakSunDirection->reset.vector[1] != r_lightTweakSunDirection->current.vector[1]
             || r_lightTweakSunDirection->reset.vector[2] != r_lightTweakSunDirection->current.vector[2])
         {
+#ifndef KISAK_GFX_GXM // no shadow maps on the GXM back end yet (r_dvars.cpp)
             Dvar_SetFloat((dvar_s *)sm_sunSampleSizeNear, 1.0);
             Dvar_SetBool((dvar_s *)sm_enable, 1);
+#endif
         }
     }
     R_CopyParseParamsFromDvars(&sunParse);

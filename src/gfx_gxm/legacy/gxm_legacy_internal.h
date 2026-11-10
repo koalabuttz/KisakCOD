@@ -130,6 +130,14 @@ struct Texture
     uint32_t faces = 1;
     std::vector<Level> levels; // face * levels + level
     Memory memory;
+    // Render targets and depth-stencil textures take their memory when they
+    // are first drawn to, locked or copied (EnsureTargetMemory). The renderer
+    // makes every target it might ever use at start-up, and the Vita cannot
+    // spare the ones a session never touches (the shadow maps alone are
+    // 18 MB). Until then deferredBytes is what it will take, and sampling it
+    // reads the stand-in.
+    uint32_t deferredBytes = 0;
+    bool deferFailed = false;
     std::vector<std::unique_ptr<Surface>> surfaces; // GetSurfaceLevel views, same index
     std::string name;
     // How sceGxm samples it (filters and addressing are set per draw);
@@ -300,6 +308,9 @@ void FreeGpuMemory(gxm::MemoryKind kind, void *data, MemoryUse use, uint32_t byt
 MemoryUse TextureUse(const TextureDesc &desc, const FormatInfo &format);
 // The pools' use by what it is for, in one line.
 std::string DescribeMemoryUse();
+// Gives a render target or depth-stencil texture its memory if it has none
+// yet. False when there is none to give (logged once per texture).
+bool EnsureTargetMemory(Device &device, Texture &texture);
 // One log line for a large piece of GPU memory as it is made.
 void LogLargePiece(Device &device, const Memory &memory, const char *what);
 // The display's raw texel for a D3DCOLOR: the display buffers are A8B8G8R8.

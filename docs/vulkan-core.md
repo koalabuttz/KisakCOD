@@ -256,16 +256,20 @@ of ours are still there.
 The clear-and-present probe has run on both physical GPUs (2026-11-07): the
 Windows PC's RTX 2080 Super and the laptop's Intel ANV, i386 and x86_64 (report
 in the project files, `renderer/vulkan-probe-laptop-run-1.md`). The draw scene
-has so far run on lavapipe only (2026-11-08, cloud sandbox, x86_64 Debug, Mesa
-25.2.8, validation with synchronisation checks: all points match, no errors).
+runs on lavapipe (2026-11-08, cloud sandbox, x86_64 Debug, Mesa
+25.2.8, validation with synchronisation checks: all points match, no errors)
+and passed on the laptop's Intel ANV, i386 and x86_64, offscreen and on
+Wayland, without the validation layer, which is not installed there
+(2026-11-08, `renderer/vulkan-probe-laptop-run-2.md`).
 
 ## Next
 
 The [Legacy adapter](vulkan-legacy-adapter.md) now sits on the core, with the
 [Legacy shader translator](vulkan-legacy-shaders.md) turning the game's shaders
 into SPIR-V for it, and its [D3D9 front](vulkan-d3d9-front.md) implementing
-the D3D9 interfaces the renderer calls. Next: the `r_backend vulkan` switch,
-which hands the renderer the front at device creation, and mp_crash drawn
-through it, compared with DXVK on the laptop and the PC. Not in the core yet, because
+the D3D9 interfaces the renderer calls. The `r_backend vulkan` switch hands
+the renderer the front at device creation, and the game draws through it on
+the laptop and the PC
+([in the game](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan)). Not in the core yet, because
 nothing needs them so far: compute pipelines, memory budgets
 (`VK_EXT_memory_budget`), and multisampled targets.

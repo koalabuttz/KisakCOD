@@ -902,6 +902,11 @@ bool OpenScene(Device &device)
         return true;
     EndScene(device);
 
+    // Targets take their memory when a scene first draws to them.
+    for (Surface *surface : {color, depth})
+        if (surface && surface->kind == SurfaceKind::TextureLevel && surface->texture)
+            EnsureTargetMemory(device, *surface->texture);
+
     d.hasColor = false;
     uint32_t width = 0, height = 0;
     SceGxmSyncObject *sync = nullptr;
@@ -1172,6 +1177,8 @@ void BindTextures(Device &device, const Variant &pixel, void *uniforms)
             if (texture->desc.kind == TextureKind::Volume)
                 depth = float(texture->desc.depth);
         }
+        else if (texture->deferredBytes && !texture->format->depth)
+            view = d.black; // a render target nothing has drawn to yet
         else if (texture->desc.kind == TextureKind::Cube)
         {
             NotYet(device, "sampling a cube texture sceGxm cannot take (a grey stand-in is bound)");
@@ -2501,6 +2508,8 @@ void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const
     SceGxmTexture view;
     uint32_t width = 0, height = 0;
     int result = -1;
+    if (src->kind == SurfaceKind::TextureLevel && src->texture)
+        EnsureTargetMemory(device, *src->texture);
     if (src->kind == SurfaceKind::BackBuffer)
     {
         width = gxm::kDisplayWidth;

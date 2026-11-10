@@ -357,8 +357,16 @@ mode's size at the desktop's resolution, so use windowed mode or the desktop's
 own resolution for now. The Windows workflow builds it for Win32 Debug and for
 x64 (whose artifact is the PC's), checks the configure log says `Vulkan back
 end: linked into KisakCOD-mp`, and checks the Win32 executable does not import
-`vulkan-1.dll`. Hosted runners have no GPU, so the game has not drawn through
-it on Windows yet.
+`vulkan-1.dll`. Hosted runners have no GPU, so CI never draws the game through
+it. On a Windows PC with the game files (RTX 2080 Super, Win32 Debug builds
+from CI, 2026-11-08; not CI evidence) the game draws mp_crash on Vulkan and
+quits cleanly. From one indoor view, Vulkan and the real `d3d9.dll` agree at
+43.9 dB in windowed desktop captures and 37.2 dB in exclusive-fullscreen
+screenshots; repeating the same comparison gives 37.6 to 43.9 dB, so that
+is the noise of the view.
+With the shader cache, a warm start reaches the map in 15 s against 62 s
+cold; the pipeline cache saves about 0.3 s more on that driver. Reports:
+`renderer/vulkan-backend-pc-run-{1,2,5}.md` in the project files.
 
 The device probe with `--backend vulkan` runs `r_init.cpp`'s device start
 unchanged (`R_PreCreateWindow`, `R_CreateWindow`, `R_CreateDevice`), clears,
@@ -403,9 +411,31 @@ the one DXVK 3.1.1 (dxbc-spirv too) gave in the shader spike. Vulkan took
 16.8 s against DXVK's 6.2 s for the whole probe. Reports:
 `renderer/vulkan-backend-laptop-run-{1,2,3}.md` in the project files.
 
+## The game on the laptop
+
+`KisakCOD-mp` plays mp_crash with `r_backend vulkan` on the laptop (Intel
+iGPU, ANV, x86_64 RelWithDebInfo, runs 4 to 7, 2026-11-08 and 09; not CI
+evidence):
+
+* Load time: run 4 measured Vulkan at +4.5 s warm, mostly while zones load
+  (shader translation and uploads), and +9.9 s cold, mostly pipelines built
+  at the first draw. The shader and pipeline caches (`r_vkShaderCache`) came
+  after that run.
+* Frame rate at a fixed view, on battery: 116 to 125 fps against 151 to 159
+  through DXVK (runs 5 and 6). The GPU is not the limit; the back end does
+  all its recording and driver calls on the render thread, where DXVK uses a
+  second thread.
+* Picture: models drew dark where the profile had
+  `r_altModelLightingUpdate 0`, because the adapter dropped a texture's
+  contents when it was locked again; fixed, and run 7 matches DXVK at 40.1 dB
+  there. With `r_altModelLightingUpdate 1` (the default) models are still 2.7
+  to 6.7 luma darker than through DXVK (33.6 dB); not explained yet.
+
+Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7}.md` in the project
+files.
+
 ## Next
 
-`KisakCOD-mp` played with `r_backend vulkan` on the laptop (laptop run 4); the
-PC comparison through the Windows host; and the load-time gap. Laptop run 4
-measured it at +4.5 s warm, mostly while zones load (shader translation and
-uploads), and +9.9 s cold, mostly pipelines built at the first draw.
+The frame rate against DXVK (a thread that records commands, as DXVK has),
+the model lighting difference above, occlusion queries (the adapter reports
+every sample as passed), and a long frame about every two minutes.

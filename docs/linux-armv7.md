@@ -80,7 +80,7 @@ test under qemu-arm.
 | --- | --- |
 | armv7 Linux dedicated server | Builds (Debug and RelWithDebInfo) and passes the asset-free bootstrap test under qemu-arm (sandbox, 2026-11-07). Not yet run with game data. |
 | Load a retail map on armv7 | Not tried. qemu-arm on the laptop or any armhf board with the game files would do it. |
-| Vita dedicated server | Builds into a `.vpk` (`KISAK_PLATFORM=vita`, 2026-11-07); not yet run on a Vita. See [vita.md](vita.md). |
+| Vita dedicated server | Builds into a `.vpk` (`KISAK_PLATFORM=vita`, 2026-11-07). On a console it has run 9 h on mp_crash and taken a player (2026-11-09). See [vita.md](vita.md). |
 
 The feasibility study, memory and CPU estimates and the staged plan are in the
 project files (`vita/vita-port-feasibility.md`).
