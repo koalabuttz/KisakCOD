@@ -133,9 +133,9 @@ struct DeviceCounters
 bool Counters(IDirect3DDevice9 *device, DeviceCounters &out);
 
 // Logs every live device's frame statistics through its host (the lines a
-// device logs when it is destroyed: `frame stats:`, `record thread:`,
-// `occlusion queries:`), counted since the device was created or since the
-// last call that reset them. With reset, the next count starts here, so a
+// device logs when it is destroyed: `frame stats:`, `slow frame`, `record
+// thread:`, `occlusion queries:`), counted since the device was created or
+// since the last call that reset them. With reset, the next count starts here, so a
 // program can measure one stretch of a run (the engine's r_vkStats command).
 // Any thread. Returns how many devices there were.
 uint32_t LogDeviceStats(bool reset);

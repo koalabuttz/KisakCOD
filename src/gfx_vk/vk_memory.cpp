@@ -72,6 +72,7 @@ bool NewBlock(Core &core, MemoryPool &pool, VkDeviceSize size, bool dedicated, u
     MemoryBlock block;
     block.size = size;
     block.dedicated = dedicated;
+    const StandStill allocating(core.stats.memoryAllocateMs);
     if (!Check(core, core.vk.vkAllocateMemory(core.dev, &info, nullptr, &block.memory), "vkAllocateMemory"))
         return false;
     if (pool.host
@@ -80,6 +81,7 @@ bool NewBlock(Core &core, MemoryPool &pool, VkDeviceSize size, bool dedicated, u
         core.vk.vkFreeMemory(core.dev, block.memory, nullptr);
         return false;
     }
+    ++core.stats.memoryAllocations;
     block.freeRanges[0] = size;
     if (pool.host)
         core.stats.hostMemoryBytes += size;

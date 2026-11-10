@@ -1155,6 +1155,15 @@ void ResetFrameTimings(Core *core)
     core->stats.framePasses = PassTimings{};
     core->stats.frameGap = PassTimings{};
 }
+
+bool FrameGpuTime(const Core *core, uint64_t frame, FrameGpuTimes &out)
+{
+    const Core::FrameGpuEntry &entry = core->frameGpuTimes[frame % std::size(core->frameGpuTimes)];
+    if (!frame || entry.frame != frame)
+        return false;
+    out = entry.times;
+    return true;
+}
 void NotifyResize(Core *core) { core->resizePending = true; }
 
 const Dispatch &Functions(const Core *core) { return core->vk; }

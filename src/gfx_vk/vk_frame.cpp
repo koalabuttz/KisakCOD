@@ -237,9 +237,11 @@ void CollectTimestamps(Core &core, uint32_t slotIndex)
     // collected in the order their frames were presented.
     uint64_t frameTicks[2] = {};
     const bool presented = slot.frameTimed && ReadTicks(core, base, frameTicks);
+    FrameGpuTimes times{};
     if (presented)
     {
-        AddTimings(core.stats.frame, TicksToMs(core, (frameTicks[1] - frameTicks[0]) & core.timestampMask));
+        times.frameMs = TicksToMs(core, (frameTicks[1] - frameTicks[0]) & core.timestampMask);
+        AddTimings(core.stats.frame, times.frameMs);
         if (core.lastFrameEndKnown)
         {
             // The GPU reads a frame's first timestamp when it reaches the
@@ -247,7 +249,8 @@ void CollectTimestamps(Core &core, uint32_t slotIndex)
             // left the pipeline: a difference in the upper half of the
             // counter's range is that, and no gap.
             const uint64_t gap = (frameTicks[0] - core.lastFrameEndTicks) & core.timestampMask;
-            AddTimings(core.stats.frameGap, gap > core.timestampMask / 2 ? 0.0 : TicksToMs(core, gap));
+            times.gapMs = gap > core.timestampMask / 2 ? 0.0 : TicksToMs(core, gap);
+            AddTimings(core.stats.frameGap, times.gapMs);
         }
         core.lastFrameEndTicks = frameTicks[1];
         core.lastFrameEndKnown = true;
@@ -274,7 +277,17 @@ void CollectTimestamps(Core &core, uint32_t slotIndex)
             AddTimings(core.stats.clearPass, ms);
     }
     if (presented)
+    {
         AddTimings(core.stats.framePasses, passesMs);
+        if (slot.frameNumber)
+        {
+            // Kept by the frame's number for FrameGpuTime.
+            times.passesMs = passesMs;
+            Core::FrameGpuEntry &entry = core.frameGpuTimes[slot.frameNumber % std::size(core.frameGpuTimes)];
+            entry.frame = slot.frameNumber;
+            entry.times = times;
+        }
+    }
 }
 
 // Waits for the slot's last submission and makes the slot ready to record.
@@ -545,7 +558,12 @@ bool WaitSerial(Core &core, uint64_t serial)
     info.semaphoreCount = 1;
     info.pSemaphores = &core.timeline;
     info.pValues = &serial;
-    if (!Check(core, core.vk.vkWaitSemaphores(core.dev, &info, UINT64_MAX), "vkWaitSemaphores"))
+    VkResult result;
+    {
+        const StandStill wait(core.stats.gpuWaitMs);
+        result = core.vk.vkWaitSemaphores(core.dev, &info, UINT64_MAX);
+    }
+    if (!Check(core, result, "vkWaitSemaphores"))
         return false;
     core.completedSerial = std::max(core.completedSerial, serial);
     return true;
@@ -698,6 +716,7 @@ FrameResult BeginFrame(Core *core_)
     if (!EnsureRecording(core))
         return FrameResult::Failed;
     FrameSlot &slot = CurrentSlot(core);
+    slot.frameNumber = 0;
     if (core.timestamps)
     {
         WriteTimestamp(core, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, SlotQueryBase(core));
@@ -719,8 +738,12 @@ Image *AcquireImage(Core &core)
     // frame's present goes first.
     if (!WaitPresents(core))
         return nullptr;
-    const VkResult result = core.vk.vkAcquireNextImageKHR(core.dev, core.swapchain, UINT64_MAX,
-                                                          CurrentSlot(core).acquired, VK_NULL_HANDLE, &core.imageIndex);
+    VkResult result;
+    {
+        const StandStill wait(core.stats.imageWaitMs);
+        result = core.vk.vkAcquireNextImageKHR(core.dev, core.swapchain, UINT64_MAX, CurrentSlot(core).acquired,
+                                               VK_NULL_HANDLE, &core.imageIndex);
+    }
     if (result == VK_ERROR_OUT_OF_DATE_KHR)
     {
         // Nothing was signalled. This frame shows nothing; rebuild next time.
@@ -799,12 +822,15 @@ FrameResult Present(Core *core_)
     ++core.recorder.presentsQueued;
     HandOff(core);
     ++core.stats.framesPresented;
+    slot.frameNumber = core.stats.framesPresented;
 
     // The next slot becomes current: wait for its previous frame (the frames in
     // flight limit) and recycle what it owns.
     core.frameIndex = (core.frameIndex + 1) % kFramesInFlight;
+    const double waited = core.stats.gpuWaitMs;
     if (!RecycleSlot(core, core.frameIndex))
         return FrameResult::Failed;
+    core.stats.frameLimitWaitMs += core.stats.gpuWaitMs - waited;
     return FrameResult::Ok;
 }
 

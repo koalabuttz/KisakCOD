@@ -86,6 +86,27 @@ since the device was made or since the last call that started them again.
   shows next to nothing in the last two. It also counts the parts the idle
   rule sent early. The line needs GPU timestamps and is left out without
   them.
+* `vulkan d3d9: slow frame N:` (up to three lines, the longest first) names
+  the frames of the stretch that took longest, for the one long frame among
+  thousands that an average hides. A frame here runs from the start of one
+  `Present` to the start of the next, so it holds the engine's work, the
+  device's, and every wait in between. Each line gives the time, the frame's
+  number in the stretch and the second it ended at, and what the device's
+  counters say happened in it: draws, passes, submissions, buffer renames and
+  swapchains built; the pipelines built (and how many of them the pipeline
+  cache held), the shaders made, the texture levels uploaded and the memory
+  blocks allocated, each with its milliseconds; and the milliseconds the
+  calling thread waited for a swapchain image, for the frames in flight (with
+  two frames in flight, a `Present` waits for the frame before the one it
+  shows), for the GPU otherwise (a texture read back, a flush that waits) and
+  for the record thread. The parts are measured where they happen and can
+  overlap (an upload that needed a memory block counts in both). What they
+  leave of the frame's time is the engine's own work and the driver's inside
+  ordinary calls. The line ends with the GPU's times for that frame (its
+  length, the part in passes, the rest between them, and the time without work
+  before it) once they have been read, which is a few frames after the frame.
+  On lavapipe a submission runs inside `vkQueueSubmit`, on the record thread,
+  so waiting for the GPU shows there as waiting for the record thread.
 * `vulkan d3d9: record thread:` is as described under Threads.
 * `vulkan d3d9: occlusion queries:` says whether they count, the Vulkan
   queries and pools they took, and what they answered in the stretch: the
@@ -262,6 +283,7 @@ a usage error.
 | `frame_loop` | The engine's frame for 48 frames: draw, poll the swap fence with `D3DGETDATA_FLUSH` until the frame before has finished, issue the GPU sync fence, `Present`, issue the swap fence, while another thread polls the sync fence as the main thread does. At most three submissions a frame, at most one swap fence flush, and the last frame, drawn on both sides of its wait, comes out whole. |
 | `gpu_feed` | A frame of 600 draws, each filling a cell of its own, with a scissor rectangle set once that cuts the last column. The adapter submits such a frame in parts while it is drawn ([adapter](vulkan-legacy-adapter.md)): every draw must show whichever part it fell in, the cells no draw touches must keep the clear colour, and the scissor must hold in every part. Prints the number of parts. |
 | `tuning` | What a program changes and asks for while its device runs. Five frames of 600 draws, each under a GPU feed setting handed over through `Host::tuning` and taken up by the `Present` before it: off (no parts), after every draw (600 parts), 50 draws a part (2 to 12), 300 draws with an idle count of 10 (the frame starts with the GPU read back, so its first part goes after 10 draws; one to five parts go early, and the picture of that frame is checked on both sides of them), and an idle count no smaller than the plain one (no early part). Every change is logged, the last one back to the device's own setting. `LogDeviceStats` then reports exactly the frames, draws and parts the scene counted since it started the statistics, a second report repeats them and starts again, and a third has no frame in it. Last, another thread changes the setting and asks for the statistics eight times while this one draws and presents, as the engine's main thread does beside its render thread, and the last frame comes out whole. |
+| `slow_frames` | The statistics' `slow frame` lines. Eight frames, of which the second makes the only blended draws of the check (so a pipeline is built) and then stands still for 400 ms, and the third uploads a texture and stands still for 250 ms. A report after the first frame has one line, for frame 1 with its 10 draws. The report after the eighth has three, the longest first, and names frames 2 and 3 with their times, their draws, the pipeline and the upload, and with the GPU's times where the device has timestamps. A report that starts the statistics again is followed by one with no such line. The two frames are found by number and not by rank, so a machine busy enough to hold another frame up for longer still passes. |
 | `bench` | Only when named (`--scene bench`), never in a full run: 120 frames of 768 draws of four D3D9 calls each, ended as `frame_loop`'s are, while another thread polls the sync fence every 20 microseconds. Prints the time the drawing thread spent on its draw calls per frame and the polls made meanwhile; passes when its frames were presented. |
 | `bench_runs` | Only when named, as `bench`: 100 frames of 768 draws in runs of eight that share a texture, an alpha reference and a pixel shader constant, as the engine's draws sorted by material do; each draw sets one vertex shader constant and draws its own quad from one static vertex and index buffer. It measures what the adapter does for a draw like the one before ([adapter](vulkan-legacy-adapter.md)). The last frame is read back and ten of its cells checked. Prints what `bench` prints. |
 | `reset` | `Reset` to 96x96 and back: the new size, default state, nothing bound, drawing at the new size. |
@@ -333,6 +355,19 @@ it off, where lavapipe has finished every submission before the call returns,
 four or five. ThreadSanitizer finds nothing in the scene. No GPU has run it,
 and the present mode a real surface gets (IMMEDIATE where it is offered) has
 not been seen: lavapipe's offscreen surface offers MAILBOX and FIFO only.
+
+The `slow_frames` scene (2026-11-10, same sandbox) passes its 21 points on
+x86_64 Debug and RelWithDebInfo with validation in the seven configurations
+the script is run in (the feed at its default, off and after every draw, the
+record thread off, static uniforms, static strides with fixed depth compare
+and wide targets, occlusion counting off) and on i386 without validation;
+alone 20 times in each build, and 20 times beside eight busy loops on the
+sandbox's four cores, without a failure. ThreadSanitizer finds nothing in it
+with the record thread on or off. On an idle sandbox the two frames it holds
+up read 406 to 413 ms and 257 to 265 ms, and beside the busy loops up to 520
+ms and 300 ms; nearly all of it shows as GPU time without work before the
+frame. No GPU has run it: what the lines say about the long frame the laptop
+sees about every two minutes is for its next measuring run.
 
 ## In the game: r_backend vulkan
 
