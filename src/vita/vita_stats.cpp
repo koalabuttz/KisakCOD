@@ -270,7 +270,19 @@ void Vita_StatsInit()
         "Console commands to send after the map was first in play: \"<seconds> <command> | <seconds> <command>\"; "
         "{serverid} stands for the server id");
     vita_assertExit = Dvar_RegisterBool("vita_assertExit", Vita_AssertExits(), DVAR_NOFLAG,
-        "A failed assertion ends the process with exit code 1 and no core dump (for emulator runs)");
+        "A failed assertion or an uncaught exception ends the process with exit code 1 and no core dump "
+        "(for emulator runs)");
+    // The log does not hold the command line (it may carry a key), so a run's
+    // report could not show what the start was asked to do.
+    Com_Printf(CON_CHANNEL_SYSTEM,
+        "Vita: run switches: vita_quitAfter %u, vita_quitAfterMenu %u, vita_quitAfterMap %u, vita_statsEvery %u, "
+        "vita_assertExit %d\n",
+        Seconds(vita_quitAfter), Seconds(vita_quitAfterMenu), Seconds(vita_quitAfterMap), Seconds(vita_statsEvery),
+        vita_assertExit && vita_assertExit->current.enabled ? 1 : 0);
+    if (vita_atMenu && vita_atMenu->current.string[0])
+        Com_Printf(CON_CHANNEL_SYSTEM, "Vita: vita_atMenu \"%s\"\n", vita_atMenu->current.string);
+    if (vita_atMap && vita_atMap->current.string[0])
+        Com_Printf(CON_CHANNEL_SYSTEM, "Vita: vita_atMap \"%s\"\n", vita_atMap->current.string);
     PrintMemory("after start-up");
     s_window = Window();
     s_window.start = Now();

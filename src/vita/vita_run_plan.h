@@ -182,8 +182,13 @@ class Plan
             StartQuit("vita_quitAfterMenu", settings.quitAfterMenu, now, step);
         else if (settings.quitAfter && now - m_start >= settings.quitAfter * kSecond)
             StartQuit("vita_quitAfter", settings.quitAfter, now, step);
-        else if (now - m_lastReport >= (settings.statsEvery ? settings.statsEvery : 1u) * kSecond)
+        else if (step.menuCameUp || step.mapCameUp ||
+                 now - m_lastReport >= (settings.statsEvery ? settings.statsEvery : 1u) * kSecond)
         {
+            // The figures also come the moment the menu or the map is up, and
+            // the period counts from there: the load before it and the play
+            // after it are not mixed in one line, and a quit timer that is a
+            // multiple of the period ends on a whole one.
             step.report = true;
             m_lastReport = now;
         }

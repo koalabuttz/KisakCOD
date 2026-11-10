@@ -61,10 +61,11 @@ bool Vita_QuitAfterDue();
 // see it change, so all figures share one period.
 unsigned int Vita_StatsGeneration();
 
-// "+set vita_assertExit 1": a failed assertion syncs the log and ends the
-// process with exit code 1 where it would stop for a core dump. An emulator
-// hangs on that stop and loses the log's tail; a console's dump is worth
-// keeping, so it is off by default. The start-up reads it from the command
+// "+set vita_assertExit 1": a failed assertion or an exception nothing caught
+// syncs the log and ends the process with exit code 1 where it would stop for
+// a core dump. An emulator hangs on that stop and loses the log's tail; a
+// console's dump is worth keeping, so it is off by default (the log is synced
+// and says what was thrown either way). The start-up reads it from the command
 // line file (an assertion can fail before any dvar exists); afterwards it
 // follows the dvar.
 bool Vita_AssertExits();

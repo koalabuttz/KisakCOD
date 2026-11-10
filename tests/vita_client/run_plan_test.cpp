@@ -139,13 +139,20 @@ void TestDefaultsReportOnceAMinute()
 {
     g_test = "defaults";
     // Stats start 8 s in, as on the Vita (Com_Init takes that long); 16 ms frames.
-    const Run run = Play(Settings(), 8 * kSecond, 200 * kSecond, 16 * kMs, 20 * kSecond, 0, 0);
+    const Run run = Play(Settings(), 8 * kSecond, 190 * kSecond, 16 * kMs, 20 * kSecond, 0, 0);
+    // The figures come when the menu is up, and every minute from there.
     CHECK(run.reports.size() == 3);
     if (run.reports.size() == 3)
     {
-        CHECK(run.reports[0] >= 68 * kSecond && run.reports[0] < 68 * kSecond + 16 * kMs);
+        CHECK(run.reports[0] == run.menuAt);
         CHECK(run.reports[1] - run.reports[0] >= 60 * kSecond && run.reports[1] - run.reports[0] < 60 * kSecond + 32 * kMs);
+        CHECK(run.reports[2] - run.reports[1] >= 60 * kSecond && run.reports[2] - run.reports[1] < 60 * kSecond + 32 * kMs);
     }
+    // With no menu and no map the period counts from the first stats frame.
+    const Run bare = Play(Settings(), 8 * kSecond, 100 * kSecond, 16 * kMs, 0, 0, 0);
+    CHECK(bare.reports.size() == 1);
+    if (bare.reports.size() == 1)
+        CHECK(bare.reports[0] >= 68 * kSecond && bare.reports[0] < 68 * kSecond + 16 * kMs);
     CHECK(run.quits == 0 && !run.quitDvar);
     CHECK(run.menuAt >= 20 * kSecond && run.menuAt < 20 * kSecond + 16 * kMs);
     CHECK(run.mapAt == 0 && run.commands.empty() && run.errors.empty());
@@ -175,8 +182,9 @@ void TestQuitAfterStartup()
     CHECK(run.quitDvar && !strcmp(run.quitDvar, "vita_quitAfter") && run.quitSeconds == 90);
     CHECK(run.quits == 1);
     CHECK(run.quitAt - run.lastFiguresAt >= kQuitGrace && run.quitAt - run.lastFiguresAt < kQuitGrace + 16 * kMs);
-    // One periodic report at 68 s, the last figures at 90 s, nothing after.
-    CHECK(run.reports.size() == 2);
+    // The menu's figures at 20 s, one periodic report at 80 s, the last
+    // figures at 90 s, nothing after.
+    CHECK(run.reports.size() == 3);
 }
 
 void TestQuitAfterMenu()
@@ -190,7 +198,10 @@ void TestQuitAfterMenu()
     CHECK(run.lastFiguresAt - run.menuAt >= 15 * kSecond && run.lastFiguresAt - run.menuAt < 15 * kSecond + 16 * kMs);
     CHECK(run.quitDvar && !strcmp(run.quitDvar, "vita_quitAfterMenu") && run.quitSeconds == 15);
     CHECK(run.quits == 1 && run.quitAt < 42 * kSecond);
-    CHECK(run.reports.size() == 1);
+    // The figures when the menu came up and the last ones.
+    CHECK(run.reports.size() == 2);
+    if (run.reports.size() == 2)
+        CHECK(run.reports[0] == run.menuAt && run.reports[1] == run.lastFiguresAt);
     // The command due after the quit is never sent.
     CHECK(run.commands.size() == 2);
     if (run.commands.size() == 2)
@@ -231,6 +242,24 @@ void TestQuitAfterMapAtEmulatorSpeed()
         CHECK(run.commands[0] == "48000 openscriptmenu team_marinesopfor autoassign");
         CHECK(run.commands[1] == "51000 openscriptmenu changeclass assault_mp,0");
     }
+
+    // Figures when the menu and the map came up, then on the default minute:
+    // none before the quit at 30 s.
+    CHECK(run.reports.size() == 3);
+    if (run.reports.size() == 3)
+        CHECK(run.reports[0] == run.menuAt && run.reports[1] == run.mapAt && run.reports[2] == run.lastFiguresAt);
+    // As a run asks for them: every 10 s from the map, so the last figures
+    // cover a whole period.
+    settings.statsEvery = 10;
+    const Run periods = Play(settings, 8 * kSecond, 700 * kSecond, 500 * kMs, 9 * kSecond, 10 * kSecond, 45 * kSecond);
+    CHECK(periods.reports.size() >= 4);
+    if (periods.reports.size() >= 4)
+    {
+        const size_t last = periods.reports.size() - 1;
+        CHECK(periods.reports[last] == 75 * kSecond && periods.reports[last - 1] == 65 * kSecond);
+        CHECK(periods.reports[last - 2] == 55 * kSecond && periods.reports[last - 3] == 45 * kSecond);
+    }
+    settings.statsEvery = 60;
 
     // The map never comes up (a failed load): the safety net ends the run.
     const Run failed = Play(settings, 8 * kSecond, 700 * kSecond, 500 * kMs, 9 * kSecond, 0, 0);

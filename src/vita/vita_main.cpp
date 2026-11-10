@@ -4,6 +4,7 @@
 #include "vita_platform.h"
 
 #include <atomic>
+#include <exception>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -197,6 +198,41 @@ namespace
         return s_tlsProbe == 1;
     }
 
+    // An exception nothing caught reaches std::terminate, which stops for a
+    // core dump: Vita3K hangs there and the log's tail is lost (PC run of
+    // 2026-11-10: std::bad_alloc on a full heap, killed after 351 s). Say what
+    // was thrown and what memory was left, sync the log, then end as a failed
+    // assertion does.
+    [[noreturn]] void OnTerminate()
+    {
+        static std::atomic<bool> s_entered;
+        if (!s_entered.exchange(true))
+        {
+            char what[160] = "nothing was thrown";
+            if (const std::exception_ptr thrown = std::current_exception())
+            {
+                try
+                {
+                    std::rethrow_exception(thrown);
+                }
+                catch (const std::exception &error)
+                {
+                    snprintf(what, sizeof(what), "%s", error.what());
+                }
+                catch (...)
+                {
+                    snprintf(what, sizeof(what), "not a std::exception");
+                }
+            }
+            LogFormat("Vita: ERROR: uncaught exception (%s); the process ends\n", what);
+            Vita_LogMemoryAtError();
+            Vita_ConsoleSync();
+        }
+        if (Vita_AssertExits())
+            Vita_Exit(1);
+        abort();
+    }
+
     // vita_assertExit (vita_platform.h), read here because an assertion can
     // fail before the engine has a dvar: true when the command line gives it
     // a value other than 0.
@@ -324,6 +360,7 @@ bool Vita_Startup(int *argc, char ***argv)
     mkdir(kDataPath, 0777);
     s_logFd = open(kLogPath, O_WRONLY | O_CREAT | O_TRUNC, 0666);
 
+    std::set_terminate(OnTerminate);
     LogFormat("Vita: KisakCOD %s starting, CPU at %d MHz\n", kProgramKind, scePowerGetArmClockFrequency());
     const unsigned int fpscr = Vita_SetIeeeFloatMode();
     LogFormat("Vita: FPSCR was 0x%08x (flush-to-zero %s)\n", fpscr, (fpscr & (1u << 24)) ? "on, now off" : "off");

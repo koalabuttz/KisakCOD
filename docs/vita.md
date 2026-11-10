@@ -113,23 +113,41 @@ line file (`cmdline.txt`, `cmdline-mp.txt` for the client). The logic is
 `src/vita/vita_run_plan.h`, checked on the host by
 `scripts/tests/test_vita_run_plan.py`.
 
+The Vita's C library does not know the `%zu`, `%jd` and `%td` printf
+conversions: it prints the letters and reads the later arguments as the wrong
+types. Cast and use `%u` or `%llu`; the same test reads `src/vita` and
+`src/gfx_gxm` for them.
+
 | Dvar | What it does |
 | --- | --- |
 | `vita_quitAfterMenu <s>` | Quit this many seconds after the main menu first showed (client). |
 | `vita_quitAfterMap <s>` | Quit this many seconds after the map was first in play: the client is in the game, or the dedicated server runs a map. |
 | `vita_quitAfter <s>` | Quit this many seconds after start-up. Set it as well, as the safety net for a start whose menu or map never comes. |
-| `vita_statsEvery <s>` | The period of the load, memory, GPU memory and sound lines (60 by default). |
+| `vita_statsEvery <s>` | The period of the load, memory, GPU memory and sound lines (60 by default). The lines also come the moment the menu or the map is up, and the period counts from there. |
 | `vita_atMenu "<s> <command> \| <s> <command>"` | Console commands to send that many seconds after the menu first showed. |
 | `vita_atMap "..."` | The same after the map was first in play. `{serverid}` in a command stands for the server id. |
-| `vita_assertExit 1` | A failed assertion ends the process with exit code 1 where it would stop for a core dump. Vita3K hangs on that stop and loses the log's tail. Off by default: a console's dump is worth keeping. |
+| `vita_assertExit 1` | A failed assertion or an exception nothing caught ends the process with exit code 1 where it would stop for a core dump. Vita3K hangs on that stop and loses the log's tail. Off by default: a console's dump is worth keeping. |
 
 Every quit timer first prints all figures (`Vita: vita_quitAfterMenu 15
-reached, last figures:`, then the load and memory lines, the renderer's two
-`gpu memory` lines and the sound's line), waits a second and at least three
-frames for those lines, and then quits (`Vita: quitting as asked`). The log
-also says when the events happened: `Vita: the menu is up`, `Vita: the map is
-up`, and with the map `Vita: script menus: 0 <name>, 1 <name>, ...`, the
-numbered script menus the server named.
+reached, last figures:`, then the load and memory lines, the sound's line and
+the renderer's two `gpu memory` lines; the last three come from other code at
+its next update, so their order is not fixed), waits a second and at least
+three frames for those lines, and then quits (`Vita: quitting as asked`, 1 to
+2 seconds after the `reached` line in Vita3K, with the engine's shutdown
+lines after it). With a quit timer that is a multiple of `vita_statsEvery`
+the last figures cover a whole period. The log also says when the events
+happened: `Vita: the menu is up`, `Vita: the map is up`, and with the map
+`Vita: script menus: 0 <name>, 1 <name>, ...`, the numbered script menus the
+server named. After start-up it says what the start was asked to do, since it
+does not hold the command line (`Vita: run switches: vita_quitAfter 600,
+vita_quitAfterMenu 0, vita_quitAfterMap 30, vita_statsEvery 10,
+vita_assertExit 1`, then `Vita: vita_atMap "..."` when one is set).
+
+An exception nothing caught (a `std::bad_alloc` when the heap is spent) logs
+`Vita: ERROR: uncaught exception (std::bad_alloc); the process ends` and the
+memory left, and syncs the log, with or without `vita_assertExit`. What
+neither switch can end is a fault or a plain `abort()`: a runner still needs
+its own time limit and a kill.
 
 A menu start that is done 15 seconds after the menu shows:
 
@@ -144,7 +162,12 @@ earlier start lists; the responses are the stock scripts'):
     +set vita_atMap "3 openscriptmenu <team menu> autoassign | 8 openscriptmenu <class menu> assault_mp,0"
 
 `cmd mr {serverid} <number> <response>` sends the same response by the menu's
-number. A timed-command list that cannot be read is reported once (`Vita:
+number (in the stock scripts 8 is the team menu and 15 the class menu; the
+first run in Vita3K, 2026-11-10, spawned a player with `8 autoassign` and
+`15 assault_mp,0`: a menu start took 30 s where the fixed-length one took
+231, a map start 76 s where the clicked one took 426). The server answers
+each with its own "Client ...'s snapshot" dump of about 40 lines, the
+engine's note of the largest snapshot so far. A timed-command list that cannot be read is reported once (`Vita:
 vita_atMap: part 2 ... does not start with a time in seconds`) and none of
 its commands is sent.
 
