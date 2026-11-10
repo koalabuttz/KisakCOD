@@ -283,7 +283,39 @@ bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &
     // Windows (PC runs Z9 and Z10). So fragment programs never use it.
     // Vertex programs keep it.
     const bool fast = fastMath && stage == ShaderStage::Vertex;
-    const bool compiled = CompileCg(cg.data(), cg.size(), stage, program, log, fast, optimization);
+    bool compiled = CompileCg(cg.data(), cg.size(), stage, program, log, fast, optimization);
+    if (!compiled)
+    {
+        // Once the compiler has stopped with "fatal internal error" every
+        // later program fails the same way within milliseconds (PC run Z11:
+        // 279 in a row). A fresh compiler gets one more try, so a broken
+        // compiler costs one program at most, not all that follow.
+        UnloadCompiler();
+        std::string message;
+        if (LoadShaderCompiler(message))
+        {
+            g_compilerTried = true;
+            g_compilerLoaded.store(true, std::memory_order_release);
+            {
+                const std::lock_guard<std::mutex> state(g_state);
+                ++g_stats.compilerRetries;
+            }
+            std::string again;
+            compiled = CompileCg(cg.data(), cg.size(), stage, program, again, fast, optimization);
+            // Still failing without fast maths: the program as it was built
+            // before run Z10 beats no program at all.
+            if (!compiled && fast != fastMath)
+                compiled = CompileCg(cg.data(), cg.size(), stage, program, again, fastMath, optimization);
+            log = compiled ? std::string() : again;
+        }
+        else
+        {
+            g_compilerTried = true;
+            g_compilerReady = false;
+            g_compilerMessage = message;
+            g_compilerLoaded.store(false, std::memory_order_release);
+        }
+    }
     const uint64_t end = Micros();
     g_lastCompile.store(end, std::memory_order_release);
     size_t held = 0, peak = 0;

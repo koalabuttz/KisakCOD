@@ -38,6 +38,8 @@ struct ProgramCacheStats
     // bytes that gave back.
     uint32_t compilerUnloads;
     uint64_t compilerGaveBack;
+    // Failed compiles tried once more with the compiler loaded afresh.
+    uint32_t compilerRetries;
     // The slowest single compile and read from the card.
     uint64_t slowestCompileMicros;
     uint64_t slowestReadMicros;
