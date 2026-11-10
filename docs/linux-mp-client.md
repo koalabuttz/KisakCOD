@@ -59,13 +59,21 @@ Running it again skips what is already built at the same revision, so after a
 | `--openal-include <folder>` | Where `AL/al.h` is, when `libopenal-dev` is not installed (see below). |
 | `--dry-run` | Prints every command and runs nothing. |
 
-Checked so far in a cloud container only (x86_64, Clang 18, no GPU, SDL3 built
-without desktop support): a full run took about five minutes and the packed
-folder started (`--version`) with no library path set. It has not been run on
-a desktop PC yet. `scripts/tests/test_setup_linux_client.py` checks the tool's
-logic without the network; the hosted workflow "Linux client setup tool" does
-the real fetch and build when the tool changes. The i386 client still needs
-the recipe below.
+Where it has run:
+
+- On a Windows PC under WSL2 (x86_64, by hand, 2026-11-10, the tool as merged):
+  a full run with `--package` took about nine minutes, and its SDL3 got both
+  the Wayland and the X11 drivers. The packed folder, started with no library
+  path set, loaded mp_crash and played it under Xvfb with software rendering.
+  A second run skipped SDL3 and DXVK ("up to date") and took five seconds; the
+  client it packed was byte for byte the same. No real GPU or monitor yet.
+- In a cloud container (x86_64, Clang 18, no GPU): about five minutes, and the
+  packed folder started (`--version`).
+- The hosted workflow "Linux client setup tool" does the real fetch and build
+  whenever the tool changes. `scripts/tests/test_setup_linux_client.py` checks
+  the tool's logic without the network.
+
+The i386 client still needs the recipe below.
 
 ### By hand
 
