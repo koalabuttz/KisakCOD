@@ -164,6 +164,18 @@ uint32_t WindowDestroying(D3D9Window window)
     return count;
 }
 
+uint32_t LogDeviceStats(bool reset)
+{
+    const FrontLock lock;
+    uint32_t count = 0;
+    for (Device *live : LiveDevices())
+    {
+        live->LogStats(reset);
+        ++count;
+    }
+    return count;
+}
+
 bool Counters(IDirect3DDevice9 *device, DeviceCounters &out)
 {
     const FrontLock lock;

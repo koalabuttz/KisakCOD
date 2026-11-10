@@ -25,10 +25,12 @@
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -121,12 +123,28 @@ struct SdlHost
     Uint32 extensionCount = 0;
     gfx_vk::CoreStats finalStats{};
     bool coreDestroyed = false;
+    // Under the mutex: what HostTuning hands the front at every Present, and
+    // the log lines a scene asked to keep (the tuning scene), any thread's.
+    std::mutex mutex;
+    front::Tuning tuning{};
+    std::vector<std::string> *logKept = nullptr;
 };
 
-void LogLine(void *, const char *line)
+void LogLine(void *user, const char *line)
 {
     std::printf("d3d9_check.log=%s\n", line);
     std::fflush(stdout);
+    SdlHost *host = static_cast<SdlHost *>(user);
+    const std::lock_guard<std::mutex> lock(host->mutex);
+    if (host->logKept)
+        host->logKept->push_back(line);
+}
+
+void HostTuning(void *user, front::Tuning &out)
+{
+    SdlHost *host = static_cast<SdlHost *>(user);
+    const std::lock_guard<std::mutex> lock(host->mutex);
+    out = host->tuning;
 }
 
 bool CreateSurface(void *user, VkInstance instance, VkSurfaceKHR *surface)
@@ -438,6 +456,7 @@ public:
     void Occlusion();
     void FrameLoop();
     void GpuFeed();
+    void Tuning();
     void Bench();
     void ResetDevice();
     void Present();
@@ -1051,11 +1070,21 @@ void Check::Occlusion()
     Ok(a->Issue(D3DISSUE_END), "Issue(end)");
     expect("occlusion_two_draws", a, 32 * 32 + 16 * 16);
 
-    // No draw, and a clear, which is not one.
+    // No draw, and a clear, which is not one. The statistics take it as one
+    // result with no sample (what the engine gets while the sun's place on
+    // screen is behind a wall), and a second read of it as nothing new.
+    const front::DeviceCounters beforeEmpty = Counters();
     Ok(a->Issue(D3DISSUE_BEGIN), "Issue(begin)");
     Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET, Argb(255, 0, 0, 64), 1.0f, 0), "Clear");
     Ok(a->Issue(D3DISSUE_END), "Issue(end)");
     expect("occlusion_no_draw", a, 0);
+    expect("occlusion_no_draw_again", a, 0);
+    const front::DeviceCounters afterEmpty = Counters();
+    Equal("occlusion_empty_result", afterEmpty.occlusionResults - beforeEmpty.occlusionResults,
+          uint64_t(counted ? 1 : 0));
+    Equal("occlusion_empty_result_zero", afterEmpty.occlusionResultsZero - beforeEmpty.occlusionResultsZero,
+          uint64_t(counted ? 1 : 0));
+    Equal("occlusion_empty_result_samples", afterEmpty.occlusionSamples - beforeEmpty.occlusionSamples, uint64_t(0));
 
     // The scissor rectangle cuts samples off.
     const RECT scissor = {0, 0, 16, LONG(kSize)};
@@ -1203,11 +1232,22 @@ void Check::Occlusion()
     Equal("occlusion_pools_kept", after.occlusionPools, afterHeld.occlusionPools);
     if (!counted)
         Equal("occlusion_nothing_counted", after.occlusionCounts, 0u);
+    // The statistics of those rounds: a result each, 64 samples each, none
+    // empty. A device that cannot count has no results to report.
+    Equal("occlusion_rounds_results", after.occlusionResults - afterHeld.occlusionResults,
+          uint64_t(counted ? kRounds : 0));
+    Equal("occlusion_rounds_samples", after.occlusionSamples - afterHeld.occlusionSamples,
+          uint64_t(counted ? kRounds * 64 : 0));
+    Equal("occlusion_rounds_none_empty", after.occlusionResultsZero - afterHeld.occlusionResultsZero, uint64_t(0));
     SafeRelease(b);
     SafeRelease(a);
-    std::printf("d3d9_check.occlusion=counted=%s queries=%d counts=%llu pools=%u\n", counted ? "yes" : "no",
-                int(kHeld) + kRounds, static_cast<unsigned long long>(after.occlusionCounts - before.occlusionCounts),
-                after.occlusionPools);
+    std::printf("d3d9_check.occlusion=counted=%s queries=%d counts=%llu pools=%u results=%llu empty=%llu "
+                "samples=%llu\n",
+                counted ? "yes" : "no", int(kHeld) + kRounds,
+                static_cast<unsigned long long>(after.occlusionCounts - before.occlusionCounts), after.occlusionPools,
+                static_cast<unsigned long long>(after.occlusionResults - before.occlusionResults),
+                static_cast<unsigned long long>(after.occlusionResultsZero - before.occlusionResultsZero),
+                static_cast<unsigned long long>(after.occlusionSamples - before.occlusionSamples));
 }
 
 // The engine's frame, as its render thread runs it (RB_RenderCommandFrame,
@@ -1340,6 +1380,251 @@ void Check::GpuFeed()
     const uint64_t parts = after.feedFlushes - before.feedFlushes;
     Equal("feed_at_most_a_part_a_draw", parts <= uint64_t(kDraws), true);
     std::printf("d3d9_check.gpu_feed=draws=%d parts=%llu\n", kDraws, static_cast<unsigned long long>(parts));
+}
+
+// What a program changes and asks for while its device exists: the GPU feed
+// (front::Tuning, taken up at every Present; the engine's r_vkGpuFeed dvars)
+// and the frame statistics (front::LogDeviceStats; the engine's r_vkStats).
+// Each setting draws a frame of 600 draws and is known by its parts: none
+// with the feed off, one for every draw with "always", two to twelve at 50
+// draws a part (a GPU that stays behind gets a part about every 200 draws).
+// Under the idle rule the first part goes after 10 draws, because the frame
+// starts with the GPU read back and so with nothing left, and the rule sends
+// five such parts at most (10, 20, 40, 80 and 160 draws).
+// Every change is logged, the last one back to the device's own setting. The
+// statistics, started again before the first setting, then report exactly
+// the frames, draws and parts counted here; a second report repeats them and
+// starts again, and a third has no frame in it.
+void Check::Tuning()
+{
+    constexpr int kDraws = 600;
+    constexpr int kCell = 4;
+    constexpr int kAcross = int(kSize) / kCell;
+    std::vector<std::string> lines;
+    const auto keep = [&](std::vector<std::string> *kept) {
+        const std::lock_guard<std::mutex> lock(host->mutex);
+        host->logKept = kept;
+    };
+    // How many of the kept lines, or of the first `limit` of them, have the text.
+    const auto logged = [&](const char *text, size_t limit = SIZE_MAX) {
+        const std::lock_guard<std::mutex> lock(host->mutex);
+        size_t count = 0;
+        for (size_t i = 0; i < lines.size() && i < limit; ++i)
+            count += lines[i].find(text) != std::string::npos;
+        return count;
+    };
+    const auto set = [&](const front::Tuning &tuning) {
+        const std::lock_guard<std::mutex> lock(host->mutex);
+        host->tuning = tuning;
+    };
+    keep(&lines);
+    Equal("stats_devices", front::LogDeviceStats(true), 1u);
+    const front::DeviceCounters start = Counters();
+    uint64_t draws = 0;
+
+    struct Parts
+    {
+        uint64_t all, early;
+    };
+    // The Present takes the setting up; the frame's draws then count from a
+    // GPU that has finished everything (Read waits for it).
+    const auto frame = [&](const front::Tuning &tuning) {
+        set(tuning);
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        Reset(Argb(255, 0, 64, 0));
+        Read();
+        const front::DeviceCounters before = Counters();
+        for (int draw = 0; draw < kDraws; ++draw)
+        {
+            const float x = float(draw % kAcross * kCell);
+            const float y = float(draw / kAcross * kCell);
+            DrawQuad(x, y, x + kCell, y + kCell, 0.5f,
+                     Argb(255, uint32_t(40 + draw % 200), uint32_t(draw / 3 % 256), 255));
+        }
+        draws += kDraws;
+        const front::DeviceCounters after = Counters();
+        return Parts{after.feedFlushes - before.feedFlushes, after.feedIdleFlushes - before.feedIdleFlushes};
+    };
+    const auto setting = [](int feed, uint32_t feedDraws, uint32_t idleDraws) {
+        front::Tuning tuning;
+        tuning.gpuFeed = feed;
+        tuning.gpuFeedDraws = feedDraws;
+        tuning.gpuFeedIdleDraws = idleDraws;
+        return tuning;
+    };
+
+    Parts parts = frame(setting(0, 0, 0));
+    Equal("feed_off_parts", parts.all, uint64_t(0));
+    parts = frame(setting(2, 0, 0));
+    Equal("feed_always_parts", parts.all, uint64_t(kDraws));
+    Equal("feed_always_early_parts", parts.early, uint64_t(0));
+    parts = frame(setting(1, 50, 0));
+    Equal("feed_50_parts", parts.all >= 2 && parts.all <= 12, true);
+    Equal("feed_50_early_parts", parts.early, uint64_t(0));
+    parts = frame(setting(1, 300, 10));
+    Equal("feed_idle_early_parts", parts.early >= 1 && parts.early <= 5, true);
+    Equal("feed_idle_other_parts", parts.all >= parts.early && parts.all - parts.early <= 2, true);
+    const Parts idle = parts;
+    // The picture of a frame cut by the rule: the draws on both sides of its
+    // first parts, the last draw, and the cells no draw touched.
+    if (Read())
+    {
+        for (int draw : {0, 9, 10, 11, 29, 30, 31, 69, 70, 71, 300, 599})
+        {
+            char name[32];
+            std::snprintf(name, sizeof(name), "idle_draw_%d", draw);
+            Expect(name, UINT(draw % kAcross * kCell + kCell / 2), UINT(draw / kAcross * kCell + kCell / 2),
+                   40 + draw % 200, (draw / 3) % 256, 255);
+        }
+        Expect("idle_clear_kept", kSize - 6, kSize - 2, 0, 64, 0);
+    }
+    // No rule where its part would be no smaller than the plain one.
+    parts = frame(setting(1, 50, 80));
+    Equal("feed_idle_too_large_parts", parts.all >= 2 && parts.all <= 12, true);
+    Equal("feed_idle_too_large_early_parts", parts.early, uint64_t(0));
+    // The device's own setting again, with nothing drawn under it.
+    const size_t settingsLogged = logged(""); // every line so far
+    set(front::Tuning{});
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    const front::DeviceCounters end = Counters();
+
+    // Every change was logged as it was taken up: four for certain and a
+    // fifth before them unless the device began with the feed off, then the
+    // one back to the device's own setting, whatever that is. At 50 draws
+    // twice: the too-large idle count is no rule and is not worded.
+    const size_t changes = logged("GPU feed now ", settingsLogged);
+    Equal("logged_changes", changes == 4 || changes == 5, true);
+    Equal("logged_always", logged("GPU feed now after every draw", settingsLogged), size_t(1));
+    Equal("logged_idle",
+          logged("GPU feed now every 300 draws (10 when the GPU has nothing left)", settingsLogged), size_t(1));
+    Equal("logged_50", logged("GPU feed now every 50 draws", settingsLogged), size_t(2));
+    Equal("logged_own_setting", logged("GPU feed now ") - changes, size_t(1));
+
+    // The statistics since the scene began.
+    struct Report
+    {
+        bool found = false;
+        unsigned long long frames = 0, flushes = 0, fenceFlushes = 0, feedFlushes = 0, timed = 0, early = 0;
+        double seconds = 0, fps = 0, draws = 0, passes = 0, sets = 0, reused = 0, constants = 0, renames = 0;
+        double submissions = 0, gpuAverage = 0, gpuMin = 0, gpuMax = 0;
+        bool gpuTime = false;
+        double inPasses = 0, between = 0, before = 0, beforeMax = 0;
+    };
+    const auto report = [&](bool reset) {
+        {
+            const std::lock_guard<std::mutex> lock(host->mutex);
+            lines.clear();
+        }
+        Report out;
+        if (front::LogDeviceStats(reset) != 1)
+            return out;
+        std::vector<std::string> said;
+        {
+            const std::lock_guard<std::mutex> lock(host->mutex);
+            said = lines;
+        }
+        for (const std::string &line : said)
+        {
+            if (std::sscanf(line.c_str(),
+                            "vulkan d3d9: frame stats: %llu frames in %lf s (%lf fps); per frame %lf draws, %lf "
+                            "passes, %lf descriptor sets (%lf reused), %lf KB constants, %lf dynamic renames, %lf "
+                            "submissions (%llu flushes in all, %llu of them ahead of Present at a swap fence, %llu "
+                            "to feed the GPU during a frame); GPU frame %lf ms average, %lf min, %lf max over %llu "
+                            "frames",
+                            &out.frames, &out.seconds, &out.fps, &out.draws, &out.passes, &out.sets, &out.reused,
+                            &out.constants, &out.renames, &out.submissions, &out.flushes, &out.fenceFlushes,
+                            &out.feedFlushes, &out.gpuAverage, &out.gpuMin, &out.gpuMax, &out.timed)
+                == 17)
+                out.found = true;
+            if (std::sscanf(line.c_str(),
+                            "vulkan d3d9: GPU time: per frame %lf ms in passes, %lf ms between them, and %lf ms "
+                            "without work before the frame (%lf max); %llu parts sent early to a GPU with nothing "
+                            "left",
+                            &out.inPasses, &out.between, &out.before, &out.beforeMax, &out.early)
+                == 5)
+                out.gpuTime = true;
+        }
+        return out;
+    };
+    const uint64_t frames = (end.presents - start.presents) - (end.presentsSkipped - start.presentsSkipped);
+    const Report first = report(false);
+    Equal("stats_line", first.found, true);
+    Equal("stats_frames", uint64_t(first.frames), frames);
+    Equal("stats_draws_per_frame", first.draws, frames ? std::round(double(draws) / double(frames)) : 0.0);
+    Equal("stats_feed_parts", uint64_t(first.feedFlushes), end.feedFlushes - start.feedFlushes);
+    Equal("stats_seconds", first.seconds > 0.0 && first.fps > 0.0, true);
+    // A device with timestamps has timed some of these frames by now, and
+    // then says where the GPU's time went.
+    Equal("stats_gpu_time_line", first.gpuTime, first.timed > 0);
+    if (first.gpuTime)
+    {
+        Equal("stats_gpu_time_values",
+              first.inPasses >= 0.0 && first.between >= 0.0 && first.before >= 0.0 && first.beforeMax >= first.before,
+              true);
+        Equal("stats_early_parts", uint64_t(first.early), end.feedIdleFlushes - start.feedIdleFlushes);
+    }
+    Equal("stats_occlusion_line", logged("vulkan d3d9: occlusion queries: "), size_t(1));
+    // Asked for again with a new start: the same stretch, and then nothing.
+    const Report second = report(true);
+    Equal("stats_kept_frames", uint64_t(second.frames), frames);
+    Equal("stats_kept_feed_parts", second.feedFlushes, first.feedFlushes);
+    const Report third = report(false);
+    Equal("stats_reset_line", third.found, true);
+    Equal("stats_reset_frames", third.frames, 0ull);
+    Equal("stats_reset_feed_parts", third.feedFlushes, 0ull);
+    Equal("stats_reset_timed_frames", third.timed, 0ull);
+    keep(nullptr);
+
+    // As in the engine, whose main thread runs r_vkStats and sets the dvars
+    // while its render thread draws: another thread asks for the statistics
+    // and changes the setting while this one draws and presents. The last
+    // frame comes out whole, and the device ends on its own setting.
+    constexpr int kRounds = 8;
+    std::atomic<int> rounds{0}, answered{0};
+    std::thread other([&] {
+        for (int round = 0; round < kRounds; ++round)
+        {
+            set(setting(round % 2, 32, 8));
+            answered += front::LogDeviceStats(round % 2 == 0) == 1;
+            ++rounds;
+            SDL_Delay(1);
+        }
+    });
+    // The top row of cells, drawn three times over: the last colours stay.
+    const auto row = [&] {
+        Reset(Argb(255, 0, 64, 0));
+        for (int draw = 0; draw < 3 * kAcross; ++draw)
+        {
+            const float x = float(draw % kAcross * kCell);
+            DrawQuad(x, 0, x + kCell, kCell, 0.5f, Argb(255, 255, uint32_t(draw), 0));
+        }
+    };
+    int meanwhile = 0;
+    do
+    {
+        row();
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        ++meanwhile;
+    } while (rounds.load() < kRounds);
+    other.join();
+    Equal("other_thread_answered", answered.load(), kRounds);
+    Equal("other_thread_frames", meanwhile > 0, true);
+    set(front::Tuning{});
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    row();
+    if (Read())
+    {
+        Expect("other_thread_first_cell", kCell / 2, kCell / 2, 255, 64, 0);
+        Expect("other_thread_last_cell", kSize - kCell / 2, kCell / 2, 255, 95, 0);
+        Expect("other_thread_clear_kept", kSize / 2, kSize / 2, 0, 64, 0);
+    }
+    std::printf("d3d9_check.tuning=frames=%llu draws=%llu parts=%llu early=%llu idle_frame_parts=%llu "
+                "idle_frame_early=%llu changes=%zu gpu_time=%s\n",
+                static_cast<unsigned long long>(frames), static_cast<unsigned long long>(draws),
+                static_cast<unsigned long long>(end.feedFlushes - start.feedFlushes),
+                static_cast<unsigned long long>(end.feedIdleFlushes - start.feedIdleFlushes),
+                static_cast<unsigned long long>(idle.all), static_cast<unsigned long long>(idle.early), changes + 1,
+                first.gpuTime ? "yes" : "no");
 }
 
 // Not part of a full run: --scene bench. What a frame of the engine's size
@@ -1650,6 +1935,7 @@ int Run(const Options &options)
     host.deviceIndex = options.device;
     host.coreDestroyed = HostCoreDestroyed;
     host.windowOrigin = HostWindowOrigin;
+    host.tuning = HostTuning;
 
     Check check;
     check.host = &sdl;
@@ -1674,6 +1960,7 @@ int Run(const Options &options)
         {"occlusion", &Check::Occlusion, true},
         {"frame_loop", &Check::FrameLoop, true},
         {"gpu_feed", &Check::GpuFeed, true},
+        {"tuning", &Check::Tuning, true},
         {"bench", &Check::Bench, true, true},
         {"reset", &Check::ResetDevice, true},
         {"present", &Check::Present, true},

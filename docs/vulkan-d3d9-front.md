@@ -64,6 +64,37 @@ instead (`vk_d3d9.h`), which the program fills once:
   Vsync follows `PresentationInterval` at `CreateDevice`.
 * `coreDestroyed`: the core's final statistics at teardown (the check reads the
   validation counts here).
+* `tuning`: settings the program may change while the device exists
+  (`Tuning`: the GPU feed on, off or after every draw, its draws to a part,
+  and the idle rule's count, see the [adapter](vulkan-legacy-adapter.md)).
+  The front asks at every `Present` and takes up what changed, so a change
+  shows in the next frame. In the game these are dvars.
+
+`LogDeviceStats(reset)` logs every live device's frame statistics through the
+host, from any thread: the lines a device logs when it is destroyed, counted
+since the device was made or since the last call that started them again.
+
+* `vulkan d3d9: frame stats:` gives the frames presented, the seconds they
+  took and the frames a second; per frame the draws, passes, descriptor sets
+  written and reused, constant data, buffer renames and submissions; the
+  flushes by kind (at a swap fence, to feed the GPU); and the GPU frame time,
+  which runs from a frame's first command to its last.
+* `vulkan d3d9: GPU time:` splits that time: the milliseconds per frame the
+  GPU spent in the frame's passes, the milliseconds between them (the GPU
+  waiting for the frame's next part), and the milliseconds before the frame
+  with nothing of the last frame or this one to do. A GPU that is the limit
+  shows next to nothing in the last two. It also counts the parts the idle
+  rule sent early. The line needs GPU timestamps and is left out without
+  them.
+* `vulkan d3d9: record thread:` is as described under Threads.
+* `vulkan d3d9: occlusion queries:` says whether they count, the Vulkan
+  queries and pools they took, and what they answered in the stretch: the
+  results worked out, how many of them had no sample, their average, and the
+  newest. The engine asks one question with them, how much of the sun's
+  sprite shows ([the adapter's guide](vulkan-legacy-adapter.md)). So with the
+  sun's place on screen in the open the results are that sprite's samples,
+  and with it behind a wall every result has no sample: `r_vkStats` twice, a
+  few seconds apart, tells the two apart without a picture.
 
 ## Reference counts
 
@@ -230,13 +261,15 @@ a usage error.
 | `occlusion` | Occlusion queries count samples exactly, as the engine's sun flare needs: a quad's pixels, two draws, none for a clear, a scissor rectangle, a query begun again, an `END` alone, two queries that overlap, a quad half and wholly hidden by depth, a query over two render targets and over a `Present`, a query released while open. Then 300 queries held at once (more than one pool of Vulkan queries, so a second is made) and one query used and read 400 times (no pool is added: the Vulkan queries given up are used again). Where the device cannot count, every finished query must report 0xffffff. Prints whether it counted, and the Vulkan queries and pools used. |
 | `frame_loop` | The engine's frame for 48 frames: draw, poll the swap fence with `D3DGETDATA_FLUSH` until the frame before has finished, issue the GPU sync fence, `Present`, issue the swap fence, while another thread polls the sync fence as the main thread does. At most three submissions a frame, at most one swap fence flush, and the last frame, drawn on both sides of its wait, comes out whole. |
 | `gpu_feed` | A frame of 600 draws, each filling a cell of its own, with a scissor rectangle set once that cuts the last column. The adapter submits such a frame in parts while it is drawn ([adapter](vulkan-legacy-adapter.md)): every draw must show whichever part it fell in, the cells no draw touches must keep the clear colour, and the scissor must hold in every part. Prints the number of parts. |
+| `tuning` | What a program changes and asks for while its device runs. Five frames of 600 draws, each under a GPU feed setting handed over through `Host::tuning` and taken up by the `Present` before it: off (no parts), after every draw (600 parts), 50 draws a part (2 to 12), 300 draws with an idle count of 10 (the frame starts with the GPU read back, so its first part goes after 10 draws; one to five parts go early, and the picture of that frame is checked on both sides of them), and an idle count no smaller than the plain one (no early part). Every change is logged, the last one back to the device's own setting. `LogDeviceStats` then reports exactly the frames, draws and parts the scene counted since it started the statistics, a second report repeats them and starts again, and a third has no frame in it. Last, another thread changes the setting and asks for the statistics eight times while this one draws and presents, as the engine's main thread does beside its render thread, and the last frame comes out whole. |
 | `bench` | Only when named (`--scene bench`), never in a full run: 120 frames of 768 draws of four D3D9 calls each, ended as `frame_loop`'s are, while another thread polls the sync fence every 20 microseconds. Prints the time the drawing thread spent on its draw calls per frame and the polls made meanwhile; passes when its frames were presented. |
 | `reset` | `Reset` to 96x96 and back: the new size, default state, nothing bound, drawing at the new size. |
 | `present` | `Present` through the device and the swap chain, then `GetFrontBufferData` halfway through the next frame: it must give the frame last shown. |
 
 `scripts/tests/test_vulkan_d3d9_front.py --binary <check>` runs it the way the
 adapter's runner does: usage errors, an unknown scene, one scene alone (with no
-unsupported call), the `bench` scene, and a full run in which every scene
+unsupported call), a run with `KISAK_VK_PRESENT_MODE=fifo` (its swapchain must
+be FIFO although the device asks for no vsync), the `bench` scene, and a full run in which every scene
 matches, the only unsupported call is the deliberate one, frames are presented,
 no object outlives its release, the device is destroyed at its last release and
 the validation layer reports no errors. It reads the GPU feed's setting from
@@ -245,7 +278,11 @@ the feed off, one for every draw with `KISAK_VK_GPU_FEED=always`, else one to
 four. It reads from the same line whether occlusion queries are counted
 (always on lavapipe, never with `KISAK_VK_OCCLUSION_QUERIES=0`) and holds the
 `occlusion` scene's report to that: at least one Vulkan query for each of its
-700 queries out of two pools, or none at all.
+700 queries out of two pools, or none at all. It holds the `tuning` scene's
+report to its five frames and 3000 draws, to one to five early parts in the
+idle rule's frame, and to the last logged change of the feed being the
+setting the device began with. On lavapipe the swapchain of a full run must
+have a present mode that does not wait for the display.
 
 The hosted `vulkan_window` job (Linux) stages DXVK Native's headers at the
 x86_64 client's pin, builds the check in Debug and RelWithDebInfo and runs that
@@ -254,8 +291,8 @@ Debug run repeats the script with the GPU feed off and with
 `KISAK_VK_GPU_FEED=always` (and the adapter's check with the latter), repeats
 both scripts with `KISAK_VK_OCCLUSION_QUERIES=0`, and
 builds the check with ThreadSanitizer and runs the `threads`, `frame_loop`
-(also with `KISAK_VK_GPU_FEED=always`), `gpu_feed`, `bench` and `occlusion`
-scenes, which fail on any data race in our code (llvmpipe's rasterizer threads
+(also with `KISAK_VK_GPU_FEED=always`), `gpu_feed`, `bench`, `occlusion` and
+`tuning` scenes, which fail on any data race in our code (llvmpipe's rasterizer threads
 are off there, [vulkan-core.md](vulkan-core.md)). The
 Windows `vulkan-probe` job builds it with MSVC, checks that it imports neither
 `vulkan-1.dll` nor `d3d9.dll` and that it starts, and adds it to the
@@ -274,6 +311,16 @@ from two pools), and 0xffffff from every query with
 `KISAK_VK_OCCLUSION_QUERIES=0`. In the game the queries have not run on a GPU
 yet.
 
+The `tuning` scene (2026-11-10, same sandbox, 14 scenes by then) passes on
+x86_64 Debug and RelWithDebInfo with validation and on i386 without, with the
+device's own feed off, at its default, at 1, 50 and 300 draws a part and
+after every draw, and with the record thread on and off. With the record
+thread on, lavapipe took one or two early parts in the idle rule's frame; with
+it off, where lavapipe has finished every submission before the call returns,
+four or five. ThreadSanitizer finds nothing in the scene. No GPU has run it,
+and the present mode a real surface gets (IMMEDIATE where it is offered) has
+not been seen: lavapipe's offscreen surface offers MAILBOX and FIFO only.
+
 ## In the game: r_backend vulkan
 
 `-DKISAK_BUILD_VULKAN_BACKEND=ON` (`scripts/vulkan_probe/vulkan_backend.cmake`,
@@ -288,7 +335,7 @@ into whichever of these programs the build configures:
 
 The probes are i386, as before; `KisakCOD-mp` is any client architecture. The
 programs still link the system's D3D9 (DXVK Native) and use it by default.
-`src/linux/client/vulkan/vulkan_backend.cpp` registers four dvars, all
+`src/linux/client/vulkan/vulkan_backend.cpp` registers four dvars that are
 archived and latched (a change applies at the next `vid_restart`):
 
 * `r_backend`: `d3d9` (default: DXVK on Linux) or `vulkan`.
@@ -300,6 +347,24 @@ archived and latched (a change applies at the next `vid_restart`):
   shader cache), and the Vulkan pipeline cache in `pipelines.bin` (the core's,
   ignored when another device or driver wrote it). 0 translates every shader
   and builds every pipeline from scratch at every start.
+
+Three more are for measuring. They are not saved and take effect in the next
+frame (the front's `Tuning`), so one launch can compare settings, by hand, in
+a config script or with `perf_ab`:
+
+* `r_vkGpuFeed`: `default` (by the kind of GPU, or `KISAK_VK_GPU_FEED`), `off`,
+  `on`, or `always` (a part after every draw, for testing).
+* `r_vkGpuFeedDraws`: the draws to a part of a frame; 0 (default) leaves the
+  device's own count, 128 unless `KISAK_VK_GPU_FEED_DRAWS` says otherwise.
+* `r_vkGpuFeedIdleDraws`: the idle rule's count; 0 (default) for no rule.
+
+The `r_vkStats` command (`src/gfx_d3d/r_cmds.cpp`, in the game and the world
+draw probe) prints the device's statistics lines since it last ran, or since
+the device was made, and starts them again; `r_vkStats keep` prints them
+without starting again. To measure a setting: change the dvar, wait for the
+frame rate to settle, `r_vkStats`, wait as long as the measurement should
+take, `r_vkStats` again and read the second report. With `r_backend d3d9`
+the command says there is no Vulkan device.
 
 With `r_backend vulkan`, `R_HW_Direct3DCreate9`
 (`src/gfx_d3d/rhi/r_rhi_d3d9_calls.cpp`, built with `KISAK_VULKAN_BACKEND`)
@@ -349,8 +414,8 @@ cmake -S . -B build -A Win32 -DDXSDK_DIR=<dxsdk> -DKISAK_BUILD_VULKAN_BACKEND=ON
 With the Vulkan SDK installed, `VULKAN_SDK` is found and the include directory
 can be left out. dxbc-spirv is fetched at configure time, as for the tools.
 
-The host is `src/win32/vulkan/win_vulkan_backend.cpp`, with plain Win32 and the
-same three dvars:
+The host is `src/win32/vulkan/win_vulkan_backend.cpp`, with plain Win32, the
+same dvars and the `r_vkStats` command:
 
 * The `HWND` is the game's own window. The surface comes from
   `vkCreateWin32SurfaceKHR`, and the size in pixels from `GetClientRect` (0 x 0
@@ -380,6 +445,15 @@ is the noise of the view.
 With the shader cache, a warm start reaches the map in 15 s against 62 s
 cold; the pipeline cache saves about 0.3 s more on that driver. Reports:
 `renderer/vulkan-backend-pc-run-{1,2,5}.md` in the project files.
+PC run 6 (2026-11-10, 8aee1d43, same PC) ran the record thread and the GPU
+feed there for the first time: the game starts, draws mp_crash and quits
+cleanly in every row with no validation error. Its frame rates say nothing
+about them, though: every Vulkan row sat at exactly 75 frames a second, the
+display's rate, in a window with vsync off (`swapchain 1024x768
+B8G8R8A8_UNORM MAILBOX, 3 images`), while the real `d3d9.dll` ran the scene
+at 215. The core asked for MAILBOX before IMMEDIATE then; it now asks for
+IMMEDIATE first ([vulkan-core.md](vulkan-core.md)), which no run on that PC
+has tried yet. Report: `renderer/vulkan-backend-pc-run-6.md`.
 
 The device probe with `--backend vulkan` runs `r_init.cpp`'s device start
 unchanged (`R_PreCreateWindow`, `R_CreateWindow`, `R_CreateDevice`), clears,

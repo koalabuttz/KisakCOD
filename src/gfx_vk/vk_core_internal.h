@@ -337,6 +337,10 @@ public:
     VkQueryPool timestamps = VK_NULL_HANDLE;
     double timestampPeriodNs = 0.0;
     uint64_t timestampMask = 0;
+    // The last timestamp of the presented frame collected before this one,
+    // for CoreStats::frameGap.
+    uint64_t lastFrameEndTicks = 0;
+    bool lastFrameEndKnown = false;
     std::vector<std::pair<const char *, PassTimings>> passTimings;
 
     std::vector<VkQueryPool> occlusionPools;

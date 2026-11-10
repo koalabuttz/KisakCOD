@@ -202,15 +202,26 @@ void AddTimings(PassTimings &timings, double ms)
     ++timings.samples;
 }
 
+double TicksToMs(const Core &core, uint64_t ticks)
+{
+    return static_cast<double>(ticks) * core.timestampPeriodNs / 1.0e6;
+}
+
+// Two timestamps written one after the other (query and query + 1), as the
+// device counted them. False if either has not been written.
+bool ReadTicks(Core &core, uint32_t query, uint64_t ticks[2])
+{
+    return core.vk.vkGetQueryPoolResults(core.dev, core.timestamps, query, 2, 2 * sizeof(uint64_t), ticks,
+                                         sizeof(uint64_t), VK_QUERY_RESULT_64_BIT)
+        == VK_SUCCESS;
+}
+
 bool ReadPair(Core &core, uint32_t query, double &ms)
 {
     uint64_t ticks[2] = {};
-    if (core.vk.vkGetQueryPoolResults(core.dev, core.timestamps, query, 2, sizeof(ticks), ticks, sizeof(uint64_t),
-                                      VK_QUERY_RESULT_64_BIT)
-        != VK_SUCCESS)
+    if (!ReadTicks(core, query, ticks))
         return false;
-    const uint64_t elapsed = (ticks[1] - ticks[0]) & core.timestampMask;
-    ms = static_cast<double>(elapsed) * core.timestampPeriodNs / 1.0e6;
+    ms = TicksToMs(core, (ticks[1] - ticks[0]) & core.timestampMask);
     return true;
 }
 
@@ -222,12 +233,31 @@ void CollectTimestamps(Core &core, uint32_t slotIndex)
     slot.queriesPending = false;
     const uint32_t base = slotIndex * kTimestampsPerSlot;
     double ms = 0.0;
-    if (slot.frameTimed && ReadPair(core, base, ms))
-        AddTimings(core.stats.frame, ms);
+    // A frame that was presented has both of its timestamps; slots are
+    // collected in the order their frames were presented.
+    uint64_t frameTicks[2] = {};
+    const bool presented = slot.frameTimed && ReadTicks(core, base, frameTicks);
+    if (presented)
+    {
+        AddTimings(core.stats.frame, TicksToMs(core, (frameTicks[1] - frameTicks[0]) & core.timestampMask));
+        if (core.lastFrameEndKnown)
+        {
+            // The GPU reads a frame's first timestamp when it reaches the
+            // command, which can be a moment before the frame ahead of it has
+            // left the pipeline: a difference in the upper half of the
+            // counter's range is that, and no gap.
+            const uint64_t gap = (frameTicks[0] - core.lastFrameEndTicks) & core.timestampMask;
+            AddTimings(core.stats.frameGap, gap > core.timestampMask / 2 ? 0.0 : TicksToMs(core, gap));
+        }
+        core.lastFrameEndTicks = frameTicks[1];
+        core.lastFrameEndKnown = true;
+    }
+    double passesMs = 0.0;
     for (const TimedPass &pass : slot.timedPasses)
     {
         if (!ReadPair(core, pass.query, ms))
             continue;
+        passesMs += ms;
         PassTimings *timings = nullptr;
         for (auto &entry : core.passTimings)
         {
@@ -243,6 +273,8 @@ void CollectTimestamps(Core &core, uint32_t slotIndex)
         if (std::strcmp(pass.name, "clear") == 0)
             AddTimings(core.stats.clearPass, ms);
     }
+    if (presented)
+        AddTimings(core.stats.framePasses, passesMs);
 }
 
 // Waits for the slot's last submission and makes the slot ready to record.

@@ -1148,6 +1148,13 @@ bool SynchronizationValidationEnabled(const Core *core) { return core->syncValid
 const DeviceInfo &Device(const Core *core) { return core->device; }
 const SwapchainInfo &Swapchain(const Core *core) { return core->swapInfo; }
 const CoreStats &Stats(const Core *core) { return core->stats; }
+
+void ResetFrameTimings(Core *core)
+{
+    core->stats.frame = PassTimings{};
+    core->stats.framePasses = PassTimings{};
+    core->stats.frameGap = PassTimings{};
+}
 void NotifyResize(Core *core) { core->resizePending = true; }
 
 const Dispatch &Functions(const Core *core) { return core->vk; }

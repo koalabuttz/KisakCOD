@@ -102,11 +102,19 @@ void BackendCounters(const Backend *, DeviceCounters &out)
     out.submissions = 0;
     out.fenceFlushes = 0;
     out.feedFlushes = 0;
+    out.feedIdleFlushes = 0;
     out.occlusionCounted = false;
     out.occlusionCounts = 0;
     out.occlusionPools = 0;
+    out.occlusionResults = 0;
+    out.occlusionResultsZero = 0;
+    out.occlusionSamples = 0;
 }
 
 // sceGxm's queries need no system call under the front's lock.
 void BackendPollProgress(Backend *) {}
+
+// No frame statistics are kept here, and the host has no settings to take up.
+void BackendLogStats(Backend *, bool) {}
+void BackendFrame(Backend *) {}
 } // namespace gfx_vk::d3d9

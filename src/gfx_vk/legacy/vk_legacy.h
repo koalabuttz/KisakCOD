@@ -264,7 +264,17 @@ struct DeviceStats
     uint64_t constantBytes;   // constant and render-state uniform data written
     uint64_t dynamicRenames;  // DISCARD locks that took a new buffer
     uint64_t fenceFlushes;    // frames submitted ahead of their Present by a frame fence poll (GetQueryData)
-    uint64_t feedFlushes;     // parts of frames submitted while the frame was being drawn (OptionalFeatures::gpuFeed)
+    uint64_t feedFlushes;     // parts of frames submitted while the frame was being drawn (GpuFeed)
+    uint64_t feedIdleFlushes; // of those, parts the idle rule sent early (GpuFeed::idleDraws)
+    // What the occlusion queries answered, on a device that counts samples:
+    // the results worked out for queries that were issued (one for each END
+    // that was read, however often), those of them with no sample, all their
+    // samples, and the newest. The engine's one question is the sun's sprite,
+    // so these say whether it saw the sun without a picture being looked at.
+    uint64_t occlusionResults;
+    uint64_t occlusionResultsZero;
+    uint64_t occlusionSamples;
+    uint32_t occlusionLast;
     // Where the time goes on the CPU, for the load and first-draw costs.
     uint32_t shaders;          // shaders created
     uint32_t shadersCached;    // of those, served by the shader cache (not translated)
@@ -276,6 +286,31 @@ struct DeviceStats
     uint64_t uploadMicros;     // staging those uploads
 };
 const DeviceStats &Stats(const Device *device);
+
+#if !defined(KISAK_GFX_GXM)
+// How a frame reaches the GPU while it is drawn (FeedGpu in
+// vk_legacy_draw.cpp). A device starts with its core's choice
+// (OptionalFeatures::gpuFeed, gpuFeedAlways and gpuFeedDraws: the kind of GPU
+// and the KISAK_VK_GPU_FEED switches) and no idle rule. SetGpuFeed changes it
+// at any point between two calls, so one run can compare settings; the change
+// is logged.
+struct GpuFeed
+{
+    bool on = false;     // submit a frame in parts at all
+    bool always = false; // a part after every draw (testing)
+    // Draws to a part while the GPU has under two submissions left to finish
+    // (more for each further one, up to four times). At least 1.
+    uint32_t draws = 128;
+    // The idle rule, 0 for none: while the GPU has no submission left at all,
+    // a part goes out after this many draws, the next such part of the frame
+    // after twice as many, and so on until that reaches `draws`. A GPU that
+    // has run dry gets work at once, and a frame is cut into only a few parts
+    // more than without the rule.
+    uint32_t idleDraws = 0;
+};
+GpuFeed GetGpuFeed(const Device *device);
+void SetGpuFeed(Device *device, const GpuFeed &feed);
+#endif
 
 // The shader cache. Translated shaders are kept by their D3D9 bytecode for the
 // whole process and shared by every device, so bytecode created again (another

@@ -2902,6 +2902,13 @@ jobs:
           "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene occlusion --validation off \
             | tee "$RUNNER_TEMP/tsan-occlusion.log"
           grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan-occlusion.log"
+          # What a program changes and asks for while its device runs, as the
+          # engine's main thread does (the r_vkGpuFeed dvars, r_vkStats):
+          # another thread changes the GPU feed and asks for the frame
+          # statistics while this one draws and presents.
+          "$OUT_DIR/tsan/KisakCOD-vulkan-d3d9-check" --scene tuning --validation off \
+            | tee "$RUNNER_TEMP/tsan-tuning.log"
+          grep -qx 'd3d9_check=passed' "$RUNNER_TEMP/tsan-tuning.log"
           # Frames, draws, read-back and swapchain rebuilds with the record
           # thread on.
           KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-probe" --draw --frames 60 --resize \

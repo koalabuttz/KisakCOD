@@ -143,6 +143,15 @@ struct CoreStats
     uint32_t validationIgnored;
     PassTimings clearPass;    // the pass ClearAndPresent records
     PassTimings frame;        // first to last timestamp of each presented frame
+    // Of each presented frame, where the GPU's time went. framePasses: its
+    // passes' own times added up, the GPU at work on it; what `frame` has
+    // beyond that is time between its passes, which is the GPU waiting for
+    // the frame's next part when the frame is submitted in parts. frameGap:
+    // from the last timestamp of the frame before to this frame's first, the
+    // GPU with neither frame to work on. (A frame's passes beyond the first
+    // 126 are not timed.)
+    PassTimings framePasses;
+    PassTimings frameGap;
 
     uint64_t submissions;     // queue submissions, flushes included
     bool recordThread;        // commands are recorded on the core's own thread
@@ -207,6 +216,10 @@ bool SynchronizationValidationEnabled(const Core *core);
 const DeviceInfo &Device(const Core *core);
 const SwapchainInfo &Swapchain(const Core *core);
 const CoreStats &Stats(const Core *core);
+// Starts CoreStats::frame, framePasses and frameGap again from nothing, for a
+// caller that measures a stretch of a run (the counters are left alone: take
+// their difference).
+void ResetFrameTimings(Core *core);
 
 // The window may have changed size (or was minimised or restored): the next
 // frame checks the surface and rebuilds the swapchain if the size differs.

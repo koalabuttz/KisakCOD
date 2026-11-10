@@ -964,7 +964,10 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
         self.assertIn('--scene bench', run)
         # Queries reset and read on one thread, begun and ended on another.
         self.assertIn('--scene occlusion', run)
-        self.assertEqual(run.count("grep -qx 'd3d9_check=passed'"), 6)
+        # The feed setting changed and the statistics asked for by a second
+        # thread while the first presents.
+        self.assertIn('--scene tuning', run)
+        self.assertEqual(run.count("grep -qx 'd3d9_check=passed'"), 7)
         self.assertIn('KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-probe"', run)
         self.assertIn("grep -qx 'vulkan_probe=passed'", run)
         self.assertIn('KISAK_VK_RECORD_THREAD=1 "$OUT_DIR/tsan/KisakCOD-vulkan-legacy-check"', run)

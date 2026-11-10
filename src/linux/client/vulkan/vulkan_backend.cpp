@@ -48,6 +48,11 @@ const dvar_s *r_backend;
 const dvar_s *r_vkValidation;
 const dvar_s *r_vkDevice;
 const dvar_s *r_vkShaderCache;
+// Read at every Present (HostTuning), so a change shows in the next frame.
+const char *s_gpuFeedNames[] = {"default", "off", "on", "always", nullptr};
+const dvar_s *r_vkGpuFeed;
+const dvar_s *r_vkGpuFeedDraws;
+const dvar_s *r_vkGpuFeedIdleDraws;
 
 struct DisplayMode
 {
@@ -282,6 +287,14 @@ std::string CacheDirectory()
     return directory;
 }
 
+// The dvars the front takes up while a device exists (front::Tuning).
+void HostTuning(void *, front::Tuning &out)
+{
+    out.gpuFeed = r_vkGpuFeed->current.integer - 1;
+    out.gpuFeedDraws = uint32_t(std::max(0, r_vkGpuFeedDraws->current.integer));
+    out.gpuFeedIdleDraws = uint32_t(std::max(0, r_vkGpuFeedIdleDraws->current.integer));
+}
+
 gfx_vk::Validation ValidationSetting()
 {
     switch (r_vkValidation->current.integer)
@@ -308,6 +321,17 @@ void Kisak_VulkanRegisterDvars()
     r_vkShaderCache = Dvar_RegisterBool("r_vkShaderCache", true, DVAR_ARCHIVE | DVAR_LATCH,
                                         "Keep translated shaders and Vulkan pipelines in fs_homepath/vulkan "
                                         "(shaders.bin, pipelines.bin) between runs");
+    // Measuring switches: not saved, and in effect from the next frame, so
+    // one launch can compare settings (perf_ab, docs/perf-ab.md).
+    r_vkGpuFeed = Dvar_RegisterEnum("r_vkGpuFeed", s_gpuFeedNames, 0, DVAR_NOFLAG,
+                                    "Vulkan: hand the GPU a frame in parts while it is drawn: default (by the "
+                                    "kind of GPU), off, on, or always (after every draw, for testing)");
+    r_vkGpuFeedDraws = Dvar_RegisterInt("r_vkGpuFeedDraws", 0, 0, 65535, DVAR_NOFLAG,
+                                        "Vulkan: draws to each part of a frame handed to the GPU; 0 is the "
+                                        "default, 128");
+    r_vkGpuFeedIdleDraws = Dvar_RegisterInt("r_vkGpuFeedIdleDraws", 0, 0, 65535, DVAR_NOFLAG,
+                                            "Vulkan: draws to a part when the GPU has nothing left (the next "
+                                            "such part of the frame takes twice as many); 0 for no such parts");
 }
 
 int Kisak_VulkanBackendSelected()
@@ -341,6 +365,7 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
     host.validation = ValidationSetting();
     host.deviceIndex = r_vkDevice->current.integer;
     host.coreDestroyed = HostCoreDestroyed;
+    host.tuning = HostTuning;
     const std::string cacheDirectory = CacheDirectory();
     s_host.shaderCachePath = cacheDirectory.empty() ? std::string() : cacheDirectory + "/shaders.bin";
     s_host.pipelineCachePath = cacheDirectory.empty() ? std::string() : cacheDirectory + "/pipelines.bin";
@@ -350,6 +375,11 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
                s_validationNames[r_vkValidation->current.integer], r_vkDevice->current.integer,
                s_host.shaderCachePath.empty() ? "off" : s_host.shaderCachePath.c_str());
     return front::CreateDirect3D9(host);
+}
+
+unsigned int Kisak_VulkanLogStats(bool reset)
+{
+    return front::LogDeviceStats(reset);
 }
 
 bool Kisak_VulkanLastTeardown(KisakVulkanTeardown &out)

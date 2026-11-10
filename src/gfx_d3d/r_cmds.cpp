@@ -34,6 +34,25 @@ void R_Cmd_ApplyPicmip()
     Material_UpdatePicmipAll();
 }
 
+#if defined(KISAK_VULKAN_BACKEND)
+// The Vulkan back end (src/linux/client/vulkan/vulkan_backend.h on Linux and
+// macOS, src/win32/vulkan/win_vulkan_backend.cpp on Windows).
+unsigned int Kisak_VulkanLogStats(bool reset);
+
+// r_vkStats: prints the Vulkan device's frame statistics (frames a second,
+// draws and submissions per frame, where the GPU's time went) since the
+// command last ran, or since the device was made, and starts them again, so
+// one launch can measure one stretch after another. "r_vkStats keep" prints
+// them without starting again. With r_backend d3d9 there is nothing to print.
+void R_Cmd_VulkanStats()
+{
+	const bool keep = Cmd_Argc() > 1 && !I_stricmp(Cmd_Argv(1), "keep");
+	if (!Kisak_VulkanLogStats(!keep))
+		Com_Printf(CON_CHANNEL_GFX, "r_vkStats: there is no Vulkan device (r_backend is not vulkan)\n");
+}
+cmd_function_s R_Cmd_VulkanStats_VAR;
+#endif
+
 cmd_function_s R_Cmd_Screenshot_VAR;
 cmd_function_s R_Cmd_ScreenshotJpeg_VAR;
 cmd_function_s R_ImageList_f_VAR;
@@ -61,6 +80,9 @@ void R_RegisterCmds()
 	Cmd_AddCommandInternal("gfx_stats", RB_Stats_f, &RB_Stats_f_VAR);
 	Cmd_AddCommandInternal("r_smc_stats", R_StaticModelCacheStats_f, &R_StaticModelCacheStats_f_VAR);
 	Cmd_AddCommandInternal("r_smc_flush", R_StaticModelCacheFlush_f, &R_StaticModelCacheFlush_f_VAR);
+#if defined(KISAK_VULKAN_BACKEND)
+	Cmd_AddCommandInternal("r_vkStats", R_Cmd_VulkanStats, &R_Cmd_VulkanStats_VAR);
+#endif
 }
 
 void R_UnregisterCmds()
@@ -77,5 +99,8 @@ void R_UnregisterCmds()
 	Cmd_RemoveCommand("gfx_stats");
 	Cmd_RemoveCommand("r_smc_stats");
 	Cmd_RemoveCommand("r_smc_flush");
+#if defined(KISAK_VULKAN_BACKEND)
+	Cmd_RemoveCommand("r_vkStats");
+#endif
 }
 

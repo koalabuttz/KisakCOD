@@ -1364,36 +1364,63 @@ void ReleaseCounts(Device &device, Query &query)
 // DXVK, which submits during the frame, kept the GPU busy throughout.
 //
 // The rule is DXVK's (GpuFlushTracker), counted in draws instead of command
-// chunks: submit after gpuFeedDraws draws while the GPU has fewer than two
+// chunks: submit after GpuFeed::draws draws while the GPU has fewer than two
 // submissions left to finish, and wait for that many again for each further
 // one, up to four times. A GPU that is behind is left alone, and a frame is
-// never cut into more than its draws divided by gpuFeedDraws.
+// never cut into more than its draws divided by that count.
+//
+// The idle rule (GpuFeed::idleDraws, off unless set) is for the GPU that has
+// nothing left at all, which under r_gpuSync is every frame's start: the
+// engine lets the render thread begin a frame about when the GPU finishes
+// the one before, and every draw recorded before the first part goes out is
+// time the GPU stands still. A part then goes out after idleDraws draws, the
+// frame's next such part after twice as many, and so on up to the plain
+// count, so the rule adds a few parts to a frame and no more.
 //
 // The draws that follow start a new command buffer and a new pass on the
 // same targets, which loads what the last one stored: the result is the same.
 void FeedGpu(Device &device)
 {
-    const OptionalFeatures &features = Features(device.core);
-    if (!features.gpuFeed)
+    const GpuFeed &feed = device.feed;
+    if (!feed.on)
         return;
+    const bool idleRule = feed.idleDraws && feed.idleDraws < feed.draws;
+    if (idleRule && device.feedIdleFrame != device.frameSerial)
+    {
+        device.feedIdleFrame = device.frameSerial;
+        device.feedIdleNeed = feed.idleDraws;
+    }
+    // Under the idle rule the GPU is looked at that often; a look costs a
+    // system call at most every 10 microseconds (RefreshProgress).
+    const bool idleLooks = idleRule && device.feedIdleNeed < feed.draws;
     if (device.feedRecording != device.stateRecording)
     {
         // The frame's first command buffer, or the first draw since a flush.
         device.feedRecording = device.stateRecording;
         device.feedDraws = 0;
-        device.feedCheckAt = features.gpuFeedDraws;
+        device.feedCheckAt = idleLooks ? device.feedIdleNeed : feed.draws;
     }
     ++device.feedDraws;
-    if (!features.gpuFeedAlways)
+    if (!feed.always)
     {
         if (device.feedDraws < device.feedCheckAt)
             return;
         constexpr uint32_t kMaxBacklog = 4;
-        const uint32_t backlog = std::clamp(PendingSubmissions(device.core), 1u, kMaxBacklog);
-        if (device.feedDraws < features.gpuFeedDraws * backlog)
+        const uint32_t pending = PendingSubmissions(device.core);
+        if (idleLooks && !pending && device.feedDraws >= device.feedIdleNeed)
         {
-            // The GPU has work: look again a quarter of a part later.
-            device.feedCheckAt = device.feedDraws + std::max(1u, features.gpuFeedDraws / 4);
+            // The GPU has run dry: this part goes now, the next waits longer.
+            device.feedIdleNeed = std::min(feed.draws, device.feedIdleNeed * 2);
+            ++device.stats.feedIdleFlushes;
+        }
+        else if (device.feedDraws < feed.draws * std::clamp(pending, 1u, kMaxBacklog))
+        {
+            // The GPU has work: look again a quarter of a part later, or as
+            // soon as the idle rule could apply.
+            uint32_t step = std::max(1u, feed.draws / 4);
+            if (idleLooks)
+                step = std::min(step, std::max(1u, feed.idleDraws));
+            device.feedCheckAt = device.feedDraws + step;
             return;
         }
     }
@@ -2064,6 +2091,13 @@ bool AddCounts(Device &device, Query &query)
     ReleaseCounts(device, query);
     query.samples = static_cast<uint32_t>(std::min<uint64_t>(total, UINT32_MAX));
     query.counted = true;
+    if (query.serial) // not one that was never issued
+    {
+        ++device.stats.occlusionResults;
+        device.stats.occlusionResultsZero += total ? 0 : 1;
+        device.stats.occlusionSamples += total;
+        device.stats.occlusionLast = query.samples;
+    }
     return true;
 }
 } // namespace
