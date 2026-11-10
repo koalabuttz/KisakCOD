@@ -1100,8 +1100,9 @@ jobs:
           set -euo pipefail
           scripts/ci/use-ccache.sh
 
-      - name: Check the client's controls and sound on the host
-        # The control mapping and the small OpenAL make no Vita call: the host
+      - name: Check the client's controls, sound and program queue on the host
+        # The control mapping, the small OpenAL and the queue that makes
+        # shader programs on a worker thread make no Vita call: the host
         # compiler builds them with sanitizers and runs their checks.
         timeout-minutes: 10
         shell: bash
@@ -1109,6 +1110,7 @@ jobs:
           set -euo pipefail
           python3 scripts/tests/test_vita_input.py
           python3 scripts/tests/test_vita_sound.py --al-include "$RUNNER_TEMP/al-include"
+          python3 scripts/tests/test_vita_program_queue.py
 
       - name: Configure PS Vita client ${{ matrix.config }}
         timeout-minutes: 15

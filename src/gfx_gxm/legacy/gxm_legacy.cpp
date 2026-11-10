@@ -122,6 +122,7 @@ uint64_t Micros()
 namespace
 {
 void LogShaderSummary(Device &device, const char *when); // with CreateShader
+void LogProgramFailures(Device &device);
 } // namespace
 
 // GPU memory in use by what it is for, in each of the two pools it can be in.
@@ -560,6 +561,7 @@ void DestroyDevice(Device *device)
         return;
     if (device->live)
         Log(*device, "%u resources were not destroyed before the device", device->live);
+    LogProgramFailures(*device);
     LogShaderSummary(*device, "in all");
     FinishGpu(*device);
     LogDrawSummary(*device);
@@ -1034,12 +1036,23 @@ namespace
 void LogShaderSummary(Device &device, const char *when)
 {
     const Device::ShaderCounts &c = device.shaderCounts;
-    const gxm::ProgramCacheStats &p = gxm::GetProgramCacheStats();
+    const gxm::ProgramCacheStats p = gxm::GetProgramCacheStats();
+    // "programs ready" and "failed to compile" count every program the cache
+    // was asked for: the shaders' own, their variants and the back end's.
     Log(device,
         "shaders %s: %u created, %u refused by the translator (%.1f ms translating), %u programs ready, "
         "%u failed to compile; %u compiled in %.1f s, %u read from the card in %.1f ms, %u not written",
-        when, c.created, c.refused, c.translateMicros / 1000.0, c.compiled, c.failed, p.compiled,
+        when, c.created, c.refused, c.translateMicros / 1000.0, p.compiled + p.fromFiles, p.failed, p.compiled,
         p.compileMicros / 1e6, p.fromFiles, p.readMicros / 1000.0, p.writeFailures);
+    // No frame waits for a program: these say how far behind the cache's
+    // thread is and how many draws were left out of a frame meanwhile.
+    Log(device,
+        "programs in the background %s: %llu asked for, %u waiting now (%u at most), %llu hurried by a draw, "
+        "%llu dropped unmade; slowest compile %.0f ms, slowest read %.0f ms; %llu draws left out of %llu frames "
+        "while their program was made",
+        when, (unsigned long long)p.requested, unsigned(gxm::ProgramsWaiting()), p.mostWaiting,
+        (unsigned long long)p.hurried, (unsigned long long)p.dropped, p.slowestCompileMicros / 1000.0,
+        p.slowestReadMicros / 1000.0, (unsigned long long)c.drawsWaited, (unsigned long long)c.framesWaited);
     size_t held = 0, peak = 0;
     uint32_t refused = 0;
     gxm::ShaderCompilerMemory(held, peak, refused);
@@ -1056,7 +1069,12 @@ void LogShaderSummary(Device &device, const char *when)
 // Up to this many compile failures are logged one by one.
 constexpr uint32_t kLoggedShaderFailures = 40;
 
-void CompileDefaultVariant(Device &device, Shader &shader, uint64_t hash)
+// Translates the shader and asks the program cache for its default variant.
+// Nothing is read from the card or compiled here: the game creates its
+// shaders on its loading thread inside the renderer's lock, hundreds in a
+// row, and a compile there (0.5 to 1.4 s on a console) stopped every frame
+// that was being drawn meanwhile.
+void RequestDefaultVariant(Device &device, Shader &shader, uint64_t hash)
 {
     Device::ShaderCounts &counts = device.shaderCounts;
     std::string reason;
@@ -1084,39 +1102,44 @@ void CompileDefaultVariant(Device &device, Shader &shader, uint64_t hash)
         return;
     }
     shader.translated = true;
-    shader.programCacheKey =
-        gxm::ProgramCacheKey(cg, shader.pixel ? gxm::ShaderStage::Fragment : gxm::ShaderStage::Vertex);
-    std::string log;
-    if (!gxm::GetProgram(cg, shader.pixel ? gxm::ShaderStage::Fragment : gxm::ShaderStage::Vertex, shader.program,
-                         log))
+    char label[64];
+    std::snprintf(label, sizeof(label), "shader %016llx (%s_%u_%u)", (unsigned long long)hash,
+                  shader.pixel ? "ps" : "vs", r.major, r.minor);
+    shader.request = gxm::RequestProgram(std::move(cg),
+                                         shader.pixel ? gxm::ShaderStage::Fragment : gxm::ShaderStage::Vertex, label);
+}
+
+// Once a frame: the programs the cache's thread could not make since the
+// last frame. A shader that cannot be compiled is still created, as D3D9
+// would; draws with it are skipped.
+void LogProgramFailures(Device &device)
+{
+    std::vector<gxm::ProgramRequestRef> failures;
+    gxm::TakeProgramFailures(failures);
+    for (const gxm::ProgramRequestRef &failed : failures)
     {
-        shader.program.clear();
-        ++counts.failed;
-        if (counts.loggedFailures++ < kLoggedShaderFailures)
+        if (device.shaderCounts.loggedFailures++ >= kLoggedShaderFailures)
+            break;
+        // The compiler's first error is enough to find the cause; the
+        // program itself stays on the card next to the cache.
+        const std::string first = failed->log.substr(0, failed->log.find('\n'));
+        Log(device, "%s did not compile (cache file %016llx): %s", failed->label.c_str(),
+            (unsigned long long)failed->key, first.c_str());
+        if (device.desc.shaderCachePath && *device.desc.shaderCachePath && !failed->cg.empty())
         {
-            // The compiler's first error is enough to find the cause; the
-            // program itself stays on the card next to the cache.
-            std::string first = log.substr(0, log.find('\n'));
-            Log(device, "shader %016llx (%s_%u_%u) did not compile: %s", (unsigned long long)hash,
-                shader.pixel ? "ps" : "vs", r.major, r.minor, first.c_str());
-            if (device.desc.shaderCachePath && *device.desc.shaderCachePath)
+            char path[256];
+            std::snprintf(path, sizeof(path), "%s/failed-%016llx.cg", device.desc.shaderCachePath,
+                          (unsigned long long)failed->key);
+            if (FILE *file = std::fopen(path, "wb"))
             {
-                char path[256];
-                std::snprintf(path, sizeof(path), "%s/failed-%016llx.cg", device.desc.shaderCachePath,
-                              (unsigned long long)hash);
-                if (FILE *file = std::fopen(path, "wb"))
-                {
-                    std::fwrite(cg.data(), 1, cg.size(), file);
-                    std::fputs("\n/* compiler log:\n", file);
-                    std::fwrite(log.data(), 1, log.size(), file);
-                    std::fputs("\n*/\n", file);
-                    std::fclose(file);
-                }
+                std::fwrite(failed->cg.data(), 1, failed->cg.size(), file);
+                std::fputs("\n/* compiler log:\n", file);
+                std::fwrite(failed->log.data(), 1, failed->log.size(), file);
+                std::fputs("\n*/\n", file);
+                std::fclose(file);
             }
         }
-        return;
     }
-    ++counts.compiled;
 }
 } // namespace
 
@@ -1137,7 +1160,7 @@ Shader *CreateShader(Device *device, const void *bytecode, size_t bytes, std::st
     shader->pixel = (version >> 16) == 0xffffu;
     // A shader that cannot be translated or compiled is still created, as
     // D3D9 would; draws with it are skipped. The log says why.
-    CompileDefaultVariant(*device, *shader, gxm::cg::Hash(code, bytes));
+    RequestDefaultVariant(*device, *shader, gxm::cg::Hash(code, bytes));
     ++device->stats.shaders;
     device->stats.shaderMicros += Micros() - begin;
     ++device->live;
@@ -1423,6 +1446,44 @@ void UpdateTexture(Device *device, Texture *src, Texture *dst)
     }
 }
 
+namespace
+{
+// A frame that took this long is logged with what else went on meanwhile:
+// the game's loading thread shares the renderer's lock with the frame, and
+// a console run should say what a hitch was made of. The first of them only.
+constexpr uint64_t kLongFrameMicros = 250 * 1000;
+constexpr uint32_t kLoggedLongFrames = 60;
+
+void LogLongFrame(Device &device)
+{
+    using Mark = Device::ShaderCounts::FrameMark;
+    Device::ShaderCounts &c = device.shaderCounts;
+    const Mark last = c.lastFrame;
+    const gxm::ProgramCacheStats p = gxm::GetProgramCacheStats();
+    Mark now;
+    now.at = Micros();
+    now.shaders = device.stats.shaders;
+    now.translateMicros = c.translateMicros;
+    now.uploads = device.stats.textureUploads;
+    now.uploadBytes = device.stats.uploadBytes;
+    now.programs = uint64_t(p.compiled) + p.fromFiles;
+    now.drawsWaited = c.drawsWaited;
+    c.lastFrame = now;
+    const uint64_t frames = ++c.frames;
+    if (last.at && now.at - last.at > kLongFrameMicros && c.loggedLongFrames < kLoggedLongFrames)
+    {
+        ++c.loggedLongFrames;
+        Log(device,
+            "long frame %llu: %.0f ms; meanwhile %u shaders created (%.1f ms translating), %llu texture levels "
+            "filled (%.2f MB), %llu programs made in the background (%u waiting), %llu draws left out",
+            (unsigned long long)frames, (now.at - last.at) / 1000.0, now.shaders - last.shaders,
+            (now.translateMicros - last.translateMicros) / 1000.0, (unsigned long long)(now.uploads - last.uploads),
+            (now.uploadBytes - last.uploadBytes) / 1048576.0, (unsigned long long)(now.programs - last.programs),
+            unsigned(gxm::ProgramsWaiting()), (unsigned long long)(now.drawsWaited - last.drawsWaited));
+    }
+}
+} // namespace
+
 PresentResult Present(Device *device)
 {
     if (!device)
@@ -1434,6 +1495,13 @@ PresentResult Present(Device *device)
     const bool shown = gxm::Present();
     FrameDone(*device);
     gxm::ProgramCacheFrame();
+    LogProgramFailures(*device);
+    if (device->shaderCounts.waitedThisFrame)
+    {
+        device->shaderCounts.waitedThisFrame = false;
+        ++device->shaderCounts.framesWaited;
+    }
+    LogLongFrame(*device);
     // Once a minute, beside the system's memory line (vita_stats.cpp).
     static uint64_t memoryLogged = 0;
     if (Micros() - memoryLogged > 60 * 1000 * 1000)
