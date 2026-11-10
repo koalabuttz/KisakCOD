@@ -35,10 +35,14 @@ platform code.
 | 0013 | Script parser error recovery reads in front of a grammar table | commit `27a760f` |
 | 0014 | Four `DvarFlags` names do not match what their bits do; two are swapped (upstream issue 30) | commits `d813766`, `f8ffa8b` |
 | 0015 | Dvars a script marks as serverinfo never reach the multiplayer serverinfo string | commit `88103e0` |
+| 0016 | With `sv_allowDownload` on, a client can download any file under the server's home path, such as its config | security fixes merge `52fdd24`, written smaller |
+| 0017 | The OpenAL driver detaches a buffer from a source that is still playing, so cut sounds keep playing and the next one is lost (upstream issue 76) | commit `0b48d2e` |
+| 0018 | An OpenAL stream that runs out of queued audio stays silent (upstream issue 76) | commit `0b48d2e` |
 
 Patches 0001 to 0004 are the proposed first batch and 0005 to 0010 the
 second. 0011 to 0015 answer open upstream issues or sit next to one, and
-come after those.
+come after those. 0016 belongs with the second batch; 0017 and 0018 go with
+the other fixes for open issues.
 
 Open points on single patches, to settle before each is offered:
 
@@ -52,8 +56,25 @@ Open points on single patches, to settle before each is offered:
   touches a dvar registration first. Every use keeps its numeric value.
 - 0015 rests on retail 1.7 `iw3mp.exe` passing `0x404` as the mask. It has
   not been run against a live server.
+- 0016 is stricter than retail 1.7, which has the same hole. The message
+  says so.
+- 0017 and 0018 change code upstream compiles only with `KISAK_OPENAL` on,
+  which is off there, so the hosted build of the queue does not compile
+  them. Both were run against OpenAL Soft's loopback device with upstream's
+  own driver code.
 - Upstream issue 36 needs nothing from the fork: upstream has already
   commented out the copies it names.
+
+Fork fixes looked at and kept back for now:
+
+- The `iprintln` command buffer, the deterministic Huffman tree, the 15-bit
+  random helpers and the script scanner's end-of-file rule only matter off
+  MSVC, so they travel with a port.
+- The voice start-up clean-up, the two script watchdog changes and the VM
+  field stack change are each larger than upstream takes in one piece, and
+  none is a known fault in upstream's Windows build.
+- The saved-dvar restore and the shellshock view-kick fix change behaviour
+  and need evidence from the retail game first.
 
 ## Rules
 
