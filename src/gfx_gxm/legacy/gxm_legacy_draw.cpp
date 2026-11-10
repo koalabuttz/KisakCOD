@@ -165,6 +165,35 @@ struct FragmentProgramEntry
     const Variant *vertex = nullptr;
 };
 
+// The programs a draw ran with, kept by what they depend on. Finding them
+// the long way takes the vertex input plan, two variant keys and two map
+// keys built as strings, for every draw, and a frame of a map is thousands
+// of draws from a few hundred combinations. A draw looks its combination up
+// in a small table first (FindPipeline) and takes the long way only when it
+// is not there. Only programs that were made are kept, so a draw that waits
+// for its program or is refused one takes the long way and is counted there.
+struct PipelineKey
+{
+    const Shader *vs, *ps;
+    const VertexDecl *decl;
+    uint32_t strides[kMaxStreams];
+    uint8_t alphaFunc; // the pixel shader variant's alpha test
+    uint8_t index32;
+    uint8_t pad[2];
+};
+struct Pipeline
+{
+    PipelineKey key; // key.vs null: empty
+    Variant *vertex, *pixel;
+    const VertexProgramEntry *vertexProgram;
+    // The fragment program for the blend state and the target format it was
+    // last drawn with; another takes the long way and takes its place.
+    const FragmentProgramEntry *fragmentProgram;
+    uint32_t blendBits, output;
+    bool blended;
+};
+constexpr uint32_t kPipelines = 512; // a power of two
+
 // What a draw failed on, each counted and the first of each logged.
 enum Skip : uint8_t
 {
@@ -240,6 +269,8 @@ struct DrawState
 
     std::map<std::string, VertexProgramEntry> vertexPrograms;
     std::map<std::string, FragmentProgramEntry> fragmentPrograms;
+    Pipeline pipelines[kPipelines] = {};
+    uint64_t pipelineLookups = 0, pipelineHits = 0;
     const SceGxmVertexProgram *boundVertex = nullptr;
     const SceGxmFragmentProgram *boundFragment = nullptr;
     FixedState fixed{};
@@ -784,6 +815,25 @@ bool MenuShaped(const Shader &shader, const InputPlan &plan)
 template <class T> void Append(std::string &key, const T &value)
 {
     key.append(reinterpret_cast<const char *>(&value), sizeof(value));
+}
+
+// The table's place for a key. The caller compares the key that is there.
+Pipeline &PipelineSlot(DrawState &d, const PipelineKey &key)
+{
+    // Heap addresses differ above their low alignment bits.
+    uint32_t hash = uint32_t(reinterpret_cast<uintptr_t>(key.vs) >> 4) * 0x9e3779b1u;
+    hash ^= uint32_t(reinterpret_cast<uintptr_t>(key.ps) >> 4) * 0x85ebca6bu;
+    hash ^= uint32_t(reinterpret_cast<uintptr_t>(key.decl) >> 4) * 0xc2b2ae35u;
+    hash ^= (uint32_t(key.alphaFunc) << 1 | key.index32) * 0x27d4eb2fu;
+    return d.pipelines[(hash >> 16) & (kPipelines - 1)];
+}
+
+// Every kept combination goes when a program, a shader or a vertex layout
+// does: a table entry points at them, and a new object may get the address
+// of a dead one.
+void ForgetPipelines(DrawState &d)
+{
+    std::memset(static_cast<void *>(d.pipelines), 0, sizeof(d.pipelines));
 }
 
 const VertexProgramEntry *GetVertexProgram(Device &device, const Variant &variant, const VertexDecl &decl,
@@ -1509,6 +1559,7 @@ void DropProgramsIf(Device &device, const std::function<bool(const VertexProgram
                     const std::function<bool(const FragmentProgramEntry &)> &fragmentMatch)
 {
     DrawState &d = *device.draw;
+    ForgetPipelines(d);
     for (auto it = d.vertexPrograms.begin(); it != d.vertexPrograms.end();)
     {
         if (!vertexMatch(it->second))
@@ -2352,15 +2403,48 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     }
 
     // Programs.
-    InputPlan plan;
-    PlanInputs(device, *vs, *device.decl, plan);
     const int diag = d.diagMode;
     const DiagTest thisTest = DiagTestAt(diag ? diag - 1 : 0);
     const DiagTest *test = diag ? &thisTest : nullptr;
+    uint32_t strides[kMaxStreams];
+    for (uint32_t s = 0; s < kMaxStreams; ++s)
+        strides[s] = device.streams[s].stride;
+    if (upVertices)
+        strides[0] = upStride;
+    gxm::cg::Options pixelOptions;
+    if (device.renderStates[d3d::RS_ALPHATESTENABLE])
+    {
+        const uint32_t func = device.renderStates[d3d::RS_ALPHAFUNC];
+        if (func >= d3d::CMP_NEVER && func < d3d::CMP_ALWAYS)
+            pixelOptions.alphaFunc = gxm::cg::AlphaFunc(func);
+    }
+    // The programs this combination last drew with (Pipeline), unless a
+    // run diagnostic wants to see or change how they are found.
+    const bool plain = !test && !d.diagnosedDraws;
+    PipelineKey pipelineKey;
+    Pipeline *pipeline = nullptr;
+    bool known = false;
+    if (plain)
+    {
+        std::memset(&pipelineKey, 0, sizeof(pipelineKey));
+        pipelineKey.vs = vs;
+        pipelineKey.ps = ps;
+        pipelineKey.decl = device.decl;
+        std::memcpy(pipelineKey.strides, strides, sizeof(strides));
+        pipelineKey.alphaFunc = uint8_t(pixelOptions.alphaFunc);
+        pipelineKey.index32 = index32;
+        pipeline = &PipelineSlot(d, pipelineKey);
+        known = std::memcmp(&pipeline->key, &pipelineKey, sizeof(pipelineKey)) == 0;
+        ++d.pipelineLookups;
+        d.pipelineHits += known;
+    }
+    InputPlan plan;
+    if (!known)
+        PlanInputs(device, *vs, *device.decl, plan);
     // The shader whose program this draw runs: the game's, or in some tests
     // one written here for draws with the menu's vertex shader.
     Shader *vsUsed = vs;
-    Variant *vertex = nullptr;
+    Variant *vertex = known ? pipeline->vertex : nullptr;
     if (test)
     {
         plan.options.diagPosition = test->option;
@@ -2379,14 +2463,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     bool waiting = false;
     if (!vertex)
         vertex = GetVariant(device, *vsUsed, plan.options, waiting);
-    gxm::cg::Options pixelOptions;
-    if (device.renderStates[d3d::RS_ALPHATESTENABLE])
-    {
-        const uint32_t func = device.renderStates[d3d::RS_ALPHAFUNC];
-        if (func >= d3d::CMP_NEVER && func < d3d::CMP_ALWAYS)
-            pixelOptions.alphaFunc = gxm::cg::AlphaFunc(func);
-    }
-    Variant *pixel = GetVariant(device, *ps, pixelOptions, waiting);
+    Variant *pixel = known ? pipeline->pixel : GetVariant(device, *ps, pixelOptions, waiting);
     if (!vertex || !pixel)
     {
         if (waiting)
@@ -2441,20 +2518,33 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             NotYet(device, "drawing with no colour target (depth only; skipped)");
         return;
     }
-    uint32_t strides[kMaxStreams];
-    for (uint32_t s = 0; s < kMaxStreams; ++s)
-        strides[s] = device.streams[s].stride;
-    if (upVertices)
-        strides[0] = upStride;
-    const VertexProgramEntry *vertexProgram = GetVertexProgram(device, *vertex, *device.decl, plan, index32, strides);
+    const VertexProgramEntry *vertexProgram =
+        known ? pipeline->vertexProgram : GetVertexProgram(device, *vertex, *device.decl, plan, index32, strides);
     if (!vertexProgram)
         return;
     SceGxmBlendInfo blend{};
     const bool blended = !diagPixel && MakeBlend(device, d.color.noAlpha, blend);
+    uint32_t blendBits = 0;
+    if (blended)
+        std::memcpy(&blendBits, &blend, sizeof(blendBits));
     const FragmentProgramEntry *fragmentProgram =
-        GetFragmentProgram(device, *pixel, passThrough ? *standIn : *vertex, blended ? &blend : nullptr);
+        known && pipeline->blended == blended && pipeline->blendBits == blendBits &&
+                pipeline->output == uint32_t(d.color.output)
+            ? pipeline->fragmentProgram
+            : GetFragmentProgram(device, *pixel, passThrough ? *standIn : *vertex, blended ? &blend : nullptr);
     if (!fragmentProgram)
         return;
+    if (plain)
+    {
+        pipeline->key = pipelineKey;
+        pipeline->vertex = vertex;
+        pipeline->pixel = pixel;
+        pipeline->vertexProgram = vertexProgram;
+        pipeline->fragmentProgram = fragmentProgram;
+        pipeline->blendBits = blendBits;
+        pipeline->output = uint32_t(d.color.output);
+        pipeline->blended = blended;
+    }
 
     // Vertex data.
     const void *streamData[kMaxStreams];
@@ -2875,6 +2965,9 @@ void LogDrawSummary(Device &device)
         (unsigned long long)d->drawn, (unsigned long long)d->copies, (unsigned long long)d->scenes, unsigned(d->vertexPrograms.size()),
         unsigned(d->fragmentPrograms.size()), d->variantsMade, d->variantFailures, (unsigned long long)d->renames,
         (unsigned long long)d->ringOverflows, d->drawFailures);
+    // What the draws did not do again (Pipeline).
+    Log(device, "draw work left out: %llu of %llu draws found their programs in the table",
+        (unsigned long long)d->pipelineHits, (unsigned long long)d->pipelineLookups);
     for (int i = 0; i < SkipCount; ++i)
         if (d->skipped[i])
             Log(device, "draws skipped: %llu x %s", (unsigned long long)d->skipped[i], kSkipNames[i]);
