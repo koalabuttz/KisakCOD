@@ -61,6 +61,7 @@ enum class Uniform : uint8_t
 };
 constexpr uint32_t kUniformCount = static_cast<uint32_t>(Uniform::Count);
 constexpr uint32_t kSamplerCount = 16; // ps s0-s15; vs s0-s3 (D3DVERTEXTEXTURESAMPLER0-3)
+constexpr uint32_t kFixedDepthClamp = 1u << 31; // in BuildSpirv's fixedDepthCompare
 
 // Set 0: vertex shader blocks at 0-8, pixel shader blocks at 16-24.
 constexpr uint32_t UniformBinding(Stage stage, Uniform uniform)
@@ -202,6 +203,29 @@ struct Shader
     std::string warnings;      // the converter's warnings, if any
 };
 
+// How translated shaders multiply. D3D9 hardware gives 0 for 0 times anything,
+// infinity and NaN included; Vulkan does not. Fast (the default, as DXVK on
+// drivers without a native multiply of that kind, such as Intel's and
+// NVIDIA's) multiplies plainly and keeps infinities out instead: rcp, rsq, exp
+// and nrm are clamped to the largest float and log to the lowest, so a product
+// never meets one. Strict checks both factors of every multiply for zero
+// (dxbc-spirv's legacy multiply: two compares and two selects per component),
+// which Mesa's Intel compiler made 4 times as long in vertex shaders (laptop
+// run 17). Set once, before the first Translate; TranslatorRevision follows it,
+// so a cache made under the other rule is not used.
+void SetStrictFloats(bool strict);
+bool StrictFloats();
+
+// Whether Translate keeps the legacy state the game never changes (fog, clip
+// planes, point sprites and sizes, and the projection, gather, unbound and
+// depth scale members of SamplerStateBlock) as uniforms read at run time, as
+// dxbc-spirv emits it. By default (false) it becomes constants, the values
+// the Legacy adapter always writes, and the code that tests it goes: blocks
+// left unread are not declared. Set once, before the first Translate, as
+// SetStrictFloats; TranslatorRevision follows it.
+void SetDynamicLegacyState(bool dynamic);
+bool DynamicLegacyState();
+
 // Translates D3D9 bytecode (a version token, then tokens, ending at the end
 // token). On failure returns false and says why in error.
 bool Translate(const void *bytecode, size_t bytes, Shader &shader, std::string &error);
@@ -216,9 +240,20 @@ bool Translate(const void *bytecode, size_t bytes, Shader &shader, std::string &
 // sampler N is bound to a depth texture, clear means a colour one, and the
 // branch not taken is removed. MoltenVK needs this: its shader converter
 // (SPIRV-Cross) declares an image sampled both with and without a depth
-// reference as a Metal depth texture, which cannot sample colour.
+// reference as a Metal depth texture, which cannot sample colour. The Legacy
+// adapter does it everywhere by default, so no sample branches on it. With
+// kFixedDepthClamp set as well, depth samplers clamp the reference to [0, 1]
+// (SamplerStateBlock::drefClamp: a D32 image standing in for D24); without
+// it none does.
+//
+// fixedAlphaCompare, when given, decides the alpha test at build time instead
+// of by AlphaTestBlock::compareOp (an AlphaCompare value; alphaRef stays in
+// the block). With Always the test goes, and the shader cannot discard: a GPU
+// tests depth before a shader that cannot, and after one that may. DXVK fixes
+// the test per pipeline the same way.
 bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<uint32_t> &spirv,
-                std::string &error, const uint32_t *fixedDepthCompare = nullptr);
+                std::string &error, const uint32_t *fixedDepthCompare = nullptr,
+                const uint32_t *fixedAlphaCompare = nullptr);
 
 // True when the pixel shader's inputs read the vertex shader's outputs as they
 // stand (BuildSpirv then needs no linking).
@@ -229,8 +264,9 @@ std::string DisassembleIr(const Shader &shader);
 
 // What makes translations differ between builds: a digest of the translator's
 // sources and dxbc-spirv's commit (KISAK_LEGACY_SHADER_REVISION, from
-// vulkan_shaders.cmake). A cache of translated shaders keeps it and drops
-// everything when it changes.
+// vulkan_shaders.cmake), the float rule (SetStrictFloats) and the legacy
+// state rule (SetDynamicLegacyState). A cache of translated shaders keeps it
+// and drops everything when it changes.
 const char *TranslatorRevision();
 
 // A translated shader as bytes, and back, for caches. Deserialize refuses

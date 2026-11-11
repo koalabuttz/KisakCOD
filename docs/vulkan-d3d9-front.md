@@ -86,7 +86,11 @@ since the device was made or since the last call that started them again.
   with nothing of the last frame or this one to do. A GPU that is the limit
   shows next to nothing in the last two. It also counts the parts the idle
   rule sent early. The line needs GPU timestamps and is left out without
-  them.
+  them. With `KISAK_VK_PASS_TIMESTAMPS=0` the passes are not timed (each
+  one's closing timestamp waits for its work, which may cost a GPU that
+  drains between passes): the line then gives the frame's time from first
+  command to last and the time before it, says `passes not timed`, and so do
+  the slow frame lines.
 * `vulkan d3d9: slow frame N:` (up to three lines, the longest first) names
   the frames of the stretch that took longest, for the one long frame among
   thousands that an average hides. A frame here runs from the start of one
@@ -441,7 +445,9 @@ The probes are i386, as before; `KisakCOD-mp` is any client architecture and
 `KisakCOD-sp` is i386 or x86_64. The x86_64 singleplayer game loads and
 draws killhouse, cargoship, blackout, ac130 and airplane through the back end
 on the laptop and quits cleanly, with no unsupported call reported
-([linux-sp-levels.md](linux-sp-levels.md#vulkan-run-1-laptop-x86_64-2026-11-10)). The
+([linux-sp-levels.md](linux-sp-levels.md#vulkan-run-1-laptop-x86_64-2026-11-10)),
+and all 21 levels do the same on llvmpipe in WSL
+([linux-sp-levels.md](linux-sp-levels.md#vulkan-sweep-all-21-levels-pc-linux-in-wsl-x86_64-2026-11-11)). The
 programs still link the system's D3D9 (DXVK Native) and use it by default.
 `src/linux/client/vulkan/vulkan_backend.cpp` registers four dvars that are
 archived and latched (a change applies at the next `vid_restart`):
@@ -645,6 +651,29 @@ from it. Over a launch the device uploads 14 to 17 GB of textures in about
 27,000 to 30,000 uploads, most of them 1 MB, which is close to one every
 other frame during play. Every launch quit cleanly. Report:
 `renderer/vulkan-backend-pc-run-9.md`.
+PC run 10 (2026-11-10, 953d94c7, the Release artifact of PR 217's manual
+run, same PC and scene, the machine alone) measures `UpdateTexture` copying
+only the patched cells. A launch now uploads about 374 MB in about 27,000 to
+37,000 uploads, where run 9's uploaded 9 to 17 GB; the first frame is about
+half of that (173 to 189 MB), and no window of play has a 1 MB upload (the
+one left is in the frame that builds the first view's pipelines, before the
+window). Vulkan runs at 473.4, 457.4 and 477.9 frames a second and the real
+`d3d9.dll` at 474.6 and 497.7: means of 469.6 against 486.2, about 3%
+behind where run 9 had about 5%, though the launches of each spread as far
+as that. The GPU is busy for about 0.9 ms of a frame, so the PC still waits
+for the CPU. Report: `renderer/vulkan-backend-pc-run-10.md`.
+PC run 11 (2026-11-11, c2db610c, master after PR 232, the Release artifact,
+the machine alone) measures the shaders of runs 18 and 19 there: Vulkan
+runs at 477.6, 460.1 and 458.4 frames a second (mean 465.4, run 10 469.6),
+so the shorter shaders do not move the PC, which waits for the CPU. The GPU
+is busy 0.80 ms of a frame (run 10 0.90). Against the real `d3d9.dll` the
+answer depends on how it is counted: its two launches read 471.0 and 446.3
+by the counters (Vulkan 1.5% ahead) and 485.7 and 459.3 by the game's frame
+log (Vulkan 1.4% behind), and its launches differ 5 to 6% from each other.
+Vulkan's slowest frames are longer (25 to 97 ms against 7 to 8 ms), one of
+them two pipelines built during play. The first launch with an empty cache
+spent 3.4 s building 131 pipelines, where run 10 spent 1.1 s on 133.
+Report: `renderer/vulkan-backend-pc-run-11.md`.
 
 The device probe with `--backend vulkan` runs `r_init.cpp`'s device start
 unchanged (`R_PreCreateWindow`, `R_CreateWindow`, `R_CreateDevice`), clears,
@@ -741,6 +770,95 @@ evidence):
   there is one; on a build without multisampled targets the V4 rows draw one
   sample. The Windows PC's runs set `r_aaSamples 1` for both back
   ends, so its numbers do compare.
+* Settings in one launch (run 12, 2026-11-10, 473f14d6, mains, two launches
+  of `vulkan-settings-mp-crash.json`): 130.9 and 136.6 fps over 120 s. In
+  `perf_ab` windows the kept draw state is worth 1.8 and 2.9% (off costs
+  0.8 ms of CPU a frame), the GPU feed 7.7 and 10.5% (off is slower: the
+  default helps), and the idle rule at 16 draws and a part every 32 draws
+  move less than a setting measured against itself (3.6 and 9.3%), so
+  differences under about 4% are noise there. The slowest frame, 428.6 ms
+  after 432 s of play, built 4 pipelines that were not in the cache (423.7
+  ms of it): pipelines built during play are the long frame the laptop sees.
+* The same samples (run 13, 2026-11-10, 5871c201, mains): with 4 samples
+  each, Vulkan runs at 100.7 and 95.7 fps and DXVK at 152.5 and 151.1, so
+  Vulkan is about 35% behind; with one sample each, 135.8 against 176.4,
+  about 23% behind (a last pair was void: another program woke up). Both
+  print `Using 4x anti-aliasing` with 4. The GPU is busy in passes for 6.7
+  to 8.4 ms of a one-sample Vulkan frame and 9.5 to 12.5 ms with 4, so the
+  laptop waits for the GPU, and the gap is the GPU's time on our frame,
+  not the samples. Screenshots of the two back ends at 4 samples match.
+* Where the GPU's time goes (run 14, 2026-11-11, one sample, Mesa's
+  `INTEL_MEASURE` over 9 frames; DXVK's half crashed under it): about 17 ms
+  of GPU work a frame while measured, nearly all of it its 900 or so draws
+  in about 9 passes. One pass of about 360 draws takes about 8.8 ms, the
+  next largest 4.4 and 3.4 ms. Colour and depth clears that ANV does the
+  slow way, about 2 of each a frame, take 466 us, about 2.7% (a first,
+  partial read put it at 6%); they were all `vkCmdClearAttachments`, which
+  ANV cannot do as a fast clear. Clears of whole targets are now a pass's
+  load operation ([adapter](vulkan-legacy-adapter.md#how-a-draw-works)).
+  Report: `renderer/vulkan-backend-laptop-run-14.md`.
+* Clears as load operations (run 15, 2026-11-11, a13e9109, run 13's scene
+  at 4 samples, defaults C against `KISAK_VK_PASS_CLEARS=0` O, C O O C):
+  about 60% of the clears became a pass's load operation (29,727 of 49,988),
+  none with the switch. C ran at 98.3 and 85.7 fps, O at 92.0 and 93.6: the
+  means (92.0 and 92.8) are within the noise of the two C rows, so the 2.7%
+  of slow clears gives no fps the laptop can see, and does no harm. GPU time
+  per frame 9.3 to 10.4 ms either way. Report:
+  `renderer/vulkan-backend-laptop-run-15.md`.
+* Pass timestamps (run 16, 2026-11-11, 1f15b84a, the same scene at 4
+  samples, defaults C against `KISAK_VK_PASS_TIMESTAMPS=0` T, C T T C): C ran
+  at 107.6 and 106.1 fps, T at 107.1 and 107.5, with GPU frames of 8.53 and
+  8.68 ms against 8.53 and 8.54. The pairs around every pass cost the laptop
+  nothing it can measure, so they stay on. Report:
+  `renderer/vulkan-backend-laptop-run-16.md`.
+* Shader code (run 17, 2026-11-11, the same scene at one sample, held 60 s
+  with Mesa's `INTEL_DEBUG=vs,fs` and its shader cache off, summed by
+  `renderer/tools/intel_shader_stats.py`): neither side spills. Our pixel
+  shaders' widest variants have a median of 635 instructions and 17,080
+  cycles against DXVK's 359 and 9,038; our vertex shaders 545 and 5,458
+  against 154 and 536 (DXVK's figures as corrected after its log was read
+  whole). The counts are per shader compiled, not per draw. Part
+  of it is the multiply rule: every multiply checked both factors for zero
+  where DXVK multiplies plainly on Intel, and the fast rule is now the
+  default ([shaders](vulkan-legacy-shaders.md#float-rules)). Report:
+  `renderer/vulkan-backend-laptop-run-17.md`.
+* Multiply rule (run 18, 2026-11-11, build ee6fe8d2, run 13's scene at 4
+  samples, F S S F): the fast rule (F) ran 129.4 and 128.2 fps with GPU frames
+  of 7.04 and 7.14 ms, the strict one (S) 105.8 and 105.5 fps with 8.61 and
+  8.72 ms: 22% more frames and 1.6 ms less GPU time, about 19 times the spread
+  of F's two rows. Mesa's statistics of F: vertex median 151 instructions and
+  625 cycles (DXVK 154 and 536), pixel 457 and 15,292 (DXVK 359 and 9,038), no
+  spills. The picture at run 13's ground view, by numbers only (mean luma,
+  5x5 grid, black and white shares, isolated pixels): F against DXVK differs
+  less than F against its own repeat; the sun view could not separate the
+  renderers. Report: `renderer/vulkan-backend-laptop-run-18.md`.
+* Alpha test and legacy state (run 19, 2026-11-11, build d2481792, the same
+  scene at 4 samples, N A L L A N): defaults (N) 172.6 fps with a GPU frame
+  of 4.90 ms; the alpha test read at run time (A, `KISAK_VK_ALPHA_TEST=dynamic`)
+  139.6 fps and 6.42 ms; the legacy state read at run time (L,
+  `KISAK_VK_LEGACY_STATE=dynamic`) 158.1 fps and 5.43 ms. The two costs
+  roughly add up to N's gain over run 18's F (43.8 fps). Mesa's statistics of
+  N: pixel median 232 instructions and 7,947 cycles (DXVK 359 and 9,038),
+  vertex 114 and 434, no spills, 226 pixel shaders (more variants, one per
+  alpha compare). Then N against DXVK in one sitting (N D D N): 170.5 against
+  166.8 fps, Vulkan 2% ahead, about four times the larger row spread. The
+  picture at the ground view, by numbers only, lands on one of a few states
+  per launch whichever back end or switch draws it (DXVK and Vulkan share
+  one); the differences, up to 0.4 luma in a cell, follow the launch, not the
+  switches. Report: `renderer/vulkan-backend-laptop-run-19.md`.
+* Depth compare (run 20, 2026-11-11, build d6b2a634, the same scene at 4
+  samples): fixed per pipeline (N, the default) against read at run time (D,
+  `KISAK_VK_DEPTH_COMPARE=dynamic`). The repeat that waited for a quieter
+  desktop (N D D N, every row captured twice) gave N 173.2 fps with a GPU
+  frame of 5.09 ms and D 162.0 fps with 5.48 ms: every N capture (170.8 to
+  176.0) beat every D capture (161.5 to 162.7). The first sitting, with the
+  desktop's load uneven between rows, pointed the same way in every pairing.
+  The branch costs about 0.4 ms of GPU time a frame. Mesa's statistics of N:
+  pixel median 157 instructions and 2,634 cycles (run 19: 232 and 7,947; DXVK
+  359 and 9,038), vertex unchanged at 114 and 434, no spills, 183 pixel
+  shaders (run 19: 226; DXVK 169). The picture at the ground view, by numbers
+  only, falls on one of the states run 19 found. Report:
+  `renderer/vulkan-backend-laptop-run-20.md`.
 * Present mode: the laptop's swapchain still says `MAILBOX, 4 images` with
   vsync off now that the core asks for IMMEDIATE first (run 11), so its
   surface does not offer IMMEDIATE.
@@ -787,24 +905,23 @@ evidence):
   launch, with a repeated launch as the baseline
   (`renderer/model-lighting/luma_grid.py` in the project files).
 
-Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11}.md`,
-`renderer/vulkan-backend-pc-run-{6,7,8,9}.md` and
+Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11,12,13,14,15,16,17,18,19,20}.md`,
+`renderer/vulkan-backend-pc-run-{6,7,8,9,10,11}.md` and
 `renderer/model-lighting/laptop-run-1.md` in the project files.
 
 ## Next
 
-The rest of the frame rate gap to DXVK. On the laptop that is the GPU's
-time, and first a measurement of the two back ends with the same
-anti-aliasing (above); then what a pass split by the feed costs on its
-driver, and whether a feed setting is better than the default at all (laptop
-run 12 measures the settings in one launch, and the kept draw state with
-them). Laptop run 13 sets Vulkan with `r_aaSamples 4`, now that the back
-end has multisampled targets, beside DXVK with 4. On the Windows PC, in a
-Release build, Vulkan is about 5% behind Direct3D 9 (PC run 9) and the PC
-waits for the CPU: what is left is the time per frame. The 1 MB uploads
-during play were the model lighting volume, which `UpdateTexture` now copies
-only in its patched cells; the next PC run measures that, then the front's
-lock. Measure the PC in the Release build of a manual `vulkan`
-run from now on. Then the long frame the laptop sees about every two
-minutes, which the `slow frame` lines are there to name, and the pipelines
-built during play.
+The laptop's gap to DXVK is closed: at the same 4 samples Vulkan draws run
+13's scene 2% faster than DXVK (laptop run 19), after the fast multiply rule
+(run 18), the alpha test fixed per pipeline and the legacy state the game
+never changes held as constants ([shaders](vulkan-legacy-shaders.md#legacy-state)).
+Run 13 had it 35% behind. The depth compare fixed per pipeline
+([adapter](vulkan-legacy-adapter.md#depth-compare)) took the pixel shaders'
+median to 157 instructions against DXVK's 359 (run 20), and Vulkan now
+compiles 183 pixel shaders against DXVK's 169. On the Windows PC, in a
+Release build, Vulkan is level with Direct3D 9 within the spread of their
+launches (PC run 11), and the PC waits for the CPU: what is left there is
+the time per frame, the front's lock first. Then the pipelines: built during
+play they are the long frames on both machines (laptop run 12, PC run 11),
+and a first launch with an empty cache built them three times slower in PC
+run 11 than in run 10.

@@ -45,14 +45,22 @@ buffer by the core's `Recording()` number.
   module is built at once; a pixel shader is linked to the vertex shader it is
   drawn with (outputs to inputs), and linked modules are kept per pair.
 * **Uniforms.** The translator turns float constants and the states shaders need
-  (alpha test, sampler state, point size) into uniform blocks, which live in
+  (alpha test, sampler state) into uniform blocks, which live in
   per-frame memory. The blocks are dynamic uniform buffers: each pipeline
   writes its descriptor set once per transient buffer (kept across frames,
   below), and later draws bind that set again with their own offsets. A layout with more
   blocks than the device's `maxDescriptorSetUniformBuffersDynamic` (8 on some
   drivers), or every layout with `KISAK_VK_UNIFORMS=static`, gets plain
   uniform buffers and a new set for each draw instead. Alpha test is D3D9
-  state, compared in the pixel shader.
+  state, compared in the pixel shader. Its compare is fixed in each
+  pipeline's pixel shader when the shader is built (`PipelineKey::alphaCompare`,
+  `legacy_shader::BuildSpirv`'s `fixedAlphaCompare`), as DXVK does, and only
+  the reference is read from the block. A draw without the test then runs a
+  shader that cannot discard, which a GPU can test depth before; with the
+  compare read at run time every pixel shader may discard. Laptop run 17 had
+  Mesa's Intel compiler make our pixel shaders about twice DXVK's length.
+  `KISAK_VK_ALPHA_TEST=dynamic` reads the compare at run time again, and the
+  `device ready:` line says `alpha test fixed` or `dynamic`.
 * **Less work for a draw like the one before.** The engine draws sorted by
   material, so most draws differ from the one before in a few vertex shader
   constants and nothing else. The adapter does and records only what changed:
@@ -72,7 +80,8 @@ buffer by the core's `Recording()` number.
     `DeviceStats::bindsSkipped` counts them.
   * *Pipeline and dynamic state.* The pipeline key and the dynamic state are
     made again only after something they are made of was set: a render state
-    (except the three of the alpha test, which are in a uniform block), a
+    (except the alpha test's reference, which is in a uniform block, and its
+    switch and compare too with `KISAK_VK_ALPHA_TEST=dynamic`), a
     shader, the vertex declaration, the viewport, the scissor rectangle, or
     the targets of the pass. Where the device fixes vertex strides or depth
     compare in the pipeline, the key also holds stream strides and bound
@@ -128,7 +137,22 @@ buffer by the core's `Recording()` number.
 * **Passes.** A pass opens lazily at the first draw or clear for the current
   targets and ends when targets change, a resource is uploaded, or a copy
   needs to run. Clears inside a pass are `vkCmdClearAttachments`, limited by
-  viewport and scissor like D3D9's.
+  viewport and scissor like D3D9's. A clear that covers every cleared target
+  whole (one level, one face, the viewport and scissor not smaller) is
+  instead the load operation a pass begins with (`LOAD_OP_CLEAR`): drivers
+  clear that way with their fast clears, and Mesa's ANV counts
+  `vkCmdClearAttachments` as a slow clear. Before a draw it begins the pass,
+  and a second such clear, colour after depth say, begins the empty pass
+  again with both, as DXVK folds clears into the pass. After a draw the open
+  pass ends and the next begins with the clear, loading what was drawn to
+  the targets it does not clear: MoltenVK left the depth uncleared when it
+  was cleared inside the pass after a draw (the `pass_clear` scene on CI's
+  Apple GPU). A depth clear without the stencil stays in the pass on D24S8,
+  since the load operation would clear both.
+  `KISAK_VK_PASS_CLEARS=0` keeps every clear in its pass; the `device ready:`
+  line says which (`clears at pass start` or `clears in the pass`), and
+  `DeviceStats::passClears` counts the ones that were load operations (the
+  front's `device stats:` line gives both).
 * **Frames in parts (the GPU feed).** A frame of many draws goes to the GPU
   in parts while it is still being drawn, as DXVK's does, instead of whole at
   its `Present`. After a draw, once the command buffer holds 128 draws
@@ -239,20 +263,40 @@ so the renderer hookup can see where it stands.
 * Border colours: transparent black, opaque black and opaque white only.
 * Shader model 1.x samplers without a declared type are treated as 2D.
 * Fog, user clip planes, integer and boolean constants and texture-stage state
-  read as zero.
+  read as zero, and there are no point sprites. Translated shaders hold fog,
+  clip planes and point sprites as constants
+  ([Legacy state](vulkan-legacy-shaders.md#legacy-state));
+  `KISAK_VK_LEGACY_STATE=dynamic` reads their blocks instead.
 * `StretchRect` covers what the core can blit or resolve: same-kind colour
   images, a multisampled colour image into a one-sample one, or depth to
   depth with point filtering. Others are skipped with a warning.
 
-## The validation layer and depth compare
+## Depth compare
 
-The Legacy shaders sample every 2D texture through a branch on a uniform: a
-depth-compare sample for depth textures, a plain one otherwise. The validation
-layer checks the compare instruction's format rule
-(`VUID-vkCmdDraw-None-06479`) statically, against colour textures the branch
-never compares, so it reports every textured draw. The core counts that one
-message apart (`CoreStats::validationIgnored`, printed as
-`validation_ignored`), not as an error, and logs it once.
+dxbc-spirv samples every 2D and cube texture through a branch on a uniform:
+a depth-compare sample for a depth texture, a plain one otherwise
+(`SamplerStateBlock::useDepthCompare`). The adapter fixes that branch per
+pipeline instead, as DXVK does: the pixel shader is built per set of samplers
+that have a depth texture bound (`PipelineKey::depthSamplers`, the bound
+textures' depth bits), and `legacy_shader::BuildSpirv` replaces the
+`useDepthCompare` and `drefClamp` loads with constants and removes the branch
+not taken. Most pixel shaders then read no sampler state block at all.
+Vertex shaders are built with no depth samplers (vertex textures are never
+depth-compared here), and the shader cache keeps that module. The pipeline
+kept from the draw before stays only while the depth bits match, so binding
+a depth texture where a colour one was is enough to change it (the
+`shadow_map` scene of the D3D9 front's check does that with nothing else
+changed). On the laptop (run 20) this is worth 11 fps at 4 samples (173.2
+against 162.0) and about 0.4 ms of GPU time a frame, and the pixel shaders'
+median falls from 232 to 157 instructions.
+
+`KISAK_VK_DEPTH_COMPARE=dynamic` keeps the branch, the only way before
+2026-11-11 except on MoltenVK. The validation layer then checks the compare
+instruction's format rule (`VUID-vkCmdDraw-None-06479`) statically, against
+colour textures the branch never compares, so it reports every textured
+draw. The core counts that one message apart (`CoreStats::validationIgnored`,
+printed as `validation_ignored`), not as an error, and logs it once. The
+`device ready:` line says `depth compare fixed` or `dynamic`.
 
 ## MoltenVK (macOS)
 
@@ -267,13 +311,12 @@ targets wide`):
   `VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE` only from macOS 14 on Mac2 or
   Apple4 GPUs, and no Vulkan query says so. The pipeline key carries each
   stream's stride instead, and buffers are bound without strides.
-- **Depth compare fixed per pipeline.** MoltenVK's shader converter
-  (SPIRV-Cross) declares an image sampled both with and without a depth
-  reference as a Metal depth texture, and a depth texture cannot sample colour.
-  So the pixel shader is built per set of samplers that have a depth texture
-  bound (`PipelineKey::depthSamplers`). `legacy_shader::BuildSpirv` replaces
-  the `useDepthCompare` loads with constants and removes the branch not taken.
-  Vertex shaders are built with no depth samplers.
+- **Depth compare fixed per pipeline**, which every device does by default
+  ([Depth compare](#depth-compare)) but MoltenVK cannot do without:
+  `KISAK_VK_DEPTH_COMPARE=dynamic` is ignored there. MoltenVK's shader
+  converter (SPIRV-Cross) declares an image sampled both with and without a
+  depth reference as a Metal depth texture, and a depth texture cannot sample
+  colour.
 - **16-bit render targets as B8G8R8A8.** Metal has the 16-bit packed formats
   only on Apple GPUs, so MoltenVK on Intel and AMD Macs (and the Intel CI VM)
   cannot render to R5G6B5, X1R5G5B5 or A1R5G5B5. A render target in one of
@@ -283,11 +326,18 @@ targets wide`):
   MoltenVK. Copies between such a target and a lockable texture of the D3D9
   format are refused, since the formats differ.
 
-`KISAK_VK_VERTEX_STRIDE=static`, `KISAK_VK_DEPTH_COMPARE=fixed` and
-`KISAK_VK_RENDER_TARGETS=wide` force each path on any device. The Linux
-lavapipe job runs the adapter and D3D9 front checks with all three set, and
-with `KISAK_VK_UNIFORMS=static` (plain uniform buffers, above), with the
-validation layer required.
+`KISAK_VK_VERTEX_STRIDE=static` and `KISAK_VK_RENDER_TARGETS=wide` force the
+other two paths on any device. The Linux lavapipe job runs the adapter and
+D3D9 front checks with both set (and depth compare fixed), and with
+`KISAK_VK_UNIFORMS=static` (plain uniform buffers, above), with the
+validation layer required; it also runs them with
+`KISAK_VK_DEPTH_COMPARE=dynamic`.
+
+A depth clear inside a pass after a draw left the depth as it was through
+MoltenVK 1.4.2 on CI's Apple GPU (2026-11-11), where lavapipe clears it.
+Whole-target clears no longer happen there (they begin the next pass), but a
+depth clear of a rectangle, or of the depth alone on D24S8, after a draw
+still does; no check covers those on MoltenVK.
 
 ## Building and running
 
@@ -315,7 +365,7 @@ statistics, the validation counts, and `legacy_check=passed` or
 | `half_pixel` | Every one of the 16384 pixels of a full-target quad showing its own texel, so texel centres land on pixel centres. |
 | `texture_levels` | Mip levels uploaded one by one, sampled one by one. |
 | `formats` | L8, A8, A8L8, X8R8G8B8, A8B8G8R8, R5G6B5, A1R5G5B5, DXT1 and DXT5 read as D3D9 reads them (formats the device lacks are skipped). |
-| `alpha_test` | Alpha test with GREATER and LESS against a reference. |
+| `alpha_test` | Alpha test with GREATER and LESS against a reference, then turned off (every texel passes), then on again. With the compare fixed in the pipeline, the three draws build two or three pipelines (earlier scenes may have built one) and turning the test back on builds none; read at run time, one pipeline serves them all. |
 | `blend` | Source-alpha blending, separate alpha blend, additive blending with a colour write mask. |
 | `depth` | Depth test, write and compare functions, depth bias. |
 | `stencil` | Stencil REPLACE with colour writes off, then an EQUAL test. |
@@ -343,8 +393,13 @@ several ways: bad arguments exit 2; an unknown scene fails at the `usage`
 stage; one scene runs alone; and a full run passes every scene in order with no
 mismatched pixel, presents every scene, renames the dynamic buffer, finishes
 the event query, counts the occlusion queries (always on lavapipe, never with
-`KISAK_VK_OCCLUSION_QUERIES=0`), builds pipelines and has no validation
-errors. The
+`KISAK_VK_OCCLUSION_QUERIES=0`), makes some clears load operations (none
+with `KISAK_VK_PASS_CLEARS=0`), builds pipelines and has no validation
+errors. The `pass_clear` scene checks which clears become load operations:
+depth and colour before a draw merge into one, a depth clear after a draw
+begins the next pass, and a depth clear that keeps the stencil, a rectangle
+and part of the viewport stay in the pass; its pixels are the same either
+way. The
 `shader_cache` scene translates two shaders, takes one again from memory,
 writes and reads back a cache file in the temporary directory, draws with the
 shaders read from it, and checks that a damaged file is refused.
@@ -413,6 +468,22 @@ front's `kept_state` scene checks that the frame drawn after the one without
 the kept state writes no set. In PC run 8 the game wrote no set a frame with
 the kept state (about 850 reused) against 227 without, kept 1,386 to 1,695
 sets, and gave them all up once a launch, at the map's load.
+
+Clears as load operations (2026-11-10, same sandbox, 22 scenes with
+`pass_clear`): laptop run 14 timed the GPU's work with Mesa's `INTEL_MEASURE`
+and found ANV's slow colour and depth clears, about 2 of each a frame,
+taking about 2.7% of the GPU time on mp_crash; the adapter's clears were all
+`vkCmdClearAttachments` then. Now 29 of the check's 37 clears are load
+operations (none with `KISAK_VK_PASS_CLEARS=0`), and every scene's pixels are
+the same either way. The check passes in Debug and RelWithDebInfo with
+validation under the switch sets above and with the switch off, the D3D9
+front's check too, both under ThreadSanitizer, and the i386 build. Two lines
+were taken out in turn: without the one that marks a pass drawn to, a depth
+clear after a draw wiped the colour drawn before it (`near_quad`); without
+the stencil rule, a depth clear on D24S8 became a load operation that would
+clear the stencil too. On the laptop (run 15) about 60% of mp_crash's clears
+became load operations and the frame rate did not move beyond the run's
+noise, either way.
 
 Laptop run 1 (2026-11-08, Intel RPL-U iGPU, Mesa 25.0.7 ANV, x86_64 and i386
 RelWithDebInfo, SDL offscreen and Wayland, no validation layer installed): all

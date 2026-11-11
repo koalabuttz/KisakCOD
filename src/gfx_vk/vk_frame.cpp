@@ -208,12 +208,58 @@ double TicksToMs(const Core &core, uint64_t ticks)
 }
 
 // Two timestamps written one after the other (query and query + 1), as the
-// device counted them. False if either has not been written.
+// device counted them. False if either has not been written. A presented
+// frame's are read from their copy (Present); the others, from frames that
+// were not presented, from the pool.
 bool ReadTicks(Core &core, uint32_t query, uint64_t ticks[2])
 {
+    if (core.frames[query / kTimestampsPerSlot].queriesCopied)
+    {
+        const uint64_t *copies = static_cast<const uint64_t *>(core.timestampCopies->allocation.mapped);
+        ticks[0] = copies[query];
+        ticks[1] = copies[query + 1];
+        return true;
+    }
     return core.vk.vkGetQueryPoolResults(core.dev, core.timestamps, query, 2, 2 * sizeof(uint64_t), ticks,
                                          sizeof(uint64_t), VK_QUERY_RESULT_64_BIT)
         == VK_SUCCESS;
+}
+
+// Records the copy of every query the current slot has written, behind the
+// last of them: Present's, at the end of the frame's last submission.
+void CopyTimestamps(Core &core)
+{
+    FrameSlot &slot = CurrentSlot(core);
+    if (!core.timestampCopies || !slot.frameTimed || slot.queriesUsed < 2)
+        return;
+    const VkQueryPool pool = core.timestamps;
+    const VkBuffer target = BufferHandle(core.timestampCopies);
+    const uint32_t first = SlotQueryBase(core);
+    const uint32_t count = slot.queriesUsed;
+    VkBufferMemoryBarrier2 toHost{};
+    toHost.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+    toHost.srcStageMask = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+    toHost.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    // The host reads it, and the slot's next frame copies over it.
+    toHost.dstStageMask = VK_PIPELINE_STAGE_2_HOST_BIT | VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+    toHost.dstAccessMask = VK_ACCESS_2_HOST_READ_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    toHost.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toHost.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toHost.buffer = target;
+    toHost.offset = sizeof(uint64_t) * first;
+    toHost.size = sizeof(uint64_t) * count;
+    Record(&core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
+        // Every query from the first to the last used was written by now (each
+        // pass ends before Present), so waiting for them cannot hang.
+        vk.vkCmdCopyQueryPoolResults(cmd, pool, first, count, target, sizeof(uint64_t) * first, sizeof(uint64_t),
+                                     VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
+        VkDependencyInfo dependency{};
+        dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        dependency.bufferMemoryBarrierCount = 1;
+        dependency.pBufferMemoryBarriers = &toHost;
+        vk.vkCmdPipelineBarrier2(cmd, &dependency);
+    });
+    slot.queriesCopied = true;
 }
 
 bool ReadPair(Core &core, uint32_t query, double &ms)
@@ -231,6 +277,16 @@ void CollectTimestamps(Core &core, uint32_t slotIndex)
     if (!slot.queriesPending)
         return;
     slot.queriesPending = false;
+    const Allocation &copies = core.timestampCopies ? core.timestampCopies->allocation : Allocation{};
+    if (slot.queriesCopied && !copies.coherent)
+    {
+        VkMappedMemoryRange range{};
+        range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+        range.memory = copies.memory;
+        range.offset = 0;
+        range.size = VK_WHOLE_SIZE;
+        core.vk.vkInvalidateMappedMemoryRanges(core.dev, 1, &range);
+    }
     const uint32_t base = slotIndex * kTimestampsPerSlot;
     double ms = 0.0;
     // A frame that was presented has both of its timestamps; slots are
@@ -278,7 +334,9 @@ void CollectTimestamps(Core &core, uint32_t slotIndex)
     }
     if (presented)
     {
-        AddTimings(core.stats.framePasses, passesMs);
+        // Without pass timestamps the time in passes is not known.
+        if (core.optional.passTimestamps)
+            AddTimings(core.stats.framePasses, passesMs);
         if (slot.frameNumber)
         {
             // Kept by the frame's number for FrameGpuTime.
@@ -314,6 +372,7 @@ bool RecycleSlot(Core &core, uint32_t slotIndex)
     slot.timedPasses.clear();
     slot.frameTimed = false;
     slot.queriesUsed = 0;
+    slot.queriesCopied = false;
     RunDeferred(core, false);
     return true;
 }
@@ -370,7 +429,7 @@ bool BeginTimed(Core &core, const char *name, int &queryOut)
 {
     queryOut = -1;
     FrameSlot &slot = CurrentSlot(core);
-    if (!core.timestamps || slot.queriesUsed + 2 > kTimestampsPerSlot)
+    if (!core.timestamps || !core.optional.passTimestamps || slot.queriesUsed + 2 > kTimestampsPerSlot)
         return false;
     const uint32_t query = SlotQueryBase(core) + slot.queriesUsed;
     slot.queriesUsed += 2;
@@ -799,7 +858,10 @@ FrameResult Present(Core *core_)
     Transition(core, image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, kPresentHandOffStage, VK_ACCESS_2_NONE);
     FrameSlot &slot = CurrentSlot(core);
     if (core.timestamps && slot.frameTimed)
+    {
         WriteTimestamp(core, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, SlotQueryBase(core) + 1);
+        CopyTimestamps(core);
+    }
     if (!SubmitRecording(core, true))
         return FrameResult::Failed;
     core.inFrame = false;

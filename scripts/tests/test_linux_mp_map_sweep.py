@@ -176,6 +176,20 @@ class SweepPatternTests(unittest.TestCase):
         answer = sweep.re.compile(sweep.sp.dvar_answer(sweep.SERVER_ID_DVAR).pattern, sweep.re.I)
         self.assertEqual(answer.search('"sv_serverid" is: "16^7" default: "0^7"').group(1), "16")
 
+    def test_window_starts_at_the_screen_corner(self):
+        def dvar(command, name):
+            values = [command[i + 2] for i in range(len(command) - 2)
+                      if command[i] == "+set" and command[i + 1] == name]
+            return values[-1]
+
+        options = sweep.argparse.Namespace(binary=Path("/x/KisakCOD-mp"), mode="1280x720", volume="0",
+                                           sound_debug=False, set=None, gdb=False)
+        command = sweep.game_command(options, Path("/x"), Path("/h"), "mp_crash")
+        self.assertEqual((dvar(command, "vid_xpos"), dvar(command, "vid_ypos")), ("0", "0"))
+        options.set = [["vid_xpos", "40"]]
+        command = sweep.game_command(options, Path("/x"), Path("/h"), "mp_crash")
+        self.assertEqual(dvar(command, "vid_xpos"), "40")
+
     def test_frame_numbers(self):
         import struct
         with tempfile.TemporaryDirectory() as folder:
@@ -323,10 +337,12 @@ class SweepRunTests(unittest.TestCase):
         self.assertIn("| mp_crash | all steps seen |", report)
         # The stand-in dies on the class response. A starved machine can take
         # longer than --menu-wait to end it, and then the join counts as seen
-        # and the next step finds the process gone; the crash and the
+        # and whichever later step checks first finds the process gone
+        # (exercised, the hold, or the console answer); the crash and the
         # assertion are reported either way.
         self.assertRegex(report,
-                         r"\| mp_backlot \| stopped at: (?:joined|exercised) \| \d+\.\d s \| 0 \| - \| signal 11 \| 1 \|")
+                         r"\| mp_backlot \| stopped at: (?:joined|exercised|held \d+ s|console answers) "
+                         r"\| \d+\.\d s \| 0 \| - \| signal 11 \| 1 \|")
         self.assertIn("- `ent->health > 0`", report)
 
     def test_map_that_never_loads_stops_the_chain(self):

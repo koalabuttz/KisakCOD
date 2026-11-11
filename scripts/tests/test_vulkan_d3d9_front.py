@@ -206,6 +206,16 @@ def main():
     # "after every draw" (KISAK_VK_GPU_FEED=always, for testing).
     feed = re.search(r'legacy: device ready: .*, GPU feed (off|after every draw|every (\d+) draws)$', stdout, re.M)
     checks.expect('the device logs its GPU feed setting', feed is not None)
+    # The translated shaders' float rule (KISAK_VK_STRICT_FLOATS=1: strict).
+    floats = re.search(r'legacy: device ready: .*, floats (fast|strict), ', stdout, re.M)
+    want_floats = 'strict' if env.get('KISAK_VK_STRICT_FLOATS') == '1' else 'fast'
+    checks.expect(f'the device logs floats {want_floats}', floats is not None and floats.group(1) == want_floats,
+                  floats.group(1) if floats else 'missing')
+    # The legacy state rule (KISAK_VK_LEGACY_STATE=dynamic: read at run time).
+    state = re.search(r'legacy: device ready: .*, legacy state (fixed|dynamic), ', stdout, re.M)
+    want_state = 'dynamic' if env.get('KISAK_VK_LEGACY_STATE') == 'dynamic' else 'fixed'
+    checks.expect(f'the device logs legacy state {want_state}', state is not None and state.group(1) == want_state,
+                  state.group(1) if state else 'missing')
     feed_setting = feed.group(1) if feed else 'off'
     if feed_setting == 'after every draw':
         # Nothing is left to flush at the poll: every draw was submitted as it was made.

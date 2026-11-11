@@ -47,6 +47,14 @@
 namespace
 {
 namespace front = gfx_vk::d3d9;
+
+// Whether the back end times its passes (KISAK_VK_PASS_TIMESTAMPS=0: no).
+bool PassesTimed()
+{
+    const char *value = SDL_getenv("KISAK_VK_PASS_TIMESTAMPS");
+    return !(value && std::strcmp(value, "0") == 0);
+}
+
 namespace shaders = vk_legacy_check_shaders;
 
 constexpr UINT kSize = 128;
@@ -793,6 +801,35 @@ void Check::ShadowMap()
         Expect("nearer_lit", 32, 96, 255, 255, 255);
         Expect("nearer_lit_right", 96, 96, 255, 255, 255);
     }
+
+    // The same shader and state with a colour texture between two draws of
+    // the depth one: only the texture changes, so the pipeline kept from the
+    // draw before has to follow it where depth compare is fixed per pipeline
+    // (PipelineKey::depthSamplers).
+    IDirect3DTexture9 *green = FilledTexture(4, 4, [](UINT, UINT) { return Argb(255, 0, 255, 0); });
+    if (green)
+    {
+        Reset(Argb(255, 64, 64, 64));
+        device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+        device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+        device->SetPixelShader(psShadow);
+        device->SetTexture(0, shadow);
+        DrawQuad(0, 0, 64, 64, 0.5f, Argb(255, 0x80, 0, 0));
+        device->SetTexture(0, green);
+        DrawQuad(64, 0, 128, 64, 0.5f, Argb(255, 0x80, 0, 0));
+        device->SetTexture(0, shadow);
+        DrawQuad(0, 64, 64, 128, 0.5f, Argb(255, 0x80, 0, 0));
+        device->SetTexture(0, nullptr);
+        if (Read())
+        {
+            Expect("depth_then_colour_shadowed", 16, 32, 0, 0, 0);
+            Expect("depth_then_colour_lit", 48, 32, 255, 255, 255);
+            Expect("colour_between_depth", 96, 32, 0, 255, 0);
+            Expect("depth_after_colour_shadowed", 16, 96, 0, 0, 0);
+            Expect("depth_after_colour_lit", 48, 96, 255, 255, 255);
+        }
+        green->Release();
+    }
     SafeRelease(colorLevel);
     SafeRelease(color);
     SafeRelease(shadowLevel);
@@ -1331,10 +1368,10 @@ void Check::Queries()
     // its target's contents. A heavy frame first, so that the poll finds the
     // fence unfinished; a GPU that still finishes first gets another try.
     // The frame stays under the GPU feed's 128 draws, so it reaches the GPU
-    // whole at its Present: lavapipe waits for everything submitted so far
-    // whenever a query is read, which Present does for the frame before, and
-    // a frame already submitted in parts would be finished by the time
-    // Present returned.
+    // whole at its Present and is still at work when Present returns. Present
+    // must not wait for it: it once did on lavapipe, which blocks a query read
+    // while its queue runs a submission, when it read the frame before's
+    // timestamps from the pool (they are copied on the GPU now).
     const char *fencePath = "finished_first";
     unsigned long long fenceFlushes = 0;
     for (int attempt = 0; attempt < 8 && fencePath[0] == 'f'; ++attempt)
@@ -1876,6 +1913,7 @@ void Check::Tuning()
         double seconds = 0, fps = 0, draws = 0, passes = 0, sets = 0, reused = 0, constants = 0, renames = 0;
         double submissions = 0, gpuAverage = 0, gpuMin = 0, gpuMax = 0;
         bool gpuTime = false;
+        bool passesTimed = true; // false: the line without pass timestamps
         double inPasses = 0, between = 0, before = 0, beforeMax = 0;
     };
     const auto report = [&](bool reset) {
@@ -1911,6 +1949,18 @@ void Check::Tuning()
                             &out.inPasses, &out.between, &out.before, &out.beforeMax, &out.early)
                 == 5)
                 out.gpuTime = true;
+            double frameMs = 0;
+            if (KISAK_SCAN_NUMBERS(line.c_str(),
+                            "vulkan d3d9: GPU time: per frame %lf ms from first command to last (passes not timed), "
+                            "and %lf ms without work before the frame (%lf max); %llu parts sent early to a GPU with "
+                            "nothing left",
+                            &frameMs, &out.before, &out.beforeMax, &out.early)
+                == 4)
+            {
+                out.gpuTime = true;
+                out.passesTimed = false;
+                out.between = frameMs;
+            }
         }
         return out;
     };
@@ -1926,6 +1976,8 @@ void Check::Tuning()
     Equal("stats_gpu_time_line", first.gpuTime, first.timed > 0);
     if (first.gpuTime)
     {
+        // KISAK_VK_PASS_TIMESTAMPS=0 leaves passes untimed, and the line says so.
+        Equal("stats_passes_timed", first.passesTimed, PassesTimed());
         Equal("stats_gpu_time_values",
               first.inPasses >= 0.0 && first.between >= 0.0 && first.before >= 0.0 && first.beforeMax >= first.before,
               true);
@@ -2132,7 +2184,12 @@ void Check::SlowFrames()
         Equal("pipeline_frame_uploads", before(*pipelineLine, " texture uploads"), 0);
         // Its timestamps were read frames ago, where the device has them.
         Equal("pipeline_frame_gpu_time", pipelineLine->find("; GPU time not read") == std::string::npos, gpuTimed);
-        if (gpuTimed)
+        if (gpuTimed && !PassesTimed())
+            Equal("pipeline_frame_gpu_values",
+                  pipelineLine->find(" (passes not timed), ") != std::string::npos
+                      && before(*pipelineLine, " without work before it") >= 0.0,
+                  true);
+        else if (gpuTimed)
             Equal("pipeline_frame_gpu_values",
                   behind(*pipelineLine, "; GPU ") >= before(*pipelineLine, " in passes")
                       && before(*pipelineLine, " in passes") >= 0.0

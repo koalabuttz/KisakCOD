@@ -309,10 +309,12 @@ struct OptionalFeatures
     // the pipelines.
     bool dynamicVertexStride;
     // Translated pixel shaders get each sampler's depth compare fixed when
-    // they are built (legacy_shader::BuildSpirv's fixedDepthCompare) instead
-    // of choosing at run time. On every portability-subset device: MoltenVK's
-    // converter turns an image sampled both ways into a Metal depth texture,
-    // which cannot sample colour. KISAK_VK_DEPTH_COMPARE=fixed forces it.
+    // they are built for a pipeline (legacy_shader::BuildSpirv's
+    // fixedDepthCompare, PipelineKey::depthSamplers) instead of choosing
+    // around every sample at run time, as DXVK does. Always on a
+    // portability-subset device: MoltenVK's converter turns an image sampled
+    // both ways into a Metal depth texture, which cannot sample colour.
+    // KISAK_VK_DEPTH_COMPARE=dynamic chooses at run time elsewhere.
     bool fixedDepthCompare;
     // The Legacy adapter makes a render target in a 16-bit packed format
     // (R5G6B5, X1R5G5B5, A1R5G5B5) as B8G8R8A8 where the device cannot render
@@ -328,6 +330,34 @@ struct OptionalFeatures
     // engine waits for the frame before it (legacy::GetQueryData). On unless
     // KISAK_VK_FENCE_FLUSH=0, to compare the two.
     bool fenceFlush;
+    // The Legacy adapter turns a Clear of the whole target that comes before
+    // any draw of a pass into the pass's load operation (LOAD_OP_CLEAR), as
+    // DXVK does: drivers clear an attachment that way with their fast clears
+    // (Mesa's ANV counts vkCmdClearAttachments as a slow clear), and a
+    // tile-based GPU loads nothing. On unless KISAK_VK_PASS_CLEARS=0.
+    bool passClears;
+    // Every pass is timed with a pair of GPU timestamps (PassTimingsFor and
+    // CoreStats::framePasses). The one at a pass's end waits for all its work
+    // (ALL_COMMANDS), which on some drivers drains the GPU between passes.
+    // On unless KISAK_VK_PASS_TIMESTAMPS=0, which keeps only the frame's own
+    // pair: the frame's GPU time stays, the time in passes is not known.
+    bool passTimestamps;
+    // The Legacy adapter's translated shaders multiply plainly, as DXVK's do on
+    // drivers without a native D3D9 multiply, and keep infinities out instead
+    // (legacy_shader::SetStrictFloats). KISAK_VK_STRICT_FLOATS=1 checks both
+    // factors of every multiply for zero instead, as D3D9 hardware gives.
+    bool strictFloats;
+    // The Legacy adapter fixes the alpha test's compare in each pipeline's
+    // pixel shader (legacy_shader::BuildSpirv's fixedAlphaCompare), as DXVK
+    // does, so a draw without the test runs a shader that cannot discard and
+    // the GPU can test depth before it. KISAK_VK_ALPHA_TEST=dynamic reads the
+    // compare from the alpha test block at run time instead.
+    bool fixedAlphaTest;
+    // The Legacy adapter's translated shaders hold the legacy state the game
+    // never changes (fog, clip planes, point sprites, unbound samplers) as
+    // constants (legacy_shader::SetDynamicLegacyState), as DXVK specialises
+    // it. KISAK_VK_LEGACY_STATE=dynamic reads it from uniforms at run time.
+    bool dynamicLegacyState;
     // The Legacy adapter submits a frame in parts while it is still being
     // drawn, so the GPU works on a frame as it is recorded instead of
     // starting when the frame ends (see FeedGpu in vk_legacy_draw.cpp). Each

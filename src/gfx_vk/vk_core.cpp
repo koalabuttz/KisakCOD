@@ -694,10 +694,15 @@ bool CreateDevice(Core &core)
     core.optional.shaderFloat16 = supported12.shaderFloat16;
     // MoltenVK's paths (see OptionalFeatures), or forced for testing.
     core.optional.dynamicVertexStride = !portability && !EnvEquals("KISAK_VK_VERTEX_STRIDE", "static");
-    core.optional.fixedDepthCompare = portability || EnvEquals("KISAK_VK_DEPTH_COMPARE", "fixed");
+    core.optional.fixedDepthCompare = portability || !EnvEquals("KISAK_VK_DEPTH_COMPARE", "dynamic");
     core.optional.forceWideRenderTargets = EnvEquals("KISAK_VK_RENDER_TARGETS", "wide");
     core.optional.staticUniforms = EnvEquals("KISAK_VK_UNIFORMS", "static");
     core.optional.fenceFlush = !EnvEquals("KISAK_VK_FENCE_FLUSH", "0");
+    core.optional.passClears = !EnvEquals("KISAK_VK_PASS_CLEARS", "0");
+    core.optional.passTimestamps = !EnvEquals("KISAK_VK_PASS_TIMESTAMPS", "0");
+    core.optional.strictFloats = EnvEquals("KISAK_VK_STRICT_FLOATS", "1");
+    core.optional.fixedAlphaTest = !EnvEquals("KISAK_VK_ALPHA_TEST", "dynamic");
+    core.optional.dynamicLegacyState = EnvEquals("KISAK_VK_LEGACY_STATE", "dynamic");
     // Tile-based GPUs pay for every part with a store and a load of the
     // targets (see OptionalFeatures): Apple, Arm, Qualcomm, Imagination,
     // Broadcom, and MoltenVK on any GPU.
@@ -786,6 +791,14 @@ bool CreateDevice(Core &core)
             return false;
         core.timestampPeriodNs = core.properties.limits.timestampPeriod;
         core.timestampMask = bits >= 64 ? ~0ull : ((1ull << bits) - 1);
+        BufferDesc copies;
+        copies.size = sizeof(uint64_t) * kTimestampsPerSlot * kFramesInFlight;
+        copies.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        copies.memory = MemoryKind::Readback;
+        copies.name = "timestamp copies";
+        core.timestampCopies = CreateBuffer(&core, copies);
+        if (!core.timestampCopies)
+            return false;
     }
     else
     {
@@ -1068,6 +1081,8 @@ void DestroyCore(Core *core, CoreStats *finalStats)
             vk.vkDestroySwapchainKHR(core->dev, core->swapchain, nullptr);
         if (core->timestamps)
             vk.vkDestroyQueryPool(core->dev, core->timestamps, nullptr);
+        if (core->timestampCopies)
+            DestroyBufferNow(*core, core->timestampCopies);
         for (VkQueryPool pool : core->occlusionPools)
             vk.vkDestroyQueryPool(core->dev, pool, nullptr);
         if (core->timeline)

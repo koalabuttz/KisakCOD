@@ -886,15 +886,13 @@ Shader *CreateShader(Device *device_, const void *bytecode, size_t bytes, std::s
     std::vector<uint32_t> spirv;
     if (shader->stage == ls::Stage::Vertex)
     {
-        // Vertex textures are never depth-compared here; where the device
-        // fixes depth compare in the shader, say so (see fixedDepthCompare).
-        // The cache keeps only the module built without it.
-        const bool fixedDepthCompare = Features(device.core).fixedDepthCompare;
+        // Vertex textures are never depth-compared here, whatever the device
+        // does for pixel shaders (see fixedDepthCompare): the module is built
+        // with depth compare fixed off, and the cache keeps it.
         const uint32_t noDepthSamplers = 0;
-        if (hit && !fixedDepthCompare && !cached.spirv.empty())
+        if (hit && !cached.spirv.empty())
             spirv = std::move(cached.spirv);
-        else if (!ls::BuildSpirv(shader->translated, nullptr, spirv, error,
-                                 fixedDepthCompare ? &noDepthSamplers : nullptr))
+        else if (!ls::BuildSpirv(shader->translated, nullptr, spirv, error, &noDepthSamplers))
         {
             Log(device, "vertex shader %08x: %s", shader->translated.bytecodeHash, error.c_str());
             return nullptr;
@@ -909,8 +907,6 @@ Shader *CreateShader(Device *device_, const void *bytecode, size_t bytes, std::s
     }
     if (!hit)
     {
-        if (Features(device.core).fixedDepthCompare)
-            spirv.clear();
         AddCachedShader(bytecode, bytes, CachedShader{shader->translated, std::move(spirv)});
     }
     return shader.release();

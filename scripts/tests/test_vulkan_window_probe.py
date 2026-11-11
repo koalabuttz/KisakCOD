@@ -12,7 +12,8 @@ server or game data is involved. The checks:
                  a driver) or the "core" stage, instead of crashing
   frames         a full run (resize halfway, capture of the last frame) passes,
                  the swapchain followed the resize, the captured frame is the
-                 cleared colour, the clear pass was timed, the core's choice
+                 cleared colour, the clear pass was timed (untimed, and the
+                 frame timed, with KISAK_VK_PASS_TIMESTAMPS=0), the core's choice
                  of present mode was checked against a table of surfaces
                  (IMMEDIATE before MAILBOX before FIFO without vsync), and
                  the validation layer (when loaded) reported no errors
@@ -73,6 +74,8 @@ def main():
     binary = os.path.abspath(args.binary)
     env = dict(os.environ)
     env['SDL_VIDEODRIVER'] = args.video_driver
+    # KISAK_VK_PASS_TIMESTAMPS=0: passes go untimed, the frame does not.
+    passes_timed = env.get('KISAK_VK_PASS_TIMESTAMPS') != '0'
     env.pop('VK_INSTANCE_LAYERS', None)
     checks = Checks()
 
@@ -114,8 +117,15 @@ def main():
     checks.expect('capture is the cleared colour',
                   found.get('vulkan_probe.capture', '').endswith('mismatched_pixels=0'),
                   found.get('vulkan_probe.capture', 'missing'))
-    checks.expect('clear pass timed', found.get('vulkan_probe.clear_pass_gpu_ms', '').startswith('avg '),
-                  found.get('vulkan_probe.clear_pass_gpu_ms', 'missing'))
+    if passes_timed:
+        checks.expect('clear pass timed', found.get('vulkan_probe.clear_pass_gpu_ms', '').startswith('avg '),
+                      found.get('vulkan_probe.clear_pass_gpu_ms', 'missing'))
+    else:
+        checks.expect('KISAK_VK_PASS_TIMESTAMPS=0 leaves the clear pass untimed',
+                      found.get('vulkan_probe.clear_pass_gpu_ms') == 'unsupported',
+                      found.get('vulkan_probe.clear_pass_gpu_ms', 'missing'))
+        checks.expect('the frame is still timed', found.get('vulkan_probe.frame_gpu_ms', '').startswith('avg '),
+                      found.get('vulkan_probe.frame_gpu_ms', 'missing'))
     checks.expect('present mode choice checked', found.get('vulkan_probe.present_mode_choice') == 'checked',
                   found.get('vulkan_probe.present_mode_choice', 'missing'))
     if args.validation == 'require':
@@ -148,8 +158,9 @@ def main():
             checks.expect(f'{name} cache file {"loaded" if run_index == 2 else "not there yet"}',
                           bool(pipelines) and pipelines.group(4) == ('1' if run_index == 2 else '0'),
                           found.get('vulkan_probe.pipelines', 'missing'))
-            checks.expect(f'{name} scene pass timed',
-                          found.get('vulkan_probe.scene_pass_gpu_ms', '').startswith('avg '),
+            checks.expect(f'{name} scene pass {"timed" if passes_timed else "untimed"}',
+                          found.get('vulkan_probe.scene_pass_gpu_ms', '').startswith('avg ') if passes_timed
+                          else found.get('vulkan_probe.scene_pass_gpu_ms') == 'unsupported',
                           found.get('vulkan_probe.scene_pass_gpu_ms', 'missing'))
             uploads = re.match(r'staging_bytes (\d+) transient_bytes (\d+) descriptor_sets (\d+) barriers (\d+) '
                                r'deferred_destroyed (\d+)', found.get('vulkan_probe.uploads', ''))

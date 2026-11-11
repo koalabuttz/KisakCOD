@@ -258,7 +258,23 @@ bool PassMatches(const Device &device)
         && device.passDepth == device.depthStencil;
 }
 
-bool BeginTargetsPass(Device &device)
+// The size a pass of the bound targets has: the smallest of them.
+void TargetsSize(const Device &device, uint32_t &width, uint32_t &height)
+{
+    width = UINT32_MAX;
+    height = UINT32_MAX;
+    const auto fit = [&](const Surface *surface) {
+        width = std::min(width, LevelSize(surface->texture->desc.width, surface->level));
+        height = std::min(height, LevelSize(surface->texture->desc.height, surface->level));
+    };
+    for (uint32_t i = 0; i < ColorCount(device.renderTargets); ++i)
+        fit(device.renderTargets[i]);
+    if (device.depthStencil)
+        fit(device.depthStencil);
+}
+
+// loads: clears the pass begins with (none: every target is loaded).
+bool BeginTargetsPass(Device &device, const Device::PassLoads &loads = {})
 {
     const uint32_t colors = ColorCount(device.renderTargets);
     for (uint32_t i = colors; i < kMaxRenderTargets; ++i)
@@ -287,26 +303,33 @@ bool BeginTargetsPass(Device &device)
     PassDesc pass;
     pass.name = "legacy";
     pass.colorCount = colors;
-    uint32_t width = UINT32_MAX;
-    uint32_t height = UINT32_MAX;
-    auto fit = [&](const Surface *surface) {
-        width = std::min(width, LevelSize(surface->texture->desc.width, surface->level));
-        height = std::min(height, LevelSize(surface->texture->desc.height, surface->level));
-    };
+    uint32_t width = 0, height = 0;
+    TargetsSize(device, width, height);
     for (uint32_t i = 0; i < colors; ++i)
     {
         pass.color[i].image = device.renderTargets[i]->texture->image;
-        fit(device.renderTargets[i]);
+        if (loads.clearColor)
+        {
+            pass.color[i].load = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            std::memcpy(pass.color[i].clear, loads.color, sizeof(loads.color));
+        }
     }
     if (device.depthStencil)
     {
         pass.depth.image = device.depthStencil->texture->image;
-        fit(device.depthStencil);
+        if (loads.clearDepth)
+        {
+            pass.depth.load = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            pass.depth.clearDepth = loads.depth;
+            pass.depth.clearStencil = loads.stencil;
+        }
     }
     pass.area = {{0, 0}, {width, height}};
     if (!BeginPass(device.core, pass))
         return Fail(device, "BeginPass: %s", LastError(device.core));
     device.passOpen = true;
+    device.passEmpty = true;
+    device.passLoads = loads;
     std::memcpy(device.passTargets, device.renderTargets, sizeof(device.passTargets));
     device.passDepth = device.depthStencil;
     device.passWidth = width;
@@ -443,13 +466,13 @@ LayoutKey LayoutFor(const Shader &vs, const Shader &ps)
     return key;
 }
 
-VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t depthSamplers)
+VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t depthSamplers, uint32_t alphaCompare)
 {
     std::vector<uint32_t> spirv;
     std::string error;
     const bool direct = ls::StagesLinkDirectly(vs.translated, ps.translated);
     const bool fixed = Features(device.core).fixedDepthCompare;
-    if (direct && !fixed)
+    if (direct && !fixed && !alphaCompare)
     {
         if (ps.module)
             return ps.module;
@@ -461,15 +484,21 @@ VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t dept
         ps.module = CreateShaderModule(device.core, spirv.data(), spirv.size() * sizeof(uint32_t));
         return ps.module;
     }
-    // The vertex shader's id (none when the stages link as they stand), and
-    // the depth samplers above it where they are fixed.
-    const uint64_t moduleKey =
-        (fixed ? uint64_t(depthSamplers | 0x10000u) << 32 : 0) | (direct ? 0xffffffffu : vs.id);
+    // The vertex shader's id (none when the stages link as they stand), the
+    // depth samplers above it where they are fixed, and the alpha test's
+    // compare plus 1 above those where it is fixed (PipelineKey::alphaCompare).
+    const uint64_t moduleKey = uint64_t(alphaCompare & 0xf) << 52
+        | (fixed ? uint64_t(depthSamplers | 0x10000u) << 32 : 0) | (direct ? 0xffffffffu : vs.id);
     auto found = ps.linked.find(moduleKey);
     if (found != ps.linked.end())
         return found->second;
+    const uint32_t compare = alphaCompare ? alphaCompare - 1 : 0;
+    // Where depth compare is fixed, so is the reference's clamp
+    // (SamplerStateBlock::drefClamp, as FillUniformBlock writes it).
+    const uint32_t depth = depthSamplers
+        | (device.depthFormat != VK_FORMAT_D24_UNORM_S8_UINT ? ls::kFixedDepthClamp : 0u);
     if (!ls::BuildSpirv(ps.translated, direct ? nullptr : &vs.translated, spirv, error,
-                        fixed ? &depthSamplers : nullptr))
+                        fixed ? &depth : nullptr, alphaCompare ? &compare : nullptr))
     {
         Fail(device, "pixel shader %08x with vertex shader %08x: %s", ps.translated.bytecodeHash,
              vs.translated.bytecodeHash, error.c_str());
@@ -536,7 +565,7 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
 {
     const TimeInto timer(device.stats.pipelineMicros);
     Layout *layout = GetLayout(device, LayoutFor(vs, ps));
-    const VkShaderModule fragment = layout ? PixelModule(device, ps, vs, key.depthSamplers) : VK_NULL_HANDLE;
+    const VkShaderModule fragment = layout ? PixelModule(device, ps, vs, key.depthSamplers, key.alphaCompare) : VK_NULL_HANDLE;
     if (!fragment)
     {
         if (device.error.empty())
@@ -701,6 +730,15 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
     return &device.pipelines.emplace(key, pipeline).first->second;
 }
 
+// The alpha test's compare as the render state gives it (ls::AlphaCompare):
+// Always while the test is off.
+uint32_t AlphaCompareNow(const Device &device)
+{
+    return device.renderStates[d3d::RS_ALPHATESTENABLE]
+        ? static_cast<uint32_t>(CompareOp(device.renderStates[d3d::RS_ALPHAFUNC]))
+        : static_cast<uint32_t>(ls::AlphaCompare::Always);
+}
+
 PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, const VertexDecl &decl,
                     d3d::PrimitiveType type, uint32_t depthSamplers)
 {
@@ -721,6 +759,9 @@ PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, co
     key.depthFormat = device.passDepth ? static_cast<uint32_t>(device.depthFormat) : 0;
     key.samples = static_cast<uint8_t>(device.passSamples);
     key.topologyClass = TopologyClass(type);
+    if (Features(device.core).fixedAlphaTest
+        && (ps.translated.reflection.uniforms & (1u << static_cast<uint32_t>(ls::Uniform::AlphaTest))))
+        key.alphaCompare = static_cast<uint8_t>(AlphaCompareNow(device) + 1);
     const bool nonSolid = Features(device.core).fillModeNonSolid;
     key.polygonMode = static_cast<uint8_t>(!nonSolid ? VK_POLYGON_MODE_FILL
                                            : rs[d3d::RS_FILLMODE] == d3d::FILL_POINT     ? VK_POLYGON_MODE_POINT
@@ -862,6 +903,20 @@ struct DrawTextures
     uint32_t vertexSignature = 0;
 };
 
+// The pixel samplers a draw reads that have a depth texture bound, one bit
+// each (PipelineKey::depthSamplers).
+uint32_t DepthSamplers(const DrawTextures &textures)
+{
+    uint32_t depth = 0;
+    for (uint32_t left = textures.mask & 0xffffu; left; left &= left - 1)
+    {
+        const uint32_t sampler = static_cast<uint32_t>(std::countr_zero(left));
+        if ((textures.pixelSignature >> (4 * sampler)) & 4u)
+            depth |= 1u << sampler;
+    }
+    return depth;
+}
+
 // Slot for a LayoutKey::samplers bit: pixel samplers 0-15, vertex 16-19.
 uint32_t SlotForBit(uint32_t bit) { return bit; }
 
@@ -950,9 +1005,7 @@ UniformKey KeyForBlock(const Device &device, uint32_t binding, const Shader &vs,
     {
     case ls::Uniform::AlphaTest:
     {
-        const uint32_t compare = device.renderStates[d3d::RS_ALPHATESTENABLE]
-            ? static_cast<uint32_t>(CompareOp(device.renderStates[d3d::RS_ALPHAFUNC]))
-            : static_cast<uint32_t>(ls::AlphaCompare::Always);
+        const uint32_t compare = AlphaCompareNow(device);
         key.key = uint64_t(1) << 63 | uint64_t(compare) << 8 | (device.renderStates[d3d::RS_ALPHAREF] & 0xff);
         break;
     }
@@ -967,7 +1020,11 @@ UniformKey KeyForBlock(const Device &device, uint32_t binding, const Shader &vs,
     return key;
 }
 
-// Writes one block: every byte of it.
+// Writes one block: every byte of it. The fog, clip plane and point blocks
+// and the sampler state's projection, gather, unbound and depth scale members
+// are constants in shaders translated with the legacy state fixed
+// (legacy_shader::SetDynamicLegacyState, FixLegacyState in
+// vk_legacy_shader.cpp): change them there too.
 void FillUniformBlock(const Device &device, const UniformBlock &block, const UniformKey &key, const Shader &vs,
                       const Shader &ps, const DrawTextures &textures, uint8_t *data)
 {
@@ -1366,7 +1423,7 @@ VkRect2D ClampRect(int32_t left, int32_t top, int32_t right, int32_t bottom, uin
 
 // The viewport, limited by the scissor rect when the scissor test is on, and
 // by the pass's targets.
-VkRect2D DrawArea(const Device &device)
+VkRect2D DrawArea(const Device &device, uint32_t width, uint32_t height)
 {
     const Viewport &vp = device.viewport;
     int32_t left = int32_t(vp.x), top = int32_t(vp.y);
@@ -1378,8 +1435,10 @@ VkRect2D DrawArea(const Device &device)
         right = std::min(right, device.scissor.right);
         bottom = std::min(bottom, device.scissor.bottom);
     }
-    return ClampRect(left, top, right, bottom, device.passWidth, device.passHeight);
+    return ClampRect(left, top, right, bottom, width, height);
 }
+
+VkRect2D DrawArea(const Device &device) { return DrawArea(device, device.passWidth, device.passHeight); }
 
 DynamicState MakeDynamicState(const Device &device, d3d::PrimitiveType type)
 {
@@ -1517,35 +1576,29 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
         if (!BeginTargetsPass(device))
             return false;
     }
+    // A clear after this draw is no longer one at the pass's start.
+    device.passEmpty = false;
     // The last draw's pipeline, when nothing its key is made of has changed.
-    // Where the device fixes vertex strides or depth compare in the pipeline
-    // the key also holds stream strides and bound textures, so it is made
-    // for every draw there.
+    // Where the device fixes vertex strides in the pipeline the key also holds
+    // stream strides, so it is made for every draw there. Where it fixes depth
+    // compare in the pixel shader the key holds the samplers it reads that
+    // have a depth texture bound (the rule SamplerStateBlock follows), which
+    // the textures bound for this draw say.
     const OptionalFeatures &features = Features(device.core);
     const bool dynamicStride = features.dynamicVertexStride;
+    const uint32_t depthSamplers = features.fixedDepthCompare ? DepthSamplers(textures) : 0;
     Pipeline *pipeline = nullptr;
-    if (!device.keyStale && device.lastPipeline && dynamicStride && !features.fixedDepthCompare
+    if (!device.keyStale && device.lastPipeline && dynamicStride
+        && device.lastPipelineKey.depthSamplers == depthSamplers
         && device.lastPipelineKey.topologyClass == TopologyClass(type))
     {
         pipeline = device.lastPipeline;
-        if (device.verifyShortcuts && !(MakeKey(device, *vs, *ps, *decl, type, 0) == device.lastPipelineKey))
+        if (device.verifyShortcuts
+            && !(MakeKey(device, *vs, *ps, *decl, type, depthSamplers) == device.lastPipelineKey))
             return Fail(device, "the pipeline kept from an earlier draw is not the one the D3D9 state gives");
     }
     else
     {
-        // Where depth compare is fixed in the pixel shader, the samplers it
-        // reads that have a depth texture bound (the rule SamplerStateBlock
-        // follows).
-        uint32_t depthSamplers = 0;
-        if (features.fixedDepthCompare)
-        {
-            for (uint32_t sampler = 0; sampler < ls::kSamplerCount; ++sampler)
-            {
-                const Texture *texture = textures.bound[SlotForBit(sampler)];
-                if ((ps->translated.reflection.samplers & (1u << sampler)) && texture && texture->format->depth)
-                    depthSamplers |= 1u << sampler;
-            }
-        }
         const PipelineKey key = MakeKey(device, *vs, *ps, *decl, type, depthSamplers);
         // Consecutive draws often keep their pipeline: compare before hashing.
         pipeline = device.lastPipeline;
@@ -1955,10 +2008,18 @@ void SetRenderState(Device *device, d3d::RenderState state, uint32_t value)
     if (state >= d3d::RS_COUNT || device->renderStates[state] == value)
         return;
     device->renderStates[state] = value;
-    // The alpha test is a uniform block's (KeyForBlock): it is in no pipeline
-    // key and no dynamic state. Every other state may be in either.
-    if (state == d3d::RS_ALPHATESTENABLE || state == d3d::RS_ALPHAFUNC || state == d3d::RS_ALPHAREF)
+    // The alpha test is a uniform block's (KeyForBlock), and in no dynamic
+    // state; its compare is in the pipeline key too where the pixel shader
+    // has it fixed (PipelineKey::alphaCompare). Every other state may be in
+    // either.
+    if (state == d3d::RS_ALPHAREF)
         return;
+    if (state == d3d::RS_ALPHATESTENABLE || state == d3d::RS_ALPHAFUNC)
+    {
+        if (Features(device->core).fixedAlphaTest)
+            device->keyStale = true;
+        return;
+    }
     device->keyStale = true;
     device->dynamicStale = true;
 }
@@ -2106,11 +2167,83 @@ void SetDepthStencilSurface(Device *device, Surface *surface)
 
 // ---- Drawing ----------------------------------------------------------------------------------
 
+// A clear of the whole of the bound targets becomes the load operation of a
+// pass that draws to them: a new pass is begun with it, or the open pass,
+// still empty, is begun again with it and any clear it began with. After a
+// draw, the open pass ends and the next one begins with the clear, rather
+// than clearing inside the pass: MoltenVK drew nothing for a depth clear
+// there (the pass_clear check on CI's Apple GPU). False when the clear is not
+// such a one.
+bool ClearAtPassStart(Device &device, uint32_t rectCount, const Rect *rects, uint32_t flags, uint32_t color,
+                      float z, uint32_t stencil)
+{
+    if (!Features(device.core).passClears || (rectCount && rects))
+        return false;
+    const bool reopen = PassMatches(device) && device.passEmpty;
+    const uint32_t colors = ColorCount(device.renderTargets);
+    const bool clearColor = (flags & d3d::CLEAR_TARGET) && colors;
+    bool clearDepth = false;
+    if (device.depthStencil && (flags & (d3d::CLEAR_ZBUFFER | d3d::CLEAR_STENCIL)))
+    {
+        // The depth image always has stencil, so a load operation clears
+        // both: only when both are cleared, or the D3D9 format has none.
+        const bool stencilFormat = device.depthStencil->texture->format->d3d == d3d::FMT_D24S8;
+        if (!(flags & d3d::CLEAR_ZBUFFER) || (stencilFormat && !(flags & d3d::CLEAR_STENCIL)))
+            return false;
+        clearDepth = true;
+    }
+    if (!clearColor && !clearDepth)
+        return false;
+    uint32_t width = 0, height = 0;
+    TargetsSize(device, width, height);
+    if (width == UINT32_MAX || height == UINT32_MAX)
+        return false;
+    const VkRect2D area = DrawArea(device, width, height);
+    if (area.offset.x || area.offset.y || area.extent.width != width || area.extent.height != height)
+        return false;
+    // A load operation clears the whole image, and the core lets go of its
+    // old contents: every cleared target must be one level and one face of
+    // exactly the pass's size.
+    const auto whole = [&](const Surface *surface) {
+        const Texture &texture = *surface->texture;
+        return texture.faces == 1 && texture.desc.levels == 1 && texture.desc.width == width
+            && texture.desc.height == height;
+    };
+    for (uint32_t i = 0; clearColor && i < colors; ++i)
+    {
+        if (!whole(device.renderTargets[i]))
+            return false;
+    }
+    if (clearDepth && !whole(device.depthStencil))
+        return false;
+
+    Device::PassLoads loads = reopen ? device.passLoads : Device::PassLoads{};
+    if (clearColor)
+    {
+        loads.clearColor = true;
+        UnpackColor(color, loads.color);
+    }
+    if (clearDepth)
+    {
+        loads.clearDepth = true;
+        loads.depth = std::clamp(z, 0.0f, 1.0f);
+        loads.stencil = stencil & 0xff;
+    }
+    EndPassIfOpen(device);
+    if (!BeginTargetsPass(device, loads))
+        return true; // skipped with a warning, as the clear would have been
+    ++device.stats.clears;
+    ++device.stats.passClears;
+    return true;
+}
+
 void Clear(Device *device_, uint32_t rectCount, const Rect *rects, uint32_t flags, uint32_t color, float z,
            uint32_t stencil)
 {
     Device &device = *device_;
     if (!EnsureFrame(device))
+        return;
+    if (ClearAtPassStart(device, rectCount, rects, flags, color, z, stencil))
         return;
     if (!PassMatches(device))
     {
@@ -2191,6 +2324,7 @@ void Clear(Device *device_, uint32_t rectCount, const Rect *rects, uint32_t flag
             vk.vkCmdClearAttachments(cmd, packet.attachmentCount, packet.attachments, packet.rectCount, packet.rects);
         });
     }
+    device.passEmpty = false;
     ++device.stats.clears;
 }
 

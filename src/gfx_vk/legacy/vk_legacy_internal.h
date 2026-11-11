@@ -146,8 +146,9 @@ struct Shader
     // Vertex shaders: their module. Pixel shaders: the module for vertex
     // shaders whose outputs it reads as they stand (built on first use).
     VkShaderModule module = VK_NULL_HANDLE;
-    // Pixel shaders: the other modules, by PixelModuleKey (the vertex shader
-    // they are linked to, and the depth samplers where those are fixed).
+    // Pixel shaders: the other modules, by the key PixelModule makes (the
+    // vertex shader they are linked to, the depth samplers where those are
+    // fixed, and the alpha test's compare where that is).
     std::unordered_map<uint64_t, VkShaderModule> linked;
 };
 
@@ -199,7 +200,11 @@ struct PipelineKey
     // The samples of the pass's targets. The key is compared and hashed as
     // bytes, in 8-byte words: the rest of this word stays zero.
     uint8_t samples = 1;
-    uint8_t unused[7] = {};
+    // The alpha test's compare (ls::AlphaCompare) plus 1 where the pixel
+    // shader has it fixed (OptionalFeatures::fixedAlphaTest) and reads the
+    // alpha test block; else 0.
+    uint8_t alphaCompare = 0;
+    uint8_t unused[6] = {};
     bool operator==(const PipelineKey &other) const { return std::memcmp(this, &other, sizeof(*this)) == 0; }
 };
 struct PipelineKeyHash
@@ -409,6 +414,18 @@ struct Device
     uint64_t frameSerial = 0;  // counts opened frames; tells cached descriptor sets apart
     bool frameSkipped = false; // BeginFrame skipped: drop drawing until Present
     bool passOpen = false;
+    // Nothing recorded in the open pass yet, and the clears its begin does: a
+    // clear of the whole target before any draw begins the pass again with
+    // it (see Clear).
+    bool passEmpty = false;
+    struct PassLoads
+    {
+        bool clearColor = false;
+        float color[4] = {};
+        bool clearDepth = false; // depth and stencil
+        float depth = 1.0f;
+        uint32_t stencil = 0;
+    } passLoads;
     Surface *passTargets[kMaxRenderTargets] = {};
     Surface *passDepth = nullptr;
     uint32_t passWidth = 0, passHeight = 0;
@@ -560,7 +577,7 @@ void ResetState(Device &device);
 struct CachedShader
 {
     ls::Shader translated;
-    std::vector<uint32_t> spirv; // a vertex shader's module; empty for pixel shaders (and with fixedDepthCompare)
+    std::vector<uint32_t> spirv; // a vertex shader's module (depth compare fixed off); empty for pixel shaders
 };
 bool FindCachedShader(const void *bytecode, size_t bytes, CachedShader &out);
 void AddCachedShader(const void *bytecode, size_t bytes, CachedShader shader);
