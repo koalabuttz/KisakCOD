@@ -476,6 +476,8 @@ VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t dept
     {
         if (ps.module)
             return ps.module;
+        const TimeInto timer(device.stats.pixelModuleMicros);
+        ++device.stats.pixelModules;
         if (!ls::BuildSpirv(ps.translated, nullptr, spirv, error))
         {
             Fail(device, "pixel shader %08x: %s", ps.translated.bytecodeHash, error.c_str());
@@ -492,6 +494,8 @@ VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t dept
     auto found = ps.linked.find(moduleKey);
     if (found != ps.linked.end())
         return found->second;
+    const TimeInto timer(device.stats.pixelModuleMicros);
+    ++device.stats.pixelModules;
     const uint32_t compare = alphaCompare ? alphaCompare - 1 : 0;
     // Where depth compare is fixed, so is the reference's clamp
     // (SamplerStateBlock::drefClamp, as FillUniformBlock writes it).

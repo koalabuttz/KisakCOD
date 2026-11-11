@@ -290,6 +290,11 @@ struct DeviceStats
     uint32_t shadersCached;    // of those, served by the shader cache (not translated)
     uint64_t shaderMicros;     // translating them (vertex modules included)
     uint64_t pipelineMicros;   // building pipelines (pixel modules included)
+    // Of those pipelines, the pixel shader modules built for them (a shader's
+    // SPIR-V with the pipeline's fixed state folded in, see PixelModule) and
+    // the time that took, the rest of pipelineMicros being the driver's.
+    uint32_t pixelModules;
+    uint64_t pixelModuleMicros;
     uint64_t textureUploads;   // copy commands of UnlockRect and UpdateTexture, of one or more regions of a level
     uint64_t textureReadbacks; // levels read back to lock a texture again (once each)
     uint64_t uploadBytes;
