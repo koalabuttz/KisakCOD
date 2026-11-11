@@ -360,6 +360,14 @@ void BackendLogStats(Backend *backend, bool reset)
     }
     else
         HostLog(h, "vulkan d3d9: occlusion queries: not counted, every finished query reports all samples passed");
+    // The fullscreen gamma ramp (r_gamma in fullscreen), when it was applied:
+    // the frames shown through it and the GPU time of its pass.
+    if (const uint64_t gammaFrames = stats.gammaPresents - was.gammaPresents)
+    {
+        const PassTimings pass = PassTimingsFor(backend->core, "gamma");
+        HostLog(h, "vulkan d3d9: gamma: %llu frames shown through the gamma ramp, %.3f ms GPU each",
+                static_cast<unsigned long long>(gammaFrames), pass.supported ? average(pass) : 0.0);
+    }
     // The Modern path, when r_visuals modern has run it: the scenes it
     // anti-aliased, the ones of them that started the history again, and
     // the GPU time of its pass.
