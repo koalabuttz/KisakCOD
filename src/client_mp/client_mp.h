@@ -972,6 +972,14 @@ void CL_DeltaClient(
     uint32_t newnum,
     const clientState_s *old,
     int32_t unchanged);
+// How a dvar name chosen by a game server reached this client.
+enum ServerDvarRoute : int32_t
+{
+    SERVER_DVAR_ROUTE_SYSTEMINFO,
+    SERVER_DVAR_ROUTE_CODINFO,
+    SERVER_DVAR_ROUTE_CLIENT_DVAR,
+};
+void CL_SetDvarFromServer(int32_t localClientNum, const char *name, const char *value, ServerDvarRoute route);
 void CL_SystemInfoChanged(int32_t localClientNum);
 void CL_ParseMapCenter(int32_t localClientNum);
 void CL_ParseServerMessage(int localClientNum, msg_t *msg);

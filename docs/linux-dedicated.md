@@ -569,6 +569,12 @@ practical consequences:
   verifies Steam tickets ([guide](linux-steam.md)).
 - **KisakCOD clients without Steam** send the same two-field request, with a
   GUID derived from the player's key code ([key codes](key-codes.md)).
+- **Refusals are logged.** Every `getchallenge` the server turns away before
+  issuing a challenge prints `rejected connection from <address>: <reason>`, the
+  reason being the text the client got (for example "This server requires Steam
+  authentication; unverified retail GUIDs are not accepted."). Nothing the client
+  sent is printed, and the per-address `getchallenge` rate limit bounds how
+  often one address can add a line.
 - **Independent of `sv_allowProtocol6`.** One controls authentication, the other
   the version number a client may advertise. Retail 1.7 hosting needs both;
   either can be set on its own.

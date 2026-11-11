@@ -11,7 +11,8 @@ default build does not change.
 
 The renderer plan puts one engine-independent Vulkan core under two users: the
 Legacy adapter, which will sit behind the D3D9-shaped seam in
-`src/gfx_d3d/rhi/r_rhi.h`, and the Modern path. The core never sees materials,
+`src/gfx_d3d/rhi/r_rhi.h`, and the Modern path (`src/gfx_vk/modern`,
+[vulkan-modern.md](vulkan-modern.md)). The core never sees materials,
 techniques, D3D9 types or shader bytecode, so it does not depend on which shader
 translator is chosen; that choice only affects the Legacy adapter. The seam's
 signatures still use D3D9 types until its interface freeze (plan step M1b), so

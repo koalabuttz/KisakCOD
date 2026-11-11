@@ -26,6 +26,9 @@ what is still missing. Build steps are in the
   a CoD4 key code and no Steam (all platforms)
 - [Finding servers](server-browser.md): local list, favourites, `connect`, and
   the opt-in internet list (`masterServerName`, empty by default)
+- [Settings a game server may not set](server-set-dvars.md): a server sets
+  client dvars by name, as in retail, except the settings this port added
+  (all platforms)
 
 ## Linux dedicated server
 

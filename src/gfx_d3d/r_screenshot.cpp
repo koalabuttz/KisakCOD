@@ -12,6 +12,57 @@
 #include <qcommon/cmd.h>
 #include "r_reflection_probe.h"
 
+#ifndef _WIN32
+#include <stdlib.h>
+#include <string.h>
+#define STB_IMAGE_WRITE_STATIC
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#define STBI_WRITE_NO_STDIO
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#endif
+#include <stb/stb_image_write.h>
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+namespace
+{
+    // Collects stb_image_write's JPEG output in memory.
+    struct R_JpegOutput
+    {
+        uint8_t *data = nullptr;
+        size_t size = 0;
+        size_t capacity = 0;
+        bool failed = false;
+    };
+
+    void R_JpegOutputWrite(void *context, void *bytes, int count)
+    {
+        R_JpegOutput *output = (R_JpegOutput *)context;
+        if (output->failed || count <= 0)
+            return;
+        if (output->size + (size_t)count > output->capacity)
+        {
+            size_t capacity = output->capacity ? output->capacity * 2 : 0x10000;
+            while (capacity < output->size + (size_t)count)
+                capacity *= 2;
+            uint8_t *grown = (uint8_t *)realloc(output->data, capacity);
+            if (!grown)
+            {
+                output->failed = true;
+                return;
+            }
+            output->data = grown;
+            output->capacity = capacity;
+        }
+        memcpy(output->data + output->size, bytes, (size_t)count);
+        output->size += (size_t)count;
+    }
+}
+#endif
+
 #ifdef _WIN32
 #include <objidl.h>
 #include <gdiplus.h>
@@ -1239,12 +1290,35 @@ int R_SaveJpg(
     uint8_t *image_buffer)
 {
 #ifndef _WIN32
-    (void)filename;
-    (void)quality;
-    (void)image_width;
-    (void)image_height;
-    (void)image_buffer;
-    return 0;
+    // Windows encodes with GDI+. Other ports use stb_image_write (deps/stb),
+    // which writes into memory here so the file still goes through
+    // FS_WriteFile like the Windows path. The buffer is 24-bit BGR, top row
+    // first; stb wants RGB.
+    if (!filename || !image_buffer || !image_width || !image_height)
+        return 0;
+    if (quality < 1)
+        quality = 1;
+    if (quality > 100)
+        quality = 100;
+    const size_t pixelCount = (size_t)image_width * image_height;
+    uint8_t *rgb = (uint8_t *)malloc(pixelCount * 3);
+    if (!rgb)
+        return 0;
+    for (size_t i = 0; i < pixelCount; ++i)
+    {
+        rgb[3 * i + 0] = image_buffer[3 * i + 2];
+        rgb[3 * i + 1] = image_buffer[3 * i + 1];
+        rgb[3 * i + 2] = image_buffer[3 * i + 0];
+    }
+    R_JpegOutput output;
+    const int encoded = stbi_write_jpg_to_func(
+        R_JpegOutputWrite, &output, (int)image_width, (int)image_height, 3, rgb, quality);
+    free(rgb);
+    int ok = 0;
+    if (encoded && !output.failed && output.size > 0)
+        ok = FS_WriteFile(filename, (char *)output.data, (uint32_t)output.size);
+    free(output.data);
+    return ok;
 #else
     CLSID jpegClsid;
     Gdiplus::Bitmap *bitmap;

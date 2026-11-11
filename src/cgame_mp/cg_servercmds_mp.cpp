@@ -67,7 +67,7 @@ void CG_ParseCodInfo(int32_t localClientNum)
             if (!*key)
                 break;
             value = CL_GetConfigString(localClientNum, i + CS_CODINFO_VALUE);
-            Dvar_SetFromStringByName(key, value);
+            CL_SetDvarFromServer(localClientNum, key, value, SERVER_DVAR_ROUTE_CODINFO);
         }
     }
 }
@@ -1366,7 +1366,7 @@ void CG_SetClientDvarFromServer(cg_s *cgameGlob, const char *dvarname, char *val
         if (I_stricmp(dvarname, "hud_drawHud"))
         {
             if (I_stricmp(dvarname, "g_scriptMainMenu"))
-                Dvar_SetFromStringByName(dvarname, value);
+                CL_SetDvarFromServer(cgameGlob->localClientNum, dvarname, value, SERVER_DVAR_ROUTE_CLIENT_DVAR);
             else
                 CG_SetScriptMainMenu(cgameGlob, value);
         }

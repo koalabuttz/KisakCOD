@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "rb_draw3d.h"
+#include "r_scene.h"
 #include "rhi/r_rhi.h"
 #include "rb_logfile.h"
 #include "r_dvars.h"
@@ -129,6 +130,8 @@ void RB_FullbrightDrawCommands(const GfxViewInfo *viewInfo)
 
 void RB_EndSceneRendering(GfxCmdBufContext context, const GfxCmdBufInput *input, const GfxViewInfo *viewInfo)
 {
+    // The Modern path's passes over the scene (r_visuals modern, Vulkan only).
+    R_ModernSceneDone(viewInfo);
     R_HW_InsertFence((IDirect3DQuery9 **)&backEndData->endFence);
     R_InitCmdBufSourceState(context.source, input, 0);
     memcpy(context.state, &gfxCmdBufState, sizeof(GfxCmdBufState));

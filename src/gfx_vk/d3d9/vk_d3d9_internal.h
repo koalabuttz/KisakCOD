@@ -539,6 +539,13 @@ public:
     void DetachWindow();
     // Under FrontLock (LogDeviceStats).
     void LogStats(bool reset);
+    // Under FrontLock (vk_d3d9.h ModernSceneDone): the scene is render
+    // target 0 and the depth surface as they are set now.
+    ModernResult ModernSceneDone(const ModernSceneView &view)
+    {
+        return BackendModernScene(backend_, renderTargets_[0] ? renderTargets_[0]->handle() : nullptr,
+                                  depthStencil_ ? depthStencil_->handle() : nullptr, view);
+    }
     const Host &host() const { return parent_->host(); }
     HRESULT Unsupported(const char *method);
     DeviceCounters counters() const;
