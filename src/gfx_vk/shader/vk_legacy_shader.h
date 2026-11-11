@@ -230,8 +230,15 @@ bool Translate(const void *bytecode, size_t bytes, Shader &shader, std::string &
 // branch not taken is removed. MoltenVK needs this: its shader converter
 // (SPIRV-Cross) declares an image sampled both with and without a depth
 // reference as a Metal depth texture, which cannot sample colour.
+//
+// fixedAlphaCompare, when given, decides the alpha test at build time instead
+// of by AlphaTestBlock::compareOp (an AlphaCompare value; alphaRef stays in
+// the block). With Always the test goes, and the shader cannot discard: a GPU
+// tests depth before a shader that cannot, and after one that may. DXVK fixes
+// the test per pipeline the same way.
 bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<uint32_t> &spirv,
-                std::string &error, const uint32_t *fixedDepthCompare = nullptr);
+                std::string &error, const uint32_t *fixedDepthCompare = nullptr,
+                const uint32_t *fixedAlphaCompare = nullptr);
 
 // True when the pixel shader's inputs read the vertex shader's outputs as they
 // stand (BuildSpirv then needs no linking).

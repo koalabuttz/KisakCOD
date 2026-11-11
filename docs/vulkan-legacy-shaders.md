@@ -90,7 +90,10 @@ same variable and prints `legacy_shader.floats=`.
   scan).
 - **Binding model.** It is simple on purpose. DXVK puts render state into push
   data and specialisation constants and packs constants. Here each block is a
-  plain uniform buffer. Most pixel shaders read three to four blocks per draw
+  plain uniform buffer, and `BuildSpirv` fixes two states per pipeline by
+  replacing their loads with constants and folding what they decide: depth
+  compare (on MoltenVK) and the alpha test's compare. Clip planes, fog and
+  point size are still read at run time, though the game sets none of them. Most pixel shaders read three to four blocks per draw
   (constants, alpha test, point sprites, plus sampler state when they sample).
   If draw-call cost on the laptop asks for it, that is the place to tighten.
 - **Point sprites in pixel shaders.** Pixel shaders read the point-sprite block
@@ -147,6 +150,10 @@ needs no GPU, game data or network. It covers:
   ([vulkan-legacy-adapter.md](vulkan-legacy-adapter.md#moltenvk-macos)). Both
   pass `spirv-val`. With `0` no depth-reference sample is left. With `0xffff`,
   2D and cube images are sampled only with a depth reference.
+- **Fixed alpha test:** every pixel shader case that reads the alpha test
+  block is built again with `--alpha-compare 7` (ALWAYS) and `4` (GREATER).
+  Both pass `spirv-val`. With ALWAYS the test's discard is gone (a `texkill`
+  keeps its own) and the block is not read; with GREATER the test stays.
 - **Float rules:** a case with matrix multiplies uses dxbc-spirv's `*_legacy`
   functions with `KISAK_VK_STRICT_FLOATS=1` and none without, and the tool says
   which rule it used.

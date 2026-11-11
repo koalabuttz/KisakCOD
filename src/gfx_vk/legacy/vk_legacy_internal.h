@@ -146,8 +146,9 @@ struct Shader
     // Vertex shaders: their module. Pixel shaders: the module for vertex
     // shaders whose outputs it reads as they stand (built on first use).
     VkShaderModule module = VK_NULL_HANDLE;
-    // Pixel shaders: the other modules, by PixelModuleKey (the vertex shader
-    // they are linked to, and the depth samplers where those are fixed).
+    // Pixel shaders: the other modules, by the key PixelModule makes (the
+    // vertex shader they are linked to, the depth samplers where those are
+    // fixed, and the alpha test's compare where that is).
     std::unordered_map<uint64_t, VkShaderModule> linked;
 };
 
@@ -199,7 +200,11 @@ struct PipelineKey
     // The samples of the pass's targets. The key is compared and hashed as
     // bytes, in 8-byte words: the rest of this word stays zero.
     uint8_t samples = 1;
-    uint8_t unused[7] = {};
+    // The alpha test's compare (ls::AlphaCompare) plus 1 where the pixel
+    // shader has it fixed (OptionalFeatures::fixedAlphaTest) and reads the
+    // alpha test block; else 0.
+    uint8_t alphaCompare = 0;
+    uint8_t unused[6] = {};
     bool operator==(const PipelineKey &other) const { return std::memcmp(this, &other, sizeof(*this)) == 0; }
 };
 struct PipelineKeyHash

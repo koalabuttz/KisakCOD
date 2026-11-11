@@ -52,7 +52,15 @@ buffer by the core's `Recording()` number.
   blocks than the device's `maxDescriptorSetUniformBuffersDynamic` (8 on some
   drivers), or every layout with `KISAK_VK_UNIFORMS=static`, gets plain
   uniform buffers and a new set for each draw instead. Alpha test is D3D9
-  state, compared in the pixel shader.
+  state, compared in the pixel shader. Its compare is fixed in each
+  pipeline's pixel shader when the shader is built (`PipelineKey::alphaCompare`,
+  `legacy_shader::BuildSpirv`'s `fixedAlphaCompare`), as DXVK does, and only
+  the reference is read from the block. A draw without the test then runs a
+  shader that cannot discard, which a GPU can test depth before; with the
+  compare read at run time every pixel shader may discard. Laptop run 17 had
+  Mesa's Intel compiler make our pixel shaders about twice DXVK's length.
+  `KISAK_VK_ALPHA_TEST=dynamic` reads the compare at run time again, and the
+  `device ready:` line says `alpha test fixed` or `dynamic`.
 * **Less work for a draw like the one before.** The engine draws sorted by
   material, so most draws differ from the one before in a few vertex shader
   constants and nothing else. The adapter does and records only what changed:
@@ -72,7 +80,8 @@ buffer by the core's `Recording()` number.
     `DeviceStats::bindsSkipped` counts them.
   * *Pipeline and dynamic state.* The pipeline key and the dynamic state are
     made again only after something they are made of was set: a render state
-    (except the three of the alpha test, which are in a uniform block), a
+    (except the alpha test's reference, which is in a uniform block, and its
+    switch and compare too with `KISAK_VK_ALPHA_TEST=dynamic`), a
     shader, the vertex declaration, the viewport, the scissor rectangle, or
     the targets of the pass. Where the device fixes vertex strides or depth
     compare in the pipeline, the key also holds stream strides and bound
@@ -336,7 +345,7 @@ statistics, the validation counts, and `legacy_check=passed` or
 | `half_pixel` | Every one of the 16384 pixels of a full-target quad showing its own texel, so texel centres land on pixel centres. |
 | `texture_levels` | Mip levels uploaded one by one, sampled one by one. |
 | `formats` | L8, A8, A8L8, X8R8G8B8, A8B8G8R8, R5G6B5, A1R5G5B5, DXT1 and DXT5 read as D3D9 reads them (formats the device lacks are skipped). |
-| `alpha_test` | Alpha test with GREATER and LESS against a reference. |
+| `alpha_test` | Alpha test with GREATER and LESS against a reference, then turned off (every texel passes), then on again. With the compare fixed in the pipeline, the three draws build two or three pipelines (earlier scenes may have built one) and turning the test back on builds none; read at run time, one pipeline serves them all. |
 | `blend` | Source-alpha blending, separate alpha blend, additive blending with a colour write mask. |
 | `depth` | Depth test, write and compare functions, depth bias. |
 | `stencil` | Stencil REPLACE with colour writes off, then an EQUAL test. |

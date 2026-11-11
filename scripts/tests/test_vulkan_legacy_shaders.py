@@ -90,6 +90,8 @@ OP_TYPE_ARRAY, OP_TYPE_STRUCT, OP_TYPE_POINTER, OP_CONSTANT = 28, 30, 32, 43
 OP_VARIABLE, OP_DECORATE, OP_MEMBER_DECORATE = 59, 71, 72
 DEC_ARRAY_STRIDE, DEC_LOCATION, DEC_BINDING, DEC_SET, DEC_OFFSET = 6, 30, 33, 34, 35
 SC_INPUT, SC_UNIFORM_CONSTANT, SC_UNIFORM, SC_OUTPUT = 1, 0, 2, 3
+# OpKill, OpTerminateInvocation, OpDemoteToHelperInvocation
+OPS_DISCARD = (252, 4416, 5380)
 # OpImageSample{Implicit,Explicit}Lod, OpImageSampleProj{Implicit,Explicit}Lod, OpImageGather
 OPS_SAMPLE_PLAIN = (87, 88, 91, 92, 96)
 # OpImageSampleDref{Implicit,Explicit}Lod, OpImageSampleProjDref{Implicit,Explicit}Lod, OpImageDrefGather
@@ -371,6 +373,39 @@ def main():
                     depth_problems.append(f'{name} {mask}: {plain} plain and {dref} depth-reference samples')
         checks.expect(f'depth compare fixed at build time ({depth_cases} cases with samplers)',
                       depth_cases > 0 and not depth_problems, '\n  '.join(depth_problems[:20]))
+
+        # alpha test fixed at build time (--alpha-compare, as the adapter builds
+        # a pixel shader for one pipeline): with ALWAYS (7) the test's discard
+        # goes (a texkill's stays) and the alpha test block is not read; with
+        # GREATER (4) the test stays
+        alpha_problems = []
+        alpha_cases = 0
+        for name, (found, base) in sorted(results.items()):
+            if not found['stage'].startswith('ps') or 'alpha_test' not in found['uniforms'].split(','):
+                continue
+            alpha_cases += 1
+            base_discards = sum(base.opcodes.get(op, 0) for op in OPS_DISCARD)
+            for compare in ('7', '4'):
+                spv = os.path.join(work, f'{name}-alpha-{compare}.spv')
+                code, stdout, _ = run(binary, ['translate', os.path.join(case_dir, name + '.bin'),
+                                               '--alpha-compare', compare, '--out', spv])
+                if code != 0 or parse(stdout).get('result') != 'passed':
+                    alpha_problems.append(f'{name} {compare}: {stdout.strip()[:200]}')
+                    continue
+                problem = validate(spv)
+                if problem:
+                    alpha_problems.append(f'{name} {compare}: spirv-val: {problem}')
+                    continue
+                with open(spv, 'rb') as f:
+                    spirv = Spirv(f.read())
+                discards = sum(spirv.opcodes.get(op, 0) for op in OPS_DISCARD)
+                block = (0, uniform_binding('ps', UNIFORMS.index('alpha_test'))) in spirv.bindings()
+                if compare == '7' and (discards != base_discards - 1 or block):
+                    alpha_problems.append(f'{name} always: {discards} of {base_discards} discards, block read {block}')
+                if compare == '4' and discards != base_discards:
+                    alpha_problems.append(f'{name} greater: {discards} of {base_discards} discards')
+        checks.expect(f'alpha test fixed at build time ({alpha_cases} pixel shader cases)',
+                      alpha_cases > 0 and not alpha_problems, '\n  '.join(alpha_problems[:20]))
 
         # reflection of chosen cases
         def reflected(name, key):

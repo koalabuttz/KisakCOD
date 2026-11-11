@@ -138,18 +138,58 @@ ir::CompileOptions CompileOptions()
     return options;
 }
 
-// Replaces every load of SamplerStateBlock::useDepthCompare with a constant
-// from depthSamplers (bit per sampler), then folds the branches it decides
-// and drops the dead code, so each image is sampled one way only. Returns the
-// number of loads replaced.
-uint32_t FixDepthCompare(ir::Builder &builder, uint32_t depthSamplers)
+// A call of a function that does nothing but return a constant becomes the
+// constant (an alpha test fixed to Always is such a function), so the
+// branches on its result fold too. Returns whether any call was replaced.
+bool FoldConstantCalls(ir::Builder &builder)
+{
+    std::vector<std::pair<ir::SsaDef, ir::SsaDef>> rewrites; // call, constant
+    auto [begin, end] = builder.getCode();
+    for (auto it = begin; it != end; ++it)
+    {
+        if (it->getOpCode() != ir::OpCode::eFunction)
+            continue;
+        auto op = std::next(it);
+        if (op == end || op->getOpCode() != ir::OpCode::eLabel)
+            continue;
+        // Loads of its parameters may be left over; they do nothing.
+        for (++op; op != end && op->getOpCode() == ir::OpCode::eParamLoad; ++op)
+        {
+        }
+        if (op == end || op->getOpCode() != ir::OpCode::eReturn || op->getOperandCount() != 1u)
+            continue;
+        const ir::SsaDef value = ir::SsaDef(op->getOperand(0u));
+        if (!value || !builder.getOp(value).isConstant())
+            continue;
+        if (++op == end || op->getOpCode() != ir::OpCode::eFunctionEnd)
+            continue;
+        std::vector<ir::SsaDef> uses;
+        builder.getUses(it->getDef(), uses);
+        for (ir::SsaDef use : uses)
+        {
+            const ir::Op &call = builder.getOp(use);
+            if (call.getOpCode() == ir::OpCode::eFunctionCall && ir::SsaDef(call.getOperand(0u)) == it->getDef())
+                rewrites.push_back({use, value});
+        }
+    }
+    for (const auto &[call, value] : rewrites)
+        builder.rewriteDef(call, value);
+    return !rewrites.empty();
+}
+
+// Replaces every 32-bit load of one member of a legacy uniform block with a
+// constant, value(element) for an array of blocks (SamplerStateBlock[16]) or
+// value(0) for one, then folds the branches the constants decide and drops
+// the dead code. Returns the number of loads replaced.
+template <typename Value>
+uint32_t FixUniformMember(ir::Builder &builder, Uniform uniform, uint32_t member, Value value)
 {
     ir::SsaDef cbv = {};
     auto [begin, end] = builder.getDeclarations();
     for (auto it = begin; it != end; ++it)
     {
         if (it->getOpCode() == ir::OpCode::eDclCbv && uint32_t(it->getOperand(1u)) == kUniformRegSpace &&
-            uint32_t(it->getOperand(2u)) == static_cast<uint32_t>(Uniform::SamplerState))
+            uint32_t(it->getOperand(2u)) == static_cast<uint32_t>(uniform))
             cbv = it->getDef();
     }
     if (!cbv)
@@ -170,16 +210,15 @@ uint32_t FixDepthCompare(ir::Builder &builder, uint32_t depthSamplers)
             if (load.getOpCode() != ir::OpCode::eBufferLoad || ir::SsaDef(load.getOperand(0u)) != descriptor)
                 continue;
             const ir::Op &address = builder.getOp(ir::SsaDef(load.getOperand(1u)));
-            if (!address.isConstant() || address.getOperandCount() != 2u ||
-                uint32_t(address.getOperand(1u)) != uint32_t(ir::LegacySamplerStateLayout::eUseDepthCompare) ||
+            const uint32_t parts = address.isConstant() ? address.getOperandCount() : 0u;
+            if ((parts != 1u && parts != 2u) || uint32_t(address.getOperand(parts - 1u)) != member ||
                 !(load.getType() == ir::Type(ir::BasicType(ir::ScalarType::eU32))))
                 continue;
-            const uint32_t sampler = uint32_t(address.getOperand(0u));
-            loads.push_back({use, sampler < 32u ? (depthSamplers >> sampler) & 1u : 0u});
+            loads.push_back({use, value(parts == 2u ? uint32_t(address.getOperand(0u)) : 0u)});
         }
     }
-    for (const auto &[load, value] : loads)
-        builder.rewriteDef(load, builder.makeConstant(value));
+    for (const auto &[load, constant] : loads)
+        builder.rewriteDef(load, builder.makeConstant(constant));
     if (loads.empty())
         return 0;
 
@@ -190,12 +229,32 @@ uint32_t FixDepthCompare(ir::Builder &builder, uint32_t depthSamplers)
         progress |= ir::ArithmeticPass::runPass(builder, options.arithmeticOptions);
         progress |= ir::CleanupControlFlowPass::runPass(builder);
         progress |= ir::SsaConstructionPass::runResolveTrivialPhiPass(builder);
+        progress |= FoldConstantCalls(builder);
         if (!progress)
             break;
         ir::RemoveUnusedPass::runPass(builder);
     }
     ir::RemoveUnusedPass::runPass(builder);
     return static_cast<uint32_t>(loads.size());
+}
+
+// Every SamplerStateBlock::useDepthCompare from depthSamplers (bit per
+// sampler), so each image is sampled one way only.
+uint32_t FixDepthCompare(ir::Builder &builder, uint32_t depthSamplers)
+{
+    return FixUniformMember(builder, Uniform::SamplerState,
+                            uint32_t(ir::LegacySamplerStateLayout::eUseDepthCompare), [depthSamplers](uint32_t sampler) {
+                                return sampler < 32u ? (depthSamplers >> sampler) & 1u : 0u;
+                            });
+}
+
+// AlphaTestBlock::compareOp from the pipeline: with Always the test and its
+// demote go, so a draw without the alpha test runs a shader that cannot
+// discard (which lets the GPU test depth before the shader).
+uint32_t FixAlphaTest(ir::Builder &builder, uint32_t compareOp)
+{
+    return FixUniformMember(builder, Uniform::AlphaTest, uint32_t(ir::LegacyAlphaTestLayout::eAlphaCompareOp),
+                            [compareOp](uint32_t) { return compareOp; });
 }
 
 
@@ -534,7 +593,7 @@ bool StagesLinkDirectly(const Shader &vertexShader, const Shader &pixelShader)
 }
 
 bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<uint32_t> &spirv, std::string &error,
-                const uint32_t *fixedDepthCompare)
+                const uint32_t *fixedDepthCompare, const uint32_t *fixedAlphaCompare)
 {
     spirv.clear();
     error.clear();
@@ -558,6 +617,8 @@ bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<ui
     }
     if (fixedDepthCompare)
         FixDepthCompare(builder, *fixedDepthCompare);
+    if (fixedAlphaCompare)
+        FixAlphaTest(builder, *fixedAlphaCompare);
 
     spirv::SpirvBuilder::Options options = {};
     options.includeDebugNames = true;

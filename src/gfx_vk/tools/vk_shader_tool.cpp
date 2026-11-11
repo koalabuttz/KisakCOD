@@ -37,7 +37,7 @@ namespace
 int Usage()
 {
     std::fprintf(stderr,
-                 "usage: KisakCOD-vulkan-shaders translate FILE [--vertex VSFILE] [--out SPV] [--ir] [--depth-samplers MASK]\n"
+                 "usage: KisakCOD-vulkan-shaders translate FILE [--vertex VSFILE] [--out SPV] [--ir] [--depth-samplers MASK] [--alpha-compare OP]\n"
                  "       KisakCOD-vulkan-shaders batch DIR [--out-dir DIR] [--threads N]\n"
                  "KISAK_VK_STRICT_FLOATS=1 translates with D3D9's strict multiply, as the game does with it.\n");
     return 2;
@@ -144,6 +144,8 @@ int RunTranslate(int argc, char **argv)
     bool ir = false;
     bool fixDepth = false;
     uint32_t depthSamplers = 0;
+    bool fixAlpha = false;
+    uint32_t alphaCompare = 0;
     for (int i = 0; i < argc; ++i)
     {
         const char *next = i + 1 < argc ? argv[i + 1] : nullptr;
@@ -161,6 +163,16 @@ int RunTranslate(int argc, char **argv)
             if (!end || *end)
                 return Usage();
             fixDepth = true;
+        }
+        else if (!std::strcmp(argv[i], "--alpha-compare") && next)
+        {
+            // As the adapter builds a pixel shader for one pipeline: the alpha
+            // test fixed (an AlphaCompare value, 0 never to 7 always).
+            char *end = nullptr;
+            alphaCompare = static_cast<uint32_t>(std::strtoul(argv[++i], &end, 0));
+            if (!end || *end || alphaCompare > 7)
+                return Usage();
+            fixAlpha = true;
         }
         else if (argv[i][0] != '-' && !file)
             file = argv[i];
@@ -193,7 +205,8 @@ int RunTranslate(int argc, char **argv)
         }
     }
     std::vector<uint32_t> spirv;
-    if (!BuildSpirv(shader, vertexFile ? &vertexShader : nullptr, spirv, error, fixDepth ? &depthSamplers : nullptr))
+    if (!BuildSpirv(shader, vertexFile ? &vertexShader : nullptr, spirv, error, fixDepth ? &depthSamplers : nullptr,
+                    fixAlpha ? &alphaCompare : nullptr))
     {
         std::printf("legacy_shader=failed reason=%s\n", error.c_str());
         return 1;
