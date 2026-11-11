@@ -775,7 +775,16 @@ What the GXM back end does so far (step 2d):
   ms, N indices a draw: vs <key> ps <key> into <target>`, after a header
   with the frame's total and the fastest single draw. Each of those scenes
   also loads and stores its whole targets, so the fastest draw's time is
-  mostly that cost; frames are much slower with it.
+  mostly that cost; frames are much slower with it. The same waits also go
+  by what the engine says it is drawing (src/gfx_gxm/gxm_draw_label.h): the
+  pass of the frame (`clear`, `depth prepass`, `lit`, `decal`, `sun`,
+  `point lights`, `resolve`, `emissive`, `scene end`, `post effects`,
+  `sun post effects`, `hud`, `2d`) and, inside a pass, the kind of surface
+  (`world`, `static model`, `model rigid`, `model skinned`, `brush model`,
+  `effect`, `mark`, ...): `diag: gpu by pass: N ms a frame (N less floor),
+  N draws a frame, slowest N ms, N indices a draw: <pass> / <surface>`,
+  all of them, most first. "Less floor" takes the fastest draw's time off
+  each draw, about what the draws would cost without a scene each.
 - **Textures** are linear: rows of whole multiples of 8 texels, and the
   levels of a mipmapped texture sized from the power of two above the base,
   which is how sceGxm reads them and also a layout LockRect can hand out.

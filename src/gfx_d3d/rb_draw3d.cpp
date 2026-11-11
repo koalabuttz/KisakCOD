@@ -22,6 +22,7 @@
 #include "rb_spotshadow.h"
 #include "rb_shade.h"
 #include "r_meshdata.h"
+#include <gfx_gxm/gxm_draw_label.h>
 
 void R_HW_InsertFence(IDirect3DQuery9 **fence)
 {
@@ -352,6 +353,7 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     data = backEndData;
     dynamicShadowType = viewInfo->dynamicShadowType;
     isRenderingFullScreen = viewInfo->isRenderingFullScreen;
+    KISAK_GXM_DRAW_PASS("shadow maps");
     if (dynamicShadowType == SHADOW_MAP)
     {
         if (Com_BitCheckAssert(backEndData->shadowableLightHasShadowMap, rgp.world->sunPrimaryLightIndex, 32))
@@ -379,9 +381,11 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
         memset(gfxCmdBufState.pixelShaderConstState, 0, sizeof(gfxCmdBufState.pixelShaderConstState));
         R_SetRenderTargetSize(&gfxCmdBufSourceState, setupRenderTargetId);
         R_SetRenderTarget(gfxCmdBufContext, setupRenderTargetId);
+        KISAK_GXM_DRAW_PASS("clear");
         R_ClearScreen(gfxCmdBufState.prim.device, whichToClearForSetup, colorWhite, 1.0, 0, 0);
         memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
         R_InitContext(data, &cmdBuf);
+        KISAK_GXM_DRAW_PASS("depth prepass");
         R_DepthPrepass(setupRenderTargetId, viewInfo, &cmdBuf);
         if (dynamicShadowType == SHADOW_COOKIE)
             RB_DrawShadowCookies(viewInfo);
@@ -396,17 +400,21 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     memset(gfxCmdBufState.pixelShaderConstState, 0, sizeof(gfxCmdBufState.pixelShaderConstState));
     R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_SCENE);
     R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_SCENE);
+    KISAK_GXM_DRAW_PASS("clear");
     if (R_GetClearColor(clearColor) || (whichToClearForScene & 0xFE) != 0)
         R_ClearScreen(gfxCmdBufState.prim.device, whichToClearForScene, clearColor, 1.0, 0, 0);
     memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
     if (needsDepthPrepass)
     {
         R_InitContext(data, &cmdBuf);
+        KISAK_GXM_DRAW_PASS("depth prepass");
         R_DepthPrepass(R_RENDERTARGET_SCENE, viewInfo, &cmdBuf);
     }
     R_InitContext(data, &cmdBuf);
+    KISAK_GXM_DRAW_PASS("lit");
     R_DrawLit(viewInfo, &cmdBuf, 0);
     R_InitContext(data, &cmdBuf);
+    KISAK_GXM_DRAW_PASS("decal");
     R_DrawDecal(viewInfo, &cmdBuf, 0);
     KISAK_NULLSUB();
     KISAK_NULLSUB();
@@ -419,21 +427,26 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_SCENE);
     R_BeginView(&gfxCmdBufSourceState, &viewInfo->sceneDef, &viewInfo->viewParms);
     R_SetViewportStruct(&gfxCmdBufSourceState, &viewInfo->sceneViewport);
+    KISAK_GXM_DRAW_PASS("sun");
     RB_DrawSun(viewInfo->localClientNum);
     memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
     R_InitContext(data, &cmdBuf);
     KISAK_NULLSUB();
+    KISAK_GXM_DRAW_PASS("point lights");
     R_DrawLights(viewInfo, &cmdBuf);
     if (rg.distortion)
     {
         PROF_SCOPED("RB_ApplyPostEffects");
         R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_SCENE);
         R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_SCENE);
+        KISAK_GXM_DRAW_PASS("resolve");
         R_Resolve(gfxCmdBufContext, gfxRenderTargets[R_RENDERTARGET_RESOLVED_POST_SUN].image);
     }
     R_InitContext(data, &cmdBuf);
     KISAK_NULLSUB();
+    KISAK_GXM_DRAW_PASS("emissive");
     R_DrawEmissive(viewInfo, &cmdBuf);
+    KISAK_GXM_DRAW_PASS("scene end");
     RB_EndSceneRendering(gfxCmdBufContext, &viewInfo->input, viewInfo);
 }
 
@@ -755,6 +768,7 @@ void RB_StandardDrawCommandsCommon()
             R_SetResolvedScene(gfxCmdBufContext);
             R_BeginView(&gfxCmdBufSourceState, &viewInfo->sceneDef, &viewInfo->viewParms);
             R_SetViewportStruct(&gfxCmdBufSourceState, &viewInfo->displayViewport);
+            KISAK_GXM_DRAW_PASS("post effects");
             if (viewInfo->isRenderingFullScreen)
             {
                 RB_ApplyLatePostEffects(viewInfo);
@@ -767,6 +781,7 @@ void RB_StandardDrawCommandsCommon()
             }
             R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_FRAME_BUFFER);
             R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_FRAME_BUFFER);
+            KISAK_GXM_DRAW_PASS("sun post effects");
             RB_DrawSunPostEffects(viewInfo->localClientNum);
             memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
             R_InitCmdBufSourceState(&gfxCmdBufSourceState, &gfxCmdBufInput, 0);
@@ -778,10 +793,12 @@ void RB_StandardDrawCommandsCommon()
             R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_FRAME_BUFFER);
             R_BeginView(&gfxCmdBufSourceState, &viewInfo->sceneDef, &viewInfo->viewParms);
             R_SetViewportStruct(&gfxCmdBufSourceState, &viewInfo->displayViewport);
+            KISAK_GXM_DRAW_PASS("hud");
             if (viewInfo->cmds)
                 RB_ExecuteRenderCommandsLoop(viewInfo->cmds);
             memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
         }
+        KISAK_GXM_DRAW_PASS("2d");
         viewInfoa = backEndData->viewInfo;
         R_InitCmdBufSourceState(&gfxCmdBufSourceState, &viewInfoa->input, 0);
         R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_FRAME_BUFFER);

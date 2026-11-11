@@ -37,6 +37,7 @@
 
 #include "gxm_legacy_internal.h"
 
+#include <gfx_gxm/gxm_draw_label.h>
 #include <gfx_gxm/gxm_program_cache.h>
 
 #include <algorithm>
@@ -45,6 +46,12 @@
 #include <functional>
 #include <map>
 #include <set>
+
+namespace gfx_gxm
+{
+const char *g_drawPass = nullptr;
+const char *g_drawSurface = nullptr;
+} // namespace gfx_gxm
 
 namespace gfx_vk::legacy
 {
@@ -345,6 +352,14 @@ struct DrawState
     };
     bool drawTimes = false;
     std::vector<DrawTime> drawTimeList;
+    // The same waits by what the engine said it was drawing (gxm_draw_label.h):
+    // the pass of the frame and the kind of surface.
+    struct PassTime
+    {
+        const char *pass = nullptr, *surface = nullptr;
+        uint64_t micros = 0, draws = 0, indices = 0, slowest = 0;
+    };
+    std::vector<PassTime> passTimeList;
     uint64_t drawTimesFrames = 0, drawTimesFastest = ~0ull, drawTimesSince = 0;
     // Renames that found no room and waited for the GPU, renames a wait since
     // the buffer's last draw made needless, and the bytes of renamed buffers'
@@ -2220,6 +2235,25 @@ void TimeDraw(Device &device, const Variant &vertex, const Variant &pixel, uint3
     const uint64_t took = Micros() - from;
     ++d.gpuWaits;
     d.drawTimesFastest = std::min(d.drawTimesFastest, took);
+    DrawState::PassTime *pass = nullptr;
+    for (auto &e : d.passTimeList)
+        if (e.pass == gfx_gxm::g_drawPass && e.surface == gfx_gxm::g_drawSurface)
+            pass = &e;
+    if (!pass && d.passTimeList.size() < 128)
+    {
+        DrawState::PassTime fresh;
+        fresh.pass = gfx_gxm::g_drawPass;
+        fresh.surface = gfx_gxm::g_drawSurface;
+        d.passTimeList.push_back(fresh);
+        pass = &d.passTimeList.back();
+    }
+    if (pass)
+    {
+        pass->micros += took;
+        ++pass->draws;
+        pass->indices += indexCount;
+        pass->slowest = std::max(pass->slowest, took);
+    }
     DrawState::DrawTime *entry = nullptr;
     for (auto &e : d.drawTimeList)
         if (e.vertexKey == vertex.cacheKey && e.pixelKey == pixel.cacheKey && e.target == target)
@@ -2274,6 +2308,23 @@ void LogDrawTimes(Device &device)
             (unsigned long long)(e.draws ? e.indices / e.draws : 0), (unsigned long long)e.vertexKey,
             (unsigned long long)e.pixelKey, e.target.c_str());
     }
+    // Every pass and kind of surface, most first. "less floor" takes off the
+    // fastest draw's time for each draw: about what the draws would cost
+    // without a scene each.
+    std::sort(d.passTimeList.begin(), d.passTimeList.end(),
+              [](const DrawState::PassTime &a, const DrawState::PassTime &b) { return a.micros > b.micros; });
+    const double floor = d.drawTimesFastest == ~0ull ? 0.0 : double(d.drawTimesFastest);
+    for (size_t i = 0; i < d.passTimeList.size() && i < 32; ++i)
+    {
+        const auto &e = d.passTimeList[i];
+        const double lessFloor = std::max(0.0, double(e.micros) - floor * double(e.draws));
+        Log(device, "diag: gpu by pass: %.2f ms a frame (%.2f less floor), %.1f draws a frame, slowest %.2f ms, "
+            "%llu indices a draw: %s / %s",
+            e.micros / 1000.0 / frames, lessFloor / 1000.0 / frames, e.draws / frames, e.slowest / 1000.0,
+            (unsigned long long)(e.draws ? e.indices / e.draws : 0), e.pass ? e.pass : "unnamed",
+            e.surface ? e.surface : "-");
+    }
+    d.passTimeList.clear();
     d.drawTimeList.clear();
     d.drawTimesFrames = 0;
     d.drawTimesFastest = ~0ull;

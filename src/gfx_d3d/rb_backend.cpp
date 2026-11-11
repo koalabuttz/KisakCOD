@@ -5,6 +5,7 @@
 #include <qcommon/mem_track.h>
 
 #include "rb_logfile.h"
+#include <gfx_gxm/gxm_draw_label.h>
 #include "rb_stats.h"
 #include "r_image.h"
 #include "rb_state.h"
@@ -856,6 +857,7 @@ void R_DrawSurfs(GfxCmdBufContext context, GfxCmdBufState *prepassState, const G
     }
     g_viewStats->drawSurfCount += info->drawSurfCount;
     R_TessEnd(context, prepassContext);
+    KISAK_GXM_DRAW_SURFACE(nullptr);
     context.state->origMaterial = 0;
 }
 
@@ -920,6 +922,15 @@ uint32_t R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArgs, GfxCm
             passPrepassContext.state = prepassContext.state;
         }
         iassert(drawSurf.fields.surfType < ARRAY_COUNT(rb_tessTable));
+#ifdef KISAK_GFX_GXM
+        {
+            static const char *const kSurfaceNames[ARRAY_COUNT(rb_tessTable)] = {
+                "world", "world pretess", "static model", "static model pretess", "static model cached",
+                "static model skinned", "brush model", "model rigid", "model rigid skinned", "model skinned",
+                "effect", "mark", "particle cloud"};
+            KISAK_GXM_DRAW_SURFACE(kSurfaceNames[drawSurf.fields.surfType]);
+        }
+#endif
         subListCount = rb_tessTable[drawSurf.fields.surfType](listArgs, passPrepassContext);
     }
     if (isPixelCostEnabled)
@@ -2888,6 +2899,7 @@ void RB_Draw3D()
     {
         PROF_SCOPED("ExecuteRenderCmds");
         RB_Draw3DInternal(&data->viewInfo[data->viewInfoIndex]);
+        KISAK_GXM_DRAW_PASS("2d");
     }
 }
 
@@ -2983,6 +2995,7 @@ void RB_CallExecuteRenderCommands()
         R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_FRAME_BUFFER);
         R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_FRAME_BUFFER);
         RB_InitSceneViewport();
+        KISAK_GXM_DRAW_PASS("2d");
         if (backEndData->cmds)
             RB_ExecuteRenderCommandsLoop(backEndData->cmds);
         if (r_drawPrimHistogram->current.enabled)
