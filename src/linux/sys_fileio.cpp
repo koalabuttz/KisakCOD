@@ -1111,8 +1111,17 @@ namespace
         Check(created != INVALID_HANDLE_VALUE, "an existing file spelled differently is opened for rewriting");
         if (created != INVALID_HANDLE_VALUE)
             CloseHandle(created);
-        snprintf(landed, sizeof(landed), "%s/sub/CREATED.BIN", s_dir);
-        Check(stat(landed, &landedInfo) != 0, "no second file differing only in case is made");
+        // Counted from the folder's listing: on a file system that ignores
+        // case itself (macOS by default) a stat of either spelling succeeds.
+        int spellings = 0;
+        snprintf(landed, sizeof(landed), "%s/sub", s_dir);
+        if (DIR *listing = opendir(landed))
+        {
+            for (const struct dirent *entry = readdir(listing); entry; entry = readdir(listing))
+                spellings += strcasecmp(entry->d_name, "created.bin") == 0;
+            closedir(listing);
+        }
+        Check(spellings == 1, "no second file differing only in case is made");
         snprintf(landed, sizeof(landed), "%s/sub/Created.bin", s_dir);
         unlink(landed);
 
