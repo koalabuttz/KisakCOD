@@ -883,6 +883,7 @@ Shader *CreateShader(Device *device_, const void *bytecode, size_t bytes, std::s
     }
     shader->id = device.nextId++;
     shader->stage = shader->translated.reflection.stage;
+    shader->contentHash = ContentHash(bytecode, bytes);
     std::vector<uint32_t> spirv;
     if (shader->stage == ls::Stage::Vertex)
     {
@@ -909,6 +910,8 @@ Shader *CreateShader(Device *device_, const void *bytecode, size_t bytes, std::s
     {
         AddCachedShader(bytecode, bytes, CachedShader{shader->translated, std::move(spirv)});
     }
+    if (device.ahead)
+        AheadShaderCreated(device, *shader);
     return shader.release();
 }
 
@@ -920,6 +923,8 @@ void DestroyShader(Device *device, Shader *shader)
         device->vertexShader = nullptr;
     if (device->pixelShader == shader)
         device->pixelShader = nullptr;
+    if (device->ahead)
+        AheadForget(*device, shader->id, shader->contentHash, true);
     ForgetPipelines(*device, shader->id);
     DestroyShaderModule(device->core, shader->module);
     for (const auto &entry : shader->linked)
@@ -944,6 +949,19 @@ VertexDecl *CreateVertexDecl(Device *device, const VertexElement *elements, uint
     VertexDecl *decl = new VertexDecl();
     decl->id = device->nextId++;
     decl->elements.assign(elements, elements + count);
+    // Field by field: the hash names the declaration in the pipeline list
+    // file, whatever the struct's padding holds.
+    uint64_t hash = ContentHash(&count, sizeof(count));
+    for (const VertexElement &element : decl->elements)
+    {
+        const uint8_t fields[8] = {uint8_t(element.stream), uint8_t(element.stream >> 8), uint8_t(element.offset),
+                                   uint8_t(element.offset >> 8), element.type, element.method, element.usage,
+                                   element.usageIndex};
+        hash = ContentHash(fields, sizeof(fields), hash);
+    }
+    decl->contentHash = hash;
+    if (device->ahead)
+        AheadDeclCreated(*device, *decl);
     return decl;
 }
 
@@ -953,6 +971,8 @@ void DestroyVertexDecl(Device *device, VertexDecl *decl)
         return;
     if (device->decl == decl)
         device->decl = nullptr;
+    if (device->ahead)
+        AheadForget(*device, decl->id, decl->contentHash, false);
     ForgetPipelines(*device, decl->id);
     delete decl;
 }

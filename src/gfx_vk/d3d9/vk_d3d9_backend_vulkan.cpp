@@ -215,6 +215,19 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     legacyDesc.log = h.log;
     legacyDesc.logUser = h.user;
     legacyDesc.shaderCachePath = h.shaderCachePath;
+    // The pipeline list lives beside the pipeline cache: pipelines.bin gives
+    // pipelines.list.
+    std::string pipelineList;
+    if (h.pipelineCachePath && *h.pipelineCachePath)
+    {
+        pipelineList = h.pipelineCachePath;
+        const size_t dot = pipelineList.rfind('.');
+        const size_t slash = pipelineList.find_last_of("/\\");
+        if (dot != std::string::npos && (slash == std::string::npos || dot > slash))
+            pipelineList.resize(dot);
+        pipelineList += ".list";
+        legacyDesc.pipelineListPath = pipelineList.c_str();
+    }
     legacyDesc.backBufferSamples = desc.samples;
     backend->legacy = lg::CreateDevice(backend->core, legacyDesc, error);
     if (!backend->legacy)

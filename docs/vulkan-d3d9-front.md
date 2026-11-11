@@ -459,8 +459,11 @@ archived and latched (a change applies at the next `vid_restart`):
 * `r_vkShaderCache`: 1 (default) keeps two caches in `<fs_homepath>/vulkan`
   between runs: the translated shaders in `shaders.bin` (the Legacy adapter's
   shader cache), and the Vulkan pipeline cache in `pipelines.bin` (the core's,
-  ignored when another device or driver wrote it). 0 translates every shader
-  and builds every pipeline from scratch at every start.
+  ignored when another device or driver wrote it), and beside them the list
+  of pipelines the last launches drew, `pipelines.list`, whose pipelines are
+  built on worker threads as the map loads (docs/vulkan-legacy-adapter.md,
+  "Pipelines built ahead"). 0 translates every shader and builds every
+  pipeline from scratch, at its first draw, at every start.
 
 Four more are for measuring. They are not saved and take effect in the next
 frame (the front's `Tuning`), so one launch can compare settings, by hand, in

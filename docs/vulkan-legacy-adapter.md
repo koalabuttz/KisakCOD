@@ -248,6 +248,58 @@ The front's `device stats` line gives the rest: `N translated`. Bytecode
 created twice in one run is translated once, so even with the cache off this
 is below the shader count.
 
+## Pipelines built ahead
+
+A pipeline is built the first time a draw needs it. That costs the frame
+from about a millisecond, when the driver's cache has the pipeline, to over a
+hundred, when a cold driver compiles its shaders: the long frames during play
+on both machines were pipeline builds (laptop run 12, PC runs 8 and 11), and
+the first view of a map built 71 pipelines in one frame (PC run 11: 485 ms
+with the caches cold, 103 ms with every one of them a pipeline cache hit).
+`vk_legacy_ahead.cpp` moves that work to worker threads, ahead of the draws:
+
+* **The list.** Each draw that uses a pipeline for the first time in a launch
+  lists it: its two shaders and vertex declaration by a 64-bit hash of their
+  contents (bytecode, declaration elements), and the rest of its key as it is.
+  `DeviceDesc::pipelineListPath` names the file: the D3D9 front puts it beside
+  the pipeline cache, `pipelines.list` next to `pipelines.bin`. A device reads
+  it when it is created and writes it when it goes, through a temporary file
+  renamed over the old one. The file names the GPU (vendor and device id); a
+  list from another GPU, another file version or with a wrong checksum is
+  ignored whole.
+* **Building ahead.** When the last shader or declaration a list entry needs
+  is created (the game creates them as it loads a map), the device queues the
+  entry's pipeline to its workers: one for every three CPU threads, at most
+  two (`KISAK_VK_PIPELINE_WORKERS` sets 1 to 8). A worker builds the pixel
+  module (shared between the jobs that need the same one) and the pipeline
+  through the pipeline cache, which Vulkan synchronises; it touches no other
+  device or core state. Entries the device would not make as it stands now
+  (the alpha test or depth compare read at run time, strides baked in where
+  they are dynamic, another depth format, a sample count the GPU lacks) are
+  left alone.
+* **The draw.** A draw whose pipeline is not in the device's table takes what
+  the workers have finished first. If a worker is still building its
+  pipeline the draw waits for it (`aheadWaits`, `aheadWaitMicros`); if the job
+  is only queued, the draw takes it out and builds the pipeline itself, as it
+  would without the list. A draw that finds its pipeline costs nothing extra:
+  the workers' results are only looked at when a pipeline is missing.
+* **Ageing.** An entry no draw used in a launch where its shaders were there
+  gets one launch older; after `kPipelineListAge` (8) such launches it is dropped,
+  so pipelines of an old setting (another anti-aliasing level, a switch) do
+  not stay built for ever. A map that was not loaded does not age its entries.
+* **Lifetimes.** Destroying a shader or declaration drops its queued jobs and
+  waits for the ones being built, so no worker reads a shader that is gone.
+  Destroying the device stops the workers, takes their pipelines and writes
+  the list.
+
+`KISAK_VK_PIPELINES_AHEAD=0` builds every pipeline at its first draw again (the
+list is still kept). The statistics: `pipelinesAhead` and `aheadMicros` (the
+workers' pipelines and time, not counted in `pipelines` and
+`pipelineMicros`), `aheadUsed` (those a draw used), the waits above, and
+`pipelinesListed` (entries the file held). A first launch, or the first time
+a map is played, still builds its pipelines at their draws: the list only
+knows what an earlier launch drew.
+
 ## Known limits
 
 These are not needed by the shaders and calls checked so far; each is listed
@@ -402,7 +454,19 @@ and part of the viewport stay in the pass; its pixels are the same either
 way. The
 `shader_cache` scene translates two shaders, takes one again from memory,
 writes and reads back a cache file in the temporary directory, draws with the
-shaders read from it, and checks that a damaged file is refused.
+shaders read from it, and checks that a damaged file is refused. The check's
+device keeps a pipeline list in the temporary directory, so every scene lists
+what it draws. The `pipelines_ahead` scene draws three pipelines with shaders
+of its own, writes the list, reads it back and creates the shaders again: the
+workers build the three before any draw (none built at a draw, three used,
+the same pixels). It then destroys a pair right after creating it, while its
+jobs are queued or being built, draws with a fresh pair before the workers
+are done (the draw waits for a pipeline being built, or builds a queued one
+itself), ages the entries out with eight launches that do not draw them, and
+checks that a damaged file is refused. The script checks that the scene's
+pipelines were built ahead and used (none with
+`KISAK_VK_PIPELINES_AHEAD=0`). ThreadSanitizer runs it with the other scenes
+in CI.
 
 The hosted CI job `vulkan_window` (Linux) builds the check for x86_64 in Debug
 and RelWithDebInfo, runs `gen_legacy_check_shaders.py --check`, and runs that
