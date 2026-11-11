@@ -452,8 +452,9 @@ front's check too, both under ThreadSanitizer, and the i386 build. Two lines
 were taken out in turn: without the one that marks a pass drawn to, a depth
 clear after a draw wiped the colour drawn before it (`near_quad`); without
 the stencil rule, a depth clear on D24S8 became a load operation that would
-clear the stencil too. No GPU has run it: the laptop's next run says what it
-is worth there.
+clear the stencil too. On the laptop (run 15) about 60% of mp_crash's clears
+became load operations and the frame rate did not move beyond the run's
+noise, either way.
 
 Laptop run 1 (2026-11-08, Intel RPL-U iGPU, Mesa 25.0.7 ANV, x86_64 and i386
 RelWithDebInfo, SDL offscreen and Wayland, no validation layer installed): all
