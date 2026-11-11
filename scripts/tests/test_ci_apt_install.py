@@ -90,7 +90,7 @@ class MirrorTests(unittest.TestCase):
 
 
 class InstallerTests(unittest.TestCase):
-    def run_installer(self, args, fail=''):
+    def run_installer(self, args, fail='', times=None):
         with tempfile.TemporaryDirectory() as temp:
             folder = Path(temp)
             sudo = folder / 'sudo'
@@ -110,12 +110,20 @@ if args[0] == 'mkdir':
     Path(args[-1]).mkdir(parents=True, exist_ok=True)
 apt_args = args[1:] if args[0] == 'DEBIAN_FRONTEND=noninteractive' else args
 if apt_args[0] == 'apt-get' and apt_args[1] == os.environ.get('FAKE_APT_FAIL'):
-    sys.exit(42)
+    # FAKE_APT_FAIL_TIMES: fail that many times, then work (a lookup that heals).
+    count_file = Path(os.environ['FAKE_SUDO_LOG']).with_suffix('.count')
+    count = int(count_file.read_text()) if count_file.exists() else 0
+    count_file.write_text(str(count + 1))
+    if count < int(os.environ.get('FAKE_APT_FAIL_TIMES', '1000')):
+        sys.exit(42)
 ''')
             sudo.chmod(0o755)
             log = folder / 'commands.jsonl'
             env = dict(os.environ, PATH=f'{folder}:{os.environ["PATH"]}',
-                       RUNNER_TEMP=temp, FAKE_SUDO_LOG=str(log), FAKE_APT_FAIL=fail)
+                       RUNNER_TEMP=temp, FAKE_SUDO_LOG=str(log), FAKE_APT_FAIL=fail,
+                       KISAK_APT_ATTEMPTS='3', KISAK_APT_RETRY_DELAY='0')
+            if times is not None:
+                env['FAKE_APT_FAIL_TIMES'] = str(times)
             env.pop('KISAK_APT_ARCHIVES', None)
             result = subprocess.run(['bash', str(ROOT / 'scripts/ci/apt-install.sh'), *args],
                                     env=env, capture_output=True, text=True, timeout=10)
@@ -147,6 +155,30 @@ if apt_args[0] == 'apt-get' and apt_args[1] == os.environ.get('FAKE_APT_FAIL'):
         result, entries, _ = self.run_installer(['clang'], fail='update')
         self.assertEqual(result.returncode, 42)
         self.assertFalse(any('install' in entry['args'] for entry in entries))
+        # It was tried three times (the tests' limit), and the mirror setup ran once.
+        commands = [entry['args'] for entry in entries]
+        self.assertEqual(commands.count(['apt-get', 'update']), 3)
+        self.assertEqual(sum(cmd[0] == 'python3' for cmd in commands), 1)
+        self.assertIn('failed after 3 attempt(s)', result.stderr)
+
+    def test_a_failure_that_heals_is_retried(self):
+        # Hosted runners lost name lookups for a minute on 2026-11-11.
+        for fail in ('update', 'install'):
+            with self.subTest(fail=fail):
+                result, entries, _ = self.run_installer(['clang'], fail=fail, times=2)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                commands = [entry['args'] for entry in entries]
+                self.assertEqual(commands.count(['apt-get', 'update']), 3)
+                self.assertTrue(any(cmd[-1] == 'clang' and 'install' in cmd for cmd in commands))
+                self.assertTrue(any(entry['args'][0] == 'chown' for entry in entries))
+                self.assertIn('trying again', result.stderr)
+
+    def test_no_update_retries_only_the_install(self):
+        result, entries, _ = self.run_installer(['--no-update', 'clang'], fail='install', times=1)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        commands = [entry['args'] for entry in entries]
+        self.assertNotIn(['apt-get', 'update'], commands)
+        self.assertEqual(sum('install' in cmd for cmd in commands), 2)
 
     def test_install_failure_is_not_hidden_by_cache_cleanup(self):
         result, entries, _ = self.run_installer(['clang'], fail='install')

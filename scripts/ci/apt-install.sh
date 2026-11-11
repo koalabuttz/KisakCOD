@@ -10,7 +10,8 @@
 # $RUNNER_TEMP/apt-archives (or $KISAK_APT_ARCHIVES), which the workflow
 # restores and saves with actions/cache, so once a job has saved its cache it
 # only downloads packages that have been updated since. apt also retries a
-# stalled download. Package choices and signature checks stay unchanged.
+# stalled download, and the refresh and install run again after a failed name
+# lookup. Package choices and signature checks stay unchanged.
 set -euo pipefail
 
 update=1
@@ -36,10 +37,37 @@ EOF
 
 if (( update )); then
     sudo python3 "$(dirname -- "$0")/ubuntu-mirror.py"
-    sudo apt-get update
 fi
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    -o "Dir::Cache::Archives=$archives" "$@"
+
+# apt retries a download that stalls, but not a name lookup that fails for a
+# minute: on 2026-11-11 hosted runners could not resolve archive.ubuntu.com,
+# apt-get update only warned, and the install then failed with exit 100 on six
+# jobs of one run. Refresh the lists and install again, after a wait that grows,
+# before giving up. KISAK_APT_ATTEMPTS and KISAK_APT_RETRY_DELAY (seconds, times
+# the attempt number) are for the tests.
+refresh_and_install() {
+    # set -e does not apply inside a function used as a condition, so each
+    # command passes on its own failure.
+    if (( update )); then
+        sudo apt-get update || return
+    fi
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        -o "Dir::Cache::Archives=$archives" "$@"
+}
+
+attempts="${KISAK_APT_ATTEMPTS:-4}"
+delay="${KISAK_APT_RETRY_DELAY:-20}"
+attempt=1
+until refresh_and_install "$@"; do
+    status=$?
+    if (( attempt >= attempts )); then
+        echo "apt-install.sh: failed after $attempt attempt(s)" >&2
+        exit "$status"
+    fi
+    echo "apt-install.sh: attempt $attempt failed with status $status; trying again in $((delay * attempt)) s" >&2
+    sleep "$((delay * attempt))"
+    attempt=$((attempt + 1))
+done
 
 # apt leaves a root-owned lock and partial directory; actions/cache saves the
 # directory as the runner user, so hand the files back and drop both.

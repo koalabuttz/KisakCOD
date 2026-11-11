@@ -97,6 +97,11 @@ of them.
   the `macos-26` jobs (the Intel pool lost one in twenty; `macos-15` for arm64 was no better in a trial,
   PR 221, closed), so every macOS job saved is one fewer to wait for. A cancelled macOS arm64 job that has no
   log never ran: it is no result, not a failure.
+- **Package installs.** Every Linux job installs through `scripts/ci/apt-install.sh`: Ubuntu's main
+  archive instead of the runner's slow Azure mirror, packages cached between runs, and the refresh and
+  install tried again (up to four attempts, waiting 20, 40 and 60 s) when they fail, since on 2026-11-11
+  hosted runners lost name lookups for a minute and six jobs of one run died at `apt-get install` with
+  exit 100. `test_ci_apt_install.py` pins it.
 
 Decided by the project owner on 2026-11-10 (drafts, Windows ARM64, Intel macOS)
 and 2026-11-03 (SDL2 after a merge, path filters, cancelling). Both build
