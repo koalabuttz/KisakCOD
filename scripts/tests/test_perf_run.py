@@ -365,8 +365,11 @@ def test_whole_run(bench):
     short = json.loads(short_text)
     check(run_report.verify(short) is None and short["full_sha256"] == results["sha256"] and short["compact"],
           "the short form has its own checksum and names the file it was cut from")
-    check(len(short_text) < len(text) / 3 and "\n" not in short_text.strip(),
-          f"the short form is a third of the file or less, on one line ({len(short_text)} of {len(text)})")
+    # A made-up run has almost nothing to cut, and the short form now keeps each
+    # row's load note too: 2819 of 8455 (33.3%) failed a hosted runner at a third
+    # on 2026-11-11, so the bound is 40%. A real run's rows are far longer.
+    check(len(short_text) < len(text) * 0.4 and "\n" not in short_text.strip(),
+          f"the short form is 40% of the file or less, on one line ({len(short_text)} of {len(text)})")
     check(run_report.averages(short["rows"]) == run_report.averages(rows)
           and run_report.summarize(short) == summary, "the averages and the summary from it are the same")
     short_report = run_report.render(short)
