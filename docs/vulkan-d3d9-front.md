@@ -768,15 +768,16 @@ evidence):
   to 8.4 ms of a one-sample Vulkan frame and 9.5 to 12.5 ms with 4, so the
   laptop waits for the GPU, and the gap is the GPU's time on our frame,
   not the samples. Screenshots of the two back ends at 4 samples match.
-* Where the GPU's time goes (run 14, 2026-11-10, partial and not yet
-  written up: the game stops about 21 frames in under Mesa's
-  `INTEL_MEASURE`): colour and depth clears
-  that ANV does the slow way, about 5 a frame, take about 6% of the GPU's
-  time in passes; they were all `vkCmdClearAttachments`, which ANV cannot
-  do as a fast clear. Clears of whole targets before a draw are now the
-  pass's load operation ([adapter](vulkan-legacy-adapter.md#how-a-draw-works)).
-  A few single draws take 0.4 to 0.6 ms each; what DXVK spends on the same
-  draws is for the run's DXVK half.
+* Where the GPU's time goes (run 14, 2026-11-11, one sample, Mesa's
+  `INTEL_MEASURE` over 9 frames; DXVK's half crashed under it): about 17 ms
+  of GPU work a frame while measured, nearly all of it its 900 or so draws
+  in about 9 passes. One pass of about 360 draws takes about 8.8 ms, the
+  next largest 4.4 and 3.4 ms. Colour and depth clears that ANV does the
+  slow way, about 2 of each a frame, take 466 us, about 2.7% (a first,
+  partial read put it at 6%); they were all `vkCmdClearAttachments`, which
+  ANV cannot do as a fast clear. Clears of whole targets are now a pass's
+  load operation ([adapter](vulkan-legacy-adapter.md#how-a-draw-works)).
+  Report: `renderer/vulkan-backend-laptop-run-14.md`.
 * Present mode: the laptop's swapchain still says `MAILBOX, 4 images` with
   vsync off now that the core asks for IMMEDIATE first (run 11), so its
   surface does not offer IMMEDIATE.
@@ -823,7 +824,7 @@ evidence):
   launch, with a repeated launch as the baseline
   (`renderer/model-lighting/luma_grid.py` in the project files).
 
-Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11,12,13}.md`,
+Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11,12,13,14}.md`,
 `renderer/vulkan-backend-pc-run-{6,7,8,9,10}.md` and
 `renderer/model-lighting/laptop-run-1.md` in the project files.
 

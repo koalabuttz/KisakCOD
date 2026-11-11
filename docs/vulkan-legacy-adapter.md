@@ -442,8 +442,8 @@ sets, and gave them all up once a launch, at the map's load.
 
 Clears as load operations (2026-11-10, same sandbox, 22 scenes with
 `pass_clear`): laptop run 14 timed the GPU's work with Mesa's `INTEL_MEASURE`
-and found ANV's slow colour and depth clears, about 5 a frame, taking about
-6% of the GPU time on mp_crash; the adapter's clears were all
+and found ANV's slow colour and depth clears, about 2 of each a frame,
+taking about 2.7% of the GPU time on mp_crash; the adapter's clears were all
 `vkCmdClearAttachments` then. Now 29 of the check's 37 clears are load
 operations (none with `KISAK_VK_PASS_CLEARS=0`), and every scene's pixels are
 the same either way. The check passes in Debug and RelWithDebInfo with
