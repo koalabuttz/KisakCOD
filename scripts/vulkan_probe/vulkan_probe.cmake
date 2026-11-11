@@ -95,6 +95,14 @@ else()
 endif()
 target_compile_options(kisak_gfx_vk PRIVATE ${KISAK_VULKAN_WARNINGS})
 
+# The Modern path (src/gfx_vk/modern, docs/vulkan-modern.md): its own passes on
+# the core, engine-independent like it. Its SPIR-V is checked in
+# (vk_modern_shaders.h, scripts/tools/vulkan/gen_spirv_header.py).
+add_library(kisak_gfx_vk_modern STATIC
+    "${SRC_DIR}/gfx_vk/modern/vk_modern_taa.cpp")
+target_link_libraries(kisak_gfx_vk_modern PUBLIC kisak_gfx_vk)
+target_compile_options(kisak_gfx_vk_modern PRIVATE ${KISAK_VULKAN_WARNINGS})
+
 if(KISAK_VULKAN_LIBRARIES_ONLY)
     return()
 endif()

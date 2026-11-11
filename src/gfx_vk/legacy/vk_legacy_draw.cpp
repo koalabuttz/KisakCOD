@@ -2653,6 +2653,27 @@ void DetachWindow(Device *device_)
 }
 
 
+bool HandOverRecording(Device *device_)
+{
+    Device &device = *device_;
+    if (!Usable(device))
+        return false;
+    // A skipped frame stays skipped until Present, as for draws.
+    if (!EnsureFrame(device))
+        return false;
+    EndPassIfOpen(device);
+    ForgetRecordingState(device);
+    return true;
+}
+
+gfx_vk::Image *SurfaceImage(const Surface *surface)
+{
+    if (!surface || !surface->texture || surface->level || surface->face
+        || surface->texture->desc.kind != TextureKind::Tex2D)
+        return nullptr;
+    return surface->texture->image;
+}
+
 PresentResult Present(Device *device_)
 {
     Device &device = *device_;
