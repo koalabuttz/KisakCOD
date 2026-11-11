@@ -1239,6 +1239,54 @@ void R_SetViewParmsForScene(const refdef_s *refdef, GfxViewParms *viewParms)
     R_SetupViewProjectionMatrices(viewParms);
 }
 
+// ---- The Modern path (rhi/r_rhi_modern.h) ---------------------------------------------
+
+static uint32_t s_modernSceneCount;
+static float s_modernLastOrigin[3];
+static bool s_modernHaveOrigin;
+
+void R_ModernJitterScene(const refdef_s *refdef, GfxViewParms *viewParms)
+{
+    const GfxModernHooks *hooks = R_ModernHooks();
+    if (!hooks || !hooks->jitterPixels || refdef->width <= 0 || refdef->height <= 0)
+        return;
+    float x = 0.0f, y = 0.0f;
+    hooks->jitterPixels(hooks->user, s_modernSceneCount++, &x, &y);
+    // The projection adds [2][0] and [2][1] times view-space z (which is w)
+    // to clip x and y, so they move the scene in NDC: 2 / size per pixel,
+    // and y points up.
+    viewParms->projectionMatrix.m[2][0] = 2.0f * x / (float)refdef->width;
+    viewParms->projectionMatrix.m[2][1] = -2.0f * y / (float)refdef->height;
+    R_SetupViewProjectionMatrices(viewParms);
+}
+
+void R_ModernSceneDone(const GfxViewInfo *viewInfo)
+{
+    const GfxModernHooks *hooks = R_ModernHooks();
+    if (!hooks || !hooks->sceneDone)
+        return;
+    const GfxViewParms &parms = viewInfo->viewParms;
+    GfxModernScene modern{};
+    memcpy(modern.view, parms.viewMatrix.m, sizeof(modern.view));
+    memcpy(modern.projection, parms.projectionMatrix.m, sizeof(modern.projection));
+    modern.x = viewInfo->sceneViewport.x;
+    modern.y = viewInfo->sceneViewport.y;
+    modern.width = viewInfo->sceneViewport.width;
+    modern.height = viewInfo->sceneViewport.height;
+    // A camera that moved more than 256 units since the last scene was cut
+    // to (a spawn, a teleport, a killcam): what the history holds is of
+    // somewhere else.
+    const float moveX = parms.origin[0] - s_modernLastOrigin[0];
+    const float moveY = parms.origin[1] - s_modernLastOrigin[1];
+    const float moveZ = parms.origin[2] - s_modernLastOrigin[2];
+    modern.cut = !s_modernHaveOrigin || moveX * moveX + moveY * moveY + moveZ * moveZ > 256.0f * 256.0f;
+    s_modernLastOrigin[0] = parms.origin[0];
+    s_modernLastOrigin[1] = parms.origin[1];
+    s_modernLastOrigin[2] = parms.origin[2];
+    s_modernHaveOrigin = true;
+    hooks->sceneDone(hooks->user, dx.device, &modern);
+}
+
 void R_SetupProjection(float tanHalfFovX, float tanHalfFovY, GfxViewParms *viewParms)
 {
     InfinitePerspectiveMatrix(viewParms->projectionMatrix.m, tanHalfFovX, tanHalfFovY, viewParms->zNear);
@@ -1405,6 +1453,7 @@ void R_RenderScene(const refdef_s *refdef)
         rg.viewDir[2] = refdef->viewaxis[0][2];
         viewParmsDraw = R_AllocViewParms();
         R_SetViewParmsForScene(refdef, viewParmsDraw);
+        R_ModernJitterScene(refdef, viewParmsDraw);
         R_SetSceneParms(refdef, &sceneParms);
         R_CorrectLodScale(refdef);
         iassert( scene.def.time == refdef->time );

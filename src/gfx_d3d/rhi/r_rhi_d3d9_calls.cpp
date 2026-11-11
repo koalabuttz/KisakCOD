@@ -13,6 +13,7 @@
 // scripts/tests/check_rhi_boundary.py and docs/renderer-interface.md).
 #include <universal/q_shared.h>
 #include "r_rhi.h"
+#include "r_rhi_modern.h"
 
 // ---- Reference counts -------------------------------------------------------
 
@@ -195,6 +196,22 @@ ULONG R_HW_AddRef(IDirect3DVolumeTexture9 *object)
 IDirect3D9 *Kisak_VulkanDirect3DCreate9();
 int Kisak_VulkanBackendSelected();
 #endif
+
+// The Modern path's hooks (r_rhi_modern.h).
+static GfxModernHooks s_modernHooks;
+static bool s_modernHooksSet;
+
+void R_SetModernHooks(const GfxModernHooks *hooks)
+{
+    s_modernHooksSet = hooks != nullptr;
+    if (hooks)
+        s_modernHooks = *hooks;
+}
+
+const GfxModernHooks *R_ModernHooks()
+{
+    return s_modernHooksSet ? &s_modernHooks : nullptr;
+}
 
 IDirect3D9 *R_HW_Direct3DCreate9(UINT SDKVersion)
 {
