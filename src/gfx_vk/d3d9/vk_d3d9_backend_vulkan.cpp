@@ -4,9 +4,12 @@
 
 #include "vk_d3d9_internal.h"
 
+#include <gfx_vk/modern/vk_modern.h>
+
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 
 namespace gfx_vk::d3d9
 {
@@ -72,6 +75,12 @@ struct Backend
     lg::DeviceStats presentStats{};
     CoreStats presentCore{};
     uint64_t framesTracked = 0;
+    // The Modern path's anti-aliasing, made at its first scene; its counts
+    // at the last reset; the reasons it could not run, each logged once.
+    modern::Taa *taa = nullptr;
+    modern::TaaStats taaBase{};
+    bool taaFailed = false;
+    std::string modernRefusals;
 };
 
 namespace
@@ -351,8 +360,22 @@ void BackendLogStats(Backend *backend, bool reset)
     }
     else
         HostLog(h, "vulkan d3d9: occlusion queries: not counted, every finished query reports all samples passed");
+    // The Modern path, when r_visuals modern has run it: the scenes it
+    // anti-aliased, the ones of them that started the history again, and
+    // the GPU time of its pass.
+    if (backend->taa)
+    {
+        const modern::TaaStats taa = modern::Stats(backend->taa);
+        const PassTimings pass = PassTimingsFor(backend->core, "modern taa");
+        HostLog(h, "vulkan d3d9: modern: %llu scenes anti-aliased (%llu without history), %.3f ms GPU each",
+                static_cast<unsigned long long>(taa.resolves - backend->taaBase.resolves),
+                static_cast<unsigned long long>(taa.restarts - backend->taaBase.restarts),
+                pass.supported ? average(pass) : 0.0);
+    }
     if (reset)
     {
+        if (backend->taa)
+            backend->taaBase = modern::Stats(backend->taa);
         backend->statsBase = stats;
         backend->coreBase = core;
         backend->statsSince = now;
@@ -369,6 +392,11 @@ void CloseBackend(Backend *backend)
         return;
     const Host &h = *backend->host;
     BackendLogStats(backend, false);
+    if (backend->taa)
+    {
+        modern::DestroyTaa(backend->core, backend->taa);
+        backend->taa = nullptr;
+    }
     if (backend->legacy)
     {
         lg::DestroyDevice(backend->legacy);
@@ -443,6 +471,51 @@ void BackendCounters(const Backend *backend, DeviceCounters &out)
     out.occlusionSamples = backend && backend->legacy ? lg::Stats(backend->legacy).occlusionSamples : 0;
     out.textureUploads = backend && backend->legacy ? lg::Stats(backend->legacy).textureUploads : 0;
     out.textureUploadBytes = backend && backend->legacy ? lg::Stats(backend->legacy).uploadBytes : 0;
+}
+
+ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surface *depth,
+                                const ModernSceneView &view)
+{
+    if (!backend || !backend->legacy || !backend->core || backend->taaFailed)
+        return ModernResult::Refused;
+    const auto refuse = [backend](const std::string &reason) {
+        // Logged once per reason: a refusal would repeat every frame.
+        const std::string line = reason + "\n";
+        if (backend->modernRefusals.find(line) == std::string::npos)
+        {
+            backend->modernRefusals += line;
+            HostLog(*backend->host, "vulkan d3d9: modern: the scene is not anti-aliased: %s", reason.c_str());
+        }
+        return ModernResult::Refused;
+    };
+    if (!color || !depth)
+        return refuse(color ? "no depth surface is set" : "no render target 0 is set");
+    Image *colorImage = lg::SurfaceImage(color);
+    Image *depthImage = lg::SurfaceImage(depth);
+    if (!colorImage || !depthImage)
+        return refuse("render target 0 or the depth surface is not level 0 of a 2D texture");
+    if (!backend->taa)
+    {
+        std::string error;
+        backend->taa = modern::CreateTaa(backend->core, error);
+        if (!backend->taa)
+        {
+            backend->taaFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no anti-aliasing: %s", error.c_str());
+            return ModernResult::Refused;
+        }
+    }
+    if (!lg::HandOverRecording(backend->legacy))
+        return ModernResult::Skipped; // nothing of this frame is drawn either
+    modern::SceneView scene{};
+    std::memcpy(scene.view, view.view, sizeof(scene.view));
+    std::memcpy(scene.projection, view.projection, sizeof(scene.projection));
+    scene.area = {{static_cast<int32_t>(view.x), static_cast<int32_t>(view.y)}, {view.width, view.height}};
+    scene.cut = view.cut;
+    std::string error;
+    if (!modern::Resolve(backend->core, backend->taa, colorImage, depthImage, scene, error))
+        return refuse(error);
+    return ModernResult::Done;
 }
 
 void BackendPollProgress(Backend *backend)

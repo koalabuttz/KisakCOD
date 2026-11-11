@@ -10,3 +10,8 @@ void Sys_InstallClientWindow();
 void Sys_PumpClientWindow();
 // win_input.cpp's IN_DeactivateMouse, which win_local.h does not declare.
 void IN_DeactivateMouse();
+
+// win_configure.cpp's Sys_DetectVideoCard for the Linux and macOS game windows:
+// adapter 0's description from D3D9. Defined in texture_memory.cpp, beside the
+// renderer's other D3D9 query that has no Windows counterpart here.
+void Sys_DetectClientVideoCard(int descLimit, char *description);

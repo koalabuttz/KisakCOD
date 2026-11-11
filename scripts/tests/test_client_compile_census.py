@@ -294,8 +294,26 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("python3 scripts/tests/test_client_compile_census.py", self.commands)
         self.assertIn("scripts/tests/run_client_compile_census.py", self.commands)
         self.assertIn("--cxx clang++", self.commands)
-        self.assertLess(names.index("Run client compile census"), names.index("Run singleplayer compile census"))
-        self.assertIn("--target sp", self.commands)
+        # The singleplayer pass has its own job, so the two run side by side.
+        self.assertNotIn("Run singleplayer compile census", names)
+        self.assertNotIn("--target sp", self.commands)
+
+    def test_the_singleplayer_pass_runs_in_its_own_job_with_the_same_toolchain(self):
+        sp = self.workflow["jobs"]["sp_census"]
+        runs = "\n".join(step.get("run", "") for step in sp["steps"])
+        self.assertEqual(sp["if"], self.job["if"])
+        self.assertEqual(sp["runs-on"], self.job["runs-on"])
+        self.assertIn("--target sp", runs)
+        self.assertIn("--cxx clang++", runs)
+        for step in sp["steps"]:
+            if "run" in step:
+                with self.subTest(step=step.get("name")):
+                    self.assertTrue(step["run"].lstrip().startswith("set -euo pipefail"))
+        install = next(step for step in sp["steps"] if step.get("name") == "Install client census tools")
+        self.assertIn("libopenal-dev", install["run"])
+        self.assertIn("g++-multilib", install["run"])
+        upload = next(step for step in sp["steps"] if step.get("uses", "").startswith("actions/upload-artifact@"))
+        self.assertEqual(upload["if"], "always()")
 
     def test_every_command_block_propagates_failure(self):
         for step in self.job["steps"]:

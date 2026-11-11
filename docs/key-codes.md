@@ -21,7 +21,9 @@ the server-side warnings. The GUID is not the one retail CoD4 or PunkBuster
 derives from the same key, so it does not match retail ban lists.
 
 Servers that require Steam refuse the request with "This server requires Steam
-authentication; unverified retail GUIDs are not accepted."
+authentication; unverified retail GUIDs are not accepted." The server's console
+and log show the same reason with the player's address, as `rejected connection
+from <address>: <reason>`. It does not show the GUID.
 
 ## Setting it up
 

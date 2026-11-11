@@ -427,6 +427,13 @@ void SV_GetChallenge(netadr_t from)
             for (int slot = 0; slot < 1024; ++slot)
                 if (NET_CompareAdr(from, svs.challenges[slot].adr))
                     memset(&svs.challenges[slot], 0, sizeof(svs.challenges[slot]));
+            // KISAK: tell the operator too; the client is the only one that
+            // used to see why.  The reason is the server's own text after
+            // "error\n" and the address is the packet's, so nothing the client
+            // typed reaches the log.  SV_QueryLimitAllows already caps how
+            // often one address can get here.
+            Com_Printf(CON_CHANNEL_SERVER, "rejected connection from %s: %s\n", NET_AdrToString(from),
+                       error + sizeof("error\n") - 1);
             NET_OutOfBandPrint(NS_SERVER, from, error);
             return;
         }
