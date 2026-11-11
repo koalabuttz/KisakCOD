@@ -209,6 +209,8 @@ jobs:
 
       - name: Upload check logs
         if: ${{ failure() }}
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: checks-macos-${{ matrix.arch }}

@@ -231,6 +231,8 @@ jobs:
           COMMANDS
       - name: Upload window check log
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: KisakCOD-window-sdl${{ matrix.sdl }}
@@ -388,6 +390,8 @@ jobs:
 
       - name: Upload executable and check logs
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: KisakCOD-linux-${{ matrix.config }}
@@ -497,6 +501,8 @@ jobs:
 
       - name: Upload client census logs
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           # Compiler diagnostics for failing sources only; no binaries.
@@ -569,6 +575,8 @@ jobs:
 
       - name: Upload x64 census report
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           # Report and compiler diagnostics for failing units only; no binaries.
@@ -1580,6 +1588,8 @@ jobs:
 
       - name: Upload world front-end logs
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           # Compiler, link and test output only; the runner builds in a
@@ -1661,6 +1671,8 @@ jobs:
 
       - name: Upload world surface check logs
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           # Text logs only: the compiled test binaries live in a temporary
@@ -1850,6 +1862,8 @@ jobs:
 
       - name: Upload native D3D9 boundary logs
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           # Text logs only: the runner's binaries live in a temporary directory it
@@ -2314,6 +2328,8 @@ jobs:
 
       - name: Upload device probe logs
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           # Text logs only; no binary and no build directory is uploaded.
@@ -2403,6 +2419,8 @@ jobs:
 
       - name: Upload free camera check logs
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           # Text logs only; the runner removes its temporary binaries.
