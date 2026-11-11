@@ -4,9 +4,12 @@
 
 #include "vk_d3d9_internal.h"
 
+#include <gfx_vk/modern/vk_modern.h>
+
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 
 namespace gfx_vk::d3d9
 {
@@ -27,6 +30,8 @@ struct SlowFrame
     uint32_t pipelines = 0;
     uint32_t pipelineCacheHits = 0;
     double pipelineMs = 0.0;
+    uint32_t pixelModules = 0;
+    double pixelModuleMs = 0.0;
     uint32_t shaders = 0;
     double shaderMs = 0.0;
     uint64_t uploads = 0;
@@ -70,6 +75,12 @@ struct Backend
     lg::DeviceStats presentStats{};
     CoreStats presentCore{};
     uint64_t framesTracked = 0;
+    // The Modern path's anti-aliasing, made at its first scene; its counts
+    // at the last reset; the reasons it could not run, each logged once.
+    modern::Taa *taa = nullptr;
+    modern::TaaStats taaBase{};
+    bool taaFailed = false;
+    std::string modernRefusals;
 };
 
 namespace
@@ -116,6 +127,8 @@ void TrackFrame(Backend &backend)
             frame.pipelines = stats.pipelines - was.pipelines;
             frame.pipelineCacheHits = core.pipelineCacheHits - coreWas.pipelineCacheHits;
             frame.pipelineMs = double(stats.pipelineMicros - was.pipelineMicros) / 1000.0;
+            frame.pixelModules = stats.pixelModules - was.pixelModules;
+            frame.pixelModuleMs = double(stats.pixelModuleMicros - was.pixelModuleMicros) / 1000.0;
             frame.shaders = stats.shaders - was.shaders;
             frame.shaderMs = double(stats.shaderMicros - was.shaderMicros) / 1000.0;
             frame.uploads = stats.textureUploads - was.textureUploads;
@@ -161,7 +174,8 @@ void LogSlowFrames(const Backend &backend)
             std::snprintf(gpu, sizeof(gpu), "GPU time not read");
         HostLog(h,
                 "vulkan d3d9: slow frame %u: %.2f ms, frame %llu at %.2f s; %llu draws, %llu passes, %llu submissions, "
-                "%llu dynamic renames, %u swapchains built; of the time: %u pipelines (%u from the cache) %.2f ms, "
+                "%llu dynamic renames, %u swapchains built; of the time: %u pipelines (%u from the cache) %.2f ms "
+                "(%u pixel shaders built for them %.2f ms), "
                 "%u shaders %.2f ms, %llu texture uploads (%.2f MB) %.2f ms, %llu memory blocks %.2f ms; waits: "
                 "swapchain image %.2f ms, frames in flight %.2f ms, GPU otherwise %.2f ms (%llu textures read back), "
                 "record thread %.2f ms; %s",
@@ -169,7 +183,8 @@ void LogSlowFrames(const Backend &backend)
                 static_cast<unsigned long long>(frame.draws), static_cast<unsigned long long>(frame.passes),
                 static_cast<unsigned long long>(frame.submissions),
                 static_cast<unsigned long long>(frame.dynamicRenames), frame.swapchainBuilds, frame.pipelines,
-                frame.pipelineCacheHits, frame.pipelineMs, frame.shaders, frame.shaderMs,
+                frame.pipelineCacheHits, frame.pipelineMs, frame.pixelModules, frame.pixelModuleMs, frame.shaders,
+                frame.shaderMs,
                 static_cast<unsigned long long>(frame.uploads), frame.uploadMegabytes, frame.uploadMs,
                 static_cast<unsigned long long>(frame.memoryAllocations), frame.memoryAllocateMs, frame.imageWaitMs,
                 frame.frameLimitWaitMs, frame.otherGpuWaitMs, static_cast<unsigned long long>(frame.readbacks),
@@ -345,8 +360,22 @@ void BackendLogStats(Backend *backend, bool reset)
     }
     else
         HostLog(h, "vulkan d3d9: occlusion queries: not counted, every finished query reports all samples passed");
+    // The Modern path, when r_visuals modern has run it: the scenes it
+    // anti-aliased, the ones of them that started the history again, and
+    // the GPU time of its pass.
+    if (backend->taa)
+    {
+        const modern::TaaStats taa = modern::Stats(backend->taa);
+        const PassTimings pass = PassTimingsFor(backend->core, "modern taa");
+        HostLog(h, "vulkan d3d9: modern: %llu scenes anti-aliased (%llu without history), %.3f ms GPU each",
+                static_cast<unsigned long long>(taa.resolves - backend->taaBase.resolves),
+                static_cast<unsigned long long>(taa.restarts - backend->taaBase.restarts),
+                pass.supported ? average(pass) : 0.0);
+    }
     if (reset)
     {
+        if (backend->taa)
+            backend->taaBase = modern::Stats(backend->taa);
         backend->statsBase = stats;
         backend->coreBase = core;
         backend->statsSince = now;
@@ -363,6 +392,11 @@ void CloseBackend(Backend *backend)
         return;
     const Host &h = *backend->host;
     BackendLogStats(backend, false);
+    if (backend->taa)
+    {
+        modern::DestroyTaa(backend->core, backend->taa);
+        backend->taa = nullptr;
+    }
     if (backend->legacy)
     {
         lg::DestroyDevice(backend->legacy);
@@ -437,6 +471,51 @@ void BackendCounters(const Backend *backend, DeviceCounters &out)
     out.occlusionSamples = backend && backend->legacy ? lg::Stats(backend->legacy).occlusionSamples : 0;
     out.textureUploads = backend && backend->legacy ? lg::Stats(backend->legacy).textureUploads : 0;
     out.textureUploadBytes = backend && backend->legacy ? lg::Stats(backend->legacy).uploadBytes : 0;
+}
+
+ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surface *depth,
+                                const ModernSceneView &view)
+{
+    if (!backend || !backend->legacy || !backend->core || backend->taaFailed)
+        return ModernResult::Refused;
+    const auto refuse = [backend](const std::string &reason) {
+        // Logged once per reason: a refusal would repeat every frame.
+        const std::string line = reason + "\n";
+        if (backend->modernRefusals.find(line) == std::string::npos)
+        {
+            backend->modernRefusals += line;
+            HostLog(*backend->host, "vulkan d3d9: modern: the scene is not anti-aliased: %s", reason.c_str());
+        }
+        return ModernResult::Refused;
+    };
+    if (!color || !depth)
+        return refuse(color ? "no depth surface is set" : "no render target 0 is set");
+    Image *colorImage = lg::SurfaceImage(color);
+    Image *depthImage = lg::SurfaceImage(depth);
+    if (!colorImage || !depthImage)
+        return refuse("render target 0 or the depth surface is not level 0 of a 2D texture");
+    if (!backend->taa)
+    {
+        std::string error;
+        backend->taa = modern::CreateTaa(backend->core, error);
+        if (!backend->taa)
+        {
+            backend->taaFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no anti-aliasing: %s", error.c_str());
+            return ModernResult::Refused;
+        }
+    }
+    if (!lg::HandOverRecording(backend->legacy))
+        return ModernResult::Skipped; // nothing of this frame is drawn either
+    modern::SceneView scene{};
+    std::memcpy(scene.view, view.view, sizeof(scene.view));
+    std::memcpy(scene.projection, view.projection, sizeof(scene.projection));
+    scene.area = {{static_cast<int32_t>(view.x), static_cast<int32_t>(view.y)}, {view.width, view.height}};
+    scene.cut = view.cut;
+    std::string error;
+    if (!modern::Resolve(backend->core, backend->taa, colorImage, depthImage, scene, error))
+        return refuse(error);
+    return ModernResult::Done;
 }
 
 void BackendPollProgress(Backend *backend)

@@ -98,8 +98,10 @@ since the device was made or since the last call that started them again.
   device's, and every wait in between. Each line gives the time, the frame's
   number in the stretch and the second it ended at, and what the device's
   counters say happened in it: draws, passes, submissions, buffer renames and
-  swapchains built; the pipelines built (and how many of them the pipeline
-  cache held), the shaders made, the texture levels uploaded and the memory
+  swapchains built; the pipelines built (how many of them the pipeline
+  cache held, and how many pixel shaders were built for them with their own
+  milliseconds: the rest of the pipelines' time is the driver's), the shaders
+  made, the texture levels uploaded and the memory
   blocks allocated, each with its milliseconds; and the milliseconds the
   calling thread waited for a swapchain image, for the frames in flight (with
   two frames in flight, a `Present` waits for the frame before the one it
@@ -121,6 +123,10 @@ since the device was made or since the last call that started them again.
   sun's place on screen in the open the results are that sprite's samples,
   and with it behind a wall every result has no sample: `r_vkStats` twice, a
   few seconds apart, tells the two apart without a picture.
+* `vulkan d3d9: modern:` appears once the Modern path has run
+  (`r_visuals modern`, [vulkan-modern.md](vulkan-modern.md)): the scenes it
+  anti-aliased in the stretch, how many of them had no history to use (the
+  first, a camera cut, a new size), and the GPU time of its pass.
 
 ## Reference counts
 
@@ -308,6 +314,7 @@ a usage error.
 | `slow_frames` | The statistics' `slow frame` lines. Eight frames, of which the second makes the only blended draws of the check (so a pipeline is built) and then stands still for 400 ms, and the third uploads a texture and stands still for 250 ms. A report after the first frame has one line, for frame 1 with its 10 draws. The report after the eighth has three, the longest first, and names frames 2 and 3 with their times, their draws, the pipeline and the upload, and with the GPU's times where the device has timestamps. A report that starts the statistics again is followed by one with no such line. The two frames are found by number and not by rank, so a machine busy enough to hold another frame up for longer still passes. |
 | `kept_state` | The switch for what a draw takes up from the draw before it (`Tuning::keepDrawState`, the game's `r_vkKeepDrawState`). The same frame of 600 draws, in runs of eight that share a texture and with a vertex shader constant set to another value for every draw, is drawn with the state kept, not kept and kept again. Each change is taken up by the `Present` after it and logged once, the first frame logs none, and the statistics count 600 draws in each. The three pictures are the same to the pixel and every one of the 600 cells has its run's texture (a draw that took the constant of the one before would land in another cell). The frame drawn without the kept state writes close to twice the constants of the other two or more, which write the same as each other, and writes descriptor sets, where the third, kept again, writes none: the sets the first frame wrote last across frames. |
 | `multisample` | Multisampled targets. A one-sample triangle is drawn first as the yardstick: no pixel of its edge is between the two colours. A render target of 64x64 at 4 samples is drawn with a 4-sample depth surface of 128x128 (larger, as D3D9 allows) and the triangle in front of a far green quad; `GetDesc` reports 4 samples, an 8-sample target is made with 8 or 4 (`edge_pixels`, `eight_samples_made_with` are printed), and 3 samples are refused. An occlusion query of an 8x8 quad counts 256 samples, four a pixel. A draw with a one-sample depth surface is skipped. `StretchRect` resolves the target into a texture level: inside red, behind green, at least 32 pixels of the edge between the two, and a read of the target gives the same picture as the resolve. A scaled `StretchRect` into a corner of the back buffer. `Reset` to a 4-sample back buffer, a draw with a soft edge in the read back, `Present`, and `GetFrontBufferData` equal to the drawn picture; `Reset` back to one sample. |
+| `modern_taa` | The Modern path's temporal anti-aliasing (`ModernSceneDone`, [vulkan-modern.md](vulkan-modern.md)). First the camera reprojection on the CPU: a camera tens of thousands of units from the origin that moves and turns between two frames maps four points (30 to 6000 units away, and a direction for the sky) from this frame to the last within 1e-9 NDC in double and a quarter of a 1920-wide pixel as the float matrix the shader gets; the jitter sequence's first and ninth values. Then frames into the back buffer with a D24S8 depth surface: four that stand still come back exactly as drawn; sixteen with the engine's jitter, whose white quad ends 0.4 pixels past a pixel, leave that pixel between black and white (without the pass it is one or the other) while the pixels inside and outside stay as they were; a scene with no depth surface is refused and left alone. The statistics line at teardown counts 20 scenes, 2 of them without history. |
 | `bench` | Only when named (`--scene bench`), never in a full run: 120 frames of 768 draws of four D3D9 calls each, ended as `frame_loop`'s are, while another thread polls the sync fence every 20 microseconds. Prints the time the drawing thread spent on its draw calls per frame and the polls made meanwhile; passes when its frames were presented. |
 | `bench_runs` | Only when named, as `bench`: 100 frames of 768 draws in runs of eight that share a texture, an alpha reference and a pixel shader constant, as the engine's draws sorted by material do; each draw sets one vertex shader constant and draws its own quad from one static vertex and index buffer. It measures what the adapter does for a draw like the one before ([adapter](vulkan-legacy-adapter.md)). The last frame is read back and ten of its cells checked. Prints what `bench` prints. |
 | `reset` | `Reset` to 96x96 and back: the new size, default state, nothing bound, drawing at the new size. |
@@ -449,7 +456,7 @@ on the laptop and quits cleanly, with no unsupported call reported
 and all 21 levels do the same on llvmpipe in WSL
 ([linux-sp-levels.md](linux-sp-levels.md#vulkan-sweep-all-21-levels-pc-linux-in-wsl-x86_64-2026-11-11)). The
 programs still link the system's D3D9 (DXVK Native) and use it by default.
-`src/linux/client/vulkan/vulkan_backend.cpp` registers four dvars that are
+`src/linux/client/vulkan/vulkan_backend.cpp` registers five dvars that are
 archived and latched (a change applies at the next `vid_restart`):
 
 * `r_backend`: `d3d9` (default: DXVK on Linux) or `vulkan`.
@@ -461,6 +468,11 @@ archived and latched (a change applies at the next `vid_restart`):
   shader cache), and the Vulkan pipeline cache in `pipelines.bin` (the core's,
   ignored when another device or driver wrote it). 0 translates every shader
   and builds every pipeline from scratch at every start.
+* `r_visuals`: `legacy` (default: the game as it was made) or `modern`, the
+  Modern path, experimental: so far temporal anti-aliasing over the scene
+  ([vulkan-modern.md](vulkan-modern.md)). It needs a one-sample back buffer
+  (`r_aaSamples 1`); with more the scene is drawn as with `legacy` and the
+  reason is logged once.
 
 Four more are for measuring. They are not saved and take effect in the next
 frame (the front's `Tuning`), so one launch can compare settings, by hand, in
@@ -514,7 +526,8 @@ console as `Vulkan: ...`. When the device goes, the front logs where the CPU
 time went, for comparing loads and first frames with DXVK. The
 `vulkan d3d9: device stats: ...` line gives the shaders created and how many
 of them were translated (the rest came from the shader cache) with the time
-it took, the pipelines built with their time, and the texture uploads with
+it took, the pipelines built with their time (and of it, the pixel shaders
+built for them, each with the pipeline's fixed state folded in), and the texture uploads with
 their size and time. The core logs `pipeline cache: N bytes from ...` when it
 starts from the pipeline cache file, and `pipeline cache: N bytes to ...`
 when it writes the file back at teardown.
@@ -674,6 +687,18 @@ Vulkan's slowest frames are longer (25 to 97 ms against 7 to 8 ms), one of
 them two pipelines built during play. The first launch with an empty cache
 spent 3.4 s building 131 pipelines, where run 10 spent 1.1 s on 133.
 Report: `renderer/vulkan-backend-pc-run-11.md`.
+PC run 12 (2026-11-11, eb316f35, after PRs 233 and 234) shows the slow
+first launch was NVIDIA's own shader cache, which keeps compiled shaders
+whatever the game's folder holds: the first view's 71 pipelines took 1.29 s
+with every cache cold, and 0.25 s in a second fresh folder whose pipeline
+cache was empty but whose driver cache now had the shaders. Vulkan ran at a
+mean of 470.8 frames a second against Direct3D 9's 478.5, inside the spread
+of their launches, and a 103 ms frame showed up on Direct3D 9 too. PC run
+12b put the depth compare read at run time (`KISAK_VK_DEPTH_COMPARE=dynamic`)
+beside the default on that build: no change on this CPU-bound PC (461 to
+485 frames a second either way), and the sun's occlusion query still one a
+frame. Reports: `renderer/vulkan-backend-pc-run-12.md`,
+`renderer/vulkan-backend-pc-run-12b.md`.
 
 The device probe with `--backend vulkan` runs `r_init.cpp`'s device start
 unchanged (`R_PreCreateWindow`, `R_CreateWindow`, `R_CreateDevice`), clears,
@@ -906,7 +931,7 @@ evidence):
   (`renderer/model-lighting/luma_grid.py` in the project files).
 
 Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11,12,13,14,15,16,17,18,19,20}.md`,
-`renderer/vulkan-backend-pc-run-{6,7,8,9,10,11}.md` and
+`renderer/vulkan-backend-pc-run-{6,7,8,9,10,11,12,12b}.md` and
 `renderer/model-lighting/laptop-run-1.md` in the project files.
 
 ## Next
@@ -922,6 +947,6 @@ compiles 183 pixel shaders against DXVK's 169. On the Windows PC, in a
 Release build, Vulkan is level with Direct3D 9 within the spread of their
 launches (PC run 11), and the PC waits for the CPU: what is left there is
 the time per frame, the front's lock first. Then the pipelines: built during
-play they are the long frames on both machines (laptop run 12, PC run 11),
-and a first launch with an empty cache built them three times slower in PC
-run 11 than in run 10.
+play they are the long frames on both machines (laptop run 12, PC run 11).
+A first launch after the shaders change builds them slower while the
+driver's own cache is cold (PC run 12).

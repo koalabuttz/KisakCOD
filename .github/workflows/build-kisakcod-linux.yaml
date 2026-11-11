@@ -335,12 +335,16 @@ jobs:
           test -x "$BINARY"
           ls -l "$BINARY"
 
+      # Plain Python contract tests: they read the sources, not the build, so
+      # RelWithDebInfo would repeat Debug's result (about 3 minutes each).
       - name: Check test-runner configuration and failure handling
+        if: matrix.config == 'Debug'
         shell: bash
         run: |
           python3 scripts/tests/test_linux_check_runner.py
           python3 scripts/tests/test_ci_apt_install.py
           python3 scripts/tests/test_ci_each_config.py
+          python3 scripts/tests/test_run_pre_push_checks.py
           python3 scripts/tests/test_linux_fastfile_driver.py
           python3 scripts/tests/test_linux_client_core_driver.py
           python3 scripts/tests/test_strip_cdecl.py
@@ -419,8 +423,8 @@ jobs:
     # No link, no engine build, no DXVK, no SDL, no GPU, no game data. OpenAL
     # headers are needed because the sound sources include <AL/al.h>. One job:
     # a front-end pass has no optimization level, so Debug and RelWithDebInfo
-    # would compile identically. A second pass covers the singleplayer game
-    # (KisakCOD-sp, --target sp) against sp_compile_census_blocked.txt.
+    # would compile identically. The singleplayer game (KisakCOD-sp,
+    # --target sp) has its own job, sp_census, so the two passes run side by side.
     name: Asset-free client compile census
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -478,10 +482,51 @@ jobs:
             --log-dir artifacts/client-census \
             2>&1 | tee artifacts/client-census.log
 
+      - name: Upload client census logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Compiler diagnostics for failing sources only; no binaries.
+          name: KisakCOD-client-census
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 7
+
+  sp_census:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # The singleplayer half of the client compile census, on its own runner so
+    # it runs beside the multiplayer half instead of after it (about 5 minutes
+    # each): the same front-end pass over the Windows KisakCOD-sp sources with
+    # KISAK_SP, checked against scripts/tests/sp_compile_census_blocked.txt in
+    # both directions. No SP target links yet.
+    name: Asset-free singleplayer compile census
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
+
+      - name: Install client census tools
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/ci/apt-install.sh \
+            cmake clang g++-multilib python3 python3-yaml libopenal-dev
+          clang++ --version
+          printf 'int main(){return 0;}\n' > "$RUNNER_TEMP/m32-probe.cpp"
+          clang++ -m32 "$RUNNER_TEMP/m32-probe.cpp" -o "$RUNNER_TEMP/m32-probe"
+          "$RUNNER_TEMP/m32-probe"
+
       - name: Run singleplayer compile census
-        # The same pass over the Windows KisakCOD-sp sources with KISAK_SP
-        # (scripts/tests/sp_compile_census_blocked.txt). No SP target links yet.
-        if: ${{ !cancelled() }}
         timeout-minutes: 20
         shell: bash
         env:
@@ -494,12 +539,12 @@ jobs:
             --log-dir artifacts/sp-census \
             2>&1 | tee artifacts/sp-census.log
 
-      - name: Upload client census logs
+      - name: Upload singleplayer census logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           # Compiler diagnostics for failing sources only; no binaries.
-          name: KisakCOD-client-census
+          name: KisakCOD-sp-census
           path: artifacts/
           if-no-files-found: warn
           retention-days: 7
@@ -3060,7 +3105,7 @@ jobs:
           export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/stand-ins"
           log="$RUNNER_TEMP/device-probe-vulkan.log"
           "$OUT_DIR/KisakCOD-device-probe" --backend vulkan --validation auto 2>&1 | tee "$log"
-          grep -qx 'Graphics back end: Vulkan (validation auto, device -1, shader cache off)' "$log"
+          grep -qx 'Graphics back end: Vulkan (validation auto, device -1, shader cache off, visuals legacy)' "$log"
           grep -q '^vulkan presents=3 skipped=0 unsupported_calls=0 ' "$log"
           grep -q '^readback width=640 height=480 .* mismatched_pixels=0$' "$log"
           grep -q '^vulkan_teardown destroyed=yes ' "$log"

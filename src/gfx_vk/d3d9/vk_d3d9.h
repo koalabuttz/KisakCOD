@@ -154,4 +154,34 @@ uint32_t LogDeviceStats(bool reset);
 // surface must not outlive its window. The devices stay usable until they are
 // released, but present nothing. Returns how many devices used the window.
 uint32_t WindowDestroying(D3D9Window window);
+
+// ---- The Modern path (the engine's r_visuals modern; docs/vulkan-modern.md) ------------------
+//
+// The camera of the 3D scene the renderer has just drawn, in D3D9's convention
+// (row vectors: p_clip = p_world * view * projection).
+struct ModernSceneView
+{
+    float view[4][4];
+    // With the frame's sub-pixel jitter in [2][0] and [2][1], in NDC units.
+    float projection[4][4];
+    // The scene's viewport in render target 0, in pixels.
+    uint32_t x, y, width, height;
+    // A camera cut: no history from before it is used.
+    bool cut;
+};
+enum class ModernResult
+{
+    Done,
+    // The frame is not drawn (a minimised window): nothing to do.
+    Skipped,
+    // Nothing changed: the device is not the front's, its back end has no
+    // Modern path (the PS Vita's), or the passes cannot run on this scene (a
+    // multisampled one, say). The reason is logged through the host the
+    // first time it comes up. The program should stop jittering the scene.
+    Refused,
+};
+// Runs the Modern path's passes over the scene in the device's render target
+// 0 and depth surface (today: temporal anti-aliasing), between the renderer's
+// draws.
+ModernResult ModernSceneDone(IDirect3DDevice9 *device, const ModernSceneView &view);
 } // namespace gfx_vk::d3d9

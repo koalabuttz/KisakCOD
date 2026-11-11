@@ -476,6 +476,8 @@ VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t dept
     {
         if (ps.module)
             return ps.module;
+        const TimeInto timer(device.stats.pixelModuleMicros);
+        ++device.stats.pixelModules;
         if (!ls::BuildSpirv(ps.translated, nullptr, spirv, error))
         {
             Fail(device, "pixel shader %08x: %s", ps.translated.bytecodeHash, error.c_str());
@@ -492,6 +494,8 @@ VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t dept
     auto found = ps.linked.find(moduleKey);
     if (found != ps.linked.end())
         return found->second;
+    const TimeInto timer(device.stats.pixelModuleMicros);
+    ++device.stats.pixelModules;
     const uint32_t compare = alphaCompare ? alphaCompare - 1 : 0;
     // Where depth compare is fixed, so is the reference's clamp
     // (SamplerStateBlock::drefClamp, as FillUniformBlock writes it).
@@ -2648,6 +2652,27 @@ void DetachWindow(Device *device_)
     ForgetRecordingState(device);
 }
 
+
+bool HandOverRecording(Device *device_)
+{
+    Device &device = *device_;
+    if (!Usable(device))
+        return false;
+    // A skipped frame stays skipped until Present, as for draws.
+    if (!EnsureFrame(device))
+        return false;
+    EndPassIfOpen(device);
+    ForgetRecordingState(device);
+    return true;
+}
+
+gfx_vk::Image *SurfaceImage(const Surface *surface)
+{
+    if (!surface || !surface->texture || surface->level || surface->face
+        || surface->texture->desc.kind != TextureKind::Tex2D)
+        return nullptr;
+    return surface->texture->image;
+}
 
 PresentResult Present(Device *device_)
 {

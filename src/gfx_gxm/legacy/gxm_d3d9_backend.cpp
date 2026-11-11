@@ -116,6 +116,12 @@ void BackendCounters(const Backend *, DeviceCounters &out)
 // sceGxm's queries need no system call under the front's lock.
 void BackendPollProgress(Backend *) {}
 
+// No Modern path on the PS Vita.
+ModernResult BackendModernScene(Backend *, lg::Surface *, lg::Surface *, const ModernSceneView &)
+{
+    return ModernResult::Refused;
+}
+
 // No frame statistics are kept here, and the host has no settings to take up.
 void BackendLogStats(Backend *, bool) {}
 void BackendFrame(Backend *) {}

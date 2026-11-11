@@ -290,6 +290,11 @@ struct DeviceStats
     uint32_t shadersCached;    // of those, served by the shader cache (not translated)
     uint64_t shaderMicros;     // translating them (vertex modules included)
     uint64_t pipelineMicros;   // building pipelines (pixel modules included)
+    // Of those pipelines, the pixel shader modules built for them (a shader's
+    // SPIR-V with the pipeline's fixed state folded in, see PixelModule) and
+    // the time that took, the rest of pipelineMicros being the driver's.
+    uint32_t pixelModules;
+    uint64_t pixelModuleMicros;
     uint64_t textureUploads;   // copy commands of UnlockRect and UpdateTexture, of one or more regions of a level
     uint64_t textureReadbacks; // levels read back to lock a texture again (once each)
     uint64_t uploadBytes;
@@ -550,6 +555,20 @@ enum class PresentResult
     Failed,
 };
 PresentResult Present(Device *device);
+
+#if !defined(KISAK_GFX_GXM)
+// ---- Passes of another user of the core (the Modern path) --------------------------------
+//
+// Ends the pass being drawn and forgets what the device has bound, so that
+// the caller can record passes of its own on the core (vk_core.h) between
+// draws; the next draw begins a new pass and binds everything again. Opens
+// the frame if none is open. False, with nothing to record into, when the
+// frame is skipped (minimised window) or the device has failed.
+bool HandOverRecording(Device *device);
+// The core image a surface draws into: its texture's image when the surface
+// is level 0 of a 2D texture or a standalone surface, else null.
+gfx_vk::Image *SurfaceImage(const Surface *surface);
+#endif
 
 // The device's window is about to be destroyed: an open pass and frame end
 // unshown, and the core lets go of its swapchain and surface (DetachWindow in

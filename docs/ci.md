@@ -92,11 +92,32 @@ of them.
   there two runners save more time than they wait. A new check that takes a
   minute or two per configuration should use the helper instead of a matrix,
   and `assert_both_configurations_in_one_job` in
-  `test_linux_window_workflow.py` pins each such job. The macOS dedicated server does the same, one
+  `test_linux_window_workflow.py` pins each such job.
+  The native job's contract tests (`Check test-runner configuration and
+  failure handling`, about 3 minutes) read sources, not the build, so they run
+  in the Debug leg only. The multiplayer and singleplayer compile censuses
+  (about 5 minutes each) are separate jobs, `client_census` and `sp_census`,
+  so they run side by side. The macOS dedicated server does the same, one
   job per architecture: GitHub runs five macOS jobs at a time and on 2026-11-10 never started a third of
   the `macos-26` jobs (the Intel pool lost one in twenty; `macos-15` for arm64 was no better in a trial,
   PR 221, closed), so every macOS job saved is one fewer to wait for. A cancelled macOS arm64 job that has no
   log never ran: it is no result, not a failure.
+- **Before you push.** Run `python3 scripts/tests/run_pre_push_checks.py`: it runs, four at a time, the
+  Linux bootstrap test, the runner self-tests, the workflow contract test and the CI script tests, plus
+  `run_linux_checks.py` when `build-linux/` and `bin/KisakCOD-dedi` exist (about two minutes in all, mostly
+  that last one; pass `--list` to see the set). A red push costs a whole queue wait, so a failure found here
+  is the cheapest one. Local results are not CI evidence.
+- **Package installs.** Every Linux job installs through `scripts/ci/apt-install.sh`: Ubuntu's main
+  archive instead of the runner's slow Azure mirror, packages cached between runs, and the refresh and
+  install tried again (up to four attempts, waiting 20, 40 and 60 s) when they fail, since on 2026-11-11
+  hosted runners lost name lookups for a minute and six jobs of one run died at `apt-get install` with
+  exit 100. A longer outage (2026-11-11, about 14:40 to 17:00 UTC) showed that some runners resolve no
+  ubuntu.com name at all, Azure's included, while other runners of the same run installed fine. So when `archive.ubuntu.com` does not resolve, `apt-install.sh` points the
+  default network link at public resolvers (1.1.1.1, 8.8.8.8) before each attempt. Whether that works on
+  a hosted runner is unverified until a runner with broken lookups logs "resolves through public
+  resolvers". (An earlier version of the mirror rewrite skipped the runners' own list because it already
+  named the main archive; that left the slow Azure mirror first and one install step timed out.)
+  `test_ci_apt_install.py` pins it.
 
 Decided by the project owner on 2026-11-10 (drafts, Windows ARM64, Intel macOS)
 and 2026-11-03 (SDL2 after a merge, path filters, cancelling). Both build
