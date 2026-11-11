@@ -1,0 +1,269 @@
+{
+  "format": "kisak-run/1",
+  "id": "vulkan-ahead-mp-crash",
+  "title": "Vulkan back end: pipelines built ahead and the per-draw cuts (PR 237) against the same build with building ahead off and against master, on mp_crash with 12 bots, from a warm home",
+  "asker": "Develop the Vulkan renderer",
+  "game": {
+    "binary": "{build}/bin/KisakCOD-mp",
+    "args": [
+      "+set",
+      "fs_basepath",
+      "{game}",
+      "+set",
+      "net_ip",
+      "127.0.0.1",
+      "+set",
+      "snd_volume",
+      "0",
+      "+set",
+      "com_maxfps",
+      "0",
+      "+set",
+      "r_vsync",
+      "0",
+      "+set",
+      "r_fullscreen",
+      "0",
+      "+set",
+      "vid_xpos",
+      "0",
+      "+set",
+      "vid_ypos",
+      "0",
+      "+set",
+      "r_mode",
+      "1280x800",
+      "+set",
+      "developer_script",
+      "1"
+    ],
+    "args_after": [
+      "+devmap",
+      "mp_crash"
+    ],
+    "env": {
+      "ALSOFT_DRIVERS": "pulse",
+      "DXVK_LOG_PATH": "{out}/{row}",
+      "LD_LIBRARY_PATH": "{libs}",
+      "DXVK_CONFIG": "d3d9.presentInterval = 0",
+      "MESA_SHADER_CACHE_DIR": "{mesa_cache}",
+      "TRACY_NO_SAMPLING": "1"
+    },
+    "clear_env": [
+      "TRACY_NO_SAMPLING",
+      "KISAK_VK_*",
+      "DXVK_LOG_LEVEL",
+      "SDL_VIDEODRIVER",
+      "SDL_VIDEO_DRIVER",
+      "DXVK_WSI_DRIVER",
+      "DXVK_STATE_CACHE_PATH"
+    ],
+    "home_template": "{home_template}",
+    "quit_timeout": 40
+  },
+  "variants": {
+    "A": {
+      "args": [
+        "+set",
+        "r_backend",
+        "vulkan"
+      ],
+      "note": "PR 237, pipelines built ahead (default)"
+    },
+    "N": {
+      "args": [
+        "+set",
+        "r_backend",
+        "vulkan"
+      ],
+      "env": {
+        "KISAK_VK_PIPELINES_AHEAD": "0"
+      },
+      "note": "PR 237, building ahead off"
+    },
+    "M": {
+      "binary": "{master_build}/bin/KisakCOD-mp",
+      "args": [
+        "+set",
+        "r_backend",
+        "vulkan"
+      ],
+      "note": "master build"
+    }
+  },
+  "rows": [
+    "A",
+    "N",
+    "M",
+    "M",
+    "N",
+    "A"
+  ],
+  "scene": [
+    {
+      "wait_quiet": 15,
+      "min": 20,
+      "timeout": 150
+    },
+    {
+      "send": "sv_serverid"
+    },
+    {
+      "expect": "\"sv_serverid\" is: \"(?P<serverid>[0-9]+)",
+      "timeout": 30
+    },
+    {
+      "send": "mr {serverid} 8 autoassign"
+    },
+    {
+      "sleep": 3
+    },
+    {
+      "send": "mr {serverid} 15 assault_mp,0"
+    },
+    {
+      "sleep": 5
+    },
+    {
+      "send": [
+        "god",
+        "setviewpos -716 461 295 121",
+        "viewpos"
+      ],
+      "gap": 1
+    },
+    {
+      "expect": "^\\(-716 461 ",
+      "timeout": 5
+    },
+    {
+      "send": [
+        "sv_botsPressAttackBtn 1",
+        "cl_yawspeed 40"
+      ],
+      "gap": 0.5
+    },
+    {
+      "send": [
+        "developer",
+        "developer_script",
+        "g_gametype",
+        "sv_cheats",
+        "r_mode",
+        "r_fullscreen",
+        "r_aaSamples",
+        "r_depthPrepass",
+        "com_maxfps",
+        "r_vsync",
+        "snd_volume",
+        "sv_maxclients",
+        "sm_enable",
+        "sm_sunEnable",
+        "sm_spotEnable",
+        "sm_maxLights",
+        "cl_yawspeed",
+        "r_gpuSync"
+      ],
+      "gap": 0.3
+    },
+    {
+      "send": "set scr_testclients 12"
+    },
+    {
+      "send": "r_vkStats"
+    },
+    {
+      "sleep": 1
+    },
+    {
+      "poll": "status",
+      "count": "^(?!.* (CNCT|ZMBI) ).*bot[0-9]+\\^7",
+      "at_least": 12,
+      "every": 2,
+      "timeout": 120,
+      "name": "bots"
+    },
+    {
+      "sleep": 10
+    },
+    {
+      "send": [
+        "setviewpos -716 461 295 121",
+        "cl_yawspeed 40",
+        "viewpos"
+      ],
+      "gap": 0.5
+    },
+    {
+      "expect": "^\\((?P<capture_start_viewpos>[-0-9. ]+)\\) : ",
+      "timeout": 5
+    },
+    {
+      "send": "+left"
+    },
+    {
+      "sleep": 1
+    },
+    {
+      "send": "r_vkStats"
+    },
+    {
+      "sleep": 1
+    },
+    {
+      "framelog": 120
+    },
+    {
+      "send": "r_vkStats"
+    },
+    {
+      "sleep": 2
+    },
+    {
+      "send": [
+        "-left",
+        "viewpos"
+      ],
+      "gap": 0.5
+    },
+    {
+      "expect": "^\\((?P<capture_end_viewpos>[-0-9. ]+)\\) : ",
+      "timeout": 5,
+      "optional": true
+    }
+  ],
+  "lines": [
+    "^Vulkan: legacy: device ready:",
+    "^Vulkan: legacy: pipeline list",
+    "frame stats:",
+    "GPU time:",
+    "slow frame [0-9]",
+    "device stats:",
+    "record thread:",
+    "\" is: \""
+  ],
+  "counts": {
+    "validation": "^(?!.*\\b0 validation errors).*validation error"
+  },
+  "power": {
+    "require": "mains",
+    "battery_floor": 10,
+    "battery_per_launch": 8,
+    "profile": "power-saver",
+    "wait": 300,
+    "retries": 1
+  },
+  "load": {
+    "max_cpu_percent": 50,
+    "wait": 600
+  },
+  "stop_if_running": [
+    "Vita3K"
+  ],
+  "guard": [
+    "{game}",
+    "{game}/main",
+    "{game}/players/**",
+    "{dxvk_prefix}/**"
+  ]
+}
