@@ -203,6 +203,48 @@ stand-in game (`tests/runs/fake_game.cpp`) and a made-up power-supply folder:
 the scene steps, every check above, the pause and the resume, and a tampered
 results file. The driver has met the real client on no machine yet.
 
+## Menus without a person: `menu_check.py`
+
+`scripts/runs/menu_check.py` clicks through the multiplayer menus of the native
+client on a private X display (Xvfb), with xdotool, and checks what they show.
+Nobody has to sit at the screen and nothing is seen. It starts a dedicated
+server and the client with private homes and checks, in order:
+
+1. the key code menu: a mistyped key is refused and saves nothing, the made-up
+   test key is accepted and saved as `codkey.txt` with mode 600;
+2. Join Game, source Local, Refresh: the server is listed by name;
+3. Add to Favourites, source Favourites, Refresh: listed;
+4. Join from that list: the server sees the player connect, with the key code
+   saved in step 1;
+5. after a client restart, the favourite is still listed.
+
+    python3 scripts/runs/menu_check.py --client build/bin/KisakCOD-mp \
+        --server build/bin/KisakCOD-dedi --game-dir ~/cod4 --out ~/kisak-private/menu-1
+
+It writes `results.json` (one entry per check, with the last menu listing for
+a failed one) and the logs in the `--out` folder. The key typed is never
+printed or logged.
+
+The client's home gets a player profile (`players/profiles/menucheck` and
+`active.txt`) before the first start; without one the menus open "You need a
+player profile" pop-ups over everything. In WSL `/tmp/.X11-unix` is a
+read-only mount and `Xvfb -displayfd` finds no display, so the script then
+starts Xvfb on an explicit free number from `:90` up.
+
+The server is started with `sv_pure 1`: the browser's default filter
+(`ui_browserShowPure 1`) lists pure servers only, and `sv_pure` defaults to 0, so a
+server without it answers the LAN scan but is filtered out of the list.
+
+The client's `listmenuitems` console command is what makes this possible: it
+prints every item of the open menus with its action script, dvar, text and the
+window pixel to click, and the rows of each list. Items are found by what they
+do (`open pc_join_unranked`, `uiScript RefreshServers`, `uiScript addFavorite`,
+`uiScript JoinServer`, `uiScript verifyCDKey`, the `cdkey1` to `cdkey5`
+fields), so another resolution or layout does not break the run. An item that
+shows a dvar's value prints the dvar's name, never the value, so the key code
+fields never appear in a listing. `scripts/tests/test_menu_check.py` checks the
+parser against the client's own format strings without a game.
+
 ## Short PS Vita starts
 
 A Vita3K or console start should end as soon as it has its numbers:

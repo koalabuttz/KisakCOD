@@ -2051,6 +2051,7 @@ cmd_function_s CL_OpenScriptMenu_f_VAR;
 cmd_function_s UI_OpenMenu_f_VAR;
 cmd_function_s UI_CloseMenu_f_VAR;
 cmd_function_s UI_ListMenus_f_VAR;
+cmd_function_s UI_ListMenuItems_f_VAR;
 cmd_function_s Com_WriteLocalizedSoundAliasFiles_VAR;
 cmd_function_s CL_SelectStringTableEntryInDvar_f_VAR;
 cmd_function_s KISAK_NULLSUB_VAR;
@@ -3124,6 +3125,7 @@ void CL_InitOnceForAllClients()
     Cmd_AddCommandInternal("openmenu", UI_OpenMenu_f, &UI_OpenMenu_f_VAR);
     Cmd_AddCommandInternal("closemenu", UI_CloseMenu_f, &UI_CloseMenu_f_VAR);
     Cmd_AddCommandInternal("listmenus", UI_ListMenus_f, &UI_ListMenus_f_VAR);
+    Cmd_AddCommandInternal("listmenuitems", UI_ListMenuItems_f, &UI_ListMenuItems_f_VAR);
     Cmd_AddCommandInternal(
         "selectStringTableEntryInDvar",
         CL_SelectStringTableEntryInDvar_f,
