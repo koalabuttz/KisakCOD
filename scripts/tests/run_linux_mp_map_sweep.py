@@ -405,6 +405,11 @@ def game_command(options, base, home, first_map):
                "+set", "g_logSync", "1",
                "+set", "r_fullscreen", "0",
                "+set", "r_mode", options.mode,
+               # The default position (3, 22) can push the window past the
+               # edge of a scaled screen, and screenshot then refuses a window
+               # it sees as partly off screen. A --set can still move it.
+               "+set", "vid_xpos", "0",
+               "+set", "vid_ypos", "0",
                "+set", "snd_volume", options.volume]
     if options.sound_debug:
         command += ["+set", "snd_alDebug", "1"]
