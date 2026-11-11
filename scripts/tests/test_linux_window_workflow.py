@@ -1046,6 +1046,21 @@ class CiTriggerTests(unittest.TestCase):
         self.assertEqual(json.loads(found.group(1)), ['arm64'])
         self.assertEqual(json.loads(found.group(2)), ['arm64', 'x86_64'])
 
+    def test_the_macos_dedicated_server_builds_both_configurations_in_one_job(self):
+        # GitHub runs five macOS jobs at a time and hands them out slowly
+        # (2026-11-10: a third of the macos-26 jobs never started), so each
+        # architecture takes one runner, not two.
+        job = self.macos['jobs']['dedicated']
+        self.assertEqual(job['name'], 'macOS ${{ matrix.arch }} dedicated server')
+        assert_both_configurations_in_one_job(self, job, [
+            'Configure ${{ matrix.arch }}', 'Build KisakCOD-dedi', 'Check for fused multiply-adds',
+            'Asset-free checks'])
+        upload = next(step for step in job['steps'] if step.get('name') == 'Upload executable')
+        self.assertEqual(upload['with']['name'], 'KisakCOD-dedi-macos-${{ matrix.arch }}')
+        self.assertIn('RelWithDebInfo', upload['with']['path'])
+        fused = next(step for step in job['steps'] if step.get('name') == 'Check for fused multiply-adds')
+        self.assertIn('!= arm64 ]; then exit 0', fused['run'])
+
     def test_macos_paths_are_the_same_for_both_events(self):
         self.assertEqual(self.macos['on']['push']['paths'], self.macos['on']['pull_request']['paths'])
 
