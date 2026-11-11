@@ -521,8 +521,23 @@ void Check::TextureLevels()
     }
     lg::UnlockRect(device, texture, 0, 0);
     DrawQuadPx(64, 0, 128, 64, 0.5f, 0xffffffffu);
+    // A slot's sampler is kept across textures with the same traits and made
+    // again for others: a single level reads level 0 at any size (maxLod 1),
+    // and the three-level texture bound again reads its level 2 once more.
+    // The state change makes the slot's sampler for the single level, so a
+    // sampler kept for the wrong texture would stop the next draw at level 1.
+    lg::Texture *single = Texture(lg::TextureKind::Tex2D, 64, 64, 1, 1, d3d::FMT_A8R8G8B8, "single");
+    if (!single || !Fill(single, 0, 0, [](uint32_t, uint32_t, uint32_t) { return Argb(255, 255, 128, 0); }))
+        return;
+    lg::SetTexture(device, 0, single);
+    lg::SetSamplerState(device, 0, d3d::SAMP_BORDERCOLOR, Argb(255, 0, 0, 0));
+    DrawQuadPx(16, 80, 32, 96, 0.5f, 0xffffffffu);
+    lg::SetTexture(device, 0, texture);
+    DrawQuadPx(48, 80, 64, 96, 0.5f, 0xffffffffu);
     if (!Read())
         return;
+    Expect("single_level", 24, 88, 255, 128, 0);
+    Expect("levels_again", 56, 88, 255, 0, 255);
     Expect("q_red", 16, 16, 255, 0, 0);
     Expect("q_green", 48, 16, 0, 255, 0);
     Expect("q_blue", 16, 48, 0, 0, 255);

@@ -54,34 +54,69 @@ inline uint32_t SamplesOf(D3DMULTISAMPLE_TYPE type) { return type >= D3DMULTISAM
 // call to wake it at the end of its own call. The engine's main thread polls
 // a fence thousands of times a second while the render thread draws
 // (R_SyncGpu), so with a plain mutex the render thread paid that on a good
-// part of its calls. A waiter that is still out of luck after kSpins tries
+// part of its calls. A waiter that is still out of luck after 2000 tries
 // (tens of microseconds: the holder is waiting for the GPU, building a
-// pipeline or not running) sleeps on the mutex after all.
+// pipeline or not running) sleeps after all.
 // KISAK_VK_FRONT_SPIN=0 makes every waiter sleep at once, to compare.
+//
+// The lock itself is one word (free, held, or held with sleepers), so taking
+// and dropping it without a waiter is one atomic operation each, inline in
+// the call; the sleep goes through a mutex and condition variable only a
+// waiter touches. The object needs no constructor that runs, so a call from a
+// static constructor or destructor still finds it.
 //
 // The PS Vita build keeps the plain recursive mutex: thread_local is emulated
 // there (a library call on every use), and its calls come from one thread.
 #if defined(__vita__)
 using FrontMutexType = std::recursive_mutex;
+FrontMutexType &FrontMutex();
 #else
 class FrontMutexType
 {
 public:
-    FrontMutexType();
-    void lock();
-    void unlock();
+    constexpr FrontMutexType() = default;
+    void lock()
+    {
+        const void *const self = Self();
+        if (owner_.load(std::memory_order_relaxed) == self)
+        {
+            ++depth_;
+            return;
+        }
+        uint32_t free = kFree;
+        if (!state_.compare_exchange_strong(free, kHeld, std::memory_order_acquire, std::memory_order_relaxed))
+            LockSlow();
+        owner_.store(self, std::memory_order_relaxed);
+        depth_ = 1;
+    }
+    void unlock()
+    {
+        if (--depth_ != 0)
+            return;
+        owner_.store(nullptr, std::memory_order_relaxed);
+        if (state_.exchange(kFree, std::memory_order_release) == kSleepers)
+            WakeOne();
+    }
 
 private:
-    static constexpr uint32_t kSpins = 2000;
-    std::mutex mutex_;
-    // The thread inside (a token of its own, see lock()), null when free.
-    // Only that thread stores its token, so a thread that reads its own is in.
+    static constexpr uint32_t kFree = 0, kHeld = 1, kSleepers = 2;
+    // Any address that is this thread's alone.
+    static const void *Self()
+    {
+        static thread_local const char t_token = 0;
+        return &t_token;
+    }
+    void LockSlow();
+    void WakeOne();
+    std::atomic<uint32_t> state_{kFree};
+    // The thread inside (its Self()), null when free. Only that thread stores
+    // its token, so a thread that reads its own is in.
     std::atomic<const void *> owner_{nullptr};
     uint32_t depth_ = 0; // the owner's
-    uint32_t spins_ = kSpins;
 };
+inline constinit FrontMutexType g_frontMutex;
+inline FrontMutexType &FrontMutex() { return g_frontMutex; }
 #endif
-FrontMutexType &FrontMutex();
 class FrontLock
 {
 public:

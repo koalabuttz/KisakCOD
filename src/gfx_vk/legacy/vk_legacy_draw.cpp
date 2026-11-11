@@ -836,10 +836,19 @@ PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, co
 
 // ---- Per-draw state ---------------------------------------------------------------------
 
-VkSampler SamplerFor(Device &device, uint32_t slot, const Texture *texture)
+// What of a texture its sampler depends on (SamplerFor): a cube, a depth
+// format, and one level or more. No texture is like one of a single level.
+uint8_t SamplerTraits(const Texture *texture)
 {
-    if (device.samplers[slot])
-        return device.samplers[slot];
+    if (!texture)
+        return 0;
+    return static_cast<uint8_t>((texture->desc.kind == TextureKind::Cube ? 1u : 0u)
+                                | (texture->format->depth ? 2u : 0u) | (texture->desc.levels > 1 ? 4u : 0u));
+}
+
+// The sampler for a slot's states and this texture, from the core's cache.
+VkSampler MakeSampler(Device &device, uint32_t slot, const Texture *texture)
+{
     const uint32_t *ss = device.samplerStates[slot];
     VkSamplerCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -901,7 +910,22 @@ VkSampler SamplerFor(Device &device, uint32_t slot, const Texture *texture)
         info.minLod = float(ss[d3d::SAMP_MAXMIPLEVEL]);
         info.maxLod = std::max(16.0f, info.minLod);
     }
-    device.samplers[slot] = GetSampler(device.core, info);
+    return GetSampler(device.core, info);
+}
+
+// MakeSampler's, kept in the slot until its states change or a texture with
+// other traits is bound (Device::verifyShortcuts: made again and compared).
+VkSampler SamplerFor(Device &device, uint32_t slot, const Texture *texture)
+{
+    const uint8_t traits = SamplerTraits(texture);
+    if (device.samplers[slot] && device.samplerTraits[slot] == traits)
+    {
+        if (device.verifyShortcuts && MakeSampler(device, slot, texture) != device.samplers[slot])
+            Fail(device, "the sampler kept for slot %u is not the one its states and texture give", slot);
+        return device.samplers[slot];
+    }
+    device.samplers[slot] = MakeSampler(device, slot, texture);
+    device.samplerTraits[slot] = traits;
     return device.samplers[slot];
 }
 
@@ -1028,16 +1052,18 @@ bool BindTextures(Device &device, const Shader &vs, const Shader &ps, DrawTextur
 // draw must be in one buffer; when the frame's memory moves on to another
 // one, the first draw after that writes all its blocks again.
 
+// No member initializers: BindUniforms keeps an array of them per draw and
+// fills in the ones the pipeline has (KeyForBlock).
 struct UniformKey
 {
-    uint64_t key = 0;
-    uint32_t shader = 0;
+    uint64_t key;
+    uint32_t shader;
 };
 
 UniformKey KeyForBlock(const Device &device, uint32_t binding, const Shader &vs, const Shader &ps,
                        const DrawTextures &textures)
 {
-    UniformKey key;
+    UniformKey key{0, 0};
     switch (static_cast<ls::Uniform>(binding & 15))
     {
     case ls::Uniform::AlphaTest:
@@ -2086,8 +2112,9 @@ void SetTexture(Device *device, uint32_t sampler, Texture *texture)
     const int slot = SamplerSlot(sampler);
     if (slot < 0 || device->textures[slot] == texture)
         return;
+    // The slot's sampler stays: SamplerFor builds another when this texture's
+    // traits differ from those it was built for.
     device->textures[slot] = texture;
-    device->samplers[slot] = VK_NULL_HANDLE; // depends on the texture's kind, levels and format
 }
 
 void SetVertexShader(Device *device, Shader *shader)

@@ -3,11 +3,13 @@
 
 #include "vk_d3d9_internal.h"
 
+#include <condition_variable>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <mutex>
 #include <vector>
 
 #if defined(_MSC_VER)
@@ -96,50 +98,66 @@ bool SpinDisabled()
     return text && std::strcmp(text, "0") == 0;
 #endif
 }
+
+// What a waiter sleeps on. Made by the first waiter and never destroyed.
+struct FrontSleep
+{
+    std::mutex mutex;
+    std::condition_variable wake;
+};
+
+FrontSleep &Sleep()
+{
+    static FrontSleep *const sleep = new FrontSleep;
+    return *sleep;
+}
+
+uint32_t Spins()
+{
+    static const uint32_t spins = SpinDisabled() ? 0 : 2000;
+    return spins;
+}
 } // namespace
 
-FrontMutexType::FrontMutexType() : spins_(SpinDisabled() ? 0 : kSpins) {}
-
-void FrontMutexType::lock()
+void FrontMutexType::LockSlow()
 {
-    // Any address that is this thread's alone.
-    static thread_local const char t_token = 0;
-    const void *const self = &t_token;
-    if (owner_.load(std::memory_order_relaxed) == self)
-    {
-        ++depth_;
-        return;
-    }
-    bool held = mutex_.try_lock();
-    for (uint32_t spin = 0; !held && spin < spins_; ++spin)
+    const uint32_t spins = Spins();
+    for (uint32_t spin = 0; spin < spins; ++spin)
     {
         CpuRelax();
-        // Looks before it tries: a failed try still takes the mutex's cache
+        // Looks before it tries: a failed try still takes the lock's cache
         // line from the thread that will unlock it.
-        held = owner_.load(std::memory_order_relaxed) == nullptr && mutex_.try_lock();
+        uint32_t free = kFree;
+        if (state_.load(std::memory_order_relaxed) == kFree &&
+            state_.compare_exchange_weak(free, kHeld, std::memory_order_acquire, std::memory_order_relaxed))
+            return;
     }
-    if (!held)
-        mutex_.lock();
-    owner_.store(self, std::memory_order_relaxed);
-    depth_ = 1;
+    // Marks the lock as having sleepers, so its holder wakes one when it
+    // leaves; a waiter that takes it this way leaves the mark, which costs at
+    // most one wake nobody needed. The holder takes Sleep().mutex before it
+    // wakes anyone, so the mark and the wait cannot miss each other.
+    FrontSleep &sleep = Sleep();
+    std::unique_lock<std::mutex> guard(sleep.mutex);
+    while (state_.exchange(kSleepers, std::memory_order_acquire) != kFree)
+        sleep.wake.wait(guard);
 }
 
-void FrontMutexType::unlock()
+void FrontMutexType::WakeOne()
 {
-    if (--depth_ == 0)
+    FrontSleep &sleep = Sleep();
     {
-        owner_.store(nullptr, std::memory_order_relaxed);
-        mutex_.unlock();
+        std::lock_guard<std::mutex> guard(sleep.mutex);
     }
+    sleep.wake.notify_one();
 }
-#endif
-
+#else
 FrontMutexType &FrontMutex()
 {
     // Never destroyed: a device released from a static destructor still locks it.
     static FrontMutexType *const mutex = new FrontMutexType;
     return *mutex;
 }
+#endif
 
 IDirect3D9 *CreateDirect3D9(const Host &host)
 {

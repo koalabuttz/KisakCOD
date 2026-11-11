@@ -119,7 +119,10 @@ buffer by the core's `Recording()` number.
   logged (`draw state kept from one draw to the next: now off`).
 * **Textures.** Each sampler slot gets the bound texture's sample view (with the
   format's swizzle: L8, A8, A8L8, X8R8G8B8 and the rest read as D3D9 reads them)
-  and a sampler cached per slot and state. Empty slots read a 1x1 black
+  and a sampler cached per slot and state. The sampler depends on the texture
+  only through its traits (a cube, a depth format, one level or more), so
+  binding another texture with the same traits keeps the slot's sampler
+  rather than looking it up again. Empty slots read a 1x1 black
   texture of the kind the shader declares. Depth textures sample with compare
   (`LESS_OR_EQUAL`), as D3D9 shadow maps do. A draw that needs the same views
   and samplers as the draw before, in the same layout, binds that draw's
@@ -415,7 +418,7 @@ statistics, the validation counts, and `legacy_check=passed` or
 | `clear` | A full clear, a scissor-limited clear and a rectangle clear. |
 | `vertex_color` | A shader-model-3 draw with per-vertex colour; a vertex shader constant moving a quad; quad edges on exact pixels. |
 | `half_pixel` | Every one of the 16384 pixels of a full-target quad showing its own texel, so texel centres land on pixel centres. |
-| `texture_levels` | Mip levels uploaded one by one, sampled one by one. |
+| `texture_levels` | Mip levels uploaded one by one, sampled one by one; a single-level texture and the three-level one again in the same slot, so a sampler kept for the wrong texture shows. |
 | `formats` | L8, A8, A8L8, X8R8G8B8, A8B8G8R8, R5G6B5, A1R5G5B5, DXT1 and DXT5 read as D3D9 reads them (formats the device lacks are skipped). |
 | `alpha_test` | Alpha test with GREATER and LESS against a reference, then turned off (every texel passes), then on again. With the compare fixed in the pipeline, the three draws build two or three pipelines (earlier scenes may have built one) and turning the test back on builds none; read at run time, one pipeline serves them all. |
 | `blend` | Source-alpha blending, separate alpha blend, additive blending with a colour write mask. |

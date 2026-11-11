@@ -164,6 +164,12 @@ frame. Two things keep that from costing the render thread:
   system call to wake it, and then often finds the lock taken again.
   `KISAK_VK_FRONT_SPIN=0` makes every waiter sleep at once, to compare. The PS
   Vita build keeps the plain recursive mutex.
+* The lock is one word (free, held, held with sleepers) and its owner, both
+  atomics: taking and dropping it without a waiter is one atomic operation
+  each, inline in the method, with no call into the C library. Only a waiter
+  that runs out of tries touches a mutex and condition variable to sleep on.
+  The object needs no constructor that runs, so a call from a static
+  constructor or destructor still finds it.
 * `IDirect3DQuery9::GetData` asks the GPU how far it has got before it takes
   the lock (`BackendPollProgress`, the core's `RefreshProgress`,
   [vulkan-core.md](vulkan-core.md)), which is the part that takes a system

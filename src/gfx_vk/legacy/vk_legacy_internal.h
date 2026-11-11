@@ -446,7 +446,11 @@ struct Device
     uint32_t renderStates[d3d::RS_COUNT] = {};
     uint32_t samplerStates[kSamplerSlots][d3d::SAMP_COUNT] = {};
     Texture *textures[kSamplerSlots] = {};
-    VkSampler samplers[kSamplerSlots] = {}; // built from samplerStates and the bound texture; null: stale
+    // Built from samplerStates and what of the texture it was built for
+    // matters (SamplerTraits); null: stale. A texture with the same traits
+    // takes the slot's sampler as it is.
+    VkSampler samplers[kSamplerSlots] = {};
+    uint8_t samplerTraits[kSamplerSlots] = {};
     Shader *vertexShader = nullptr;
     Shader *pixelShader = nullptr;
     VertexDecl *decl = nullptr;
