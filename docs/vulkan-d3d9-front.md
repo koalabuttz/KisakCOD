@@ -99,7 +99,9 @@ since the device was made or since the last call that started them again.
   number in the stretch and the second it ended at, and what the device's
   counters say happened in it: draws, passes, submissions, buffer renames and
   swapchains built; the pipelines built (and how many of them the pipeline
-  cache held), the shaders made, the texture levels uploaded and the memory
+  cache held), the pipelines a draw waited for a worker to finish building
+  ahead (see "Pipelines built ahead" in
+  [vulkan-legacy-adapter.md](vulkan-legacy-adapter.md)), the shaders made, the texture levels uploaded and the memory
   blocks allocated, each with its milliseconds; and the milliseconds the
   calling thread waited for a swapchain image, for the frames in flight (with
   two frames in flight, a `Present` waits for the frame before the one it
@@ -523,8 +525,10 @@ console as `Vulkan: ...`. When the device goes, the front logs where the CPU
 time went, for comparing loads and first frames with DXVK. The
 `vulkan d3d9: device stats: ...` line gives the shaders created and how many
 of them were translated (the rest came from the shader cache) with the time
-it took, the pipelines built with their time, and the texture uploads with
-their size and time. The core logs `pipeline cache: N bytes from ...` when it
+it took, the pipelines built with their time, the pipelines built ahead on
+worker threads (their time there, how many a draw used, how many a draw waited
+for and how long, and how many entries the pipeline list holds), and the
+texture uploads with their size and time. The core logs `pipeline cache: N bytes from ...` when it
 starts from the pipeline cache file, and `pipeline cache: N bytes to ...`
 when it writes the file back at teardown.
 
