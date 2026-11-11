@@ -82,7 +82,7 @@
       "note": "PR 237, building ahead off"
     },
     "M": {
-      "binary": "{master_build}/bin/KisakCOD-mp",
+      "binary": "{build}/../vk-mp-x64-master/bin/KisakCOD-mp",
       "args": [
         "+set",
         "r_backend",
