@@ -1095,7 +1095,7 @@ jobs:
           grep -Eqx 'libavcodec\.so\.[0-9]+' "$RUNNER_TEMP/x64-mp-client-needed.txt"
           grep -Eqx 'libavutil\.so\.[0-9]+' "$RUNNER_TEMP/x64-mp-client-needed.txt"
           # Built with the HTTP downloader (src/qcommon/dl_main.cpp), which
-          # uses the system's libcurl; without the option the client has
+          # uses the system's libcurl; with it turned off the client has
           # stand-ins and no libcurl (the i386 client job).
           grep -Eqx 'libcurl\.so\.4' "$RUNNER_TEMP/x64-mp-client-needed.txt"
           nm -D --undefined-only "$OUT_DIR/KisakCOD-mp" | grep -Eq ' curl_multi_perform(@|$)'
@@ -2199,8 +2199,11 @@ jobs:
           # stays the player build with no profiler.
           tracy=OFF
           if [ "$config" = Debug ]; then tracy=ON; fi
+          # HTTP downloads are off here on purpose, so the client's download
+          # stand-ins (mp_client_unavailable.cpp) keep building; the x86_64
+          # client job builds the downloader.
           cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY="$openal" \
-            -DKISAK_LINUX_TRACY="$tracy" -DKISAK_LINUX_CINEMATICS=OFF \
+            -DKISAK_LINUX_TRACY="$tracy" -DKISAK_LINUX_CINEMATICS=OFF -DKISAK_LINUX_HTTP_DOWNLOADS=OFF \
             2>&1 | tee "artifacts/mp-client-$config.log"
           cmake --build "$BUILD_DIR" --target KisakCOD-mp KisakCOD-mp-client-window-test --parallel "$(nproc)" \
             2>&1 | tee -a "artifacts/mp-client-$config.log"

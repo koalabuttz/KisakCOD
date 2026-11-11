@@ -55,7 +55,7 @@ Running it again skips what is already built at the same revision, so after a
 | `--package <new folder>` | Also packs the client, SDL3 and DXVK into a [folder that runs on another PC](#a-folder-that-runs-on-another-pc), and `<new folder>.tar.gz`. That client is built without movies, because a movie build only starts where the build machine's own FFmpeg version is installed; `--movies` keeps them. |
 | `--sdk-only` | Builds SDL3 and DXVK and stops. |
 | `--build-type Debug` | The client's build type (default `RelWithDebInfo`). |
-| `--cmake-arg=-D...` | One more option for the client's configure, for example `--cmake-arg=-DKISAK_LINUX_HTTP_DOWNLOADS=ON`. |
+| `--cmake-arg=-D...` | One more option for the client's configure, for example `--cmake-arg=-DKISAK_LINUX_HTTP_DOWNLOADS=OFF`. |
 | `--openal-include <folder>` | Where `AL/al.h` is, when `libopenal-dev` is not installed (see below). |
 | `--dry-run` | Prints every command and runs nothing. |
 
@@ -289,7 +289,7 @@ engine answers on Windows when that service is missing:
 | Service | Windows owner | Answer on Linux |
 | --- | --- | --- |
 | Remote script debugger | `win_net_debug.cpp` | None attached. `net_listen` says it is unavailable. |
-| HTTP downloads | `dl_main.cpp` (libcurl) | Off by default: a download cannot begin, so the client sends `wwwdl fail` and falls back to the UDP download. `-DKISAK_LINUX_HTTP_DOWNLOADS=ON` links the real downloader ([below](#http-downloads)). |
+| HTTP downloads | `dl_main.cpp` (libcurl) | On by default where libcurl links ([below](#http-downloads)). Without libcurl, or with `-DKISAK_LINUX_HTTP_DOWNLOADS=OFF`, a download cannot begin, so the client sends `wwwdl fail` and falls back to the UDP download. |
 | Voice chat | `win_voice.cpp` (DirectSound) | No voice device: nothing is captured, sent or played. |
 
 Functions that only raw-asset loading (`useFastFile 0`) or an attached remote
@@ -309,13 +309,21 @@ client instead ([linux-steam.md](linux-steam.md)).
 A server can point the client at a web address for its map and mod files
 (`sv_wwwDownload`), which is much faster than the engine's own UDP transfer.
 The engine's downloader, `src/qcommon/dl_main.cpp`, does that with libcurl; the
-Windows build links a pinned static libcurl. On Linux it is opt-in:
+Windows build links a pinned static libcurl. On Linux it is on by default
+(`KISAK_LINUX_HTTP_DOWNLOADS=AUTO`) wherever libcurl's development files are
+found and link for the client's architecture; configure prints
+`KisakCOD-mp HTTP downloads: on` or says why it is off. `ON` makes a missing
+libcurl an error, and `OFF` leaves the downloader out:
 
 ```sh
-cmake ... -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_LINUX_HTTP_DOWNLOADS=ON
+cmake ... -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_LINUX_HTTP_DOWNLOADS=OFF
 ```
 
-That compiles `dl_main.cpp` unmodified into `KisakCOD-mp`, leaves its stand-ins
+A build folder configured before AUTO existed keeps the `OFF` it stored; pass
+`-DKISAK_LINUX_HTTP_DOWNLOADS=AUTO` once to change it. On macOS AUTO stays off
+until it has been tried there.
+
+With the downloader on, the build compiles `dl_main.cpp` unmodified into `KisakCOD-mp`, leaves its stand-ins
 out of `mp_client_unavailable.cpp`, and links the system's libcurl, found with
 pkg-config (7.85 or newer; `libcurl4-openssl-dev` on Debian and Ubuntu). For an
 i386 client on an x86_64 host install the i386 package and point pkg-config at
@@ -331,7 +339,8 @@ the UDP download. `scripts/tests/test_http_downloads.py` runs that state
 machine against local HTTP and TLS servers ([notes](../scripts/tests/http_downloads.md)).
 
 Hosted CI builds the x86_64 client with the option on and checks that it links
-libcurl and still exports no names; the i386 client job keeps it off. No
+libcurl and still exports no names; the i386 client job turns it off so the
+stand-ins keep building. No
 download from a real game server has been made with the Linux client yet: that
 needs a server with `sv_wwwDownload` set and a file the client lacks.
 
