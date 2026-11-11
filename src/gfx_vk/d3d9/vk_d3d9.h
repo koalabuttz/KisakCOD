@@ -58,6 +58,15 @@ struct Tuning
     bool keepDrawState = true;
 };
 
+// A display mode a fullscreen device asks for (Host::fullscreen). A 0 width or
+// height keeps the display's size; a 0 refresh rate takes any.
+struct FullscreenMode
+{
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t refreshRate = 0;
+};
+
 // What the front needs from the program around it: the window system, display
 // modes and the monitor. D3D9 answers these from the OS; the front asks.
 struct Host
@@ -79,6 +88,13 @@ struct Host
     // GetFrontBufferData into a display-sized surface (windowed screenshots).
     // Null: the monitor's top-left corner.
     bool (*windowOrigin)(void *user, D3D9Window window, int32_t &x, int32_t &y) = nullptr;
+    // Fullscreen as D3D9 does it for a device made or reset with Windowed
+    // false: the monitor switched to the mode and the window covering it.
+    // mode null: the desktop's mode back, when a fullscreen device is reset to
+    // windowed or released. Called under the front's lock. False: the mode
+    // could not be set (the host still covers the monitor with the window if
+    // it can). Null: a fullscreen device is a window where the program put it.
+    bool (*fullscreen)(void *user, D3D9Window window, const FullscreenMode *mode) = nullptr;
     // One line per call, no newline. Null: nowhere.
     void (*log)(void *user, const char *line) = nullptr;
 

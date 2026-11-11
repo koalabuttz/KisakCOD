@@ -57,7 +57,7 @@ import sys
 # The scenes the check runs, in order. A scene added to the check is added here.
 SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'model_lighting', 'dirty_update',
           'references', 'threads', 'queries', 'occlusion', 'frame_loop', 'gpu_feed', 'tuning', 'slow_frames',
-          'kept_state', 'multisample', 'modern_taa', 'reset', 'present')
+          'kept_state', 'multisample', 'modern_taa', 'reset', 'fullscreen', 'present')
 
 
 def run(binary, args, env, timeout=300):
