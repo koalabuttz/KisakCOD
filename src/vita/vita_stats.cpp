@@ -73,6 +73,12 @@ namespace
     // the console, so the dvars are read once (kisak::vita_run::StartText).
     kisak::vita_run::StartText<kisak::vita_run::kMaxTimedListLength> s_atMenu;
     kisak::vita_run::StartText<kisak::vita_run::kMaxTimedListLength> s_atMap;
+    // What vita_atMenu and vita_atMap send: their text, or the steps of the
+    // file they name ("@<file>"), read with them at start-up.
+    char s_atMenuSteps[kisak::vita_run::kMaxTimedListLength];
+    char s_atMapSteps[kisak::vita_run::kMaxTimedListLength];
+    const char *s_atMenuUsed = "";
+    const char *s_atMapUsed = "";
     kisak::vita_run::Plan s_plan;
     bool s_quitDue;
 
@@ -216,6 +222,56 @@ namespace
         Cbuf_AddText(0, "\n");
     }
 
+    // vita_atMenu or vita_atMap as taken at start-up: its text, or with
+    // "@<file>" the steps in that file of the data folder (one
+    // "<seconds> <command>" a line). What cannot be read sends nothing.
+    const char *StepsOf(const char *dvarName, const char *taken, char *steps, size_t stepsSize)
+    {
+        if (taken[0] != '@')
+        {
+            if (taken[0])
+                Com_Printf(CON_CHANNEL_SYSTEM, "Vita: %s \"%s\"\n", dvarName, taken);
+            return taken;
+        }
+        char name[kisak::vita_run::kMaxStepFileName];
+        if (!kisak::vita_run::StepFileName(taken, name, sizeof(name)))
+        {
+            Com_PrintError(CON_CHANNEL_SYSTEM, "Vita: %s \"%s\" does not name a plain file in %s; none of its "
+                "commands will be sent\n", dvarName, taken, Sys_VitaDataPath());
+            return "";
+        }
+        char path[256];
+        snprintf(path, sizeof(path), "%s/%s", Sys_VitaDataPath(), name);
+        // Room for the steps and a comment line or two each.
+        static char fileText[3 * kisak::vita_run::kMaxTimedListLength];
+        FILE *file = fopen(path, "rb");
+        size_t length = 0;
+        bool whole = false;
+        if (file)
+        {
+            length = fread(fileText, 1, sizeof(fileText) - 1, file);
+            whole = length < sizeof(fileText) - 1 || fgetc(file) == EOF;
+            fclose(file);
+        }
+        fileText[length] = '\0';
+        if (!file || !whole)
+        {
+            Com_PrintError(CON_CHANNEL_SYSTEM, "Vita: %s: %s %s; none of its commands will be sent\n", dvarName, path,
+                file ? "is too big" : "cannot be opened");
+            return "";
+        }
+        char error[96];
+        const int count = kisak::vita_run::JoinStepFile(fileText, steps, stepsSize, error, sizeof(error));
+        if (count < 0)
+        {
+            Com_PrintError(CON_CHANNEL_SYSTEM, "Vita: %s: %s %s; none of its commands will be sent\n", dvarName, path,
+                error);
+            return "";
+        }
+        Com_Printf(CON_CHANNEL_SYSTEM, "Vita: %s from %s: %d steps\n", dvarName, path, count);
+        return steps;
+    }
+
     unsigned int Seconds(const dvar_t *dvar)
     {
         return dvar && dvar->current.integer > 0 ? (unsigned int)dvar->current.integer : 0;
@@ -228,8 +284,8 @@ namespace
         settings.quitAfterMenu = Seconds(vita_quitAfterMenu);
         settings.quitAfterMap = Seconds(vita_quitAfterMap);
         settings.statsEvery = Seconds(vita_statsEvery);
-        settings.atMenu = s_atMenu.Get();
-        settings.atMap = s_atMap.Get();
+        settings.atMenu = s_atMenuUsed;
+        settings.atMap = s_atMapUsed;
         const kisak::vita_run::Step step = s_plan.Frame(now, MenuIsUp(), MapIsUp(), settings);
 
         if (step.menuCameUp)
@@ -269,11 +325,12 @@ void Vita_StatsInit()
     vita_statsEvery = Dvar_RegisterInt("vita_statsEvery", 60, 1, 86400, DVAR_NOFLAG,
         "Seconds between the load, memory and sound lines in the log");
     vita_atMenu = Dvar_RegisterString("vita_atMenu", "", DVAR_NOFLAG,
-        "Console commands to send after the main menu first showed: \"<seconds> <command> | <seconds> <command>\" "
-        "(read at start-up only)");
+        "Console commands to send after the main menu first showed: \"<seconds> <command> | <seconds> <command>\", "
+        "or \"@<file>\" for a file of such steps in the data folder, one a line (read at start-up only)");
     vita_atMap = Dvar_RegisterString("vita_atMap", "", DVAR_NOFLAG,
         "Console commands to send after the map was first in play: \"<seconds> <command> | <seconds> <command>\"; "
-        "{serverid} stands for the server id (read at start-up only)");
+        "or \"@<file>\" for a file of such steps in the data folder, one a line; {serverid} stands for the server id "
+        "(read at start-up only)");
     // Read here and nowhere else: a game server can set either dvar later, and
     // what they hold is run as console commands.
     if (!s_atMenu.Take(vita_atMenu ? vita_atMenu->current.string : ""))
@@ -292,10 +349,8 @@ void Vita_StatsInit()
         "vita_assertExit %d\n",
         Seconds(vita_quitAfter), Seconds(vita_quitAfterMenu), Seconds(vita_quitAfterMap), Seconds(vita_statsEvery),
         vita_assertExit && vita_assertExit->current.enabled ? 1 : 0);
-    if (s_atMenu.Get()[0])
-        Com_Printf(CON_CHANNEL_SYSTEM, "Vita: vita_atMenu \"%s\"\n", s_atMenu.Get());
-    if (s_atMap.Get()[0])
-        Com_Printf(CON_CHANNEL_SYSTEM, "Vita: vita_atMap \"%s\"\n", s_atMap.Get());
+    s_atMenuUsed = StepsOf("vita_atMenu", s_atMenu.Get(), s_atMenuSteps, sizeof(s_atMenuSteps));
+    s_atMapUsed = StepsOf("vita_atMap", s_atMap.Get(), s_atMapSteps, sizeof(s_atMapSteps));
     PrintMemory("after start-up");
     s_window = Window();
     s_window.start = Now();

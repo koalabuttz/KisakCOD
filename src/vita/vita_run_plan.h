@@ -12,7 +12,9 @@
 //   vita_quitAfter <s>       quit this long after start-up, as before
 //   vita_atMenu, vita_atMap  console commands to send that long after the
 //                            menu or the map came up:
-//                            "<seconds> <command> | <seconds> <command>"
+//                            "<seconds> <command> | <seconds> <command>",
+//                            or "@<file>": the same, one step a line, from
+//                            a file in the game's data folder (StepFile)
 //
 // Every quit timer prints all figures first and leaves the renderer and the
 // sound thread a moment to add theirs.
@@ -34,7 +36,9 @@
 namespace kisak::vita_run
 {
 
-constexpr size_t kMaxTimedCommands = 8;
+// One start can step through a whole sweep (every switch at both views), so
+// the list holds far more than the 8 that fit on a command line.
+constexpr size_t kMaxTimedCommands = 64;
 constexpr size_t kMaxCommandLength = 160;
 // Room for a full list: every command at its longest, with its time and bar.
 constexpr size_t kMaxTimedListLength = kMaxTimedCommands * (kMaxCommandLength + 32);
@@ -113,6 +117,88 @@ inline bool ParseTimedCommands(const char *text, TimedCommands *out, char *error
         part = bar + 1;
     }
     return true;
+}
+
+// "@<name>": the timed commands are in the file <name> in the game's data
+// folder. Writes the name and returns true when text asks for a file and the
+// name is plain (letters, digits, '.', '_', '-'; no leading '.', so no path
+// and no "..").
+constexpr size_t kMaxStepFileName = 64;
+inline bool StepFileName(const char *text, char *name, size_t nameSize)
+{
+    if (nameSize)
+        name[0] = '\0';
+    if (!text || text[0] != '@' || !text[1] || text[1] == '.')
+        return false;
+    const size_t length = strlen(text + 1);
+    if (length >= nameSize || length >= kMaxStepFileName)
+        return false;
+    for (size_t i = 0; i < length; ++i)
+    {
+        const char c = text[1 + i];
+        const bool plain = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' ||
+                           c == '_' || c == '-';
+        if (!plain)
+            return false;
+    }
+    memcpy(name, text + 1, length);
+    name[length] = '\0';
+    return true;
+}
+
+// A step file's text as one timed-command list: each line is
+// "<seconds> <command>", blank lines and lines starting with '#' are left
+// out, and the lines are joined with " | " for ParseTimedCommands. A line may
+// not hold a bar itself (it would split into two steps unseen). Returns the
+// number of steps, or -1 with the reason in error and out empty.
+inline int JoinStepFile(const char *fileText, char *out, size_t outSize, char *error, size_t errorSize)
+{
+    if (errorSize)
+        error[0] = '\0';
+    if (!outSize)
+        return -1;
+    out[0] = '\0';
+    size_t used = 0;
+    int steps = 0;
+    unsigned lineNumber = 0;
+    for (const char *line = fileText ? fileText : ""; *line;)
+    {
+        const char *next = strchr(line, '\n');
+        const char *end = next ? next : line + strlen(line);
+        ++lineNumber;
+        const char *from = line;
+        while (from < end && (*from == ' ' || *from == '\t'))
+            ++from;
+        while (end > from && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r'))
+            --end;
+        if (from < end && *from != '#')
+        {
+            const char *reason = nullptr;
+            if (memchr(from, '|', size_t(end - from)))
+                reason = "holds a '|' (one step a line)";
+            else if (used + (steps ? 3 : 0) + size_t(end - from) >= outSize)
+                reason = "does not fit (the steps are too long together)";
+            if (reason)
+            {
+                snprintf(error, errorSize, "line %u %s", lineNumber, reason);
+                out[0] = '\0';
+                return -1;
+            }
+            if (steps)
+            {
+                memcpy(out + used, " | ", 3);
+                used += 3;
+            }
+            memcpy(out + used, from, size_t(end - from));
+            used += size_t(end - from);
+            out[used] = '\0';
+            ++steps;
+        }
+        if (!next)
+            break;
+        line = next + 1;
+    }
+    return steps;
 }
 
 // A text setting as the start gave it.

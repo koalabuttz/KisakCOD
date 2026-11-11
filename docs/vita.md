@@ -127,6 +127,7 @@ types. Cast and use `%u` or `%llu`; the same test reads `src/vita` and
 | `vita_statsEvery <s>` | The period of the load, memory, GPU memory and sound lines (60 by default). The lines also come the moment the menu or the map is up, and the period counts from there. |
 | `vita_atMenu "<s> <command> \| <s> <command>"` | Console commands to send that many seconds after the menu first showed. Read at start-up only. |
 | `vita_atMap "..."` | The same after the map was first in play. `{serverid}` in a command stands for the server id. Read at start-up only. |
+| `vita_atMenu "@<file>"`, `vita_atMap "@<file>"` | The same steps from a file in the data folder (`ux0:data/KisakCOD/<file>`), one `<s> <command>` a line, up to 64; blank lines and lines starting with `#` are left out, and a line may not hold a `\|`. The name is letters, digits, `.`, `_` and `-` only. The log says `Vita: vita_atMap from ux0:data/KisakCOD/<file>: N steps`. Read at start-up only. |
 | `vita_assertExit 1` | A failed assertion or an exception nothing caught ends the process with exit code 1 where it would stop for a core dump. Vita3K hangs on that stop and loses the log's tail. Off by default: a console's dump is worth keeping. |
 
 Every quit timer first prints all figures (`Vita: vita_quitAfterMenu 15
@@ -142,7 +143,8 @@ happened: `Vita: the menu is up`, `Vita: the map is up`, and with the map
 server named. After start-up it says what the start was asked to do, since it
 does not hold the command line (`Vita: run switches: vita_quitAfter 600,
 vita_quitAfterMenu 0, vita_quitAfterMap 30, vita_statsEvery 10,
-vita_assertExit 1`, then `Vita: vita_atMap "..."` when one is set).
+vita_assertExit 1`, then `Vita: vita_atMap "..."` when one is set, or the
+step file's name and step count).
 
 An exception nothing caught (a `std::bad_alloc` when the heap is spent) logs
 `Vita: ERROR: uncaught exception (std::bad_alloc); the process ends` and the
@@ -176,6 +178,18 @@ each with its own "Client ...'s snapshot" dump of about 40 lines, the
 engine's note of the largest snapshot so far. A timed-command list that cannot be read is reported once (`Vita:
 vita_atMap: part 2 ... does not start with a time in seconds`) and none of
 its commands is sent.
+
+A sweep that needs more than the command line holds goes in a step file:
+one start can try every switch at both views. `+set vita_atMap "@sweep.txt"`
+with `ux0:data/KisakCOD/sweep.txt`:
+
+    # team and class
+    3 cmd mr {serverid} 8 autoassign
+    8 cmd mr {serverid} 15 assault_mp,0
+    # facing the busy way, then without the world
+    30 setviewpos 1264 -1896 124 90 0
+    60 r_drawWorld 0
+    80 r_drawWorld 1
 
 `vita_atMenu` and `vita_atMap` are taken from the command line (`+set`) when
 the game starts and not read again. A game server sets a client's dvars by

@@ -135,6 +135,59 @@ void TestParse()
     CHECK(strstr(error, "one more than fit"));
 }
 
+void TestStepFile()
+{
+    g_test = "step file";
+    char name[kMaxStepFileName];
+    CHECK(StepFileName("@sweep.txt", name, sizeof(name)) && !strcmp(name, "sweep.txt"));
+    CHECK(StepFileName("@a-b_C9", name, sizeof(name)) && !strcmp(name, "a-b_C9"));
+    // Only a plain name in the data folder: no path, no "..", nothing else.
+    CHECK(!StepFileName("3 quit", name, sizeof(name)) && !name[0]);
+    CHECK(!StepFileName("@", name, sizeof(name)));
+    CHECK(!StepFileName("@../x", name, sizeof(name)));
+    CHECK(!StepFileName("@.hidden", name, sizeof(name)));
+    CHECK(!StepFileName("@a/b", name, sizeof(name)));
+    CHECK(!StepFileName("@a\\b", name, sizeof(name)));
+    CHECK(!StepFileName("@ux0:x", name, sizeof(name)));
+    CHECK(!StepFileName("@a b", name, sizeof(name)));
+    CHECK(!StepFileName(nullptr, name, sizeof(name)));
+    CHECK(!StepFileName(("@" + std::string(kMaxStepFileName, 'n')).c_str(), name, sizeof(name)));
+    CHECK(StepFileName(("@" + std::string(kMaxStepFileName - 1, 'n')).c_str(), name, sizeof(name)));
+
+    char out[kMaxTimedListLength];
+    char error[96];
+    CHECK(JoinStepFile("# sweep\r\n3 cmd mr {serverid} 8 autoassign\r\n\n  30 setviewpos 1 2 3 90 0; r_drawWorld 0  \n"
+                       "#40 quit\n45 r_drawWorld 1",
+                       out, sizeof(out), error, sizeof(error)) == 3);
+    CHECK(!strcmp(out, "3 cmd mr {serverid} 8 autoassign | 30 setviewpos 1 2 3 90 0; r_drawWorld 0 | 45 r_drawWorld 1"));
+    TimedCommands commands;
+    CHECK(ParseTimedCommands(out, &commands, error, sizeof(error)) && commands.count == 3);
+    CHECK(commands.items[1].afterMicros == 30 * kSecond);
+    CHECK(JoinStepFile("", out, sizeof(out), error, sizeof(error)) == 0 && !out[0]);
+    CHECK(JoinStepFile("# nothing\n\n", out, sizeof(out), error, sizeof(error)) == 0 && !out[0]);
+    // A bar would make two steps of one line: refused, with its line.
+    CHECK(JoinStepFile("1 a\n2 b | 3 c\n", out, sizeof(out), error, sizeof(error)) == -1 && !out[0]);
+    CHECK(strstr(error, "line 2"));
+    // A file of more steps than fit is refused by the parse, whole.
+    std::string many;
+    for (size_t i = 0; i <= kMaxTimedCommands; ++i)
+        many += std::to_string(i) + " c" + std::to_string(i) + "\n";
+    CHECK(JoinStepFile(many.c_str(), out, sizeof(out), error, sizeof(error)) == int(kMaxTimedCommands + 1));
+    CHECK(!ParseTimedCommands(out, &commands, error, sizeof(error)) && strstr(error, "one more than fit"));
+    // Steps too long together do not overrun the output (the sanitizers watch).
+    char small[32];
+    CHECK(JoinStepFile("1 aaaaaaaaaa\n2 bbbbbbbbbb\n3 cccccccccc\n", small, sizeof(small), error, sizeof(error)) == -1);
+    CHECK(!small[0] && strstr(error, "line 3"));
+    char tiny[4];
+    CHECK(JoinStepFile("1 a\n2 | b\n", out, sizeof(out), tiny, sizeof(tiny)) == -1);
+    // A full sweep fits: every step at its longest.
+    std::string full;
+    for (size_t i = 0; i < kMaxTimedCommands; ++i)
+        full += "# step\n" + std::to_string(i) + " " + std::string(kMaxCommandLength - 1, 'c') + "\r\n";
+    CHECK(JoinStepFile(full.c_str(), out, sizeof(out), error, sizeof(error)) == int(kMaxTimedCommands));
+    CHECK(ParseTimedCommands(out, &commands, error, sizeof(error)) && commands.count == kMaxTimedCommands);
+}
+
 void TestDefaultsReportOnceAMinute()
 {
     g_test = "defaults";
@@ -376,6 +429,7 @@ void TestStartTextIsReadOnce()
 int main()
 {
     TestParse();
+    TestStepFile();
     TestDefaultsReportOnceAMinute();
     TestStatsEvery();
     TestQuitAfterStartup();
