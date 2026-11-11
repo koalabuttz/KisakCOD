@@ -340,6 +340,11 @@ struct OptionalFeatures
     // On unless KISAK_VK_PASS_TIMESTAMPS=0, which keeps only the frame's own
     // pair: the frame's GPU time stays, the time in passes is not known.
     bool passTimestamps;
+    // The Legacy adapter's translated shaders multiply plainly, as DXVK's do on
+    // drivers without a native D3D9 multiply, and keep infinities out instead
+    // (legacy_shader::SetStrictFloats). KISAK_VK_STRICT_FLOATS=1 checks both
+    // factors of every multiply for zero instead, as D3D9 hardware gives.
+    bool strictFloats;
     // The Legacy adapter submits a frame in parts while it is still being
     // drawn, so the GPU works on a frame as it is recorded instead of
     // starting when the frame ends (see FeedGpu in vk_legacy_draw.cpp). Each

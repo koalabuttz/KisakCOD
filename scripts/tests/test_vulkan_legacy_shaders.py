@@ -192,9 +192,9 @@ class Checks:
             self.failures.append(name)
 
 
-def run(binary, args, timeout=120):
+def run(binary, args, timeout=120, env=None):
     result = subprocess.run([binary] + args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                            timeout=timeout)
+                            timeout=timeout, env=env)
     return result.returncode, result.stdout, result.stderr
 
 
@@ -442,6 +442,27 @@ def main():
                                         os.path.join(case_dir, 'vs3_arith.bin')])
             checks.expect('fxc-style texcoord pair links directly', code == 0 and parse(out).get('linked') == 'direct',
                           out.strip())
+
+        # float rules: D3D9's strict multiply (both factors checked for zero;
+        # dxbc-spirv names its functions for it *_legacy, as dp4_f32_legacy) only with
+        # KISAK_VK_STRICT_FLOATS=1; plain multiplies otherwise
+        for strict in (False, True):
+            env = dict(os.environ)
+            env.pop('KISAK_VK_STRICT_FLOATS', None)
+            if strict:
+                env['KISAK_VK_STRICT_FLOATS'] = '1'
+            spv = os.path.join(work, 'floats_%s.spv' % ('strict' if strict else 'fast'))
+            code, out, _ = run(binary, ['translate', os.path.join(case_dir, 'ps3_m4x4.bin'), '--out', spv], env=env)
+            rule = 'strict' if strict else 'fast'
+            legacy = False
+            if code == 0:
+                with open(spv, 'rb') as f:
+                    data = f.read()
+                legacy = b'_legacy' in data
+            checks.expect(f'floats {rule}: the tool says so, and the legacy multiply is '
+                          + ('used' if strict else 'not used'),
+                          code == 0 and parse(out).get('floats') == rule and legacy == strict,
+                          f'status {code}, floats {parse(out).get("floats")}, legacy multiply {legacy}')
 
     if checks.failures:
         print(f'{len(checks.failures)} check(s) failed: {", ".join(checks.failures)}')

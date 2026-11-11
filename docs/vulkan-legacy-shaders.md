@@ -56,6 +56,32 @@ Reflection gives the adapter:
 - **Inputs and outputs:** every input and output with its location and
   semantic.
 
+## Float rules
+
+D3D9 hardware gives 0 for 0 times anything, infinity and NaN included, and
+Vulkan does not. dxbc-spirv offers two ways to match it, and the translator
+uses the one DXVK picks on drivers without a native multiply of that kind
+(Intel's and NVIDIA's):
+
+- **Fast** (the default): plain multiplies, with infinities kept out instead.
+  `rcp`, `rsq`, `exp`, `expp` and `nrm` are clamped to the largest float and
+  `log` and `logp` to the lowest, and `pow` with a zero exponent gives 1, so a
+  product never meets an infinity (dxbc-spirv's `fastFloatEmulation`).
+- **Strict** (`KISAK_VK_STRICT_FLOATS=1`): every multiply, multiply-add and dot
+  product checks both factors for zero, two compares and two selects per
+  component (dxbc-spirv's `*_legacy` functions). Up to 2026-11-11 this was the
+  only rule. Laptop run 17 had Mesa's Intel compiler print its statistics for
+  every shader of a mp_crash scene: our vertex shaders were about 4 times as
+  long as DXVK's (median 545 against 141 instructions) and our pixel shaders
+  about twice (635 against 324).
+
+The rule is set once per process (`legacy_shader::SetStrictFloats`, from the
+core's `OptionalFeatures::strictFloats`), before the first shader is
+translated. `TranslatorRevision` carries it, so a shader cache file made under
+the other rule is not used. The adapter's `device ready:` line says
+`floats fast` or `floats strict`, and `KisakCOD-vulkan-shaders` follows the
+same variable and prints `legacy_shader.floats=`.
+
 ## Known limits
 
 - **Predication.** `setp`, predicated instructions, and `if`/`break` on p0
@@ -121,6 +147,9 @@ needs no GPU, game data or network. It covers:
   ([vulkan-legacy-adapter.md](vulkan-legacy-adapter.md#moltenvk-macos)). Both
   pass `spirv-val`. With `0` no depth-reference sample is left. With `0xffff`,
   2D and cube images are sampled only with a depth reference.
+- **Float rules:** a case with matrix multiplies uses dxbc-spirv's `*_legacy`
+  functions with `KISAK_VK_STRICT_FLOATS=1` and none without, and the tool says
+  which rule it used.
 
 Hosted CI runs this test in two places:
 

@@ -202,6 +202,19 @@ struct Shader
     std::string warnings;      // the converter's warnings, if any
 };
 
+// How translated shaders multiply. D3D9 hardware gives 0 for 0 times anything,
+// infinity and NaN included; Vulkan does not. Fast (the default, as DXVK on
+// drivers without a native multiply of that kind, such as Intel's and
+// NVIDIA's) multiplies plainly and keeps infinities out instead: rcp, rsq, exp
+// and nrm are clamped to the largest float and log to the lowest, so a product
+// never meets one. Strict checks both factors of every multiply for zero
+// (dxbc-spirv's legacy multiply: two compares and two selects per component),
+// which Mesa's Intel compiler made 4 times as long in vertex shaders (laptop
+// run 17). Set once, before the first Translate; TranslatorRevision follows it,
+// so a cache made under the other rule is not used.
+void SetStrictFloats(bool strict);
+bool StrictFloats();
+
 // Translates D3D9 bytecode (a version token, then tokens, ending at the end
 // token). On failure returns false and says why in error.
 bool Translate(const void *bytecode, size_t bytes, Shader &shader, std::string &error);
@@ -229,8 +242,8 @@ std::string DisassembleIr(const Shader &shader);
 
 // What makes translations differ between builds: a digest of the translator's
 // sources and dxbc-spirv's commit (KISAK_LEGACY_SHADER_REVISION, from
-// vulkan_shaders.cmake). A cache of translated shaders keeps it and drops
-// everything when it changes.
+// vulkan_shaders.cmake), and the float rule (SetStrictFloats). A cache of
+// translated shaders keeps it and drops everything when it changes.
 const char *TranslatorRevision();
 
 // A translated shader as bytes, and back, for caches. Deserialize refuses
