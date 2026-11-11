@@ -101,7 +101,10 @@ of them.
   archive instead of the runner's slow Azure mirror, packages cached between runs, and the refresh and
   install tried again (up to four attempts, waiting 20, 40 and 60 s) when they fail, since on 2026-11-11
   hosted runners lost name lookups for a minute and six jobs of one run died at `apt-get install` with
-  exit 100. `test_ci_apt_install.py` pins it.
+  exit 100. A later outage (2026-11-11, about 15:00 to 16:00 UTC) kept `archive.ubuntu.com` and
+  `security.ubuntu.com` unresolvable for longer than the four attempts, so the runner's Azure mirror
+  stays in `apt-mirrors.txt` as the last choice. Whether it resolves in such an outage is untested.
+  `test_ci_apt_install.py` pins it.
 
 Decided by the project owner on 2026-11-10 (drafts, Windows ARM64, Intel macOS)
 and 2026-11-03 (SDL2 after a merge, path filters, cancelling). Both build
