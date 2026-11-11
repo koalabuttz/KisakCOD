@@ -483,7 +483,7 @@ VkShaderModule FindPixelModule(Device &device, Shader &ps, const Shader &vs, uin
     // depth samplers above it where they are fixed, and the alpha test's
     // compare plus 1 above those where it is fixed (PipelineKey::alphaCompare).
     recipe.moduleKey = uint64_t(alphaCompare & 0xf) << 52
-        | (fixed ? uint64_t(depthSamplers | 0x10000u) << 32 : 0) | (recipe.direct ? 0xffffffffu : vs.id);
+        | (fixed ? uint64_t(depthSamplers | 0x10000u) << 32 : 0) | (recipe.direct ? 0xffffffffu : vs.pipelineId);
     // Where depth compare is fixed, so is the reference's clamp
     // (SamplerStateBlock::drefClamp, as FillUniformBlock writes it).
     recipe.fixDepth = fixed;
@@ -781,9 +781,9 @@ PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, co
 {
     const uint32_t *rs = device.renderStates;
     PipelineKey key{};
-    key.vs = vs.id;
-    key.ps = ps.id;
-    key.decl = decl.id;
+    key.vs = vs.pipelineId;
+    key.ps = ps.pipelineId;
+    key.decl = decl.pipelineId;
     key.depthSamplers = static_cast<uint16_t>(depthSamplers);
     if (!Features(device.core).dynamicVertexStride)
     {

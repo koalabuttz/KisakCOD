@@ -150,9 +150,13 @@ struct Shader
     // vertex shader they are linked to, the depth samplers where those are
     // fixed, and the alpha test's compare where that is).
     std::unordered_map<uint64_t, VkShaderModule> linked;
-    // 64-bit FNV-1a of the bytecode: names the shader in the pipeline list,
-    // across launches.
+    // 64-bit FNV-1a of the bytecode, by 8-byte words (ContentHash): names the
+    // shader in the pipeline list, across launches.
     uint64_t contentHash = 0;
+    // The id pipeline keys use: that of the oldest live shader translated to
+    // the same code (Device::sameShaders), so shader objects created again
+    // from the same bytecode share their pipelines and pixel modules.
+    uint32_t pipelineId = 0;
 };
 
 struct VertexDecl
@@ -160,6 +164,7 @@ struct VertexDecl
     uint32_t id = 0;
     std::vector<VertexElement> elements;
     uint64_t contentHash = 0; // of the elements, as Shader::contentHash
+    uint32_t pipelineId = 0;  // as Shader::pipelineId, for the same elements
 };
 
 struct Query
@@ -418,6 +423,11 @@ struct Device
     VkDescriptorSetLayout emptySet = VK_NULL_HANDLE; // fills set 0 when a pair reads textures only
     std::unordered_map<LayoutKey, std::unique_ptr<Layout>, LayoutKeyHash> layouts;
     std::unordered_map<PipelineKey, Pipeline, PipelineKeyHash> pipelines;
+    // Live shaders and declarations by content hash, oldest first: those with
+    // the same code or elements share one pipeline id (Shader::pipelineId),
+    // and the pipelines keyed by it go when the last of them does.
+    std::unordered_map<uint64_t, std::vector<Shader *>> sameShaders;
+    std::unordered_map<uint64_t, std::vector<VertexDecl *>> sameDecls;
     // The last draw's pipeline and key: a draw with the same key skips the
     // hash lookup. Pipelines erased from the map clear it.
     Pipeline *lastPipeline = nullptr;

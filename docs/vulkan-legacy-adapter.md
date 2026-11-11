@@ -268,7 +268,7 @@ with the caches cold, 103 ms with every one of them a pipeline cache hit).
   the pipeline cache, `pipelines.list` next to `pipelines.bin`. A device reads
   it when it is created and writes it when it goes, through a temporary file
   renamed over the old one. The file names the GPU (vendor and device id); a
-  list from another GPU, another file version or with a wrong checksum is
+  list from another GPU, another file version (2 now) or with a wrong checksum is
   ignored whole.
 * **Building ahead.** When the last shader or declaration a list entry needs
   is created (the game creates them as it loads a map), the device queues the
@@ -290,6 +290,15 @@ with the caches cold, 103 ms with every one of them a pipeline cache hit).
   gets one launch older; after `kPipelineListAge` (8) such launches it is dropped,
   so pipelines of an old setting (another anti-aliasing level, a switch) do
   not stay built for ever. A map that was not loaded does not age its entries.
+* **Copies share.** The game creates many shader objects with the same
+  bytecode. Live shaders translated to the same code, and declarations with
+  the same elements, share one pipeline id (`Shader::pipelineId`,
+  `VertexDecl::pipelineId`), which the pipeline table is keyed by: a copy
+  draws with the pipelines the first one built, and its creation queues
+  nothing new. Pipelines go when the last object holding their id does.
+  Before this, PC run 13 built 1,074 pipelines ahead for a list of 114 and
+  drew 61 of them. The content hash reads 8-byte words (file version 2), since
+  every shader's bytecode is hashed as it is created.
 * **Lifetimes.** Destroying a shader or declaration drops its queued jobs and
   waits for the ones being built, so no worker reads a shader that is gone.
   Destroying the device stops the workers, takes their pipelines and writes
@@ -462,8 +471,11 @@ device keeps a pipeline list in the temporary directory, so every scene lists
 what it draws. The `pipelines_ahead` scene draws three pipelines with shaders
 of its own, writes the list, reads it back and creates the shaders again: the
 workers build the three before any draw (none built at a draw, three used,
-the same pixels). It then destroys a pair right after creating it, while its
-jobs are queued or being built, draws with a fresh pair before the workers
+the same pixels). Its pixel shader reads c1, so no shader the device keeps
+shares its pipelines. A second copy of that shader draws without building
+anything, and the first keeps its pipelines when the copy goes. It then
+destroys the pixel shader, creates it again and destroys it at once, while
+its jobs are queued or being built, draws with a fresh one before the workers
 are done (the draw waits for a pipeline being built, or builds a queued one
 itself), ages the entries out with eight launches that do not draw them, and
 checks that a damaged file is refused. The script checks that the scene's

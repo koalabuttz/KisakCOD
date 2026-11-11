@@ -26,6 +26,7 @@
 #include <cstring>
 #include <filesystem>
 #include <functional>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
@@ -1657,8 +1658,20 @@ void Check::ShaderCache()
 // that shaders created again get those pipelines from the workers before any
 // draw needs them, drawn as before. Then a pair destroyed while its jobs are
 // queued, a damaged file, and entries that age out unused.
+// kPsConstant reading c1: the device's own psConstant has the same code as
+// kPsConstant and so shares its pipelines, which a destroyed copy would keep.
+static std::vector<uint32_t> PsConstantC1()
+{
+    std::vector<uint32_t> code(std::begin(shaders::kPsConstant), std::end(shaders::kPsConstant));
+    for (uint32_t &word : code)
+        if (word == 0xa0e40000u) // source c0.xyzw of the mov
+            word = 0xa0e40001u;
+    return code;
+}
+
 void Check::PipelinesAhead()
 {
+    const std::vector<uint32_t> psCode = PsConstantC1();
     const std::string path = (std::filesystem::temp_directory_path() / "kisak_legacy_check_ahead.list").string();
     std::remove(path.c_str());
     auto made = std::make_shared<std::vector<lg::Shader *>>();
@@ -1691,7 +1704,7 @@ void Check::PipelinesAhead()
         Reset(Argb(255, 0, 0, 255));
         lg::SetVertexShader(device, vs);
         lg::SetPixelShader(device, ps);
-        SetConstant(false, 0, 1.0f, 0.0f, 0.0f, 0.5f);
+        SetConstant(false, 1, 1.0f, 0.0f, 0.0f, 0.5f);
         lg::SetRenderState(device, d3d::RS_ALPHABLENDENABLE, 1);
         lg::SetRenderState(device, d3d::RS_SRCBLEND, d3d::BLEND_SRCALPHA);
         lg::SetRenderState(device, d3d::RS_DESTBLEND, d3d::BLEND_INVSRCALPHA);
@@ -1705,7 +1718,7 @@ void Check::PipelinesAhead()
         lg::SetRenderState(device, d3d::RS_SRCBLEND, d3d::BLEND_ONE);
         lg::SetRenderState(device, d3d::RS_DESTBLEND, d3d::BLEND_ONE);
         lg::SetRenderState(device, d3d::RS_COLORWRITEENABLE, 0x5);
-        SetConstant(false, 0, 0.5f, 1.0f, 0.0f, 0.0f);
+        SetConstant(false, 1, 0.5f, 1.0f, 0.0f, 0.0f);
         DrawQuadPx(0, 64, 64, 128, 0.5f, 0xffffffffu);
         lg::SetRenderState(device, d3d::RS_ALPHABLENDENABLE, 0);
         lg::SetRenderState(device, d3d::RS_COLORWRITEENABLE, 0xf);
@@ -1721,7 +1734,7 @@ void Check::PipelinesAhead()
 
     // First launch: no list entry yet, so the draws build their pipelines.
     lg::Shader *vs = create(shaders::kVsBasic, sizeof(shaders::kVsBasic));
-    lg::Shader *ps = create(shaders::kPsConstant, sizeof(shaders::kPsConstant));
+    lg::Shader *ps = create(psCode.data(), psCode.size() * sizeof(uint32_t));
     if (!vs || !ps)
         return;
     lg::DeviceStats stats = lg::Stats(device);
@@ -1742,7 +1755,7 @@ void Check::PipelinesAhead()
     point("listed", listed >= 3);
     stats = lg::Stats(device);
     vs = create(shaders::kVsBasic, sizeof(shaders::kVsBasic));
-    ps = create(shaders::kPsConstant, sizeof(shaders::kPsConstant));
+    ps = create(psCode.data(), psCode.size() * sizeof(uint32_t));
     if (!vs || !ps)
         return;
     lg::FinishPipelinesAhead(device);
@@ -1756,22 +1769,32 @@ void Check::PipelinesAhead()
     std::printf("legacy_check.pipelines_ahead=%u used=%u waits=%u listed=%u\n", after.pipelinesAhead, after.aheadUsed,
                 after.aheadWaits, listed);
 
-    // A pair destroyed while its jobs may be queued or building: the device
-    // waits for them, and a draw with a third pair builds as usual.
-    lg::Shader *vsGone = create(shaders::kVsBasic, sizeof(shaders::kVsBasic));
-    lg::Shader *psGone = create(shaders::kPsConstant, sizeof(shaders::kPsConstant));
+    // Two shader objects with the same code share their pipelines (the game
+    // creates many such copies): the second draws without building, and
+    // destroying it keeps the first one's.
+    lg::Shader *psTwin = create(psCode.data(), psCode.size() * sizeof(uint32_t));
+    if (!psTwin)
+        return;
+    stats = lg::Stats(device);
+    draw(vs, psTwin);
+    point("same_code_shares", lg::Stats(device).pipelines == stats.pipelines);
+    destroy(psTwin);
+    draw(vs, ps);
+    point("twin_destroyed_keeps", lg::Stats(device).pipelines == stats.pipelines);
+
+    // The last shader of its pipelines destroyed and created again, then
+    // destroyed while its jobs may be queued or building: the device waits
+    // for them.
+    destroy(ps);
+    lg::Shader *psGone = create(psCode.data(), psCode.size() * sizeof(uint32_t));
     destroy(psGone);
-    destroy(vsGone);
     lg::FinishPipelinesAhead(device);
     point("gone_pair_settled", lg::DeviceError(device)[0] == 0);
 
     // A draw that needs a pipeline a worker has queued or is building gets
     // it without failing, from the worker or built by itself.
-    destroy(vs);
-    destroy(ps);
-    vs = create(shaders::kVsBasic, sizeof(shaders::kVsBasic));
-    ps = create(shaders::kPsConstant, sizeof(shaders::kPsConstant));
-    if (!vs || !ps)
+    ps = create(psCode.data(), psCode.size() * sizeof(uint32_t));
+    if (!ps)
         return;
     const lg::DeviceStats raced = lg::Stats(device);
     draw(vs, ps);

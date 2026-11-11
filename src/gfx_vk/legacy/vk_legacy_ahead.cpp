@@ -25,7 +25,7 @@ namespace
 // ---- The list ------------------------------------------------------------------------------
 
 constexpr char kMagic[8] = {'K', 'V', 'K', 'P', 'L', 'S', 'T', '1'};
-constexpr uint32_t kListVersion = 1;
+constexpr uint32_t kListVersion = 2; // 2: ContentHash reads 8-byte words
 constexpr uint32_t kMaxEntries = 16384;
 
 // A pipeline as the list names it: its shaders and declaration by their
@@ -147,10 +147,19 @@ struct Ahead
 
 uint64_t ContentHash(const void *data, size_t bytes, uint64_t hash)
 {
+    // FNV-1a over 8-byte words (shader bytecode is read at every start), then
+    // the bytes left over.
     const uint8_t *p = static_cast<const uint8_t *>(data);
-    for (size_t i = 0; i < bytes; ++i)
+    size_t i = 0;
+    for (; i + 8 <= bytes; i += 8)
+    {
+        uint64_t word;
+        std::memcpy(&word, p + i, sizeof(word));
+        hash = (hash ^ word) * 1099511628211ull;
+    }
+    for (; i < bytes; ++i)
         hash = (hash ^ p[i]) * 1099511628211ull;
-    return hash;
+    return hash ^ (hash >> 29);
 }
 
 namespace
@@ -433,9 +442,9 @@ void TryQueue(Device &device, uint32_t at)
         return;
 
     PipelineKey key = listed;
-    key.vs = vertex.id;
-    key.ps = pixel.id;
-    key.decl = decl.id;
+    key.vs = vertex.pipelineId;
+    key.ps = pixel.pipelineId;
+    key.decl = decl.pipelineId;
     if (device.pipelines.count(key) || ahead.jobs.count(key))
         return;
     Layout *layout = GetLayout(device, LayoutFor(vertex, pixel));
