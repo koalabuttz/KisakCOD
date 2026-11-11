@@ -488,6 +488,8 @@ jobs:
 
       - name: Upload client census logs
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           # Compiler diagnostics for failing sources only; no binaries.
