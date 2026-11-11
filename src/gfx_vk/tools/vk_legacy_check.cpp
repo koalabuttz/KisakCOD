@@ -1456,9 +1456,9 @@ void Check::StateReuse()
     Expect("keep_off_clear", 6 * 16 + 8, 16 + 8, 0, 0, 64);
 }
 
-// Clears of whole targets before anything is drawn become the load operation
-// of their pass (OptionalFeatures::passClears); the rest stay clears inside
-// the pass. Either way the pixels are D3D9's.
+// Clears of whole targets become the load operation of a pass
+// (OptionalFeatures::passClears); the rest stay clears inside the pass.
+// Either way the pixels are D3D9's.
 void Check::PassClear()
 {
     Reset();
@@ -1494,14 +1494,15 @@ void Check::PassClear()
     lg::SetRenderState(device, d3d::RS_ZENABLE, 1);
     lg::SetRenderState(device, d3d::RS_ZWRITEENABLE, 1);
     DrawQuadPx(32, 32, 96, 96, 0.5f, Argb(255, 0, 255, 0));
-    // After a draw a clear stays in the pass; the depth is 1 again, so a
-    // farther quad covers the near one. A GPU feed after every draw ends the
-    // pass at the draw, so the clear begins the next one.
+    // After a draw the clear begins the next pass, which loads the colour
+    // drawn so far; the depth is 1 again, so a farther quad covers the near
+    // one.
     lg::Clear(device, 0, nullptr, d3d::CLEAR_ZBUFFER | d3d::CLEAR_STENCIL, 0, 1.0f, 0);
-    counted("after_draw", 1, gfx_vk::Features(core).gpuFeedAlways ? 1 : 0);
+    counted("after_draw", 1, 1);
     DrawQuadPx(0, 0, 64, 64, 0.75f, Argb(255, 0, 0, 255));
     // A depth without its stencil on D24S8 keeps the stencil, so it is not a
     // load operation; nor a clear of a rectangle or of part of the viewport.
+    // These come before any draw of their pass.
     lg::SetDepthStencilSurface(device, other);
     lg::Clear(device, 0, nullptr, d3d::CLEAR_ZBUFFER, 0, 1.0f, 0);
     counted("depth_without_stencil", 1, 0);

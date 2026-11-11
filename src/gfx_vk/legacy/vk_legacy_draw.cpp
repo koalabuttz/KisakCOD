@@ -2133,18 +2133,19 @@ void SetDepthStencilSurface(Device *device, Surface *surface)
 
 // ---- Drawing ----------------------------------------------------------------------------------
 
-// A clear of the whole of the bound targets before anything is drawn to them
-// becomes the load operation of the pass that draws to them: the pass is
-// begun with it, or the open pass, still empty, is begun again with it and
-// any clear it began with. False when the clear is not such a one.
+// A clear of the whole of the bound targets becomes the load operation of a
+// pass that draws to them: a new pass is begun with it, or the open pass,
+// still empty, is begun again with it and any clear it began with. After a
+// draw, the open pass ends and the next one begins with the clear, rather
+// than clearing inside the pass: MoltenVK drew nothing for a depth clear
+// there (the pass_clear check on CI's Apple GPU). False when the clear is not
+// such a one.
 bool ClearAtPassStart(Device &device, uint32_t rectCount, const Rect *rects, uint32_t flags, uint32_t color,
                       float z, uint32_t stencil)
 {
     if (!Features(device.core).passClears || (rectCount && rects))
         return false;
-    const bool reopen = PassMatches(device);
-    if (reopen && !device.passEmpty)
-        return false;
+    const bool reopen = PassMatches(device) && device.passEmpty;
     const uint32_t colors = ColorCount(device.renderTargets);
     const bool clearColor = (flags & d3d::CLEAR_TARGET) && colors;
     bool clearDepth = false;
