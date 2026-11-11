@@ -39,9 +39,9 @@ the buttons at the bottom stay put.
 
 ## Options > Display: a new page
 
-A tab under "Reset system defaults" in the Options column. It is shown when
-Graphics is: in a game only when the server allows graphics changes, because
-all three settings need a `vid_restart`.
+A tab under "Reset system defaults" in the Options column. It works when
+Graphics does: in a game it is greyed out like Graphics unless the server
+allows graphics changes, because all three settings need a `vid_restart`.
 
 | Row | Setting | Choices |
 | --- | --- | --- |
@@ -49,8 +49,10 @@ all three settings need a `vid_restart`.
 | Fullscreen Mode | `r_fullscreenMode` | Exclusive, Borderless window |
 | Renderer | `r_backend` | Direct3D 9, Vulkan (only in builds with the Vulkan back end) |
 
-A change lights the page's Apply button, a copy of the one in Options >
-Graphics: it asks first, then restarts the renderer. Opening the page runs
+A change lights the page's Apply button (bottom right), a copy of the one in
+Options > Graphics: it asks first, then restarts the renderer. As on Graphics,
+it stays lit until the page is opened again, even if the setting is changed
+back. Opening the page runs
 what Options > Graphics runs when it opens (`options_graphics.cfg`), because
 that Apply also sets the Graphics page's settings from their menu copies.
 
@@ -74,7 +76,7 @@ nor the tab exists.
 | Use Controller | `in_gamepad` | No, Yes |
 | Look Speed | `in_gamepadLookSpeed` | 200 to 5000 |
 | Vertical Speed % | `in_gamepadLookPitchRatio` | 20 to 150 % |
-| Response Curve | `in_gamepadLookCurve` | 1 to 4 |
+| Response Curve | `in_gamepadLookCurve` | 1 to 4 (no number shown) |
 | Dead Zone % | `in_gamepadDeadzone` | 0 to 50 % |
 | Trigger Point % | `in_gamepadTrigger` | 5 to 95 % |
 | Default Buttons | `in_gamepadDefaultBinds` | No, Yes |

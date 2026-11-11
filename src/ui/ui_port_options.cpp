@@ -865,6 +865,24 @@ void AddTabs(menuDef_t *menu, bool ownPage)
             }
             items[count++] = copy;
         }
+        // The greyed-out twin a tab such as Graphics has right after its
+        // button, shown while the tab is unavailable (in a game where the
+        // server allows no graphics changes).
+        const char *caption = CaptionString(menu->items[button]);
+        for (int i = button + 1; i < menu->itemCount && count < kMaxMenuItems; ++i)
+        {
+            const itemDef_s *source = menu->items[i];
+            if (!SameLine(source->window.rect, line) || source->action || source->dvar
+                || !source->visibleExp.numEntries || HighlightNumber(source->visibleExp) >= 0)
+            {
+                break;
+            }
+            itemDef_s *copy = CopyItem(source, menu, distance);
+            const char *twinCaption = CaptionString(source);
+            if (caption && twinCaption && !std::strcmp(caption, twinCaption))
+                copy->text = page.title;
+            items[count++] = copy;
+        }
         ++number;
         changed = true;
     }
