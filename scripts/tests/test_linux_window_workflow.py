@@ -1516,6 +1516,12 @@ class CiCacheTests(unittest.TestCase):
         self.assertIn('python3 scripts/tests/test_ci_apt_install.py',
                       self.step('native', 'Check test-runner configuration and failure handling')['run'])
 
+    def test_native_contract_tests_run_once_not_per_configuration(self):
+        # They are plain Python reading the sources, so RelWithDebInfo would repeat
+        # Debug's result at about 3 minutes each.
+        step = self.step('native', 'Check test-runner configuration and failure handling')
+        self.assertEqual(step['if'], "matrix.config == 'Debug'")
+
     def test_ccache_setup_launches_cmake_compiles_only(self):
         script = (ROOT / 'scripts/ci/use-ccache.sh').read_text()
         self.assertIn('set -euo pipefail', script)

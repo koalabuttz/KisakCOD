@@ -76,7 +76,8 @@ public:
     void OnFocus(bool focused) override { focus=focused;++focusCalls; }
     void OnQuit() override { ++quitCalls; }
     void OnPointerPresence(bool inside) override { pointer=inside;++pointerCalls;if(failPointer)throw std::runtime_error("fixture pointer failure"); }
-    bool pointer=false,failPointer=false;int pointerCalls=0;
+    bool TypingText() const override { return typing; }
+    bool pointer=false,failPointer=false,typing=false;int pointerCalls=0;
     int width=0,height=0,resizeCalls=0,focusCalls=0,quitCalls=0;
     bool focus=false;
     uint32_t clockShift;
@@ -156,9 +157,10 @@ std::vector<sysEvent_t> SettleInput(kisak::window::WindowHost &host,Input &input
 // there, so the same call calibrates the queue identically in both builds.
 uint32_t Push(SDL_Event event) { if(!kisak::sdl::PushEvent(event))throw std::runtime_error(SDL_GetError());return kisak::sdl::Milliseconds(event.common.timestamp); }
 void WindowEvent(uint32_t id,Kind kind,int a=0,int b=0) { Push(kisak::sdl::MakeWindow(id,kind,a,b)); }
-uint32_t Key(uint32_t id,int scan,bool down,bool repeat=false,uint32_t time=0) {
-    return Push(kisak::sdl::MakeKey(id,scan,down,repeat,time));
+uint32_t Key(uint32_t id,int scan,bool down,bool repeat=false,uint32_t time=0,bool numLock=false) {
+    return Push(kisak::sdl::MakeKey(id,scan,down,repeat,time,numLock));
 }
+void NumLockKey(uint32_t id,int scan,bool down,bool repeat=false) { Key(id,scan,down,repeat,0,true); }
 void Text(uint32_t id,const char *text) { Push(kisak::sdl::MakeText(id,text)); }
 void Button(uint32_t id,int button,bool down) { Push(kisak::sdl::MakeButton(id,button,down)); }
 void Motion(uint32_t id,float x,float y,float dx,float dy) { Push(kisak::sdl::MakeMotion(id,x,y,dx,dy)); }
@@ -201,6 +203,28 @@ int main()
             check(events.size()==5 && events[2].evType==SE_CHAR && events[2].evValue==1,"control editing shortcut reaches legacy character interface");
             Key(host.Id(),SDL_SCANCODE_BACKSPACE,true);Key(host.Id(),SDL_SCANCODE_BACKSPACE,false);host.Pump();events=Drain();
             check(events.size()==3 && events[1].evType==SE_CHAR && events[1].evValue==8,"backspace produces key plus editing character without text-input dependency");
+            // Keypad digits while typing (win_wndproc.cpp's AdustKeyForNumericKeypad):
+            // with Num Lock on they are text only, so a console line is not also
+            // edited by K_KP_LEFTARROW, K_KP_INS and the like.
+            input.typing=true;
+            NumLockKey(host.Id(),SDL_SCANCODE_KP_4,true);NumLockKey(host.Id(),SDL_SCANCODE_KP_4,true,true);Text(host.Id(),"4");
+            NumLockKey(host.Id(),SDL_SCANCODE_KP_4,false);host.Pump();events=Drain();
+            check(events.size()==1 && events[0].evType==SE_CHAR && events[0].evValue=='4' && !consumerHeld[K_KP_LEFTARROW],
+                "typed keypad digit with Num Lock on is text only");
+            NumLockKey(host.Id(),SDL_SCANCODE_KP_PERIOD,true);NumLockKey(host.Id(),SDL_SCANCODE_KP_PERIOD,false);host.Pump();
+            check(Drain().empty(),"typed keypad decimal point with Num Lock on is not a key");
+            NumLockKey(host.Id(),SDL_SCANCODE_KP_ENTER,true);NumLockKey(host.Id(),SDL_SCANCODE_KP_ENTER,false);host.Pump();events=Drain();
+            check(events.size()==3 && events[0].evValue==K_KP_ENTER && events[1].evType==SE_CHAR,"keypad enter stays a key while typing");
+            Key(host.Id(),SDL_SCANCODE_KP_4,true);Key(host.Id(),SDL_SCANCODE_KP_4,false);host.Pump();events=Drain();
+            check(events.size()==2 && events[0].evValue==K_KP_LEFTARROW,"keypad arrow with Num Lock off stays a key while typing");
+            input.typing=false;
+            NumLockKey(host.Id(),SDL_SCANCODE_KP_4,true);host.Pump();events=Drain();
+            check(events.size()==1 && events[0].evValue==K_KP_LEFTARROW && consumerHeld[K_KP_LEFTARROW],"keypad digit is a key in play");
+            input.typing=true;
+            NumLockKey(host.Id(),SDL_SCANCODE_KP_4,false);host.Pump();events=Drain();
+            check(events.size()==1 && !events[0].evValue2 && !consumerHeld[K_KP_LEFTARROW],
+                "keypad key pressed in play is released after the console opens");
+            input.typing=false;
             Text(host.Id(),"A\xc3\xa9\xf0\x9f\x98\x80");host.Pump();events=Drain();
             check(events.size()==2 && events[0].evValue=='A' && events[1].evValue==233 && input.UnsupportedCharacters()==1,
                 "UTF-8 decodes to printable Latin-1 and rejects unrepresentable scalar without truncation");

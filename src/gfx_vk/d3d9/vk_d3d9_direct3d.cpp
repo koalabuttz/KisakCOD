@@ -198,6 +198,15 @@ bool Counters(IDirect3DDevice9 *device, DeviceCounters &out)
     return false;
 }
 
+ModernResult ModernSceneDone(IDirect3DDevice9 *device, const ModernSceneView &view)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernSceneDone(view);
+    return ModernResult::Refused;
+}
+
 // ---- IUnknown -------------------------------------------------------------------------------------
 
 HRESULT STDMETHODCALLTYPE Direct3D::QueryInterface(REFIID, void **object)

@@ -39,7 +39,9 @@ involved. The checks:
                  settings, logged every change and ended on the device's own
                  setting (what each setting did to its frame, and that the
                  statistics count from where they were last started, are the
-                 scene's own points)
+                 scene's own points); and the Modern path's statistics line
+                 counts the modern_taa scene's 20 anti-aliased scenes, 2 of
+                 them without history
 
 Usage:
   test_vulkan_d3d9_front.py --binary build/bin/KisakCOD-vulkan-d3d9-check
@@ -55,7 +57,7 @@ import sys
 # The scenes the check runs, in order. A scene added to the check is added here.
 SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'model_lighting', 'dirty_update',
           'references', 'threads', 'queries', 'occlusion', 'frame_loop', 'gpu_feed', 'tuning', 'slow_frames',
-          'kept_state', 'multisample', 'reset', 'present')
+          'kept_state', 'multisample', 'modern_taa', 'reset', 'present')
 
 
 def run(binary, args, env, timeout=300):
@@ -187,6 +189,13 @@ def main():
     presents = re.match(r'(\d+) skipped=(\d+)$', found.get('d3d9_check.presents', ''))
     checks.expect('frames presented', bool(presents) and int(presents.group(1)) >= len(SCENES),
                   found.get('d3d9_check.presents', 'missing'))
+    # The Modern path's line at teardown: the modern_taa scene's frames (4
+    # still, 16 jittered; the first of each starts the history again).
+    modern = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes anti-aliased \((\d+) without history\)',
+                       stdout, re.M)
+    checks.expect('the Modern path anti-aliased 20 scenes, 2 without history',
+                  modern is not None and modern.group(1) == '20' and modern.group(2) == '2',
+                  modern.group(0) if modern else 'missing')
     checks.expect('no object outlived its release', found.get('d3d9_check.live_objects_at_teardown') == '0',
                   found.get('d3d9_check.live_objects_at_teardown', 'missing'))
     checks.expect('device destroyed at its last release',

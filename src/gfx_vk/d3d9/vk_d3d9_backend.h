@@ -72,4 +72,9 @@ void BackendCounters(const Backend *backend, DeviceCounters &out);
 // other thread's D3D9 calls need while it is in the kernel. The back end
 // outlives the call (the query keeps its device alive). Null is ignored.
 void BackendPollProgress(Backend *backend);
+// The Modern path's passes over the scene drawn into these surfaces
+// (vk_d3d9.h ModernSceneDone). Refused when the back end has none or they
+// cannot run; the back end logs why, once per reason.
+ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surface *depth,
+                                const ModernSceneView &view);
 } // namespace gfx_vk::d3d9

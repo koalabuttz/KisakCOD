@@ -56,6 +56,12 @@ int KeyCode(int scan)
     default: return K_NONE;
     }
 }
+// The keypad keys that type a character with Num Lock on (Windows: VK_NUMPAD0
+// to VK_NUMPAD9 and VK_DECIMAL).
+bool KeypadText(int scan)
+{
+    return (scan >= SDL_SCANCODE_KP_1 && scan <= SDL_SCANCODE_KP_0) || scan == SDL_SCANCODE_KP_PERIOD;
+}
 int MouseKey(int button)
 {
     switch (button) {
@@ -295,6 +301,9 @@ void WindowHost::Dispatch(const SDL_Event &source)
         const int key=KeyCode(scan);
         if (!key) return;
         if (event.kind==sdl::Kind::KeyDown) {
+            // A typed keypad digit is text only; its key never goes down, so
+            // neither its repeats nor its release reach the sink either.
+            if (!physical_[scan] && event.numLock && KeypadText(scan) && sink_.TypingText()) return;
             if (event.repeat) SetKey(time,key,true,true);
             else if (!physical_[scan]) { physical_[scan]=true; SetKey(time,key,true); }
         } else if (physical_[scan]) { physical_[scan]=false; SetKey(time,key,false); }
