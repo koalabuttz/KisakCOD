@@ -25,6 +25,11 @@ public:
     virtual void Quit() = 0;
     // Pointer boundary does not imply keyboard focus or release held keys.
     virtual void PointerPresence(bool) {}
+    // With Num Lock on, a keypad digit or decimal point also arrives as text.
+    // True while the consumer takes typed text (the game: its console or a menu
+    // has the keyboard); the host then passes those keys as text only, as the
+    // Windows build does (win_wndproc.cpp, AdustKeyForNumericKeypad).
+    virtual bool TypingText() const { return false; }
 };
 
 struct Config {
@@ -121,6 +126,7 @@ private:
     float residualDx_=0,residualDy_=0,residualWheel_=0;
     int width_, height_;
     std::array<bool, sdl::kScancodeCount> physical_{};
+    std::array<int, sdl::kScancodeCount> heldKey_{}; // the key number each held scancode went down as
     std::array<unsigned char, 256> held_{};
     std::array<bool, 5> mouseHeld_{};
 };

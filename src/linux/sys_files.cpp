@@ -7,6 +7,7 @@
 #include <universal/com_memory.h>
 
 #include "sys_files.h"
+#include "sys_path_case.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -38,6 +39,16 @@ namespace
         for (; path && path[i] && i < outSize - 1; ++i)
             out[i] = (path[i] == '\\') ? '/' : path[i];
         out[i] = '\0';
+    }
+
+    // opendir as Windows names folders, ignoring case (sys_path_case.h).
+    DIR *OpenDirMatchingCase(const char *path)
+    {
+        DIR *const dir = opendir(path);
+        if (dir || (errno != ENOENT && errno != ENOTDIR))
+            return dir;
+        char matched[PATH_MAX];
+        return Sys_MatchPathCase(path, matched, sizeof(matched)) ? opendir(matched) : nullptr;
     }
 
     bool HasExtension(const char *name, const char *extension)
@@ -293,6 +304,11 @@ void Sys_Mkdir(const char *path)
     char posixPath[PATH_MAX];
     ToPosixPath(path, posixPath, (int)sizeof(posixPath));
 
+    // A folder that exists spelled differently is the one Windows would use.
+    char matched[PATH_MAX];
+    if (Sys_MatchPathCase(posixPath, matched, sizeof(matched)))
+        I_strncpyz(posixPath, matched, (int)sizeof(posixPath));
+
     // Deliberately ignore EEXIST: callers create directories speculatively. Any
     // other failure is left in errno for the caller to observe.
     if (mkdir(posixPath, 0755) == 0)
@@ -381,7 +397,7 @@ void Sys_ListFilteredFiles(
     char posixDir[PATH_MAX];
     ToPosixPath(posixBase, posixDir, (int)sizeof(posixDir));
 
-    DIR *dir = opendir(posixDir);
+    DIR *dir = OpenDirMatchingCase(posixDir);
     if (!dir)
         return;
 
@@ -466,7 +482,7 @@ char **Sys_ListFiles(
     char posixDir[PATH_MAX];
     ToPosixPath(directory, posixDir, (int)sizeof(posixDir));
 
-    DIR *dir = opendir(posixDir);
+    DIR *dir = OpenDirMatchingCase(posixDir);
     if (!dir)
     {
         if (numfiles)

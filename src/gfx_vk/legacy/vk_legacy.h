@@ -243,6 +243,11 @@ struct DeviceDesc
     // The PS Vita's GXM back end reads it as a folder, one compiled program
     // per file (src/gfx_gxm/gxm_program_cache.h).
     const char *shaderCachePath = nullptr;
+    // The pipeline list file (see "Pipelines built ahead" below): read when
+    // the device is created and written when it is destroyed. Null or empty:
+    // none, and every pipeline is built at its first draw. The GXM back end
+    // ignores it.
+    const char *pipelineListPath = nullptr;
     // Samples a pixel of the back buffer (see "Multisampled targets" below).
     // The GXM back end has one.
     uint32_t backBufferSamples = 1;
@@ -295,6 +300,24 @@ struct DeviceStats
     // the time that took, the rest of pipelineMicros being the driver's.
     uint32_t pixelModules;
     uint64_t pixelModuleMicros;
+    // Pipelines built ahead on worker threads (see "Pipelines built ahead"),
+    // not counted in pipelines or pipelineMicros: those built, the workers'
+    // time on them, those a draw then used, the draws that had to wait for
+    // one a worker was still building and how long they waited, and the
+    // entries the pipeline list file held when the device was created; then
+    // the time the creating thread spent queueing jobs as shaders and
+    // declarations were made (for shaders, inside shaderMicros).
+    uint32_t pipelinesAhead;
+    uint64_t aheadMicros;
+    uint32_t aheadUsed;
+    uint32_t aheadWaits;
+    uint64_t aheadWaitMicros;
+    uint32_t pipelinesListed;
+    uint64_t aheadQueueMicros;
+    // Of the pipelines built ahead, the pixel modules the workers built for
+    // them (as pixelModules) and the workers' time on those.
+    uint32_t aheadPixelModules;
+    uint64_t aheadPixelModuleMicros;
     uint64_t textureUploads;   // copy commands of UnlockRect and UpdateTexture, of one or more regions of a level
     uint64_t textureReadbacks; // levels read back to lock a texture again (once each)
     uint64_t uploadBytes;
@@ -338,6 +361,31 @@ void SetGpuFeed(Device *device, const GpuFeed &feed);
 // between two calls; the change is logged.
 bool GetKeepDrawState(const Device *device);
 void SetKeepDrawState(Device *device, bool keep);
+
+// Pipelines built ahead. A pipeline is built the first time a draw needs it,
+// which costs that frame from about a millisecond (the driver's cache has it)
+// to over a hundred (a cold driver compiling the shaders). The device keeps a
+// list of the pipelines draws used: each entry names its shaders and vertex
+// declaration by their contents and holds the rest of the pipeline's state.
+// A device created with DeviceDesc::pipelineListPath reads the list at the
+// start; whenever the last shader or declaration an entry needs is created
+// (the game creates them as it loads a map), the entry's pipeline is queued
+// to worker threads (OptionalFeatures::pipelinesAhead), so it is usually
+// built before the first draw that needs it. A draw that needs one a worker
+// is still building waits for it; one only queued is built by the draw. The
+// list is written when the device is destroyed: entries drawn this launch,
+// and those not drawn in fewer than kPipelineListAge launches that built
+// them. The file names the GPU: another GPU starts with an empty list.
+//
+// SavePipelineList and LoadPipelineList write and read the list now (message
+// says what they did); a load replaces the device's list and queues what it
+// can build. FinishPipelinesAhead waits until the workers have nothing left
+// and hands their pipelines to the device. For checks and tools.
+constexpr uint32_t kPipelineListAge = 8;
+bool SavePipelineList(Device *device, const char *path, std::string &message);
+bool LoadPipelineList(Device *device, const char *path, std::string &message);
+void FinishPipelinesAhead(Device *device);
+uint32_t PipelineListSize(const Device *device);
 #endif
 
 // The shader cache. Translated shaders are kept by their D3D9 bytecode for the

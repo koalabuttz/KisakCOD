@@ -107,13 +107,20 @@ since the device was made or since the last call that started them again.
   counters say happened in it: draws, passes, submissions, buffer renames and
   swapchains built; the pipelines built (how many of them the pipeline
   cache held, and how many pixel shaders were built for them with their own
-  milliseconds: the rest of the pipelines' time is the driver's), the shaders
-  made, the texture levels uploaded and the memory
+  milliseconds: the rest of the pipelines' time is the driver's), the
+  pipelines a draw waited for a worker to finish building ahead (see
+  "Pipelines built ahead" in
+  [vulkan-legacy-adapter.md](vulkan-legacy-adapter.md)), the shaders made,
+  the texture levels uploaded and the memory
   blocks allocated, each with its milliseconds; and the milliseconds the
   calling thread waited for a swapchain image, for the frames in flight (with
   two frames in flight, a `Present` waits for the frame before the one it
   shows), for the GPU otherwise (a texture read back, a flush that waits) and
-  for the record thread. The parts are measured where they happen and can
+  for the record thread. Then the front lock's sleeps in the frame, on any
+  thread: waits that spinning did not end, with the milliseconds from the end
+  of the spin to holding the lock (none on the PS Vita, whose lock is a plain
+  mutex). A thread that waits there long is held up by another thread inside
+  the front. The parts are measured where they happen and can
   overlap (an upload that needed a memory block counts in both). What they
   leave of the frame's time is the engine's own work and the driver's inside
   ordinary calls. The line ends with the GPU's times for that frame (its
@@ -180,6 +187,12 @@ frame. Two things keep that from costing the render thread:
   system call to wake it, and then often finds the lock taken again.
   `KISAK_VK_FRONT_SPIN=0` makes every waiter sleep at once, to compare. The PS
   Vita build keeps the plain recursive mutex.
+* The lock is one word (free, held, held with sleepers) and its owner, both
+  atomics: taking and dropping it without a waiter is one atomic operation
+  each, inline in the method, with no call into the C library. Only a waiter
+  that runs out of tries touches a mutex and condition variable to sleep on.
+  The object needs no constructor that runs, so a call from a static
+  constructor or destructor still finds it.
 * `IDirect3DQuery9::GetData` asks the GPU how far it has got before it takes
   the lock (`BackendPollProgress`, the core's `RefreshProgress`,
   [vulkan-core.md](vulkan-core.md)), which is the part that takes a system
@@ -480,8 +493,11 @@ archived and latched (a change applies at the next `vid_restart`):
 * `r_vkShaderCache`: 1 (default) keeps two caches in `<fs_homepath>/vulkan`
   between runs: the translated shaders in `shaders.bin` (the Legacy adapter's
   shader cache), and the Vulkan pipeline cache in `pipelines.bin` (the core's,
-  ignored when another device or driver wrote it). 0 translates every shader
-  and builds every pipeline from scratch at every start.
+  ignored when another device or driver wrote it), and beside them the list
+  of pipelines the last launches drew, `pipelines.list`, whose pipelines are
+  built on worker threads as the map loads (docs/vulkan-legacy-adapter.md,
+  "Pipelines built ahead"). 0 translates every shader and builds every
+  pipeline from scratch, at its first draw, at every start.
 * `r_visuals`: `legacy` (default: the game as it was made) or `modern`, the
   Modern path, experimental: so far temporal anti-aliasing over the scene
   ([vulkan-modern.md](vulkan-modern.md)). It needs a one-sample back buffer
@@ -545,8 +561,11 @@ time went, for comparing loads and first frames with DXVK. The
 `vulkan d3d9: device stats: ...` line gives the shaders created and how many
 of them were translated (the rest came from the shader cache) with the time
 it took, the pipelines built with their time (and of it, the pixel shaders
-built for them, each with the pipeline's fixed state folded in), and the texture uploads with
-their size and time. The core logs `pipeline cache: N bytes from ...` when it
+built for them, each with the pipeline's fixed state folded in), the
+pipelines built ahead on worker threads (their time there, the pixel shaders
+the workers built for them, how many a draw used, how many a draw waited for
+and how long, how many entries the pipeline list holds, and the time spent
+queueing them), and the texture uploads with their size and time. The core logs `pipeline cache: N bytes from ...` when it
 starts from the pipeline cache file, and `pipeline cache: N bytes to ...`
 when it writes the file back at teardown.
 

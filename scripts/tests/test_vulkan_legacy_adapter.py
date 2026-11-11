@@ -14,7 +14,9 @@ involved. The checks:
                  queries were counted (always on lavapipe, never with
                  KISAK_VK_OCCLUSION_QUERIES=0, else as the device can),
                  some clears were load operations (none with
-                 KISAK_VK_PASS_CLEARS=0), pipelines were built and the
+                 KISAK_VK_PASS_CLEARS=0), the pipeline list's three
+                 pipelines were built ahead and used (none with
+                 KISAK_VK_PIPELINES_AHEAD=0), pipelines were built and the
                  validation layer reported no errors
 
 Usage:
@@ -33,7 +35,7 @@ SCENES = (
     'clear', 'vertex_color', 'half_pixel', 'texture_levels', 'formats', 'alpha_test', 'blend', 'depth',
     'stencil', 'cull', 'render_to_texture', 'dynamic_buffer', 'static_buffers', 'cube_volume',
     'shader_model_2', 'partial_precision', 'missing_input', 'event_query', 'occlusion_query', 'state_reuse',
-    'shader_cache', 'pass_clear', 'gamma',
+    'shader_cache', 'pass_clear', 'pipelines_ahead', 'gamma',
 )
 
 
@@ -135,6 +137,16 @@ def main():
         checks.expect('KISAK_VK_PASS_CLEARS=0 keeps clears in their pass', pass_clears == '0', pass_clears)
     else:
         checks.expect('clears become load operations', pass_clears.isdigit() and int(pass_clears) > 0, pass_clears)
+    # The pipelines_ahead scene's exact counts are its own points; here,
+    # which path it took.
+    ahead = re.search(r'^(\d+) used=(\d+) waits=(\d+)', found.get('legacy_check.pipelines_ahead', ''))
+    if env.get('KISAK_VK_PIPELINES_AHEAD') == '0':
+        checks.expect('KISAK_VK_PIPELINES_AHEAD=0 builds nothing ahead',
+                      bool(ahead) and ahead.group(1) == '0' and ahead.group(2) == '0',
+                      found.get('legacy_check.pipelines_ahead', 'missing'))
+    else:
+        checks.expect('pipelines built ahead and used', bool(ahead) and int(ahead.group(2)) >= 3,
+                      found.get('legacy_check.pipelines_ahead', 'missing'))
     stats = re.search(r'pipelines (\d+) in_frame (\d+)', found.get('legacy_check.stats', ''))
     checks.expect('pipelines built', bool(stats) and int(stats.group(1)) > 0, found.get('legacy_check.stats', 'missing'))
     if args.validation == 'require':

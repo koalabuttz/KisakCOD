@@ -32,6 +32,8 @@ struct SlowFrame
     double pipelineMs = 0.0;
     uint32_t pixelModules = 0;
     double pixelModuleMs = 0.0;
+    uint32_t aheadWaits = 0; // pipelines a draw waited for a worker to finish
+    double aheadWaitMs = 0.0;
     uint32_t shaders = 0;
     double shaderMs = 0.0;
     uint64_t uploads = 0;
@@ -45,6 +47,8 @@ struct SlowFrame
     double frameLimitWaitMs = 0.0;
     double otherGpuWaitMs = 0.0;
     double recordWaitMs = 0.0;
+    uint64_t frontSleeps = 0; // waits for the front lock that slept, any thread
+    double frontSleepMs = 0.0;
     bool gpuKnown = false;
     FrameGpuTimes gpu{};
 };
@@ -74,6 +78,7 @@ struct Backend
     std::chrono::steady_clock::time_point presentAt{};
     lg::DeviceStats presentStats{};
     CoreStats presentCore{};
+    FrontLockSleeps presentSlept{};
     uint64_t framesTracked = 0;
     // The Modern path's anti-aliasing, made at its first scene; its counts
     // at the last reset; the reasons it could not run, each logged once.
@@ -129,6 +134,8 @@ void TrackFrame(Backend &backend)
             frame.pipelineMs = double(stats.pipelineMicros - was.pipelineMicros) / 1000.0;
             frame.pixelModules = stats.pixelModules - was.pixelModules;
             frame.pixelModuleMs = double(stats.pixelModuleMicros - was.pixelModuleMicros) / 1000.0;
+            frame.aheadWaits = stats.aheadWaits - was.aheadWaits;
+            frame.aheadWaitMs = double(stats.aheadWaitMicros - was.aheadWaitMicros) / 1000.0;
             frame.shaders = stats.shaders - was.shaders;
             frame.shaderMs = double(stats.shaderMicros - was.shaderMicros) / 1000.0;
             frame.uploads = stats.textureUploads - was.textureUploads;
@@ -143,6 +150,9 @@ void TrackFrame(Backend &backend)
             frame.otherGpuWaitMs =
                 std::max(0.0, (core.gpuWaitMs - coreWas.gpuWaitMs) - frame.frameLimitWaitMs);
             frame.recordWaitMs = core.recordWaitMs - coreWas.recordWaitMs;
+            const FrontLockSleeps slept = FrontLockSlept();
+            frame.frontSleeps = slept.sleeps - backend.presentSlept.sleeps;
+            frame.frontSleepMs = double(slept.micros - backend.presentSlept.micros) / 1000.0;
             uint32_t place = kSlowFrames - 1;
             for (; place > 0 && backend.slowFrames[place - 1].ms < ms; --place)
                 backend.slowFrames[place] = backend.slowFrames[place - 1];
@@ -153,6 +163,7 @@ void TrackFrame(Backend &backend)
     backend.presentAt = now;
     backend.presentStats = stats;
     backend.presentCore = core;
+    backend.presentSlept = FrontLockSlept();
 }
 
 void LogSlowFrames(const Backend &backend)
@@ -175,20 +186,21 @@ void LogSlowFrames(const Backend &backend)
         HostLog(h,
                 "vulkan d3d9: slow frame %u: %.2f ms, frame %llu at %.2f s; %llu draws, %llu passes, %llu submissions, "
                 "%llu dynamic renames, %u swapchains built; of the time: %u pipelines (%u from the cache) %.2f ms "
-                "(%u pixel shaders built for them %.2f ms), "
+                "(%u pixel shaders built for them %.2f ms), %u waited for from workers %.2f ms, "
                 "%u shaders %.2f ms, %llu texture uploads (%.2f MB) %.2f ms, %llu memory blocks %.2f ms; waits: "
                 "swapchain image %.2f ms, frames in flight %.2f ms, GPU otherwise %.2f ms (%llu textures read back), "
-                "record thread %.2f ms; %s",
+                "record thread %.2f ms, front lock %llu sleeps %.2f ms (any thread); %s",
                 i + 1, frame.ms, static_cast<unsigned long long>(frame.number), frame.seconds,
                 static_cast<unsigned long long>(frame.draws), static_cast<unsigned long long>(frame.passes),
                 static_cast<unsigned long long>(frame.submissions),
                 static_cast<unsigned long long>(frame.dynamicRenames), frame.swapchainBuilds, frame.pipelines,
-                frame.pipelineCacheHits, frame.pipelineMs, frame.pixelModules, frame.pixelModuleMs, frame.shaders,
+                frame.pipelineCacheHits, frame.pipelineMs, frame.pixelModules, frame.pixelModuleMs, frame.aheadWaits,
+                frame.aheadWaitMs, frame.shaders,
                 frame.shaderMs,
                 static_cast<unsigned long long>(frame.uploads), frame.uploadMegabytes, frame.uploadMs,
                 static_cast<unsigned long long>(frame.memoryAllocations), frame.memoryAllocateMs, frame.imageWaitMs,
                 frame.frameLimitWaitMs, frame.otherGpuWaitMs, static_cast<unsigned long long>(frame.readbacks),
-                frame.recordWaitMs, gpu);
+                frame.recordWaitMs, static_cast<unsigned long long>(frame.frontSleeps), frame.frontSleepMs, gpu);
     }
 }
 } // namespace
@@ -230,6 +242,19 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     legacyDesc.log = h.log;
     legacyDesc.logUser = h.user;
     legacyDesc.shaderCachePath = h.shaderCachePath;
+    // The pipeline list lives beside the pipeline cache: pipelines.bin gives
+    // pipelines.list.
+    std::string pipelineList;
+    if (h.pipelineCachePath && *h.pipelineCachePath)
+    {
+        pipelineList = h.pipelineCachePath;
+        const size_t dot = pipelineList.rfind('.');
+        const size_t slash = pipelineList.find_last_of("/\\");
+        if (dot != std::string::npos && (slash == std::string::npos || dot > slash))
+            pipelineList.resize(dot);
+        pipelineList += ".list";
+        legacyDesc.pipelineListPath = pipelineList.c_str();
+    }
     legacyDesc.backBufferSamples = desc.samples;
     backend->legacy = lg::CreateDevice(backend->core, legacyDesc, error);
     if (!backend->legacy)

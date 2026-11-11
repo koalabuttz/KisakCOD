@@ -217,6 +217,10 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
             Log(*device, "shader cache %s: %s", desc.shaderCachePath, message.c_str());
         }
     }
+    // Pipelines built ahead: before any shader is created, so each one
+    // created queues what the list has for it.
+    StartAhead(*device, desc.pipelineListPath);
+    device->desc.pipelineListPath = nullptr;
     device->depthFormat = DepthStencilFormat(core);
     // D3DRS_DEPTHBIAS is in units of the depth range; Vulkan's constant factor
     // is in units of the format's smallest step.
@@ -300,6 +304,7 @@ void DestroyDevice(Device *device)
         gfx_vk::Present(core); // the core needs its frame closed; nothing new is shown
     device->frameOpen = false;
     gfx_vk::WaitIdle(core);
+    StopAhead(*device);
     DestroyPipelineObjects(*device);
     for (Texture *&texture : device->nullTexture)
     {

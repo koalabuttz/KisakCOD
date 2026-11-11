@@ -37,6 +37,7 @@
 
 #include "gxm_legacy_internal.h"
 
+#include <gfx_gxm/gxm_engine_options.h>
 #include <gfx_gxm/gxm_program_cache.h>
 
 #include <cmath>
@@ -44,6 +45,11 @@
 #include <functional>
 #include <map>
 #include <set>
+
+namespace gfx_gxm
+{
+bool g_depthPrepass = true;
+} // namespace gfx_gxm
 
 namespace gfx_vk::legacy
 {
@@ -1679,6 +1685,10 @@ bool InitDraw(Device &device, std::string &error)
         d.census = true;
         Log(device, "diag: diag-state-census is there: each new draw state is logged once (census lines)");
     }
+    gfx_gxm::g_depthPrepass = !gxm::ProgramCacheMarker("no-depth-prepass");
+    if (!gfx_gxm::g_depthPrepass)
+        Log(device, "diag: no-depth-prepass is there: the scene's depth is drawn first only when r_depthPrepass, "
+                    "depth of field or soft particles ask for it");
     if (gxm::ProgramCacheMarker("no-draw-reuse"))
     {
         d.reuse = false;

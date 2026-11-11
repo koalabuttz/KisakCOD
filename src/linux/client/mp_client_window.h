@@ -51,12 +51,15 @@ struct ClientWindowEngine {
     // WM_CREATE / WM_DESTROY: the game window's handle, or nullptr once it is
     // going away (g_wv.hWnd).
     void (*windowChanged)(void *hwnd) = nullptr;
+    // Optional. True while the console or a menu has the keyboard, so typed
+    // keypad digits go in as text only (EventSink::TypingText).
+    bool (*typingText)() = nullptr;
 };
 
 class ClientWindow {
 public:
     // `window` is borrowed and must outlive this object. Every callback in
-    // `engine` is required.
+    // `engine` is required, except typingText.
     ClientWindow(SDL_Window *window, const ClientWindowEngine &engine);
     ~ClientWindow();
     ClientWindow(const ClientWindow &) = delete;

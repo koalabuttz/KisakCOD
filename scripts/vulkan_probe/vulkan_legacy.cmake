@@ -43,6 +43,7 @@ endif()
 message(STATUS "----- KisakCOD Vulkan Legacy adapter (opt-in) -----")
 
 add_library(kisak_gfx_vk_legacy STATIC
+    "${SRC_DIR}/gfx_vk/legacy/vk_legacy_ahead.cpp"
     "${SRC_DIR}/gfx_vk/legacy/vk_legacy_device.cpp"
     "${SRC_DIR}/gfx_vk/legacy/vk_legacy_draw.cpp"
     "${SRC_DIR}/gfx_vk/legacy/vk_legacy_gamma.cpp"

@@ -13,9 +13,46 @@ namespace kisak::window {
 namespace {
 std::atomic_flag hostActive=ATOMIC_FLAG_INIT;
 std::runtime_error Error(const char *operation) { return std::runtime_error(std::string(operation)+": "+SDL_GetError()); }
-int KeyCode(int scan)
+// win_wndproc.cpp's extendedVirtualKeyConvert: the Latin-1 characters a key can
+// type that have a key number of their own (K_ASCII_181 and so on).
+int LatinKey(uint32_t character)
 {
-    // Bindings use physical US positions; SDL text input supplies layout-aware text.
+    static const struct { uint32_t character; int key; } kLatinKeys[] = {
+        { 0xB5, K_ASCII_181 }, { 0xBF, K_ASCII_191 }, { 0xDF, K_ASCII_223 }, { 0xE0, K_ASCII_224 },
+        { 0xE1, K_ASCII_225 }, { 0xE4, K_ASCII_228 }, { 0xE5, K_ASCII_229 }, { 0xE6, K_ASCII_230 },
+        { 0xE7, K_ASCII_231 }, { 0xE8, K_ASCII_232 }, { 0xE9, K_ASCII_233 }, { 0xEC, K_ASCII_236 },
+        { 0xF1, K_ASCII_241 }, { 0xF2, K_ASCII_242 }, { 0xF3, K_ASCII_243 }, { 0xF6, K_ASCII_246 },
+        { 0xF8, K_ASCII_248 }, { 0xF9, K_ASCII_249 }, { 0xFA, K_ASCII_250 }, { 0xFC, K_ASCII_252 },
+    };
+    for (const auto &entry : kLatinKeys)
+        if (entry.character == character) return entry.key;
+    return K_NONE;
+}
+// The letter and punctuation keys follow the keyboard layout, as on Windows,
+// where MainWndProc maps them by virtual key (MapKey): an AZERTY key labelled A
+// is 'a', a German key labelled o-umlaut is K_ASCII_246. SDL's key code is that
+// unshifted character. A key the layout gives no such character (a Cyrillic
+// letter under SDL2, a symbol with no key number) keeps its US position. The
+// number row, the console key (scancode 0x29, '~' on Windows) and every other
+// key stay positional, as their virtual keys are on Windows.
+int LayoutKey(int scan, uint32_t keycode)
+{
+    const bool letter = scan >= SDL_SCANCODE_A && scan <= SDL_SCANCODE_Z;
+    const bool punctuation = (scan >= SDL_SCANCODE_MINUS && scan <= SDL_SCANCODE_SLASH && scan != SDL_SCANCODE_GRAVE)
+        || scan == SDL_SCANCODE_NONUSBACKSLASH;
+    if (!letter && !punctuation) return K_NONE;
+    if (keycode >= 'A' && keycode <= 'Z') keycode += 'a' - 'A';
+    if (keycode >= 'a' && keycode <= 'z') return int(keycode);
+    // Printable ASCII other than letters, digits, space and the console key.
+    if (keycode > ' ' && keycode < 0x7F && keycode != '`' && keycode != '~'
+        && !(keycode >= '0' && keycode <= '9')) return int(keycode);
+    return LatinKey(keycode);
+}
+int KeyCode(int scan, uint32_t keycode)
+{
+    // Bindings follow the layout for letters and punctuation (LayoutKey) and
+    // the US position for the rest; SDL text input supplies the typed text.
+    if (const int layoutKey = LayoutKey(scan, keycode)) return layoutKey;
     if (scan >= SDL_SCANCODE_A && scan <= SDL_SCANCODE_Z) return 'a'+scan-SDL_SCANCODE_A;
     if (scan >= SDL_SCANCODE_1 && scan <= SDL_SCANCODE_9) return '1'+scan-SDL_SCANCODE_1;
     if (scan >= SDL_SCANCODE_F1 && scan <= SDL_SCANCODE_F12) return K_F1+scan-SDL_SCANCODE_F1;
@@ -55,6 +92,12 @@ int KeyCode(int scan)
     case SDL_SCANCODE_KP_EQUALS: return K_KP_EQUALS; case SDL_SCANCODE_NUMLOCKCLEAR: return K_KP_NUMLOCK;
     default: return K_NONE;
     }
+}
+// The keypad keys that type a character with Num Lock on (Windows: VK_NUMPAD0
+// to VK_NUMPAD9 and VK_DECIMAL).
+bool KeypadText(int scan)
+{
+    return (scan >= SDL_SCANCODE_KP_1 && scan <= SDL_SCANCODE_KP_0) || scan == SDL_SCANCODE_KP_PERIOD;
 }
 int MouseKey(int button)
 {
@@ -292,11 +335,16 @@ void WindowHost::Dispatch(const SDL_Event &source)
         if (!own) return;
         const int scan=event.scancode;
         if (scan<0 || scan>=sdl::kScancodeCount) return;
-        const int key=KeyCode(scan);
+        // A held key repeats and goes up as the key number it went down as,
+        // even if the layout changed meanwhile.
+        const int key=physical_[scan] ? heldKey_[scan] : KeyCode(scan,event.keycode);
         if (!key) return;
         if (event.kind==sdl::Kind::KeyDown) {
+            // A typed keypad digit is text only; its key never goes down, so
+            // neither its repeats nor its release reach the sink either.
+            if (!physical_[scan] && event.numLock && KeypadText(scan) && sink_.TypingText()) return;
             if (event.repeat) SetKey(time,key,true,true);
-            else if (!physical_[scan]) { physical_[scan]=true; SetKey(time,key,true); }
+            else if (!physical_[scan]) { physical_[scan]=true; heldKey_[scan]=key; SetKey(time,key,true); }
         } else if (physical_[scan]) { physical_[scan]=false; SetKey(time,key,false); }
         return;
     }

@@ -262,7 +262,8 @@ else pumps its events (the world draw probe and the adapter never do).
 (`AdoptedWindow`) and is the only event pump in the process:
 
 - The host pumps the window's SDL events through the same translation as the
-  window host (physical US key positions, sub-pixel pointer carry, focus and
+  window host (letter and punctuation keys by keyboard layout, the rest by US
+  position, as on Windows; sub-pixel pointer carry, focus and
   pointer boundaries). It never creates a software surface on the window, never
   presents to it and never destroys it. Its SDL video reference is its own, so the
   window layer's reference survives it.
