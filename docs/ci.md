@@ -101,13 +101,12 @@ of them.
   archive instead of the runner's slow Azure mirror, packages cached between runs, and the refresh and
   install tried again (up to four attempts, waiting 20, 40 and 60 s) when they fail, since on 2026-11-11
   hosted runners lost name lookups for a minute and six jobs of one run died at `apt-get install` with
-  exit 100. A later outage (2026-11-11, about 15:00 to 16:00 UTC) kept `archive.ubuntu.com` and
-  `security.ubuntu.com` unresolvable for longer than the four attempts, so the runner's Azure mirror
-  stays in `apt-mirrors.txt` as the last choice. That did not help: the run on that commit showed some
-  runners resolving no ubuntu.com name at all (the Azure mirror included) while other runners of the same
-  run installed fine. So when `archive.ubuntu.com` does not resolve, `apt-install.sh` points the default
-  network link at public resolvers (1.1.1.1, 8.8.8.8) before each attempt. Whether that works on a hosted
-  runner is unverified until a runner with broken lookups logs "resolves through public resolvers".
+  exit 100. A longer outage (2026-11-11, about 14:40 to 17:00 UTC) showed that some runners resolve no
+  ubuntu.com name at all, Azure's included, while other runners of the same run installed fine. So when `archive.ubuntu.com` does not resolve, `apt-install.sh` points the
+  default network link at public resolvers (1.1.1.1, 8.8.8.8) before each attempt. Whether that works on
+  a hosted runner is unverified until a runner with broken lookups logs "resolves through public
+  resolvers". (An earlier version of the mirror rewrite skipped the runners' own list because it already
+  named the main archive; that left the slow Azure mirror first and one install step timed out.)
   `test_ci_apt_install.py` pins it.
 
 Decided by the project owner on 2026-11-10 (drafts, Windows ARM64, Intel macOS)

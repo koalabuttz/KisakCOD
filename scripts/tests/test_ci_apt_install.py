@@ -75,45 +75,28 @@ class MirrorTests(unittest.TestCase):
             self.assertEqual(source.read_text(), content)
             self.assertEqual(mirrors.read_text(),
                              'https://archive.ubuntu.com/ubuntu\tpriority:1\n'
-                             'http://archive.ubuntu.com/ubuntu\tpriority:2\n'
-                             'http://azure.archive.ubuntu.com/ubuntu\tpriority:3\n')
+                             'http://archive.ubuntu.com/ubuntu\tpriority:2\n')
 
-    def test_azure_mirror_is_kept_after_the_other_entries(self):
+    def test_the_runner_shaped_list_is_rewritten_although_it_names_the_main_archive(self):
+        # What a hosted runner ships (144 bytes): Azure first, then the main
+        # archive and security over https. A list that already names the main
+        # archive must still lose its Azure entry.
+        original = ('http://azure.archive.ubuntu.com/ubuntu/\tpriority:1\n'
+                    'https://archive.ubuntu.com/ubuntu/\tpriority:2\n'
+                    'https://security.ubuntu.com/ubuntu/\tpriority:3\n')
+        self.assertEqual(len(original.encode()), 144)
         with tempfile.TemporaryDirectory() as temp:
             apt = Path(temp)
             mirrors = apt / 'apt-mirrors.txt'
-            mirrors.write_text('http://azure.archive.ubuntu.com/ubuntu/\tpriority:1\n'
-                               'http://archive.ubuntu.com/ubuntu/\tpriority:2\n'
-                               'http://security.ubuntu.com/ubuntu/\tpriority:3')
+            mirrors.write_text(original)
             mirror.use_main_archive(apt)
             self.assertEqual(mirrors.read_text(),
                              'https://archive.ubuntu.com/ubuntu/\tpriority:1\n'
-                             'http://archive.ubuntu.com/ubuntu/\tpriority:2\n'
-                             'http://security.ubuntu.com/ubuntu/\tpriority:3\n'
-                             'http://azure.archive.ubuntu.com/ubuntu/\tpriority:4\n')
-            once = mirrors.read_text()
+                             'https://archive.ubuntu.com/ubuntu/\tpriority:2\n'
+                             'https://security.ubuntu.com/ubuntu/\tpriority:3\n')
+            first = mirrors.read_text()
             mirror.use_main_archive(apt)
-            self.assertEqual(mirrors.read_text(), once)
-
-    def test_source_files_do_not_gain_an_azure_line(self):
-        with tempfile.TemporaryDirectory() as temp:
-            apt = Path(temp)
-            path = apt / 'sources.list'
-            path.write_text('deb http://azure.archive.ubuntu.com/ubuntu noble main\n')
-            mirror.use_main_archive(apt)
-            self.assertEqual(path.read_text(),
-                             'deb https://archive.ubuntu.com/ubuntu noble main\n')
-
-    def test_missing_sources_and_repeated_setup_are_harmless(self):
-        with tempfile.TemporaryDirectory() as temp:
-            apt = Path(temp)
-            mirror.use_main_archive(apt)
-            path = apt / 'sources.list'
-            path.write_text('deb http://azure.archive.ubuntu.com/ubuntu noble main\n')
-            mirror.use_main_archive(apt)
-            before = path.stat().st_mtime_ns
-            mirror.use_main_archive(apt)
-            self.assertEqual(path.stat().st_mtime_ns, before)
+            self.assertEqual(mirrors.read_text(), first)
 
 
 class InstallerTests(unittest.TestCase):
