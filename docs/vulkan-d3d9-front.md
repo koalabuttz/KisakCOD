@@ -783,6 +783,14 @@ evidence):
   ANV cannot do as a fast clear. Clears of whole targets are now a pass's
   load operation ([adapter](vulkan-legacy-adapter.md#how-a-draw-works)).
   Report: `renderer/vulkan-backend-laptop-run-14.md`.
+* Clears as load operations (run 15, 2026-11-11, a13e9109, run 13's scene
+  at 4 samples, defaults C against `KISAK_VK_PASS_CLEARS=0` O, C O O C):
+  about 60% of the clears became a pass's load operation (29,727 of 49,988),
+  none with the switch. C ran at 98.3 and 85.7 fps, O at 92.0 and 93.6: the
+  means (92.0 and 92.8) are within the noise of the two C rows, so the 2.7%
+  of slow clears gives no fps the laptop can see, and does no harm. GPU time
+  per frame 9.3 to 10.4 ms either way. Report:
+  `renderer/vulkan-backend-laptop-run-15.md`.
 * Present mode: the laptop's swapchain still says `MAILBOX, 4 images` with
   vsync off now that the core asks for IMMEDIATE first (run 11), so its
   surface does not offer IMMEDIATE.
@@ -829,17 +837,19 @@ evidence):
   launch, with a repeated launch as the baseline
   (`renderer/model-lighting/luma_grid.py` in the project files).
 
-Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11,12,13,14}.md`,
+Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11,12,13,14,15}.md`,
 `renderer/vulkan-backend-pc-run-{6,7,8,9,10}.md` and
 `renderer/model-lighting/laptop-run-1.md` in the project files.
 
 ## Next
 
 The rest of the frame rate gap to DXVK. On the laptop that is the GPU's
-time: at the same 4 samples Vulkan is about 35% behind (laptop run 13). A
-laptop run measures the clears that are now load operations, and the GPU
-time per pass and per draw against DXVK's says where the rest goes (what a
-pass split by the feed costs on its driver among it). On the Windows PC, in
+time: at the same 4 samples Vulkan is about 35% behind (laptop run 13), and
+nearly all of the GPU's time is draws in a few large passes (run 14); fast
+clears did not move it (run 15). Next a laptop run measures what the
+timestamps around every pass cost (`KISAK_VK_PASS_TIMESTAMPS=0`), since the
+one at a pass's end may drain the GPU between passes, and then the GPU time
+per draw against DXVK's says where the rest goes. On the Windows PC, in
 a Release build, Vulkan is about 3% behind Direct3D 9 (PC run 10) and the
 PC waits for the CPU: what is left is the time per frame, the front's lock
 first. Measure the PC in the Release build of a manual `vulkan` run. Then
