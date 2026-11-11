@@ -1,9 +1,9 @@
 # Linux port status
 
-Last updated 2026-11-11 17:40 UTC (master `7d796bf`: the Vulkan back end's
+Last updated 2026-11-11 17:45 UTC (master `46cdc8a`: the Vulkan back end's
 shaders shortened until it draws the laptop's test scene as fast as DXVK,
 PRs 220 and 226 to 234; all 21 singleplayer levels through Vulkan on
-software rendering, PR 228; the Windows key code run, a listen server run and a mixed Steam and key code session). This page is the current state of
+software rendering, PR 228; the Windows key code run, a listen server run, a mixed Steam and key code session and hosted runners that retry when name lookups fail, PR 236). This page is the current state of
 the native Linux port and the other platform builds, the open pull requests and
 the roadmap. The [docs index](README.md) lists the detailed guides;
 older handoffs are in [history](history/README.md) and are not current.
@@ -182,7 +182,7 @@ These came before the playable client and still build and run in CI:
 
 ## Open pull requests
 
-As of 2026-11-11 16:25 UTC, five. They change by the hour; the
+As of 2026-11-11 17:45 UTC, four. They change by the hour; the
 [list on GitHub](https://github.com/koalabuttz/KisakCOD/pulls) is the current
 one. A machine run a pull request waits on is named where its author has
 said so.
@@ -192,7 +192,6 @@ said so.
 | 214 | PS Vita client (draft): build fragment programs that sample a cube map (`texCUBElod`) without fast maths, for the speckle on the ground under decals | Vita3K run Z11 on its head (2cb543f): warm-up, then the ground views against Windows and run Z8. |
 | 225 | Refuse a game server's sets of 50 settings this port added and 34 retail ones that belong to the player's machine (console commands run on entering the game, master and file paths, downloads, the player's own server's passwords), on all three routes a server sets client dvars; a note for systeminfo names outside the client's own set | A join of one stock and one modded server, reading the console for the two new lines (its author's run that would show nothing legitimate is refused). |
 | 235 | Vulkan back end: count the pixel shaders built for pipelines, with their time, in the front's `device stats` and `slow frame` lines; PC runs 12 and 12b in the guide | The next PC run reads the split from those lines. |
-| 236 | CI: run the apt refresh and install again (up to four attempts) when a hosted runner loses name lookups | None named. |
 | 237 | Vulkan back end: build pipelines ahead on worker threads from a list of past draws (`KISAK_VK_PIPELINES_AHEAD=0` turns it off), and a one-word front lock with kept samplers; 6,276 to 5,255 instructions a draw in a callgrind bench | Laptop and Windows PC runs, no GPU or game run yet. |
 
 ## Laptop and PC runs still to do
