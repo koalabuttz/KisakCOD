@@ -10,7 +10,8 @@
 # $RUNNER_TEMP/apt-archives (or $KISAK_APT_ARCHIVES), which the workflow
 # restores and saves with actions/cache, so once a job has saved its cache it
 # only downloads packages that have been updated since. apt also retries a
-# stalled download. Package choices and signature checks stay unchanged.
+# stalled download, and the refresh and install run again after a failed name
+# lookup. Package choices and signature checks stay unchanged.
 set -euo pipefail
 
 update=1
@@ -36,10 +37,66 @@ EOF
 
 if (( update )); then
     sudo python3 "$(dirname -- "$0")/ubuntu-mirror.py"
-    sudo apt-get update
 fi
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    -o "Dir::Cache::Archives=$archives" "$@"
+
+# On 2026-11-11 some hosted runners could not resolve ANY ubuntu.com name (the
+# main archive, security and the Azure mirror alike) for a whole job, while
+# other runners of the same run resolved them. A retry on the same runner then
+# only waits. When the main archive does not resolve, point the runner's default
+# network link at public resolvers and look again. This never fails the install
+# by itself: apt reports the outcome.
+ensure_name_lookups() {
+    if timeout 15 getent hosts archive.ubuntu.com >/dev/null 2>&1; then
+        return 0
+    fi
+    echo "apt-install.sh: archive.ubuntu.com does not resolve; trying public resolvers" >&2
+    local link
+    link="$(ip route show default 2>/dev/null |
+            awk '{for (i = 1; i < NF; i++) if ($i == "dev") { print $(i + 1); exit }}')" || true
+    if [[ -z "$link" ]]; then
+        echo "apt-install.sh: no default network link found" >&2
+        return 0
+    fi
+    sudo resolvectl dns "$link" 1.1.1.1 8.8.8.8 || echo "apt-install.sh: resolvectl dns failed" >&2
+    sudo resolvectl flush-caches || true
+    if timeout 15 getent hosts archive.ubuntu.com >/dev/null 2>&1; then
+        echo "apt-install.sh: archive.ubuntu.com resolves through public resolvers" >&2
+    else
+        echo "apt-install.sh: archive.ubuntu.com still does not resolve" >&2
+    fi
+    return 0
+}
+
+# apt retries a download that stalls, but not a name lookup that fails for a
+# minute: on 2026-11-11 hosted runners could not resolve archive.ubuntu.com,
+# apt-get update only warned, and the install then failed with exit 100 on six
+# jobs of one run. Refresh the lists and install again, after a wait that grows,
+# before giving up. KISAK_APT_ATTEMPTS and KISAK_APT_RETRY_DELAY (seconds, times
+# the attempt number) are for the tests.
+refresh_and_install() {
+    # set -e does not apply inside a function used as a condition, so each
+    # command passes on its own failure.
+    ensure_name_lookups
+    if (( update )); then
+        sudo apt-get update || return
+    fi
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        -o "Dir::Cache::Archives=$archives" "$@"
+}
+
+attempts="${KISAK_APT_ATTEMPTS:-4}"
+delay="${KISAK_APT_RETRY_DELAY:-20}"
+attempt=1
+until refresh_and_install "$@"; do
+    status=$?
+    if (( attempt >= attempts )); then
+        echo "apt-install.sh: failed after $attempt attempt(s)" >&2
+        exit "$status"
+    fi
+    echo "apt-install.sh: attempt $attempt failed with status $status; trying again in $((delay * attempt)) s" >&2
+    sleep "$((delay * attempt))"
+    attempt=$((attempt + 1))
+done
 
 # apt leaves a root-owned lock and partial directory; actions/cache saves the
 # directory as the runner user, so hand the files back and drop both.
