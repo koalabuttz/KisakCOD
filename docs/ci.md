@@ -103,7 +103,11 @@ of them.
   hosted runners lost name lookups for a minute and six jobs of one run died at `apt-get install` with
   exit 100. A later outage (2026-11-11, about 15:00 to 16:00 UTC) kept `archive.ubuntu.com` and
   `security.ubuntu.com` unresolvable for longer than the four attempts, so the runner's Azure mirror
-  stays in `apt-mirrors.txt` as the last choice. Whether it resolves in such an outage is untested.
+  stays in `apt-mirrors.txt` as the last choice. That did not help: the run on that commit showed some
+  runners resolving no ubuntu.com name at all (the Azure mirror included) while other runners of the same
+  run installed fine. So when `archive.ubuntu.com` does not resolve, `apt-install.sh` points the default
+  network link at public resolvers (1.1.1.1, 8.8.8.8) before each attempt. Whether that works on a hosted
+  runner is unverified until a runner with broken lookups logs "resolves through public resolvers".
   `test_ci_apt_install.py` pins it.
 
 Decided by the project owner on 2026-11-10 (drafts, Windows ARM64, Intel macOS)

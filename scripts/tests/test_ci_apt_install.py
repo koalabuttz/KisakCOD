@@ -117,7 +117,7 @@ class MirrorTests(unittest.TestCase):
 
 
 class InstallerTests(unittest.TestCase):
-    def run_installer(self, args, fail='', times=None):
+    def run_installer(self, args, fail='', times=None, dns_broken=False, resolver_fixes=True):
         with tempfile.TemporaryDirectory() as temp:
             folder = Path(temp)
             sudo = folder / 'sudo'
@@ -132,6 +132,8 @@ if args[0] == 'tee':
     entry['stdin'] = sys.stdin.read()
 with open(os.environ['FAKE_SUDO_LOG'], 'a') as log:
     log.write(json.dumps(entry) + '\\n')
+if args[:2] == ['resolvectl', 'dns'] and not os.environ.get('FAKE_RESOLVER_STAYS_BROKEN'):
+    (Path(os.environ['FAKE_SUDO_LOG']).with_suffix('.dns')).write_text('fixed')
 if args[0] == 'mkdir':
     assert Path(args[-1]).is_relative_to(os.environ['RUNNER_TEMP'])
     Path(args[-1]).mkdir(parents=True, exist_ok=True)
@@ -145,17 +147,55 @@ if apt_args[0] == 'apt-get' and apt_args[1] == os.environ.get('FAKE_APT_FAIL'):
         sys.exit(42)
 ''')
             sudo.chmod(0o755)
+            # Name lookups: getent fails while FAKE_DNS_BROKEN is set and the
+            # fake sudo has not been told to change the resolvers.
+            getent = folder / 'getent'
+            getent.write_text('''#!/bin/sh
+[ -n "$FAKE_DNS_BROKEN" ] && [ ! -e "${FAKE_SUDO_LOG%.jsonl}.dns" ] && exit 2
+exit 0
+''')
+            getent.chmod(0o755)
+            ip = folder / 'ip'
+            ip.write_text('#!/bin/sh\necho "default via 10.1.0.1 dev eth0 proto dhcp"\n')
+            ip.chmod(0o755)
             log = folder / 'commands.jsonl'
             env = dict(os.environ, PATH=f'{folder}:{os.environ["PATH"]}',
                        RUNNER_TEMP=temp, FAKE_SUDO_LOG=str(log), FAKE_APT_FAIL=fail,
                        KISAK_APT_ATTEMPTS='3', KISAK_APT_RETRY_DELAY='0')
             if times is not None:
                 env['FAKE_APT_FAIL_TIMES'] = str(times)
+            if dns_broken:
+                env['FAKE_DNS_BROKEN'] = '1'
+            if not resolver_fixes:
+                env['FAKE_RESOLVER_STAYS_BROKEN'] = '1'
             env.pop('KISAK_APT_ARCHIVES', None)
             result = subprocess.run(['bash', str(ROOT / 'scripts/ci/apt-install.sh'), *args],
                                     env=env, capture_output=True, text=True, timeout=10)
             entries = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
             return result, entries, str(folder / 'apt-archives')
+
+    def test_working_name_lookups_leave_the_resolvers_alone(self):
+        result, entries, _ = self.run_installer(['curl'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse([e for e in entries if e['args'][0] == 'resolvectl'])
+
+    def test_broken_name_lookups_switch_the_default_link_to_public_resolvers(self):
+        result, entries, _ = self.run_installer(['curl'], dns_broken=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        commands = [e['args'] for e in entries]
+        self.assertIn(['resolvectl', 'dns', 'eth0', '1.1.1.1', '8.8.8.8'], commands)
+        self.assertIn(['resolvectl', 'flush-caches'], commands)
+        self.assertIn('resolves through public resolvers', result.stderr)
+        # The resolvers change before the first package refresh.
+        self.assertLess(commands.index(['resolvectl', 'dns', 'eth0', '1.1.1.1', '8.8.8.8']),
+                        commands.index(['apt-get', 'update']))
+
+    def test_lookups_that_stay_broken_still_let_apt_report_the_outcome(self):
+        result, entries, _ = self.run_installer(['curl'], dns_broken=True, resolver_fixes=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('still does not resolve', result.stderr)
+        self.assertTrue([e for e in entries if e['args'][:2] == ['apt-get', 'install']
+                         or e['args'][1:3] == ['apt-get', 'install']])
 
     def test_mirror_setup_precedes_update_and_install_keeps_requested_packages(self):
         result, entries, archives = self.run_installer(['clang', 'libsdl2-dev:i386'])

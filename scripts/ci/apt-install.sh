@@ -39,6 +39,34 @@ if (( update )); then
     sudo python3 "$(dirname -- "$0")/ubuntu-mirror.py"
 fi
 
+# On 2026-11-11 some hosted runners could not resolve ANY ubuntu.com name (the
+# main archive, security and the Azure mirror alike) for a whole job, while
+# other runners of the same run resolved them. A retry on the same runner then
+# only waits. When the main archive does not resolve, point the runner's default
+# network link at public resolvers and look again. This never fails the install
+# by itself: apt reports the outcome.
+ensure_name_lookups() {
+    if timeout 15 getent hosts archive.ubuntu.com >/dev/null 2>&1; then
+        return 0
+    fi
+    echo "apt-install.sh: archive.ubuntu.com does not resolve; trying public resolvers" >&2
+    local link
+    link="$(ip route show default 2>/dev/null |
+            awk '{for (i = 1; i < NF; i++) if ($i == "dev") { print $(i + 1); exit }}')" || true
+    if [[ -z "$link" ]]; then
+        echo "apt-install.sh: no default network link found" >&2
+        return 0
+    fi
+    sudo resolvectl dns "$link" 1.1.1.1 8.8.8.8 || echo "apt-install.sh: resolvectl dns failed" >&2
+    sudo resolvectl flush-caches || true
+    if timeout 15 getent hosts archive.ubuntu.com >/dev/null 2>&1; then
+        echo "apt-install.sh: archive.ubuntu.com resolves through public resolvers" >&2
+    else
+        echo "apt-install.sh: archive.ubuntu.com still does not resolve" >&2
+    fi
+    return 0
+}
+
 # apt retries a download that stalls, but not a name lookup that fails for a
 # minute: on 2026-11-11 hosted runners could not resolve archive.ubuntu.com,
 # apt-get update only warned, and the install then failed with exit 100 on six
@@ -48,6 +76,7 @@ fi
 refresh_and_install() {
     # set -e does not apply inside a function used as a condition, so each
     # command passes on its own failure.
+    ensure_name_lookups
     if (( update )); then
         sudo apt-get update || return
     fi
