@@ -392,6 +392,24 @@ struct Device
     // another size or format is needed.
     Texture *resolveScratch = nullptr;
 
+    // SetGammaRamp (vk_legacy_gamma.cpp): while a ramp other than the
+    // identity is set, Present draws the shown image into the swapchain
+    // image through it instead of blitting. The ramp image, the pipeline (for
+    // the swapchain's format) and its layouts are made at first use.
+    struct Gamma
+    {
+        bool on = false;
+        bool uploaded = false; // ramp below is in rampImage
+        bool failed = false;   // the pass could not be made: Present blits
+        GammaRamp ramp{};
+        Image *rampImage = nullptr; // 256 x 1, R16G16B16A16_UNORM
+        VkFormat format = VK_FORMAT_UNDEFINED; // the pipeline's colour format
+        VkPipeline pipeline = VK_NULL_HANDLE;
+        VkPipelineLayout layout = VK_NULL_HANDLE;
+        VkDescriptorSetLayout setLayout = VK_NULL_HANDLE;
+        VkSampler nearest = VK_NULL_HANDLE, linear = VK_NULL_HANDLE;
+    } gamma;
+
     // D3D9 state.
     uint32_t renderStates[d3d::RS_COUNT] = {};
     uint32_t samplerStates[kSamplerSlots][d3d::SAMP_COUNT] = {};
@@ -529,10 +547,20 @@ enum Warning : uint32_t
     WarnReadBackLayout,
     WarnSampleMismatch,
     WarnStretchToSamples,
+    WarnGamma,
 };
 // One message per kind for the device's life (bit 0-31).
 void WarnOnce(Device &device, uint32_t bit, const char *format, ...);
 bool Usable(Device &device);
+
+// vk_legacy_gamma.cpp
+// Draws `shown` over the whole of the swapchain image through the gamma
+// ramp (scaled when the sizes differ) and returns true; false, with nothing
+// recorded, when no ramp is on or the pass cannot be made (Present then
+// blits as before).
+bool PresentThroughGamma(Device &device, Image *shown, Image *swapchain);
+// After the GPU has finished with them (DestroyDevice waits first).
+void DestroyGamma(Device &device);
 
 // vk_legacy_resources.cpp
 // samples over 1 makes a multisampled render target or depth surface; the

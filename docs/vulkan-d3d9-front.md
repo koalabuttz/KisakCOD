@@ -218,8 +218,11 @@ Everything in `r_rhi.h`, and the getters D3D9 pairs with each setter:
   `GetFrontBufferData` (the last frame shown, kept apart from the back buffer),
   event and occlusion
   queries, the implicit swap chain, `Reset` (new back buffer size, every state
-  back to its default), `Present`, gamma ramps (kept, not applied: DXVK applies
-  them only to fullscreen swapchains), `GetAvailableTextureMem` (device-local
+  back to its default), `Present`, gamma ramps (applied as D3D9 and DXVK
+  apply them: for a fullscreen device only, `Windowed` false at `CreateDevice`
+  or `Reset`, by the adapter's `SetGammaRamp` as `Present` draws the window's
+  image; a windowed device keeps the ramp for `GetGammaRamp` and shows the
+  frame as drawn), `GetAvailableTextureMem` (device-local
   memory, below 4 GB).
 * Defaults: the depth test is off after `CreateDevice` and `Reset`, because the
   front never makes an automatic depth-stencil surface (the renderer creates its
