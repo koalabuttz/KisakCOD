@@ -26,7 +26,9 @@
 #include <server_mp/sv_handshake_auth.h>
 #endif
 
+#include <cstdarg>
 #include <functional>
+#include <string>
 
 #ifdef KISAK_DEDICATED
 #include <steamsdk/steam/steam_gameserver.h>
@@ -122,7 +124,7 @@ static void Steam_OnAuthVerdict(const ValidateAuthTicketResponse_t *pCallback)
 	}
 	else
 	{
-		Com_Printf(CON_CHANNEL_DONT_FILTER, "[Kisak] Player %lld passed Steam Auth Check", id64);
+		Com_Printf(CON_CHANNEL_DONT_FILTER, "[Kisak] Player %lld passed Steam Auth Check\n", id64);
 	}
 }
 
@@ -228,6 +230,33 @@ void Steam_CheckClients()
 }
 
 
+// KISAK: Steam_Init runs before Com_Init (win_main.cpp), when Com_Printf has no
+// console window or log file to write to, so everything it says was lost: a
+// mistyped KISAK_STEAM_SERVER_LOGIN, "logging on as an anonymous game server",
+// "SteamAPI_Init() failed". It keeps those lines here, and
+// Steam_PrintStartupMessages prints them once Com_Init has run.
+static std::string s_startupMessages;
+
+static void Steam_StartupPrintf(const char *format, ...)
+{
+	char line[1024];
+	va_list args;
+	va_start(args, format);
+	vsnprintf(line, sizeof(line), format, args);
+	va_end(args);
+	s_startupMessages += line;
+	if (s_startupMessages.empty() || s_startupMessages.back() != '\n')
+		s_startupMessages += '\n';
+}
+
+void Steam_PrintStartupMessages()
+{
+	if (!s_startupMessages.empty())
+		Com_Printf(CON_CHANNEL_DONT_FILTER, "%s", s_startupMessages.c_str());
+	s_startupMessages.clear();
+	s_startupMessages.shrink_to_fit();
+}
+
 // callback hook for debug text emitted from the Steam API
 extern "C" void SteamAPIDebugTextHook(int nSeverity, const char *pchDebugText)
 {
@@ -247,7 +276,7 @@ static void CreateAppIdFile()
 	FILE *fp = fopen("steam_appid.txt", "w");
 	if (!fp)
 	{
-		Com_Printf(CON_CHANNEL_DONT_FILTER, "[Kisak] Error opening 'steam_appid.txt'.");
+		Steam_StartupPrintf("[Kisak] Error opening 'steam_appid.txt'.");
 		return;
 	}
 
@@ -264,7 +293,7 @@ static void Steam_InitGameServer(const char *login)
 {
 	if (strcmp(login, "anonymous"))
 	{
-		Com_Printf(CON_CHANNEL_DONT_FILTER,
+		Steam_StartupPrintf(
 			"[Kisak] Steam: KISAK_STEAM_SERVER_LOGIN must be \"anonymous\" or unset, not \"%s\". Steam authentication is off.\n",
 			login);
 		return;
@@ -277,7 +306,7 @@ static void Steam_InitGameServer(const char *login)
 	if (SteamGameServer_InitEx(0, 28960, STEAMGAMESERVER_QUERY_PORT_SHARED, eServerModeAuthentication, "1.7.0.0", &error)
 		!= k_ESteamAPIInitResult_OK)
 	{
-		Com_Printf(CON_CHANNEL_DONT_FILTER,
+		Steam_StartupPrintf(
 			"[Kisak] Steam: could not start an anonymous game server (%s). Is Steam installed? Steam authentication is off.\n",
 			error);
 		return;
@@ -293,7 +322,7 @@ static void Steam_InitGameServer(const char *login)
 	s_gameServerLogonReported = false;
 	s_gameServer = true;
 	g_steamInitialized = true;
-	Com_Printf(CON_CHANNEL_DONT_FILTER, "[Kisak] Steam: logging on as an anonymous game server for app %d\n", APPID);
+	Steam_StartupPrintf("[Kisak] Steam: logging on as an anonymous game server for app %d\n", APPID);
 }
 #endif
 
@@ -317,13 +346,13 @@ void Steam_Init()
 
 	if (!SteamAPI_Init())
 	{
-		Com_Printf(CON_CHANNEL_DONT_FILTER, "[Kisak] SteamAPI_Init() failed. Is the Steam Client Running? Do you own COD4?");
+		Steam_StartupPrintf("[Kisak] SteamAPI_Init() failed. Is the Steam Client Running? Do you own COD4?");
 		return;
 	}
 
 	if (!SteamUser()->BLoggedOn())
 	{
-		Com_Printf(CON_CHANNEL_DONT_FILTER, "[Kisak] Steam User isn't Logged On.");
+		Steam_StartupPrintf("[Kisak] Steam User isn't Logged On.");
 		return;
 	}
 
@@ -394,7 +423,7 @@ bool Steam_CheckClientTicket(const void* pAuthTicket, uint32 authTicketLen, uint
 
 	if (!g_steamInitialized)
 	{
-		Com_Printf(CON_CHANNEL_DONT_FILTER, "[Kisak] Steam_CheckClientTicket() - Steam is not Initialized! Returning False");
+		Com_Printf(CON_CHANNEL_DONT_FILTER, "[Kisak] Steam_CheckClientTicket() - Steam is not Initialized! Returning False\n");
 		return false;
 	}
 
