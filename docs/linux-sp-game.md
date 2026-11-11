@@ -50,7 +50,10 @@ The default stays `r_backend d3d9`. On the laptop (x86_64, Intel GPU,
 2026-11-10) killhouse, cargoship, blackout, ac130 and airplane load, hold
 60 s, draw a frame and quit cleanly through Vulkan, with no unsupported D3D9
 call reported ([linux-sp-levels.md](linux-sp-levels.md#vulkan-run-1-laptop-x86_64-2026-11-10)).
-Nobody has looked at those frames yet, and nothing has been timed alone.
+On the Windows PC (Linux in WSL, software Vulkan device, 2026-11-11) all 21
+levels do the same, and the frames looked at after a long enough hold match
+DXVK's ([linux-sp-levels.md](linux-sp-levels.md#vulkan-sweep-all-21-levels-pc-linux-in-wsl-x86_64-2026-11-11)).
+Validation layers were off in both runs, and nothing has been timed alone.
 
 For x86_64, add `-DKISAK_LINUX_ARCH=x86_64` in a build directory of its own
 and point the three libraries at x86_64 builds, as for the x86_64 multiplayer
@@ -137,9 +140,10 @@ back end builds, links and leaves the start alone, not that it draws.
    are in [linux-sp-levels.md](linux-sp-levels.md).
 2. The x86_64 game by hand (its level chain and save and load pass in the
    sweep tool).
-3. Look at the singleplayer frames drawn through `r_backend vulkan` next to
-   DXVK's (five levels draw and quit cleanly; nobody has looked), and the
-   other 16 levels.
+3. Run the singleplayer levels through `r_backend vulkan` with the
+   validation layers on, and look at GPU frames next to DXVK's (all 21
+   levels draw and quit cleanly; only software-device frames were looked
+   at).
 4. Compare with the Windows `KisakCOD-sp` build on the same data, to tell
    port bugs from bugs the Windows build shares. Linux keeps assertions on in
    every configuration and the Windows Release build does not, so compare
