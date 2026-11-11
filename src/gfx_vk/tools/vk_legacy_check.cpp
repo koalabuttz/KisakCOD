@@ -589,18 +589,40 @@ void Check::AlphaTest()
         return;
     lg::SetTexture(device, 0, texture);
     lg::SetPixelShader(device, psTexture);
+    const uint32_t pipelines = lg::Stats(device).pipelines;
     lg::SetRenderState(device, d3d::RS_ALPHATESTENABLE, 1);
     lg::SetRenderState(device, d3d::RS_ALPHAREF, 128);
     lg::SetRenderState(device, d3d::RS_ALPHAFUNC, d3d::CMP_GREATER);
-    DrawQuadPx(0, 0, 128, 64, 0.5f, 0xffffffffu);
+    DrawQuadPx(0, 0, 128, 40, 0.5f, 0xffffffffu);
     lg::SetRenderState(device, d3d::RS_ALPHAFUNC, d3d::CMP_LESS);
-    DrawQuadPx(0, 64, 128, 128, 0.5f, 0xffffffffu);
+    DrawQuadPx(0, 40, 128, 80, 0.5f, 0xffffffffu);
+    // The test off: everything passes (with the compare fixed in the
+    // pipeline, a shader without the test).
+    lg::SetRenderState(device, d3d::RS_ALPHATESTENABLE, 0);
+    DrawQuadPx(0, 80, 128, 128, 0.5f, 0xffffffffu);
+    const uint32_t built = lg::Stats(device).pipelines - pipelines;
+    // On again with LESS: the pipeline of the second draw, nothing built.
+    lg::SetRenderState(device, d3d::RS_ALPHATESTENABLE, 1);
+    DrawQuadPx(0, 40, 128, 80, 0.5f, 0xffffffffu);
     if (!Read())
         return;
-    Expect("greater_low", 32, 32, 0, 0, 0);
-    Expect("greater_high", 96, 32, 255, 0, 0, 192);
-    Expect("less_low", 32, 96, 255, 0, 0, 64);
-    Expect("less_high", 96, 96, 0, 0, 0);
+    Expect("greater_low", 32, 20, 0, 0, 0);
+    Expect("greater_high", 96, 20, 255, 0, 0, 192);
+    Expect("less_low", 32, 60, 255, 0, 0, 64);
+    Expect("less_high", 96, 60, 0, 0, 0);
+    Expect("off_low", 32, 104, 255, 0, 0, 64);
+    Expect("off_high", 96, 104, 255, 0, 0, 192);
+    // Where the compare is fixed (OptionalFeatures::fixedAlphaTest) each
+    // compare has a pipeline of its own; where the shader reads it, one
+    // serves all. Earlier scenes may have built some of these already.
+    const bool fixed = gfx_vk::Features(core).fixedAlphaTest;
+    ++result->points;
+    if (!(fixed ? built >= 2 && built <= 3 : built <= 1) || lg::Stats(device).pipelines - pipelines != built)
+    {
+        ++result->mismatched;
+        result->detail += " pipelines_built=" + std::to_string(built) + "/"
+            + std::to_string(lg::Stats(device).pipelines - pipelines);
+    }
 }
 
 void Check::Blend()

@@ -701,6 +701,8 @@ bool CreateDevice(Core &core)
     core.optional.passClears = !EnvEquals("KISAK_VK_PASS_CLEARS", "0");
     core.optional.passTimestamps = !EnvEquals("KISAK_VK_PASS_TIMESTAMPS", "0");
     core.optional.strictFloats = EnvEquals("KISAK_VK_STRICT_FLOATS", "1");
+    core.optional.fixedAlphaTest = !EnvEquals("KISAK_VK_ALPHA_TEST", "dynamic");
+    core.optional.dynamicLegacyState = EnvEquals("KISAK_VK_LEGACY_STATE", "dynamic");
     // Tile-based GPUs pay for every part with a store and a load of the
     // targets (see OptionalFeatures): Apple, Arm, Qualcomm, Imagination,
     // Broadcom, and MoltenVK on any GPU.

@@ -71,9 +71,12 @@ uses the one DXVK picks on drivers without a native multiply of that kind
   product checks both factors for zero, two compares and two selects per
   component (dxbc-spirv's `*_legacy` functions). Up to 2026-11-11 this was the
   only rule. Laptop run 17 had Mesa's Intel compiler print its statistics for
-  every shader of a mp_crash scene: our vertex shaders were about 4 times as
-  long as DXVK's (median 545 against 141 instructions) and our pixel shaders
-  about twice (635 against 324).
+  every shader of a mp_crash scene: our vertex shaders were about 3.5 times as
+  long as DXVK's (median 545 against 154 instructions) and our pixel shaders
+  1.8 times (635 against 359). With the fast rule (laptop run 18) the vertex
+  shaders are as long as DXVK's (151) and the pixel shaders 1.3 times (457),
+  and the laptop draws the scene at 129 fps against 106, with a picture that
+  cannot be told from DXVK's by its numbers.
 
 The rule is set once per process (`legacy_shader::SetStrictFloats`, from the
 core's `OptionalFeatures::strictFloats`), before the first shader is
@@ -81,6 +84,41 @@ translated. `TranslatorRevision` carries it, so a shader cache file made under
 the other rule is not used. The adapter's `device ready:` line says
 `floats fast` or `floats strict`, and `KisakCOD-vulkan-shaders` follows the
 same variable and prints `legacy_shader.floats=`.
+
+## Legacy state
+
+dxbc-spirv turns the D3D9 state a shader depends on into uniform blocks read
+at run time, where DXVK specialises it per pipeline. The Legacy adapter always
+writes the same values for the parts the game never changes (see
+`FillUniformBlock` in `vk_legacy_draw.cpp`), so `Translate` makes them
+constants after legalising and folds what they decide
+(`FixLegacyState` in `vk_legacy_shader.cpp`):
+
+| Block | Fixed as | What goes |
+| --- | --- | --- |
+| Fog | off | ps 1.x and 2.x: the fog branch and its function |
+| Clip planes | none | vertex shaders: six dot products and the block (the clip distances are written as 0) |
+| Point sprites | not a sprite; size 1, 1 to 64 | pixel shaders: a select between each texture coordinate and `PointCoord`; vertex shaders: the size's clamp is constant |
+| Sampler state | no projection, no gather, never unbound, D24 depth scale | around each sample: the unbound branch, the gather path and the projection select |
+
+An unbound sampler reads the adapter's null texture, which is (0, 0, 0, 1) as
+D3D9 gives, so the unbound branch is not needed. What stays in the sampler
+state block is the texture type (shader model 1 only), the depth compare
+(unless fixed per pipeline, as on MoltenVK) and the depth clamp. Blocks with
+nothing left to read are not declared, so the adapter binds and writes fewer
+of them. Over the spike cases the shaders have 22% fewer SPIR-V instructions.
+
+`KISAK_VK_LEGACY_STATE=dynamic` keeps all of it as dxbc-spirv emits it. Like
+the float rule it is set once per process (`legacy_shader::SetDynamicLegacyState`,
+from the core's `OptionalFeatures::dynamicLegacyState`), `TranslatorRevision`
+carries it, the adapter's `device ready:` line says `legacy state fixed` or
+`dynamic`, and `KisakCOD-vulkan-shaders` follows the same variable and prints
+`legacy_shader.legacy_state=`.
+
+`Translate` also removes unused calls of functions without side effects:
+dxbc-spirv's `RemoveUnusedPass` keeps a call of a function it has not met yet
+in code order, and the vertex shaders' clipping function comes before the
+dot product it calls.
 
 ## Known limits
 
@@ -90,12 +128,14 @@ same variable and prints `legacy_shader.floats=`.
   scan).
 - **Binding model.** It is simple on purpose. DXVK puts render state into push
   data and specialisation constants and packs constants. Here each block is a
-  plain uniform buffer. Most pixel shaders read three to four blocks per draw
-  (constants, alpha test, point sprites, plus sampler state when they sample).
-  If draw-call cost on the laptop asks for it, that is the place to tighten.
-- **Point sprites in pixel shaders.** Pixel shaders read the point-sprite block
-  for `PointCoord` even though the game draws no point sprites. That costs one
-  select per texture coordinate.
+  plain uniform buffer, and `BuildSpirv` fixes two states per pipeline by
+  replacing their loads with constants and folding what they decide: depth
+  compare (on MoltenVK) and the alpha test's compare. `Translate` fixes the
+  state the game never changes ([Legacy state](#legacy-state)). Most pixel
+  shaders read two to three blocks per draw (constants, alpha test, plus
+  sampler state when they sample), most vertex shaders one. If the game ever
+  sets fog, clip planes or point sprites, they need
+  `KISAK_VK_LEGACY_STATE=dynamic` or a pipeline key bit, as the alpha test has.
 
 ## Pin
 
@@ -147,6 +187,17 @@ needs no GPU, game data or network. It covers:
   ([vulkan-legacy-adapter.md](vulkan-legacy-adapter.md#moltenvk-macos)). Both
   pass `spirv-val`. With `0` no depth-reference sample is left. With `0xffff`,
   2D and cube images are sampled only with a depth reference.
+- **Fixed alpha test:** every pixel shader case that reads the alpha test
+  block is built again with `--alpha-compare 7` (ALWAYS) and `4` (GREATER).
+  Both pass `spirv-val`. With ALWAYS the test's discard is gone (a `texkill`
+  keeps its own) and the block is not read; with GREATER the test stays.
+- **Legacy state:** every case is translated again with
+  `KISAK_VK_LEGACY_STATE=dynamic` and passes `spirv-val` and the layout check
+  that way too (the fog, clip plane and point blocks are checked there). By
+  default no case declares the fog, clip plane or point blocks and none
+  gathers; with the switch every vertex shader declares the clip planes,
+  every ps 2.x one the fog, and some cases gather. The test prints the
+  instructions summed over the cases both ways.
 - **Float rules:** a case with matrix multiplies uses dxbc-spirv's `*_legacy`
   functions with `KISAK_VK_STRICT_FLOATS=1` and none without, and the tool says
   which rule it used.

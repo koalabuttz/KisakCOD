@@ -466,13 +466,13 @@ LayoutKey LayoutFor(const Shader &vs, const Shader &ps)
     return key;
 }
 
-VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t depthSamplers)
+VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t depthSamplers, uint32_t alphaCompare)
 {
     std::vector<uint32_t> spirv;
     std::string error;
     const bool direct = ls::StagesLinkDirectly(vs.translated, ps.translated);
     const bool fixed = Features(device.core).fixedDepthCompare;
-    if (direct && !fixed)
+    if (direct && !fixed && !alphaCompare)
     {
         if (ps.module)
             return ps.module;
@@ -484,15 +484,17 @@ VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t dept
         ps.module = CreateShaderModule(device.core, spirv.data(), spirv.size() * sizeof(uint32_t));
         return ps.module;
     }
-    // The vertex shader's id (none when the stages link as they stand), and
-    // the depth samplers above it where they are fixed.
-    const uint64_t moduleKey =
-        (fixed ? uint64_t(depthSamplers | 0x10000u) << 32 : 0) | (direct ? 0xffffffffu : vs.id);
+    // The vertex shader's id (none when the stages link as they stand), the
+    // depth samplers above it where they are fixed, and the alpha test's
+    // compare plus 1 above those where it is fixed (PipelineKey::alphaCompare).
+    const uint64_t moduleKey = uint64_t(alphaCompare & 0xf) << 52
+        | (fixed ? uint64_t(depthSamplers | 0x10000u) << 32 : 0) | (direct ? 0xffffffffu : vs.id);
     auto found = ps.linked.find(moduleKey);
     if (found != ps.linked.end())
         return found->second;
+    const uint32_t compare = alphaCompare ? alphaCompare - 1 : 0;
     if (!ls::BuildSpirv(ps.translated, direct ? nullptr : &vs.translated, spirv, error,
-                        fixed ? &depthSamplers : nullptr))
+                        fixed ? &depthSamplers : nullptr, alphaCompare ? &compare : nullptr))
     {
         Fail(device, "pixel shader %08x with vertex shader %08x: %s", ps.translated.bytecodeHash,
              vs.translated.bytecodeHash, error.c_str());
@@ -559,7 +561,7 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
 {
     const TimeInto timer(device.stats.pipelineMicros);
     Layout *layout = GetLayout(device, LayoutFor(vs, ps));
-    const VkShaderModule fragment = layout ? PixelModule(device, ps, vs, key.depthSamplers) : VK_NULL_HANDLE;
+    const VkShaderModule fragment = layout ? PixelModule(device, ps, vs, key.depthSamplers, key.alphaCompare) : VK_NULL_HANDLE;
     if (!fragment)
     {
         if (device.error.empty())
@@ -724,6 +726,15 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
     return &device.pipelines.emplace(key, pipeline).first->second;
 }
 
+// The alpha test's compare as the render state gives it (ls::AlphaCompare):
+// Always while the test is off.
+uint32_t AlphaCompareNow(const Device &device)
+{
+    return device.renderStates[d3d::RS_ALPHATESTENABLE]
+        ? static_cast<uint32_t>(CompareOp(device.renderStates[d3d::RS_ALPHAFUNC]))
+        : static_cast<uint32_t>(ls::AlphaCompare::Always);
+}
+
 PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, const VertexDecl &decl,
                     d3d::PrimitiveType type, uint32_t depthSamplers)
 {
@@ -744,6 +755,9 @@ PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, co
     key.depthFormat = device.passDepth ? static_cast<uint32_t>(device.depthFormat) : 0;
     key.samples = static_cast<uint8_t>(device.passSamples);
     key.topologyClass = TopologyClass(type);
+    if (Features(device.core).fixedAlphaTest
+        && (ps.translated.reflection.uniforms & (1u << static_cast<uint32_t>(ls::Uniform::AlphaTest))))
+        key.alphaCompare = static_cast<uint8_t>(AlphaCompareNow(device) + 1);
     const bool nonSolid = Features(device.core).fillModeNonSolid;
     key.polygonMode = static_cast<uint8_t>(!nonSolid ? VK_POLYGON_MODE_FILL
                                            : rs[d3d::RS_FILLMODE] == d3d::FILL_POINT     ? VK_POLYGON_MODE_POINT
@@ -973,9 +987,7 @@ UniformKey KeyForBlock(const Device &device, uint32_t binding, const Shader &vs,
     {
     case ls::Uniform::AlphaTest:
     {
-        const uint32_t compare = device.renderStates[d3d::RS_ALPHATESTENABLE]
-            ? static_cast<uint32_t>(CompareOp(device.renderStates[d3d::RS_ALPHAFUNC]))
-            : static_cast<uint32_t>(ls::AlphaCompare::Always);
+        const uint32_t compare = AlphaCompareNow(device);
         key.key = uint64_t(1) << 63 | uint64_t(compare) << 8 | (device.renderStates[d3d::RS_ALPHAREF] & 0xff);
         break;
     }
@@ -990,7 +1002,11 @@ UniformKey KeyForBlock(const Device &device, uint32_t binding, const Shader &vs,
     return key;
 }
 
-// Writes one block: every byte of it.
+// Writes one block: every byte of it. The fog, clip plane and point blocks
+// and the sampler state's projection, gather, unbound and depth scale members
+// are constants in shaders translated with the legacy state fixed
+// (legacy_shader::SetDynamicLegacyState, FixLegacyState in
+// vk_legacy_shader.cpp): change them there too.
 void FillUniformBlock(const Device &device, const UniformBlock &block, const UniformKey &key, const Shader &vs,
                       const Shader &ps, const DrawTextures &textures, uint8_t *data)
 {
@@ -1982,10 +1998,18 @@ void SetRenderState(Device *device, d3d::RenderState state, uint32_t value)
     if (state >= d3d::RS_COUNT || device->renderStates[state] == value)
         return;
     device->renderStates[state] = value;
-    // The alpha test is a uniform block's (KeyForBlock): it is in no pipeline
-    // key and no dynamic state. Every other state may be in either.
-    if (state == d3d::RS_ALPHATESTENABLE || state == d3d::RS_ALPHAFUNC || state == d3d::RS_ALPHAREF)
+    // The alpha test is a uniform block's (KeyForBlock), and in no dynamic
+    // state; its compare is in the pipeline key too where the pixel shader
+    // has it fixed (PipelineKey::alphaCompare). Every other state may be in
+    // either.
+    if (state == d3d::RS_ALPHAREF)
         return;
+    if (state == d3d::RS_ALPHATESTENABLE || state == d3d::RS_ALPHAFUNC)
+    {
+        if (Features(device->core).fixedAlphaTest)
+            device->keyStale = true;
+        return;
+    }
     device->keyStale = true;
     device->dynamicStale = true;
 }

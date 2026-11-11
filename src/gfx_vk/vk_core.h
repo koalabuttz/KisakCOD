@@ -345,6 +345,17 @@ struct OptionalFeatures
     // (legacy_shader::SetStrictFloats). KISAK_VK_STRICT_FLOATS=1 checks both
     // factors of every multiply for zero instead, as D3D9 hardware gives.
     bool strictFloats;
+    // The Legacy adapter fixes the alpha test's compare in each pipeline's
+    // pixel shader (legacy_shader::BuildSpirv's fixedAlphaCompare), as DXVK
+    // does, so a draw without the test runs a shader that cannot discard and
+    // the GPU can test depth before it. KISAK_VK_ALPHA_TEST=dynamic reads the
+    // compare from the alpha test block at run time instead.
+    bool fixedAlphaTest;
+    // The Legacy adapter's translated shaders hold the legacy state the game
+    // never changes (fog, clip planes, point sprites, unbound samplers) as
+    // constants (legacy_shader::SetDynamicLegacyState), as DXVK specialises
+    // it. KISAK_VK_LEGACY_STATE=dynamic reads it from uniforms at run time.
+    bool dynamicLegacyState;
     // The Legacy adapter submits a frame in parts while it is still being
     // drawn, so the GPU works on a frame as it is recorded instead of
     // starting when the frame ends (see FeedGpu in vk_legacy_draw.cpp). Each

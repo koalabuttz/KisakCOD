@@ -215,6 +215,16 @@ struct Shader
 void SetStrictFloats(bool strict);
 bool StrictFloats();
 
+// Whether Translate keeps the legacy state the game never changes (fog, clip
+// planes, point sprites and sizes, and the projection, gather, unbound and
+// depth scale members of SamplerStateBlock) as uniforms read at run time, as
+// dxbc-spirv emits it. By default (false) it becomes constants, the values
+// the Legacy adapter always writes, and the code that tests it goes: blocks
+// left unread are not declared. Set once, before the first Translate, as
+// SetStrictFloats; TranslatorRevision follows it.
+void SetDynamicLegacyState(bool dynamic);
+bool DynamicLegacyState();
+
 // Translates D3D9 bytecode (a version token, then tokens, ending at the end
 // token). On failure returns false and says why in error.
 bool Translate(const void *bytecode, size_t bytes, Shader &shader, std::string &error);
@@ -230,8 +240,15 @@ bool Translate(const void *bytecode, size_t bytes, Shader &shader, std::string &
 // branch not taken is removed. MoltenVK needs this: its shader converter
 // (SPIRV-Cross) declares an image sampled both with and without a depth
 // reference as a Metal depth texture, which cannot sample colour.
+//
+// fixedAlphaCompare, when given, decides the alpha test at build time instead
+// of by AlphaTestBlock::compareOp (an AlphaCompare value; alphaRef stays in
+// the block). With Always the test goes, and the shader cannot discard: a GPU
+// tests depth before a shader that cannot, and after one that may. DXVK fixes
+// the test per pipeline the same way.
 bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<uint32_t> &spirv,
-                std::string &error, const uint32_t *fixedDepthCompare = nullptr);
+                std::string &error, const uint32_t *fixedDepthCompare = nullptr,
+                const uint32_t *fixedAlphaCompare = nullptr);
 
 // True when the pixel shader's inputs read the vertex shader's outputs as they
 // stand (BuildSpirv then needs no linking).
@@ -242,8 +259,9 @@ std::string DisassembleIr(const Shader &shader);
 
 // What makes translations differ between builds: a digest of the translator's
 // sources and dxbc-spirv's commit (KISAK_LEGACY_SHADER_REVISION, from
-// vulkan_shaders.cmake), and the float rule (SetStrictFloats). A cache of
-// translated shaders keeps it and drops everything when it changes.
+// vulkan_shaders.cmake), the float rule (SetStrictFloats) and the legacy
+// state rule (SetDynamicLegacyState). A cache of translated shaders keeps it
+// and drops everything when it changes.
 const char *TranslatorRevision();
 
 // A translated shader as bytes, and back, for caches. Deserialize refuses
