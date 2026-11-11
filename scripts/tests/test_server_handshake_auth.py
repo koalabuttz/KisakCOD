@@ -2763,6 +2763,14 @@ static void TestGetChallengeRetailGuidDisabled()
     CheckEq(R.steamChecks, 0, "a refused retail GUID never reaches the Steam backend");
     CheckEq(static_cast<long long>(R.banCheckedIdentities.size()), 0,
             "a refused retail GUID never reaches the ban check");
+    // The operator sees the refusal too: the address and the reason the client
+    // got, on the always-printed channel, once, and without the GUID.
+    CheckEq(static_cast<long long>(R.alwaysPrinted.size()), 1, "the refusal prints one console line");
+    CheckText(R.alwaysPrinted.empty() ? std::string() : R.alwaysPrinted[0],
+              "rejected connection from 203.0.113.7:28000: This server requires Steam authentication; "
+              "unverified retail GUIDs are not accepted.\n",
+              "the console line names the address and the reason");
+    Check(!AnyLineContains(R.printed, kRetailGuid), "the refused GUID is not printed");
 
     // A 32-hex field is also valid base64, so this proves the retail branch was
     // taken and nothing was decoded as a Steam ticket.
@@ -2893,6 +2901,15 @@ static void TestGetChallengeRetailGuidMalformed()
         std::string label = std::string("retail GUID \"") + Escape(bad[i]) + "\"";
         int token = IssueRetailChallenge(from, bad[i]);
         CheckText(LastOob(), kMalformedGuidMessage, label + " is refused as malformed");
+        // Only the server's own reason reaches the console, never the field.
+        // (Turning the switch on printed its warning first.)
+        long long rejections = 0;
+        for (const std::string &line : R.printed)
+            rejections += line.find("rejected connection") != std::string::npos;
+        CheckEq(rejections, 1, label + " prints one rejection line");
+        CheckText(R.alwaysPrinted.empty() ? std::string() : R.alwaysPrinted.back(),
+                  "rejected connection from 203.0.113.7:28000: Malformed GUID authentication fields.\n",
+                  label + " is logged with the reason only");
         CheckEq(static_cast<long long>(token), -1, label + " gets no token");
         Check(AllChallengesZeroed(), label + " allocates no challenge slot");
         CheckEq(R.steamChecks, 0, label + " never reaches the Steam backend");
