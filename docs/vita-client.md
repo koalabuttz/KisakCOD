@@ -791,8 +791,9 @@ What the GXM back end does so far (step 2d):
   run T (2026-11-11, mp_crash) measured the GPU's time a frame at 80 ms with
   it against 108 without at the busy view, and 27 against 50 facing the
   other way. The gun keeps its own narrow depth range; in the depth pass that
-  range is pinned to its far end, since the two passes' programs wrote depths
-  a hair apart there and parts of the gun showed black. An empty file
+  range moves to a sliver just past it (1/64 to 1/64 + 1/65536), since the
+  two passes' programs wrote depths a hair apart there and parts of the gun
+  showed black. An empty file
   `no-depth-prepass` in the folder of the compiled programs turns the
   forced pass off.
 - **Textures** are linear: rows of whole multiples of 8 texels, and the
