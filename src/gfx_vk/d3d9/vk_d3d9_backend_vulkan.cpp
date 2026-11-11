@@ -42,6 +42,8 @@ struct SlowFrame
     double frameLimitWaitMs = 0.0;
     double otherGpuWaitMs = 0.0;
     double recordWaitMs = 0.0;
+    uint64_t frontSleeps = 0; // waits for the front lock that slept, any thread
+    double frontSleepMs = 0.0;
     bool gpuKnown = false;
     FrameGpuTimes gpu{};
 };
@@ -71,6 +73,7 @@ struct Backend
     std::chrono::steady_clock::time_point presentAt{};
     lg::DeviceStats presentStats{};
     CoreStats presentCore{};
+    FrontLockSleeps presentSlept{};
     uint64_t framesTracked = 0;
 };
 
@@ -134,6 +137,9 @@ void TrackFrame(Backend &backend)
             frame.otherGpuWaitMs =
                 std::max(0.0, (core.gpuWaitMs - coreWas.gpuWaitMs) - frame.frameLimitWaitMs);
             frame.recordWaitMs = core.recordWaitMs - coreWas.recordWaitMs;
+            const FrontLockSleeps slept = FrontLockSlept();
+            frame.frontSleeps = slept.sleeps - backend.presentSlept.sleeps;
+            frame.frontSleepMs = double(slept.micros - backend.presentSlept.micros) / 1000.0;
             uint32_t place = kSlowFrames - 1;
             for (; place > 0 && backend.slowFrames[place - 1].ms < ms; --place)
                 backend.slowFrames[place] = backend.slowFrames[place - 1];
@@ -144,6 +150,7 @@ void TrackFrame(Backend &backend)
     backend.presentAt = now;
     backend.presentStats = stats;
     backend.presentCore = core;
+    backend.presentSlept = FrontLockSlept();
 }
 
 void LogSlowFrames(const Backend &backend)
@@ -168,7 +175,7 @@ void LogSlowFrames(const Backend &backend)
                 "%llu dynamic renames, %u swapchains built; of the time: %u pipelines (%u from the cache) %.2f ms, "
                 "%u waited for from workers %.2f ms, %u shaders %.2f ms, %llu texture uploads (%.2f MB) %.2f ms, %llu memory blocks %.2f ms; waits: "
                 "swapchain image %.2f ms, frames in flight %.2f ms, GPU otherwise %.2f ms (%llu textures read back), "
-                "record thread %.2f ms; %s",
+                "record thread %.2f ms, front lock %llu sleeps %.2f ms (any thread); %s",
                 i + 1, frame.ms, static_cast<unsigned long long>(frame.number), frame.seconds,
                 static_cast<unsigned long long>(frame.draws), static_cast<unsigned long long>(frame.passes),
                 static_cast<unsigned long long>(frame.submissions),
@@ -178,7 +185,7 @@ void LogSlowFrames(const Backend &backend)
                 static_cast<unsigned long long>(frame.uploads), frame.uploadMegabytes, frame.uploadMs,
                 static_cast<unsigned long long>(frame.memoryAllocations), frame.memoryAllocateMs, frame.imageWaitMs,
                 frame.frameLimitWaitMs, frame.otherGpuWaitMs, static_cast<unsigned long long>(frame.readbacks),
-                frame.recordWaitMs, gpu);
+                frame.recordWaitMs, static_cast<unsigned long long>(frame.frontSleeps), frame.frontSleepMs, gpu);
     }
 }
 } // namespace

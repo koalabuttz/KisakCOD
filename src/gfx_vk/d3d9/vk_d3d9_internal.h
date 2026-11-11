@@ -117,6 +117,14 @@ private:
 inline constinit FrontMutexType g_frontMutex;
 inline FrontMutexType &FrontMutex() { return g_frontMutex; }
 #endif
+// Waits for the front lock that ended in a sleep (spinning did not get it),
+// over all threads since start: the slow frame lines print a frame's share.
+struct FrontLockSleeps
+{
+    uint64_t sleeps = 0; // waits on the condition variable
+    uint64_t micros = 0; // from the end of spinning to holding the lock
+};
+FrontLockSleeps FrontLockSlept();
 class FrontLock
 {
 public:

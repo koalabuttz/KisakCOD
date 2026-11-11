@@ -106,7 +106,11 @@ since the device was made or since the last call that started them again.
   calling thread waited for a swapchain image, for the frames in flight (with
   two frames in flight, a `Present` waits for the frame before the one it
   shows), for the GPU otherwise (a texture read back, a flush that waits) and
-  for the record thread. The parts are measured where they happen and can
+  for the record thread. Then the front lock's sleeps in the frame, on any
+  thread: waits that spinning did not end, with the milliseconds from the end
+  of the spin to holding the lock (none on the PS Vita, whose lock is a plain
+  mutex). A thread that waits there long is held up by another thread inside
+  the front. The parts are measured where they happen and can
   overlap (an upload that needed a memory block counts in both). What they
   leave of the frame's time is the engine's own work and the driver's inside
   ordinary calls. The line ends with the GPU's times for that frame (its

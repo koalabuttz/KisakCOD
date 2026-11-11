@@ -3,6 +3,8 @@
 
 #include "vk_d3d9_internal.h"
 
+#include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdarg>
 #include <cstdio>
@@ -99,6 +101,10 @@ bool SpinDisabled()
 #endif
 }
 
+// FrontLockSlept's counts.
+std::atomic<uint64_t> g_frontSleeps{0};
+std::atomic<uint64_t> g_frontSleepMicros{0};
+
 // What a waiter sleeps on. Made by the first waiter and never destroyed.
 struct FrontSleep
 {
@@ -137,9 +143,31 @@ void FrontMutexType::LockSlow()
     // most one wake nobody needed. The holder takes Sleep().mutex before it
     // wakes anyone, so the mark and the wait cannot miss each other.
     FrontSleep &sleep = Sleep();
-    std::unique_lock<std::mutex> guard(sleep.mutex);
-    while (state_.exchange(kSleepers, std::memory_order_acquire) != kFree)
-        sleep.wake.wait(guard);
+    const auto start = std::chrono::steady_clock::now();
+    uint64_t sleeps = 0;
+    {
+        std::unique_lock<std::mutex> guard(sleep.mutex);
+        while (state_.exchange(kSleepers, std::memory_order_acquire) != kFree)
+        {
+            ++sleeps;
+            sleep.wake.wait(guard);
+        }
+    }
+    if (sleeps)
+    {
+        const auto micros =
+            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
+        g_frontSleeps.fetch_add(sleeps, std::memory_order_relaxed);
+        g_frontSleepMicros.fetch_add(static_cast<uint64_t>(micros), std::memory_order_relaxed);
+    }
+}
+
+FrontLockSleeps FrontLockSlept()
+{
+    FrontLockSleeps slept;
+    slept.sleeps = g_frontSleeps.load(std::memory_order_relaxed);
+    slept.micros = g_frontSleepMicros.load(std::memory_order_relaxed);
+    return slept;
 }
 
 void FrontMutexType::WakeOne()
@@ -151,6 +179,11 @@ void FrontMutexType::WakeOne()
     sleep.wake.notify_one();
 }
 #else
+FrontLockSleeps FrontLockSlept()
+{
+    return {}; // a plain recursive mutex here: its sleeps are not seen
+}
+
 FrontMutexType &FrontMutex()
 {
     // Never destroyed: a device released from a static destructor still locks it.

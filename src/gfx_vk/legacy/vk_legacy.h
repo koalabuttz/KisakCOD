@@ -299,13 +299,16 @@ struct DeviceStats
     // not counted in pipelines or pipelineMicros: those built, the workers'
     // time on them, those a draw then used, the draws that had to wait for
     // one a worker was still building and how long they waited, and the
-    // entries the pipeline list file held when the device was created.
+    // entries the pipeline list file held when the device was created; then
+    // the time the creating thread spent queueing jobs as shaders and
+    // declarations were made (for shaders, inside shaderMicros).
     uint32_t pipelinesAhead;
     uint64_t aheadMicros;
     uint32_t aheadUsed;
     uint32_t aheadWaits;
     uint64_t aheadWaitMicros;
     uint32_t pipelinesListed;
+    uint64_t aheadQueueMicros;
     uint64_t textureUploads;   // copy commands of UnlockRect and UpdateTexture, of one or more regions of a level
     uint64_t textureReadbacks; // levels read back to lock a texture again (once each)
     uint64_t uploadBytes;

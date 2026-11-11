@@ -308,7 +308,10 @@ with the caches cold, 103 ms with every one of them a pipeline cache hit).
 list is still kept). The statistics: `pipelinesAhead` and `aheadMicros` (the
 workers' pipelines and time, not counted in `pipelines` and
 `pipelineMicros`), `aheadUsed` (those a draw used), the waits above, and
-`pipelinesListed` (entries the file held). A first launch, or the first time
+`pipelinesListed` (entries the file held), and `aheadQueueMicros` (the
+thread creating shaders and declarations, queueing their jobs; for shaders
+also inside `shaderMicros`, which PC run 14 found about twice master's with
+building ahead on: 29 to 31 ms against 14 to 15). A first launch, or the first time
 a map is played, still builds its pipelines at their draws: the list only
 knows what an earlier launch drew.
 

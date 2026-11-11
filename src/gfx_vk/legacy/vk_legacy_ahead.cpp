@@ -469,6 +469,7 @@ void TryQueue(Device &device, uint32_t at)
 
 void QueueFor(Device &device, uint64_t contentHash)
 {
+    const TimeInto timer(device.stats.aheadQueueMicros);
     Ahead &ahead = *device.ahead;
     const auto range = ahead.byContent.equal_range(contentHash);
     std::vector<uint32_t> found;
