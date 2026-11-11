@@ -659,9 +659,12 @@ void Sys_OpenURL(const char *url, int doexit)
         Cbuf_AddText(0, "quit\n");
 }
 
+#if !defined(KISAK_LINUX_GAME_CLIENT) || defined(__vita__)
+// The Linux and macOS game windows read and write the clipboard through SDL
+// (src/linux/client/mp_client_input.cpp). The dedicated server has no display,
+// and the Vita no clipboard.
 char *Sys_GetClipboardData()
 {
-    // No clipboard without a display server.
     return nullptr;
 }
 
@@ -670,6 +673,7 @@ int Sys_SetClipboardData(const char *text)
     (void)text;
     return 0;
 }
+#endif
 
 void Sys_Quit()
 {
