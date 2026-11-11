@@ -107,6 +107,10 @@ state block is the texture type (shader model 1 only), the depth compare
 (unless fixed per pipeline, as on MoltenVK) and the depth clamp. Blocks with
 nothing left to read are not declared, so the adapter binds and writes fewer
 of them. Over the spike cases the shaders have 22% fewer SPIR-V instructions.
+On the laptop (run 19) holding the legacy state as constants is worth 15 fps
+(158 to 173) and the alpha test fixed per pipeline 33 (140 to 173); with both,
+Mesa's Intel compiler makes our pixel shaders shorter than DXVK's (median 232
+against 359 instructions).
 
 `KISAK_VK_LEGACY_STATE=dynamic` keeps all of it as dxbc-spirv emits it. Like
 the float rule it is set once per process (`legacy_shader::SetDynamicLegacyState`,

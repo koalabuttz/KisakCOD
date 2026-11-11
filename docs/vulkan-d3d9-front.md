@@ -820,6 +820,20 @@ evidence):
   5x5 grid, black and white shares, isolated pixels): F against DXVK differs
   less than F against its own repeat; the sun view could not separate the
   renderers. Report: `renderer/vulkan-backend-laptop-run-18.md`.
+* Alpha test and legacy state (run 19, 2026-11-11, build d2481792, the same
+  scene at 4 samples, N A L L A N): defaults (N) 172.6 fps with a GPU frame
+  of 4.90 ms; the alpha test read at run time (A, `KISAK_VK_ALPHA_TEST=dynamic`)
+  139.6 fps and 6.42 ms; the legacy state read at run time (L,
+  `KISAK_VK_LEGACY_STATE=dynamic`) 158.1 fps and 5.43 ms. The two costs
+  roughly add up to N's gain over run 18's F (43.8 fps). Mesa's statistics of
+  N: pixel median 232 instructions and 7,947 cycles (DXVK 359 and 9,038),
+  vertex 114 and 434, no spills, 226 pixel shaders (more variants, one per
+  alpha compare). Then N against DXVK in one sitting (N D D N): 170.5 against
+  166.8 fps, Vulkan 2% ahead, about four times the larger row spread. The
+  picture at the ground view, by numbers only, lands on one of a few states
+  per launch whichever back end or switch draws it (DXVK and Vulkan share
+  one); the differences, up to 0.4 luma in a cell, follow the launch, not the
+  switches. Report: `renderer/vulkan-backend-laptop-run-19.md`.
 * Present mode: the laptop's swapchain still says `MAILBOX, 4 images` with
   vsync off now that the core asks for IMMEDIATE first (run 11), so its
   surface does not offer IMMEDIATE.
@@ -866,26 +880,21 @@ evidence):
   launch, with a repeated launch as the baseline
   (`renderer/model-lighting/luma_grid.py` in the project files).
 
-Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11,12,13,14,15,16,17,18}.md`,
+Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11,12,13,14,15,16,17,18,19}.md`,
 `renderer/vulkan-backend-pc-run-{6,7,8,9,10}.md` and
 `renderer/model-lighting/laptop-run-1.md` in the project files.
 
 ## Next
 
-The rest of the frame rate gap to DXVK. On the laptop that is the GPU's
-time: at the same 4 samples Vulkan is about 35% behind (laptop run 13), and
-nearly all of the GPU's time is draws in a few large passes (run 14); fast
-clears (run 15) and the pass timestamps (run 16) did not move it. Our
-shaders compiled to 1.8 to 3.5 times DXVK's code on that driver (run 17);
-the fast multiply rule brought the vertex shaders level and gave 22% more
-frames (run 18). The pixel shaders are still 1.3 times DXVK's. The alpha
-test is now fixed per pipeline and the legacy state the game never changes
-is constant ([shaders](vulkan-legacy-shaders.md#legacy-state)); laptop run 19
-measures both against their switches. What may be left after that: the depth
-compare read at run time around each sample, and more distinct shaders
-compiled than DXVK (201 pixel shaders against 169). On the Windows PC, in
-a Release build, Vulkan is about 3% behind Direct3D 9 (PC run 10) and the
-PC waits for the CPU: what is left is the time per frame, the front's lock
-first. Measure the PC in the Release build of a manual `vulkan` run. Then
-the pipelines built during play, which are the long frame the laptop sees
-about every few minutes (laptop run 12).
+The laptop's gap to DXVK is closed: at the same 4 samples Vulkan draws run
+13's scene 2% faster than DXVK (laptop run 19), after the fast multiply rule
+(run 18), the alpha test fixed per pipeline and the legacy state the game
+never changes held as constants ([shaders](vulkan-legacy-shaders.md#legacy-state)).
+Run 13 had it 35% behind. What is left in the shaders: the depth compare read
+at run time around each sample (fixed per pipeline only on MoltenVK), and
+more distinct pixel shaders compiled than DXVK (226 against 169). On the
+Windows PC, in a Release build, Vulkan was about 3% behind Direct3D 9 (PC
+run 10) and the PC waits for the CPU: what is left is the time per frame,
+the front's lock first; PC run 11 measures today's shaders there. Then the
+pipelines built during play, which are the long frame the laptop sees about
+every few minutes (laptop run 12).
