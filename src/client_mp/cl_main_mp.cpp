@@ -2929,6 +2929,11 @@ void CL_InitOnceForAllClients()
     cl_voice = Dvar_RegisterBool("cl_voice", true, DVAR_ARCHIVE | DVAR_USERINFO, "Use voice communications");
     cl_keyCodeOnly = Dvar_RegisterBool("cl_keyCodeOnly", false, DVAR_ARCHIVE,
         "Join remote servers with your CoD4 key code (codkey.txt in the home folder) even when Steam is running");
+    // KISAK: Steam_Init reads +set cl_steam from the command line before
+    // Com_Init (src/universal/steam_optin.h). Registered so "cl_steam" shows
+    // what the game started with; DVAR_INIT because a later change does nothing.
+    Dvar_RegisterBool("cl_steam", false, DVAR_INIT,
+        "Join remote servers with Steam (start-up only: start the game with +set cl_steam 1)");
     min.value.max = 3600.0;
     min.value.min = 0.0;
     cl_timeout = Dvar_RegisterFloat("cl_timeout", 40.0, min, DVAR_NOFLAG, "Seconds with no received packets until a timeout occurs");
