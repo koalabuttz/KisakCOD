@@ -126,6 +126,7 @@ private:
     float residualDx_=0,residualDy_=0,residualWheel_=0;
     int width_, height_;
     std::array<bool, sdl::kScancodeCount> physical_{};
+    std::array<int, sdl::kScancodeCount> heldKey_{}; // the key number each held scancode went down as
     std::array<unsigned char, 256> held_{};
     std::array<bool, 5> mouseHeld_{};
 };
