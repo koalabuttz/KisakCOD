@@ -791,6 +791,14 @@ bool CreateDevice(Core &core)
             return false;
         core.timestampPeriodNs = core.properties.limits.timestampPeriod;
         core.timestampMask = bits >= 64 ? ~0ull : ((1ull << bits) - 1);
+        BufferDesc copies;
+        copies.size = sizeof(uint64_t) * kTimestampsPerSlot * kFramesInFlight;
+        copies.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        copies.memory = MemoryKind::Readback;
+        copies.name = "timestamp copies";
+        core.timestampCopies = CreateBuffer(&core, copies);
+        if (!core.timestampCopies)
+            return false;
     }
     else
     {
@@ -1073,6 +1081,8 @@ void DestroyCore(Core *core, CoreStats *finalStats)
             vk.vkDestroySwapchainKHR(core->dev, core->swapchain, nullptr);
         if (core->timestamps)
             vk.vkDestroyQueryPool(core->dev, core->timestamps, nullptr);
+        if (core->timestampCopies)
+            DestroyBufferNow(*core, core->timestampCopies);
         for (VkQueryPool pool : core->occlusionPools)
             vk.vkDestroyQueryPool(core->dev, pool, nullptr);
         if (core->timeline)

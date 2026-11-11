@@ -1368,10 +1368,10 @@ void Check::Queries()
     // its target's contents. A heavy frame first, so that the poll finds the
     // fence unfinished; a GPU that still finishes first gets another try.
     // The frame stays under the GPU feed's 128 draws, so it reaches the GPU
-    // whole at its Present: lavapipe waits for everything submitted so far
-    // whenever a query is read, which Present does for the frame before, and
-    // a frame already submitted in parts would be finished by the time
-    // Present returned.
+    // whole at its Present and is still at work when Present returns. Present
+    // must not wait for it: it once did on lavapipe, which blocks a query read
+    // while its queue runs a submission, when it read the frame before's
+    // timestamps from the pool (they are copied on the GPU now).
     const char *fencePath = "finished_first";
     unsigned long long fenceFlushes = 0;
     for (int attempt = 0; attempt < 8 && fencePath[0] == 'f'; ++attempt)
