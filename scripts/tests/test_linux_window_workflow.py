@@ -878,6 +878,47 @@ class CiTriggerTests(unittest.TestCase):
                 with self.subTest(event=event, path=path):
                     self.assertFalse(_selected(path, self.vita['on'][event]['paths']))
 
+    # The test machines' run scripts and their host tests: Python and
+    # PowerShell no build compiles or reads.
+    RUN_SCRIPTS_ONLY = (
+        'scripts/runs/perf_run.py',
+        'scripts/runs/run_report.py',
+        'scripts/runs/recipes/vulkan-ab-mp-crash.json',
+        'scripts/runs/vita3k/vita-run.ps1',
+        'scripts/runs/vita3k/wsl/03-build.sh',
+        'tests/runs/fake_game.cpp',
+        'scripts/tests/test_perf_run.py',
+        'scripts/tests/test_vita3k_runner.py',
+    )
+
+    def test_run_script_changes_start_the_run_scripts_workflow_alone(self):
+        scripts = yaml.load((ROOT / '.github/workflows/run-scripts.yaml').read_text(), Loader=yaml.BaseLoader)
+        for event in ('push', 'pull_request'):
+            for path in self.RUN_SCRIPTS_ONLY + ('.github/workflows/run-scripts.yaml',):
+                with self.subTest(event=event, path=path):
+                    self.assertTrue(_selected(path, scripts['on'][event]['paths']))
+                    if path.startswith('.github/'):
+                        continue
+                    for other in (self.linux, self.vita, self.windows, self.macos):
+                        self.assertFalse(_selected(path, other['on'][event]['paths']))
+            # Everything else under scripts/ still starts the Linux workflow.
+            for path in ('scripts/tools/changed_units.py', 'scripts/tests/test_frame_log.py'):
+                with self.subTest(event=event, path=path):
+                    self.assertFalse(_selected(path, scripts['on'][event]['paths']))
+                    self.assertTrue(_selected(path, self.linux['on'][event]['paths']))
+        # Its one job runs both host tests; the Linux native job runs them too
+        # whenever a wider change starts it.
+        commands = '\n'.join(step.get('run', '') for job in scripts['jobs'].values() for step in job['steps'])
+        native = '\n'.join(step.get('run', '') for step in self.linux['jobs']['native']['steps'])
+        for test in ('scripts/tests/test_perf_run.py', 'scripts/tests/test_vita3k_runner.py'):
+            with self.subTest(test=test):
+                self.assertIn(f'python3 {test}', commands)
+                self.assertIn(f'python3 {test}', native)
+        self.assertEqual(scripts['on']['push']['branches'], ['master'])
+        self.assertIn('workflow_dispatch', scripts['on'])
+        for job in scripts['jobs'].values():
+            self.assertEqual(job['if'], "github.event_name != 'pull_request' || github.event.pull_request.draft == false")
+
     def test_shared_changes_start_the_vita_and_the_linux_workflow(self):
         for event in ('push', 'pull_request'):
             for path in self.VITA_AND_LINUX:
@@ -909,6 +950,27 @@ class CiTriggerTests(unittest.TestCase):
             with self.subTest(test=path):
                 self.assertIn(f'python3 {path}', vita_commands)
         self.assertIn('python3 scripts/tools/strip_cdecl.py --check', vita_commands)
+
+    def test_each_vita_job_builds_both_configurations_and_keeps_its_artifact_name(self):
+        # One job per program; the machines fetch the RelWithDebInfo .vpk by
+        # its artifact name, so the names stay what they were.
+        jobs = self.vita['jobs']
+        assert_both_configurations_in_one_job(self, jobs['vita_dedicated'], [
+            'Configure PS Vita', 'Build PS Vita KisakCOD-dedi and its .vpk'])
+        assert_both_configurations_in_one_job(self, jobs['vita_mp_client'], [
+            'Configure PS Vita client', 'Build PS Vita KisakCOD-mp and its .vpk'])
+        uploads = {job: next(step for step in jobs[job]['steps']
+                             if step.get('uses', '').startswith('actions/upload-artifact@'))
+                   for job in ('vita_dedicated', 'vita_mp_client')}
+        self.assertEqual(uploads['vita_dedicated']['with']['name'], 'KisakCOD-dedi-vita-RelWithDebInfo')
+        self.assertEqual(uploads['vita_dedicated']['with']['path'], 'out/vita-RelWithDebInfo/KisakCOD-dedi.vpk')
+        self.assertEqual(uploads['vita_mp_client']['with']['name'], 'KisakCOD-mp-vita-RelWithDebInfo')
+        for name in ('out/vita-mp-RelWithDebInfo/KisakCOD-mp.vpk', 'out/vita-mp-RelWithDebInfo/KisakCOD-mp.elf',
+                     'out/vita-mp-RelWithDebInfo/KisakCOD-gxm-probe.vpk'):
+            self.assertIn(name, uploads['vita_mp_client']['with']['path'])
+        for upload in uploads.values():
+            self.assertNotIn('if', upload)
+            self.assertEqual(upload['with']['if-no-files-found'], 'error')
 
     def test_the_linux_workflow_runs_when_the_vita_workflow_changes(self):
         # This file checks the Vita workflow, and the Linux native job runs it.
@@ -983,6 +1045,21 @@ class CiTriggerTests(unittest.TestCase):
             self.MACOS_ARCHS)
         self.assertEqual(json.loads(found.group(1)), ['arm64'])
         self.assertEqual(json.loads(found.group(2)), ['arm64', 'x86_64'])
+
+    def test_the_macos_dedicated_server_builds_both_configurations_in_one_job(self):
+        # GitHub runs five macOS jobs at a time and hands them out slowly
+        # (2026-11-10: a third of the macos-26 jobs never started), so each
+        # architecture takes one runner, not two.
+        job = self.macos['jobs']['dedicated']
+        self.assertEqual(job['name'], 'macOS ${{ matrix.arch }} dedicated server')
+        assert_both_configurations_in_one_job(self, job, [
+            'Configure ${{ matrix.arch }}', 'Build KisakCOD-dedi', 'Check for fused multiply-adds',
+            'Asset-free checks'])
+        upload = next(step for step in job['steps'] if step.get('name') == 'Upload executable')
+        self.assertEqual(upload['with']['name'], 'KisakCOD-dedi-macos-${{ matrix.arch }}')
+        self.assertIn('RelWithDebInfo', upload['with']['path'])
+        fused = next(step for step in job['steps'] if step.get('name') == 'Check for fused multiply-adds')
+        self.assertIn('!= arm64 ]; then exit 0', fused['run'])
 
     def test_macos_paths_are_the_same_for_both_events(self):
         self.assertEqual(self.macos['on']['push']['paths'], self.macos['on']['pull_request']['paths'])

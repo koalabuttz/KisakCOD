@@ -88,7 +88,11 @@ unreachable, any other value turns Steam off, the server is not listed, and a
 client or listen server ignores the variable. The 64-bit Windows build has no
 Steam at all (there is no 64-bit `steam_api` in `deps/steamsdk`).
 
-This mode has not been run yet (see Verified).
+Steam Windows run 3 ran this mode against Steam (see Verified). Steam_Init
+runs before the console and log file exist on Windows, so the lines it prints
+(a wrong login value, "logging on as an anonymous game server") are kept and
+printed right after start-up; the later "logged on" line is printed when Steam
+answers.
 
 ### After a ticket is accepted
 
@@ -117,7 +121,7 @@ player whose address changed in the middle of a game waits until the old
 connection times out (`sv_timeout`).
 
 `scripts/tests/test_server_handshake_auth.py` covers these rules without Steam.
-They have not been run against Steam yet (see Verified).
+Steam verdict run 1 ran them against Steam (see Verified).
 
 If Steam is not running, not logged in, or the library is missing, start-up
 prints why and the backend stays off: the client refuses remote servers and the
@@ -198,9 +202,30 @@ as `steam_session`) needs no Steam:
   after the logon line, one quit before the logon finished, and one client-mode
   quit all exited 0.
 
-Not verified: a Windows server in either mode (its anonymous game server
-login has never been run against Steam), a negative verdict from Steam for a
-player who is connected or about to connect (only host tests cover it), two
+- 2026-11-10, Steam Windows run 3 (a local Win32 Release dedi of master
+  c7a6dcc on the Windows PC with `KISAK_STEAM_SERVER_LOGIN=anonymous`; the
+  laptop's x86_64 Linux Steam client at 45896f4 over the LAN): the server
+  printed "logged on as an anonymous game server for app 7940", the laptop
+  joined, passed the server's Steam auth check and spawned, and did it again
+  after `disconnect` and `connect`; `quit` exited 0. With `anon` as the login
+  value the server left Steam off and the laptop was refused ("Your Steam
+  Client Ticket was Invalid"). That run found that the Windows server's
+  start-up lines were never shown (they were printed before the console
+  existed) and that two of its lines had no line break; both are fixed.
+
+- 2026-11-10, Steam verdict run 1 (PR 194 at 2d04091; Part A an x86_64 dedi
+  and client on the laptop, Part B the Win32 dedi on the Windows PC with the
+  laptop as player; anonymous server login both times): every join passed the
+  Steam auth check; leaving and joining again, and a game killed with
+  `kill -9` and started again at once, got back in with no "already
+  connected" refusal (Steam's own verdict for the killed session arrived
+  first and the server dropped it); `steam_testkick` dropped the player to the
+  menu ("Steam Auth Timed out") with the server still up, and a new ticket got
+  back in; every process quit with exit 0. The menu's text for the kick is not
+  in the client's log, so its wording on screen is unconfirmed.
+
+Not verified: a Windows server in client mode, a negative verdict from Steam for a
+player who is about to connect (only host tests cover it), two
 different Steam accounts, and a
 Windows client against a Linux server in client mode (one account can't be signed in on
 two computers at once, which is why the anonymous login exists).

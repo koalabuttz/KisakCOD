@@ -94,6 +94,15 @@ ClientWindow::ClientWindow(SDL_Window *window, const ClientWindowEngine &engine)
     sink_ = std::make_unique<Sink>(engine_);
     host_ = std::make_unique<window::WindowHost>(*sink_, window::AdoptedWindow{window});
     sink_->Attach(*host_);
+    // A window can already have the keyboard focus when it is adopted: SDL
+    // gives a shown window the focus at once where no window manager does it
+    // later (X11 with none, as under Xvfb; the dummy driver). The host then
+    // counts the window as focused and the queued focus event changes
+    // nothing, so the engine would never hear of it and VID_AppActivate would
+    // never run: no mouse, no menu clicks. Windows sends WM_ACTIVATE when the
+    // window is shown; this is that.
+    if (host_->Focused() && !host_->Minimized())
+        engine_.activate(true, false);
 }
 
 ClientWindow::~ClientWindow()

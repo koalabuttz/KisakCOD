@@ -243,3 +243,32 @@ the game. A local run, not CI evidence.
 - Engine messages as in run 1: hunted "Max scene drawsurfs exceed" twice,
   ac130 "Too many visible static models" 5 times, airplane "couldn't find
   path to goal" 3 times.
+
+## Vulkan run 1 (laptop, x86_64, 2026-11-10)
+
+Master 5e2e574, x86_64 RelWithDebInfo with the four Vulkan options and the
+singleplayer game, movies on, sound off, `--hold 60 --screenshot`. A local
+run beside other laptop work, not CI evidence.
+
+| Level | Back end | Steps | Load | Frame (mean, not black, colours) |
+| --- | --- | --- | --- | --- |
+| killhouse | DXVK | all seen, exit 0 | 11.7 s | 74, 99 %, 666 |
+| cargoship | DXVK | all seen, exit 0 | 16.0 s | 58, 79 %, 671 |
+| killhouse | Vulkan | all seen, exit 0 | 45.9 s | 77, 100 %, 677 |
+| cargoship | Vulkan | all seen, exit 0 | 19.3 s | 42, 62 %, 594 |
+| blackout | Vulkan | all seen, exit 0 | 32.7 s | 54, 100 %, 431 |
+| ac130 | Vulkan | all seen, exit 0 | 9.1 s | 107, 99 %, 210 |
+| airplane | Vulkan | all seen, exit 0 | 7.2 s | 90, 85 %, 603 |
+
+- No line with "unsupported" or `VK_` in any Vulkan log; each ends with "0
+  validation errors, 0 warnings", but validation was off, so that says
+  little.
+- killhouse's long Vulkan load is the first run: it translated 575 shaders
+  (11.2 s) and built 138 pipelines (22.6 s) from nothing; later levels reuse
+  the caches.
+- cargoship's Vulkan frame is darker than its DXVK frame. One frame each,
+  taken at a fixed time in a level with a storm, so it says nothing yet;
+  nobody has looked at the images.
+- Frame rates (killhouse 25.8, cargoship 30.2, blackout 23.8, ac130 99.3,
+  airplane 103.1 fps) ran beside other work on the laptop and are not a
+  measurement.
