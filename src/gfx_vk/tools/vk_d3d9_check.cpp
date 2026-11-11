@@ -51,7 +51,7 @@ namespace front = gfx_vk::d3d9;
 // Whether the back end times its passes (KISAK_VK_PASS_TIMESTAMPS=0: no).
 bool PassesTimed()
 {
-    const char *value = std::getenv("KISAK_VK_PASS_TIMESTAMPS");
+    const char *value = SDL_getenv("KISAK_VK_PASS_TIMESTAMPS");
     return !(value && std::strcmp(value, "0") == 0);
 }
 
