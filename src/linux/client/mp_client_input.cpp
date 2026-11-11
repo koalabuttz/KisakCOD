@@ -18,6 +18,10 @@
 // Joysticks, MIDI and raw DirectInput are not ported; the Windows build does not
 // use them either (IN_StartupMouse never starts DirectInput).
 //
+// Also here, as on Windows: a keypad digit typed into the console or a menu is
+// text only (win_wndproc.cpp's AdustKeyForNumericKeypad), and the clipboard
+// (win_main.cpp's Sys_GetClipboardData and Sys_SetClipboardData), through SDL.
+//
 // With KISAK_LINUX_GAMEPAD, KisakCOD-mp also takes a game controller
 // (mp_client_gamepad.cpp): its buttons arrive as keys when the window is
 // pumped, and its sticks join the mouse where the window hands the mouse to
@@ -82,6 +86,13 @@ void CloseWindow()
     Cbuf_AddText(0, "quit\n");
 }
 
+// win_wndproc.cpp's AdustKeyForNumericKeypad: while the console or a menu has
+// the keyboard, a keypad digit is the character it types, not a key.
+bool TypingText()
+{
+    return Key_IsCatcherActive(0, KEYCATCH_CONSOLE | KEYCATCH_UI);
+}
+
 // WM_CREATE and WM_DESTROY.
 void WindowChanged(void *hwnd)
 {
@@ -126,6 +137,7 @@ void Sys_InstallClientWindow()
     engine.activate = AppActivate;
     engine.close = CloseWindow;
     engine.windowChanged = WindowChanged;
+    engine.typingText = TypingText;
     kisak::mp_client::InstallWindowProcedure(engine);
 }
 

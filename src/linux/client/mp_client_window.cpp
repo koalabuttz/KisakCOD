@@ -80,6 +80,10 @@ private:
         if (!g_detaching)
             engine_.close();
     }
+    bool TypingText() const override
+    {
+        return engine_.typingText && engine_.typingText();
+    }
 
     const ClientWindowEngine &engine_;
     const window::WindowHost *host_ = nullptr;
