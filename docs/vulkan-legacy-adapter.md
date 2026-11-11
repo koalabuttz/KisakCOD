@@ -271,15 +271,30 @@ so the renderer hookup can see where it stands.
   images, a multisampled colour image into a one-sample one, or depth to
   depth with point filtering. Others are skipped with a warning.
 
-## The validation layer and depth compare
+## Depth compare
 
-The Legacy shaders sample every 2D texture through a branch on a uniform: a
-depth-compare sample for depth textures, a plain one otherwise. The validation
-layer checks the compare instruction's format rule
-(`VUID-vkCmdDraw-None-06479`) statically, against colour textures the branch
-never compares, so it reports every textured draw. The core counts that one
-message apart (`CoreStats::validationIgnored`, printed as
-`validation_ignored`), not as an error, and logs it once.
+dxbc-spirv samples every 2D and cube texture through a branch on a uniform:
+a depth-compare sample for a depth texture, a plain one otherwise
+(`SamplerStateBlock::useDepthCompare`). The adapter fixes that branch per
+pipeline instead, as DXVK does: the pixel shader is built per set of samplers
+that have a depth texture bound (`PipelineKey::depthSamplers`, the bound
+textures' depth bits), and `legacy_shader::BuildSpirv` replaces the
+`useDepthCompare` and `drefClamp` loads with constants and removes the branch
+not taken. Most pixel shaders then read no sampler state block at all.
+Vertex shaders are built with no depth samplers (vertex textures are never
+depth-compared here), and the shader cache keeps that module. The pipeline
+kept from the draw before stays only while the depth bits match, so binding
+a depth texture where a colour one was is enough to change it (the
+`shadow_map` scene of the D3D9 front's check does that with nothing else
+changed).
+
+`KISAK_VK_DEPTH_COMPARE=dynamic` keeps the branch, the only way before
+2026-11-11 except on MoltenVK. The validation layer then checks the compare
+instruction's format rule (`VUID-vkCmdDraw-None-06479`) statically, against
+colour textures the branch never compares, so it reports every textured
+draw. The core counts that one message apart (`CoreStats::validationIgnored`,
+printed as `validation_ignored`), not as an error, and logs it once. The
+`device ready:` line says `depth compare fixed` or `dynamic`.
 
 ## MoltenVK (macOS)
 
@@ -294,13 +309,12 @@ targets wide`):
   `VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE` only from macOS 14 on Mac2 or
   Apple4 GPUs, and no Vulkan query says so. The pipeline key carries each
   stream's stride instead, and buffers are bound without strides.
-- **Depth compare fixed per pipeline.** MoltenVK's shader converter
-  (SPIRV-Cross) declares an image sampled both with and without a depth
-  reference as a Metal depth texture, and a depth texture cannot sample colour.
-  So the pixel shader is built per set of samplers that have a depth texture
-  bound (`PipelineKey::depthSamplers`). `legacy_shader::BuildSpirv` replaces
-  the `useDepthCompare` loads with constants and removes the branch not taken.
-  Vertex shaders are built with no depth samplers.
+- **Depth compare fixed per pipeline**, which every device does by default
+  ([Depth compare](#depth-compare)) but MoltenVK cannot do without:
+  `KISAK_VK_DEPTH_COMPARE=dynamic` is ignored there. MoltenVK's shader
+  converter (SPIRV-Cross) declares an image sampled both with and without a
+  depth reference as a Metal depth texture, and a depth texture cannot sample
+  colour.
 - **16-bit render targets as B8G8R8A8.** Metal has the 16-bit packed formats
   only on Apple GPUs, so MoltenVK on Intel and AMD Macs (and the Intel CI VM)
   cannot render to R5G6B5, X1R5G5B5 or A1R5G5B5. A render target in one of
@@ -310,11 +324,12 @@ targets wide`):
   MoltenVK. Copies between such a target and a lockable texture of the D3D9
   format are refused, since the formats differ.
 
-`KISAK_VK_VERTEX_STRIDE=static`, `KISAK_VK_DEPTH_COMPARE=fixed` and
-`KISAK_VK_RENDER_TARGETS=wide` force each path on any device. The Linux
-lavapipe job runs the adapter and D3D9 front checks with all three set, and
-with `KISAK_VK_UNIFORMS=static` (plain uniform buffers, above), with the
-validation layer required.
+`KISAK_VK_VERTEX_STRIDE=static` and `KISAK_VK_RENDER_TARGETS=wide` force the
+other two paths on any device. The Linux lavapipe job runs the adapter and
+D3D9 front checks with both set (and depth compare fixed), and with
+`KISAK_VK_UNIFORMS=static` (plain uniform buffers, above), with the
+validation layer required; it also runs them with
+`KISAK_VK_DEPTH_COMPARE=dynamic`.
 
 A depth clear inside a pass after a draw left the depth as it was through
 MoltenVK 1.4.2 on CI's Apple GPU (2026-11-11), where lavapipe clears it.

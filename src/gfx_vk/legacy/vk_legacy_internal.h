@@ -577,7 +577,7 @@ void ResetState(Device &device);
 struct CachedShader
 {
     ls::Shader translated;
-    std::vector<uint32_t> spirv; // a vertex shader's module; empty for pixel shaders (and with fixedDepthCompare)
+    std::vector<uint32_t> spirv; // a vertex shader's module (depth compare fixed off); empty for pixel shaders
 };
 bool FindCachedShader(const void *bytecode, size_t bytes, CachedShader &out);
 void AddCachedShader(const void *bytecode, size_t bytes, CachedShader shader);

@@ -212,7 +212,7 @@ requires the validation layer with synchronisation checks. It also runs
 `gen_spirv_header.py --check`. One validation message, the depth-compare format
 rule the layer checks statically against the Legacy shaders, is counted apart
 from errors (`validation_ignored`; see
-[vulkan-legacy-adapter.md](vulkan-legacy-adapter.md#the-validation-layer-and-depth-compare)).
+[vulkan-legacy-adapter.md](vulkan-legacy-adapter.md#depth-compare)).
 
 Results so far (2026-11-05, cloud sandbox, no GPU, lavapipe from Mesa 25.2.8):
 

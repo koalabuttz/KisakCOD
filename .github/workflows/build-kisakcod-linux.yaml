@@ -2698,6 +2698,14 @@ jobs:
           KISAK_VK_FENCE_FLUSH=0 python3 -u scripts/tests/test_vulkan_d3d9_front.py \
             --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
             --video-driver offscreen --validation require
+          # And with depth compare chosen around each sample at run time
+          # instead of fixed per pipeline (docs/vulkan-legacy-adapter.md).
+          KISAK_VK_DEPTH_COMPARE=dynamic python3 -u scripts/tests/test_vulkan_legacy_adapter.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-legacy-check" \
+            --video-driver offscreen --validation require
+          KISAK_VK_DEPTH_COMPARE=dynamic python3 -u scripts/tests/test_vulkan_d3d9_front.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
+            --video-driver offscreen --validation require
 
       - name: Run the checks again with the GPU feed off and at its extreme
         timeout-minutes: 15

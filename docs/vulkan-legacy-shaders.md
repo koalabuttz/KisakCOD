@@ -103,10 +103,16 @@ constants after legalising and folds what they decide
 
 An unbound sampler reads the adapter's null texture, which is (0, 0, 0, 1) as
 D3D9 gives, so the unbound branch is not needed. What stays in the sampler
-state block is the texture type (shader model 1 only), the depth compare
-(unless fixed per pipeline, as on MoltenVK) and the depth clamp. Blocks with
+state block is the texture type (shader model 1 only) and, with
+`KISAK_VK_DEPTH_COMPARE=dynamic`, the depth compare and the depth clamp,
+which the adapter otherwise fixes per pipeline
+([adapter](vulkan-legacy-adapter.md#depth-compare)). Blocks with
 nothing left to read are not declared, so the adapter binds and writes fewer
 of them. Over the spike cases the shaders have 22% fewer SPIR-V instructions.
+On the laptop (run 19) holding the legacy state as constants is worth 15 fps
+(158 to 173) and the alpha test fixed per pipeline 33 (140 to 173); with both,
+Mesa's Intel compiler makes our pixel shaders shorter than DXVK's (median 232
+against 359 instructions).
 
 `KISAK_VK_LEGACY_STATE=dynamic` keeps all of it as dxbc-spirv emits it. Like
 the float rule it is set once per process (`legacy_shader::SetDynamicLegacyState`,
@@ -130,12 +136,12 @@ dot product it calls.
   data and specialisation constants and packs constants. Here each block is a
   plain uniform buffer, and `BuildSpirv` fixes two states per pipeline by
   replacing their loads with constants and folding what they decide: depth
-  compare (on MoltenVK) and the alpha test's compare. `Translate` fixes the
-  state the game never changes ([Legacy state](#legacy-state)). Most pixel
-  shaders read two to three blocks per draw (constants, alpha test, plus
-  sampler state when they sample), most vertex shaders one. If the game ever
-  sets fog, clip planes or point sprites, they need
-  `KISAK_VK_LEGACY_STATE=dynamic` or a pipeline key bit, as the alpha test has.
+  compare (with its clamp) and the alpha test's compare. `Translate` fixes
+  the state the game never changes ([Legacy state](#legacy-state)). Most
+  pixel shaders read one or two blocks per draw (constants, plus the alpha
+  test when it is on), most vertex shaders one. If the game ever sets fog,
+  clip planes or point sprites, they need `KISAK_VK_LEGACY_STATE=dynamic` or a
+  pipeline key bit, as the alpha test has.
 
 ## Pin
 
@@ -183,10 +189,11 @@ needs no GPU, game data or network. It covers:
   at another location reads it from there. An input the vertex shader does not
   write is dropped. fxc-style texcoord pairs link without changes.
 - **Fixed depth compare:** every case with samplers is built again with
-  `--depth-samplers 0` and `0xffff`, the build MoltenVK gets
-  ([vulkan-legacy-adapter.md](vulkan-legacy-adapter.md#moltenvk-macos)). Both
-  pass `spirv-val`. With `0` no depth-reference sample is left. With `0xffff`,
-  2D and cube images are sampled only with a depth reference.
+  `--depth-samplers 0` and `0xffff`, the build every device gets by default
+  ([vulkan-legacy-adapter.md](vulkan-legacy-adapter.md#depth-compare)). Both
+  pass `spirv-val`. With `0` no depth-reference sample is left, and shader
+  model 2 and 3 cases read no sampler state block. With `0xffff`, 2D and cube
+  images are sampled only with a depth reference.
 - **Fixed alpha test:** every pixel shader case that reads the alpha test
   block is built again with `--alpha-compare 7` (ALWAYS) and `4` (GREATER).
   Both pass `spirv-val`. With ALWAYS the test's discard is gone (a `texkill`

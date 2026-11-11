@@ -27,8 +27,9 @@ for linking. The checks:
              point sprites, unbound and gather samplers) is constant, and
              with KISAK_VK_LEGACY_STATE=dynamic is read from its blocks, whose
              layout is checked too
-  depth      --depth-samplers (depth compare fixed at build time, as on
-             MoltenVK): every case with samplers still passes spirv-val, with
+  depth      --depth-samplers (depth compare fixed at build time, as the
+             adapter builds pixel shaders by default): every case with samplers
+             still passes spirv-val and reads no sampler state block, with
              no depth-reference sampling when no sampler is a depth one, and
              only depth-reference sampling of 2D and cube images when all are
 
@@ -393,7 +394,14 @@ def main():
                     depth_problems.append(f'{name} {mask}: spirv-val: {problem}')
                     continue
                 with open(spv, 'rb') as f:
-                    ops = Spirv(f.read()).opcodes
+                    spirv = Spirv(f.read())
+                ops = spirv.opcodes
+                # Fixed with the clamp too, shader model 2 and 3 leave nothing
+                # to read in the sampler state block (the texture type is for 1.x).
+                stage = found['stage'].split()[0]
+                block = (0, uniform_binding(stage, UNIFORMS.index('sampler_state'))) in spirv.bindings()
+                if block and not found['stage'].endswith(('1.0', '1.1', '1.2', '1.3', '1.4')):
+                    depth_problems.append(f'{name} {mask}: still reads the sampler state block')
                 dref = sum(ops.get(op, 0) for op in OPS_SAMPLE_DREF)
                 plain = sum(ops.get(op, 0) for op in OPS_SAMPLE_PLAIN)
                 if mask == '0' and dref:

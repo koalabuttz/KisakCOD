@@ -801,6 +801,35 @@ void Check::ShadowMap()
         Expect("nearer_lit", 32, 96, 255, 255, 255);
         Expect("nearer_lit_right", 96, 96, 255, 255, 255);
     }
+
+    // The same shader and state with a colour texture between two draws of
+    // the depth one: only the texture changes, so the pipeline kept from the
+    // draw before has to follow it where depth compare is fixed per pipeline
+    // (PipelineKey::depthSamplers).
+    IDirect3DTexture9 *green = FilledTexture(4, 4, [](UINT, UINT) { return Argb(255, 0, 255, 0); });
+    if (green)
+    {
+        Reset(Argb(255, 64, 64, 64));
+        device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+        device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+        device->SetPixelShader(psShadow);
+        device->SetTexture(0, shadow);
+        DrawQuad(0, 0, 64, 64, 0.5f, Argb(255, 0x80, 0, 0));
+        device->SetTexture(0, green);
+        DrawQuad(64, 0, 128, 64, 0.5f, Argb(255, 0x80, 0, 0));
+        device->SetTexture(0, shadow);
+        DrawQuad(0, 64, 64, 128, 0.5f, Argb(255, 0x80, 0, 0));
+        device->SetTexture(0, nullptr);
+        if (Read())
+        {
+            Expect("depth_then_colour_shadowed", 16, 32, 0, 0, 0);
+            Expect("depth_then_colour_lit", 48, 32, 255, 255, 255);
+            Expect("colour_between_depth", 96, 32, 0, 255, 0);
+            Expect("depth_after_colour_shadowed", 16, 96, 0, 0, 0);
+            Expect("depth_after_colour_lit", 48, 96, 255, 255, 255);
+        }
+        green->Release();
+    }
     SafeRelease(colorLevel);
     SafeRelease(color);
     SafeRelease(shadowLevel);

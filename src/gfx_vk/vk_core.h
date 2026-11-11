@@ -309,10 +309,12 @@ struct OptionalFeatures
     // the pipelines.
     bool dynamicVertexStride;
     // Translated pixel shaders get each sampler's depth compare fixed when
-    // they are built (legacy_shader::BuildSpirv's fixedDepthCompare) instead
-    // of choosing at run time. On every portability-subset device: MoltenVK's
-    // converter turns an image sampled both ways into a Metal depth texture,
-    // which cannot sample colour. KISAK_VK_DEPTH_COMPARE=fixed forces it.
+    // they are built for a pipeline (legacy_shader::BuildSpirv's
+    // fixedDepthCompare, PipelineKey::depthSamplers) instead of choosing
+    // around every sample at run time, as DXVK does. Always on a
+    // portability-subset device: MoltenVK's converter turns an image sampled
+    // both ways into a Metal depth texture, which cannot sample colour.
+    // KISAK_VK_DEPTH_COMPARE=dynamic chooses at run time elsewhere.
     bool fixedDepthCompare;
     // The Legacy adapter makes a render target in a 16-bit packed format
     // (R5G6B5, X1R5G5B5, A1R5G5B5) as B8G8R8A8 where the device cannot render

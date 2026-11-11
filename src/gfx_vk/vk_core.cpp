@@ -694,7 +694,7 @@ bool CreateDevice(Core &core)
     core.optional.shaderFloat16 = supported12.shaderFloat16;
     // MoltenVK's paths (see OptionalFeatures), or forced for testing.
     core.optional.dynamicVertexStride = !portability && !EnvEquals("KISAK_VK_VERTEX_STRIDE", "static");
-    core.optional.fixedDepthCompare = portability || EnvEquals("KISAK_VK_DEPTH_COMPARE", "fixed");
+    core.optional.fixedDepthCompare = portability || !EnvEquals("KISAK_VK_DEPTH_COMPARE", "dynamic");
     core.optional.forceWideRenderTargets = EnvEquals("KISAK_VK_RENDER_TARGETS", "wide");
     core.optional.staticUniforms = EnvEquals("KISAK_VK_UNIFORMS", "static");
     core.optional.fenceFlush = !EnvEquals("KISAK_VK_FENCE_FLUSH", "0");

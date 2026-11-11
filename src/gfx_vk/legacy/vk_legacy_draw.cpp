@@ -493,8 +493,12 @@ VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t dept
     if (found != ps.linked.end())
         return found->second;
     const uint32_t compare = alphaCompare ? alphaCompare - 1 : 0;
+    // Where depth compare is fixed, so is the reference's clamp
+    // (SamplerStateBlock::drefClamp, as FillUniformBlock writes it).
+    const uint32_t depth = depthSamplers
+        | (device.depthFormat != VK_FORMAT_D24_UNORM_S8_UINT ? ls::kFixedDepthClamp : 0u);
     if (!ls::BuildSpirv(ps.translated, direct ? nullptr : &vs.translated, spirv, error,
-                        fixed ? &depthSamplers : nullptr, alphaCompare ? &compare : nullptr))
+                        fixed ? &depth : nullptr, alphaCompare ? &compare : nullptr))
     {
         Fail(device, "pixel shader %08x with vertex shader %08x: %s", ps.translated.bytecodeHash,
              vs.translated.bytecodeHash, error.c_str());
@@ -898,6 +902,20 @@ struct DrawTextures
     uint64_t pixelSignature = 0;
     uint32_t vertexSignature = 0;
 };
+
+// The pixel samplers a draw reads that have a depth texture bound, one bit
+// each (PipelineKey::depthSamplers).
+uint32_t DepthSamplers(const DrawTextures &textures)
+{
+    uint32_t depth = 0;
+    for (uint32_t left = textures.mask & 0xffffu; left; left &= left - 1)
+    {
+        const uint32_t sampler = static_cast<uint32_t>(std::countr_zero(left));
+        if ((textures.pixelSignature >> (4 * sampler)) & 4u)
+            depth |= 1u << sampler;
+    }
+    return depth;
+}
 
 // Slot for a LayoutKey::samplers bit: pixel samplers 0-15, vertex 16-19.
 uint32_t SlotForBit(uint32_t bit) { return bit; }
@@ -1561,34 +1579,26 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
     // A clear after this draw is no longer one at the pass's start.
     device.passEmpty = false;
     // The last draw's pipeline, when nothing its key is made of has changed.
-    // Where the device fixes vertex strides or depth compare in the pipeline
-    // the key also holds stream strides and bound textures, so it is made
-    // for every draw there.
+    // Where the device fixes vertex strides in the pipeline the key also holds
+    // stream strides, so it is made for every draw there. Where it fixes depth
+    // compare in the pixel shader the key holds the samplers it reads that
+    // have a depth texture bound (the rule SamplerStateBlock follows), which
+    // the textures bound for this draw say.
     const OptionalFeatures &features = Features(device.core);
     const bool dynamicStride = features.dynamicVertexStride;
+    const uint32_t depthSamplers = features.fixedDepthCompare ? DepthSamplers(textures) : 0;
     Pipeline *pipeline = nullptr;
-    if (!device.keyStale && device.lastPipeline && dynamicStride && !features.fixedDepthCompare
+    if (!device.keyStale && device.lastPipeline && dynamicStride
+        && device.lastPipelineKey.depthSamplers == depthSamplers
         && device.lastPipelineKey.topologyClass == TopologyClass(type))
     {
         pipeline = device.lastPipeline;
-        if (device.verifyShortcuts && !(MakeKey(device, *vs, *ps, *decl, type, 0) == device.lastPipelineKey))
+        if (device.verifyShortcuts
+            && !(MakeKey(device, *vs, *ps, *decl, type, depthSamplers) == device.lastPipelineKey))
             return Fail(device, "the pipeline kept from an earlier draw is not the one the D3D9 state gives");
     }
     else
     {
-        // Where depth compare is fixed in the pixel shader, the samplers it
-        // reads that have a depth texture bound (the rule SamplerStateBlock
-        // follows).
-        uint32_t depthSamplers = 0;
-        if (features.fixedDepthCompare)
-        {
-            for (uint32_t sampler = 0; sampler < ls::kSamplerCount; ++sampler)
-            {
-                const Texture *texture = textures.bound[SlotForBit(sampler)];
-                if ((ps->translated.reflection.samplers & (1u << sampler)) && texture && texture->format->depth)
-                    depthSamplers |= 1u << sampler;
-            }
-        }
         const PipelineKey key = MakeKey(device, *vs, *ps, *decl, type, depthSamplers);
         // Consecutive draws often keep their pipeline: compare before hashing.
         pipeline = device.lastPipeline;
