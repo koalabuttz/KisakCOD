@@ -97,6 +97,11 @@ of them.
   the `macos-26` jobs (the Intel pool lost one in twenty; `macos-15` for arm64 was no better in a trial,
   PR 221, closed), so every macOS job saved is one fewer to wait for. A cancelled macOS arm64 job that has no
   log never ran: it is no result, not a failure.
+- **Before you push.** Run `python3 scripts/tests/run_pre_push_checks.py`: it runs, four at a time, the
+  Linux bootstrap test, the runner self-tests, the workflow contract test and the CI script tests, plus
+  `run_linux_checks.py` when `build-linux/` and `bin/KisakCOD-dedi` exist (about two minutes in all, mostly
+  that last one; pass `--list` to see the set). A red push costs a whole queue wait, so a failure found here
+  is the cheapest one. Local results are not CI evidence.
 - **Package installs.** Every Linux job installs through `scripts/ci/apt-install.sh`: Ubuntu's main
   archive instead of the runner's slow Azure mirror, packages cached between runs, and the refresh and
   install tried again (up to four attempts, waiting 20, 40 and 60 s) when they fail, since on 2026-11-11
