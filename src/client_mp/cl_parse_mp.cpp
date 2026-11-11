@@ -16,6 +16,7 @@
 #include <qcommon/files.h>
 #include <client/client.h>
 #include <server_mp/server_mp.h>
+#include <qcommon/server_dvar_guard.h>
 
 const char* svc_strings[256] = {
     "svc_nop",
@@ -170,6 +171,65 @@ void CL_DeltaClient(
     ++frame->numClients;
 }
 
+static_assert(SERVER_DVAR_SYSTEMINFO_FLAG == DVAR_SYSTEMINFO, "server_dvar_guard.h must name the engine's systeminfo flag");
+
+// Sets a dvar whose name a game server chose.  Every such set goes through
+// here: systeminfo, codinfo and the setClientDvar script call.  A name on the
+// lists in qcommon/server_dvar_guard.h keeps its value; the console says so
+// once per name.
+void CL_SetDvarFromServer(int localClientNum, const char *name, const char *value, ServerDvarRoute route)
+{
+    static ServerDvarNames<64, 64> refused;
+    static ServerDvarNames<64, 64> noted;
+    static const char *const routeNames[] = { "systeminfo", "codinfo", "setClientDvar" };
+    char shown[64];
+
+    iassert(name);
+    iassert(value);
+    iassert(route >= SERVER_DVAR_ROUTE_SYSTEMINFO && route <= SERVER_DVAR_ROUTE_CLIENT_DVAR);
+
+    // The server on this machine, when it is the one this client is joined to,
+    // is the player's own, and so are its scripts.  A demo is someone else's
+    // recording even while that server runs.
+    const clientConnection_t *clc = CL_GetLocalClientConnection(localClientNum);
+    if (com_sv_running->current.enabled && NET_IsLocalAddress(clc->serverAddress) && !clc->demoplaying)
+    {
+        Dvar_SetFromStringByName(name, value);
+        return;
+    }
+
+    if (!Com_ServerMaySetDvar(name))
+    {
+        if (refused.FirstTime(name))
+        {
+            Com_CopyServerDvarName(name, shown, sizeof(shown));
+            Com_Printf(
+                CON_CHANNEL_CLIENT,
+                "The server tried to set %s (%s). Servers may not set it, so it keeps its value.\n",
+                shown,
+                routeNames[route]);
+        }
+        return;
+    }
+
+    // Not refused yet, only noted: a stock server sends through systeminfo only
+    // the settings this client flags the same way.
+    if (route == SERVER_DVAR_ROUTE_SYSTEMINFO)
+    {
+        const dvar_s *dvar = Dvar_FindVar(name);
+        if (!Com_SysteminfoSettingExpected(dvar != NULL, dvar ? dvar->flags : 0) && noted.FirstTime(name))
+        {
+            Com_CopyServerDvarName(name, shown, sizeof(shown));
+            Com_Printf(
+                CON_CHANNEL_CLIENT,
+                "Note: the server's systeminfo set %s, which is not a systeminfo setting on this client. It was applied.\n",
+                shown);
+        }
+    }
+
+    Dvar_SetFromStringByName(name, value);
+}
+
 void CL_SystemInfoChanged(int localClientNum)
 {
     const char *v1; // eax
@@ -229,7 +289,7 @@ void CL_SystemInfoChanged(int localClientNum)
                 Info_NextPair(&s, (char *)key, (char *)value);
                 if (!*(_BYTE *)key)
                     break;
-                Dvar_SetFromStringByName((const char *)key, (char *)value);
+                CL_SetDvarFromServer(localClientNum, (const char *)key, (const char *)value, SERVER_DVAR_ROUTE_SYSTEMINFO);
             }
         }
         cl_connectedToPureServer = Dvar_GetBool("sv_pure");

@@ -53,6 +53,19 @@ also reads `src/win32/win_main.cpp` to see the rule applied before
 `ShellExecuteA`, and that no other `ShellExecute` call opens anything but a
 fixed string.
 
+`test_server_dvar_guard.py` compiles the production
+`src/qcommon/server_dvar_guard.h` rule 64- and 32-bit: a game server sets
+client dvars by name (systeminfo, codinfo, `setClientDvar`), and the names on
+the header's two lists are refused in any letter case: every dvar this port
+added, and the retail ones that belong to the player's machine (`activeAction`,
+whose text is run as commands, the update and download settings, hosts, file
+roots, the network set-up, the player's own server). The check reads the
+sources too: the three routes set dvars only through `CL_SetDvarFromServer`,
+which asks the rule first; a dvar registered in `src` that is not in
+`retail_dvar_names.txt` must be on the port's list; and no listed name is one
+the engine replicates to clients. See
+[settings a game server may not set](../../docs/server-set-dvars.md).
+
 `test_server_test_clients.py` checks the extracted internal bot functions with
 controlled connection and movement services; the native runner runs its 32-bit
 sanitizer configuration. The opt-in `test_linux_bots.py` uses stock bot/team/class setup, requires repeated healthy
