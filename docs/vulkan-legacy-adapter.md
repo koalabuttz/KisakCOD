@@ -45,7 +45,7 @@ buffer by the core's `Recording()` number.
   module is built at once; a pixel shader is linked to the vertex shader it is
   drawn with (outputs to inputs), and linked modules are kept per pair.
 * **Uniforms.** The translator turns float constants and the states shaders need
-  (alpha test, sampler state, point size) into uniform blocks, which live in
+  (alpha test, sampler state) into uniform blocks, which live in
   per-frame memory. The blocks are dynamic uniform buffers: each pipeline
   writes its descriptor set once per transient buffer (kept across frames,
   below), and later draws bind that set again with their own offsets. A layout with more
@@ -263,7 +263,10 @@ so the renderer hookup can see where it stands.
 * Border colours: transparent black, opaque black and opaque white only.
 * Shader model 1.x samplers without a declared type are treated as 2D.
 * Fog, user clip planes, integer and boolean constants and texture-stage state
-  read as zero.
+  read as zero, and there are no point sprites. Translated shaders hold fog,
+  clip planes and point sprites as constants
+  ([Legacy state](vulkan-legacy-shaders.md#legacy-state));
+  `KISAK_VK_LEGACY_STATE=dynamic` reads their blocks instead.
 * `StretchRect` covers what the core can blit or resolve: same-kind colour
   images, a multisampled colour image into a one-sample one, or depth to
   depth with point filtering. Others are skipped with a warning.

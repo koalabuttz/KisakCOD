@@ -39,22 +39,25 @@ int Usage()
     std::fprintf(stderr,
                  "usage: KisakCOD-vulkan-shaders translate FILE [--vertex VSFILE] [--out SPV] [--ir] [--depth-samplers MASK] [--alpha-compare OP]\n"
                  "       KisakCOD-vulkan-shaders batch DIR [--out-dir DIR] [--threads N]\n"
-                 "KISAK_VK_STRICT_FLOATS=1 translates with D3D9's strict multiply, as the game does with it.\n");
+                 "KISAK_VK_STRICT_FLOATS=1 translates with D3D9's strict multiply, as the game does with it.\n"
+                 "KISAK_VK_LEGACY_STATE=dynamic keeps fog, clip planes, point sprites and unbound samplers as\n"
+                 "uniforms, as the game does with it.\n");
     return 2;
 }
 
-// KISAK_VK_STRICT_FLOATS=1, as the game reads it (OptionalFeatures::strictFloats).
-bool StrictFloatsAsked()
+// Whether the variable is set to value, as the game reads its switches
+// (OptionalFeatures::strictFloats, ::dynamicLegacyState).
+bool EnvIs(const char *name, const char *value)
 {
 #if defined(_MSC_VER)
     char *text = nullptr;
     size_t length = 0;
-    const bool strict = _dupenv_s(&text, &length, "KISAK_VK_STRICT_FLOATS") == 0 && text && std::strcmp(text, "1") == 0;
+    const bool is = _dupenv_s(&text, &length, name) == 0 && text && std::strcmp(text, value) == 0;
     std::free(text);
-    return strict;
+    return is;
 #else
-    const char *text = std::getenv("KISAK_VK_STRICT_FLOATS");
-    return text && std::strcmp(text, "1") == 0;
+    const char *text = std::getenv(name);
+    return text && std::strcmp(text, value) == 0;
 #endif
 }
 
@@ -364,8 +367,10 @@ int main(int argc, char **argv)
 {
     if (argc < 3)
         return Usage();
-    SetStrictFloats(StrictFloatsAsked());
+    SetStrictFloats(EnvIs("KISAK_VK_STRICT_FLOATS", "1"));
+    SetDynamicLegacyState(EnvIs("KISAK_VK_LEGACY_STATE", "dynamic"));
     std::printf("legacy_shader.floats=%s\n", StrictFloats() ? "strict" : "fast");
+    std::printf("legacy_shader.legacy_state=%s\n", DynamicLegacyState() ? "dynamic" : "fixed");
     if (!std::strcmp(argv[1], "translate"))
         return RunTranslate(argc - 2, argv + 2);
     if (!std::strcmp(argv[1], "batch"))

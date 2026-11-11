@@ -23,6 +23,10 @@ for linking. The checks:
   linking    a pixel shader linked to a vertex shader that writes its inputs at
              other locations reads them from there, and one the vertex shader
              does not write is dropped
+  state      the legacy state the adapter never changes (fog, clip planes,
+             point sprites, unbound and gather samplers) is constant, and
+             with KISAK_VK_LEGACY_STATE=dynamic is read from its blocks, whose
+             layout is checked too
   depth      --depth-samplers (depth compare fixed at build time, as on
              MoltenVK): every case with samplers still passes spirv-val, with
              no depth-reference sampling when no sampler is a depth one, and
@@ -264,6 +268,8 @@ def main():
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         return '' if val.returncode == 0 else (val.stdout.strip() or 'spirv-val failed')[:400]
     checks = Checks()
+    # The cases are translated with the legacy state fixed, then dynamic.
+    os.environ.pop('KISAK_VK_LEGACY_STATE', None)
 
     with tempfile.TemporaryDirectory() as work:
         # usage
@@ -311,9 +317,32 @@ def main():
         checks.expect('every unpredicated case translated' + (' to valid SPIR-V' if spirv_val else ''),
                       len(results) == total - len(PREDICATED), f'{len(results)} of {total - len(PREDICATED)}')
 
+        # The same with KISAK_VK_LEGACY_STATE=dynamic: fog, clip planes, point
+        # sprites and the sampler state the adapter never changes stay uniforms.
+        dynamic_env = dict(os.environ, KISAK_VK_LEGACY_STATE='dynamic')
+        dynamic = {}
+        for name in sorted(results):
+            spv = os.path.join(work, name + '-dynamic.spv')
+            code, stdout, _ = run(binary, ['translate', os.path.join(case_dir, name + '.bin'), '--out', spv],
+                                  env=dynamic_env)
+            found = parse(stdout)
+            if code != 0 or found.get('result') != 'passed' or found.get('legacy_state') != 'dynamic':
+                checks.expect(f'{name} translates with the legacy state dynamic', False, stdout.strip())
+                continue
+            problem = validate(spv)
+            if problem:
+                checks.expect(f'{name} spirv-val with the legacy state dynamic', False, problem)
+                continue
+            with open(spv, 'rb') as f:
+                dynamic[name] = (found, Spirv(f.read()))
+        checks.expect('every unpredicated case translated with the legacy state dynamic',
+                      len(dynamic) == len(results), f'{len(dynamic)} of {len(results)}')
+
         # layout: every uniform block, texture and sampler at its binding
         layout_problems = []
-        for name, (found, spv) in sorted(results.items()):
+        layout_cases = [(name, entry) for name, entry in sorted(results.items())]
+        layout_cases += [(name + ' (dynamic state)', entry) for name, entry in sorted(dynamic.items())]
+        for name, (found, spv) in layout_cases:
             stage = found['stage'].split()[0]
             declared = set(found['uniforms'].split(',')) - {'none'}
             bindings = spv.bindings()
@@ -406,6 +435,34 @@ def main():
                     alpha_problems.append(f'{name} greater: {discards} of {base_discards} discards')
         checks.expect(f'alpha test fixed at build time ({alpha_cases} pixel shader cases)',
                       alpha_cases > 0 and not alpha_problems, '\n  '.join(alpha_problems[:20]))
+
+        # legacy state: fixed by default (no fog, clip plane or point argument
+        # block declared, no gather), read at run time with the switch (every
+        # vertex shader declares the clip planes, every ps 2.x one the fog,
+        # and samples of 2D and cube images have a gather path)
+        state_problems = []
+        for name, (found, spv) in sorted(results.items()):
+            declared = set(found['uniforms'].split(','))
+            stray = declared & {'fog', 'clip_planes', 'point_args'}
+            if found.get('legacy_state') != 'fixed' or stray or spv.opcodes.get(96, 0):
+                state_problems.append(f"{name}: state {found.get('legacy_state')}, blocks {sorted(stray)}, "
+                                      f"gathers {spv.opcodes.get(96, 0)}")
+        gathers = 0
+        for name, (found, spv) in sorted(dynamic.items()):
+            declared = set(found['uniforms'].split(','))
+            # pixel shaders apply fog below shader model 3 only
+            want = 'clip_planes' if found['stage'].startswith('vs') else \
+                'fog' if not found['stage'].endswith('3.0') else None
+            if want and want not in declared:
+                state_problems.append(f'{name} (dynamic state): no {want} block')
+            gathers += 1 if spv.opcodes.get(96, 0) else 0
+        if not gathers:
+            state_problems.append('no case gathers with the legacy state dynamic')
+        words_fixed = sum(sum(spv.opcodes.values()) for _, spv in results.values())
+        words_dynamic = sum(sum(spv.opcodes.values()) for _, spv in dynamic.values())
+        print(f'legacy state: {words_fixed} instructions fixed, {words_dynamic} dynamic')
+        checks.expect('legacy state fixed by default and dynamic with the switch',
+                      not state_problems and words_fixed < words_dynamic, '\n  '.join(state_problems[:20]))
 
         # reflection of chosen cases
         def reflected(name, key):

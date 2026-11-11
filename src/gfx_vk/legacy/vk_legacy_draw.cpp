@@ -1002,7 +1002,11 @@ UniformKey KeyForBlock(const Device &device, uint32_t binding, const Shader &vs,
     return key;
 }
 
-// Writes one block: every byte of it.
+// Writes one block: every byte of it. The fog, clip plane and point blocks
+// and the sampler state's projection, gather, unbound and depth scale members
+// are constants in shaders translated with the legacy state fixed
+// (legacy_shader::SetDynamicLegacyState, FixLegacyState in
+// vk_legacy_shader.cpp): change them there too.
 void FillUniformBlock(const Device &device, const UniformBlock &block, const UniformKey &key, const Shader &vs,
                       const Shader &ps, const DrawTextures &textures, uint8_t *data)
 {

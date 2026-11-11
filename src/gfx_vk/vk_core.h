@@ -351,6 +351,11 @@ struct OptionalFeatures
     // the GPU can test depth before it. KISAK_VK_ALPHA_TEST=dynamic reads the
     // compare from the alpha test block at run time instead.
     bool fixedAlphaTest;
+    // The Legacy adapter's translated shaders hold the legacy state the game
+    // never changes (fog, clip planes, point sprites, unbound samplers) as
+    // constants (legacy_shader::SetDynamicLegacyState), as DXVK specialises
+    // it. KISAK_VK_LEGACY_STATE=dynamic reads it from uniforms at run time.
+    bool dynamicLegacyState;
     // The Legacy adapter submits a frame in parts while it is still being
     // drawn, so the GPU works on a frame as it is recorded instead of
     // starting when the frame ends (see FeedGpu in vk_legacy_draw.cpp). Each
