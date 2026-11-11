@@ -18,6 +18,7 @@
 
 #if defined(KISAK_VULKAN_BACKEND)
 void Kisak_VulkanWindowDestroying(HWND window); // src/win32/vulkan/win_vulkan_backend.cpp
+void Kisak_VulkanAppActivated(HWND window, bool active); // src/win32/vulkan/win_vulkan_backend.cpp
 #endif
 
 const dvar_t *vid_xpos;
@@ -470,6 +471,13 @@ LRESULT WINAPI MainWndProc(
 	case WM_ACTIVATE:
 		VID_AppActivate((unsigned __int16)wParam, HIWORD(wParam));
 		return DefWindowProcA(hWnd, uMsg, wParam, lParam);
+#if defined(KISAK_VULKAN_BACKEND)
+	case WM_ACTIVATEAPP:
+		// r_backend vulkan: a fullscreen device's display mode goes back to the
+		// desktop while the game is in the background, as D3D9's does.
+		Kisak_VulkanAppActivated(hWnd, wParam != 0);
+		return DefWindowProcA(hWnd, uMsg, wParam, lParam);
+#endif
 	case WM_SETFOCUS:
 		if (!r_autopriority->current.enabled)
 			return DefWindowProcA(hWnd, uMsg, wParam, lParam);

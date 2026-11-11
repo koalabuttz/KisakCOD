@@ -35,12 +35,14 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <vector>
 
 IDirect3D9 *Kisak_VulkanDirect3DCreate9();
 int Kisak_VulkanBackendSelected();
 void Kisak_VulkanWindowDestroying(HWND window);
+void Kisak_VulkanAppActivated(HWND window, bool active);
 unsigned int Kisak_VulkanLogStats(bool reset);
 
 namespace
@@ -92,6 +94,15 @@ struct HostState
     std::vector<DisplayMode> modes;
     std::string shaderCachePath;   // what Host::shaderCachePath points at
     std::string pipelineCachePath; // what Host::pipelineCachePath points at
+    // Fullscreen (HostFullscreen): the device window, the mode it asked for,
+    // and whether the primary display is now at a mode of ours rather than
+    // the desktop's. The front calls under its lock, WM_ACTIVATEAPP comes on
+    // the window's thread: both take this one (recursive, as moving the
+    // window on its own thread runs its window procedure).
+    std::recursive_mutex fullscreenLock;
+    HWND fullscreenWindow = nullptr;
+    front::FullscreenMode fullscreenMode{};
+    bool displayChanged = false;
 };
 // Not s_host: winsock.h defines that name as a macro.
 HostState s_vkHost;
@@ -248,6 +259,85 @@ HMONITOR HostMonitor(void *)
 {
     // The one adapter the front offers is the primary display.
     return MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+}
+
+// ---- Fullscreen ------------------------------------------------------------------
+
+// The primary display at the mode, unless it is there already. False when
+// Windows refuses it.
+bool SetDisplayMode(const front::FullscreenMode &mode)
+{
+    DEVMODEW current{};
+    current.dmSize = sizeof(current);
+    const bool known = EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &current) != 0;
+    const DWORD width = mode.width ? DWORD(mode.width) : current.dmPelsWidth;
+    const DWORD height = mode.height ? DWORD(mode.height) : current.dmPelsHeight;
+    if (known && current.dmPelsWidth == width && current.dmPelsHeight == height
+        && (!mode.refreshRate || RefreshRate(current) == mode.refreshRate))
+        return true;
+    DEVMODEW wanted{};
+    wanted.dmSize = sizeof(wanted);
+    wanted.dmPelsWidth = width;
+    wanted.dmPelsHeight = height;
+    wanted.dmBitsPerPel = 32;
+    wanted.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_BITSPERPEL;
+    if (mode.refreshRate)
+    {
+        wanted.dmDisplayFrequency = mode.refreshRate;
+        wanted.dmFields |= DM_DISPLAYFREQUENCY;
+    }
+    const LONG result = ChangeDisplaySettingsExW(nullptr, &wanted, nullptr, CDS_FULLSCREEN, nullptr);
+    if (result != DISP_CHANGE_SUCCESSFUL)
+    {
+        Com_Printf(CON_CHANNEL_GFX, "Vulkan: the display refused %lux%lu at %u Hz (%ld)\n",
+                   static_cast<unsigned long>(width), static_cast<unsigned long>(height), mode.refreshRate, result);
+        return false;
+    }
+    s_vkHost.displayChanged = true;
+    return true;
+}
+
+void RestoreDisplayMode()
+{
+    if (!s_vkHost.displayChanged)
+        return;
+    s_vkHost.displayChanged = false;
+    // Null: the mode saved in the registry, the desktop's.
+    const LONG result = ChangeDisplaySettingsExW(nullptr, nullptr, nullptr, 0, nullptr);
+    if (result != DISP_CHANGE_SUCCESSFUL)
+        Com_Printf(CON_CHANNEL_GFX, "Vulkan: the desktop's display mode did not come back (%ld)\n", result);
+}
+
+// The window over the whole primary display, as D3D9 places a fullscreen
+// device's window. From another thread than the window's, without waiting
+// for it (that thread may be waiting for this one).
+void CoverMonitor(HWND window)
+{
+    MONITORINFO info{};
+    info.cbSize = sizeof(info);
+    if (!IsWindow(window) || !GetMonitorInfoW(MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY), &info))
+        return;
+    const RECT &rect = info.rcMonitor;
+    UINT flags = SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER;
+    if (GetWindowThreadProcessId(window, nullptr) != GetCurrentThreadId())
+        flags |= SWP_ASYNCWINDOWPOS;
+    SetWindowPos(window, nullptr, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, flags);
+}
+
+bool HostFullscreen(void *, front::D3D9Window window, const front::FullscreenMode *mode)
+{
+    const std::lock_guard<std::recursive_mutex> lock(s_vkHost.fullscreenLock);
+    if (!mode)
+    {
+        s_vkHost.fullscreenWindow = nullptr;
+        RestoreDisplayMode();
+        return true;
+    }
+    s_vkHost.fullscreenWindow = window;
+    s_vkHost.fullscreenMode = *mode;
+    const bool set = SetDisplayMode(*mode);
+    CoverMonitor(window);
+    return set;
 }
 
 // The window's client area on its monitor, for windowed screenshots (the
@@ -415,6 +505,7 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
     host.currentMode = HostCurrentMode;
     host.monitor = HostMonitor;
     host.windowOrigin = HostWindowOrigin;
+    host.fullscreen = HostFullscreen;
     host.log = HostLog;
     host.validation = ValidationSetting();
     host.deviceIndex = r_vkDevice->current.integer;
@@ -440,6 +531,28 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
 void Kisak_VulkanWindowDestroying(HWND window)
 {
     front::WindowDestroying(window);
+}
+
+// WM_ACTIVATEAPP: D3D9 gives a fullscreen device's display mode back to the
+// desktop and minimizes the window when the player switches away, and sets
+// it again on the way back. The front's devices are fullscreen through
+// HostFullscreen, so this does the same.
+void Kisak_VulkanAppActivated(HWND window, bool active)
+{
+    const std::lock_guard<std::recursive_mutex> lock(s_vkHost.fullscreenLock);
+    if (!s_vkHost.fullscreenWindow || window != s_vkHost.fullscreenWindow)
+        return;
+    if (active)
+    {
+        SetDisplayMode(s_vkHost.fullscreenMode);
+        CoverMonitor(window);
+        return;
+    }
+    if (s_vkHost.displayChanged)
+    {
+        RestoreDisplayMode();
+        ShowWindow(window, SW_MINIMIZE);
+    }
 }
 
 // For the renderer's r_vkStats command (src/gfx_d3d/r_cmds.cpp): logs the
