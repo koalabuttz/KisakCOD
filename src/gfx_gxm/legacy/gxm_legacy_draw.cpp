@@ -1684,6 +1684,11 @@ void DropProgramsIf(Device &device, const std::function<bool(const VertexProgram
         it = d.fragmentPrograms.erase(it);
     }
 }
+
+// Run diagnostic (swizzle-all-textures): uncompressed 2D textures that are
+// not dynamic are swizzled too, so that a console run can compare the GPU's
+// time with them read from the linear layout.
+bool swizzleAll = false;
 } // namespace
 
 // ---- The interface (gxm_legacy_internal.h) ----------------------------------------------------
@@ -1718,6 +1723,12 @@ bool InitDraw(Device &device, std::string &error)
         d.drawTimes = true;
         Log(device, "diag: gpu-draw-times is there: every draw is a scene of its own and is waited for, and the "
                     "GPU's time is logged by program pair every 60 frames or 10 s (frames are much slower with it)");
+    }
+    if (gxm::ProgramCacheMarker("swizzle-all-textures"))
+    {
+        swizzleAll = true;
+        Log(device, "diag: swizzle-all-textures is there: uncompressed 2D textures that are not dynamic are "
+                    "swizzled like the compressed ones");
     }
     if (gxm::ProgramCacheMarker("no-draw-reuse"))
     {
@@ -2013,6 +2024,8 @@ bool SwizzledTexture(const TextureDesc &desc, const FormatInfo &format)
     if (desc.pool == d3d::POOL_SYSTEMMEM || desc.pool == d3d::POOL_SCRATCH || format.depth ||
         (desc.usage & d3d::USAGE_RENDERTARGET))
         return false;
+    if (swizzleAll && desc.kind == TextureKind::Tex2D && !(desc.usage & d3d::USAGE_DYNAMIC))
+        return true;
     return desc.kind == TextureKind::Cube || (desc.kind == TextureKind::Tex2D && format.compressed);
 }
 
