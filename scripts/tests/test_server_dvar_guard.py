@@ -5,14 +5,10 @@ A server a player joins sets dvars on that client by name: through systeminfo
 (``CL_SystemInfoChanged``), through codinfo (``CG_ParseCodInfo``) and through
 the script call setClientDvar (``CG_SetClientDvarFromServer``).  All three end
 in an internal set that ignores the read-only, start-up-only and cheat flags.
-Mods need most of that, so it stays open, except for the names listed in
-``src/qcommon/server_dvar_guard.h``:
-
-  ``kServerDvarsOfThisPort``    every setting this port added.
-  ``kServerDvarsOfTheMachine``  retail settings that belong to the player's
-                                machine (text run as commands, hosts, update
-                                files, download consent, file roots, the
-                                network set-up, the player's own server).
+Retail trusted the server with that and mods depend on it, so every retail
+setting stays as it was in retail.  The one exception is the list
+``kServerDvarsOfThisPort`` in ``src/qcommon/server_dvar_guard.h``: every
+setting this port added, which no retail server and no retail mod knows.
 
 Three things are checked, with no game data and no network:
 
@@ -23,11 +19,11 @@ Three things are checked, with no game data and no network:
 2. The three places a server's name reaches a dvar all go through
    ``CL_SetDvarFromServer``, which asks the header's rule before it sets
    anything.
-3. The lists fit the sources.  A dvar registered in ``src`` that the retail
-   sources did not have (``retail_dvar_names.txt``) must be in the port's list
-   or exempted below with a reason.  No listed name is one the engine itself
-   replicates to clients (``DVAR_SYSTEMINFO``, ``DVAR_CODINFO``), so a stock
-   server never sends a name that is refused.
+3. The list fits the sources.  A dvar registered in ``src`` that the retail
+   sources did not have (``retail_dvar_names.txt``) must be on the list or
+   exempted below with a reason.  No listed name is a retail name, and none is
+   one the engine itself replicates to clients (``DVAR_SYSTEMINFO``,
+   ``DVAR_CODINFO``), so no retail server and no retail mod is refused.
 
 ``--m32`` makes the 32-bit build a requirement.
 """
@@ -139,6 +135,14 @@ static const char* const stockSysteminfo[] = {
 @STOCK_SYSTEMINFO@
 };
 
+// Every dvar name of the retail sources (retail_dvar_names.txt).  Retail
+// settings stay as they were in retail, also the ones that matter to the
+// player's machine such as activeAction and cl_allowDownload: the rule lets a
+// server set each of them, in any letter case.
+static const char* const retailNames[] = {
+@RETAIL_NAMES@
+};
+
 // Names mods and stock scripts set on players, and names like the listed ones.
 static const char* const modNames[] = {
     "cg_fov", "cg_fovScale", "com_maxfps", "cl_maxpackets", "rate", "snaps", "r_fullbright",
@@ -146,13 +150,20 @@ static const char* const modNames[] = {
     "scr_game_spectatetype", "cg_drawCrosshair", "compassSize", "ammoCounterHide", "ui_mapname",
     "sv_hostname", "g_gametype", "mapname", "nextmap", "name", "password", "fs_game", "sv_serverid",
     "cg_objectiveText", "hud_drawHud", "g_scriptMainMenu", "r_backendish", "vita", "vita_", "net",
-    "activeActions", "cl_allowDownloads", "fs_gamedir", "x",
+    "r_backends", "vita_layouts", "fs_gamedir", "x",
 };
 
 static void CheckRule()
 {
     CheckListed(kServerDvarsOfThisPort, "kServerDvarsOfThisPort");
-    CheckListed(kServerDvarsOfTheMachine, "kServerDvarsOfTheMachine");
+
+    Expect(sizeof(retailNames) / sizeof(retailNames[0]) > 1000, "the retail names are missing");
+    for (const char* name : retailNames)
+    {
+        Expect(MaySet(name), "a retail setting is refused", name);
+        Expect(MaySet(Upper(name)), "a retail setting is refused in upper case", name);
+        Expect(MaySet(Lower(name)), "a retail setting is refused in lower case", name);
+    }
 
     for (const char* name : stockSysteminfo)
     {
@@ -165,22 +176,21 @@ static void CheckRule()
     Expect(!Com_ServerMaySetDvar(nullptr), "no name at all may be set");
     Expect(MaySet(""), "the empty name is refused");
 
-    // The names the findings came from, spelled the way a server might.
-    Expect(!MaySet("ACTIVEACTION"), "ACTIVEACTION may be set");
-    Expect(!MaySet("activeaction"), "activeaction may be set");
-    Expect(!MaySet("CL_UPDATEFILES"), "CL_UPDATEFILES may be set");
+    // Names of this port, spelled the way a server might.
     Expect(!MaySet("Vita_KeyboardAnswer"), "Vita_KeyboardAnswer may be set");
+    Expect(!MaySet("VITA_ATMAP"), "VITA_ATMAP may be set");
     Expect(!MaySet("R_BACKEND"), "R_BACKEND may be set");
-    Expect(!MaySet("cl_allowdownload"), "cl_allowdownload may be set");
+    Expect(!MaySet("r_vkdevice"), "r_vkdevice may be set");
     Expect(!MaySet("SV_ALLOWUNVERIFIEDGUIDS"), "SV_ALLOWUNVERIFIEDGUIDS may be set");
+    Expect(!MaySet("con_Restricted"), "con_Restricted may be set");
 
     // Bytes around the ASCII letters and 8-bit bytes are not letters.
-    Expect(MaySet("`ctive`ction"), "'`' matched 'a'");
-    Expect(MaySet("{ctiveAction"), "'{' matched a letter");
-    Expect(MaySet("@ctiveAction"), "'@' matched a letter");
-    Expect(MaySet("[ctiveAction"), "'[' matched a letter");
-    Expect(MaySet(std::string("activeActio") + static_cast<char>(0xEE)), "an 8-bit byte matched 'n'");
-    Expect(MaySet(std::string("activeActio") + static_cast<char>(0xCE)), "an 8-bit byte matched 'N'");
+    Expect(MaySet("r_b`ckend"), "'`' matched 'a'");
+    Expect(MaySet("r_b@ckend"), "'@' matched a letter");
+    Expect(MaySet("in_gamepadDead{one"), "'{' matched a letter");
+    Expect(MaySet("in_gamepadDead[one"), "'[' matched a letter");
+    Expect(MaySet(std::string("r_backen") + static_cast<char>(0xE4)), "an 8-bit byte matched 'd'");
+    Expect(MaySet(std::string("r_backen") + static_cast<char>(0xC4)), "an 8-bit byte matched 'D'");
 }
 
 static void CheckNamesMatch()
@@ -441,31 +451,49 @@ def read_retail_names(path: Path = RETAIL_NAMES):
     return names
 
 
-def check_lists(port, machine, registered, retail, values, exempt=None) -> bool:
-    """The lists fit the sources."""
+def check_header_lists(header: str) -> bool:
+    """The header holds one list, the one this check reads, and the rule asks only it."""
+    ok = True
+    lists = sorted(set(re.findall(r"\b(\w+)\s*\[\s*\]\s*=\s*\{", header)))
+    if lists != ["kServerDvarsOfThisPort"]:
+        print(f"FAIL: server_dvar_guard.h holds the lists {lists}; this check reads kServerDvarsOfThisPort only, "
+              "and every retail setting stays as it was in retail (docs/server-set-dvars.md)")
+        ok = False
+    rule = function_body(header, "inline bool Com_ServerMaySetDvar(")
+    asked = [] if rule is None else re.findall(r"\bCom_ServerDvarListed\s*\(\s*(\w+)", rule)
+    if asked != ["kServerDvarsOfThisPort"]:
+        print(f"FAIL: Com_ServerMaySetDvar asks {asked}; it must ask kServerDvarsOfThisPort and nothing else")
+        ok = False
+    elif not re.fullmatch(r"\s*if\s*\(\s*!\s*name\s*\)\s*return\s+false\s*;\s*"
+                          r"return\s*!\s*Com_ServerDvarListed\s*\(\s*kServerDvarsOfThisPort\s*,\s*name\s*\)\s*;\s*",
+                          rule):
+        print("FAIL: Com_ServerMaySetDvar is no longer 'no name: false; otherwise: not on the port's list'; "
+              "a retail setting must not be refused by anything else")
+        ok = False
+    if ok:
+        print("PASS: the rule refuses the names on kServerDvarsOfThisPort and nothing else")
+    return ok
+
+
+def check_lists(port, registered, retail, values, exempt=None) -> bool:
+    """The list fits the sources."""
     exempt = PORT_DVARS_A_SERVER_MAY_SET if exempt is None else exempt
     ok = True
     retail_lower = {name.lower() for name in retail}
-    listed = {}
-    for list_name, names in (("kServerDvarsOfThisPort", port), ("kServerDvarsOfTheMachine", machine)):
-        for name in names:
-            if not re.fullmatch(r"[A-Za-z0-9_]+", name):
-                print(f"FAIL: {list_name} holds {name!r}, which is not a dvar name")
-                ok = False
-            if name.lower() in listed:
-                print(f"FAIL: {name} is listed twice ({listed[name.lower()]} and {list_name})")
-                ok = False
-            listed[name.lower()] = list_name
+    listed = set()
+    for name in port:
+        if not re.fullmatch(r"[A-Za-z0-9_]+", name):
+            print(f"FAIL: kServerDvarsOfThisPort holds {name!r}, which is not a dvar name")
+            ok = False
+        if name.lower() in listed:
+            print(f"FAIL: {name} is listed twice in kServerDvarsOfThisPort")
+            ok = False
+        listed.add(name.lower())
 
     for name in port:
         if name.lower() in retail_lower:
-            print(f"FAIL: {name} is in kServerDvarsOfThisPort but the retail sources have it; "
-                  "a retail name belongs in kServerDvarsOfTheMachine, with the reason")
-            ok = False
-    for name in machine:
-        if name.lower() not in retail_lower:
-            print(f"FAIL: {name} is in kServerDvarsOfTheMachine but the retail sources do not have it; "
-                  "a setting of this port belongs in kServerDvarsOfThisPort")
+            print(f"FAIL: {name} is in kServerDvarsOfThisPort but the retail sources have it; every retail "
+                  "setting stays as it was in retail, where a server may set it (docs/server-set-dvars.md)")
             ok = False
     for name in exempt:
         if name.lower() in listed:
@@ -519,7 +547,7 @@ def check_lists(port, machine, registered, retail, values, exempt=None) -> bool:
     if ok:
         added = sum(1 for name in registered if name.lower() not in retail_lower)
         print(f"PASS: all {added} dvars this port adds are on its list, and no listed name is replicated to clients "
-              f"({len(registered)} registered, {len(port)} + {len(machine)} listed)")
+              f"({len(registered)} registered, {len(port)} listed, no retail name among them)")
     return ok
 
 
@@ -620,19 +648,25 @@ def main() -> int:
 
     header = read_source(HEADER)
     port = header_list(header, "kServerDvarsOfThisPort")
-    machine = header_list(header, "kServerDvarsOfTheMachine")
-    if not port or not machine:
-        print("FAIL: could not read the two lists from server_dvar_guard.h", file=sys.stderr)
+    if not port:
+        print("FAIL: could not read kServerDvarsOfThisPort from server_dvar_guard.h", file=sys.stderr)
         return 1
 
     ok = check_call_sites()
-    ok = check_lists(port, machine, registered_dvars(), read_retail_names(), flag_values()) and ok
+    ok = check_header_lists(header) and ok
+    retail = read_retail_names()
+    for name in retail:
+        if not re.fullmatch(r"[A-Za-z0-9_]+", name):
+            print(f"FAIL: retail_dvar_names.txt holds {name!r}, which is not a dvar name", file=sys.stderr)
+            return 1
+    ok = check_lists(port, registered_dvars(), retail, flag_values()) and ok
 
     with tempfile.TemporaryDirectory(prefix="kisak-server-dvar-guard-") as temp:
         workdir = Path(temp)
         source = workdir / "server_dvar_guard_check.cpp"
-        source.write_text(PROGRAM.replace(
-            "@STOCK_SYSTEMINFO@", "\n".join(f'    "{name}",' for name in STOCK_SYSTEMINFO)))
+        source.write_text(
+            PROGRAM.replace("@STOCK_SYSTEMINFO@", "\n".join(f'    "{name}",' for name in STOCK_SYSTEMINFO))
+            .replace("@RETAIL_NAMES@", "\n".join(f'    "{name}",' for name in retail)))
 
         sanitize = [] if args.no_sanitize else ["-fsanitize=address,undefined", "-fno-sanitize-recover=all"]
         if sanitize and not toolchain_supports(args.cxx, sanitize, workdir):

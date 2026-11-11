@@ -1,10 +1,11 @@
 # Settings a game server may not set
 
 A game server sets dvars on the clients that join it, by name. This is retail
-behaviour and mods depend on it, so it is kept, with one exception: a short
-list of settings that belong to the player's machine or to this port. A server
-that names one of them is ignored for that name, and the console says so once.
-This holds on every platform's multiplayer client.
+behaviour and mods depend on it, so it is kept: every retail setting behaves as
+it did in retail. The one exception is the settings this port added, which no
+retail server and no retail mod knows. A server that names one of them is
+ignored for that name, and the console says so once. This holds on every
+platform's multiplayer client.
 
 ## How a server sets a client's dvars
 
@@ -17,54 +18,58 @@ This holds on every platform's multiplayer client.
 All three are internal sets: the read-only, start-up-only and cheat flags do
 not apply, and a name the client has not registered yet is created and keeps
 its value when the client registers it later. Retail trusted the server with
-all of it. Two things followed from that: a server could set `cl_updatefiles`,
-which the Windows client opened with ShellExecute, and it could set
-`activeAction`, whose text the client runs as console commands when the player
-enters the game.
+all of it.
 
 ## What is refused
 
 All three routes now go through `CL_SetDvarFromServer`
 (`src/client_mp/cl_parse_mp.cpp`), which asks the rule in
-`src/qcommon/server_dvar_guard.h`. The rule is two lists of names, matched the
-way the engine matches dvar names (without regard to letter case), so it holds
-for a setting the client has not registered yet.
+`src/qcommon/server_dvar_guard.h`. The rule is one list of names,
+`kServerDvarsOfThisPort`, matched the way the engine matches dvar names
+(without regard to letter case), so it holds for a setting the client has not
+registered yet.
 
-**Settings this port added** (`kServerDvarsOfThisPort`): every one of them, 50
-today: the renderer choice and the Vulkan and GPU wait settings (`r_backend`,
-`r_vk*`, `r_gpuSyncSleep*`), the controller and Vita settings
-(`in_gamepad*`, `vita_*`), `cl_keyCodeOnly`, `con_restricted`, `snd_adpcm`,
-`snd_alDebug`, `xanim_blendOnce`, and the settings for how the player's own
-server admits players (`sv_allowUnverifiedGuids`, `sv_allowProtocol6`,
-`sv_advertisedProtocol`, `sv_loopbackTestAuth`). No retail server or mod knows
-these names.
+The list is every setting this port added, 50 today: the renderer choice and
+the Vulkan and GPU wait settings (`r_backend`, `r_vk*`, `r_gpuSyncSleep*`), the
+controller and Vita settings (`in_gamepad*`, `vita_*`), `cl_keyCodeOnly`,
+`con_restricted`, `snd_adpcm`, `snd_alDebug`, `xanim_blendOnce`, and the
+settings for how the player's own server admits players
+(`sv_allowUnverifiedGuids`, `sv_allowProtocol6`, `sv_advertisedProtocol`,
+`sv_loopbackTestAuth`). No retail server or mod knows these names, and none of
+them is one the engine replicates to clients.
 
-**Retail settings that belong to the machine** (`kServerDvarsOfTheMachine`):
+## What stays as in retail
 
-| Settings | Why a server may not set them |
+Everything else:
+
+- Every retail setting, on all three routes. A mod's `setClientDvar` and
+  `makeDvarServerInfo` calls work as before, and so does a server that sends
+  more through systeminfo than a stock one. The asset-free check feeds every
+  retail dvar name (1531 of them) to the rule and fails if one is refused.
+- A listen server is the player's own, and its scripts set this port's settings
+  too: the server runs in this process and the client is joined to it over the
+  local address. A demo is treated as a remote server, whatever runs locally.
+
+That includes retail settings that matter to the player's machine. They were
+looked at when the list was drawn up, and the decision was to leave them as the
+game shipped rather than risk a mod that sets them:
+
+| Retail setting | What a server can do with it, as in retail |
 | --- | --- |
-| `activeAction`, `nextdemo` | Their text is run as console commands (on entering the game, at the end of a demo) |
-| `masterServerName`, `masterPort`, `authServerName`, `authPort` | Which hosts the client contacts |
-| `cl_updatefiles`, `cl_updateavailable`, `cl_updateversion`, `cl_updateoldversion` | The update the client offers to fetch and open |
-| `cl_allowDownload`, `cl_wwwDownload` | The player's consent to downloads. Systeminfo is read before the client decides whether to download what the server names, so a server could switch downloads on for a player who had them off |
-| `fs_basepath`, `fs_homepath`, `fs_cdpath`, `fs_basegame`, `fs_copyfiles`, `fs_restrict`, `com_playerProfile` | Where the game reads and writes files |
-| `net_ip`, `net_port`, `net_noudp`, `net_noipx`, `net_socksEnabled`, `net_socksServer`, `net_socksPort`, `net_socksUsername`, `net_socksPassword` | The player's network set-up |
-| `rcon_password`, `g_password`, `sv_privatePassword`, `sv_wwwBaseURL`, `sv_wwwDownload`, `sv_wwwDlDisconnected` | The player's own server: its remote console, its passwords and where it sends players for downloads |
+| `activeAction` | Its text is run as console commands when the player enters the game |
+| `nextdemo` | Its text is run as a console command at the end of a demo |
+| `cl_allowDownload`, `cl_wwwDownload` | Systeminfo is read before the client decides whether to download what the server names, so a server can switch downloads on for a player who had them off |
+| `fs_basepath`, `fs_homepath`, `net_*`, `rcon_password`, `sv_www*` and the like | A server can change them like any other setting |
 
-`fs_game` is not on the list: a server names its mod with it. No listed name
-is one the engine replicates to clients, so a stock server never sends a name
-that is refused.
+Two guards from earlier work are separate from this list and stay:
+`masterServerName` and `masterPort` cannot be changed while the client is
+connected to a remote server ([finding servers](server-browser.md)), and an
+address the client hands to the desktop, such as the update file a server can
+name through `cl_updatefiles`, is opened only when it is a plain `http://` or
+`https://` address (`src/qcommon/url_check.h`).
 
-What stays as in retail:
-
-- Every other name, on all three routes. A mod's `setClientDvar` and
-  `makeDvarServerInfo` calls work as before.
-- A listen server is the player's own, and its scripts set anything: the server
-  runs in this process and the client is joined to it over the local address.
-  A demo is treated as a remote server, whatever runs locally.
-- A mod the player has installed or downloaded can still run console commands
-  through its own menus. The list protects the routes that need no consent from
-  the player, and it keeps `cl_allowDownload` the player's own choice.
+A mod the player has installed or downloaded can also run console commands
+through its own menus, as in retail.
 
 ## The systeminfo note
 
@@ -92,3 +97,7 @@ dvar, exempt it in the check's `PORT_DVARS_A_SERVER_MAY_SET`, with the reason.
 New client code should still not read a dvar at the moment it runs a command,
 opens a file or an address, or picks a host. The list is a second line of
 defence, not a reason to drop the first.
+
+A retail name does not go on the list, and the check fails when one is added.
+Retail settings stay as in retail; changing that for a name is a decision for
+the project owner, not for a patch.

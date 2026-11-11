@@ -174,9 +174,10 @@ void CL_DeltaClient(
 static_assert(SERVER_DVAR_SYSTEMINFO_FLAG == DVAR_SYSTEMINFO, "server_dvar_guard.h must name the engine's systeminfo flag");
 
 // Sets a dvar whose name a game server chose.  Every such set goes through
-// here: systeminfo, codinfo and the setClientDvar script call.  A name on the
-// lists in qcommon/server_dvar_guard.h keeps its value; the console says so
-// once per name.
+// here: systeminfo, codinfo and the setClientDvar script call.  Retail settings
+// are set as in retail.  A setting this port added (the list in
+// qcommon/server_dvar_guard.h) keeps its value; the console says so once per
+// name.
 void CL_SetDvarFromServer(int localClientNum, const char *name, const char *value, ServerDvarRoute route)
 {
     static ServerDvarNames<64, 64> refused;

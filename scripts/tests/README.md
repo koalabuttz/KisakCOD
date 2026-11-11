@@ -56,14 +56,13 @@ fixed string.
 `test_server_dvar_guard.py` compiles the production
 `src/qcommon/server_dvar_guard.h` rule 64- and 32-bit: a game server sets
 client dvars by name (systeminfo, codinfo, `setClientDvar`), and the names on
-the header's two lists are refused in any letter case: every dvar this port
-added, and the retail ones that belong to the player's machine (`activeAction`,
-whose text is run as commands, the update and download settings, hosts, file
-roots, the network set-up, the player's own server). The check reads the
-sources too: the three routes set dvars only through `CL_SetDvarFromServer`,
-which asks the rule first; a dvar registered in `src` that is not in
-`retail_dvar_names.txt` must be on the port's list; and no listed name is one
-the engine replicates to clients. See
+the header's list are refused in any letter case: every dvar this port added.
+Every retail dvar name (`retail_dvar_names.txt`) is fed to the rule and must be
+allowed, since retail settings stay as in retail. The check reads the sources
+too: the three routes set dvars only through `CL_SetDvarFromServer`, which asks
+the rule first; the rule asks the port's list and nothing else; a dvar
+registered in `src` that is not a retail name must be on that list; and no
+listed name is a retail name or one the engine replicates to clients. See
 [settings a game server may not set](../../docs/server-set-dvars.md).
 
 `test_server_test_clients.py` checks the extracted internal bot functions with

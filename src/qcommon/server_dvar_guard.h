@@ -17,11 +17,11 @@
 // All three end in Dvar_SetFromStringByName, an internal set: the read-only,
 // start-up-only and cheat flags do not apply, and a name the client has not
 // registered yet is created and its value kept when the client registers it
-// later.  Retail trusted the server with all of it.  Mods need most of it, so
-// what a server may set stays open, except the names listed here: settings
-// that belong to the player's machine and to this port, which no server and no
-// retail mod has a reason to set.  The check is by name, so it also holds for a
-// setting the client has not registered yet.
+// later.  Retail trusted the server with all of it, and every retail setting
+// stays as it was in retail: a server may set it.  The names listed here are
+// the settings this port added, which no retail server and no retail mod
+// knows.  The check is by name, so it also holds for a setting the client has
+// not registered yet.
 //
 // Header-only and free of engine types so the asset-free check
 // (scripts/tests/test_server_dvar_guard.py) compiles exactly these rules.  The
@@ -88,56 +88,6 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "vita_stickDeadzone",
 };
 
-// Retail settings that belong to the player's machine.  Each one is here for
-// what the client does with its value.
-inline constexpr const char* const kServerDvarsOfTheMachine[] = {
-    // Run as console commands: activeAction when the player enters the game,
-    // nextdemo when a demo ends.
-    "activeAction",
-    "nextdemo",
-    // Which hosts the client contacts for the server list and for key checks.
-    "masterServerName",
-    "masterPort",
-    "authServerName",
-    "authPort",
-    // The update the client offers to fetch and open.
-    "cl_updateavailable",
-    "cl_updatefiles",
-    "cl_updateoldversion",
-    "cl_updateversion",
-    // The player's consent to downloads.  Systeminfo is read before the client
-    // decides whether to download what the server names.
-    "cl_allowDownload",
-    "cl_wwwDownload",
-    // Where the game reads and writes files.  fs_game is not here: a server
-    // names its mod with it.
-    "fs_basegame",
-    "fs_basepath",
-    "fs_cdpath",
-    "fs_copyfiles",
-    "fs_homepath",
-    "fs_restrict",
-    "com_playerProfile",
-    // The player's network set-up.
-    "net_ip",
-    "net_noipx",
-    "net_noudp",
-    "net_port",
-    "net_socksEnabled",
-    "net_socksPassword",
-    "net_socksPort",
-    "net_socksServer",
-    "net_socksUsername",
-    // The player's own server: its remote console, its passwords and where it
-    // sends its players for downloads.
-    "rcon_password",
-    "g_password",
-    "sv_privatePassword",
-    "sv_wwwBaseURL",
-    "sv_wwwDlDisconnected",
-    "sv_wwwDownload",
-};
-
 // The engine matches dvar names without regard to ASCII letter case
 // (Dvar_FindMalleableVar uses I_stricmp), so this does too.
 inline bool Com_ServerDvarNamesMatch(const char* a, const char* b)
@@ -173,8 +123,7 @@ inline bool Com_ServerMaySetDvar(const char* name)
 {
     if (!name)
         return false;
-    return !Com_ServerDvarListed(kServerDvarsOfThisPort, name)
-        && !Com_ServerDvarListed(kServerDvarsOfTheMachine, name);
+    return !Com_ServerDvarListed(kServerDvarsOfThisPort, name);
 }
 
 // The engine's DVAR_SYSTEMINFO flag: a setting the server replicates to its
