@@ -396,6 +396,13 @@ def game_command(options, base, home, first_level):
                "+set", "logfile", "2",
                "+set", "r_fullscreen", "0",
                "+set", "r_mode", options.mode,
+               # The window at the screen's corner: the game refuses a
+               # screenshot from a window partly off its monitor, and the
+               # default position (3, 22) can put a 1280x720 window past the
+               # edge of a scaled laptop screen (the laptop, 2026-11-11) or a
+               # desktop with no window manager. A --set below still wins.
+               "+set", "vid_xpos", "0",
+               "+set", "vid_ypos", "0",
                "+set", "snd_volume", options.volume]
     for name, value in options.set or []:
         command += ["+set", name, value]
