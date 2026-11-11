@@ -97,9 +97,12 @@
         "d3d9",
         "+set",
         "r_aaSamples",
-        "4"
+        "4",
+        "+set",
+        "r_visuals",
+        "legacy"
       ],
-      "note": "DXVK, 4 samples (reference for the cost of anti-aliasing)"
+      "note": "DXVK, 4 samples (reference for the cost of anti-aliasing); r_visuals is archived, so it is set here although DXVK ignores it"
     }
   },
   "rows": [
