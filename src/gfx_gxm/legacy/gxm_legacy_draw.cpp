@@ -38,6 +38,7 @@
 #include "gxm_legacy_internal.h"
 
 #include <gfx_gxm/gxm_draw_label.h>
+#include <gfx_gxm/gxm_engine_options.h>
 #include <gfx_gxm/gxm_program_cache.h>
 
 #include <algorithm>
@@ -51,6 +52,7 @@ namespace gfx_gxm
 {
 const char *g_drawPass = nullptr;
 const char *g_drawSurface = nullptr;
+bool g_depthPrepass = true;
 } // namespace gfx_gxm
 
 namespace gfx_vk::legacy
@@ -1739,6 +1741,10 @@ bool InitDraw(Device &device, std::string &error)
         Log(device, "diag: gpu-draw-times is there: every draw is a scene of its own and is waited for, and the "
                     "GPU's time is logged by program pair every 60 frames or 10 s (frames are much slower with it)");
     }
+    gfx_gxm::g_depthPrepass = !gxm::ProgramCacheMarker("no-depth-prepass");
+    if (!gfx_gxm::g_depthPrepass)
+        Log(device, "diag: no-depth-prepass is there: the scene's depth is drawn first only when r_depthPrepass, "
+                    "depth of field or soft particles ask for it");
     if (gxm::ProgramCacheMarker("swizzle-all-textures"))
     {
         swizzleAll = true;

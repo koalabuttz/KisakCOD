@@ -23,6 +23,7 @@
 #include "rb_shade.h"
 #include "r_meshdata.h"
 #include <gfx_gxm/gxm_draw_label.h>
+#include <gfx_gxm/gxm_engine_options.h>
 
 void R_HW_InsertFence(IDirect3DQuery9 **fence)
 {
@@ -360,7 +361,7 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
             RB_SunShadowMaps(data, viewInfo);
         RB_SpotShadowMaps(data, viewInfo);
     }
-    needsDepthPrepass = r_depthPrepass->current.enabled;
+    needsDepthPrepass = r_depthPrepass->current.enabled || KISAK_GXM_DEPTH_PREPASS();
     whichToClearForScene = 7;
     R_InitContext(data, &cmdBuf);
     iassert( !viewInfo->needsFloatZ || R_HaveFloatZ() );

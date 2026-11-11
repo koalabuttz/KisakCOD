@@ -573,6 +573,17 @@ void R_ChangeDepthRange(GfxCmdBufState *state, GfxDepthRangeType depthRangeType)
     else
         v2 = 1.0;
     state->depthRangeFar = v2;
+#ifdef KISAK_GFX_GXM
+    // The view model (the gun) in a depth pass: its whole range at its far
+    // end. Its lit pass then always passes the depth test, while the scene
+    // behind it is still hidden. With its own range the depth pass and the
+    // lit pass, two programs the Vita's compiler builds apart, wrote depths a
+    // hair apart in the narrow range, and parts of the gun failed the test
+    // and showed black (console run T).
+    if (depthRangeType != GFX_DEPTH_RANGE_SCENE &&
+        (state->techType == TECHNIQUE_DEPTH_PREPASS || state->techType == TECHNIQUE_BUILD_FLOAT_Z))
+        state->depthRangeNear = state->depthRangeFar;
+#endif
     device = state->prim.device;
     iassert( device );
     R_HW_SetViewport(device, &state->viewport, state->depthRangeNear, state->depthRangeFar);

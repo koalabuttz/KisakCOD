@@ -785,6 +785,16 @@ What the GXM back end does so far (step 2d):
   N draws a frame, slowest N ms, N indices a draw: <pass> / <surface>`,
   all of them, most first. "Less floor" takes the fastest draw's time off
   each draw, about what the draws would cost without a scene each.
+- **Depth first.** The scene's depth is always drawn before its lit pass
+  on the Vita (src/gfx_gxm/gxm_engine_options.h), whatever r_depthPrepass
+  says, so that the GPU skips hidden pixels of the lit pass early. Console
+  run T (2026-11-11, mp_crash) measured the GPU's time a frame at 80 ms with
+  it against 108 without at the busy view, and 27 against 50 facing the
+  other way. The gun keeps its own narrow depth range; in the depth pass that
+  range is pinned to its far end, since the two passes' programs wrote depths
+  a hair apart there and parts of the gun showed black. An empty file
+  `no-depth-prepass` in the folder of the compiled programs turns the
+  forced pass off.
 - **Textures** are linear: rows of whole multiples of 8 texels, and the
   levels of a mipmapped texture sized from the power of two above the base,
   which is how sceGxm reads them and also a layout LockRect can hand out.
