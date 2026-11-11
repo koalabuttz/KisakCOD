@@ -4,6 +4,7 @@
 #include <win32/win_localize.h>
 
 #include <qcommon/qcommon.h>
+#include <linux/sys_path_case.h>
 #include <stringed/stringed_hooks.h>
 #include <universal/com_files.h>
 #include <universal/q_parse.h>
@@ -60,6 +61,9 @@ void ReadLocalization()
     char path[1024];
     Com_sprintf(path, sizeof(path), "%s/localization.txt", fs_basepath->current.string);
     FILE *file = fopen(path, "rb");
+    char matched[sizeof(path)];
+    if (!file && Sys_MatchPathCase(path, matched, sizeof(matched)))
+        file = fopen(matched, "rb"); // as Windows finds it, ignoring case
     if (!file)
     {
         Com_PrintWarning(CON_CHANNEL_SYSTEM,

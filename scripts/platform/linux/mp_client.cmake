@@ -45,8 +45,9 @@
 #     have yet (remote script debugger, HTTP downloads, voice, mouse, window
 #     procedure). Each answers as the engine does on Windows when the service is
 #     missing, or refuses by name where only raw assets or a remote debugger go.
-#     With KISAK_LINUX_HTTP_DOWNLOADS the real downloader, src/qcommon/dl_main.cpp,
-#     links instead of its answers there, against the system's libcurl.
+#     With KISAK_LINUX_HTTP_DOWNLOADS (AUTO: on on Linux when libcurl links) the
+#     real downloader, src/qcommon/dl_main.cpp, links instead of its answers
+#     there, against the system's libcurl.
 #
 # The link uses --gc-sections like the dedicated target. See
 # docs/linux-mp-client.md.
@@ -54,8 +55,9 @@
 set(KISAK_LINUX_CINEMATICS "AUTO" CACHE STRING
     "Play Bink movies in KisakCOD-mp and KisakCOD-sp through the Linux Bink shim (libavcodec and libavutil, found with pkg-config). ON, OFF, or AUTO: on when both are found and link for the target architecture")
 set_property(CACHE KISAK_LINUX_CINEMATICS PROPERTY STRINGS AUTO ON OFF)
-option(KISAK_LINUX_HTTP_DOWNLOADS
-    "Fetch a server's map and mod files over HTTP(S) in KisakCOD-mp with the engine's libcurl downloader (needs libcurl 7.85 or newer, found with pkg-config)" OFF)
+set(KISAK_LINUX_HTTP_DOWNLOADS "AUTO" CACHE STRING
+    "Fetch a server's map and mod files over HTTP(S) in KisakCOD-mp with the engine's libcurl downloader (needs libcurl 7.85 or newer, found with pkg-config). ON, OFF, or AUTO: on when libcurl is found and links for the target architecture")
+set_property(CACHE KISAK_LINUX_HTTP_DOWNLOADS PROPERTY STRINGS AUTO ON OFF)
 option(KISAK_LINUX_TRACY
     "Build KisakCOD-dedi, KisakCOD-mp and KisakCOD-sp with the Tracy profiler: idle until a profiler connects, localhost only. For profiling runs" OFF)
 option(KISAK_LINUX_GAMEPAD
@@ -204,13 +206,55 @@ if(mp_client_http_at EQUAL -1)
     message(FATAL_ERROR "the census no longer blocks dl_main.cpp; review how KisakCOD-mp builds HTTP downloads")
 endif()
 list(REMOVE_ITEM mp_client_engine_sources "${mp_client_http_source}")
+# On by default on Linux, as on Windows, wherever libcurl can be used (AUTO);
+# from here
+# on KISAK_LINUX_HTTP_DOWNLOADS is a plain ON or OFF. dl_main.cpp sets
+# CURLOPT_PROTOCOLS_STR, which libcurl has from 7.85. For an i386 build on an
+# x86_64 host, point pkg-config at the i386 files:
+# PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
+set(kisak_http_downloads_asked "${KISAK_LINUX_HTTP_DOWNLOADS}")
+if(NOT kisak_http_downloads_asked STREQUAL "AUTO")
+    if(kisak_http_downloads_asked)
+        set(KISAK_LINUX_HTTP_DOWNLOADS ON)
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(KISAK_CURL REQUIRED IMPORTED_TARGET "libcurl>=7.85")
+    else()
+        set(KISAK_LINUX_HTTP_DOWNLOADS OFF)
+    endif()
+elseif(APPLE)
+    # Not built or run on macOS yet; ask for it with ON.
+    set(KISAK_LINUX_HTTP_DOWNLOADS OFF)
+    message(STATUS "KisakCOD-mp HTTP downloads: off on macOS unless -DKISAK_LINUX_HTTP_DOWNLOADS=ON")
+else()
+    set(KISAK_LINUX_HTTP_DOWNLOADS OFF)
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(KISAK_CURL QUIET IMPORTED_TARGET "libcurl>=7.85")
+    endif()
+    if(KISAK_CURL_FOUND)
+        # As for movies above: pkg-config may answer for the host's
+        # architecture, so only a link with the target's flags settles it.
+        include(CheckCXXSourceCompiles)
+        set(CMAKE_REQUIRED_LIBRARIES PkgConfig::KISAK_CURL)
+        check_cxx_source_compiles("
+            #include <curl/curl.h>
+            int main() { return curl_version() ? 0 : 1; }"
+            KISAK_CURL_LINKS_FOR_TARGET)
+        unset(CMAKE_REQUIRED_LIBRARIES)
+        if(KISAK_CURL_LINKS_FOR_TARGET)
+            set(KISAK_LINUX_HTTP_DOWNLOADS ON)
+        endif()
+    endif()
+    if(NOT KISAK_LINUX_HTTP_DOWNLOADS)
+        if(KISAK_CURL_FOUND)
+            message(STATUS "KisakCOD-mp HTTP downloads: off (pkg-config found libcurl ${KISAK_CURL_VERSION}, but a test program does not link with it in this build; it is probably for another architecture)")
+        else()
+            message(STATUS "KisakCOD-mp HTTP downloads: off (no libcurl 7.85 or newer development files found with pkg-config; on Debian/Ubuntu install libcurl4-openssl-dev). A server's files then come over the game connection only")
+        endif()
+    endif()
+endif()
 if(KISAK_LINUX_HTTP_DOWNLOADS)
-    find_package(PkgConfig REQUIRED)
-    # dl_main.cpp sets CURLOPT_PROTOCOLS_STR, which libcurl has from 7.85.
-    # For an i386 build on an x86_64 host, point pkg-config at the i386 files:
-    # PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
-    pkg_check_modules(KISAK_CURL REQUIRED IMPORTED_TARGET "libcurl>=7.85")
-    message(STATUS "KisakCOD-mp HTTP downloads: libcurl ${KISAK_CURL_VERSION}")
+    message(STATUS "KisakCOD-mp HTTP downloads: on (libcurl ${KISAK_CURL_VERSION}; -DKISAK_LINUX_HTTP_DOWNLOADS=OFF leaves them out)")
     list(APPEND mp_client_engine_sources "${mp_client_http_source}")
 endif()
 
