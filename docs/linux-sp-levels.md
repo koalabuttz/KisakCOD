@@ -79,7 +79,10 @@ python3 scripts/tests/run_linux_sp_level_sweep.py "$GAME" --binary "$BUILD/Kisak
   third. A black or one-colour screen shows up with nobody watching, and a
   level whose row stands apart from the others is worth a look. The images
   are game output: they stay on the machine (`--delete-screenshots` removes
-  each one once it is measured).
+  each one once it is measured). The tool puts the window at 0,0
+  (`vid_xpos`, `vid_ypos`), because the game refuses a screenshot from a
+  window partly off its monitor, which the default position 3,22 caused on
+  the laptop's scaled screen and under Xvfb.
 - `--death-retry` adds, last in each level, `kill`, a wait for the retry's
   load (the game starts `loadgame_continue` by itself 3 seconds after the
   death), a hold and the `mapname` question again. The retry loads the last
