@@ -79,7 +79,7 @@ void SV_WWWDownload_f(client_t *cl)
                             CON_CHANNEL_SERVER,
                             "WARNING: client '%s' reports that the redirect download for '%s' had wrong checksum.\n",
                             cl->name,
-                            cl->downloadName);
+                            cl->downloadURL);
                         Com_Printf(CON_CHANNEL_SERVER, "         you should check your download redirect configuration.\n");
                         SV_WWWDownLoad_Clear(cl);
                         cl->wwwFallback = 1;
@@ -88,13 +88,13 @@ void SV_WWWDownload_f(client_t *cl)
                 }
                 else
                 {
-                    // Print before clearing: SV_WWWDownLoad_Clear empties
-                    // downloadName, and the line named the file as ''.
+                    // Name the redirect URL: the server emptied downloadName
+                    // when it sent the redirect, so the line said ''.
                     Com_Printf(
                         CON_CHANNEL_SERVER,
                         "Client '%s' reported that the http download of '%s' failed, falling back to a server download\n",
                         cl->name,
-                        cl->downloadName);
+                        cl->downloadURL);
                     SV_WWWDownLoad_Clear(cl);
                     cl->wwwFallback = 1;
                     SV_SendClientGameState(cl);
