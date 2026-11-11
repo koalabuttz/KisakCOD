@@ -92,7 +92,12 @@ of them.
   there two runners save more time than they wait. A new check that takes a
   minute or two per configuration should use the helper instead of a matrix,
   and `assert_both_configurations_in_one_job` in
-  `test_linux_window_workflow.py` pins each such job. The macOS dedicated server does the same, one
+  `test_linux_window_workflow.py` pins each such job.
+  The native job's contract tests (`Check test-runner configuration and
+  failure handling`, about 3 minutes) read sources, not the build, so they run
+  in the Debug leg only. The multiplayer and singleplayer compile censuses
+  (about 5 minutes each) are separate jobs, `client_census` and `sp_census`,
+  so they run side by side. The macOS dedicated server does the same, one
   job per architecture: GitHub runs five macOS jobs at a time and on 2026-11-10 never started a third of
   the `macos-26` jobs (the Intel pool lost one in twenty; `macos-15` for arm64 was no better in a trial,
   PR 221, closed), so every macOS job saved is one fewer to wait for. A cancelled macOS arm64 job that has no
