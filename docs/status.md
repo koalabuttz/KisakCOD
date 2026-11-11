@@ -182,7 +182,7 @@ These came before the playable client and still build and run in CI:
 
 ## Open pull requests
 
-As of 2026-11-11 17:45 UTC, four. They change by the hour; the
+As of 2026-11-11 17:50 UTC, five. They change by the hour; the
 [list on GitHub](https://github.com/koalabuttz/KisakCOD/pulls) is the current
 one. A machine run a pull request waits on is named where its author has
 said so.
@@ -193,6 +193,7 @@ said so.
 | 225 | Refuse a game server's sets of 50 settings this port added and 34 retail ones that belong to the player's machine (console commands run on entering the game, master and file paths, downloads, the player's own server's passwords), on all three routes a server sets client dvars; a note for systeminfo names outside the client's own set | A join of one stock and one modded server, reading the console for the two new lines (its author's run that would show nothing legitimate is refused). |
 | 235 | Vulkan back end: count the pixel shaders built for pipelines, with their time, in the front's `device stats` and `slow frame` lines; PC runs 12 and 12b in the guide | The next PC run reads the split from those lines. |
 | 237 | Vulkan back end: build pipelines ahead on worker threads from a list of past draws (`KISAK_VK_PIPELINES_AHEAD=0` turns it off), and a one-word front lock with kept samplers; 6,276 to 5,255 instructions a draw in a callgrind bench | Laptop and Windows PC runs, no GPU or game run yet. |
+| 241 | Project settings: allow cloud sessions to `git push` to `claude/*-next` branches (the follow-up branch stacked on a waiting pull request), in `.claude/settings.json` | A cloud thread has to push to a `-next` branch once after it merges to show the permission check honours the rule. |
 
 ## Laptop and PC runs still to do
 
