@@ -3,6 +3,7 @@
 #include "ui_registration.h"
 #include "ui_script_core.h"
 #include "ui_input_core.h"
+#include "ui_port_options.h"
 #include <universal/q_parse.h>
 #include <client/client.h>
 #include <qcommon/cmd.h>
@@ -4229,6 +4230,8 @@ void UI_AddMenu(UiContext *dc, menuDef_t *menu)
             640);
     if (IsFastFileLoad() && DB_FindXAssetHeader(ASSET_TYPE_MENU, menu->window.name).menu != menu)
         MyAssertHandler(".\\ui\\ui_shared.cpp", 6304, 0, "%s", "touchMenu == menu");
+    // Port: rows the retail options menus lack (src/ui/ui_port_options.h).
+    UI_AddPortOptionRows(menu);
     if (!UI_AppendMenuReference(dc, menu))
         Com_Error(ERR_DROP, "UI_AddMenu: invalid menu registration");
 }
