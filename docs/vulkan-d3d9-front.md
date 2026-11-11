@@ -98,10 +98,13 @@ since the device was made or since the last call that started them again.
   device's, and every wait in between. Each line gives the time, the frame's
   number in the stretch and the second it ended at, and what the device's
   counters say happened in it: draws, passes, submissions, buffer renames and
-  swapchains built; the pipelines built (and how many of them the pipeline
-  cache held), the pipelines a draw waited for a worker to finish building
-  ahead (see "Pipelines built ahead" in
-  [vulkan-legacy-adapter.md](vulkan-legacy-adapter.md)), the shaders made, the texture levels uploaded and the memory
+  swapchains built; the pipelines built (how many of them the pipeline
+  cache held, and how many pixel shaders were built for them with their own
+  milliseconds: the rest of the pipelines' time is the driver's), the
+  pipelines a draw waited for a worker to finish building ahead (see
+  "Pipelines built ahead" in
+  [vulkan-legacy-adapter.md](vulkan-legacy-adapter.md)), the shaders made,
+  the texture levels uploaded and the memory
   blocks allocated, each with its milliseconds; and the milliseconds the
   calling thread waited for a swapchain image, for the frames in flight (with
   two frames in flight, a `Present` waits for the frame before the one it
@@ -529,10 +532,12 @@ console as `Vulkan: ...`. When the device goes, the front logs where the CPU
 time went, for comparing loads and first frames with DXVK. The
 `vulkan d3d9: device stats: ...` line gives the shaders created and how many
 of them were translated (the rest came from the shader cache) with the time
-it took, the pipelines built with their time, the pipelines built ahead on
-worker threads (their time there, how many a draw used, how many a draw waited
-for and how long, and how many entries the pipeline list holds), and the
-texture uploads with their size and time. The core logs `pipeline cache: N bytes from ...` when it
+it took, the pipelines built with their time (and of it, the pixel shaders
+built for them, each with the pipeline's fixed state folded in), the
+pipelines built ahead on worker threads (their time there, the pixel shaders
+the workers built for them, how many a draw used, how many a draw waited for
+and how long, how many entries the pipeline list holds, and the time spent
+queueing them), and the texture uploads with their size and time. The core logs `pipeline cache: N bytes from ...` when it
 starts from the pipeline cache file, and `pipeline cache: N bytes to ...`
 when it writes the file back at teardown.
 
@@ -691,6 +696,18 @@ Vulkan's slowest frames are longer (25 to 97 ms against 7 to 8 ms), one of
 them two pipelines built during play. The first launch with an empty cache
 spent 3.4 s building 131 pipelines, where run 10 spent 1.1 s on 133.
 Report: `renderer/vulkan-backend-pc-run-11.md`.
+PC run 12 (2026-11-11, eb316f35, after PRs 233 and 234) shows the slow
+first launch was NVIDIA's own shader cache, which keeps compiled shaders
+whatever the game's folder holds: the first view's 71 pipelines took 1.29 s
+with every cache cold, and 0.25 s in a second fresh folder whose pipeline
+cache was empty but whose driver cache now had the shaders. Vulkan ran at a
+mean of 470.8 frames a second against Direct3D 9's 478.5, inside the spread
+of their launches, and a 103 ms frame showed up on Direct3D 9 too. PC run
+12b put the depth compare read at run time (`KISAK_VK_DEPTH_COMPARE=dynamic`)
+beside the default on that build: no change on this CPU-bound PC (461 to
+485 frames a second either way), and the sun's occlusion query still one a
+frame. Reports: `renderer/vulkan-backend-pc-run-12.md`,
+`renderer/vulkan-backend-pc-run-12b.md`.
 
 The device probe with `--backend vulkan` runs `r_init.cpp`'s device start
 unchanged (`R_PreCreateWindow`, `R_CreateWindow`, `R_CreateDevice`), clears,
@@ -923,7 +940,7 @@ evidence):
   (`renderer/model-lighting/luma_grid.py` in the project files).
 
 Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11,12,13,14,15,16,17,18,19,20}.md`,
-`renderer/vulkan-backend-pc-run-{6,7,8,9,10,11}.md` and
+`renderer/vulkan-backend-pc-run-{6,7,8,9,10,11,12,12b}.md` and
 `renderer/model-lighting/laptop-run-1.md` in the project files.
 
 ## Next
@@ -939,6 +956,6 @@ compiles 183 pixel shaders against DXVK's 169. On the Windows PC, in a
 Release build, Vulkan is level with Direct3D 9 within the spread of their
 launches (PC run 11), and the PC waits for the CPU: what is left there is
 the time per frame, the front's lock first. Then the pipelines: built during
-play they are the long frames on both machines (laptop run 12, PC run 11),
-and a first launch with an empty cache built them three times slower in PC
-run 11 than in run 10.
+play they are the long frames on both machines (laptop run 12, PC run 11).
+A first launch after the shaders change builds them slower while the
+driver's own cache is cold (PC run 12).

@@ -341,6 +341,7 @@ jobs:
           python3 scripts/tests/test_linux_check_runner.py
           python3 scripts/tests/test_ci_apt_install.py
           python3 scripts/tests/test_ci_each_config.py
+          python3 scripts/tests/test_run_pre_push_checks.py
           python3 scripts/tests/test_linux_fastfile_driver.py
           python3 scripts/tests/test_linux_client_core_driver.py
           python3 scripts/tests/test_strip_cdecl.py

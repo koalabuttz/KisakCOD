@@ -1761,6 +1761,9 @@ void Check::PipelinesAhead()
     lg::FinishPipelinesAhead(device);
     const lg::DeviceStats ahead = lg::Stats(device);
     point("built_ahead", on ? ahead.pipelinesAhead >= stats.pipelinesAhead + 3 : ahead.pipelinesAhead == stats.pipelinesAhead);
+    // The pixel shader is new, so the workers built its module and counted it.
+    point("ahead_pixel_modules", on ? ahead.aheadPixelModules > stats.aheadPixelModules
+                                    : ahead.aheadPixelModules == stats.aheadPixelModules);
     draw(vs, ps);
     const lg::DeviceStats after = lg::Stats(device);
     point("drawn_without_building", on ? after.pipelines == stats.pipelines : after.pipelines == stats.pipelines + 3);

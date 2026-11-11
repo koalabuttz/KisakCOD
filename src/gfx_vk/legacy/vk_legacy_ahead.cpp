@@ -99,6 +99,8 @@ struct Job
     VkPipeline pipeline = VK_NULL_HANDLE;
     uint32_t bindings = 0;     // Pipeline::bindings
     bool sharedModule = false; // fragment is in Ahead::modules
+    bool builtModule = false;  // this job's worker built it
+    double moduleMs = 0.0;
     std::string error;
     double ms = 0.0;
 };
@@ -243,6 +245,7 @@ VkShaderModule SharedPixelModule(Ahead &ahead, Job &job)
             ahead.finished.wait(hold);
         }
     }
+    const auto start = std::chrono::steady_clock::now();
     std::vector<uint32_t> spirv;
     VkShaderModule module = VK_NULL_HANDLE;
     if (BuildPixelSpirv(job.recipe, *job.ps, *job.vs, spirv, job.error))
@@ -258,6 +261,8 @@ VkShaderModule SharedPixelModule(Ahead &ahead, Job &job)
             job.error = "vkCreateShaderModule failed";
         }
     }
+    job.builtModule = true;
+    job.moduleMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     std::lock_guard<std::mutex> hold(ahead.lock);
     SharedModule &shared = ahead.modules[key];
     shared.module = module;
@@ -324,6 +329,11 @@ void Collect(Device &device)
     }
     for (Job *job : done)
     {
+        if (job->builtModule)
+        {
+            ++device.stats.aheadPixelModules;
+            device.stats.aheadPixelModuleMicros += static_cast<uint64_t>(job->moduleMs * 1000.0);
+        }
         if (job->sharedModule)
         {
             std::lock_guard<std::mutex> hold(ahead.lock);

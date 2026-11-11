@@ -246,15 +246,17 @@ void Device::Destroy()
         const lg::DeviceStats &stats = lg::Stats(legacy_);
         HostLog(host(),
                 "vulkan d3d9: device stats: %llu draws, %u shaders (%u translated in %.1f ms), "
-                "%u pipelines (%.1f ms building), %u built ahead on workers (%.1f ms there, %u drawn, %u waited for in "
-                "%.1f ms, %u in the pipeline list, %.1f ms queueing them), %llu texture uploads (%.1f MB, %.1f ms), %llu read back to lock "
+                "%u pipelines (%.1f ms building, %u pixel shaders of them in %.1f ms), %u built ahead on workers "
+                "(%.1f ms there, %u pixel shaders of them in %.1f ms, %u drawn, %u waited for in %.1f ms, %u in the "
+                "pipeline list, %.1f ms queueing them), %llu texture uploads (%.1f MB, %.1f ms), %llu read back to lock "
                 "again, %llu descriptor sets kept across frames (all given up %u times), %llu clears (%llu at a "
                 "pass's start)",
                 static_cast<unsigned long long>(stats.draws), stats.shaders,
                 stats.shaders - std::min(stats.shaders, stats.shadersCached), stats.shaderMicros / 1000.0,
-                stats.pipelines, stats.pipelineMicros / 1000.0, stats.pipelinesAhead, stats.aheadMicros / 1000.0,
-                stats.aheadUsed, stats.aheadWaits, stats.aheadWaitMicros / 1000.0, stats.pipelinesListed,
-                stats.aheadQueueMicros / 1000.0,
+                stats.pipelines, stats.pipelineMicros / 1000.0, stats.pixelModules, stats.pixelModuleMicros / 1000.0,
+                stats.pipelinesAhead, stats.aheadMicros / 1000.0, stats.aheadPixelModules,
+                stats.aheadPixelModuleMicros / 1000.0, stats.aheadUsed, stats.aheadWaits,
+                stats.aheadWaitMicros / 1000.0, stats.pipelinesListed, stats.aheadQueueMicros / 1000.0,
                 static_cast<unsigned long long>(stats.textureUploads),
                 stats.uploadBytes / (1024.0 * 1024.0), stats.uploadMicros / 1000.0,
                 static_cast<unsigned long long>(stats.textureReadbacks),

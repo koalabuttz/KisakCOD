@@ -308,7 +308,9 @@ with the caches cold, 103 ms with every one of them a pipeline cache hit).
 list is still kept). The statistics: `pipelinesAhead` and `aheadMicros` (the
 workers' pipelines and time, not counted in `pipelines` and
 `pipelineMicros`), `aheadUsed` (those a draw used), the waits above, and
-`pipelinesListed` (entries the file held), and `aheadQueueMicros` (the
+`pipelinesListed` (entries the file held), `aheadPixelModules` and
+`aheadPixelModuleMicros` (the pixel modules the workers built, as
+`pixelModules` counts those built at draws), and `aheadQueueMicros` (the
 thread creating shaders and declarations, queueing their jobs; for shaders
 also inside `shaderMicros`, which PC run 14 found about twice master's with
 building ahead on: 29 to 31 ms against 14 to 15). A first launch, or the first time

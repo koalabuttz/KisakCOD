@@ -27,6 +27,8 @@ struct SlowFrame
     uint32_t pipelines = 0;
     uint32_t pipelineCacheHits = 0;
     double pipelineMs = 0.0;
+    uint32_t pixelModules = 0;
+    double pixelModuleMs = 0.0;
     uint32_t aheadWaits = 0; // pipelines a draw waited for a worker to finish
     double aheadWaitMs = 0.0;
     uint32_t shaders = 0;
@@ -121,6 +123,8 @@ void TrackFrame(Backend &backend)
             frame.pipelines = stats.pipelines - was.pipelines;
             frame.pipelineCacheHits = core.pipelineCacheHits - coreWas.pipelineCacheHits;
             frame.pipelineMs = double(stats.pipelineMicros - was.pipelineMicros) / 1000.0;
+            frame.pixelModules = stats.pixelModules - was.pixelModules;
+            frame.pixelModuleMs = double(stats.pixelModuleMicros - was.pixelModuleMicros) / 1000.0;
             frame.aheadWaits = stats.aheadWaits - was.aheadWaits;
             frame.aheadWaitMs = double(stats.aheadWaitMicros - was.aheadWaitMicros) / 1000.0;
             frame.shaders = stats.shaders - was.shaders;
@@ -172,15 +176,17 @@ void LogSlowFrames(const Backend &backend)
             std::snprintf(gpu, sizeof(gpu), "GPU time not read");
         HostLog(h,
                 "vulkan d3d9: slow frame %u: %.2f ms, frame %llu at %.2f s; %llu draws, %llu passes, %llu submissions, "
-                "%llu dynamic renames, %u swapchains built; of the time: %u pipelines (%u from the cache) %.2f ms, "
-                "%u waited for from workers %.2f ms, %u shaders %.2f ms, %llu texture uploads (%.2f MB) %.2f ms, %llu memory blocks %.2f ms; waits: "
+                "%llu dynamic renames, %u swapchains built; of the time: %u pipelines (%u from the cache) %.2f ms "
+                "(%u pixel shaders built for them %.2f ms), %u waited for from workers %.2f ms, "
+                "%u shaders %.2f ms, %llu texture uploads (%.2f MB) %.2f ms, %llu memory blocks %.2f ms; waits: "
                 "swapchain image %.2f ms, frames in flight %.2f ms, GPU otherwise %.2f ms (%llu textures read back), "
                 "record thread %.2f ms, front lock %llu sleeps %.2f ms (any thread); %s",
                 i + 1, frame.ms, static_cast<unsigned long long>(frame.number), frame.seconds,
                 static_cast<unsigned long long>(frame.draws), static_cast<unsigned long long>(frame.passes),
                 static_cast<unsigned long long>(frame.submissions),
                 static_cast<unsigned long long>(frame.dynamicRenames), frame.swapchainBuilds, frame.pipelines,
-                frame.pipelineCacheHits, frame.pipelineMs, frame.aheadWaits, frame.aheadWaitMs, frame.shaders,
+                frame.pipelineCacheHits, frame.pipelineMs, frame.pixelModules, frame.pixelModuleMs, frame.aheadWaits,
+                frame.aheadWaitMs, frame.shaders,
                 frame.shaderMs,
                 static_cast<unsigned long long>(frame.uploads), frame.uploadMegabytes, frame.uploadMs,
                 static_cast<unsigned long long>(frame.memoryAllocations), frame.memoryAllocateMs, frame.imageWaitMs,

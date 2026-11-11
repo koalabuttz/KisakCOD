@@ -528,6 +528,8 @@ VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t dept
     PixelModuleRecipe recipe;
     if (const VkShaderModule kept = FindPixelModule(device, ps, vs, depthSamplers, alphaCompare, recipe))
         return kept;
+    const TimeInto timer(device.stats.pixelModuleMicros);
+    ++device.stats.pixelModules;
     std::vector<uint32_t> spirv;
     std::string error;
     if (!BuildPixelSpirv(recipe, ps, vs, spirv, error))
