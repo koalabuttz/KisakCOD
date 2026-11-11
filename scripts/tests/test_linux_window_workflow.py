@@ -1039,8 +1039,7 @@ class CiTriggerTests(unittest.TestCase):
                 # bring that job back, so the runner comes from the architecture.
                 self.assertNotIn('include', job['strategy']['matrix'])
                 self.assertEqual(job['runs-on'],
-                                 "${{ matrix.arch == 'arm64' && (github.event_name == 'pull_request' "
-                                 "&& 'macos-15' || 'macos-26') || 'macos-15-intel' }}")
+                                 "${{ matrix.arch == 'arm64' && 'macos-26' || 'macos-15-intel' }}")
         found = re.fullmatch(
             r"\$\{\{ fromJSON\(github\.event_name == 'pull_request' && '([^']*)' \|\| '([^']*)'\) \}\}",
             self.MACOS_ARCHS)

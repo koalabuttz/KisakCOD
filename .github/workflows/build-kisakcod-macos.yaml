@@ -106,15 +106,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Apple silicon: pull requests run on macos-15 and master on macos-26. On
-  # 2026-11-10 a third of the macos-26 jobs never got a runner (the Intel pool
-  # lost one in twenty), so a pull request waited up to an hour or was
-  # cancelled; macos-15 keeps the pull request's own check, macos-26 is
-  # still built and checked on every merge.
   dedicated:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: macOS ${{ matrix.arch }} dedicated server ${{ matrix.config }}
-    runs-on: ${{ matrix.arch == 'arm64' && (github.event_name == 'pull_request' && 'macos-15' || 'macos-26') || 'macos-15-intel' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'macos-26' || 'macos-15-intel' }}
     timeout-minutes: 45
 
     strategy:
@@ -233,7 +228,7 @@ jobs:
     # trees with no game data, the Bink shim test and the skinning tests. No
     # MoltenVK, DXVK library, GPU, game data or game movie is involved.
     name: macOS ${{ matrix.arch }} multiplayer client${{ matrix.config != 'Debug' && format(' {0}', matrix.config) || '' }}
-    runs-on: ${{ matrix.arch == 'arm64' && (github.event_name == 'pull_request' && 'macos-15' || 'macos-26') || 'macos-15-intel' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'macos-26' || 'macos-15-intel' }}
     timeout-minutes: 60
 
     strategy:
@@ -654,7 +649,7 @@ jobs:
     # against DXVK Native's headers (no DXVK library). Nothing of the engine is
     # compiled in and no game data is read.
     name: macOS ${{ matrix.arch }} Vulkan back end checks
-    runs-on: ${{ matrix.arch == 'arm64' && (github.event_name == 'pull_request' && 'macos-15' || 'macos-26') || 'macos-15-intel' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'macos-26' || 'macos-15-intel' }}
     timeout-minutes: 40
 
     strategy:
