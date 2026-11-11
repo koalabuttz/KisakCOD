@@ -556,6 +556,18 @@ enum class PresentResult
 };
 PresentResult Present(Device *device);
 
+// ---- Passes of another user of the core (the Modern path) --------------------------------
+//
+// Ends the pass being drawn and forgets what the device has bound, so that
+// the caller can record passes of its own on the core (vk_core.h) between
+// draws; the next draw begins a new pass and binds everything again. Opens
+// the frame if none is open. False, with nothing to record into, when the
+// frame is skipped (minimised window) or the device has failed.
+bool HandOverRecording(Device *device);
+// The core image a surface draws into: its texture's image when the surface
+// is level 0 of a 2D texture or a standalone surface, else null.
+gfx_vk::Image *SurfaceImage(const Surface *surface);
+
 // The device's window is about to be destroyed: an open pass and frame end
 // unshown, and the core lets go of its swapchain and surface (DetachWindow in
 // vk_core.h). Everything else stays usable; Present skips from now on.

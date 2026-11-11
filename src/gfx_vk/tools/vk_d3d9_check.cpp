@@ -17,6 +17,7 @@
 // passed, 1 a failure, 2 a usage error. See docs/vulkan-d3d9-front.md.
 
 #include <gfx_vk/d3d9/vk_d3d9.h>
+#include <gfx_vk/modern/vk_modern.h>
 
 #include "vk_legacy_check_shaders.h"
 
@@ -490,6 +491,7 @@ public:
     void SlowFrames();
     void KeptState();
     void Multisample();
+    void ModernTaa();
     void Bench();
     void BenchRuns();
     void BenchFrames(bool runs);
@@ -2803,6 +2805,194 @@ void Check::Multisample()
     SafeRelease(target);
 }
 
+// The Modern path's temporal anti-aliasing (front::ModernSceneDone,
+// docs/vulkan-modern.md): its camera reprojection on the CPU, then frames
+// drawn into the back buffer with a depth surface and handed to it. A scene
+// that stands still comes back as it was drawn; with the sub-pixel jitter the
+// engine applies, a pixel the jitter covers in some frames and not in others
+// ends between the two colours, where without the pass it would be one or the
+// other; a scene with no depth surface is refused.
+void Check::ModernTaa()
+{
+    // ---- Reprojection, in double and as the float matrix the shader gets ----
+    // A camera far from the origin (the engine's maps reach tens of
+    // thousands of units) that moves and turns between two frames.
+    using Row4 = double[4];
+    const auto viewMatrix = [](const double origin[3], double yaw, float out[4][4]) {
+        const double forward[3] = {std::cos(yaw), std::sin(yaw), 0.0};
+        const double left[3] = {-std::sin(yaw), std::cos(yaw), 0.0};
+        const double up[3] = {0.0, 0.0, 1.0};
+        for (int i = 0; i < 3; ++i)
+        {
+            out[i][0] = static_cast<float>(-left[i]);
+            out[i][1] = static_cast<float>(up[i]);
+            out[i][2] = static_cast<float>(forward[i]);
+            out[i][3] = 0.0f;
+        }
+        for (int c = 0; c < 3; ++c)
+        {
+            const double axis[3] = {c == 0 ? -left[0] : c == 1 ? up[0] : forward[0],
+                                    c == 0 ? -left[1] : c == 1 ? up[1] : forward[1],
+                                    c == 0 ? -left[2] : c == 1 ? up[2] : forward[2]};
+            out[3][c] = static_cast<float>(-(origin[0] * axis[0] + origin[1] * axis[1] + origin[2] * axis[2]));
+        }
+        out[3][3] = 1.0f;
+    };
+    // The engine's InfinitePerspectiveMatrix (src/universal/com_math.cpp).
+    const auto projectionMatrix = [](float jitterX, float jitterY, float out[4][4]) {
+        std::memset(out, 0, sizeof(float) * 16);
+        const float k = 0.99951172f;
+        out[0][0] = k / 0.75f;
+        out[1][1] = k / 0.5625f;
+        out[2][2] = k;
+        out[2][3] = 1.0f;
+        out[3][2] = -4.0f * k;
+        out[2][0] = jitterX;
+        out[2][1] = jitterY;
+    };
+    // p * view * projection with the jitter left out, in double.
+    const auto toClip = [](const Row4 p, const gfx_vk::modern::SceneView &scene, Row4 out) {
+        double viewed[4];
+        for (int c = 0; c < 4; ++c)
+            viewed[c] = p[0] * scene.view[0][c] + p[1] * scene.view[1][c] + p[2] * scene.view[2][c]
+                + p[3] * scene.view[3][c];
+        for (int c = 0; c < 4; ++c)
+        {
+            double sum = 0.0;
+            for (int k = 0; k < 4; ++k)
+                sum += viewed[k] * ((k == 2 && c < 2) ? 0.0 : scene.projection[k][c]);
+            out[c] = sum;
+        }
+    };
+    gfx_vk::modern::SceneView before{}, now{};
+    const double originBefore[3] = {52000.0, -31000.0, 900.0};
+    const double originNow[3] = {52012.0, -30995.0, 901.5};
+    viewMatrix(originBefore, 0.70, before.view);
+    viewMatrix(originNow, 0.72, now.view);
+    projectionMatrix(0.004f, -0.003f, before.projection);
+    projectionMatrix(-0.002f, 0.005f, now.projection);
+    double reprojection[4][4];
+    Equal("reprojection_made", gfx_vk::modern::Reprojection(now, before, reprojection), true);
+    // World points 30 to 6000 units in front, and a direction (the sky).
+    const Row4 points[] = {
+        {52030.0 + 5.0, -30995.0 + 25.0, 902.0, 1.0},
+        {52012.0 + 400.0, -30995.0 + 300.0, 950.0, 1.0},
+        {52012.0 + 4500.0, -30995.0 + 3800.0, 1200.0, 1.0},
+        {0.75, 0.65, 0.05, 0.0},
+    };
+    double worstDouble = 0.0, worstFloat = 0.0;
+    for (const Row4 &point : points)
+    {
+        double clipNow[4], clipBefore[4];
+        toClip(point, now, clipNow);
+        toClip(point, before, clipBefore);
+        // What the shader starts from: NDC x, y and the depth, w = 1.
+        const double start[4] = {clipNow[0] / clipNow[3], clipNow[1] / clipNow[3], clipNow[2] / clipNow[3], 1.0};
+        const double wantX = clipBefore[0] / clipBefore[3], wantY = clipBefore[1] / clipBefore[3];
+        double viaDouble[4] = {}, viaFloat[4] = {};
+        for (int c = 0; c < 4; ++c)
+            for (int k = 0; k < 4; ++k)
+            {
+                viaDouble[c] += start[k] * reprojection[k][c];
+                viaFloat[c] += static_cast<float>(start[k]) * static_cast<float>(reprojection[k][c]);
+            }
+        worstDouble = std::max(worstDouble, std::max(std::fabs(viaDouble[0] / viaDouble[3] - wantX),
+                                                     std::fabs(viaDouble[1] / viaDouble[3] - wantY)));
+        worstFloat = std::max(worstFloat, std::max(std::fabs(viaFloat[0] / viaFloat[3] - wantX),
+                                                   std::fabs(viaFloat[1] / viaFloat[3] - wantY)));
+    }
+    // In NDC; a pixel of a 1920-wide image is 0.00104.
+    Equal("reprojection_exact", worstDouble < 1e-9, true);
+    Equal("reprojection_float_under_quarter_pixel", worstFloat < 0.00026, true);
+    if (worstFloat >= 0.00026)
+        result->detail += " reprojection_float_error=" + std::to_string(worstFloat);
+    float jx = 0.0f, jy = 0.0f;
+    gfx_vk::modern::JitterPixels(0, jx, jy);
+    Equal("jitter_first_x_milli", std::lround(jx * 1000.0f), 0);
+    Equal("jitter_first_y_milli", std::lround(jy * 1000.0f), -167);
+    gfx_vk::modern::JitterPixels(9, jx, jy);
+    Equal("jitter_wraps_x_milli", std::lround(jx * 1000.0f), -250);
+
+    // ---- Frames through the front ----
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    view.width = view.height = kSize;
+    // One frame: black, with a white quad over the left half whose right
+    // edge sits 0.4 pixels past pixel 63's, so that pixel 64 is covered when
+    // the jitter moves the scene right by more than 0.1 pixels.
+    const auto frame = [&](float pixelsX, float pixelsY, bool first) {
+        Reset(Argb(255, 0, 0, 0));
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, 1.0f, 0), "Clear(depth)");
+        device->SetRenderState(D3DRS_ZENABLE, TRUE);
+        device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+        const float jitter[4] = {2.0f * pixelsX / kSize, -2.0f * pixelsY / kSize, 0.0f, 0.0f};
+        device->SetVertexShaderConstantF(0, jitter, 1);
+        DrawQuad(0, 0, 64.4f, 128, 0.5f, Argb(255, 255, 255, 255));
+        view.projection[2][0] = jitter[0];
+        view.projection[2][1] = jitter[1];
+        view.cut = first;
+        return front::ModernSceneDone(device, view) == front::ModernResult::Done;
+    };
+    const auto present = [&]() { Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present"); };
+
+    // Still: what was drawn comes back.
+    bool done = true;
+    for (int i = 0; i < 4; ++i)
+    {
+        done = frame(0.0f, 0.0f, i == 0) && done;
+        if (i < 3)
+            present();
+    }
+    Equal("still_resolved", done, true);
+    if (Read())
+    {
+        Expect("still_inside", 32, 64, 255, 255, 255);
+        Expect("still_edge_in", 63, 64, 255, 255, 255);
+        Expect("still_edge_out", 64, 64, 0, 0, 0);
+        Expect("still_outside", 96, 64, 0, 0, 0);
+    }
+    present();
+
+    // Jittered: pixel 64 is covered in 3 of the 8 frames of the sequence.
+    done = true;
+    for (uint32_t i = 0; i < 16; ++i)
+    {
+        gfx_vk::modern::JitterPixels(i, jx, jy);
+        done = frame(jx, jy, i == 0) && done;
+        if (i < 15)
+            present();
+    }
+    Equal("jittered_resolved", done, true);
+    if (Read())
+    {
+        Expect("jittered_inside", 32, 64, 255, 255, 255);
+        Expect("jittered_outside", 96, 64, 0, 0, 0);
+        const int edge = pixels[(64 * readSize + 64) * 4 + 1];
+        Equal("jittered_edge_between", edge > 20 && edge < 235, true);
+        if (!(edge > 20 && edge < 235))
+            result->detail += " jittered_edge=" + std::to_string(edge);
+    }
+    present();
+
+    // No depth surface: refused, and the scene is left as drawn.
+    Reset(Argb(255, 0, 0, 0));
+    DrawQuad(0, 0, 64, 128, 0.5f, Argb(255, 255, 255, 255));
+    Equal("no_depth_refused", front::ModernSceneDone(device, view) == front::ModernResult::Refused, true);
+    if (Read())
+        Expect("no_depth_untouched", 32, 64, 255, 255, 255);
+    device->SetDepthStencilSurface(nullptr);
+    const float zero[4] = {0, 0, 0, 0};
+    device->SetVertexShaderConstantF(0, zero, 1);
+    SafeRelease(depth);
+}
+
 void Check::ResetDevice()
 {
     SafeRelease(backBuffer);
@@ -3038,6 +3228,7 @@ int Run(const Options &options)
         {"slow_frames", &Check::SlowFrames, true},
         {"kept_state", &Check::KeptState, true},
         {"multisample", &Check::Multisample, true},
+        {"modern_taa", &Check::ModernTaa, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},
