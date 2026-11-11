@@ -791,6 +791,22 @@ evidence):
   of slow clears gives no fps the laptop can see, and does no harm. GPU time
   per frame 9.3 to 10.4 ms either way. Report:
   `renderer/vulkan-backend-laptop-run-15.md`.
+* Pass timestamps (run 16, 2026-11-11, 1f15b84a, the same scene at 4
+  samples, defaults C against `KISAK_VK_PASS_TIMESTAMPS=0` T, C T T C): C ran
+  at 107.6 and 106.1 fps, T at 107.1 and 107.5, with GPU frames of 8.53 and
+  8.68 ms against 8.53 and 8.54. The pairs around every pass cost the laptop
+  nothing it can measure, so they stay on. Report:
+  `renderer/vulkan-backend-laptop-run-16.md`.
+* Shader code (run 17, 2026-11-11, the same scene at one sample, held 60 s
+  with Mesa's `INTEL_DEBUG=vs,fs` and its shader cache off, summed by
+  `renderer/tools/intel_shader_stats.py`): neither side spills. Our pixel
+  shaders' widest variants have a median of 635 instructions and 17,080
+  cycles against DXVK's 324 and 7,434; our vertex shaders 545 and 5,458
+  against 141 and 488. The counts are per shader compiled, not per draw. Part
+  of it is the multiply rule: every multiply checked both factors for zero
+  where DXVK multiplies plainly on Intel, and the fast rule is now the
+  default ([shaders](vulkan-legacy-shaders.md#float-rules)). Report:
+  `renderer/vulkan-backend-laptop-run-17.md`.
 * Present mode: the laptop's swapchain still says `MAILBOX, 4 images` with
   vsync off now that the core asks for IMMEDIATE first (run 11), so its
   surface does not offer IMMEDIATE.
@@ -837,7 +853,7 @@ evidence):
   launch, with a repeated launch as the baseline
   (`renderer/model-lighting/luma_grid.py` in the project files).
 
-Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11,12,13,14,15}.md`,
+Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11,12,13,14,15,16,17}.md`,
 `renderer/vulkan-backend-pc-run-{6,7,8,9,10}.md` and
 `renderer/model-lighting/laptop-run-1.md` in the project files.
 
@@ -846,10 +862,12 @@ Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11,12,13,14,15}.md`,
 The rest of the frame rate gap to DXVK. On the laptop that is the GPU's
 time: at the same 4 samples Vulkan is about 35% behind (laptop run 13), and
 nearly all of the GPU's time is draws in a few large passes (run 14); fast
-clears did not move it (run 15). Next a laptop run measures what the
-timestamps around every pass cost (`KISAK_VK_PASS_TIMESTAMPS=0`), since the
-one at a pass's end may drain the GPU between passes, and then the GPU time
-per draw against DXVK's says where the rest goes. On the Windows PC, in
+clears (run 15) and the pass timestamps (run 16) did not move it. Our
+shaders compile to two to four times DXVK's code on that driver (run 17). A
+laptop run measures the fast multiply rule (fps, Mesa's statistics and a
+picture against DXVK's), and then what is left of the shaders' length: the
+legacy state DXVK fixes per pipeline with specialisation constants and the
+translator reads at run time (clip planes, fog, alpha test, point size). On the Windows PC, in
 a Release build, Vulkan is about 3% behind Direct3D 9 (PC run 10) and the
 PC waits for the CPU: what is left is the time per frame, the front's lock
 first. Measure the PC in the Release build of a manual `vulkan` run. Then
