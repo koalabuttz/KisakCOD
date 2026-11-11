@@ -127,6 +127,9 @@ since the device was made or since the last call that started them again.
   (`r_visuals modern`, [vulkan-modern.md](vulkan-modern.md)): the scenes it
   anti-aliased in the stretch, how many of them had no history to use (the
   first, a camera cut, a new size), and the GPU time of its pass.
+* `vulkan d3d9: gamma:` appears when frames of the stretch went to the window
+  through the fullscreen gamma ramp (`r_gamma` with `r_fullscreen 1`): how
+  many, and the GPU time of that pass.
 
 ## Reference counts
 
