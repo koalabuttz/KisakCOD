@@ -3810,6 +3810,13 @@ void R_StoreWindowSettings(const GfxWindowParms *wndParms)
         else
         {
             vidConfig.aspectRatioWindow = 1.7777778f;
+            // Port: retail snaps every screen wider than 16:10 to 16:9, so an
+            // ultrawide screen (21:9, 32:9) shows a 16:9 picture stretched
+            // sideways. Use the screen's own shape when it is clearly wider
+            // than 16:9; screens near 16:9 (1366x768) still snap.
+            const float screenAspect = (float)monitorWidth / (float)monitorHeight;
+            if (screenAspect > 1.7777778f * 1.05f)
+                vidConfig.aspectRatioWindow = screenAspect;
         }
         break;
     case GFX_ASPECT_RATIO_STANDARD:
