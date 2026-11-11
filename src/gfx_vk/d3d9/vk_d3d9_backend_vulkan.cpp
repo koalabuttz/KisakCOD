@@ -149,7 +149,10 @@ void LogSlowFrames(const Backend &backend)
     {
         const SlowFrame &frame = backend.slowFrames[i];
         char gpu[160];
-        if (frame.gpuKnown)
+        if (frame.gpuKnown && !Features(backend.core).passTimestamps)
+            std::snprintf(gpu, sizeof(gpu), "GPU %.2f ms (passes not timed), %.2f without work before it",
+                          frame.gpu.frameMs, frame.gpu.gapMs);
+        else if (frame.gpuKnown)
             std::snprintf(gpu, sizeof(gpu),
                           "GPU %.2f ms: %.2f in passes, %.2f between them, %.2f without work before it",
                           frame.gpu.frameMs, frame.gpu.passesMs,
@@ -303,6 +306,12 @@ void BackendLogStats(Backend *backend, bool reset)
                 "before the frame (%.2f max); %llu parts sent early to a GPU with nothing left",
                 average(core.framePasses), std::max(0.0, average(core.frame) - average(core.framePasses)),
                 average(core.frameGap), core.frameGap.samples ? core.frameGap.maxMs : 0.0,
+                static_cast<unsigned long long>(stats.feedIdleFlushes - was.feedIdleFlushes));
+    else if (core.frame.samples)
+        HostLog(h,
+                "vulkan d3d9: GPU time: per frame %.2f ms from first command to last (passes not timed), and "
+                "%.2f ms without work before the frame (%.2f max); %llu parts sent early to a GPU with nothing left",
+                average(core.frame), average(core.frameGap), core.frameGap.samples ? core.frameGap.maxMs : 0.0,
                 static_cast<unsigned long long>(stats.feedIdleFlushes - was.feedIdleFlushes));
     LogSlowFrames(*backend);
     if (core.recordThread)

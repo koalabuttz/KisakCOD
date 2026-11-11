@@ -334,6 +334,12 @@ struct OptionalFeatures
     // (Mesa's ANV counts vkCmdClearAttachments as a slow clear), and a
     // tile-based GPU loads nothing. On unless KISAK_VK_PASS_CLEARS=0.
     bool passClears;
+    // Every pass is timed with a pair of GPU timestamps (PassTimingsFor and
+    // CoreStats::framePasses). The one at a pass's end waits for all its work
+    // (ALL_COMMANDS), which on some drivers drains the GPU between passes.
+    // On unless KISAK_VK_PASS_TIMESTAMPS=0, which keeps only the frame's own
+    // pair: the frame's GPU time stays, the time in passes is not known.
+    bool passTimestamps;
     // The Legacy adapter submits a frame in parts while it is still being
     // drawn, so the GPU works on a frame as it is recorded instead of
     // starting when the frame ends (see FeedGpu in vk_legacy_draw.cpp). Each

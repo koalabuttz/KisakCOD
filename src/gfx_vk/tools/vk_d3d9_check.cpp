@@ -47,6 +47,14 @@
 namespace
 {
 namespace front = gfx_vk::d3d9;
+
+// Whether the back end times its passes (KISAK_VK_PASS_TIMESTAMPS=0: no).
+bool PassesTimed()
+{
+    const char *value = std::getenv("KISAK_VK_PASS_TIMESTAMPS");
+    return !(value && std::strcmp(value, "0") == 0);
+}
+
 namespace shaders = vk_legacy_check_shaders;
 
 constexpr UINT kSize = 128;
@@ -1876,6 +1884,7 @@ void Check::Tuning()
         double seconds = 0, fps = 0, draws = 0, passes = 0, sets = 0, reused = 0, constants = 0, renames = 0;
         double submissions = 0, gpuAverage = 0, gpuMin = 0, gpuMax = 0;
         bool gpuTime = false;
+        bool passesTimed = true; // false: the line without pass timestamps
         double inPasses = 0, between = 0, before = 0, beforeMax = 0;
     };
     const auto report = [&](bool reset) {
@@ -1911,6 +1920,18 @@ void Check::Tuning()
                             &out.inPasses, &out.between, &out.before, &out.beforeMax, &out.early)
                 == 5)
                 out.gpuTime = true;
+            double frameMs = 0;
+            if (KISAK_SCAN_NUMBERS(line.c_str(),
+                            "vulkan d3d9: GPU time: per frame %lf ms from first command to last (passes not timed), "
+                            "and %lf ms without work before the frame (%lf max); %llu parts sent early to a GPU with "
+                            "nothing left",
+                            &frameMs, &out.before, &out.beforeMax, &out.early)
+                == 4)
+            {
+                out.gpuTime = true;
+                out.passesTimed = false;
+                out.between = frameMs;
+            }
         }
         return out;
     };
@@ -1926,6 +1947,8 @@ void Check::Tuning()
     Equal("stats_gpu_time_line", first.gpuTime, first.timed > 0);
     if (first.gpuTime)
     {
+        // KISAK_VK_PASS_TIMESTAMPS=0 leaves passes untimed, and the line says so.
+        Equal("stats_passes_timed", first.passesTimed, PassesTimed());
         Equal("stats_gpu_time_values",
               first.inPasses >= 0.0 && first.between >= 0.0 && first.before >= 0.0 && first.beforeMax >= first.before,
               true);
@@ -2132,7 +2155,12 @@ void Check::SlowFrames()
         Equal("pipeline_frame_uploads", before(*pipelineLine, " texture uploads"), 0);
         // Its timestamps were read frames ago, where the device has them.
         Equal("pipeline_frame_gpu_time", pipelineLine->find("; GPU time not read") == std::string::npos, gpuTimed);
-        if (gpuTimed)
+        if (gpuTimed && !PassesTimed())
+            Equal("pipeline_frame_gpu_values",
+                  pipelineLine->find(" (passes not timed), ") != std::string::npos
+                      && before(*pipelineLine, " without work before it") >= 0.0,
+                  true);
+        else if (gpuTimed)
             Equal("pipeline_frame_gpu_values",
                   behind(*pipelineLine, "; GPU ") >= before(*pipelineLine, " in passes")
                       && before(*pipelineLine, " in passes") >= 0.0

@@ -278,7 +278,9 @@ void CollectTimestamps(Core &core, uint32_t slotIndex)
     }
     if (presented)
     {
-        AddTimings(core.stats.framePasses, passesMs);
+        // Without pass timestamps the time in passes is not known.
+        if (core.optional.passTimestamps)
+            AddTimings(core.stats.framePasses, passesMs);
         if (slot.frameNumber)
         {
             // Kept by the frame's number for FrameGpuTime.
@@ -370,7 +372,7 @@ bool BeginTimed(Core &core, const char *name, int &queryOut)
 {
     queryOut = -1;
     FrameSlot &slot = CurrentSlot(core);
-    if (!core.timestamps || slot.queriesUsed + 2 > kTimestampsPerSlot)
+    if (!core.timestamps || !core.optional.passTimestamps || slot.queriesUsed + 2 > kTimestampsPerSlot)
         return false;
     const uint32_t query = SlotQueryBase(core) + slot.queriesUsed;
     slot.queriesUsed += 2;

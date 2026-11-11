@@ -86,7 +86,11 @@ since the device was made or since the last call that started them again.
   with nothing of the last frame or this one to do. A GPU that is the limit
   shows next to nothing in the last two. It also counts the parts the idle
   rule sent early. The line needs GPU timestamps and is left out without
-  them.
+  them. With `KISAK_VK_PASS_TIMESTAMPS=0` the passes are not timed (each
+  one's closing timestamp waits for its work, which may cost a GPU that
+  drains between passes): the line then gives the frame's time from first
+  command to last and the time before it, says `passes not timed`, and so do
+  the slow frame lines.
 * `vulkan d3d9: slow frame N:` (up to three lines, the longest first) names
   the frames of the stretch that took longest, for the one long frame among
   thousands that an average hides. A frame here runs from the start of one
