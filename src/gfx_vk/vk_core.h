@@ -369,6 +369,15 @@ struct OptionalFeatures
     // (testing: every draw then starts a command buffer and a pass).
     bool gpuFeed;
     bool gpuFeedAlways;
+    // The Legacy adapter keeps a list of the pipelines each launch drew
+    // (DeviceDesc::pipelineListPath) and builds them on worker threads as soon
+    // as the shaders and declaration they need exist, so the first draw that
+    // needs one finds it built. On unless KISAK_VK_PIPELINES_AHEAD=0, which
+    // builds every pipeline at its first draw (and still writes the list).
+    bool pipelinesAhead;
+    // How many worker threads build them: KISAK_VK_PIPELINE_WORKERS (1 to 8),
+    // else 0, for one per three CPU threads, at most two.
+    uint32_t pipelineWorkers;
     // Draws recorded before a part is submitted (KISAK_VK_GPU_FEED_DRAWS,
     // default 128): that many while the GPU has under two submissions left,
     // more for each further one (up to four times).
@@ -744,6 +753,19 @@ void DestroyShaderModule(Core *core, VkShaderModule module);
 // Through the pipeline cache, counted in CoreStats (creation inside a frame is
 // counted separately: the target is none during play). VK_NULL_HANDLE on failure.
 VkPipeline CreateGraphicsPipeline(Core *core, const VkGraphicsPipelineCreateInfo &info);
+// The same through the pipeline cache, from any thread while the core lives:
+// it touches nothing of the core but the cache, which Vulkan synchronises, so
+// it counts nothing in CoreStats and sets no error. VK_NULL_HANDLE on failure,
+// with the result in `result`; `ms` is the time it took and `cacheHit` what
+// pipeline creation feedback said.
+struct OffThreadPipeline
+{
+    VkResult result = VK_SUCCESS;
+    double ms = 0.0;
+    bool cacheHit = false;
+};
+VkPipeline CreateGraphicsPipelineOffThread(Core *core, const VkGraphicsPipelineCreateInfo &info,
+                                           OffThreadPipeline &out);
 // Destroyed once the frames recorded so far have finished.
 void DestroyPipeline(Core *core, VkPipeline pipeline);
 // One sampler per distinct description, owned by the core.

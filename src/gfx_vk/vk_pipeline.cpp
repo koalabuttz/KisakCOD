@@ -176,6 +176,26 @@ VkPipeline CreateGraphicsPipeline(Core *core, const VkGraphicsPipelineCreateInfo
     return pipeline;
 }
 
+VkPipeline CreateGraphicsPipelineOffThread(Core *core, const VkGraphicsPipelineCreateInfo &info,
+                                           OffThreadPipeline &out)
+{
+    VkPipelineCreationFeedback pipelineFeedback{};
+    VkPipelineCreationFeedbackCreateInfo feedback{};
+    feedback.sType = VK_STRUCTURE_TYPE_PIPELINE_CREATION_FEEDBACK_CREATE_INFO;
+    feedback.pNext = info.pNext;
+    feedback.pPipelineCreationFeedback = &pipelineFeedback;
+    VkGraphicsPipelineCreateInfo chained = info;
+    chained.pNext = &feedback;
+
+    const auto start = std::chrono::steady_clock::now();
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    out.result = core->vk.vkCreateGraphicsPipelines(core->dev, core->pipelineCache, 1, &chained, nullptr, &pipeline);
+    out.ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    out.cacheHit = (pipelineFeedback.flags & VK_PIPELINE_CREATION_FEEDBACK_VALID_BIT)
+        && (pipelineFeedback.flags & VK_PIPELINE_CREATION_FEEDBACK_APPLICATION_PIPELINE_CACHE_HIT_BIT);
+    return out.result == VK_SUCCESS ? pipeline : VK_NULL_HANDLE;
+}
+
 void DestroyPipeline(Core *core, VkPipeline pipeline)
 {
     if (pipeline)

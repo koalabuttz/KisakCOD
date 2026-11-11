@@ -356,8 +356,6 @@ bool SyncRecording(Device &device)
     return true;
 }
 
-// ---- Layouts and pipelines ------------------------------------------------------------
-
 uint32_t BitCount(uint32_t bits)
 {
     uint32_t count = 0;
@@ -365,6 +363,10 @@ uint32_t BitCount(uint32_t bits)
         ++count;
     return count;
 }
+
+} // namespace
+
+// ---- Layouts and pipelines ------------------------------------------------------------
 
 Layout *GetLayout(Device &device, const LayoutKey &key)
 {
@@ -466,55 +468,82 @@ LayoutKey LayoutFor(const Shader &vs, const Shader &ps)
     return key;
 }
 
-VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t depthSamplers, uint32_t alphaCompare)
+VkShaderModule FindPixelModule(Device &device, Shader &ps, const Shader &vs, uint32_t depthSamplers,
+                               uint32_t alphaCompare, PixelModuleRecipe &recipe)
 {
-    std::vector<uint32_t> spirv;
-    std::string error;
-    const bool direct = ls::StagesLinkDirectly(vs.translated, ps.translated);
+    recipe = PixelModuleRecipe{};
+    recipe.direct = ls::StagesLinkDirectly(vs.translated, ps.translated);
     const bool fixed = Features(device.core).fixedDepthCompare;
-    if (direct && !fixed && !alphaCompare)
+    if (recipe.direct && !fixed && !alphaCompare)
     {
-        if (ps.module)
-            return ps.module;
-        const TimeInto timer(device.stats.pixelModuleMicros);
-        ++device.stats.pixelModules;
-        if (!ls::BuildSpirv(ps.translated, nullptr, spirv, error))
-        {
-            Fail(device, "pixel shader %08x: %s", ps.translated.bytecodeHash, error.c_str());
-            return VK_NULL_HANDLE;
-        }
-        ps.module = CreateShaderModule(device.core, spirv.data(), spirv.size() * sizeof(uint32_t));
+        recipe.plain = true;
         return ps.module;
     }
     // The vertex shader's id (none when the stages link as they stand), the
     // depth samplers above it where they are fixed, and the alpha test's
     // compare plus 1 above those where it is fixed (PipelineKey::alphaCompare).
-    const uint64_t moduleKey = uint64_t(alphaCompare & 0xf) << 52
-        | (fixed ? uint64_t(depthSamplers | 0x10000u) << 32 : 0) | (direct ? 0xffffffffu : vs.id);
-    auto found = ps.linked.find(moduleKey);
-    if (found != ps.linked.end())
-        return found->second;
-    const TimeInto timer(device.stats.pixelModuleMicros);
-    ++device.stats.pixelModules;
-    const uint32_t compare = alphaCompare ? alphaCompare - 1 : 0;
+    recipe.moduleKey = uint64_t(alphaCompare & 0xf) << 52
+        | (fixed ? uint64_t(depthSamplers | 0x10000u) << 32 : 0) | (recipe.direct ? 0xffffffffu : vs.pipelineId);
     // Where depth compare is fixed, so is the reference's clamp
     // (SamplerStateBlock::drefClamp, as FillUniformBlock writes it).
-    const uint32_t depth = depthSamplers
-        | (device.depthFormat != VK_FORMAT_D24_UNORM_S8_UINT ? ls::kFixedDepthClamp : 0u);
-    if (!ls::BuildSpirv(ps.translated, direct ? nullptr : &vs.translated, spirv, error,
-                        fixed ? &depth : nullptr, alphaCompare ? &compare : nullptr))
+    recipe.fixDepth = fixed;
+    recipe.depthCompare =
+        depthSamplers | (device.depthFormat != VK_FORMAT_D24_UNORM_S8_UINT ? ls::kFixedDepthClamp : 0u);
+    recipe.fixAlpha = alphaCompare != 0;
+    recipe.alphaCompare = alphaCompare ? alphaCompare - 1 : 0;
+    auto found = ps.linked.find(recipe.moduleKey);
+    return found != ps.linked.end() ? found->second : VK_NULL_HANDLE;
+}
+
+bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Shader &vs,
+                     std::vector<uint32_t> &spirv, std::string &error)
+{
+    if (recipe.plain)
+        return ls::BuildSpirv(ps.translated, nullptr, spirv, error);
+    return ls::BuildSpirv(ps.translated, recipe.direct ? nullptr : &vs.translated, spirv, error,
+                          recipe.fixDepth ? &recipe.depthCompare : nullptr,
+                          recipe.fixAlpha ? &recipe.alphaCompare : nullptr);
+}
+
+bool KeepPixelModule(Device &device, Shader &ps, const PixelModuleRecipe &recipe, VkShaderModule module)
+{
+    if (recipe.plain)
     {
-        Fail(device, "pixel shader %08x with vertex shader %08x: %s", ps.translated.bytecodeHash,
-             vs.translated.bytecodeHash, error.c_str());
+        if (ps.module)
+            return false;
+        ps.module = module;
+        return true;
+    }
+    if (!ps.linked.emplace(recipe.moduleKey, module).second)
+        return false;
+    if (!recipe.direct)
+        ++device.stats.shaderPairs;
+    return true;
+}
+
+namespace
+{
+VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t depthSamplers, uint32_t alphaCompare)
+{
+    PixelModuleRecipe recipe;
+    if (const VkShaderModule kept = FindPixelModule(device, ps, vs, depthSamplers, alphaCompare, recipe))
+        return kept;
+    const TimeInto timer(device.stats.pixelModuleMicros);
+    ++device.stats.pixelModules;
+    std::vector<uint32_t> spirv;
+    std::string error;
+    if (!BuildPixelSpirv(recipe, ps, vs, spirv, error))
+    {
+        if (recipe.direct)
+            Fail(device, "pixel shader %08x: %s", ps.translated.bytecodeHash, error.c_str());
+        else
+            Fail(device, "pixel shader %08x with vertex shader %08x: %s", ps.translated.bytecodeHash,
+                 vs.translated.bytecodeHash, error.c_str());
         return VK_NULL_HANDLE;
     }
-    VkShaderModule module = CreateShaderModule(device.core, spirv.data(), spirv.size() * sizeof(uint32_t));
+    const VkShaderModule module = CreateShaderModule(device.core, spirv.data(), spirv.size() * sizeof(uint32_t));
     if (module)
-    {
-        ps.linked.emplace(moduleKey, module);
-        if (!direct)
-            ++device.stats.shaderPairs;
-    }
+        KeepPixelModule(device, ps, recipe, module);
     return module;
 }
 
@@ -576,21 +605,39 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
             Fail(device, "cannot build the pixel shader: %s", LastError(device.core));
         return nullptr;
     }
+    PipelineInfo info;
+    MakePipelineInfo(info, key, vs, fragment, decl, *layout, Features(device.core).dynamicVertexStride);
+    const VkPipeline handle = CreateGraphicsPipeline(device.core, info.info);
+    if (!handle)
+    {
+        Fail(device, "cannot build the pipeline for shaders %08x/%08x: %s", vs.translated.bytecodeHash,
+             ps.translated.bytecodeHash, LastError(device.core));
+        return nullptr;
+    }
+    ++device.stats.pipelines;
+    if (device.frameOpen)
+        ++device.stats.pipelinesInFrame;
+    return AddPipeline(device, key, handle, layout, info.bindingMask, vs, ps, decl);
+}
 
-    VkPipelineShaderStageCreateInfo stages[2]{};
-    stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    stages[0].module = vs.module;
-    stages[0].pName = "main";
-    stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    stages[1].module = fragment;
-    stages[1].pName = "main";
+} // namespace
+
+void MakePipelineInfo(PipelineInfo &out, const PipelineKey &key, const Shader &vs, VkShaderModule fragment,
+                      const VertexDecl &decl, const Layout &layout, bool dynamicStride)
+{
+    out.stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    out.stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    out.stages[0].module = vs.module;
+    out.stages[0].pName = "main";
+    out.stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    out.stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    out.stages[1].module = fragment;
+    out.stages[1].pName = "main";
 
     // Each vertex shader input reads the declaration element with its usage
     // and index; inputs the declaration lacks read zero.
-    uint32_t bindingMask = 0;
-    std::vector<VkVertexInputAttributeDescription> attributes;
+    out.bindingMask = 0;
+    out.attributes.clear();
     for (const ls::IoEntry &input : vs.translated.reflection.inputs)
     {
         if (input.builtIn)
@@ -609,52 +656,44 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
                 break;
             }
         }
-        bindingMask |= 1u << attribute.binding;
-        attributes.push_back(attribute);
+        out.bindingMask |= 1u << attribute.binding;
+        out.attributes.push_back(attribute);
     }
-    const bool dynamicStride = Features(device.core).dynamicVertexStride;
-    std::vector<VkVertexInputBindingDescription> bindings;
+    out.bindings.clear();
     for (uint32_t binding = 0; binding <= kZeroBinding; ++binding)
     {
-        if (bindingMask & (1u << binding))
+        if (out.bindingMask & (1u << binding))
         {
             // The stride is dynamic where the device allows it, else the
             // key's. The zero binding steps per instance, so every vertex
             // reads its first element.
             const uint32_t stride = binding == kZeroBinding || dynamicStride ? 16 : key.strides[binding];
-            bindings.push_back({binding, stride, binding == kZeroBinding ? VK_VERTEX_INPUT_RATE_INSTANCE
-                                                                          : VK_VERTEX_INPUT_RATE_VERTEX});
+            out.bindings.push_back({binding, stride, binding == kZeroBinding ? VK_VERTEX_INPUT_RATE_INSTANCE
+                                                                              : VK_VERTEX_INPUT_RATE_VERTEX});
         }
     }
-    VkPipelineVertexInputStateCreateInfo vertexInput{};
-    vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInput.vertexBindingDescriptionCount = static_cast<uint32_t>(bindings.size());
-    vertexInput.pVertexBindingDescriptions = bindings.data();
-    vertexInput.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributes.size());
-    vertexInput.pVertexAttributeDescriptions = attributes.data();
+    out.vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    out.vertexInput.vertexBindingDescriptionCount = static_cast<uint32_t>(out.bindings.size());
+    out.vertexInput.pVertexBindingDescriptions = out.bindings.data();
+    out.vertexInput.vertexAttributeDescriptionCount = static_cast<uint32_t>(out.attributes.size());
+    out.vertexInput.pVertexAttributeDescriptions = out.attributes.data();
 
-    VkPipelineInputAssemblyStateCreateInfo assembly{};
-    assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    assembly.topology = key.topologyClass == 0 ? VK_PRIMITIVE_TOPOLOGY_POINT_LIST
-        : key.topologyClass == 1              ? VK_PRIMITIVE_TOPOLOGY_LINE_LIST
-                                              : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    VkPipelineViewportStateCreateInfo viewport{};
-    viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewport.viewportCount = 1;
-    viewport.scissorCount = 1;
-    VkPipelineRasterizationStateCreateInfo raster{};
-    raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    raster.polygonMode = static_cast<VkPolygonMode>(key.polygonMode);
-    raster.lineWidth = 1.0f;
-    VkPipelineMultisampleStateCreateInfo multisample{};
-    multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisample.rasterizationSamples = static_cast<VkSampleCountFlagBits>(key.samples);
-    VkPipelineDepthStencilStateCreateInfo depthStencil{};
-    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    VkPipelineColorBlendAttachmentState blends[kMaxRenderTargets]{};
+    out.assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    out.assembly.topology = key.topologyClass == 0 ? VK_PRIMITIVE_TOPOLOGY_POINT_LIST
+        : key.topologyClass == 1                  ? VK_PRIMITIVE_TOPOLOGY_LINE_LIST
+                                                  : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    out.viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    out.viewport.viewportCount = 1;
+    out.viewport.scissorCount = 1;
+    out.raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    out.raster.polygonMode = static_cast<VkPolygonMode>(key.polygonMode);
+    out.raster.lineWidth = 1.0f;
+    out.multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    out.multisample.rasterizationSamples = static_cast<VkSampleCountFlagBits>(key.samples);
+    out.depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     for (uint32_t i = 0; i < key.colorCount; ++i)
     {
-        VkPipelineColorBlendAttachmentState &blend = blends[i];
+        VkPipelineColorBlendAttachmentState &blend = out.blends[i];
         blend.blendEnable = key.blendEnable;
         blend.srcColorBlendFactor = static_cast<VkBlendFactor>(key.srcColor);
         blend.dstColorBlendFactor = static_cast<VkBlendFactor>(key.dstColor);
@@ -664,10 +703,9 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
         blend.alphaBlendOp = static_cast<VkBlendOp>(key.alphaOp);
         blend.colorWriteMask = key.writeMask[i];
     }
-    VkPipelineColorBlendStateCreateInfo blend{};
-    blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    blend.attachmentCount = key.colorCount;
-    blend.pAttachments = blends;
+    out.blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    out.blend.attachmentCount = key.colorCount;
+    out.blend.pAttachments = out.blends;
     static const VkDynamicState kDynamic[] = {
         VK_DYNAMIC_STATE_VIEWPORT,
         VK_DYNAMIC_STATE_SCISSOR,
@@ -688,52 +726,49 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
         VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE, // last: left out when strides are baked in
     };
     constexpr uint32_t kDynamicCount = static_cast<uint32_t>(sizeof(kDynamic) / sizeof(kDynamic[0]));
-    VkPipelineDynamicStateCreateInfo dynamic{};
-    dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamic.dynamicStateCount = dynamicStride ? kDynamicCount : kDynamicCount - 1;
-    dynamic.pDynamicStates = kDynamic;
+    out.dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    out.dynamic.dynamicStateCount = dynamicStride ? kDynamicCount : kDynamicCount - 1;
+    out.dynamic.pDynamicStates = kDynamic;
 
-    VkFormat colorFormats[kMaxRenderTargets];
     for (uint32_t i = 0; i < key.colorCount; ++i)
-        colorFormats[i] = static_cast<VkFormat>(key.colorFormats[i]);
-    VkPipelineRenderingCreateInfo rendering{};
-    rendering.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    rendering.colorAttachmentCount = key.colorCount;
-    rendering.pColorAttachmentFormats = colorFormats;
-    rendering.depthAttachmentFormat = static_cast<VkFormat>(key.depthFormat);
-    rendering.stencilAttachmentFormat = static_cast<VkFormat>(key.depthFormat); // the core's formats have stencil
+        out.colorFormats[i] = static_cast<VkFormat>(key.colorFormats[i]);
+    out.rendering.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    out.rendering.colorAttachmentCount = key.colorCount;
+    out.rendering.pColorAttachmentFormats = out.colorFormats;
+    out.rendering.depthAttachmentFormat = static_cast<VkFormat>(key.depthFormat);
+    out.rendering.stencilAttachmentFormat = static_cast<VkFormat>(key.depthFormat); // the core's formats have stencil
 
-    VkGraphicsPipelineCreateInfo info{};
-    info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    info.pNext = &rendering;
-    info.stageCount = 2;
-    info.pStages = stages;
-    info.pVertexInputState = &vertexInput;
-    info.pInputAssemblyState = &assembly;
-    info.pViewportState = &viewport;
-    info.pRasterizationState = &raster;
-    info.pMultisampleState = &multisample;
-    info.pDepthStencilState = &depthStencil;
-    info.pColorBlendState = &blend;
-    info.pDynamicState = &dynamic;
-    info.layout = layout->pipeline;
+    out.info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    out.info.pNext = &out.rendering;
+    out.info.stageCount = 2;
+    out.info.pStages = out.stages;
+    out.info.pVertexInputState = &out.vertexInput;
+    out.info.pInputAssemblyState = &out.assembly;
+    out.info.pViewportState = &out.viewport;
+    out.info.pRasterizationState = &out.raster;
+    out.info.pMultisampleState = &out.multisample;
+    out.info.pDepthStencilState = &out.depthStencil;
+    out.info.pColorBlendState = &out.blend;
+    out.info.pDynamicState = &out.dynamic;
+    out.info.layout = layout.pipeline;
+}
+
+Pipeline *AddPipeline(Device &device, const PipelineKey &key, VkPipeline handle, Layout *layout,
+                      uint32_t bindings, const Shader &vs, const Shader &ps, const VertexDecl &decl)
+{
     Pipeline pipeline;
-    pipeline.pipeline = CreateGraphicsPipeline(device.core, info);
-    if (!pipeline.pipeline)
-    {
-        Fail(device, "cannot build the pipeline for shaders %08x/%08x: %s", vs.translated.bytecodeHash,
-             ps.translated.bytecodeHash, LastError(device.core));
-        return nullptr;
-    }
+    pipeline.pipeline = handle;
     pipeline.layout = layout;
-    pipeline.bindings = bindingMask;
+    pipeline.bindings = bindings;
+    pipeline.vsHash = vs.contentHash;
+    pipeline.psHash = ps.contentHash;
+    pipeline.declHash = decl.contentHash;
     ListUniformBlocks(pipeline, *layout, vs, ps);
-    ++device.stats.pipelines;
-    if (device.frameOpen)
-        ++device.stats.pipelinesInFrame;
     return &device.pipelines.emplace(key, pipeline).first->second;
 }
 
+namespace
+{
 // The alpha test's compare as the render state gives it (ls::AlphaCompare):
 // Always while the test is off.
 uint32_t AlphaCompareNow(const Device &device)
@@ -748,9 +783,9 @@ PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, co
 {
     const uint32_t *rs = device.renderStates;
     PipelineKey key{};
-    key.vs = vs.id;
-    key.ps = ps.id;
-    key.decl = decl.id;
+    key.vs = vs.pipelineId;
+    key.ps = ps.pipelineId;
+    key.decl = decl.pipelineId;
     key.depthSamplers = static_cast<uint16_t>(depthSamplers);
     if (!Features(device.core).dynamicVertexStride)
     {
@@ -803,10 +838,19 @@ PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, co
 
 // ---- Per-draw state ---------------------------------------------------------------------
 
-VkSampler SamplerFor(Device &device, uint32_t slot, const Texture *texture)
+// What of a texture its sampler depends on (SamplerFor): a cube, a depth
+// format, and one level or more. No texture is like one of a single level.
+uint8_t SamplerTraits(const Texture *texture)
 {
-    if (device.samplers[slot])
-        return device.samplers[slot];
+    if (!texture)
+        return 0;
+    return static_cast<uint8_t>((texture->desc.kind == TextureKind::Cube ? 1u : 0u)
+                                | (texture->format->depth ? 2u : 0u) | (texture->desc.levels > 1 ? 4u : 0u));
+}
+
+// The sampler for a slot's states and this texture, from the core's cache.
+VkSampler MakeSampler(Device &device, uint32_t slot, const Texture *texture)
+{
     const uint32_t *ss = device.samplerStates[slot];
     VkSamplerCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -868,7 +912,22 @@ VkSampler SamplerFor(Device &device, uint32_t slot, const Texture *texture)
         info.minLod = float(ss[d3d::SAMP_MAXMIPLEVEL]);
         info.maxLod = std::max(16.0f, info.minLod);
     }
-    device.samplers[slot] = GetSampler(device.core, info);
+    return GetSampler(device.core, info);
+}
+
+// MakeSampler's, kept in the slot until its states change or a texture with
+// other traits is bound (Device::verifyShortcuts: made again and compared).
+VkSampler SamplerFor(Device &device, uint32_t slot, const Texture *texture)
+{
+    const uint8_t traits = SamplerTraits(texture);
+    if (device.samplers[slot] && device.samplerTraits[slot] == traits)
+    {
+        if (device.verifyShortcuts && MakeSampler(device, slot, texture) != device.samplers[slot])
+            Fail(device, "the sampler kept for slot %u is not the one its states and texture give", slot);
+        return device.samplers[slot];
+    }
+    device.samplers[slot] = MakeSampler(device, slot, texture);
+    device.samplerTraits[slot] = traits;
     return device.samplers[slot];
 }
 
@@ -995,16 +1054,18 @@ bool BindTextures(Device &device, const Shader &vs, const Shader &ps, DrawTextur
 // draw must be in one buffer; when the frame's memory moves on to another
 // one, the first draw after that writes all its blocks again.
 
+// No member initializers: BindUniforms keeps an array of them per draw and
+// fills in the ones the pipeline has (KeyForBlock).
 struct UniformKey
 {
-    uint64_t key = 0;
-    uint32_t shader = 0;
+    uint64_t key;
+    uint32_t shader;
 };
 
 UniformKey KeyForBlock(const Device &device, uint32_t binding, const Shader &vs, const Shader &ps,
                        const DrawTextures &textures)
 {
-    UniformKey key;
+    UniformKey key{0, 0};
     switch (static_cast<ls::Uniform>(binding & 15))
     {
     case ls::Uniform::AlphaTest:
@@ -1609,9 +1670,15 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
         if (!pipeline || !(key == device.lastPipelineKey))
         {
             auto found = device.pipelines.find(key);
-            pipeline = found != device.pipelines.end() ? &found->second : BuildPipeline(device, key, *vs, *ps, *decl);
+            pipeline = found != device.pipelines.end() ? &found->second : nullptr;
+            if (!pipeline && device.ahead)
+                pipeline = AheadFind(device, key);
+            if (!pipeline)
+                pipeline = BuildPipeline(device, key, *vs, *ps, *decl);
             if (!pipeline)
                 return false;
+            if (!pipeline->drawn)
+                AheadDrawn(device, key, *pipeline);
             device.lastPipeline = pipeline;
             device.lastPipelineKey = key;
         }
@@ -2047,8 +2114,9 @@ void SetTexture(Device *device, uint32_t sampler, Texture *texture)
     const int slot = SamplerSlot(sampler);
     if (slot < 0 || device->textures[slot] == texture)
         return;
+    // The slot's sampler stays: SamplerFor builds another when this texture's
+    // traits differ from those it was built for.
     device->textures[slot] = texture;
-    device->samplers[slot] = VK_NULL_HANDLE; // depends on the texture's kind, levels and format
 }
 
 void SetVertexShader(Device *device, Shader *shader)

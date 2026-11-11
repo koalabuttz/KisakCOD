@@ -150,12 +150,21 @@ struct Shader
     // vertex shader they are linked to, the depth samplers where those are
     // fixed, and the alpha test's compare where that is).
     std::unordered_map<uint64_t, VkShaderModule> linked;
+    // 64-bit FNV-1a of the bytecode, by 8-byte words (ContentHash): names the
+    // shader in the pipeline list, across launches.
+    uint64_t contentHash = 0;
+    // The id pipeline keys use: that of the oldest live shader translated to
+    // the same code (Device::sameShaders), so shader objects created again
+    // from the same bytecode share their pipelines and pixel modules.
+    uint32_t pipelineId = 0;
 };
 
 struct VertexDecl
 {
     uint32_t id = 0;
     std::vector<VertexElement> elements;
+    uint64_t contentHash = 0; // of the elements, as Shader::contentHash
+    uint32_t pipelineId = 0;  // as Shader::pipelineId, for the same elements
 };
 
 struct Query
@@ -275,9 +284,55 @@ struct Pipeline
         VkDescriptorSet set = VK_NULL_HANDLE;
     } lastingUniforms[kLastingUniformSets];
     uint32_t lastingUniformNext = 0;
+    // The contents of its shaders and declaration (Shader::contentHash), for
+    // the pipeline list, and whether a draw has used it yet (AheadDrawn).
+    uint64_t vsHash = 0, psHash = 0, declHash = 0;
+    bool drawn = false;
+    bool ahead = false; // built by a worker (vk_legacy_ahead.cpp)
 };
 
+// A pixel shader module a pipeline needs and nobody has built yet: how to
+// build it (PixelModule in vk_legacy_draw.cpp) and where the shader keeps it.
+struct PixelModuleRecipe
+{
+    bool direct = false;          // the stages link as they stand: no vertex shader passed
+    bool plain = false;           // nothing fixed either: Shader::module, else Shader::linked
+    uint64_t moduleKey = 0;       // Shader::linked's key
+    bool fixDepth = false;        // depthCompare is passed
+    uint32_t depthCompare = 0;
+    bool fixAlpha = false;        // alphaCompare is passed
+    uint32_t alphaCompare = 0;
+};
+
+// The create info of a graphics pipeline and everything it points at
+// (MakePipelineInfo in vk_legacy_draw.cpp). It points into itself: neither
+// copied nor moved.
+struct PipelineInfo
+{
+    PipelineInfo() = default;
+    PipelineInfo(const PipelineInfo &) = delete;
+    PipelineInfo &operator=(const PipelineInfo &) = delete;
+
+    VkPipelineShaderStageCreateInfo stages[2]{};
+    std::vector<VkVertexInputAttributeDescription> attributes;
+    std::vector<VkVertexInputBindingDescription> bindings;
+    VkPipelineVertexInputStateCreateInfo vertexInput{};
+    VkPipelineInputAssemblyStateCreateInfo assembly{};
+    VkPipelineViewportStateCreateInfo viewport{};
+    VkPipelineRasterizationStateCreateInfo raster{};
+    VkPipelineMultisampleStateCreateInfo multisample{};
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    VkPipelineColorBlendAttachmentState blends[kMaxRenderTargets]{};
+    VkPipelineColorBlendStateCreateInfo blend{};
+    VkPipelineDynamicStateCreateInfo dynamic{};
+    VkFormat colorFormats[kMaxRenderTargets]{};
+    VkPipelineRenderingCreateInfo rendering{};
+    VkGraphicsPipelineCreateInfo info{};
+    uint32_t bindingMask = 0; // Pipeline::bindings
+};
 // ---- The device ------------------------------------------------------------------------
+
+struct Ahead; // the pipeline list and its workers (vk_legacy_ahead.cpp)
 
 constexpr uint32_t kVsFloatRegisters = 256;
 constexpr uint32_t kPsFloatRegisters = 224;
@@ -368,6 +423,11 @@ struct Device
     VkDescriptorSetLayout emptySet = VK_NULL_HANDLE; // fills set 0 when a pair reads textures only
     std::unordered_map<LayoutKey, std::unique_ptr<Layout>, LayoutKeyHash> layouts;
     std::unordered_map<PipelineKey, Pipeline, PipelineKeyHash> pipelines;
+    // Live shaders and declarations by content hash, oldest first: those with
+    // the same code or elements share one pipeline id (Shader::pipelineId),
+    // and the pipelines keyed by it go when the last of them does.
+    std::unordered_map<uint64_t, std::vector<Shader *>> sameShaders;
+    std::unordered_map<uint64_t, std::vector<VertexDecl *>> sameDecls;
     // The last draw's pipeline and key: a draw with the same key skips the
     // hash lookup. Pipelines erased from the map clear it.
     Pipeline *lastPipeline = nullptr;
@@ -396,7 +456,11 @@ struct Device
     uint32_t renderStates[d3d::RS_COUNT] = {};
     uint32_t samplerStates[kSamplerSlots][d3d::SAMP_COUNT] = {};
     Texture *textures[kSamplerSlots] = {};
-    VkSampler samplers[kSamplerSlots] = {}; // built from samplerStates and the bound texture; null: stale
+    // Built from samplerStates and what of the texture it was built for
+    // matters (SamplerTraits); null: stale. A texture with the same traits
+    // takes the slot's sampler as it is.
+    VkSampler samplers[kSamplerSlots] = {};
+    uint8_t samplerTraits[kSamplerSlots] = {};
     Shader *vertexShader = nullptr;
     Shader *pixelShader = nullptr;
     VertexDecl *decl = nullptr;
@@ -508,6 +572,9 @@ struct Device
     } lastingTextures;
     uint64_t lastingGeneration = 1;
     uint32_t warnedOnce = 0; // bit per one-time warning
+    // The pipeline list and the workers that build pipelines ahead
+    // (vk_legacy_ahead.cpp). Null until StartAhead.
+    Ahead *ahead = nullptr;
 };
 
 // vk_legacy_device.cpp
@@ -571,6 +638,47 @@ void DestroyPipelineObjects(Device &device);
 // Index into Device::textures and samplerStates for a D3D9 sampler number; -1 for none.
 int SamplerSlot(uint32_t sampler);
 void ResetState(Device &device);
+
+// Pipelines (vk_legacy_draw.cpp), shared with the workers that build them
+// ahead. LayoutFor and GetLayout run on the device's thread.
+LayoutKey LayoutFor(const Shader &vs, const Shader &ps);
+Layout *GetLayout(Device &device, const LayoutKey &key);
+// The pixel module a pipeline of this key needs: the one the shader keeps, or
+// null with how to build it in recipe.
+VkShaderModule FindPixelModule(Device &device, Shader &ps, const Shader &vs, uint32_t depthSamplers,
+                               uint32_t alphaCompare, PixelModuleRecipe &recipe);
+// Builds that module's SPIR-V. Reads only the two shaders' translations, which
+// never change: safe on any thread.
+bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Shader &vs,
+                     std::vector<uint32_t> &spirv, std::string &error);
+// Gives the shader a module built from recipe to keep; false (and the module
+// is left to the caller) when it already keeps one there.
+bool KeepPixelModule(Device &device, Shader &ps, const PixelModuleRecipe &recipe, VkShaderModule module);
+// Fills info for a pipeline of key. Reads only its arguments: safe on any
+// thread while they live.
+void MakePipelineInfo(PipelineInfo &info, const PipelineKey &key, const Shader &vs, VkShaderModule fragment,
+                      const VertexDecl &decl, const Layout &layout, bool dynamicStride);
+// Adds a built pipeline to Device::pipelines (it must not be there yet).
+Pipeline *AddPipeline(Device &device, const PipelineKey &key, VkPipeline handle, Layout *layout,
+                      uint32_t bindings, const Shader &vs, const Shader &ps, const VertexDecl &decl);
+
+// vk_legacy_ahead.cpp: the pipeline list and the workers that build pipelines
+// ahead (vk_legacy.h, "Pipelines built ahead"). Everything here runs on the
+// device's thread; the workers take only what these hand them.
+void StartAhead(Device &device, const char *listPath);
+// Stops the workers, takes what they built and writes the list.
+void StopAhead(Device &device);
+void AheadShaderCreated(Device &device, Shader &shader);
+void AheadDeclCreated(Device &device, VertexDecl &decl);
+// Before a shader or declaration goes: no worker uses it from here on, and
+// what they built with it is in Device::pipelines (for ForgetPipelines).
+void AheadForget(Device &device, uint32_t id, uint64_t contentHash, bool shader);
+// A draw found no pipeline for key in Device::pipelines: the one a worker has
+// built or is building for it (waiting for that), else null.
+Pipeline *AheadFind(Device &device, const PipelineKey &key);
+// The first draw to use a pipeline: lists it, or marks its entry drawn.
+void AheadDrawn(Device &device, const PipelineKey &key, Pipeline &pipeline);
+uint64_t ContentHash(const void *data, size_t bytes, uint64_t hash = 14695981039346656037ull);
 
 // vk_legacy_shader_cache.cpp: translated shaders by their bytecode, shared by
 // every device in the process (the file side is public, in vk_legacy.h).
