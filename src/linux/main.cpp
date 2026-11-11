@@ -418,9 +418,13 @@ void Sys_DetectCpuVendorAndName(char *vendor, char *name)
 
 void Sys_DetectVideoCard(int descLimit, char *description)
 {
-#ifdef KISAK_LINUX_GAME_CLIENT
-    // Sys_FindInfo runs before the renderer opens a device, so the adapter is not
-    // known yet; the renderer logs DXVK's adapter when it creates the device.
+#if defined(KISAK_LINUX_GAME_CLIENT) && !defined(__vita__)
+    // As win_configure.cpp: adapter 0's name, which autoconfigure matches
+    // against configure_mp.csv's GPU rows (texture_memory.cpp).
+    Sys_DetectClientVideoCard(descLimit, description);
+#elif defined(KISAK_LINUX_GAME_CLIENT)
+    // The Vita's D3D9 is its own graphics back end, made once by the renderer,
+    // so the Vita keeps the text it always had.
     I_strncpyz(description, "Direct3D 9 through DXVK Native (adapter reported by the renderer)", descLimit);
 #else
     // A dedicated server has no video device; say so rather than inventing one.
@@ -924,15 +928,16 @@ int main(int argc, char **argv)
     Com_InitParse();
     Dvar_Init();
     InitTiming();
+#ifdef KISAK_LINUX_GAME_CLIENT
+    // Before the renderer creates its window, so the window is adopted at once,
+    // and before Sys_FindInfo asks D3D9 for the video card, which needs the
+    // DXVK window system this chooses.
+    Sys_InstallClientWindow();
+#endif
     Sys_FindInfo();
 
     Profile_Init();
     Profile_InitContext(0);
-
-#ifdef KISAK_LINUX_GAME_CLIENT
-    // Before the renderer creates its window, so the window is adopted at once.
-    Sys_InstallClientWindow();
-#endif
 #ifdef KISAK_LINUX_STEAM
     // As WinMain: Steam is up before Com_Init runs the command line, so a
     // +connect on it can get a ticket. It never bypasses authentication.
