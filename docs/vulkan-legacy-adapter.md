@@ -286,7 +286,9 @@ depth-compared here), and the shader cache keeps that module. The pipeline
 kept from the draw before stays only while the depth bits match, so binding
 a depth texture where a colour one was is enough to change it (the
 `shadow_map` scene of the D3D9 front's check does that with nothing else
-changed).
+changed). On the laptop (run 20) this is worth 11 fps at 4 samples (173.2
+against 162.0) and about 0.4 ms of GPU time a frame, and the pixel shaders'
+median falls from 232 to 157 instructions.
 
 `KISAK_VK_DEPTH_COMPARE=dynamic` keeps the branch, the only way before
 2026-11-11 except on MoltenVK. The validation layer then checks the compare

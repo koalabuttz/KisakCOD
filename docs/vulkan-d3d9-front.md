@@ -662,6 +662,18 @@ window). Vulkan runs at 473.4, 457.4 and 477.9 frames a second and the real
 behind where run 9 had about 5%, though the launches of each spread as far
 as that. The GPU is busy for about 0.9 ms of a frame, so the PC still waits
 for the CPU. Report: `renderer/vulkan-backend-pc-run-10.md`.
+PC run 11 (2026-11-11, c2db610c, master after PR 232, the Release artifact,
+the machine alone) measures the shaders of runs 18 and 19 there: Vulkan
+runs at 477.6, 460.1 and 458.4 frames a second (mean 465.4, run 10 469.6),
+so the shorter shaders do not move the PC, which waits for the CPU. The GPU
+is busy 0.80 ms of a frame (run 10 0.90). Against the real `d3d9.dll` the
+answer depends on how it is counted: its two launches read 471.0 and 446.3
+by the counters (Vulkan 1.5% ahead) and 485.7 and 459.3 by the game's frame
+log (Vulkan 1.4% behind), and its launches differ 5 to 6% from each other.
+Vulkan's slowest frames are longer (25 to 97 ms against 7 to 8 ms), one of
+them two pipelines built during play. The first launch with an empty cache
+spent 3.4 s building 131 pipelines, where run 10 spent 1.1 s on 133.
+Report: `renderer/vulkan-backend-pc-run-11.md`.
 
 The device probe with `--backend vulkan` runs `r_init.cpp`'s device start
 unchanged (`R_PreCreateWindow`, `R_CreateWindow`, `R_CreateDevice`), clears,
@@ -834,6 +846,19 @@ evidence):
   per launch whichever back end or switch draws it (DXVK and Vulkan share
   one); the differences, up to 0.4 luma in a cell, follow the launch, not the
   switches. Report: `renderer/vulkan-backend-laptop-run-19.md`.
+* Depth compare (run 20, 2026-11-11, build d6b2a634, the same scene at 4
+  samples): fixed per pipeline (N, the default) against read at run time (D,
+  `KISAK_VK_DEPTH_COMPARE=dynamic`). The repeat that waited for a quieter
+  desktop (N D D N, every row captured twice) gave N 173.2 fps with a GPU
+  frame of 5.09 ms and D 162.0 fps with 5.48 ms: every N capture (170.8 to
+  176.0) beat every D capture (161.5 to 162.7). The first sitting, with the
+  desktop's load uneven between rows, pointed the same way in every pairing.
+  The branch costs about 0.4 ms of GPU time a frame. Mesa's statistics of N:
+  pixel median 157 instructions and 2,634 cycles (run 19: 232 and 7,947; DXVK
+  359 and 9,038), vertex unchanged at 114 and 434, no spills, 183 pixel
+  shaders (run 19: 226; DXVK 169). The picture at the ground view, by numbers
+  only, falls on one of the states run 19 found. Report:
+  `renderer/vulkan-backend-laptop-run-20.md`.
 * Present mode: the laptop's swapchain still says `MAILBOX, 4 images` with
   vsync off now that the core asks for IMMEDIATE first (run 11), so its
   surface does not offer IMMEDIATE.
@@ -880,8 +905,8 @@ evidence):
   launch, with a repeated launch as the baseline
   (`renderer/model-lighting/luma_grid.py` in the project files).
 
-Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11,12,13,14,15,16,17,18,19}.md`,
-`renderer/vulkan-backend-pc-run-{6,7,8,9,10}.md` and
+Reports: `renderer/vulkan-backend-laptop-run-{4,5,6,7,8,9,11,12,13,14,15,16,17,18,19,20}.md`,
+`renderer/vulkan-backend-pc-run-{6,7,8,9,10,11}.md` and
 `renderer/model-lighting/laptop-run-1.md` in the project files.
 
 ## Next
@@ -890,11 +915,13 @@ The laptop's gap to DXVK is closed: at the same 4 samples Vulkan draws run
 13's scene 2% faster than DXVK (laptop run 19), after the fast multiply rule
 (run 18), the alpha test fixed per pipeline and the legacy state the game
 never changes held as constants ([shaders](vulkan-legacy-shaders.md#legacy-state)).
-Run 13 had it 35% behind. What is left in the shaders: the depth compare read
-at run time around each sample (fixed per pipeline only on MoltenVK), and
-more distinct pixel shaders compiled than DXVK (226 against 169). On the
-Windows PC, in a Release build, Vulkan was about 3% behind Direct3D 9 (PC
-run 10) and the PC waits for the CPU: what is left is the time per frame,
-the front's lock first; PC run 11 measures today's shaders there. Then the
-pipelines built during play, which are the long frame the laptop sees about
-every few minutes (laptop run 12).
+Run 13 had it 35% behind. The depth compare fixed per pipeline
+([adapter](vulkan-legacy-adapter.md#depth-compare)) took the pixel shaders'
+median to 157 instructions against DXVK's 359 (run 20), and Vulkan now
+compiles 183 pixel shaders against DXVK's 169. On the Windows PC, in a
+Release build, Vulkan is level with Direct3D 9 within the spread of their
+launches (PC run 11), and the PC waits for the CPU: what is left there is
+the time per frame, the front's lock first. Then the pipelines: built during
+play they are the long frames on both machines (laptop run 12, PC run 11),
+and a first launch with an empty cache built them three times slower in PC
+run 11 than in run 10.
