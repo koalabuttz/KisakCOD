@@ -439,6 +439,7 @@ HRESULT STDMETHODCALLTYPE Device::Reset(D3DPRESENT_PARAMETERS *params)
     params_.MultiSampleType = samples > 1 ? static_cast<D3DMULTISAMPLE_TYPE>(samples) : D3DMULTISAMPLE_NONE;
     params_.MultiSampleQuality = 0;
     DefaultState();
+    ApplyGamma(); // windowed or fullscreen may have changed
     return D3D_OK;
 }
 
@@ -495,10 +496,31 @@ HRESULT STDMETHODCALLTYPE Device::SetDialogBoxMode(BOOL)
 void STDMETHODCALLTYPE Device::SetGammaRamp(UINT swapChain, DWORD, const D3DGAMMARAMP *ramp)
 {
     const FrontLock lock;
-    // Kept for GetGammaRamp. DXVK applies the ramp only to fullscreen
-    // swapchains; the Vulkan front draws windowed and leaves it out.
     if (swapChain == 0 && ramp)
+    {
         gamma_ = *ramp;
+        ApplyGamma();
+    }
+}
+
+// D3D9 (and DXVK) apply the ramp of a fullscreen swapchain only; a windowed
+// one keeps it for GetGammaRamp. The adapter applies it as Present draws the
+// image into the window, so the desktop's own gamma is never changed.
+void Device::ApplyGamma()
+{
+#if !defined(KISAK_GFX_GXM)
+    if (params_.Windowed)
+    {
+        lg::SetGammaRamp(legacy_, nullptr);
+        return;
+    }
+    static_assert(sizeof(lg::GammaRamp) == sizeof(D3DGAMMARAMP), "a ramp is 3 x 256 16-bit entries");
+    lg::GammaRamp ramp;
+    std::memcpy(ramp.red, gamma_.red, sizeof(ramp.red));
+    std::memcpy(ramp.green, gamma_.green, sizeof(ramp.green));
+    std::memcpy(ramp.blue, gamma_.blue, sizeof(ramp.blue));
+    lg::SetGammaRamp(legacy_, &ramp);
+#endif
 }
 
 void STDMETHODCALLTYPE Device::GetGammaRamp(UINT swapChain, D3DGAMMARAMP *ramp)

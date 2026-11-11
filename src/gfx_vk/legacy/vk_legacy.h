@@ -299,6 +299,7 @@ struct DeviceStats
     uint64_t textureReadbacks; // levels read back to lock a texture again (once each)
     uint64_t uploadBytes;
     uint64_t uploadMicros;     // staging those uploads
+    uint64_t gammaPresents;    // frames Present showed through the gamma ramp (SetGammaRamp)
 };
 const DeviceStats &Stats(const Device *device);
 
@@ -555,6 +556,27 @@ enum class PresentResult
     Failed,
 };
 PresentResult Present(Device *device);
+#if !defined(KISAK_GFX_GXM)
+// With `shown`, the window's image is also read back as Present leaves it
+// (ReadImage on the swapchain image, which needs CoreDesc::allowCapture), for
+// checks of what reaches the window; *shown stays null when it cannot be.
+PresentResult Present(Device *device, gfx_vk::Readback **shown);
+#endif
+
+#if !defined(KISAK_GFX_GXM)
+// D3D9's gamma ramp of a fullscreen swapchain (SetGammaRamp): Present maps
+// each channel of the shown image through it on the way to the window, with
+// one full-screen pass. Null, or a ramp that keeps every value (i * 257),
+// shows the image as drawn and costs nothing. The front passes it only for a
+// fullscreen device, since D3D9 ignores the ramp of a windowed one.
+struct GammaRamp
+{
+    uint16_t red[256];
+    uint16_t green[256];
+    uint16_t blue[256];
+};
+void SetGammaRamp(Device *device, const GammaRamp *ramp);
+#endif
 
 // ---- Passes of another user of the core (the Modern path) --------------------------------
 //

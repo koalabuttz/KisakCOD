@@ -29,6 +29,7 @@ buffer by the core's `Recording()` number.
 | `vk_legacy_device.cpp` | Device creation (D3D9's default states, 1x1 stand-in textures for empty samplers, the back buffer), `ResetState`, errors and one-time warnings. |
 | `vk_legacy_resources.cpp` | Formats, textures and their locks, surfaces, buffers and their locks, shaders, vertex declarations. |
 | `vk_legacy_draw.cpp` | States, pipelines, descriptors, constants, passes, draws, clears, copies, present, queries. |
+| `vk_legacy_gamma.cpp` | The fullscreen gamma ramp, drawn into the window's image by `Present` (GLSL in `shaders/`, SPIR-V in `vk_legacy_shaders.h` from `scripts/tools/vulkan/gen_spirv_header.py`). |
 
 ## How a draw works
 
@@ -209,6 +210,20 @@ buffer by the core's `Recording()` number.
   0.553 times its brightness, so desktop captures, and real D3D9's windowed
   screenshots (a copy of the desktop), read darker than the frame drawn. In
   exclusive fullscreen, d3d9 and Vulkan screenshots agree (PC run 4).
+* **Gamma ramp.** `SetGammaRamp` takes D3D9's ramp of a fullscreen swapchain
+  (the front hands it over only for a fullscreen device, see
+  [front](vulkan-d3d9-front.md)). While a ramp other than the identity is set,
+  `Present` draws the shown image into the swapchain image with one
+  full-screen pass (`vk_legacy_gamma.cpp`, shaders in
+  `src/gfx_vk/legacy/shaders`) that looks each channel up in the ramp, a
+  256-texel `R16G16B16A16_UNORM` image, instead of blitting. A back buffer of
+  another size than the window is scaled with the linear filter first, as the
+  blit scales it. The back buffer and front buffer keep what was drawn, so
+  screenshots and `GetFrontBufferData` are unchanged, as with D3D9's hardware
+  ramp, and the desktop's own gamma is never touched. The pass is timed as
+  `gamma`; `DeviceStats::gammaPresents` counts the frames it drew. If the pass
+  cannot be made, a warning is logged once and `Present` blits. This is what
+  makes `r_gamma` (the brightness setting) work in fullscreen.
 
 ## Resources and D3D9's lock rules
 
@@ -402,7 +417,12 @@ and part of the viewport stay in the pass; its pixels are the same either
 way. The
 `shader_cache` scene translates two shaders, takes one again from memory,
 writes and reads back a cache file in the temporary directory, draws with the
-shaders read from it, and checks that a damaged file is refused.
+shaders read from it, and checks that a damaged file is refused. The
+`gamma` scene sets a ramp that inverts red and squares blue, presents with the
+window's image read back (`Present(device, &readback)`, which needs a core
+made with `allowCapture`), and checks that image and the untouched front
+buffer, then checks that the identity ramp and no ramp show the frame as
+drawn by a blit.
 
 The hosted CI job `vulkan_window` (Linux) builds the check for x86_64 in Debug
 and RelWithDebInfo, runs `gen_legacy_check_shaders.py --check`, and runs that

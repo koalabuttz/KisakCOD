@@ -537,6 +537,8 @@ public:
     HRESULT STDMETHODCALLTYPE SetDialogBoxMode(BOOL enable) override;
     void STDMETHODCALLTYPE SetGammaRamp(UINT swapChain, DWORD flags, const D3DGAMMARAMP *ramp) override;
     void STDMETHODCALLTYPE GetGammaRamp(UINT swapChain, D3DGAMMARAMP *ramp) override;
+    // Hands gamma_ to the adapter for a fullscreen device, nothing for a windowed one.
+    void ApplyGamma();
     HRESULT STDMETHODCALLTYPE CreateTexture(UINT width, UINT height, UINT levels, DWORD usage, D3DFORMAT format,
                                             D3DPOOL pool, IDirect3DTexture9 **texture, HANDLE *shared) override;
     HRESULT STDMETHODCALLTYPE CreateVolumeTexture(UINT width, UINT height, UINT depth, UINT levels, DWORD usage,
