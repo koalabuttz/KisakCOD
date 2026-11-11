@@ -38,8 +38,24 @@ int Usage()
 {
     std::fprintf(stderr,
                  "usage: KisakCOD-vulkan-shaders translate FILE [--vertex VSFILE] [--out SPV] [--ir] [--depth-samplers MASK]\n"
-                 "       KisakCOD-vulkan-shaders batch DIR [--out-dir DIR] [--threads N]\n");
+                 "       KisakCOD-vulkan-shaders batch DIR [--out-dir DIR] [--threads N]\n"
+                 "KISAK_VK_STRICT_FLOATS=1 translates with D3D9's strict multiply, as the game does with it.\n");
     return 2;
+}
+
+// KISAK_VK_STRICT_FLOATS=1, as the game reads it (OptionalFeatures::strictFloats).
+bool StrictFloatsAsked()
+{
+#if defined(_MSC_VER)
+    char *text = nullptr;
+    size_t length = 0;
+    const bool strict = _dupenv_s(&text, &length, "KISAK_VK_STRICT_FLOATS") == 0 && text && std::strcmp(text, "1") == 0;
+    std::free(text);
+    return strict;
+#else
+    const char *text = std::getenv("KISAK_VK_STRICT_FLOATS");
+    return text && std::strcmp(text, "1") == 0;
+#endif
 }
 
 bool ReadFile(const fs::path &path, std::vector<uint8_t> &data)
@@ -335,6 +351,8 @@ int main(int argc, char **argv)
 {
     if (argc < 3)
         return Usage();
+    SetStrictFloats(StrictFloatsAsked());
+    std::printf("legacy_shader.floats=%s\n", StrictFloats() ? "strict" : "fast");
     if (!std::strcmp(argv[1], "translate"))
         return RunTranslate(argc - 2, argv + 2);
     if (!std::strcmp(argv[1], "batch"))

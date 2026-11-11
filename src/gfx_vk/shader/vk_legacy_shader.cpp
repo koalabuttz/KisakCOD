@@ -25,6 +25,7 @@
 #include "util/util_log.h"
 
 #include <array>
+#include <atomic>
 #include <cstring>
 #include <optional>
 #include <sstream>
@@ -446,6 +447,7 @@ bool Translate(const void *bytecode, size_t bytes, Shader &shader, std::string &
     {
         sm3::Converter::Options options = {};
         options.includeDebugNames = true;
+        options.fastFloatEmulation = !StrictFloats();
         sm3::Converter converter(util::ByteReader(bytecode, bytes), options);
         if (!converter.convertShader(builder))
         {
@@ -639,7 +641,18 @@ const char *TextureTypeName(TextureType type)
 #error "vulkan_shaders.cmake defines KISAK_LEGACY_SHADER_REVISION"
 #endif
 
-const char *TranslatorRevision() { return KISAK_LEGACY_SHADER_REVISION; }
+namespace
+{
+std::atomic<bool> g_strictFloats{false};
+} // namespace
+
+void SetStrictFloats(bool strict) { g_strictFloats.store(strict, std::memory_order_relaxed); }
+bool StrictFloats() { return g_strictFloats.load(std::memory_order_relaxed); }
+
+const char *TranslatorRevision()
+{
+    return StrictFloats() ? KISAK_LEGACY_SHADER_REVISION "+strict-floats" : KISAK_LEGACY_SHADER_REVISION;
+}
 
 namespace
 {
