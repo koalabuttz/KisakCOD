@@ -578,6 +578,7 @@ struct GammaRamp
 void SetGammaRamp(Device *device, const GammaRamp *ramp);
 #endif
 
+#if !defined(KISAK_GFX_GXM)
 // ---- Passes of another user of the core (the Modern path) --------------------------------
 //
 // Ends the pass being drawn and forgets what the device has bound, so that
@@ -589,6 +590,7 @@ bool HandOverRecording(Device *device);
 // The core image a surface draws into: its texture's image when the surface
 // is level 0 of a 2D texture or a standalone surface, else null.
 gfx_vk::Image *SurfaceImage(const Surface *surface);
+#endif
 
 // The device's window is about to be destroyed: an open pass and frame end
 // unshown, and the core lets go of its swapchain and surface (DetachWindow in
