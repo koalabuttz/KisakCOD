@@ -71,9 +71,12 @@ uses the one DXVK picks on drivers without a native multiply of that kind
   product checks both factors for zero, two compares and two selects per
   component (dxbc-spirv's `*_legacy` functions). Up to 2026-11-11 this was the
   only rule. Laptop run 17 had Mesa's Intel compiler print its statistics for
-  every shader of a mp_crash scene: our vertex shaders were about 4 times as
-  long as DXVK's (median 545 against 141 instructions) and our pixel shaders
-  about twice (635 against 324).
+  every shader of a mp_crash scene: our vertex shaders were about 3.5 times as
+  long as DXVK's (median 545 against 154 instructions) and our pixel shaders
+  1.8 times (635 against 359). With the fast rule (laptop run 18) the vertex
+  shaders are as long as DXVK's (151) and the pixel shaders 1.3 times (457),
+  and the laptop draws the scene at 129 fps against 106, with a picture that
+  cannot be told from DXVK's by its numbers.
 
 The rule is set once per process (`legacy_shader::SetStrictFloats`, from the
 core's `OptionalFeatures::strictFloats`), before the first shader is
