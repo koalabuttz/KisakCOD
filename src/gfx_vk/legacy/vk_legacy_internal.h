@@ -409,6 +409,18 @@ struct Device
     uint64_t frameSerial = 0;  // counts opened frames; tells cached descriptor sets apart
     bool frameSkipped = false; // BeginFrame skipped: drop drawing until Present
     bool passOpen = false;
+    // Nothing recorded in the open pass yet, and the clears its begin does: a
+    // clear of the whole target before any draw begins the pass again with
+    // it (see Clear).
+    bool passEmpty = false;
+    struct PassLoads
+    {
+        bool clearColor = false;
+        float color[4] = {};
+        bool clearDepth = false; // depth and stencil
+        float depth = 1.0f;
+        uint32_t stencil = 0;
+    } passLoads;
     Surface *passTargets[kMaxRenderTargets] = {};
     Surface *passDepth = nullptr;
     uint32_t passWidth = 0, passHeight = 0;

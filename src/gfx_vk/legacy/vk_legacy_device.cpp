@@ -263,11 +263,12 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
             GpuFeedText(device->feed, feed, sizeof(feed));
             Log(*device,
                 "device ready: back buffer %ux%u, %u %s, depth %s, vertex stride %s, depth compare %s, "
-                "16-bit targets %s, occlusion queries %s, GPU feed %s",
+                "16-bit targets %s, occlusion queries %s, clears %s, GPU feed %s",
                 width, height, device->backBufferSamples, device->backBufferSamples == 1 ? "sample" : "samples",
                 FormatName(device->depthFormat), features.dynamicVertexStride ? "dynamic" : "static",
                 features.fixedDepthCompare ? "fixed" : "dynamic", packedTargets ? "packed" : "wide",
-                features.occlusionCounts ? "counted" : "not counted", feed);
+                features.occlusionCounts ? "counted" : "not counted",
+                features.passClears ? "at pass start" : "in the pass", feed);
             return device.release();
         }
         Fail(*device, "core: %s", LastError(core));

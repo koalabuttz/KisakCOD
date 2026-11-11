@@ -259,6 +259,7 @@ struct DeviceStats
 {
     uint64_t draws;
     uint64_t clears;
+    uint64_t passClears;      // of those, done as their pass's load operation (OptionalFeatures::passClears)
     uint64_t passes;          // render passes begun (a target change or a texture read after write)
     uint32_t pipelines;       // distinct pipelines built
     uint32_t pipelinesInFrame;

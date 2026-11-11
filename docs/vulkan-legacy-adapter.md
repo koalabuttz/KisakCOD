@@ -128,7 +128,22 @@ buffer by the core's `Recording()` number.
 * **Passes.** A pass opens lazily at the first draw or clear for the current
   targets and ends when targets change, a resource is uploaded, or a copy
   needs to run. Clears inside a pass are `vkCmdClearAttachments`, limited by
-  viewport and scissor like D3D9's.
+  viewport and scissor like D3D9's. A clear that covers every cleared target
+  whole (one level, one face, the viewport and scissor not smaller) is
+  instead the load operation a pass begins with (`LOAD_OP_CLEAR`): drivers
+  clear that way with their fast clears, and Mesa's ANV counts
+  `vkCmdClearAttachments` as a slow clear. Before a draw it begins the pass,
+  and a second such clear, colour after depth say, begins the empty pass
+  again with both, as DXVK folds clears into the pass. After a draw the open
+  pass ends and the next begins with the clear, loading what was drawn to
+  the targets it does not clear: MoltenVK left the depth uncleared when it
+  was cleared inside the pass after a draw (the `pass_clear` scene on CI's
+  Apple GPU). A depth clear without the stencil stays in the pass on D24S8,
+  since the load operation would clear both.
+  `KISAK_VK_PASS_CLEARS=0` keeps every clear in its pass; the `device ready:`
+  line says which (`clears at pass start` or `clears in the pass`), and
+  `DeviceStats::passClears` counts the ones that were load operations (the
+  front's `device stats:` line gives both).
 * **Frames in parts (the GPU feed).** A frame of many draws goes to the GPU
   in parts while it is still being drawn, as DXVK's does, instead of whole at
   its `Present`. After a draw, once the command buffer holds 128 draws
@@ -289,6 +304,12 @@ lavapipe job runs the adapter and D3D9 front checks with all three set, and
 with `KISAK_VK_UNIFORMS=static` (plain uniform buffers, above), with the
 validation layer required.
 
+A depth clear inside a pass after a draw left the depth as it was through
+MoltenVK 1.4.2 on CI's Apple GPU (2026-11-11), where lavapipe clears it.
+Whole-target clears no longer happen there (they begin the next pass), but a
+depth clear of a rectangle, or of the depth alone on D24S8, after a draw
+still does; no check covers those on MoltenVK.
+
 ## Building and running
 
 ```sh
@@ -343,8 +364,13 @@ several ways: bad arguments exit 2; an unknown scene fails at the `usage`
 stage; one scene runs alone; and a full run passes every scene in order with no
 mismatched pixel, presents every scene, renames the dynamic buffer, finishes
 the event query, counts the occlusion queries (always on lavapipe, never with
-`KISAK_VK_OCCLUSION_QUERIES=0`), builds pipelines and has no validation
-errors. The
+`KISAK_VK_OCCLUSION_QUERIES=0`), makes some clears load operations (none
+with `KISAK_VK_PASS_CLEARS=0`), builds pipelines and has no validation
+errors. The `pass_clear` scene checks which clears become load operations:
+depth and colour before a draw merge into one, a depth clear after a draw
+begins the next pass, and a depth clear that keeps the stencil, a rectangle
+and part of the viewport stay in the pass; its pixels are the same either
+way. The
 `shader_cache` scene translates two shaders, takes one again from memory,
 writes and reads back a cache file in the temporary directory, draws with the
 shaders read from it, and checks that a damaged file is refused.
@@ -413,6 +439,21 @@ front's `kept_state` scene checks that the frame drawn after the one without
 the kept state writes no set. In PC run 8 the game wrote no set a frame with
 the kept state (about 850 reused) against 227 without, kept 1,386 to 1,695
 sets, and gave them all up once a launch, at the map's load.
+
+Clears as load operations (2026-11-10, same sandbox, 22 scenes with
+`pass_clear`): laptop run 14 timed the GPU's work with Mesa's `INTEL_MEASURE`
+and found ANV's slow colour and depth clears, about 2 of each a frame,
+taking about 2.7% of the GPU time on mp_crash; the adapter's clears were all
+`vkCmdClearAttachments` then. Now 29 of the check's 37 clears are load
+operations (none with `KISAK_VK_PASS_CLEARS=0`), and every scene's pixels are
+the same either way. The check passes in Debug and RelWithDebInfo with
+validation under the switch sets above and with the switch off, the D3D9
+front's check too, both under ThreadSanitizer, and the i386 build. Two lines
+were taken out in turn: without the one that marks a pass drawn to, a depth
+clear after a draw wiped the colour drawn before it (`near_quad`); without
+the stencil rule, a depth clear on D24S8 became a load operation that would
+clear the stencil too. No GPU has run it: the laptop's next run says what it
+is worth there.
 
 Laptop run 1 (2026-11-08, Intel RPL-U iGPU, Mesa 25.0.7 ANV, x86_64 and i386
 RelWithDebInfo, SDL offscreen and Wayland, no validation layer installed): all

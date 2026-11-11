@@ -258,7 +258,23 @@ bool PassMatches(const Device &device)
         && device.passDepth == device.depthStencil;
 }
 
-bool BeginTargetsPass(Device &device)
+// The size a pass of the bound targets has: the smallest of them.
+void TargetsSize(const Device &device, uint32_t &width, uint32_t &height)
+{
+    width = UINT32_MAX;
+    height = UINT32_MAX;
+    const auto fit = [&](const Surface *surface) {
+        width = std::min(width, LevelSize(surface->texture->desc.width, surface->level));
+        height = std::min(height, LevelSize(surface->texture->desc.height, surface->level));
+    };
+    for (uint32_t i = 0; i < ColorCount(device.renderTargets); ++i)
+        fit(device.renderTargets[i]);
+    if (device.depthStencil)
+        fit(device.depthStencil);
+}
+
+// loads: clears the pass begins with (none: every target is loaded).
+bool BeginTargetsPass(Device &device, const Device::PassLoads &loads = {})
 {
     const uint32_t colors = ColorCount(device.renderTargets);
     for (uint32_t i = colors; i < kMaxRenderTargets; ++i)
@@ -287,26 +303,33 @@ bool BeginTargetsPass(Device &device)
     PassDesc pass;
     pass.name = "legacy";
     pass.colorCount = colors;
-    uint32_t width = UINT32_MAX;
-    uint32_t height = UINT32_MAX;
-    auto fit = [&](const Surface *surface) {
-        width = std::min(width, LevelSize(surface->texture->desc.width, surface->level));
-        height = std::min(height, LevelSize(surface->texture->desc.height, surface->level));
-    };
+    uint32_t width = 0, height = 0;
+    TargetsSize(device, width, height);
     for (uint32_t i = 0; i < colors; ++i)
     {
         pass.color[i].image = device.renderTargets[i]->texture->image;
-        fit(device.renderTargets[i]);
+        if (loads.clearColor)
+        {
+            pass.color[i].load = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            std::memcpy(pass.color[i].clear, loads.color, sizeof(loads.color));
+        }
     }
     if (device.depthStencil)
     {
         pass.depth.image = device.depthStencil->texture->image;
-        fit(device.depthStencil);
+        if (loads.clearDepth)
+        {
+            pass.depth.load = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            pass.depth.clearDepth = loads.depth;
+            pass.depth.clearStencil = loads.stencil;
+        }
     }
     pass.area = {{0, 0}, {width, height}};
     if (!BeginPass(device.core, pass))
         return Fail(device, "BeginPass: %s", LastError(device.core));
     device.passOpen = true;
+    device.passEmpty = true;
+    device.passLoads = loads;
     std::memcpy(device.passTargets, device.renderTargets, sizeof(device.passTargets));
     device.passDepth = device.depthStencil;
     device.passWidth = width;
@@ -1366,7 +1389,7 @@ VkRect2D ClampRect(int32_t left, int32_t top, int32_t right, int32_t bottom, uin
 
 // The viewport, limited by the scissor rect when the scissor test is on, and
 // by the pass's targets.
-VkRect2D DrawArea(const Device &device)
+VkRect2D DrawArea(const Device &device, uint32_t width, uint32_t height)
 {
     const Viewport &vp = device.viewport;
     int32_t left = int32_t(vp.x), top = int32_t(vp.y);
@@ -1378,8 +1401,10 @@ VkRect2D DrawArea(const Device &device)
         right = std::min(right, device.scissor.right);
         bottom = std::min(bottom, device.scissor.bottom);
     }
-    return ClampRect(left, top, right, bottom, device.passWidth, device.passHeight);
+    return ClampRect(left, top, right, bottom, width, height);
 }
+
+VkRect2D DrawArea(const Device &device) { return DrawArea(device, device.passWidth, device.passHeight); }
 
 DynamicState MakeDynamicState(const Device &device, d3d::PrimitiveType type)
 {
@@ -1517,6 +1542,8 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
         if (!BeginTargetsPass(device))
             return false;
     }
+    // A clear after this draw is no longer one at the pass's start.
+    device.passEmpty = false;
     // The last draw's pipeline, when nothing its key is made of has changed.
     // Where the device fixes vertex strides or depth compare in the pipeline
     // the key also holds stream strides and bound textures, so it is made
@@ -2106,11 +2133,83 @@ void SetDepthStencilSurface(Device *device, Surface *surface)
 
 // ---- Drawing ----------------------------------------------------------------------------------
 
+// A clear of the whole of the bound targets becomes the load operation of a
+// pass that draws to them: a new pass is begun with it, or the open pass,
+// still empty, is begun again with it and any clear it began with. After a
+// draw, the open pass ends and the next one begins with the clear, rather
+// than clearing inside the pass: MoltenVK drew nothing for a depth clear
+// there (the pass_clear check on CI's Apple GPU). False when the clear is not
+// such a one.
+bool ClearAtPassStart(Device &device, uint32_t rectCount, const Rect *rects, uint32_t flags, uint32_t color,
+                      float z, uint32_t stencil)
+{
+    if (!Features(device.core).passClears || (rectCount && rects))
+        return false;
+    const bool reopen = PassMatches(device) && device.passEmpty;
+    const uint32_t colors = ColorCount(device.renderTargets);
+    const bool clearColor = (flags & d3d::CLEAR_TARGET) && colors;
+    bool clearDepth = false;
+    if (device.depthStencil && (flags & (d3d::CLEAR_ZBUFFER | d3d::CLEAR_STENCIL)))
+    {
+        // The depth image always has stencil, so a load operation clears
+        // both: only when both are cleared, or the D3D9 format has none.
+        const bool stencilFormat = device.depthStencil->texture->format->d3d == d3d::FMT_D24S8;
+        if (!(flags & d3d::CLEAR_ZBUFFER) || (stencilFormat && !(flags & d3d::CLEAR_STENCIL)))
+            return false;
+        clearDepth = true;
+    }
+    if (!clearColor && !clearDepth)
+        return false;
+    uint32_t width = 0, height = 0;
+    TargetsSize(device, width, height);
+    if (width == UINT32_MAX || height == UINT32_MAX)
+        return false;
+    const VkRect2D area = DrawArea(device, width, height);
+    if (area.offset.x || area.offset.y || area.extent.width != width || area.extent.height != height)
+        return false;
+    // A load operation clears the whole image, and the core lets go of its
+    // old contents: every cleared target must be one level and one face of
+    // exactly the pass's size.
+    const auto whole = [&](const Surface *surface) {
+        const Texture &texture = *surface->texture;
+        return texture.faces == 1 && texture.desc.levels == 1 && texture.desc.width == width
+            && texture.desc.height == height;
+    };
+    for (uint32_t i = 0; clearColor && i < colors; ++i)
+    {
+        if (!whole(device.renderTargets[i]))
+            return false;
+    }
+    if (clearDepth && !whole(device.depthStencil))
+        return false;
+
+    Device::PassLoads loads = reopen ? device.passLoads : Device::PassLoads{};
+    if (clearColor)
+    {
+        loads.clearColor = true;
+        UnpackColor(color, loads.color);
+    }
+    if (clearDepth)
+    {
+        loads.clearDepth = true;
+        loads.depth = std::clamp(z, 0.0f, 1.0f);
+        loads.stencil = stencil & 0xff;
+    }
+    EndPassIfOpen(device);
+    if (!BeginTargetsPass(device, loads))
+        return true; // skipped with a warning, as the clear would have been
+    ++device.stats.clears;
+    ++device.stats.passClears;
+    return true;
+}
+
 void Clear(Device *device_, uint32_t rectCount, const Rect *rects, uint32_t flags, uint32_t color, float z,
            uint32_t stencil)
 {
     Device &device = *device_;
     if (!EnsureFrame(device))
+        return;
+    if (ClearAtPassStart(device, rectCount, rects, flags, color, z, stencil))
         return;
     if (!PassMatches(device))
     {
@@ -2191,6 +2290,7 @@ void Clear(Device *device_, uint32_t rectCount, const Rect *rects, uint32_t flag
             vk.vkCmdClearAttachments(cmd, packet.attachmentCount, packet.attachments, packet.rectCount, packet.rects);
         });
     }
+    device.passEmpty = false;
     ++device.stats.clears;
 }
 

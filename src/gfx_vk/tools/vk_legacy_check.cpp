@@ -406,6 +406,7 @@ public:
     void OcclusionQuery();
     void StateReuse();
     void ShaderCache();
+    void PassClear();
 };
 
 void Check::Clear()
@@ -1455,6 +1456,74 @@ void Check::StateReuse()
     Expect("keep_off_clear", 6 * 16 + 8, 16 + 8, 0, 0, 64);
 }
 
+// Clears of whole targets become the load operation of a pass
+// (OptionalFeatures::passClears); the rest stay clears inside the pass.
+// Either way the pixels are D3D9's.
+void Check::PassClear()
+{
+    Reset();
+    lg::Surface *depth = DepthSurface();
+    lg::Surface *other = DepthSurface();
+    if (!depth || !other)
+        return;
+    const bool on = gfx_vk::Features(core).passClears;
+    auto point = [this](const char *name, bool ok) {
+        ++result->points;
+        if (!ok)
+        {
+            ++result->mismatched;
+            result->detail += std::string(" ") + name;
+        }
+    };
+    uint64_t clears = lg::Stats(device).clears;
+    uint64_t passClears = lg::Stats(device).passClears;
+    // Counts the clears since the last call, and how many were load operations.
+    auto counted = [&](const char *name, uint64_t all, uint64_t asLoads) {
+        const lg::DeviceStats &now = lg::Stats(device);
+        point(name, now.clears - clears == all && now.passClears - passClears == (on ? asLoads : 0));
+        clears = now.clears;
+        passClears = now.passClears;
+    };
+
+    // New targets: depth and stencil, then colour, both before a draw: the
+    // pass is begun with the one and again with both.
+    lg::SetDepthStencilSurface(device, depth);
+    lg::Clear(device, 0, nullptr, d3d::CLEAR_ZBUFFER | d3d::CLEAR_STENCIL, 0, 1.0f, 0);
+    lg::Clear(device, 0, nullptr, d3d::CLEAR_TARGET, Argb(255, 255, 0, 0), 1.0f, 0);
+    counted("start_both", 2, 2);
+    lg::SetRenderState(device, d3d::RS_ZENABLE, 1);
+    lg::SetRenderState(device, d3d::RS_ZWRITEENABLE, 1);
+    DrawQuadPx(32, 32, 96, 96, 0.5f, Argb(255, 0, 255, 0));
+    // After a draw the clear begins the next pass, which loads the colour
+    // drawn so far; the depth is 1 again, so a farther quad covers the near
+    // one.
+    lg::Clear(device, 0, nullptr, d3d::CLEAR_ZBUFFER | d3d::CLEAR_STENCIL, 0, 1.0f, 0);
+    counted("after_draw", 1, 1);
+    DrawQuadPx(0, 0, 64, 64, 0.75f, Argb(255, 0, 0, 255));
+    // A depth without its stencil on D24S8 keeps the stencil, so it is not a
+    // load operation; nor a clear of a rectangle or of part of the viewport.
+    // These come before any draw of their pass.
+    lg::SetDepthStencilSurface(device, other);
+    lg::Clear(device, 0, nullptr, d3d::CLEAR_ZBUFFER, 0, 1.0f, 0);
+    counted("depth_without_stencil", 1, 0);
+    lg::SetDepthStencilSurface(device, depth);
+    const lg::Rect rect{100, 100, 112, 112};
+    lg::Clear(device, 1, &rect, d3d::CLEAR_TARGET, Argb(255, 255, 255, 0), 1.0f, 0);
+    counted("rect", 1, 0);
+    lg::SetDepthStencilSurface(device, other);
+    lg::SetViewport(device, {0, kSize / 2, kSize, kSize / 2, 0.0f, 1.0f});
+    lg::Clear(device, 0, nullptr, d3d::CLEAR_ZBUFFER | d3d::CLEAR_STENCIL, 0, 1.0f, 0);
+    counted("part_of_viewport", 1, 0);
+    lg::SetViewport(device, {0, 0, kSize, kSize, 0.0f, 1.0f});
+    if (!Read())
+        return;
+    Expect("background", 8, 120, 255, 0, 0, 255);
+    Expect("near_quad", 80, 80, 0, 255, 0, 255);
+    Expect("far_quad_after_clear", 40, 40, 0, 0, 255, 255);
+    Expect("rect", 104, 104, 255, 255, 0, 255);
+    Expect("rect_out", 98, 98, 255, 0, 0, 255);
+}
+
 void Check::ShaderCache()
 {
     const std::string path = (std::filesystem::temp_directory_path() / "kisak_legacy_check_shaders.bin").string();
@@ -1689,6 +1758,7 @@ int Run(const Options &options)
         {"occlusion_query", &Check::OcclusionQuery},
         {"state_reuse", &Check::StateReuse},
         {"shader_cache", &Check::ShaderCache},
+        {"pass_clear", &Check::PassClear},
     };
     const char *failedStage = nullptr;
     std::string failedReason;
@@ -1743,6 +1813,7 @@ int Run(const Options &options)
                 static_cast<unsigned long long>(stats.descriptorSetsReused),
                 static_cast<unsigned long long>(stats.constantBytes),
                 static_cast<unsigned long long>(stats.dynamicRenames));
+    std::printf("legacy_check.pass_clears=%llu\n", static_cast<unsigned long long>(stats.passClears));
     check.Destroy();
     const bool validation = gfx_vk::ValidationEnabled(check.core);
     gfx_vk::CoreStats ending{};
