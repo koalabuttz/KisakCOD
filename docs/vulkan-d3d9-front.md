@@ -445,7 +445,9 @@ The probes are i386, as before; `KisakCOD-mp` is any client architecture and
 `KisakCOD-sp` is i386 or x86_64. The x86_64 singleplayer game loads and
 draws killhouse, cargoship, blackout, ac130 and airplane through the back end
 on the laptop and quits cleanly, with no unsupported call reported
-([linux-sp-levels.md](linux-sp-levels.md#vulkan-run-1-laptop-x86_64-2026-11-10)). The
+([linux-sp-levels.md](linux-sp-levels.md#vulkan-run-1-laptop-x86_64-2026-11-10)),
+and all 21 levels do the same on llvmpipe in WSL
+([linux-sp-levels.md](linux-sp-levels.md#vulkan-sweep-all-21-levels-pc-linux-in-wsl-x86_64-2026-11-11)). The
 programs still link the system's D3D9 (DXVK Native) and use it by default.
 `src/linux/client/vulkan/vulkan_backend.cpp` registers four dvars that are
 archived and latched (a change applies at the next `vid_restart`):
