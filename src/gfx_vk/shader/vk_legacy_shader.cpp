@@ -315,13 +315,18 @@ uint32_t FixUniformMember(ir::Builder &builder, Uniform uniform, uint32_t member
 }
 
 // Every SamplerStateBlock::useDepthCompare from depthSamplers (bit per
-// sampler), so each image is sampled one way only.
+// sampler), so each image is sampled one way only, and drefClamp with it:
+// set for a depth sampler where kFixedDepthClamp is.
 uint32_t FixDepthCompare(ir::Builder &builder, uint32_t depthSamplers)
 {
-    return FixUniformMember(builder, Uniform::SamplerState,
-                            uint32_t(ir::LegacySamplerStateLayout::eUseDepthCompare), [depthSamplers](uint32_t sampler) {
-                                return sampler < 32u ? (depthSamplers >> sampler) & 1u : 0u;
-                            });
+    const auto depth = [depthSamplers](uint32_t sampler) {
+        return sampler < kSamplerCount ? (depthSamplers >> sampler) & 1u : 0u;
+    };
+    const bool clamp = (depthSamplers & kFixedDepthClamp) != 0;
+    return FixUniformMember(builder, Uniform::SamplerState, uint32_t(ir::LegacySamplerStateLayout::eUseDepthCompare),
+                            depth) +
+        FixUniformMember(builder, Uniform::SamplerState, uint32_t(ir::LegacySamplerStateLayout::eDrefClamp),
+                         [depth, clamp](uint32_t sampler) { return clamp ? depth(sampler) : 0u; });
 }
 
 // The legacy state the Legacy adapter always writes the same (see

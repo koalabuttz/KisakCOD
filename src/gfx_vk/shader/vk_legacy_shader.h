@@ -61,6 +61,7 @@ enum class Uniform : uint8_t
 };
 constexpr uint32_t kUniformCount = static_cast<uint32_t>(Uniform::Count);
 constexpr uint32_t kSamplerCount = 16; // ps s0-s15; vs s0-s3 (D3DVERTEXTEXTURESAMPLER0-3)
+constexpr uint32_t kFixedDepthClamp = 1u << 31; // in BuildSpirv's fixedDepthCompare
 
 // Set 0: vertex shader blocks at 0-8, pixel shader blocks at 16-24.
 constexpr uint32_t UniformBinding(Stage stage, Uniform uniform)
@@ -239,7 +240,11 @@ bool Translate(const void *bytecode, size_t bytes, Shader &shader, std::string &
 // sampler N is bound to a depth texture, clear means a colour one, and the
 // branch not taken is removed. MoltenVK needs this: its shader converter
 // (SPIRV-Cross) declares an image sampled both with and without a depth
-// reference as a Metal depth texture, which cannot sample colour.
+// reference as a Metal depth texture, which cannot sample colour. The Legacy
+// adapter does it everywhere by default, so no sample branches on it. With
+// kFixedDepthClamp set as well, depth samplers clamp the reference to [0, 1]
+// (SamplerStateBlock::drefClamp: a D32 image standing in for D24); without
+// it none does.
 //
 // fixedAlphaCompare, when given, decides the alpha test at build time instead
 // of by AlphaTestBlock::compareOp (an AlphaCompare value; alphaRef stays in
