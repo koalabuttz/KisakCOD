@@ -856,7 +856,10 @@ What the GXM back end does so far (step 2d):
   drawn. The forced depth pass draws into the scene's own targets, where
   the engine sent it to the dynamic shadows target (same depth, a colour
   target nothing read): the clear, the depth pass and the lit pass are then
-  one scene where they were three. And the copy of the picture that
+  one scene where they were three. The back end writes no colour for that
+  pass's draws there, whatever their state says: a surface whose lit
+  program is still being made would show the depth pass's colour
+  otherwise. And the copy of the picture that
   distortion reads (heat haze, glass) is made only in frames whose emissive
   list holds a technique that reads it; the engine made it in every frame
   with r_distortion on, which also split the back buffer's scene before the

@@ -56,6 +56,7 @@ const char *g_drawPass = nullptr;
 const char *g_drawSurface = nullptr;
 bool g_depthPrepass = true;
 bool g_depthInScene = true;
+bool g_depthOnlyDraws = false;
 bool g_resolveWhenUsed = true;
 } // namespace gfx_gxm
 
@@ -396,7 +397,7 @@ struct DrawState
     // Run diagnostic: draws the engine labelled as its depth pass, and those of
     // them whose state writes colour (the pass now shares the scene's colour
     // target, where colour written would show).
-    uint64_t depthPassDraws = 0, depthPassColourDraws = 0;
+    uint64_t depthPassDraws = 0, depthPassColourDraws = 0, depthPassMasked = 0;
     uint64_t copies = 0;
     uint32_t variantsMade = 0, variantFailures = 0;
 
@@ -1055,7 +1056,9 @@ uint8_t BlendFunc(uint32_t op)
 bool MakeBlend(Device &device, bool noAlpha, SceGxmBlendInfo &blend)
 {
     const uint32_t *rs = device.renderStates;
-    const uint32_t mask = rs[d3d::RS_COLORWRITEENABLE];
+    // The engine's depth pass in the scene's own target writes no colour
+    // (gxm_engine_options.h).
+    const uint32_t mask = gfx_gxm::g_depthOnlyDraws ? 0 : rs[d3d::RS_COLORWRITEENABLE];
     // D3D9: R 1, G 2, B 4, A 8. sceGxm: A 1, R 2, G 4, B 8.
     blend.colorMask = uint8_t((mask & 1 ? SCE_GXM_COLOR_MASK_R : 0) | (mask & 2 ? SCE_GXM_COLOR_MASK_G : 0) |
                               (mask & 4 ? SCE_GXM_COLOR_MASK_B : 0) | (mask & 8 ? SCE_GXM_COLOR_MASK_A : 0));
@@ -3122,6 +3125,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     {
         ++d.depthPassDraws;
         d.depthPassColourDraws += (device.renderStates[d3d::RS_COLORWRITEENABLE] & 0xf) != 0;
+        d.depthPassMasked += gfx_gxm::g_depthOnlyDraws;
     }
     // Programs.
     const int diag = d.diagMode;
@@ -3731,8 +3735,11 @@ void LogDrawSummary(Device &device)
         "the second piece; kept pieces and second pieces hold %u KB",
         (unsigned long long)d->renamesSpared, (unsigned long long)d->renameSwaps, (unsigned long long)d->renames,
         (unsigned long long)d->renameWaits, (unsigned long long)d->textureSwaps, d->copyBytes >> 10);
-    Log(device, "diag: depth pass: %llu draws, %llu of them with a state that writes colour",
-        (unsigned long long)d->depthPassDraws, (unsigned long long)d->depthPassColourDraws);
+    Log(device,
+        "diag: depth pass: %llu draws, %llu of them with a state that writes colour, %llu drawn with no colour written "
+        "(in the scene's own target)",
+        (unsigned long long)d->depthPassDraws, (unsigned long long)d->depthPassColourDraws,
+        (unsigned long long)d->depthPassMasked);
     Log(device,
         "frames overlap: %s; %llu of %llu frames waited for the frame before last, %.1f ms each on average; %u "
         "notifications did not come",
