@@ -143,6 +143,11 @@ int Checks()
     CHECK(JobRefused("job a\nsend ../console-mp.log\n", "line 2"));
     CHECK(JobRefused("job a\nsend iw_00.iwd\n", "line 2"));
     CHECK(JobRefused("job a\nrun this\n", "line 2"));
+    CHECK(ParseJob(("job a\npack " + b + " 2000000\n").c_str(), &job, error, sizeof(error)));
+    CHECK(job.hasPack && b == job.packSha256 && job.packBytes == 2000000);
+    CHECK(JobRefused(("job a\npack " + b + " 0\n").c_str(), "line 2"));
+    CHECK(JobRefused(("job a\npack " + b + " 67108865\n").c_str(), "line 2"));
+    CHECK(JobRefused(("job a\npack " + b + " 5\npack " + b + " 5\n").c_str(), "line 3"));
     {
         std::string many = "job a\n";
         for (int i = 0; i < 17; ++i)
@@ -243,6 +248,7 @@ int OneStart(char **arguments)
     Paths paths;
     snprintf(paths.data, sizeof(paths.data), "%s", arguments[0]);
     snprintf(paths.eboot, sizeof(paths.eboot), "%s", arguments[1]);
+    snprintf(paths.programs, sizeof(paths.programs), "%s/gxp", arguments[0]);
     const bool fetched = atoi(arguments[2]) != 0, byBench = atoi(arguments[3]) != 0;
     const std::string label = arguments[4], data = std::string(arguments[0]) + "/";
     static Bench bench(paths, &platform);

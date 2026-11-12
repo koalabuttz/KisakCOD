@@ -1,4 +1,5 @@
 #include "gxm_program_cache.h"
+#include "gxm_program_pack.h"
 
 #include <gfx_gxm/shader/gxm_cg_translate.h>
 
@@ -23,6 +24,10 @@ bool g_folderMade = false;
 bool g_compilerTried = false;
 bool g_compilerReady = false;
 std::string g_compilerMessage;
+
+// The folder's pack (gxm_program_pack.h): looked for once, then kept open.
+bool g_packTried = false;
+ProgramPack g_pack;
 
 // The folder, the statistics and the two marks below: held for a moment only.
 std::mutex g_state;
@@ -135,6 +140,16 @@ bool ReadFile(const std::string &path, std::vector<uint8_t> &data)
     return ok;
 }
 
+// With g_work held. A pack that cannot be read is as good as none.
+void OpenPack(const std::string &folder)
+{
+    g_packTried = true;
+    g_pack.Open((folder + "/" + kPackName).c_str());
+    const std::lock_guard<std::mutex> state(g_state);
+    g_stats.packPrograms = uint32_t(g_pack.Entries().size());
+    g_stats.packRefused = g_pack.Refused();
+}
+
 // With g_work held.
 bool WriteFile(const std::string &folder, const std::string &path, const std::vector<uint8_t> &data)
 {
@@ -222,6 +237,10 @@ void SetProgramCacheFolder(const char *folder)
     g_folder = cleaned;
     g_folderMade = false;
     g_dumpChecked = false;
+    g_pack.Close();
+    g_packTried = false;
+    g_stats.packPrograms = 0;
+    g_stats.packRefused = false;
 }
 
 bool ProgramCacheMarker(const char *name)
@@ -250,14 +269,20 @@ bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &
         DumpSource(folder, cg, stage);
         path = PathFor(folder, cg, stage);
         const uint64_t begin = Micros();
-        const bool read = ReadFile(path, program) &&
-                          sceGxmProgramCheck(reinterpret_cast<const SceGxmProgram *>(program.data())) >= 0;
+        if (!g_packTried)
+            OpenPack(folder);
+        // The pack first: no open, and what it holds a file would hold too.
+        const bool packed = g_pack.Read(KeyFor(cg, stage), program) &&
+                            sceGxmProgramCheck(reinterpret_cast<const SceGxmProgram *>(program.data())) >= 0;
+        const bool read = packed || (ReadFile(path, program) &&
+                                     sceGxmProgramCheck(reinterpret_cast<const SceGxmProgram *>(program.data())) >= 0);
         const uint64_t took = Micros() - begin;
         const std::lock_guard<std::mutex> state(g_state);
         g_stats.readMicros += took;
         if (read)
         {
             ++g_stats.fromFiles;
+            g_stats.fromPack += packed ? 1 : 0;
             ++g_stats.programs[stage == ShaderStage::Vertex ? 0 : 1];
             g_stats.programBytes[stage == ShaderStage::Vertex ? 0 : 1] += program.size();
             if (took > g_stats.slowestReadMicros)

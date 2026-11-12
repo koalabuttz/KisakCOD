@@ -277,7 +277,9 @@ the key, and optionally `wait <seconds>`:
 
 A job is queued with `add`: a run list, its step files, the names of files
 to send back beside the logs, and the build to run it on, either a `.vpk`
-from CI (its `eboot.bin` is taken out) or none for the installed build:
+from CI (its `eboot.bin` is taken out) or none for the installed build,
+and optionally a pack of compiled programs (`--pack`, see "A pack of
+programs" below):
 
     python3 scripts/platform/vita/vita_bench_server.py add --root ~/vita-bench --name run-w \
         --vpk KisakCOD-mp.vpk --run-list runlist-mp.txt --file run-w.txt
@@ -333,6 +335,32 @@ The dedicated server has no bench: its package may not write beside its own
 `vita_bench_client.h` (network and files) and `vita_bench.cpp`; the first
 two make no Vita call, and `scripts/tests/test_vita_bench.py` runs them on
 the host against the real server script, playing the restarts.
+
+### A pack of programs
+
+The client compiles each shader program once and keeps it in a file of its
+own in `ux0:data/KisakCOD/gxp`. Two things about that cost a console run
+time: a build whose translator changed compiles everything again, a second
+or so a program and over a thousand of them, and every start opens each
+program's file on the card. With `programs.pack` in the program folder the
+client looks in it first: one open for all of them, and the pack can come
+from another machine. Vita3K runs the Vita's own compiler, so the folder a
+PC run of the same build leaves holds the programs the console would
+compile:
+
+    python3 scripts/platform/vita/vita_pack_programs.py pack --out programs.pack <Vita3K's ux0>/data/KisakCOD/gxp
+
+Copy `programs.pack` into the console's `gxp` folder, or give it to a
+bench's job with `--pack` (above). A program is found in the pack by the
+same key as its file, a hash of its source, so a pack from another
+translator is not used and does no harm; a program the pack lacks is read
+from its own file or compiled as before, and what is compiled still goes to
+a file. Folders and packs can be packed together, the later source winning.
+The quit lines say `program pack ...: programs.pack holds N programs; M of
+the K read from the card came out of it`. The programs come from the game's
+shaders, so a pack stays on the owner's machines like the game's files.
+The reading is `src/gfx_gxm/gxm_program_pack.h`, checked on the host by
+`scripts/tests/test_vita_program_pack.py`.
 
 ## Testing in Vita3K
 

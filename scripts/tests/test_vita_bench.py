@@ -173,10 +173,13 @@ def scenarios(work: Path, root: Path, port: int, key: str, binary: Path, timeout
     (sources / "run-a.txt").write_text("wait 5\nvita_gxm no-vsync 1\n")
     (sources / "empty.txt").write_text("")
     (sources / "list-two.txt").write_text("B1 | - | +set vita_quitAfterMenu 5\n")
+    pack = b"KGXPACK1" + os.urandom(300 * 1024)
+    (sources / "programs.pack").write_bytes(pack)
     code, output = server_command("add", "--root", str(root), "--name", "one", "--vpk", str(sources / "one.vpk"),
+                                  "--pack", str(sources / "programs.pack"),
                                   "--run-list", str(sources / "list-one.txt"), "--file", str(sources / "run-a.txt"),
                                   "--file", str(sources / "empty.txt"), "--send", "extra.json", "--send", "absent.csv")
-    check(code == 0 and "2 starts on its own build" in output, f"add one: {output}")
+    check(code == 0 and "2 starts on its own build" in output and "a program pack" in output, f"add one: {output}")
     time.sleep(1.1)  # a job's name starts with the second it was queued
     code, output = server_command("add", "--root", str(root), "--name", "two", "--run-list", str(sources / "list-two.txt"))
     check(code == 0 and "1 starts on the installed build" in output, f"add two: {output}")
@@ -184,6 +187,7 @@ def scenarios(work: Path, root: Path, port: int, key: str, binary: Path, timeout
                 ["--name", "x", "--run-list", str(sources / "run-a.txt")],
                 ["--name", "x", "--run-list", str(sources / "empty.txt")],
                 ["--name", "../x", "--run-list", str(sources / "list-one.txt")],
+                ["--name", "x", "--run-list", str(sources / "list-one.txt"), "--pack", str(sources / "one.vpk")],
                 ["--name", "x", "--run-list", str(sources / "list-one.txt"), "--send", "bench.txt"]):
         code, output = server_command("add", "--root", str(root), *bad)
         check(code != 0, f"add {bad} should be refused: {output}")
@@ -192,6 +196,7 @@ def scenarios(work: Path, root: Path, port: int, key: str, binary: Path, timeout
     code, output = card.tap()
     check(code == 2 and output.strip().endswith("QUIT"), f"two jobs, then the process ends: {code} {output}")
     check(card.eboot.read_bytes() == build_one, "the fetched build is the one queued")
+    check((card.data / "gxp" / "programs.pack").read_bytes() == pack, "the program pack is in the program folder")
     fetched_label = "the fetched build " + hashlib.sha256(build_one).hexdigest()[:8]
     order = [line for line in output.splitlines() if line.startswith(("START", "NEXT"))]
     check(order == ["NEXT fetched", f"START A1 on {fetched_label}", "NEXT fetched", f"START A2 on {fetched_label}",

@@ -66,6 +66,7 @@ struct Paths
 {
     char data[96] = {};   // the data folder: bench.txt, a job's files, the logs
     char eboot[128] = {}; // where the fetched build is kept
+    char programs[128] = {}; // the program folder, for a job's pack
     const char *runList = "runlist-mp.txt";
     const char *runListAt = "runlist-mp.at";
     const char *runListDone = "runlist-mp.done.txt";
@@ -702,6 +703,34 @@ class Bench
             }
             else
                 Log("job %s: the build %.12s is on the card already", job.id, job.ebootSha256);
+        }
+
+        if (job.hasPack)
+        {
+            // Programs compiled elsewhere from the same build. One that is
+            // there already is kept; a start reads it when it is first asked
+            // for a program, so it is in place before the list begins.
+            char have[80], pack[192];
+            snprintf(pack, sizeof(pack), "%s/programs.pack", paths_.programs);
+            ReadText(Path(path, "bench-pack.txt"), have, sizeof(have));
+            if (strncmp(have, job.packSha256, 64) || FileBytes(pack) != (long)job.packBytes)
+            {
+                unlink(path);
+                mkdir(paths_.programs, 0777);
+                snprintf(part, sizeof(part), "%s.part", pack);
+                const int fetched = Fetch(job.packSha256, job.packBytes, part, reason, reasonSize);
+                if (fetched != 1)
+                    return dropParts(), fetched;
+                if (!Replace(part, pack))
+                {
+                    snprintf(reason, reasonSize, "the pack cannot be put at %s (errno %d)", pack, errno);
+                    unlink(part);
+                    return dropParts(), 0;
+                }
+                WriteText(Path(path, "bench-pack.txt"), job.packSha256);
+                Log("job %s: fetched the program pack %.12s, %u bytes", job.id, job.packSha256,
+                    (unsigned int)job.packBytes);
+            }
         }
 
         unlink(Path(path, paths_.runListAt));

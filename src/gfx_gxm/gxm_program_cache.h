@@ -4,7 +4,8 @@
 // compiled once per console (the Vita's compiler takes about 0.1 s per
 // program, and a map uses hundreds).
 //
-// A program is found by a hash of its Cg source and its stage, in one file
+// A program is found by a hash of its Cg source and its stage, in the
+// folder's pack when there is one (gxm_program_pack.h), else in one file
 // per program: <folder>/<16 hex digits>.gxp. Changing the translator
 // changes the source, so stale programs are never picked up; they only take
 // space. A file that fails sceGxmProgramCheck is compiled again.
@@ -53,6 +54,12 @@ struct ProgramCacheStats
     // ways of compiling the same shaders.
     uint32_t programs[2];
     uint64_t programBytes[2];
+    // The folder's pack (gxm_program_pack.h): the programs it holds, how
+    // many of fromFiles came out of it, and whether a pack was there that
+    // could not be read.
+    uint32_t packPrograms;
+    uint32_t fromPack;
+    bool packRefused;
 };
 
 // The program for this source, from its file or compiled now (and then

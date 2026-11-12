@@ -100,6 +100,7 @@ bool Vita_BenchBegin(int argc, char **argv)
     }
     Paths paths;
     snprintf(paths.data, sizeof(paths.data), "%s", Sys_VitaDataPath());
+    snprintf(paths.programs, sizeof(paths.programs), "%s/gxp", Sys_VitaDataPath());
     // The fetched build goes beside the installed one, the only place the
     // system starts a program of this application from.
     char titleId[32] = {};

@@ -30,6 +30,9 @@
 //     eboot <sha256> <bytes>            the build to run it on; without the
 //                                       line, the installed one
 //     file <name>.txt <sha256> <bytes>  into the data folder
+//     pack <sha256> <bytes>             compiled programs, as the program
+//                                       folder's programs.pack
+//                                       (gfx_gxm/gxm_program_pack.h)
 //     send <name>                       a file to send back beside the logs
 //
 // or the single word "none". A file's name is letters, digits, '.', '_' and
@@ -52,6 +55,7 @@ constexpr size_t kMaxJobId = 40;
 constexpr size_t kMaxFileName = 64;
 constexpr uint32_t kMaxEbootBytes = 64u << 20;
 constexpr uint32_t kMaxFileBytes = 1u << 20;
+constexpr uint32_t kMaxPackBytes = 64u << 20;
 
 // ---- SHA-256 ------------------------------------------------------------------------------
 
@@ -393,6 +397,9 @@ struct Job
     uint32_t ebootBytes = 0;
     JobFile files[kMaxJobFiles];
     size_t fileCount = 0;
+    bool hasPack = false;
+    char packSha256[65] = {};
+    uint32_t packBytes = 0;
     char send[kMaxJobFiles][kMaxFileName] = {};
     size_t sendCount = 0;
 
@@ -474,6 +481,14 @@ inline bool ParseJob(const char *text, Job *out, char *error, size_t errorSize)
             memcpy(file.sha256, words[2], 65);
             ++out->fileCount;
         }
+        else if (!strcmp(words[0], "pack"))
+        {
+            if (out->hasPack || count != 3 || !Sha256Text(words[1]) ||
+                !Number(words[2], kMaxPackBytes, &out->packBytes) || out->packBytes == 0)
+                return fail("expected one \"pack <sha256> <bytes>\"");
+            out->hasPack = true;
+            memcpy(out->packSha256, words[1], 65);
+        }
         else if (!strcmp(words[0], "send"))
         {
             if (count != 2 || !SendFileName(words[1]))
@@ -483,11 +498,11 @@ inline bool ParseJob(const char *text, Job *out, char *error, size_t errorSize)
             snprintf(out->send[out->sendCount++], kMaxFileName, "%s", words[1]);
         }
         else
-            return fail("not a job, eboot, file or send line");
+            return fail("not a job, eboot, file, pack or send line");
     }
     if (sawNone)
     {
-        if (sawJob || sawEboot || out->fileCount || out->sendCount)
+        if (sawJob || sawEboot || out->fileCount || out->sendCount || out->hasPack)
             return snprintf(error, errorSize, "job: \"none\" with more beside it"), *out = Job(), false;
         return true;
     }

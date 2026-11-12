@@ -13,18 +13,19 @@ only.
         card's bench.txt.
     vita_bench_server.py add   --root DIR --name NAME --run-list FILE
                                [--vpk FILE | --eboot FILE] [--file FILE ...]
-                               [--send NAME ...]
+                               [--pack FILE] [--send NAME ...]
         Queues a job. --vpk takes the eboot.bin out of a build's package.
         The run list goes to the card as runlist-mp.txt, the files under
-        their own names (.txt).
+        their own names (.txt). --pack is a programs.pack of compiled
+        programs (vita_pack_programs.py) for the card's program folder.
     vita_bench_server.py serve --root DIR --bind ADDRESS [--port 28970]
         Answers the Vita until it is stopped. ADDRESS is this computer's
         address on the network the Vita is on.
     vita_bench_server.py list  --root DIR
         What waits and what is done.
 
-The folder: ``key.txt``; ``queue/<job>/`` (``eboot.bin``, ``files/``,
-``send.txt``, and ``logs/`` as they arrive); ``done/<job>/`` with
+The folder: ``key.txt``; ``queue/<job>/`` (``eboot.bin``, ``programs.pack``,
+``files/``, ``send.txt``, and ``logs/`` as they arrive); ``done/<job>/`` with
 ``result.txt`` once the Vita says the job is over.
 
 The key never travels. Every request carries a code made with it
@@ -52,6 +53,7 @@ RUN_LIST = "runlist-mp.txt"
 MAX_FILES = 16
 MAX_FILE_BYTES = 1 << 20
 MAX_EBOOT_BYTES = 64 << 20
+MAX_PACK_BYTES = 64 << 20
 MAX_LOG_BYTES = 16 << 20
 PLAIN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]*$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -98,11 +100,12 @@ def queued_jobs(root: Path) -> list:
 
 
 def job_blobs(job: Path) -> dict:
-    """What a job is made of: {name on the card or 'eboot': (path, sha256, bytes)}."""
+    """What a job is made of: {name on the card, 'eboot' or 'pack': (path, sha256, bytes)}."""
     blobs = {}
-    eboot = job / "eboot.bin"
-    if eboot.is_file():
-        blobs["eboot"] = (eboot, sha256_file(eboot), eboot.stat().st_size)
+    for kind, name in (("eboot", "eboot.bin"), ("pack", "programs.pack")):
+        path = job / name
+        if path.is_file():
+            blobs[kind] = (path, sha256_file(path), path.stat().st_size)
     files = job / "files"
     if files.is_dir():
         for path in sorted(files.iterdir()):
@@ -114,7 +117,7 @@ def job_blobs(job: Path) -> dict:
 def job_text(job: Path) -> str:
     lines = [f"job {job.name}"]
     for name, (_, digest, size) in job_blobs(job).items():
-        lines.append(f"eboot {digest} {size}" if name == "eboot" else f"file {name} {digest} {size}")
+        lines.append(f"{name} {digest} {size}" if name in ("eboot", "pack") else f"file {name} {digest} {size}")
     send = job / "send.txt"
     if send.is_file():
         lines += [f"send {name}" for name in send.read_text().split() if send_file_name(name)]
@@ -292,6 +295,11 @@ def command_add(args) -> int:
     if eboot is not None and not 0 < len(eboot) <= MAX_EBOOT_BYTES:
         raise SystemExit("the eboot.bin is empty or over 64 MB")
 
+    if args.pack:
+        pack = Path(args.pack)
+        if not pack.is_file() or not 0 < pack.stat().st_size <= MAX_PACK_BYTES or pack.read_bytes()[:8] != b"KGXPACK1":
+            raise SystemExit(f"{pack}: not a program pack of up to 64 MB")
+
     # Made under a name the server skips, then renamed: a job is never
     # handed out half written.
     work = root / "queue" / f".new-{job_id}"
@@ -300,11 +308,13 @@ def command_add(args) -> int:
         shutil.copyfile(path, work / "files" / name)
     if eboot is not None:
         (work / "eboot.bin").write_bytes(eboot)
+    if args.pack:
+        shutil.copyfile(args.pack, work / "programs.pack")
     if args.send:
         (work / "send.txt").write_text("\n".join(args.send) + "\n")
     work.rename(root / "queue" / job_id)
     build = f"its own build ({hashlib.sha256(eboot).hexdigest()[:12]})" if eboot is not None else "the installed build"
-    print(f"queued {job_id}: {starts} starts on {build}, {len(files)} files")
+    print(f"queued {job_id}: {starts} starts on {build}, {len(files)} files" + (", a program pack" if args.pack else ""))
     return 0
 
 
@@ -351,6 +361,7 @@ def main() -> int:
             build.add_argument("--vpk")
             build.add_argument("--eboot")
             sub.add_argument("--file", action="append")
+            sub.add_argument("--pack")
             sub.add_argument("--send", action="append")
     args = parser.parse_args()
     return {"key": command_key, "add": command_add, "serve": command_serve, "list": command_list}[args.command](args)
