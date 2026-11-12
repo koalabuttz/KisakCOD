@@ -284,6 +284,12 @@ def scenarios(work: Path, root: Path, port: int, key: str, binary: Path, timeout
     check(code == 0 and "START" not in output and six is not None, f"a bad run list: {code} {output}")
     if six:
         check((six / "result.txt").read_text().startswith("failed: run list line 1:"), "six's result")
+        # The card still holds job two's list and log; a job that failed
+        # before its files were in place sends no start's log (console run
+        # AB sent run AA's).
+        sent = sorted(p.name for p in (six / "logs").iterdir()) if (six / "logs").is_dir() else []
+        check((card.data / "console-mp-B1.log").exists() and sent == ["bench.log"],
+              f"six sent only its bench.log: {sent}")
     check(not (card.data / "runlist-mp.txt").exists() and not list(card.data.glob("*.part")), "nothing was put in place")
 
     # ---- A card with another key gets nothing, and the job stays queued.

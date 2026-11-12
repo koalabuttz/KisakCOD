@@ -799,10 +799,19 @@ class Bench
     {
         char path[224], name[kMaxFileName + 48], error[160];
         unsigned sent = 0;
-        if (ReadText(Path(path, paths_.runListDone), listText_, sizeof(listText_)) == 0)
+        // Only a job whose files were put in place has a list and logs of
+        // its own: the card's manifest is written then. A job that failed
+        // before would find the list of a run before it (console run AB
+        // sent run AA's logs as its own).
+        Job job;
+        ReadText(Path(path, "bench-manifest.txt"), manifest_, sizeof(manifest_));
+        const bool placed =
+            ParseJob(manifest_, &job, error, sizeof(error)) && !job.none && !strcmp(job.id, state.id);
+        listText_[0] = '\0';
+        if (placed && ReadText(Path(path, paths_.runListDone), listText_, sizeof(listText_)) == 0)
             ReadText(Path(path, paths_.runList), listText_, sizeof(listText_));
         size_t starts = 0;
-        for (size_t i = 0;
+        for (size_t i = 0; placed &&
              kisak::vita_run::ParseRunList(listText_, i, &start_, &starts, error, sizeof(error)) && i < starts; ++i)
         {
             snprintf(name, sizeof(name), "%s-%s.log", paths_.logStem, start_.name);
@@ -811,16 +820,13 @@ class Bench
                 return false;
             sent += result == Sent::Yes;
         }
-        Job job;
-        ReadText(Path(path, "bench-manifest.txt"), manifest_, sizeof(manifest_));
-        if (ParseJob(manifest_, &job, error, sizeof(error)) && !job.none && !strcmp(job.id, state.id))
-            for (size_t i = 0; i < job.sendCount; ++i)
-            {
-                const Sent result = SendFile(state.id, job.send[i]);
-                if (result == Sent::NoServer)
-                    return false;
-                sent += result == Sent::Yes;
-            }
+        for (size_t i = 0; placed && i < job.sendCount; ++i)
+        {
+            const Sent result = SendFile(state.id, job.send[i]);
+            if (result == Sent::NoServer)
+                return false;
+            sent += result == Sent::Yes;
+        }
         Log("job %s: %u files sent; %s", state.id, sent, state.note[0] ? state.note : "it ran to its end");
         if (SendFile(state.id, "bench.log") == Sent::NoServer)
             return false;
