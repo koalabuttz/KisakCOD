@@ -40,6 +40,7 @@
 #include <gfx_gxm/gxm_draw_label.h>
 #include <gfx_gxm/gxm_engine_options.h>
 #include <gfx_gxm/gxm_program_cache.h>
+#include <gfx_gxm/gxm_shader_compiler.h>
 
 #include <algorithm>
 #include <psp2/kernel/threadmgr.h>
@@ -1816,6 +1817,18 @@ bool InitDraw(Device &device, std::string &error)
     if (!gfx_gxm::g_resolveWhenUsed)
         Log(device, "diag: no-resolve-skip is there: the picture is copied for distortion in every frame, drawn or "
                     "not");
+    if (gxm::ProgramCacheMarker("fast-precision"))
+    {
+        gxm::SetShaderCompilerFastPrecision(true);
+        Log(device, "diag: fast-precision is there: programs are compiled with the compiler's fast precision option "
+                    "and kept under names of their own (a first start compiles them all again)");
+    }
+    if (gxm::ProgramCacheMarker("half-temporaries"))
+    {
+        gxm::cg::SetHalfTemporaries(true);
+        Log(device, "diag: half-temporaries is there: pixel shader registers that never reach a texture coordinate "
+                    "are half precision (a first start compiles every fragment program again)");
+    }
     if (gxm::ProgramCacheMarker("no-draw-reuse"))
     {
         d.reuse = false;

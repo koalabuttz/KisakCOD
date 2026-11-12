@@ -54,4 +54,10 @@ enum class ShaderStage : uint8_t
 // the two parameters are for finding out what the compiler does otherwise.
 bool CompileCg(const char *source, size_t length, ShaderStage stage, std::vector<uint8_t> &program,
                std::string &log, bool fastMath = true, int optimization = 3);
+// Run experiment for the 60 fps work: compile with the compiler's fast
+// precision option (useFastprecision), which lets it work at a lower
+// precision where the result is kept at one. Off unless asked for; the
+// program cache keeps such programs under names of their own.
+void SetShaderCompilerFastPrecision(bool on);
+bool ShaderCompilerFastPrecision();
 } // namespace gfx_gxm

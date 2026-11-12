@@ -145,6 +145,16 @@ struct Options
     uint8_t diagPosition = 0;
 };
 
+// Run experiment for the Vita's 60 fps work, off unless asked for: pixel
+// shader temporaries whose value never reaches a texture coordinate or the
+// depth are declared half4, and so is the colour. The Vita's GPU works on
+// four half components in one instruction and on two float ones. A
+// register counts as reaching a coordinate when any value it ever holds
+// does, whatever the order of the instructions. Process-wide; set it before
+// any shader is emitted.
+void SetHalfTemporaries(bool on);
+bool HalfTemporaries();
+
 // ---- Parsed form ---------------------------------------------------------------------------
 
 struct Operand

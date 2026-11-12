@@ -48,6 +48,11 @@ struct ProgramCacheStats
     uint64_t hurried;
     uint64_t dropped;
     uint32_t mostWaiting;
+    // Programs got either way and their size, [0] vertex and [1] fragment.
+    // A program's code is 8 bytes an instruction, so the bytes compare two
+    // ways of compiling the same shaders.
+    uint32_t programs[2];
+    uint64_t programBytes[2];
 };
 
 // The program for this source, from its file or compiled now (and then

@@ -16,7 +16,8 @@ on a Vita, so this test checks what can be checked here:
    translator writes, so this catches malformed or mistyped output.
    ``--require-glslang`` makes a missing glslang a failure (CI);
 4. a few cases are checked for the options' effect (D3DCOLOR inputs, alpha
-   test) and the reflection (constant counts, varyings);
+   test) and the reflection (constant counts, varyings), and every pixel
+   case is translated again with the half temporaries experiment on;
 5. truncated and corrupted bytecode must be refused without a crash.
 
 Usage:
@@ -82,6 +83,11 @@ VITA_CASES = {
                          "mad r2.xz, v0, c8.xxyy, c9.yyww\nmul r3.yw, c9, v0\nmad r4, r0, -c8.y, r0.wzyx\n"
                          "mad r5, v0, c9.yyww, c1\nadd r0, r0, r1\nadd r2, r2, r3\nadd r4, r4, r5\n"
                          "add o0, r0, r2\nmov o1, r4",
+    # A coordinate computed from a texture: r0 and r1 reach a coordinate,
+    # r2 and r3 only the colour (--half-temporaries).
+    "ps3_vita_dependent_read": "ps_3_0\ndcl_texcoord v0\ndcl_2d s0\ndcl_2d s1\ntexld r0, v0, s0\n"
+                               "mad r1, r0, c4, v0\ntexld r2, r1, s1\nmul r3, r2, c5\nmax r3, r3, r0\n"
+                               "mov oC0, r3",
 }
 
 # (case, extra tool arguments, text the program must contain, text the
@@ -94,6 +100,15 @@ CHECKS = [
     ("ps3_texkill", ["--alpha", "7"], "if (!(a >= ref)) discard;", "kills=1"),
     ("ps3_texkill", ["--alpha", "1"], "if (!(false)) discard;", "kills=1"),
     ("ps3_texkill", [], "return oC0;", "kills=1"),
+    ("ps3_vita_dependent_read", [], "float4 r3 = float4(0.0, 0.0, 0.0, 0.0);", "samplers=0:2d,1:2d"),
+    ("ps3_vita_dependent_read", ["--half-temporaries"],
+     "    float4 r0 = float4(0.0, 0.0, 0.0, 0.0);\n    float4 r1 = float4(0.0, 0.0, 0.0, 0.0);\n"
+     "    half4 r2 = float4(0.0, 0.0, 0.0, 0.0);\n    half4 r3 = float4(0.0, 0.0, 0.0, 0.0);\n"
+     "    half4 oC0 = float4(0.0, 0.0, 0.0, 0.0);\n", "samplers=0:2d,1:2d"),
+    ("ps3_vita_dependent_read", ["--half-temporaries"],
+     "    r1 = (r0 * c[4] + v0);\n    r2 = tex2D(s1, (r1).xy);\n    r3 = (r2 * ((half4)(c[5])));\n"
+     "    r3 = max(r3, ((half4)(r0)));\n    oC0 = r3;\n", "samplers=0:2d,1:2d"),
+    ("vs2_oT_oD_fog", ["--half-temporaries"], "float4 v1 = in_v1;", "constants=6"),
     ("ps3_def_const", [], "const float4 k20 = float4(0.5, 1.0, 2.0, -1.0);", "constants=0"),
     ("vs3_skinning_256", [], "c[a0.y + 16]", "constants=256 relative=1"),
     ("vs3_m4x3_m3x4_m3x2", [], "dot((v1).xyz, (c[13]).xyz)", "constants=14"),
@@ -212,6 +227,31 @@ def main() -> int:
                 if not ok:
                     failures.append(f"{name} {extra}: glslang rejects the program:\n{log.strip()}")
 
+        # The half temporaries experiment must leave every pixel shader a
+        # program, with a half register in it, and vertex shaders alone.
+        halved = 0
+        for name, binary in binaries.items():
+            if name in REFUSED:
+                continue
+            plain = run_tool(tool, binary)
+            result = run_tool(tool, binary, ["--half-temporaries"])
+            if result.returncode:
+                failures.append(f"{name} --half-temporaries: not translated: {result.stderr.strip()}")
+                continue
+            if name.startswith("vs"):
+                if result.stdout != plain.stdout:
+                    failures.append(f"{name} --half-temporaries: a vertex program changed")
+                continue
+            if "half4 oC0" not in result.stdout and "half4 r" not in result.stdout:
+                failures.append(f"{name} --half-temporaries: no half register in the program")
+            halved += 1
+            if glslang:
+                program = work / (name + "-half.cg")
+                program.write_text(result.stdout)
+                ok, log = glslang_ok(glslang, "frag", program)
+                if not ok:
+                    failures.append(f"{name} --half-temporaries: glslang rejects the program:\n{log.strip()}")
+
         # Damaged bytecode: refused or translated, never a crash.
         rng = random.Random(20261109)
         damaged = 0
@@ -238,7 +278,7 @@ def main() -> int:
         print("FAIL:", failure)
     glslang_note = f"{compiled} accepted by glslang" if glslang else "glslang not installed, syntax not checked"
     print(f"{translated} translated ({glslang_note}), {refused} refused as expected, "
-          f"{len(CHECKS)} option checks, {damaged} damaged inputs")
+          f"{len(CHECKS)} option checks, {halved} with half temporaries, {damaged} damaged inputs")
     if failures:
         return 1
     print("PASS: gxm cg translator")

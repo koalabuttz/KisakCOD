@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <map>
 #include <set>
@@ -12,6 +13,9 @@ namespace gfx_gxm::cg
 {
 namespace
 {
+// SetHalfTemporaries.
+bool g_halfTemporaries = false;
+
 // D3DSPR_* register types.
 enum : uint8_t
 {
@@ -379,6 +383,19 @@ class Emitter
     std::vector<std::string> locals_;
     std::set<std::string> declared_;
     bool usesAddress_ = false;
+    // Pixel shaders with HalfTemporaries(): the temporaries that stay float.
+    std::set<uint16_t> floatTemps_;
+    // "half4" or "float4" while a statement of such a shader is written:
+    // every operand of the other kind is cast to it, so no operator or
+    // intrinsic sees the two mixed (the Vita's compiler calls some mixed
+    // calls ambiguous). Null otherwise.
+    const char *statementType_ = nullptr;
+    bool HalfTemp(uint8_t type, uint16_t number) const
+    {
+        return type == kTemp && !floatTemps_.count(number);
+    }
+    void FindFloatTemps();
+    const char *LocalType(const std::string &name) const;
     // def'd float constants.
     std::set<uint16_t> defined_;
     std::map<uint16_t, std::array<float, 4>> definedValues_;
@@ -393,6 +410,58 @@ class Emitter
     };
     std::vector<std::pair<uint16_t, Dcl>> outputDcls_, inputDcls_;
 };
+
+// Which temporaries of a pixel shader must stay float: those read as a
+// texture coordinate or a gradient, those written to the depth, and every
+// temporary an instruction reads to write one of them, to a fixed point.
+// The order of the instructions is not looked at, so a register that holds
+// a coordinate at one point and a colour at another stays float.
+void Emitter::FindFloatTemps()
+{
+    floatTemps_.clear();
+    if (vertex_ || !g_halfTemporaries)
+        return;
+    auto seed = [&](const Operand &op) {
+        if (op.type == kTemp)
+            floatTemps_.insert(op.number);
+    };
+    for (const Instruction &ins : shader_.instructions)
+    {
+        if ((ins.opcode == kTex || ins.opcode == kTexLdl || ins.opcode == kTexLdd) && ins.sourceCount >= 1)
+        {
+            seed(ins.sources[0]);
+            if (ins.opcode == kTexLdd)
+                for (int i = 2; i < ins.sourceCount && i < 4; ++i)
+                    seed(ins.sources[i]);
+        }
+        if (ins.hasDestination && ins.destination.type == kDepthOut)
+            for (int i = 0; i < ins.sourceCount && i < 4; ++i)
+                seed(ins.sources[i]);
+    }
+    for (bool grew = true; grew;)
+    {
+        grew = false;
+        for (const Instruction &ins : shader_.instructions)
+        {
+            if (!ins.hasDestination || ins.destination.type != kTemp || !floatTemps_.count(ins.destination.number))
+                continue;
+            for (int i = 0; i < ins.sourceCount && i < 4; ++i)
+                if (ins.sources[i].type == kTemp && floatTemps_.insert(ins.sources[i].number).second)
+                    grew = true;
+        }
+    }
+}
+
+const char *Emitter::LocalType(const std::string &name) const
+{
+    if (vertex_ || !g_halfTemporaries)
+        return "float4";
+    if (name == "oC0")
+        return "half4";
+    if (name.size() > 1 && name[0] == 'r' && !floatTemps_.count(uint16_t(std::atoi(name.c_str() + 1))))
+        return "half4";
+    return "float4";
+}
 
 std::string Emitter::Constant(uint16_t number) const
 {
@@ -514,31 +583,44 @@ std::string Emitter::SourceWithNumber(const Operand &op, uint16_t number)
     switch (op.modifier)
     {
     case kSmNone:
-        return value;
+        break;
     case kSmNeg:
-        return "(-" + value + ")";
+        value = "(-" + value + ")";
+        break;
     case kSmBias:
-        return "(" + value + " - 0.5)";
+        value = "(" + value + " - 0.5)";
+        break;
     case kSmBiasNeg:
-        return "(0.5 - " + value + ")";
+        value = "(0.5 - " + value + ")";
+        break;
     case kSmSign:
-        return "(" + value + " * 2.0 - 1.0)";
+        value = "(" + value + " * 2.0 - 1.0)";
+        break;
     case kSmSignNeg:
-        return "(1.0 - " + value + " * 2.0)";
+        value = "(1.0 - " + value + " * 2.0)";
+        break;
     case kSmComp:
-        return "(1.0 - " + value + ")";
+        value = "(1.0 - " + value + ")";
+        break;
     case kSmX2:
-        return "(" + value + " * 2.0)";
+        value = "(" + value + " * 2.0)";
+        break;
     case kSmX2Neg:
-        return "(" + value + " * -2.0)";
+        value = "(" + value + " * -2.0)";
+        break;
     case kSmAbs:
-        return "abs(" + value + ")";
+        value = "abs(" + value + ")";
+        break;
     case kSmAbsNeg:
-        return "(-abs(" + value + "))";
+        value = "(-abs(" + value + "))";
+        break;
     default:
         Fail("source modifier " + std::to_string(op.modifier) + " is not handled");
         return value;
     }
+    if (statementType_ && HalfTemp(op.type, number) != (statementType_[0] == 'h'))
+        value = std::string("((") + statementType_ + ")(" + value + "))";
+    return value;
 }
 
 std::string Emitter::Source(const Operand &op)
@@ -706,7 +788,20 @@ bool Emitter::Statement(const Instruction &ins)
 {
     const Operand *s = ins.sources;
     auto src = [&](int i) { return Source(s[i]); };
-    auto splat = [](const std::string &scalar) { return "kisak_splat(" + scalar + ")"; };
+    // A texture read's operands are coordinates: float whatever the
+    // destination is.
+    statementType_ = nullptr;
+    if (!vertex_ && g_halfTemporaries)
+    {
+        const bool reads = ins.opcode == kTex || ins.opcode == kTexLdl || ins.opcode == kTexLdd;
+        const bool half = !reads && ins.hasDestination &&
+                          (HalfTemp(ins.destination.type, ins.destination.number) || ins.destination.type == kColorOut);
+        statementType_ = half ? "half4" : "float4";
+    }
+    const bool halfStatement = statementType_ && statementType_[0] == 'h';
+    auto splat = [halfStatement](const std::string &scalar) {
+        return halfStatement ? "((half4)kisak_splat(" + scalar + "))" : "kisak_splat(" + scalar + ")";
+    };
     std::string v;
     switch (ins.opcode)
     {
@@ -1043,6 +1138,7 @@ bool Emitter::Run(std::string &cg, std::string &error)
         }
     }
 
+    FindFloatTemps();
     for (const Instruction &ins : shader_.instructions)
         if (!Statement(ins))
         {
@@ -1277,7 +1373,7 @@ bool Emitter::Run(std::string &cg, std::string &error)
                 error = "reads " + name + " without declaring it";
                 return false;
             }
-            locals += "    float4 " + name + " = float4(0.0, 0.0, 0.0, 0.0);\n";
+            locals += std::string("    ") + LocalType(name) + " " + name + " = float4(0.0, 0.0, 0.0, 0.0);\n";
         }
     if (usesAddress_)
         locals += "    int4 a0 = int4(0, 0, 0, 0);\n";
@@ -1300,6 +1396,16 @@ bool Emitter::Run(std::string &cg, std::string &error)
     return true;
 }
 } // namespace
+
+void SetHalfTemporaries(bool on)
+{
+    g_halfTemporaries = on;
+}
+
+bool HalfTemporaries()
+{
+    return g_halfTemporaries;
+}
 
 const char *SemanticName(Semantic semantic)
 {

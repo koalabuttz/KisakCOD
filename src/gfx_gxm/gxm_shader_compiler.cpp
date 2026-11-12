@@ -187,6 +187,21 @@ void ShaderCompilerMemory(size_t &held, size_t &peak, uint32_t &refused)
     refused = g_refusedAllocations;
 }
 
+namespace
+{
+bool g_fastPrecision = false;
+}
+
+void SetShaderCompilerFastPrecision(bool on)
+{
+    g_fastPrecision = on;
+}
+
+bool ShaderCompilerFastPrecision()
+{
+    return g_fastPrecision;
+}
+
 bool CompileCg(const char *source, size_t length, ShaderStage stage, std::vector<uint8_t> &program,
                std::string &log, bool fastMath, int optimization)
 {
@@ -210,6 +225,7 @@ bool CompileCg(const char *source, size_t length, ShaderStage stage, std::vector
     options.useFx = 1;
     options.optimizationLevel = optimization;
     options.useFastmath = fastMath ? 1 : 0;
+    options.useFastprecision = g_fastPrecision ? 1 : 0;
     options.warningLevel = 1;
 
     SceShaccCgCallbackList callbacks;

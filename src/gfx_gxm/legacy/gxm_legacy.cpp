@@ -1124,6 +1124,9 @@ void LogShaderSummary(Device &device, const char *when)
         when, (unsigned long long)p.requested, unsigned(gxm::ProgramsWaiting()), p.mostWaiting,
         (unsigned long long)p.hurried, (unsigned long long)p.dropped, p.slowestCompileMicros / 1000.0,
         p.slowestReadMicros / 1000.0, (unsigned long long)c.drawsWaited, (unsigned long long)c.framesWaited);
+    Log(device, "program sizes %s: %u vertex programs of %llu bytes in all, %u fragment programs of %llu bytes in all",
+        when, p.programs[0], (unsigned long long)p.programBytes[0], p.programs[1],
+        (unsigned long long)p.programBytes[1]);
     size_t held = 0, peak = 0;
     uint32_t refused = 0;
     gxm::ShaderCompilerMemory(held, peak, refused);

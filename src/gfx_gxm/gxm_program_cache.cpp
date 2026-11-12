@@ -102,7 +102,10 @@ void UnloadIdleCompiler()
 
 uint64_t KeyFor(const std::string &cg, ShaderStage stage)
 {
-    const uint8_t tag = stage == ShaderStage::Vertex ? 'v' : 'f';
+    // Programs compiled with fast precision (a run experiment) have names
+    // of their own, so neither kind is read for the other.
+    const bool fast = ShaderCompilerFastPrecision();
+    const uint8_t tag = stage == ShaderStage::Vertex ? (fast ? 'V' : 'v') : (fast ? 'F' : 'f');
     return cg::Hash(cg.data(), cg.size(), cg::Hash(&tag, 1));
 }
 
@@ -255,6 +258,8 @@ bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &
         if (read)
         {
             ++g_stats.fromFiles;
+            ++g_stats.programs[stage == ShaderStage::Vertex ? 0 : 1];
+            g_stats.programBytes[stage == ShaderStage::Vertex ? 0 : 1] += program.size();
             if (took > g_stats.slowestReadMicros)
                 g_stats.slowestReadMicros = took;
             return true;
@@ -295,6 +300,8 @@ bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &
             return false;
         }
         ++g_stats.compiled;
+        ++g_stats.programs[stage == ShaderStage::Vertex ? 0 : 1];
+        g_stats.programBytes[stage == ShaderStage::Vertex ? 0 : 1] += program.size();
     }
     if (!path.empty() && !WriteFile(folder, path, program))
     {
