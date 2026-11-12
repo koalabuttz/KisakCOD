@@ -410,8 +410,16 @@ gxm::MemorySizes PoolSizes(Device &device)
                       ? (uint32_t(system.size_cdram) - margin) & ~((256u << 10) - 1)
                       : 16u << 20;
     // 16 MB peaked at 15.1 in the menus before drawing; draws add the
-    // transient ring and renamed buffers.
-    sizes.main = 20u << 20;
+    // transient ring and the kept pieces of the buffers the game discards
+    // every frame (Rename): one more skinned cache (3 MB), dynamic index
+    // buffer (2 MB), pretess buffer and dynamic vertex buffer (1 MB each)
+    // and less than 1 MB of small ones. A console had 16 MB of system memory
+    // free on a map when this pool was 20 MB.
+    sizes.main = 26u << 20;
+    // For a console run that asks whether sceGxm's ring buffers hold two
+    // frames (big-gxm-rings, below): room for rings of twice the size.
+    if (gxm::ProgramCacheMarker("big-gxm-rings"))
+        sizes.main += 3u << 20;
     // For measuring in an emulator what a map would take if it fitted: a file
     // named big-gpu-pool beside the compiled programs adds 96 MB to the main
     // pool. A console has no such memory to give (the device is then not
@@ -572,7 +580,29 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     // A frame's geometry beyond this is binned in partial renders: slower,
     // not wrong. The default 16 MB is a quarter of what the engine has left.
     display.parameterBufferBytes = 8u << 20;
-    display.vsync = true;
+    // With the CPU a frame ahead, the parameter buffer and the context's ring
+    // buffers hold the geometry, draw calls and uniform buffers of two frames
+    // at times. Whether they do so without the GPU splitting a scene or a
+    // draw waiting for room is for a console to say: an empty file named
+    // big-parameter-buffer beside the compiled programs gives 12 MB, and one
+    // named big-gxm-rings doubles the rings (3 MB more of main memory), so
+    // that one sitting can compare.
+    if (gxm::ProgramCacheMarker("big-parameter-buffer"))
+    {
+        display.parameterBufferBytes = 12u << 20;
+        Log(*device, "diag: big-parameter-buffer is there: the parameter buffer is 12 MB");
+    }
+    if (gxm::ProgramCacheMarker("big-gxm-rings"))
+    {
+        display.ringScale = 2;
+        Log(*device, "diag: big-gxm-rings is there: sceGxm's ring buffers are twice their default size");
+    }
+    // A frame is shown at the display's next refresh. A file named no-vsync
+    // beside the compiled programs shows it at once (it tears): a console run
+    // can then tell what waiting for the refresh costs.
+    display.vsync = !gxm::ProgramCacheMarker("no-vsync");
+    if (!display.vsync)
+        Log(*device, "diag: no-vsync is there: frames are shown without waiting for the display's refresh");
     display.log = DisplayLog;
     display.logUser = device.get();
     if (!gxm::InitDisplay(display, error))
@@ -775,6 +805,7 @@ void DestroyTexture(Device *device, Texture *texture)
     }
     Retire(*device, texture->memory);
     Retire(*device, texture->swizzled);
+    RetireCopies(*device, *texture);
     --device->live;
     delete texture;
 }
@@ -798,7 +829,10 @@ bool LockRect(Device *device, Texture *texture, uint32_t face, uint32_t level, c
     }
     // What the GPU draws into must be done before the CPU looks.
     if (texture->memory.gpu && (texture->desc.usage & (d3d::USAGE_RENDERTARGET | d3d::USAGE_DEPTHSTENCIL)))
-        FinishGpu(*device);
+        FinishGpu(*device, WaitCause::ReadTarget);
+    // DISCARD: all of it is written anew, so not where the GPU still reads.
+    else if (flags & d3d::LOCK_DISCARD)
+        MakeWritable(*device, *texture);
     uint32_t x = 0, y = 0, z = 0;
     if (box && box->right)
     {
@@ -1003,6 +1037,7 @@ void *LockBuffer(Device *device, GpuBuffer *buffer, uint32_t offset, uint32_t by
 
 void DestroyBuffer(Device *device, GpuBuffer *buffer)
 {
+    RetireCopies(*device, *buffer);
     Retire(*device, buffer->memory);
     --device->live;
 }
@@ -1469,7 +1504,7 @@ bool GetRenderTargetData(Device *device, Surface *renderTarget, Surface *dst)
         Log(*device, "GetRenderTargetData: the surfaces differ in size or are not 32-bit");
         return false;
     }
-    FinishGpu(*device);
+    FinishGpu(*device, WaitCause::ReadTarget);
     for (uint32_t y = 0; y < source.height; ++y)
     {
         const uint8_t *from = source.data + size_t(y) * source.pitch;
@@ -1495,6 +1530,10 @@ void UpdateTexture(Device *device, Texture *src, Texture *dst)
 {
     if (!device || !src || !dst || src->desc.format != dst->desc.format || src->faces != dst->faces)
         return;
+    // The game does this to the model lighting volume every frame, while the
+    // GPU still samples last frame's.
+    if (src->memory.data && src->desc.levels >= dst->desc.levels && dst->desc.width == src->desc.width)
+        MakeWritable(*device, *dst);
     const uint32_t skip = dst->desc.width < src->desc.width ? FullChain(src->desc.width / dst->desc.width, 1, 1) - 1 : 0;
     for (uint32_t face = 0; face < dst->faces; ++face)
     {
@@ -1592,11 +1631,12 @@ PresentResult Present(Device *device)
     if (device->detached)
         return PresentResult::Skipped;
     DiagnoseFrame(*device);
-    EndScene(*device);
+    EndFrameScene(*device);
     const uint64_t from = Micros();
     const bool shown = gxm::Present();
     device->frameTime.Shown(Micros() - from);
     FrameDone(*device);
+    PaceFrame(*device);
     gxm::ProgramCacheFrame();
     LogProgramFailures(*device);
     if (device->shaderCounts.waitedThisFrame)
@@ -1614,6 +1654,7 @@ PresentResult Present(Device *device)
         Log(*device, "%s", gxm::DescribeMemory().c_str());
         Log(*device, "%s", DescribeMemoryUse().c_str());
         LogFrameTime(*device);
+        LogWaitCauses(*device);
     }
     if (!shown)
     {

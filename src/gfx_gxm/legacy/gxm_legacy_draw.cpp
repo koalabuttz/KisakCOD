@@ -40,6 +40,8 @@
 #include <gfx_gxm/gxm_engine_options.h>
 #include <gfx_gxm/gxm_program_cache.h>
 
+#include <psp2/kernel/threadmgr.h>
+
 #include <cmath>
 #include <cstring>
 #include <functional>
@@ -325,11 +327,31 @@ struct DrawState
     // Every wait for the GPU (FinishGpu): after one, nothing drawn before it
     // is still read.
     uint64_t gpuWaits = 0;
+    uint64_t waitsBy[size_t(WaitCause::Count)] = {}, waitsLogged[size_t(WaitCause::Count)] = {};
+    // Which frames the GPU has drawn (gxm_gpu_progress.h), from the
+    // notification the last scene of each frame carries. `overlap` off (a
+    // file named no-frame-overlap beside the programs, or notifications that
+    // never came): the CPU waits for the whole GPU at every Present, as the
+    // back end did before.
+    gfx_gxm::GpuProgress progress;
+    volatile uint32_t *notifications = nullptr;
+    bool overlap = true, notifyScene = false;
+    uint32_t paceTimeouts = 0;
+    uint64_t paceWaits = 0, paceMicros = 0;
     // Renames that found no room and waited for the GPU, renames a wait since
     // the buffer's last draw made needless, and the bytes of renamed buffers'
     // old memory the GPU may still read.
-    uint64_t renameWaits = 0, renamesSpared = 0;
-    uint32_t renamedWaiting = 0, renamedWaitingMost = 0;
+    uint64_t renameWaits = 0, renamesSpared = 0, renameSwaps = 0, textureSwaps = 0;
+    // Memory a discarded buffer left and the GPU may still read; the next
+    // discard of a buffer of its size and use takes it once the GPU is done
+    // (Rename).
+    struct KeptCopy
+    {
+        Memory memory;
+        uint64_t drawnWait = 0, drawnStamp = 0;
+    };
+    std::vector<KeptCopy> kept;
+    uint32_t copyBytes = 0; // the kept pieces and the second pieces of textures
     uint32_t drawFailures = 0, uniformFailures = 0;
     uint64_t copies = 0;
     uint32_t variantsMade = 0, variantFailures = 0;
@@ -573,6 +595,18 @@ namespace
 SceGxmContext *Gxm()
 {
     return gxm::Context();
+}
+
+// The frame being filled, counted from 1 (GpuProgress stamps).
+uint64_t Stamp(const DrawState &d)
+{
+    return d.frame + 1;
+}
+
+void PollGpu(DrawState &d)
+{
+    if (d.notifications)
+        d.progress.Poll([&d](uint32_t word) { return d.notifications[word]; });
 }
 
 void Defer(Device &device, std::function<void()> work)
@@ -1354,6 +1388,8 @@ bool BindTextures(Device &device, const Variant &pixel, void *uniforms)
         else if (texture->sampleable)
         {
             view = texture->sampled;
+            texture->drawnWait = d.gpuWaits;
+            texture->drawnStamp = Stamp(d);
             if (texture->desc.kind == TextureKind::Volume)
                 depth = float(texture->desc.depth);
         }
@@ -1689,6 +1725,18 @@ bool InitDraw(Device &device, std::string &error)
     if (!gfx_gxm::g_depthPrepass)
         Log(device, "diag: no-depth-prepass is there: the scene's depth is drawn first only when r_depthPrepass, "
                     "depth of field or soft particles ask for it");
+    d.notifications = sceGxmGetNotificationRegion();
+    if (gxm::ProgramCacheMarker("no-frame-overlap"))
+    {
+        d.overlap = false;
+        Log(device, "diag: no-frame-overlap is there: the CPU waits for the whole GPU at every Present, so the two "
+                    "take turns (frames are slower with it)");
+    }
+    else if (!d.notifications)
+    {
+        d.overlap = false;
+        Log(device, "sceGxm gave no notification region: the CPU waits for the whole GPU at every Present");
+    }
     if (gxm::ProgramCacheMarker("no-draw-reuse"))
     {
         d.reuse = false;
@@ -2125,21 +2173,129 @@ void EndScene(Device &device)
         return;
     d->sceneOpen = false;
     d->sceneColor = d->sceneDepth = nullptr;
+    // The frame's last scene tells when the GPU is done with the frame.
+    SceGxmNotification done{};
+    const bool notify = d->notifyScene && d->overlap && d->notifications;
+    d->notifyScene = false;
+    if (notify)
+    {
+        uint32_t value = 0;
+        const uint32_t word = d->progress.Submit(Stamp(*d), value);
+        d->notifications[word] = 0;
+        done.address = d->notifications + word;
+        done.value = value;
+    }
     const uint64_t from = Micros();
-    const int result = sceGxmEndScene(Gxm(), nullptr, nullptr);
+    const int result = sceGxmEndScene(Gxm(), nullptr, notify ? &done : nullptr);
     device.frameTime.SceneEnd(Micros() - from);
     if (result < 0)
         Log(device, "sceGxmEndScene failed (0x%08x)", unsigned(result));
 }
 
-void FinishGpu(Device &device)
+void EndFrameScene(Device &device)
+{
+    if (DrawState *d = device.draw)
+        d->notifyScene = d->sceneOpen;
+    EndScene(device);
+}
+
+void FinishGpu(Device &device, WaitCause cause)
 {
     EndScene(device);
     const uint64_t from = Micros();
     gxm::Finish();
     device.frameTime.Wait(Micros() - from);
-    if (device.draw)
-        ++device.draw->gpuWaits;
+    if (DrawState *d = device.draw)
+    {
+        ++d->gpuWaits;
+        ++d->waitsBy[size_t(cause)];
+        // Every frame before this one is drawn; what this frame has drawn so
+        // far is too, which gpuWaits tells (GpuDoneWith).
+        d->progress.Finished(Stamp(*d) - 1);
+    }
+}
+
+// The pacing wait. The CPU may fill frame N while the GPU draws frame N - 1,
+// and no more: a second frame of lead would only add a frame of delay between
+// the controls and the picture. So before frame N starts, frame N - 2 must be
+// drawn. That is also what lets a buffer discarded every other frame be
+// written in place, and what makes memory retired three frames ago free.
+// A GPU-bound game spends most of its frame here while the GPU draws; a
+// CPU-bound one finds the frame drawn and does not wait.
+void PaceFrame(Device &device)
+{
+    constexpr uint64_t kPollMicros = 250;
+    constexpr uint64_t kTimeoutMicros = 2000 * 1000;
+    constexpr uint32_t kTimeoutsAllowed = 3;
+    DrawState &d = *device.draw;
+    if (!d.overlap)
+    {
+        FinishGpu(device, WaitCause::EveryFrame);
+        return;
+    }
+    const uint64_t next = Stamp(d); // the frame about to be filled
+    if (next < 3)
+        return;
+    const uint64_t wanted = next - 2;
+    PollGpu(d);
+    if (d.progress.Done(wanted))
+        return;
+    const uint64_t from = Micros();
+    bool timedOut = false;
+    while (!d.progress.Done(wanted) && d.progress.Expected(wanted))
+    {
+        if (Micros() - from > kTimeoutMicros)
+        {
+            timedOut = true;
+            break;
+        }
+        sceKernelDelayThread(kPollMicros);
+        PollGpu(d);
+    }
+    if (d.progress.Done(wanted))
+    {
+        const uint64_t took = Micros() - from;
+        device.frameTime.Pace(took);
+        ++d.paceWaits;
+        d.paceMicros += took;
+        return;
+    }
+    // No notification will say so (the frame ended without a scene, or the
+    // word never changed): wait for everything.
+    FinishGpu(device, WaitCause::Pace);
+    if (timedOut && ++d.paceTimeouts >= kTimeoutsAllowed)
+    {
+        d.overlap = false;
+        Log(device,
+            "the GPU's notification for a frame's last scene did not come in %u ms, %u times: from here on the CPU "
+            "waits for the whole GPU at every Present (as with no-frame-overlap)",
+            unsigned(kTimeoutMicros / 1000), kTimeoutsAllowed);
+    }
+}
+
+void LogWaitCauses(Device &device)
+{
+    static const char *const kNames[size_t(WaitCause::Count)] = {
+        "other (shutdown, memory, diagnostics)", "a buffer lock without a copy to write",
+        "a texture rewrite without a second piece", "the CPU reading what the GPU drew",
+        "pacing without a notification",          "every frame (no overlap)"};
+    DrawState *d = device.draw;
+    if (!d)
+        return;
+    std::string line;
+    for (size_t i = 0; i < size_t(WaitCause::Count); ++i)
+    {
+        const uint64_t count = d->waitsBy[i] - d->waitsLogged[i];
+        d->waitsLogged[i] = d->waitsBy[i];
+        if (!count)
+            continue;
+        char part[96];
+        std::snprintf(part, sizeof(part), "%s%llu x %s", line.empty() ? "" : ", ", (unsigned long long)count,
+                      kNames[i]);
+        line += part;
+    }
+    if (!line.empty())
+        Log(device, "waits for the whole GPU since the last such line: %s", line.c_str());
 }
 
 void FrameDone(Device &device)
@@ -2204,51 +2360,151 @@ void ForgetDecl(Device &device, VertexDecl &decl)
         DropProgramsIf(device, [&](const VertexProgramEntry &e) { return e.decl == &decl; }, nullptr);
 }
 
-// The engine locks most of its dynamic buffers with DISCARD every frame, and
-// the old memory of each rename waits kFramesInFlight frames. So a buffer can
-// hold four times its size, and the pools have no room for that in a game.
-// The fresh memory therefore comes from the pool the buffer belongs in (main
-// for dynamic buffers) and from no other: copies that spilled into CDRAM took
-// the room the game's render targets needed, in pieces. When that pool is
-// full, the lock waits for the GPU and writes in place. One such wait serves
-// every buffer drawn before it: until a draw reads one again, its locks
-// write in place too.
+// The engine locks its dynamic buffers with DISCARD every frame, and the GPU
+// still reads what the last frame put in them: the CPU fills a frame while
+// the GPU draws the one before (PaceFrame). So a discarded buffer changes
+// memory with a kept piece of the same size and use that the GPU is done
+// with, and its own goes to the kept ones until the GPU is done with it too.
+// One kept piece serves every buffer of a kind that is discarded once a
+// frame: the engine's two skinned vertex caches, which it fills in turn, go
+// round three pieces of memory, not four. The pieces are kept, not freed and
+// asked for again: the main pool has no room for memory that waits to be
+// freed. A discard that finds no piece and no room for a new one waits for
+// the whole GPU, which makes the CPU and the GPU take turns for that frame;
+// the log counts those (LogWaitCauses).
+//
+// Locks come from two threads, never at once: the back end's as it draws,
+// and the game's between two frames, when the back end is idle and the GPU
+// has the frame just sent (the skinned caches, the pretessellated indices).
+namespace
+{
+// How many pieces of one size and use are kept at most. Large buffers are
+// few and discarded once a frame; of the small ones (a quad for each light
+// or view) many can be discarded in one frame.
+size_t KeptOfAKind(uint32_t bytes)
+{
+    constexpr uint32_t kLarge = 256u << 10;
+    return bytes >= kLarge ? 3 : std::max<size_t>(4, std::min<size_t>(64, kLarge / std::max(bytes, 1u)));
+}
+
+bool GpuDoneWith(const DrawState &d, uint64_t drawnWait, uint64_t drawnStamp)
+{
+    return drawnWait != d.gpuWaits || d.progress.Done(drawnStamp);
+}
+
+bool SameKind(const Memory &kept, const GpuBuffer &buffer)
+{
+    return kept.gpu && kept.bytes == buffer.memory.bytes && kept.use == buffer.memory.use;
+}
+} // namespace
+
 void Rename(Device &device, GpuBuffer &buffer)
 {
     DrawState &d = *device.draw;
-    if (buffer.drawnWait != d.gpuWaits)
+    PollGpu(d);
+    if (GpuDoneWith(d, buffer.drawnWait, buffer.drawnStamp))
     {
         buffer.drawn = false;
         ++d.renamesSpared;
         return;
     }
+    size_t ofThisKind = 0;
+    for (DrawState::KeptCopy &kept : d.kept)
+    {
+        if (!SameKind(kept.memory, buffer))
+            continue;
+        ++ofThisKind;
+        if (!GpuDoneWith(d, kept.drawnWait, kept.drawnStamp))
+            continue;
+        std::swap(kept.memory, buffer.memory);
+        kept.drawnWait = buffer.drawnWait;
+        kept.drawnStamp = buffer.drawnStamp;
+        buffer.drawn = false;
+        ++d.renameSwaps;
+        ++device.stats.dynamicRenames;
+        return;
+    }
     Memory fresh;
     const bool dynamic = (buffer.usage & d3d::USAGE_DYNAMIC) != 0;
-    if (!AllocateRenamed(fresh, buffer.size, 16, dynamic ? gxm::MemoryKind::Main : gxm::MemoryKind::Cdram,
+    if (ofThisKind >= KeptOfAKind(buffer.memory.bytes) ||
+        !AllocateRenamed(fresh, buffer.memory.bytes, 16, dynamic ? gxm::MemoryKind::Main : gxm::MemoryKind::Cdram,
                          buffer.memory.use))
     {
-        FinishGpu(device);
+        FinishGpu(device, WaitCause::Rename);
         buffer.drawn = false;
         ++d.renameWaits;
         return;
     }
-    {
-        const gxm::MemoryKind kind = buffer.memory.kind;
-        void *data = buffer.memory.data;
-        const MemoryUse use = buffer.memory.use;
-        const uint32_t bytes = buffer.memory.bytes;
-        DrawState *state = &d;
-        d.renamedWaiting += bytes;
-        d.renamedWaitingMost = std::max(d.renamedWaitingMost, d.renamedWaiting);
-        Defer(device, [state, kind, data, use, bytes] {
-            FreeGpuMemory(kind, data, use, bytes);
-            state->renamedWaiting -= bytes;
-        });
-    }
+    d.copyBytes += fresh.bytes;
+    d.kept.push_back(DrawState::KeptCopy{std::move(buffer.memory), buffer.drawnWait, buffer.drawnStamp});
     buffer.memory = std::move(fresh);
     buffer.drawn = false;
     ++d.renames;
     ++device.stats.dynamicRenames;
+}
+
+// Buffers go at shutdown and at a renderer restart, with all their kind: the
+// kept pieces of that kind go too, and are made again if a buffer still
+// needs one.
+void RetireCopies(Device &device, GpuBuffer &buffer)
+{
+    DrawState *d = device.draw;
+    if (!d || !buffer.memory.gpu)
+        return;
+    for (size_t i = 0; i < d->kept.size();)
+    {
+        if (!SameKind(d->kept[i].memory, buffer))
+        {
+            ++i;
+            continue;
+        }
+        d->copyBytes -= std::min(d->copyBytes, d->kept[i].memory.bytes);
+        Retire(device, d->kept[i].memory);
+        d->kept.erase(d->kept.begin() + i);
+    }
+}
+
+void RetireCopies(Device &device, Texture &texture)
+{
+    if (device.draw && texture.spare.gpu)
+        device.draw->copyBytes -= std::min(device.draw->copyBytes, texture.spare.bytes);
+    Retire(device, texture.spare);
+}
+
+void MakeWritable(Device &device, Texture &texture)
+{
+    DrawState *d = device.draw;
+    if (!d || !texture.memory.gpu || texture.swizzledLayout || !texture.sampleable || texture.levels.size() != 1 ||
+        (texture.desc.usage & (d3d::USAGE_RENDERTARGET | d3d::USAGE_DEPTHSTENCIL)))
+        return;
+    PollGpu(*d);
+    if (GpuDoneWith(*d, texture.drawnWait, texture.drawnStamp))
+        return;
+    if (!texture.spare.gpu)
+    {
+        // Beside the first piece if it can be, else in the other pool.
+        const gxm::MemoryKind other =
+            texture.memory.kind == gxm::MemoryKind::Cdram ? gxm::MemoryKind::Main : gxm::MemoryKind::Cdram;
+        if (AllocateRenamed(texture.spare, texture.memory.bytes, 256, texture.memory.kind, texture.memory.use) ||
+            AllocateRenamed(texture.spare, texture.memory.bytes, 256, other, texture.memory.use))
+        {
+            texture.spareWait = texture.spareStamp = 0;
+            d->copyBytes += texture.spare.bytes;
+        }
+    }
+    if (!texture.spare.gpu || !GpuDoneWith(*d, texture.spareWait, texture.spareStamp))
+    {
+        FinishGpu(device, WaitCause::TextureCopy);
+        return;
+    }
+    std::swap(texture.memory, texture.spare);
+    texture.spareWait = texture.drawnWait;
+    texture.spareStamp = texture.drawnStamp;
+    texture.drawnStamp = 0;
+    // The view draws bind points at the memory: the kept one no longer
+    // matches `sampled` and is made anew by the next draw.
+    sceGxmTextureSetData(&texture.sampled, texture.memory.data);
+    ++d->textureSwaps;
 }
 
 void ClearTargets(Device &device, uint32_t rectCount, const Rect *rects, uint32_t flags, uint32_t color, float z,
@@ -2590,6 +2846,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         indexData = ib->memory.data + startIndex * bytes;
         ib->drawn = true;
         ib->drawnWait = d.gpuWaits;
+        ib->drawnStamp = Stamp(d);
     }
     else if (indexCount > kSequentialIndices)
     {
@@ -2768,6 +3025,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         }
         vb->drawn = true;
         vb->drawnWait = d.gpuWaits;
+        vb->drawnStamp = Stamp(d);
         streamData[i] = vb->memory.data + int64_t(device.streams[s].offset) + int64_t(baseVertex) * strides[s];
     }
 
@@ -3196,9 +3454,16 @@ void LogDrawSummary(Device &device)
         if (d->skipped[i])
             Log(device, "draws skipped: %llu x %s", (unsigned long long)d->skipped[i], kSkipNames[i]);
     Log(device,
-        "buffer renames: %llu took fresh memory, %llu waited for the GPU instead (their pool was full) and %llu "
-        "needed neither (a wait since their last draw); old copies the GPU might still read took %u KB at most",
-        (unsigned long long)d->renames, (unsigned long long)d->renameWaits, (unsigned long long)d->renamesSpared,
-        d->renamedWaitingMost >> 10);
+        "buffer discards: %llu wrote in place (the GPU was done with the buffer), %llu took a kept piece of memory, "
+        "%llu made a new one and %llu waited for the whole GPU (none free and no room); %llu texture rewrites took "
+        "the second piece; kept pieces and second pieces hold %u KB",
+        (unsigned long long)d->renamesSpared, (unsigned long long)d->renameSwaps, (unsigned long long)d->renames,
+        (unsigned long long)d->renameWaits, (unsigned long long)d->textureSwaps, d->copyBytes >> 10);
+    Log(device,
+        "frames overlap: %s; %llu of %llu frames waited for the frame before last, %.1f ms each on average; %u "
+        "notifications did not come",
+        d->overlap ? "yes (the CPU fills a frame while the GPU draws the one before)" : "no",
+        (unsigned long long)d->paceWaits, (unsigned long long)d->frame,
+        d->paceWaits ? d->paceMicros / 1000.0 / double(d->paceWaits) : 0.0, d->paceTimeouts);
 }
 } // namespace gfx_vk::legacy
