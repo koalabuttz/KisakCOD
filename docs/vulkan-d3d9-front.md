@@ -619,9 +619,11 @@ same dvars and the `r_vkStats` command:
   (`ChangeDisplaySettingsExW` with `CDS_FULLSCREEN`, left alone when the
   display is there already) and moves the window over the whole display. The
   registry's mode comes back when the device goes windowed or is released.
-  `WM_ACTIVATEAPP` calls `Kisak_VulkanAppActivated`: switching away gives the
-  desktop its mode back and minimises the window, coming back sets the mode
-  again, as D3D9 does.
+  `WM_ACTIVATEAPP` calls `Kisak_VulkanAppActivated`: switching away minimises
+  the window and then gives the desktop its mode back, coming back sets the
+  mode again, as D3D9 does. In the other order (PC run 18, 2026-11-12) Windows
+  resized the window to the desktop's full size as the mode changed back, and
+  it stayed topmost and drawing instead of minimised.
 
 Before this (PC run 17, 2026-11-11), `r_fullscreen 1` with `r_mode 1280x720`
 left a 2560x1080 display at its mode and 75 Hz and showed the game as a

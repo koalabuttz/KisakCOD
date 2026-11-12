@@ -550,8 +550,15 @@ void Kisak_VulkanAppActivated(HWND window, bool active)
     }
     if (s_vkHost.displayChanged)
     {
+        // Minimised first, then the desktop's mode, as DXVK does. The other
+        // way round (PC run 18) left the window at the desktop's full size,
+        // topmost and drawing: Windows resizes a window that covered the
+        // display when the mode changes back. Posted again if it still shows.
+        if (IsWindowVisible(window))
+            ShowWindow(window, SW_MINIMIZE);
         RestoreDisplayMode();
-        ShowWindow(window, SW_MINIMIZE);
+        if (IsWindowVisible(window) && !IsIconic(window))
+            ShowWindowAsync(window, SW_MINIMIZE);
     }
 }
 
