@@ -9,6 +9,12 @@
 // every display buffer still queued). The back end times its calls and keeps
 // the sums here; the line gives a frame's mean of each and what is left.
 //
+// The waits are of two kinds. A wait for the whole GPU (sceGxmFinish) makes
+// the CPU and the GPU take turns: the frame costs both their times. The
+// pacing wait at the end of a frame is for the frame before last only
+// (gxm_gpu_progress.h): the GPU draws the last frame meanwhile, so a GPU-bound
+// game shows a long pacing wait and still runs at the GPU's own rate.
+//
 // The calls that can wait for the GPU are few and all timed. Draws are too
 // many for that: a clock read may be a system call on the console, and two
 // for each of some thousand draws would cost what they measure. So about one
@@ -36,6 +42,7 @@ struct FrameTime
     uint64_t frames = 0;
     uint64_t sceneMicros = 0, scenes = 0;                // sceGxmBeginScene and sceGxmEndScene
     uint64_t waitMicros = 0, waits = 0, longestWait = 0; // sceGxmFinish
+    uint64_t paceMicros = 0, paces = 0, longestPace = 0; // for the frame before last
     uint64_t showMicros = 0, longestShow = 0;            // the Present
     // Draws, and clears and copies (every one timed), each without the scene
     // work and the waits inside it.
@@ -59,6 +66,14 @@ struct FrameTime
         waitMicros += micros;
         longestWait = std::max(longestWait, micros);
         ++waits;
+    }
+    // A pacing wait that had to wait at all (most frames of a CPU-bound
+    // game find the frame before last drawn already).
+    void Pace(uint64_t micros)
+    {
+        paceMicros += micros;
+        longestPace = std::max(longestPace, micros);
+        ++paces;
     }
     void Shown(uint64_t micros)
     {
@@ -104,7 +119,7 @@ struct FrameTime
     // A frame's mean of each, in milliseconds, at `now`.
     struct Means
     {
-        double all = 0.0, draws = 0.0, others = 0.0, scenes = 0.0, waits = 0.0, show = 0.0, rest = 0.0;
+        double all = 0.0, draws = 0.0, others = 0.0, scenes = 0.0, waits = 0.0, pace = 0.0, show = 0.0, rest = 0.0;
         double timedOneIn = 0.0; // draws for each timed one
     };
     Means Mean(uint64_t now) const
@@ -120,8 +135,9 @@ struct FrameTime
         m.others = each(double(otherMicros));
         m.scenes = each(double(sceneMicros));
         m.waits = each(double(waitMicros));
+        m.pace = each(double(paceMicros));
         m.show = each(double(showMicros));
-        m.rest = m.all - m.draws - m.others - m.scenes - m.waits - m.show;
+        m.rest = m.all - m.draws - m.others - m.scenes - m.waits - m.pace - m.show;
         return m;
     }
 
@@ -138,12 +154,13 @@ struct FrameTime
             line, sizeof(line),
             "frame time, last %llu frames: %.1f ms a frame. In this back end: %.0f draws %.2f ms (one in %.1f timed), "
             "%.1f clears and copies %.2f ms, %.1f scenes' starts and ends %.2f ms, %.2f waits for the GPU %.2f ms "
-            "(longest %.1f ms), showing the frame %.2f ms (longest %.1f ms). The rest, %.1f ms, is the game, the D3D9 "
+            "(longest %.1f ms), %.2f waits for the frame before last %.2f ms (longest %.1f ms), showing the frame "
+            "%.2f ms (longest %.1f ms). The rest, %.1f ms, is the game, the D3D9 "
             "front and the filling of buffers and textures. %llu timed draws took over %u ms (%.1f ms more in all, "
             "counted once). A clock read costs %.2f us",
             (unsigned long long)frames, m.all, double(draws) / count, m.draws, m.timedOneIn, double(others) / count,
             m.others, double(scenes) / count, m.scenes, double(waits) / count, m.waits, double(longestWait) / 1000.0,
-            m.show, double(longestShow) / 1000.0, m.rest, (unsigned long long)slowDraws,
+            double(paces) / count, m.pace, double(longestPace) / 1000.0, m.show, double(longestShow) / 1000.0, m.rest, (unsigned long long)slowDraws,
             unsigned(kSlowDrawMicros / 1000), double(slowDrawMicros) / 1000.0, clockReadMicros);
         return line;
     }

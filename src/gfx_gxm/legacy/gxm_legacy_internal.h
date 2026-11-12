@@ -14,6 +14,7 @@
 
 #include <gfx_gxm/gxm_display.h>
 #include <gfx_gxm/gxm_frame_time.h>
+#include <gfx_gxm/gxm_gpu_progress.h>
 #include <gfx_gxm/gxm_memory.h>
 #include <gfx_gxm/gxm_program_queue.h>
 #include <gfx_gxm/shader/gxm_cg_translate.h>
@@ -161,6 +162,16 @@ struct Texture
     // nearly always sampled one way, so most draws set none of that again.
     mutable SceGxmTexture view, viewOf;
     mutable uint32_t viewBits = ~0u;
+    // When a draw last sampled it: the count of waits for the whole GPU and
+    // the frame (GpuProgress stamps). The CPU may rewrite the memory once
+    // either says the GPU is done with it.
+    mutable uint64_t drawnWait = 0, drawnStamp = 0;
+    // A second piece of memory for a texture the game rewrites whole while
+    // the GPU still samples it (the model lighting volume, every frame): the
+    // rewrite goes to the piece the GPU is done with and the two change
+    // places (MakeWritable). Made at the first such rewrite.
+    Memory spare;
+    uint64_t spareWait = 0, spareStamp = 0;
     // Depth formats: the depth-stencil surface scenes use.
     SceGxmDepthStencilSurface depthSurface;
     // Swizzled textures (cubes, and block-compressed 2D textures, which
@@ -200,6 +211,7 @@ struct GpuBuffer
     bool locked = false;
     bool drawn = false; // read by a draw since its memory was last renamed
     uint64_t drawnWait = 0; // the count of waits for the GPU when a draw last read it
+    uint64_t drawnStamp = 0; // the frame of that draw (GpuProgress stamps)
     std::string name;
 };
 struct VertexBuffer : GpuBuffer
@@ -355,9 +367,8 @@ uint64_t Micros();
 // resources stay in the C heap.
 bool AllocateMemory(Device &device, Memory &memory, uint32_t bytes, uint32_t align, d3d::Pool pool, bool preferCdram,
                     MemoryUse use, const char *name);
-// A buffer's fresh memory for a rename: from the one pool named, and no log
-// line when it has no room (Rename waits for the GPU then, every frame if it
-// must).
+// A buffer's or texture's second piece of memory: from the one pool named,
+// and no log line when it has no room (the caller waits for the GPU then).
 bool AllocateRenamed(Memory &memory, uint32_t bytes, uint32_t align, gxm::MemoryKind kind, MemoryUse use);
 void FreeMemory(Memory &memory);
 // Frees a piece AllocateMemory handed out, by its parts (for frees that wait
@@ -398,20 +409,48 @@ void Retire(Device &device, Memory &memory);
 // Out of GPU memory: waits for the GPU and frees everything retired. Returns
 // how many pieces of work ran (0 when nothing was waiting).
 size_t FreeRetiredNow(Device &device);
+// Why the CPU waited for the whole GPU (sceGxmFinish). Such a wait makes the
+// CPU and the GPU take turns, so the log counts them by cause.
+enum class WaitCause : uint8_t
+{
+    Other,       // shutdown, a map change's memory, a diagnostic
+    Rename,      // a DISCARD lock found no copy of the buffer to write
+    TextureCopy, // a texture rewritten whole had no second piece of memory
+    ReadTarget,  // the CPU reads what the GPU drew (a lock, a screenshot)
+    Pace,        // the pacing wait had no notification to wait for
+    EveryFrame,  // no-frame-overlap: one wait at every Present
+    Count
+};
 // The open scene, if any, goes to the GPU; Finish also waits for it.
 void EndScene(Device &device);
-void FinishGpu(Device &device);
+void FinishGpu(Device &device, WaitCause cause = WaitCause::Other);
+// The Present's EndScene: the frame's last scene carries the notification
+// that tells when the GPU is done with the frame (gxm_gpu_progress.h).
+void EndFrameScene(Device &device);
 // After each Present: frees what the GPU is done with.
 void FrameDone(Device &device);
+// After FrameDone: waits until the GPU has drawn the frame before last, so
+// that the CPU runs one frame ahead of it and no further.
+void PaceFrame(Device &device);
+// The waits for the whole GPU since the last such line, by cause.
+void LogWaitCauses(Device &device);
+// A texture's whole content is about to be rewritten: when the GPU may still
+// sample it, the write goes to its second piece of memory. Textures with one
+// level and one face in linear GPU memory only; others are written in place.
+void MakeWritable(Device &device, Texture &texture);
+// A buffer or texture is going: the kept copies of its kind of buffer, or
+// its second piece, are retired with it.
+void RetireCopies(Device &device, GpuBuffer &buffer);
+void RetireCopies(Device &device, Texture &texture);
 // Before each Present, while the frame's scene is still open: the run
 // diagnostics (draws a test rectangle, reads the back buffer back).
 void DiagnoseFrame(Device &device);
 // Drops programs made from a shader or declaration about to go.
 void ForgetShader(Device &device, Shader &shader);
 void ForgetDecl(Device &device, VertexDecl &decl);
-// DISCARD on a buffer a draw read: fresh memory with the old retired, or,
-// when the buffer's pool has no room for that, a wait for the GPU. Neither
-// when the GPU has been waited for since that draw.
+// DISCARD on a buffer a draw read: written in place when the GPU is done
+// with that draw's frame, else it changes memory with a kept piece the GPU
+// is done with (made when there is none), else a wait for the GPU.
 void Rename(Device &device, GpuBuffer &buffer);
 void ClearTargets(Device &device, uint32_t rectCount, const Rect *rects, uint32_t flags, uint32_t color, float z,
                   uint32_t stencil);

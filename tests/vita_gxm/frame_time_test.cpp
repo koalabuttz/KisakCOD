@@ -66,11 +66,15 @@ void Sums()
         time.Other(400, time.Inner());
         time.SceneEnd(300);
         time.Wait(frame == 3 ? 5000 : 1000);
+        // Every other frame finds the frame before last still drawing.
+        if (frame % 2 == 0)
+            time.Pace(frame == 4 ? 3000 : 1000);
         time.Shown(frame == 7 ? 9000 : 2000);
     }
     EXPECT(time.frames == 10 && time.scenes == 10 && time.waits == 10 && time.others == 10);
     EXPECT(time.draws == 40 && time.timedDraws == 40 && time.slowDraws == 0);
     EXPECT(time.longestWait == 5000 && time.longestShow == 9000);
+    EXPECT(time.paces == 5 && time.longestPace == 3000);
     // Ten frames in 200 ms.
     const FrameTime::Means m = time.Mean(1000000 + 200000);
     EXPECT(Near(m.all, 20.0));
@@ -79,9 +83,10 @@ void Sums()
     EXPECT(Near(m.others, 0.4));
     EXPECT(Near(m.scenes, 0.4));  // 100 + 300 us
     EXPECT(Near(m.waits, 1.4));   // 9 x 1000 + 5000 us over ten frames
+    EXPECT(Near(m.pace, 0.7));    // 4 x 1000 + 3000 us over ten frames
     EXPECT(Near(m.show, 2.7));    // 9 x 2000 + 9000 us
-    EXPECT(Near(m.rest, 20.0 - 1.0 - 0.4 - 0.4 - 1.4 - 2.7));
-    EXPECT(Near(m.all, m.draws + m.others + m.scenes + m.waits + m.show + m.rest));
+    EXPECT(Near(m.rest, 20.0 - 1.0 - 0.4 - 0.4 - 1.4 - 0.7 - 2.7));
+    EXPECT(Near(m.all, m.draws + m.others + m.scenes + m.waits + m.pace + m.show + m.rest));
 
     const std::string line = time.Describe(1000000 + 200000, 0.75);
     std::printf("%s\n", line.c_str());
@@ -91,7 +96,8 @@ void Sums()
     EXPECT(line.find("1.0 scenes' starts and ends 0.40 ms") != std::string::npos);
     EXPECT(line.find("1.00 waits for the GPU 1.40 ms (longest 5.0 ms)") != std::string::npos);
     EXPECT(line.find("showing the frame 2.70 ms (longest 9.0 ms)") != std::string::npos);
-    EXPECT(line.find("The rest, 14.1 ms,") != std::string::npos);
+    EXPECT(line.find("0.50 waits for the frame before last 0.70 ms (longest 3.0 ms)") != std::string::npos);
+    EXPECT(line.find("The rest, 13.4 ms,") != std::string::npos);
     EXPECT(line.find("0 timed draws took over 2 ms (0.0 ms more in all, counted once)") != std::string::npos);
     EXPECT(line.find("A clock read costs 0.75 us") != std::string::npos);
     EXPECT(line.size() < 700); // the back end's log line holds 1024 with its prefix
