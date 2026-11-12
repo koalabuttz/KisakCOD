@@ -88,8 +88,10 @@ cross-build.
 
 Gameplay requires legally obtained COD4 data, including the small configuration
 and localization files as well as the MP fastfiles. Keep the original directory
-layout. The native server uses case-sensitive filesystem lookups; it translates
-engine path separators but does not case-fold filenames. Raw source-asset mode
+layout. File names are matched as on Windows: a file or folder that is not
+found as written is looked for ignoring case (`src/linux/sys_path_case.h`), so
+`Mods/MyMod`, `Main/` or a mixed-case fastfile name still load, and a file the
+engine writes goes into an existing folder spelled differently. Raw source-asset mode
 (`useFastFile 0`) is explicitly rejected by this target.
 
 Without assets, the expected result is a nonzero exit during real engine

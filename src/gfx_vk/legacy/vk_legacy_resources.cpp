@@ -3,6 +3,8 @@
 
 #include "vk_legacy_internal.h"
 
+#include <algorithm>
+
 namespace gfx_vk::legacy
 {
 namespace
@@ -883,6 +885,7 @@ Shader *CreateShader(Device *device_, const void *bytecode, size_t bytes, std::s
     }
     shader->id = device.nextId++;
     shader->stage = shader->translated.reflection.stage;
+    shader->contentHash = ContentHash(bytecode, bytes);
     std::vector<uint32_t> spirv;
     if (shader->stage == ls::Stage::Vertex)
     {
@@ -909,8 +912,43 @@ Shader *CreateShader(Device *device_, const void *bytecode, size_t bytes, std::s
     {
         AddCachedShader(bytecode, bytes, CachedShader{shader->translated, std::move(spirv)});
     }
+    // A live shader translated to the same code lends its pipeline id.
+    std::vector<Shader *> &same = device.sameShaders[shader->contentHash];
+    shader->pipelineId = shader->id;
+    for (const Shader *other : same)
+    {
+        if (other->stage == shader->stage && other->translated.ir == shader->translated.ir)
+        {
+            shader->pipelineId = other->pipelineId;
+            break;
+        }
+    }
+    same.push_back(shader.get());
+    if (device.ahead)
+        AheadShaderCreated(device, *shader);
     return shader.release();
 }
+
+namespace
+{
+// Takes object out of its content's list; true when no live object shares
+// its pipeline id any more, so the pipelines keyed by it can go.
+template <typename Object>
+bool LastOfItsPipelines(std::unordered_map<uint64_t, std::vector<Object *>> &same, Object *object)
+{
+    auto found = same.find(object->contentHash);
+    if (found == same.end())
+        return true;
+    std::vector<Object *> &list = found->second;
+    list.erase(std::remove(list.begin(), list.end(), object), list.end());
+    bool last = true;
+    for (const Object *other : list)
+        last = last && other->pipelineId != object->pipelineId;
+    if (list.empty())
+        same.erase(found);
+    return last;
+}
+} // namespace
 
 void DestroyShader(Device *device, Shader *shader)
 {
@@ -920,12 +958,31 @@ void DestroyShader(Device *device, Shader *shader)
         device->vertexShader = nullptr;
     if (device->pixelShader == shader)
         device->pixelShader = nullptr;
-    ForgetPipelines(*device, shader->id);
+    if (device->ahead)
+        AheadForget(*device, shader->id, shader->contentHash, true);
+    if (LastOfItsPipelines(device->sameShaders, shader))
+        ForgetPipelines(*device, shader->pipelineId);
     DestroyShaderModule(device->core, shader->module);
     for (const auto &entry : shader->linked)
         DestroyShaderModule(device->core, entry.second);
     delete shader;
 }
+
+namespace
+{
+bool SameElements(const std::vector<VertexElement> &a, const std::vector<VertexElement> &b)
+{
+    if (a.size() != b.size())
+        return false;
+    for (size_t i = 0; i < a.size(); ++i)
+    {
+        if (a[i].stream != b[i].stream || a[i].offset != b[i].offset || a[i].type != b[i].type
+            || a[i].method != b[i].method || a[i].usage != b[i].usage || a[i].usageIndex != b[i].usageIndex)
+            return false;
+    }
+    return true;
+}
+} // namespace
 
 VertexDecl *CreateVertexDecl(Device *device, const VertexElement *elements, uint32_t count)
 {
@@ -944,6 +1001,30 @@ VertexDecl *CreateVertexDecl(Device *device, const VertexElement *elements, uint
     VertexDecl *decl = new VertexDecl();
     decl->id = device->nextId++;
     decl->elements.assign(elements, elements + count);
+    // Field by field: the hash names the declaration in the pipeline list
+    // file, whatever the struct's padding holds.
+    uint64_t hash = ContentHash(&count, sizeof(count));
+    for (const VertexElement &element : decl->elements)
+    {
+        const uint8_t fields[8] = {uint8_t(element.stream), uint8_t(element.stream >> 8), uint8_t(element.offset),
+                                   uint8_t(element.offset >> 8), element.type, element.method, element.usage,
+                                   element.usageIndex};
+        hash = ContentHash(fields, sizeof(fields), hash);
+    }
+    decl->contentHash = hash;
+    std::vector<VertexDecl *> &same = device->sameDecls[hash];
+    decl->pipelineId = decl->id;
+    for (const VertexDecl *other : same)
+    {
+        if (SameElements(other->elements, decl->elements))
+        {
+            decl->pipelineId = other->pipelineId;
+            break;
+        }
+    }
+    same.push_back(decl);
+    if (device->ahead)
+        AheadDeclCreated(*device, *decl);
     return decl;
 }
 
@@ -953,7 +1034,10 @@ void DestroyVertexDecl(Device *device, VertexDecl *decl)
         return;
     if (device->decl == decl)
         device->decl = nullptr;
-    ForgetPipelines(*device, decl->id);
+    if (device->ahead)
+        AheadForget(*device, decl->id, decl->contentHash, false);
+    if (LastOfItsPipelines(device->sameDecls, decl))
+        ForgetPipelines(*device, decl->pipelineId);
     delete decl;
 }
 } // namespace gfx_vk::legacy

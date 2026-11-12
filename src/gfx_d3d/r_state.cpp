@@ -573,6 +573,21 @@ void R_ChangeDepthRange(GfxCmdBufState *state, GfxDepthRangeType depthRangeType)
     else
         v2 = 1.0;
     state->depthRangeFar = v2;
+#ifdef KISAK_GFX_GXM
+    // The view model (the gun) in a depth pass: a sliver just past its own
+    // range. Its lit pass (0 to 1/64) then always passes the depth test, while
+    // the scene behind it (1/64 to 1) is still hidden. With its own range the
+    // depth pass and the lit pass, two programs the Vita's compiler builds
+    // apart, wrote depths a hair apart in the narrow range, and parts of the
+    // gun failed the test and showed black (console run T). D3D9 wants the
+    // far end past the near one (PC run Z17).
+    if (depthRangeType != GFX_DEPTH_RANGE_SCENE &&
+        (state->techType == TECHNIQUE_DEPTH_PREPASS || state->techType == TECHNIQUE_BUILD_FLOAT_Z))
+    {
+        state->depthRangeNear = state->depthRangeFar;
+        state->depthRangeFar = state->depthRangeNear + 1.0f / 65536.0f;
+    }
+#endif
     device = state->prim.device;
     iassert( device );
     R_HW_SetViewport(device, &state->viewport, state->depthRangeNear, state->depthRangeFar);

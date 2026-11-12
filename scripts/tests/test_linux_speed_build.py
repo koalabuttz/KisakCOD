@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Check the opt-in speed build options: KISAK_LINUX_CPU and KISAK_LINUX_LTO.
+"""Check the opt-in speed build options: KISAK_LINUX_CPU, KISAK_LINUX_LTO and no assertions.
 
-Asset-free, and nothing is built: two compiles to assembly and two CMake
-configures into a temporary directory.
+Asset-free, and nothing is built: a source check, two compiles to assembly
+and two CMake configures into a temporary directory.
 
   * Clang really does fuse ``a * b + c`` into one instruction at the CPU level
     the test asks for, and ``-ffp-contract=off`` really does stop it. This is
@@ -15,6 +15,11 @@ configures into a temporary directory.
     uses lld.
   * With neither option, no compile command carries ``-march`` or ``-flto``
     and no link names a linker: the default build is unchanged.
+  * A build without assertions (KISAK_LINUX_CLIENT_ASSERTS=OFF, as Windows
+    release builds are) drops whatever an ``iassert`` does. The marks code
+    counts its users of ``g_markThread`` inside ``iassert``, so every change
+    of that count has to be inside one, or the count only goes one way: laptop
+    perf run 6's build without assertions stopped at map load on exactly that.
 
 Usage:
     python3 scripts/tests/test_linux_speed_build.py [--arch i386|x86_64]
@@ -25,6 +30,7 @@ toolchain the i386 build needs.
 
 import argparse
 import json
+import re
 from pathlib import Path
 import shlex
 import subprocess
@@ -81,6 +87,20 @@ def configure(workdir, name, arch, cc, cxx, extra):
     return commands, links
 
 
+def check_mark_counter():
+    path = ROOT / "src" / "EffectsCore" / "fx_marks.cpp"
+    changes = 0
+    for number, line in enumerate(path.read_text().splitlines(), 1):
+        if re.search(r"Interlocked(Increment|Decrement)\b.*g_markThread", line):
+            changes += 1
+            if not line.strip().startswith("iassert("):
+                fail(f"{path.relative_to(ROOT)}:{number} changes g_markThread outside iassert, "
+                     "so a build without assertions keeps only the other half")
+    if changes < 2:
+        fail(f"found {changes} changes of g_markThread in {path.relative_to(ROOT)}; the check is stale")
+    print(f"ok: all {changes} changes of g_markThread are inside iassert", flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--arch", choices=("i386", "x86_64"), default="i386")
@@ -88,6 +108,7 @@ def main():
     parser.add_argument("--cxx", default="clang++")
     options = parser.parse_args()
     arch_flags = ["-m32", "-msse2", "-mfpmath=sse"] if options.arch == "i386" else ["-m64"]
+    check_mark_counter()
 
     with tempfile.TemporaryDirectory(prefix="kisak-speed-build-") as temporary:
         workdir = Path(temporary)

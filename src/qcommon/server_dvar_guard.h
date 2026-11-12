@@ -33,6 +33,7 @@
 inline constexpr const char* const kServerDvarsOfThisPort[] = {
     // Client and input.
     "cl_keyCodeOnly",
+    "cl_steam",
     "con_restricted",
     "in_gamepad",
     "in_gamepadCursorSpeed",
