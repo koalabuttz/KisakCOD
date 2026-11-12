@@ -251,9 +251,14 @@ bool Translate(const void *bytecode, size_t bytes, Shader &shader, std::string &
 // the block). With Always the test goes, and the shader cannot discard: a GPU
 // tests depth before a shader that cannot, and after one that may. DXVK fixes
 // the test per pipeline the same way.
+//
+// linearOutput, for a pixel shader, takes colour output 0's red, green and
+// blue from sRGB to linear light as they are stored (clamped to [0, 1], then
+// the sRGB curve); alpha stays. The Modern path's linear-light scene is drawn
+// this way (docs/vulkan-modern.md).
 bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<uint32_t> &spirv,
                 std::string &error, const uint32_t *fixedDepthCompare = nullptr,
-                const uint32_t *fixedAlphaCompare = nullptr);
+                const uint32_t *fixedAlphaCompare = nullptr, bool linearOutput = false);
 
 // True when the pixel shader's inputs read the vertex shader's outputs as they
 // stand (BuildSpirv then needs no linking).

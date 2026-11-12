@@ -32,6 +32,9 @@ for linking. The checks:
              still passes spirv-val and reads no sampler state block, with
              no depth-reference sampling when no sampler is a depth one, and
              only depth-reference sampling of 2D and cube images when all are
+  linear     --linear-output (the Modern path's linear-light scene): every
+             pixel shader case that writes colour 0 still passes spirv-val and
+             gets a clamp, a pow and a select per colour channel it writes
 
 Usage:
   test_vulkan_legacy_shaders.py --binary build/bin/KisakCOD-vulkan-shaders
@@ -93,6 +96,7 @@ def sampler_binding(stage, sampler):
 OP_NAME, OP_TYPE_INT, OP_TYPE_FLOAT, OP_TYPE_VECTOR = 5, 21, 22, 23
 OP_TYPE_ARRAY, OP_TYPE_STRUCT, OP_TYPE_POINTER, OP_CONSTANT = 28, 30, 32, 43
 OP_VARIABLE, OP_DECORATE, OP_MEMBER_DECORATE = 59, 71, 72
+OP_EXT_INST, OP_SELECT = 12, 169
 DEC_ARRAY_STRIDE, DEC_LOCATION, DEC_BINDING, DEC_SET, DEC_OFFSET = 6, 30, 33, 34, 35
 SC_INPUT, SC_UNIFORM_CONSTANT, SC_UNIFORM, SC_OUTPUT = 1, 0, 2, 3
 # OpKill, OpTerminateInvocation, OpDemoteToHelperInvocation
@@ -443,6 +447,42 @@ def main():
                     alpha_problems.append(f'{name} greater: {discards} of {base_discards} discards')
         checks.expect(f'alpha test fixed at build time ({alpha_cases} pixel shader cases)',
                       alpha_cases > 0 and not alpha_problems, '\n  '.join(alpha_problems[:20]))
+
+        # linear output (--linear-output, as the adapter builds a pixel shader
+        # that draws into the Modern path's linear-light scene): the colour
+        # output's red, green and blue each get a clamp and a pow (two more
+        # GLSL.std.450 instructions) and a select, and the SPIR-V stays valid
+        linear_problems = []
+        linear_cases = 0
+        for name, (found, base) in sorted(results.items()):
+            outputs = found.get('output', [])
+            color = next((o for o in outputs if o.startswith('color0 ')), None)
+            if not found['stage'].startswith('ps') or color is None:
+                continue
+            mask = color.rsplit(' ', 1)[-1]
+            channels = sum(1 for c in 'xyz' if c in mask)
+            if not channels:
+                continue
+            linear_cases += 1
+            spv = os.path.join(work, f'{name}-linear.spv')
+            code, stdout, _ = run(binary, ['translate', os.path.join(case_dir, name + '.bin'), '--linear-output',
+                                           '--out', spv])
+            if code != 0 or parse(stdout).get('result') != 'passed':
+                linear_problems.append(f'{name}: {stdout.strip()[:200]}')
+                continue
+            problem = validate(spv)
+            if problem:
+                linear_problems.append(f'{name}: spirv-val: {problem}')
+                continue
+            with open(spv, 'rb') as f:
+                spirv = Spirv(f.read())
+            ext = spirv.opcodes.get(OP_EXT_INST, 0) - base.opcodes.get(OP_EXT_INST, 0)
+            selects = spirv.opcodes.get(OP_SELECT, 0) - base.opcodes.get(OP_SELECT, 0)
+            if ext < 2 * channels or selects < channels:
+                linear_problems.append(f'{name}: {ext} more extended instructions and {selects} more selects '
+                                       f'for {channels} channels')
+        checks.expect(f'linear output decodes the colour output ({linear_cases} pixel shader cases)',
+                      linear_cases > 0 and not linear_problems, '\n  '.join(linear_problems[:20]))
 
         # legacy state: fixed by default (no fog, clip plane or point argument
         # block declared, no gather), read at run time with the switch (every

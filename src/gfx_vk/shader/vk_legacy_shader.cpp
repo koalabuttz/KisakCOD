@@ -363,6 +363,63 @@ uint32_t FixAlphaTest(ir::Builder &builder, uint32_t compareOp)
                             [compareOp](uint32_t) { return compareOp; });
 }
 
+// Colour output 0's red, green and blue, as stored, taken from sRGB to
+// linear light: clamped to [0, 1] first, as an 8-bit render target would
+// have kept them, then decoded with the sRGB curve (IEC 61966-2-1). Alpha is
+// left as it is. Returns the number of stores changed. For a pixel shader
+// drawing into the Modern path's linear-light scene (docs/vulkan-modern.md):
+// the game's shaders work in gamma space, and blending then happens in linear
+// light.
+uint32_t DecodeColorOutput(ir::Builder &builder)
+{
+    ir::SsaDef color = {};
+    auto [begin, end] = builder.getDeclarations();
+    for (auto it = begin; it != end; ++it)
+    {
+        if (it->getOpCode() == ir::OpCode::eDclOutput && uint32_t(it->getOperand(1u)) == 0u)
+            color = it->getDef();
+    }
+    if (!color)
+        return 0;
+    std::vector<ir::SsaDef> stores;
+    builder.getUses(color, stores);
+    const ir::Type f32 = ir::Type(ir::BasicType(ir::ScalarType::eF32));
+    const ir::Type boolean = ir::Type(ir::BasicType(ir::ScalarType::eBool));
+    uint32_t changed = 0;
+    for (ir::SsaDef store : stores)
+    {
+        const ir::Op &op = builder.getOp(store);
+        if (op.getOpCode() != ir::OpCode::eOutputStore)
+            continue;
+        // One component a store, at a constant index: how dxbc-spirv writes a
+        // shader model 2 or 3 colour output.
+        const ir::SsaDef addressDef = ir::SsaDef(op.getOperand(1u));
+        if (!addressDef)
+            continue;
+        const ir::Op &address = builder.getOp(addressDef);
+        if (!address.isConstant() || address.getOperandCount() != 1u || uint32_t(address.getOperand(0u)) > 2u)
+            continue;
+        const ir::SsaDef value = ir::SsaDef(op.getOperand(2u));
+        if (builder.getOp(value).getType() != f32)
+            continue;
+        const ir::SsaDef t = builder.addBefore(
+            store, ir::Op::FClamp(f32, value, builder.makeConstant(0.0f), builder.makeConstant(1.0f)));
+        const ir::SsaDef low = builder.addBefore(store, ir::Op::FMul(f32, t, builder.makeConstant(1.0f / 12.92f)));
+        const ir::SsaDef shifted = builder.addBefore(store, ir::Op::FAdd(f32, t, builder.makeConstant(0.055f)));
+        const ir::SsaDef scaled =
+            builder.addBefore(store, ir::Op::FMul(f32, shifted, builder.makeConstant(1.0f / 1.055f)));
+        const ir::SsaDef high = builder.addBefore(store, ir::Op::FPow(f32, scaled, builder.makeConstant(2.4f)));
+        const ir::SsaDef isLow =
+            builder.addBefore(store, ir::Op::FLe(boolean, t, builder.makeConstant(0.04045f)));
+        const ir::SsaDef linear = builder.addBefore(store, ir::Op::Select(f32, isLow, low, high));
+        ir::Op rewritten = op;
+        rewritten.setOperand(2u, linear);
+        builder.rewriteOp(store, std::move(rewritten));
+        ++changed;
+    }
+    return changed;
+}
+
 
 uint32_t Fnv1a(const void *data, size_t bytes)
 {
@@ -701,7 +758,7 @@ bool StagesLinkDirectly(const Shader &vertexShader, const Shader &pixelShader)
 }
 
 bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<uint32_t> &spirv, std::string &error,
-                const uint32_t *fixedDepthCompare, const uint32_t *fixedAlphaCompare)
+                const uint32_t *fixedDepthCompare, const uint32_t *fixedAlphaCompare, bool linearOutput)
 {
     spirv.clear();
     error.clear();
@@ -727,6 +784,8 @@ bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<ui
         FixDepthCompare(builder, *fixedDepthCompare);
     if (fixedAlphaCompare)
         FixAlphaTest(builder, *fixedAlphaCompare);
+    if (linearOutput && shader.reflection.stage == Stage::Pixel)
+        DecodeColorOutput(builder);
 
     spirv::SpirvBuilder::Options options = {};
     options.includeDebugNames = true;
