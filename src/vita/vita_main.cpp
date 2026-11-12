@@ -2,6 +2,7 @@
 // server. See vita_platform.h and docs/vita.md.
 
 #include "vita_platform.h"
+#include "vita_run_list.h"
 
 #include <atomic>
 #include <exception>
@@ -17,6 +18,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <psp2/appmgr.h>
+#include <psp2/io/dirent.h>
+#include <psp2/io/fcntl.h>
+#include <psp2/io/stat.h>
 #include <psp2/ctrl.h>
 #include <psp2/kernel/processmgr.h>
 #include <psp2/net/net.h>
@@ -59,6 +64,12 @@ namespace
     // own log and command line, so neither overwrites the other's.
     constexpr char kLogPath[] = "ux0:data/KisakCOD/console-mp.log";
     constexpr char kCommandLinePath[] = "ux0:data/KisakCOD/cmdline-mp.txt";
+    // A list of starts (vita_run_list.h): the list, the number of its next
+    // start, where a finished list is set aside, and each start's own log.
+    constexpr char kRunListPath[] = "ux0:data/KisakCOD/runlist-mp.txt";
+    constexpr char kRunListStatePath[] = "ux0:data/KisakCOD/runlist-mp.at";
+    constexpr char kRunListDonePath[] = "ux0:data/KisakCOD/runlist-mp.done.txt";
+    constexpr char kRunListLogStem[] = "ux0:data/KisakCOD/console-mp";
     constexpr char kProgramKind[] = "multiplayer client";
     // The client starts at the main menu. cmdline-mp.txt replaces it
     // (docs/vita-client.md).
@@ -66,6 +77,10 @@ namespace
 #else
     constexpr char kLogPath[] = "ux0:data/KisakCOD/console.log";
     constexpr char kCommandLinePath[] = "ux0:data/KisakCOD/cmdline.txt";
+    constexpr char kRunListPath[] = "ux0:data/KisakCOD/runlist.txt";
+    constexpr char kRunListStatePath[] = "ux0:data/KisakCOD/runlist.at";
+    constexpr char kRunListDonePath[] = "ux0:data/KisakCOD/runlist.done.txt";
+    constexpr char kRunListLogStem[] = "ux0:data/KisakCOD/console";
     constexpr char kProgramKind[] = "dedicated server";
     // A LAN server on mp_crash. cmdline.txt replaces it (docs/vita.md).
     constexpr char kDefaultCommandLine[] = "+set dedicated 1 +map mp_crash";
@@ -86,6 +101,22 @@ namespace
     char *s_arguments[kMaxArguments + 1];
 
     uint64_t s_lastPowerTick;
+
+    // The compiled programs' folder (src/vita/client/vita_d3d9.cpp), where a
+    // start's marker files go.
+    constexpr char kProgramFolder[] = "ux0:data/KisakCOD/gxp";
+
+    // This start's log: kLogPath, or the list's console-mp-<name>.log.
+    char s_logPath[128];
+    // The start this process is, when a list on the card names one.
+    bool s_listActive;
+    size_t s_listIndex, s_listCount;
+    kisak::vita_run::ListStart s_listStart;
+    // What the list did before the log was open.
+    char s_listNote[512];
+    // START + SELECT ends the list with the start: the next one waits for
+    // the next tap on the bubble.
+    std::atomic<bool> s_listStopped;
 
     void WriteAll(const char *text, size_t length)
     {
@@ -254,8 +285,124 @@ namespace
         return atoi(at) != 0;
     }
 
+    size_t ReadTextFile(const char *path, char *text, size_t size)
+    {
+        size_t length = 0;
+        if (FILE *file = fopen(path, "rb"))
+        {
+            length = fread(text, 1, size - 1, file);
+            fclose(file);
+        }
+        text[length] = '\0';
+        return length;
+    }
+
+    // The list is done: set it aside, so the next start is an ordinary one.
+    void SetRunListAside()
+    {
+        unlink(kRunListDonePath);
+        rename(kRunListPath, kRunListDonePath);
+        unlink(kRunListStatePath);
+    }
+
+    // Leaves the program folder with this start's markers and no other:
+    // every empty file there without a dot in its name is a marker.
+    void SetRunListMarkers(unsigned *removed)
+    {
+        *removed = 0;
+        if (s_listStart.markerCount)
+            mkdir(kProgramFolder, 0777);
+        char names[32][64];
+        unsigned count = 0;
+        const SceUID folder = sceIoDopen(kProgramFolder);
+        if (folder >= 0)
+        {
+            SceIoDirent entry;
+            memset(&entry, 0, sizeof(entry));
+            while (count < 32 && sceIoDread(folder, &entry) > 0)
+            {
+                if (SCE_S_ISREG(entry.d_stat.st_mode) && entry.d_stat.st_size == 0 && !strchr(entry.d_name, '.') &&
+                    strlen(entry.d_name) < sizeof(names[0]))
+                    strcpy(names[count++], entry.d_name);
+                memset(&entry, 0, sizeof(entry));
+            }
+            sceIoDclose(folder);
+        }
+        char path[192];
+        for (unsigned i = 0; i < count; ++i)
+        {
+            snprintf(path, sizeof(path), "%s/%s", kProgramFolder, names[i]);
+            if (sceIoRemove(path) >= 0)
+                ++*removed;
+        }
+        for (size_t i = 0; i < s_listStart.markerCount; ++i)
+        {
+            snprintf(path, sizeof(path), "%s/%s", kProgramFolder, s_listStart.markers[i]);
+            const int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+            if (fd >= 0)
+                close(fd);
+        }
+    }
+
+    // Before the log is opened: is this process a start of a list on the
+    // card? Then the log, the markers and the command line are that start's.
+    void RunListBegin()
+    {
+        snprintf(s_logPath, sizeof(s_logPath), "%s", kLogPath);
+        static char text[16 * 1024];
+        if (ReadTextFile(kRunListPath, text, sizeof(text)) == 0)
+            return;
+        char state[32];
+        ReadTextFile(kRunListStatePath, state, sizeof(state));
+        const size_t index = kisak::vita_run::ParseListIndex(state);
+        char error[128];
+        if (!kisak::vita_run::ParseRunList(text, index, &s_listStart, &s_listCount, error, sizeof(error)))
+        {
+            snprintf(s_listNote, sizeof(s_listNote), "Vita: %s; %s is left alone and this is an ordinary start\n", error,
+                kRunListPath);
+            return;
+        }
+        if (index >= s_listCount)
+        {
+            SetRunListAside();
+            snprintf(s_listNote, sizeof(s_listNote),
+                "Vita: the run list had no start left (%u starts); set aside as %s, this is an ordinary start\n",
+                (unsigned int)s_listCount, kRunListDonePath);
+            return;
+        }
+        s_listActive = true;
+        s_listIndex = index;
+        // The next start's number goes to the card first: a start that
+        // faults is not run again by the next tap.
+        if (index + 1 == s_listCount)
+            SetRunListAside();
+        else if (FILE *file = fopen(kRunListStatePath, "wb"))
+        {
+            fprintf(file, "%u\n", (unsigned int)(index + 1));
+            fclose(file);
+        }
+        snprintf(s_logPath, sizeof(s_logPath), "%s-%s.log", kRunListLogStem, s_listStart.name);
+        unsigned removed = 0;
+        SetRunListMarkers(&removed);
+        int used = snprintf(s_listNote, sizeof(s_listNote),
+            "Vita: run list: start %u of %u, \"%s\"; the log is %s; %u old markers removed; markers now:",
+            (unsigned int)(index + 1), (unsigned int)s_listCount, s_listStart.name, s_logPath, removed);
+        for (size_t i = 0; i < s_listStart.markerCount && used > 0 && (size_t)used < sizeof(s_listNote); ++i)
+            used += snprintf(s_listNote + used, sizeof(s_listNote) - (size_t)used, " %s", s_listStart.markers[i]);
+        if (used > 0 && (size_t)used < sizeof(s_listNote))
+            snprintf(s_listNote + used, sizeof(s_listNote) - (size_t)used, "%s\n",
+                s_listStart.markerCount ? "" : " none");
+    }
+
     void LoadCommandLine()
     {
+        if (s_listActive && s_listStart.commandLine[0])
+        {
+            snprintf(s_commandLine, sizeof(s_commandLine), "%s", s_listStart.commandLine);
+            LogFormat("Vita: command line from the run list\n");
+            s_assertExits.store(CommandLineSetsAssertExit(s_commandLine));
+            return;
+        }
         FILE *file = fopen(kCommandLinePath, "rb");
         size_t length = 0;
         if (file)
@@ -309,15 +456,28 @@ void Vita_Exit(int status)
         if (!locked)
             usleep(2000);
     }
+    // A list's next start: this program again, which reads the list anew.
+    const bool again = s_listActive && s_listIndex + 1 < s_listCount && !s_listStopped.load(std::memory_order_relaxed);
     if (s_logFd >= 0)
     {
         const int fd = s_logFd;
+        if (again)
+        {
+            char line[96];
+            const int length = snprintf(line, sizeof(line), "%sVita: run list: starting again for start %u of %u\n",
+                s_logAtLineStart ? "" : "\n", (unsigned int)(s_listIndex + 2), (unsigned int)s_listCount);
+            if (length > 0)
+                WriteAll(line, (size_t)length);
+        }
         s_logFd = -1;
         fsync(fd);
         close(fd);
     }
     if (locked)
         pthread_mutex_unlock(&s_logLock);
+    // When it cannot be started the process ends as it would have.
+    if (again)
+        sceAppMgrLoadExec("app0:eboot.bin", nullptr, nullptr);
     sceKernelExitProcess(status);
     for (;;)
         ;
@@ -387,11 +547,14 @@ bool Vita_Startup(int *argc, char ***argv)
     // Vita3K does not cut a file an open asks to truncate, so a shorter log
     // would keep the end of the last run's (com_fileaccess.cpp has the same
     // for the engine's files). The old log goes first.
-    unlink(kLogPath);
-    s_logFd = open(kLogPath, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    RunListBegin();
+    unlink(s_logPath);
+    s_logFd = open(s_logPath, O_WRONLY | O_CREAT | O_TRUNC, 0666);
 
     std::set_terminate(OnTerminate);
     LogFormat("Vita: KisakCOD %s starting, CPU at %d MHz\n", kProgramKind, scePowerGetArmClockFrequency());
+    if (s_listNote[0])
+        LogText(s_listNote);
     const unsigned int fpscr = Vita_SetIeeeFloatMode();
     LogFormat("Vita: FPSCR was 0x%08x (flush-to-zero %s)\n", fpscr, (fpscr & (1u << 24)) ? "on, now off" : "off");
     // newlib's heap block is already taken; the engine's reservations come
@@ -438,5 +601,9 @@ bool Vita_QuitRequested()
     if (sceCtrlPeekBufferPositive(0, &pad, 1) < 0)
         return false;
     const unsigned int quitButtons = SCE_CTRL_START | SCE_CTRL_SELECT;
-    return (pad.buttons & quitButtons) == quitButtons;
+    if ((pad.buttons & quitButtons) != quitButtons)
+        return false;
+    // A person ended this start: a list's next one waits for the next tap.
+    s_listStopped.store(true, std::memory_order_relaxed);
+    return true;
 }

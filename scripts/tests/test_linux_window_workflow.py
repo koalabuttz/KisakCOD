@@ -851,6 +851,7 @@ class CiTriggerTests(unittest.TestCase):
         'src/gfx_gxm/legacy/gxm_legacy.cpp',
         'scripts/platform/vita/mp_client.cmake',
         'scripts/tests/test_vita_run_plan.py',
+        'scripts/tests/test_vita_run_list.py',
         'scripts/ci/install-vitasdk.sh',
         'tests/vita_client/run_plan_test.cpp',
         'tests/vita_gxm/heap_test.cpp',
