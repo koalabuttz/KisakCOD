@@ -46,10 +46,9 @@ void R_DepthPrepassCallback(const void *userData, GfxCmdBufContext context, GfxC
     {
         // The Vita draws it into the scene's own targets, which saves two
         // scenes of the frame (gxm_engine_options.h).
-        R_SetRenderTarget(
-            context,
-            KISAK_GXM_DEPTH_IN_SCENE() && viewInfo->dynamicShadowType != SHADOW_COOKIE ? R_RENDERTARGET_SCENE
-                                                                                       : R_RENDERTARGET_DYNAMICSHADOWS);
+        const bool inScene = KISAK_GXM_DEPTH_IN_SCENE() && viewInfo->dynamicShadowType != SHADOW_COOKIE;
+        R_SetRenderTarget(context, inScene ? R_RENDERTARGET_SCENE : R_RENDERTARGET_DYNAMICSHADOWS);
+        KISAK_GXM_DEPTH_ONLY_DRAWS(inScene);
         baseTechType = TECHNIQUE_DEPTH_PREPASS;
     }
     qmemcpy(&info, &viewInfo->litInfo, sizeof(info));
@@ -58,6 +57,7 @@ void R_DepthPrepassCallback(const void *userData, GfxCmdBufContext context, GfxC
     qmemcpy(&info, &viewInfo->decalInfo, sizeof(info));
     info.baseTechType = baseTechType;
     R_DrawSurfs(context, 0, &info);
+    KISAK_GXM_DEPTH_ONLY_DRAWS(false);
     R_HW_DisableScissor(context.state->prim.device);
 }
 

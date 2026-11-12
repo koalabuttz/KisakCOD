@@ -23,6 +23,14 @@
 // Not when shadow cookies are on: they draw into that target after the
 // depth pass and the lit pass reads it. `no-depth-in-scene` turns it off.
 //
+// g_depthOnlyDraws: set by the engine around that depth pass's draws. Nearly
+// all of them come with a state that writes colour (PC run Z19 counted 98
+// in 100), which did no harm in a target nothing read. In the scene's own
+// target the lit pass draws over every one of them, but a surface whose lit
+// program is still being made is left out for some frames and would show
+// the depth pass's colour meanwhile. So the back end writes no colour for
+// draws made while this is set.
+//
 // g_resolveWhenUsed: with r_distortion on, the engine copies the picture
 // for the surfaces that bend it (heat haze, glass) before the emissive pass
 // of every frame, whether or not such a surface is drawn. With it the copy
@@ -35,15 +43,18 @@ namespace gfx_gxm
 {
 extern bool g_depthPrepass;
 extern bool g_depthInScene;
+extern bool g_depthOnlyDraws;
 extern bool g_resolveWhenUsed;
 } // namespace gfx_gxm
 
 #ifdef KISAK_GFX_GXM
 #define KISAK_GXM_DEPTH_PREPASS() (::gfx_gxm::g_depthPrepass)
 #define KISAK_GXM_DEPTH_IN_SCENE() (::gfx_gxm::g_depthInScene)
+#define KISAK_GXM_DEPTH_ONLY_DRAWS(on) ((void)(::gfx_gxm::g_depthOnlyDraws = (on)))
 #define KISAK_GXM_RESOLVE_WHEN_USED() (::gfx_gxm::g_resolveWhenUsed)
 #else
 #define KISAK_GXM_DEPTH_PREPASS() false
 #define KISAK_GXM_DEPTH_IN_SCENE() false
+#define KISAK_GXM_DEPTH_ONLY_DRAWS(on) ((void)0)
 #define KISAK_GXM_RESOLVE_WHEN_USED() false
 #endif
