@@ -107,7 +107,8 @@ client connections, or network compatibility with an existing client.
 
 Console commands come from stdin; SIGINT/SIGTERM request shutdown on the main
 thread. Fatal initialization errors print to the terminal and exit nonzero,
-rather than displaying a Windows dialog.
+rather than displaying a Windows dialog. (The game clients also show the error
+in a box: [linux-mp-client.md](linux-mp-client.md#message-boxes-web-links-and-the-other-game).)
 
 The native game client, `KisakCOD-mp`, is documented in
 [linux-mp-client.md](linux-mp-client.md). It is opt-in and does not replace

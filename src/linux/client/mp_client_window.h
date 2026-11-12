@@ -83,6 +83,8 @@ public:
     // IN_SetCursorPos, in window pixels.
     void SetCursorPos(int x, int y);
 
+    // The borrowed SDL window (message boxes take it as their parent).
+    SDL_Window *Handle() const { return window_; }
     bool Look() const { return look_; }
     bool CursorHidden() const { return hideCursor_; }
     const window::WindowHost &Host() const { return *host_; }

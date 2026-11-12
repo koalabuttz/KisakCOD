@@ -1090,18 +1090,27 @@ void CL_VoidCommand()
     ;
 }
 
+// The Xbox 360 code this file comes from shut the renderer down and launched
+// cod3mp.exe with XLaunchNewImage. On a computer the singleplayer program quits
+// and the multiplayer program starts, as cl_main_mp.cpp's startSingleplayer
+// does the other way round.
 void CL_startMultiplayer_f()
 {
-    iassert(0); // KISAKTODO
-    if (!Sys_IsMainThread())
-        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\client\\cl_main.cpp", 1453, 0, "%s", "Sys_IsMainThread()");
-    //LSP_SendLogRequest(cl_controller_in_use);
-    //LB_EndOngoingTasks();
-    Com_SyncThreads();
-    Sys_SuspendOtherThreads();
-    R_ShutdownDirect3D();
-    //XLaunchNewImage("cod3mp.exe", 0);
-    //JUMPOUT(0x82179E04);
+    iassert(Sys_IsMainThread());
+    Sys_QuitAndStartProcess(KISAK_MP_PROGRAM, 0);
+}
+
+// The Mods menu's "RunMod" and "ClearMods" (ui_main.cpp) set fs_game and ask for
+// startSingleplayer: the game restarts with the mod, or without one. fs_game is
+// only read at start-up, so the singleplayer program starts again with it.
+void CL_startSingleplayer_f()
+{
+    iassert(Sys_IsMainThread());
+    const char *const game = Dvar_GetString("fs_game");
+    if (game && game[0] && !strpbrk(game, "\"+\n\r"))
+        Sys_QuitAndStartProcess(KISAK_SP_PROGRAM, va("+set fs_game \"%s\"", game));
+    else
+        Sys_QuitAndStartProcess(KISAK_SP_PROGRAM, 0);
 }
 
 void CL_ShellExecute_URL_f()
@@ -1420,6 +1429,7 @@ void CL_Shutdown(int localClientNum)
         Cmd_RemoveCommand("updatehunkusage");
         Cmd_RemoveCommand("sl");
         Cmd_RemoveCommand("startMultiplayer");
+        Cmd_RemoveCommand("startSingleplayer");
         Cmd_RemoveCommand("shellExecute");
         Cmd_RemoveCommand("+incAnimWeight");
         Cmd_RemoveCommand("+decAnimWeight");
@@ -1772,6 +1782,7 @@ cmd_function_s CL_PlayUnskippableCinematic_f_VAR;
 cmd_function_s CL_Pause_f_VAR;
 cmd_function_s CL_VoidCommand_VAR;
 cmd_function_s CL_startMultiplayer_f_VAR;
+cmd_function_s CL_startSingleplayer_f_VAR;
 cmd_function_s CL_ShellExecute_URL_f_VAR;
 cmd_function_s CL_IncAnimWeight_f_VAR;
 cmd_function_s CL_DecAnimWeight_f_VAR;
@@ -1901,6 +1912,7 @@ void CL_Init(int localClientNum)
     Cmd_AddCommandInternal("pause", CL_Pause_f, &CL_Pause_f_VAR);
     Cmd_AddCommandInternal("sl", CL_VoidCommand, &CL_VoidCommand_VAR);
     Cmd_AddCommandInternal("startMultiplayer", CL_startMultiplayer_f, &CL_startMultiplayer_f_VAR);
+    Cmd_AddCommandInternal("startSingleplayer", CL_startSingleplayer_f, &CL_startSingleplayer_f_VAR);
     Cmd_AddCommandInternal("shellExecute", CL_ShellExecute_URL_f, &CL_ShellExecute_URL_f_VAR);
     Cmd_AddCommandInternal("+incAnimWeight", (void(*)())CL_IncAnimWeight_f, &CL_IncAnimWeight_f_VAR);
     Cmd_AddCommandInternal("+decAnimWeight", (void(*)())CL_DecAnimWeight_f, &CL_DecAnimWeight_f_VAR);

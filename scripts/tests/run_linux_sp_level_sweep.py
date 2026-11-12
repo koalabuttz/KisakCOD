@@ -416,6 +416,8 @@ def game_command(options, base, home, first_level):
 def game_env(options, work):
     env = dict(os.environ)
     env["XDG_DATA_HOME"] = str(work / "xdg")
+    # A box (an error, a question) would wait for a click nobody makes.
+    env.setdefault("KISAK_NO_DIALOGS", "1")
     if options.assert_continue:
         env["KISAK_ASSERT_CONTINUE"] = "1"
     else:

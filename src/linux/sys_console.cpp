@@ -7,6 +7,7 @@
 #include <universal/assertive.h>
 
 #include "sys_console.h"
+#include "sys_desktop.h"
 #if defined(__vita__)
 #include <vita/vita_platform.h> // Vita_ConsoleWrite
 #endif
@@ -338,4 +339,8 @@ void Sys_SetErrorText(const char *buf)
     ConsoleWrite(s_errorString, strlen(s_errorString));
     ConsoleWrite("\n", 1);
     fflush(stdout);
+
+    // win_syscon.cpp shows the error in a box too. The game windows do
+    // (src/linux/sys_desktop.h); the dedicated server and the Vita print only.
+    Sys_ShowDialog(SysDialogKind::Error, "Error", s_errorString);
 }

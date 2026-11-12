@@ -171,6 +171,14 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
 
     checks.append(
         Check(
+            "sys_desktop",
+            "message boxes stay off in scripted runs, and only the other game program is started, cut off from this one",
+            [Command([python, TESTS / "test_sys_desktop.py", "--cxx", cxx, "--m32"], timeout=300)],
+        )
+    )
+
+    checks.append(
+        Check(
             "server_dvar_guard",
             "a game server cannot set the client settings that belong to the player's machine or to this port",
             [Command([python, TESTS / "test_server_dvar_guard.py", "--cxx", cxx, "--m32"], timeout=300)],

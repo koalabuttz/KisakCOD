@@ -724,6 +724,9 @@ class Run:
         for pattern in game.get("clear_env", []):
             for name in [name for name in env if fnmatch.fnmatchcase(name, pattern)]:
                 del env[name]
+        # A box (an error, a question) would wait for a click nobody makes; a
+        # recipe's env may still set KISAK_NO_DIALOGS to 0.
+        env.setdefault("KISAK_NO_DIALOGS", "1")
         binary = expand(spec.get("binary") or game["binary"], names)
         command = [expand(str(part), names) for part in game.get("wrap", [])] + [binary]
         if game.get("home_template"):

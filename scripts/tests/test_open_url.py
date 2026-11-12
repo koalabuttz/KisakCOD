@@ -21,7 +21,9 @@ Two things are checked, with no game data and no network:
    exactly its size, so a read past its end fails the run.
 2. The production ``Sys_OpenURL`` in ``src/win32/win_main.cpp`` applies the rule
    before it calls ``ShellExecuteA``, and no other ``ShellExecuteA`` call in the
-   sources opens anything but a fixed string.
+   sources opens anything but a fixed string.  The Linux, macOS and Vita
+   ``Sys_OpenURL`` in ``src/linux/main.cpp`` applies it before
+   ``Sys_OpenWebUrl``, and only that function calls ``SDL_OpenURL``.
 
 ``--m32`` makes the 32-bit build a requirement.
 """
@@ -39,6 +41,8 @@ ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
 HEADER = SRC / "qcommon" / "url_check.h"
 WIN_MAIN = SRC / "win32" / "win_main.cpp"
+POSIX_MAIN = SRC / "linux" / "main.cpp"
+CLIENT_INPUT = SRC / "linux" / "client" / "mp_client_input.cpp"
 
 PROGRAM = r'''
 #include "url_check.h"
@@ -264,27 +268,52 @@ def function_body(text: str, signature: str):
     return None
 
 
-def check_sys_open_url(win_main: Path = WIN_MAIN) -> bool:
-    """The Windows Sys_OpenURL refuses anything but a web address before it opens it."""
+def check_sys_open_url(win_main: Path = WIN_MAIN, opener: str = "ShellExecuteA") -> bool:
+    """A Sys_OpenURL refuses anything but a web address before it opens it."""
     body = function_body(strip_comments(win_main.read_text(encoding="utf-8", errors="replace")),
                          "void Sys_OpenURL(const char *url, int doexit)")
     if body is None:
         print(f"FAIL: {win_main.name} no longer defines Sys_OpenURL the way this check reads it")
         return False
     guard = re.search(r"if\s*\(\s*!\s*Com_IsWebUrl\s*\(\s*url\s*\)\s*\)", body)
-    opened = body.find("ShellExecuteA")
+    opened = body.find(opener)
     if opened < 0:
-        print("FAIL: Sys_OpenURL no longer calls ShellExecuteA; update this check for what it calls now")
+        print(f"FAIL: {win_main.name}'s Sys_OpenURL no longer calls {opener}; update this check for what it calls now")
         return False
     if not guard or guard.start() > opened:
-        print("FAIL: Sys_OpenURL calls ShellExecuteA without first refusing what Com_IsWebUrl refuses")
+        print(f"FAIL: {win_main.name}'s Sys_OpenURL calls {opener} without first refusing what Com_IsWebUrl refuses")
         return False
     refused = body[guard.end():opened]
     if not re.search(r"\breturn\s*;", refused):
-        print("FAIL: Sys_OpenURL does not return after refusing an address")
+        print(f"FAIL: {win_main.name}'s Sys_OpenURL does not return after refusing an address")
         return False
-    print("PASS: Sys_OpenURL refuses anything but a web address before ShellExecuteA")
+    print(f"PASS: {win_main.name}'s Sys_OpenURL refuses anything but a web address before {opener}")
     return True
+
+
+def check_sdl_open_calls(src: Path = SRC) -> bool:
+    """SDL_OpenURL is called only by Sys_OpenWebUrl, which only Sys_OpenURL calls."""
+    ok = True
+    for path in sorted(src.rglob("*")):
+        if path.suffix not in (".cpp", ".c", ".h", ".hpp", ".inl", ".mm"):
+            continue
+        text = strip_comments(path.read_text(encoding="utf-8", errors="replace"))
+        name = f"src/{path.relative_to(src).as_posix()}"
+        if re.search(r"\bSDL_OpenURL\s*\(", text):
+            body = function_body(text, "bool Sys_OpenWebUrl(const char *url)")
+            if path.resolve() != CLIENT_INPUT.resolve() or body is None or "SDL_OpenURL" not in body \
+                    or len(re.findall(r"\bSDL_OpenURL\s*\(", text)) != 1:
+                print(f"FAIL: {name} calls SDL_OpenURL outside Sys_OpenWebUrl")
+                ok = False
+        for match in re.finditer(r"\bSys_OpenWebUrl\s*\(([^;{)]*)\)\s*([;{]?)", text):
+            if match.group(2) == "{" or match.group(2) == ";" and "const char" in match.group(1):
+                continue  # a definition or the declaration
+            if path.resolve() != POSIX_MAIN.resolve():
+                print(f"FAIL: {name} calls Sys_OpenWebUrl; only Sys_OpenURL may")
+                ok = False
+    if ok:
+        print("PASS: only Sys_OpenWebUrl calls SDL_OpenURL, and only Sys_OpenURL calls it")
+    return ok
 
 
 def check_other_shell_calls(src: Path = SRC) -> bool:
@@ -326,12 +355,14 @@ def main() -> int:
                         help="compile without -fsanitize=address,undefined")
     args = parser.parse_args()
 
-    for needed in (HEADER, WIN_MAIN):
+    for needed in (HEADER, WIN_MAIN, POSIX_MAIN, CLIENT_INPUT):
         if not needed.is_file():
             print(f"FAIL: {needed} is missing", file=sys.stderr)
             return 1
 
     ok = check_sys_open_url()
+    ok = check_sys_open_url(POSIX_MAIN, "Sys_OpenWebUrl") and ok
+    ok = check_sdl_open_calls() and ok
     ok = check_other_shell_calls() and ok
 
     with tempfile.TemporaryDirectory(prefix="kisak-open-url-") as temp:

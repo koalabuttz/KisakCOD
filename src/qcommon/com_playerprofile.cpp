@@ -9,6 +9,9 @@
 #include <win32/win_storage.h>
 #include <win32/win_local.h>
 #include <win32/win_localize.h>
+#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
+#include <linux/sys_desktop.h>
+#endif
 
 const dvar_t *ui_playerProfileAlreadyChosen;
 const dvar_t *com_playerProfile;
@@ -559,9 +562,11 @@ void Com_SetRecommended(int localClientNum, int restart)
 }
 
 // Windows confirms a detected hardware/config change with a modal Yes/No box.
-// A dedicated Linux server has no window to attach a box to, so there is no way
-// to ask the user: report the pending change on the console and answer "No" so
-// the stored profile is left alone instead of being rewritten unasked.
+// The Linux and macOS game windows ask the same way (src/linux/sys_desktop.h).
+// Where no box can be shown (the dedicated server, the Vita, a run with
+// KISAK_NO_DIALOGS) there is no way to ask the user: report the pending change
+// on the console and answer "No" so the stored profile is left alone instead
+// of being rewritten unasked.
 static bool Sys_ConfirmChangePrompt(const char *titleRef, const char *bodyRef)
 {
     char *title; // [esp-Ch] [ebp-Ch]
@@ -570,6 +575,9 @@ static bool Sys_ConfirmChangePrompt(const char *titleRef, const char *bodyRef)
     title = Win_LocalizeRef(titleRef);
     body = Win_LocalizeRef(bodyRef);
 #if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
+    const SysDialogAnswer answer = Sys_ShowDialog(SysDialogKind::Question, title, body);
+    if (answer != SysDialogAnswer::NotShown)
+        return answer == SysDialogAnswer::Yes;
     Com_PrintWarning(
         CON_CHANNEL_SYSTEM,
         "WARNING: %s: %s\nWARNING: no profile confirmation dialog is available on this platform; "
