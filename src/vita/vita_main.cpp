@@ -517,7 +517,15 @@ void Vita_Exit(int status)
     if (Vita_BenchActive())
         Vita_BenchEnd(more, stopped);
     else if (again)
-        sceAppMgrLoadExec("app0:eboot.bin", nullptr, nullptr);
+    {
+        // With an argument: Vita3K starts the program again itself only when
+        // the call carries one (PC runs Z21 and Z22b side by side), and a
+        // console takes either. Nothing reads it: the command line is the
+        // list's.
+        char restart[] = "-list-restart";
+        char *const arguments[] = { restart, nullptr };
+        sceAppMgrLoadExec("app0:eboot.bin", arguments, nullptr);
+    }
     sceKernelExitProcess(status);
     for (;;)
         ;
