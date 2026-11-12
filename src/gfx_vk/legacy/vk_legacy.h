@@ -638,6 +638,12 @@ bool HandOverRecording(Device *device);
 // The core image a surface draws into: its texture's image when the surface
 // is level 0 of a 2D texture or a standalone surface, else null.
 gfx_vk::Image *SurfaceImage(const Surface *surface);
+// Marks a render target texture as holding linear light (the Modern path's
+// scene, docs/vulkan-modern.md): draws into it as render target 0 run their
+// pixel shaders with colour output 0 taken from sRGB to linear light
+// (legacy_shader::BuildSpirv's linearOutput), and clears of it take their
+// colour from sRGB to linear light too. Blending then happens in linear light.
+void SetLinearLight(Texture *texture, bool linear);
 #endif
 
 // The device's window is about to be destroyed: an open pass and frame end

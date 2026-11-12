@@ -84,6 +84,8 @@ struct Texture
     std::vector<Subresource> subresources;          // face * levels + level
     std::vector<std::unique_ptr<Surface>> surfaces; // GetSurfaceLevel views, same index
     std::string name;
+    // Holds linear light (SetLinearLight).
+    bool linearLight = false;
     // SYSTEMMEM and SCRATCH textures: what the next UpdateTexture copies, per
     // face, in level 0's texels. The boxes do not overlap; past
     // kDirtyBoxLimit of them the whole face is dirty.
@@ -213,7 +215,10 @@ struct PipelineKey
     // shader has it fixed (OptionalFeatures::fixedAlphaTest) and reads the
     // alpha test block; else 0.
     uint8_t alphaCompare = 0;
-    uint8_t unused[6] = {};
+    // 1 when render target 0 holds linear light (SetLinearLight): the pixel
+    // shader's colour output is decoded from sRGB.
+    uint8_t linearOutput = 0;
+    uint8_t unused[5] = {};
     bool operator==(const PipelineKey &other) const { return std::memcmp(this, &other, sizeof(*this)) == 0; }
 };
 struct PipelineKeyHash
@@ -302,6 +307,7 @@ struct PixelModuleRecipe
     uint32_t depthCompare = 0;
     bool fixAlpha = false;        // alphaCompare is passed
     uint32_t alphaCompare = 0;
+    bool linearOutput = false;    // colour output decoded from sRGB (PipelineKey::linearOutput)
 };
 
 // The create info of a graphics pipeline and everything it points at
@@ -674,7 +680,7 @@ Layout *GetLayout(Device &device, const LayoutKey &key);
 // The pixel module a pipeline of this key needs: the one the shader keeps, or
 // null with how to build it in recipe.
 VkShaderModule FindPixelModule(Device &device, Shader &ps, const Shader &vs, uint32_t depthSamplers,
-                               uint32_t alphaCompare, PixelModuleRecipe &recipe);
+                               uint32_t alphaCompare, uint32_t linearOutput, PixelModuleRecipe &recipe);
 // Builds that module's SPIR-V. Reads only the two shaders' translations, which
 // never change: safe on any thread.
 bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Shader &vs,

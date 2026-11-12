@@ -467,7 +467,8 @@ void TryQueue(Device &device, uint32_t at)
     job->decl = &decl;
     job->layout = layout;
     job->dynamicStride = features.dynamicVertexStride;
-    job->fragment = FindPixelModule(device, pixel, vertex, key.depthSamplers, key.alphaCompare, job->recipe);
+    job->fragment = FindPixelModule(device, pixel, vertex, key.depthSamplers, key.alphaCompare, key.linearOutput,
+                                    job->recipe);
     if (ahead.workers.empty())
         StartWorkers(ahead);
     Job *queued = job.get();

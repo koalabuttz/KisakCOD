@@ -62,6 +62,15 @@ buffer by the core's `Recording()` number.
   Mesa's Intel compiler make our pixel shaders about twice DXVK's length.
   `KISAK_VK_ALPHA_TEST=dynamic` reads the compare at run time again, and the
   `device ready:` line says `alpha test fixed` or `dynamic`.
+* **Linear light.** A render target texture marked with `SetLinearLight`
+  (the Modern path's linear-light scene, [vulkan-modern.md](vulkan-modern.md#linear-light))
+  holds light, not display values. A pipeline whose render target 0 is one
+  (`PipelineKey::linearOutput`) runs its pixel shader built with
+  `legacy_shader::BuildSpirv`'s `linearOutput`: colour output 0's red, green
+  and blue are clamped to [0, 1] and decoded with the sRGB curve as they are
+  stored, so blending happens in linear light. Clears of such a target decode
+  their colour the same way. Nothing else changes, and no other target is
+  touched.
 * **Less work for a draw like the one before.** The engine draws sorted by
   material, so most draws differ from the one before in a few vertex shader
   constants and nothing else. The adapter does and records only what changed:
