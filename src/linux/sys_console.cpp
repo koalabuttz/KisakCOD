@@ -330,6 +330,20 @@ void Conbuf_AppendTextInMainThread(const char *msg)
     Conbuf_AppendText(msg);
 }
 
+// The game windows show message boxes through SDL
+// (src/linux/client/mp_client_input.cpp). Everything else built from this
+// folder, the dedicated server, the Vita and the asset-free checks that link
+// this file, has none.
+#if !(defined(KISAK_LINUX_MP_CLIENT) || defined(KISAK_LINUX_SP_GAME)) || defined(__vita__)
+SysDialogAnswer Sys_ShowDialog(SysDialogKind kind, const char *title, const char *text)
+{
+    (void)kind;
+    (void)title;
+    (void)text;
+    return SysDialogAnswer::NotShown;
+}
+#endif
+
 void Sys_SetErrorText(const char *buf)
 {
     I_strncpyz(s_errorString, buf ? buf : "", (int)sizeof(s_errorString));

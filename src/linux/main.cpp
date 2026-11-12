@@ -764,18 +764,10 @@ void Sys_OpenURL(const char *url, int doexit)
 }
 
 #if !defined(KISAK_LINUX_GAME_CLIENT) || defined(__vita__)
-// The Linux and macOS game windows read and write the clipboard, show message
-// boxes and open web links through SDL (src/linux/client/mp_client_input.cpp).
-// The dedicated server has no display, and the Vita no clipboard, boxes or
-// browser.
-SysDialogAnswer Sys_ShowDialog(SysDialogKind kind, const char *title, const char *text)
-{
-    (void)kind;
-    (void)title;
-    (void)text;
-    return SysDialogAnswer::NotShown;
-}
-
+// The Linux and macOS game windows read and write the clipboard and open web
+// links through SDL (src/linux/client/mp_client_input.cpp). The dedicated
+// server has no display, and the Vita no clipboard or browser. (The message
+// box stand-in is in sys_console.cpp, beside its one caller.)
 bool Sys_OpenWebUrl(const char *url)
 {
     (void)url;
