@@ -24,6 +24,8 @@
 #include "sys_threads.h"
 #include "sys_time.h"
 #include "sys_events.h"
+#include "sys_desktop.h"
+#include <qcommon/url_check.h>
 
 // The game builds with a window, renderer and input: the multiplayer client
 // (KisakCOD-mp) and the singleplayer game (KisakCOD-sp). The dedicated server
@@ -40,6 +42,7 @@
 #include <vita/vita_platform.h> // Vita_Startup, Vita_QuitRequested, Vita_Frame*
 #endif
 #include <errno.h>
+#include <limits.h>
 #include <sched.h>
 #include <signal.h>
 #include <stdio.h>
@@ -629,44 +632,149 @@ int Sys_IsGameProcess(uint32_t id)
     return 0;
 }
 
+#if !defined(__vita__)
+// The program Sys_Quit starts: win_main.cpp keeps one command line for
+// CreateProcessA, POSIX wants a path and an argument list, so the path is kept
+// here and sys_exitCmdLine holds the parameters.
+static char s_exitProgram[PATH_MAX];
+
+// The value of a folder dvar the new program is given, or nullptr when it
+// could not be passed whole: a '+' or a newline would split the engine's
+// command line and a quote would end the argument.
+static const char *FolderToPass(const char *dvarName)
+{
+    const char *const value = Dvar_GetString(dvarName);
+    if (!value || !value[0] || strpbrk(value, "+\n\r\""))
+        return nullptr;
+    return value;
+}
+#endif
+
+// win_main.cpp starts `exeName` from the working folder once the game has
+// quit; it is how the multiplayer and singleplayer programs start each other.
+// Here the program must sit beside this one (Sys_DefaultInstallPath, the
+// executable's folder) and is named without a folder: CL_DownloadsComplete's
+// auto-update would start a file a server sent ("updates/<name>", a Windows
+// program), which is refused. The new program is told this one's game and
+// home folders, which the command line may have set.
 void Sys_QuitAndStartProcess(const char *exeName, const char *parameters)
 {
-    char workingDirectory[1024];
-    if (!getcwd(workingDirectory, sizeof(workingDirectory)))
-        I_strncpyz(workingDirectory, ".", (int)sizeof(workingDirectory));
+    char shown[128];
+    Com_CopyPrintable(exeName, shown, sizeof(shown));
+#if defined(__vita__)
+    (void)parameters;
+    Com_PrintError(CON_CHANNEL_SYSTEM, "Cannot start '%s': the Vita build has no other game program\n", shown);
+#else
+    if (!Sys_IsSiblingProgramName(exeName))
+    {
+        Com_PrintError(CON_CHANNEL_SYSTEM,
+            "Sys_QuitAndStartProcess: refused to start '%s': only a game program beside this one is started\n", shown);
+        return;
+    }
 
+    char program[PATH_MAX];
+    const int written = snprintf(program, sizeof(program), "%s/%s", Sys_DefaultInstallPath(), exeName);
+    if (written < 0 || (size_t)written >= sizeof(program))
+    {
+        Com_PrintError(CON_CHANNEL_SYSTEM, "Cannot start '%s': its path is too long\n", shown);
+        return;
+    }
+    if (access(program, X_OK) != 0)
+    {
+        // Before quitting, unlike CreateProcessA's failure in Sys_Quit: the
+        // player stays in the game and the menu shows why.
+        const int error = errno;
+        Com_PrintError(CON_CHANNEL_SYSTEM, "Cannot start %s: %s\n", program, strerror(error));
+        Com_Error(ERR_DROP, "Cannot start %s: %s", program, strerror(error));
+        return;
+    }
+
+    char line[sizeof(sys_exitCmdLine)];
+    line[0] = '\0';
+    if (const char *const basePath = FolderToPass("fs_basepath"))
+        Com_sprintf(line, (uint32_t)sizeof(line), "+set fs_basepath \"%s\" ", basePath);
+    if (const char *const homePath = FolderToPass("fs_homepath"))
+        I_strncat(line, (int)sizeof(line), va("+set fs_homepath \"%s\" ", homePath));
     if (parameters)
-        Com_sprintf(sys_exitCmdLine, (uint32_t)sizeof(sys_exitCmdLine), "\"%s/%s\" %s", workingDirectory, exeName, parameters);
-    else
-        Com_sprintf(sys_exitCmdLine, (uint32_t)sizeof(sys_exitCmdLine), "\"%s/%s\"", workingDirectory, exeName);
+        I_strncat(line, (int)sizeof(line), parameters);
+    if (strlen(line) + 1 >= sizeof(line))
+    {
+        Com_PrintError(CON_CHANNEL_SYSTEM, "Cannot start %s: its command line is too long\n", program);
+        return;
+    }
 
+    I_strncpyz(s_exitProgram, program, (int)sizeof(s_exitProgram));
+    I_strncpyz(sys_exitCmdLine, line, (int)sizeof(sys_exitCmdLine));
     Cbuf_AddText(0, "quit\n");
+#endif
 }
 
+// win_main.cpp's CreateProcessA from Sys_Quit (Sys_StartProgram).
 void Sys_SpawnQuitProcess()
 {
-    if (!sys_exitCmdLine[0])
+#if !defined(__vita__)
+    if (!s_exitProgram[0])
         return;
 
-    Com_PrintError(CON_CHANNEL_SYSTEM, "Cannot relaunch '%s': process restart is not supported on this platform\n",
-        sys_exitCmdLine);
+    char storage[sizeof(sys_exitCmdLine)];
+    const char *arguments[66];
+    arguments[0] = s_exitProgram;
+    const int count = Sys_SplitParameters(sys_exitCmdLine, storage, sizeof(storage), arguments + 1, 64);
+    if (count < 0)
+    {
+        Com_PrintError(CON_CHANNEL_SYSTEM, "Cannot start %s: too many parameters\n", s_exitProgram);
+        s_exitProgram[0] = '\0';
+        return;
+    }
+    arguments[count + 1] = nullptr;
+
+    fflush(stdout);
+    fflush(stderr);
+    const pid_t child = Sys_StartProgram(s_exitProgram, arguments);
+    if (child < 0)
+        Com_PrintError(CON_CHANNEL_SYSTEM, "Cannot start %s: %s\n", s_exitProgram, strerror(errno));
+    else
+        Com_Printf(CON_CHANNEL_SYSTEM, "Started %s\n", s_exitProgram);
+    s_exitProgram[0] = '\0';
+#endif
     sys_exitCmdLine[0] = '\0';
 }
 
 void Sys_OpenURL(const char *url, int doexit)
 {
-    // A dedicated server has no desktop session to hand a URL to. Report it
-    // instead of pretending the request succeeded.
-    Com_PrintError(CON_CHANNEL_SYSTEM, "Sys_OpenURL: no URL handler on this platform (%s)\n", url ? url : "");
+    // As win_main.cpp: the address can be a game server's choice (a download
+    // redirect, or the update dvar a server may set), so only a plain web
+    // address goes to the desktop (qcommon/url_check.h).
+    if (!Com_IsWebUrl(url))
+    {
+        char shown[128];
+        Com_CopyPrintable(url, shown, sizeof(shown));
+        Com_PrintError(CON_CHANNEL_SYSTEM, "Sys_OpenURL: refused to open '%s'\n", shown);
+        Com_Error(ERR_DROP, "Refused to open an address that is not a plain http:// or https:// web address");
+        return;
+    }
+
+    // The game windows hand it to the desktop's browser; the dedicated server
+    // and the Vita have none (Sys_OpenWebUrl below).
+    if (!Sys_OpenWebUrl(url))
+        Com_Error(ERR_DROP, "EXE_ERR_COULDNT_OPEN_URL");
 
     if (doexit)
         Cbuf_AddText(0, "quit\n");
 }
 
 #if !defined(KISAK_LINUX_GAME_CLIENT) || defined(__vita__)
-// The Linux and macOS game windows read and write the clipboard through SDL
-// (src/linux/client/mp_client_input.cpp). The dedicated server has no display,
-// and the Vita no clipboard.
+// The Linux and macOS game windows read and write the clipboard and open web
+// links through SDL (src/linux/client/mp_client_input.cpp). The dedicated
+// server has no display, and the Vita no clipboard or browser. (The message
+// box stand-in is in sys_console.cpp, beside its one caller.)
+bool Sys_OpenWebUrl(const char *url)
+{
+    (void)url;
+    Com_PrintError(CON_CHANNEL_SYSTEM, "Sys_OpenURL: no web browser on this platform\n");
+    return false;
+}
+
 char *Sys_GetClipboardData()
 {
     return nullptr;

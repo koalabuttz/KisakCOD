@@ -252,6 +252,31 @@ hosted x86_64 client job). **No real controller has been tried in the game
 yet**, so the feel of the sticks, the menus and the default speeds are untested
 by hand.
 
+## Message boxes, web links and the other game
+
+Windows shows a box, opens a browser or starts the other game program in a few
+places. The game windows on Linux and macOS (`KisakCOD-mp` and `KisakCOD-sp`)
+do the same through SDL (`src/linux/sys_desktop.h`,
+`src/linux/client/mp_client_input.cpp`):
+
+| Windows | Linux and macOS |
+| --- | --- |
+| A fatal error shows "Error" in a box (`Sys_SetErrorText`) | The error is still printed, then shown in a box with an OK button. The game window is hidden first, so the box is not behind it. Out of memory and out of file handles go the same way. |
+| "Your computer has changed" and "configuration updated" ask Yes or No | The same question in a box. Yes resets the graphics settings to the recommended ones, as on Windows. The first start after the GPU name became real (it used to be fixed text) asks once. |
+| `Sys_OpenURL` hands a web address to `ShellExecute` | The desktop's browser opens it (`xdg-open` on Linux). Only a plain `http://` or `https://` address is opened, as on Windows (`src/qcommon/url_check.h`). |
+| `startSingleplayer` starts `KisakCOD-sp.exe` from the game folder | `startSingleplayer` (the multiplayer main menu) starts `KisakCOD-sp` from the folder `KisakCOD-mp` is in, and `startMultiplayer` (the singleplayer main menu) starts `KisakCOD-mp`. The new program is given the same `fs_basepath` and `fs_homepath`. When the program is not there (the singleplayer game is opt-in) the menu says so and nothing quits. |
+
+A box waits for a click, so scripted runs turn them off: set
+`KISAK_NO_DIALOGS=1`. Then the error is only printed and each question is
+answered No, as before. `perf_run.py`, `menu_check.py`, the sweeps and the
+checks set it themselves. No box is shown with SDL's `dummy` or `offscreen`
+video driver either, or from any thread but the main one.
+
+The dedicated server and the Vita have no desktop: they print the error, answer
+No, and refuse to open a link or start another program. On every platform the
+started program must be a game program beside the running one; the
+multiplayer auto-update, which would start a file a server sent, is refused.
+
 ## Where it writes
 
 Configs, logs and player profiles go to `fs_homepath`. The engine's default for

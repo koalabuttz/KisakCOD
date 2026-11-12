@@ -152,6 +152,11 @@ What the driver does by itself, because each has spoiled a row before:
   the next launch. `--resume` skips the rows that `results.json` already has as
   ok, so a run stopped by power or by `PAUSE` picks up where it left off.
   `--rows A-2,D` runs only those rows or variants.
+- **No boxes.** The game is started with `KISAK_NO_DIALOGS=1`, so a fatal
+  error is printed and ends the launch instead of waiting in a message box,
+  and the "computer has changed" question is answered No
+  ([linux-mp-client.md](linux-mp-client.md#message-boxes-web-links-and-the-other-game)).
+  A recipe's `env` can set it to `0`. Runs started by hand should set it too.
 
 A profiler capture rides along when a run needs named zones: `{"framelog":
 120, "with": {"run": ["~/kisak-build/tracy-capture/tracy-capture", "-o",

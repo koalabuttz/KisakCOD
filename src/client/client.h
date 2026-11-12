@@ -1081,6 +1081,7 @@ int32_t CL_ScaledMilliseconds();
 void CL_InitRef();
 void CL_VoidCommand();
 void CL_startMultiplayer_f();
+void CL_startSingleplayer_f();
 void CL_ShellExecute_URL_f();
 void CL_IncAnimWeight_f();
 void CL_DecAnimWeight_f();

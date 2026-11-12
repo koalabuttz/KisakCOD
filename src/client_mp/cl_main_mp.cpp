@@ -1838,7 +1838,9 @@ void CL_startSingleplayer_f()
 {
     if (!Sys_IsMainThread())
         MyAssertHandler(".\\client_mp\\cl_main_mp.cpp", 4558, 0, "%s", "Sys_IsMainThread()");
-    Sys_QuitAndStartProcess("cod3sp.exe", 0);
+    // Retail started cod3sp.exe; this port's singleplayer program has its own
+    // name (win_local.h).
+    Sys_QuitAndStartProcess(KISAK_SP_PROGRAM, 0);
 }
 
 void CL_DrawLogo(int32_t localClientNum)
