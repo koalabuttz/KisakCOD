@@ -200,15 +200,20 @@ class Handler(BaseHTTPRequestHandler):
         job, name = match[1], match[2]
         if not (send_file_name(name) or name == "bench.log"):
             return self.refused("not a name a log may have")
+        # Only a job that waits takes logs, and that is known before the
+        # body is read: the code covers the body, so a stranger's upload is
+        # read before it can be refused, and this keeps that to the one job.
+        folder = root / "queue" / job
+        if not folder.is_dir():
+            return self.answer(404)
+        if not SHA256.match(self.headers.get("X-Bench-Mac", "")):
+            return self.refused("no code")
         data = self.body(MAX_LOG_BYTES)
         if data is None:
             return self.refused("no length, or too long")
         digest = hashlib.sha256(data).hexdigest()
         if not self.signed(b"log", job.encode(), name.encode(), digest.encode()):
             return self.refused("not the key's code")
-        folder = root / "queue" / job
-        if not folder.is_dir():
-            return self.answer(404)
         (folder / "logs").mkdir(exist_ok=True)
         (folder / "logs" / name).write_bytes(data)
         note(f"job {job}: received {name} ({len(data)} bytes)")
