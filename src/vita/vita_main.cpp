@@ -146,12 +146,17 @@ namespace
         LogText(line);
     }
 
+    // Why the network library did not start, for the log (it may be asked
+    // for before the log is open).
+    char s_networkError[96];
+
     bool StartNetwork()
     {
         int result = sceSysmoduleLoadModule(SCE_SYSMODULE_NET);
         if (result < 0)
         {
-            LogFormat("Vita: loading the network module failed (0x%08x)\n", (unsigned int)result);
+            snprintf(s_networkError, sizeof(s_networkError), "Vita: loading the network module failed (0x%08x)\n",
+                (unsigned int)result);
             return false;
         }
         SceNetInitParam parameters;
@@ -161,13 +166,15 @@ namespace
         result = sceNetInit(&parameters);
         if (result < 0)
         {
-            LogFormat("Vita: sceNetInit failed (0x%08x)\n", (unsigned int)result);
+            snprintf(s_networkError, sizeof(s_networkError), "Vita: sceNetInit failed (0x%08x)\n",
+                (unsigned int)result);
             return false;
         }
         result = sceNetCtlInit();
         if (result < 0)
         {
-            LogFormat("Vita: sceNetCtlInit failed (0x%08x)\n", (unsigned int)result);
+            snprintf(s_networkError, sizeof(s_networkError), "Vita: sceNetCtlInit failed (0x%08x)\n",
+                (unsigned int)result);
             return false;
         }
         return true;
@@ -422,6 +429,12 @@ namespace
     }
 }
 
+bool Vita_StartNetwork()
+{
+    static const bool s_started = StartNetwork();
+    return s_started;
+}
+
 bool Vita_AssertExits()
 {
     return s_assertExits.load(std::memory_order_relaxed);
@@ -457,7 +470,9 @@ void Vita_Exit(int status)
             usleep(2000);
     }
     // A list's next start: this program again, which reads the list anew.
-    const bool again = s_listActive && s_listIndex + 1 < s_listCount && !s_listStopped.load(std::memory_order_relaxed);
+    const bool more = s_listActive && s_listIndex + 1 < s_listCount;
+    const bool stopped = s_listStopped.load(std::memory_order_relaxed);
+    const bool again = more && !stopped;
     if (s_logFd >= 0)
     {
         const int fd = s_logFd;
@@ -475,8 +490,12 @@ void Vita_Exit(int status)
     }
     if (locked)
         pthread_mutex_unlock(&s_logLock);
-    // When it cannot be started the process ends as it would have.
-    if (again)
+    // When it cannot be started the process ends as it would have. A bench's
+    // job (vita_bench.h) runs its list on the build the job named, and after
+    // the last start goes back to the installed build to send the logs.
+    if (Vita_BenchActive())
+        Vita_BenchEnd(more, stopped);
+    else if (again)
         sceAppMgrLoadExec("app0:eboot.bin", nullptr, nullptr);
     sceKernelExitProcess(status);
     for (;;)
@@ -544,6 +563,9 @@ bool Vita_Startup(int *argc, char ***argv)
     s_startTime = sceKernelGetProcessTimeWide();
     mkdir("ux0:data", 0777);
     mkdir(kDataPath, 0777);
+    // The bench comes before the list of starts, which it may fetch.
+    if (!Vita_BenchBegin(*argc, *argv))
+        sceKernelExitProcess(0);
     // Vita3K does not cut a file an open asks to truncate, so a shorter log
     // would keep the end of the last run's (com_fileaccess.cpp has the same
     // for the engine's files). The old log goes first.
@@ -553,6 +575,8 @@ bool Vita_Startup(int *argc, char ***argv)
 
     std::set_terminate(OnTerminate);
     LogFormat("Vita: KisakCOD %s starting, CPU at %d MHz\n", kProgramKind, scePowerGetArmClockFrequency());
+    if (Vita_BenchNote()[0])
+        LogText(Vita_BenchNote());
     if (s_listNote[0])
         LogText(s_listNote);
     const unsigned int fpscr = Vita_SetIeeeFloatMode();
@@ -576,8 +600,11 @@ bool Vita_Startup(int *argc, char ***argv)
         LogFormat("Vita: cannot enter %s (errno %d); copy the game data there first\n", kDataPath, errno);
         return false;
     }
-    if (!StartNetwork())
+    if (!Vita_StartNetwork())
+    {
+        LogText(s_networkError);
         return false;
+    }
 
     LoadCommandLine();
     *argc = SplitCommandLine();

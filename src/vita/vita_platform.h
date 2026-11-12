@@ -87,3 +87,22 @@ int Vita_HeapSizeMB();
 // gap faults on freed memory (Vita3K shows it at every fatal error). The
 // kernel reclaims everything anyway, so the server's exits skip that clean-up.
 [[noreturn]] void Vita_Exit(int status);
+
+// The network library, started once: the bench needs it before the log is
+// open, the engine after. False when it could not be started; the start-up
+// logs why.
+bool Vita_StartNetwork();
+
+// The bench that fetches its work (vita_bench.h; the multiplayer client
+// only, and only with bench.txt on the card). Vita_BenchBegin runs first at
+// start-up, before the list of starts, which it may have just fetched; it
+// does not return when the job at hand runs on the other build. False: the
+// bench started this process and has nothing left to do, so it ends.
+// Vita_BenchNote is what it did, for the log. Vita_BenchEnd is called at the
+// process's end while a job runs (Vita_BenchActive): it starts the list's
+// next start, or hands a finished list's logs to the installed build to
+// send, and returns when the process should simply end.
+bool Vita_BenchBegin(int argc, char **argv);
+const char *Vita_BenchNote();
+bool Vita_BenchActive();
+void Vita_BenchEnd(bool listHasMore, bool stopped);

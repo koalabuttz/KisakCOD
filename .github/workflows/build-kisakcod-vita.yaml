@@ -303,6 +303,7 @@ jobs:
           set -euo pipefail
           python3 scripts/tests/test_vita_run_plan.py
           python3 scripts/tests/test_vita_run_list.py
+          python3 scripts/tests/test_vita_bench.py
           python3 scripts/tests/test_vita_input.py
           python3 scripts/tests/test_vita_sound.py --al-include "$RUNNER_TEMP/al-include"
           python3 scripts/tests/test_vita_program_queue.py
