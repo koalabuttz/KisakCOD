@@ -38,13 +38,17 @@ OPCODES = {
     "dcl": 31, "pow": 32, "crs": 33, "sgn": 34, "abs": 35, "nrm": 36,
     "sincos": 37, "rep": 38, "endrep": 39, "if": 40, "ifc": 41, "else": 42,
     "endif": 43, "break": 44, "breakc": 45, "mova": 46, "defb": 47,
-    "defi": 48, "texkill": 65, "texld": 66, "expp": 78, "logp": 79,
+    "defi": 48, "texcoord": 64, "texkill": 65, "texld": 66, "tex": 66,
+    "texbem": 67,
+    "expp": 78, "logp": 79,
     "cnd": 80, "def": 81, "cmp": 88, "dp2add": 90, "dsx": 91, "dsy": 92,
     "texldd": 93, "setp": 94, "texldl": 95, "breakp": 96,
 }
 NO_DST = {"nop", "call", "callnz", "loop", "ret", "endloop", "label", "rep",
           "endrep", "if", "ifc", "else", "endif", "break", "breakc", "breakp"}
 # texkill's single operand is encoded as a destination.
+# ps 1.x result shifts, a 4-bit signed field of the destination token.
+SHIFTS = {"x2": 1, "x4": 2, "d2": 15}
 COMPARISONS = {"gt": 1, "eq": 2, "ge": 3, "lt": 4, "ne": 5, "le": 6}
 USAGES = {"position": 0, "blendweight": 1, "blendindices": 2, "normal": 3,
           "psize": 4, "texcoord": 5, "tangent": 6, "binormal": 7,
@@ -138,7 +142,10 @@ class Shader:
         kind, num = self.register(base)
         token = _reg_bits(kind, num) | (_writemask(mask or "") << 16)
         for mod in mods:
-            token |= {"sat": 1, "pp": 2, "centroid": 4}[mod] << 20
+            if mod in SHIFTS:
+                token |= SHIFTS[mod] << 24
+            else:
+                token |= {"sat": 1, "pp": 2, "centroid": 4}[mod] << 20
         if not rel_reg:
             return [token]
         rkind, rnum = self.register(rel_reg)
@@ -178,10 +185,14 @@ class Shader:
         return out
 
     # instructions ----------------------------------------------------------
-    def emit(self, opcode: int, params, control: int = 0, predicated: bool = False):
-        token = opcode | (control << 16) | (len(params) << 24)
+    def emit(self, opcode: int, params, control: int = 0, predicated: bool = False, coissue: bool = False):
+        token = opcode | (control << 16)
+        if self.major >= 2:
+            token |= len(params) << 24  # shader model 1 tokens carry no length
         if predicated:
             token |= 1 << 28
+        if coissue:
+            token |= 1 << 30
         self.tokens.append(token)
         self.tokens.extend(params)
 
@@ -197,6 +208,10 @@ class Shader:
             return
         predicated = False
         pred_tokens = []
+        # ps 1.x: "+" puts an instruction beside the one before it.
+        coissue = text.startswith("+")
+        if coissue:
+            text = text[1:].strip()
         m = re.match(r"\((!?)(p0(?:\.[xyzw]+)?)\)\s*(.*)", text)
         if m:
             predicated = True
@@ -218,7 +233,7 @@ class Shader:
         for mod in mods:
             if mod in COMPARISONS:
                 control = COMPARISONS[mod]
-            elif mod in ("sat", "pp", "centroid"):
+            elif mod in ("sat", "pp", "centroid") or mod in SHIFTS:
                 dst_mods.append(mod)
             else:
                 raise AsmError("unknown modifier _%s" % mod)
@@ -242,7 +257,7 @@ class Shader:
             for a in args[1:]:
                 params += self.src(a)
         params += pred_tokens
-        self.emit(OPCODES[name], params, control, predicated)
+        self.emit(OPCODES[name], params, control, predicated, coissue)
 
     def _dcl(self, mods, args):
         reg = args[0]

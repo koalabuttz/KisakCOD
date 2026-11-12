@@ -225,6 +225,38 @@ int SourceCountV1(uint16_t op, bool &hasDestination)
     }
 }
 
+// The same for ps_1_1 to ps_1_3. Their texture instructions name one
+// register, which is both the coordinate read and the colour written.
+int SourceCountPs1(uint16_t op, bool &hasDestination)
+{
+    hasDestination = true;
+    switch (op)
+    {
+    case kNop:
+        hasDestination = false;
+        return 0;
+    case kTex:
+    case kTexCoord:
+    case kTexKill:
+        return 0;
+    case kMov:
+        return 1;
+    case kAdd:
+    case kSub:
+    case kMul:
+    case kDp3:
+    case kDp4:
+        return 2;
+    case kMad:
+    case kLrp:
+    case kCnd:
+    case kCmp:
+        return 3;
+    default:
+        return -1;
+    }
+}
+
 struct Reader
 {
     const uint32_t *tokens;
@@ -1431,6 +1463,179 @@ uint64_t Hash(const void *data, size_t bytes, uint64_t hash)
     return hash;
 }
 
+namespace
+{
+// ps_1_1 to ps_1_3 as the ps_2_0 the emitter writes. r0 and r1 stay; the
+// colour a texture instruction leaves in t<n> lives in r<n + 2>, and t<n>
+// itself stays the coordinate, as in ps_2_0.
+bool LowerPs1(Shader &shader, std::string &error)
+{
+    constexpr uint16_t kFirstTextureTemp = 2;
+    constexpr uint16_t kOne = 8; // the model has c0 to c7
+    Reflection &r = shader.reflection;
+    std::vector<Instruction> out;
+    out.reserve(shader.instructions.size() + 3);
+    auto asValue = [&](Operand &op) {
+        if (op.type == kTexture)
+        {
+            op.type = kTemp;
+            op.number = uint16_t(op.number + kFirstTextureTemp);
+        }
+    };
+    auto textureOf = [&](const Instruction &ins, uint16_t &number) {
+        if (ins.destination.type != kTexture || ins.destination.number >= 4)
+        {
+            error = std::string(OpcodeName(ins.opcode) ? OpcodeName(ins.opcode) : "a texture instruction") +
+                    " names a register other than t0 to t3";
+            return false;
+        }
+        number = ins.destination.number;
+        return true;
+    };
+    bool definedOne = false;
+    Operand lastWritten;
+    bool haveLast = false;
+    for (const Instruction &in : shader.instructions)
+    {
+        if (in.opcode == kDef || in.opcode == kNop)
+        {
+            out.push_back(in);
+            continue;
+        }
+        if (in.opcode == kDcl || in.opcode == kDefI || in.opcode == kDefB)
+        {
+            error = "a declaration in a ps 1.x shader";
+            return false;
+        }
+        uint16_t n = 0;
+        if (in.opcode == kTex)
+        {
+            if (!textureOf(in, n))
+                return false;
+            Instruction read;
+            read.opcode = kTex;
+            read.hasDestination = true;
+            read.destination.type = kTemp;
+            read.destination.number = uint16_t(n + kFirstTextureTemp);
+            read.sourceCount = 2;
+            read.sources[0].type = kTexture;
+            read.sources[0].number = n;
+            read.sources[1].type = kSampler;
+            read.sources[1].number = n;
+            r.samplers[n] = SamplerType::Tex2D;
+            out.push_back(read);
+            haveLast = false;
+            continue;
+        }
+        if (in.opcode == kTexCoord)
+        {
+            // The coordinate as a colour: 0 to 1, alpha 1.
+            if (!textureOf(in, n))
+                return false;
+            if (!definedOne)
+            {
+                Instruction one;
+                one.opcode = kDef;
+                one.hasDestination = true;
+                one.destination.type = kConst;
+                one.destination.number = kOne;
+                const float value = 1.0f;
+                for (uint32_t &word : one.literal)
+                    std::memcpy(&word, &value, sizeof(word));
+                out.insert(out.begin(), one);
+                definedOne = true;
+            }
+            Instruction colour;
+            colour.opcode = kMov;
+            colour.hasDestination = true;
+            colour.destination.type = kTemp;
+            colour.destination.number = uint16_t(n + kFirstTextureTemp);
+            colour.destination.mask = 0x7;
+            colour.destination.modifier = kDmSaturate;
+            colour.sourceCount = 1;
+            colour.sources[0].type = kTexture;
+            colour.sources[0].number = n;
+            out.push_back(colour);
+            Instruction alpha = colour;
+            alpha.destination.mask = 0x8;
+            alpha.destination.modifier = 0;
+            alpha.sources[0].type = kConst;
+            alpha.sources[0].number = kOne;
+            out.push_back(alpha);
+            haveLast = false;
+            continue;
+        }
+        if (in.opcode == kTexKill)
+        {
+            // The first three coordinates, whatever was read from the
+            // texture since.
+            if (!textureOf(in, n))
+                return false;
+            Instruction kill = in;
+            kill.destination.mask = 0x7;
+            out.push_back(kill);
+            haveLast = false;
+            continue;
+        }
+
+        Instruction ins = in;
+        if (!ins.hasDestination || (ins.destination.type != kTemp && ins.destination.type != kTexture) ||
+            (ins.destination.type == kTemp && ins.destination.number >= kFirstTextureTemp) ||
+            (ins.destination.type == kTexture && ins.destination.number >= 4))
+        {
+            error = "a ps 1.x instruction writes a register other than r0, r1 and t0 to t3";
+            return false;
+        }
+        asValue(ins.destination);
+        for (int i = 0; i < ins.sourceCount; ++i)
+        {
+            Operand &src = ins.sources[i];
+            if ((src.type == kTemp && src.number >= kFirstTextureTemp) || (src.type == kTexture && src.number >= 4) ||
+                (src.type == kConst && src.number >= kOne))
+            {
+                error = "a ps 1.x instruction reads a register the model does not have";
+                return false;
+            }
+            asValue(src);
+        }
+        // An instruction that runs beside the one before it reads what was
+        // there before either wrote. One statement after the other is the
+        // same thing unless it reads what its partner writes.
+        if (ins.coissue && haveLast)
+            for (int i = 0; i < ins.sourceCount; ++i)
+            {
+                const Operand &src = ins.sources[i];
+                if (src.type != lastWritten.type || src.number != lastWritten.number)
+                    continue;
+                uint8_t lanes = ins.opcode == kDp3 ? 0x7 : ins.opcode == kDp4 ? 0xf : ins.destination.mask;
+                if (ins.opcode == kCnd && i == 0)
+                    lanes = 0xf;
+                uint8_t read = 0;
+                for (int lane = 0; lane < 4; ++lane)
+                    if (lanes & (1 << lane))
+                        read |= uint8_t(1 << ((src.swizzle >> (2 * lane)) & 3));
+                if (read & lastWritten.mask)
+                {
+                    error = "an instruction reads what the instruction it runs beside writes";
+                    return false;
+                }
+            }
+        lastWritten = ins.destination;
+        haveLast = true;
+        out.push_back(ins);
+    }
+    Instruction result;
+    result.opcode = kMov;
+    result.hasDestination = true;
+    result.destination.type = kColorOut;
+    result.sourceCount = 1;
+    result.sources[0].type = kTemp;
+    out.push_back(result);
+    shader.instructions = std::move(out);
+    return true;
+}
+} // namespace
+
 bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &error)
 {
     shader = Shader{};
@@ -1454,7 +1659,7 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
     r.major = uint8_t((version >> 8) & 0xff);
     r.minor = uint8_t(version & 0xff);
     const bool vertex = r.stage == Stage::Vertex;
-    if (r.major > 3 || r.major < 1 || (!vertex && r.major < 2))
+    if (r.major > 3 || r.major < 1 || (!vertex && r.major < 2 && (r.minor < 1 || r.minor > 3)))
     {
         char text[48];
         std::snprintf(text, sizeof(text), "%s_%u_%u is not handled", vertex ? "vs" : "ps", r.major, r.minor);
@@ -1492,6 +1697,7 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
         Instruction ins;
         ins.opcode = op;
         ins.control = uint8_t((token >> 16) & 0xff);
+        ins.coissue = !sm2 && (token & (1u << 30)) != 0;
         const size_t start = reader.at;
         const size_t length = sm2 ? (token >> 24) & 0xf : 0;
         if (op == kDcl)
@@ -1530,10 +1736,11 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
             }
             else
             {
-                sources = SourceCountV1(op, hasDestination);
+                sources = vertex ? SourceCountV1(op, hasDestination) : SourceCountPs1(op, hasDestination);
                 if (sources < 0)
                 {
-                    error = "vs_1_1 opcode " + std::to_string(op) + " is not handled";
+                    error = std::string(vertex ? "vs_1_1" : "ps 1.x") + " opcode " + std::to_string(op) +
+                            " is not handled";
                     return false;
                 }
             }
@@ -1632,6 +1839,8 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
     {
         // vs_1_1 declares every input too; nothing else to add.
     }
+    if (!vertex && r.major < 2 && !LowerPs1(shader, error))
+        return false;
     if (r.relativeConstants)
         r.floatConstants = vertex ? 256 : 224;
     else if (highestConstant >= 0)

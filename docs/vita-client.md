@@ -899,11 +899,15 @@ What the GXM back end does so far (step 2d):
 ### Shaders (step 2c)
 
 `src/gfx_gxm/shader/gxm_cg_translate.cpp` turns D3D9 shader bytecode
-(vs_1_1 to vs_3_0, ps_2_0 to ps_3_0) into Cg: a float4 local per register and
+(vs_1_1 to vs_3_0, ps_1_1 to ps_3_0) into Cg: a float4 local per register and
 one statement per instruction. Loops, calls, predicates, `if` on boolean
-constants, `vPos`, `vFace`, more than one colour output and ps 1.x are
+constants, `vPos`, `vFace`, more than one colour output and ps_1_4 are
 refused with a reason; the game's shaders use none of them (the renderer
-plan's corpus scan). GXM has no volume textures, so a volume is stored as its
+plan's corpus scan). ps_1_1 to ps_1_3, which the game's shader model 2 set
+(`r_rendererPreference 0`) draws its depth pass with, are rewritten as
+ps_2_0 when parsed: `tex t0` reads sampler 0 at coordinate 0, the colour is
+what r0 holds at the end; their samplers are taken to be 2D, and the
+instructions that address one texture through another are refused. GXM has no volume textures, so a volume is stored as its
 slices one under the other in a 2D texture and sampled by blending the two
 nearest slices (`kisak_tex3D`, slice count in `kisak_depth_s<n>`). The Cg
 program meets the back end through:
