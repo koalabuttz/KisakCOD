@@ -318,6 +318,24 @@ void CoverMonitor(HWND window)
     if (!IsWindow(window) || !GetMonitorInfoW(MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY), &info))
         return;
     const RECT &rect = info.rcMonitor;
+    if (IsIconic(window))
+    {
+        // Minimised (the player is coming back to it): the size it comes
+        // back at. Windows set that to the desktop's whole display when the
+        // desktop's mode came back (PC run 18b), which on our smaller mode
+        // showed a corner of the picture. The placement is in workspace
+        // coordinates, which start at the work area rather than the display.
+        WINDOWPLACEMENT placement{};
+        placement.length = sizeof(placement);
+        if (GetWindowPlacement(window, &placement))
+        {
+            const LONG x = rect.left - (info.rcWork.left - info.rcMonitor.left);
+            const LONG y = rect.top - (info.rcWork.top - info.rcMonitor.top);
+            placement.rcNormalPosition = RECT{x, y, x + (rect.right - rect.left), y + (rect.bottom - rect.top)};
+            SetWindowPlacement(window, &placement);
+        }
+        return;
+    }
     UINT flags = SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER;
     if (GetWindowThreadProcessId(window, nullptr) != GetCurrentThreadId())
         flags |= SWP_ASYNCWINDOWPOS;
