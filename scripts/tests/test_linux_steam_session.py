@@ -15,7 +15,12 @@ the Steam client running on the player's machine through its steamclient.so
    32-bit (the shipped target); --m32 makes the 32-bit run a requirement. With
    sanitizers unless the toolchain lacks them or --no-sanitize is given.
 
-2. Compile proof (32-bit, front end only). The engine units the flag changes
+2. Opt-in test. tests/linux_steam/steam_optin_test.cpp checks which command
+   lines turn Steam on for the multiplayer client (+set cl_steam 1, read by
+   Steam_ClientOptedIn in src/universal/steam_optin.h before Com_Init), on
+   Linux and Windows alike. Built 64-bit, with sanitizers when available.
+
+3. Compile proof (32-bit, front end only). The engine units the flag changes
    are compiled with KISAK_LINUX_STEAM, in the dedicated server's definitions
    and in the multiplayer client's, so a flag-on build cannot rot unnoticed
    while CI builds the default. Like the client compile census it reuses, this
@@ -45,6 +50,7 @@ import run_client_compile_census as census  # noqa: E402
 SESSION = SRC / "linux" / "steam" / "steamclient_session.cpp"
 FAKE = TESTS / "fake_steamclient.cpp"
 TEST = TESTS / "steamclient_session_test.cpp"
+OPTIN_TEST = TESTS / "steam_optin_test.cpp"
 WARNINGS = ("-Wall", "-Wextra", "-Werror")
 SANITIZE = ("-fsanitize=address,undefined", "-fno-omit-frame-pointer", "-fno-sanitize-recover=all")
 
@@ -81,6 +87,24 @@ def build_session_test(cxx, bits, sanitize, workdir):
     if code:
         return False, False, f"session test ({bits}-bit) failed to build:\n{log}", None, None
     return True, False, "", fake, test
+
+
+def run_optin_test(cxx, sanitize, workdir):
+    """Build and run the opt-in parser test; returns (ok, banner, log)."""
+    test = workdir / "steam_optin_test"
+    base = [cxx, "-std=c++20", "-O1", "-g", *WARNINGS, "-I", SRC, "-o", test, OPTIN_TEST]
+    sanitized = False
+    code, log = run(base[:1] + list(SANITIZE) + base[1:]) if sanitize else (1, "")
+    if code == 0:
+        sanitized = True
+    else:
+        code, log = run(base)
+        if code:
+            return False, "opt-in test: FAIL (build)", f"opt-in test failed to build:\n{log}"
+    code, output = run([test], timeout=60)
+    print(output.rstrip())
+    banner = f"opt-in test{' sanitized' if sanitized else ''}: {'pass' if code == 0 else 'FAIL'}"
+    return code == 0, banner, "" if code == 0 else f"opt-in test exited {code}"
 
 
 def compile_proofs(cxx, workdir):
@@ -126,6 +150,10 @@ def main(argv=None):
                        f"{'pass' if code == 0 else 'FAIL'}")
             if code:
                 failures.append(f"session test ({bits}-bit) exited {code}")
+        ok, banner, log = run_optin_test(options.cxx, not options.no_sanitize, workdir)
+        ran.append(banner)
+        if not ok:
+            failures.append(log)
         if not options.skip_compile_proof:
             proof_failures = compile_proofs(options.cxx, workdir)
             failures.extend(proof_failures)

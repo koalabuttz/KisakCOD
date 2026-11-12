@@ -60,6 +60,10 @@ void Steam_Frame() {}
 
 #include <linux/steam/steamclient_session.h>
 #include <qcommon/cmd.h>
+#include <universal/steam_optin.h>
+
+// main.cpp: the command line, copied before Steam_Init runs.
+extern char sys_cmdline[1024];
 
 #ifdef KISAK_MP
 #include <server_mp/server_mp.h>
@@ -258,6 +262,18 @@ static bool Steam_InitGameServer(const char *path, const char *login)
 
 void Steam_Init()
 {
+#if defined(KISAK_MP) && !defined(KISAK_DEDICATED)
+    // KISAK: Steam is opt-in for the client (src/universal/steam_optin.h), as
+    // on Windows. Without +set cl_steam 1 the client never opens
+    // steamclient.so and joins with a key code.
+    if (!Steam_ClientOptedIn(sys_cmdline))
+    {
+        Com_Printf(CON_CHANNEL_SYSTEM,
+            "[Kisak] Steam is off, so remote servers are joined with your key code. "
+            "Start the game with +set cl_steam 1 to join with Steam.\n");
+        return;
+    }
+#endif
     char path[512];
     if (!linux_steam::DefaultLibraryPath(path, sizeof(path)))
     {
