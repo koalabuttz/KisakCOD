@@ -846,6 +846,25 @@ What the GXM back end does so far (step 2d):
   defaults, 3 MB more of main memory) are there for a console run to say
   whether either is too small for that.
   Not run on a console or in Vita3K yet.
+- **Fewer scenes a frame.** The Vita's GPU works a scene at a time: every
+  change of render target ends one, stores its whole colour and depth
+  targets and loads them again when the frame comes back. Console run V
+  (2026-11-12, mp_crash) counted seven scenes a frame at the busy view: the
+  back buffer four times, the depth pass once and two copies of the picture
+  with no draws at 2.25 ms each. Two choices in
+  src/gfx_gxm/gxm_engine_options.h take scenes out without changing what is
+  drawn. The forced depth pass draws into the scene's own targets, where
+  the engine sent it to the dynamic shadows target (same depth, a colour
+  target nothing read): the clear, the depth pass and the lit pass are then
+  one scene where they were three. And the copy of the picture that
+  distortion reads (heat haze, glass) is made only in frames whose emissive
+  list holds a technique that reads it; the engine made it in every frame
+  with r_distortion on, which also split the back buffer's scene before the
+  emissive pass. Shadow cookies, if they are ever turned on (sc_enable),
+  keep the engine's way, since they draw into that target. Empty files
+  `no-depth-in-scene` and `no-resolve-skip` in the folder of the compiled
+  programs turn each off for a run that compares. Not measured on a console
+  yet.
 - **Textures** are linear: rows of whole multiples of 8 texels, and the
   levels of a mipmapped texture sized from the power of two above the base,
   which is how sceGxm reads them and also a layout LockRect can hand out.

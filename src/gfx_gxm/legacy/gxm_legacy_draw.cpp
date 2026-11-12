@@ -55,6 +55,8 @@ namespace gfx_gxm
 const char *g_drawPass = nullptr;
 const char *g_drawSurface = nullptr;
 bool g_depthPrepass = true;
+bool g_depthInScene = true;
+bool g_resolveWhenUsed = true;
 } // namespace gfx_gxm
 
 namespace gfx_vk::legacy
@@ -391,6 +393,10 @@ struct DrawState
     std::vector<KeptCopy> kept;
     uint32_t copyBytes = 0; // the kept pieces and the second pieces of textures
     uint32_t drawFailures = 0, uniformFailures = 0;
+    // Run diagnostic: draws the engine labelled as its depth pass, and those of
+    // them whose state writes colour (the pass now shares the scene's colour
+    // target, where colour written would show).
+    uint64_t depthPassDraws = 0, depthPassColourDraws = 0;
     uint64_t copies = 0;
     uint32_t variantsMade = 0, variantFailures = 0;
 
@@ -1799,6 +1805,14 @@ bool InitDraw(Device &device, std::string &error)
         d.overlap = false;
         Log(device, "sceGxm gave no notification region: the CPU waits for the whole GPU at every Present");
     }
+    gfx_gxm::g_depthInScene = !gxm::ProgramCacheMarker("no-depth-in-scene");
+    if (!gfx_gxm::g_depthInScene)
+        Log(device, "diag: no-depth-in-scene is there: the forced depth pass draws into the dynamic shadows target, "
+                    "in a scene of its own");
+    gfx_gxm::g_resolveWhenUsed = !gxm::ProgramCacheMarker("no-resolve-skip");
+    if (!gfx_gxm::g_resolveWhenUsed)
+        Log(device, "diag: no-resolve-skip is there: the picture is copied for distortion in every frame, drawn or "
+                    "not");
     if (gxm::ProgramCacheMarker("no-draw-reuse"))
     {
         d.reuse = false;
@@ -3104,6 +3118,11 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         return;
     }
 
+    if (gfx_gxm::g_drawPass && !std::strcmp(gfx_gxm::g_drawPass, "depth prepass"))
+    {
+        ++d.depthPassDraws;
+        d.depthPassColourDraws += (device.renderStates[d3d::RS_COLORWRITEENABLE] & 0xf) != 0;
+    }
     // Programs.
     const int diag = d.diagMode;
     const DiagTest thisTest = DiagTestAt(diag ? diag - 1 : 0);
@@ -3712,6 +3731,8 @@ void LogDrawSummary(Device &device)
         "the second piece; kept pieces and second pieces hold %u KB",
         (unsigned long long)d->renamesSpared, (unsigned long long)d->renameSwaps, (unsigned long long)d->renames,
         (unsigned long long)d->renameWaits, (unsigned long long)d->textureSwaps, d->copyBytes >> 10);
+    Log(device, "diag: depth pass: %llu draws, %llu of them with a state that writes colour",
+        (unsigned long long)d->depthPassDraws, (unsigned long long)d->depthPassColourDraws);
     Log(device,
         "frames overlap: %s; %llu of %llu frames waited for the frame before last, %.1f ms each on average; %u "
         "notifications did not come",

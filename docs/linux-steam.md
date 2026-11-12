@@ -40,6 +40,10 @@ Set `KISAK_STEAMCLIENT_LIBRARY` to load a different `steamclient.so`.
 ## What you need
 
 - The Steam client running and logged in, on an account that owns CoD4.
+- For the client: start it with `+set cl_steam 1`. Steam is opt-in, on Linux
+  and Windows alike; without it the client never opens `steamclient.so` and
+  joins with its [key code](key-codes.md). The dedicated server does not need
+  it.
 - For a server: either the same, on the server machine (the Windows build works
   this way too: it uses the client API, not the GameServer API), or, for the
   dedicated server, an anonymous Steam game server login (below).

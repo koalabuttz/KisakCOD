@@ -6,6 +6,8 @@
 #include "r_state.h"
 #include "r_meshdata.h"
 
+#include <gfx_gxm/gxm_engine_options.h>
+
 
 void R_DepthPrepassCallback(const void *userData, GfxCmdBufContext context, GfxCmdBufContext prepassContext)
 {
@@ -42,7 +44,12 @@ void R_DepthPrepassCallback(const void *userData, GfxCmdBufContext context, GfxC
     }
     else
     {
-        R_SetRenderTarget(context, R_RENDERTARGET_DYNAMICSHADOWS);
+        // The Vita draws it into the scene's own targets, which saves two
+        // scenes of the frame (gxm_engine_options.h).
+        R_SetRenderTarget(
+            context,
+            KISAK_GXM_DEPTH_IN_SCENE() && viewInfo->dynamicShadowType != SHADOW_COOKIE ? R_RENDERTARGET_SCENE
+                                                                                       : R_RENDERTARGET_DYNAMICSHADOWS);
         baseTechType = TECHNIQUE_DEPTH_PREPASS;
     }
     qmemcpy(&info, &viewInfo->litInfo, sizeof(info));

@@ -20,6 +20,10 @@
 #include <mutex>
 #include <vector>
 #include <qcommon/cmd.h>
+#include <universal/steam_optin.h>
+
+// win_main.cpp: the command line, copied before Steam_Init runs.
+extern char sys_cmdline[1024];
 
 #ifdef KISAK_MP
 #include <server_mp/server_mp.h>
@@ -328,6 +332,17 @@ static void Steam_InitGameServer(const char *login)
 
 void Steam_Init()
 {
+#if defined(KISAK_MP) && !defined(KISAK_DEDICATED)
+	// KISAK: Steam is opt-in for the client (src/universal/steam_optin.h).
+	// Without +set cl_steam 1 nothing here runs: no steam_appid.txt, no
+	// SteamAPI_Init, and the player joins with a key code.
+	if (!Steam_ClientOptedIn(sys_cmdline))
+	{
+		Steam_StartupPrintf("[Kisak] Steam is off, so remote servers are joined with your key code. "
+			"Start the game with +set cl_steam 1 to join with Steam.\n");
+		return;
+	}
+#endif
 	CreateAppIdFile();
 	SetEnvironmentVariableA("SteamAppId", APPID_STR);
 	SetEnvironmentVariableA("SteamGameId", APPID_STR);
