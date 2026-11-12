@@ -194,7 +194,7 @@ These came before the playable client and still build and run in CI:
 
 ## Open pull requests
 
-As of 2026-11-12 01:15 UTC, five. They change by the hour; the
+As of 2026-11-12 01:15 UTC, six. They change by the hour; the
 [list on GitHub](https://github.com/koalabuttz/KisakCOD/pulls) is the current
 one. A machine run a pull request waits on is named where its author has
 said so.
@@ -206,6 +206,7 @@ said so.
 | 251 | Draft, first stacked on 248 (merged): ultrawide screens use their own shape with `r_aspectRatio auto`, borderless fullscreen (`r_fullscreenMode`), Display and Controller settings pages and FPS rows in Options | PC run "settings pages run 1" (the menus, borderless and a wide picture have not been seen in a running client). |
 | 252 | Vulkan back end: apply the gamma ramp in fullscreen (PC run 17: `r_gamma 0.8` came out darker than 1, mean 24.3, 26.8, 25.2 against 37.5, 40.6, 38.6, for 0.060 ms of GPU time a frame) and switch the monitor's display mode (with `r_mode 1280x720` Vulkan fullscreen left the display at 2560x1080 at 75 Hz where Direct3D 9 went to 1280x720 at 60 Hz) | A PC run of the display mode, including alt-tab, comes next. |
 | 256 | PS Vita back end (draft): let the CPU fill a frame while the GPU draws the last. Console run U showed one `sceGxmFinish` a frame (85 to 92 ms beside 47 ms of CPU work) because discarded dynamic buffers asked a full 20 MB pool for fresh memory; now a discard changes memory with a kept piece the GPU is done with, the pacing waits for the frame before last, and the main pool is 26 MB. PC run Z18 in Vita3K: same pictures with and without it, no lock waited for the whole GPU (5,232 discards wrote in place, 16,979 took a kept piece); the hosted Vita jobs passed on its head | Console run W: the overlap against `no-frame-overlap` at run U's views, plus `no-vsync`. |
+| 258 | Fix a counter of the mark vertex generation (`g_markThread`) that was raised in builds without assertions but lowered only inside `iassert`, which stopped laptop perf run 6's speed build twice on mp_crash 10 to 15 s after the map load; `test_linux_speed_build.py` gains a source check | None named: no game has run with the fix; the next laptop run of the build without assertions will show it. |
 
 ## Laptop and PC runs still to do
 
