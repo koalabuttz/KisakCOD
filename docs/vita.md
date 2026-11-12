@@ -229,6 +229,13 @@ START + SELECT ends the start and the chain: the next line waits for the
 next tap. A fault ends the chain too. So give every line a quit timer and
 `vita_quitAfter` as the safety net.
 
+A start after which the list goes no further (its last start, or one ended
+by hand) removes every marker as it ends, so a list leaves the program
+folder without markers and the next ordinary start is the plain build
+(`Vita: run list: that was its last start; 1 markers removed`). Markers
+that were there before the list are gone with it: make them again by hand.
+A last start that faults cannot do this and leaves its markers.
+
 The log's second line says which start it is and what was done to the
 markers. A name is letters, digits, `.`, `_` and `-`; a marker lower-case
 letters, digits and `-`; up to 32 starts and 8 markers a start. A list with

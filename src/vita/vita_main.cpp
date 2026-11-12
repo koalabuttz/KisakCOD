@@ -312,13 +312,10 @@ namespace
         unlink(kRunListStatePath);
     }
 
-    // Leaves the program folder with this start's markers and no other:
-    // every empty file there without a dot in its name is a marker.
-    void SetRunListMarkers(unsigned *removed)
+    // Removes every marker from the program folder: every empty file there
+    // without a dot in its name is one. Returns how many went.
+    unsigned RemoveMarkers()
     {
-        *removed = 0;
-        if (s_listStart.markerCount)
-            mkdir(kProgramFolder, 0777);
         char names[32][64];
         unsigned count = 0;
         const SceUID folder = sceIoDopen(kProgramFolder);
@@ -335,13 +332,24 @@ namespace
             }
             sceIoDclose(folder);
         }
+        unsigned removed = 0;
         char path[192];
         for (unsigned i = 0; i < count; ++i)
         {
             snprintf(path, sizeof(path), "%s/%s", kProgramFolder, names[i]);
             if (sceIoRemove(path) >= 0)
-                ++*removed;
+                ++removed;
         }
+        return removed;
+    }
+
+    // Leaves the program folder with this start's markers and no other.
+    void SetRunListMarkers(unsigned *removed)
+    {
+        if (s_listStart.markerCount)
+            mkdir(kProgramFolder, 0777);
+        *removed = RemoveMarkers();
+        char path[192];
         for (size_t i = 0; i < s_listStart.markerCount; ++i)
         {
             snprintf(path, sizeof(path), "%s/%s", kProgramFolder, s_listStart.markers[i]);
@@ -473,9 +481,22 @@ void Vita_Exit(int status)
     const bool more = s_listActive && s_listIndex + 1 < s_listCount;
     const bool stopped = s_listStopped.load(std::memory_order_relaxed);
     const bool again = more && !stopped;
+    // A list that goes no further from here leaves no marker behind: its
+    // last start's markers would otherwise change every later ordinary
+    // start (PC run Z23). A start that follows makes its own.
+    const bool listOver = s_listActive && !again;
+    const unsigned cleared = listOver ? RemoveMarkers() : 0;
     if (s_logFd >= 0)
     {
         const int fd = s_logFd;
+        if (listOver)
+        {
+            char line[128];
+            const int length = snprintf(line, sizeof(line), "%sVita: run list: %s; %u markers removed\n",
+                s_logAtLineStart ? "" : "\n", more ? "stopped by hand" : "that was its last start", cleared);
+            if (length > 0)
+                WriteAll(line, (size_t)length);
+        }
         if (again)
         {
             char line[96];
