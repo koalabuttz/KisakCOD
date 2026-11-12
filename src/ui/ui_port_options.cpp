@@ -1015,8 +1015,16 @@ menuDef_t *BuildPage(const UiContext *dc, const menuDef_t *source, const PageSpe
         }
         items[count++] = copy;
     }
+    // The rows are numbered (for the highlight) after the source's own
+    // numbers. Tabs the port has added to the source already took the
+    // highest numbers; leaving them out numbers the page the same whether it
+    // is built before or after they were added (see UI_RefreshPortOptions).
+    int portTabs = 0;
+    for (const PageSpec &other : kPages)
+        portTabs += FindTab(source, other.name) >= 0 ? 1 : 0;
     const float firstY = source->items[from.setting]->window.rect.y;
-    BuildRows(from, page, spec.rows, spec.rowCount, firstY, HighestHighlightNumber(source) + 1, items, &count);
+    BuildRows(from, page, spec.rows, spec.rowCount, firstY, HighestHighlightNumber(source) + 1 - portTabs, items,
+              &count);
     if (spec.applyFrom)
     {
         if (const menuDef_t *applyMenu = FindRegisteredMenu(dc, spec.applyFrom))
