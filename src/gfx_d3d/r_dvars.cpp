@@ -11,6 +11,10 @@
  //const dvar_t **r_smp_worker_thread;
  const dvar_t *r_smp_worker_thread[2];
  const dvar_t *r_envMapMaxIntensity;
+#ifndef KISAK_PURE
+ const dvar_t *r_fullscreenMode;
+ static const char *r_fullscreenModeNames[] = {"exclusive", "borderless", nullptr};
+#endif
  const dvar_t *r_portalMinRecurseDepth;
  const dvar_t *r_dof_nearEnd;
  const dvar_t *r_streamSize;
@@ -543,6 +547,12 @@
      vid_xpos = Dvar_RegisterInt("vid_xpos", 3, (DvarLimits)0x1000FFFFF000LL, DVAR_ARCHIVE, "Game window horizontal position");
      vid_ypos = Dvar_RegisterInt("vid_ypos", 22, (DvarLimits)0x1000FFFFF000LL, DVAR_ARCHIVE, "game window vertical position");
      r_fullscreen = Dvar_RegisterBool("r_fullscreen", 0, DVAR_LATCH | DVAR_ARCHIVE, "Display game full screen");
+#ifndef KISAK_PURE
+     // Port: "borderless" fills the screen with a window at the desktop's own
+     // resolution instead of changing the display mode (R_SetWndParms).
+     r_fullscreenMode = Dvar_RegisterEnum("r_fullscreenMode", r_fullscreenModeNames, 0, DVAR_LATCH | DVAR_ARCHIVE,
+                                          "Fullscreen as an exclusive display mode or as a borderless window");
+#endif
      min.value.max = 3.0;
      min.value.min = 0.5;
      r_gamma = Dvar_RegisterFloat("r_gamma", 0.80000001f, min, DVAR_ARCHIVE, "Gamma value");

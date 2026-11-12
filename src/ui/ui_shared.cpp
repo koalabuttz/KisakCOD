@@ -1713,6 +1713,9 @@ int Menus_OpenByName(UiContext *dc, const char *p)
     pMenu = Menus_FindByName(dc, p);
     if (pMenu)
     {
+        // Port: the rows and tabs the database may have copied away since the
+        // menu was registered (src/ui/ui_port_options.h).
+        UI_RefreshPortOptions(dc, pMenu);
         Menus_Open(dc, pMenu);
         return 1;
     }
@@ -4230,10 +4233,10 @@ void UI_AddMenu(UiContext *dc, menuDef_t *menu)
             640);
     if (IsFastFileLoad() && DB_FindXAssetHeader(ASSET_TYPE_MENU, menu->window.name).menu != menu)
         MyAssertHandler(".\\ui\\ui_shared.cpp", 6304, 0, "%s", "touchMenu == menu");
-    // Port: rows the retail options menus lack (src/ui/ui_port_options.h).
-    UI_AddPortOptionRows(menu);
     if (!UI_AppendMenuReference(dc, menu))
         Com_Error(ERR_DROP, "UI_AddMenu: invalid menu registration");
+    // Port: rows and pages the retail options menus lack (src/ui/ui_port_options.h).
+    UI_AddPortOptions(dc, menu);
 }
 
 int UI_PlayLocalSoundAliasByName(uint32_t localClientNum, const char *aliasname)
