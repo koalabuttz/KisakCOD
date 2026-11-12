@@ -518,13 +518,18 @@ void Vita_Exit(int status)
         Vita_BenchEnd(more, stopped);
     else if (again)
     {
-        // With an argument: Vita3K starts the program again itself only when
-        // the call carries one (PC runs Z21 and Z22b side by side), and a
-        // console takes either. Nothing reads it: the command line is the
+        // The call asks the system for the other program and comes back;
+        // the system then takes this process away. Ending the process
+        // straight after takes the request back in Vita3K, which then only
+        // quits (PC runs Z21, Z23 and Z25; the bench, which waits, was
+        // started again every time in Z22b). So wait for it as the bench
+        // does; should it not come, end as a start does. The argument is the
+        // bench's way too and nothing reads it: the command line is the
         // list's.
         char restart[] = "-list-restart";
         char *const arguments[] = { restart, nullptr };
-        sceAppMgrLoadExec("app0:eboot.bin", arguments, nullptr);
+        if (sceAppMgrLoadExec("app0:eboot.bin", arguments, nullptr) >= 0)
+            sceKernelDelayThread(3 * 1000 * 1000);
     }
     sceKernelExitProcess(status);
     for (;;)

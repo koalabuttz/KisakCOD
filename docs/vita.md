@@ -225,8 +225,9 @@ At start-up the program takes the next line and, before anything else:
 When the start ends, by its quit timer or by an error that exits
 (`vita_assertExit 1`), the program starts itself again for the next line
 (`Vita: run list: starting again for start 2 of 3` is the log's last line).
-The restart call carries one argument that nothing reads: Vita3K carries
-out the restart itself only for a call with arguments.
+After the restart call the program waits up to 3 seconds to be taken away
+before it ends: Vita3K carries the restart out only when the program does
+not end itself straight after asking (PC run Z25).
 START + SELECT ends the start and the chain: the next line waits for the
 next tap. A fault ends the chain too. So give every line a quit timer and
 `vita_quitAfter` as the safety net.
