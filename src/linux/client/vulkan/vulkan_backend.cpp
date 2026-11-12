@@ -77,6 +77,9 @@ struct DisplayMode
 struct HostState
 {
     SDL_Window *window = nullptr; // the window CreateDevice was last given
+    // Set fullscreen by HostFullscreen, until it is set back or destroyed
+    // (WM_DESTROY may come from another thread than the front's calls).
+    std::atomic<SDL_Window *> fullscreenWindow{nullptr};
     std::vector<DisplayMode> modes;
     std::string shaderCachePath;   // what Host::shaderCachePath points at
     std::string pipelineCachePath; // what Host::pipelineCachePath points at
@@ -220,6 +223,48 @@ HMONITOR HostMonitor(void *)
     return reinterpret_cast<HMONITOR>(static_cast<std::uintptr_t>(Display()));
 }
 
+// ---- Fullscreen ------------------------------------------------------------------
+
+// The window fullscreen on the primary display at the closest mode SDL has, as
+// D3D9 (and DXVK's SDL window system) do for a fullscreen device. SDL gives the
+// desktop its mode back when the window goes back to windowed, when it is
+// destroyed and, by default, when it loses focus (it minimizes then).
+bool HostFullscreen(void *, front::D3D9Window handle, const front::FullscreenMode *mode)
+{
+    if (!mode)
+    {
+        SDL_Window *const window = s_host.fullscreenWindow.exchange(nullptr);
+        if (window && !SDL_SetWindowFullscreen(window, false))
+        {
+            Com_Printf(CON_CHANNEL_GFX, "Vulkan: SDL_SetWindowFullscreen(off) failed: %s\n", SDL_GetError());
+            return false;
+        }
+        return true;
+    }
+    SDL_Window *const window = reinterpret_cast<SDL_Window *>(handle);
+    const SDL_DisplayID display = Display();
+    if (!window || !SDL_GetWindowID(window) || !display)
+        return false;
+    const SDL_DisplayMode *const desktop = SDL_GetDesktopDisplayMode(display);
+    const int width = mode->width ? int(mode->width) : (desktop ? desktop->w : 0);
+    const int height = mode->height ? int(mode->height) : (desktop ? desktop->h : 0);
+    SDL_DisplayMode closest{};
+    // A refresh rate of 0 takes the desktop's.
+    const bool found = width > 0 && height > 0
+        && SDL_GetClosestFullscreenDisplayMode(display, width, height, float(mode->refreshRate), false, &closest);
+    if (!found)
+        Com_Printf(CON_CHANNEL_GFX, "Vulkan: no %dx%d display mode at %u Hz; fullscreen at the desktop's mode\n",
+                   width, height, mode->refreshRate);
+    s_host.fullscreenWindow.store(window);
+    // Null: fullscreen at the desktop's mode (borderless, the window covering it).
+    bool ok = SDL_SetWindowFullscreenMode(window, found ? &closest : nullptr);
+    ok = SDL_SetWindowFullscreen(window, true) && ok;
+    if (!ok)
+        Com_Printf(CON_CHANNEL_GFX, "Vulkan: fullscreen failed: %s\n", SDL_GetError());
+    (void)SDL_SyncWindow(window);
+    return ok && found;
+}
+
 // The window's client area on its display, for windowed screenshots.
 bool HostWindowOrigin(void *, front::D3D9Window handle, int32_t &x, int32_t &y)
 {
@@ -261,6 +306,8 @@ void HostCoreDestroyed(void *, const gfx_vk::CoreStats &stats)
 // releases the device).
 void HostWindowDestroying(void *hwnd)
 {
+    SDL_Window *destroyed = static_cast<SDL_Window *>(hwnd);
+    s_host.fullscreenWindow.compare_exchange_strong(destroyed, nullptr);
     front::WindowDestroying(reinterpret_cast<front::D3D9Window>(hwnd));
 }
 
@@ -418,6 +465,7 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
     host.currentMode = HostCurrentMode;
     host.monitor = HostMonitor;
     host.windowOrigin = HostWindowOrigin;
+    host.fullscreen = HostFullscreen;
     host.log = HostLog;
     host.validation = ValidationSetting();
     host.deviceIndex = r_vkDevice->current.integer;

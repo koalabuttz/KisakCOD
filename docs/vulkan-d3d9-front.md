@@ -59,6 +59,13 @@ instead (`vk_d3d9.h`), which the program fills once:
   windowed screenshot asks `GetFrontBufferData` for a surface the size of the
   display, as D3D9 does; the front puts the last frame shown there at that
   place.
+* `fullscreen(window, mode)`: D3D9 switches the monitor to a fullscreen
+  device's mode and covers it with the device window. For a device made or
+  reset with `Windowed` false the front asks the host for the back buffer's
+  size at `FullScreen_RefreshRateInHz` (`vulkan d3d9: fullscreen at WxH, R
+  Hz`), and for the desktop's mode back (a null mode) when the device is reset
+  to windowed or released. Null: a fullscreen device stays a window where the
+  program put it.
 * `log`: one line per call.
 * `validation`, `deviceIndex`, `pipelineCachePath`: how the core is created.
   Vsync follows `PresentationInterval` at `CreateDevice`.
@@ -134,6 +141,9 @@ since the device was made or since the last call that started them again.
   (`r_visuals modern`, [vulkan-modern.md](vulkan-modern.md)): the scenes it
   anti-aliased in the stretch, how many of them had no history to use (the
   first, a camera cut, a new size), and the GPU time of its pass.
+* `vulkan d3d9: gamma:` appears when frames of the stretch went to the window
+  through the fullscreen gamma ramp (`r_gamma` with `r_fullscreen 1`): how
+  many, and the GPU time of that pass.
 
 ## Reference counts
 
@@ -231,8 +241,11 @@ Everything in `r_rhi.h`, and the getters D3D9 pairs with each setter:
   `GetFrontBufferData` (the last frame shown, kept apart from the back buffer),
   event and occlusion
   queries, the implicit swap chain, `Reset` (new back buffer size, every state
-  back to its default), `Present`, gamma ramps (kept, not applied: DXVK applies
-  them only to fullscreen swapchains), `GetAvailableTextureMem` (device-local
+  back to its default), `Present`, gamma ramps (applied as D3D9 and DXVK
+  apply them: for a fullscreen device only, `Windowed` false at `CreateDevice`
+  or `Reset`, by the adapter's `SetGammaRamp` as `Present` draws the window's
+  image; a windowed device keeps the ramp for `GetGammaRamp` and shows the
+  frame as drawn), `GetAvailableTextureMem` (device-local
   memory, below 4 GB).
 * Defaults: the depth test is off after `CreateDevice` and `Reset`, because the
   front never makes an automatic depth-stencil surface (the renderer creates its
@@ -331,6 +344,7 @@ a usage error.
 | `bench` | Only when named (`--scene bench`), never in a full run: 120 frames of 768 draws of four D3D9 calls each, ended as `frame_loop`'s are, while another thread polls the sync fence every 20 microseconds. Prints the time the drawing thread spent on its draw calls per frame and the polls made meanwhile; passes when its frames were presented. |
 | `bench_runs` | Only when named, as `bench`: 100 frames of 768 draws in runs of eight that share a texture, an alpha reference and a pixel shader constant, as the engine's draws sorted by material do; each draw sets one vertex shader constant and draws its own quad from one static vertex and index buffer. It measures what the adapter does for a draw like the one before ([adapter](vulkan-legacy-adapter.md)). The last frame is read back and ten of its cells checked. Prints what `bench` prints. |
 | `reset` | `Reset` to 96x96 and back: the new size, default state, nothing bound, drawing at the new size. |
+| `fullscreen` | `Reset` with `Windowed` false at 96x96 and 60 Hz asks `Host::fullscreen` once for exactly that mode and presents; back to windowed asks once for the desktop's mode (null); windowed again asks nothing. The check's host only records the asks. |
 | `present` | `Present` through the device and the swap chain, then `GetFrontBufferData` halfway through the next frame: it must give the frame last shown. |
 
 `scripts/tests/test_vulkan_d3d9_front.py --binary <check>` runs it the way the
@@ -538,7 +552,11 @@ is SDL3, as for DXVK's SDL3 WSI: the `HWND` the Win32 window layer makes is the
 `SDL_Window`, the `HMONITOR` is the primary display's `SDL_DisplayID`, the
 display modes are SDL's fullscreen modes (or the desktop mode where SDL lists
 none, as with its offscreen driver), and the front's log lines go to the
-console as `Vulkan: ...`. When the device goes, the front logs where the CPU
+console as `Vulkan: ...`. A fullscreen device makes the window fullscreen on
+the primary display at SDL's closest mode (`SDL_GetClosestFullscreenDisplayMode`,
+`SDL_SetWindowFullscreenMode`), as DXVK's SDL3 window system does; SDL gives
+the desktop its mode back when the window goes windowed, is destroyed or loses
+focus. When the device goes, the front logs where the CPU
 time went, for comparing loads and first frames with DXVK. The
 `vulkan d3d9: device stats: ...` line gives the shaders created and how many
 of them were translated (the rest came from the shader cache) with the time
@@ -597,10 +615,27 @@ same dvars and the `r_vkStats` command:
 * `WM_DESTROY` (`src/win32/win_wndproc.cpp`) calls
   `Kisak_VulkanWindowDestroying`, which detaches the device's surface from the
   window as on Linux. `vulkan-1.dll` is never unloaded.
+* A fullscreen device switches the primary display to its mode
+  (`ChangeDisplaySettingsExW` with `CDS_FULLSCREEN`, left alone when the
+  display is there already) and moves the window over the whole display. The
+  registry's mode comes back when the device goes windowed or is released.
+  `WM_ACTIVATEAPP` calls `Kisak_VulkanAppActivated`: switching away minimises
+  the window and then gives the desktop its mode back, coming back sets the
+  mode again, as D3D9 does. In the other order (PC run 18, 2026-11-12) Windows
+  resized the window to the desktop's full size as the mode changed back, and
+  it stayed topmost and drawing instead of minimised. Coming back, Windows
+  restored the window at the desktop's full size on the game's smaller mode
+  (runs 18b and 18c), because the restore activates the window while it is
+  still minimised. So the host sets the restore size on activation, and
+  `WM_SIZE` calls `Kisak_VulkanWindowSized`, which moves a fullscreen window
+  of the wrong size back over the display while the display is at the game's
+  mode (`Vulkan: fullscreen window sized WxH on a WxH display: moved back over
+  it`).
 
-The front never changes the display mode. In fullscreen the window covers the
-mode's size at the desktop's resolution, so use windowed mode or the desktop's
-own resolution for now. The Windows workflow builds it for Win32 Debug and for
+Before this (PC run 17, 2026-11-11), `r_fullscreen 1` with `r_mode 1280x720`
+left a 2560x1080 display at its mode and 75 Hz and showed the game as a
+1280x720 window at `vid_xpos`, `vid_ypos`; Direct3D 9 switched the display to
+1280x720 at 60 Hz. The Windows workflow builds it for Win32 Debug and for
 x64 (whose artifact is the PC's), checks the configure log says `Vulkan back
 end: linked into KisakCOD-mp`, and checks the Win32 executable does not import
 `vulkan-1.dll`. The Win32 Release player build leaves it out, except in a

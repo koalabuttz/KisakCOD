@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Compile the Vulkan code's own GLSL shaders into C++ headers of SPIR-V words.
 
-Two sets: the probe's (src/gfx_vk/tools/shaders) and the Modern path's
-(src/gfx_vk/modern/shaders). Both are built on platforms without a shader
+Three sets: the probe's (src/gfx_vk/tools/shaders), the Modern path's
+(src/gfx_vk/modern/shaders) and the Legacy adapter's present passes
+(src/gfx_vk/legacy/shaders). All are built on platforms without a shader
 compiler (MSVC with only the Vulkan headers), so the SPIR-V is generated here
 and checked in next to its GLSL source, like the other generated tables in
 this repository. The header
@@ -52,6 +53,15 @@ SETS = [
         [
             ("fullscreen.vert", "kFullscreenVert"),
             ("taa.frag", "kTaaFrag"),
+        ],
+    ),
+    ShaderSet(
+        "src/gfx_vk/legacy/shaders",
+        "src/gfx_vk/legacy/vk_legacy_shaders.h",
+        "gfx_vk::legacy::shaders",
+        [
+            ("fullscreen.vert", "kFullscreenVert"),
+            ("gamma.frag", "kGammaFrag"),
         ],
     ),
 ]

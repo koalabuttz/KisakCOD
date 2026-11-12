@@ -157,6 +157,14 @@ struct SdlHost
     front::Tuning tuning{};
     std::vector<std::string> *logKept = nullptr;
     bool benchKeepsDrawState = true; // Options::benchKeepsDrawState
+    // Host::fullscreen's calls, in order: the mode asked for, or windowed
+    // (null) as all zeros with asked false. The front calls it under its lock.
+    struct FullscreenCall
+    {
+        bool fullscreen;
+        front::FullscreenMode mode;
+    };
+    std::vector<FullscreenCall> fullscreenCalls;
 };
 
 void LogLine(void *user, const char *line)
@@ -241,6 +249,15 @@ bool HostWindowOrigin(void *, front::D3D9Window, int32_t &x, int32_t &y)
 {
     x = kWindowOriginX;
     y = kWindowOriginY;
+    return true;
+}
+
+bool HostFullscreen(void *user, front::D3D9Window window, const front::FullscreenMode *mode)
+{
+    SdlHost *host = static_cast<SdlHost *>(user);
+    if (window != WindowHandle(*host))
+        return false;
+    host->fullscreenCalls.push_back({mode != nullptr, mode ? *mode : front::FullscreenMode{}});
     return true;
 }
 
@@ -496,6 +513,7 @@ public:
     void BenchRuns();
     void BenchFrames(bool runs);
     void ResetDevice();
+    void Fullscreen();
     void Present();
 };
 
@@ -2993,6 +3011,49 @@ void Check::ModernTaa()
     SafeRelease(depth);
 }
 
+// D3D9 switches the display for a fullscreen device and back for a windowed
+// one; the front asks the host (Host::fullscreen). This host only records the
+// asks, so nothing on the machine changes.
+void Check::Fullscreen()
+{
+    host->fullscreenCalls.clear();
+    SafeRelease(backBuffer);
+    D3DPRESENT_PARAMETERS fullscreen = params;
+    fullscreen.Windowed = FALSE;
+    fullscreen.BackBufferWidth = fullscreen.BackBufferHeight = 96;
+    fullscreen.FullScreen_RefreshRateInHz = 60;
+    if (Ok(device->Reset(&fullscreen), "Reset(fullscreen)"))
+    {
+        Equal("fullscreen_asks", host->fullscreenCalls.size(), size_t(1));
+        if (!host->fullscreenCalls.empty())
+        {
+            const SdlHost::FullscreenCall &call = host->fullscreenCalls.back();
+            Equal("fullscreen_mode", call.fullscreen, true);
+            Equal("fullscreen_width", call.mode.width, 96u);
+            Equal("fullscreen_height", call.mode.height, 96u);
+            Equal("fullscreen_refresh", call.mode.refreshRate, 60u);
+        }
+        if (Ok(device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer), "GetBackBuffer(fullscreen)"))
+        {
+            Reset(Argb(255, 0, 128, 0));
+            Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present(fullscreen)");
+        }
+        SafeRelease(backBuffer);
+    }
+    // Windowed again: the desktop's mode back, once.
+    host->fullscreenCalls.clear();
+    if (Ok(device->Reset(&params), "Reset(windowed)"))
+    {
+        Equal("windowed_asks", host->fullscreenCalls.size(), size_t(1));
+        if (!host->fullscreenCalls.empty())
+            Equal("windowed_mode", host->fullscreenCalls.back().fullscreen, false);
+    }
+    host->fullscreenCalls.clear();
+    if (Ok(device->Reset(&params), "Reset(windowed again)"))
+        Equal("windowed_again_asks", host->fullscreenCalls.size(), size_t(0));
+    Ok(device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer), "GetBackBuffer");
+}
+
 void Check::ResetDevice()
 {
     SafeRelease(backBuffer);
@@ -3197,6 +3258,7 @@ int Run(const Options &options)
     host.deviceIndex = options.device;
     host.coreDestroyed = HostCoreDestroyed;
     host.windowOrigin = HostWindowOrigin;
+    host.fullscreen = HostFullscreen;
     host.tuning = HostTuning;
 
     Check check;
@@ -3232,6 +3294,7 @@ int Run(const Options &options)
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},
+        {"fullscreen", &Check::Fullscreen, true},
         {"present", &Check::Present, true},
     };
     const char *failedStage = nullptr;

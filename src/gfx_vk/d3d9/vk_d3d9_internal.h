@@ -580,6 +580,12 @@ public:
     HRESULT STDMETHODCALLTYPE SetDialogBoxMode(BOOL enable) override;
     void STDMETHODCALLTYPE SetGammaRamp(UINT swapChain, DWORD flags, const D3DGAMMARAMP *ramp) override;
     void STDMETHODCALLTYPE GetGammaRamp(UINT swapChain, D3DGAMMARAMP *ramp) override;
+    // Hands gamma_ to the adapter for a fullscreen device, nothing for a windowed one.
+    void ApplyGamma();
+    // Asks the host for params_'s display mode (Host::fullscreen) when the
+    // device is fullscreen, and for the desktop's back when it no longer is.
+    void ApplyDisplayMode();
+    void LeaveFullscreen();
     HRESULT STDMETHODCALLTYPE CreateTexture(UINT width, UINT height, UINT levels, DWORD usage, D3DFORMAT format,
                                             D3DPOOL pool, IDirect3DTexture9 **texture, HANDLE *shared) override;
     HRESULT STDMETHODCALLTYPE CreateVolumeTexture(UINT width, UINT height, UINT depth, UINT levels, DWORD usage,
@@ -733,6 +739,7 @@ private:
     std::unique_ptr<Surface> backBuffer_;
     std::unique_ptr<SwapChain> swapChain_;
     D3DGAMMARAMP gamma_{};
+    bool fullscreen_ = false; // the host was asked for a display mode (ApplyDisplayMode)
     ULONG refs_ = 1;
     uint32_t objects_ = 0;
     bool releasing_ = false; // Release is unbinding: objects going must not delete the device

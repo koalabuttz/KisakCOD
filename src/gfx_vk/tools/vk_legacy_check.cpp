@@ -409,6 +409,7 @@ public:
     void ShaderCache();
     void PassClear();
     void PipelinesAhead();
+    void Gamma();
 };
 
 void Check::Clear()
@@ -1847,6 +1848,111 @@ void Check::PipelinesAhead()
     made->push_back(ps);
 }
 
+// The gamma ramp (SetGammaRamp) is applied as Present draws the window's
+// image: the back buffer keeps what was drawn, and the swapchain image shows
+// each channel through the ramp. The back buffer (128 square) is scaled to the
+// window (512 square), so the points sit in the middle of two flat halves.
+void Check::Gamma()
+{
+    auto point = [this](const char *name, bool ok, const std::string &got = std::string()) {
+        ++result->points;
+        if (!ok)
+        {
+            ++result->mismatched;
+            result->detail += " " + std::string(name) + (got.empty() ? "" : "=" + got);
+        }
+    };
+    if (!gfx_vk::Swapchain(core).canCapture)
+    {
+        std::printf("legacy_check.gamma=skipped: the window's image cannot be read back here\n");
+        point("window_image_readable", true);
+        return;
+    }
+    // Presents with `ramp` set and returns the window's pixels at the middle
+    // of the left and right halves, as r, g, b.
+    auto present = [&](const lg::GammaRamp *ramp, int out[2][3]) -> bool {
+        Reset(Argb(255, 64, 128, 200));
+        const lg::Rect right{kSize / 2, 0, kSize, kSize};
+        lg::Clear(device, 1, &right, d3d::CLEAR_TARGET, Argb(255, 255, 0, 10), 1.0f, 0);
+        lg::SetGammaRamp(device, ramp);
+        gfx_vk::Readback *read = nullptr;
+        const lg::PresentResult shown = lg::Present(device, &read);
+        lg::SetGammaRamp(device, nullptr);
+        if (shown != lg::PresentResult::Ok || !read)
+        {
+            Fail(std::string("Present with a read-back did not show a frame: ") + lg::DeviceError(device));
+            if (read)
+                gfx_vk::DestroyReadback(core, read);
+            return false;
+        }
+        gfx_vk::ReadbackData data{};
+        const bool ok = gfx_vk::WaitReadback(core, read, &data);
+        if (ok)
+        {
+            const bool bgra = data.format == VK_FORMAT_B8G8R8A8_UNORM || data.format == VK_FORMAT_B8G8R8A8_SRGB;
+            for (int half = 0; half < 2; ++half)
+            {
+                const uint32_t x = data.width / 4 + half * data.width / 2, y = data.height / 2;
+                const uint8_t *p = data.pixels + size_t(y) * data.rowBytes + size_t(x) * 4;
+                out[half][0] = bgra ? p[2] : p[0];
+                out[half][1] = p[1];
+                out[half][2] = bgra ? p[0] : p[2];
+            }
+        }
+        gfx_vk::DestroyReadback(core, read);
+        if (!ok)
+            Fail(std::string("reading the window's image back failed: ") + gfx_vk::LastError(core));
+        return ok;
+    };
+    auto within = [](const int got[3], int r, int g, int b) {
+        return std::abs(got[0] - r) <= 1 && std::abs(got[1] - g) <= 1 && std::abs(got[2] - b) <= 1;
+    };
+    auto text = [](const int got[3]) {
+        return std::to_string(got[0]) + "," + std::to_string(got[1]) + "," + std::to_string(got[2]);
+    };
+
+    // Red inverted, green kept, blue squared.
+    lg::GammaRamp ramp{};
+    for (uint32_t i = 0; i < 256; ++i)
+    {
+        ramp.red[i] = static_cast<uint16_t>((255 - i) * 257);
+        ramp.green[i] = static_cast<uint16_t>(i * 257);
+        ramp.blue[i] = static_cast<uint16_t>(i * i / 255 * 257);
+    }
+    int got[2][3] = {};
+    uint64_t through = lg::Stats(device).gammaPresents;
+    if (!present(&ramp, got))
+        return;
+    point("ramp_left", within(got[0], 191, 128, 200 * 200 / 255), text(got[0]));
+    point("ramp_right", within(got[1], 0, 0, 10 * 10 / 255), text(got[1]));
+    point("ramp_counted", lg::Stats(device).gammaPresents == through + 1);
+    // What was drawn is untouched: it is the front buffer after Present.
+    lg::LockedRect locked;
+    if (lg::GetRenderTargetData(device, lg::FrontBuffer(device), readSurface)
+        && lg::LockSurface(device, readSurface, nullptr, d3d::LOCK_READONLY, locked))
+    {
+        const uint8_t *p = static_cast<const uint8_t *>(locked.bits) + (kSize / 2) * locked.pitch + (kSize / 4) * 4;
+        const int drawn[3] = {p[2], p[1], p[0]};
+        lg::UnlockSurface(device, readSurface);
+        point("front_buffer_as_drawn", within(drawn, 64, 128, 200), text(drawn));
+    }
+    else
+        Fail(std::string("reading the front buffer failed: ") + lg::DeviceError(device));
+
+    // The identity ramp, and none, show the image as drawn, with a blit.
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        for (uint32_t i = 0; i < 256; ++i)
+            ramp.red[i] = ramp.green[i] = ramp.blue[i] = static_cast<uint16_t>(i * 257);
+        through = lg::Stats(device).gammaPresents;
+        if (!present(pass ? nullptr : &ramp, got))
+            return;
+        point(pass ? "none_left" : "identity_left", within(got[0], 64, 128, 200), text(got[0]));
+        point(pass ? "none_right" : "identity_right", within(got[1], 255, 0, 10), text(got[1]));
+        point(pass ? "none_not_counted" : "identity_not_counted", lg::Stats(device).gammaPresents == through);
+    }
+}
+
 bool Check::Init(std::string &error)
 {
     lg::DeviceDesc desc;
@@ -1948,6 +2054,7 @@ int Run(const Options &options)
     coreDesc.validation = options.validation;
     coreDesc.deviceIndex = options.device;
     coreDesc.vsync = false;
+    coreDesc.allowCapture = true; // the gamma scene reads the window's image back
     coreDesc.log = LogLine;
     char coreError[512] = {};
     Check check;
@@ -1998,6 +2105,7 @@ int Run(const Options &options)
         {"shader_cache", &Check::ShaderCache},
         {"pass_clear", &Check::PassClear},
         {"pipelines_ahead", &Check::PipelinesAhead},
+        {"gamma", &Check::Gamma},
     };
     const char *failedStage = nullptr;
     std::string failedReason;

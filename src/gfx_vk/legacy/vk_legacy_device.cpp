@@ -314,6 +314,7 @@ void DestroyDevice(Device *device)
     DestroyBackBuffer(*device);
     DestroyBuffer(core, device->zeroVertices);
     gfx_vk::WaitIdle(core);
+    DestroyGamma(*device);
     if (!device->shaderCachePath.empty())
     {
         std::string message;

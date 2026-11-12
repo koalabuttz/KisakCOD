@@ -2742,8 +2742,12 @@ gfx_vk::Image *SurfaceImage(const Surface *surface)
     return surface->texture->image;
 }
 
-PresentResult Present(Device *device_)
+PresentResult Present(Device *device) { return Present(device, nullptr); }
+
+PresentResult Present(Device *device_, gfx_vk::Readback **shownRead)
 {
+    if (shownRead)
+        *shownRead = nullptr;
     Device &device = *device_;
     if (!Usable(device))
         return PresentResult::Failed;
@@ -2769,8 +2773,12 @@ PresentResult Present(Device *device_)
         const VkOffset3D src[2] = {{0, 0, 0}, {int32_t(back.width), int32_t(back.height), 1}};
         const VkOffset3D dst[2] = {{0, 0, 0}, {int32_t(shown.width), int32_t(shown.height), 1}};
         const bool scaled = shown.width != back.width || shown.height != back.height;
-        BlitImage(device.core, (multisampled ? device.frontBuffer : device.backBuffer)->image, src, swapchain, dst,
-                  scaled ? VK_FILTER_LINEAR : VK_FILTER_NEAREST);
+        Image *const image = (multisampled ? device.frontBuffer : device.backBuffer)->image;
+        // Through the gamma ramp when one is set (SetGammaRamp), else a blit.
+        if (!PresentThroughGamma(device, image, swapchain))
+            BlitImage(device.core, image, src, swapchain, dst, scaled ? VK_FILTER_LINEAR : VK_FILTER_NEAREST);
+        if (shownRead && Swapchain(device.core).canCapture)
+            *shownRead = ReadImage(device.core, swapchain, 0, 0);
     }
     // Flip: the image just shown becomes the front buffer, and the next frame
     // draws into the other one. Render target 0 and every other use of the

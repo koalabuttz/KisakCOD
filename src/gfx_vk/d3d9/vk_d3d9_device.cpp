@@ -102,11 +102,14 @@ bool Device::Init()
     desc.width = params_.BackBufferWidth;
     desc.height = params_.BackBufferHeight;
     desc.samples = SamplesOf(params_.MultiSampleType);
+    // The display's mode first, so the window's surface starts at its size.
+    ApplyDisplayMode();
     std::string error;
     backend_ = OpenBackend(desc, error);
     if (!backend_)
     {
         HostLog(h, "vulkan d3d9: CreateDevice: %s", error.c_str());
+        LeaveFullscreen();
         return false;
     }
     legacy_ = LegacyDevice(backend_);
@@ -267,6 +270,7 @@ void Device::Destroy()
     CloseBackend(backend_);
     backend_ = nullptr;
     legacy_ = nullptr;
+    LeaveFullscreen();
     if (parent_)
     {
         parent_->Release();
@@ -444,6 +448,8 @@ HRESULT STDMETHODCALLTYPE Device::Reset(D3DPRESENT_PARAMETERS *params)
     params_.MultiSampleType = samples > 1 ? static_cast<D3DMULTISAMPLE_TYPE>(samples) : D3DMULTISAMPLE_NONE;
     params_.MultiSampleQuality = 0;
     DefaultState();
+    ApplyDisplayMode(); // windowed or fullscreen, and the size, may have changed
+    ApplyGamma();
     return D3D_OK;
 }
 
@@ -500,10 +506,67 @@ HRESULT STDMETHODCALLTYPE Device::SetDialogBoxMode(BOOL)
 void STDMETHODCALLTYPE Device::SetGammaRamp(UINT swapChain, DWORD, const D3DGAMMARAMP *ramp)
 {
     const FrontLock lock;
-    // Kept for GetGammaRamp. DXVK applies the ramp only to fullscreen
-    // swapchains; the Vulkan front draws windowed and leaves it out.
     if (swapChain == 0 && ramp)
+    {
         gamma_ = *ramp;
+        ApplyGamma();
+    }
+}
+
+// D3D9 (and DXVK) apply the ramp of a fullscreen swapchain only; a windowed
+// one keeps it for GetGammaRamp. The adapter applies it as Present draws the
+// image into the window, so the desktop's own gamma is never changed.
+void Device::ApplyGamma()
+{
+#if !defined(KISAK_GFX_GXM)
+    if (params_.Windowed)
+    {
+        lg::SetGammaRamp(legacy_, nullptr);
+        return;
+    }
+    static_assert(sizeof(lg::GammaRamp) == sizeof(D3DGAMMARAMP), "a ramp is 3 x 256 16-bit entries");
+    lg::GammaRamp ramp;
+    std::memcpy(ramp.red, gamma_.red, sizeof(ramp.red));
+    std::memcpy(ramp.green, gamma_.green, sizeof(ramp.green));
+    std::memcpy(ramp.blue, gamma_.blue, sizeof(ramp.blue));
+    lg::SetGammaRamp(legacy_, &ramp);
+#endif
+}
+
+// D3D9 switches the monitor to a fullscreen device's mode and covers it with
+// the device window (and DXVK does the same); without this, r_fullscreen 1
+// gave a borderless window at the saved window position, at the desktop's
+// mode. The host does the switching (Host::fullscreen).
+void Device::ApplyDisplayMode()
+{
+    const Host &h = host();
+    if (!h.fullscreen)
+        return;
+    if (params_.Windowed)
+    {
+        LeaveFullscreen();
+        return;
+    }
+    FullscreenMode mode;
+    mode.width = params_.BackBufferWidth;
+    mode.height = params_.BackBufferHeight;
+    mode.refreshRate = params_.FullScreen_RefreshRateInHz;
+    fullscreen_ = true;
+    if (h.fullscreen(h.user, window_, &mode))
+        HostLog(h, "vulkan d3d9: fullscreen at %ux%u, %u Hz", mode.width, mode.height, mode.refreshRate);
+    else
+        HostLog(h, "vulkan d3d9: fullscreen: the display could not be set to %ux%u at %u Hz", mode.width,
+                mode.height, mode.refreshRate);
+}
+
+void Device::LeaveFullscreen()
+{
+    if (!fullscreen_)
+        return;
+    fullscreen_ = false;
+    const Host &h = host();
+    if (h.fullscreen && !h.fullscreen(h.user, window_, nullptr))
+        HostLog(h, "vulkan d3d9: fullscreen: the desktop's display mode could not be set back");
 }
 
 void STDMETHODCALLTYPE Device::GetGammaRamp(UINT swapChain, D3DGAMMARAMP *ramp)
