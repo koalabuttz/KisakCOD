@@ -117,6 +117,13 @@ FAKE_GAME = textwrap.dedent('''\
                     print("ASSERT FAILED: ent->health > 0\\n\\tg_main.cpp:42", file=sys.stderr, flush=True)
                 if name == env("FAKE_CRASH_MAP"):
                     os.kill(os.getpid(), signal.SIGSEGV)
+        elif cmd[0] == "weapnext" and name == env("FAKE_ROTATE_MAP"):
+            # The round ends during the hold and the server moves on; the
+            # player keeps the team and class, as the stock scripts do.
+            alive = state["alive"]
+            load(env("FAKE_ROTATE_TO"))
+            state["polls"] = 1
+            state["team"] = state["alive"] = alive
         elif cmd[0] == "+attack" and sound:
             print("snd_al: last 5.0 s: 12 starts, 1 cut while playing, 0 stream underruns, 0 OpenAL errors; "
                   "playing 2D 1/8 3D 3/32 stream 1/13; longest update gap 31 ms", flush=True)
@@ -297,6 +304,15 @@ class SweepRunTests(unittest.TestCase):
         self.assertRegex(report, r"\| mp_crash \| all steps seen \| \d+\.\d s \| 1 \| - \| exit 0 \| 0 \| 1 \|")
         self.assertIn("- `ERROR: PLATFORM_STATSREADERROR`", report)
         self.assertIn("after one drop to the menu", report)
+
+    def test_rotation_during_the_hold_is_named(self):
+        os.environ["FAKE_ROTATE_MAP"] = "mp_crash"
+        os.environ["FAKE_ROTATE_TO"] = "mp_bog"
+        status, report = self.run_sweep("--maps", "mp_crash")
+        self.assertEqual(status, 0, report)
+        self.assertIn("| mp_crash | all steps seen |", report)
+        self.assertIn("The server rotated during the hold, so the steps after it ran on the new map: "
+                      "mp_crash to mp_bog.", report)
 
     def test_join_that_never_spawns_is_reported(self):
         os.environ["FAKE_NO_SPAWN_MAP"] = "mp_backlot"
