@@ -623,10 +623,14 @@ same dvars and the `r_vkStats` command:
   the window and then gives the desktop its mode back, coming back sets the
   mode again, as D3D9 does. In the other order (PC run 18, 2026-11-12) Windows
   resized the window to the desktop's full size as the mode changed back, and
-  it stayed topmost and drawing instead of minimised. Coming back, the window's
-  restore size is set to the game's mode as well (run 18b): Windows had
-  enlarged it to the desktop's display while minimised, so the game came back
-  as a desktop-sized window on the smaller mode.
+  it stayed topmost and drawing instead of minimised. Coming back, Windows
+  restored the window at the desktop's full size on the game's smaller mode
+  (runs 18b and 18c), because the restore activates the window while it is
+  still minimised. So the host sets the restore size on activation, and
+  `WM_SIZE` calls `Kisak_VulkanWindowSized`, which moves a fullscreen window
+  of the wrong size back over the display while the display is at the game's
+  mode (`Vulkan: fullscreen window sized WxH on a WxH display: moved back over
+  it`).
 
 Before this (PC run 17, 2026-11-11), `r_fullscreen 1` with `r_mode 1280x720`
 left a 2560x1080 display at its mode and 75 Hz and showed the game as a

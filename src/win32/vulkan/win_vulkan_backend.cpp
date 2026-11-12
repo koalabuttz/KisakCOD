@@ -43,6 +43,7 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9();
 int Kisak_VulkanBackendSelected();
 void Kisak_VulkanWindowDestroying(HWND window);
 void Kisak_VulkanAppActivated(HWND window, bool active);
+void Kisak_VulkanWindowSized(HWND window);
 unsigned int Kisak_VulkanLogStats(bool reset);
 
 namespace
@@ -564,6 +565,10 @@ void Kisak_VulkanAppActivated(HWND window, bool active)
     {
         SetDisplayMode(s_vkHost.fullscreenMode);
         CoverMonitor(window);
+        RECT rect{};
+        GetWindowRect(window, &rect);
+        Com_Printf(CON_CHANNEL_GFX, "Vulkan: fullscreen game active again: window (%ld, %ld, %ld, %ld)%s\n",
+                   rect.left, rect.top, rect.right, rect.bottom, IsIconic(window) ? ", minimised" : "");
         return;
     }
     if (s_vkHost.displayChanged)
@@ -578,6 +583,31 @@ void Kisak_VulkanAppActivated(HWND window, bool active)
         if (IsWindowVisible(window) && !IsIconic(window))
             ShowWindowAsync(window, SW_MINIMIZE);
     }
+}
+
+// WM_SIZE of the game's window: a fullscreen window that is resized to
+// anything but the display's size while the display is at our mode is moved
+// back over the display. PC runs 18b and 18c: restoring the minimised window
+// activates it while it is still minimised, so the restore size the host
+// sets then comes too late, and the window came back at the desktop's full
+// size (2560x1080) on the game's 1280x720 mode.
+void Kisak_VulkanWindowSized(HWND window)
+{
+    std::unique_lock<std::recursive_mutex> lock(s_vkHost.fullscreenLock, std::try_to_lock);
+    if (!lock.owns_lock() || window != s_vkHost.fullscreenWindow || !s_vkHost.displayChanged || IsIconic(window))
+        return;
+    RECT client{};
+    DEVMODEW current{};
+    current.dmSize = sizeof(current);
+    if (!GetClientRect(window, &client) || !EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &current))
+        return;
+    const LONG width = client.right - client.left, height = client.bottom - client.top;
+    if (width == LONG(current.dmPelsWidth) && height == LONG(current.dmPelsHeight))
+        return;
+    Com_Printf(CON_CHANNEL_GFX, "Vulkan: fullscreen window sized %ldx%ld on a %lux%lu display: moved back over it\n",
+               width, height, static_cast<unsigned long>(current.dmPelsWidth),
+               static_cast<unsigned long>(current.dmPelsHeight));
+    CoverMonitor(window);
 }
 
 // For the renderer's r_vkStats command (src/gfx_d3d/r_cmds.cpp): logs the
