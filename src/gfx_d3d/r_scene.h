@@ -283,6 +283,8 @@ void R_SetViewParmsForScene(const refdef_s *refdef, GfxViewParms *viewParms);
 // The Modern path (rhi/r_rhi_modern.h): nothing happens without its hooks.
 // Moves the projection of a scene about to be drawn by this frame's jitter.
 void R_ModernJitterScene(const refdef_s *refdef, GfxViewParms *viewParms);
+// RB_Draw3DInternal's call, before a view's 3D scene is drawn.
+void R_ModernSceneBegin();
 // RB_EndSceneRendering's call.
 void R_ModernSceneDone(const GfxViewInfo *viewInfo);
 void R_SetupProjection(float tanHalfFovX, float tanHalfFovY, GfxViewParms *viewParms);

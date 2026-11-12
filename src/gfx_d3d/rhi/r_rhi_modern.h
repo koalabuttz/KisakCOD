@@ -31,6 +31,10 @@ struct GfxModernHooks
     // A view's 3D scene is drawn (render target 0 and the depth surface hold
     // it), before post effects and 2D: the back end runs its passes over it.
     void (*sceneDone)(void *user, IDirect3DDevice9 *device, const GfxModernScene *scene);
+    // A view's 3D scene is about to be drawn (before its shadow maps and its
+    // first draw into the back buffer). With linear light the back end gives
+    // it an image of its own until sceneDone. May be null.
+    void (*sceneBegin)(void *user, IDirect3DDevice9 *device);
 };
 
 // Null removes them. Called while no frame is being built (as the renderer

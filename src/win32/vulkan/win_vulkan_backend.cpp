@@ -496,7 +496,15 @@ void ModernSceneDone(void *, IDirect3DDevice9 *device, const GfxModernScene *sce
         s_modernRefused.store(true, std::memory_order_relaxed);
 }
 
-const GfxModernHooks s_modernHooks = {nullptr, ModernJitterPixels, ModernSceneDone};
+// Linear light (KISAK_VK_MODERN_LINEAR): a refusal here (logged once by the
+// front) leaves the scene in the back buffer, and the anti-aliasing runs on.
+void ModernSceneBegin(void *, IDirect3DDevice9 *device)
+{
+    if (!s_modernRefused.load(std::memory_order_relaxed))
+        front::ModernSceneBegin(device);
+}
+
+const GfxModernHooks s_modernHooks = {nullptr, ModernJitterPixels, ModernSceneDone, ModernSceneBegin};
 } // namespace
 
 int Kisak_VulkanBackendSelected()

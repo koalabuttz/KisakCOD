@@ -196,8 +196,19 @@ enum class ModernResult
     // first time it comes up. The program should stop jittering the scene.
     Refused,
 };
+// The renderer is about to draw a view's 3D scene into the back buffer. With
+// linear light (on with the Modern path unless KISAK_VK_MODERN_LINEAR=0) the
+// back end gives the scene a linear-light image of its own: until
+// ModernSceneDone, draws and clears aimed at the back buffer as render target
+// 0 go there, decoded from sRGB, and a StretchRect from the back buffer reads
+// it back as display values. Done when the scene has its image, Skipped when
+// nothing changed (linear light off, or no frame to draw), Refused when it
+// cannot run (logged once).
+ModernResult ModernSceneBegin(IDirect3DDevice9 *device);
 // Runs the Modern path's passes over the scene in the device's render target
-// 0 and depth surface (today: temporal anti-aliasing), between the renderer's
-// draws.
+// 0 and depth surface (temporal anti-aliasing), between the renderer's draws.
+// After a ModernSceneBegin that was Done, the scene is the linear-light image:
+// the passes run on it, the tonemap writes it into the back buffer within the
+// viewport, and the back buffer is render target 0 again.
 ModernResult ModernSceneDone(IDirect3DDevice9 *device, const ModernSceneView &view);
 } // namespace gfx_vk::d3d9

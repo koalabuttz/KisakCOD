@@ -1260,6 +1260,13 @@ void R_ModernJitterScene(const refdef_s *refdef, GfxViewParms *viewParms)
     R_SetupViewProjectionMatrices(viewParms);
 }
 
+void R_ModernSceneBegin()
+{
+    const GfxModernHooks *hooks = R_ModernHooks();
+    if (hooks && hooks->sceneBegin)
+        hooks->sceneBegin(hooks->user, dx.device);
+}
+
 void R_ModernSceneDone(const GfxViewInfo *viewInfo)
 {
     const GfxModernHooks *hooks = R_ModernHooks();

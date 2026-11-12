@@ -4,9 +4,10 @@
 // sections 3 and 6), on the shared core (vk_core.h). It records its own passes
 // into the frame the Legacy path draws, on the same core images.
 //
-// What it has so far is the first piece of the plan's early experiment (E1):
+// What it has so far: the first piece of the plan's early experiment (E1),
 // temporal anti-aliasing over the scene the Legacy path drew with a jittered
-// projection. The engine jitters the projection (src/gfx_d3d/r_scene.cpp)
+// projection, and the first piece of linear light (MD1), the scene drawn
+// into a linear-light image and tonemapped back (below). The engine jitters the projection (src/gfx_d3d/r_scene.cpp)
 // and, when the 3D scene is done, the D3D9 front's Vulkan back end hands this
 // module the scene's colour and depth images. Velocity comes from the camera
 // alone for now: what moves on its own is kept from smearing by clipping the
@@ -66,4 +67,39 @@ struct TaaStats
     uint64_t restarts;  // of those, ones with no history (first, cut, resize)
 };
 TaaStats Stats(const Taa *taa);
+
+// ---- Linear light (renderer plan MD1; docs/vulkan-modern.md) ----
+//
+// With linear light the 3D scene is drawn into an R16G16B16A16_SFLOAT image
+// in linear light instead of the 8-bit back buffer: the Legacy adapter decodes
+// its pixel shaders' colour output from sRGB as it draws there
+// (legacy::SetLinearLight), so blending happens in linear light. When the
+// scene is done, the tonemap writes it back as display values.
+
+// The scene image's format.
+constexpr VkFormat kSceneFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+
+struct Tonemap;
+
+// The pipeline layout (pipelines are made per target format as needed).
+// Null with the reason.
+Tonemap *CreateTonemap(Core *core, std::string &error);
+// Waits for the GPU to finish what was recorded (a device teardown calls it).
+void DestroyTonemap(Core *core, Tonemap *tonemap);
+
+// Records one pass that writes the linear-light scene in `scene` (the
+// rectangle `from`) into `target` (the rectangle `to`) as display values:
+// today the neutral tonemap, the light clamped to 1 and encoded with the sRGB
+// curve, the exact inverse of the Legacy adapter's decode. Alpha is copied.
+// With different sizes the scene is sampled with the filter. `pass` names the
+// pass in the core's pass timings. Outside a pass, inside a frame. False with
+// the reason, and nothing recorded, when the images cannot take part.
+bool WriteDisplay(Core *core, Tonemap *tonemap, Image *scene, const VkRect2D &from, Image *target,
+                  const VkRect2D &to, VkFilter filter, const char *pass, std::string &error);
+
+struct TonemapStats
+{
+    uint64_t passes; // WriteDisplay calls that recorded
+};
+TonemapStats Stats(const Tonemap *tonemap);
 } // namespace gfx_vk::modern

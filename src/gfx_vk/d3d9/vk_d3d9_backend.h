@@ -74,7 +74,20 @@ void BackendCounters(const Backend *backend, DeviceCounters &out);
 void BackendPollProgress(Backend *backend);
 // The Modern path's passes over the scene drawn into these surfaces
 // (vk_d3d9.h ModernSceneDone). Refused when the back end has none or they
-// cannot run; the back end logs why, once per reason.
+// cannot run; the back end logs why, once per reason. With display, color is
+// the linear-light scene (BackendModernSceneTarget): after the passes the
+// tonemap writes it into display within the view's viewport, and that is
+// done even when the passes are refused.
 ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surface *depth,
-                                const ModernSceneView &view);
+                                const ModernSceneView &view, lg::Surface *display = nullptr);
+// The linear-light image a 3D scene is drawn into instead of this back buffer
+// (vk_d3d9.h ModernSceneBegin), made or made again at its size; null when
+// linear light is off or cannot run (logged once). Refused tells the two
+// apart; Skipped means the frame is not drawn.
+lg::Surface *BackendModernSceneTarget(Backend *backend, lg::Surface *backBuffer, ModernResult &result);
+// A StretchRect from the back buffer while the scene is drawn into scene: the
+// tonemap writes the rectangle into dst as display values. False when it
+// cannot (the caller copies the scene as it is).
+bool BackendModernCopyScene(Backend *backend, lg::Surface *scene, const lg::Rect *from, lg::Surface *dst,
+                            const lg::Rect *to, bool linear);
 } // namespace gfx_vk::d3d9

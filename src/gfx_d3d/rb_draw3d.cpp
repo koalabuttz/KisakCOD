@@ -75,6 +75,8 @@ void RB_Draw3DInternal(const GfxViewInfo *viewInfo)
 
     if (gfxDrawMethod.drawScene)
     {
+        // The Modern path's linear-light scene (r_visuals modern, Vulkan only).
+        R_ModernSceneBegin();
         if (gfxDrawMethod.drawScene == GFX_DRAW_SCENE_FULLBRIGHT)
         {
             RB_FullbrightDrawCommands(viewInfo);

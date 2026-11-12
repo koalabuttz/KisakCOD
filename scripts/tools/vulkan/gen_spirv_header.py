@@ -53,6 +53,7 @@ SETS = [
         [
             ("fullscreen.vert", "kFullscreenVert"),
             ("taa.frag", "kTaaFrag"),
+            ("tonemap.frag", "kTonemapFrag"),
         ],
     ),
     ShaderSet(

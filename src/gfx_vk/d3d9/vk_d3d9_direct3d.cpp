@@ -249,6 +249,15 @@ bool Counters(IDirect3DDevice9 *device, DeviceCounters &out)
     return false;
 }
 
+ModernResult ModernSceneBegin(IDirect3DDevice9 *device)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernSceneBegin();
+    return ModernResult::Refused;
+}
+
 ModernResult ModernSceneDone(IDirect3DDevice9 *device, const ModernSceneView &view)
 {
     const FrontLock lock;
