@@ -50,7 +50,6 @@ namespace gfx_gxm
 {
 bool g_depthPrepass = true;
 bool g_depthInScene = true;
-bool g_depthOnlyDraws = false;
 bool g_resolveWhenUsed = true;
 } // namespace gfx_gxm
 
@@ -980,9 +979,7 @@ uint8_t BlendFunc(uint32_t op)
 bool MakeBlend(Device &device, bool noAlpha, SceGxmBlendInfo &blend)
 {
     const uint32_t *rs = device.renderStates;
-    // The engine's depth pass in the scene's own target writes no colour
-    // (gxm_engine_options.h).
-    const uint32_t mask = gfx_gxm::g_depthOnlyDraws ? 0 : rs[d3d::RS_COLORWRITEENABLE];
+    const uint32_t mask = rs[d3d::RS_COLORWRITEENABLE];
     // D3D9: R 1, G 2, B 4, A 8. sceGxm: A 1, R 2, G 4, B 8.
     blend.colorMask = uint8_t((mask & 1 ? SCE_GXM_COLOR_MASK_R : 0) | (mask & 2 ? SCE_GXM_COLOR_MASK_G : 0) |
                               (mask & 4 ? SCE_GXM_COLOR_MASK_B : 0) | (mask & 8 ? SCE_GXM_COLOR_MASK_A : 0));
