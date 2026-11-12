@@ -2931,9 +2931,12 @@ void CL_InitOnceForAllClients()
         "Join remote servers with your CoD4 key code (codkey.txt in the home folder) even when Steam is running");
     // KISAK: Steam_Init reads +set cl_steam from the command line before
     // Com_Init (src/universal/steam_optin.h). Registered so "cl_steam" shows
-    // what the game started with; DVAR_INIT because a later change does nothing.
-    Dvar_RegisterBool("cl_steam", false, DVAR_INIT,
-        "Join remote servers with Steam (start-up only: start the game with +set cl_steam 1)");
+    // what the game started with. Not DVAR_INIT: the command line's own +set
+    // runs again after start-up and would print "cl_steam is write protected"
+    // for the very setting the player was told to use. A later change does
+    // nothing, as the description says.
+    Dvar_RegisterBool("cl_steam", false, DVAR_NOFLAG,
+        "Join remote servers with Steam. Read only at start-up: start the game with +set cl_steam 1");
     min.value.max = 3600.0;
     min.value.min = 0.0;
     cl_timeout = Dvar_RegisterFloat("cl_timeout", 40.0, min, DVAR_NOFLAG, "Seconds with no received packets until a timeout occurs");
