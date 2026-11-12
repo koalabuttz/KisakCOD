@@ -143,12 +143,16 @@ void PatcherFragmentUsseFree(void *, void *memory)
     Free(MemoryKind::FragmentUsse, memory);
 }
 
-bool CreateContext(std::string &error)
+bool CreateContext(uint32_t ringScale, std::string &error)
 {
+    const uint32_t scale = ringScale ? ringScale : 1;
+    const uint32_t vdmBytes = SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE * scale;
+    const uint32_t vertexBytes = SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE * scale;
+    const uint32_t fragmentBytes = SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE * scale;
     g.hostMem = std::malloc(SCE_GXM_MINIMUM_CONTEXT_HOST_MEM_SIZE);
-    g.vdmRing = Allocate(MemoryKind::Main, SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE, 4096);
-    g.vertexRing = Allocate(MemoryKind::Main, SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE, 4096);
-    g.fragmentRing = Allocate(MemoryKind::Main, SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE, 4096);
+    g.vdmRing = Allocate(MemoryKind::Main, vdmBytes, 4096);
+    g.vertexRing = Allocate(MemoryKind::Main, vertexBytes, 4096);
+    g.fragmentRing = Allocate(MemoryKind::Main, fragmentBytes, 4096);
     g.fragmentUsseRing = Allocate(MemoryKind::FragmentUsse, SCE_GXM_DEFAULT_FRAGMENT_USSE_RING_BUFFER_SIZE, 4096);
     if (!g.hostMem || !g.vdmRing || !g.vertexRing || !g.fragmentRing || !g.fragmentUsseRing)
     {
@@ -159,11 +163,11 @@ bool CreateContext(std::string &error)
     params.hostMem = g.hostMem;
     params.hostMemSize = SCE_GXM_MINIMUM_CONTEXT_HOST_MEM_SIZE;
     params.vdmRingBufferMem = g.vdmRing;
-    params.vdmRingBufferMemSize = SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE;
+    params.vdmRingBufferMemSize = vdmBytes;
     params.vertexRingBufferMem = g.vertexRing;
-    params.vertexRingBufferMemSize = SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE;
+    params.vertexRingBufferMemSize = vertexBytes;
     params.fragmentRingBufferMem = g.fragmentRing;
-    params.fragmentRingBufferMemSize = SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE;
+    params.fragmentRingBufferMemSize = fragmentBytes;
     params.fragmentUsseRingBufferMem = g.fragmentUsseRing;
     params.fragmentUsseRingBufferMemSize = SCE_GXM_DEFAULT_FRAGMENT_USSE_RING_BUFFER_SIZE;
     params.fragmentUsseRingBufferOffset = UsseOffset(MemoryKind::FragmentUsse, g.fragmentUsseRing);
@@ -264,15 +268,16 @@ bool InitDisplay(const DisplayDesc &desc, std::string &error)
         return false;
     }
     g.memory = true;
-    if (!CreateContext(error) || !CreateSurfaces(error) || !CreatePatcher(error))
+    if (!CreateContext(desc.ringScale, error) || !CreateSurfaces(error) || !CreatePatcher(error))
     {
         ShutdownDisplay();
         return false;
     }
     g.back = 0;
     g.front = kDisplayBuffers - 1;
-    Log("gxm: display %ux%u, %u buffers, vsync %s, parameter buffer %u KB", kDisplayWidth, kDisplayHeight,
-        kDisplayBuffers, g.vsync ? "on" : "off", desc.parameterBufferBytes >> 10);
+    Log("gxm: display %ux%u, %u buffers, vsync %s, parameter buffer %u KB, ring buffers %u times sceGxm's defaults",
+        kDisplayWidth, kDisplayHeight, kDisplayBuffers, g.vsync ? "on" : "off", desc.parameterBufferBytes >> 10,
+        desc.ringScale ? desc.ringScale : 1);
     return true;
 }
 

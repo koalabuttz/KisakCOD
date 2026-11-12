@@ -38,6 +38,11 @@ struct DisplayDesc
     // the context's ring buffers about 2.6 MB of main memory and 16 KB of
     // fragment USSE.
     MemorySizes memory;
+    // The context's ring buffers, from the main pool: sceGxm's defaults times
+    // this. They hold the draw calls and uniform buffers of the scenes the GPU
+    // has not finished, which is two frames' when the CPU fills one frame
+    // while the GPU draws another.
+    uint32_t ringScale = 1;
     bool vsync = true;
     // One line per call, no newline. Null: nowhere.
     void (*log)(void *user, const char *line) = nullptr;
