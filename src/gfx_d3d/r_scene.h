@@ -6,6 +6,7 @@
 
 #include "r_init.h"
 #include "r_rendercmds.h"
+#include "rhi/r_rhi_modern.h"
 
 #define GFX_MAX_CLIENT_VIEWS 4
 #define MTL_SORT_ENVMAP_BITS 8
@@ -278,6 +279,12 @@ void R_SetLodOrigin(const refdef_s *refdef);
 void R_UpdateFrameFog();
 uint8_t LerpByte(uint8_t from, uint8_t to, float frac);
 void R_SetViewParmsForScene(const refdef_s *refdef, GfxViewParms *viewParms);
+
+// The Modern path (rhi/r_rhi_modern.h): nothing happens without its hooks.
+// Moves the projection of a scene about to be drawn by this frame's jitter.
+void R_ModernJitterScene(const refdef_s *refdef, GfxViewParms *viewParms);
+// RB_EndSceneRendering's call.
+void R_ModernSceneDone(const GfxViewInfo *viewInfo);
 void R_SetupProjection(float tanHalfFovX, float tanHalfFovY, GfxViewParms *viewParms);
 bool R_UpdateFrameSun();
 void R_LerpDir(

@@ -38,6 +38,10 @@ on:
       - '!scripts/platform/vita/**'
       - '!scripts/tests/test_vita_*.py'
       - '!scripts/ci/install-vitasdk.sh'
+      # The test machines' run scripts and their tests: run-scripts.yaml.
+      - '!scripts/runs/**'
+      - '!scripts/tests/test_perf_run.py'
+      - '!scripts/tests/test_vita3k_runner.py'
       - deps/**
       - tests/linux_net/**
       - tests/linux_client_core/**
@@ -78,6 +82,10 @@ on:
       - '!scripts/platform/vita/**'
       - '!scripts/tests/test_vita_*.py'
       - '!scripts/ci/install-vitasdk.sh'
+      # The test machines' run scripts and their tests: run-scripts.yaml.
+      - '!scripts/runs/**'
+      - '!scripts/tests/test_perf_run.py'
+      - '!scripts/tests/test_vita3k_runner.py'
       - deps/**
       - tests/linux_net/**
       - tests/linux_client_core/**
@@ -117,13 +125,15 @@ concurrency:
 jobs:
   window:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    name: Linux SDL${{ matrix.sdl }} window ${{ matrix.config }}
+    # Debug and RelWithDebInfo run one after the other in this one job:
+    # each step that depends on the configuration runs it for both
+    # (scripts/ci/each-config.sh), so the pair needs one runner, not two.
+    name: Linux SDL${{ matrix.sdl }} window
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 115
     strategy:
       fail-fast: false
       matrix:
-        config: [Debug, RelWithDebInfo]
         # Pull requests build and test the SDL3 window host in both configurations.
         # The older SDL2 path, the slowest pair of jobs, runs on pushes to master
         # and on manual runs, so it is still checked after every merge.
@@ -150,11 +160,14 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/ccache
-          key: ccache-window-sdl${{ matrix.sdl }}-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: ccache-window-sdl${{ matrix.sdl }}-${{ matrix.config }}-
+          key: ccache-window-sdl${{ matrix.sdl }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-window-sdl${{ matrix.sdl }}-
       - name: Use compiler cache
         id: ccache
         shell: bash
+        env:
+          # One cache holds both configurations.
+          KISAK_CCACHE_MAXSIZE: 1G
         run: |
           set -euo pipefail
           scripts/ci/use-ccache.sh
@@ -196,13 +209,14 @@ jobs:
       - name: Check graphical workflow contract
         run: python3 scripts/tests/test_linux_window_workflow.py
       - name: Build and test asset-free window host
-        timeout-minutes: 45
+        timeout-minutes: 90
         shell: bash
         env:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
           mkdir -p artifacts
           sdk_args=(--sdl2-dir /usr/lib/i386-linux-gnu/cmake/SDL2)
           if [[ "${{ matrix.sdl }}" == 3 ]]; then
@@ -210,15 +224,16 @@ jobs:
             export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           fi
           python3 -u scripts/tests/test_linux_window.py \
-            --build-dir "$GITHUB_WORKSPACE/build-linux/window-sdl${{ matrix.sdl }}-${{ matrix.config }}" \
-            --build-type "${{ matrix.config }}" --cc clang --cxx clang++ --jobs "$(nproc)" \
+            --build-dir "$GITHUB_WORKSPACE/build-linux/window-sdl${{ matrix.sdl }}-$config" \
+            --build-type "$config" --cc clang --cxx clang++ --jobs "$(nproc)" \
             --sdl-major "${{ matrix.sdl }}" "${sdk_args[@]}" --video-driver dummy \
-            2>&1 | tee "artifacts/window-sdl${{ matrix.sdl }}-${{ matrix.config }}.log"
+            2>&1 | tee "artifacts/window-sdl${{ matrix.sdl }}-$config.log"
+          COMMANDS
       - name: Upload window check log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: KisakCOD-window-sdl${{ matrix.sdl }}-${{ matrix.config }}
+          name: KisakCOD-window-sdl${{ matrix.sdl }}
           path: artifacts/*.log
           if-no-files-found: warn
           retention-days: 7
@@ -233,7 +248,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/ccache
-          key: ccache-window-sdl${{ matrix.sdl }}-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ccache-window-sdl${{ matrix.sdl }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   native:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
@@ -320,12 +335,16 @@ jobs:
           test -x "$BINARY"
           ls -l "$BINARY"
 
+      # Plain Python contract tests: they read the sources, not the build, so
+      # RelWithDebInfo would repeat Debug's result (about 3 minutes each).
       - name: Check test-runner configuration and failure handling
+        if: matrix.config == 'Debug'
         shell: bash
         run: |
           python3 scripts/tests/test_linux_check_runner.py
           python3 scripts/tests/test_ci_apt_install.py
           python3 scripts/tests/test_ci_each_config.py
+          python3 scripts/tests/test_run_pre_push_checks.py
           python3 scripts/tests/test_linux_fastfile_driver.py
           python3 scripts/tests/test_linux_client_core_driver.py
           python3 scripts/tests/test_strip_cdecl.py
@@ -333,6 +352,7 @@ jobs:
           python3 scripts/tests/test_summarize_alignment_report.py
           python3 scripts/tests/test_frame_log.py
           python3 scripts/tests/test_perf_run.py
+          python3 scripts/tests/test_menu_check.py
           python3 scripts/tests/test_vita3k_runner.py
           python3 scripts/tests/test_changed_units.py
           python3 scripts/tests/test_float_int_rounding.py
@@ -403,8 +423,8 @@ jobs:
     # No link, no engine build, no DXVK, no SDL, no GPU, no game data. OpenAL
     # headers are needed because the sound sources include <AL/al.h>. One job:
     # a front-end pass has no optimization level, so Debug and RelWithDebInfo
-    # would compile identically. A second pass covers the singleplayer game
-    # (KisakCOD-sp, --target sp) against sp_compile_census_blocked.txt.
+    # would compile identically. The singleplayer game (KisakCOD-sp,
+    # --target sp) has its own job, sp_census, so the two passes run side by side.
     name: Asset-free client compile census
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -462,10 +482,51 @@ jobs:
             --log-dir artifacts/client-census \
             2>&1 | tee artifacts/client-census.log
 
+      - name: Upload client census logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Compiler diagnostics for failing sources only; no binaries.
+          name: KisakCOD-client-census
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 7
+
+  sp_census:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # The singleplayer half of the client compile census, on its own runner so
+    # it runs beside the multiplayer half instead of after it (about 5 minutes
+    # each): the same front-end pass over the Windows KisakCOD-sp sources with
+    # KISAK_SP, checked against scripts/tests/sp_compile_census_blocked.txt in
+    # both directions. No SP target links yet.
+    name: Asset-free singleplayer compile census
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
+
+      - name: Install client census tools
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/ci/apt-install.sh \
+            cmake clang g++-multilib python3 python3-yaml libopenal-dev
+          clang++ --version
+          printf 'int main(){return 0;}\n' > "$RUNNER_TEMP/m32-probe.cpp"
+          clang++ -m32 "$RUNNER_TEMP/m32-probe.cpp" -o "$RUNNER_TEMP/m32-probe"
+          "$RUNNER_TEMP/m32-probe"
+
       - name: Run singleplayer compile census
-        # The same pass over the Windows KisakCOD-sp sources with KISAK_SP
-        # (scripts/tests/sp_compile_census_blocked.txt). No SP target links yet.
-        if: ${{ !cancelled() }}
         timeout-minutes: 20
         shell: bash
         env:
@@ -478,12 +539,12 @@ jobs:
             --log-dir artifacts/sp-census \
             2>&1 | tee artifacts/sp-census.log
 
-      - name: Upload client census logs
+      - name: Upload singleplayer census logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           # Compiler diagnostics for failing sources only; no binaries.
-          name: KisakCOD-client-census
+          name: KisakCOD-sp-census
           path: artifacts/
           if-no-files-found: warn
           retention-days: 7
@@ -568,19 +629,12 @@ jobs:
     # -DKISAK_LINUX_ARCH=x86_64 and run the asset-free bootstrap test against the
     # ELF64 binary. No game data, so loading a real map is not covered here. The
     # i386 build and its checks are untouched.
-    name: x86_64 dedicated server ${{ matrix.config }}
+    # Debug and RelWithDebInfo run one after the other in this one job:
+    # each step that depends on the configuration runs it for both
+    # (scripts/ci/each-config.sh), so the pair needs one runner, not two.
+    name: x86_64 dedicated server
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
-
-    strategy:
-      fail-fast: false
-      matrix:
-        config: [Debug, RelWithDebInfo]
-
-    env:
-      BUILD_DIR: build-x64/${{ matrix.config }}
-      CMAKE_RUNTIME_OUTPUT_DIRECTORY: ${{ github.workspace }}/out/x64-${{ matrix.config }}
-      BINARY: out/x64-${{ matrix.config }}/KisakCOD-dedi
+    timeout-minutes: 75
 
     steps:
       - name: Checkout repository
@@ -614,35 +668,45 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/ccache
-          key: ccache-x64-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: ccache-x64-dedicated-${{ matrix.config }}-
+          key: ccache-x64-dedicated-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-x64-dedicated-
       - name: Use compiler cache
         id: ccache
         shell: bash
+        env:
+          # One cache holds both configurations.
+          KISAK_CCACHE_MAXSIZE: 1G
         run: |
           set -euo pipefail
           scripts/ci/use-ccache.sh
 
-      - name: Configure x86_64 ${{ matrix.config }}
-        timeout-minutes: 15
+      - name: Configure x86_64
+        timeout-minutes: 30
         shell: bash
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
+          export BUILD_DIR="build-x64/$config"
+          export CMAKE_RUNTIME_OUTPUT_DIRECTORY="$GITHUB_WORKSPACE/out/x64-$config"
           clang++ --version
           cmake -S . -B "$BUILD_DIR" -G Ninja \
             -DKISAK_PLATFORM=linux -DKISAK_LINUX_ARCH=x86_64 \
-            -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
+            -DCMAKE_BUILD_TYPE=$config \
             -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$CMAKE_RUNTIME_OUTPUT_DIRECTORY"
+          COMMANDS
 
       - name: Check fastfile record layout tables
-        timeout-minutes: 5
+        timeout-minutes: 10
         shell: bash
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
+          export BUILD_DIR="build-x64/$config"
           # libclang's Python bindings come with the system Python.
           /usr/bin/python3 scripts/tools/gen_db_disk_layout.py --build-dir "$BUILD_DIR" --check
+          COMMANDS
 
       - name: Check 64-bit fastfile record conversion
         timeout-minutes: 10
@@ -652,33 +716,43 @@ jobs:
           python3 scripts/tests/test_db_record_conversion.py --cxx clang++
 
       - name: Build x86_64 KisakCOD-dedi
-        timeout-minutes: 30
+        timeout-minutes: 60
         shell: bash
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
+          export BUILD_DIR="build-x64/$config"
+          export BINARY="out/x64-$config/KisakCOD-dedi"
           cmake --build "$BUILD_DIR" --target KisakCOD-dedi --parallel "$(nproc)"
           ls -l "$BINARY"
+          COMMANDS
 
       # &ptr[-n] with a uint32_t n wraps back on i386 but jumps ~2^32 elements
       # forward on x86_64. The scan is the same for both configurations. It runs
       # after the build because common.cpp includes the generated buildnumber.h.
       - name: Check for negated 32-bit unsigned indexes
-        if: matrix.config == 'Debug'
         timeout-minutes: 15
         shell: bash
         run: |
           set -euo pipefail
+          # Debug only, as before the two configurations shared a job.
+          config=Debug
+          export BUILD_DIR="build-x64/$config"
           /usr/bin/python3 scripts/tools/check_unsigned_negation.py --build-dir "$BUILD_DIR"
 
       # The bootstrap test, then the platform self-tests (runtime wrappers,
       # network deadlines, UDP, file I/O, virtual memory) built at 64 bits.
       - name: Asset-free x86_64 checks
-        timeout-minutes: 20
+        timeout-minutes: 40
         shell: bash
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
+          export BUILD_DIR="build-x64/$config"
+          export BINARY="out/x64-$config/KisakCOD-dedi"
           python3 scripts/tests/run_linux_checks.py --arch x86_64 \
             --build-dir "$BUILD_DIR" --binary "$BINARY" --cxx clang++
+          COMMANDS
 
       - name: Report compiler cache
         if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
@@ -691,7 +765,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/ccache
-          key: ccache-x64-dedicated-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ccache-x64-dedicated-${{ github.run_id }}-${{ github.run_attempt }}
 
   arm64_dedicated:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
@@ -1065,7 +1139,7 @@ jobs:
           grep -Eqx 'libavcodec\.so\.[0-9]+' "$RUNNER_TEMP/x64-mp-client-needed.txt"
           grep -Eqx 'libavutil\.so\.[0-9]+' "$RUNNER_TEMP/x64-mp-client-needed.txt"
           # Built with the HTTP downloader (src/qcommon/dl_main.cpp), which
-          # uses the system's libcurl; without the option the client has
+          # uses the system's libcurl; with it turned off the client has
           # stand-ins and no libcurl (the i386 client job).
           grep -Eqx 'libcurl\.so\.4' "$RUNNER_TEMP/x64-mp-client-needed.txt"
           nm -D --undefined-only "$OUT_DIR/KisakCOD-mp" | grep -Eq ' curl_multi_perform(@|$)'
@@ -1650,19 +1724,16 @@ jobs:
     # The last build step links the opt-in offline world front-end probe on top of
     # the boundary and runs its asset-free invariants test; the probe itself is
     # not run, because running it needs a game install.
-    name: Native D3D9 boundary ${{ matrix.config }}
+    # Debug and RelWithDebInfo run one after the other in this one job:
+    # each step that depends on the configuration runs it for both
+    # (scripts/ci/each-config.sh), so the pair needs one runner, not two.
+    name: Native D3D9 boundary
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
-
-    strategy:
-      fail-fast: false
-      matrix:
-        config: [Debug, RelWithDebInfo]
+    timeout-minutes: 80
 
     env:
       DXVK_REVISION: c3dd74be6baec53786d4e064a572185b70347a17
       DXVK_DIRECTX_HEADERS_REVISION: 9df86f2341616ef1888ae59919feaa6d4fad693d
-      BUILD_DIR: build-linux/native-d3d9-${{ matrix.config }}
 
     steps:
       - name: Checkout repository
@@ -1687,11 +1758,14 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/ccache
-          key: ccache-native-d3d9-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: ccache-native-d3d9-${{ matrix.config }}-
+          key: ccache-native-d3d9-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-native-d3d9-
       - name: Use compiler cache
         id: ccache
         shell: bash
+        env:
+          # One cache holds both configurations.
+          KISAK_CCACHE_MAXSIZE: 1G
         run: |
           set -euo pipefail
           scripts/ci/use-ccache.sh
@@ -1740,62 +1814,69 @@ jobs:
           python3 scripts/tests/test_native_d3d9_boundary_runner.py
 
       - name: Run asset-free native D3D9 boundary checks
-        timeout-minutes: 20
+        timeout-minutes: 40
         shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
           mkdir -p artifacts
           python3 -u scripts/tests/run_native_d3d9_boundary_checks.py \
-            --config "${{ matrix.config }}" \
+            --config "$config" \
             --dxvk-source "$RUNNER_TEMP/dxvk-source" \
             --header-cxx g++ --header-cxx clang++ --engine-cxx clang++ \
-            --log-dir "artifacts/native-d3d9-${{ matrix.config }}" \
-            2>&1 | tee "artifacts/native-d3d9-${{ matrix.config }}.log"
+            --log-dir "artifacts/native-d3d9-$config" \
+            2>&1 | tee "artifacts/native-d3d9-$config.log"
+          COMMANDS
 
       - name: Configure and build the opt-in CMake boundary proofs
-        timeout-minutes: 20
+        timeout-minutes: 40
         shell: bash
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
+          export BUILD_DIR="build-linux/native-d3d9-$config"
           mkdir -p artifacts
           python3 scripts/tests/run_native_d3d9_boundary_checks.py \
             --dxvk-source "$RUNNER_TEMP/dxvk-source" \
             --stage-dxvk-headers "$RUNNER_TEMP/dxvk-include/dxvk"
           cmake -S . -B "$BUILD_DIR" -G Ninja \
             -DKISAK_PLATFORM=linux \
-            -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
+            -DCMAKE_BUILD_TYPE=$config \
             -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$GITHUB_WORKSPACE/out/native-d3d9-${{ matrix.config }}" \
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$GITHUB_WORKSPACE/out/native-d3d9-$config" \
             -DKISAK_BUILD_LINUX_NATIVE_D3D9=ON \
             -DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk" \
-            2>&1 | tee "artifacts/native-d3d9-cmake-${{ matrix.config }}.log"
+            2>&1 | tee "artifacts/native-d3d9-cmake-$config.log"
           cmake --build "$BUILD_DIR" --target KisakCOD-native-d3d9-proofs --parallel "$(nproc)" \
-            2>&1 | tee -a "artifacts/native-d3d9-cmake-${{ matrix.config }}.log"
-          out="$GITHUB_WORKSPACE/out/native-d3d9-${{ matrix.config }}"
+            2>&1 | tee -a "artifacts/native-d3d9-cmake-$config.log"
+          out="$GITHUB_WORKSPACE/out/native-d3d9-$config"
           "$out/KisakCOD-native-d3d9-boundary-check"
           "$out/KisakCOD-native-d3d9-layout-standin" > "$RUNNER_TEMP/layout-standin.txt"
           "$out/KisakCOD-native-d3d9-layout-native" > "$RUNNER_TEMP/layout-native.txt"
           # Only the first (mode) line may differ between the two views.
           diff <(tail -n +2 "$RUNNER_TEMP/layout-standin.txt") <(tail -n +2 "$RUNNER_TEMP/layout-native.txt")
           tail -n 1 "$RUNNER_TEMP/layout-native.txt" | grep -qx 'PASS engine D3D9 layouts'
+          COMMANDS
 
       - name: Build the offline world front-end probe
-        timeout-minutes: 30
+        timeout-minutes: 60
         shell: bash
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
+          export BUILD_DIR="build-linux/native-d3d9-$config"
           # Link proof for the opt-in probe (scripts/platform/linux/
           # world_frontend_probe.cmake): the asset exporter with the production
           # renderer front end linked in. It is only built and inspected here;
           # running it needs a game install, which CI never has or looks for.
           cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_WORLD_FRONTEND_PROBE=ON \
-            2>&1 | tee "artifacts/world-frontend-probe-${{ matrix.config }}.log"
+            2>&1 | tee "artifacts/world-frontend-probe-$config.log"
           cmake --build "$BUILD_DIR" \
             --target KisakCOD-world-frontend-probe KisakCOD-world-frontend-invariants-test --parallel "$(nproc)" \
-            2>&1 | tee -a "artifacts/world-frontend-probe-${{ matrix.config }}.log"
-          out="$GITHUB_WORKSPACE/out/native-d3d9-${{ matrix.config }}"
+            2>&1 | tee -a "artifacts/world-frontend-probe-$config.log"
+          out="$GITHUB_WORKSPACE/out/native-d3d9-$config"
           "$out/KisakCOD-world-frontend-invariants-test"
           probe="$out/KisakCOD-world-frontend-probe"
           readelf -h "$probe" | grep -Eq 'Class:[[:space:]]+ELF32'
@@ -1809,6 +1890,7 @@ jobs:
             echo "the offline probe needs a library beyond the C and C++ runtimes" >&2
             exit 1
           fi
+          COMMANDS
 
       - name: Upload native D3D9 boundary logs
         if: always()
@@ -1816,7 +1898,7 @@ jobs:
         with:
           # Text logs only: the runner's binaries live in a temporary directory it
           # removes, and the CMake build directory is not uploaded.
-          name: KisakCOD-native-d3d9-${{ matrix.config }}
+          name: KisakCOD-native-d3d9
           path: artifacts/
           if-no-files-found: warn
           retention-days: 7
@@ -1832,7 +1914,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/ccache
-          key: ccache-native-d3d9-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ccache-native-d3d9-${{ github.run_id }}-${{ github.run_attempt }}
 
   device_probe:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
@@ -1861,20 +1943,17 @@ jobs:
     # data, where it must stop at the file system check or at autoconfigure.
     # The singleplayer game KisakCOD-sp (scripts/platform/linux/sp_game.cmake)
     # is built and run the same way by scripts/tests/test_linux_sp_game.py.
-    name: D3D9 device probe without a GPU ${{ matrix.config }}
+    # Debug and RelWithDebInfo run one after the other in this one job:
+    # each step that depends on the configuration runs it for both
+    # (scripts/ci/each-config.sh), so the pair needs one runner, not two.
+    name: D3D9 device probe without a GPU
     runs-on: ubuntu-24.04
-    timeout-minutes: 110
-
-    strategy:
-      fail-fast: false
-      matrix:
-        config: [Debug, RelWithDebInfo]
+    timeout-minutes: 180
 
     env:
       DXVK_REVISION: c3dd74be6baec53786d4e064a572185b70347a17
       DXVK_DIRECTX_HEADERS_REVISION: 9df86f2341616ef1888ae59919feaa6d4fad693d
       SDL3_REVISION: 877399b2b2cf21e67554ed9046410f268ce1d1b2
-      BUILD_DIR: build-linux/device-probe-${{ matrix.config }}
 
     steps:
       - name: Checkout repository
@@ -1901,11 +1980,14 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/ccache
-          key: ccache-device-probe-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: ccache-device-probe-${{ matrix.config }}-
+          key: ccache-device-probe-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-device-probe-
       - name: Use compiler cache
         id: ccache
         shell: bash
+        env:
+          # One cache holds both configurations.
+          KISAK_CCACHE_MAXSIZE: 1G
         run: |
           set -euo pipefail
           scripts/ci/use-ccache.sh
@@ -1971,28 +2053,30 @@ jobs:
             --dxvk-source "$src" --stage-dxvk-headers "$RUNNER_TEMP/dxvk-include/dxvk"
 
       - name: Build the device probe against the stand-in D3D9 library
-        timeout-minutes: 25
+        timeout-minutes: 50
         shell: bash
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
+          export BUILD_DIR="build-linux/device-probe-$config"
           mkdir -p artifacts "$RUNNER_TEMP/d3d9-unavailable"
           stand_in="$RUNNER_TEMP/d3d9-unavailable/libd3d9_unavailable.so"
           clang++ -m32 -shared -fPIC -Wall -Wextra -Werror -Wl,-soname,libd3d9_unavailable.so \
             tests/linux_device_probe/d3d9_unavailable.cpp -o "$stand_in"
           cmake -S . -B "$BUILD_DIR" -G Ninja \
             -DKISAK_PLATFORM=linux \
-            -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
+            -DCMAKE_BUILD_TYPE=$config \
             -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}" \
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$GITHUB_WORKSPACE/out/device-probe-$config" \
             -DKISAK_BUILD_LINUX_NATIVE_D3D9=ON \
             -DKISAK_DXVK_NATIVE_INCLUDE_DIR="$RUNNER_TEMP/dxvk-include/dxvk" \
             -DKISAK_DXVK_NATIVE_LIBRARY="$stand_in" \
             -DKISAK_BUILD_DEVICE_PROBE=ON \
             -DSDL3_DIR="$RUNNER_TEMP/SDL3-sdk/lib/cmake/SDL3" \
-            2>&1 | tee "artifacts/device-probe-${{ matrix.config }}.log"
+            2>&1 | tee "artifacts/device-probe-$config.log"
           cmake --build "$BUILD_DIR" --target KisakCOD-device-probe KisakCOD-win32-window-test --parallel "$(nproc)" \
-            2>&1 | tee -a "artifacts/device-probe-${{ matrix.config }}.log"
-          out="$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}"
+            2>&1 | tee -a "artifacts/device-probe-$config.log"
+          out="$GITHUB_WORKSPACE/out/device-probe-$config"
           for binary in "$out/KisakCOD-device-probe" "$out/KisakCOD-win32-window-test"; do
             readelf -h "$binary" | grep -Eq 'Class:[[:space:]]+ELF32'
             readelf -h "$binary" | grep -Eq 'Machine:[[:space:]]+Intel 80386'
@@ -2006,46 +2090,51 @@ jobs:
             echo "the Win32 layer's test must not need the D3D9 library" >&2
             exit 1
           fi
+          COMMANDS
 
       - name: Run the Win32 window layer test and the probe's fail-closed path
-        timeout-minutes: 5
+        timeout-minutes: 10
         shell: bash
         env:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
         run: |
           set -euo pipefail
-          out="$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}"
+          scripts/ci/each-config.sh <<'COMMANDS'
+          out="$GITHUB_WORKSPACE/out/device-probe-$config"
           export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/d3d9-unavailable"
-          "$out/KisakCOD-win32-window-test" 2>&1 | tee "artifacts/win32-window-test-${{ matrix.config }}.log"
+          "$out/KisakCOD-win32-window-test" 2>&1 | tee "artifacts/win32-window-test-$config.log"
           status=0
-          "$out/KisakCOD-device-probe" > "artifacts/device-probe-run-${{ matrix.config }}.log" 2>&1 || status=$?
-          cat "artifacts/device-probe-run-${{ matrix.config }}.log"
+          "$out/KisakCOD-device-probe" > "artifacts/device-probe-run-$config.log" 2>&1 || status=$?
+          cat "artifacts/device-probe-run-$config.log"
           # Without a D3D9 implementation the probe must stop at Direct3DCreate9,
           # after the engine runtime came up, and say so on its last line.
           test "$status" -eq 1
           grep -q '^engine_runtime=ready dvars=registered r_fullscreen=0 r_customMode=640x480' \
-            "artifacts/device-probe-run-${{ matrix.config }}.log"
-          grep -qx 'Direct3D 9 failed to initialize' "artifacts/device-probe-run-${{ matrix.config }}.log"
-          tail -n 1 "artifacts/device-probe-run-${{ matrix.config }}.log" | grep -q '^device_probe=failed stage=direct3d '
+            "artifacts/device-probe-run-$config.log"
+          grep -qx 'Direct3D 9 failed to initialize' "artifacts/device-probe-run-$config.log"
+          tail -n 1 "artifacts/device-probe-run-$config.log" | grep -q '^device_probe=failed stage=direct3d '
           # A usage error is its own status.
           status=0
           "$out/KisakCOD-device-probe" --frames 0 > /dev/null 2>&1 || status=$?
           test "$status" -eq 2
+          COMMANDS
 
       - name: Build the world device probe against the stand-in D3D9 library
-        timeout-minutes: 30
+        timeout-minutes: 60
         shell: bash
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
+          export BUILD_DIR="build-linux/device-probe-$config"
           # The same build directory, with the two probes the world device probe
           # builds on switched on. Only built and inspected here.
           cmake -S . -B "$BUILD_DIR" \
             -DKISAK_BUILD_WORLD_FRONTEND_PROBE=ON -DKISAK_BUILD_WORLD_DEVICE_PROBE=ON \
-            2>&1 | tee "artifacts/world-device-probe-${{ matrix.config }}.log"
+            2>&1 | tee "artifacts/world-device-probe-$config.log"
           cmake --build "$BUILD_DIR" --target KisakCOD-world-device-probe --parallel "$(nproc)" \
-            2>&1 | tee -a "artifacts/world-device-probe-${{ matrix.config }}.log"
-          probe="$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-world-device-probe"
+            2>&1 | tee -a "artifacts/world-device-probe-$config.log"
+          probe="$GITHUB_WORKSPACE/out/device-probe-$config/KisakCOD-world-device-probe"
           readelf -h "$probe" | grep -Eq 'Class:[[:space:]]+ELF32'
           readelf -h "$probe" | grep -Eq 'Machine:[[:space:]]+Intel 80386'
           # SDL3, the D3D9 library and the C and C++ runtimes, nothing else.
@@ -2058,9 +2147,10 @@ jobs:
             echo "the world device probe needs a library beyond SDL3, D3D9 and the runtimes" >&2
             exit 1
           fi
+          COMMANDS
 
       - name: Run the world device probe's fail-closed paths
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         env:
           SDL_VIDEODRIVER: dummy
@@ -2068,6 +2158,7 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
           export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/d3d9-unavailable"
           # The script starts the engine from a temporary tree that holds only a
           # one-line stub of the file the engine checks for, so it reaches the
@@ -2075,22 +2166,25 @@ jobs:
           # Direct3DCreate9 before any zone is queued; no map and an unknown map
           # must be refused first. Nothing may land in the output directories.
           python3 -u scripts/tests/test_world_device_probe.py \
-            --probe "$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-world-device-probe" \
-            2>&1 | tee "artifacts/world-device-run-${{ matrix.config }}.log"
+            --probe "$GITHUB_WORKSPACE/out/device-probe-$config/KisakCOD-world-device-probe" \
+            2>&1 | tee "artifacts/world-device-run-$config.log"
+          COMMANDS
 
       - name: Build the world draw probe against the stand-in D3D9 library
-        timeout-minutes: 30
+        timeout-minutes: 60
         shell: bash
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
+          export BUILD_DIR="build-linux/device-probe-$config"
           # The same build directory again, with the draw probe on top of the
           # world device probe: the whole renderer except the four units the
           # client census still blocks. Only built and inspected here.
           cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_WORLD_DRAW_PROBE=ON \
-            2>&1 | tee "artifacts/world-draw-probe-${{ matrix.config }}.log"
+            2>&1 | tee "artifacts/world-draw-probe-$config.log"
           cmake --build "$BUILD_DIR" --target KisakCOD-world-draw-probe --parallel "$(nproc)" \
-            2>&1 | tee -a "artifacts/world-draw-probe-${{ matrix.config }}.log"
-          probe="$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-world-draw-probe"
+            2>&1 | tee -a "artifacts/world-draw-probe-$config.log"
+          probe="$GITHUB_WORKSPACE/out/device-probe-$config/KisakCOD-world-draw-probe"
           readelf -h "$probe" | grep -Eq 'Class:[[:space:]]+ELF32'
           readelf -h "$probe" | grep -Eq 'Machine:[[:space:]]+Intel 80386'
           # SDL3, the D3D9 library and the C and C++ runtimes, nothing else.
@@ -2103,9 +2197,10 @@ jobs:
             echo "the world draw probe needs a library beyond SDL3, D3D9 and the runtimes" >&2
             exit 1
           fi
+          COMMANDS
 
       - name: Run the world draw probe's fail-closed paths
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         env:
           SDL_VIDEODRIVER: dummy
@@ -2113,6 +2208,7 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
           export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/d3d9-unavailable"
           # The same temporary tree with no game data as the world device probe's
           # run. An allowlisted map must stop at Direct3DCreate9 before R_Init
@@ -2121,14 +2217,17 @@ jobs:
           # driver must stop the same way and refuse their own bad arguments.
           # Nothing may land in the output directories.
           python3 -u scripts/tests/test_world_draw_probe.py \
-            --probe "$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-world-draw-probe" \
-            2>&1 | tee "artifacts/world-draw-run-${{ matrix.config }}.log"
+            --probe "$GITHUB_WORKSPACE/out/device-probe-$config/KisakCOD-world-draw-probe" \
+            2>&1 | tee "artifacts/world-draw-run-$config.log"
+          COMMANDS
 
       - name: Build the multiplayer client against the stand-in D3D9 and OpenAL libraries
-        timeout-minutes: 40
+        timeout-minutes: 80
         shell: bash
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
+          export BUILD_DIR="build-linux/device-probe-$config"
           # KisakCOD-mp (scripts/platform/linux/mp_client.cmake): the whole game
           # in one i386 process, its renderer units through the native D3D9
           # boundary. It links the same D3D9 stand-in as the probes and an
@@ -2143,20 +2242,23 @@ jobs:
           # profiling build compiles and links on every push; RelWithDebInfo
           # stays the player build with no profiler.
           tracy=OFF
-          if [ "${{ matrix.config }}" = Debug ]; then tracy=ON; fi
+          if [ "$config" = Debug ]; then tracy=ON; fi
+          # HTTP downloads are off here on purpose, so the client's download
+          # stand-ins (mp_client_unavailable.cpp) keep building; the x86_64
+          # client job builds the downloader.
           cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_OPENAL_LIBRARY="$openal" \
-            -DKISAK_LINUX_TRACY="$tracy" -DKISAK_LINUX_CINEMATICS=OFF \
-            2>&1 | tee "artifacts/mp-client-${{ matrix.config }}.log"
+            -DKISAK_LINUX_TRACY="$tracy" -DKISAK_LINUX_CINEMATICS=OFF -DKISAK_LINUX_HTTP_DOWNLOADS=OFF \
+            2>&1 | tee "artifacts/mp-client-$config.log"
           cmake --build "$BUILD_DIR" --target KisakCOD-mp KisakCOD-mp-client-window-test --parallel "$(nproc)" \
-            2>&1 | tee -a "artifacts/mp-client-${{ matrix.config }}.log"
-          window_test="$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-mp-client-window-test"
+            2>&1 | tee -a "artifacts/mp-client-$config.log"
+          window_test="$GITHUB_WORKSPACE/out/device-probe-$config/KisakCOD-mp-client-window-test"
           readelf -h "$window_test" | grep -Eq 'Class:[[:space:]]+ELF32'
           readelf -d "$window_test" | grep -F 'Shared library: [libSDL3.so.0]'
           if readelf -d "$window_test" | grep -F 'libd3d9_unavailable'; then
             echo "the game window test must not link a D3D9 library" >&2
             exit 1
           fi
-          client="$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-mp"
+          client="$GITHUB_WORKSPACE/out/device-probe-$config/KisakCOD-mp"
           readelf -h "$client" | grep -Eq 'Class:[[:space:]]+ELF32'
           readelf -h "$client" | grep -Eq 'Machine:[[:space:]]+Intel 80386'
           # SDL3, the D3D9 and OpenAL libraries and the C and C++ runtimes.
@@ -2176,9 +2278,10 @@ jobs:
             echo "the multiplayer client exports names to shared libraries" >&2
             exit 1
           fi
+          COMMANDS
 
       - name: Run the multiplayer client's fail-closed start
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         env:
           SDL_VIDEODRIVER: dummy
@@ -2186,35 +2289,39 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
           export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/d3d9-unavailable:$RUNNER_TEMP/openal-unavailable"
           # The game window on SDL's dummy driver: adopted when the renderer's
           # window is made and let go before it is destroyed, keys into the
           # engine queue, one mouse report per frame, focus and close.
-          "$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-mp-client-window-test" \
-            2>&1 | tee "artifacts/mp-client-window-test-${{ matrix.config }}.log"
+          "$GITHUB_WORKSPACE/out/device-probe-$config/KisakCOD-mp-client-window-test" \
+            2>&1 | tee "artifacts/mp-client-window-test-$config.log"
           # The script starts the client from temporary trees with no game data:
           # an empty one must be refused at the file system check, one holding a
           # stub of the file the engine checks for must stop at the client's
           # autoconfigure step for want of a game file. No connection is tried.
           python3 -u scripts/tests/test_linux_mp_client.py \
-            --binary "$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-mp" \
-            2>&1 | tee "artifacts/mp-client-run-${{ matrix.config }}.log"
+            --binary "$GITHUB_WORKSPACE/out/device-probe-$config/KisakCOD-mp" \
+            2>&1 | tee "artifacts/mp-client-run-$config.log"
+          COMMANDS
 
       - name: Build the singleplayer game against the stand-in D3D9 and OpenAL libraries
-        timeout-minutes: 40
+        timeout-minutes: 80
         shell: bash
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
+          export BUILD_DIR="build-linux/device-probe-$config"
           # KisakCOD-sp (scripts/platform/linux/sp_game.cmake): the singleplayer
           # game from the KisakCOD-sp source lists, built like KisakCOD-mp in the
           # same directory with the same stand-ins. Only built and inspected here.
           openal="$RUNNER_TEMP/openal-unavailable/libopenal_unavailable.so"
           cmake -S . -B "$BUILD_DIR" -DKISAK_BUILD_LINUX_SP_GAME=ON -DKISAK_OPENAL_LIBRARY="$openal" \
             -DKISAK_LINUX_CINEMATICS=OFF \
-            2>&1 | tee "artifacts/sp-game-${{ matrix.config }}.log"
+            2>&1 | tee "artifacts/sp-game-$config.log"
           cmake --build "$BUILD_DIR" --target KisakCOD-sp --parallel "$(nproc)" \
-            2>&1 | tee -a "artifacts/sp-game-${{ matrix.config }}.log"
-          game="$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-sp"
+            2>&1 | tee -a "artifacts/sp-game-$config.log"
+          game="$GITHUB_WORKSPACE/out/device-probe-$config/KisakCOD-sp"
           readelf -h "$game" | grep -Eq 'Class:[[:space:]]+ELF32'
           readelf -h "$game" | grep -Eq 'Machine:[[:space:]]+Intel 80386'
           readelf -d "$game" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' > "$RUNNER_TEMP/sp-game-needed.txt"
@@ -2231,9 +2338,10 @@ jobs:
             echo "the singleplayer game exports names to shared libraries" >&2
             exit 1
           fi
+          COMMANDS
 
       - name: Run the singleplayer game's fail-closed start
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         env:
           SDL_VIDEODRIVER: dummy
@@ -2241,20 +2349,22 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
           export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/d3d9-unavailable:$RUNNER_TEMP/openal-unavailable"
           # From temporary trees with no game data: an empty one must be refused
           # at the file system check, a stub one must stop at autoconfigure for
           # want of configure.csv.
           python3 -u scripts/tests/test_linux_sp_game.py \
-            --binary "$GITHUB_WORKSPACE/out/device-probe-${{ matrix.config }}/KisakCOD-sp" \
-            2>&1 | tee "artifacts/sp-game-run-${{ matrix.config }}.log"
+            --binary "$GITHUB_WORKSPACE/out/device-probe-$config/KisakCOD-sp" \
+            2>&1 | tee "artifacts/sp-game-run-$config.log"
+          COMMANDS
 
       - name: Upload device probe logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           # Text logs only; no binary and no build directory is uploaded.
-          name: KisakCOD-device-probe-${{ matrix.config }}
+          name: KisakCOD-device-probe
           path: artifacts/
           if-no-files-found: warn
           retention-days: 7
@@ -2270,7 +2380,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/ccache
-          key: ccache-device-probe-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ccache-device-probe-${{ github.run_id }}-${{ github.run_attempt }}
 
   free_camera:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
@@ -2366,21 +2476,17 @@ jobs:
     # (VK_EXT_headless_surface): no GPU, no display server, no game data. The
     # validation layer is required, with synchronisation checks, and any error
     # fails the job.
-    name: Vulkan window probe on lavapipe ${{ matrix.config }}
+    # Debug and RelWithDebInfo run one after the other in this one job:
+    # each step that depends on the configuration runs it for both
+    # (scripts/ci/each-config.sh), so the pair needs one runner, not two.
+    name: Vulkan window probe on lavapipe
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-
-    strategy:
-      fail-fast: false
-      matrix:
-        config: [Debug, RelWithDebInfo]
+    timeout-minutes: 65
 
     env:
       SDL3_REVISION: 877399b2b2cf21e67554ed9046410f268ce1d1b2
       DXVK_REVISION: c3dd74be6baec53786d4e064a572185b70347a17
       DXVK_DIRECTX_HEADERS_REVISION: 9df86f2341616ef1888ae59919feaa6d4fad693d
-      BUILD_DIR: build-x64/vulkan-probe-${{ matrix.config }}
-      OUT_DIR: ${{ github.workspace }}/out/vulkan-probe-${{ matrix.config }}
 
     steps:
       - name: Checkout repository
@@ -2410,11 +2516,14 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/ccache
-          key: ccache-vulkan-window-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: ccache-vulkan-window-${{ matrix.config }}-
+          key: ccache-vulkan-window-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-vulkan-window-
       - name: Use compiler cache
         id: ccache
         shell: bash
+        env:
+          # One cache holds both configurations.
+          KISAK_CCACHE_MAXSIZE: 1G
         run: |
           set -euo pipefail
           scripts/ci/use-ccache.sh
@@ -2477,13 +2586,16 @@ jobs:
             --dxvk-source "$src" --stage-dxvk-headers "$RUNNER_TEMP/dxvk-include/dxvk"
 
       - name: Build the Vulkan window probe
-        timeout-minutes: 15
+        timeout-minutes: 30
         shell: bash
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
+          export BUILD_DIR="build-x64/vulkan-probe-$config"
+          export OUT_DIR="$GITHUB_WORKSPACE/out/vulkan-probe-$config"
           cmake -S . -B "$BUILD_DIR" -G Ninja \
             -DKISAK_PLATFORM=linux -DKISAK_LINUX_ARCH=x86_64 \
-            -DCMAKE_BUILD_TYPE="${{ matrix.config }}" \
+            -DCMAKE_BUILD_TYPE="$config" \
             -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$OUT_DIR" \
             -DKISAK_BUILD_VULKAN_PROBE=ON -DKISAK_BUILD_VULKAN_SHADERS=ON \
@@ -2504,6 +2616,7 @@ jobs:
               exit 1
             fi
           done
+          COMMANDS
 
       - name: Check the probe's generated SPIR-V header
         shell: bash
@@ -2517,58 +2630,69 @@ jobs:
           python3 scripts/tools/vulkan/gen_legacy_check_shaders.py --check
 
       - name: Run the Vulkan window probe on lavapipe
-        timeout-minutes: 15
+        timeout-minutes: 30
         shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
+          export OUT_DIR="$GITHUB_WORKSPACE/out/vulkan-probe-$config"
           python3 -u scripts/tests/test_vulkan_window_probe.py \
             --binary "$OUT_DIR/KisakCOD-vulkan-probe" \
             --video-driver offscreen --validation require
+          COMMANDS
 
       - name: Check the Legacy shader translator
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
+          export OUT_DIR="$GITHUB_WORKSPACE/out/vulkan-probe-$config"
           # dxbc-spirv (fetched at a pinned commit) and our lowering, on the
           # shader spike's 81 test shaders: valid SPIR-V for Vulkan 1.3 with
           # scalar block layout, predication refused, uniform block layouts,
           # reflection and linking (docs/vulkan-legacy-shaders.md).
           python3 -u scripts/tests/test_vulkan_legacy_shaders.py \
             --binary "$OUT_DIR/KisakCOD-vulkan-shaders"
+          COMMANDS
 
       - name: Run the Legacy adapter check on lavapipe
-        timeout-minutes: 15
+        timeout-minutes: 30
         shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
+          export OUT_DIR="$GITHUB_WORKSPACE/out/vulkan-probe-$config"
           # D3D9-style scenes drawn through the Legacy adapter (translation,
           # pipelines, descriptors, textures, buffers, render state, queries)
           # and checked pixel by pixel, with the validation layer required.
           python3 -u scripts/tests/test_vulkan_legacy_adapter.py \
             --binary "$OUT_DIR/KisakCOD-vulkan-legacy-check" \
             --video-driver offscreen --validation require
+          COMMANDS
 
       - name: Run the D3D9 front check on lavapipe
-        timeout-minutes: 15
+        timeout-minutes: 30
         shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
+          export OUT_DIR="$GITHUB_WORKSPACE/out/vulkan-probe-$config"
           # The adapter driven through IDirect3D9 and IDirect3DDevice9, as the
           # renderer calls it: pixels, reference counts, state getters,
           # queries, Reset, Present and teardown, with validation required.
           python3 -u scripts/tests/test_vulkan_d3d9_front.py \
             --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
             --video-driver offscreen --validation require
+          COMMANDS
 
       - name: Run both checks again on MoltenVK's paths
-        if: ${{ matrix.config == 'Debug' }}
         timeout-minutes: 15
         shell: bash
         env:
@@ -2584,6 +2708,9 @@ jobs:
           KISAK_VK_UNIFORMS: static
         run: |
           set -euo pipefail
+          # Debug only, as before the two configurations shared a job.
+          config=Debug
+          export OUT_DIR="$GITHUB_WORKSPACE/out/vulkan-probe-$config"
           python3 -u scripts/tests/test_vulkan_legacy_adapter.py \
             --binary "$OUT_DIR/KisakCOD-vulkan-legacy-check" \
             --video-driver offscreen --validation require
@@ -2592,13 +2719,15 @@ jobs:
             --video-driver offscreen --validation require
 
       - name: Run the checks again with the record thread switched
-        if: ${{ matrix.config == 'Debug' }}
         timeout-minutes: 15
         shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           set -euo pipefail
+          # Debug only, as before the two configurations shared a job.
+          config=Debug
+          export OUT_DIR="$GITHUB_WORKSPACE/out/vulkan-probe-$config"
           # The core can make its Vulkan calls on a thread of its own
           # (CoreDesc::recordThread, docs/vulkan-core.md). The D3D9 front turns
           # it on and the probe and the adapter check leave it off, so each
@@ -2617,15 +2746,25 @@ jobs:
           KISAK_VK_FENCE_FLUSH=0 python3 -u scripts/tests/test_vulkan_d3d9_front.py \
             --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
             --video-driver offscreen --validation require
+          # And with depth compare chosen around each sample at run time
+          # instead of fixed per pipeline (docs/vulkan-legacy-adapter.md).
+          KISAK_VK_DEPTH_COMPARE=dynamic python3 -u scripts/tests/test_vulkan_legacy_adapter.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-legacy-check" \
+            --video-driver offscreen --validation require
+          KISAK_VK_DEPTH_COMPARE=dynamic python3 -u scripts/tests/test_vulkan_d3d9_front.py \
+            --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
+            --video-driver offscreen --validation require
 
       - name: Run the checks again with the GPU feed off and at its extreme
-        if: ${{ matrix.config == 'Debug' }}
         timeout-minutes: 15
         shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           set -euo pipefail
+          # Debug only, as before the two configurations shared a job.
+          config=Debug
+          export OUT_DIR="$GITHUB_WORKSPACE/out/vulkan-probe-$config"
           # The adapter submits a frame in parts while it is drawn
           # (docs/vulkan-legacy-adapter.md, Frames). Off, a frame goes to the
           # GPU whole, as it does by default on tile-based GPUs and MoltenVK.
@@ -2643,13 +2782,15 @@ jobs:
             --video-driver offscreen --validation require
 
       - name: Run the checks again without occlusion counts
-        if: ${{ matrix.config == 'Debug' }}
         timeout-minutes: 15
         shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           set -euo pipefail
+          # Debug only, as before the two configurations shared a job.
+          config=Debug
+          export OUT_DIR="$GITHUB_WORKSPACE/out/vulkan-probe-$config"
           # Occlusion queries count samples where the device can
           # (docs/vulkan-legacy-adapter.md, Queries), which lavapipe can: the
           # runs above check the counts. Switched off, the adapter takes the
@@ -2663,7 +2804,6 @@ jobs:
             --video-driver offscreen --validation require
 
       - name: Check the D3D9 front's lock with ThreadSanitizer
-        if: ${{ matrix.config == 'Debug' }}
         timeout-minutes: 15
         shell: bash
         env:
@@ -2676,6 +2816,9 @@ jobs:
           LP_NUM_THREADS: "0"
         run: |
           set -euo pipefail
+          # Debug only, as before the two configurations shared a job.
+          config=Debug
+          export OUT_DIR="$GITHUB_WORKSPACE/out/vulkan-probe-$config"
           # The renderer calls D3D9 from several threads; the check's threads
           # scene does too (a worker creates and fills textures while this
           # thread draws). Built with ThreadSanitizer, any data race in the
@@ -2770,7 +2913,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/ccache
-          key: ccache-vulkan-window-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ccache-vulkan-window-${{ github.run_id }}-${{ github.run_attempt }}
 
   vulkan_engine:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
@@ -2965,7 +3108,7 @@ jobs:
           export LD_LIBRARY_PATH="$RUNNER_TEMP/SDL3-sdk/lib:$RUNNER_TEMP/stand-ins"
           log="$RUNNER_TEMP/device-probe-vulkan.log"
           "$OUT_DIR/KisakCOD-device-probe" --backend vulkan --validation auto 2>&1 | tee "$log"
-          grep -qx 'Graphics back end: Vulkan (validation auto, device -1, shader cache off)' "$log"
+          grep -qx 'Graphics back end: Vulkan (validation auto, device -1, shader cache off, visuals legacy)' "$log"
           grep -q '^vulkan presents=3 skipped=0 unsupported_calls=0 ' "$log"
           grep -q '^readback width=640 height=480 .* mismatched_pixels=0$' "$log"
           grep -q '^vulkan_teardown destroyed=yes ' "$log"

@@ -26,10 +26,15 @@
 #include <windows.h>
 
 #include <gfx_vk/d3d9/vk_d3d9.h>
+#include <gfx_vk/modern/vk_modern.h>
+// After d3d9.h (above), so IDirect3DDevice9 is the SDK's.
+#include <gfx_d3d/rhi/r_rhi_modern.h>
 #include <vulkan/vulkan_win32.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -60,6 +65,13 @@ const dvar_s *r_vkGpuFeed;
 const dvar_s *r_vkGpuFeedDraws;
 const dvar_s *r_vkGpuFeedIdleDraws;
 const dvar_s *r_vkKeepDrawState;
+const char *s_visualsNames[] = {"legacy", "modern", nullptr};
+enum : int
+{
+    VISUALS_LEGACY = 0,
+    VISUALS_MODERN = 1,
+};
+const dvar_s *r_visuals;
 
 const char *const s_instanceExtensions[] = {
     VK_KHR_SURFACE_EXTENSION_NAME,
@@ -337,13 +349,55 @@ void RegisterDvars()
     r_vkKeepDrawState = Dvar_RegisterBool("r_vkKeepDrawState", true, DVAR_NOFLAG,
                                           "Vulkan: a draw takes up the pipeline, constants and binds the draw "
                                           "before it left; off makes every draw set them all again");
+    r_visuals = Dvar_RegisterEnum("r_visuals", s_visualsNames, VISUALS_LEGACY, DVAR_ARCHIVE | DVAR_LATCH,
+                                  "Visuals with r_backend vulkan: legacy (the game as it was made) or modern "
+                                  "(experimental; so far temporal anti-aliasing)");
 }
+
+// ---- The Modern path (r_visuals modern; docs/vulkan-modern.md) ------------------------
+
+// Set when the front refused a scene (a multisampled back buffer, say): the
+// scenes are not jittered any more, since nothing would take the jitter out.
+// Read on the front end's thread, written on the render thread.
+std::atomic<bool> s_modernRefused{false};
+
+void ModernJitterPixels(void *, uint32_t frame, float *x, float *y)
+{
+    if (s_modernRefused.load(std::memory_order_relaxed))
+    {
+        *x = *y = 0.0f;
+        return;
+    }
+    gfx_vk::modern::JitterPixels(frame, *x, *y);
+}
+
+void ModernSceneDone(void *, IDirect3DDevice9 *device, const GfxModernScene *scene)
+{
+    if (s_modernRefused.load(std::memory_order_relaxed))
+        return;
+    front::ModernSceneView view{};
+    std::memcpy(view.view, scene->view, sizeof(view.view));
+    std::memcpy(view.projection, scene->projection, sizeof(view.projection));
+    view.x = uint32_t((std::max)(0, scene->x));
+    view.y = uint32_t((std::max)(0, scene->y));
+    view.width = uint32_t((std::max)(0, scene->width));
+    view.height = uint32_t((std::max)(0, scene->height));
+    view.cut = scene->cut;
+    if (front::ModernSceneDone(device, view) == front::ModernResult::Refused)
+        s_modernRefused.store(true, std::memory_order_relaxed);
+}
+
+const GfxModernHooks s_modernHooks = {nullptr, ModernJitterPixels, ModernSceneDone};
 } // namespace
 
 int Kisak_VulkanBackendSelected()
 {
     RegisterDvars();
-    return r_backend->current.integer == BACKEND_VULKAN;
+    if (r_backend->current.integer == BACKEND_VULKAN)
+        return 1;
+    // The Modern path's hooks belong to the Vulkan back end.
+    R_SetModernHooks(nullptr);
+    return 0;
 }
 
 IDirect3D9 *Kisak_VulkanDirect3DCreate9()
@@ -371,9 +425,12 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
     s_vkHost.pipelineCachePath = cacheDirectory.empty() ? std::string() : cacheDirectory + "\\pipelines.bin";
     host.shaderCachePath = s_vkHost.shaderCachePath.empty() ? nullptr : s_vkHost.shaderCachePath.c_str();
     host.pipelineCachePath = s_vkHost.pipelineCachePath.empty() ? nullptr : s_vkHost.pipelineCachePath.c_str();
-    Com_Printf(CON_CHANNEL_GFX, "Graphics back end: Vulkan (validation %s, device %d, shader cache %s)\n",
+    Com_Printf(CON_CHANNEL_GFX, "Graphics back end: Vulkan (validation %s, device %d, shader cache %s, visuals %s)\n",
                s_validationNames[r_vkValidation->current.integer], r_vkDevice->current.integer,
-               s_vkHost.shaderCachePath.empty() ? "off" : s_vkHost.shaderCachePath.c_str());
+               s_vkHost.shaderCachePath.empty() ? "off" : s_vkHost.shaderCachePath.c_str(),
+               s_visualsNames[r_visuals->current.integer]);
+    s_modernRefused.store(false, std::memory_order_relaxed);
+    R_SetModernHooks(r_visuals->current.integer == VISUALS_MODERN ? &s_modernHooks : nullptr);
     return front::CreateDirect3D9(host);
 }
 

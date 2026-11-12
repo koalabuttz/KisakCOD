@@ -44,8 +44,14 @@ HARMLESS = (
     "scripts/platform/vita/*", "scripts/platform/macos/*", "scripts/platform/win32/*", "scripts/platform/mingw/*",
     ".github/workflows/*",
 )
-# ...except these, which decide how the scanned build is configured.
+# ...except these, which decide how the scanned build is configured. The Linux
+# workflow is read by section (_workflow_decides_the_scan): a change to its
+# triggers or to a job that runs no scan leaves the scanned build as it was.
 NOT_HARMLESS = (".github/workflows/build-kisakcod-linux.yaml",)
+SCAN_WORKFLOW = ".github/workflows/build-kisakcod-linux.yaml"
+# Top-level sections of the workflow that cannot change a scanned build.
+QUIET_SECTIONS = ("on", "concurrency", "permissions")
+SCAN_MARK = "check_32bit_"  # a job that names the scans runs them
 SOURCE_SUFFIXES = (".c", ".cc", ".cpp", ".cxx")
 
 
@@ -88,6 +94,63 @@ def parse_deps(text, build_dir):
     return deps or None
 
 
+def _scan_signature(text):
+    """What of the Linux workflow decides how the scanned build is made: every
+    top-level section except the triggers, concurrency and permissions (the
+    top-level env among them), and each job that runs one of the scans. None
+    when the file does not look like a workflow."""
+    sections, order, key, in_jobs, job = {}, [], None, False, None
+    for line in text.splitlines():
+        if line.strip() == "" or line.lstrip().startswith("#"):
+            if key is not None:
+                sections[key].append(line)
+            continue
+        if not line[0].isspace():
+            name = line.partition(":")[0].strip()
+            key, in_jobs, job = (name, True, None) if name == "jobs" else (name, False, None)
+            if key in sections:
+                return None
+            sections[key] = [line]
+            order.append(key)
+        elif in_jobs and line.startswith("  ") and not line.startswith("   "):
+            job = "jobs/" + line.partition(":")[0].strip()
+            if job in sections:
+                return None
+            sections[job] = [line]
+            order.append(job)
+            key = job
+        elif key is not None:
+            sections[key].append(line)
+    if "jobs" not in sections:
+        return None
+    kept = []
+    for name in order:
+        body = "\n".join(sections[name])
+        if name.startswith("jobs/"):
+            if SCAN_MARK in body:
+                kept.append(body)
+        elif name != "jobs" and name not in QUIET_SECTIONS:
+            kept.append(body)
+    return kept
+
+
+def _workflow_decides_the_scan(root, since, path):
+    """True unless the change to the Linux workflow since a commit leaves
+    _scan_signature as it was. True also when that cannot be told."""
+    if since is None or path != SCAN_WORKFLOW:
+        return True
+    try:
+        old = subprocess.run(["git", "show", f"{since}:{path}"], cwd=root, capture_output=True, text=True,
+                             timeout=120)
+        new = (Path(root) / path).read_text(encoding="utf-8", errors="replace")
+    except (OSError, subprocess.SubprocessError):
+        return True
+    if old.returncode != 0:
+        return True
+    before, after = _scan_signature(old.stdout), _scan_signature(new)
+    return before is None or after is None or before != after
+
+
 def _harmless(path):
     if any(fnmatch.fnmatchcase(path, pattern) for pattern in NOT_HARMLESS):
         return False
@@ -105,10 +168,12 @@ def _named_in_an_include(name, files):
     return None
 
 
-def reachable(units, changed, deps, root=ROOT):
+def reachable(units, changed, deps, root=ROOT, since=None):
     """(units to scan, why). units: absolute source paths. changed: paths
-    relative to root, or None. deps: parse_deps' result, or None. The first
-    value is None when everything must be scanned."""
+    relative to root, or None. deps: parse_deps' result, or None. since: the
+    commit the change is measured from, which lets a change to the Linux
+    workflow that touches no scanned build count as harmless. The first value
+    is None when everything must be scanned."""
     root = Path(root)
     if changed is None:
         return None, "git could not list the change"
@@ -119,7 +184,7 @@ def reachable(units, changed, deps, root=ROOT):
     for path in changed:
         (inside if path.startswith("src/") else outside).append(path)
     for path in outside:
-        if not _harmless(path):
+        if not _harmless(path) and _workflow_decides_the_scan(root, since, path):
             return None, f"{path} changed"
     units = set(units)
     owners = {}  # dependency -> units whose object lists it
@@ -159,7 +224,7 @@ def select(units, build_dirs, since, root=ROOT):
             deps = None
             break
         deps.update(found)
-    return reachable(units, changed_files(root, since), deps, root)
+    return reachable(units, changed_files(root, since), deps, root, since)
 
 
 def main() -> int:

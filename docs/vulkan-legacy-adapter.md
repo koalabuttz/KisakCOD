@@ -45,14 +45,22 @@ buffer by the core's `Recording()` number.
   module is built at once; a pixel shader is linked to the vertex shader it is
   drawn with (outputs to inputs), and linked modules are kept per pair.
 * **Uniforms.** The translator turns float constants and the states shaders need
-  (alpha test, sampler state, point size) into uniform blocks, which live in
+  (alpha test, sampler state) into uniform blocks, which live in
   per-frame memory. The blocks are dynamic uniform buffers: each pipeline
   writes its descriptor set once per transient buffer (kept across frames,
   below), and later draws bind that set again with their own offsets. A layout with more
   blocks than the device's `maxDescriptorSetUniformBuffersDynamic` (8 on some
   drivers), or every layout with `KISAK_VK_UNIFORMS=static`, gets plain
   uniform buffers and a new set for each draw instead. Alpha test is D3D9
-  state, compared in the pixel shader.
+  state, compared in the pixel shader. Its compare is fixed in each
+  pipeline's pixel shader when the shader is built (`PipelineKey::alphaCompare`,
+  `legacy_shader::BuildSpirv`'s `fixedAlphaCompare`), as DXVK does, and only
+  the reference is read from the block. A draw without the test then runs a
+  shader that cannot discard, which a GPU can test depth before; with the
+  compare read at run time every pixel shader may discard. Laptop run 17 had
+  Mesa's Intel compiler make our pixel shaders about twice DXVK's length.
+  `KISAK_VK_ALPHA_TEST=dynamic` reads the compare at run time again, and the
+  `device ready:` line says `alpha test fixed` or `dynamic`.
 * **Less work for a draw like the one before.** The engine draws sorted by
   material, so most draws differ from the one before in a few vertex shader
   constants and nothing else. The adapter does and records only what changed:
@@ -72,7 +80,8 @@ buffer by the core's `Recording()` number.
     `DeviceStats::bindsSkipped` counts them.
   * *Pipeline and dynamic state.* The pipeline key and the dynamic state are
     made again only after something they are made of was set: a render state
-    (except the three of the alpha test, which are in a uniform block), a
+    (except the alpha test's reference, which is in a uniform block, and its
+    switch and compare too with `KISAK_VK_ALPHA_TEST=dynamic`), a
     shader, the vertex declaration, the viewport, the scissor rectangle, or
     the targets of the pass. Where the device fixes vertex strides or depth
     compare in the pipeline, the key also holds stream strides and bound
@@ -110,7 +119,10 @@ buffer by the core's `Recording()` number.
   logged (`draw state kept from one draw to the next: now off`).
 * **Textures.** Each sampler slot gets the bound texture's sample view (with the
   format's swizzle: L8, A8, A8L8, X8R8G8B8 and the rest read as D3D9 reads them)
-  and a sampler cached per slot and state. Empty slots read a 1x1 black
+  and a sampler cached per slot and state. The sampler depends on the texture
+  only through its traits (a cube, a depth format, one level or more), so
+  binding another texture with the same traits keeps the slot's sampler
+  rather than looking it up again. Empty slots read a 1x1 black
   texture of the kind the shader declares. Depth textures sample with compare
   (`LESS_OR_EQUAL`), as D3D9 shadow maps do. A draw that needs the same views
   and samplers as the draw before, in the same layout, binds that draw's
@@ -128,7 +140,22 @@ buffer by the core's `Recording()` number.
 * **Passes.** A pass opens lazily at the first draw or clear for the current
   targets and ends when targets change, a resource is uploaded, or a copy
   needs to run. Clears inside a pass are `vkCmdClearAttachments`, limited by
-  viewport and scissor like D3D9's.
+  viewport and scissor like D3D9's. A clear that covers every cleared target
+  whole (one level, one face, the viewport and scissor not smaller) is
+  instead the load operation a pass begins with (`LOAD_OP_CLEAR`): drivers
+  clear that way with their fast clears, and Mesa's ANV counts
+  `vkCmdClearAttachments` as a slow clear. Before a draw it begins the pass,
+  and a second such clear, colour after depth say, begins the empty pass
+  again with both, as DXVK folds clears into the pass. After a draw the open
+  pass ends and the next begins with the clear, loading what was drawn to
+  the targets it does not clear: MoltenVK left the depth uncleared when it
+  was cleared inside the pass after a draw (the `pass_clear` scene on CI's
+  Apple GPU). A depth clear without the stencil stays in the pass on D24S8,
+  since the load operation would clear both.
+  `KISAK_VK_PASS_CLEARS=0` keeps every clear in its pass; the `device ready:`
+  line says which (`clears at pass start` or `clears in the pass`), and
+  `DeviceStats::passClears` counts the ones that were load operations (the
+  front's `device stats:` line gives both).
 * **Frames in parts (the GPU feed).** A frame of many draws goes to the GPU
   in parts while it is still being drawn, as DXVK's does, instead of whole at
   its `Present`. After a draw, once the command buffer holds 128 draws
@@ -191,7 +218,7 @@ buffer by the core's `Recording()` number.
 | Resource | How |
 | --- | --- |
 | Managed and default textures | A lock returns CPU memory for that level (or box); unlock uploads it through staging and frees the CPU copy. A level locked again without `DISCARD` is read back from the GPU once, and its CPU copy is kept from then on, so a lock keeps the texels it does not overwrite, as in D3D9 (the game's model lighting volume relies on this). Compressed formats lock whole 4x4 blocks. |
-| SYSTEMMEM and SCRATCH textures | CPU memory only, kept; the source of `UpdateTexture` and the destination of `GetRenderTargetData`. |
+| SYSTEMMEM and SCRATCH textures | CPU memory only, kept; the source of `UpdateTexture` and the destination of `GetRenderTargetData`. Such a texture keeps what is dirty per face, in level 0's texels, as D3D9 does: all of it when new, the region of a lock without `LOCK_NO_DIRTY_UPDATE` or `LOCK_READONLY`, and what `AddDirtyRegion` (the front's `AddDirtyRect` and `AddDirtyBox`) marks. Boxes that overlap are merged; past 128 the whole face is dirty. `UpdateTexture` copies only that, in every level (halved per level, grown to whole blocks of a compressed format), in one copy command per level (`UploadRegions`), and then nothing is dirty. The game's model lighting volume patches a few 4x4x4 cells a frame this way. |
 | Render targets and depth surfaces | 2D, one level. A texture with RENDERTARGET usage can be drawn to and sampled. |
 | Multisampled targets | `CreateMultisampledRenderTarget`, `CreateMultisampledDepthStencil` and `DeviceDesc::backBufferSamples` (`SetBackBufferSamples` then `ResizeBackBuffer` to change it) take a sample count; `UsableSamples` keeps 1, and turns a count the device lacks into 4, which Vulkan requires of every device for colour and depth; `SurfaceSamples` says what a surface got. Such an image is drawn to and resolved, never sampled or locked. A pass takes its count from its targets and the pipeline key carries it (`rasterizationSamples`); a pass whose targets differ in count is skipped with a warning. `StretchRect` from a multisampled colour surface resolves it (`vkCmdResolveImage`): straight into the destination when size and format match, otherwise into a scratch image the device keeps and then a blit. `GetRenderTargetData` resolves into that scratch before the read back, and `Present` of a multisampled back buffer resolves it into the image `GetFrontBufferData` reads and blits that to the swapchain. A multisampled destination or depth source is refused with a warning. Not on the Vita: the GXM back end has none of these. |
 | Static buffers | Device memory with a CPU shadow; unlock uploads the locked range. |
@@ -224,6 +251,72 @@ The front's `device stats` line gives the rest: `N translated`. Bytecode
 created twice in one run is translated once, so even with the cache off this
 is below the shader count.
 
+## Pipelines built ahead
+
+A pipeline is built the first time a draw needs it. That costs the frame
+from about a millisecond, when the driver's cache has the pipeline, to over a
+hundred, when a cold driver compiles its shaders: the long frames during play
+on both machines were pipeline builds (laptop run 12, PC runs 8 and 11), and
+the first view of a map built 71 pipelines in one frame (PC run 11: 485 ms
+with the caches cold, 103 ms with every one of them a pipeline cache hit).
+`vk_legacy_ahead.cpp` moves that work to worker threads, ahead of the draws:
+
+* **The list.** Each draw that uses a pipeline for the first time in a launch
+  lists it: its two shaders and vertex declaration by a 64-bit hash of their
+  contents (bytecode, declaration elements), and the rest of its key as it is.
+  `DeviceDesc::pipelineListPath` names the file: the D3D9 front puts it beside
+  the pipeline cache, `pipelines.list` next to `pipelines.bin`. A device reads
+  it when it is created and writes it when it goes, through a temporary file
+  renamed over the old one. The file names the GPU (vendor and device id); a
+  list from another GPU, another file version (2 now) or with a wrong checksum is
+  ignored whole.
+* **Building ahead.** When the last shader or declaration a list entry needs
+  is created (the game creates them as it loads a map), the device queues the
+  entry's pipeline to its workers: one for every three CPU threads, at most
+  two (`KISAK_VK_PIPELINE_WORKERS` sets 1 to 8). A worker builds the pixel
+  module (shared between the jobs that need the same one) and the pipeline
+  through the pipeline cache, which Vulkan synchronises; it touches no other
+  device or core state. Entries the device would not make as it stands now
+  (the alpha test or depth compare read at run time, strides baked in where
+  they are dynamic, another depth format, a sample count the GPU lacks) are
+  left alone.
+* **The draw.** A draw whose pipeline is not in the device's table takes what
+  the workers have finished first. If a worker is still building its
+  pipeline the draw waits for it (`aheadWaits`, `aheadWaitMicros`); if the job
+  is only queued, the draw takes it out and builds the pipeline itself, as it
+  would without the list. A draw that finds its pipeline costs nothing extra:
+  the workers' results are only looked at when a pipeline is missing.
+* **Ageing.** An entry no draw used in a launch where its shaders were there
+  gets one launch older; after `kPipelineListAge` (8) such launches it is dropped,
+  so pipelines of an old setting (another anti-aliasing level, a switch) do
+  not stay built for ever. A map that was not loaded does not age its entries.
+* **Copies share.** The game creates many shader objects with the same
+  bytecode. Live shaders translated to the same code, and declarations with
+  the same elements, share one pipeline id (`Shader::pipelineId`,
+  `VertexDecl::pipelineId`), which the pipeline table is keyed by: a copy
+  draws with the pipelines the first one built, and its creation queues
+  nothing new. Pipelines go when the last object holding their id does.
+  Before this, PC run 13 built 1,074 pipelines ahead for a list of 114 and
+  drew 61 of them. The content hash reads 8-byte words (file version 2), since
+  every shader's bytecode is hashed as it is created.
+* **Lifetimes.** Destroying a shader or declaration drops its queued jobs and
+  waits for the ones being built, so no worker reads a shader that is gone.
+  Destroying the device stops the workers, takes their pipelines and writes
+  the list.
+
+`KISAK_VK_PIPELINES_AHEAD=0` builds every pipeline at its first draw again (the
+list is still kept). The statistics: `pipelinesAhead` and `aheadMicros` (the
+workers' pipelines and time, not counted in `pipelines` and
+`pipelineMicros`), `aheadUsed` (those a draw used), the waits above, and
+`pipelinesListed` (entries the file held), `aheadPixelModules` and
+`aheadPixelModuleMicros` (the pixel modules the workers built, as
+`pixelModules` counts those built at draws), and `aheadQueueMicros` (the
+thread creating shaders and declarations, queueing their jobs; for shaders
+also inside `shaderMicros`, which PC run 14 found about twice master's with
+building ahead on: 29 to 31 ms against 14 to 15). A first launch, or the first time
+a map is played, still builds its pipelines at their draws: the list only
+knows what an earlier launch drew.
+
 ## Known limits
 
 These are not needed by the shaders and calls checked so far; each is listed
@@ -239,20 +332,40 @@ so the renderer hookup can see where it stands.
 * Border colours: transparent black, opaque black and opaque white only.
 * Shader model 1.x samplers without a declared type are treated as 2D.
 * Fog, user clip planes, integer and boolean constants and texture-stage state
-  read as zero.
+  read as zero, and there are no point sprites. Translated shaders hold fog,
+  clip planes and point sprites as constants
+  ([Legacy state](vulkan-legacy-shaders.md#legacy-state));
+  `KISAK_VK_LEGACY_STATE=dynamic` reads their blocks instead.
 * `StretchRect` covers what the core can blit or resolve: same-kind colour
   images, a multisampled colour image into a one-sample one, or depth to
   depth with point filtering. Others are skipped with a warning.
 
-## The validation layer and depth compare
+## Depth compare
 
-The Legacy shaders sample every 2D texture through a branch on a uniform: a
-depth-compare sample for depth textures, a plain one otherwise. The validation
-layer checks the compare instruction's format rule
-(`VUID-vkCmdDraw-None-06479`) statically, against colour textures the branch
-never compares, so it reports every textured draw. The core counts that one
-message apart (`CoreStats::validationIgnored`, printed as
-`validation_ignored`), not as an error, and logs it once.
+dxbc-spirv samples every 2D and cube texture through a branch on a uniform:
+a depth-compare sample for a depth texture, a plain one otherwise
+(`SamplerStateBlock::useDepthCompare`). The adapter fixes that branch per
+pipeline instead, as DXVK does: the pixel shader is built per set of samplers
+that have a depth texture bound (`PipelineKey::depthSamplers`, the bound
+textures' depth bits), and `legacy_shader::BuildSpirv` replaces the
+`useDepthCompare` and `drefClamp` loads with constants and removes the branch
+not taken. Most pixel shaders then read no sampler state block at all.
+Vertex shaders are built with no depth samplers (vertex textures are never
+depth-compared here), and the shader cache keeps that module. The pipeline
+kept from the draw before stays only while the depth bits match, so binding
+a depth texture where a colour one was is enough to change it (the
+`shadow_map` scene of the D3D9 front's check does that with nothing else
+changed). On the laptop (run 20) this is worth 11 fps at 4 samples (173.2
+against 162.0) and about 0.4 ms of GPU time a frame, and the pixel shaders'
+median falls from 232 to 157 instructions.
+
+`KISAK_VK_DEPTH_COMPARE=dynamic` keeps the branch, the only way before
+2026-11-11 except on MoltenVK. The validation layer then checks the compare
+instruction's format rule (`VUID-vkCmdDraw-None-06479`) statically, against
+colour textures the branch never compares, so it reports every textured
+draw. The core counts that one message apart (`CoreStats::validationIgnored`,
+printed as `validation_ignored`), not as an error, and logs it once. The
+`device ready:` line says `depth compare fixed` or `dynamic`.
 
 ## MoltenVK (macOS)
 
@@ -267,13 +380,12 @@ targets wide`):
   `VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE` only from macOS 14 on Mac2 or
   Apple4 GPUs, and no Vulkan query says so. The pipeline key carries each
   stream's stride instead, and buffers are bound without strides.
-- **Depth compare fixed per pipeline.** MoltenVK's shader converter
-  (SPIRV-Cross) declares an image sampled both with and without a depth
-  reference as a Metal depth texture, and a depth texture cannot sample colour.
-  So the pixel shader is built per set of samplers that have a depth texture
-  bound (`PipelineKey::depthSamplers`). `legacy_shader::BuildSpirv` replaces
-  the `useDepthCompare` loads with constants and removes the branch not taken.
-  Vertex shaders are built with no depth samplers.
+- **Depth compare fixed per pipeline**, which every device does by default
+  ([Depth compare](#depth-compare)) but MoltenVK cannot do without:
+  `KISAK_VK_DEPTH_COMPARE=dynamic` is ignored there. MoltenVK's shader
+  converter (SPIRV-Cross) declares an image sampled both with and without a
+  depth reference as a Metal depth texture, and a depth texture cannot sample
+  colour.
 - **16-bit render targets as B8G8R8A8.** Metal has the 16-bit packed formats
   only on Apple GPUs, so MoltenVK on Intel and AMD Macs (and the Intel CI VM)
   cannot render to R5G6B5, X1R5G5B5 or A1R5G5B5. A render target in one of
@@ -283,11 +395,18 @@ targets wide`):
   MoltenVK. Copies between such a target and a lockable texture of the D3D9
   format are refused, since the formats differ.
 
-`KISAK_VK_VERTEX_STRIDE=static`, `KISAK_VK_DEPTH_COMPARE=fixed` and
-`KISAK_VK_RENDER_TARGETS=wide` force each path on any device. The Linux
-lavapipe job runs the adapter and D3D9 front checks with all three set, and
-with `KISAK_VK_UNIFORMS=static` (plain uniform buffers, above), with the
-validation layer required.
+`KISAK_VK_VERTEX_STRIDE=static` and `KISAK_VK_RENDER_TARGETS=wide` force the
+other two paths on any device. The Linux lavapipe job runs the adapter and
+D3D9 front checks with both set (and depth compare fixed), and with
+`KISAK_VK_UNIFORMS=static` (plain uniform buffers, above), with the
+validation layer required; it also runs them with
+`KISAK_VK_DEPTH_COMPARE=dynamic`.
+
+A depth clear inside a pass after a draw left the depth as it was through
+MoltenVK 1.4.2 on CI's Apple GPU (2026-11-11), where lavapipe clears it.
+Whole-target clears no longer happen there (they begin the next pass), but a
+depth clear of a rectangle, or of the depth alone on D24S8, after a draw
+still does; no check covers those on MoltenVK.
 
 ## Building and running
 
@@ -313,9 +432,9 @@ statistics, the validation counts, and `legacy_check=passed` or
 | `clear` | A full clear, a scissor-limited clear and a rectangle clear. |
 | `vertex_color` | A shader-model-3 draw with per-vertex colour; a vertex shader constant moving a quad; quad edges on exact pixels. |
 | `half_pixel` | Every one of the 16384 pixels of a full-target quad showing its own texel, so texel centres land on pixel centres. |
-| `texture_levels` | Mip levels uploaded one by one, sampled one by one. |
+| `texture_levels` | Mip levels uploaded one by one, sampled one by one; a single-level texture and the three-level one again in the same slot, so a sampler kept for the wrong texture shows. |
 | `formats` | L8, A8, A8L8, X8R8G8B8, A8B8G8R8, R5G6B5, A1R5G5B5, DXT1 and DXT5 read as D3D9 reads them (formats the device lacks are skipped). |
-| `alpha_test` | Alpha test with GREATER and LESS against a reference. |
+| `alpha_test` | Alpha test with GREATER and LESS against a reference, then turned off (every texel passes), then on again. With the compare fixed in the pipeline, the three draws build two or three pipelines (earlier scenes may have built one) and turning the test back on builds none; read at run time, one pipeline serves them all. |
 | `blend` | Source-alpha blending, separate alpha blend, additive blending with a colour write mask. |
 | `depth` | Depth test, write and compare functions, depth bias. |
 | `stencil` | Stencil REPLACE with colour writes off, then an EQUAL test. |
@@ -343,11 +462,31 @@ several ways: bad arguments exit 2; an unknown scene fails at the `usage`
 stage; one scene runs alone; and a full run passes every scene in order with no
 mismatched pixel, presents every scene, renames the dynamic buffer, finishes
 the event query, counts the occlusion queries (always on lavapipe, never with
-`KISAK_VK_OCCLUSION_QUERIES=0`), builds pipelines and has no validation
-errors. The
+`KISAK_VK_OCCLUSION_QUERIES=0`), makes some clears load operations (none
+with `KISAK_VK_PASS_CLEARS=0`), builds pipelines and has no validation
+errors. The `pass_clear` scene checks which clears become load operations:
+depth and colour before a draw merge into one, a depth clear after a draw
+begins the next pass, and a depth clear that keeps the stencil, a rectangle
+and part of the viewport stay in the pass; its pixels are the same either
+way. The
 `shader_cache` scene translates two shaders, takes one again from memory,
 writes and reads back a cache file in the temporary directory, draws with the
-shaders read from it, and checks that a damaged file is refused.
+shaders read from it, and checks that a damaged file is refused. The check's
+device keeps a pipeline list in the temporary directory, so every scene lists
+what it draws. The `pipelines_ahead` scene draws three pipelines with shaders
+of its own, writes the list, reads it back and creates the shaders again: the
+workers build the three before any draw (none built at a draw, three used,
+the same pixels). Its pixel shader reads c1, so no shader the device keeps
+shares its pipelines. A second copy of that shader draws without building
+anything, and the first keeps its pipelines when the copy goes. It then
+destroys the pixel shader, creates it again and destroys it at once, while
+its jobs are queued or being built, draws with a fresh one before the workers
+are done (the draw waits for a pipeline being built, or builds a queued one
+itself), ages the entries out with eight launches that do not draw them, and
+checks that a damaged file is refused. The script checks that the scene's
+pipelines were built ahead and used (none with
+`KISAK_VK_PIPELINES_AHEAD=0`). ThreadSanitizer runs it with the other scenes
+in CI.
 
 The hosted CI job `vulkan_window` (Linux) builds the check for x86_64 in Debug
 and RelWithDebInfo, runs `gen_legacy_check_shaders.py --check`, and runs that
@@ -399,7 +538,9 @@ kept anything it was 4,626: a draw without kept state writes and records what
 it did then, and the newer code spends a little less on doing so. On the
 Windows PC (PC run 8, RTX 2080 SUPER, hosted Win32 Debug build, mp_crash with
 12 bots) the game ran at 171.2 frames a second with the state kept and 160.8
-without, writing 101 KB and 454 KB of constants a frame.
+without, writing 101 KB and 454 KB of constants a frame. In the Release
+build (PC run 9) it ran at 451.2 and 462.0 with the state kept and 435.6
+without.
 
 Descriptor sets kept across frames (2026-11-10, same sandbox): `bench_runs`
 writes no set a frame with the kept state where it wrote 95 of its 768 draws'
@@ -411,6 +552,22 @@ front's `kept_state` scene checks that the frame drawn after the one without
 the kept state writes no set. In PC run 8 the game wrote no set a frame with
 the kept state (about 850 reused) against 227 without, kept 1,386 to 1,695
 sets, and gave them all up once a launch, at the map's load.
+
+Clears as load operations (2026-11-10, same sandbox, 22 scenes with
+`pass_clear`): laptop run 14 timed the GPU's work with Mesa's `INTEL_MEASURE`
+and found ANV's slow colour and depth clears, about 2 of each a frame,
+taking about 2.7% of the GPU time on mp_crash; the adapter's clears were all
+`vkCmdClearAttachments` then. Now 29 of the check's 37 clears are load
+operations (none with `KISAK_VK_PASS_CLEARS=0`), and every scene's pixels are
+the same either way. The check passes in Debug and RelWithDebInfo with
+validation under the switch sets above and with the switch off, the D3D9
+front's check too, both under ThreadSanitizer, and the i386 build. Two lines
+were taken out in turn: without the one that marks a pass drawn to, a depth
+clear after a draw wiped the colour drawn before it (`near_quad`); without
+the stencil rule, a depth clear on D24S8 became a load operation that would
+clear the stencil too. On the laptop (run 15) about 60% of mp_crash's clears
+became load operations and the frame rate did not move beyond the run's
+noise, either way.
 
 Laptop run 1 (2026-11-08, Intel RPL-U iGPU, Mesa 25.0.7 ANV, x86_64 and i386
 RelWithDebInfo, SDL offscreen and Wayland, no validation layer installed): all

@@ -1264,9 +1264,13 @@ struct IdentityCase
 
 static const IdentityCase kIdentityCases[] = {
     { "1", true, 1ULL },
-    // A uint64 decimal identity fits in 20 digits; overlong zero-padded
-    // spellings are refused rather than truncated into the 33-byte GUID field.
-    { "00000000000000000001", true, 1ULL },
+    // One spelling per identity: a leading zero is refused at any length, so a
+    // padded SteamID64 is never a second ban key for the same player.
+    { "00000000000000000001", false, 0ULL },
+    { "01", false, 0ULL },
+    { "076561197960287930", false, 0ULL },
+    { "0076561197960287930", false, 0ULL },
+    { "10", true, 10ULL },
     { "000000000000000000001", false, 0ULL },
     { "0000000000000000000001", false, 0ULL },
     { "0000000000000000000000000000000000000001", false, 0ULL },
@@ -1639,7 +1643,7 @@ static void TestGetChallengeIdentityLength()
     // Exactly 20 digits is the longest accepted identity and must be stored in
     // full: the GUID field is 33 bytes and I_strncpyz() would otherwise cut an
     // overlong identity short.
-    const char *twentyDigits = "00000000000000000001";
+    const char *twentyDigits = "18446744073709551615";
     int token = IssueChallenge(from, kGoodTicket, twentyDigits);
     Check(token > 0, "a 20-digit identity is accepted");
     int slot = FindSlot(from);
@@ -1648,9 +1652,11 @@ static void TestGetChallengeIdentityLength()
         CheckText(SlotIdentity(slot), twentyDigits,
                   "the accepted 20-digit identity is stored without truncation");
 
-    // 21 digits, and a long zero-padded spelling: refused as malformed input,
-    // never truncated into a challenge record.
+    // A zero-padded spelling of any length: refused as malformed input, never
+    // stored and never truncated into a challenge record.
     const char *cases[] = {
+        "076561197960287930",
+        "00000000000000000001",
         "000000000000000000001",
         "0000000000000000000000000000000000000001",
         "00000000000000000000000000000000000000000000000001",
@@ -2757,6 +2763,14 @@ static void TestGetChallengeRetailGuidDisabled()
     CheckEq(R.steamChecks, 0, "a refused retail GUID never reaches the Steam backend");
     CheckEq(static_cast<long long>(R.banCheckedIdentities.size()), 0,
             "a refused retail GUID never reaches the ban check");
+    // The operator sees the refusal too: the address and the reason the client
+    // got, on the always-printed channel, once, and without the GUID.
+    CheckEq(static_cast<long long>(R.alwaysPrinted.size()), 1, "the refusal prints one console line");
+    CheckText(R.alwaysPrinted.empty() ? std::string() : R.alwaysPrinted[0],
+              "rejected connection from 203.0.113.7:28000: This server requires Steam authentication; "
+              "unverified retail GUIDs are not accepted.\n",
+              "the console line names the address and the reason");
+    Check(!AnyLineContains(R.printed, kRetailGuid), "the refused GUID is not printed");
 
     // A 32-hex field is also valid base64, so this proves the retail branch was
     // taken and nothing was decoded as a Steam ticket.
@@ -2887,6 +2901,15 @@ static void TestGetChallengeRetailGuidMalformed()
         std::string label = std::string("retail GUID \"") + Escape(bad[i]) + "\"";
         int token = IssueRetailChallenge(from, bad[i]);
         CheckText(LastOob(), kMalformedGuidMessage, label + " is refused as malformed");
+        // Only the server's own reason reaches the console, never the field.
+        // (Turning the switch on printed its warning first.)
+        long long rejections = 0;
+        for (const std::string &line : R.printed)
+            rejections += line.find("rejected connection") != std::string::npos;
+        CheckEq(rejections, 1, label + " prints one rejection line");
+        CheckText(R.alwaysPrinted.empty() ? std::string() : R.alwaysPrinted.back(),
+                  "rejected connection from 203.0.113.7:28000: Malformed GUID authentication fields.\n",
+                  label + " is logged with the reason only");
         CheckEq(static_cast<long long>(token), -1, label + " gets no token");
         Check(AllChallengesZeroed(), label + " allocates no challenge slot");
         CheckEq(R.steamChecks, 0, label + " never reaches the Steam backend");
@@ -3235,8 +3258,10 @@ static int ConnectPlayer(netadr_t from, int qport, const char *identity = kGoodI
 static void TestIdentitiesMatch()
 {
     Check(SV_IdentitiesMatch("76561197960287930", "76561197960287930"), "the same SteamID64 matches");
-    Check(SV_IdentitiesMatch("076561197960287930", "76561197960287930"), "a zero-padded spelling is the same SteamID64");
-    Check(SV_IdentitiesMatch("00000000000000000001", "1"), "twenty digits with zeros is the same SteamID64");
+    // A zero-padded spelling is not a SteamID64 (SV_GetChallenge never stores
+    // one), so it is only ever equal to its own text.
+    Check(!SV_IdentitiesMatch("076561197960287930", "76561197960287930"), "a zero-padded spelling is not the SteamID64");
+    Check(!SV_IdentitiesMatch("00000000000000000001", "1"), "twenty digits with zeros is not the SteamID64");
     Check(!SV_IdentitiesMatch("76561197960287930", "76561197960287931"), "different SteamID64s do not match");
     Check(SV_IdentitiesMatch(kRetailGuid, kRetailGuid), "the same GUID matches");
     Check(!SV_IdentitiesMatch(kRetailGuid, "9fa4b618b026886e7fe966bb184ae771"), "different GUIDs do not match");
@@ -3363,12 +3388,12 @@ static void TestSteamRejectionBeforeConnect()
     CheckText(LastOob(), "error\nEXE_BAD_CHALLENGE", "a connect after the negative verdict is refused");
     Check(!ClientIsConnected(0), "nobody connected after the negative verdict");
 
-    // A zero-padded spelling of the same SteamID64 is the same player.
+    // A zero-padded spelling gets no challenge, so no record can hide from
+    // the verdict under another spelling.
     ResetWorld();
     token = IssueChallenge(from, kGoodTicket, "076561197960287930");
-    Check(token > 0, "a challenge was issued for the zero-padded spelling");
-    SV_OnSteamAuthRejected(kGoodSteamId);
-    Check(AllChallengesZeroed(), "the verdict forgot the zero-padded record too");
+    Check(token < 0, "no challenge for a zero-padded spelling");
+    Check(AllChallengesZeroed(), "and no record");
 
     // It never touches GUID players or other SteamID64s.
     ResetWorld();
@@ -3509,6 +3534,35 @@ static void TestSteamRejectionDuringTicketCheck()
     Check(!ClientIsConnected(0), "nobody connected without a session");
 }
 
+static void TestBanCoversEverySpelling()
+{
+    // The ban lists compare the identity as text. A ticket is checked against
+    // the number, so if "0765..." were accepted as the player "765...", each
+    // padded spelling would be a fresh name with the same valid ticket.
+    netadr_t from = MakeAdr(203, 0, 113, 7, 28000);
+    SV_BanGuidBriefly(kGoodIdentity);
+    int token = IssueChallenge(from);
+    Check(token < 0, "the banned SteamID64 gets no challenge");
+    CheckText(LastOob(), "error\x0a\x15" "You are temporarily banned from this server",
+              "the banned SteamID64 is told it is banned");
+
+    const std::string padded[] = {
+        std::string("0") + kGoodIdentity,
+        std::string("00") + kGoodIdentity,
+        std::string("000") + kGoodIdentity,
+    };
+    for (size_t i = 0; i < sizeof(padded) / sizeof(padded[0]); ++i)
+    {
+        R.oob.clear();
+        token = IssueChallenge(from, kGoodTicket, padded[i].c_str());
+        std::string label = FormatVa("%u leading zero(s)", static_cast<unsigned>(i + 1));
+        Check(token < 0, label + ": the banned player gets no challenge");
+        CheckText(LastOob(), "error\nMalformed Steam authentication fields.", label + ": refused as malformed");
+        CheckEq(R.steamChecks, 0, label + ": the ticket never reaches the backend");
+        Check(AllChallengesZeroed(), label + ": no challenge record");
+    }
+}
+
 static void TestOnePendingChallengePerSteamId()
 {
     // Two requests for one SteamID64 from two addresses, both with tickets the
@@ -3557,7 +3611,7 @@ static void TestDropKeepsSharedSession()
     svs.clients[1].header.state = CS_ACTIVE;
     svs.clients[1].header.netchan.remoteAddress = MakeAdr(203, 0, 113, 7, 28002);
     I_strncpyz(svs.clients[1].name, "player", sizeof(svs.clients[1].name));
-    I_strncpyz(svs.clients[1].cdkeyHash, "076561197960287930", sizeof(svs.clients[1].cdkeyHash));
+    I_strncpyz(svs.clients[1].cdkeyHash, kGoodIdentity, sizeof(svs.clients[1].cdkeyHash));
     dvar_dedicated.current.integer = 1;
 
     SV_DropClient(&svs.clients[0], "EXE_TIMEDOUT", false);
@@ -3644,6 +3698,7 @@ int main(void)
     Run("Steam rejection: stale slots", TestSteamRejectionSkipsStaleSlots);
     Run("SV_GetChallenge: SteamID64 already connected", TestGetChallengeForConnectedSteamId);
     Run("Steam rejection: during the ticket check", TestSteamRejectionDuringTicketCheck);
+    Run("SV_GetChallenge: a ban covers every spelling", TestBanCoversEverySpelling);
     Run("SV_GetChallenge: one pending challenge per SteamID64", TestOnePendingChallengePerSteamId);
 
     printf("\n%i checks, %i failures\n", g_checks, g_failures);

@@ -43,6 +43,7 @@ endif()
 message(STATUS "----- KisakCOD Vulkan Legacy adapter (opt-in) -----")
 
 add_library(kisak_gfx_vk_legacy STATIC
+    "${SRC_DIR}/gfx_vk/legacy/vk_legacy_ahead.cpp"
     "${SRC_DIR}/gfx_vk/legacy/vk_legacy_device.cpp"
     "${SRC_DIR}/gfx_vk/legacy/vk_legacy_draw.cpp"
     "${SRC_DIR}/gfx_vk/legacy/vk_legacy_resources.cpp"
@@ -79,7 +80,7 @@ if(WIN32 OR TARGET kisak_linux_native_d3d9)
         "${SRC_DIR}/gfx_vk/d3d9/vk_d3d9_direct3d.cpp"
         "${SRC_DIR}/gfx_vk/d3d9/vk_d3d9_resources.cpp")
     add_library(kisak_gfx_vk_d3d9 STATIC ${vk_d3d9_sources})
-    target_link_libraries(kisak_gfx_vk_d3d9 PUBLIC kisak_gfx_vk_legacy)
+    target_link_libraries(kisak_gfx_vk_d3d9 PUBLIC kisak_gfx_vk_legacy kisak_gfx_vk_modern)
     target_include_directories(kisak_gfx_vk_d3d9 PUBLIC "${SRC_DIR}")
     target_compile_options(kisak_gfx_vk_d3d9 PRIVATE ${KISAK_VULKAN_WARNINGS})
     if(MSVC)

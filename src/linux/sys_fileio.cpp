@@ -6,6 +6,7 @@
 #endif
 
 #include <linux/sys_fileio.h>
+#include <linux/sys_path_case.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -131,8 +132,8 @@ namespace
 
     // The engine writes Windows paths ("main\\zone\\mp_ui.ff"). Backslashes are
     // translated only here, at the syscall boundary, and the name is otherwise
-    // left byte-for-byte: Linux filesystems are case-sensitive, so folding case
-    // would make content lookup depend on the filesystem's behaviour.
+    // left byte-for-byte. Case is matched afterwards, only where Windows would
+    // find a file the path does not name exactly (CreateFileA, sys_path_case.h).
     bool NormalizePath(const char *path, char *out, size_t outSize)
     {
         if (!path || !*path || outSize == 0)
@@ -292,7 +293,25 @@ HANDLE CreateFileA(
         return INVALID_HANDLE_VALUE;
     }
 
-    const int fd = open(normalized, openFlags, 0644);
+    // Windows names ignore case. A file that would be created goes where an
+    // existing one spelled differently already is, and a file or folder that is
+    // not found as written is looked for ignoring case (sys_path_case.h).
+    char matched[sizeof(normalized)];
+    const char *openPath = normalized;
+    if ((openFlags & O_CREAT) && Sys_MatchPathCase(normalized, matched, sizeof(matched)))
+        openPath = matched;
+    int fd = open(openPath, openFlags, 0644);
+    if (fd < 0 && (errno == ENOENT || errno == ENOTDIR) && openPath == normalized)
+    {
+        const int notFound = errno; // the matching below sets errno itself
+        if (Sys_MatchPathCase(normalized, matched, sizeof(matched)))
+        {
+            openPath = matched;
+            fd = open(openPath, openFlags, 0644);
+        }
+        else
+            errno = notFound;
+    }
     if (fd < 0)
     {
         SetLastError(ErrnoToWin32(errno));
@@ -360,7 +379,18 @@ BOOL DeleteFileA(const char *path)
         return FALSE;
     }
 
-    if (unlink(normalized) != 0)
+    int result = unlink(normalized);
+    if (result != 0 && (errno == ENOENT || errno == ENOTDIR))
+    {
+        // As CreateFileA: the file as Windows would find it, ignoring case.
+        const int notFound = errno;
+        char matched[sizeof(normalized)];
+        if (Sys_MatchPathCase(normalized, matched, sizeof(matched)))
+            result = unlink(matched);
+        else
+            errno = notFound;
+    }
+    if (result != 0)
     {
         SetLastError(ErrnoToWin32(errno));
         return FALSE;
@@ -1048,16 +1078,59 @@ namespace
         WriteFile(file, payload, sizeof(payload), &written, nullptr);
         CloseHandle(file);
 
-        // Case must be preserved: the same path with different case is a
-        // different file on a case-sensitive filesystem and must not resolve.
+        // As on Windows, a path that differs only in case opens the same file
+        // (sys_path_case.h), on a case-sensitive file system too.
         char wrongCase[512];
         snprintf(wrongCase, sizeof(wrongCase), "%s\\SUB\\WINDOWS.BIN", s_dir);
         HANDLE cased = CreateFileA(wrongCase, GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        Check(cased != INVALID_HANDLE_VALUE, "a path differing only in case opens the file");
         if (cased != INVALID_HANDLE_VALUE)
         {
+            char readBack[sizeof(payload)] = {};
+            DWORD read = 0;
+            ReadFile(cased, readBack, sizeof(readBack), &read, nullptr);
+            Check(read == sizeof(payload) && memcmp(readBack, payload, sizeof(payload)) == 0,
+                  "the file opened ignoring case is the one written");
             CloseHandle(cased);
-            printf("  note: filesystem is case-insensitive; case-sensitivity check skipped\n");
         }
+
+        // Creating a file in a folder spelled differently uses the existing
+        // folder, and creating one spelled like an existing file reuses it.
+        char createdPath[512];
+        snprintf(createdPath, sizeof(createdPath), "%s\\Sub\\Created.bin", s_dir);
+        HANDLE created = CreateFileA(createdPath, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, 0, nullptr);
+        Check(created != INVALID_HANDLE_VALUE, "a file is created through a folder spelled differently");
+        if (created != INVALID_HANDLE_VALUE)
+            CloseHandle(created);
+        char landed[512];
+        snprintf(landed, sizeof(landed), "%s/sub/Created.bin", s_dir);
+        struct stat landedInfo;
+        Check(stat(landed, &landedInfo) == 0, "the created file is in the existing folder, named as asked");
+        snprintf(createdPath, sizeof(createdPath), "%s\\sub\\CREATED.BIN", s_dir);
+        created = CreateFileA(createdPath, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, 0, nullptr);
+        Check(created != INVALID_HANDLE_VALUE, "an existing file spelled differently is opened for rewriting");
+        if (created != INVALID_HANDLE_VALUE)
+            CloseHandle(created);
+        // Counted from the folder's listing: on a file system that ignores
+        // case itself (macOS by default) a stat of either spelling succeeds.
+        int spellings = 0;
+        snprintf(landed, sizeof(landed), "%s/sub", s_dir);
+        if (DIR *listing = opendir(landed))
+        {
+            for (const struct dirent *entry = readdir(listing); entry; entry = readdir(listing))
+                spellings += strcasecmp(entry->d_name, "created.bin") == 0;
+            closedir(listing);
+        }
+        Check(spellings == 1, "no second file differing only in case is made");
+        snprintf(landed, sizeof(landed), "%s/sub/Created.bin", s_dir);
+        unlink(landed);
+
+        // A name that matches nothing still fails as not found.
+        char missing[512];
+        snprintf(missing, sizeof(missing), "%s\\SUB\\absent.bin", s_dir);
+        HANDLE absent = CreateFileA(missing, GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        Check(absent == INVALID_HANDLE_VALUE && GetLastError() == ERROR_FILE_NOT_FOUND,
+              "a missing file is still not found");
 
         char posixPath[512];
         snprintf(posixPath, sizeof(posixPath), "%s/sub/windows.bin", s_dir);

@@ -1,7 +1,7 @@
 # What hosted CI runs, and when
 
 Hosted runners cost this public repository nothing, but the account runs about
-20 jobs at a time (5 on macOS). One full run is about 43 jobs and 150 runner
+20 jobs at a time (5 on macOS). One full run is about 36 jobs and 150 runner
 minutes (Linux 74, Windows 43, macOS 30), so with a dozen pull requests open
 the checks of each wait for the others. The rules below keep a pull request's
 run to what is likely to tell something new, and leave the full run to master.
@@ -14,7 +14,7 @@ of them.
 | Linux workflow | every job; the window jobs on SDL3 only | every job, SDL2 and SDL3 |
 | Windows | Win32 Debug and Release, Vulkan probe, regression checks | also MSVC x64 and MSVC ARM64 |
 | macOS | Apple silicon (arm64) | also Intel (x86_64) |
-| PS Vita workflow | dedicated server and client, Debug and RelWithDebInfo, and the port's host tests | the same |
+| PS Vita workflow | dedicated server and client, each one job building Debug and RelWithDebInfo, and the port's host tests | the same |
 | Upstream patch queue | only when `docs/upstream` or its tool changes: the patches apply, and the patched upstream tree builds with MSVC | the same |
 
 - **Drafts.** No job runs while a pull request is a draft. Marking it ready for
@@ -30,16 +30,21 @@ of them.
 - **Paths.** A workflow starts only when a changed path can reach it. The
   Windows workflow skips documentation, the Linux, macOS and PS Vita ports' own
   sources and tests, and the test machines' run scripts; the macOS workflow
-  skips the PS Vita port's sources. The filters look at the whole pull request,
-  not the last push.
-- **PS Vita.** The port's four build jobs and its host tests are their own
+  skips the PS Vita port's sources. The test machines' run scripts
+  (`scripts/runs`, `tests/runs`, `test_perf_run.py`, `test_vita3k_runner.py`)
+  start only the one-job **Machine run scripts** workflow (`run-scripts.yaml`);
+  on 2026-11-10 a PowerShell-only change had started 26 Linux and PS Vita
+  jobs. The filters look at the whole pull request, not the last push.
+- **PS Vita.** The port's two build jobs and its host tests are their own
   workflow (`build-kisakcod-vita.yaml`; they were part of the Linux one). A
   change to the port's own files only (`src/vita`, `src/gfx_gxm`,
   `scripts/platform/vita`, `tests/vita_*`, `scripts/tests/test_vita_*.py`,
-  `scripts/ci/install-vitasdk.sh`) starts that workflow alone: four jobs
+  `scripts/ci/install-vitasdk.sh`) starts that workflow alone: two jobs
   where a push used to start about thirty Linux jobs that neither compile nor
-  read those files. A change to shared source starts both. The `.vpk`
-  artifacts keep their names; fetch them from the run of the **PS Vita server
+  read those files. A change to shared source starts both. Each job builds
+  Debug and RelWithDebInfo (below) and uploads the RelWithDebInfo `.vpk`; the
+  artifacts keep their names (`KisakCOD-dedi-vita-RelWithDebInfo`,
+  `KisakCOD-mp-vita-RelWithDebInfo`); fetch them from the run of the **PS Vita server
   and client** workflow (`gh run list --workflow build-kisakcod-vita.yaml`).
   A new host test for the port goes in the Vita client job, and a file a
   Linux job needs must not sit under those paths; `CiTriggerTests` checks
@@ -50,9 +55,16 @@ of them.
   request they scan only the units the change can reach (`--changed-since
   HEAD^1`, `scripts/tools/changed_units.py`): those whose dependency list in
   the job's own Ninja build holds a changed file. They scan everything when
-  the reach is not known (a CMake file, the tools, their allow lists or the
-  Linux workflow changed, or a changed header is named in an `#include` but in
-  no compiled unit's list), and always on master.
+  the reach is not known (a CMake file, the tools or their allow lists
+  changed, a changed header is named in an `#include` but in no compiled
+  unit's list, or the Linux workflow changed in a way that can alter the
+  scanned build), and always on master. A workflow change counts only in its
+  top-level settings other than the triggers, the concurrency group and the
+  permissions, and in a job that runs one of the scans; a change to the
+  triggers or to any other job does not (`changed_units.py`,
+  `WorkflowTests`). On 2026-11-10 PR 213 changed neither, yet the old rule
+  ran both scans over the whole tree and its x86_64 client job took 45
+  minutes instead of about 10.
 - **Newer pushes.** A newer push to a pull request cancels that pull request's
   older run. A master run is not cancelled once it is in progress: later merges
   wait behind it, and of those only the newest is kept, so master runs neither
@@ -60,18 +72,52 @@ of them.
   an hour's queue, five master runs in a row were cancelled before they
   finished). The PS Vita workflow goes further: every master run of it
   finishes, so each merge that changes the port keeps its vpk for console runs.
-- **One runner for a quick pair.** The account's runners go to the waiting
-  runs in turn, so under load a push finishes later for every job it has, even
-  a one-minute job (measured on 2026-11-10: 27 Linux jobs, 16 of them under
-  2.5 minutes, each waiting 12 to 77 minutes for a runner). The free camera,
-  world surface and world front-end checks and the aarch64 and armv7
-  dedicated servers therefore run Debug and RelWithDebInfo in one job each,
-  one after the other (`scripts/ci/each-config.sh`, tested by
-  `test_ci_each_config.py`): 22 Linux jobs on a pull request instead of 27.
-  The second configuration still runs when the first fails, and either
-  failure fails the job. A new check that takes a minute or two per
-  configuration should do the same instead of adding a matrix; a long build
-  keeps its matrix, since there one runner per configuration saves time.
+- **One runner for both configurations.** The account's runners go to the
+  waiting runs in turn, so under load a push finishes later for every job it
+  has, even a one-minute job (measured on 2026-11-10: 27 Linux jobs, 16 of them
+  under 2.5 minutes, each waiting 12 to 77 minutes for a runner). So every
+  Linux job that took a few minutes per configuration builds and tests Debug
+  and then RelWithDebInfo itself: the SDL window, the native D3D9 boundary,
+  the D3D9 device probe, the Vulkan window probe, the free camera, world
+  surface and world front-end checks, the x86_64, aarch64 and armv7
+  dedicated servers, and the PS Vita server and client. A pull request starts 17 Linux jobs, where it started 27.
+  Each step that depends on the configuration hands its commands to
+  `scripts/ci/each-config.sh` (tested by `test_ci_each_config.py`), which runs
+  them for both with `$config` set, keeps going when the first fails, and fails
+  the step when either did. A failed step stops the job's later steps, for
+  both configurations; the first failure is the one to fix. Steps that do not
+  depend on the configuration (installs, fetches, contract tests) now run once.
+  A step that was Debug only sets `config=Debug` itself. The native Linux build
+  and the long client and census jobs keep one runner per configuration, since
+  there two runners save more time than they wait. A new check that takes a
+  minute or two per configuration should use the helper instead of a matrix,
+  and `assert_both_configurations_in_one_job` in
+  `test_linux_window_workflow.py` pins each such job.
+  The native job's contract tests (`Check test-runner configuration and
+  failure handling`, about 3 minutes) read sources, not the build, so they run
+  in the Debug leg only. The multiplayer and singleplayer compile censuses
+  (about 5 minutes each) are separate jobs, `client_census` and `sp_census`,
+  so they run side by side. The macOS dedicated server does the same, one
+  job per architecture: GitHub runs five macOS jobs at a time and on 2026-11-10 never started a third of
+  the `macos-26` jobs (the Intel pool lost one in twenty; `macos-15` for arm64 was no better in a trial,
+  PR 221, closed), so every macOS job saved is one fewer to wait for. A cancelled macOS arm64 job that has no
+  log never ran: it is no result, not a failure.
+- **Before you push.** Run `python3 scripts/tests/run_pre_push_checks.py`: it runs, four at a time, the
+  Linux bootstrap test, the runner self-tests, the workflow contract test and the CI script tests, plus
+  `run_linux_checks.py` when `build-linux/` and `bin/KisakCOD-dedi` exist (about two minutes in all, mostly
+  that last one; pass `--list` to see the set). A red push costs a whole queue wait, so a failure found here
+  is the cheapest one. Local results are not CI evidence.
+- **Package installs.** Every Linux job installs through `scripts/ci/apt-install.sh`: Ubuntu's main
+  archive instead of the runner's slow Azure mirror, packages cached between runs, and the refresh and
+  install tried again (up to four attempts, waiting 20, 40 and 60 s) when they fail, since on 2026-11-11
+  hosted runners lost name lookups for a minute and six jobs of one run died at `apt-get install` with
+  exit 100. A longer outage (2026-11-11, about 14:40 to 17:00 UTC) showed that some runners resolve no
+  ubuntu.com name at all, Azure's included, while other runners of the same run installed fine. So when `archive.ubuntu.com` does not resolve, `apt-install.sh` points the
+  default network link at public resolvers (1.1.1.1, 8.8.8.8) before each attempt. Whether that works on
+  a hosted runner is unverified until a runner with broken lookups logs "resolves through public
+  resolvers". (An earlier version of the mirror rewrite skipped the runners' own list because it already
+  named the main archive; that left the slow Azure mirror first and one install step timed out.)
+  `test_ci_apt_install.py` pins it.
 
 Decided by the project owner on 2026-11-10 (drafts, Windows ARM64, Intel macOS)
 and 2026-11-03 (SDL2 after a merge, path filters, cancelling). Both build

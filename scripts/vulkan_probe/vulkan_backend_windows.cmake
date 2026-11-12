@@ -48,7 +48,8 @@ endif()
 # The game links the static C runtime (scripts/pre_build.cmake); so must the
 # libraries it links.
 foreach(kisak_vulkan_library IN ITEMS
-        kisak_gfx_vk kisak_dxbc_spirv kisak_vk_legacy_shader kisak_gfx_vk_legacy kisak_gfx_vk_d3d9)
+        kisak_gfx_vk kisak_gfx_vk_modern kisak_dxbc_spirv kisak_vk_legacy_shader kisak_gfx_vk_legacy
+        kisak_gfx_vk_d3d9)
     set_property(TARGET ${kisak_vulkan_library} PROPERTY
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endforeach()

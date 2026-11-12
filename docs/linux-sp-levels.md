@@ -79,7 +79,10 @@ python3 scripts/tests/run_linux_sp_level_sweep.py "$GAME" --binary "$BUILD/Kisak
   third. A black or one-colour screen shows up with nobody watching, and a
   level whose row stands apart from the others is worth a look. The images
   are game output: they stay on the machine (`--delete-screenshots` removes
-  each one once it is measured).
+  each one once it is measured). The tool puts the window at 0,0
+  (`vid_xpos`, `vid_ypos`), because the game refuses a screenshot from a
+  window partly off its monitor, which the default position 3,22 caused on
+  the laptop's scaled screen and under Xvfb.
 - `--death-retry` adds, last in each level, `kill`, a wait for the retry's
   load (the game starts `loadgame_continue` by itself 3 seconds after the
   death), a hold and the `mapname` question again. The retry loads the last
@@ -243,3 +246,70 @@ the game. A local run, not CI evidence.
 - Engine messages as in run 1: hunted "Max scene drawsurfs exceed" twice,
   ac130 "Too many visible static models" 5 times, airplane "couldn't find
   path to goal" 3 times.
+
+## Vulkan run 1 (laptop, x86_64, 2026-11-10)
+
+Master 5e2e574, x86_64 RelWithDebInfo with the four Vulkan options and the
+singleplayer game, movies on, sound off, `--hold 60 --screenshot`. A local
+run beside other laptop work, not CI evidence.
+
+| Level | Back end | Steps | Load | Frame (mean, not black, colours) |
+| --- | --- | --- | --- | --- |
+| killhouse | DXVK | all seen, exit 0 | 11.7 s | 74, 99 %, 666 |
+| cargoship | DXVK | all seen, exit 0 | 16.0 s | 58, 79 %, 671 |
+| killhouse | Vulkan | all seen, exit 0 | 45.9 s | 77, 100 %, 677 |
+| cargoship | Vulkan | all seen, exit 0 | 19.3 s | 42, 62 %, 594 |
+| blackout | Vulkan | all seen, exit 0 | 32.7 s | 54, 100 %, 431 |
+| ac130 | Vulkan | all seen, exit 0 | 9.1 s | 107, 99 %, 210 |
+| airplane | Vulkan | all seen, exit 0 | 7.2 s | 90, 85 %, 603 |
+
+- No line with "unsupported" or `VK_` in any Vulkan log; each ends with "0
+  validation errors, 0 warnings", but validation was off, so that says
+  little.
+- killhouse's long Vulkan load is the first run: it translated 575 shaders
+  (11.2 s) and built 138 pipelines (22.6 s) from nothing; later levels reuse
+  the caches.
+- cargoship's Vulkan frame is darker than its DXVK frame. One frame each,
+  taken at a fixed time in a level with a storm, so it says nothing yet;
+  nobody has looked at the images.
+- Frame rates (killhouse 25.8, cargoship 30.2, blackout 23.8, ac130 99.3,
+  airplane 103.1 fps) ran beside other work on the laptop and are not a
+  measurement.
+
+## Vulkan sweep, all 21 levels (PC, Linux in WSL, x86_64, 2026-11-11)
+
+Master d2735ed6, x86_64 RelWithDebInfo with the four Vulkan options, the
+singleplayer game and movies, run under Xvfb in WSL on Mesa's software
+Vulkan device (llvmpipe), not a GPU. `--levels all --hold 60 --screenshot
+--set r_backend vulkan`. A local correctness run, shared with other PC work,
+not CI evidence; its speeds say nothing about a GPU.
+
+- All 21 levels load (21 to 85 s), hold 60 s, answer the console and quit
+  with exit 0. No assertion, no error, no crash, no hang.
+- No line with "unsupported", `VK_` or "validation error" in any log beyond
+  the usual start-up and shut-down lines; every level ends with "Vulkan:
+  device destroyed after N frames (0 skipped), 0 validation errors, 0
+  warnings". The validation layers are not installed there, so that last
+  part says little.
+- The only warnings are the engine's own, in village_assault and
+  scoutsniper (a `WIN_COMPUTER_CHANGE_TITLE` popup warning and the profile
+  confirmation dialog this platform does not have).
+- Five frames at 60 s were nearly one colour: ac130 and village_defend
+  black, killhouse, cargoship and launchfacility_b white. All five are the
+  level's opening. On llvmpipe the Vulkan path draws about one frame a
+  second once a level is up, and the singleplayer game slows its clock
+  when a frame takes longer than `com_maxFrameTime` (100 ms by default), so
+  60 s of hold is only a few seconds of the level. With 180 s ac130,
+  killhouse, cargoship and launchfacility_b show a full scene (killhouse
+  then matches DXVK's frame: 72 against 66 mean, 920 against 939 colours).
+- village_defend took longest: still the opening title card at 180 s, and
+  at 60 s even with `--set com_maxFrameTime 5000`, while DXVK on the same
+  device shows the scene at 60 s. With a 420 s hold Vulkan shows the same
+  scene as DXVK, nothing missing (mean 105, 1393 colours). Turning off the
+  kept draw state, occlusion queries, the record thread or packed render
+  targets changed nothing at 60 s, so the back end is not at fault; it is
+  slower than DXVK on llvmpipe.
+- In WSL every frame is 1920x1080 on both back ends: Xvfb offers only that
+  mode, so the tool's `r_mode 1280x720` is refused.
+
+For a frame worth comparing on a software device, hold for minutes, not 60 s.

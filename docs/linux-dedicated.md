@@ -88,8 +88,10 @@ cross-build.
 
 Gameplay requires legally obtained COD4 data, including the small configuration
 and localization files as well as the MP fastfiles. Keep the original directory
-layout. The native server uses case-sensitive filesystem lookups; it translates
-engine path separators but does not case-fold filenames. Raw source-asset mode
+layout. File names are matched as on Windows: a file or folder that is not
+found as written is looked for ignoring case (`src/linux/sys_path_case.h`), so
+`Mods/MyMod`, `Main/` or a mixed-case fastfile name still load, and a file the
+engine writes goes into an existing folder spelled differently. Raw source-asset mode
 (`useFastFile 0`) is explicitly rejected by this target.
 
 Without assets, the expected result is a nonzero exit during real engine
@@ -569,6 +571,12 @@ practical consequences:
   verifies Steam tickets ([guide](linux-steam.md)).
 - **KisakCOD clients without Steam** send the same two-field request, with a
   GUID derived from the player's key code ([key codes](key-codes.md)).
+- **Refusals are logged.** Every `getchallenge` the server turns away before
+  issuing a challenge prints `rejected connection from <address>: <reason>`, the
+  reason being the text the client got (for example "This server requires Steam
+  authentication; unverified retail GUIDs are not accepted."). Nothing the client
+  sent is printed, and the per-address `getchallenge` rate limit bounds how
+  often one address can add a line.
 - **Independent of `sv_allowProtocol6`.** One controls authentication, the other
   the version number a client may advertise. Retail 1.7 hosting needs both;
   either can be set on its own.

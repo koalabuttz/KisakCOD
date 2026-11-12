@@ -17,6 +17,7 @@
 // passed, 1 a failure, 2 a usage error. See docs/vulkan-d3d9-front.md.
 
 #include <gfx_vk/d3d9/vk_d3d9.h>
+#include <gfx_vk/modern/vk_modern.h>
 
 #include "vk_legacy_check_shaders.h"
 
@@ -47,6 +48,14 @@
 namespace
 {
 namespace front = gfx_vk::d3d9;
+
+// Whether the back end times its passes (KISAK_VK_PASS_TIMESTAMPS=0: no).
+bool PassesTimed()
+{
+    const char *value = SDL_getenv("KISAK_VK_PASS_TIMESTAMPS");
+    return !(value && std::strcmp(value, "0") == 0);
+}
+
 namespace shaders = vk_legacy_check_shaders;
 
 constexpr UINT kSize = 128;
@@ -471,6 +480,7 @@ public:
     void RenderTarget();
     void ShadowMap();
     void ModelLighting();
+    void DirtyUpdate();
     void References();
     void Threads();
     void Queries();
@@ -481,6 +491,7 @@ public:
     void SlowFrames();
     void KeptState();
     void Multisample();
+    void ModernTaa();
     void Bench();
     void BenchRuns();
     void BenchFrames(bool runs);
@@ -792,6 +803,35 @@ void Check::ShadowMap()
         Expect("nearer_lit", 32, 96, 255, 255, 255);
         Expect("nearer_lit_right", 96, 96, 255, 255, 255);
     }
+
+    // The same shader and state with a colour texture between two draws of
+    // the depth one: only the texture changes, so the pipeline kept from the
+    // draw before has to follow it where depth compare is fixed per pipeline
+    // (PipelineKey::depthSamplers).
+    IDirect3DTexture9 *green = FilledTexture(4, 4, [](UINT, UINT) { return Argb(255, 0, 255, 0); });
+    if (green)
+    {
+        Reset(Argb(255, 64, 64, 64));
+        device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+        device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+        device->SetPixelShader(psShadow);
+        device->SetTexture(0, shadow);
+        DrawQuad(0, 0, 64, 64, 0.5f, Argb(255, 0x80, 0, 0));
+        device->SetTexture(0, green);
+        DrawQuad(64, 0, 128, 64, 0.5f, Argb(255, 0x80, 0, 0));
+        device->SetTexture(0, shadow);
+        DrawQuad(0, 64, 64, 128, 0.5f, Argb(255, 0x80, 0, 0));
+        device->SetTexture(0, nullptr);
+        if (Read())
+        {
+            Expect("depth_then_colour_shadowed", 16, 32, 0, 0, 0);
+            Expect("depth_then_colour_lit", 48, 32, 255, 255, 255);
+            Expect("colour_between_depth", 96, 32, 0, 255, 0);
+            Expect("depth_after_colour_shadowed", 16, 96, 0, 0, 0);
+            Expect("depth_after_colour_lit", 48, 96, 255, 255, 255);
+        }
+        green->Release();
+    }
     SafeRelease(colorLevel);
     SafeRelease(color);
     SafeRelease(shadowLevel);
@@ -809,7 +849,11 @@ void Check::ShadowMap()
 //      (made with usage 0, as Image_Create3DTexture_PC makes it), which is
 //      the one that is drawn with.
 // Two frames of patches go through both; after each, every cell is drawn
-// slice by slice from both volumes and read back.
+// slice by slice from both volumes and read back. As in D3D9, UpdateTexture
+// copies only what is dirty: the whole new volume the first time, then only
+// the cells given to AddDirtyBox. A cell written in the second frame without
+// one stays out of the drawn volume, and that frame's update uploads two
+// cells' bytes in one copy.
 void Check::ModelLighting()
 {
     Reset();
@@ -840,7 +884,8 @@ void Check::ModelLighting()
         return Argb(255, seed, 30 + 70 * x, 15 + 60 * y + 15 * z);
     };
     // The renderer's own addressing and call order for one frame's patches.
-    const auto patch = [&](bool alt, const Patch *patches, size_t count) {
+    // stray: a cell written in the system memory volume with no AddDirtyBox.
+    const auto patch = [&](bool alt, const Patch *patches, size_t count, const Patch *stray = nullptr) {
         IDirect3DVolumeTexture9 *texture = alt ? staging : managed;
         D3DLOCKED_BOX locked{};
         if (!Ok(texture->LockBox(0, &locked, nullptr, alt ? D3DLOCK_NO_DIRTY_UPDATE : 0), "LockBox"))
@@ -872,10 +917,39 @@ void Check::ModelLighting()
                                     &value, 4);
                     }
         }
+        if (alt && stray)
+        {
+            const UINT x0 = kCell * (stray->cell & 0x3f);
+            const UINT y0 = (stray->cell >> 4) & ~3u;
+            for (UINT z = 0; z < kDepth; ++z)
+                for (UINT y = 0; y < kCell; ++y)
+                    for (UINT x = 0; x < kCell; ++x)
+                    {
+                        const uint32_t value = texel(stray->seed, x, y, z);
+                        std::memcpy(static_cast<uint8_t *>(locked.pBits) + z * locked.SlicePitch
+                                        + (y0 + y) * locked.RowPitch + 4 * (x0 + x),
+                                    &value, 4);
+                    }
+        }
         if (!Ok(texture->UnlockBox(0), "UnlockBox"))
             return false;
         return !alt || Ok(device->UpdateTexture(staging, shown), "UpdateTexture");
     };
+    // What one UpdateTexture uploaded: copies and bytes.
+    const auto updateUploads = [&](const char *frame, const Patch *patches, size_t count, const Patch *stray,
+                                   uint64_t wantBytes) {
+        const front::DeviceCounters was = Counters();
+        const bool done = patch(true, patches, count, stray);
+        const front::DeviceCounters now = Counters();
+        char name[64];
+        std::snprintf(name, sizeof(name), "%s_update_uploads", frame);
+        Equal(name, now.textureUploads - was.textureUploads, uint64_t(1));
+        std::snprintf(name, sizeof(name), "%s_update_bytes", frame);
+        Equal(name, now.textureUploadBytes - was.textureUploadBytes, wantBytes);
+        return done;
+    };
+    constexpr uint64_t kVolumeBytes = uint64_t(kWidth) * kHeight * kDepth * 4;
+    constexpr uint64_t kCellBytes = uint64_t(kCell) * kCell * kDepth * 4;
     // Draws the four watched cells from both volumes, one 16x16 block per
     // slice (each texel 4x4 pixels): the managed volume in columns 0 to 3, the
     // updated one in columns 4 to 7, a row per cell. Then checks every texel
@@ -930,15 +1004,21 @@ void Check::ModelLighting()
     // Frame 1: the first and the last cell of row 0.
     const Patch first[] = {{0, 60}, {63, 120}};
     // Frame 2: a cell of row 1, and cell 0 again. Cell 63 is not written and
-    // must keep frame 1's texels; cell 70 is never written.
+    // must keep frame 1's texels; cell 70 is written only in the system memory
+    // volume, with no AddDirtyBox, so it never reaches either drawn volume.
     const Patch second[] = {{69, 180}, {0, 240}};
-    bool ok = patch(false, first, 2) && patch(true, first, 2);
+    const Patch stray = {70, 99};
+    bool ok = patch(false, first, 2) && updateUploads("frame1", first, 2, nullptr, kVolumeBytes);
     if (ok)
     {
         const Patch watched[4] = {{0, 60}, {63, 120}, {69, 0}, {70, 0}};
         drawAndExpect("frame1", watched);
         Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
-        ok = patch(false, second, 2) && patch(true, second, 2);
+        ok = patch(false, second, 2) && updateUploads("frame2", second, 2, &stray, 2 * kCellBytes);
+        // Nothing written since: nothing to copy.
+        const front::DeviceCounters was = Counters();
+        ok = ok && Ok(device->UpdateTexture(staging, shown), "UpdateTexture");
+        Equal("clean_update_uploads", Counters().textureUploads - was.textureUploads, uint64_t(0));
     }
     if (ok)
     {
@@ -949,6 +1029,141 @@ void Check::ModelLighting()
     SafeRelease(shown);
     SafeRelease(staging);
     SafeRelease(managed);
+}
+
+// UpdateTexture copies only what is dirty, in every level, as D3D9 does: a
+// 16x16 A8R8G8B8 texture of two levels and a 16x16 DXT1 texture, each from
+// SYSTEMMEM into DEFAULT. A new texture is copied whole. Then texels written
+// under D3DLOCK_NO_DIRTY_UPDATE reach the drawn texture only inside an
+// AddDirtyRect, which reaches level 1 halved and a DXT1 texture grown to
+// whole 4x4 blocks, and a lock without the flag marks its own region. Each
+// level is drawn 1:1 (level 1 as an 8x8 quad, point mip filter) and read back.
+void Check::DirtyUpdate()
+{
+    Reset();
+    IDirect3DTexture9 *staging = nullptr, *shown = nullptr, *blockStaging = nullptr, *blockShown = nullptr;
+    if (!Ok(device->CreateTexture(16, 16, 2, 0, D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &staging, nullptr),
+            "CreateTexture(system memory)")
+        || !Ok(device->CreateTexture(16, 16, 2, 0, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &shown, nullptr),
+               "CreateTexture(default)")
+        || !Ok(device->CreateTexture(16, 16, 1, 0, D3DFMT_DXT1, D3DPOOL_SYSTEMMEM, &blockStaging, nullptr),
+               "CreateTexture(DXT1 system memory)")
+        || !Ok(device->CreateTexture(16, 16, 1, 0, D3DFMT_DXT1, D3DPOOL_DEFAULT, &blockShown, nullptr),
+               "CreateTexture(DXT1 default)"))
+    {
+        SafeRelease(blockStaging);
+        SafeRelease(shown);
+        SafeRelease(staging);
+        return;
+    }
+    const uint32_t red = Argb(255, 255, 0, 0), green = Argb(255, 0, 255, 0), blue = Argb(255, 0, 0, 255),
+                   white = Argb(255, 255, 255, 255), yellow = Argb(255, 255, 255, 0);
+    // Writes value over [x0, x1) x [y0, y1) of a level, locked with flags and
+    // an optional rect.
+    const auto write = [&](UINT level, const RECT *rect, DWORD flags, UINT x0, UINT y0, UINT x1, UINT y1,
+                           uint32_t value) {
+        D3DLOCKED_RECT locked{};
+        if (!Ok(staging->LockRect(level, &locked, rect, flags), "LockRect"))
+            return;
+        uint8_t *base = static_cast<uint8_t *>(locked.pBits);
+        const UINT left = rect ? UINT(rect->left) : 0, top = rect ? UINT(rect->top) : 0;
+        for (UINT y = y0; y < y1; ++y)
+            for (UINT x = x0; x < x1; ++x)
+                std::memcpy(base + (y - top) * locked.Pitch + 4 * (x - left), &value, 4);
+        staging->UnlockRect(level);
+    };
+    // One DXT1 block of one colour (RGB565, every index 0).
+    const auto block = [](uint16_t colour) {
+        uint8_t bytes[8] = {uint8_t(colour), uint8_t(colour >> 8), uint8_t(colour), uint8_t(colour >> 8), 0, 0, 0, 0};
+        uint64_t value = 0;
+        std::memcpy(&value, bytes, 8);
+        return value;
+    };
+    const auto writeBlocks = [&](DWORD flags, UINT bx0, UINT by0, UINT bx1, UINT by1, uint16_t colour) {
+        D3DLOCKED_RECT locked{};
+        if (!Ok(blockStaging->LockRect(0, &locked, nullptr, flags), "LockRect(DXT1)"))
+            return;
+        const uint64_t value = block(colour);
+        for (UINT by = by0; by < by1; ++by)
+            for (UINT bx = bx0; bx < bx1; ++bx)
+                std::memcpy(static_cast<uint8_t *>(locked.pBits) + by * locked.Pitch + 8 * bx, &value, 8);
+        blockStaging->UnlockRect(0);
+    };
+    const auto update = [&](const char *name, IDirect3DTexture9 *from, IDirect3DTexture9 *to, uint64_t uploads,
+                            uint64_t bytes) {
+        const front::DeviceCounters was = Counters();
+        Ok(device->UpdateTexture(from, to), "UpdateTexture");
+        const front::DeviceCounters now = Counters();
+        char label[64];
+        std::snprintf(label, sizeof(label), "%s_uploads", name);
+        Equal(label, now.textureUploads - was.textureUploads, uploads);
+        std::snprintf(label, sizeof(label), "%s_bytes", name);
+        Equal(label, now.textureUploadBytes - was.textureUploadBytes, bytes);
+    };
+    // Level 0 at (0,0), level 1 at (32,0), the DXT1 texture at (64,0).
+    const auto draw = [&]() {
+        Reset();
+        Ok(device->SetPixelShader(psTexture), "SetPixelShader");
+        device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+        device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+        device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_POINT);
+        Ok(device->SetTexture(0, shown), "SetTexture");
+        DrawQuad(0, 0, 16, 16, 0.5f, 0xffffffffu);
+        DrawQuad(32, 0, 40, 8, 0.5f, 0xffffffffu);
+        Ok(device->SetTexture(0, blockShown), "SetTexture(DXT1)");
+        DrawQuad(64, 0, 80, 16, 0.5f, 0xffffffffu);
+        device->SetTexture(0, nullptr);
+        device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+        return Read();
+    };
+
+    // New: everything is copied.
+    write(0, nullptr, 0, 0, 0, 16, 16, red);
+    write(1, nullptr, 0, 0, 0, 8, 8, green);
+    update("new", staging, shown, 2, 16 * 16 * 4 + 8 * 8 * 4);
+    writeBlocks(0, 0, 0, 4, 4, 0xf800);
+    update("new_dxt1", blockStaging, blockShown, 1, 16 * 8);
+
+    // Marked: blue inside the rect on both levels, white outside it.
+    write(0, nullptr, D3DLOCK_NO_DIRTY_UPDATE, 8, 8, 12, 12, blue);
+    write(0, nullptr, D3DLOCK_NO_DIRTY_UPDATE, 0, 0, 4, 4, white);
+    write(1, nullptr, D3DLOCK_NO_DIRTY_UPDATE, 4, 4, 6, 6, blue);
+    write(1, nullptr, D3DLOCK_NO_DIRTY_UPDATE, 0, 0, 2, 2, white);
+    const RECT dirty = {8, 8, 12, 12};
+    Ok(staging->AddDirtyRect(&dirty), "AddDirtyRect");
+    update("marked", staging, shown, 2, 4 * 4 * 4 + 2 * 2 * 4);
+    // A rect inside one block grows to the block: green there, a stray green
+    // block outside.
+    writeBlocks(D3DLOCK_NO_DIRTY_UPDATE, 1, 1, 2, 2, 0x07e0);
+    writeBlocks(D3DLOCK_NO_DIRTY_UPDATE, 2, 2, 3, 3, 0x07e0);
+    const RECT inBlock = {5, 5, 7, 7};
+    Ok(blockStaging->AddDirtyRect(&inBlock), "AddDirtyRect(DXT1)");
+    update("marked_dxt1", blockStaging, blockShown, 1, 8);
+    // Nothing dirty since: nothing copied.
+    update("clean", staging, shown, 0, 0);
+
+    // A lock without the flag marks its rect, on level 0 and halved on level 1.
+    const RECT corner = {12, 0, 16, 4};
+    write(0, &corner, 0, 12, 0, 16, 4, yellow);
+    update("locked", staging, shown, 2, 4 * 4 * 4 + 2 * 2 * 4);
+
+    if (draw())
+    {
+        Expect("level0_marked", 9, 9, 0, 0, 255);
+        Expect("level0_unmarked", 1, 1, 255, 0, 0);
+        Expect("level0_untouched", 14, 14, 255, 0, 0);
+        Expect("level0_locked", 13, 1, 255, 255, 0);
+        Expect("level1_marked", 32 + 4, 4, 0, 0, 255);
+        Expect("level1_unmarked", 32 + 0, 0, 0, 255, 0);
+        Expect("level1_untouched", 32 + 7, 7, 0, 255, 0);
+        Expect("dxt1_marked_block", 64 + 4, 4, 0, 255, 0);
+        Expect("dxt1_marked_block_edge", 64 + 7, 7, 0, 255, 0);
+        Expect("dxt1_unmarked_block", 64 + 9, 9, 255, 0, 0);
+    }
+    SafeRelease(blockShown);
+    SafeRelease(blockStaging);
+    SafeRelease(shown);
+    SafeRelease(staging);
 }
 
 // D3D9's reference counts: levels share their texture's count, objects the
@@ -1155,10 +1370,10 @@ void Check::Queries()
     // its target's contents. A heavy frame first, so that the poll finds the
     // fence unfinished; a GPU that still finishes first gets another try.
     // The frame stays under the GPU feed's 128 draws, so it reaches the GPU
-    // whole at its Present: lavapipe waits for everything submitted so far
-    // whenever a query is read, which Present does for the frame before, and
-    // a frame already submitted in parts would be finished by the time
-    // Present returned.
+    // whole at its Present and is still at work when Present returns. Present
+    // must not wait for it: it once did on lavapipe, which blocks a query read
+    // while its queue runs a submission, when it read the frame before's
+    // timestamps from the pool (they are copied on the GPU now).
     const char *fencePath = "finished_first";
     unsigned long long fenceFlushes = 0;
     for (int attempt = 0; attempt < 8 && fencePath[0] == 'f'; ++attempt)
@@ -1700,6 +1915,7 @@ void Check::Tuning()
         double seconds = 0, fps = 0, draws = 0, passes = 0, sets = 0, reused = 0, constants = 0, renames = 0;
         double submissions = 0, gpuAverage = 0, gpuMin = 0, gpuMax = 0;
         bool gpuTime = false;
+        bool passesTimed = true; // false: the line without pass timestamps
         double inPasses = 0, between = 0, before = 0, beforeMax = 0;
     };
     const auto report = [&](bool reset) {
@@ -1735,6 +1951,18 @@ void Check::Tuning()
                             &out.inPasses, &out.between, &out.before, &out.beforeMax, &out.early)
                 == 5)
                 out.gpuTime = true;
+            double frameMs = 0;
+            if (KISAK_SCAN_NUMBERS(line.c_str(),
+                            "vulkan d3d9: GPU time: per frame %lf ms from first command to last (passes not timed), "
+                            "and %lf ms without work before the frame (%lf max); %llu parts sent early to a GPU with "
+                            "nothing left",
+                            &frameMs, &out.before, &out.beforeMax, &out.early)
+                == 4)
+            {
+                out.gpuTime = true;
+                out.passesTimed = false;
+                out.between = frameMs;
+            }
         }
         return out;
     };
@@ -1750,6 +1978,8 @@ void Check::Tuning()
     Equal("stats_gpu_time_line", first.gpuTime, first.timed > 0);
     if (first.gpuTime)
     {
+        // KISAK_VK_PASS_TIMESTAMPS=0 leaves passes untimed, and the line says so.
+        Equal("stats_passes_timed", first.passesTimed, PassesTimed());
         Equal("stats_gpu_time_values",
               first.inPasses >= 0.0 && first.between >= 0.0 && first.before >= 0.0 && first.beforeMax >= first.before,
               true);
@@ -1956,7 +2186,12 @@ void Check::SlowFrames()
         Equal("pipeline_frame_uploads", before(*pipelineLine, " texture uploads"), 0);
         // Its timestamps were read frames ago, where the device has them.
         Equal("pipeline_frame_gpu_time", pipelineLine->find("; GPU time not read") == std::string::npos, gpuTimed);
-        if (gpuTimed)
+        if (gpuTimed && !PassesTimed())
+            Equal("pipeline_frame_gpu_values",
+                  pipelineLine->find(" (passes not timed), ") != std::string::npos
+                      && before(*pipelineLine, " without work before it") >= 0.0,
+                  true);
+        else if (gpuTimed)
             Equal("pipeline_frame_gpu_values",
                   behind(*pipelineLine, "; GPU ") >= before(*pipelineLine, " in passes")
                       && before(*pipelineLine, " in passes") >= 0.0
@@ -2570,6 +2805,194 @@ void Check::Multisample()
     SafeRelease(target);
 }
 
+// The Modern path's temporal anti-aliasing (front::ModernSceneDone,
+// docs/vulkan-modern.md): its camera reprojection on the CPU, then frames
+// drawn into the back buffer with a depth surface and handed to it. A scene
+// that stands still comes back as it was drawn; with the sub-pixel jitter the
+// engine applies, a pixel the jitter covers in some frames and not in others
+// ends between the two colours, where without the pass it would be one or the
+// other; a scene with no depth surface is refused.
+void Check::ModernTaa()
+{
+    // ---- Reprojection, in double and as the float matrix the shader gets ----
+    // A camera far from the origin (the engine's maps reach tens of
+    // thousands of units) that moves and turns between two frames.
+    using Row4 = double[4];
+    const auto viewMatrix = [](const double origin[3], double yaw, float out[4][4]) {
+        const double forward[3] = {std::cos(yaw), std::sin(yaw), 0.0};
+        const double left[3] = {-std::sin(yaw), std::cos(yaw), 0.0};
+        const double up[3] = {0.0, 0.0, 1.0};
+        for (int i = 0; i < 3; ++i)
+        {
+            out[i][0] = static_cast<float>(-left[i]);
+            out[i][1] = static_cast<float>(up[i]);
+            out[i][2] = static_cast<float>(forward[i]);
+            out[i][3] = 0.0f;
+        }
+        for (int c = 0; c < 3; ++c)
+        {
+            const double axis[3] = {c == 0 ? -left[0] : c == 1 ? up[0] : forward[0],
+                                    c == 0 ? -left[1] : c == 1 ? up[1] : forward[1],
+                                    c == 0 ? -left[2] : c == 1 ? up[2] : forward[2]};
+            out[3][c] = static_cast<float>(-(origin[0] * axis[0] + origin[1] * axis[1] + origin[2] * axis[2]));
+        }
+        out[3][3] = 1.0f;
+    };
+    // The engine's InfinitePerspectiveMatrix (src/universal/com_math.cpp).
+    const auto projectionMatrix = [](float jitterX, float jitterY, float out[4][4]) {
+        std::memset(out, 0, sizeof(float) * 16);
+        const float k = 0.99951172f;
+        out[0][0] = k / 0.75f;
+        out[1][1] = k / 0.5625f;
+        out[2][2] = k;
+        out[2][3] = 1.0f;
+        out[3][2] = -4.0f * k;
+        out[2][0] = jitterX;
+        out[2][1] = jitterY;
+    };
+    // p * view * projection with the jitter left out, in double.
+    const auto toClip = [](const Row4 p, const gfx_vk::modern::SceneView &scene, Row4 out) {
+        double viewed[4];
+        for (int c = 0; c < 4; ++c)
+            viewed[c] = p[0] * scene.view[0][c] + p[1] * scene.view[1][c] + p[2] * scene.view[2][c]
+                + p[3] * scene.view[3][c];
+        for (int c = 0; c < 4; ++c)
+        {
+            double sum = 0.0;
+            for (int k = 0; k < 4; ++k)
+                sum += viewed[k] * ((k == 2 && c < 2) ? 0.0 : scene.projection[k][c]);
+            out[c] = sum;
+        }
+    };
+    gfx_vk::modern::SceneView before{}, now{};
+    const double originBefore[3] = {52000.0, -31000.0, 900.0};
+    const double originNow[3] = {52012.0, -30995.0, 901.5};
+    viewMatrix(originBefore, 0.70, before.view);
+    viewMatrix(originNow, 0.72, now.view);
+    projectionMatrix(0.004f, -0.003f, before.projection);
+    projectionMatrix(-0.002f, 0.005f, now.projection);
+    double reprojection[4][4];
+    Equal("reprojection_made", gfx_vk::modern::Reprojection(now, before, reprojection), true);
+    // World points 30 to 6000 units in front, and a direction (the sky).
+    const Row4 points[] = {
+        {52030.0 + 5.0, -30995.0 + 25.0, 902.0, 1.0},
+        {52012.0 + 400.0, -30995.0 + 300.0, 950.0, 1.0},
+        {52012.0 + 4500.0, -30995.0 + 3800.0, 1200.0, 1.0},
+        {0.75, 0.65, 0.05, 0.0},
+    };
+    double worstDouble = 0.0, worstFloat = 0.0;
+    for (const Row4 &point : points)
+    {
+        double clipNow[4], clipBefore[4];
+        toClip(point, now, clipNow);
+        toClip(point, before, clipBefore);
+        // What the shader starts from: NDC x, y and the depth, w = 1.
+        const double start[4] = {clipNow[0] / clipNow[3], clipNow[1] / clipNow[3], clipNow[2] / clipNow[3], 1.0};
+        const double wantX = clipBefore[0] / clipBefore[3], wantY = clipBefore[1] / clipBefore[3];
+        double viaDouble[4] = {}, viaFloat[4] = {};
+        for (int c = 0; c < 4; ++c)
+            for (int k = 0; k < 4; ++k)
+            {
+                viaDouble[c] += start[k] * reprojection[k][c];
+                viaFloat[c] += static_cast<float>(start[k]) * static_cast<float>(reprojection[k][c]);
+            }
+        worstDouble = std::max(worstDouble, std::max(std::fabs(viaDouble[0] / viaDouble[3] - wantX),
+                                                     std::fabs(viaDouble[1] / viaDouble[3] - wantY)));
+        worstFloat = std::max(worstFloat, std::max(std::fabs(viaFloat[0] / viaFloat[3] - wantX),
+                                                   std::fabs(viaFloat[1] / viaFloat[3] - wantY)));
+    }
+    // In NDC; a pixel of a 1920-wide image is 0.00104.
+    Equal("reprojection_exact", worstDouble < 1e-9, true);
+    Equal("reprojection_float_under_quarter_pixel", worstFloat < 0.00026, true);
+    if (worstFloat >= 0.00026)
+        result->detail += " reprojection_float_error=" + std::to_string(worstFloat);
+    float jx = 0.0f, jy = 0.0f;
+    gfx_vk::modern::JitterPixels(0, jx, jy);
+    Equal("jitter_first_x_milli", std::lround(jx * 1000.0f), 0);
+    Equal("jitter_first_y_milli", std::lround(jy * 1000.0f), -167);
+    gfx_vk::modern::JitterPixels(9, jx, jy);
+    Equal("jitter_wraps_x_milli", std::lround(jx * 1000.0f), -250);
+
+    // ---- Frames through the front ----
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    view.width = view.height = kSize;
+    // One frame: black, with a white quad over the left half whose right
+    // edge sits 0.4 pixels past pixel 63's, so that pixel 64 is covered when
+    // the jitter moves the scene right by more than 0.1 pixels.
+    const auto frame = [&](float pixelsX, float pixelsY, bool first) {
+        Reset(Argb(255, 0, 0, 0));
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, 1.0f, 0), "Clear(depth)");
+        device->SetRenderState(D3DRS_ZENABLE, TRUE);
+        device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+        const float jitter[4] = {2.0f * pixelsX / kSize, -2.0f * pixelsY / kSize, 0.0f, 0.0f};
+        device->SetVertexShaderConstantF(0, jitter, 1);
+        DrawQuad(0, 0, 64.4f, 128, 0.5f, Argb(255, 255, 255, 255));
+        view.projection[2][0] = jitter[0];
+        view.projection[2][1] = jitter[1];
+        view.cut = first;
+        return front::ModernSceneDone(device, view) == front::ModernResult::Done;
+    };
+    const auto present = [&]() { Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present"); };
+
+    // Still: what was drawn comes back.
+    bool done = true;
+    for (int i = 0; i < 4; ++i)
+    {
+        done = frame(0.0f, 0.0f, i == 0) && done;
+        if (i < 3)
+            present();
+    }
+    Equal("still_resolved", done, true);
+    if (Read())
+    {
+        Expect("still_inside", 32, 64, 255, 255, 255);
+        Expect("still_edge_in", 63, 64, 255, 255, 255);
+        Expect("still_edge_out", 64, 64, 0, 0, 0);
+        Expect("still_outside", 96, 64, 0, 0, 0);
+    }
+    present();
+
+    // Jittered: pixel 64 is covered in 3 of the 8 frames of the sequence.
+    done = true;
+    for (uint32_t i = 0; i < 16; ++i)
+    {
+        gfx_vk::modern::JitterPixels(i, jx, jy);
+        done = frame(jx, jy, i == 0) && done;
+        if (i < 15)
+            present();
+    }
+    Equal("jittered_resolved", done, true);
+    if (Read())
+    {
+        Expect("jittered_inside", 32, 64, 255, 255, 255);
+        Expect("jittered_outside", 96, 64, 0, 0, 0);
+        const int edge = pixels[(64 * readSize + 64) * 4 + 1];
+        Equal("jittered_edge_between", edge > 20 && edge < 235, true);
+        if (!(edge > 20 && edge < 235))
+            result->detail += " jittered_edge=" + std::to_string(edge);
+    }
+    present();
+
+    // No depth surface: refused, and the scene is left as drawn.
+    Reset(Argb(255, 0, 0, 0));
+    DrawQuad(0, 0, 64, 128, 0.5f, Argb(255, 255, 255, 255));
+    Equal("no_depth_refused", front::ModernSceneDone(device, view) == front::ModernResult::Refused, true);
+    if (Read())
+        Expect("no_depth_untouched", 32, 64, 255, 255, 255);
+    device->SetDepthStencilSurface(nullptr);
+    const float zero[4] = {0, 0, 0, 0};
+    device->SetVertexShaderConstantF(0, zero, 1);
+    SafeRelease(depth);
+}
+
 void Check::ResetDevice()
 {
     SafeRelease(backBuffer);
@@ -2794,6 +3217,7 @@ int Run(const Options &options)
         {"render_target", &Check::RenderTarget, true},
         {"shadow_map", &Check::ShadowMap, true},
         {"model_lighting", &Check::ModelLighting, true},
+        {"dirty_update", &Check::DirtyUpdate, true},
         {"references", &Check::References, true},
         {"threads", &Check::Threads, true},
         {"queries", &Check::Queries, true},
@@ -2804,6 +3228,7 @@ int Run(const Options &options)
         {"slow_frames", &Check::SlowFrames, true},
         {"kept_state", &Check::KeptState, true},
         {"multisample", &Check::Multisample, true},
+        {"modern_taa", &Check::ModernTaa, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},

@@ -16,8 +16,8 @@ summary short enough for a thread message.
 The short form (``--compact``, and ``results-compact.json`` beside every
 results file) is what a machine pastes when the whole file is too long to
 relay: per row the status, the power, the counts that are not zero, what the
-scene read and the frame log line as the game printed it, with a checksum of
-its own and the checksum of the file it was cut from. Every table can be made
+scene read, the frame log line as the game printed it and the load note (three
+busiest other processes per sample), with a checksum of its own and the checksum of the file it was cut from. Every table can be made
 from it; the other verbatim lines stay in the full file on the machine.
 
 The checksum is the SHA-256 of the results without their ``sha256`` entry,
@@ -175,10 +175,16 @@ def compact(results, lines=None):
         failed = [step for step in row.get("steps") or [] if not step[1]]
         if failed:
             kept["steps"] = failed
+        # Every row keeps its load note, quiet or not: a row with no note
+        # cannot be told from a row that was never checked. The lists keep
+        # their three busiest processes.
         load_note = row.get("load") or {}
-        if any(load_note.get(key) for key in ("waited", "over", "waited_at_capture", "busy")):
-            kept["load"] = {key: load_note[key] for key in ("waited", "over", "waited_at_capture", "busy")
-                            if key in load_note}
+        short_load = {key: load_note[key] for key in ("waited", "over", "waited_at_capture", "busy")
+                      if key in load_note}
+        short_load.update({key: load_note[key][:3] for key in ("top", "at_capture", "during_capture")
+                           if load_note.get(key)})
+        if short_load:
+            kept["load"] = short_load
         short["rows"].append(kept)
     return seal(short)
 
@@ -222,6 +228,24 @@ def averages(rows):
     return table
 
 
+# Copies of one variant further apart than this share of the fastest are not
+# noise: on the laptop, run 13 (2026-11-10) read D4 152.5 / 151.1 and V4
+# 100.7 / 95.7, but D1 176.4 / 138.1 after a foreign process had run.
+SPREAD_LIMIT = 0.07
+
+
+def disagreeing(rows):
+    """[(variant, share, fps values)] for each variant whose ok copies differ
+    by more than SPREAD_LIMIT of the fastest one."""
+    found = []
+    for variant, count, _, each in averages(rows):
+        if count > 1 and each and max(each) > 0:
+            share = (max(each) - min(each)) / max(each)
+            if share > SPREAD_LIMIT:
+                found.append((variant, share, each))
+    return found
+
+
 def average_table(rows):
     table = averages(rows)
     if not table:
@@ -232,6 +256,10 @@ def average_table(rows):
         cells = [_number(means.get(key), digits) for key, _, digits in FRAME_COLUMNS]
         lines.append(f"| {variant} | {count} | " + " | ".join(cells) + " | "
                      + ", ".join(f"{value:.1f}" for value in each) + " |")
+    for variant, share, each in disagreeing(rows):
+        lines += ["", f"**{variant}: its copies differ by {100 * share:.0f}% ("
+                  + ", ".join(f"{value:.1f}" for value in each)
+                  + " fps); the mean is not a measurement. Look at the load and power of each copy.**"]
     return lines
 
 
@@ -338,6 +366,8 @@ def summarize(results, problem=None, limit=SUMMARY_LIMIT):
             f"{variant} {means.get('fps', 0):.1f} ({means.get('mean', 0):.3f}, {means.get('p99', 0):.3f}) "
             f"from {count}" + (f" [{', '.join(f'{value:.1f}' for value in each)}]" if count > 1 else "")
             for variant, count, means, each in table) + ".")
+    for variant, share, each in disagreeing(rows):
+        parts.append(f"{variant} copies differ by {100 * share:.0f}%: do not use its mean.")
     for row in rows:
         if row.get("status") != "ok":
             parts.append(f"{row['name']}: {row.get('status')}.")

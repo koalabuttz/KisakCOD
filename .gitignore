@@ -434,6 +434,7 @@ res/
 
 .idea/*
 .claude/*
+!.claude/settings.json
 IDA/*
 KisakCOD/.idea/*
 build-radiant/

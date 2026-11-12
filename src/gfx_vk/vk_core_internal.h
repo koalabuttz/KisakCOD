@@ -166,6 +166,9 @@ struct FrameSlot
     bool frameTimed = false;     // queries 0 and 1 of the slot hold the frame
     uint32_t queriesUsed = 0;
     bool queriesPending = false; // written, not yet collected
+    // The frame's last submission copied its queries into Core::timestampCopies
+    // (Present), so collecting them needs no call into the driver.
+    bool queriesCopied = false;
     // CoreStats::framesPresented as the slot's frame left it, 0 for a frame
     // that was not presented (FrameGpuTime).
     uint64_t frameNumber = 0;
@@ -340,6 +343,11 @@ public:
     std::vector<Readback *> readbacks;        // alive, destroyed with the core
 
     VkQueryPool timestamps = VK_NULL_HANDLE;
+    // The timestamps as each presented frame's last submission copied them,
+    // kTimestampsPerSlot 64-bit values per slot. Reading them back with
+    // vkGetQueryPoolResults instead blocks on lavapipe while its queue runs a
+    // submission, so Present waited for the frame it had just submitted.
+    Buffer *timestampCopies = nullptr;
     double timestampPeriodNs = 0.0;
     uint64_t timestampMask = 0;
     // The last timestamp of the presented frame collected before this one,

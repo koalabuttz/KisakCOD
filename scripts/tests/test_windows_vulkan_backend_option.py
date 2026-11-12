@@ -46,8 +46,9 @@ def main() -> int:
             "libraries-only mode leaves out both check tools")
     runtime = re.search(r"foreach\(kisak_vulkan_library IN ITEMS([^)]*)\)", module)
     require(runtime is not None
-            and set(runtime.group(1).split()) == {"kisak_gfx_vk", "kisak_dxbc_spirv", "kisak_vk_legacy_shader",
-                                                   "kisak_gfx_vk_legacy", "kisak_gfx_vk_d3d9"}
+            and set(runtime.group(1).split()) == {"kisak_gfx_vk", "kisak_gfx_vk_modern", "kisak_dxbc_spirv",
+                                                   "kisak_vk_legacy_shader", "kisak_gfx_vk_legacy",
+                                                   "kisak_gfx_vk_d3d9"}
             and 'MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"' in module,
             "every Vulkan library links the static C runtime, as the game does")
 

@@ -3,6 +3,8 @@
 
 #include "vk_legacy_internal.h"
 
+#include <algorithm>
+
 namespace gfx_vk::legacy
 {
 namespace
@@ -73,7 +75,8 @@ uint32_t BlocksAcross(const FormatInfo &format, uint32_t texels)
     return format.compressed ? (texels + 3) / 4 : texels;
 }
 
-// Bytes of one level of one face, rows of blocks tightly packed.
+} // namespace
+
 void LevelLayout(const Texture &texture, uint32_t level, uint32_t &rowBytes, uint32_t &rows, uint32_t &depth)
 {
     const FormatInfo &format = *texture.format;
@@ -81,6 +84,9 @@ void LevelLayout(const Texture &texture, uint32_t level, uint32_t &rowBytes, uin
     rows = BlocksAcross(format, LevelSize(texture.desc.height, level));
     depth = texture.desc.kind == TextureKind::Volume ? LevelSize(texture.desc.depth, level) : 1;
 }
+
+namespace
+{
 
 bool HostOnly(d3d::Pool pool) { return pool == d3d::POOL_SYSTEMMEM || pool == d3d::POOL_SCRATCH; }
 
@@ -344,6 +350,8 @@ Texture *CreateTextureInternal(Device &device, const TextureDesc &desc, uint32_t
     texture->vkFormat = format->depth ? device.depthFormat : format->vk;
     texture->faces = desc.kind == TextureKind::Cube ? 6 : 1;
     texture->subresources.resize(texture->faces * texture->desc.levels);
+    if (HostOnly(desc.pool))
+        texture->dirty.resize(texture->faces);
     texture->surfaces.resize(texture->subresources.size());
 
     if (!HostOnly(desc.pool))
@@ -512,6 +520,18 @@ bool LockRect(Device *device_, Texture *texture, uint32_t face, uint32_t level, 
     sub.locked = true;
     sub.readOnly = (flags & d3d::LOCK_READONLY) != 0;
     sub.box = region;
+    if (!texture->dirty.empty() && !(flags & (d3d::LOCK_READONLY | d3d::LOCK_NO_DIRTY_UPDATE)))
+    {
+        // D3D9 keeps the dirty region in level 0's texels.
+        Box top;
+        top.left = region.left << level;
+        top.top = region.top << level;
+        top.front = region.front << level;
+        top.right = std::min(region.right << level, desc.width);
+        top.bottom = std::min(region.bottom << level, desc.height);
+        top.back = desc.kind == TextureKind::Volume ? std::min(region.back << level, desc.depth) : 1;
+        AddDirtyRegion(&device, texture, face, &top);
+    }
     const uint32_t blockX = texture->format->compressed ? region.left / 4 : region.left;
     const uint32_t blockY = texture->format->compressed ? region.top / 4 : region.top;
     out.bits = sub.cpu.data() + region.front * slice + static_cast<size_t>(blockY) * rowBytes
@@ -519,6 +539,129 @@ bool LockRect(Device *device_, Texture *texture, uint32_t face, uint32_t level, 
     out.pitch = rowBytes;
     out.slicePitch = static_cast<uint32_t>(slice);
     return true;
+}
+
+bool UploadRegions(Device &device, Texture &texture, uint32_t face, uint32_t level, const Box *boxes,
+                   uint32_t count, const uint8_t *data)
+{
+    const TimeInto timer(device.stats.uploadMicros);
+    ++device.stats.textureUploads;
+    uint32_t rowBytes = 0, rows = 0, depth = 0;
+    LevelLayout(texture, level, rowBytes, rows, depth);
+    const size_t slice = static_cast<size_t>(rowBytes) * rows;
+    const FormatInfo &format = *texture.format;
+    // In groups of up to 16, kept on the stack; a group after the first one
+    // of a level costs a barrier, so a texture keeps at most kDirtyBoxLimit.
+    constexpr uint32_t kGroup = 16;
+    for (uint32_t first = 0; first < count; first += kGroup)
+    {
+        const uint32_t n = std::min(kGroup, count - first);
+        ImageRegion regions[kGroup];
+        void *staged[kGroup];
+        uint32_t stageRow[kGroup], stageSlice[kGroup];
+        for (uint32_t i = 0; i < n; ++i)
+        {
+            const Box &box = boxes[first + i];
+            ImageRegion &region = regions[i];
+            region.mipLevel = level;
+            region.layer = face;
+            region.x = box.left;
+            region.y = box.top;
+            region.z = box.front;
+            region.width = box.right - box.left;
+            region.height = box.bottom - box.top;
+            region.depth = box.back - box.front;
+        }
+        if (!StageImageWrites(device.core, texture.image, regions, n, staged, stageRow, stageSlice))
+        {
+            Fail(device, "cannot upload %s level %u: %s", texture.name.c_str(), level, LastError(device.core));
+            return false;
+        }
+        for (uint32_t i = 0; i < n; ++i)
+        {
+            const ImageRegion &region = regions[i];
+            const uint32_t blockX = format.compressed ? region.x / 4 : region.x;
+            const uint32_t blockY = format.compressed ? region.y / 4 : region.y;
+            const uint32_t blockRows = BlocksAcross(format, region.height);
+            uint8_t *to = static_cast<uint8_t *>(staged[i]);
+            for (uint32_t z = 0; z < region.depth; ++z)
+            {
+                for (uint32_t row = 0; row < blockRows; ++row)
+                {
+                    const uint8_t *src = data + (region.z + z) * slice
+                        + static_cast<size_t>(blockY + row) * rowBytes
+                        + static_cast<size_t>(blockX) * format.blockBytes;
+                    std::memcpy(to + static_cast<size_t>(z) * stageSlice[i]
+                                    + static_cast<size_t>(row) * stageRow[i],
+                                src, stageRow[i]);
+                }
+            }
+            device.stats.uploadBytes += static_cast<uint64_t>(stageRow[i]) * blockRows * region.depth;
+        }
+    }
+    return true;
+}
+
+void AddDirtyRegion(Device *device, Texture *texture, uint32_t face, const Box *box)
+{
+    (void)device;
+    if (!texture || face >= texture->dirty.size())
+        return;
+    Texture::Dirty &dirty = texture->dirty[face];
+    if (dirty.all)
+        return;
+    const TextureDesc &desc = texture->desc;
+    const uint32_t depth = desc.kind == TextureKind::Volume ? desc.depth : 1;
+    if (!box)
+    {
+        dirty.all = true;
+        dirty.boxes.clear();
+        return;
+    }
+    Box add = *box;
+    add.right = std::min(add.right, desc.width);
+    add.bottom = std::min(add.bottom, desc.height);
+    if (desc.kind != TextureKind::Volume)
+    {
+        add.front = 0;
+        add.back = 1;
+    }
+    add.back = std::min(add.back, depth);
+    if (add.left >= add.right || add.top >= add.bottom || add.front >= add.back)
+        return;
+    if (dirty.boxes.size() >= kDirtyBoxLimit)
+    {
+        dirty.all = true;
+        dirty.boxes.clear();
+        return;
+    }
+    AddBoxApart(dirty.boxes, add);
+}
+
+void AddBoxApart(std::vector<Box> &boxes, Box add)
+{
+    const auto overlap = [](const Box &a, const Box &b) {
+        return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom && a.front < b.back
+            && b.front < a.back;
+    };
+    for (size_t i = 0; i < boxes.size();)
+    {
+        const Box &have = boxes[i];
+        if (!overlap(have, add))
+        {
+            ++i;
+            continue;
+        }
+        add.left = std::min(add.left, have.left);
+        add.top = std::min(add.top, have.top);
+        add.front = std::min(add.front, have.front);
+        add.right = std::max(add.right, have.right);
+        add.bottom = std::max(add.bottom, have.bottom);
+        add.back = std::max(add.back, have.back);
+        boxes.erase(boxes.begin() + static_cast<std::ptrdiff_t>(i));
+        i = 0; // the grown box may now overlap one passed over
+    }
+    boxes.push_back(add);
 }
 
 void UnlockRect(Device *device_, Texture *texture, uint32_t face, uint32_t level)
@@ -534,43 +677,8 @@ void UnlockRect(Device *device_, Texture *texture, uint32_t face, uint32_t level
         return;
 
     EndPassIfOpen(device);
-    const TimeInto timer(device.stats.uploadMicros);
-    ++device.stats.textureUploads;
-    uint32_t rowBytes = 0, rows = 0, depth = 0;
-    LevelLayout(*texture, level, rowBytes, rows, depth);
-    const size_t slice = static_cast<size_t>(rowBytes) * rows;
-    const FormatInfo &format = *texture->format;
-    ImageRegion region;
-    region.mipLevel = level;
-    region.layer = face;
-    region.x = sub.box.left;
-    region.y = sub.box.top;
-    region.z = sub.box.front;
-    region.width = sub.box.right - sub.box.left;
-    region.height = sub.box.bottom - sub.box.top;
-    region.depth = sub.box.back - sub.box.front;
-    uint32_t stageRow = 0, stageSlice = 0;
-    uint8_t *staged =
-        static_cast<uint8_t *>(StageImageWrite(device.core, texture->image, region, &stageRow, &stageSlice));
-    if (!staged)
-    {
-        Fail(device, "cannot upload %s level %u: %s", texture->name.c_str(), level, LastError(device.core));
+    if (!UploadRegions(device, *texture, face, level, &sub.box, 1, sub.cpu.data()))
         return;
-    }
-    const uint32_t blockX = format.compressed ? region.x / 4 : region.x;
-    const uint32_t blockY = format.compressed ? region.y / 4 : region.y;
-    const uint32_t blockRows = BlocksAcross(format, region.height);
-    for (uint32_t z = 0; z < region.depth; ++z)
-    {
-        for (uint32_t row = 0; row < blockRows; ++row)
-        {
-            const uint8_t *src = sub.cpu.data() + (region.z + z) * slice + static_cast<size_t>(blockY + row) * rowBytes
-                + static_cast<size_t>(blockX) * format.blockBytes;
-            std::memcpy(staged + static_cast<size_t>(z) * stageSlice + static_cast<size_t>(row) * stageRow, src,
-                        stageRow);
-        }
-    }
-    device.stats.uploadBytes += static_cast<uint64_t>(stageRow) * blockRows * region.depth;
     sub.uploaded = true;
     // The GPU keeps the texture; D3D9's managed copy is not kept, to save
     // memory (a 32-bit process has little), unless the level was locked again
@@ -777,18 +885,17 @@ Shader *CreateShader(Device *device_, const void *bytecode, size_t bytes, std::s
     }
     shader->id = device.nextId++;
     shader->stage = shader->translated.reflection.stage;
+    shader->contentHash = ContentHash(bytecode, bytes);
     std::vector<uint32_t> spirv;
     if (shader->stage == ls::Stage::Vertex)
     {
-        // Vertex textures are never depth-compared here; where the device
-        // fixes depth compare in the shader, say so (see fixedDepthCompare).
-        // The cache keeps only the module built without it.
-        const bool fixedDepthCompare = Features(device.core).fixedDepthCompare;
+        // Vertex textures are never depth-compared here, whatever the device
+        // does for pixel shaders (see fixedDepthCompare): the module is built
+        // with depth compare fixed off, and the cache keeps it.
         const uint32_t noDepthSamplers = 0;
-        if (hit && !fixedDepthCompare && !cached.spirv.empty())
+        if (hit && !cached.spirv.empty())
             spirv = std::move(cached.spirv);
-        else if (!ls::BuildSpirv(shader->translated, nullptr, spirv, error,
-                                 fixedDepthCompare ? &noDepthSamplers : nullptr))
+        else if (!ls::BuildSpirv(shader->translated, nullptr, spirv, error, &noDepthSamplers))
         {
             Log(device, "vertex shader %08x: %s", shader->translated.bytecodeHash, error.c_str());
             return nullptr;
@@ -803,12 +910,45 @@ Shader *CreateShader(Device *device_, const void *bytecode, size_t bytes, std::s
     }
     if (!hit)
     {
-        if (Features(device.core).fixedDepthCompare)
-            spirv.clear();
         AddCachedShader(bytecode, bytes, CachedShader{shader->translated, std::move(spirv)});
     }
+    // A live shader translated to the same code lends its pipeline id.
+    std::vector<Shader *> &same = device.sameShaders[shader->contentHash];
+    shader->pipelineId = shader->id;
+    for (const Shader *other : same)
+    {
+        if (other->stage == shader->stage && other->translated.ir == shader->translated.ir)
+        {
+            shader->pipelineId = other->pipelineId;
+            break;
+        }
+    }
+    same.push_back(shader.get());
+    if (device.ahead)
+        AheadShaderCreated(device, *shader);
     return shader.release();
 }
+
+namespace
+{
+// Takes object out of its content's list; true when no live object shares
+// its pipeline id any more, so the pipelines keyed by it can go.
+template <typename Object>
+bool LastOfItsPipelines(std::unordered_map<uint64_t, std::vector<Object *>> &same, Object *object)
+{
+    auto found = same.find(object->contentHash);
+    if (found == same.end())
+        return true;
+    std::vector<Object *> &list = found->second;
+    list.erase(std::remove(list.begin(), list.end(), object), list.end());
+    bool last = true;
+    for (const Object *other : list)
+        last = last && other->pipelineId != object->pipelineId;
+    if (list.empty())
+        same.erase(found);
+    return last;
+}
+} // namespace
 
 void DestroyShader(Device *device, Shader *shader)
 {
@@ -818,12 +958,31 @@ void DestroyShader(Device *device, Shader *shader)
         device->vertexShader = nullptr;
     if (device->pixelShader == shader)
         device->pixelShader = nullptr;
-    ForgetPipelines(*device, shader->id);
+    if (device->ahead)
+        AheadForget(*device, shader->id, shader->contentHash, true);
+    if (LastOfItsPipelines(device->sameShaders, shader))
+        ForgetPipelines(*device, shader->pipelineId);
     DestroyShaderModule(device->core, shader->module);
     for (const auto &entry : shader->linked)
         DestroyShaderModule(device->core, entry.second);
     delete shader;
 }
+
+namespace
+{
+bool SameElements(const std::vector<VertexElement> &a, const std::vector<VertexElement> &b)
+{
+    if (a.size() != b.size())
+        return false;
+    for (size_t i = 0; i < a.size(); ++i)
+    {
+        if (a[i].stream != b[i].stream || a[i].offset != b[i].offset || a[i].type != b[i].type
+            || a[i].method != b[i].method || a[i].usage != b[i].usage || a[i].usageIndex != b[i].usageIndex)
+            return false;
+    }
+    return true;
+}
+} // namespace
 
 VertexDecl *CreateVertexDecl(Device *device, const VertexElement *elements, uint32_t count)
 {
@@ -842,6 +1001,30 @@ VertexDecl *CreateVertexDecl(Device *device, const VertexElement *elements, uint
     VertexDecl *decl = new VertexDecl();
     decl->id = device->nextId++;
     decl->elements.assign(elements, elements + count);
+    // Field by field: the hash names the declaration in the pipeline list
+    // file, whatever the struct's padding holds.
+    uint64_t hash = ContentHash(&count, sizeof(count));
+    for (const VertexElement &element : decl->elements)
+    {
+        const uint8_t fields[8] = {uint8_t(element.stream), uint8_t(element.stream >> 8), uint8_t(element.offset),
+                                   uint8_t(element.offset >> 8), element.type, element.method, element.usage,
+                                   element.usageIndex};
+        hash = ContentHash(fields, sizeof(fields), hash);
+    }
+    decl->contentHash = hash;
+    std::vector<VertexDecl *> &same = device->sameDecls[hash];
+    decl->pipelineId = decl->id;
+    for (const VertexDecl *other : same)
+    {
+        if (SameElements(other->elements, decl->elements))
+        {
+            decl->pipelineId = other->pipelineId;
+            break;
+        }
+    }
+    same.push_back(decl);
+    if (device->ahead)
+        AheadDeclCreated(*device, *decl);
     return decl;
 }
 
@@ -851,7 +1034,10 @@ void DestroyVertexDecl(Device *device, VertexDecl *decl)
         return;
     if (device->decl == decl)
         device->decl = nullptr;
-    ForgetPipelines(*device, decl->id);
+    if (device->ahead)
+        AheadForget(*device, decl->id, decl->contentHash, false);
+    if (LastOfItsPipelines(device->sameDecls, decl))
+        ForgetPipelines(*device, decl->pipelineId);
     delete decl;
 }
 } // namespace gfx_vk::legacy

@@ -208,6 +208,7 @@ enum Pool : uint32_t { POOL_DEFAULT = 0, POOL_MANAGED, POOL_SYSTEMMEM, POOL_SCRA
 constexpr uint32_t LOCK_READONLY = 0x10;
 constexpr uint32_t LOCK_DISCARD = 0x2000;
 constexpr uint32_t LOCK_NOOVERWRITE = 0x1000;
+constexpr uint32_t LOCK_NO_DIRTY_UPDATE = 0x8000;
 constexpr uint32_t CLEAR_TARGET = 0x1;
 constexpr uint32_t CLEAR_ZBUFFER = 0x2;
 constexpr uint32_t CLEAR_STENCIL = 0x4;
@@ -242,6 +243,11 @@ struct DeviceDesc
     // The PS Vita's GXM back end reads it as a folder, one compiled program
     // per file (src/gfx_gxm/gxm_program_cache.h).
     const char *shaderCachePath = nullptr;
+    // The pipeline list file (see "Pipelines built ahead" below): read when
+    // the device is created and written when it is destroyed. Null or empty:
+    // none, and every pipeline is built at its first draw. The GXM back end
+    // ignores it.
+    const char *pipelineListPath = nullptr;
     // Samples a pixel of the back buffer (see "Multisampled targets" below).
     // The GXM back end has one.
     uint32_t backBufferSamples = 1;
@@ -258,6 +264,7 @@ struct DeviceStats
 {
     uint64_t draws;
     uint64_t clears;
+    uint64_t passClears;      // of those, done as their pass's load operation (OptionalFeatures::passClears)
     uint64_t passes;          // render passes begun (a target change or a texture read after write)
     uint32_t pipelines;       // distinct pipelines built
     uint32_t pipelinesInFrame;
@@ -288,7 +295,30 @@ struct DeviceStats
     uint32_t shadersCached;    // of those, served by the shader cache (not translated)
     uint64_t shaderMicros;     // translating them (vertex modules included)
     uint64_t pipelineMicros;   // building pipelines (pixel modules included)
-    uint64_t textureUploads;   // texture levels uploaded by UnlockRect
+    // Of those pipelines, the pixel shader modules built for them (a shader's
+    // SPIR-V with the pipeline's fixed state folded in, see PixelModule) and
+    // the time that took, the rest of pipelineMicros being the driver's.
+    uint32_t pixelModules;
+    uint64_t pixelModuleMicros;
+    // Pipelines built ahead on worker threads (see "Pipelines built ahead"),
+    // not counted in pipelines or pipelineMicros: those built, the workers'
+    // time on them, those a draw then used, the draws that had to wait for
+    // one a worker was still building and how long they waited, and the
+    // entries the pipeline list file held when the device was created; then
+    // the time the creating thread spent queueing jobs as shaders and
+    // declarations were made (for shaders, inside shaderMicros).
+    uint32_t pipelinesAhead;
+    uint64_t aheadMicros;
+    uint32_t aheadUsed;
+    uint32_t aheadWaits;
+    uint64_t aheadWaitMicros;
+    uint32_t pipelinesListed;
+    uint64_t aheadQueueMicros;
+    // Of the pipelines built ahead, the pixel modules the workers built for
+    // them (as pixelModules) and the workers' time on those.
+    uint32_t aheadPixelModules;
+    uint64_t aheadPixelModuleMicros;
+    uint64_t textureUploads;   // copy commands of UnlockRect and UpdateTexture, of one or more regions of a level
     uint64_t textureReadbacks; // levels read back to lock a texture again (once each)
     uint64_t uploadBytes;
     uint64_t uploadMicros;     // staging those uploads
@@ -330,6 +360,31 @@ void SetGpuFeed(Device *device, const GpuFeed &feed);
 // between two calls; the change is logged.
 bool GetKeepDrawState(const Device *device);
 void SetKeepDrawState(Device *device, bool keep);
+
+// Pipelines built ahead. A pipeline is built the first time a draw needs it,
+// which costs that frame from about a millisecond (the driver's cache has it)
+// to over a hundred (a cold driver compiling the shaders). The device keeps a
+// list of the pipelines draws used: each entry names its shaders and vertex
+// declaration by their contents and holds the rest of the pipeline's state.
+// A device created with DeviceDesc::pipelineListPath reads the list at the
+// start; whenever the last shader or declaration an entry needs is created
+// (the game creates them as it loads a map), the entry's pipeline is queued
+// to worker threads (OptionalFeatures::pipelinesAhead), so it is usually
+// built before the first draw that needs it. A draw that needs one a worker
+// is still building waits for it; one only queued is built by the draw. The
+// list is written when the device is destroyed: entries drawn this launch,
+// and those not drawn in fewer than kPipelineListAge launches that built
+// them. The file names the GPU: another GPU starts with an empty list.
+//
+// SavePipelineList and LoadPipelineList write and read the list now (message
+// says what they did); a load replaces the device's list and queues what it
+// can build. FinishPipelinesAhead waits until the workers have nothing left
+// and hands their pipelines to the device. For checks and tools.
+constexpr uint32_t kPipelineListAge = 8;
+bool SavePipelineList(Device *device, const char *path, std::string &message);
+bool LoadPipelineList(Device *device, const char *path, std::string &message);
+void FinishPipelinesAhead(Device *device);
+uint32_t PipelineListSize(const Device *device);
 #endif
 
 // The shader cache. Translated shaders are kept by their D3D9 bytecode for the
@@ -528,8 +583,14 @@ void StretchRect(Device *device, Surface *src, const Rect *srcRect, Surface *dst
 // GetRenderTargetData: waits for the GPU and copies a render target into a
 // SYSTEMMEM surface of the same size and format (4 bytes per pixel formats).
 bool GetRenderTargetData(Device *device, Surface *renderTarget, Surface *dst);
-// UpdateTexture: every level of a SYSTEMMEM texture into a matching texture.
+// UpdateTexture: a SYSTEMMEM texture into a matching texture, as D3D9 does it:
+// only what is dirty, in every level, and then nothing is. A new texture is
+// dirty all over; a lock without LOCK_NO_DIRTY_UPDATE or LOCK_READONLY marks
+// its region, and AddDirtyRegion marks one (AddDirtyRect, AddDirtyBox).
 void UpdateTexture(Device *device, Texture *src, Texture *dst);
+// box in level 0's texels; null marks the whole face. Only SYSTEMMEM and
+// SCRATCH textures keep it: other textures upload at every unlock.
+void AddDirtyRegion(Device *device, Texture *texture, uint32_t face, const Box *box);
 
 // D3D9's BeginScene/EndScene bracket nothing here; Present shows the back
 // buffer (scaled to the window when their sizes differ), then makes it the
@@ -542,6 +603,20 @@ enum class PresentResult
     Failed,
 };
 PresentResult Present(Device *device);
+
+#if !defined(KISAK_GFX_GXM)
+// ---- Passes of another user of the core (the Modern path) --------------------------------
+//
+// Ends the pass being drawn and forgets what the device has bound, so that
+// the caller can record passes of its own on the core (vk_core.h) between
+// draws; the next draw begins a new pass and binds everything again. Opens
+// the frame if none is open. False, with nothing to record into, when the
+// frame is skipped (minimised window) or the device has failed.
+bool HandOverRecording(Device *device);
+// The core image a surface draws into: its texture's image when the surface
+// is level 0 of a 2D texture or a standalone surface, else null.
+gfx_vk::Image *SurfaceImage(const Surface *surface);
+#endif
 
 // The device's window is about to be destroyed: an open pass and frame end
 // unshown, and the core lets go of its swapchain and surface (DetachWindow in

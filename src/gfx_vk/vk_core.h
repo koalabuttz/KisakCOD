@@ -309,10 +309,12 @@ struct OptionalFeatures
     // the pipelines.
     bool dynamicVertexStride;
     // Translated pixel shaders get each sampler's depth compare fixed when
-    // they are built (legacy_shader::BuildSpirv's fixedDepthCompare) instead
-    // of choosing at run time. On every portability-subset device: MoltenVK's
-    // converter turns an image sampled both ways into a Metal depth texture,
-    // which cannot sample colour. KISAK_VK_DEPTH_COMPARE=fixed forces it.
+    // they are built for a pipeline (legacy_shader::BuildSpirv's
+    // fixedDepthCompare, PipelineKey::depthSamplers) instead of choosing
+    // around every sample at run time, as DXVK does. Always on a
+    // portability-subset device: MoltenVK's converter turns an image sampled
+    // both ways into a Metal depth texture, which cannot sample colour.
+    // KISAK_VK_DEPTH_COMPARE=dynamic chooses at run time elsewhere.
     bool fixedDepthCompare;
     // The Legacy adapter makes a render target in a 16-bit packed format
     // (R5G6B5, X1R5G5B5, A1R5G5B5) as B8G8R8A8 where the device cannot render
@@ -328,6 +330,34 @@ struct OptionalFeatures
     // engine waits for the frame before it (legacy::GetQueryData). On unless
     // KISAK_VK_FENCE_FLUSH=0, to compare the two.
     bool fenceFlush;
+    // The Legacy adapter turns a Clear of the whole target that comes before
+    // any draw of a pass into the pass's load operation (LOAD_OP_CLEAR), as
+    // DXVK does: drivers clear an attachment that way with their fast clears
+    // (Mesa's ANV counts vkCmdClearAttachments as a slow clear), and a
+    // tile-based GPU loads nothing. On unless KISAK_VK_PASS_CLEARS=0.
+    bool passClears;
+    // Every pass is timed with a pair of GPU timestamps (PassTimingsFor and
+    // CoreStats::framePasses). The one at a pass's end waits for all its work
+    // (ALL_COMMANDS), which on some drivers drains the GPU between passes.
+    // On unless KISAK_VK_PASS_TIMESTAMPS=0, which keeps only the frame's own
+    // pair: the frame's GPU time stays, the time in passes is not known.
+    bool passTimestamps;
+    // The Legacy adapter's translated shaders multiply plainly, as DXVK's do on
+    // drivers without a native D3D9 multiply, and keep infinities out instead
+    // (legacy_shader::SetStrictFloats). KISAK_VK_STRICT_FLOATS=1 checks both
+    // factors of every multiply for zero instead, as D3D9 hardware gives.
+    bool strictFloats;
+    // The Legacy adapter fixes the alpha test's compare in each pipeline's
+    // pixel shader (legacy_shader::BuildSpirv's fixedAlphaCompare), as DXVK
+    // does, so a draw without the test runs a shader that cannot discard and
+    // the GPU can test depth before it. KISAK_VK_ALPHA_TEST=dynamic reads the
+    // compare from the alpha test block at run time instead.
+    bool fixedAlphaTest;
+    // The Legacy adapter's translated shaders hold the legacy state the game
+    // never changes (fog, clip planes, point sprites, unbound samplers) as
+    // constants (legacy_shader::SetDynamicLegacyState), as DXVK specialises
+    // it. KISAK_VK_LEGACY_STATE=dynamic reads it from uniforms at run time.
+    bool dynamicLegacyState;
     // The Legacy adapter submits a frame in parts while it is still being
     // drawn, so the GPU works on a frame as it is recorded instead of
     // starting when the frame ends (see FeedGpu in vk_legacy_draw.cpp). Each
@@ -339,6 +369,15 @@ struct OptionalFeatures
     // (testing: every draw then starts a command buffer and a pass).
     bool gpuFeed;
     bool gpuFeedAlways;
+    // The Legacy adapter keeps a list of the pipelines each launch drew
+    // (DeviceDesc::pipelineListPath) and builds them on worker threads as soon
+    // as the shaders and declaration they need exist, so the first draw that
+    // needs one finds it built. On unless KISAK_VK_PIPELINES_AHEAD=0, which
+    // builds every pipeline at its first draw (and still writes the list).
+    bool pipelinesAhead;
+    // How many worker threads build them: KISAK_VK_PIPELINE_WORKERS (1 to 8),
+    // else 0, for one per three CPU threads, at most two.
+    uint32_t pipelineWorkers;
     // Draws recorded before a part is submitted (KISAK_VK_GPU_FEED_DRAWS,
     // default 128): that many while the GPU has under two submissions left,
     // more for each further one (up to four times).
@@ -638,6 +677,12 @@ struct ImageRegion
 // rowPitch and slicePitch receive the staging layout in bytes: a row of texels,
 // or of 4x4 blocks for block-compressed formats, and one depth slice.
 void *StageImageWrite(Core *core, Image *image, const ImageRegion &region, uint32_t *rowPitch, uint32_t *slicePitch);
+// Several regions of one image in one copy command, with at most one barrier
+// before it: what a texture's dirty boxes need. The regions must not overlap.
+// data, rowPitch and slicePitch receive one entry per region (the pitches may
+// be null). False, with nothing recorded, when any region is bad.
+bool StageImageWrites(Core *core, Image *image, const ImageRegion *regions, uint32_t count, void **data,
+                      uint32_t *rowPitch, uint32_t *slicePitch);
 
 // Host-visible memory for this frame only (vertex, index and uniform data),
 // valid until the frame slot comes round again.
@@ -708,6 +753,19 @@ void DestroyShaderModule(Core *core, VkShaderModule module);
 // Through the pipeline cache, counted in CoreStats (creation inside a frame is
 // counted separately: the target is none during play). VK_NULL_HANDLE on failure.
 VkPipeline CreateGraphicsPipeline(Core *core, const VkGraphicsPipelineCreateInfo &info);
+// The same through the pipeline cache, from any thread while the core lives:
+// it touches nothing of the core but the cache, which Vulkan synchronises, so
+// it counts nothing in CoreStats and sets no error. VK_NULL_HANDLE on failure,
+// with the result in `result`; `ms` is the time it took and `cacheHit` what
+// pipeline creation feedback said.
+struct OffThreadPipeline
+{
+    VkResult result = VK_SUCCESS;
+    double ms = 0.0;
+    bool cacheHit = false;
+};
+VkPipeline CreateGraphicsPipelineOffThread(Core *core, const VkGraphicsPipelineCreateInfo &info,
+                                           OffThreadPipeline &out);
 // Destroyed once the frames recorded so far have finished.
 void DestroyPipeline(Core *core, VkPipeline pipeline);
 // One sampler per distinct description, owned by the core.

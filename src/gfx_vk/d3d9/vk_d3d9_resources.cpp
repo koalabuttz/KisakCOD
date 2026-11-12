@@ -470,6 +470,20 @@ HRESULT BaseTexture<Interface>::Lock(UINT face, UINT level, D3DLOCKED_RECT *lock
 }
 
 template <class Interface>
+HRESULT BaseTexture<Interface>::Dirty(UINT face, const RECT *rect)
+{
+    if (face >= state_.faces || (rect && !ValidRect(*rect)))
+        return D3DERR_INVALIDCALL;
+#if !defined(KISAK_GFX_GXM)
+    lg::Box box;
+    if (rect)
+        box = ToBox(*rect);
+    lg::AddDirtyRegion(this->device_->legacy(), state_.texture, face, rect ? &box : nullptr);
+#endif
+    return D3D_OK;
+}
+
+template <class Interface>
 HRESULT BaseTexture<Interface>::Unlock(UINT face, UINT level)
 {
     if (face >= state_.faces || level >= state_.levels)
@@ -502,11 +516,12 @@ HRESULT STDMETHODCALLTYPE Texture::UnlockRect(UINT level)
     return Unlock(0, level);
 }
 
-HRESULT STDMETHODCALLTYPE Texture::AddDirtyRect(const RECT *)
+// Only a SYSTEMMEM texture keeps what is dirty, for UpdateTexture; every
+// other texture uploads what was written at its unlock.
+HRESULT STDMETHODCALLTYPE Texture::AddDirtyRect(const RECT *rect)
 {
     const FrontLock lock;
-    // Every unlock uploads what was written, so there is nothing to mark.
-    return D3D_OK;
+    return Dirty(0, rect);
 }
 
 HRESULT STDMETHODCALLTYPE CubeTexture::GetLevelDesc(UINT level, D3DSURFACE_DESC *desc)
@@ -535,10 +550,10 @@ HRESULT STDMETHODCALLTYPE CubeTexture::UnlockRect(D3DCUBEMAP_FACES face, UINT le
     return Unlock(static_cast<UINT>(face), level);
 }
 
-HRESULT STDMETHODCALLTYPE CubeTexture::AddDirtyRect(D3DCUBEMAP_FACES, const RECT *)
+HRESULT STDMETHODCALLTYPE CubeTexture::AddDirtyRect(D3DCUBEMAP_FACES face, const RECT *rect)
 {
     const FrontLock lock;
-    return D3D_OK;
+    return Dirty(static_cast<UINT>(face), rect);
 }
 
 // ---- Volumes --------------------------------------------------------------------------------------
@@ -671,9 +686,24 @@ HRESULT STDMETHODCALLTYPE VolumeTexture::UnlockBox(UINT level)
     return Unlock(0, level);
 }
 
-HRESULT STDMETHODCALLTYPE VolumeTexture::AddDirtyBox(const D3DBOX *)
+HRESULT STDMETHODCALLTYPE VolumeTexture::AddDirtyBox(const D3DBOX *box)
 {
     const FrontLock lock;
+    if (box && (box->Right <= box->Left || box->Bottom <= box->Top || box->Back <= box->Front))
+        return D3DERR_INVALIDCALL;
+#if !defined(KISAK_GFX_GXM)
+    lg::Box region;
+    if (box)
+    {
+        region.left = box->Left;
+        region.top = box->Top;
+        region.front = box->Front;
+        region.right = box->Right;
+        region.bottom = box->Bottom;
+        region.back = box->Back;
+    }
+    lg::AddDirtyRegion(device_->legacy(), state_.texture, 0, box ? &region : nullptr);
+#endif
     return D3D_OK;
 }
 

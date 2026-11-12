@@ -24,7 +24,10 @@
 #include "util/util_byte_stream.h"
 #include "util/util_log.h"
 
+#include <algorithm>
 #include <array>
+#include <atomic>
+#include <bit>
 #include <cstring>
 #include <optional>
 #include <sstream>
@@ -137,18 +140,124 @@ ir::CompileOptions CompileOptions()
     return options;
 }
 
-// Replaces every load of SamplerStateBlock::useDepthCompare with a constant
-// from depthSamplers (bit per sampler), then folds the branches it decides
-// and drops the dead code, so each image is sampled one way only. Returns the
-// number of loads replaced.
-uint32_t FixDepthCompare(ir::Builder &builder, uint32_t depthSamplers)
+// A call of a function that does nothing but return a constant becomes the
+// constant (an alpha test fixed to Always is such a function), so the
+// branches on its result fold too. Returns whether any call was replaced.
+bool FoldConstantCalls(ir::Builder &builder)
+{
+    std::vector<std::pair<ir::SsaDef, ir::SsaDef>> rewrites; // call, constant
+    auto [begin, end] = builder.getCode();
+    for (auto it = begin; it != end; ++it)
+    {
+        if (it->getOpCode() != ir::OpCode::eFunction)
+            continue;
+        auto op = std::next(it);
+        if (op == end || op->getOpCode() != ir::OpCode::eLabel)
+            continue;
+        // Loads of its parameters may be left over; they do nothing.
+        for (++op; op != end && op->getOpCode() == ir::OpCode::eParamLoad; ++op)
+        {
+        }
+        if (op == end || op->getOpCode() != ir::OpCode::eReturn || op->getOperandCount() != 1u)
+            continue;
+        const ir::SsaDef value = ir::SsaDef(op->getOperand(0u));
+        if (!value || !builder.getOp(value).isConstant())
+            continue;
+        if (++op == end || op->getOpCode() != ir::OpCode::eFunctionEnd)
+            continue;
+        std::vector<ir::SsaDef> uses;
+        builder.getUses(it->getDef(), uses);
+        for (ir::SsaDef use : uses)
+        {
+            const ir::Op &call = builder.getOp(use);
+            if (call.getOpCode() == ir::OpCode::eFunctionCall && ir::SsaDef(call.getOperand(0u)) == it->getDef())
+                rewrites.push_back({use, value});
+        }
+    }
+    for (const auto &[call, value] : rewrites)
+        builder.rewriteDef(call, value);
+    return !rewrites.empty();
+}
+
+// An unused call of a function without side effects goes. dxbc-spirv's
+// RemoveUnusedPass keeps a call of a function it has not met yet in code
+// order, and the vertex shaders' clipping function comes before the dot
+// product it calls six times. Calls and stores of any kind count as side
+// effects here. Returns whether any call was removed.
+bool RemoveUnusedPureCalls(ir::Builder &builder)
+{
+    std::vector<ir::SsaDef> pure;
+    ir::SsaDef function = {};
+    bool sideEffects = false;
+    auto [begin, end] = builder.getCode();
+    for (auto it = begin; it != end; ++it)
+    {
+        switch (it->getOpCode())
+        {
+        case ir::OpCode::eFunction:
+            function = it->getDef();
+            sideEffects = false;
+            break;
+        case ir::OpCode::eFunctionEnd:
+            if (function && !sideEffects)
+                pure.push_back(function);
+            function = {};
+            break;
+        case ir::OpCode::eFunctionCall:
+        case ir::OpCode::eTmpStore:
+        case ir::OpCode::eScratchStore:
+        case ir::OpCode::eLdsStore:
+        case ir::OpCode::eOutputStore:
+        case ir::OpCode::eBufferStore:
+        case ir::OpCode::eMemoryStore:
+        case ir::OpCode::eImageStore:
+        case ir::OpCode::eLdsAtomic:
+        case ir::OpCode::eBufferAtomic:
+        case ir::OpCode::eImageAtomic:
+        case ir::OpCode::eCounterAtomic:
+        case ir::OpCode::eMemoryAtomic:
+        case ir::OpCode::eEmitVertex:
+        case ir::OpCode::eEmitPrimitive:
+        case ir::OpCode::eDemote:
+        case ir::OpCode::eBarrier:
+        case ir::OpCode::eRovScopedLockBegin:
+        case ir::OpCode::eRovScopedLockEnd:
+        case ir::OpCode::eDrain:
+            sideEffects = true;
+            break;
+        default:
+            break;
+        }
+    }
+    std::vector<ir::SsaDef> unused;
+    for (auto it = begin; it != end; ++it)
+    {
+        if (it->getOpCode() != ir::OpCode::eFunctionCall ||
+            std::find(pure.begin(), pure.end(), ir::SsaDef(it->getOperand(0u))) == pure.end())
+            continue;
+        std::vector<ir::SsaDef> uses;
+        builder.getUses(it->getDef(), uses);
+        if (uses.empty())
+            unused.push_back(it->getDef());
+    }
+    for (ir::SsaDef call : unused)
+        builder.remove(call);
+    return !unused.empty();
+}
+
+// Replaces every 32-bit (u32 or f32) load of one member of a legacy uniform block with a
+// constant, value(element) for an array of blocks (SamplerStateBlock[16]) or
+// value(0) for one, then folds the branches the constants decide and drops
+// the dead code. Returns the number of loads replaced.
+template <typename Value>
+uint32_t FixUniformMember(ir::Builder &builder, Uniform uniform, uint32_t member, Value value)
 {
     ir::SsaDef cbv = {};
     auto [begin, end] = builder.getDeclarations();
     for (auto it = begin; it != end; ++it)
     {
         if (it->getOpCode() == ir::OpCode::eDclCbv && uint32_t(it->getOperand(1u)) == kUniformRegSpace &&
-            uint32_t(it->getOperand(2u)) == static_cast<uint32_t>(Uniform::SamplerState))
+            uint32_t(it->getOperand(2u)) == static_cast<uint32_t>(uniform))
             cbv = it->getDef();
     }
     if (!cbv)
@@ -169,16 +278,22 @@ uint32_t FixDepthCompare(ir::Builder &builder, uint32_t depthSamplers)
             if (load.getOpCode() != ir::OpCode::eBufferLoad || ir::SsaDef(load.getOperand(0u)) != descriptor)
                 continue;
             const ir::Op &address = builder.getOp(ir::SsaDef(load.getOperand(1u)));
-            if (!address.isConstant() || address.getOperandCount() != 2u ||
-                uint32_t(address.getOperand(1u)) != uint32_t(ir::LegacySamplerStateLayout::eUseDepthCompare) ||
-                !(load.getType() == ir::Type(ir::BasicType(ir::ScalarType::eU32))))
+            const uint32_t parts = address.isConstant() ? address.getOperandCount() : 0u;
+            const bool u32 = load.getType() == ir::Type(ir::BasicType(ir::ScalarType::eU32));
+            const bool f32 = load.getType() == ir::Type(ir::BasicType(ir::ScalarType::eF32));
+            if ((parts != 1u && parts != 2u) || uint32_t(address.getOperand(parts - 1u)) != member || !(u32 || f32))
                 continue;
-            const uint32_t sampler = uint32_t(address.getOperand(0u));
-            loads.push_back({use, sampler < 32u ? (depthSamplers >> sampler) & 1u : 0u});
+            loads.push_back({use, value(parts == 2u ? uint32_t(address.getOperand(0u)) : 0u)});
         }
     }
-    for (const auto &[load, value] : loads)
-        builder.rewriteDef(load, builder.makeConstant(value));
+    for (const auto &[load, constant] : loads)
+    {
+        // A float member's value is its bits.
+        if (builder.getOp(load).getType() == ir::Type(ir::BasicType(ir::ScalarType::eF32)))
+            builder.rewriteDef(load, builder.makeConstant(std::bit_cast<float>(constant)));
+        else
+            builder.rewriteDef(load, builder.makeConstant(constant));
+    }
     if (loads.empty())
         return 0;
 
@@ -189,12 +304,63 @@ uint32_t FixDepthCompare(ir::Builder &builder, uint32_t depthSamplers)
         progress |= ir::ArithmeticPass::runPass(builder, options.arithmeticOptions);
         progress |= ir::CleanupControlFlowPass::runPass(builder);
         progress |= ir::SsaConstructionPass::runResolveTrivialPhiPass(builder);
+        progress |= FoldConstantCalls(builder);
+        progress |= RemoveUnusedPureCalls(builder);
         if (!progress)
             break;
         ir::RemoveUnusedPass::runPass(builder);
     }
     ir::RemoveUnusedPass::runPass(builder);
     return static_cast<uint32_t>(loads.size());
+}
+
+// Every SamplerStateBlock::useDepthCompare from depthSamplers (bit per
+// sampler), so each image is sampled one way only, and drefClamp with it:
+// set for a depth sampler where kFixedDepthClamp is.
+uint32_t FixDepthCompare(ir::Builder &builder, uint32_t depthSamplers)
+{
+    const auto depth = [depthSamplers](uint32_t sampler) {
+        return sampler < kSamplerCount ? (depthSamplers >> sampler) & 1u : 0u;
+    };
+    const bool clamp = (depthSamplers & kFixedDepthClamp) != 0;
+    return FixUniformMember(builder, Uniform::SamplerState, uint32_t(ir::LegacySamplerStateLayout::eUseDepthCompare),
+                            depth) +
+        FixUniformMember(builder, Uniform::SamplerState, uint32_t(ir::LegacySamplerStateLayout::eDrefClamp),
+                         [depth, clamp](uint32_t sampler) { return clamp ? depth(sampler) : 0u; });
+}
+
+// The legacy state the Legacy adapter always writes the same (see
+// FillUniformBlock in vk_legacy_draw.cpp; the game never changes it), as
+// constants: no fog, no clip planes, no point sprites and D3D9's point sizes,
+// and no projection, gather or unbound sampler (an unbound one reads the
+// adapter's null texture, which is (0, 0, 0, 1) as the check gave). Without
+// these every pixel shader branches three times around each sample and picks
+// each texture coordinate between it and the point coordinate, and every
+// vertex shader works out six clip distances (laptop run 17).
+void FixLegacyState(ir::Builder &builder)
+{
+    const auto zero = [](uint32_t) { return 0u; };
+    const auto bits = [](float value) { return [value](uint32_t) { return std::bit_cast<uint32_t>(value); }; };
+    FixUniformMember(builder, Uniform::Fog, uint32_t(ir::LegacyFogLayout::eFogEnable), zero);
+    FixUniformMember(builder, Uniform::ClipPlanes, uint32_t(ir::LegacyClipPlaneLayout::eClipPlaneCount), zero);
+    FixUniformMember(builder, Uniform::PointArgs, uint32_t(ir::LegacyPointArgsLayout::eIsPointSprite), zero);
+    FixUniformMember(builder, Uniform::PointArgs, uint32_t(ir::LegacyPointArgsLayout::ePointSize), bits(1.0f));
+    FixUniformMember(builder, Uniform::PointArgs, uint32_t(ir::LegacyPointArgsLayout::ePointSizeMin), bits(1.0f));
+    FixUniformMember(builder, Uniform::PointArgs, uint32_t(ir::LegacyPointArgsLayout::ePointSizeMax), bits(64.0f));
+    FixUniformMember(builder, Uniform::SamplerState, uint32_t(ir::LegacySamplerStateLayout::eUseProjection), zero);
+    FixUniformMember(builder, Uniform::SamplerState, uint32_t(ir::LegacySamplerStateLayout::eIsNull), zero);
+    FixUniformMember(builder, Uniform::SamplerState, uint32_t(ir::LegacySamplerStateLayout::eUseGather), zero);
+    FixUniformMember(builder, Uniform::SamplerState, uint32_t(ir::LegacySamplerStateLayout::eDrefScale),
+                     bits(1.0f / float((1u << 24) - 1)));
+}
+
+// AlphaTestBlock::compareOp from the pipeline: with Always the test and its
+// demote go, so a draw without the alpha test runs a shader that cannot
+// discard (which lets the GPU test depth before the shader).
+uint32_t FixAlphaTest(ir::Builder &builder, uint32_t compareOp)
+{
+    return FixUniformMember(builder, Uniform::AlphaTest, uint32_t(ir::LegacyAlphaTestLayout::eAlphaCompareOp),
+                            [compareOp](uint32_t) { return compareOp; });
 }
 
 
@@ -446,6 +612,7 @@ bool Translate(const void *bytecode, size_t bytes, Shader &shader, std::string &
     {
         sm3::Converter::Options options = {};
         options.includeDebugNames = true;
+        options.fastFloatEmulation = !StrictFloats();
         sm3::Converter converter(util::ByteReader(bytecode, bytes), options);
         if (!converter.convertShader(builder))
         {
@@ -501,6 +668,8 @@ bool Translate(const void *bytecode, size_t bytes, Shader &shader, std::string &
     }
 
     ir::legalizeIr(builder, CompileOptions());
+    if (!DynamicLegacyState())
+        FixLegacyState(builder);
 
     ReflectResources(builder, reflection);
     if (!(reflection.uniforms & (1u << static_cast<uint32_t>(Uniform::FloatConstants))))
@@ -532,7 +701,7 @@ bool StagesLinkDirectly(const Shader &vertexShader, const Shader &pixelShader)
 }
 
 bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<uint32_t> &spirv, std::string &error,
-                const uint32_t *fixedDepthCompare)
+                const uint32_t *fixedDepthCompare, const uint32_t *fixedAlphaCompare)
 {
     spirv.clear();
     error.clear();
@@ -556,6 +725,8 @@ bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<ui
     }
     if (fixedDepthCompare)
         FixDepthCompare(builder, *fixedDepthCompare);
+    if (fixedAlphaCompare)
+        FixAlphaTest(builder, *fixedAlphaCompare);
 
     spirv::SpirvBuilder::Options options = {};
     options.includeDebugNames = true;
@@ -639,7 +810,27 @@ const char *TextureTypeName(TextureType type)
 #error "vulkan_shaders.cmake defines KISAK_LEGACY_SHADER_REVISION"
 #endif
 
-const char *TranslatorRevision() { return KISAK_LEGACY_SHADER_REVISION; }
+namespace
+{
+std::atomic<bool> g_strictFloats{false};
+std::atomic<bool> g_dynamicLegacyState{false};
+} // namespace
+
+void SetStrictFloats(bool strict) { g_strictFloats.store(strict, std::memory_order_relaxed); }
+bool StrictFloats() { return g_strictFloats.load(std::memory_order_relaxed); }
+void SetDynamicLegacyState(bool dynamic) { g_dynamicLegacyState.store(dynamic, std::memory_order_relaxed); }
+bool DynamicLegacyState() { return g_dynamicLegacyState.load(std::memory_order_relaxed); }
+
+const char *TranslatorRevision()
+{
+    static const char *const kRevisions[4] = {
+        KISAK_LEGACY_SHADER_REVISION,
+        KISAK_LEGACY_SHADER_REVISION "+strict-floats",
+        KISAK_LEGACY_SHADER_REVISION "+dynamic-state",
+        KISAK_LEGACY_SHADER_REVISION "+strict-floats+dynamic-state",
+    };
+    return kRevisions[(StrictFloats() ? 1 : 0) | (DynamicLegacyState() ? 2 : 0)];
+}
 
 namespace
 {

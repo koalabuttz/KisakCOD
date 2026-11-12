@@ -57,7 +57,9 @@ void DestroyBackBuffer(Device &device)
     device.frontBufferSurface.texture = nullptr;
 }
 
-// 1x1 textures of each kind, cleared to zero, for samplers with nothing bound.
+// 1x1 textures of each kind, (0, 0, 0, 1) as D3D9 samples nothing bound, for
+// samplers with nothing bound. Shaders translated with the legacy state fixed
+// sample them as they are (no isNull test).
 bool CreateNullTextures(Device &device)
 {
     static const char *const names[3] = {"null 2D texture", "null cube texture", "null volume texture"};
@@ -81,7 +83,8 @@ bool CreateNullTextures(Device &device)
             void *data = StageImageWrite(device.core, texture->image, region, nullptr, nullptr);
             if (!data)
                 return Fail(device, "cannot clear the %s: %s", names[kind], LastError(device.core));
-            std::memset(data, 0, 4);
+            const uint8_t black[4] = {0, 0, 0, 0xff}; // A8R8G8B8: B, G, R, A
+            std::memcpy(data, black, sizeof(black));
         }
     }
     return true;
@@ -199,6 +202,9 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     device->vk = &Functions(core);
     device->dev = DeviceHandle(core);
     device->desc = desc;
+    // Before any shader is translated or the cache is read, which follows it.
+    ls::SetStrictFloats(Features(core).strictFloats);
+    ls::SetDynamicLegacyState(Features(core).dynamicLegacyState);
     if (desc.shaderCachePath && *desc.shaderCachePath)
     {
         device->shaderCachePath = desc.shaderCachePath;
@@ -211,6 +217,10 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
             Log(*device, "shader cache %s: %s", desc.shaderCachePath, message.c_str());
         }
     }
+    // Pipelines built ahead: before any shader is created, so each one
+    // created queues what the list has for it.
+    StartAhead(*device, desc.pipelineListPath);
+    device->desc.pipelineListPath = nullptr;
     device->depthFormat = DepthStencilFormat(core);
     // D3DRS_DEPTHBIAS is in units of the depth range; Vulkan's constant factor
     // is in units of the format's smallest step.
@@ -263,11 +273,16 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
             GpuFeedText(device->feed, feed, sizeof(feed));
             Log(*device,
                 "device ready: back buffer %ux%u, %u %s, depth %s, vertex stride %s, depth compare %s, "
-                "16-bit targets %s, occlusion queries %s, GPU feed %s",
+                "16-bit targets %s, occlusion queries %s, clears %s, passes %s, floats %s, alpha test %s, "
+                "legacy state %s, GPU feed %s",
                 width, height, device->backBufferSamples, device->backBufferSamples == 1 ? "sample" : "samples",
                 FormatName(device->depthFormat), features.dynamicVertexStride ? "dynamic" : "static",
                 features.fixedDepthCompare ? "fixed" : "dynamic", packedTargets ? "packed" : "wide",
-                features.occlusionCounts ? "counted" : "not counted", feed);
+                features.occlusionCounts ? "counted" : "not counted",
+                features.passClears ? "at pass start" : "in the pass",
+                features.passTimestamps ? "timed" : "not timed", features.strictFloats ? "strict" : "fast",
+                features.fixedAlphaTest ? "fixed" : "dynamic", features.dynamicLegacyState ? "dynamic" : "fixed",
+                feed);
             return device.release();
         }
         Fail(*device, "core: %s", LastError(core));
@@ -289,6 +304,7 @@ void DestroyDevice(Device *device)
         gfx_vk::Present(core); // the core needs its frame closed; nothing new is shown
     device->frameOpen = false;
     gfx_vk::WaitIdle(core);
+    StopAhead(*device);
     DestroyPipelineObjects(*device);
     for (Texture *&texture : device->nullTexture)
     {

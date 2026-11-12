@@ -83,6 +83,7 @@
     X(vkCmdResetQueryPool) \
     X(vkCmdWriteTimestamp2) \
     X(vkGetQueryPoolResults) \
+    X(vkCmdCopyQueryPoolResults) \
     X(vkResetQueryPool) \
     X(vkCmdBeginQuery) \
     X(vkCmdEndQuery) \

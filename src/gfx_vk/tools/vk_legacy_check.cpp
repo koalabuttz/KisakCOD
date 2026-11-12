@@ -26,6 +26,7 @@
 #include <cstring>
 #include <filesystem>
 #include <functional>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
@@ -406,6 +407,8 @@ public:
     void OcclusionQuery();
     void StateReuse();
     void ShaderCache();
+    void PassClear();
+    void PipelinesAhead();
 };
 
 void Check::Clear()
@@ -519,8 +522,23 @@ void Check::TextureLevels()
     }
     lg::UnlockRect(device, texture, 0, 0);
     DrawQuadPx(64, 0, 128, 64, 0.5f, 0xffffffffu);
+    // A slot's sampler is kept across textures with the same traits and made
+    // again for others: a single level reads level 0 at any size (maxLod 1),
+    // and the three-level texture bound again reads its level 2 once more.
+    // The state change makes the slot's sampler for the single level, so a
+    // sampler kept for the wrong texture would stop the next draw at level 1.
+    lg::Texture *single = Texture(lg::TextureKind::Tex2D, 64, 64, 1, 1, d3d::FMT_A8R8G8B8, "single");
+    if (!single || !Fill(single, 0, 0, [](uint32_t, uint32_t, uint32_t) { return Argb(255, 255, 128, 0); }))
+        return;
+    lg::SetTexture(device, 0, single);
+    lg::SetSamplerState(device, 0, d3d::SAMP_BORDERCOLOR, Argb(255, 0, 0, 0));
+    DrawQuadPx(16, 80, 32, 96, 0.5f, 0xffffffffu);
+    lg::SetTexture(device, 0, texture);
+    DrawQuadPx(48, 80, 64, 96, 0.5f, 0xffffffffu);
     if (!Read())
         return;
+    Expect("single_level", 24, 88, 255, 128, 0);
+    Expect("levels_again", 56, 88, 255, 0, 255);
     Expect("q_red", 16, 16, 255, 0, 0);
     Expect("q_green", 48, 16, 0, 255, 0);
     Expect("q_blue", 16, 48, 0, 0, 255);
@@ -588,18 +606,40 @@ void Check::AlphaTest()
         return;
     lg::SetTexture(device, 0, texture);
     lg::SetPixelShader(device, psTexture);
+    const uint32_t pipelines = lg::Stats(device).pipelines;
     lg::SetRenderState(device, d3d::RS_ALPHATESTENABLE, 1);
     lg::SetRenderState(device, d3d::RS_ALPHAREF, 128);
     lg::SetRenderState(device, d3d::RS_ALPHAFUNC, d3d::CMP_GREATER);
-    DrawQuadPx(0, 0, 128, 64, 0.5f, 0xffffffffu);
+    DrawQuadPx(0, 0, 128, 40, 0.5f, 0xffffffffu);
     lg::SetRenderState(device, d3d::RS_ALPHAFUNC, d3d::CMP_LESS);
-    DrawQuadPx(0, 64, 128, 128, 0.5f, 0xffffffffu);
+    DrawQuadPx(0, 40, 128, 80, 0.5f, 0xffffffffu);
+    // The test off: everything passes (with the compare fixed in the
+    // pipeline, a shader without the test).
+    lg::SetRenderState(device, d3d::RS_ALPHATESTENABLE, 0);
+    DrawQuadPx(0, 80, 128, 128, 0.5f, 0xffffffffu);
+    const uint32_t built = lg::Stats(device).pipelines - pipelines;
+    // On again with LESS: the pipeline of the second draw, nothing built.
+    lg::SetRenderState(device, d3d::RS_ALPHATESTENABLE, 1);
+    DrawQuadPx(0, 40, 128, 80, 0.5f, 0xffffffffu);
     if (!Read())
         return;
-    Expect("greater_low", 32, 32, 0, 0, 0);
-    Expect("greater_high", 96, 32, 255, 0, 0, 192);
-    Expect("less_low", 32, 96, 255, 0, 0, 64);
-    Expect("less_high", 96, 96, 0, 0, 0);
+    Expect("greater_low", 32, 20, 0, 0, 0);
+    Expect("greater_high", 96, 20, 255, 0, 0, 192);
+    Expect("less_low", 32, 60, 255, 0, 0, 64);
+    Expect("less_high", 96, 60, 0, 0, 0);
+    Expect("off_low", 32, 104, 255, 0, 0, 64);
+    Expect("off_high", 96, 104, 255, 0, 0, 192);
+    // Where the compare is fixed (OptionalFeatures::fixedAlphaTest) each
+    // compare has a pipeline of its own; where the shader reads it, one
+    // serves all. Earlier scenes may have built some of these already.
+    const bool fixed = gfx_vk::Features(core).fixedAlphaTest;
+    ++result->points;
+    if (!(fixed ? built >= 2 && built <= 3 : built <= 1) || lg::Stats(device).pipelines - pipelines != built)
+    {
+        ++result->mismatched;
+        result->detail += " pipelines_built=" + std::to_string(built) + "/"
+            + std::to_string(lg::Stats(device).pipelines - pipelines);
+    }
 }
 
 void Check::Blend()
@@ -1455,6 +1495,74 @@ void Check::StateReuse()
     Expect("keep_off_clear", 6 * 16 + 8, 16 + 8, 0, 0, 64);
 }
 
+// Clears of whole targets become the load operation of a pass
+// (OptionalFeatures::passClears); the rest stay clears inside the pass.
+// Either way the pixels are D3D9's.
+void Check::PassClear()
+{
+    Reset();
+    lg::Surface *depth = DepthSurface();
+    lg::Surface *other = DepthSurface();
+    if (!depth || !other)
+        return;
+    const bool on = gfx_vk::Features(core).passClears;
+    auto point = [this](const char *name, bool ok) {
+        ++result->points;
+        if (!ok)
+        {
+            ++result->mismatched;
+            result->detail += std::string(" ") + name;
+        }
+    };
+    uint64_t clears = lg::Stats(device).clears;
+    uint64_t passClears = lg::Stats(device).passClears;
+    // Counts the clears since the last call, and how many were load operations.
+    auto counted = [&](const char *name, uint64_t all, uint64_t asLoads) {
+        const lg::DeviceStats &now = lg::Stats(device);
+        point(name, now.clears - clears == all && now.passClears - passClears == (on ? asLoads : 0));
+        clears = now.clears;
+        passClears = now.passClears;
+    };
+
+    // New targets: depth and stencil, then colour, both before a draw: the
+    // pass is begun with the one and again with both.
+    lg::SetDepthStencilSurface(device, depth);
+    lg::Clear(device, 0, nullptr, d3d::CLEAR_ZBUFFER | d3d::CLEAR_STENCIL, 0, 1.0f, 0);
+    lg::Clear(device, 0, nullptr, d3d::CLEAR_TARGET, Argb(255, 255, 0, 0), 1.0f, 0);
+    counted("start_both", 2, 2);
+    lg::SetRenderState(device, d3d::RS_ZENABLE, 1);
+    lg::SetRenderState(device, d3d::RS_ZWRITEENABLE, 1);
+    DrawQuadPx(32, 32, 96, 96, 0.5f, Argb(255, 0, 255, 0));
+    // After a draw the clear begins the next pass, which loads the colour
+    // drawn so far; the depth is 1 again, so a farther quad covers the near
+    // one.
+    lg::Clear(device, 0, nullptr, d3d::CLEAR_ZBUFFER | d3d::CLEAR_STENCIL, 0, 1.0f, 0);
+    counted("after_draw", 1, 1);
+    DrawQuadPx(0, 0, 64, 64, 0.75f, Argb(255, 0, 0, 255));
+    // A depth without its stencil on D24S8 keeps the stencil, so it is not a
+    // load operation; nor a clear of a rectangle or of part of the viewport.
+    // These come before any draw of their pass.
+    lg::SetDepthStencilSurface(device, other);
+    lg::Clear(device, 0, nullptr, d3d::CLEAR_ZBUFFER, 0, 1.0f, 0);
+    counted("depth_without_stencil", 1, 0);
+    lg::SetDepthStencilSurface(device, depth);
+    const lg::Rect rect{100, 100, 112, 112};
+    lg::Clear(device, 1, &rect, d3d::CLEAR_TARGET, Argb(255, 255, 255, 0), 1.0f, 0);
+    counted("rect", 1, 0);
+    lg::SetDepthStencilSurface(device, other);
+    lg::SetViewport(device, {0, kSize / 2, kSize, kSize / 2, 0.0f, 1.0f});
+    lg::Clear(device, 0, nullptr, d3d::CLEAR_ZBUFFER | d3d::CLEAR_STENCIL, 0, 1.0f, 0);
+    counted("part_of_viewport", 1, 0);
+    lg::SetViewport(device, {0, 0, kSize, kSize, 0.0f, 1.0f});
+    if (!Read())
+        return;
+    Expect("background", 8, 120, 255, 0, 0, 255);
+    Expect("near_quad", 80, 80, 0, 255, 0, 255);
+    Expect("far_quad_after_clear", 40, 40, 0, 0, 255, 255);
+    Expect("rect", 104, 104, 255, 255, 0, 255);
+    Expect("rect_out", 98, 98, 255, 0, 0, 255);
+}
+
 void Check::ShaderCache()
 {
     const std::string path = (std::filesystem::temp_directory_path() / "kisak_legacy_check_shaders.bin").string();
@@ -1544,11 +1652,210 @@ void Check::ShaderCache()
     }
 }
 
+// The pipeline list (vk_legacy.h, "Pipelines built ahead"). The check's
+// device keeps one (Init), so every scene lists what it draws; this one
+// draws three pipelines with shaders of its own, writes the list, and checks
+// that shaders created again get those pipelines from the workers before any
+// draw needs them, drawn as before. Then a pair destroyed while its jobs are
+// queued, a damaged file, and entries that age out unused.
+// kPsConstant reading c1: the device's own psConstant has the same code as
+// kPsConstant and so shares its pipelines, which a destroyed copy would keep.
+static std::vector<uint32_t> PsConstantC1()
+{
+    std::vector<uint32_t> code(std::begin(shaders::kPsConstant), std::end(shaders::kPsConstant));
+    for (uint32_t &word : code)
+        if (word == 0xa0e40000u) // source c0.xyzw of the mov
+            word = 0xa0e40001u;
+    return code;
+}
+
+void Check::PipelinesAhead()
+{
+    const std::vector<uint32_t> psCode = PsConstantC1();
+    const std::string path = (std::filesystem::temp_directory_path() / "kisak_legacy_check_ahead.list").string();
+    std::remove(path.c_str());
+    auto made = std::make_shared<std::vector<lg::Shader *>>();
+    cleanup.push_back([this, made, path] {
+        for (lg::Shader *shader : *made)
+            lg::DestroyShader(device, shader);
+        std::remove(path.c_str());
+    });
+    auto point = [this](const char *name, bool ok) {
+        ++result->points;
+        if (!ok)
+        {
+            ++result->mismatched;
+            result->detail += std::string(" ") + name;
+        }
+    };
+    auto create = [&](const uint32_t *code, size_t bytes) {
+        std::string reason;
+        lg::Shader *shader = lg::CreateShader(device, code, bytes, reason);
+        if (!shader)
+            Fail("CreateShader: " + reason);
+        return shader;
+    };
+    auto destroy = [&](lg::Shader *&shader) {
+        lg::DestroyShader(device, shader);
+        shader = nullptr;
+    };
+    // Blend's three draws, with this pair: three pipelines.
+    auto draw = [&](lg::Shader *vs, lg::Shader *ps) {
+        Reset(Argb(255, 0, 0, 255));
+        lg::SetVertexShader(device, vs);
+        lg::SetPixelShader(device, ps);
+        SetConstant(false, 1, 1.0f, 0.0f, 0.0f, 0.5f);
+        lg::SetRenderState(device, d3d::RS_ALPHABLENDENABLE, 1);
+        lg::SetRenderState(device, d3d::RS_SRCBLEND, d3d::BLEND_SRCALPHA);
+        lg::SetRenderState(device, d3d::RS_DESTBLEND, d3d::BLEND_INVSRCALPHA);
+        lg::SetRenderState(device, d3d::RS_BLENDOP, d3d::BLENDOP_ADD);
+        DrawQuadPx(0, 0, 64, 64, 0.5f, 0xffffffffu);
+        lg::SetRenderState(device, d3d::RS_SEPARATEALPHABLENDENABLE, 1);
+        lg::SetRenderState(device, d3d::RS_SRCBLENDALPHA, d3d::BLEND_ZERO);
+        lg::SetRenderState(device, d3d::RS_DESTBLENDALPHA, d3d::BLEND_ZERO);
+        DrawQuadPx(64, 0, 128, 64, 0.5f, 0xffffffffu);
+        lg::SetRenderState(device, d3d::RS_SEPARATEALPHABLENDENABLE, 0);
+        lg::SetRenderState(device, d3d::RS_SRCBLEND, d3d::BLEND_ONE);
+        lg::SetRenderState(device, d3d::RS_DESTBLEND, d3d::BLEND_ONE);
+        lg::SetRenderState(device, d3d::RS_COLORWRITEENABLE, 0x5);
+        SetConstant(false, 1, 0.5f, 1.0f, 0.0f, 0.0f);
+        DrawQuadPx(0, 64, 64, 128, 0.5f, 0xffffffffu);
+        lg::SetRenderState(device, d3d::RS_ALPHABLENDENABLE, 0);
+        lg::SetRenderState(device, d3d::RS_COLORWRITEENABLE, 0xf);
+        if (!Read())
+            return;
+        Expect("src_alpha", 32, 32, 128, 0, 128, 191, 3);
+        Expect("separate_alpha", 96, 32, 128, 0, 128, 0, 3);
+        Expect("additive_masked", 32, 96, 128, 0, 255, 255);
+        Expect("untouched", 96, 96, 0, 0, 255, 255);
+    };
+    const bool on = gfx_vk::Features(core).pipelinesAhead;
+    std::string message;
+
+    // First launch: no list entry yet, so the draws build their pipelines.
+    lg::Shader *vs = create(shaders::kVsBasic, sizeof(shaders::kVsBasic));
+    lg::Shader *ps = create(psCode.data(), psCode.size() * sizeof(uint32_t));
+    if (!vs || !ps)
+        return;
+    lg::DeviceStats stats = lg::Stats(device);
+    draw(vs, ps);
+    point("first_draws_build", lg::Stats(device).pipelines == stats.pipelines + 3);
+    point("first_draws_none_ahead", lg::Stats(device).aheadUsed == stats.aheadUsed);
+    point("saved", lg::SavePipelineList(device, path.c_str(), message));
+    std::printf("legacy_check.pipeline_list_save=%s\n", message.c_str());
+    point("save_unchanged", lg::SavePipelineList(device, path.c_str(), message) && message == "unchanged");
+
+    // Next launch: the list is read and the shaders are created again; the
+    // workers build the three pipelines before anything draws.
+    destroy(vs);
+    destroy(ps);
+    point("loaded", lg::LoadPipelineList(device, path.c_str(), message));
+    std::printf("legacy_check.pipeline_list_load=%s\n", message.c_str());
+    const uint32_t listed = lg::PipelineListSize(device);
+    point("listed", listed >= 3);
+    stats = lg::Stats(device);
+    vs = create(shaders::kVsBasic, sizeof(shaders::kVsBasic));
+    ps = create(psCode.data(), psCode.size() * sizeof(uint32_t));
+    if (!vs || !ps)
+        return;
+    lg::FinishPipelinesAhead(device);
+    const lg::DeviceStats ahead = lg::Stats(device);
+    point("built_ahead", on ? ahead.pipelinesAhead >= stats.pipelinesAhead + 3 : ahead.pipelinesAhead == stats.pipelinesAhead);
+    // The pixel shader is new, so the workers built its module and counted it.
+    point("ahead_pixel_modules", on ? ahead.aheadPixelModules > stats.aheadPixelModules
+                                    : ahead.aheadPixelModules == stats.aheadPixelModules);
+    draw(vs, ps);
+    const lg::DeviceStats after = lg::Stats(device);
+    point("drawn_without_building", on ? after.pipelines == stats.pipelines : after.pipelines == stats.pipelines + 3);
+    point("ahead_used", on ? after.aheadUsed == stats.aheadUsed + 3 : after.aheadUsed == stats.aheadUsed);
+    point("no_wait_after_finish", after.aheadWaits == stats.aheadWaits);
+    std::printf("legacy_check.pipelines_ahead=%u used=%u waits=%u listed=%u\n", after.pipelinesAhead, after.aheadUsed,
+                after.aheadWaits, listed);
+
+    // Two shader objects with the same code share their pipelines (the game
+    // creates many such copies): the second draws without building, and
+    // destroying it keeps the first one's.
+    lg::Shader *psTwin = create(psCode.data(), psCode.size() * sizeof(uint32_t));
+    if (!psTwin)
+        return;
+    stats = lg::Stats(device);
+    draw(vs, psTwin);
+    point("same_code_shares", lg::Stats(device).pipelines == stats.pipelines);
+    destroy(psTwin);
+    draw(vs, ps);
+    point("twin_destroyed_keeps", lg::Stats(device).pipelines == stats.pipelines);
+
+    // The last shader of its pipelines destroyed and created again, then
+    // destroyed while its jobs may be queued or building: the device waits
+    // for them.
+    destroy(ps);
+    lg::Shader *psGone = create(psCode.data(), psCode.size() * sizeof(uint32_t));
+    destroy(psGone);
+    lg::FinishPipelinesAhead(device);
+    point("gone_pair_settled", lg::DeviceError(device)[0] == 0);
+
+    // A draw that needs a pipeline a worker has queued or is building gets
+    // it without failing, from the worker or built by itself.
+    ps = create(psCode.data(), psCode.size() * sizeof(uint32_t));
+    if (!ps)
+        return;
+    const lg::DeviceStats raced = lg::Stats(device);
+    draw(vs, ps);
+    lg::FinishPipelinesAhead(device);
+    const lg::DeviceStats settled = lg::Stats(device);
+    std::printf("legacy_check.pipelines_ahead_race=built %u waited %u used %u\n",
+                settled.pipelines - raced.pipelines, settled.aheadWaits - raced.aheadWaits,
+                settled.aheadUsed - raced.aheadUsed);
+
+    // Entries whose shaders are there but that no draw uses age out after
+    // kPipelineListAge launches: each load and save is one such launch.
+    point("saved_again", lg::SavePipelineList(device, path.c_str(), message));
+    lg::LoadPipelineList(device, path.c_str(), message);
+    const uint32_t beforeAging = lg::PipelineListSize(device);
+    for (uint32_t launch = 0; launch < lg::kPipelineListAge; ++launch)
+    {
+        lg::LoadPipelineList(device, path.c_str(), message);
+        lg::FinishPipelinesAhead(device);
+        lg::SavePipelineList(device, path.c_str(), message);
+    }
+    lg::LoadPipelineList(device, path.c_str(), message);
+    // Every entry this scene drew is gone (entries of shaders other scenes
+    // destroyed stay: they were not buildable).
+    point("aged_out", lg::PipelineListSize(device) + 3 <= beforeAging);
+    std::printf("legacy_check.pipeline_list_aged=%s\n", message.c_str());
+
+    // A damaged file is ignored whole.
+    draw(vs, ps); // lists the three pipelines again
+    point("saved_drawn", lg::SavePipelineList(device, path.c_str(), message) && lg::PipelineListSize(device) >= 3);
+#ifdef _MSC_VER
+    std::FILE *file = nullptr;
+    if (fopen_s(&file, path.c_str(), "r+b") != 0)
+        file = nullptr;
+#else
+    std::FILE *file = std::fopen(path.c_str(), "r+b");
+#endif
+    if (file)
+    {
+        std::fseek(file, 40, SEEK_SET);
+        const char junk[8] = {'d', 'a', 'm', 'a', 'g', 'e', 'd', '!'};
+        std::fwrite(junk, 1, sizeof(junk), file);
+        std::fclose(file);
+    }
+    point("damaged_refused", !lg::LoadPipelineList(device, path.c_str(), message) && lg::PipelineListSize(device) == 0);
+    std::printf("legacy_check.pipeline_list_damaged=%s\n", message.c_str());
+    made->push_back(vs);
+    made->push_back(ps);
+}
+
 bool Check::Init(std::string &error)
 {
     lg::DeviceDesc desc;
     desc.width = desc.height = kSize;
     desc.log = LogLine;
+    // Every scene lists its pipelines (pipelines_ahead reads the list).
+    const std::string list = (std::filesystem::temp_directory_path() / "kisak_legacy_check_device.list").string();
+    std::remove(list.c_str());
+    desc.pipelineListPath = list.c_str();
     device = lg::CreateDevice(core, desc, error);
     if (!device)
         return false;
@@ -1689,6 +1996,8 @@ int Run(const Options &options)
         {"occlusion_query", &Check::OcclusionQuery},
         {"state_reuse", &Check::StateReuse},
         {"shader_cache", &Check::ShaderCache},
+        {"pass_clear", &Check::PassClear},
+        {"pipelines_ahead", &Check::PipelinesAhead},
     };
     const char *failedStage = nullptr;
     std::string failedReason;
@@ -1743,6 +2052,7 @@ int Run(const Options &options)
                 static_cast<unsigned long long>(stats.descriptorSetsReused),
                 static_cast<unsigned long long>(stats.constantBytes),
                 static_cast<unsigned long long>(stats.dynamicRenames));
+    std::printf("legacy_check.pass_clears=%llu\n", static_cast<unsigned long long>(stats.passClears));
     check.Destroy();
     const bool validation = gfx_vk::ValidationEnabled(check.core);
     gfx_vk::CoreStats ending{};

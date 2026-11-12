@@ -7,6 +7,35 @@
 #include <unistd.h>
 #endif
 
+#ifndef _WIN32
+#include <errno.h>
+#include <linux/sys_path_case.h>
+
+// fopen as Windows names files, ignoring case (sys_path_case.h): a file to be
+// written goes where an existing one spelled differently is, and a file to be
+// read that is not found as written is looked for ignoring case.
+static FILE *FS_FileOpenMatchingCase(const char *filename, const char *mode)
+{
+    char matched[1024];
+    const bool writes = mode[0] == 'w' || mode[0] == 'a';
+    if (writes && Sys_MatchPathCase(filename, matched, sizeof(matched)))
+        return fopen(matched, mode);
+    FILE *const file = fopen(filename, mode);
+    if (file || writes || (errno != ENOENT && errno != ENOTDIR))
+        return file;
+    const int notFound = errno;
+    if (Sys_MatchPathCase(filename, matched, sizeof(matched)))
+        return fopen(matched, mode);
+    errno = notFound;
+    return nullptr;
+}
+#else
+static FILE *FS_FileOpenMatchingCase(const char *filename, const char *mode)
+{
+    return fopen(filename, mode);
+}
+#endif
+
 // A file opened to be written anew must start empty. On the PS Vita the open
 // asks the system for that (newlib passes O_TRUNC on as SCE_O_TRUNC) and a
 // console obeys, but the Vita3K emulator opens the old file as it is and does
@@ -59,7 +88,7 @@ FILE *FS_FileOpenReadBinary(const char *filename)
     FILE *file; // [esp+0h] [ebp-4h]
 
     ProfLoad_BeginTrackedValue(MAP_PROFILE_FILE_OPEN);
-    file = fopen(filename, "rb");
+    file = FS_FileOpenMatchingCase(filename, "rb");
     ProfLoad_EndTrackedValue(MAP_PROFILE_FILE_OPEN);
     return file;
 }
@@ -69,7 +98,7 @@ FILE *FS_FileOpenReadText(const char *filename)
     FILE *file; // [esp+0h] [ebp-4h]
 
     ProfLoad_BeginTrackedValue(MAP_PROFILE_FILE_OPEN);
-    file = fopen(filename, "rt");
+    file = FS_FileOpenMatchingCase(filename, "rt");
     ProfLoad_EndTrackedValue(MAP_PROFILE_FILE_OPEN);
     return file;
 }
@@ -80,7 +109,7 @@ FILE *FS_FileOpenWriteBinary(const char *filename)
 
     ProfLoad_BeginTrackedValue(MAP_PROFILE_FILE_OPEN);
     FS_FileRemoveBeforeRewrite(filename);
-    file = fopen(filename, "wb");
+    file = FS_FileOpenMatchingCase(filename, "wb");
     ProfLoad_EndTrackedValue(MAP_PROFILE_FILE_OPEN);
     return file;
 }
@@ -90,7 +119,7 @@ FILE *FS_FileOpenAppendText(const char *filename)
     FILE *file; // [esp+0h] [ebp-4h]
 
     ProfLoad_BeginTrackedValue(MAP_PROFILE_FILE_OPEN);
-    file = fopen(filename, "at");
+    file = FS_FileOpenMatchingCase(filename, "at");
     ProfLoad_EndTrackedValue(MAP_PROFILE_FILE_OPEN);
     return file;
 }
@@ -101,7 +130,7 @@ FILE *FS_FileOpenWriteText(const char *filename)
 
     ProfLoad_BeginTrackedValue(MAP_PROFILE_FILE_OPEN);
     FS_FileRemoveBeforeRewrite(filename);
-    file = fopen(filename, "w+t");
+    file = FS_FileOpenMatchingCase(filename, "w+t");
     ProfLoad_EndTrackedValue(MAP_PROFILE_FILE_OPEN);
     return file;
 }
@@ -112,7 +141,7 @@ FILE *FS_FileOpenWriteReadBinary(const char *filename)
 
     ProfLoad_BeginTrackedValue(MAP_PROFILE_FILE_OPEN);
     FS_FileRemoveBeforeRewrite(filename);
-    file = fopen(filename, "w+b"); // KISAKTODO: unsure if flag is accurate, it uses CreateFileA()
+    file = FS_FileOpenMatchingCase(filename, "w+b"); // KISAKTODO: unsure if flag is accurate, it uses CreateFileA()
     ProfLoad_EndTrackedValue(MAP_PROFILE_FILE_OPEN);
     return file;
 }

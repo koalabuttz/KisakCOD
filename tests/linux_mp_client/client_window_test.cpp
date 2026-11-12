@@ -186,6 +186,12 @@ void CheckWindowLifetime()
     Check(rec.windows.size() == 1 && rec.windows[0] == game, "WM_CREATE hands the engine the new window once");
     Check(rec.windowKnownWhenCreated, "the window exists when the engine hears of it");
     Check(GameWindow() && GameWindow()->Host().Adopted(), "the game window is adopted, not created, by its host");
+    // The dummy driver focuses a window when it is shown, as X11 does with no
+    // window manager: the app must be activated for it, or the mouse never
+    // reaches the engine.
+    Check(GameWindow() && GameWindow()->Host().Focused(), "the dummy driver gives the shown game window the focus");
+    Check(!rec.activations.empty() && rec.activations.back().active && !rec.activations.back().minimized,
+          "a window that has the focus when it is adopted activates the app");
 
     const HWND other = MakeWindow();
     Check(other != nullptr && GameWindow() && GameWindow()->Host().Id() == IdOf(game),

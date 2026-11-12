@@ -46,9 +46,14 @@ The Vulkan back end is linked in the way the multiplayer client links it: add
 headers needed; the loader is opened at run time through SDL, never linked),
 and `+set r_backend vulkan` then draws through it instead of DXVK
 ([vulkan-d3d9-front.md](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan)).
-The default stays `r_backend d3d9`. This is build proof only so far: the game
-compiles and links with the back end and starts as before without game files,
-but no singleplayer level has been drawn through Vulkan yet.
+The default stays `r_backend d3d9`. On the laptop (x86_64, Intel GPU,
+2026-11-10) killhouse, cargoship, blackout, ac130 and airplane load, hold
+60 s, draw a frame and quit cleanly through Vulkan, with no unsupported D3D9
+call reported ([linux-sp-levels.md](linux-sp-levels.md#vulkan-run-1-laptop-x86_64-2026-11-10)).
+On the Windows PC (Linux in WSL, software Vulkan device, 2026-11-11) all 21
+levels do the same, and the frames looked at after a long enough hold match
+DXVK's ([linux-sp-levels.md](linux-sp-levels.md#vulkan-sweep-all-21-levels-pc-linux-in-wsl-x86_64-2026-11-11)).
+Validation layers were off in both runs, and nothing has been timed alone.
 
 For x86_64, add `-DKISAK_LINUX_ARCH=x86_64` in a build directory of its own
 and point the three libraries at x86_64 builds, as for the x86_64 multiplayer
@@ -135,8 +140,10 @@ back end builds, links and leaves the start alone, not that it draws.
    are in [linux-sp-levels.md](linux-sp-levels.md).
 2. The x86_64 game by hand (its level chain and save and load pass in the
    sweep tool).
-3. A first level through `r_backend vulkan` on the laptop, to find what the
-   singleplayer levels ask of the D3D9 front that multiplayer maps do not.
+3. Run the singleplayer levels through `r_backend vulkan` with the
+   validation layers on, and look at GPU frames next to DXVK's (all 21
+   levels draw and quit cleanly; only software-device frames were looked
+   at).
 4. Compare with the Windows `KisakCOD-sp` build on the same data, to tell
    port bugs from bugs the Windows build shares. Linux keeps assertions on in
    every configuration and the Windows Release build does not, so compare

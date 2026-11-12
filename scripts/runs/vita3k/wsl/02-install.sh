@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Step 2 of the local Vita build set-up in WSL Ubuntu: the packages, the pinned VitaSDK and the
-# pinned DXVK Native headers, as the CI job "PS Vita multiplayer client RelWithDebInfo" installs them.
+# pinned DXVK Native headers, as the CI job "PS Vita multiplayer client" installs them.
 # ~/kisak-build stands in for the runner's $RUNNER_TEMP; the SDK goes to ~/vitasdk-pinned.
 set -euo pipefail
 export RUNNER_TEMP="$HOME/kisak-build"

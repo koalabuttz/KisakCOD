@@ -39,7 +39,9 @@ involved. The checks:
                  settings, logged every change and ended on the device's own
                  setting (what each setting did to its frame, and that the
                  statistics count from where they were last started, are the
-                 scene's own points)
+                 scene's own points); and the Modern path's statistics line
+                 counts the modern_taa scene's 20 anti-aliased scenes, 2 of
+                 them without history
 
 Usage:
   test_vulkan_d3d9_front.py --binary build/bin/KisakCOD-vulkan-d3d9-check
@@ -53,9 +55,9 @@ import subprocess
 import sys
 
 # The scenes the check runs, in order. A scene added to the check is added here.
-SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'model_lighting', 'references', 'threads',
-          'queries', 'occlusion', 'frame_loop', 'gpu_feed', 'tuning', 'slow_frames', 'kept_state', 'multisample',
-          'reset', 'present')
+SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'model_lighting', 'dirty_update',
+          'references', 'threads', 'queries', 'occlusion', 'frame_loop', 'gpu_feed', 'tuning', 'slow_frames',
+          'kept_state', 'multisample', 'modern_taa', 'reset', 'present')
 
 
 def run(binary, args, env, timeout=300):
@@ -187,6 +189,13 @@ def main():
     presents = re.match(r'(\d+) skipped=(\d+)$', found.get('d3d9_check.presents', ''))
     checks.expect('frames presented', bool(presents) and int(presents.group(1)) >= len(SCENES),
                   found.get('d3d9_check.presents', 'missing'))
+    # The Modern path's line at teardown: the modern_taa scene's frames (4
+    # still, 16 jittered; the first of each starts the history again).
+    modern = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes anti-aliased \((\d+) without history\)',
+                       stdout, re.M)
+    checks.expect('the Modern path anti-aliased 20 scenes, 2 without history',
+                  modern is not None and modern.group(1) == '20' and modern.group(2) == '2',
+                  modern.group(0) if modern else 'missing')
     checks.expect('no object outlived its release', found.get('d3d9_check.live_objects_at_teardown') == '0',
                   found.get('d3d9_check.live_objects_at_teardown', 'missing'))
     checks.expect('device destroyed at its last release',
@@ -206,6 +215,16 @@ def main():
     # "after every draw" (KISAK_VK_GPU_FEED=always, for testing).
     feed = re.search(r'legacy: device ready: .*, GPU feed (off|after every draw|every (\d+) draws)$', stdout, re.M)
     checks.expect('the device logs its GPU feed setting', feed is not None)
+    # The translated shaders' float rule (KISAK_VK_STRICT_FLOATS=1: strict).
+    floats = re.search(r'legacy: device ready: .*, floats (fast|strict), ', stdout, re.M)
+    want_floats = 'strict' if env.get('KISAK_VK_STRICT_FLOATS') == '1' else 'fast'
+    checks.expect(f'the device logs floats {want_floats}', floats is not None and floats.group(1) == want_floats,
+                  floats.group(1) if floats else 'missing')
+    # The legacy state rule (KISAK_VK_LEGACY_STATE=dynamic: read at run time).
+    state = re.search(r'legacy: device ready: .*, legacy state (fixed|dynamic), ', stdout, re.M)
+    want_state = 'dynamic' if env.get('KISAK_VK_LEGACY_STATE') == 'dynamic' else 'fixed'
+    checks.expect(f'the device logs legacy state {want_state}', state is not None and state.group(1) == want_state,
+                  state.group(1) if state else 'missing')
     feed_setting = feed.group(1) if feed else 'off'
     if feed_setting == 'after every draw':
         # Nothing is left to flush at the poll: every draw was submitted as it was made.
