@@ -101,8 +101,18 @@ leaves a port page closes it, and every retail page that gets a port tab closes
 the port pages when it opens, as the retail pages close each other. Registering
 a menu again (a second context, a `vid_restart`) adds no second row or tab.
 
+The database can change a registered menu under the UI. Multiplayer has
+the options menus twice, in `ui_mp.ff` and in `common_mp.ff`. Back at the
+main menu after a map, `ui_mp.ff` loads again and, once it has finished
+loading, copies its versions over `common_mp.ff`'s, which happens after the UI
+has registered them. Without a fix, the tabs and the Game rows are gone at
+that point. So every menu opened by name (`open`) gets the rows and tabs
+back first (`UI_RefreshPortOptions`), and a port page whose retail page now
+has other contents is built again. The rows moved down to make room are
+copies, so the fast file's own items never move.
+
 The memory the copies use is never freed: some tens of kilobytes per menu
-context.
+context, and again for each menu the database has replaced.
 
 None of this adds a dvar except `r_fullscreenMode`.
 

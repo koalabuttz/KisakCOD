@@ -730,19 +730,6 @@ void AddGameRows(menuDef_t *menu)
     const int rowCount = BuildRows(from, menu, kGameRows, KISAK_COUNT(kGameRows), anchorY + from.step,
                                    HighestHighlightNumber(menu) + 1, rows, &rowItems);
 
-    // The rows below move down to make room. Only the row column moves: the
-    // tabs on the left and the buttons at the bottom keep their places.
-    const rectDef_s &line = menu->items[anchor]->window.rect;
-    for (int i = anchor + 1; i < menu->itemCount; ++i)
-    {
-        itemDef_s *item = menu->items[i];
-        if (item->window.rect.y > line.y + 0.5f
-            && SameColumn(item->window.rect, line, from.columnLeft, from.columnRight))
-        {
-            MoveDown(item, from.step * rowCount);
-        }
-    }
-
     // The new rows go in right after the anchor's row, so the arrow keys reach
     // them next.
     itemDef_s *items[kMaxMenuItems];
@@ -751,8 +738,21 @@ void AddGameRows(menuDef_t *menu)
         items[count++] = menu->items[i];
     for (int i = 0; i < rowItems; ++i)
         items[count++] = rows[i];
+    // The rows below move down to make room, as copies: the fast file's items
+    // stay as they are, for when the database puts the menu's own item list
+    // back. Only the row column moves: the tabs on the left and the buttons at
+    // the bottom keep their places.
+    const rectDef_s &line = menu->items[anchor]->window.rect;
     for (int i = anchor + 1; i < menu->itemCount; ++i)
-        items[count++] = menu->items[i];
+    {
+        itemDef_s *item = menu->items[i];
+        if (item->window.rect.y > line.y + 0.5f
+            && SameColumn(item->window.rect, line, from.columnLeft, from.columnRight))
+        {
+            item = CopyItem(item, menu, from.step * rowCount);
+        }
+        items[count++] = item;
+    }
     ReplaceItems(menu, items, count);
 }
 
@@ -1026,12 +1026,56 @@ menuDef_t *BuildPage(const UiContext *dc, const menuDef_t *source, const PageSpe
     return page;
 }
 
-bool IsOurPage(const menuDef_t *menu)
+const PageSpec *OurPage(const menuDef_t *menu)
 {
     for (const PageSpec &page : kPages)
     {
         if (!I_stricmp(menu->window.name, page.name))
-            return true;
+            return &page;
+    }
+    return nullptr;
+}
+
+bool IsOurPage(const menuDef_t *menu)
+{
+    return OurPage(menu) != nullptr;
+}
+
+// Which contents of its retail page each page was built from: the page's
+// first item, which the port never changes. The database can replace a
+// registered menu's contents (see UI_RefreshPortOptions), so a page whose
+// retail page now has other contents is built again.
+struct BuiltPage
+{
+    const menuDef_t *page;
+    const itemDef_s *sourceFirst;
+};
+BuiltPage g_builtPages[32];
+int g_builtPageNext;
+
+void RememberPage(const menuDef_t *page, const menuDef_t *source)
+{
+    BuiltPage *slot = nullptr;
+    for (BuiltPage &built : g_builtPages)
+    {
+        if (built.page == page)
+            slot = &built;
+    }
+    if (!slot)
+    {
+        slot = &g_builtPages[g_builtPageNext];
+        g_builtPageNext = (g_builtPageNext + 1) % KISAK_COUNT(g_builtPages);
+    }
+    slot->page = page;
+    slot->sourceFirst = source->items[0];
+}
+
+bool BuiltFromCurrentContents(const menuDef_t *page, const menuDef_t *source)
+{
+    for (const BuiltPage &built : g_builtPages)
+    {
+        if (built.page == page)
+            return built.sourceFirst == source->items[0];
     }
     return false;
 }
@@ -1083,9 +1127,41 @@ void UI_AddPortOptions(UiContext *dc, menuDef_t *menu)
         if (menuDef_t *page = BuildPage(dc, menu, spec))
         {
             AddTabs(page, true);
+            RememberPage(page, menu);
             UI_AppendMenuReference(dc, page);
         }
     }
 
     AddTabs(menu, false);
+}
+
+void UI_RefreshPortOptions(UiContext *dc, menuDef_t *menu)
+{
+    if (!dc || !menu || !menu->window.name)
+        return;
+    const PageSpec *spec = OurPage(menu);
+    if (!spec)
+    {
+        UI_AddPortOptions(dc, menu);
+        return;
+    }
+
+    // One of the port's pages: its retail page first, then the page again if
+    // it was built from contents the retail page no longer has.
+    menuDef_t *source = const_cast<menuDef_t *>(FindRegisteredMenu(dc, spec->source));
+    if (!MenuIsUsable(source))
+        return;
+    UI_AddPortOptions(dc, source);
+    if (BuiltFromCurrentContents(menu, source))
+        return;
+    menuDef_t *fresh = BuildPage(dc, source, *spec);
+    if (!fresh)
+        return;
+    AddTabs(fresh, true);
+    // In place, so the context's reference stays. The page keeps its state
+    // flags (open, visible).
+    const windowDef_t previous = menu->window;
+    *menu = *fresh;
+    std::memcpy(menu->window.dynamicFlags, previous.dynamicFlags, sizeof(previous.dynamicFlags));
+    RememberPage(menu, source);
 }

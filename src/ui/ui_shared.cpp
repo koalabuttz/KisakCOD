@@ -1713,6 +1713,9 @@ int Menus_OpenByName(UiContext *dc, const char *p)
     pMenu = Menus_FindByName(dc, p);
     if (pMenu)
     {
+        // Port: the rows and tabs the database may have copied away since the
+        // menu was registered (src/ui/ui_port_options.h).
+        UI_RefreshPortOptions(dc, pMenu);
         Menus_Open(dc, pMenu);
         return 1;
     }

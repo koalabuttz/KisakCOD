@@ -22,3 +22,12 @@ struct menuDef_t;
 // from it. Call it after `menu` itself is registered in `dc`. Calling it again
 // for a menu that already has them adds nothing.
 void UI_AddPortOptions(UiContext *dc, menuDef_t *menu);
+
+// Puts back what UI_AddPortOptions added to `menu` when the menu's contents
+// have been replaced since, and builds a port page again when its retail page
+// has other contents now. Menus_OpenByName (the `open` script command) calls
+// it before it opens `menu`. The database can replace a registered menu's
+// contents: back at the main menu after a map, ui_mp.ff's options menus
+// replace common_mp.ff's same-named ones when the zone has finished loading,
+// which is after the UI registered them.
+void UI_RefreshPortOptions(UiContext *dc, menuDef_t *menu);
