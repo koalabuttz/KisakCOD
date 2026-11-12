@@ -240,6 +240,11 @@ bool CreatePatcher(std::string &error)
 }
 } // namespace
 
+void SetDisplayVsync(bool on)
+{
+    g.vsync = on;
+}
+
 bool InitDisplay(const DisplayDesc &desc, std::string &error)
 {
     if (g.initialized)

@@ -236,6 +236,26 @@ a line that cannot be read is left alone, the reason is logged and the start
 is an ordinary one. The reading is `src/vita/vita_run_list.h`, checked on
 the host by `scripts/tests/test_vita_run_list.py`.
 
+### Two ways in one start
+
+Some of the client's marker files can also be turned while the game runs,
+by the console command `vita_gxm <marker> <0|1>`, where 1 is "as if the
+marker were there". A step file can then measure the old way and the new
+way minutes apart in one start, at the same temperature and battery state,
+where two starts were needed:
+
+    30 setviewpos 1264 -1896 124 90 0
+    60 vita_gxm no-depth-in-scene 1
+    90 vita_gxm no-depth-in-scene 0
+
+The switches that can be turned: `no-depth-in-scene`, `no-resolve-skip`,
+`no-depth-prepass`, `no-frame-overlap`, `no-vsync`, `gpu-scene-times` and
+`no-draw-reuse`. The others size or make things at start-up and are refused
+by name. A switch is turned between two frames and the log says so (`diag:
+switch no-depth-in-scene is on from frame 1840 on (vita_gxm)`). The marker
+files themselves are not touched. Leave a window at least 20 seconds and
+drop its first 10 second line, which holds the frames of both ways.
+
 ## Testing in Vita3K
 
 Vita3K boots the `.vpk` far enough to check start-up, files, threads and,
