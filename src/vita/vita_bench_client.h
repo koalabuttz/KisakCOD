@@ -28,7 +28,6 @@
 #include <ctime>
 #include <fcntl.h>
 #include <netinet/in.h>
-#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -274,15 +273,17 @@ class Bench
                 close(fd);
         }
 
-        bool Ready(bool toWrite, unsigned seconds) const
+        // Every wait is a short sleep and another try: select() is not
+        // the same thing on a Vita, on Linux and in an emulator, and a
+        // bench's few megabytes do not need it.
+        static void Pause()
         {
-            fd_set set;
-            FD_ZERO(&set);
-            FD_SET(fd, &set);
-            timeval timeout;
-            timeout.tv_sec = seconds;
-            timeout.tv_usec = 0;
-            return select(fd + 1, toWrite ? nullptr : &set, toWrite ? &set : nullptr, nullptr, &timeout) > 0;
+            usleep(10 * 1000);
+        }
+
+        static bool Later(int error)
+        {
+            return error == EAGAIN || error == EWOULDBLOCK || error == EINTR;
         }
 
         bool Open(const Server &server, char *error, size_t errorSize)
@@ -290,8 +291,6 @@ class Bench
             fd = socket(AF_INET, SOCK_STREAM, 0);
             if (fd < 0)
                 return snprintf(error, errorSize, "no socket (errno %d)", errno), false;
-            if (fd >= FD_SETSIZE)
-                return snprintf(error, errorSize, "the socket's number is too high"), false;
             const int flags = fcntl(fd, F_GETFL, 0);
             if (flags == -1 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
                 return snprintf(error, errorSize, "the socket cannot be set not to block"), false;
@@ -300,18 +299,24 @@ class Bench
             address.sin_family = AF_INET;
             address.sin_port = htons((uint16_t)server.port);
             address.sin_addr.s_addr = inet_addr(server.host);
-            if (connect(fd, (const sockaddr *)&address, sizeof(address)) != 0)
+            // A connection that is not there at once is asked after again
+            // until it is, for 5 s: the Vita says "in progress" and then
+            // "already" or "is connected"; Vita3K on Windows says "would
+            // block" first (PC run Z22).
+            for (int tries = 0; tries < 500; ++tries)
             {
-                if (errno != EINPROGRESS && errno != EALREADY)
-                    return snprintf(error, errorSize, "no connection (errno %d)", errno), false;
-                if (!Ready(true, 5))
-                    return snprintf(error, errorSize, "no connection within 5 s"), false;
-                int socketError = 0;
-                socklen_t length = sizeof(socketError);
-                if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &socketError, &length) != 0 || socketError)
-                    return snprintf(error, errorSize, "no connection (error %d)", socketError), false;
+                if (connect(fd, (const sockaddr *)&address, sizeof(address)) == 0 || errno == EISCONN)
+                    return true;
+                if (errno != EINPROGRESS && errno != EALREADY && !Later(errno))
+                {
+                    // A second ask may be answered "invalid" while the
+                    // first is still on its way (Winsock).
+                    if (tries == 0 || errno != EINVAL)
+                        return snprintf(error, errorSize, "no connection (errno %d)", errno), false;
+                }
+                Pause();
             }
-            return true;
+            return snprintf(error, errorSize, "no connection within 5 s"), false;
         }
 
         bool Send(const void *data, size_t length) const
@@ -322,19 +327,17 @@ class Bench
 #else
             const int flags = 0;
 #endif
-            while (length)
+            for (int idle = 0; length;)
             {
                 const ssize_t sent = send(fd, from, length, flags);
                 if (sent > 0)
                 {
                     from += sent;
                     length -= (size_t)sent;
+                    idle = 0;
                 }
-                else if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
-                {
-                    if (!Ready(true, 10))
-                        return false;
-                }
+                else if (sent < 0 && Later(errno) && ++idle < 1000)
+                    Pause();
                 else
                     return false;
             }
@@ -344,15 +347,14 @@ class Bench
         // Bytes read, 0 at the end, -1 for an error or 10 s of silence.
         int Receive(void *data, size_t size) const
         {
-            for (;;)
+            for (int idle = 0;; ++idle)
             {
                 const ssize_t got = recv(fd, data, size, 0);
                 if (got >= 0)
                     return (int)got;
-                if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
+                if (!Later(errno) || idle >= 1000)
                     return -1;
-                if (!Ready(false, 10))
-                    return -1;
+                Pause();
             }
         }
     };
