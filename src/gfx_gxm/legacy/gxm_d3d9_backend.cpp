@@ -127,6 +127,8 @@ lg::Surface *BackendModernSceneTarget(Backend *, lg::Surface *, ModernResult &re
     result = ModernResult::Refused;
     return nullptr;
 }
+bool BackendModernEffectsOnDisplay(Backend *) { return false; }
+
 bool BackendModernCopyScene(Backend *, lg::Surface *, const lg::Rect *, lg::Surface *, const lg::Rect *, bool)
 {
     return false;

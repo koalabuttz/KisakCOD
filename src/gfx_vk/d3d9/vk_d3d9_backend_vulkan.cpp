@@ -100,6 +100,11 @@ struct Backend
     modern::Tonemap *tonemap = nullptr;
     uint64_t linearScenes = 0, linearScenesBase = 0;
     uint64_t linearCopies = 0, linearCopiesBase = 0;
+    // Effects (the renderer's emissive surfaces) blend in linear light with
+    // the rest of the scene with KISAK_VK_MODERN_EFFECTS=linear; otherwise
+    // the scene is finished before them and they draw on the display image
+    // (vk_d3d9.h ModernSceneLit).
+    bool effectsInLinear = false;
     // Bloom from the linear-light scene in place of the renderer's glow
     // (vk_d3d9.h ModernSceneDone): made at the first scene with glow, unless
     // KISAK_VK_MODERN_BLOOM=0; the scenes it ran for, and at the last reset.
@@ -233,19 +238,21 @@ void LogSlowFrames(const Backend &backend)
 namespace
 {
 // Whether the environment variable is set to "0".
-bool EnvIsZero(const char *name)
+bool EnvIs(const char *name, const char *value)
 {
 #if defined(_MSC_VER)
     char *text = nullptr;
     size_t length = 0;
-    const bool zero = _dupenv_s(&text, &length, name) == 0 && text && std::strcmp(text, "0") == 0;
+    const bool same = _dupenv_s(&text, &length, name) == 0 && text && std::strcmp(text, value) == 0;
     std::free(text);
-    return zero;
+    return same;
 #else
     const char *text = std::getenv(name);
-    return text && std::strcmp(text, "0") == 0;
+    return text && std::strcmp(text, value) == 0;
 #endif
 }
+
+bool EnvIsZero(const char *name) { return EnvIs(name, "0"); }
 } // namespace
 
 Backend *OpenBackend(const BackendDesc &desc, std::string &error)
@@ -257,6 +264,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     // (docs/vulkan-modern.md); without r_visuals modern nothing asks for it.
     backend->linearWanted = !EnvIsZero("KISAK_VK_MODERN_LINEAR");
     backend->bloomWanted = !EnvIsZero("KISAK_VK_MODERN_BLOOM");
+    backend->effectsInLinear = EnvIs("KISAK_VK_MODERN_EFFECTS", "linear");
     if (!h.windowSystem || !h.windowSystem(h.user, desc.window, backend->windowSystem))
     {
         error = "the host has no Vulkan window system for this window";
@@ -747,6 +755,8 @@ lg::Surface *BackendModernSceneTarget(Backend *backend, lg::Surface *backBuffer,
     result = ModernResult::Done;
     return backend->linearSceneSurface;
 }
+
+bool BackendModernEffectsOnDisplay(Backend *backend) { return backend && !backend->effectsInLinear; }
 
 bool BackendModernCopyScene(Backend *backend, lg::Surface *scene, const lg::Rect *from, lg::Surface *dst,
                             const lg::Rect *to, bool linear)

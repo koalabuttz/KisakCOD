@@ -44,6 +44,11 @@ struct GfxModernHooks
     // first draw into the back buffer). With linear light the back end gives
     // it an image of its own until sceneDone. May be null.
     void (*sceneBegin)(void *user, IDirect3DDevice9 *device);
+    // The view's lit scene is drawn and its emissive surfaces (effects,
+    // blended surfaces) come next; sceneDone follows them with the same
+    // scene. A back end that draws effects on the display image finishes the
+    // scene here (and then does nothing at sceneDone). May be null.
+    void (*sceneLit)(void *user, IDirect3DDevice9 *device, GfxModernScene *scene);
 };
 
 // Null removes them. Called while no frame is being built (as the renderer
