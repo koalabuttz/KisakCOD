@@ -21,7 +21,7 @@
 //
 // It reads what the game's shader reads, where that shader reads it (world-lit
 // shader facts 1 to 3, 2026-11-13), but adds its light in linear light:
-//   albedo = colour map (plus detail around grey) * vertex colour, decoded;
+//   albedo = colour map (plus detail around grey) * vertex colour;
 //   sky    = the secondary lightmap's two halves combined as the game's shader
 //            combines them (an encoding of one baked light), then decoded;
 //   sun    = what the sun (the shadow, or the primary lightmap's sun
@@ -30,12 +30,16 @@
 //   spec   = likewise what the game's specular (specular colour * Fresnel *
 //            (shadow * the sun's highlight * its colour + the reflection
 //            probe)) adds to the game's diffuse colour, decoded;
-//   colour = albedo * (sky * sky strength + sun * sun strength) + spec, then
-//            fog blended in linear light.
-// The game's shader adds its terms in display values, so in linear light a
-// term's share depends on what it is added to; taking each share from the
-// game's sum keeps every surface as bright as the game's (strengths 1),
-// while the terms stay apart for the strengths to scale.
+//   colour = decode(albedo * the game's light) shared out between sky and
+//            sun as their decoded light is, each share times its strength,
+//            + spec, then fog blended in linear light.
+// The game's shader adds and multiplies its terms in display values, so in
+// linear light a term's share depends on what it is added to, and a dark
+// colour times bright light (or the other way round) is not the decoded
+// colour times the decoded light (PC barrel check 1: up to +36% on a dark
+// barrel in the sun, -11% on a shaded helicopter). Decoding the game's own
+// product and sum keeps every surface as bright as the game's (strengths
+// 1), while the terms stay apart for the strengths to scale.
 //
 // The inputs' locations here are placeholders (texcoord N at N, colour 0 at
 // 10): the Legacy adapter moves them to where the vertex shader writes those
@@ -210,7 +214,6 @@ void main()
     // t0: the game's shader keeps alpha >= 0.5 and writes black with alpha 0
     // elsewhere, for the render state's alpha test to drop.
     const bool kept = kMode != 2 || alpha >= 0.5;
-    vec3 albedo = Decode(color) * Decode(color0.rgb);
     vec3 albedoDisplay = max(color, vec3(0.0)) * color0.rgb;
 
     // The secondary lightmap: two images stacked, their alphas a direction
@@ -284,13 +287,18 @@ void main()
     const vec3 sun = vec3(0.0);
 #endif
 
+    // The game's diffuse colour, decoded, shared out between the sky and the
+    // sun as their light is (sky + sun is the decoded light), each share
+    // scaled by its strength.
+    const vec3 light = sky + sun;
+    vec3 lit = Decode(albedoDisplay * (skyDisplay + sunDisplay)) * (sky * kSkyStrength + sun * kSunStrength)
+        / max(light, vec3(1e-6));
     // A blended surface is premultiplied by its alpha.
     if (kMode == 1)
     {
-        albedo *= alpha;
+        lit *= alpha;
         albedoDisplay *= alpha;
     }
-    vec3 lit = albedo * (sky * kSkyStrength + sun * kSunStrength);
 #if LM_SUN_SPECULAR
     const vec4 specularSample = texture(sampler2D(specularMap, specularMapSampler), uv);
     // A blended surface masks its specular: by how much colour the specular

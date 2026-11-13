@@ -21,7 +21,7 @@
 // It reads what the game's shader reads, where that shader reads it
 // (model-lit shader facts, 2026-11-13), and adds its light in linear light
 // the way lm_sun.frag does for the world:
-//   albedo = colour map (plus detail around grey) * vertex colour, decoded;
+//   albedo = colour map (plus detail around grey) * vertex colour;
 //   sky    = the lighting volume's colour, doubled as the game doubles it,
 //            then decoded (the volume is sampled where the normal points:
 //            its coordinate plus the normal times lightingLookupScale over
@@ -31,8 +31,9 @@
 //            decode(sky + sun) - decode(sky);
 //   spec   = likewise what the game's specular adds to the game's diffuse
 //            colour, decoded;
-//   colour = albedo * (sky * sky strength + sun * sun strength) + spec, then
-//            fog blended in linear light.
+//   colour = decode(albedo * the game's light) shared out between sky and
+//            sun as their decoded light is, each share times its strength,
+//            + spec, then fog blended in linear light (lm_sun.frag).
 // It differs from lm_sun.frag where the game's model shader differs from its
 // world shader: the volume in place of the lightmaps, the shadow always
 // taken (no primary lightmap to skip it) and fading to the volume's alpha,
@@ -206,7 +207,6 @@ void main()
     // t0: the game's shader keeps alpha >= 0.5 and writes black with alpha 0
     // elsewhere, for the render state's alpha test to drop.
     const bool kept = kMode != 2 || alpha >= 0.5;
-    vec3 albedo = Decode(color) * Decode(color0.rgb);
     vec3 albedoDisplay = max(color, vec3(0.0)) * color0.rgb;
 
 #if LP_SUN_NORMAL
@@ -268,13 +268,18 @@ void main()
     const vec3 sun = vec3(0.0);
 #endif
 
+    // The game's diffuse colour, decoded, shared out between the sky and the
+    // sun as their light is (sky + sun is the decoded light), each share
+    // scaled by its strength.
+    const vec3 light = sky + sun;
+    vec3 lit = Decode(albedoDisplay * (skyDisplay + sunDisplay)) * (sky * kSkyStrength + sun * kSunStrength)
+        / max(light, vec3(1e-6));
     // A blended surface is premultiplied by its alpha.
     if (kMode == 1)
     {
-        albedo *= alpha;
+        lit *= alpha;
         albedoDisplay *= alpha;
     }
-    vec3 lit = albedo * (sky * kSkyStrength + sun * kSunStrength);
 #if LP_SUN_SPECULAR
     const vec4 specularSample = texture(sampler2D(specularMap, specularMapSampler), uv);
     // A blended surface masks its specular: by how much colour the specular

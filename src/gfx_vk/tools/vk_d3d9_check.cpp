@@ -4126,7 +4126,7 @@ void Check::ModernLitShader()
             const auto slope = [](int byte, double scale, double offset) { return byte / 255.0 * scale - offset; };
             const double b = slope(130, 4.06452, 2.06452); // the lightmap's direction (a is 0)
             const double lengthD = 1.0 / std::sqrt(b * b + 1.0);
-            const double greyValue = 128 / 255.0, greyLight = decode(greyValue);
+            const double greyValue = 128 / 255.0;
             // The diffuse light of a surface whose normal map's slope along
             // the tangent is x (0 without a normal map; y is b's), in the
             // shade or the sun: the lightmap's decoded, plus what the sun
@@ -4135,6 +4135,12 @@ void Check::ModernLitShader()
             struct Light
             {
                 double linear, display;
+            };
+            // A colour of albedoDisplay under that light as ours draws it: the
+            // game's product decoded, shared out between the sky and the sun
+            // as their strengths scale them.
+            const auto colour = [&](double albedoDisplay, const Light &light) {
+                return decode(albedoDisplay * light.display) * light.linear / std::max(decode(light.display), 1e-12);
             };
             const auto diffuse = [&](double x, bool normalMap, bool sunlit, double yScale = 1.0) {
                 const double y = b * yScale;
@@ -4148,8 +4154,8 @@ void Check::ModernLitShader()
                 const double sunLight = decode(skyDisplay + sunDisplay) - skyLight;
                 return Light{skyLight * sky + sunLight * sun, skyDisplay + sunDisplay};
             };
-            const double sunlit = greyLight * diffuse(0.0, false, true).linear;
-            const double shaded = greyLight * diffuse(0.0, false, false).linear;
+            const double sunlit = colour(greyValue, diffuse(0.0, false, true));
+            const double shaded = colour(greyValue, diffuse(0.0, false, false));
             expect("sunlit", 16, 32, shown(sunlit, sunlit, sunlit));
             expect("shadow_lit", 48, 32, shown(sunlit, sunlit, sunlit));
             expect("shadow_shaded", 80, 32, shown(shaded, shaded, shaded));
@@ -4165,12 +4171,12 @@ void Check::ModernLitShader()
                 const Light light = diffuse(0.0, true, true, alpha);
                 const double diffuseDisplay = alpha * detailDisplay * light.display;
                 const double specularDisplay = greyValue * (0.5 * greyValue * sun + 64 / 255.0);
-                return alpha * decode(detailDisplay) * light.linear + decode(diffuseDisplay + specularDisplay)
+                return alpha * colour(detailDisplay, light) + decode(diffuseDisplay + specularDisplay)
                     - decode(diffuseDisplay);
             };
             const double opaque = withMaps(1.0);
             const double blended = withMaps(128 / 255.0);
-            const double tilted = greyLight * diffuse(slope(192, 4.08, 2.08), true, true).linear;
+            const double tilted = colour(greyValue, diffuse(slope(192, 4.08, 2.08), true, true));
             expect("maps_opaque", 16, 96, shown(opaque, opaque, opaque));
             expect("maps_normal_tilted", 48, 96, shown(tilted, tilted, tilted));
             expect("maps_blended", 80, 96, shown(blended, blended, blended));
@@ -4400,7 +4406,7 @@ void Check::ModernLitModels()
                 return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
             };
             const auto slope = [](int byte, double scale, double offset) { return byte / 255.0 * scale - offset; };
-            const double greyValue = 128 / 255.0, greyLight = decode(greyValue);
+            const double greyValue = 128 / 255.0;
             const double skyDisplay = 2.0 * 48 / 255.0, skyLight = decode(skyDisplay);
             const double volumeSun = 200 / 255.0;
             // The diffuse light, linear and in display values, with the sun
@@ -4409,14 +4415,20 @@ void Check::ModernLitModels()
             {
                 double linear, display;
             };
+            // A colour of albedoDisplay under that light as ours draws it: the
+            // game's product decoded, shared out between the sky and the sun
+            // as their strengths scale them.
+            const auto colour = [&](double albedoDisplay, const Light &light) {
+                return decode(albedoDisplay * light.display) * light.linear / std::max(decode(light.display), 1e-12);
+            };
             const auto diffuse = [&](double vis, double facing) {
                 const double sunDisplay = vis * facing * greyValue;
                 return Light{skyLight * sky + (decode(skyDisplay + sunDisplay) - skyLight) * sun,
                              skyDisplay + sunDisplay};
             };
-            const double volumeLit = greyLight * diffuse(volumeSun, 1.0).linear;
-            const double shadowLit = greyLight * diffuse(1.0, 1.0).linear;
-            const double shaded = greyLight * diffuse(0.0, 1.0).linear;
+            const double volumeLit = colour(greyValue, diffuse(volumeSun, 1.0));
+            const double shadowLit = colour(greyValue, diffuse(1.0, 1.0));
+            const double shaded = colour(greyValue, diffuse(0.0, 1.0));
             expect("volume_sun", 16, 32, shown(volumeLit, volumeLit, volumeLit));
             expect("shadow_lit", 48, 32, shown(shadowLit, shadowLit, shadowLit));
             expect("shadow_shaded", 80, 32, shown(shaded, shaded, shaded));
@@ -4433,13 +4445,13 @@ void Check::ModernLitModels()
                 const Light light = diffuse(1.0, 1.0 / std::sqrt(yb * yb + 1.0));
                 const double diffuseDisplay = alpha * detailDisplay * light.display;
                 const double specularDisplay = greyValue * (0.5 * greyValue * sun + 64 / 255.0);
-                return alpha * decode(detailDisplay) * light.linear + decode(diffuseDisplay + specularDisplay)
+                return alpha * colour(detailDisplay, light) + decode(diffuseDisplay + specularDisplay)
                     - decode(diffuseDisplay);
             };
             const double opaque = withMaps(1.0);
             const double blended = withMaps(128 / 255.0);
             const double x = slope(192, 4.08, 2.08);
-            const double tilted = greyLight * diffuse(volumeSun, 1.0 / std::sqrt(x * x + y * y + 1.0)).linear;
+            const double tilted = colour(greyValue, diffuse(volumeSun, 1.0 / std::sqrt(x * x + y * y + 1.0)));
             expect("maps_opaque", 16, 96, shown(opaque, opaque, opaque));
             expect("maps_normal_tilted", 48, 96, shown(tilted, tilted, tilted));
             expect("maps_blended", 80, 96, shown(blended, blended, blended));
@@ -4680,7 +4692,7 @@ void Check::ModernLitNoSun()
                 return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
             };
             const auto slope = [](int byte, double scale, double offset) { return byte / 255.0 * scale - offset; };
-            const double greyValue = 128 / 255.0, greyLight = decode(greyValue);
+            const double greyValue = 128 / 255.0;
             const double detailDisplay = greyValue + 160 / 255.0 - 0.5;
             const double specularDisplay = greyValue * 64 / 255.0; // no sun highlight
             // The world's light in display values: the lightmap's direction is
@@ -4697,18 +4709,18 @@ void Check::ModernLitNoSun()
             // of lightDisplay, premultiplied by alpha.
             const auto withMaps = [&](double lightDisplay, double alpha) {
                 const double diffuseDisplay = alpha * detailDisplay * lightDisplay;
-                return alpha * decode(detailDisplay) * decode(lightDisplay) * sky
+                return alpha * decode(detailDisplay * lightDisplay) * sky
                     + decode(diffuseDisplay + specularDisplay) - decode(diffuseDisplay);
             };
             const double flatY = slope(130, 4.06452, 2.06452);
-            const double world = greyLight * decode(lightmap(false, 0.0, 0.0)) * sky;
+            const double world = decode(greyValue * lightmap(false, 0.0, 0.0)) * sky;
             expect("world", on, 16, 32, world);
             expect("world_half_fog", on, 48, 32, world, 0.5);
-            const double model = greyLight * decode(2.0 * 48 / 255.0) * sky;
+            const double model = decode(greyValue * 2.0 * 48 / 255.0) * sky;
             expect("model", modelsOn, 80, 32, model);
             expect("model_half_fog", modelsOn, 112, 32, model, 0.5);
             expect("world_maps_opaque", on, 16, 96, withMaps(lightmap(true, 0.0, flatY), 1.0));
-            const double tilted = greyLight * decode(lightmap(true, slope(192, 4.08, 2.08), flatY)) * sky;
+            const double tilted = decode(greyValue * lightmap(true, slope(192, 4.08, 2.08), flatY)) * sky;
             expect("world_normal_tilted", on, 48, 96, tilted);
             const double alpha = 128 / 255.0;
             expect("world_maps_blended", on, 80, 96, withMaps(lightmap(true, 0.0, flatY * alpha), alpha));

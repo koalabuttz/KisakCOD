@@ -590,7 +590,7 @@ What ours computes (from the game shaders' maths, world-lit shader facts 1
 to 3 in the project files, 2026-11-13):
 
 * **albedo** = colour map (plus the detail map around grey, `d0`) times
-  vertex colour, each decoded from sRGB;
+  vertex colour, as the game has it (display values);
 * **sky** = the secondary lightmap's two halves combined as the game
   combines them (top plus bottom times N.D, with the flat normal or, `n0`,
   the normal map's slopes, which also scale the top: one baked light,
@@ -608,16 +608,21 @@ to 3 in the project files, 2026-11-13):
   (envMapParms) times (shadow times the sun's highlight, exponent from the
   gloss, times envMapParms.w, the sun's specular colour and the sun
   strength, plus the reflection probe at LOD 6 - 8 gloss times its alpha);
-* **colour** = albedo times (sky times the sky strength plus sun times the
-  sun strength) plus specular, then the fog
+* **colour** = decode(albedo times the game's light, sky plus sun in
+  display values), shared out between the sky and the sun as their decoded
+  light is (sky / (sky + sun) of it to the sky), each share times its
+  strength, plus specular, then the fog
   colour (decoded) blended over it in linear light by the vertex fog factor.
   `b0` premultiplies the albedo and fog colour by colour alpha times vertex
   alpha, which is the output alpha; `t0` keeps alpha 0.5 and over and writes
   black with alpha 0 elsewhere, as the game's shader does; then the alpha
   test of the render state.
 
-So with both strengths 1 every surface is as bright as the game's:
-decode(colour times light) is decode(colour) times decode(light). The game
+So with both strengths 1 every surface is as bright as the game's: its
+diffuse colour is the game's product decoded. Decoding the colour and the
+light apart and multiplying them would not be (the sRGB curve is not a
+power: a dark colour in bright light came out up to 36% brighter than
+Legacy's, a shaded one 11% darker, PC barrel check 1). The game
 added its terms in display values, so in linear light a term's share
 depends on what it is added to: a single sun strength over decoded terms
 matched the game at 2.9 on Crash and 4.3 on Backlot (PC sun run 2), which
