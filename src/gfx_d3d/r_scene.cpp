@@ -1782,6 +1782,20 @@ static GfxModernScene &R_ModernScene(const GfxViewInfo *viewInfo)
     return modern;
 }
 
+bool R_ModernWantsSceneDepth()
+{
+    const GfxModernHooks *hooks = R_ModernHooks();
+    return hooks && hooks->wantsSceneDepth && hooks->sceneDepth && hooks->wantsSceneDepth(hooks->user, dx.device);
+}
+
+void R_ModernSceneDepth(const GfxViewInfo *viewInfo)
+{
+    const GfxModernHooks *hooks = R_ModernHooks();
+    if (!hooks || !hooks->sceneDepth)
+        return;
+    hooks->sceneDepth(hooks->user, dx.device, &R_ModernScene(viewInfo));
+}
+
 void R_ModernSceneLit(const GfxViewInfo *viewInfo)
 {
     R_ModernEndLitPasses();

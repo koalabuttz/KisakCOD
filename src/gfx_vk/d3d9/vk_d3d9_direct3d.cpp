@@ -267,6 +267,24 @@ ModernResult ModernSceneLit(IDirect3DDevice9 *device, const ModernSceneView &vie
     return ModernResult::Refused;
 }
 
+bool ModernWantsSceneDepth(IDirect3DDevice9 *device)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernWantsSceneDepth();
+    return false;
+}
+
+ModernResult ModernSceneDepth(IDirect3DDevice9 *device, const ModernSceneView &view)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernSceneDepth(view);
+    return ModernResult::Refused;
+}
+
 void SetModernLitInputs(IDirect3DDevice9 *device, const ModernLitInputs *inputs)
 {
     const FrontLock lock;

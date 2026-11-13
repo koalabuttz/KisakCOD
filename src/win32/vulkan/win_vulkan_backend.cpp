@@ -583,9 +583,23 @@ void ModernLitInputs(void *, IDirect3DDevice9 *device, const GfxModernLitInputs 
     front::SetModernLitInputs(device, &lit);
 }
 
+// The normals buffer (docs/vulkan-modern.md): the front asks for the depth
+// prepass when something reads it, and builds it from the prepass's depth.
+bool ModernWantsSceneDepth(void *, IDirect3DDevice9 *device)
+{
+    return !s_modernRefused.load(std::memory_order_relaxed) && front::ModernWantsSceneDepth(device);
+}
+
+void ModernSceneDepth(void *, IDirect3DDevice9 *device, GfxModernScene *scene)
+{
+    if (!s_modernRefused.load(std::memory_order_relaxed))
+        front::ModernSceneDepth(device, ModernViewOf(scene));
+}
+
 const GfxModernHooks s_modernHooks = {nullptr,          ModernJitterPixels, ModernSceneDone,
                                       ModernSceneBegin, ModernSceneLit,     ModernSurfaceMoved,
-                                      ModernSkinnedSurfaceMoved, ModernLitInputs};
+                                      ModernSkinnedSurfaceMoved, ModernLitInputs, ModernWantsSceneDepth,
+                                      ModernSceneDepth};
 } // namespace
 
 int Kisak_VulkanBackendSelected()

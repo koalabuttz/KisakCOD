@@ -233,6 +233,11 @@ ModernResult Device::ModernSceneDone(const ModernSceneView &view, bool *glowDraw
     return result;
 }
 
+ModernResult Device::ModernSceneDepth(const ModernSceneView &view)
+{
+    return BackendModernSceneDepth(backend_, depthStencil_ ? depthStencil_->handle() : nullptr, view);
+}
+
 void Device::SetModernLitInputs(const ModernLitInputs *inputs) { BackendModernLitInputs(backend_, inputs); }
 
 ModernResult Device::ModernSceneLit(const ModernSceneView &view, bool *glowDrawn)
