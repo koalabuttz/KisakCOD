@@ -3997,7 +3997,7 @@ void Check::ModernLitShader()
             const auto slope = [](int byte, double scale, double offset) { return byte / 255.0 * scale - offset; };
             const double b = slope(130, 4.06452, 2.06452); // the lightmap's direction (a is 0)
             const double lengthD = 1.0 / std::sqrt(b * b + 1.0);
-            const double grey = 128 / 255.0, greyLight = decode(grey);
+            const double greyValue = 128 / 255.0, greyLight = decode(greyValue);
             // The diffuse light of a surface whose normal map's slope along
             // the tangent is x (0 without a normal map; y is b's), in the
             // shade or the sun: the lightmap's decoded, plus what the sun
@@ -4014,7 +4014,7 @@ void Check::ModernLitShader()
                                                 : std::clamp(lengthD, 0.0, 1.0);
                 const double skyDisplay = 64 / 255.0 * lengthN + 64 / 255.0 * facing;
                 // The normal (x, y, 1) or (0, 0, 1) faces the sun by lengthN.
-                const double sunDisplay = sunlit ? (normalMap ? lengthN : 1.0) * grey : 0.0;
+                const double sunDisplay = sunlit ? (normalMap ? lengthN : 1.0) * greyValue : 0.0;
                 const double skyLight = decode(skyDisplay);
                 const double sunLight = decode(skyDisplay + sunDisplay) - skyLight;
                 return Light{skyLight * sky + sunLight * sun, skyDisplay + sunDisplay};
@@ -4030,11 +4030,11 @@ void Check::ModernLitShader()
             // down at a normal within 0.5 degrees of the sun: the highlight is
             // whole, the Fresnel 1, the probe grey 64; the specular adds what
             // it adds to the game's diffuse colour.
-            const double detailDisplay = grey + 160 / 255.0 - 0.5;
+            const double detailDisplay = greyValue + 160 / 255.0 - 0.5;
             const auto withMaps = [&](double alpha) {
                 const Light light = diffuse(0.0, true, true);
                 const double diffuseDisplay = alpha * detailDisplay * light.display;
-                const double specularDisplay = grey * (0.5 * grey * sun + 64 / 255.0);
+                const double specularDisplay = greyValue * (0.5 * greyValue * sun + 64 / 255.0);
                 return alpha * decode(detailDisplay) * light.linear + decode(diffuseDisplay + specularDisplay)
                     - decode(diffuseDisplay);
             };
