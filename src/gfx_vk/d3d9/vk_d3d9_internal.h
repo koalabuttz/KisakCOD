@@ -545,6 +545,7 @@ public:
     ModernResult ModernSceneBegin();
     ModernResult ModernSceneDone(const ModernSceneView &view, bool *glowDrawn);
     ModernResult ModernSceneLit(const ModernSceneView &view, bool *glowDrawn);
+    void SetModernLitInputs(const ModernLitInputs *inputs);
     const Host &host() const { return parent_->host(); }
     HRESULT Unsupported(const char *method);
     DeviceCounters counters() const;

@@ -233,6 +233,8 @@ ModernResult Device::ModernSceneDone(const ModernSceneView &view, bool *glowDraw
     return result;
 }
 
+void Device::SetModernLitInputs(const ModernLitInputs *inputs) { BackendModernLitInputs(backend_, inputs); }
+
 ModernResult Device::ModernSceneLit(const ModernSceneView &view, bool *glowDrawn)
 {
     if (!BackendModernEffectsOnDisplay(backend_))

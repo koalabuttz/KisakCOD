@@ -329,6 +329,7 @@ public:
     IDirect3DDevice9 *device = nullptr;
     IDirect3DVertexShader9 *vsBasic = nullptr;
     IDirect3DPixelShader9 *psColor = nullptr, *psTexture = nullptr, *psShadow = nullptr, *psVolume = nullptr;
+    IDirect3DPixelShader9 *psLit = nullptr;
     IDirect3DVertexDeclaration9 *decl = nullptr;
     IDirect3DSurface9 *readSurface = nullptr;
     IDirect3DSurface9 *backBuffer = nullptr;
@@ -512,6 +513,7 @@ public:
     void ModernLinear();
     void ModernBloom();
     void ModernEffects();
+    void ModernLit();
     void Bench();
     void BenchRuns();
     void BenchFrames(bool runs);
@@ -3331,6 +3333,79 @@ void Check::ModernEffects()
     SafeRelease(depth);
 }
 
+// Lit surfaces computing in linear light (front::SetModernLitInputs): a grey
+// 128 colour map times a white vertex colour, plus a light of 64 in c1. Taken
+// to linear light only as the stored sum (no lit inputs, or linear light off)
+// the quad shows 128 + 64 = 192; with the colour map, the light and the
+// vertex colour decoded before the sum it shows encode(decode(128) +
+// decode(64)) = 141, and 197 with the colour map doubled (decode(2v) / 2).
+void Check::ModernLit()
+{
+    const auto env = [](const char *name, const char *value) {
+#if defined(_MSC_VER)
+        char *text = nullptr;
+        size_t length = 0;
+        const bool same = _dupenv_s(&text, &length, name) == 0 && text && !std::strcmp(text, value);
+        std::free(text);
+        return same;
+#else
+        const char *text = std::getenv(name);
+        return text && !std::strcmp(text, value);
+#endif
+    };
+    const bool lit = !env("KISAK_VK_MODERN_LINEAR", "0") && !env("KISAK_VK_MODERN_LIT", "0");
+    IDirect3DTexture9 *texture = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 128, 128, 128); });
+    IDirect3DSurface9 *depth = nullptr;
+    if (!texture
+        || !Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                                 nullptr),
+               "CreateDepthStencilSurface"))
+    {
+        SafeRelease(texture);
+        return;
+    }
+    Reset(Argb(255, 0, 0, 0));
+    front::ModernSceneBegin(device);
+    device->SetDepthStencilSurface(depth);
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0), "Clear(scene)");
+    Ok(device->SetTexture(0, texture), "SetTexture");
+    Ok(device->SetPixelShader(psLit), "SetPixelShader");
+    const float light[4] = {64.0f / 255.0f, 64.0f / 255.0f, 64.0f / 255.0f, 0.0f};
+    Ok(device->SetPixelShaderConstantF(1, light, 1), "SetPixelShaderConstantF");
+    DrawQuad(0, 0, 64, 64, 0.5f, Argb(255, 255, 255, 255));
+    front::ModernLitInputs inputs;
+    inputs.samplers = 1u << 0;
+    inputs.constants = 1ull << 1;
+    inputs.colorInput = true;
+    front::SetModernLitInputs(device, &inputs);
+    DrawQuad(64, 0, 128, 64, 0.5f, Argb(255, 255, 255, 255));
+    inputs.doubled = 1u << 0;
+    front::SetModernLitInputs(device, &inputs);
+    DrawQuad(0, 64, 64, 128, 0.5f, Argb(255, 255, 255, 255));
+    front::SetModernLitInputs(device, nullptr);
+    DrawQuad(64, 64, 128, 128, 0.5f, Argb(255, 255, 255, 255));
+
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    view.width = view.height = kSize;
+    view.cut = true;
+    if (front::ModernSceneLit(device, view) == front::ModernResult::Skipped)
+        front::ModernSceneDone(device, view);
+    device->SetDepthStencilSurface(nullptr);
+    device->SetTexture(0, nullptr);
+    if (Read())
+    {
+        Expect("unlit", 32, 32, 192, 192, 192);
+        Expect("lit", 96, 32, lit ? 141 : 192, lit ? 141 : 192, lit ? 141 : 192);
+        Expect("lit_doubled", 32, 96, lit ? 197 : 192, lit ? 197 : 192, lit ? 197 : 192);
+        Expect("unlit_again", 96, 96, 192, 192, 192);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    SafeRelease(depth);
+    SafeRelease(texture);
+}
+
 void Check::ResetDevice()
 {
     SafeRelease(backBuffer);
@@ -3460,6 +3535,8 @@ bool Check::CreateObjects(std::string &error)
         hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsShadow), &psShadow);
     if (SUCCEEDED(hr))
         hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsVolume), &psVolume);
+    if (SUCCEEDED(hr))
+        hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsLit), &psLit);
     const D3DVERTEXELEMENT9 elements[] = {
         {0, 0, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
         {0, 12, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
@@ -3501,6 +3578,7 @@ void Check::ReleaseObjects()
     }
     SafeRelease(vsBasic);
     SafeRelease(psColor);
+    SafeRelease(psLit);
     SafeRelease(psTexture);
     SafeRelease(psShadow);
     SafeRelease(psVolume);
@@ -3571,6 +3649,7 @@ int Run(const Options &options)
         {"modern_linear", &Check::ModernLinear, true},
         {"modern_bloom", &Check::ModernBloom, true},
         {"modern_effects", &Check::ModernEffects, true},
+        {"modern_lit", &Check::ModernLit, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},

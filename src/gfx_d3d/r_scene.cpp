@@ -48,6 +48,7 @@
 void CL_UpdateSound();
 #endif
 #include "r_state.h"
+#include "r_utils.h"
 #include "r_draw_sunshadow.h"
 
 //struct GfxScene scene      859c8280     gfx_d3d : r_scene.obj
@@ -1266,12 +1267,132 @@ void R_ModernJitterScene(const refdef_s *refdef, GfxViewParms *viewParms)
     R_SetupViewProjectionMatrices(viewParms);
 }
 
+// The lit inputs (R_ModernPassInputs) between sceneBegin and sceneLit: on,
+// the pass and material they were last worked out for, and whether the last
+// ones sent were for a lit pass.
+static bool s_modernLitPasses;
+static const MaterialPass *s_modernInputsPass;
+static const Material *s_modernInputsMaterial;
+static GfxModernLitInputs s_modernInputsSent;
+static bool s_modernInputsLit;
+
+static void R_ModernSendInputs(const GfxModernLitInputs *inputs)
+{
+    const GfxModernHooks *hooks = R_ModernHooks();
+    if (!hooks || !hooks->litInputs)
+        return;
+    if (!inputs ? !s_modernInputsLit
+                : s_modernInputsLit && s_modernInputsSent.constants == inputs->constants
+                      && s_modernInputsSent.samplers == inputs->samplers
+                      && s_modernInputsSent.doubled == inputs->doubled
+                      && s_modernInputsSent.colorInput == inputs->colorInput)
+        return;
+    s_modernInputsLit = inputs != nullptr;
+    if (inputs)
+        s_modernInputsSent = *inputs;
+    hooks->litInputs(hooks->user, dx.device, inputs);
+}
+
+static void R_ModernEndLitPasses()
+{
+    if (s_modernLitPasses)
+        R_ModernSendInputs(nullptr);
+    s_modernLitPasses = false;
+    s_modernInputsPass = nullptr;
+    s_modernInputsMaterial = nullptr;
+}
+
 void R_ModernSceneBegin()
 {
     s_modernSceneView = nullptr;
     const GfxModernHooks *hooks = R_ModernHooks();
+    R_ModernEndLitPasses();
+    s_modernLitPasses = hooks && hooks->litInputs;
     if (hooks && hooks->sceneBegin)
         hooks->sceneBegin(hooks->user, dx.device);
+}
+
+// Which colours a lit pass's pixel shader reads, by its kind (the pixel
+// shader's name: lm_ world surfaces lit by lightmaps, lp_ models lit by the
+// lighting volume, l_ dynamic lights) and what its arguments bind. The rest
+// (lightmap primary, shadow maps, normal maps, light attenuation, directions,
+// fog and shadow parameters) are not colours.
+void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
+{
+    if (!s_modernLitPasses || !pass || !material)
+        return;
+    if (pass == s_modernInputsPass && material == s_modernInputsMaterial)
+        return;
+    s_modernInputsPass = pass;
+    s_modernInputsMaterial = material;
+    const char *name = pass->pixelShader ? pass->pixelShader->name : nullptr;
+    const bool lit = name && (!strncmp(name, "lm_", 3) || !strncmp(name, "lp_", 3) || !strncmp(name, "l_", 2));
+    if (!lit)
+    {
+        R_ModernSendInputs(nullptr);
+        return;
+    }
+    // A detail map is drawn around grey and doubled: decode(2v) / 2 keeps it
+    // a factor of 1 at grey.
+    static const uint32_t detailMapHash = R_HashString("detailMap");
+    GfxModernLitInputs inputs{};
+    inputs.colorInput = true;
+    const uint32_t argCount = pass->perPrimArgCount + pass->perObjArgCount + pass->stableArgCount;
+    for (uint32_t i = 0; i < argCount; ++i)
+    {
+        const MaterialShaderArgument &arg = pass->args[i];
+        switch (arg.type)
+        {
+        case MTL_ARG_MATERIAL_PIXEL_SAMPLER:
+            for (uint32_t t = 0; t < material->textureCount; ++t)
+            {
+                const MaterialTextureDef &def = material->textureTable[t];
+                if (def.nameHash != arg.u.nameHash)
+                    continue;
+                if (arg.dest < 16 && (def.semantic == TS_COLOR_MAP || def.semantic == TS_SPECULAR_MAP))
+                {
+                    inputs.samplers |= (uint16_t)(1u << arg.dest);
+                    if (def.nameHash == detailMapHash)
+                        inputs.doubled |= (uint16_t)(1u << arg.dest);
+                }
+                break;
+            }
+            break;
+        case MTL_ARG_CODE_PIXEL_SAMPLER:
+            if (arg.dest >= 16)
+                break;
+            if (arg.u.codeSampler == TEXTURE_SRC_CODE_LIGHTMAP_SECONDARY
+                || arg.u.codeSampler == TEXTURE_SRC_CODE_REFLECTION_PROBE)
+                inputs.samplers |= (uint16_t)(1u << arg.dest);
+            else if (arg.u.codeSampler == TEXTURE_SRC_CODE_MODEL_LIGHTING)
+            {
+                // Its rgb is doubled in the shader (a 2x overbright).
+                inputs.samplers |= (uint16_t)(1u << arg.dest);
+                inputs.doubled |= (uint16_t)(1u << arg.dest);
+            }
+            break;
+        case MTL_ARG_CODE_PIXEL_CONST:
+            if (arg.dest >= 64)
+                break;
+            switch (arg.u.codeConst.index)
+            {
+            case CONST_SRC_CODE_FOG_COLOR:
+            case CONST_SRC_CODE_SUN_DIFFUSE:
+            case CONST_SRC_CODE_SUN_SPECULAR:
+            case CONST_SRC_CODE_LIGHT_DIFFUSE:
+            case CONST_SRC_CODE_LIGHT_SPECULAR:
+            case CONST_SRC_CODE_MATERIAL_COLOR:
+                inputs.constants |= 1ull << arg.dest;
+                break;
+            default:
+                break;
+            }
+            break;
+        default:
+            break;
+        }
+    }
+    R_ModernSendInputs(&inputs);
 }
 
 static GfxModernScene &R_ModernScene(const GfxViewInfo *viewInfo)
@@ -1315,6 +1436,7 @@ static GfxModernScene &R_ModernScene(const GfxViewInfo *viewInfo)
 
 void R_ModernSceneLit(const GfxViewInfo *viewInfo)
 {
+    R_ModernEndLitPasses();
     const GfxModernHooks *hooks = R_ModernHooks();
     if (!hooks || !hooks->sceneLit)
         return;
@@ -1323,6 +1445,7 @@ void R_ModernSceneLit(const GfxViewInfo *viewInfo)
 
 void R_ModernSceneDone(const GfxViewInfo *viewInfo)
 {
+    R_ModernEndLitPasses();
     const GfxModernHooks *hooks = R_ModernHooks();
     if (!hooks || !hooks->sceneDone)
         return;

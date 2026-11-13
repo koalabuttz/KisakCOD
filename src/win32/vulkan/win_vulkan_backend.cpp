@@ -548,7 +548,24 @@ void ModernSceneBegin(void *, IDirect3DDevice9 *device)
         front::ModernSceneBegin(device);
 }
 
-const GfxModernHooks s_modernHooks = {nullptr, ModernJitterPixels, ModernSceneDone, ModernSceneBegin, ModernSceneLit};
+// The colours a lit pass's pixel shader reads, for linear light.
+void ModernLitInputs(void *, IDirect3DDevice9 *device, const GfxModernLitInputs *inputs)
+{
+    if (!inputs)
+    {
+        front::SetModernLitInputs(device, nullptr);
+        return;
+    }
+    front::ModernLitInputs lit;
+    lit.constants = inputs->constants;
+    lit.samplers = inputs->samplers;
+    lit.doubled = inputs->doubled;
+    lit.colorInput = inputs->colorInput;
+    front::SetModernLitInputs(device, &lit);
+}
+
+const GfxModernHooks s_modernHooks = {nullptr,         ModernJitterPixels, ModernSceneDone, ModernSceneBegin,
+                                      ModernSceneLit,  ModernLitInputs};
 } // namespace
 
 int Kisak_VulkanBackendSelected()

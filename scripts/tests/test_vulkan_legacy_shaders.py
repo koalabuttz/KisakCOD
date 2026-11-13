@@ -35,6 +35,9 @@ for linking. The checks:
   linear     --linear-output (the Modern path's linear-light scene): every
              pixel shader case that writes colour 0 still passes spirv-val and
              gets a clamp, a pow and a select per colour channel it writes
+  lit        --linear-inputs with everything marked (the Modern path's lit
+             surfaces): every pixel shader case still passes spirv-val, and
+             those that read a colour get more pows than without
 
 Usage:
   test_vulkan_legacy_shaders.py --binary build/bin/KisakCOD-vulkan-shaders
@@ -483,6 +486,34 @@ def main():
                                        f'for {channels} channels')
         checks.expect(f'linear output decodes the colour output ({linear_cases} pixel shader cases)',
                       linear_cases > 0 and not linear_problems, '\n  '.join(linear_problems[:20]))
+
+        # linear inputs (--linear-inputs, as the adapter builds a lit pixel
+        # shader for the Modern path's linear-light scene), with every
+        # sampler, constant and the colour input marked: the SPIR-V stays
+        # valid, and shaders that read colours decode them (more pows)
+        lit_problems = []
+        lit_cases = 0
+        lit_decoded = 0
+        for name, (found, base) in sorted(results.items()):
+            if not found['stage'].startswith('ps'):
+                continue
+            lit_cases += 1
+            spv = os.path.join(work, f'{name}-lit.spv')
+            code, stdout, _ = run(binary, ['translate', os.path.join(case_dir, name + '.bin'), '--linear-inputs',
+                                           '0xffff,0xffff,0xffffffffffffffff,1', '--out', spv])
+            if code != 0 or parse(stdout).get('result') != 'passed':
+                lit_problems.append(f'{name}: {stdout.strip()[:200]}')
+                continue
+            problem = validate(spv)
+            if problem:
+                lit_problems.append(f'{name}: spirv-val: {problem}')
+                continue
+            with open(spv, 'rb') as f:
+                spirv = Spirv(f.read())
+            if spirv.opcodes.get(OP_EXT_INST, 0) > base.opcodes.get(OP_EXT_INST, 0):
+                lit_decoded += 1
+        checks.expect(f'linear inputs build valid shaders ({lit_cases} pixel shader cases, {lit_decoded} decode)',
+                      lit_cases > 0 and lit_decoded > 0 and not lit_problems, '\n  '.join(lit_problems[:20]))
 
         # legacy state: fixed by default (no fog, clip plane or point argument
         # block declared, no gather), read at run time with the switch (every

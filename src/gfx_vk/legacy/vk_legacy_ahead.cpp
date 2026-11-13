@@ -25,7 +25,7 @@ namespace
 // ---- The list ------------------------------------------------------------------------------
 
 constexpr char kMagic[8] = {'K', 'V', 'K', 'P', 'L', 'S', 'T', '1'};
-constexpr uint32_t kListVersion = 2; // 2: ContentHash reads 8-byte words
+constexpr uint32_t kListVersion = 3; // 2: ContentHash reads 8-byte words; 3: linear inputs in the key
 constexpr uint32_t kMaxEntries = 16384;
 
 // A pipeline as the list names it: its shaders and declaration by their
@@ -113,7 +113,7 @@ struct SharedModule
     bool building = true;
     bool kept = false;
 };
-using ModuleKey = std::pair<uint32_t, uint64_t>;
+using ModuleKey = std::pair<uint32_t, LinkedKey>;
 } // namespace
 
 struct Ahead
@@ -223,7 +223,7 @@ void ClearList(Ahead &ahead)
 // The job's pixel module, built by this worker or another. Null on failure.
 VkShaderModule SharedPixelModule(Ahead &ahead, Job &job)
 {
-    const ModuleKey key{job.ps->id, job.recipe.plain ? 0 : job.recipe.moduleKey};
+    const ModuleKey key{job.ps->id, job.recipe.plain ? LinkedKey{} : job.recipe.moduleKey};
     {
         std::unique_lock<std::mutex> hold(ahead.lock);
         for (;;)
@@ -337,7 +337,7 @@ void Collect(Device &device)
         if (job->sharedModule)
         {
             std::lock_guard<std::mutex> hold(ahead.lock);
-            SharedModule &shared = ahead.modules[{job->ps->id, job->recipe.plain ? 0 : job->recipe.moduleKey}];
+            SharedModule &shared = ahead.modules[{job->ps->id, job->recipe.plain ? LinkedKey{} : job->recipe.moduleKey}];
             if (!shared.kept && KeepPixelModule(device, *job->ps, job->recipe, shared.module))
                 shared.kept = true;
         }
@@ -467,7 +467,7 @@ void TryQueue(Device &device, uint32_t at)
     job->decl = &decl;
     job->layout = layout;
     job->dynamicStride = features.dynamicVertexStride;
-    job->fragment = FindPixelModule(device, pixel, vertex, key.depthSamplers, key.alphaCompare, key.linearOutput,
+    job->fragment = FindPixelModule(device, pixel, vertex, key.depthSamplers, key.alphaCompare, key,
                                     job->recipe);
     if (ahead.workers.empty())
         StartWorkers(ahead);

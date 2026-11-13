@@ -290,6 +290,9 @@ void R_ModernSceneBegin();
 // other blended surfaces, R_DrawEmissive).
 void R_ModernSceneLit(const GfxViewInfo *viewInfo);
 void R_ModernSceneDone(const GfxViewInfo *viewInfo);
+// R_SetupPass's call: tells the back end which colours a lit pass's pixel
+// shader reads (GfxModernHooks::litInputs), from sceneBegin to sceneLit.
+void R_ModernPassInputs(const Material *material, const MaterialPass *pass);
 // True when the Modern path drew this view's glow as bloom at its last
 // R_ModernSceneDone: the post effects leave the glow out.
 bool R_ModernDrewGlow(const GfxViewInfo *viewInfo);

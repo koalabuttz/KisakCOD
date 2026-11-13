@@ -129,6 +129,8 @@ lg::Surface *BackendModernSceneTarget(Backend *, lg::Surface *, ModernResult &re
 }
 bool BackendModernEffectsOnDisplay(Backend *) { return false; }
 
+void BackendModernLitInputs(Backend *, const ModernLitInputs *) {}
+
 bool BackendModernCopyScene(Backend *, lg::Surface *, const lg::Rect *, lg::Surface *, const lg::Rect *, bool)
 {
     return false;

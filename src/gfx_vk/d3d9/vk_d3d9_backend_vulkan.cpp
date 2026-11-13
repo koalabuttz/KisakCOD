@@ -105,6 +105,13 @@ struct Backend
     // the scene is finished before them and they draw on the display image
     // (vk_d3d9.h ModernSceneLit).
     bool effectsInLinear = false;
+    // Lit surfaces computing in linear light (vk_d3d9.h SetModernLitInputs),
+    // unless KISAK_VK_MODERN_LIT=0: the linear-light scenes with lit draws and
+    // the changes of lit inputs, and their counts at the last reset.
+    bool litWanted = true;
+    bool litThisScene = false;
+    uint64_t litScenes = 0, litScenesBase = 0;
+    uint64_t litChanges = 0, litChangesBase = 0;
     // Bloom from the linear-light scene in place of the renderer's glow
     // (vk_d3d9.h ModernSceneDone): made at the first scene with glow, unless
     // KISAK_VK_MODERN_BLOOM=0; the scenes it ran for, and at the last reset.
@@ -265,6 +272,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     backend->linearWanted = !EnvIsZero("KISAK_VK_MODERN_LINEAR");
     backend->bloomWanted = !EnvIsZero("KISAK_VK_MODERN_BLOOM");
     backend->effectsInLinear = EnvIs("KISAK_VK_MODERN_EFFECTS", "linear");
+    backend->litWanted = !EnvIsZero("KISAK_VK_MODERN_LIT");
     if (!h.windowSystem || !h.windowSystem(h.user, desc.window, backend->windowSystem))
     {
         error = "the host has no Vulkan window system for this window";
@@ -471,6 +479,16 @@ void BackendLogStats(Backend *backend, bool reset)
                 static_cast<unsigned long long>(backend->linearCopies - backend->linearCopiesBase),
                 pass.supported ? average(pass) : 0.0);
     }
+    // Lit surfaces in linear light: the scenes with them, and how often the
+    // lit inputs changed in each.
+    if (backend->litScenes != backend->litScenesBase)
+    {
+        const uint64_t scenes = backend->litScenes - backend->litScenesBase;
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with lit surfaces computed in linear light "
+                   "(%.1f changes of lit inputs each)",
+                static_cast<unsigned long long>(scenes),
+                double(backend->litChanges - backend->litChangesBase) / double(scenes));
+    }
     // Bloom: the scenes it ran for in place of the glow, the passes of each,
     // and their GPU time per scene.
     if (backend->bloom)
@@ -492,6 +510,8 @@ void BackendLogStats(Backend *backend, bool reset)
         if (backend->bloom)
             backend->bloomMsBase = PassTimingsFor(backend->core, "modern bloom").totalMs;
         backend->linearScenesBase = backend->linearScenes;
+        backend->litScenesBase = backend->litScenes;
+        backend->litChangesBase = backend->litChanges;
         backend->linearCopiesBase = backend->linearCopies;
         backend->statsBase = stats;
         backend->coreBase = core;
@@ -752,8 +772,24 @@ lg::Surface *BackendModernSceneTarget(Backend *backend, lg::Surface *backBuffer,
         lg::SetLinearLight(backend->linearScene, true);
     }
     ++backend->linearScenes;
+    backend->litThisScene = false;
     result = ModernResult::Done;
     return backend->linearSceneSurface;
+}
+
+void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
+{
+    if (!backend || !backend->legacy || !backend->litWanted)
+        return;
+    if (inputs && backend->linearScene && !backend->linearFailed)
+    {
+        ++backend->litChanges;
+        if (!backend->litThisScene)
+            ++backend->litScenes;
+        backend->litThisScene = true;
+    }
+    lg::SetLinearInputs(backend->legacy, inputs ? inputs->constants : 0, inputs ? inputs->samplers : 0,
+                        inputs ? inputs->doubled : 0, inputs && inputs->colorInput);
 }
 
 bool BackendModernEffectsOnDisplay(Backend *backend) { return backend && !backend->effectsInLinear; }

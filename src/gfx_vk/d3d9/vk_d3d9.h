@@ -231,4 +231,17 @@ ModernResult ModernSceneDone(IDirect3DDevice9 *device, const ModernSceneView &vi
 // skips ModernSceneDone for this scene. Skipped only when the effects stay
 // in the scene, and ModernSceneDone finishes it.
 ModernResult ModernSceneLit(IDirect3DDevice9 *device, const ModernSceneView &view, bool *glowDrawn = nullptr);
+// The colours the pixel shaders of the draws that follow read, for lit
+// surfaces; null for draws that are not lit. With linear light (and unless
+// KISAK_VK_MODERN_LIT=0) a draw into the linear-light scene then takes these
+// from sRGB to linear light, computes in linear light and stores its colour
+// as it is, instead of decoding the colour it stores. Ignored elsewhere.
+struct ModernLitInputs
+{
+    uint64_t constants = 0; // float constants c0-c63, bit per register
+    uint16_t samplers = 0;  // pixel samplers s0-s15 whose results are colours
+    uint16_t doubled = 0;   // of those, the ones the shader doubles (2x overbright)
+    bool colorInput = false; // the colour 0 input (the vertex colour)
+};
+void SetModernLitInputs(IDirect3DDevice9 *device, const ModernLitInputs *inputs);
 } // namespace gfx_vk::d3d9

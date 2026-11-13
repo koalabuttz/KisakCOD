@@ -11,9 +11,10 @@ the project files, `renderer/modern-renderer-plan.md`, sections 3, 6 and 7).
 early experiment (E1), temporal anti-aliasing (TAA) over the scene the Legacy
 path drew, and the first piece of linear light (the plan's MD1): the scene is
 drawn into a linear-light HDR image and tonemapped back
-([Linear light](#linear-light)), with bloom from that image in place of the
-vision set's glow ([Bloom](#bloom)). Velocity comes from the camera alone. No
-material is drawn by shaders of the Modern path's own yet.
+([Linear light](#linear-light)), with lit surfaces computing in linear
+light ([Lit surfaces](#lit-surfaces)) and bloom from that image in place of
+the vision set's glow ([Bloom](#bloom)). Velocity comes from the camera alone.
+No material is drawn by shaders of the Modern path's own yet.
 
 ## Turning it on
 
@@ -210,11 +211,70 @@ the scene is Skipped and drawn as always (the blend is 128);
 every pixel shader case with `--linear-output` too
 ([vulkan-legacy-shaders.md](vulkan-legacy-shaders.md)).
 
-**Not yet:** the world-lit family drawn by the Modern path's own shaders
-(colour maps decoded as sRGB, lightmaps and the light grid as light), the
-tonemap's shoulder and the vision sets' film settings. The plan's MD1 lists
-them; the retail shaders' lightmap decoding is being read on a machine with
-the game first, as derived facts only.
+**Not yet:** the tonemap's shoulder and the vision sets' film settings. Lit
+surfaces compute in linear light ([Lit surfaces](#lit-surfaces)).
+
+## Lit surfaces
+
+Decoding only a shader's stored colour leaves its arithmetic in display
+values. The game's lit shaders sum their light in display values: a world
+surface adds the two halves of its secondary lightmap, the sun and its
+specular, then lerps toward the fog colour; a model adds the lighting
+volume's ambient and the sun. A product survives a decode of its result
+(decode(a × b) is close to decode(a) × decode(b)), but a sum and a lerp do
+not. So the lit families compute in linear light: every colour they read is
+decoded before the arithmetic, and the result is stored as it comes.
+
+* **Which draws.** `R_SetupPass` (`src/gfx_d3d/r_shade.cpp`) calls
+  `R_ModernPassInputs` (`r_scene.cpp`) for every pass between `sceneBegin`
+  and `sceneLit`. A pass is lit when its pixel shader's name starts with
+  `lm_` (world surfaces lit by lightmaps), `lp_` (models lit by the lighting
+  volume) or `l_` (dynamic lights). Effects, the sky, unlit and 2D shaders
+  are not, and keep the decode of their stored colour.
+* **Which inputs.** From the pass's arguments: material samplers whose
+  texture is a colour map or specular map (semantic `TS_COLOR_MAP`,
+  `TS_SPECULAR_MAP`); the secondary lightmap and the reflection probe; the
+  lighting volume, doubled (below); the float constants for the fog colour,
+  sun diffuse and specular, light diffuse and specular and the material
+  colour; and the vertex colour (colour 0 input). Not decoded: the primary
+  lightmap and shadow maps (visibility), normal maps, light attenuation, and
+  every alpha (lightmap and normal-map alphas hold directions).
+* **Doubled.** The model shaders double the lighting volume's colour (a 2x
+  overbright), and a detail map is drawn around grey and doubled. Their
+  samples become decode(2v) / 2, so that twice them is the decoded double
+  and grey stays a factor of 1.
+* **How.** The hook (`GfxModernHooks::litInputs`, called only when the inputs
+  change, and with none at `sceneLit`) reaches the front's
+  `SetModernLitInputs` and `legacy::SetLinearInputs`. For a draw into the
+  linear-light scene the adapter keys the pipeline on them
+  (`PipelineKey::linearOutput` 2 and the masks, cut to what the shader
+  reads) and builds the pixel shader with `legacy_shader::BuildSpirv`'s
+  `linearInputs`: the red, green and blue of marked samples, constant loads
+  and colour input loads go through the sRGB curve, unclamped
+  (`DecodeLinearInputs` in `vk_legacy_shader.cpp`), and colour output 0 is
+  only kept from going negative. Values over 1 (a doubled volume, specular)
+  stay in the HDR scene until the tonemap clamps them.
+* `KISAK_VK_MODERN_LIT=0` turns this off: lit surfaces are drawn like the
+  rest, with their stored colour decoded.
+
+What it changes: the lightmap halves, the sun and the specular now add as
+light, so where two light terms meet a surface is brighter than in Legacy,
+and fog mixes as light. Unlit areas and surfaces with one light term stay
+close to Legacy. The pipeline list (`pipelines.list`, version 3) keeps the
+lit pipelines like the others.
+
+**Cost:** a few more instructions per colour read (a power per channel), and
+one pixel shader module per lit shader and set of inputs. `r_vkStats` prints
+`vulkan d3d9: modern: N scenes with lit surfaces computed in linear light (C
+changes of lit inputs each)`.
+
+**Checks:** the D3D9 check's `modern_lit` scene draws a grey 128 colour map
+times a white vertex colour plus a light of 64 in a constant: 192 (128 + 64)
+without lit inputs, encode(decode(128) + decode(64)) = 141 with them, 197
+with the colour map doubled. `test_vulkan_d3d9_front.py` also runs it with
+`KISAK_VK_MODERN_LIT=0` and `KISAK_VK_MODERN_LINEAR=0` (192 everywhere).
+The translator tool takes `--linear-inputs S,D,C,V` to build a shader this
+way.
 
 ## Effects
 
@@ -323,10 +383,10 @@ From the plan's E1, in order:
   (the previous frame's skinned vertices, which the renderer already keeps
   per frame) and the view model (its own current and previous projection);
 * a reactive mask for effects;
-* then the rest of linear light: the world-lit family drawn by the Modern
-  path's own shaders into the HDR scene ([Linear light](#linear-light) has
-  the image, the tonemap and bloom), a tonemap with a shoulder, and the
-  vision sets' film settings in it.
+* then the rest of linear light: a tonemap with a shoulder and the vision
+  sets' film settings in it ([Linear light](#linear-light) has the image,
+  the tonemap and bloom; [Lit surfaces](#lit-surfaces) computes the lit
+  families in linear light).
 
 The first laptop run of this piece should compare `r_visuals legacy` and
 `modern` in the standing mp_crash scene: frame rate, the pass's GPU time,

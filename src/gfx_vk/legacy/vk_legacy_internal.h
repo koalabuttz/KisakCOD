@@ -140,6 +140,28 @@ struct IndexBuffer : GpuBuffer
 {
 };
 
+// A pixel shader module's key in Shader::linked: PixelModule's key for the
+// vertex shader, depth samplers, alpha test and colour output, and the linear
+// inputs when the colour output is not decoded.
+struct LinkedKey
+{
+    uint64_t key = 0;
+    ls::LinearInputs inputs{};
+    bool operator==(const LinkedKey &other) const { return std::memcmp(this, &other, sizeof(*this)) == 0; }
+    bool operator<(const LinkedKey &other) const { return std::memcmp(this, &other, sizeof(*this)) < 0; }
+};
+static_assert(sizeof(LinkedKey) == 24, "LinkedKey is compared as bytes");
+struct LinkedKeyHash
+{
+    size_t operator()(const LinkedKey &key) const
+    {
+        uint64_t hash = key.key ^ key.inputs.constants * 0x9e3779b97f4a7c15ull;
+        hash ^= (uint64_t(key.inputs.samplers) | uint64_t(key.inputs.doubled) << 16
+                 | uint64_t(key.inputs.flags) << 32) * 0xc2b2ae3d27d4eb4full;
+        return std::hash<uint64_t>()(hash);
+    }
+};
+
 struct Shader
 {
     ls::Shader translated;
@@ -151,7 +173,7 @@ struct Shader
     // Pixel shaders: the other modules, by the key PixelModule makes (the
     // vertex shader they are linked to, the depth samplers where those are
     // fixed, and the alpha test's compare where that is).
-    std::unordered_map<uint64_t, VkShaderModule> linked;
+    std::unordered_map<LinkedKey, VkShaderModule, LinkedKeyHash> linked;
     // 64-bit FNV-1a of the bytecode, by 8-byte words (ContentHash): names the
     // shader in the pipeline list, across launches.
     uint64_t contentHash = 0;
@@ -216,9 +238,15 @@ struct PipelineKey
     // alpha test block; else 0.
     uint8_t alphaCompare = 0;
     // 1 when render target 0 holds linear light (SetLinearLight): the pixel
-    // shader's colour output is decoded from sRGB.
+    // shader's colour output is decoded from sRGB. 2 when it does and the
+    // draw has linear inputs (SetLinearInputs): the colours it reads are
+    // decoded instead, as the fields below say.
     uint8_t linearOutput = 0;
-    uint8_t unused[5] = {};
+    uint8_t linearColorInput = 0; // ls::LinearInputs::flags, with linearOutput 2
+    uint16_t linearSamplers = 0;  // ls::LinearInputs::samplers, with linearOutput 2
+    uint16_t linearDoubled = 0;   // ls::LinearInputs::doubled, with linearOutput 2
+    uint32_t linearConstants[2] = {}; // ls::LinearInputs::constants (low, high), with linearOutput 2
+    uint8_t unused[8] = {};
     bool operator==(const PipelineKey &other) const { return std::memcmp(this, &other, sizeof(*this)) == 0; }
 };
 struct PipelineKeyHash
@@ -302,12 +330,13 @@ struct PixelModuleRecipe
 {
     bool direct = false;          // the stages link as they stand: no vertex shader passed
     bool plain = false;           // nothing fixed either: Shader::module, else Shader::linked
-    uint64_t moduleKey = 0;       // Shader::linked's key
+    LinkedKey moduleKey{};        // Shader::linked's key
     bool fixDepth = false;        // depthCompare is passed
     uint32_t depthCompare = 0;
     bool fixAlpha = false;        // alphaCompare is passed
     uint32_t alphaCompare = 0;
-    bool linearOutput = false;    // colour output decoded from sRGB (PipelineKey::linearOutput)
+    bool linearOutput = false;    // colour output decoded from sRGB (PipelineKey::linearOutput 1)
+    bool linearInputs = false;    // colours read decoded instead (PipelineKey::linearOutput 2): moduleKey.inputs
 };
 
 // The create info of a graphics pipeline and everything it points at
@@ -542,6 +571,10 @@ struct Device
     // viewport and scissor the dynamic state, a pass both (its targets are in
     // the key, its size and depth surface in the dynamic state).
     bool keyStale = true;
+    // SetLinearInputs: the colours the next draws' pixel shaders read, for a
+    // linear-light render target 0; on when any is marked.
+    ls::LinearInputs linearInputs{};
+    bool linearInputsOn = false;
     bool dynamicStale = true;
     // Checks every shortcut a draw takes (these two, and uniform blocks kept
     // from an earlier draw) against the full work, and fails the device when
@@ -680,7 +713,7 @@ Layout *GetLayout(Device &device, const LayoutKey &key);
 // The pixel module a pipeline of this key needs: the one the shader keeps, or
 // null with how to build it in recipe.
 VkShaderModule FindPixelModule(Device &device, Shader &ps, const Shader &vs, uint32_t depthSamplers,
-                               uint32_t alphaCompare, uint32_t linearOutput, PixelModuleRecipe &recipe);
+                               uint32_t alphaCompare, const PipelineKey &linear, PixelModuleRecipe &recipe);
 // Builds that module's SPIR-V. Reads only the two shaders' translations, which
 // never change: safe on any thread.
 bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Shader &vs,
