@@ -166,7 +166,11 @@ struct Backend
     modern::KeptStats keptBase{};
     // KISAK_VK_MODERN_DEBUG=velocity: the velocity debug view over each
     // anti-aliased scene (docs/vulkan-modern.md), made at its first use.
+    // velocity-all: the same, with every surface that moves on its own drawn
+    // wherever it lands, hidden or not (the velocity pass skips its depth
+    // test), to find them on the screen.
     bool debugVelocity = false;
+    bool debugVelocityAll = false;
     bool debugFailed = false;
     modern::DebugView *debug = nullptr;
 };
@@ -357,7 +361,8 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         if (!curve.empty() && !modern::CurveFromName(curve.c_str(), backend->tonemapCurve))
             backend->tonemapCurveUnknown = true;
     }
-    backend->debugVelocity = EnvIs("KISAK_VK_MODERN_DEBUG", "velocity");
+    backend->debugVelocityAll = EnvIs("KISAK_VK_MODERN_DEBUG", "velocity-all");
+    backend->debugVelocity = backend->debugVelocityAll || EnvIs("KISAK_VK_MODERN_DEBUG", "velocity");
     if (!h.windowSystem || !h.windowSystem(h.user, desc.window, backend->windowSystem))
     {
         error = "the host has no Vulkan window system for this window";
@@ -1093,7 +1098,7 @@ Image *SceneVelocity(Backend *backend, Image *depth, const modern::SceneView &sc
     if (!backend->velocity)
     {
         std::string error;
-        backend->velocity = modern::CreateVelocity(backend->core, error);
+        backend->velocity = modern::CreateVelocity(backend->core, error, !backend->debugVelocityAll);
         if (!backend->velocity)
         {
             backend->velocityFailed = true;

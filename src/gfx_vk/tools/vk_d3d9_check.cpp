@@ -3034,7 +3034,10 @@ void Check::ModernTaa()
 // ModernSkinnedSurfaceMoved): a dynamic buffer written again with DISCARD each
 // frame, the same matrix both frames, and a draw that starts at a base vertex
 // and a minimum index. The stripes stay as drawn only if the velocity comes
-// from last frame's vertices, which the Modern path kept. With
+// from last frame's vertices, which the Modern path kept. A fourth draws it
+// as a brush model: 44-byte vertices far from the origin, placed by the
+// world shaders' two matrices but reported with their product, and indices
+// in a dynamic buffer overwritten before the scene ends. With
 // KISAK_VK_MODERN_DEBUG=velocity the velocity debug view is drawn over the
 // reported runs instead: the band's pixels come back cyan at half brightness
 // (2 pixels a frame, from the left), and everything else as without it.
@@ -3077,6 +3080,15 @@ void Check::ModernVelocity()
     // The skinned band: 4 vertices before it, drawn with base vertex 2 and
     // indices from 2.
     constexpr int kSkinnedLead = 4, kSkinnedBase = 2;
+    // The brush band's vertices are in world units, far from the origin, and
+    // drawn as the engine's world shaders draw them (shaders::kVsWorld): the
+    // eye-relative world matrix takes the eye's position off, then the
+    // view-projection scales them to clip space. The surface is reported with
+    // the two matrices multiplied (R_GetCodeMatrix's world-view-projection),
+    // whose depth rounds differently: the velocity pass must still match it.
+    static constexpr float kBrushScale = 3.0f;
+    static constexpr float kBrushFar[3] = {2417.3f, -1531.9f, 3071.2f};
+    IDirect3DVertexShader9 *vsWorld = nullptr;
     if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
                                               nullptr),
             "CreateDepthStencilSurface")
@@ -3099,7 +3111,9 @@ void Check::ModernVelocity()
         || !Ok(device->CreateIndexBuffer(kStripes * 6 * sizeof(uint16_t), D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY,
                                          D3DFMT_INDEX16, D3DPOOL_DEFAULT, &brushIb, nullptr),
                "CreateIndexBuffer(brush)")
-        || !Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &event), "CreateQuery(event)"))
+        || !Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &event), "CreateQuery(event)")
+        || !Ok(device->CreateVertexShader(reinterpret_cast<const DWORD *>(shaders::kVsWorld), &vsWorld),
+               "CreateVertexShader(world)"))
     {
         SafeRelease(depth);
         SafeRelease(vb);
@@ -3108,6 +3122,7 @@ void Check::ModernVelocity()
         SafeRelease(skinnedIb);
         SafeRelease(brushVb);
         SafeRelease(brushIb);
+        SafeRelease(event);
         return;
     }
     // The band at rest covers pixels 8..71 by 32..95; stripe k is white when k is even.
@@ -3134,7 +3149,13 @@ void Check::ModernVelocity()
             const uint32_t color = k % 2 ? Argb(255, 0, 0, 0) : Argb(255, 255, 255, 255);
             QuadCorners(corners, 8.0f + 2.0f * k, 32.0f, 10.0f + 2.0f * k, 96.0f, 0.5f, color);
             for (int c = 0; c < 4; ++c)
+            {
+                // In the world's units, far from its origin, as a map's are.
+                corners[c].x = corners[c].x * kBrushScale + kBrushFar[0];
+                corners[c].y = corners[c].y * kBrushScale + kBrushFar[1];
+                corners[c].z = corners[c].z * kBrushScale + kBrushFar[2];
                 out[k * 4 + c] = Vertex44{corners[c], {0, 0, 0, 0, 0}};
+            }
         }
         brushVb->Unlock();
     }
@@ -3174,6 +3195,28 @@ void Check::ModernVelocity()
         for (int i = 0; i < 4; ++i)
             out[i][i] = 1.0f;
         out[3][0] = 2.0f * (2.0f * f) / kSize;
+    };
+    // The brush band's in frame f, as R_GetCodeMatrix makes it: the world
+    // matrix (identity, less kBrushFar) times the view-projection (a scale
+    // by 1 / kBrushScale, and the band's move).
+    const auto brushClip = [](int f, float out[4][4]) {
+        float world[4][4] = {}, viewProjection[4][4] = {};
+        for (int i = 0; i < 4; ++i)
+            world[i][i] = viewProjection[i][i] = 1.0f;
+        for (int i = 0; i < 3; ++i)
+        {
+            world[3][i] = -kBrushFar[i];
+            viewProjection[i][i] = 1.0f / kBrushScale;
+        }
+        viewProjection[3][0] = 2.0f * (2.0f * f) / kSize;
+        for (int r = 0; r < 4; ++r)
+            for (int c = 0; c < 4; ++c)
+            {
+                float sum = 0.0f;
+                for (int k = 0; k < 4; ++k)
+                    sum += world[r][k] * viewProjection[k][c];
+                out[r][c] = sum;
+            }
     };
     // The skinned band's vertices in frame f: moved 2 f pixels right.
     const auto writeSkinned = [&](int f) {
@@ -3255,15 +3298,27 @@ void Check::ModernVelocity()
         }
         else if (report == Report::Brush)
         {
-            bandClip(f, clip);
-            bandClip(f - 1, prevClip);
-            const float move[4] = {clip[3][0], clip[3][1], 0.0f, 0.0f};
-            device->SetVertexShaderConstantF(0, move, 1);
+            brushClip(f, clip);
+            brushClip(f - 1, prevClip);
+            // c0-c3: the view-projection's columns; c4-c7: the world matrix's.
+            float columns[8][4] = {};
+            const float move = 2.0f * (2.0f * f) / kSize;
+            for (int i = 0; i < 3; ++i)
+            {
+                columns[i][i] = 1.0f / kBrushScale;
+                columns[4 + i][i] = 1.0f;
+                columns[4 + i][3] = -kBrushFar[i];
+            }
+            columns[0][3] = move;
+            columns[3][3] = columns[7][3] = 1.0f;
+            device->SetVertexShaderConstantF(0, &columns[0][0], 8);
+            device->SetVertexShader(vsWorld);
             writeBrushIndices(false);
             Ok(device->SetStreamSource(0, brushVb, 0, sizeof(Vertex44)), "SetStreamSource(brush)");
             Ok(device->SetIndices(brushIb), "SetIndices(brush)");
             Ok(device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, kStripes * 4, 0, kStripes * 2),
                "DrawIndexedPrimitive(brush)");
+            device->SetVertexShader(vsBasic);
             front::ModernSurfaceMoved(device, clip, prevClip);
             // The GPU finishes the draw before the scene ends, and the
             // indices are written again (the dynamic buffer wrapped): the
@@ -3356,6 +3411,7 @@ void Check::ModernVelocity()
     SafeRelease(brushIb);
     SafeRelease(brushVb);
     SafeRelease(event);
+    SafeRelease(vsWorld);
     SafeRelease(depth);
 }
 

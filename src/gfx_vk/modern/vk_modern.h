@@ -122,7 +122,9 @@ struct MovedSurface
 
 struct Velocity;
 
-Velocity *CreateVelocity(Core *core, std::string &error);
+// depthTest false draws every surface wherever it lands, hidden or not: only
+// for the debug view that finds them (KISAK_VK_MODERN_DEBUG=velocity-all).
+Velocity *CreateVelocity(Core *core, std::string &error, bool depthTest = true);
 // Waits for the GPU to finish what was recorded.
 void DestroyVelocity(Core *core, Velocity *velocity);
 

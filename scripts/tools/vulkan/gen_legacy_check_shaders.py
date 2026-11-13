@@ -121,6 +121,27 @@ texld r0, t0, s0
 mul r0, r0, v0
 mov oC0, r0
 """),
+    # As the engine's world shaders place a vertex: the eye-relative world
+    # matrix (c4-c7) first, then the view-projection (c0-c3), each a column
+    # of D3D's row-vector matrix (vk_d3d9_check.cpp ModernVelocity's brush run).
+    ("kVsWorld", """vs_3_0
+dcl_position v0
+dcl_texcoord0 v1
+dcl_color0 v2
+dcl_position o0
+dcl_texcoord0 o1
+dcl_color0 o2
+dp4 r0.x, v0, c4
+dp4 r0.y, v0, c5
+dp4 r0.z, v0, c6
+dp4 r0.w, v0, c7
+dp4 o0.x, r0, c0
+dp4 o0.y, r0, c1
+dp4 o0.z, r0, c2
+dp4 o0.w, r0, c3
+mov o1, v1
+mov o2, v2
+"""),
 ]
 
 

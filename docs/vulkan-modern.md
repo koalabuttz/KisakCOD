@@ -153,6 +153,16 @@ draws their surfaces a second time with their own motion.
   surface keeps the camera's motion. It has a pipeline for 32-byte vertices
   (models') and one for 44-byte vertices (the world's, which brush models
   are drawn from), both with the position first.
+* **Matching the scene's depth.** The pass takes a surface to clip space with
+  one matrix, the renderer's world-view-projection. The world's shaders, which
+  draw brush models, go through the eye-relative world matrix first and the
+  view-projection after. A brush model's vertices are in the map's units, far
+  from its origin, so with the single matrix its depth is a small difference
+  of large terms and rounds differently, by more than a fixed tolerance allows
+  near the camera; every fragment of the surface was then dropped as hidden.
+  `velocity.vert` works out a bound on that rounding for each vertex (the size
+  of the terms behind the clip z and w, times a few units in the last place,
+  over w; at most 0.001) and the fragment test allows that much more.
 * **Skinned surfaces** (characters' bodies, the view model's arms) have
   vertices the renderer writes again each frame, on the CPU, into a buffer it
   locks with DISCARD (its skinned cache, or the dynamic vertex buffer when
@@ -181,6 +191,9 @@ grows with the distance, from a quarter at none to full at 6 pixels or more,
 so a reported surface that did not move shows dim grey. TAA's history is kept
 apart from the image the view draws on, so the view never feeds back into it.
 It is drawn only in scenes that have a velocity image.
+`KISAK_VK_MODERN_DEBUG=velocity-all` is the same view with the velocity pass's
+depth test off: every reported surface is coloured wherever it lands, hidden
+or not, which finds a surface that is reported but never shows.
 
 There is no history on the first scene, after a cut, or when the scene's size
 changes. Those scenes are drawn as they came. Pixel positions follow D3D9's,
@@ -246,7 +259,9 @@ skinned vertices (a dynamic buffer locked with DISCARD) and once more from
 draw, as brush models are; in that run the GPU finishes each draw (an event
 query polled with FLUSH) and the indices are written over with DISCARD before
 the scene ends, so the band stays sharp only if the pass still reads the
-draw's.
+draw's. That band's vertices are also far from the origin and drawn with the
+world shaders' two matrices, while it is reported with their product, so it
+stays sharp only if the pass allows for the depth's rounding.
 
 `scripts/tests/test_vulkan_d3d9_front.py` checks the scenes in the full run and
 the `modern:` statistics lines. `scripts/tools/vulkan/gen_spirv_header.py

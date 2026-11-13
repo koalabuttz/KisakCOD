@@ -52,7 +52,7 @@ struct Velocity
 
 namespace
 {
-bool CreatePipeline(Core *core, Velocity &velocity, std::string &error)
+bool CreatePipeline(Core *core, Velocity &velocity, bool depthTest, std::string &error)
 {
     const Dispatch &vk = Functions(core);
     const VkDevice device = DeviceHandle(core);
@@ -102,6 +102,15 @@ bool CreatePipeline(Core *core, Velocity &velocity, std::string &error)
     stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
     stages[1].module = fragment;
     stages[1].pName = "main";
+    // velocity.frag's kDepthTest (constant 0), a 32-bit boolean.
+    const VkBool32 depthTestValue = depthTest ? VK_TRUE : VK_FALSE;
+    const VkSpecializationMapEntry depthTestEntry{0, 0, sizeof(VkBool32)};
+    VkSpecializationInfo specialization{};
+    specialization.mapEntryCount = 1;
+    specialization.pMapEntries = &depthTestEntry;
+    specialization.dataSize = sizeof(depthTestValue);
+    specialization.pData = &depthTestValue;
+    stages[1].pSpecializationInfo = &specialization;
     // This frame's vertices, and last frame's (the same vertices again for
     // all but skinned surfaces).
     VkVertexInputBindingDescription vertexBindings[2] = {{0, 0, VK_VERTEX_INPUT_RATE_VERTEX},
@@ -219,7 +228,7 @@ bool EnsureImage(Core *core, Velocity &velocity, uint32_t width, uint32_t height
 }
 } // namespace
 
-Velocity *CreateVelocity(Core *core, std::string &error)
+Velocity *CreateVelocity(Core *core, std::string &error, bool depthTest)
 {
     if (!FormatSupports(core, kVelocityFormat, VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT))
     {
@@ -232,7 +241,7 @@ Velocity *CreateVelocity(Core *core, std::string &error)
         return nullptr;
     }
     Velocity *velocity = new Velocity();
-    if (!CreatePipeline(core, *velocity, error))
+    if (!CreatePipeline(core, *velocity, depthTest, error))
     {
         DestroyVelocity(core, velocity);
         return nullptr;

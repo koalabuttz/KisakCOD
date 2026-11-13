@@ -25,10 +25,34 @@ layout(push_constant) uniform Params
 
 layout(location = 0) out vec4 currentClip;
 layout(location = 1) out vec4 previousClip;
+// How far this draw's depth may be from the scene's through rounding alone.
+layout(location = 2) out float depthSlack;
+
+// Float rounding of a four-term dot product, with room for the scene's own
+// draw, which reaches clip space its own way (a world surface's shader goes
+// through the eye-relative world matrix first): a few units in the last
+// place of the largest term.
+const float kRounding = 1.0e-6;
+// The most slack a vertex gives, in depth: near the camera the bound grows
+// without saying much, and a vertex behind the camera has none to give.
+const float kMostSlack = 1.0e-3;
 
 void main()
 {
-    currentClip = p.clip * vec4(position, 1.0);
+    const vec4 object = vec4(position, 1.0);
+    currentClip = p.clip * object;
     previousClip = p.prevClip * vec4(prevPosition, 1.0);
     gl_Position = currentClip;
+
+    // The size of the terms that make up each clip coordinate. A brush
+    // model's vertices are far from the world's origin, so its z and w are
+    // small differences of large terms, and the depth this draw lands on can
+    // be further from the scene's than the fixed tolerance in the fragment
+    // shader allows.
+    const vec4 terms = abs(p.clip[0]) * abs(object.x) + abs(p.clip[1]) * abs(object.y)
+                     + abs(p.clip[2]) * abs(object.z) + abs(p.clip[3]);
+    const float w = currentClip.w;
+    depthSlack = w > 0.0
+        ? min(kRounding * (terms.z + abs(currentClip.z / w) * terms.w) / w, kMostSlack)
+        : kMostSlack;
 }
