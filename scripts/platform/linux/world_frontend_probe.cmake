@@ -116,6 +116,7 @@ set(KISAK_WORLD_FRONTEND_PROBE_OWN_SOURCES
 )
 set(KISAK_WORLD_FRONTEND_NATIVE_SOURCES
     "${SRC_DIR}/gfx_d3d/r_scene.cpp"
+    "${SRC_DIR}/gfx_d3d/r_modern_motion.cpp"
     "${SRC_DIR}/gfx_d3d/r_buffers.cpp"
     # The graphics interface r_scene.cpp and r_buffers.cpp call D3D9 through.
     "${SRC_DIR}/gfx_d3d/rhi/r_rhi_d3d9_calls.cpp"

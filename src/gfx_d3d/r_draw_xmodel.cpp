@@ -11,7 +11,21 @@
 #include <cgame/cg_local.h>
 #include "r_model_lighting.h"
 #include "r_dobj_skin.h"
+#include "r_modern_motion.h"
 
+
+// The Modern path (r_modern_motion.h): a rigid surface of an entity's model
+// was just drawn into the scene; report it with the matrix that drew it.
+static void R_ModernMotionRigidSurf(GfxCmdBufContext context, const GfxModelRigidSurface *modelSurf)
+{
+    const GfxRenderTargetId target = context.state->renderTargetId;
+    if (target != R_RENDERTARGET_SCENE && target != R_RENDERTARGET_FRAME_BUFFER)
+        return;
+    float clip[4][4];
+    memcpy(clip, R_GetCodeMatrix(context.source, CONST_SRC_CODE_WORLD_VIEW_PROJECTION_MATRIX, 0), sizeof(clip));
+    R_ModernMotionSurface(context.state->prim.device, modelSurf->surf.info.modernOwner, modelSurf->surf.info.boneIndex,
+                          modelSurf->surf.xsurf, clip);
+}
 
 void R_DrawXModelRigidModelSurf(GfxCmdBufContext context, XSurface *xsurf)
 {
@@ -162,6 +176,8 @@ uint32_t R_DrawXModelRigidSurfLitInternal(
         R_SetModelLightingCoordsForSource(modelSurf->surf.info.lightingHandle, context.source);
         R_SetReflectionProbe(context, drawSurf.fields.reflectionProbeIndex);
         R_DrawXModelRigidModelSurf(context, modelSurf->surf.xsurf);
+        if (R_ModernMotionWanted())
+            R_ModernMotionRigidSurf(context, modelSurf);
         if (++drawSurfIndex == drawSurfCount)
             break;
         drawSurf.packed = drawSurfList[drawSurfIndex].packed;
@@ -239,6 +255,8 @@ uint32_t R_DrawXModelRigidSurfCameraInternal(
         matrix = R_GetActiveWorldMatrix(context.source);
         memcpy(&matrix->matrices.matrix[0], &worldMat, sizeof(GfxMatrix));
         R_DrawXModelRigidModelSurf(context, modelSurf->surf.xsurf);
+        if (R_ModernMotionWanted())
+            R_ModernMotionRigidSurf(context, modelSurf);
 
         if (++drawSurfIndex == drawSurfCount || (drawSurfMask.packed & drawSurfList[drawSurfIndex].packed) != drawSurfKey)
             break;
@@ -308,6 +326,8 @@ uint32_t R_DrawXModelRigidSurfInternal(
         matrix = R_GetActiveWorldMatrix(context.source);
         memcpy(&matrix->matrices.matrix[0], &worldMat, sizeof(GfxMatrix));
         R_DrawXModelRigidModelSurf(context, modelSurf->surf.xsurf);
+        if (R_ModernMotionWanted())
+            R_ModernMotionRigidSurf(context, modelSurf);
         if (++drawSurfIndex == drawSurfCount)
             break;
         drawSurf.packed = drawSurfList[drawSurfIndex].packed;

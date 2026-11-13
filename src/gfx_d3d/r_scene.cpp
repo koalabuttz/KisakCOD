@@ -28,6 +28,7 @@
 #include "r_drawsurf.h"
 #include "rb_postfx.h"
 #include "r_meshdata.h"
+#include "r_modern_motion.h"
 #include <qcommon/com_bsp.h>
 #include "r_cinematic.h"
 #include <win32/win_net.h>
@@ -1262,6 +1263,7 @@ void R_ModernJitterScene(const refdef_s *refdef, GfxViewParms *viewParms)
 
 void R_ModernSceneBegin()
 {
+    R_ModernMotionSceneBegin();
     const GfxModernHooks *hooks = R_ModernHooks();
     if (hooks && hooks->sceneBegin)
         hooks->sceneBegin(hooks->user, dx.device);
@@ -1269,6 +1271,7 @@ void R_ModernSceneBegin()
 
 void R_ModernSceneDone(const GfxViewInfo *viewInfo)
 {
+    R_ModernMotionSceneDone();
     const GfxModernHooks *hooks = R_ModernHooks();
     if (!hooks || !hooks->sceneDone)
         return;
