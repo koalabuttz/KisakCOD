@@ -437,6 +437,9 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
         R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_SCENE);
         R_Resolve(gfxCmdBufContext, gfxRenderTargets[R_RENDERTARGET_RESOLVED_POST_SUN].image);
     }
+    // The Modern path may finish the scene here, so that effects blend on
+    // the tonemapped image as they were made to (r_visuals modern, Vulkan).
+    R_ModernSceneLit(viewInfo);
     R_InitContext(data, &cmdBuf);
     KISAK_NULLSUB();
     R_DrawEmissive(viewInfo, &cmdBuf);

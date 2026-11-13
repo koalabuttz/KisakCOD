@@ -544,6 +544,7 @@ public:
     // the linear-light image standing in for the back buffer.
     ModernResult ModernSceneBegin();
     ModernResult ModernSceneDone(const ModernSceneView &view, bool *glowDrawn);
+    ModernResult ModernSceneLit(const ModernSceneView &view, bool *glowDrawn);
     const Host &host() const { return parent_->host(); }
     HRESULT Unsupported(const char *method);
     DeviceCounters counters() const;
