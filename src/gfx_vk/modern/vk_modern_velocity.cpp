@@ -6,6 +6,8 @@
 #include "vk_modern_shaders.h"
 
 #include <cstring>
+#include <unordered_map>
+#include <vector>
 
 namespace gfx_vk::modern
 {
@@ -88,14 +90,18 @@ bool CreatePipeline(Core *core, Velocity &velocity, std::string &error)
     stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
     stages[1].module = fragment;
     stages[1].pName = "main";
-    const VkVertexInputBindingDescription vertexBinding{0, kStride, VK_VERTEX_INPUT_RATE_VERTEX};
-    const VkVertexInputAttributeDescription position{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0};
+    // This frame's vertices, and last frame's (the same vertices again for
+    // all but skinned surfaces).
+    const VkVertexInputBindingDescription vertexBindings[2] = {{0, kStride, VK_VERTEX_INPUT_RATE_VERTEX},
+                                                               {1, kStride, VK_VERTEX_INPUT_RATE_VERTEX}};
+    const VkVertexInputAttributeDescription positions[2] = {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0},
+                                                            {1, 1, VK_FORMAT_R32G32B32_SFLOAT, 0}};
     VkPipelineVertexInputStateCreateInfo vertexInput{};
     vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInput.vertexBindingDescriptionCount = 1;
-    vertexInput.pVertexBindingDescriptions = &vertexBinding;
-    vertexInput.vertexAttributeDescriptionCount = 1;
-    vertexInput.pVertexAttributeDescriptions = &position;
+    vertexInput.vertexBindingDescriptionCount = 2;
+    vertexInput.pVertexBindingDescriptions = vertexBindings;
+    vertexInput.vertexAttributeDescriptionCount = 2;
+    vertexInput.pVertexAttributeDescriptions = positions;
     VkPipelineInputAssemblyStateCreateInfo assembly{};
     assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
     assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -311,12 +317,29 @@ Image *DrawVelocity(Core *core, Velocity *velocity, Image *depth, const SceneVie
     });
     const float jitters[4] = {view.projection[2][0], view.projection[2][1], previous.projection[2][0],
                               previous.projection[2][1]};
-    uint32_t drawn = 0;
+    uint32_t drawn = 0, skinned = 0;
     for (uint32_t i = 0; i < count; ++i)
     {
         const MovedSurface &s = surfaces[i];
         if (s.stride != kStride || !s.indexCount || !s.vertices || !s.indices)
             continue;
+        // A skinned surface reads last frame's vertices from the kept copy,
+        // which starts at the first vertex the draw uses: both bindings start
+        // there, and the draw's vertex offset takes the indices to it.
+        VkBuffer buffers[2] = {s.vertices, s.vertices};
+        VkDeviceSize offsets[2] = {s.vertexOffset, s.vertexOffset};
+        int32_t drawBase = s.vertexBase;
+        if (s.previous)
+        {
+            const int64_t first = static_cast<int64_t>(s.vertexBase) + s.minIndex;
+            if (first < 0 || !s.vertexCount)
+                continue;
+            buffers[1] = s.previous;
+            offsets[0] = s.vertexOffset + static_cast<VkDeviceSize>(first) * kStride;
+            offsets[1] = s.previousOffset;
+            drawBase = -static_cast<int32_t>(s.minIndex);
+            ++skinned;
+        }
         Push push{};
         std::memcpy(push.clip, s.clip, sizeof(push.clip));
         std::memcpy(push.prevClip, s.prevClip, sizeof(push.prevClip));
@@ -330,20 +353,17 @@ Image *DrawVelocity(Core *core, Velocity *velocity, Image *depth, const SceneVie
                                   -s.viewport[3],
                                   s.minDepth,
                                   s.maxDepth};
-        const VkBuffer vertices = s.vertices;
-        const VkDeviceSize vertexOffset = s.vertexOffset;
         const VkBuffer indices = s.indices;
         const VkIndexType indexType = s.indexType;
         const uint32_t indexCount = s.indexCount;
         const uint32_t firstIndex = s.firstIndex;
-        const int32_t vertexBase = s.vertexBase;
         Record(core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
             vk.vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
                                   sizeof(push), &push);
             vk.vkCmdSetViewport(cmd, 0, 1, &viewport);
-            vk.vkCmdBindVertexBuffers(cmd, 0, 1, &vertices, &vertexOffset);
+            vk.vkCmdBindVertexBuffers(cmd, 0, 2, buffers, offsets);
             vk.vkCmdBindIndexBuffer(cmd, indices, 0, indexType);
-            vk.vkCmdDrawIndexed(cmd, indexCount, 1, firstIndex, vertexBase, 0);
+            vk.vkCmdDrawIndexed(cmd, indexCount, 1, firstIndex, drawBase, 0);
         });
         ++drawn;
     }
@@ -351,6 +371,140 @@ Image *DrawVelocity(Core *core, Velocity *velocity, Image *depth, const SceneVie
     UseImage(core, velocity->image, ImageUse::Sampled);
     ++velocity->stats.passes;
     velocity->stats.surfaces += drawn;
+    velocity->stats.skinned += skinned;
     return velocity->image;
 }
+
+// ---- Skinned surfaces' vertices, kept for the next scene ----
+
+namespace
+{
+// Each half holds one scene's: 262144 vertices, several times what a busy
+// scene's characters and view model have.
+constexpr VkDeviceSize kHalfBytes = VkDeviceSize(8) << 20;
+
+struct Kept
+{
+    VkDeviceSize offset;
+    uint32_t vertexCount;
+};
+} // namespace
+
+struct KeptVertices
+{
+    Buffer *buffer = nullptr;
+    uint32_t half = 1; // the half the last KeepVertices wrote
+    std::unordered_map<uint64_t, Kept> last, next;
+    std::vector<VkBufferCopy> regions;
+    KeptStats stats{};
+};
+
+KeptVertices *CreateKeptVertices() { return new KeptVertices(); }
+
+void DestroyKeptVertices(Core *core, KeptVertices *kept)
+{
+    if (!kept)
+        return;
+    DestroyBuffer(core, kept->buffer);
+    delete kept;
+}
+
+bool FindKept(const KeptVertices *kept, uint64_t key, uint32_t vertexCount, VkBuffer &buffer, VkDeviceSize &offset)
+{
+    if (!kept || !kept->buffer)
+        return false;
+    const auto found = kept->last.find(key);
+    if (found == kept->last.end() || found->second.vertexCount != vertexCount)
+        return false;
+    buffer = BufferHandle(kept->buffer);
+    offset = found->second.offset;
+    return true;
+}
+
+void ForgetKept(KeptVertices *kept)
+{
+    if (kept)
+        kept->last.clear();
+}
+
+bool KeepVertices(Core *core, KeptVertices *kept, const KeepRequest *requests, uint32_t count, std::string &error)
+{
+    error.clear();
+    if (!kept)
+        return false;
+    kept->last.clear();
+    if (!count)
+        return true;
+    if (!InFrame(core) || InPass(core))
+    {
+        error = "not between passes of a frame";
+        return false;
+    }
+    if (!kept->buffer)
+    {
+        BufferDesc desc;
+        desc.size = 2 * kHalfBytes;
+        desc.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        desc.memory = MemoryKind::Device;
+        desc.name = "modern kept vertices";
+        kept->buffer = CreateBuffer(core, desc);
+        if (!kept->buffer)
+        {
+            error = LastError(core);
+            return false;
+        }
+    }
+    // The other half from the one the velocity pass just read.
+    const uint32_t half = kept->half ^ 1u;
+    const VkDeviceSize base = half * kHalfBytes;
+    VkDeviceSize used = 0;
+    kept->next.clear();
+    kept->regions.clear();
+    uint32_t surfaces = 0;
+    // Copies from one buffer go together (cached skinned surfaces all come
+    // from the renderer's skinned cache).
+    VkBuffer source = VK_NULL_HANDLE;
+    const auto flush = [&]() {
+        if (kept->regions.empty())
+            return true;
+        const bool ok = CopyBufferRegions(core, source, kept->buffer, kept->regions.data(),
+                                          static_cast<uint32_t>(kept->regions.size()));
+        kept->regions.clear();
+        return ok;
+    };
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        const KeepRequest &r = requests[i];
+        const VkDeviceSize bytes = VkDeviceSize(r.vertexCount) * kStride;
+        if (!r.vertices || !bytes || used + bytes > kHalfBytes || kept->next.count(r.key))
+            continue;
+        if (r.vertices != source && !flush())
+        {
+            error = LastError(core);
+            return false;
+        }
+        source = r.vertices;
+        kept->regions.push_back({r.offset, base + used, bytes});
+        kept->next[r.key] = Kept{base + used, r.vertexCount};
+        used += bytes;
+        ++surfaces;
+    }
+    if (!flush())
+    {
+        error = LastError(core);
+        kept->next.clear();
+        return false;
+    }
+    kept->last.swap(kept->next);
+    kept->half = half;
+    if (surfaces)
+    {
+        ++kept->stats.scenes;
+        kept->stats.surfaces += surfaces;
+        kept->stats.bytes += used;
+    }
+    return true;
+}
+
+KeptStats Stats(const KeptVertices *kept) { return kept ? kept->stats : KeptStats{}; }
 } // namespace gfx_vk::modern

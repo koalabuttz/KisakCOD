@@ -12,11 +12,11 @@ early experiment (E1), temporal anti-aliasing (TAA) over the scene the Legacy
 path drew, and the first piece of linear light (the plan's MD1): the scene is
 drawn into a linear-light HDR image and tonemapped back
 ([Linear light](#linear-light)), with bloom from that image in place of the
-vision set's glow ([Bloom](#bloom)). Velocity comes from the camera, and for the
-rigid surfaces of entities' models (the view model's included) from a velocity
-pass of their own ([Velocity](#velocity-of-what-moves-on-its-own)); skinned
-surfaces (characters' bodies) and effects do not have their own yet. No
-material is drawn by shaders of the Modern path's own yet.
+vision set's glow ([Bloom](#bloom)). Velocity comes from the camera, and for
+entities' models (rigid and skinned surfaces, the view model's included) from
+a velocity pass of their own ([Velocity](#velocity-of-what-moves-on-its-own));
+effects do not have their own yet. No material is drawn by shaders of the
+Modern path's own yet.
 
 ## Turning it on
 
@@ -134,13 +134,24 @@ Modern path draws their surfaces a second time with their own motion.
   frame's jitter. Hidden fragments write nothing, so what hides a moving
   surface keeps the camera's motion. The pipeline reads 32-byte vertices with
   the position first, as the engine's models are.
+* **Skinned surfaces** (characters' bodies, the view model's arms) have
+  vertices the renderer writes again each frame, on the CPU, into a buffer it
+  locks with DISCARD (its skinned cache, or the dynamic vertex buffer when
+  the cache is off, as in singleplayer); last frame's are gone by the next
+  scene. `rb_tess.cpp` reports them through the `skinnedSurfaceMoved` hook in
+  every scene, with the surface's key and a null last matrix the first time.
+  The front keeps the vertices each draw read: when the scene is finished,
+  `modern::KeepVertices` copies them on the GPU into a buffer of the pass's
+  own (two halves of 8 MB, one written each scene while the other holds the
+  last scene's). The next scene draws the surface's velocity with this
+  scene's vertices as one vertex stream and the kept copy as a second, so its
+  motion is the skinning's as well as the entity's. A camera cut, or a scene
+  that keeps nothing, forgets what was kept.
 
-What it does not cover yet: skinned surfaces (characters' bodies, whose
-vertices the renderer skins on the CPU each frame; their last positions are
-not kept, so they come next), models added without an entity (scene models),
+What it does not cover yet: models added without an entity (scene models),
 brush models and effects (whether drawn on the display image or, with
-`KISAK_VK_MODERN_EFFECTS=linear`, in the scene). `KISAK_VK_MODERN_VELOCITY=0` turns the pass off, for
-comparisons.
+`KISAK_VK_MODERN_EFFECTS=linear`, in the scene). `KISAK_VK_MODERN_VELOCITY=0`
+turns the pass off, for comparisons.
 
 There is no history on the first scene, after a cut, or when the scene's size
 changes. Those scenes are drawn as they came. Pixel positions follow D3D9's,
@@ -149,13 +160,12 @@ as the Legacy path draws: pixel (i, j) holds the scene at NDC
 
 ## What it does not do yet
 
-* **Skinned surfaces and effects have no motion of their own:** characters'
-  bodies and effects are reprojected as if they stood still in the world.
-  Clipping the history to this frame's colours keeps them from leaving trails,
-  at the cost of some softness on them while they move. Rigid surfaces of
-  entities' models and the view model have their own
-  ([Velocity](#velocity-of-what-moves-on-its-own)); skinned surfaces come
-  next, and effects get a reactive mask.
+* **Effects have no motion of their own:** they are reprojected as if they
+  stood still in the world. Clipping the history to this frame's colours keeps
+  them from leaving trails, at the cost of some softness on them while they
+  move. Entities' models and the view model have their own
+  ([Velocity](#velocity-of-what-moves-on-its-own)); effects get a reactive
+  mask next.
 * **No sharpening.** TAA softens the picture somewhat. A sharpening pass would
   come with the plan's temporal upscaler (MD3).
 * **One history for all views.** Splitscreen would share it; the PC
@@ -175,7 +185,11 @@ each`. The last number is the pass's own GPU time from the core's pass
 timestamps (`KISAK_VK_PASS_TIMESTAMPS`). It leaves out the blit back, which
 the frame's GPU time includes. When surfaces that move on their own were
 drawn, it also prints `vulkan d3d9: modern: N scenes with surfaces that move
-on their own (M surfaces), X ms GPU each for their velocity`.
+on their own (M surfaces), X ms GPU each for their velocity`, and
+`vulkan d3d9: modern: N scenes kept skinned vertices (M surfaces, K KB each
+scene), S skinned surfaces drawn from last scene's`: the copies at the end of
+each scene, and how many skinned surfaces had last scene's vertices to be
+drawn from.
 
 ## Checks
 
@@ -380,12 +394,6 @@ moved into the tonemap, so that bloom and film keep the Legacy order.
 
 From the plan's E1, in order:
 
-* velocity for skinned surfaces. The renderer does not keep their last
-  positions: it skins them on the CPU into a vertex buffer it locks with
-  DISCARD every frame, and `oldSkinnedCachedOffset` is about the CPU-side
-  normals only. The plan is to copy each reported skinned surface's positions
-  on the GPU into a buffer of the Modern path's own at the end of the scene,
-  and draw the next frame's velocity from both;
 * a reactive mask for effects;
 * then the rest of linear light: the world-lit family drawn by the Modern
   path's own shaders into the HDR scene ([Linear light](#linear-light) has

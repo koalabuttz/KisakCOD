@@ -2422,8 +2422,6 @@ void Clear(Device *device_, uint32_t rectCount, const Rect *rects, uint32_t flag
 void DrawIndexedPrimitive(Device *device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t minIndex,
                           uint32_t vertexCount, uint32_t startIndex, uint32_t primitiveCount)
 {
-    (void)minIndex;
-    (void)vertexCount;
     const uint32_t indexCount = VertexCount(type, primitiveCount);
     if (!indexCount || !device->indices)
         return;
@@ -2454,6 +2452,8 @@ void DrawIndexedPrimitive(Device *device, d3d::PrimitiveType type, int32_t baseV
     device->lastIndexed.firstIndex = startIndex;
     device->lastIndexed.indexCount = indexCount;
     device->lastIndexed.vertexBase = baseVertex;
+    device->lastIndexed.minIndex = minIndex;
+    device->lastIndexed.vertexCount = vertexCount;
     ++device->stats.draws;
     FeedGpu(*device);
 }
@@ -2473,6 +2473,8 @@ bool LastIndexedDraw(Device *device, IndexedDraw &out)
     out.firstIndex = last.firstIndex;
     out.indexCount = last.indexCount;
     out.vertexBase = last.vertexBase;
+    out.minIndex = last.minIndex;
+    out.vertexCount = last.vertexCount;
     out.viewport = device->viewport;
     return true;
 }

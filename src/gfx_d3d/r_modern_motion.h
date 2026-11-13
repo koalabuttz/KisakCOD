@@ -16,7 +16,8 @@ struct IDirect3DDevice9;
 
 // The renderer is about to draw a view's 3D scene (r_scene.cpp R_ModernSceneBegin).
 void R_ModernMotionSceneBegin();
-// The scene is done (R_ModernSceneDone): its matrices become the last frame's.
+// The scene is finished (R_ModernSceneLit or R_ModernSceneDone, whichever
+// comes first): its matrices become the last frame's.
 void R_ModernMotionSceneDone();
 // True while a scene is drawn with a back end that takes surfaces' motion:
 // the draw code checks this before it works anything out.
@@ -28,3 +29,8 @@ bool R_ModernMotionWanted();
 // scene the surface is seen in on.
 void R_ModernMotionSurface(IDirect3DDevice9 *device, uint32_t owner, uint32_t bone, const void *surface,
                            const float clip[4][4]);
+// The same for a skinned surface, whose vertices the renderer wrote this
+// frame: reported in every scene it is drawn in, the first time with no last
+// matrix, so that the back end keeps its vertices for the next scene.
+void R_ModernMotionSkinnedSurface(IDirect3DDevice9 *device, uint32_t owner, uint32_t bone, const void *surface,
+                                  const float clip[4][4]);
