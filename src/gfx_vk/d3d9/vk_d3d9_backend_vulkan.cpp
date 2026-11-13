@@ -203,6 +203,21 @@ struct Backend
     bool sceneAo = false;
     uint32_t aoFrame = 0;
     modern::AoStats aoBase{};
+    // Screen-space reflections (vk_modern.h TraceReflections), traced right
+    // after the normals buffer from the prepass depth and last scene's
+    // anti-aliased linear-light colour: wanted when something reads it (for
+    // now KISAK_VK_MODERN_SSR=1 or the reflections debug view; the lit
+    // shaders next), which wants the normals buffer too;
+    // KISAK_VK_MODERN_SSR=0 keeps it off. Its settings
+    // (KISAK_VK_MODERN_SSR_DISTANCE, _THICKNESS, _STEPS, _LEVELS); the pass,
+    // made at its first scene; sceneReflections is the scene's own until it
+    // is finished; the counts at the last reset.
+    bool reflectionsWanted = false;
+    bool reflectionsFailed = false;
+    modern::ReflectionParams reflectionParams{};
+    modern::Reflections *reflections = nullptr;
+    Image *sceneReflections = nullptr;
+    modern::ReflectionStats reflectionsBase{};
     // KISAK_VK_MODERN_DEBUG=velocity: the velocity debug view over each
     // anti-aliased scene (docs/vulkan-modern.md), made at its first use.
     // KISAK_VK_MODERN_DEBUG=normals: the normals debug view over each
@@ -212,6 +227,9 @@ struct Backend
     // KISAK_VK_MODERN_DEBUG=ao: the ambient occlusion as grey over each
     // finished scene.
     bool debugAo = false;
+    // KISAK_VK_MODERN_DEBUG=reflections: the reflections debug view over each
+    // finished scene that has them (on the display image).
+    bool debugReflections = false;
     bool debugFailed = false;
     modern::DebugView *debug = nullptr;
 };
@@ -433,11 +451,30 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         if (depth > 0.0f)
             backend->aoParams.thickness = depth;
     }
+    backend->debugReflections = EnvIs("KISAK_VK_MODERN_DEBUG", "reflections");
+    backend->reflectionsWanted =
+        !EnvIsZero("KISAK_VK_MODERN_SSR") && (EnvIs("KISAK_VK_MODERN_SSR", "1") || backend->debugReflections);
+    {
+        modern::ReflectionParams &p = backend->reflectionParams;
+        const auto number = [](const char *name, float &out) {
+            const std::string text = EnvText(name);
+            const float value = text.empty() ? 0.0f : std::strtof(text.c_str(), nullptr);
+            if (value > 0.0f)
+                out = value;
+        };
+        float steps = static_cast<float>(p.steps), levels = static_cast<float>(p.levels);
+        number("KISAK_VK_MODERN_SSR_DISTANCE", p.maxDistance);
+        number("KISAK_VK_MODERN_SSR_THICKNESS", p.thickness);
+        number("KISAK_VK_MODERN_SSR_STEPS", steps);
+        number("KISAK_VK_MODERN_SSR_LEVELS", levels);
+        p.steps = static_cast<uint32_t>(std::min(steps, 256.0f));
+        p.levels = static_cast<uint32_t>(std::min(levels, static_cast<float>(modern::kMaxReflectionLevels)));
+    }
     // The normals buffer is built for what reads it; KISAK_VK_MODERN_NORMALS=0
-    // keeps it (and so ambient occlusion) off whatever asks.
-    backend->normalsWanted =
-        !EnvIsZero("KISAK_VK_MODERN_NORMALS")
-        && (EnvIs("KISAK_VK_MODERN_NORMALS", "1") || backend->debugNormals || backend->aoWanted);
+    // keeps it (and so ambient occlusion and reflections) off whatever asks.
+    backend->normalsWanted = !EnvIsZero("KISAK_VK_MODERN_NORMALS")
+                             && (EnvIs("KISAK_VK_MODERN_NORMALS", "1") || backend->debugNormals
+                                 || backend->aoWanted || backend->reflectionsWanted);
     if (!h.windowSystem || !h.windowSystem(h.user, desc.window, backend->windowSystem))
     {
         error = "the host has no Vulkan window system for this window";
@@ -721,6 +758,16 @@ void BackendLogStats(Backend *backend, bool reset)
                 backend->aoParams.power,
                 pass.supported ? 2.0 * average(pass) : 0.0);
     }
+    // Screen-space reflections: the scenes traced, the levels of the last,
+    // the trace pass's GPU time (the levels are blits, not timed).
+    if (backend->reflections)
+    {
+        const modern::ReflectionStats reflections = modern::Stats(backend->reflections);
+        const PassTimings pass = PassTimingsFor(backend->core, "modern reflections");
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with screen-space reflections (%u levels), %.3f ms GPU each",
+                static_cast<unsigned long long>(reflections.traces - backend->reflectionsBase.traces),
+                reflections.levels, pass.supported ? average(pass) : 0.0);
+    }
     // Bloom: the scenes it ran for in place of the glow, the passes of each,
     // and their GPU time per scene.
     if (backend->bloom)
@@ -745,6 +792,7 @@ void BackendLogStats(Backend *backend, bool reset)
             backend->velocityBase = modern::Stats(backend->velocity);
         backend->normalsBase = modern::Stats(backend->normals);
         backend->aoBase = modern::Stats(backend->ao);
+        backend->reflectionsBase = modern::Stats(backend->reflections);
         backend->keptBase = modern::Stats(backend->kept);
         backend->linearScenesBase = backend->linearScenes;
         modern::ResetStats(backend->exposure);
@@ -801,6 +849,12 @@ void CloseBackend(Backend *backend)
         modern::DestroyNormals(backend->core, backend->normals);
         backend->normals = nullptr;
         backend->sceneNormals = nullptr;
+    }
+    if (backend->reflections)
+    {
+        modern::DestroyReflections(backend->core, backend->reflections);
+        backend->reflections = nullptr;
+        backend->sceneReflections = nullptr;
     }
     if (backend->debug)
     {
@@ -1337,6 +1391,27 @@ void DrawAoDebug(Backend *backend, Image *ao, Image *target, const VkRect2D &are
         LogModernOnce(backend, "the ambient occlusion debug view is not drawn", error);
 }
 
+// The reflections debug view over a finished scene
+// (KISAK_VK_MODERN_DEBUG=reflections).
+void DrawReflectionsDebug(Backend *backend, Image *reflections, Image *target, const VkRect2D &area)
+{
+    if (backend->debugFailed || !reflections || !target)
+        return;
+    std::string error;
+    if (!backend->debug)
+    {
+        backend->debug = modern::CreateDebugView(backend->core, error);
+        if (!backend->debug)
+        {
+            backend->debugFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no reflections debug view: %s", error.c_str());
+            return;
+        }
+    }
+    if (!modern::DrawReflectionsDebug(backend->core, backend->debug, reflections, target, area, error))
+        LogModernOnce(backend, "the reflections debug view is not drawn", error);
+}
+
 modern::SceneView SceneViewOf(const ModernSceneView &view)
 {
     modern::SceneView scene{};
@@ -1413,6 +1488,43 @@ void SceneAmbientOcclusion(Backend *backend, Image *depth, const modern::SceneVi
     // The lit shaders of ours read it until the scene is lit (BackendModernScene).
     lg::SetModernAmbientOcclusion(backend->legacy, backend->sceneAo ? backend->aoTexture : nullptr);
 }
+
+// The scene's screen-space reflections, after its normals buffer. They read
+// last scene's anti-aliased colour, so they need that scene in linear light
+// and kept by the anti-aliasing (none on a cut or the first scene; the
+// readers then have none for this scene).
+void TraceSceneReflections(Backend *backend, Image *depth, const modern::SceneView &view)
+{
+    backend->sceneReflections = nullptr;
+    if (!backend->reflectionsWanted || backend->reflectionsFailed)
+        return;
+    if (!backend->linearWanted || backend->linearFailed || !backend->linearScene)
+    {
+        LogModernOnce(backend, "no screen-space reflections", "the scene is not drawn in linear light");
+        return;
+    }
+    modern::SceneView previous{};
+    Image *history = modern::LastHistory(backend->taa);
+    if (view.cut || !history || !modern::LastView(backend->taa, previous))
+        return;
+    if (!backend->reflections)
+    {
+        std::string error;
+        backend->reflections = modern::CreateReflections(backend->core, error);
+        if (!backend->reflections)
+        {
+            backend->reflectionsFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no screen-space reflections: %s", error.c_str());
+            return;
+        }
+    }
+    std::string error;
+    backend->sceneReflections = modern::TraceReflections(backend->core, backend->reflections, depth,
+                                                         backend->sceneNormals, history, view, previous,
+                                                         backend->reflectionParams, error);
+    if (!backend->sceneReflections)
+        LogModernOnce(backend, "no screen-space reflections", error);
+}
 } // namespace
 
 bool BackendModernWantsSceneDepth(Backend *backend)
@@ -1457,6 +1569,7 @@ ModernResult BackendModernSceneDepth(Backend *backend, lg::Surface *depth, const
         return ModernResult::Refused;
     }
     SceneAmbientOcclusion(backend, depthImage, scene);
+    TraceSceneReflections(backend, depthImage, scene);
     return ModernResult::Done;
 }
 
@@ -1472,6 +1585,8 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
     Image *ao = backend->sceneAo ? lg::SurfaceImage(backend->aoSurface) : nullptr;
     backend->sceneAo = false;
     lg::SetModernAmbientOcclusion(backend->legacy, nullptr);
+    Image *reflections = backend->sceneReflections;
+    backend->sceneReflections = nullptr;
     // The surfaces that moved in this scene; the next scene starts a new list.
     std::vector<modern::MovedSurface> moved;
     moved.swap(backend->moved);
@@ -1516,6 +1631,8 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
             DrawNormalsDebug(backend, normals, lg::SurfaceImage(display), area);
         if (backend->debugAo)
             DrawAoDebug(backend, ao, lg::SurfaceImage(display), area);
+        if (backend->debugReflections)
+            DrawReflectionsDebug(backend, reflections, lg::SurfaceImage(display), area);
         return passes;
     };
     if (backend->taaFailed)
