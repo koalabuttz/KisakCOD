@@ -57,8 +57,11 @@ involved. The checks:
                  kept over white, inputs changed 2.8 times in each (twice in
                  modern_lit and modern_tonemap, six times in
                  modern_lit_shader, once in modern_ao), and the seven pixel
-                 modules modern_lit_shader (six) and modern_ao (one) built
-                 as our own lit shaders (none
+                 modules modern_lit_shader (six) and modern_ao (one: its
+                 floor is depth-tested against the prepass, a depth compare
+                 of its own; six in all with KISAK_VK_DEPTH_COMPARE=dynamic,
+                 where the compare is not built in) built as our own lit
+                 shaders (none
                  with KISAK_VK_MODERN_LINEAR=0 or KISAK_VK_MODERN_LIT=0, and
                  no lit shaders of our own with KISAK_VK_MODERN_SHADERS=0),
                  modern_velocity's 14 scenes with a surface that moves on its
@@ -553,8 +556,11 @@ def main():
         checks.expect('no lit shaders of our own with linear light, lit inputs or our shaders off', shaders is None,
                       shaders.group(0) if shaders else '')
     else:
-        checks.expect('the Modern path built 7 pixel modules as our own lit shaders, none refused',
-                      shaders is not None and shaders.group(2) == '7' and shaders.group(3) == '0',
+        # modern_ao's floor tests depth against its prepass: a depth compare
+        # of its own, built into its module unless chosen at run time.
+        modules = '6' if env.get('KISAK_VK_DEPTH_COMPARE') == 'dynamic' else '7'
+        checks.expect(f'the Modern path built {modules} pixel modules as our own lit shaders, none refused',
+                      shaders is not None and shaders.group(2) == modules and shaders.group(3) == '0',
                       shaders.group(0) if shaders else 'missing')
     checks.expect('no object outlived its release', found.get('d3d9_check.live_objects_at_teardown') == '0',
                   found.get('d3d9_check.live_objects_at_teardown', 'missing'))
