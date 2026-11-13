@@ -3232,12 +3232,12 @@ void Check::ModernBloom()
     {
         Expect("square_white", 64, 64, 255, 255, 255);
         // Four pixels below the square's edge: lit by the bloom, or black.
-        const int near = value(64, 76);
-        Equal("square_spreads", bloomOn ? near >= 8 : near == 0, true);
-        if (bloomOn ? near < 8 : near != 0)
-            result->detail += " square_spreads_got=" + std::to_string(near);
+        const int spread = value(64, 76);
+        Equal("square_spreads", bloomOn ? spread >= 8 : spread == 0, true);
+        if (bloomOn ? spread < 8 : spread != 0)
+            result->detail += " square_spreads_got=" + std::to_string(spread);
         // The bloom fades with distance and stays white's colour.
-        Equal("square_fades", value(64, 100) <= near, true);
+        Equal("square_fades", value(64, 100) <= spread, true);
         const uint8_t *p = &pixels[(76 * readSize + 64) * 4];
         Equal("square_bloom_grey", std::abs(int(p[2]) - int(p[0])) <= 1 && std::abs(int(p[1]) - int(p[0])) <= 1,
               true);
