@@ -83,6 +83,8 @@ SETS = [
             ("gtao.frag", "kGtaoFrag"),
             ("ao_blur.frag", "kAoBlurFrag"),
             ("debug_ao.frag", "kDebugAoFrag"),
+            ("reflections.frag", "kReflectionsFrag"),
+            ("debug_reflections.frag", "kDebugReflectionsFrag"),
         ],
     ),
     ShaderSet(
