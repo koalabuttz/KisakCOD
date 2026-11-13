@@ -4160,10 +4160,18 @@ void Check::ModernExposure()
     const auto target = [&](int grey) { return std::clamp(std::log2(key / decode(grey)), -1.0, 1.0); };
 
     scene(100, true);
+    // r_vkStats can come at any point of a frame. The first scene's exposure
+    // is copied for the statistics and not submitted yet; logging them inside
+    // a pass leaves that reading for later rather than wait for it (waiting
+    // there failed the device, PC run 23).
+    DrawQuad(0, 0, 8, 8, 0.5f, Argb(255, 0, 0, 255));
+    front::LogDeviceStats(false);
+    DrawQuad(8, 0, 16, 8, 0.5f, Argb(255, 0, 255, 0));
     if (Read())
     {
         const int v = exposed(100, target(100));
         Expect("grey100_to_key", 64, 64, v, v, v);
+        Expect("stats_in_pass", 12, 4, 0, 255, 0);
     }
     Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
     scene(255, true);
