@@ -357,6 +357,8 @@ bool LastView(const Taa *taa, SceneView &out)
     return true;
 }
 
+Image *LastHistory(const Taa *taa) { return taa && taa->haveHistory ? taa->history[taa->latest] : nullptr; }
+
 bool Resolve(Core *core, Taa *taa, Image *color, Image *depth, const SceneView &view, std::string &error,
              Image *velocity)
 {

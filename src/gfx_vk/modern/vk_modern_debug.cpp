@@ -1,6 +1,6 @@
 // The Modern path's debug views: see vk_modern.h and docs/vulkan-modern.md.
-// The shaders are src/gfx_vk/modern/shaders/debug_velocity.frag and
-// debug_normals.frag.
+// The shaders are src/gfx_vk/modern/shaders/debug_velocity.frag,
+// debug_normals.frag and debug_reflections.frag.
 
 #include "vk_modern.h"
 #include "vk_modern_internal.h"
@@ -26,7 +26,8 @@ enum Kind : uint32_t
 {
     kVelocityView = 0,
     kNormalsView = 1,
-    kKinds = 2,
+    kReflectionsView = 2,
+    kKinds = 3,
 };
 } // namespace
 
@@ -76,7 +77,10 @@ DebugView *CreateDebugView(Core *core, std::string &error)
         CreateShaderModule(core, shaders::kDebugVelocityFrag, sizeof(shaders::kDebugVelocityFrag));
     debug->fragment[kNormalsView] =
         CreateShaderModule(core, shaders::kDebugNormalsFrag, sizeof(shaders::kDebugNormalsFrag));
-    if (!debug->vertex || !debug->fragment[kVelocityView] || !debug->fragment[kNormalsView])
+    debug->fragment[kReflectionsView] =
+        CreateShaderModule(core, shaders::kDebugReflectionsFrag, sizeof(shaders::kDebugReflectionsFrag));
+    if (!debug->vertex || !debug->fragment[kVelocityView] || !debug->fragment[kNormalsView]
+        || !debug->fragment[kReflectionsView])
         return fail(LastError(core));
     VkSamplerCreateInfo sampler{};
     sampler.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -211,5 +215,11 @@ bool DrawNormalsDebug(Core *core, DebugView *debug, Image *normals, Image *targe
                       std::string &error)
 {
     return DrawDebug(core, debug, kNormalsView, "modern debug normals", normals, target, area, error);
+}
+
+bool DrawReflectionsDebug(Core *core, DebugView *debug, Image *reflections, Image *target, const VkRect2D &area,
+                          std::string &error)
+{
+    return DrawDebug(core, debug, kReflectionsView, "modern debug reflections", reflections, target, area, error);
 }
 } // namespace gfx_vk::modern
