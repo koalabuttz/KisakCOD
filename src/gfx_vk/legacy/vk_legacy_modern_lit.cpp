@@ -6,7 +6,8 @@
 // the vertex shader's outputs need linking: the GLSL declares its inputs at
 // placeholder locations (texcoord N at N, colour 0 at 10), and here they are
 // moved, in the SPIR-V, to the locations where the vertex shader writes those
-// semantics, and the specialization constants' defaults are set.
+// semantics, and the specialization constants' defaults are set (the
+// strengths, the depth reference's clamp, the mode and the alpha test).
 
 #include "vk_legacy_internal.h"
 #include "vk_legacy_shaders.h"
@@ -62,32 +63,64 @@ int OutputLocation(const ls::Shader &vs, uint8_t usage, uint32_t index, uint8_t 
     }
     return found->location;
 }
+
+// The lm_sun.frag build for each set of maps (gen_spirv_header.py), by
+// ModernLitShader flags (shadow 1, normal 2, specular 4, detail 8).
+struct LmSunBuild
+{
+    const uint32_t *words;
+    size_t count;
+};
+#define LM_SUN_BUILD(name) LmSunBuild{shaders::name, sizeof(shaders::name) / sizeof(uint32_t)}
+LmSunBuild LmSunBuildFor(uint8_t maps)
+{
+    switch (maps)
+    {
+    case 0: return LM_SUN_BUILD(kLmSunFrag);
+    case ModernLitNormal: return LM_SUN_BUILD(kLmSunNFrag);
+    case ModernLitNormal | ModernLitSpecular: return LM_SUN_BUILD(kLmSunNSFrag);
+    case ModernLitDetail: return LM_SUN_BUILD(kLmSunDFrag);
+    case ModernLitDetail | ModernLitNormal: return LM_SUN_BUILD(kLmSunDNFrag);
+    case ModernLitDetail | ModernLitNormal | ModernLitSpecular: return LM_SUN_BUILD(kLmSunDNSFrag);
+    case ModernLitShadow: return LM_SUN_BUILD(kLmSunShadowFrag);
+    case ModernLitShadow | ModernLitNormal: return LM_SUN_BUILD(kLmSunShadowNFrag);
+    case ModernLitShadow | ModernLitNormal | ModernLitSpecular: return LM_SUN_BUILD(kLmSunShadowNSFrag);
+    case ModernLitShadow | ModernLitDetail: return LM_SUN_BUILD(kLmSunShadowDFrag);
+    case ModernLitShadow | ModernLitDetail | ModernLitNormal: return LM_SUN_BUILD(kLmSunShadowDNFrag);
+    case ModernLitShadow | ModernLitDetail | ModernLitNormal | ModernLitSpecular:
+        return LM_SUN_BUILD(kLmSunShadowDNSFrag);
+    default: return LmSunBuild{nullptr, 0};
+    }
+}
+#undef LM_SUN_BUILD
 } // namespace
 
 bool BuildModernLitSpirv(uint8_t shader, const ls::Shader &vs, float sunStrength, float skyStrength,
-                         bool clampDepthReference, std::vector<uint32_t> &spirv)
+                         bool clampDepthReference, bool alphaTest, std::vector<uint32_t> &spirv)
 {
-    const uint32_t *words = nullptr;
-    size_t count = 0;
+    if (!ModernLitShaderValid(shader))
+        return false;
+    const LmSunBuild build = LmSunBuildFor(shader & (ModernLitShadow | ModernLitNormal | ModernLitSpecular
+                                                     | ModernLitDetail));
+    if (!build.words)
+        return false;
+    const uint32_t *words = build.words;
+    const size_t count = build.count;
     std::vector<Placeholder> placeholders = {
         {0, kUsageTexcoord, 0, 4},
         {1, kUsageTexcoord, 1, 4},
         {10, kUsageColor, 0, 4},
     };
-    switch (shader)
+    if (shader & ModernLitNormal)
     {
-    case ModernLitLmSun:
-        words = shaders::kLmSunFrag;
-        count = sizeof(shaders::kLmSunFrag) / sizeof(uint32_t);
-        break;
-    case ModernLitLmSunShadow:
-        words = shaders::kLmSunShadowFrag;
-        count = sizeof(shaders::kLmSunShadowFrag) / sizeof(uint32_t);
-        placeholders.push_back({4, kUsageTexcoord, 4, 4});
-        break;
-    default:
-        return false;
+        placeholders.push_back({2, kUsageTexcoord, 2, 4});
+        placeholders.push_back({3, kUsageTexcoord, 3, 4});
     }
+    if (shader & ModernLitShadow)
+        placeholders.push_back({4, kUsageTexcoord, 4, 4});
+    if (shader & ModernLitSpecular)
+        placeholders.push_back({5, kUsageTexcoord, 5, 4});
+    const uint32_t mode = (shader & ModernLitModeMask) >> ModernLitModeShift;
     // Where each placeholder goes.
     std::vector<int> moved(placeholders.size());
     for (size_t i = 0; i < placeholders.size(); ++i)
@@ -152,6 +185,10 @@ bool BuildModernLitSpirv(uint8_t shader, const ls::Shader &vs, float sunStrength
                     out[at + 3] = std::bit_cast<uint32_t>(skyStrength);
                 else if (specId == 2)
                     out[at + 3] = clampDepthReference ? 1u : 0u;
+                else if (specId == 3)
+                    out[at + 3] = mode;
+                else if (specId == 4)
+                    out[at + 3] = alphaTest ? 1u : 0u;
             }
         }
         at += length;

@@ -573,28 +573,46 @@ exposure moves their colours.
 
 The second stage of the Modern lit shaders plan: lit passes drawn with
 shaders of the Modern path's own, which add their light in linear light,
-in place of the game's. The first is the world's base sunlit shader.
+in place of the game's. The first is the world's sunlit family,
+`lm_[hsm_]sun_<mode>c0[d0][n0][s0]`: one source, `lm_sun.frag`, compiled
+for each set of maps (12 builds), with the mode a specialization constant.
 
-| Game shader | Ours | Reads |
+| Part of the name | Define | Reads, beyond the base |
 | --- | --- | --- |
-| `lm_sun_r0c0` | `lm_sun.frag` (`LM_SUN_SHADOW=0`) | colour map s0, primary lightmap s2, secondary lightmap s3; fog colour c0, sun direction c17, sun colour c18; texcoord 0 (colour and lightmap UVs), texcoord 1 (normal, fog), colour 0 |
-| `lm_hsm_sun_r0c0` | `lm_sun.frag` (`LM_SUN_SHADOW=1`) | the same, plus the sun's shadow map s4, its partition switch c2 and scale c4, and texcoord 4 (the shadow-map coordinate) |
+| (base) `lm_sun_r0c0` | | colour map s0, primary lightmap s2, secondary lightmap s3; fog colour c0, sun direction c17, sun colour c18; texcoord 0 (colour and lightmap UVs), texcoord 1 (normal, fog), colour 0 |
+| `hsm_` | `LM_SUN_SHADOW` | the sun's shadow map s4, its partition switch c2 and scale c4; texcoord 4 (the shadow-map coordinate) |
+| `n0` | `LM_SUN_NORMAL` | a normal map at the next sampler (s4, s5 with the shadow map); texcoords 2 and 3 (binormal, tangent) |
+| `s0` (only with `n0`) | `LM_SUN_SPECULAR` | the reflection probe (cube) s1, a specular map after the normal map; envMapParms c5, the sun's specular colour c19; texcoord 5 (eye-to-point) |
+| `d0` | `LM_SUN_DETAIL` | a detail map after the others; detailScale at c5 (c6 with `s0`) |
+| `r0` / `b0` / `t0` | (mode) | opaque / blended / alpha-tested: nothing more |
 
 What ours computes (from the game shaders' maths, world-lit shader facts 1
-and 2 in the project files, 2026-11-13):
+to 3 in the project files, 2026-11-13):
 
-* **albedo** = colour map times vertex colour, each decoded from sRGB;
+* **albedo** = colour map (plus the detail map around grey, `d0`) times
+  vertex colour, each decoded from sRGB;
 * **sky** = the secondary lightmap's two halves combined as the game
-  combines them (top plus bottom times the flat normal's N.D: one baked
-  light, encoded in two images), then decoded, times the sky strength;
+  combines them (top plus bottom times N.D, with the flat normal or, `n0`,
+  the normal map's slopes, which also scale the top: one baked light,
+  encoded in two images), then decoded, times the sky strength;
 * **sun** = shadow times N.L times the sun's colour decoded, times the sun
-  strength. The shadow is the primary lightmap's sun visibility, or where
-  the shadow map covers the surface (and the lightmap's is not 0), the
-  game's four depth-compare taps a quarter each, near and far partitions
-  blended over w 0.75 to 1, faded back to the lightmap's towards the far
-  partition's edge;
-* **colour** = albedo times (sky plus sun), then the fog colour (decoded)
-  blended over it in linear light by the vertex fog factor.
+  strength, N from the normal map in the tangent frame with `n0`. The
+  shadow is the primary lightmap's sun visibility, or where the shadow map
+  covers the surface (and the lightmap's is not 0), the game's four
+  depth-compare taps a quarter each, near and far partitions blended over
+  w 0.75 to 1, faded back to the lightmap's towards the far partition's
+  edge;
+* **specular** (`s0`) = the specular map decoded times the game's Fresnel
+  (envMapParms) times (shadow times the sun's highlight, exponent from the
+  gloss, times envMapParms.w and the sun's specular colour decoded and the
+  sun strength, plus the reflection probe decoded, at LOD 6 - 8 gloss,
+  times its alpha), added after albedo times light;
+* **colour** = albedo times (sky plus sun) plus specular, then the fog
+  colour (decoded) blended over it in linear light by the vertex fog factor.
+  `b0` premultiplies the albedo and fog colour by colour alpha times vertex
+  alpha, which is the output alpha; `t0` keeps alpha 0.5 and over and writes
+  black with alpha 0 elsewhere, as the game's shader does; then the alpha
+  test of the render state.
 
 So shade is the game's: decode(colour times light) is decode(colour) times
 decode(light). Where the sun adds to the lightmap, the game added the two in
@@ -604,29 +622,34 @@ Legacy) stands in for that. The sum is not clamped, so the tonemap and bloom
 see sunlit highlights as they are.
 
 * **Which passes.** `R_ModernPassInputs` (`r_scene.cpp`) names one in
-  `GfxModernLitInputs::shader` when the pass's pixel shader is one of the
-  names above (`_sm3` or `_sm2`, the lightmaps bound as custom samplers) and
-  its pixel arguments bind exactly what ours reads, where ours reads it;
-  any other pixel argument keeps the game's shader.
+  `GfxModernLitInputs::shader` (a code: 0x40 plus flags for the shadow 1,
+  normal 2, specular 4 and detail 8 maps and the mode times 16) when the
+  pass's pixel shader's name is one of the family (`_sm3`; `_sm2` only for
+  `r0c0` without maps; the lightmaps, and the probe with `s0`, bound as
+  custom samplers) and its pixel arguments bind exactly what ours reads,
+  where ours reads it; any other pixel argument keeps the game's shader.
+  `KISAK_VK_MODERN_LIT_LOG=1` prints each lit pixel shader's arguments and
+  the code it was given.
 * **How.** It travels with the over-white lit inputs (front
   `ModernLitInputs::shader`, `legacy::SetLinearInputs`'s `shader`,
   `PipelineKey::linearShader`). Building the pipeline's pixel module, the
   adapter (`vk_legacy_modern_lit.cpp`) takes our SPIR-V (compiled at build
   time into `vk_legacy_shaders.h`), moves its inputs from their placeholder
   locations (texcoord N at N, colour 0 at 10) to where the vertex shader
-  writes those semantics, and sets the strengths and the depth reference
-  clamp as specialization constants' defaults. The pipeline layout and
-  descriptors stay the game shader's, so the adapter uses ours only where
-  that shader reads at least what ours does (constants to c18, 2D images at
-  those samplers), the vertex shader writes each input as one four-component
-  vector alone at its location, the alpha test is off and, for the shadow,
-  s4 is a depth image; otherwise it builds the game's shader, over white,
-  and counts it.
+  writes those semantics, and sets the strengths, the depth reference
+  clamp, the mode and whether it runs the alpha test (not where the compare
+  is fixed as always) as specialization constants' defaults. The pipeline
+  layout and descriptors stay the game shader's, so the adapter uses ours
+  only where that shader reads at least what ours does (constants to c18 or
+  c19, 2D images and the probe cube at those samplers, the alpha test's
+  block), the vertex shader writes each input as one four-component vector
+  alone at its location and, for the shadow, s4 is a depth image; otherwise
+  it builds the game's shader, over white, and counts it.
 
 | Switch | Default |
 | --- | --- |
 | `KISAK_VK_MODERN_SHADERS=0` | our shaders on (with linear light and lit passes on) |
-| `KISAK_VK_MODERN_SUN_STRENGTH=<value>` | 2 |
+| `KISAK_VK_MODERN_SUN_STRENGTH=<value>` | 2 (PC sun run 1 measured about 1.5 to 2 against Legacy, on the few surfaces then drawn as ours) |
 | `KISAK_VK_MODERN_SKY_STRENGTH=<value>` | 1 |
 
 The statistics line, after the lit surfaces' one: `vulkan d3d9: modern: lit
@@ -639,7 +662,11 @@ as `lm_sun` and `lm_hsm_sun`: grey 128 colour map, lightmap halves 64 each,
 grey 128 sun overhead, a shadow map at depth 0.5. It expects 0.2159 *
 (0.2159 * sky + 0.2159 * sun) of light without a shadow and with a reference
 in front of the stored depth, the lightmap's alone behind it, and half fog
-towards red blended in linear light; black with our shaders off.
+towards red blended in linear light; black with our shaders off. A second
+stand-in, for `lm_hsm_sun_r0c0d0n0s0`, is drawn as the `d0n0s0` variant
+opaque, blended and alpha-tested (kept and dropped), and as `lm_sun_r0c0n0`
+with a normal map tilted along the tangent; the expectations follow the
+game's formulas.
 `test_vulkan_d3d9_front.py` also runs it with `KISAK_VK_MODERN_SHADERS=0`.
 
 ## Next

@@ -51,8 +51,10 @@ involved. The checks:
                  bloom (none with KISAK_VK_MODERN_LINEAR=0 or
                  KISAK_VK_MODERN_BLOOM=0), modern_lit's, modern_lit_shader's
                  and modern_tonemap's scenes with lit surfaces kept over
-                 white, inputs changed twice in each, and modern_lit_shader's
-                 two pixel modules built as our own lit shaders (none
+                 white, inputs changed 3.3 times in each (twice in
+                 modern_lit and modern_tonemap, six times in
+                 modern_lit_shader), and modern_lit_shader's
+                 six pixel modules built as our own lit shaders (none
                  with KISAK_VK_MODERN_LINEAR=0 or KISAK_VK_MODERN_LIT=0, and
                  no lit shaders of our own with KISAK_VK_MODERN_SHADERS=0),
                  modern_velocity's 14 scenes with a surface that moves on its
@@ -332,7 +334,7 @@ def main():
     # starting with a cut); those thirteen before modern_velocity were drawn
     # in linear light, with one copy read from
     # them, two of modern_bloom's with bloom and modern_lit's,
-    # modern_lit_shader's and modern_tonemap's with lit surfaces (two pixel
+    # modern_lit_shader's and modern_tonemap's with lit surfaces (six pixel
     # modules of modern_lit_shader's built as our own lit shaders, unless
     # KISAK_VK_MODERN_SHADERS=0), unless KISAK_VK_MODERN_LINEAR=0 (or
     # KISAK_VK_MODERN_BLOOM=0 for the bloom, KISAK_VK_MODERN_LIT=0 for the lit
@@ -381,8 +383,8 @@ def main():
         checks.expect('no scene with lit surfaces in linear light with linear light or lit inputs off', lit is None,
                       lit.group(0) if lit else '')
     else:
-        checks.expect('the Modern path drew lit surfaces in linear light in 3 scenes, inputs changed 2 times each',
-                      lit is not None and lit.group(1) == '3' and lit.group(2) == '2.0',
+        checks.expect('the Modern path drew lit surfaces in linear light in 3 scenes, inputs changed 3.3 times each',
+                      lit is not None and lit.group(1) == '3' and lit.group(2) == '3.3',
                       lit.group(0) if lit else 'missing')
     shaders = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: lit shaders of our own: ([0-9.]+) changes to one '
                         r'each scene, (\d+) pixel modules built as one \((\d+) could not be\)', stdout, re.M)
@@ -391,8 +393,8 @@ def main():
         checks.expect('no lit shaders of our own with linear light, lit inputs or our shaders off', shaders is None,
                       shaders.group(0) if shaders else '')
     else:
-        checks.expect('the Modern path built 2 pixel modules as our own lit shaders, none refused',
-                      shaders is not None and shaders.group(2) == '2' and shaders.group(3) == '0',
+        checks.expect('the Modern path built 6 pixel modules as our own lit shaders, none refused',
+                      shaders is not None and shaders.group(2) == '6' and shaders.group(3) == '0',
                       shaders.group(0) if shaders else 'missing')
     checks.expect('no object outlived its release', found.get('d3d9_check.live_objects_at_teardown') == '0',
                   found.get('d3d9_check.live_objects_at_teardown', 'missing'))

@@ -40,6 +40,18 @@ class ShaderSet:
         self.shaders = [entry if len(entry) == 3 else (entry[0], entry[1], ()) for entry in shaders]
 
 
+# The lm_[hsm_]sun world shader's variants (vk_legacy_modern_lit.cpp): with or
+# without the shadow map, times the material maps the game's shaders come
+# with (D detail, N normal, S specular; specular comes only with the normal).
+LM_SUN_VARIANTS = [
+    ("lm_sun.frag", f"kLmSun{'Shadow' if shadow else ''}{maps}Frag",
+     (f"LM_SUN_SHADOW={shadow}", f"LM_SUN_DETAIL={int('D' in maps)}", f"LM_SUN_NORMAL={int('N' in maps)}",
+      f"LM_SUN_SPECULAR={int('S' in maps)}"))
+    for shadow in (0, 1)
+    for maps in ("", "N", "NS", "D", "DN", "DNS")
+]
+
+
 SETS = [
     ShaderSet(
         "src/gfx_vk/tools/shaders",
@@ -75,9 +87,7 @@ SETS = [
         [
             ("fullscreen.vert", "kFullscreenVert"),
             ("gamma.frag", "kGammaFrag"),
-            ("lm_sun.frag", "kLmSunFrag", ("LM_SUN_SHADOW=0",)),
-            ("lm_sun.frag", "kLmSunShadowFrag", ("LM_SUN_SHADOW=1",)),
-        ],
+        ] + LM_SUN_VARIANTS,
     ),
 ]
 

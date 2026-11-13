@@ -744,11 +744,11 @@ bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Sh
                      std::vector<uint32_t> &spirv, std::string &error);
 // The SPIR-V of a Modern lit shader of ours (ModernLitShader) for a pixel
 // shader drawn with vs: its inputs moved to where vs writes their semantics,
-// and its strengths and depth reference clamp set. False, with nothing
-// built, when vs does not write one of them as the shader reads it.
-// vk_legacy_modern_lit.cpp; safe on any thread.
+// and its strengths, depth reference clamp, mode and whether it runs the
+// alpha test set. False, with nothing built, when vs does not write one of
+// them as the shader reads it. vk_legacy_modern_lit.cpp; safe on any thread.
 bool BuildModernLitSpirv(uint8_t shader, const ls::Shader &vs, float sunStrength, float skyStrength,
-                         bool clampDepthReference, std::vector<uint32_t> &spirv);
+                         bool clampDepthReference, bool alphaTest, std::vector<uint32_t> &spirv);
 // Gives the shader a module built from recipe to keep; false (and the module
 // is left to the caller) when it already keeps one there.
 bool KeepPixelModule(Device &device, Shader &ps, const PixelModuleRecipe &recipe, VkShaderModule module);

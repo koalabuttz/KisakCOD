@@ -528,28 +528,46 @@ bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Sh
     if (recipe.plain)
         return ls::BuildSpirv(ps.translated, nullptr, spirv, error);
     // A Modern lit shader of ours in place of the pixel shader, where it links
-    // to the vertex shader and the alpha test is off; else the pixel shader
-    // as it is (its key keeps the shader, so this is decided once).
-    // The pipeline's layout is the pixel shader's, so it must read at least
-    // what ours reads (constants to c18, 2D images at s0, s2, s3 and, for the
-    // shadow, s4), and the shadow map must be a depth image where depth
-    // compare is fixed.
+    // to the vertex shader; else the pixel shader as it is (its key keeps the
+    // shader, so this is decided once). The pipeline's layout is the pixel
+    // shader's, so it must read at least what ours reads (the constants to
+    // c18, or c19 with the specular; 2D images at s0, s2, s3 and the shadow,
+    // normal, specular and detail maps' samplers; a cube at s1 with the
+    // specular; the alpha test's block), and the shadow map must be a depth
+    // image where depth compare is fixed.
     const uint8_t shader = recipe.linearInputs ? recipe.moduleKey.inputs.shader : uint8_t(ModernLitNone);
-    const ls::Reflection &pr = ps.translated.reflection;
-    const uint32_t images = 1u << 0 | 1u << 2 | 1u << 3 | (shader == ModernLitLmSunShadow ? 1u << 4 : 0u);
-    bool fits = pr.floatConstants >= 19
-        && (pr.uniforms & (1u << static_cast<uint32_t>(ls::Uniform::FloatConstants)))
-        && (pr.samplers & images) == images;
-    for (uint32_t sampler = 0; sampler < 5 && fits; ++sampler)
-        fits = !(images & (1u << sampler)) || pr.samplerTypes[sampler] == ls::TextureType::Tex2D;
-    if (shader && fits
-        && (!recipe.fixAlpha || recipe.alphaCompare == static_cast<uint32_t>(ls::AlphaCompare::Always))
-        && (shader != ModernLitLmSunShadow || !recipe.fixDepth || (recipe.depthCompare & (1u << 4)))
-        && BuildModernLitSpirv(shader, vs.translated, recipe.sunStrength, recipe.skyStrength,
-                               (recipe.depthCompare & ls::kFixedDepthClamp) != 0, spirv))
+    if (ModernLitShaderValid(shader))
     {
-        recipe.modernBuilt = true;
-        return true;
+        const ls::Reflection &pr = ps.translated.reflection;
+        const uint32_t normal = 4u + (shader & ModernLitShadow ? 1u : 0u);
+        const uint32_t specular = normal + (shader & ModernLitNormal ? 1u : 0u);
+        const uint32_t detail = specular + (shader & ModernLitSpecular ? 1u : 0u);
+        const uint32_t images = 1u << 0 | 1u << 2 | 1u << 3 | (shader & ModernLitShadow ? 1u << 4 : 0u)
+            | (shader & ModernLitNormal ? 1u << normal : 0u) | (shader & ModernLitSpecular ? 1u << specular : 0u)
+            | (shader & ModernLitDetail ? 1u << detail : 0u);
+        const uint32_t cubes = shader & ModernLitSpecular ? 1u << 1 : 0u;
+        const uint32_t uniforms = 1u << static_cast<uint32_t>(ls::Uniform::FloatConstants)
+            | 1u << static_cast<uint32_t>(ls::Uniform::AlphaTest);
+        bool fits = pr.floatConstants >= (shader & ModernLitSpecular ? 20u : 19u)
+            && (pr.uniforms & uniforms) == uniforms && (pr.samplers & (images | cubes)) == (images | cubes)
+            && (!(shader & ModernLitShadow) || !recipe.fixDepth || (recipe.depthCompare & (1u << 4)));
+        for (uint32_t sampler = 0; sampler < ls::kSamplerCount && fits; ++sampler)
+        {
+            if (images & (1u << sampler))
+                fits = pr.samplerTypes[sampler] == ls::TextureType::Tex2D;
+            else if (cubes & (1u << sampler))
+                fits = pr.samplerTypes[sampler] == ls::TextureType::Cube;
+        }
+        // Where the alpha test's compare is fixed as Always, ours leaves it out.
+        const bool alphaTest =
+            !recipe.fixAlpha || recipe.alphaCompare != static_cast<uint32_t>(ls::AlphaCompare::Always);
+        if (fits
+            && BuildModernLitSpirv(shader, vs.translated, recipe.sunStrength, recipe.skyStrength,
+                                   (recipe.depthCompare & ls::kFixedDepthClamp) != 0, alphaTest, spirv))
+        {
+            recipe.modernBuilt = true;
+            return true;
+        }
     }
     recipe.modernBuilt = false;
     return ls::BuildSpirv(ps.translated, recipe.direct ? nullptr : &vs.translated, spirv, error,
@@ -2864,7 +2882,7 @@ void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint
     if (overWhite)
     {
         inputs.flags = ls::kLinearOverWhite;
-        inputs.shader = shader < ModernLitShaderCount ? shader : uint8_t(ModernLitNone);
+        inputs.shader = ModernLitShaderValid(shader) ? shader : uint8_t(ModernLitNone);
     }
     else
     {

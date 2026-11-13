@@ -149,6 +149,75 @@ add r0, r0, c18
 mul r0, r0, c1
 mov oC0, r0
 """),
+    # The same for the lm_hsm_sun_<mode>c0d0n0s0 family: the vertex shader also
+    # writes the binormal (texcoord 2), tangent (texcoord 3) and eye-to-point
+    # vector (texcoord 5) from c3, c4 and c6, and the stand-in reads the probe
+    # cube at s1, the normal, specular and detail maps at s5-s7 and the
+    # constants up to c19.
+    ("kVsLmSunMaps", """vs_3_0
+dcl_position v0
+dcl_texcoord0 v1
+dcl_color0 v2
+dcl_position o0
+dcl_texcoord0 o1
+dcl_texcoord1 o2
+dcl_texcoord2 o3
+dcl_texcoord3 o4
+dcl_texcoord4 o5
+dcl_texcoord5 o6
+dcl_color0 o7
+add o0, v0, c0
+mov o1, c1
+mov o2, c2
+mov o3, c3
+mov o4, c4
+mov o5, c5
+mov o6, c6
+mov o7, v2
+"""),
+    ("kPsLmSunMapsStandIn", """ps_3_0
+dcl_texcoord0 v0
+dcl_texcoord1 v1
+dcl_texcoord2 v2
+dcl_texcoord3 v3
+dcl_texcoord4 v4
+dcl_texcoord5 v5
+dcl_color0 v6
+dcl_2d s0
+dcl_cube s1
+dcl_2d s2
+dcl_2d s3
+dcl_2d s4
+dcl_2d s5
+dcl_2d s6
+dcl_2d s7
+texld r0, v0, s0
+texld r1, v5, s1
+add r0, r0, r1
+texld r1, v0, s2
+add r0, r0, r1
+texld r1, v0, s3
+add r0, r0, r1
+texld r1, v4, s4
+add r0, r0, r1
+texld r1, v0, s5
+add r0, r0, r1
+texld r1, v0, s6
+add r0, r0, r1
+texld r1, v0, s7
+add r0, r0, r1
+add r0, r0, v1
+add r0, r0, v2
+add r0, r0, v3
+add r0, r0, v6
+add r0, r0, c0
+add r0, r0, c5
+add r0, r0, c6
+add r0, r0, c18
+add r0, r0, c19
+mul r0, r0, c1
+mov oC0, r0
+"""),
     # Shader model 2: the same path through fixed output registers.
     ("kVs20", """vs_2_0
 dcl_position v0
