@@ -50,12 +50,12 @@ struct GfxModernLitInputs
     // pass's pixel shader can be drawn as instead (it reads the same samplers,
     // registers and vertex outputs, which the renderer has checked), or
     // GFX_MODERN_LIT_SHADER_NONE.
-    uint8_t shader;
+    uint16_t shader;
 };
 
 // The Modern lit shader's code: the family, plus flags for its maps and its
 // mode (the same values as the Vulkan back end's ModernLitShader).
-enum GfxModernLitShader : uint8_t
+enum GfxModernLitShader : uint16_t
 {
     GFX_MODERN_LIT_SHADER_NONE = 0,
     // lm_[hsm_]sun_<mode>c0[d0][n0][s0]: world surfaces lit by lightmaps and
@@ -77,6 +77,14 @@ enum GfxModernLitShader : uint8_t
     GFX_MODERN_LIT_SHADER_DETAIL = 0x08,   // d0: a detail map
     GFX_MODERN_LIT_SHADER_BLENDED = 0x10,  // b0 (else r0, opaque)
     GFX_MODERN_LIT_SHADER_ALPHA_TESTED = 0x20, // t0
+    // The primary light, in bits 8-9, with the LM_SUN and LP_SUN families (0
+    // is the sun): a spot or omni light in its place (lit shader facts 6),
+    // or, for models only, lp_[i_]amb[_<light>]_t0c0: the volume's light plus
+    // its visibility times the sun's colour, with no normal.
+    GFX_MODERN_LIT_SHADER_SPOT = 0x100,
+    GFX_MODERN_LIT_SHADER_OMNI = 0x200,
+    GFX_MODERN_LIT_SHADER_AMBIENT = 0x300,
+    GFX_MODERN_LIT_SHADER_LIGHT = 0x300,
 };
 
 struct GfxModernHooks

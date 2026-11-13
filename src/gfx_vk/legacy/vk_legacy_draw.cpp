@@ -538,7 +538,7 @@ bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Sh
     // moves the samplers after it one on; a cube at s1 with the specular; the
     // alpha test's block), and the shadow map must be a depth image where
     // depth compare is fixed.
-    const uint8_t shader = recipe.linearInputs ? recipe.moduleKey.inputs.shader : uint8_t(ModernLitNone);
+    const uint16_t shader = recipe.linearInputs ? recipe.moduleKey.inputs.shader : uint16_t(ModernLitNone);
     if (ModernLitShaderValid(shader))
     {
         const ls::Reflection &pr = ps.translated.reflection;
@@ -2885,7 +2885,7 @@ void SetLinearLight(Texture *texture, bool linear)
 }
 
 void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint16_t doubled, bool colorInput,
-                     bool overWhite, uint8_t shader)
+                     bool overWhite, uint16_t shader)
 {
     if (!device)
         return;
@@ -2893,7 +2893,7 @@ void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint
     if (overWhite)
     {
         inputs.flags = ls::kLinearOverWhite;
-        inputs.shader = ModernLitShaderValid(shader) ? shader : uint8_t(ModernLitNone);
+        inputs.shader = ModernLitShaderValid(shader) ? shader : uint16_t(ModernLitNone);
     }
     else
     {

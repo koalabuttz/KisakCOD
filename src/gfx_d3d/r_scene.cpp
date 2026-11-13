@@ -1463,12 +1463,12 @@ static bool R_ModernTakeWord(const char **name, size_t *length, const char *word
 // lp_[i_]<r0|b0|t0>c0[d0][n0][s0]_sm3 (their shader model 2 builds read the
 // lightmap's UV elsewhere; lp_skin_ s0 has a shader of its own, and flag_,
 // the same shader as lp_t0, is left with skin_ for now).
-static uint8_t R_ModernLitShaderFromName(const char *name)
+static uint16_t R_ModernLitShaderFromName(const char *name)
 {
     size_t length = strlen(name);
     if (length > 5 && !strcmp(name + length - 5, ".hlsl"))
         length -= 5;
-    uint8_t shader;
+    uint16_t shader;
     if (R_ModernTakeWord(&name, &length, "lm_hsm_sun_"))
         shader = GFX_MODERN_LIT_SHADER_LM_SUN | GFX_MODERN_LIT_SHADER_SHADOW;
     else if (R_ModernTakeWord(&name, &length, "lm_sun_"))
@@ -1479,6 +1479,16 @@ static uint8_t R_ModernLitShaderFromName(const char *name)
     {
         const bool shadow = R_ModernTakeWord(&name, &length, "hsm_");
         R_ModernTakeWord(&name, &length, "i_");
+        if (!shadow && R_ModernTakeWord(&name, &length, "amb_"))
+        {
+            // lp_[i_]amb[_sun|_spot|_omni]_t0c0: one program whatever the
+            // light (lit shader facts 6).
+            if (!R_ModernTakeWord(&name, &length, "sun_") && !R_ModernTakeWord(&name, &length, "spot_"))
+                R_ModernTakeWord(&name, &length, "omni_");
+            if (!R_ModernTakeWord(&name, &length, "t0c0") || length != 4 || strncmp(name, "_sm3", 4))
+                return GFX_MODERN_LIT_SHADER_NONE;
+            return GFX_MODERN_LIT_SHADER_LP_SUN | GFX_MODERN_LIT_SHADER_AMBIENT | GFX_MODERN_LIT_SHADER_ALPHA_TESTED;
+        }
         if (R_ModernTakeWord(&name, &length, "sun_"))
             shader = GFX_MODERN_LIT_SHADER_LP_SUN | (shadow ? GFX_MODERN_LIT_SHADER_SHADOW : 0);
         else if (!shadow)
@@ -1504,7 +1514,7 @@ static uint8_t R_ModernLitShaderFromName(const char *name)
         shader |= GFX_MODERN_LIT_SHADER_SPECULAR;
     // The shader model 2 builds are known only without maps or a mode (world-lit
     // shader facts 1 and 2); facts 3 read the shader model 3 ones.
-    const uint8_t sm3Only = GFX_MODERN_LIT_SHADER_NORMAL | GFX_MODERN_LIT_SHADER_SPECULAR
+    const uint16_t sm3Only = GFX_MODERN_LIT_SHADER_NORMAL | GFX_MODERN_LIT_SHADER_SPECULAR
         | GFX_MODERN_LIT_SHADER_DETAIL | GFX_MODERN_LIT_SHADER_BLENDED | GFX_MODERN_LIT_SHADER_ALPHA_TESTED;
     if (length == 4 && !strncmp(name, "_sm3", 4))
         return shader;
@@ -1543,13 +1553,16 @@ static bool R_ModernMaterialConstIs(const Material *material, uint32_t nameHash,
 // probe is their only custom sampler. Without the sun (interiors) the same
 // less the sun (c17, c18, c19), the primary lightmap and the shadow map
 // (lit shader facts 5). Anything else keeps the game's shader.
-static uint8_t R_ModernLitShader(const char *name, const Material *material, const MaterialPass *pass)
+static uint16_t R_ModernLitShader(const char *name, const Material *material, const MaterialPass *pass)
 {
-    const uint8_t shader = R_ModernLitShaderFromName(name);
+    const uint16_t shader = R_ModernLitShaderFromName(name);
     if (shader == GFX_MODERN_LIT_SHADER_NONE)
         return GFX_MODERN_LIT_SHADER_NONE;
-    const uint8_t family = shader & GFX_MODERN_LIT_SHADER_FAMILY;
-    const bool sun = family != GFX_MODERN_LIT_SHADER_NO_SUN;
+    const uint16_t family = shader & GFX_MODERN_LIT_SHADER_FAMILY;
+    // lp_amb reads the sun's colour (c18) but neither its direction nor the
+    // lookup scale.
+    const bool ambient = (shader & GFX_MODERN_LIT_SHADER_LIGHT) == GFX_MODERN_LIT_SHADER_AMBIENT;
+    const bool sun = family != GFX_MODERN_LIT_SHADER_NO_SUN && !ambient;
     const bool shadow = sun && (shader & GFX_MODERN_LIT_SHADER_SHADOW) != 0;
     const bool normal = (shader & GFX_MODERN_LIT_SHADER_NORMAL) != 0;
     const bool specular = (shader & GFX_MODERN_LIT_SHADER_SPECULAR) != 0;
@@ -1590,7 +1603,7 @@ static uint8_t R_ModernLitShader(const char *name, const Material *material, con
         LOOKUP_SCALE = 1u << 14,
     };
     const uint32_t wanted = COLOR_MAP | FOG_COLOR | (sun ? SUN_POSITION | SUN_DIFFUSE : 0u)
-        | (model ? LIGHTING_VOLUME | LOOKUP_SCALE : 0u)
+        | (ambient ? SUN_DIFFUSE | LIGHTING_VOLUME : 0u) | (model && !ambient ? LIGHTING_VOLUME | LOOKUP_SCALE : 0u)
         | (shadow ? SHADOW_MAP | SWITCH_PARTITION | SHADOW_SCALE : 0u) | (normal ? NORMAL_MAP : 0u)
         | (specular ? SPECULAR_MAP | ENV_MAP_PARMS | (sun ? SUN_SPECULAR : 0u) : 0u)
         | (detail ? DETAIL_MAP | DETAIL_SCALE : 0u);

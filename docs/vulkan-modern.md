@@ -767,6 +767,26 @@ the sun's constants, a white primary lightmap and the volume's alpha all
 set: none of them may light anything. `test_vulkan_d3d9_front.py` also runs
 it with `KISAK_VK_MODERN_NO_SUN_SHADERS=0`.
 
+### Ambient-only models: lp_amb
+
+`lp_[i_]amb[_sun|_spot|_omni]_t0c0` is one program whatever the light (lit
+shader facts 6). It reads the colour map, the lighting volume at texcoord 1's
+xyz (with no normal, so no lookup push and no N.L), fog colour c0 and the
+sun's colour c18. Its light is the volume's, doubled, plus the volume's alpha
+times c18. `lp_sun.frag` builds it with `LP_SUN_AMBIENT=1`: the sun's share is
+that second term, taken from the game's sum as for the sun family. The code
+is 0x3a0, the `lp_sun` family (0x80) with the light field (bits 8-9) set to
+ambient (0x300) and `t0`. Spot (0x100) and omni (0x200) in that field are
+reserved for the spot and omni families. The code is 16 bits wide.
+`PipelineKey::linearShader`'s low byte is where the one-byte code was, so
+`pipelines.list` keeps its version.
+
+The renderer takes it only when c18 is bound to the sun's colour.
+`KISAK_VK_MODERN_MODEL_SHADERS=0` keeps it on the game's shader;
+`KISAK_VK_MODERN_NO_SUN_SHADERS=0` does not, since it has the sun's colour.
+The `modern_lit_no_sun` scene draws it over the bottom of the
+`lp_r0c0d0n0s0` quad.
+
 ## Normals buffer
 
 Ambient occlusion and screen-space reflections need the normal of the surface

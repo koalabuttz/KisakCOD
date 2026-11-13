@@ -4646,15 +4646,23 @@ void Check::ModernLitModels()
 // normal map tilted along the tangent (it turns the lightmap's light only),
 // lm_b0c0d0n0s0 (colour alpha 128: its normal-map slopes and specular scaled
 // by it) and lp_r0c0d0n0s0; their specular is the probe's grey 64 alone (no
-// sun highlight), Fresnel 1. Without these shaders the stand-ins show black.
+// sun highlight), Fresnel 1. Over the bottom of the last, lp_amb_t0c0 (lit
+// shader facts 6): the volume at texcoord 1, its light plus its alpha times
+// the sun's colour, no normal. Without these shaders the stand-ins show black.
 void Check::ModernLitNoSun()
 {
     const bool on = EnvText("KISAK_VK_MODERN_LINEAR") != "0" && EnvText("KISAK_VK_MODERN_LIT") != "0"
         && EnvText("KISAK_VK_MODERN_SHADERS") != "0" && EnvText("KISAK_VK_MODERN_NO_SUN_SHADERS") != "0";
     const bool modelsOn = on && EnvText("KISAK_VK_MODERN_MODEL_SHADERS") != "0";
+    // lp_amb is a model shader with the sun's colour: not one without the sun.
+    const bool ambientOn = EnvText("KISAK_VK_MODERN_LINEAR") != "0" && EnvText("KISAK_VK_MODERN_LIT") != "0"
+        && EnvText("KISAK_VK_MODERN_SHADERS") != "0" && EnvText("KISAK_VK_MODERN_MODEL_SHADERS") != "0";
     const std::string skyText = EnvText("KISAK_VK_MODERN_SKY_STRENGTH");
     const double skyValue = skyText.empty() ? -1.0 : std::strtod(skyText.c_str(), nullptr);
     const double sky = skyValue >= 0.0 ? skyValue : 1.0;
+    const std::string sunText = EnvText("KISAK_VK_MODERN_SUN_STRENGTH");
+    const double sunValue = sunText.empty() ? -1.0 : std::strtod(sunText.c_str(), nullptr);
+    const double sun = sunValue >= 0.0 ? sunValue : 1.0;
     IDirect3DTexture9 *color = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 128, 128, 128); });
     IDirect3DTexture9 *colorHalf = FilledTexture(1, 1, [](UINT, UINT) { return Argb(128, 128, 128, 128); });
     IDirect3DTexture9 *primary = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
@@ -4819,6 +4827,14 @@ void Check::ModernLitNoSun()
         inputs.shader = 0xcf; // lp_r0c0d0n0s0
         front::SetModernLitInputs(device, &inputs);
         DrawQuad(96, 64, 128, 128, 0.5f, white);
+        // lp_amb_t0c0 over the bottom of that: texcoord 1 is the volume
+        // coordinate (the lit slice's centre), lit by the volume's light plus
+        // its alpha times the sun's colour (c18), with no normal.
+        const float ambientVertex[2][4] = {{0.5f, 0.5f, 0, 0}, {0.5f, 0.5f, 0.75f, 1.0f}};
+        Ok(device->SetVertexShaderConstantF(1, &ambientVertex[0][0], 2), "SetVertexShaderConstantF(ambient)");
+        inputs.shader = 0x3a0; // lp_amb_t0c0
+        front::SetModernLitInputs(device, &inputs);
+        DrawQuad(96, 112, 128, 128, 0.5f, white);
         front::SetModernLitInputs(device, nullptr);
 
         front::ModernSceneView view{};
@@ -4889,6 +4905,14 @@ void Check::ModernLitNoSun()
             const double alpha = 128 / 255.0;
             expect("world_maps_blended", on, 80, 96, withMaps(lightmap(true, 0.0, flatY * alpha), alpha));
             expect("model_maps_opaque", modelsOn, 112, 96, withMaps(2.0 * 48 / 255.0, 1.0));
+            // lp_amb: the volume's 96 plus its alpha 200 times the sun's grey,
+            // shared out as the sun family shares it.
+            const double ambientSky = 2.0 * 48 / 255.0, ambientSun = 200 / 255.0 * greyValue;
+            const double ambientSkyLight = decode(ambientSky);
+            const double ambientLinear = ambientSkyLight * sky + (decode(ambientSky + ambientSun) - ambientSkyLight) * sun;
+            const double ambient = decode(greyValue * (ambientSky + ambientSun)) * ambientLinear
+                / std::max(decode(ambientSky + ambientSun), 1e-12);
+            expect("model_ambient", ambientOn, 112, 120, ambient);
         }
         Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
     }

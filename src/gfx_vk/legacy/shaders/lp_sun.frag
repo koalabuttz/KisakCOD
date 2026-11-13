@@ -63,6 +63,16 @@
 #if !LP_SUN_LIGHT && LP_SUN_SHADOW
 #error "the shadow map needs the sun"
 #endif
+// lp_[i_]amb[_<light>]_t0c0 (lit shader facts 6): the volume's light plus its
+// visibility times the sun's colour, with no normal (so no N.L, no lookup
+// push), no shadow and no maps; texcoord 1 holds the volume coordinate (xyz)
+// and the fog.
+#ifndef LP_SUN_AMBIENT
+#define LP_SUN_AMBIENT 0
+#endif
+#if LP_SUN_AMBIENT && (!LP_SUN_LIGHT || LP_SUN_SHADOW || LP_SUN_NORMAL || LP_SUN_SPECULAR || LP_SUN_DETAIL)
+#error "lp_amb has the sun's colour and no maps"
+#endif
 
 // The material's samplers follow the fixed ones (colour map s0, probe s1,
 // lighting volume s4, shadow map s5) in the order normal, specular, detail;
@@ -82,7 +92,7 @@
 #endif
 
 layout(location = 0) in vec4 texcoord0; // xy colour map UV
-layout(location = 1) in vec4 texcoord1; // xyz world normal, w fog factor (1 = no fog)
+layout(location = 1) in vec4 texcoord1; // xyz world normal (lp_amb: the volume coordinate), w fog factor (1 = no fog)
 #if LP_SUN_NORMAL
 layout(location = 2) in vec4 texcoord2; // xyz world binormal
 layout(location = 3) in vec4 texcoord3; // xyz world tangent
@@ -93,7 +103,9 @@ layout(location = 4) in vec4 texcoord4; // xy near shadow-map UV, z depth, w par
 #if LP_SUN_SPECULAR
 layout(location = 5) in vec4 texcoord5; // xyz eye-to-point vector
 #endif
+#if !LP_SUN_AMBIENT
 layout(location = 6) in vec4 texcoord6; // xyz the model's lighting-volume coordinate
+#endif
 layout(location = 10) in vec4 color0;   // vertex colour
 
 layout(location = 0) out vec4 outColor;
@@ -221,16 +233,20 @@ void main()
         y *= alpha;
     }
     const vec3 normal = normalize(texcoord1.xyz + x * texcoord3.xyz + y * texcoord2.xyz);
-#else
+#elif !LP_SUN_AMBIENT
     const vec3 normal = normalize(texcoord1.xyz);
 #endif
 
     // The lighting volume, where the normal points from the model's
-    // coordinate: rgb the light from around (doubled), alpha how much of the
-    // sun reaches there.
+    // coordinate (lp_amb: at the coordinate): rgb the light from around
+    // (doubled), alpha how much of the sun reaches there.
+#if LP_SUN_AMBIENT
+    const vec3 lookup = texcoord1.xyz;
+#else
     const vec3 reach = abs(normal);
     const float largest = max(reach.x, max(reach.y, reach.z));
     const vec3 lookup = texcoord6.xyz + normal * pc.c[5].xyz / max(largest, 1e-30);
+#endif
     const vec4 volume = texture(sampler3D(lightingVolume, lightingVolumeSampler), lookup);
     const vec3 skyDisplay = 2.0 * volume.rgb;
     const vec3 sky = Decode(skyDisplay);
@@ -257,8 +273,12 @@ void main()
         }
     }
 #endif
+#if LP_SUN_AMBIENT
+    const float facingSun = 1.0;
+#else
     const vec3 sunDirection = pc.c[17].xyz;
     const float facingSun = clamp(dot(sunDirection, normal), 0.0, 1.0);
+#endif
     const vec3 sunDisplay = shadow * facingSun * pc.c[18].rgb;
     // What the sun adds to the volume's light in the game's display-value
     // sum (lm_sun.frag).

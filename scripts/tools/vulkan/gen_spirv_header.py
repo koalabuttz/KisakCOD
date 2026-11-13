@@ -66,6 +66,9 @@ NO_SUN_VARIANTS = [
     for family in ("lm", "lp")
     for maps in ("", "N", "S", "NS", "D", "DN", "DS", "DNS")
 ]
+# lp_[i_]amb[_<light>]_t0c0: the model shader's ambient-only build (lit shader
+# facts 6).
+AMBIENT_VARIANTS = [("lp_sun.frag", "kLpAmbFrag", ("LP_SUN_AMBIENT=1",))]
 
 
 SETS = [
@@ -107,7 +110,7 @@ SETS = [
         [
             ("fullscreen.vert", "kFullscreenVert"),
             ("gamma.frag", "kGammaFrag"),
-        ] + LM_SUN_VARIANTS + LP_SUN_VARIANTS + NO_SUN_VARIANTS,
+        ] + LM_SUN_VARIANTS + LP_SUN_VARIANTS + NO_SUN_VARIANTS + AMBIENT_VARIANTS,
     ),
 ]
 

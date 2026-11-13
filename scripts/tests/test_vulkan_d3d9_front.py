@@ -54,13 +54,14 @@ involved. The checks:
                  bloom (none with KISAK_VK_MODERN_LINEAR=0 or
                  KISAK_VK_MODERN_BLOOM=0), modern_lit's, modern_lit_shader's,
                  modern_lit_models', modern_lit_no_sun's and modern_tonemap's
-                 scenes with lit surfaces kept over white, inputs changed 4.4
+                 scenes with lit surfaces kept over white, inputs changed 4.6
                  times in each (twice in modern_lit and modern_tonemap, six
-                 times in the other three), and modern_lit_shader's,
-                 modern_lit_models' and modern_lit_no_sun's eighteen pixel
+                 times in modern_lit_shader and modern_lit_models, seven in
+                 modern_lit_no_sun), and modern_lit_shader's,
+                 modern_lit_models' and modern_lit_no_sun's nineteen pixel
                  modules built as our own lit shaders (ten, the world's,
-                 with KISAK_VK_MODERN_MODEL_SHADERS=0; twelve, those with the
-                 sun, with KISAK_VK_MODERN_NO_SUN_SHADERS=0; none
+                 with KISAK_VK_MODERN_MODEL_SHADERS=0; thirteen, those with the
+                 sun and lp_amb, with KISAK_VK_MODERN_NO_SUN_SHADERS=0; none
                  with KISAK_VK_MODERN_LINEAR=0 or KISAK_VK_MODERN_LIT=0, and
                  no lit shaders of our own with KISAK_VK_MODERN_SHADERS=0),
                  modern_velocity's 14 scenes with a surface that moves on its
@@ -95,8 +96,8 @@ involved. The checks:
                  shader is drawn as it is and no pixel module is built as ours
   no-sun-off     --scene modern_lit_no_sun passes with
                  KISAK_VK_MODERN_NO_SUN_SHADERS=0, where the pixel shaders
-                 without the sun are drawn as they are and no pixel module is
-                 built as ours
+                 without the sun are drawn as they are and only lp_amb's pixel
+                 module is built as ours (none with models off too)
   debug-velocity --scene modern_velocity passes with
                  KISAK_VK_MODERN_DEBUG=velocity, where the velocity debug
                  view colours the moving band (the scene's own points)
@@ -306,12 +307,16 @@ def main():
     # no-sun-off
     off = dict(env)
     off['KISAK_VK_MODERN_NO_SUN_SHADERS'] = '0'
+    # lp_amb stays ours (it has the sun's colour) and is all the scene shows
+    # then: auto exposure would brighten it.
+    off['KISAK_VK_MODERN_EXPOSURE'] = '0'
+    ambient_modules = '0' if env.get('KISAK_VK_MODERN_MODEL_SHADERS') == '0' else '1'
     code, stdout, _ = run(binary, ['--scene', 'modern_lit_no_sun', '--validation', args.validation], off)
     found, scenes = parse(stdout)
     checks.expect('modern_lit_no_sun passes with KISAK_VK_MODERN_NO_SUN_SHADERS=0',
                   code == 0 and found.get('d3d9_check') == 'passed'
                   and [s[0] for s in scenes] == ['modern_lit_no_sun']
-                  and all(m == '0' for m in re.findall(r'lit shaders of our own: [0-9.]+ changes to one each scene, '
+                  and all(m == ambient_modules for m in re.findall(r'lit shaders of our own: [0-9.]+ changes to one each scene, '
                                                         r'(\d+) pixel modules', stdout)),
                   f'status {code}\n{stdout}')
     # debug-velocity
@@ -506,8 +511,8 @@ def main():
         checks.expect('no scene with lit surfaces in linear light with linear light or lit inputs off', lit is None,
                       lit.group(0) if lit else '')
     else:
-        checks.expect('the Modern path drew lit surfaces in linear light in 5 scenes, inputs changed 4.4 times each',
-                      lit is not None and lit.group(1) == '5' and lit.group(2) == '4.4',
+        checks.expect('the Modern path drew lit surfaces in linear light in 5 scenes, inputs changed 4.6 times each',
+                      lit is not None and lit.group(1) == '5' and lit.group(2) == '4.6',
                       lit.group(0) if lit else 'missing')
     shaders = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: lit shaders of our own: ([0-9.]+) changes to one '
                         r'each scene, (\d+) pixel modules built as one \((\d+) could not be\)', stdout)
@@ -516,9 +521,9 @@ def main():
         checks.expect('no lit shaders of our own with linear light, lit inputs or our shaders off', shaders is None,
                       shaders.group(0) if shaders else '')
     else:
-        modules = 18
+        modules = 19
         if env.get('KISAK_VK_MODERN_MODEL_SHADERS') == '0':
-            modules -= 8  # the models' with the sun (6) and without (2)
+            modules -= 9  # the models' with the sun (6), without (2) and lp_amb
         if env.get('KISAK_VK_MODERN_NO_SUN_SHADERS') == '0':
             modules -= 4 if env.get('KISAK_VK_MODERN_MODEL_SHADERS') == '0' else 6
         modules = str(modules)

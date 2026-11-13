@@ -1091,9 +1091,9 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
 {
     if (!backend || !backend->legacy || !backend->litWanted)
         return;
-    uint8_t shader = inputs && backend->shadersWanted ? inputs->shader : uint8_t(lg::ModernLitNone);
+    uint16_t shader = inputs && backend->shadersWanted ? inputs->shader : uint16_t(lg::ModernLitNone);
     if ((lg::ModernLitModel(shader) && !backend->modelShadersWanted)
-        || (shader && !lg::ModernLitSun(shader) && !backend->noSunShadersWanted))
+        || ((shader & lg::ModernLitFamilyMask) == lg::ModernLitNoSun && !backend->noSunShadersWanted))
         shader = lg::ModernLitNone;
     if (inputs && backend->linearScene && !backend->linearFailed)
     {

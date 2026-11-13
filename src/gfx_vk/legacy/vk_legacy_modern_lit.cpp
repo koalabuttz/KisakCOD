@@ -109,8 +109,10 @@ struct LitBuild
     case ModernLitDetail | ModernLitNormal | ModernLitSpecular: return LIT_BUILD(k##prefix##DNSFrag);              \
     default: return LitBuild{nullptr, 0};                                                                          \
     }
-LitBuild LitBuildFor(uint8_t shader)
+LitBuild LitBuildFor(uint16_t shader)
 {
+    if (ModernLitAmbientOnly(shader))
+        return LIT_BUILD(kLpAmbFrag);
     if (!ModernLitSun(shader))
     {
         const uint8_t maps = shader & (ModernLitNormal | ModernLitSpecular | ModernLitDetail);
@@ -132,7 +134,7 @@ LitBuild LitBuildFor(uint8_t shader)
 #undef LIT_BUILD
 } // namespace
 
-bool BuildModernLitSpirv(uint8_t shader, const ls::Shader &vs, float sunStrength, float skyStrength,
+bool BuildModernLitSpirv(uint16_t shader, const ls::Shader &vs, float sunStrength, float skyStrength,
                          bool clampDepthReference, bool alphaTest, std::vector<uint32_t> &spirv)
 {
     if (!ModernLitShaderValid(shader))
@@ -162,8 +164,8 @@ bool BuildModernLitSpirv(uint8_t shader, const ls::Shader &vs, float sunStrength
         placeholders.push_back({4, kUsageTexcoord, 4, 4});
     if (shader & ModernLitSpecular)
         placeholders.push_back({5, kUsageTexcoord, 5, 4});
-    if (ModernLitModel(shader))
-        placeholders.push_back({6, kUsageTexcoord, 6, 4}); // the lighting-volume coordinate
+    if (ModernLitModel(shader) && !ModernLitAmbientOnly(shader))
+        placeholders.push_back({6, kUsageTexcoord, 6, 4}); // the lighting-volume coordinate (lp_amb: texcoord 1)
     const uint32_t mode = (shader & ModernLitModeMask) >> ModernLitModeShift;
     // Where each placeholder goes.
     std::vector<int> moved(placeholders.size());
