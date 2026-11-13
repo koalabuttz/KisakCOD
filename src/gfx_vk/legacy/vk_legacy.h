@@ -728,6 +728,15 @@ void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint
 // and the lightmap's light are multiplied by these (1 and 1 by default). Set
 // before the first draw that uses one: shaders already built keep theirs.
 void SetModernLitStrengths(Device *device, float sun, float sky);
+// The Modern path's ambient occlusion for the lit shaders of ours: a texture
+// the size of the scene's render targets whose red is the visibility, 1 open
+// (vk_modern.h BuildAmbientOcclusion). Every pipeline drawn as one of ours
+// (ModernLitShaderValid) reads it at pixel sampler kModernAoSampler, which
+// the game's lit shaders leave free, by pixel position; null reads as white
+// (no occlusion). Set while the scene that has it draws, null after. The
+// texture must be ready to sample (written before the pass that reads it).
+constexpr uint32_t kModernAoSampler = 15;
+void SetModernAmbientOcclusion(Device *device, Texture *texture);
 #endif
 
 // The device's window is about to be destroyed: an open pass and frame end

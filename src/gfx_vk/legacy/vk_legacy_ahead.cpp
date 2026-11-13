@@ -458,7 +458,7 @@ void TryQueue(Device &device, uint32_t at)
     key.decl = decl.pipelineId;
     if (device.pipelines.count(key) || ahead.jobs.count(key))
         return;
-    Layout *layout = GetLayout(device, LayoutFor(vertex, pixel));
+    Layout *layout = GetLayout(device, LayoutFor(vertex, pixel, key.linearShader));
     if (!layout)
         return;
     std::unique_ptr<Job> job(new Job());

@@ -3044,7 +3044,8 @@ void Check::ModernTaa()
 // normal instead (A (128, 128, 0), B (128, 175, 9), C (184, 128, 13)), also
 // in the pixels at the edges between them, where a normal taken across the
 // edge would mix the two, and D stays as drawn. The normals buffer is wanted
-// for ambient occlusion (KISAK_VK_MODERN_AO=1 or its debug view), that view or
+// for ambient occlusion (our lit shaders, KISAK_VK_MODERN_AO=1 or its debug
+// view; not with KISAK_VK_MODERN_AO=0), that view or
 // KISAK_VK_MODERN_NORMALS=1, never with KISAK_VK_MODERN_NORMALS=0.
 void Check::ModernNormals()
 {
@@ -3065,7 +3066,9 @@ void Check::ModernNormals()
     const bool wanted = !envIs("KISAK_VK_MODERN_NORMALS", "0")
         && (debugView || envIs("KISAK_VK_MODERN_NORMALS", "1")
             || (!envIs("KISAK_VK_MODERN_AO", "0")
-                && (envIs("KISAK_VK_MODERN_AO", "1") || envIs("KISAK_VK_MODERN_DEBUG", "ao"))));
+                && (envIs("KISAK_VK_MODERN_AO", "1") || envIs("KISAK_VK_MODERN_DEBUG", "ao")
+                    || (!envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
+                        && !envIs("KISAK_VK_MODERN_SHADERS", "0")))));
     const bool shown = wanted && debugView;
     Equal("wants_scene_depth", front::ModernWantsSceneDepth(device), wanted);
 
@@ -3167,9 +3170,16 @@ void Check::ModernNormals()
 // KISAK_VK_MODERN_DEBUG=ao the view shows the visibility: open floor and the
 // wall's top stay about white, the floor 12 units from the wall and the wall
 // 10 units above the floor are darker by a clear margin (and not black), and
-// the sky is white. Without the view the scene comes back as drawn. Ambient
-// occlusion is built with KISAK_VK_MODERN_AO=1 or its debug view, never with
-// KISAK_VK_MODERN_AO=0 or KISAK_VK_MODERN_NORMALS=0.
+// the sky is white. Without the view the floor is drawn as lm_sun_r0c0 (the
+// Modern lit shaders' stand-in) lit by its lightmap alone: white colour map,
+// the secondary lightmap's halves 96 each (0.53 of light), no sun. Our
+// shader multiplies that light by the ambient occlusion, so the floor in the
+// corner is darker than open floor by a clear margin; without ambient
+// occlusion the two are the same, and without our shaders the floor is black.
+// The wall is drawn in its colour. Ambient occlusion is built for our lit
+// shaders (linear light, lit inputs and our shaders on), with
+// KISAK_VK_MODERN_AO=1 or its debug view, never with KISAK_VK_MODERN_AO=0 or
+// KISAK_VK_MODERN_NORMALS=0.
 void Check::ModernAo()
 {
     const auto envIs = [](const char *name, const char *value) {
@@ -3184,8 +3194,11 @@ void Check::ModernAo()
         return env && !std::strcmp(env, value);
 #endif
     };
+    // Our lit shaders draw (and read ambient occlusion).
+    const bool ours = !envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
+                      && !envIs("KISAK_VK_MODERN_SHADERS", "0");
     const bool built = !envIs("KISAK_VK_MODERN_AO", "0") && !envIs("KISAK_VK_MODERN_NORMALS", "0")
-                       && (envIs("KISAK_VK_MODERN_AO", "1") || envIs("KISAK_VK_MODERN_DEBUG", "ao"));
+                       && (ours || envIs("KISAK_VK_MODERN_AO", "1") || envIs("KISAK_VK_MODERN_DEBUG", "ao"));
     // The scene's depth is taken whenever the normals buffer is wanted.
     const bool depthTaken = built || (!envIs("KISAK_VK_MODERN_NORMALS", "0")
                                       && (envIs("KISAK_VK_MODERN_NORMALS", "1")
@@ -3211,7 +3224,7 @@ void Check::ModernAo()
     const auto project = [&](float x, float y, float z, uint32_t color) {
         return Vertex{k * x / z, k * y / z, k - nearPlane * k / z, 0.0f, 0.0f, color};
     };
-    const uint32_t floorColor = Argb(255, 128, 128, 128), wallColor = Argb(255, 90, 110, 150);
+    const uint32_t floorColor = Argb(255, 255, 255, 255), wallColor = Argb(255, 90, 110, 150);
     const Vertex floorCorners[4] = {project(-200, -120, 60, floorColor), project(200, -120, 60, floorColor),
                                     project(200, -120, 400, floorColor), project(-200, -120, 400, floorColor)};
     const Vertex wallCorners[4] = {project(0, -120, 200, wallColor), project(200, -120, 200, wallColor),
@@ -3236,8 +3249,39 @@ void Check::ModernAo()
     Equal("scene_depth", static_cast<int>(front::ModernSceneDepth(device, view)),
           static_cast<int>(depthTaken ? front::ModernResult::Done : front::ModernResult::Skipped));
     device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-    Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(lit)");
+    // The floor as lm_sun_r0c0: colour map and lightmap UVs, the normal up and
+    // no fog, the shadow-map coordinate (unread); no sun.
+    IDirect3DTexture9 *colorMap = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
+    IDirect3DTexture9 *primary = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
+    IDirect3DTexture9 *secondary = FilledTexture(1, 2, [](UINT, UINT) { return Argb(130, 96, 96, 96); });
+    if (colorMap && primary && secondary)
+    {
+        device->SetVertexShader(vsLmSun);
+        device->SetPixelShader(psLmSunStandIn);
+        device->SetTexture(0, colorMap);
+        device->SetTexture(2, primary);
+        device->SetTexture(3, secondary);
+        const float pixel[19][4] = {{}, {}, {0, 0, 0, 1}, {}, {}, {}, {}, {}, {}, {},
+                                    {}, {}, {}, {}, {}, {}, {}, {0, 0, 1, 0}, {}};
+        Ok(device->SetPixelShaderConstantF(0, &pixel[0][0], 19), "SetPixelShaderConstantF");
+        const float vertex[4][4] = {{0, 0, 0, 0}, {0.5f, 0.5f, 0.5f, 0.5f}, {0, 0, 1, 1}, {0.5f, 0.5f, 0.25f, 0.5f}};
+        Ok(device->SetVertexShaderConstantF(0, &vertex[0][0], 4), "SetVertexShaderConstantF");
+        front::ModernLitInputs inputs;
+        inputs.overWhite = true;
+        inputs.shader = 0x40; // lm_sun_r0c0
+        front::SetModernLitInputs(device, &inputs);
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(floor)");
+        front::SetModernLitInputs(device, nullptr);
+        for (DWORD sampler : {0u, 2u, 3u})
+            device->SetTexture(sampler, nullptr);
+        device->SetVertexShader(vsBasic);
+        device->SetPixelShader(psColor);
+    }
+    Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, surfaces + 6, sizeof(Vertex)), "DrawPrimitiveUP(wall)");
     Equal("scene_done", front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
+    SafeRelease(colorMap);
+    SafeRelease(primary);
+    SafeRelease(secondary);
     // Pixels of view points: x and y / z, NDC to pixels.
     const auto pixelOf = [&](float x, float y, float z, UINT &px, UINT &py) {
         px = static_cast<UINT>((k * x / z + 1.0f) * 0.5f * kSize);
@@ -3267,10 +3311,30 @@ void Check::ModernAo()
                           wall);
             result->detail += line;
         }
+        else if (ours)
+        {
+            const int open = at(openX, openY), corner = at(cornerX, cornerY);
+            Equal("open_floor_lit", open >= 100, true);
+            if (built)
+            {
+                Equal("corner_floor_darker", corner + 10 <= open, true);
+                Equal("corner_floor_not_black", corner >= open / 2, true);
+            }
+            else
+            {
+                Equal("corner_floor_as_open", std::abs(corner - open) <= 1, true);
+            }
+            Expect("wall_foot", footX, footY, 90, 110, 150);
+            Expect("wall", wallX, wallY, 90, 110, 150);
+            Expect("sky", 20, 10, 0, 0, 0);
+            char line[96];
+            std::snprintf(line, sizeof(line), " lit_open=%d lit_corner=%d", open, corner);
+            result->detail += line;
+        }
         else
         {
-            Expect("open_floor", openX, openY, 128, 128, 128);
-            Expect("corner_floor", cornerX, cornerY, 128, 128, 128);
+            Expect("open_floor", openX, openY, 0, 0, 0);
+            Expect("corner_floor", cornerX, cornerY, 0, 0, 0);
             Expect("wall_foot", footX, footY, 90, 110, 150);
             Expect("wall", wallX, wallY, 90, 110, 150);
             Expect("sky", 20, 10, 0, 0, 0);

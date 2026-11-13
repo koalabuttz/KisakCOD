@@ -51,12 +51,13 @@ involved. The checks:
                  linear light with one copy read from them (none with
                  KISAK_VK_MODERN_LINEAR=0), modern_bloom's 2 scenes with
                  bloom (none with KISAK_VK_MODERN_LINEAR=0 or
-                 KISAK_VK_MODERN_BLOOM=0), modern_lit's, modern_lit_shader's
-                 and modern_tonemap's scenes with lit surfaces kept over
-                 white, inputs changed 3.3 times in each (twice in
+                 KISAK_VK_MODERN_BLOOM=0), modern_lit's, modern_lit_shader's,
+                 modern_tonemap's and modern_ao's scenes with lit surfaces
+                 kept over white, inputs changed 2.8 times in each (twice in
                  modern_lit and modern_tonemap, six times in
-                 modern_lit_shader), and modern_lit_shader's
-                 six pixel modules built as our own lit shaders (none
+                 modern_lit_shader, once in modern_ao), and the seven pixel
+                 modules modern_lit_shader (six) and modern_ao (one) built
+                 as our own lit shaders (none
                  with KISAK_VK_MODERN_LINEAR=0 or KISAK_VK_MODERN_LIT=0, and
                  no lit shaders of our own with KISAK_VK_MODERN_SHADERS=0),
                  modern_velocity's 14 scenes with a surface that moves on its
@@ -96,15 +97,19 @@ involved. The checks:
                  KISAK_VK_MODERN_NORMALS=1, where it is built and not shown,
                  or KISAK_VK_MODERN_AO=1, where it is built for ambient
                  occlusion, and with KISAK_VK_MODERN_NORMALS=0 beside the
-                 debug view, where it is not built; the full run builds none
-  ao             --scene modern_ao passes with KISAK_VK_MODERN_DEBUG=ao (and
+                 debug view or KISAK_VK_MODERN_AO=0, where it is not built;
+                 the full run builds it for ambient occlusion (2 scenes)
+                 unless linear light, lit inputs or our lit shaders are off
+  ao             --scene modern_ao passes as it is, where our lit shader
+                 darkens the floor in the corner by the ambient occlusion
+                 (the scene's own points), with KISAK_VK_MODERN_DEBUG=ao (and
                  with linear light off), where the ambient occlusion debug
                  view shows open floor and wall white and the corner between
-                 them darker (the scene's own points), with
-                 KISAK_VK_MODERN_AO=1, where it is built and not shown, and
-                 with KISAK_VK_MODERN_AO=0 or KISAK_VK_MODERN_NORMALS=0
-                 beside the debug view, where it is not built; the full run
-                 builds none
+                 them darker, with KISAK_VK_MODERN_AO=1, and with
+                 KISAK_VK_MODERN_AO=0, KISAK_VK_MODERN_NORMALS=0 (beside the
+                 debug view or not), KISAK_VK_MODERN_LINEAR=0 or
+                 KISAK_VK_MODERN_SHADERS=0, where none is built; the full
+                 run builds it for modern_normals and modern_ao
 
 Usage:
   test_vulkan_d3d9_front.py --binary build/bin/KisakCOD-vulkan-d3d9-check
@@ -284,10 +289,15 @@ def main():
     # normals
     normals_line = re.compile(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with a normals buffer from the '
                               r'depth prepass, ([0-9.]+) ms GPU each$', re.M)
+    # Our lit shaders read ambient occlusion, which reads the normals buffer.
+    lit_shaders_on = all(env.get(name) != '0'
+                         for name in ('KISAK_VK_MODERN_LINEAR', 'KISAK_VK_MODERN_LIT', 'KISAK_VK_MODERN_SHADERS'))
     for settings, built in (({'KISAK_VK_MODERN_DEBUG': 'normals'}, True),
                             ({'KISAK_VK_MODERN_DEBUG': 'normals', 'KISAK_VK_MODERN_LINEAR': '0'}, True),
                             ({'KISAK_VK_MODERN_NORMALS': '1'}, True),
                             ({'KISAK_VK_MODERN_AO': '1'}, True),
+                            ({}, lit_shaders_on),
+                            ({'KISAK_VK_MODERN_AO': '0'}, False),
                             ({'KISAK_VK_MODERN_DEBUG': 'normals', 'KISAK_VK_MODERN_NORMALS': '0'}, False)):
         chosen = dict(env)
         chosen.pop('KISAK_VK_MODERN_NORMALS', None)
@@ -296,7 +306,7 @@ def main():
         code, stdout, _ = run(binary, ['--scene', 'modern_normals', '--validation', args.validation], chosen)
         found, scenes = parse(stdout)
         line = normals_line.search(stdout)
-        named = ' '.join(f'{k}={v}' for k, v in settings.items())
+        named = ' '.join(f'{k}={v}' for k, v in settings.items()) or 'the defaults'
         checks.expect(f'modern_normals passes with {named}',
                       code == 0 and found.get('d3d9_check') == 'passed' and [s[0] for s in scenes] == ['modern_normals']
                       and (line is not None and line.group(1) == '1' if built else line is None)
@@ -306,20 +316,26 @@ def main():
     # ao
     ao_line = re.compile(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with ambient occlusion \(radius '
                          r'48\.0, power 1\.00\), ([0-9.]+) ms GPU each$', re.M)
-    for settings, built in (({'KISAK_VK_MODERN_DEBUG': 'ao'}, True),
+    for settings, built in (({}, True),
+                            ({'KISAK_VK_MODERN_DEBUG': 'ao'}, True),
                             ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_LINEAR': '0'}, True),
                             ({'KISAK_VK_MODERN_AO': '1'}, True),
+                            ({'KISAK_VK_MODERN_AO': '0'}, False),
+                            ({'KISAK_VK_MODERN_NORMALS': '0'}, False),
+                            ({'KISAK_VK_MODERN_LINEAR': '0'}, False),
+                            ({'KISAK_VK_MODERN_SHADERS': '0'}, False),
                             ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_AO': '0'}, False),
                             ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_NORMALS': '0'}, False)):
         chosen = dict(env)
         for name in ('KISAK_VK_MODERN_NORMALS', 'KISAK_VK_MODERN_AO', 'KISAK_VK_MODERN_AO_RADIUS',
-                     'KISAK_VK_MODERN_AO_POWER'):
+                     'KISAK_VK_MODERN_AO_POWER', 'KISAK_VK_MODERN_LINEAR', 'KISAK_VK_MODERN_LIT',
+                     'KISAK_VK_MODERN_SHADERS', 'KISAK_VK_MODERN_DEBUG'):
             chosen.pop(name, None)
         chosen.update(settings)
         code, stdout, _ = run(binary, ['--scene', 'modern_ao', '--validation', args.validation], chosen)
         found, scenes = parse(stdout)
         line = ao_line.search(stdout)
-        named = ' '.join(f'{k}={v}' for k, v in settings.items())
+        named = ' '.join(f'{k}={v}' for k, v in settings.items()) or 'the defaults'
         checks.expect(f'modern_ao passes with {named}',
                       code == 0 and found.get('d3d9_check') == 'passed' and [s[0] for s in scenes] == ['modern_ao']
                       and (line is not None and line.group(1) == '1' if built else line is None)
@@ -425,10 +441,26 @@ def main():
                   kept.group(0) if kept else 'missing')
     if env.get('KISAK_VK_MODERN_EXPOSURE') == '0':
         checks.expect('no auto exposure with KISAK_VK_MODERN_EXPOSURE=0', 'scenes with auto exposure' not in stdout)
-    if ('KISAK_VK_MODERN_NORMALS' not in env and 'KISAK_VK_MODERN_DEBUG' not in env
-            and env.get('KISAK_VK_MODERN_AO') != '1'):
-        checks.expect('no normals buffer when nothing reads it', 'scenes with a normals buffer' not in stdout)
-        checks.expect('no ambient occlusion when nothing reads it', 'scenes with ambient occlusion' not in stdout)
+    # Ambient occlusion, and the normals buffer for it, in the two scenes that
+    # draw a depth prepass (modern_normals, modern_ao), when our lit shaders
+    # read it.
+    if 'KISAK_VK_MODERN_NORMALS' not in env and 'KISAK_VK_MODERN_DEBUG' not in env:
+        read = env.get('KISAK_VK_MODERN_AO') != '0' and (
+            env.get('KISAK_VK_MODERN_AO') == '1'
+            or all(env.get(name) != '0'
+                   for name in ('KISAK_VK_MODERN_LINEAR', 'KISAK_VK_MODERN_LIT', 'KISAK_VK_MODERN_SHADERS')))
+        normals = normals_line.search(stdout)
+        occlusion = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with ambient occlusion \(radius ',
+                              stdout, re.M)
+        if read:
+            checks.expect('a normals buffer and ambient occlusion for the 2 scenes with a depth prepass',
+                          normals is not None and normals.group(1) == '2' and occlusion is not None
+                          and occlusion.group(1) == '2',
+                          f'{normals.group(0) if normals else "no normals line"}; '
+                          f'{occlusion.group(0) if occlusion else "no ambient occlusion line"}')
+        else:
+            checks.expect('no normals buffer when nothing reads it', normals is None)
+            checks.expect('no ambient occlusion when nothing reads it', occlusion is None)
     linear = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes in linear light \((\d+) copies read '
                        r'from them\), ([0-9.]+) ms GPU each for the tonemap$', stdout, re.M)
     if env.get('KISAK_VK_MODERN_LINEAR') == '0':
@@ -453,8 +485,8 @@ def main():
         checks.expect('no scene with lit surfaces in linear light with linear light or lit inputs off', lit is None,
                       lit.group(0) if lit else '')
     else:
-        checks.expect('the Modern path drew lit surfaces in linear light in 3 scenes, inputs changed 3.3 times each',
-                      lit is not None and lit.group(1) == '3' and lit.group(2) == '3.3',
+        checks.expect('the Modern path drew lit surfaces in linear light in 4 scenes, inputs changed 2.8 times each',
+                      lit is not None and lit.group(1) == '4' and lit.group(2) == '2.8',
                       lit.group(0) if lit else 'missing')
     shaders = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: lit shaders of our own: ([0-9.]+) changes to one '
                         r'each scene, (\d+) pixel modules built as one \((\d+) could not be\)', stdout, re.M)
@@ -463,8 +495,8 @@ def main():
         checks.expect('no lit shaders of our own with linear light, lit inputs or our shaders off', shaders is None,
                       shaders.group(0) if shaders else '')
     else:
-        checks.expect('the Modern path built 6 pixel modules as our own lit shaders, none refused',
-                      shaders is not None and shaders.group(2) == '6' and shaders.group(3) == '0',
+        checks.expect('the Modern path built 7 pixel modules as our own lit shaders, none refused',
+                      shaders is not None and shaders.group(2) == '7' and shaders.group(3) == '0',
                       shaders.group(0) if shaders else 'missing')
     checks.expect('no object outlived its release', found.get('d3d9_check.live_objects_at_teardown') == '0',
                   found.get('d3d9_check.live_objects_at_teardown', 'missing'))

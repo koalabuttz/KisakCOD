@@ -187,11 +187,12 @@ struct Backend
     modern::NormalsStats normalsBase{};
     // Ambient occlusion (vk_modern.h BuildAmbientOcclusion) from the depth and
     // the normals, recorded with them before the lit surfaces: wanted when
-    // something reads it (for now KISAK_VK_MODERN_AO=1 or the ambient
-    // occlusion debug view), which makes the normals buffer wanted too;
-    // KISAK_VK_MODERN_AO=0 keeps it off whatever asks. Its parameters
-    // (KISAK_VK_MODERN_AO_RADIUS, _POWER); the
-    // scene-sized image it writes, a Legacy texture so lit draws can read it;
+    // something reads it (our lit shaders, so with linear light, lit inputs
+    // and our shaders on; KISAK_VK_MODERN_AO=1 or the ambient occlusion debug
+    // view), which makes the normals buffer wanted too; KISAK_VK_MODERN_AO=0
+    // keeps it off whatever asks. Its parameters (KISAK_VK_MODERN_AO_RADIUS,
+    // _POWER); the scene-sized image it writes, a Legacy texture the lit
+    // shaders read (lg::SetModernAmbientOcclusion) until the scene is lit;
     // whether this scene has it; the scenes counted at the last reset.
     bool aoWanted = false;
     bool aoFailed = false;
@@ -415,8 +416,9 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     backend->debugVelocity = EnvIs("KISAK_VK_MODERN_DEBUG", "velocity");
     backend->debugNormals = EnvIs("KISAK_VK_MODERN_DEBUG", "normals");
     backend->debugAo = EnvIs("KISAK_VK_MODERN_DEBUG", "ao");
-    backend->aoWanted =
-        !EnvIsZero("KISAK_VK_MODERN_AO") && (EnvIs("KISAK_VK_MODERN_AO", "1") || backend->debugAo);
+    backend->aoWanted = !EnvIsZero("KISAK_VK_MODERN_AO")
+        && (EnvIs("KISAK_VK_MODERN_AO", "1") || backend->debugAo
+            || (backend->linearWanted && backend->litWanted && backend->shadersWanted));
     {
         const std::string radius = EnvText("KISAK_VK_MODERN_AO_RADIUS");
         const float value = radius.empty() ? 0.0f : std::strtof(radius.c_str(), nullptr);
@@ -1403,6 +1405,8 @@ void SceneAmbientOcclusion(Backend *backend, Image *depth, const modern::SceneVi
                                                      scene, params, lg::SurfaceImage(backend->aoSurface), error);
     if (!backend->sceneAo)
         LogModernOnce(backend, "no ambient occlusion", error);
+    // The lit shaders of ours read it until the scene is lit (BackendModernScene).
+    lg::SetModernAmbientOcclusion(backend->legacy, backend->sceneAo ? backend->aoTexture : nullptr);
 }
 } // namespace
 
@@ -1417,6 +1421,7 @@ ModernResult BackendModernSceneDepth(Backend *backend, lg::Surface *depth, const
         return ModernResult::Skipped;
     backend->sceneNormals = nullptr;
     backend->sceneAo = false;
+    lg::SetModernAmbientOcclusion(backend->legacy, nullptr);
     Image *depthImage = depth ? lg::SurfaceImage(depth) : nullptr;
     if (!depthImage)
     {
@@ -1461,6 +1466,7 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
     backend->sceneNormals = nullptr;
     Image *ao = backend->sceneAo ? lg::SurfaceImage(backend->aoSurface) : nullptr;
     backend->sceneAo = false;
+    lg::SetModernAmbientOcclusion(backend->legacy, nullptr);
     // The surfaces that moved in this scene; the next scene starts a new list.
     std::vector<modern::MovedSurface> moved;
     moved.swap(backend->moved);

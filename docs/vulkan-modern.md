@@ -609,7 +609,8 @@ to 3 in the project files, 2026-11-13):
   gloss, times envMapParms.w, the sun's specular colour and the sun
   strength, plus the reflection probe at LOD 6 - 8 gloss times its alpha);
 * **colour** = albedo times (sky times the sky strength plus sun times the
-  sun strength) plus specular, then the fog
+  sun strength) plus specular, the sky (and the probe) also darkened by the
+  [ambient occlusion](#ambient-occlusion), then the fog
   colour (decoded) blended over it in linear light by the vertex fog factor.
   `b0` premultiplies the albedo and fog colour by colour alpha times vertex
   alpha, which is the output alpha; `t0` keeps alpha 0.5 and over and writes
@@ -731,7 +732,7 @@ pass of 9 depth reads per pixel.
 
 | Setting | Default | Switch |
 | --- | --- | --- |
-| Normals buffer | built only when something reads it: the debug view below, or ambient occlusion | `KISAK_VK_MODERN_NORMALS=1` builds it (and turns the prepass on) with nothing reading it, to measure the cost; `KISAK_VK_MODERN_NORMALS=0` never builds it |
+| Normals buffer | built only when something reads it: ambient occlusion (on with our lit shaders), or the debug view below | `KISAK_VK_MODERN_NORMALS=1` builds it (and turns the prepass on) with nothing reading it, to measure the cost; `KISAK_VK_MODERN_NORMALS=0` never builds it |
 | Debug view | off | `KISAK_VK_MODERN_DEBUG=normals` draws the buffer over the finished scene (after the tonemap): red faces right, green up, blue away; a wall seen head on is (128, 128, 0); the sky is left as it is |
 
 The statistics line: `vulkan d3d9: modern: N scenes with a normals buffer
@@ -784,13 +785,26 @@ timed as "modern ao"):
 **What a texel holds:** the visible share of the cosine-weighted sky, 1 open,
 0 fully hidden; 1 where there is no surface.
 
-**What reads it.** For now only the debug view. Applying it to the lit
-surfaces' indirect light comes next, in our own lit shaders (`lm_sun.frag`
-multiplies its sky term by it), so it is built only when something reads it.
+**What reads it.** Our own lit shaders ([Lit shaders of our
+own](#lit-shaders-of-our-own)). The Legacy adapter gives every pipeline drawn
+as one of ours the texture at pixel sampler 15 (`lg::kModernAoSampler`,
+which the game's lit shaders leave free; set 1 bindings 15 and 31), or a 1x1
+white texture where the scene has none (`lg::SetModernAmbientOcclusion`,
+from the scene's depth hand-over until the scene is lit). `lm_sun.frag`
+reads it by pixel position and darkens only the light from all around:
+
+* the lightmap's sky term: `sky * sky strength * ao`. The sun's share is
+  still taken from the undarkened sky (`decode(sky + sun) - decode(sky)`),
+  and the sun keeps its own shadow;
+* the reflection probe (`s0`), through a specular occlusion for the view
+  angle and gloss (Lagarde and de Rousiers 2014, roughness `1 - gloss`).
+
+Surfaces drawn with the game's shaders (models, effects, families we have no
+shader for yet) are not darkened.
 
 | Setting | Default | Switch |
 | --- | --- | --- |
-| Ambient occlusion | built only when something reads it: the debug view below for now | `KISAK_VK_MODERN_AO=1` builds it (and the normals buffer and the prepass) with nothing reading it, to measure the cost; `KISAK_VK_MODERN_AO=0` never builds it |
+| Ambient occlusion | on with our lit shaders (linear light, lit inputs and our shaders on); it turns the normals buffer and the prepass on | `KISAK_VK_MODERN_AO=0` turns it off (our shaders read white); `KISAK_VK_MODERN_AO=1` builds it even with nothing reading it, to measure the cost |
 | Radius | 48 world units (a little over a metre; a player is 70 tall) | `KISAK_VK_MODERN_AO_RADIUS=<units>` |
 | Strength | power 1 | `KISAK_VK_MODERN_AO_POWER=<p>`: the visibility is raised to p (2 darkens, 0.5 lightens, 0 turns it off) |
 | Debug view | off | `KISAK_VK_MODERN_DEBUG=ao` draws the visibility as grey over the finished scene (after the tonemap): white open, darker in corners |
@@ -800,15 +814,21 @@ The statistics line: `vulkan d3d9: modern: N scenes with ambient occlusion
 
 **Checks:** the D3D9 check's `modern_ao` scene draws a floor 120 units below
 a camera with the engine's 90-degree perspective, and a wall rising from it
-200 units ahead over the right half, with the engine's prepass order. With
-`KISAK_VK_MODERN_DEBUG=ao` it expects open floor and the wall's top at least
-240 of 255, and the floor 12 units in front of the wall and the wall 10 units
-above the floor at least 25 darker but not black (on lavapipe: 252 open
-floor, 244 wall, 200 corner floor, 212 wall foot). Without the view the
-scene comes back as drawn. `test_vulkan_d3d9_front.py` runs it with the debug
-view (linear light on and off), with `KISAK_VK_MODERN_AO=1`, and with
-`KISAK_VK_MODERN_AO=0` and `KISAK_VK_MODERN_NORMALS=0` beside the debug view,
-where none is built.
+200 units ahead over the right half, with the engine's prepass order. The
+floor is drawn as `lm_sun_r0c0` (our shader, through the stand-in of
+`modern_lit_shader`) lit by its lightmap alone. Our shader darkens the floor
+12 units in front of the wall by the ambient occlusion (on lavapipe 172
+against 191 for open floor); without ambient occlusion the two are the same,
+and without our shaders the floor is black. With `KISAK_VK_MODERN_DEBUG=ao`
+it expects open floor and the wall's top at least 240 of 255, and that corner
+floor and the wall 10 units above the floor at least 25 darker but not black
+(on lavapipe: 252 open floor, 244 wall, 200 corner floor, 212 wall foot).
+`test_vulkan_d3d9_front.py` runs it as it is, with the debug view (linear
+light on and off), with `KISAK_VK_MODERN_AO=1`, and with
+`KISAK_VK_MODERN_AO=0`, `KISAK_VK_MODERN_NORMALS=0` (with the debug view or
+not), `KISAK_VK_MODERN_LINEAR=0` or `KISAK_VK_MODERN_SHADERS=0`, where none
+is built. `modern_lit_shader` passes as before: its scene has no prepass, so
+our shaders read white.
 
 ## Next
 
