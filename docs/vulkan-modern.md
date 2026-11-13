@@ -705,7 +705,11 @@ before any light is added, so ambient occlusion can darken the indirect light
    `ModernSceneDone`), where the passes that read it run.
 
 **What a texel holds:** `normal * 0.5 + 0.5` in the engine's view space (x
-right, y up, z forward, so a surface facing the camera has z < 0), alpha 1.
+right, y up, z forward, so a surface facing the camera has z < 0), alpha 1,
+or 2/3 where the normal is a guess: on some axis neither side's straight
+line meets the pixel's depth (within a quarter of the step to the
+neighbour, or four steps of a 24-bit depth), as on thin trim or a face seen
+edge on a pixel or two wide.
 A pixel with no surface (depth at or past a point at infinity's, the sky)
 holds (0.5, 0.5, 0.5, 0).
 
@@ -773,7 +777,13 @@ timed as "modern ao"):
    (from the normals buffer) projected into the slice. Samples fade out over
    the outer 60% of the radius, so a distant wall does not darken the
    ground. The slice angles and step positions are jittered per pixel and per
-   frame (interleaved gradient noise). It writes an `R16_SFLOAT` image. The
+   frame (interleaved gradient noise). Two kinds of pixel are left
+   unoccluded, because the depth buffer cannot tell what is around them:
+   pixels whose normal is a guess (the normals buffer marks a strip a pixel
+   or two wide, whose neighbours are all on other surfaces), and surfaces
+   seen nearly edge on (the effect fades out as the normal turns across the
+   view, from 5 to 1 degrees of the surface to the view ray). PC AO run 1
+   showed both as dark lines: the side of a pillar and the edge of an arch. It writes an `R16_SFLOAT` image. The
    value is left unclamped: a single slice of an open surface seen at an angle
    gives more than 1 or less, and only the average over the slices is 1.
 2. `shaders/ao_blur.frag`: a 5x5 blur that keeps to the pixel's own surface
@@ -806,7 +816,7 @@ shader for yet) are not darkened.
 | --- | --- | --- |
 | Ambient occlusion | on with our lit shaders (linear light, lit inputs and our shaders on); it turns the normals buffer and the prepass on | `KISAK_VK_MODERN_AO=0` turns it off (our shaders read white); `KISAK_VK_MODERN_AO=1` builds it even with nothing reading it, to measure the cost |
 | Radius | 48 world units (a little over a metre; a player is 70 tall) | `KISAK_VK_MODERN_AO_RADIUS=<units>` |
-| Strength | power 1 | `KISAK_VK_MODERN_AO_POWER=<p>`: the visibility is raised to p (2 darkens, 0.5 lightens, 0 turns it off) |
+| Strength | power 1.5 (PC AO run 1: 1 read slightly weak, 2 about right in the shade) | `KISAK_VK_MODERN_AO_POWER=<p>`: the visibility is raised to p (2 darkens, 1 lightens, 0 turns it off) |
 | Debug view | off | `KISAK_VK_MODERN_DEBUG=ao` draws the visibility as grey over the finished scene (after the tonemap): white open, darker in corners |
 
 The statistics line: `vulkan d3d9: modern: N scenes with ambient occlusion
@@ -817,12 +827,13 @@ a camera with the engine's 90-degree perspective, and a wall rising from it
 200 units ahead over the right half, with the engine's prepass order. The
 floor is drawn as `lm_sun_r0c0` (our shader, through the stand-in of
 `modern_lit_shader`) lit by its lightmap alone. Our shader darkens the floor
-12 units in front of the wall by the ambient occlusion (on lavapipe 172
-against 191 for open floor); without ambient occlusion the two are the same,
+12 units in front of the wall by the ambient occlusion (on lavapipe 163
+against 190 for open floor); without ambient occlusion the two are the same,
 and without our shaders the floor is black. With `KISAK_VK_MODERN_DEBUG=ao`
-it expects open floor and the wall's top at least 240 of 255, and that corner
-floor and the wall 10 units above the floor at least 25 darker but not black
-(on lavapipe: 252 open floor, 244 wall, 200 corner floor, 212 wall foot).
+it expects open floor and the wall's top at least 230 of 255 (one frame's
+noise leaves them a few levels under white), and that corner floor and the
+wall 10 units above the floor at least 25 darker but not black (on
+lavapipe: 250 open floor, 239 wall, 177 corner floor, 193 wall foot).
 `test_vulkan_d3d9_front.py` runs it as it is, with the debug view (linear
 light on and off), with `KISAK_VK_MODERN_AO=1`, and with
 `KISAK_VK_MODERN_AO=0`, `KISAK_VK_MODERN_NORMALS=0` (with the debug view or

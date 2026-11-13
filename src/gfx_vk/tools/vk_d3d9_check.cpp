@@ -3299,8 +3299,10 @@ void Check::ModernAo()
         {
             const int open = at(openX, openY), corner = at(cornerX, cornerY), foot = at(footX, footY),
                       wall = at(wallX, wallY);
-            Equal("open_floor_unoccluded", open >= 240, true);
-            Equal("wall_top_unoccluded", wall >= 240, true);
+            // One frame's noise (two slices a pixel) leaves open surfaces a
+            // few levels under white; the anti-aliasing averages it.
+            Equal("open_floor_unoccluded", open >= 230, true);
+            Equal("wall_top_unoccluded", wall >= 230, true);
             Equal("corner_darker", corner + 25 <= open, true);
             Equal("corner_not_black", corner >= 64, true);
             Equal("wall_foot_darker", foot + 25 <= wall, true);
