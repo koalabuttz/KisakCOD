@@ -772,18 +772,28 @@ timed as "modern ao"):
    "Practical Real-Time Strategies for Accurate Indirect Occlusion", 2016).
    For 2 directions on screen around each pixel (slices of the hemisphere),
    it steps 6 times to each side through the depth, within a radius in world
-   units, and keeps the highest horizon on each side. The visible arc between
-   the two horizons is integrated against the cosine of the pixel's normal
-   (from the normals buffer) projected into the slice. Samples fade out over
-   the outer 60% of the radius, so a distant wall does not darken the
-   ground. The slice angles and step positions are jittered per pixel and per
+   units. Each sample hides only the directions between its surface and a
+   point a set thickness (8 units) further along its view ray, kept as 32
+   sectors of the slice (a visibility bitmask: Therrien, Levesque and Gilet,
+   "Screen Space Indirect Lighting with Visibility Bitmask", 2023); the
+   sectors are spaced evenly in the slice's cosine-weighted measure, so the
+   visible share is the share of sectors left open, scaled by the cosine of
+   the pixel's normal (from the normals buffer) projected into the slice.
+   Plain GTAO keeps only the highest horizon on each side and so takes
+   everything below it as hidden: a thin thing in front of a surface (a sign
+   hung off a pillar on brackets, the edge of an arch) then darkened the
+   surface beside it as a solid block would, the dark bands of PC AO runs 1
+   and 2. With the thickness, the directions behind it stay open. Samples
+   fade out over the outer 60% of the radius (a fading sample's sector
+   slides to the edge of the hemisphere, where the cosine leaves it little
+   weight), so a distant wall does not darken the ground. The slice angles and step positions are jittered per pixel and per
    frame (interleaved gradient noise). Two kinds of pixel are left
    unoccluded, because the depth buffer cannot tell what is around them:
    pixels whose normal is a guess (the normals buffer marks a strip a pixel
    or two wide, whose neighbours are all on other surfaces), and surfaces
    seen nearly edge on (the effect fades out as the normal turns across the
-   view, from 5 to 1 degrees of the surface to the view ray). PC AO run 1
-   showed both as dark lines: the side of a pillar and the edge of an arch. It writes an `R16_SFLOAT` image. The
+   view, from 5 to 1 degrees of the surface to the view ray). It writes an
+   `R16_SFLOAT` image. The
    value is left unclamped: a single slice of an open surface seen at an angle
    gives more than 1 or less, and only the average over the slices is 1.
 2. `shaders/ao_blur.frag`: a 5x5 blur that keeps to the pixel's own surface
@@ -816,26 +826,34 @@ shader for yet) are not darkened.
 | --- | --- | --- |
 | Ambient occlusion | on with our lit shaders (linear light, lit inputs and our shaders on); it turns the normals buffer and the prepass on | `KISAK_VK_MODERN_AO=0` turns it off (our shaders read white); `KISAK_VK_MODERN_AO=1` builds it even with nothing reading it, to measure the cost |
 | Radius | 48 world units (a little over a metre; a player is 70 tall) | `KISAK_VK_MODERN_AO_RADIUS=<units>` |
+| Thickness | 8 world units: how far behind a sample's surface it is taken to reach | `KISAK_VK_MODERN_AO_THICKNESS=<units>`: less keeps thin things from darkening what is behind them but weakens contact shadows; 1000 behaves as plain GTAO (everything below the horizon hidden) |
 | Strength | power 1.5 (PC AO run 1: 1 read slightly weak, 2 about right in the shade) | `KISAK_VK_MODERN_AO_POWER=<p>`: the visibility is raised to p (2 darkens, 1 lightens, 0 turns it off) |
 | Debug view | off | `KISAK_VK_MODERN_DEBUG=ao` draws the visibility as grey over the finished scene (after the tonemap): white open, darker in corners |
 
 The statistics line: `vulkan d3d9: modern: N scenes with ambient occlusion
-(radius R, power P), X ms GPU each` (both passes).
+(radius R, thickness T, power P), X ms GPU each` (both passes).
 
 **Checks:** the D3D9 check's `modern_ao` scene draws a floor 120 units below
 a camera with the engine's 90-degree perspective, and a wall rising from it
 200 units ahead over the right half, with the engine's prepass order. The
 floor is drawn as `lm_sun_r0c0` (our shader, through the stand-in of
 `modern_lit_shader`) lit by its lightmap alone. Our shader darkens the floor
-12 units in front of the wall by the ambient occlusion (on lavapipe 163
-against 190 for open floor); without ambient occlusion the two are the same,
+12 units in front of the wall by the ambient occlusion (on lavapipe 164
+against 191 for open floor); without ambient occlusion the two are the same,
 and without our shaders the floor is black. With `KISAK_VK_MODERN_DEBUG=ao`
 it expects open floor and the wall's top at least 230 of 255 (one frame's
 noise leaves them a few levels under white), and that corner floor and the
 wall 10 units above the floor at least 25 darker but not black (on
-lavapipe: 250 open floor, 239 wall, 177 corner floor, 193 wall foot).
+lavapipe: 251 open floor, 240 wall, 179 corner floor, 191 wall foot). A thin
+plate facing the camera hovers 16 units above the open floor, as a sign hangs
+off a pillar on brackets; the floor seen just past its lower edge lies behind
+it. The check expects that floor at least 150 (lavapipe 195), and with
+`KISAK_VK_MODERN_AO_THICKNESS=1000`, where the plate hides everything behind
+it as a solid block would, at most 120 (lavapipe 69): the dark band of PC AO
+run 2.
 `test_vulkan_d3d9_front.py` runs it as it is, with the debug view (linear
-light on and off), with `KISAK_VK_MODERN_AO=1`, and with
+light on and off, and with a thickness of 1000), with `KISAK_VK_MODERN_AO=1`,
+and with
 `KISAK_VK_MODERN_AO=0`, `KISAK_VK_MODERN_NORMALS=0` (with the debug view or
 not), `KISAK_VK_MODERN_LINEAR=0` or `KISAK_VK_MODERN_SHADERS=0`, where none
 is built. `modern_lit_shader` passes as before: its scene has no prepass, so

@@ -7,12 +7,21 @@
 // lit surfaces are drawn.
 //
 // For a few directions around each pixel (slices of the hemisphere), the
-// highest horizon on each side is found by stepping through the depth within
-// a radius in world units; the visible part of the slice is integrated
-// against the cosine of the surface's normal projected into it. The slice
-// angle and the step positions are jittered per pixel and per frame
-// (interleaved gradient noise), so a small blur and the temporal
-// anti-aliasing average the noise away.
+// depth is stepped through within a radius in world units, and the visible
+// part of the slice is integrated against the cosine of the surface's normal
+// projected into it. The slice angle and the step positions are jittered per
+// pixel and per frame (interleaved gradient noise), so a small blur and the
+// temporal anti-aliasing average the noise away.
+//
+// Each sample hides only the directions between its surface and a point a
+// set thickness behind it along its view ray, kept as 32 sectors of the
+// slice (a visibility bitmask: Therrien, Levesque and Gilet, "Screen Space
+// Indirect Lighting with Visibility Bitmask", 2023), not everything below the
+// highest horizon as plain GTAO assumes. A thin thing in front of a surface,
+// such as a sign hung off a wall on brackets or the edge of an arch, then
+// leaves the directions behind it open; with the horizon alone it drew a
+// dark band on the surface beside it (PC AO run 2). The sectors are spaced
+// evenly in the slice's cosine-weighted measure, so each counts the same.
 //
 // Out: r = the visible fraction of the hemisphere's cosine-weighted light,
 // 1 unoccluded; pixels with no surface get 1, and so do pixels whose normal
@@ -36,6 +45,7 @@ layout(push_constant) uniform Params
     float falloff;   // the share of the radius over which a sample fades out
     float power;     // the visibility is raised to it (strength), in the blur
     uint frame;      // moves the noise from frame to frame
+    float thickness; // world units a sample's surface is taken to reach behind it
 } params;
 
 layout(location = 0) out vec4 outVisibility;
@@ -56,6 +66,16 @@ vec3 ViewAt(vec2 pixelCentre, float depth)
     const vec2 uv = (pixelCentre - params.area.xy) / params.area.zw;
     const vec4 view = params.clipToView * vec4(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, depth, 1.0);
     return view.xyz / view.w;
+}
+
+// The slice's cosine-weighted visible measure from the view direction to the
+// angle theta (signed like the horizons), for the projected normal at angle
+// n: the integral of |sin t| cos(t - n) from 0 to theta (GTAO's inner
+// integral; increasing in theta across the hemisphere).
+float Measure(float theta, float n)
+{
+    const float v = 0.25 * (-cos(2.0 * theta - n) + cos(n) + 2.0 * theta * sin(n));
+    return theta >= 0.0 ? v : -v;
 }
 
 // Jimenez 2014's interleaved gradient noise, in [0, 1).
@@ -107,11 +127,14 @@ void main()
         const float cosN = clamp(dot(projectedNormal, toEye) / projectedLength, -1.0, 1.0);
         const float n = signN * acos(cosN);
 
-        float horizon[2];
+        // The hemisphere in this slice, and its measure.
+        const float low = n - 0.5 * kPi, high = n + 0.5 * kPi;
+        const float lowMeasure = Measure(low, n);
+        const float total = Measure(high, n) - lowMeasure;
+        uint hidden = 0u;
         for (int side = 0; side < 2; ++side)
         {
             const float sideSign = side == 0 ? -1.0 : 1.0;
-            float highest = -1.0;
             for (int step = 0; step < kSteps; ++step)
             {
                 float t = (float(step) + stepNoise) / float(kSteps);
@@ -124,22 +147,34 @@ void main()
                 const float sampleDepth = texelFetch(sceneDepth, samplePixel, 0).r;
                 if (sampleDepth >= params.sky)
                     continue;
-                const vec3 delta = ViewAt(at, sampleDepth) - here;
+                const vec3 front = ViewAt(at, sampleDepth);
+                const vec3 delta = front - here;
                 const float distance = length(delta);
                 if (distance < 1e-4)
                     continue;
-                // Beyond the radius a sample fades back down to no horizon.
+                // Beyond the radius a sample fades out: its sector slides to
+                // the hemisphere's edge on this side, where the cosine leaves
+                // it little weight (as GTAO lowers a fading horizon).
                 const float fade = clamp((distance - fadeStart) / fadeWidth, 0.0, 1.0);
-                highest = max(highest, mix(dot(delta / distance, toEye), -1.0, fade));
+                if (fade >= 1.0)
+                    continue;
+                const vec3 backDelta = front + params.thickness * normalize(front) - here;
+                const float edge = side == 0 ? low : high;
+                const float frontAngle =
+                    mix(sideSign * acos(clamp(dot(delta / distance, toEye), -1.0, 1.0)), edge, fade);
+                const float backAngle =
+                    mix(sideSign * acos(clamp(dot(normalize(backDelta), toEye), -1.0, 1.0)), edge, fade);
+                const float from = max(min(frontAngle, backAngle), low);
+                const float to = min(max(frontAngle, backAngle), high);
+                if (to <= from)
+                    continue;
+                const uint first = uint(clamp(round((Measure(from, n) - lowMeasure) / total * 32.0), 0.0, 32.0));
+                const uint last = uint(clamp(round((Measure(to, n) - lowMeasure) / total * 32.0), 0.0, 32.0));
+                if (last > first)
+                    hidden |= (last >= 32u ? 0xffffffffu : (1u << last) - 1u) & ~((1u << first) - 1u);
             }
-            horizon[side] = sideSign * acos(clamp(highest, -1.0, 1.0));
         }
-        const float h0 = n + max(horizon[0] - n, -0.5 * kPi);
-        const float h1 = n + min(horizon[1] - n, 0.5 * kPi);
-        const float sinN = sin(n);
-        const float arc0 = -cos(2.0 * h0 - n) + cosN + 2.0 * h0 * sinN;
-        const float arc1 = -cos(2.0 * h1 - n) + cosN + 2.0 * h1 * sinN;
-        visibility += projectedLength * 0.25 * (arc0 + arc1);
+        visibility += projectedLength * total * (1.0 - float(bitCount(hidden)) / 32.0);
     }
     // Edge on (the normal across the view), fade to unoccluded.
     const float facing = smoothstep(0.02, 0.08, abs(dot(normal, toEye)));

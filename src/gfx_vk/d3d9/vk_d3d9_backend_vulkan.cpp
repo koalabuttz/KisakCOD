@@ -191,7 +191,7 @@ struct Backend
     // and our shaders on; KISAK_VK_MODERN_AO=1 or the ambient occlusion debug
     // view), which makes the normals buffer wanted too; KISAK_VK_MODERN_AO=0
     // keeps it off whatever asks. Its parameters (KISAK_VK_MODERN_AO_RADIUS,
-    // _POWER); the scene-sized image it writes, a Legacy texture the lit
+    // _THICKNESS, _POWER); the scene-sized image it writes, a Legacy texture the lit
     // shaders read (lg::SetModernAmbientOcclusion) until the scene is lit;
     // whether this scene has it; the scenes counted at the last reset.
     bool aoWanted = false;
@@ -428,6 +428,10 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         const float strength = power.empty() ? -1.0f : std::strtof(power.c_str(), nullptr);
         if (strength >= 0.0f)
             backend->aoParams.power = strength;
+        const std::string thickness = EnvText("KISAK_VK_MODERN_AO_THICKNESS");
+        const float depth = thickness.empty() ? 0.0f : std::strtof(thickness.c_str(), nullptr);
+        if (depth > 0.0f)
+            backend->aoParams.thickness = depth;
     }
     // The normals buffer is built for what reads it; KISAK_VK_MODERN_NORMALS=0
     // keeps it (and so ambient occlusion) off whatever asks.
@@ -711,9 +715,10 @@ void BackendLogStats(Backend *backend, bool reset)
     {
         const PassTimings pass = PassTimingsFor(backend->core, "modern ao");
         const uint64_t scenes = modern::Stats(backend->ao).builds - backend->aoBase.builds;
-        HostLog(h, "vulkan d3d9: modern: %llu scenes with ambient occlusion (radius %.1f, power %.2f), "
-                   "%.3f ms GPU each",
-                static_cast<unsigned long long>(scenes), backend->aoParams.radius, backend->aoParams.power,
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with ambient occlusion (radius %.1f, thickness %.1f, "
+                   "power %.2f), %.3f ms GPU each",
+                static_cast<unsigned long long>(scenes), backend->aoParams.radius, backend->aoParams.thickness,
+                backend->aoParams.power,
                 pass.supported ? 2.0 * average(pass) : 0.0);
     }
     // Bloom: the scenes it ran for in place of the glow, the passes of each,

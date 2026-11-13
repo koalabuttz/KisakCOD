@@ -237,6 +237,10 @@ struct AoParams
     float radius = 48.0f;  // world units (inches): about 1.2 m
     float falloff = 0.6f;  // the outer share of the radius over which samples fade out
     float power = 1.5f;    // the visibility is raised to it (PC AO run 1: 1 weak, 2 about right in the shade)
+    // World units a sample's surface is taken to reach behind it: what lies
+    // further behind stays lit (a thin sign or arch edge in front of a wall
+    // no longer darkens the wall beside it as a solid block would).
+    float thickness = 8.0f;
     uint32_t frame = 0;    // moves the noise
 };
 

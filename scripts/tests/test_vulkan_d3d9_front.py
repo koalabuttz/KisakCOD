@@ -105,7 +105,9 @@ involved. The checks:
                  (the scene's own points), with KISAK_VK_MODERN_DEBUG=ao (and
                  with linear light off), where the ambient occlusion debug
                  view shows open floor and wall white and the corner between
-                 them darker, with KISAK_VK_MODERN_AO=1, and with
+                 them darker, and the floor behind a thin hovering plate
+                 light (with KISAK_VK_MODERN_AO_THICKNESS=1000 dark, as
+                 behind a solid block), with KISAK_VK_MODERN_AO=1, and with
                  KISAK_VK_MODERN_AO=0, KISAK_VK_MODERN_NORMALS=0 (beside the
                  debug view or not), KISAK_VK_MODERN_LINEAR=0 or
                  KISAK_VK_MODERN_SHADERS=0, where none is built; the full
@@ -315,9 +317,10 @@ def main():
 
     # ao
     ao_line = re.compile(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with ambient occlusion \(radius '
-                         r'48\.0, power 1\.50\), ([0-9.]+) ms GPU each$', re.M)
+                         r'48\.0, thickness ([0-9.]+), power 1\.50\), ([0-9.]+) ms GPU each$', re.M)
     for settings, built in (({}, True),
                             ({'KISAK_VK_MODERN_DEBUG': 'ao'}, True),
+                            ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_AO_THICKNESS': '1000'}, True),
                             ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_LINEAR': '0'}, True),
                             ({'KISAK_VK_MODERN_AO': '1'}, True),
                             ({'KISAK_VK_MODERN_AO': '0'}, False),
@@ -328,17 +331,19 @@ def main():
                             ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_NORMALS': '0'}, False)):
         chosen = dict(env)
         for name in ('KISAK_VK_MODERN_NORMALS', 'KISAK_VK_MODERN_AO', 'KISAK_VK_MODERN_AO_RADIUS',
-                     'KISAK_VK_MODERN_AO_POWER', 'KISAK_VK_MODERN_LINEAR', 'KISAK_VK_MODERN_LIT',
+                     'KISAK_VK_MODERN_AO_POWER', 'KISAK_VK_MODERN_AO_THICKNESS', 'KISAK_VK_MODERN_LINEAR', 'KISAK_VK_MODERN_LIT',
                      'KISAK_VK_MODERN_SHADERS', 'KISAK_VK_MODERN_DEBUG'):
             chosen.pop(name, None)
         chosen.update(settings)
         code, stdout, _ = run(binary, ['--scene', 'modern_ao', '--validation', args.validation], chosen)
         found, scenes = parse(stdout)
         line = ao_line.search(stdout)
+        thickness = '1000.0' if settings.get('KISAK_VK_MODERN_AO_THICKNESS') == '1000' else '8.0'
         named = ' '.join(f'{k}={v}' for k, v in settings.items()) or 'the defaults'
         checks.expect(f'modern_ao passes with {named}',
                       code == 0 and found.get('d3d9_check') == 'passed' and [s[0] for s in scenes] == ['modern_ao']
-                      and (line is not None and line.group(1) == '1' if built else line is None)
+                      and (line is not None and line.group(1) == '1' and line.group(2) == thickness
+                           if built else line is None)
                       and 'no ambient occlusion' not in stdout,
                       f'status {code}\n{stdout}')
 

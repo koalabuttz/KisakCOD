@@ -26,7 +26,8 @@ struct Push
     float falloff;
     float power;
     uint32_t frame;
-    float pad[2];
+    float thickness;
+    float pad;
 };
 static_assert(sizeof(Push) == 112, "gtao.frag's push constant block fits 112 bytes");
 
@@ -243,6 +244,7 @@ bool BuildAmbientOcclusion(Core *core, AmbientOcclusion *ao, Image *depth, Image
     push.falloff = params.falloff;
     push.power = params.power;
     push.frame = params.frame;
+    push.thickness = params.thickness;
 
     if (ao->raw)
     {

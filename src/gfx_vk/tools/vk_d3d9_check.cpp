@@ -3170,7 +3170,14 @@ void Check::ModernNormals()
 // KISAK_VK_MODERN_DEBUG=ao the view shows the visibility: open floor and the
 // wall's top stay about white, the floor 12 units from the wall and the wall
 // 10 units above the floor are darker by a clear margin (and not black), and
-// the sky is white. Without the view the floor is drawn as lm_sun_r0c0 (the
+// the sky is white. A thin plate facing the camera hovers 16 units above the
+// open floor on the left, 160 units ahead, as a sign hangs off a wall on
+// brackets: the floor seen just past its lower edge lies behind it (172 units
+// ahead). Each sample is taken to reach only a few units behind its surface,
+// so that floor stays light (at least 150); with
+// KISAK_VK_MODERN_AO_THICKNESS=1000 the plate hides everything behind it as a
+// solid block would, and the floor there goes dark (at most 120, the dark
+// band of PC AO run 2). Without the view the floor is drawn as lm_sun_r0c0 (the
 // Modern lit shaders' stand-in) lit by its lightmap alone: white colour map,
 // the secondary lightmap's halves 96 each (0.53 of light), no sun. Our
 // shader multiplies that light by the ambient occlusion, so the floor in the
@@ -3229,12 +3236,15 @@ void Check::ModernAo()
                                     project(200, -120, 400, floorColor), project(-200, -120, 400, floorColor)};
     const Vertex wallCorners[4] = {project(0, -120, 200, wallColor), project(200, -120, 200, wallColor),
                                    project(200, 300, 200, wallColor), project(0, 300, 200, wallColor)};
-    Vertex surfaces[12];
+    const Vertex plateCorners[4] = {project(-40, -104, 160, wallColor), project(-5, -104, 160, wallColor),
+                                    project(-5, -40, 160, wallColor), project(-40, -40, 160, wallColor)};
+    Vertex surfaces[18];
     const int order[6] = {0, 1, 2, 0, 2, 3};
     for (int i = 0; i < 6; ++i)
     {
         surfaces[i] = floorCorners[order[i]];
         surfaces[6 + i] = wallCorners[order[i]];
+        surfaces[12 + i] = plateCorners[order[i]];
     }
 
     Reset(Argb(255, 0, 0, 0));
@@ -3244,7 +3254,7 @@ void Check::ModernAo()
     device->SetRenderState(D3DRS_ZENABLE, TRUE);
     device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
     device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
-    Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(prepass)");
+    Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 6, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(prepass)");
     device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xf);
     Equal("scene_depth", static_cast<int>(front::ModernSceneDepth(device, view)),
           static_cast<int>(depthTaken ? front::ModernResult::Done : front::ModernResult::Skipped));
@@ -3277,7 +3287,7 @@ void Check::ModernAo()
         device->SetVertexShader(vsBasic);
         device->SetPixelShader(psColor);
     }
-    Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, surfaces + 6, sizeof(Vertex)), "DrawPrimitiveUP(wall)");
+    Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces + 6, sizeof(Vertex)), "DrawPrimitiveUP(wall)");
     Equal("scene_done", front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
     SafeRelease(colorMap);
     SafeRelease(primary);
@@ -3287,7 +3297,8 @@ void Check::ModernAo()
         px = static_cast<UINT>((k * x / z + 1.0f) * 0.5f * kSize);
         py = static_cast<UINT>((1.0f - k * y / z) * 0.5f * kSize);
     };
-    UINT openX, openY, cornerX, cornerY, footX, footY, wallX, wallY;
+    UINT openX, openY, cornerX, cornerY, footX, footY, wallX, wallY, besideX, besideY;
+    pixelOf(-22, -120, 172, besideX, besideY);
     pixelOf(-100, -120, 160, openX, openY);
     pixelOf(100, -120, 188, cornerX, cornerY);
     pixelOf(100, -110, 200, footX, footY);
@@ -3298,7 +3309,7 @@ void Check::ModernAo()
         if (shown)
         {
             const int open = at(openX, openY), corner = at(cornerX, cornerY), foot = at(footX, footY),
-                      wall = at(wallX, wallY);
+                      wall = at(wallX, wallY), beside = at(besideX, besideY);
             // One frame's noise (two slices a pixel) leaves open surfaces a
             // few levels under white; the anti-aliasing averages it.
             Equal("open_floor_unoccluded", open >= 230, true);
@@ -3307,10 +3318,14 @@ void Check::ModernAo()
             Equal("corner_not_black", corner >= 64, true);
             Equal("wall_foot_darker", foot + 25 <= wall, true);
             Equal("wall_foot_not_black", foot >= 64, true);
+            if (envIs("KISAK_VK_MODERN_AO_THICKNESS", "1000"))
+                Equal("floor_behind_plate_dark_as_behind_a_block", beside <= 120, true);
+            else
+                Equal("floor_behind_plate_light", beside >= 150, true);
             Expect("sky_white", 20, 10, 255, 255, 255);
-            char line[128];
-            std::snprintf(line, sizeof(line), " ao_open=%d ao_corner=%d ao_foot=%d ao_wall=%d", open, corner, foot,
-                          wall);
+            char line[160];
+            std::snprintf(line, sizeof(line), " ao_open=%d ao_corner=%d ao_foot=%d ao_wall=%d ao_beside_plate=%d",
+                          open, corner, foot, wall, beside);
             result->detail += line;
         }
         else if (ours)
