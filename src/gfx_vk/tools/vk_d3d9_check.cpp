@@ -3046,8 +3046,9 @@ void Check::ModernTaa()
 // in the pixels at the edges between them, where a normal taken across the
 // edge would mix the two, and D stays as drawn. The normals buffer is wanted
 // for ambient occlusion (our lit shaders, KISAK_VK_MODERN_AO=1 or its debug
-// view; not with KISAK_VK_MODERN_AO=0), for screen-space reflections
-// (KISAK_VK_MODERN_SSR=1 or their debug view; not with KISAK_VK_MODERN_SSR=0),
+// view; not with KISAK_VK_MODERN_AO=0), for screen-space reflections (our
+// lit shaders, KISAK_VK_MODERN_SSR=1 or their debug view; not with
+// KISAK_VK_MODERN_SSR=0),
 // that view or KISAK_VK_MODERN_NORMALS=1, never with KISAK_VK_MODERN_NORMALS=0.
 void Check::ModernNormals()
 {
@@ -3067,7 +3068,10 @@ void Check::ModernNormals()
     const bool debugView = envIs("KISAK_VK_MODERN_DEBUG", "normals");
     const bool wanted = !envIs("KISAK_VK_MODERN_NORMALS", "0")
         && (debugView || envIs("KISAK_VK_MODERN_NORMALS", "1")
-            || (!envIs("KISAK_VK_MODERN_SSR", "0") && envIs("KISAK_VK_MODERN_SSR", "1"))
+            || (!envIs("KISAK_VK_MODERN_SSR", "0")
+                && (envIs("KISAK_VK_MODERN_SSR", "1")
+                    || (!envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
+                        && !envIs("KISAK_VK_MODERN_SHADERS", "0"))))
             || (!envIs("KISAK_VK_MODERN_AO", "0")
                 && (envIs("KISAK_VK_MODERN_AO", "1") || envIs("KISAK_VK_MODERN_DEBUG", "ao")
                     || (!envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
@@ -3214,7 +3218,7 @@ void Check::ModernAo()
                                       && (envIs("KISAK_VK_MODERN_NORMALS", "1")
                                           || envIs("KISAK_VK_MODERN_DEBUG", "normals")
                                           || (!envIs("KISAK_VK_MODERN_SSR", "0")
-                                              && (envIs("KISAK_VK_MODERN_SSR", "1")
+                                              && (ours || envIs("KISAK_VK_MODERN_SSR", "1")
                                                   || envIs("KISAK_VK_MODERN_DEBUG", "reflections")))));
     const bool shown = built && envIs("KISAK_VK_MODERN_DEBUG", "ao");
     IDirect3DSurface9 *depth = nullptr;
@@ -3384,8 +3388,13 @@ void Check::ModernAo()
 // nothing (black); the wall itself mirrors back towards the camera, which
 // the screen cannot show (black). Without the view (or with linear light
 // off, where nothing is traced) the scene comes back as drawn. Reflections
-// are traced with KISAK_VK_MODERN_SSR=1 or their debug view, never with
-// KISAK_VK_MODERN_SSR=0 or KISAK_VK_MODERN_NORMALS=0.
+// are traced for our lit shaders (linear light, lit inputs and our shaders
+// on), with KISAK_VK_MODERN_SSR=1 or their debug view, never with
+// KISAK_VK_MODERN_SSR=0 or KISAK_VK_MODERN_NORMALS=0. Without the debug view
+// the scene is then drawn twice more with the floor as lm_sun_r0c0s0, all
+// black but a mirror-like specular: in the second, our shader shows the
+// wall's red where the reflections found it and black elsewhere (black
+// everywhere with no reflections, and the stand-in's black without ours).
 void Check::ModernReflections()
 {
     const auto envIs = [](const char *name, const char *value) {
@@ -3401,8 +3410,12 @@ void Check::ModernReflections()
 #endif
     };
     const bool normalsOff = envIs("KISAK_VK_MODERN_NORMALS", "0");
+    // Our lit shaders draw (and read the reflections).
+    const bool ours = !envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
+                      && !envIs("KISAK_VK_MODERN_SHADERS", "0");
     const bool wanted = !envIs("KISAK_VK_MODERN_SSR", "0") && !normalsOff
-                        && (envIs("KISAK_VK_MODERN_SSR", "1") || envIs("KISAK_VK_MODERN_DEBUG", "reflections"));
+                        && (ours || envIs("KISAK_VK_MODERN_SSR", "1")
+                            || envIs("KISAK_VK_MODERN_DEBUG", "reflections"));
     // The scene's depth is taken whenever the normals buffer is wanted: also
     // for ambient occlusion (on with our lit shaders).
     const bool aoBuilt = !envIs("KISAK_VK_MODERN_AO", "0")
@@ -3456,7 +3469,60 @@ void Check::ModernReflections()
     pixelOf(100, -120, 200, mirrorX, mirrorY);
     pixelOf(-100, -120, 200, openX, openY);
     pixelOf(150, 150, 300, wallX, wallY);
-    const auto scene = [&](const char *name, bool cut) {
+    // For the scenes whose floor our lit shader draws: lm_sun_r0c0s0 with a
+    // black colour map, lightmaps, probe and sun, and a white specular map of
+    // gloss 1 with Fresnel 1, seen from straight above, so all it shows is
+    // what the reflections found, at their sharpest level.
+    IDirect3DTexture9 *black = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 0, 0, 0); });
+    IDirect3DTexture9 *blackLight = FilledTexture(1, 2, [](UINT, UINT) { return Argb(130, 0, 0, 0); });
+    IDirect3DTexture9 *glossy = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
+    IDirect3DCubeTexture9 *probe = nullptr;
+    if (Ok(device->CreateCubeTexture(1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &probe, nullptr),
+           "CreateCubeTexture(probe)"))
+    {
+        for (UINT face = 0; face < 6; ++face)
+        {
+            D3DLOCKED_RECT rect{};
+            if (Ok(probe->LockRect(static_cast<D3DCUBEMAP_FACES>(face), 0, &rect, nullptr, 0), "LockRect(probe)"))
+            {
+                *static_cast<uint32_t *>(rect.pBits) = Argb(255, 0, 0, 0);
+                probe->UnlockRect(static_cast<D3DCUBEMAP_FACES>(face), 0);
+            }
+        }
+    }
+    const bool litMade = black && blackLight && glossy && probe;
+    const auto drawLitFloor = [&]() {
+        device->SetVertexShader(vsLmSunMaps);
+        device->SetPixelShader(psLmSunMapsStandIn);
+        device->SetTexture(0, black);
+        device->SetTexture(1, probe);
+        device->SetTexture(2, black);
+        device->SetTexture(3, blackLight);
+        device->SetTexture(4, glossy);
+        // c0 fog colour, c1 the stand-in's black, c5 envMapParms (Fresnel 1,
+        // no sun highlight), c17 the sun overhead, c18 and c19 its colours: 0.
+        float pixel[20][4] = {};
+        pixel[5][0] = pixel[5][1] = 1.0f;
+        pixel[17][2] = 1.0f;
+        Ok(device->SetPixelShaderConstantF(0, &pixel[0][0], 20), "SetPixelShaderConstantF(lit floor)");
+        // Positions as given; UVs; the normal up and no fog; binormal,
+        // tangent, shadow-map coordinate (unread); looking straight down.
+        const float vertex[7][4] = {{0, 0, 0, 0}, {0.5f, 0.5f, 0.5f, 0.5f}, {0, 0, 1, 1}, {0, 1, 0, 0},
+                                    {1, 0, 0, 0}, {0.5f, 0.5f, 0.25f, 0.5f}, {0, 0, -1, 0}};
+        Ok(device->SetVertexShaderConstantF(0, &vertex[0][0], 7), "SetVertexShaderConstantF(lit floor)");
+        front::ModernLitInputs inputs;
+        inputs.overWhite = true;
+        inputs.shader = 0x44; // lm_sun_r0c0s0
+        front::SetModernLitInputs(device, &inputs);
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(lit floor)");
+        front::SetModernLitInputs(device, nullptr);
+        for (DWORD sampler : {0u, 1u, 2u, 3u, 4u})
+            device->SetTexture(sampler, nullptr);
+        device->SetVertexShader(vsBasic);
+        device->SetPixelShader(psColor);
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, surfaces + 6, sizeof(Vertex)), "DrawPrimitiveUP(wall)");
+    };
+    const auto scene = [&](const char *name, bool cut, bool litFloor = false) {
         Reset(Argb(255, 0, 0, 0));
         front::ModernSceneBegin(device);
         device->SetDepthStencilSurface(depth);
@@ -3471,7 +3537,10 @@ void Check::ModernReflections()
         Equal((std::string(name) + "_scene_depth").c_str(), static_cast<int>(front::ModernSceneDepth(device, view)),
               static_cast<int>(depthTaken ? front::ModernResult::Done : front::ModernResult::Skipped));
         device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(lit)");
+        if (litFloor)
+            drawLitFloor();
+        else
+            Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(lit)");
         Equal((std::string(name) + "_scene_done").c_str(),
               front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
     };
@@ -3502,6 +3571,46 @@ void Check::ModernReflections()
         else
             expectDrawn("second");
     }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+
+    // Our lit shader on the floor (docs/vulkan-modern.md "Screen-space
+    // reflections"): where the reflections found the wall, the specular
+    // shows it in place of the black probe; elsewhere, and with no
+    // reflections, it is black. With the debug view on, that is drawn over.
+    if (litMade && !shown)
+    {
+        scene("lit_first", true, true);
+        if (Read())
+        {
+            Expect("lit_first_mirror_floor", mirrorX, mirrorY, 0, 0, 0);
+            Expect("lit_first_wall", wallX, wallY, 200, 40, 40);
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        scene("lit_second", false, true);
+        if (Read())
+        {
+            const uint8_t *mirror = &pixels[(mirrorY * readSize + mirrorX) * 4];
+            const int red = mirror[2], green = mirror[1], blue = mirror[0]; // B, G, R, A
+            if (ours && traced)
+            {
+                Equal("lit_mirror_floor_shows_wall_red", red >= 60 && red >= green + 40 && red >= blue + 40, true);
+                Expect("lit_open_floor_black", openX, openY, 0, 0, 0);
+            }
+            else
+            {
+                Expect("lit_mirror_floor_black", mirrorX, mirrorY, 0, 0, 0);
+            }
+            Expect("lit_second_wall", wallX, wallY, 200, 40, 40);
+            char line[80];
+            std::snprintf(line, sizeof(line), " lit_mirror=%d,%d,%d", red, green, blue);
+            result->detail += line;
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    }
+    SafeRelease(probe);
+    SafeRelease(glossy);
+    SafeRelease(blackLight);
+    SafeRelease(black);
     device->SetDepthStencilSurface(nullptr);
     SafeRelease(depth);
 }

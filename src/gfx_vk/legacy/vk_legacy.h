@@ -737,6 +737,18 @@ void SetModernLitStrengths(Device *device, float sun, float sky);
 // texture must be ready to sample (written before the pass that reads it).
 constexpr uint32_t kModernAoSampler = 15;
 void SetModernAmbientOcclusion(Device *device, Texture *texture);
+// The Modern path's screen-space reflections for the lit shaders of ours: an
+// image the size of the scene's render targets, with mip levels, holding
+// the reflected light (linear light, before exposure) times its confidence
+// in rgb and the confidence in alpha (vk_modern.h TraceReflections). Every
+// pipeline drawn as one of ours reads it at pixel sampler
+// kModernReflectionsSampler, which the game's lit shaders leave free, with
+// a trilinear sampler clamped to the edge; null reads as a 1x1 image of
+// (0, 0, 0, 0) (no reflection). Set while the scene that has it draws, null
+// after. The image must be ready to sample (written before the pass that
+// reads it) and outlive the scene's draws.
+constexpr uint32_t kModernReflectionsSampler = 14;
+void SetModernReflections(Device *device, Image *image);
 #endif
 
 // The device's window is about to be destroyed: an open pass and frame end

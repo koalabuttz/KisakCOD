@@ -607,7 +607,10 @@ to 3 in the project files, 2026-11-13):
   game's diffuse colour, decoded: the specular map times the Fresnel
   (envMapParms) times (shadow times the sun's highlight, exponent from the
   gloss, times envMapParms.w, the sun's specular colour and the sun
-  strength, plus the reflection probe at LOD 6 - 8 gloss times its alpha);
+  strength, plus the reflection probe at LOD 6 - 8 gloss times its alpha,
+  which on opaque surfaces gives way to the
+  [screen-space reflections](#screen-space-reflections) where they found
+  something);
 * **colour** = albedo times (sky times the sky strength plus sun times the
   sun strength) plus specular, the sky (and the probe) also darkened by the
   [ambient occlusion](#ambient-occlusion), then the fog
@@ -736,7 +739,7 @@ pass of 9 depth reads per pixel.
 
 | Setting | Default | Switch |
 | --- | --- | --- |
-| Normals buffer | built only when something reads it: ambient occlusion (on with our lit shaders), screen-space reflections, or the debug view below | `KISAK_VK_MODERN_NORMALS=1` builds it (and turns the prepass on) with nothing reading it, to measure the cost; `KISAK_VK_MODERN_NORMALS=0` never builds it |
+| Normals buffer | built only when something reads it: ambient occlusion (on with our lit shaders), screen-space reflections (also on with our lit shaders), or the debug view below | `KISAK_VK_MODERN_NORMALS=1` builds it (and turns the prepass on) with nothing reading it, to measure the cost; `KISAK_VK_MODERN_NORMALS=0` never builds it |
 | Debug view | off | `KISAK_VK_MODERN_DEBUG=normals` draws the buffer over the finished scene (after the tonemap): red faces right, green up, blue away; a wall seen head on is (128, 128, 0); the sky is left as it is |
 
 The statistics line: `vulkan d3d9: modern: N scenes with a normals buffer
@@ -863,9 +866,8 @@ our shaders read white.
 The reflection probe CoD4's lit shaders add is one baked cube map per area:
 it does not show what is really next to a surface. Screen-space reflections
 (SSR) find what each pixel's surface would mirror among what the screen
-shows, so that our own lit shaders can use that in place of the probe where
-it is found. This first piece traces them and shows them in a debug view;
-nothing in the lighting reads them yet.
+shows, and our own lit shaders use that in place of the probe where it is
+found.
 
 **How a scene goes with it:**
 
@@ -908,15 +910,22 @@ ray met nothing on the screen, met the sky, or met a surface from behind,
 where the normal is only a guess, and on a cut or the first scene (no last
 scene to read light from: no image at all then).
 
-**How the lighting will use it (agreed with the lit shaders' owners,
-2026-11-13):** a pipeline drawn by one of our lit shaders gets the image at
-pixel sampler 14 (a black, alpha 0 texture where the scene has none), and
-the shader mixes it into the reflection probe's light only, in the game's
-display values: `probe = mix(probe * specular occlusion, encode(ssr.rgb /
-ssr.a), ssr.a)`, at the level its gloss picks (`(6 - 8 gloss) / 6` of the
-way to the blurriest, as the game picks the probe's). The sun, its highlight
-and the lightmap are untouched. That step comes with the lit shaders' own
-pull requests.
+**How the lighting uses it (agreed with the lit shaders' owners,
+2026-11-13):** the back end hands the scene's image to the Legacy adapter
+(`lg::SetModernReflections`) from the depth hand-over until the scene is
+lit, null after. A pipeline drawn by one of our lit shaders
+(`PipelineKey::linearShader`) gets it at pixel sampler 14
+(`kModernReflectionsSampler`, in `LayoutFor`; ours is not built where the
+game's shader reads s14), read with a trilinear sampler clamped to the
+edge, and a 1x1 (0, 0, 0, 0) texture where the scene has none. `lm_sun.frag`
+with a specular map (`s0`) mixes it into the reflection probe's light only,
+in the game's display values: `probe = mix(probe * specular occlusion,
+encode(ssr.rgb / ssr.a), ssr.a)` (encode unclamped), at the level its gloss
+picks (`(6 - 8 gloss) / 6` of the way to the blurriest, as the game picks
+the probe's), on opaque surfaces only (a blended one is not in the prepass,
+so the reflections there belong to what is behind it). The sun, its
+highlight and the lightmap are untouched, and so is the Fresnel and the
+specular map that scale the result.
 
 **Limits.** Only what the screen shows can be reflected: things off screen,
 behind the camera or hidden behind something else are not (the probe stays
@@ -935,7 +944,7 @@ chain).
 
 | Setting | Default | Switch |
 | --- | --- | --- |
-| Reflections | traced only when something reads them: the debug view below for now; our lit shaders next. They need linear light (with `KISAK_VK_MODERN_LINEAR=0` they are not traced, logged once) and the normals buffer (`KISAK_VK_MODERN_NORMALS=0` turns them off too) | `KISAK_VK_MODERN_SSR=1` traces them (and turns the prepass and normals on) with nothing reading them, to measure the cost; `KISAK_VK_MODERN_SSR=0` never traces them |
+| Reflections | traced when something reads them: our lit shaders (on with linear light, lit inputs and our shaders), or the debug view below. They need linear light (with `KISAK_VK_MODERN_LINEAR=0` they are not traced, logged once) and the normals buffer (`KISAK_VK_MODERN_NORMALS=0` turns them off too) | `KISAK_VK_MODERN_SSR=1` traces them (and turns the prepass and normals on) with nothing reading them, to measure the cost; `KISAK_VK_MODERN_SSR=0` never traces them |
 | Longest ray | 2000 units | `KISAK_VK_MODERN_SSR_DISTANCE` |
 | Thickness | 16 units | `KISAK_VK_MODERN_SSR_THICKNESS` |
 | Steps | 32 | `KISAK_VK_MODERN_SSR_STEPS` (at most 256) |
@@ -951,11 +960,20 @@ and a red wall over the right half facing the camera, through the prepass
 as the engine does, twice (the first a cut). The first has no reflections;
 in the second, with `KISAK_VK_MODERN_DEBUG=reflections`, the floor in front
 of the wall shows the wall's red, the floor on the left (whose rays meet
-only the sky) and the wall (whose rays come back at the camera) show black.
-`test_vulkan_d3d9_front.py` runs it with the debug view, with
-`KISAK_VK_MODERN_SSR=1`, and with the debug view beside
+only the sky) and the wall (whose rays come back at the camera) show black. Without the debug
+view it draws the scene twice more with the floor as `lm_sun_r0c0s0` (the
+`modern_lit_shader` stand-in): black colour map, lightmaps, probe and sun,
+and a white specular map of gloss 1 with Fresnel 1, seen from straight
+above. In the second, our shader shows the wall's red (199, 40, 40) where
+the reflections found it and black elsewhere; black everywhere with
+`KISAK_VK_MODERN_SSR=0`, and the stand-in's black without our shaders.
+`test_vulkan_d3d9_front.py` runs it as it is, with the debug view, with
+`KISAK_VK_MODERN_SSR=1` (also beside `KISAK_VK_MODERN_SHADERS=0`), with
+`KISAK_VK_MODERN_SSR=0`, `KISAK_VK_MODERN_LIT=0` and
+`KISAK_VK_MODERN_SHADERS=0`, and with the debug view beside
 `KISAK_VK_MODERN_LINEAR=0`, `KISAK_VK_MODERN_SSR=0` and
-`KISAK_VK_MODERN_NORMALS=0`, and checks that a full run traces none.
+`KISAK_VK_MODERN_NORMALS=0`, and checks that a full run traces 2 scenes
+(none with our lit shaders off).
 
 ## Next
 
