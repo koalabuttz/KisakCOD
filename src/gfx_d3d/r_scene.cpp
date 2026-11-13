@@ -28,6 +28,7 @@
 #include "r_drawsurf.h"
 #include "rb_postfx.h"
 #include "r_meshdata.h"
+#include "r_modern_motion.h"
 #include <qcommon/com_bsp.h>
 #include "r_cinematic.h"
 #include <win32/win_net.h>
@@ -1306,6 +1307,7 @@ static void R_ModernEndLitPasses()
 void R_ModernSceneBegin()
 {
     s_modernSceneView = nullptr;
+    R_ModernMotionSceneBegin();
     const GfxModernHooks *hooks = R_ModernHooks();
     R_ModernEndLitPasses();
     s_modernLitPasses = hooks && hooks->litInputs;
@@ -1606,6 +1608,9 @@ static GfxModernScene &R_ModernScene(const GfxViewInfo *viewInfo)
 void R_ModernSceneLit(const GfxViewInfo *viewInfo)
 {
     R_ModernEndLitPasses();
+    // The back end may finish the scene here, so what moved in it is
+    // complete: surfaces drawn after this (effects) report no motion.
+    R_ModernMotionSceneDone();
     const GfxModernHooks *hooks = R_ModernHooks();
     if (!hooks || !hooks->sceneLit)
         return;
@@ -1615,6 +1620,7 @@ void R_ModernSceneLit(const GfxViewInfo *viewInfo)
 void R_ModernSceneDone(const GfxViewInfo *viewInfo)
 {
     R_ModernEndLitPasses();
+    R_ModernMotionSceneDone();
     const GfxModernHooks *hooks = R_ModernHooks();
     if (!hooks || !hooks->sceneDone)
         return;

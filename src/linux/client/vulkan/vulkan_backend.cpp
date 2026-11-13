@@ -452,6 +452,23 @@ void ModernSceneBegin(void *, IDirect3DDevice9 *device)
         front::ModernSceneBegin(device);
 }
 
+// A surface that moves on its own was just drawn (r_modern_motion.cpp): the
+// front keeps it for the scene's velocity pass.
+void ModernSurfaceMoved(void *, IDirect3DDevice9 *device, const float clip[4][4], const float prevClip[4][4])
+{
+    if (!s_modernRefused.load(std::memory_order_relaxed))
+        front::ModernSurfaceMoved(device, clip, prevClip);
+}
+
+// The same for a skinned surface: the front keeps its vertices for the next
+// scene's velocity, and draws its velocity from last scene's.
+void ModernSkinnedSurfaceMoved(void *, IDirect3DDevice9 *device, uint64_t key, const float clip[4][4],
+                               const float prevClip[4][4])
+{
+    if (!s_modernRefused.load(std::memory_order_relaxed))
+        front::ModernSkinnedSurfaceMoved(device, key, clip, prevClip);
+}
+
 // The colours a lit pass's pixel shader reads, for linear light.
 void ModernLitInputs(void *, IDirect3DDevice9 *device, const GfxModernLitInputs *inputs)
 {
@@ -469,8 +486,9 @@ void ModernLitInputs(void *, IDirect3DDevice9 *device, const GfxModernLitInputs 
     front::SetModernLitInputs(device, &lit);
 }
 
-const GfxModernHooks s_modernHooks = {nullptr,         ModernJitterPixels, ModernSceneDone, ModernSceneBegin,
-                                      ModernSceneLit,  ModernLitInputs};
+const GfxModernHooks s_modernHooks = {nullptr,          ModernJitterPixels, ModernSceneDone,
+                                      ModernSceneBegin, ModernSceneLit,     ModernSurfaceMoved,
+                                      ModernSkinnedSurfaceMoved, ModernLitInputs};
 } // namespace
 
 void Kisak_VulkanRegisterDvars()

@@ -231,6 +231,20 @@ ModernResult ModernSceneDone(IDirect3DDevice9 *device, const ModernSceneView &vi
 // skips ModernSceneDone for this scene. Skipped only when the effects stay
 // in the scene, and ModernSceneDone finishes it.
 ModernResult ModernSceneLit(IDirect3DDevice9 *device, const ModernSceneView &view, bool *glowDrawn = nullptr);
+// The last DrawIndexedPrimitive drew a surface that moves on its own into the
+// scene: the Modern path draws it again for its velocity when the scene is
+// finished, by ModernSceneLit or ModernSceneDone (docs/vulkan-modern.md).
+// clip and prevClip take the surface's vertices to this frame's and last
+// frame's clip space (row vectors, p_clip = p * M), each with its frame's
+// jitter. Ignored by a back
+// end without a Modern path, and when the draw was not a triangle list.
+void ModernSurfaceMoved(IDirect3DDevice9 *device, const float clip[4][4], const float prevClip[4][4]);
+// The same for a skinned surface, whose vertices change from frame to frame:
+// the Modern path keeps a copy of the vertices the draw read under `key`
+// when the scene is finished, and draws the surface's velocity from last
+// scene's copy when the key comes again. prevClip is null the first time.
+void ModernSkinnedSurfaceMoved(IDirect3DDevice9 *device, uint64_t key, const float clip[4][4],
+                               const float prevClip[4][4]);
 // The colours the pixel shaders of the draws that follow read, for lit
 // surfaces; null for draws that are not lit. With linear light (and unless
 // KISAK_VK_MODERN_LIT=0) a draw into the linear-light scene then takes these

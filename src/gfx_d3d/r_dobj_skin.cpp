@@ -160,6 +160,7 @@ int  R_SkinSceneDObjModels(
             targBoneIndexHigh.boneCount = boneCount;
             targBoneIndexHigh.gfxEntIndex = sceneEnt->gfxEntIndex;
             targBoneIndexHigh.lightingHandle = 0;
+            targBoneIndexHigh.modernOwner = static_cast<uint16_t>(sceneEnt->entnum + 1);
 
             XSurface *surfaces = NULL;
             surfaceCount = XModelGetSurfaces(model, &surfaces, cullLod);

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 
 namespace gfx_vk
 {
@@ -1252,6 +1253,44 @@ void *StageBufferWrite(Core *core_, Buffer *target, VkDeviceSize offset, VkDevic
         vk.vkCmdCopyBuffer(cmd, staging, destination, 1, &region);
     });
     return core.failed ? nullptr : data;
+}
+
+bool CopyBufferRegions(Core *core_, VkBuffer source, Buffer *target, const VkBufferCopy *regions, uint32_t count)
+{
+    Core &core = *core_;
+    if (core.failed)
+        return false;
+    if (core.inPass)
+    {
+        Fail(core, "CopyBufferRegions inside a pass (%s)", target->name.c_str());
+        return false;
+    }
+    if (!count)
+        return true;
+    for (uint32_t i = 0; i < count; ++i)
+        if (!source || !regions[i].size || regions[i].dstOffset + regions[i].size > BufferSize(target))
+        {
+            Fail(core, "CopyBufferRegions outside buffer %s", target->name.c_str());
+            return false;
+        }
+    OpenBufferCopies(core);
+    const VkBuffer destination = BufferHandle(target);
+    // Fixed-size packets, as Record wants trivially destructible captures.
+    constexpr uint32_t kRegions = 16;
+    for (uint32_t first = 0; first < count; first += kRegions)
+    {
+        struct Packet
+        {
+            VkBufferCopy regions[kRegions];
+            uint32_t count;
+        } packet{};
+        packet.count = std::min(kRegions, count - first);
+        std::memcpy(packet.regions, regions + first, packet.count * sizeof(VkBufferCopy));
+        Record(&core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
+            vk.vkCmdCopyBuffer(cmd, source, destination, packet.count, packet.regions);
+        });
+    }
+    return !core.failed;
 }
 
 void *StageImageWrite(Core *core, Image *image, const ImageRegion &region, uint32_t *rowPitch, uint32_t *slicePitch)

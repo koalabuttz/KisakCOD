@@ -25,8 +25,9 @@ struct Push
     float jitter[2];
     float farDepth;
     float feedback;
+    float haveVelocity;
 };
-static_assert(sizeof(Push) == 104, "taa.frag's push constant block is 104 bytes");
+static_assert(sizeof(Push) == 108, "taa.frag's push constant block is 108 bytes");
 
 using Matrix = double[4][4];
 
@@ -154,8 +155,8 @@ bool CreatePipeline(Core *core, Taa &taa, std::string &error)
     const Dispatch &vk = Functions(core);
     const VkDevice device = DeviceHandle(core);
 
-    VkDescriptorSetLayoutBinding bindings[3]{};
-    for (uint32_t i = 0; i < 3; ++i)
+    VkDescriptorSetLayoutBinding bindings[4]{};
+    for (uint32_t i = 0; i < 4; ++i)
     {
         bindings[i].binding = i;
         bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -164,7 +165,7 @@ bool CreatePipeline(Core *core, Taa &taa, std::string &error)
     }
     VkDescriptorSetLayoutCreateInfo setInfo{};
     setInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    setInfo.bindingCount = 3;
+    setInfo.bindingCount = 4;
     setInfo.pBindings = bindings;
     if (vk.vkCreateDescriptorSetLayout(device, &setInfo, nullptr, &taa.setLayout) != VK_SUCCESS)
     {
@@ -348,12 +349,31 @@ void DestroyTaa(Core *core, Taa *taa)
 
 TaaStats Stats(const Taa *taa) { return taa ? taa->stats : TaaStats{}; }
 
-bool Resolve(Core *core, Taa *taa, Image *color, Image *depth, const SceneView &view, std::string &error)
+bool LastView(const Taa *taa, SceneView &out)
+{
+    if (!taa || !taa->haveHistory)
+        return false;
+    out = taa->lastView;
+    return true;
+}
+
+bool Resolve(Core *core, Taa *taa, Image *color, Image *depth, const SceneView &view, std::string &error,
+             Image *velocity)
 {
     if (!taa || !color || !depth)
     {
         error = "no colour or depth image";
         return false;
+    }
+    if (velocity)
+    {
+        const ImageDesc &velocityInfo = ImageInfo(velocity);
+        if (velocityInfo.width != ImageInfo(color).width || velocityInfo.height != ImageInfo(color).height
+            || !(velocityInfo.usage & VK_IMAGE_USAGE_SAMPLED_BIT))
+        {
+            error = "the velocity image is not the scene's size or cannot be sampled";
+            return false;
+        }
     }
     const ImageDesc &colorInfo = ImageInfo(color);
     const ImageDesc &depthInfo = ImageInfo(depth);
@@ -410,6 +430,8 @@ bool Resolve(Core *core, Taa *taa, Image *color, Image *depth, const SceneView &
     push.jitter[1] = view.projection[2][1];
     push.farDepth = view.projection[2][2] < 1.0f ? view.projection[2][2] : 1.0f;
     push.feedback = history ? kFeedback : 0.0f;
+    // Velocity is motion since last frame: with no history there is none to follow.
+    push.haveVelocity = history && velocity ? 1.0f : 0.0f;
 
     Image *previous = taa->history[taa->latest];
     Image *next = taa->history[taa->latest ^ 1];
@@ -419,13 +441,15 @@ bool Resolve(Core *core, Taa *taa, Image *color, Image *depth, const SceneView &
         error = LastError(core);
         return false;
     }
-    const VkDescriptorImageInfo images[3] = {
+    // Without velocity the depth stands in for it (the shader does not read it).
+    const VkDescriptorImageInfo images[4] = {
         {taa->nearest, ImageView(color), VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL},
         {taa->nearest, ImageSampleView(depth), VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL},
         {taa->linear, ImageView(previous), VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL},
+        {taa->nearest, velocity ? ImageView(velocity) : ImageSampleView(depth), VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL},
     };
-    VkWriteDescriptorSet writes[3]{};
-    for (uint32_t i = 0; i < 3; ++i)
+    VkWriteDescriptorSet writes[4]{};
+    for (uint32_t i = 0; i < 4; ++i)
     {
         writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[i].dstSet = set;
@@ -434,11 +458,13 @@ bool Resolve(Core *core, Taa *taa, Image *color, Image *depth, const SceneView &
         writes[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         writes[i].pImageInfo = &images[i];
     }
-    Functions(core).vkUpdateDescriptorSets(DeviceHandle(core), 3, writes, 0, nullptr);
+    Functions(core).vkUpdateDescriptorSets(DeviceHandle(core), 4, writes, 0, nullptr);
 
     UseImage(core, color, ImageUse::Sampled);
     UseImage(core, depth, ImageUse::Sampled);
     UseImage(core, previous, ImageUse::Sampled);
+    if (velocity)
+        UseImage(core, velocity, ImageUse::Sampled);
     PassDesc pass;
     pass.name = "modern taa";
     pass.colorCount = 1;

@@ -10,8 +10,9 @@ struct GfxModelSurfaceInfo // sizeof=0xC
     uint8_t boneCount;
     uint16_t gfxEntIndex;
     uint16_t lightingHandle;
-    // padding byte
-    // padding byte
+    // Port: the entity number plus one of the scene entity the surface
+    // belongs to, 0 for none (r_modern_motion.h); retail's padding.
+    uint16_t modernOwner;
 };
 
 struct GfxModelSkinnedSurface // sizeof=0x18

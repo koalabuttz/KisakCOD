@@ -837,7 +837,8 @@ void R_DrawAllSceneEnt(const GfxViewInfo *viewInfo)
                 sceneModel->obj,
                 &sceneModel->placement.base,
                 sceneModel->placement.scale,
-                sceneModel->gfxEntIndex))
+                sceneModel->gfxEntIndex,
+                static_cast<uint16_t>(sceneModel->entnum + 1)))
             {
                 for (viewIndex = 0; viewIndex < 7; ++viewIndex)
                     sceneEntVisData[viewIndex][sceneEntIndex] = 0;
@@ -979,7 +980,10 @@ void R_DrawAllDynEnt(const GfxViewInfo *viewInfo)
             dynEntDef = DynEnt_GetEntityDef(dynEntIndex, DYNENT_DRAW_MODEL);
             iassert( dynEntDef->xModel );
             sceneDynModel = &rgp.world->sceneDynModel[scene.sceneDynModelCount];
-            if (R_SkinXModel(&sceneDynModel->info, dynEntDef->xModel, 0, &dynEntPose->pose, 1.0, 0))
+            // The Modern path's owner for a dynamic entity: above every
+            // entity number plus one (r_modern_motion.h).
+            const uint16_t dynEntOwner = static_cast<uint16_t>(0x8000u | ((dynEntIndex + 1) & 0x7FFFu));
+            if (R_SkinXModel(&sceneDynModel->info, dynEntDef->xModel, 0, &dynEntPose->pose, 1.0, 0, dynEntOwner))
             {
                 sceneDynModel->dynEntId = dynEntIndex;
                 ++scene.sceneDynModelCount;

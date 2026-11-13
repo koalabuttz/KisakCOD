@@ -2449,8 +2449,6 @@ void Clear(Device *device_, uint32_t rectCount, const Rect *rects, uint32_t flag
 void DrawIndexedPrimitive(Device *device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t minIndex,
                           uint32_t vertexCount, uint32_t startIndex, uint32_t primitiveCount)
 {
-    (void)minIndex;
-    (void)vertexCount;
     const uint32_t indexCount = VertexCount(type, primitiveCount);
     if (!indexCount || !device->indices)
         return;
@@ -2475,9 +2473,39 @@ void DrawIndexedPrimitive(Device *device, d3d::PrimitiveType type, int32_t baseV
             vk.vkCmdDrawIndexed(cmd, indexCount, 1, startIndex, baseVertex, 0);
         });
     }
+    device->lastIndexed.triangleList = type == d3d::PT_TRIANGLELIST;
+    device->lastIndexed.indices = indices;
+    device->lastIndexed.indexType = indexType;
+    device->lastIndexed.firstIndex = startIndex;
+    device->lastIndexed.indexCount = indexCount;
+    device->lastIndexed.vertexBase = baseVertex;
+    device->lastIndexed.minIndex = minIndex;
+    device->lastIndexed.vertexCount = vertexCount;
     ++device->stats.draws;
     FeedGpu(*device);
 }
+
+#if !defined(KISAK_GFX_GXM)
+bool LastIndexedDraw(Device *device, IndexedDraw &out)
+{
+    const auto &last = device->lastIndexed;
+    const StreamBinding &stream = device->streams[0];
+    if (!last.triangleList || !last.indexCount || !stream.buffer)
+        return false;
+    out.vertices = DrawBuffer(*device, *stream.buffer);
+    out.vertexOffset = stream.offset;
+    out.stride = stream.stride;
+    out.indices = last.indices;
+    out.indexType = last.indexType;
+    out.firstIndex = last.firstIndex;
+    out.indexCount = last.indexCount;
+    out.vertexBase = last.vertexBase;
+    out.minIndex = last.minIndex;
+    out.vertexCount = last.vertexCount;
+    out.viewport = device->viewport;
+    return true;
+}
+#endif
 
 void DrawPrimitive(Device *device, d3d::PrimitiveType type, uint32_t startVertex, uint32_t primitiveCount)
 {
