@@ -244,8 +244,14 @@ target_link_libraries(KisakCOD-mp PRIVATE ${KISAK_VITA_LINK_LIBRARIES} SceCtrl_s
 add_dependencies(KisakCOD-mp update_build_number)
 
 set(KISAK_VITA_MP_TITLE_ID "KSKD00002" CACHE STRING "PS Vita title ID of the multiplayer client .vpk (9 characters)")
+set(KISAK_VITA_TEST_TITLE_ID "KSKD00004" CACHE STRING
+    "PS Vita title ID of KisakCOD Test, the bench's second application (9 characters)")
 # Unsafe: the shader compiler lives in ur0:data, which safe homebrew can't read.
 kisak_vita_pack_vpk(KisakCOD-mp "${KISAK_VITA_MP_TITLE_ID}" "KisakCOD Multiplayer" UNSAFE)
+# The same program as a second application, which the bench writes each
+# job's build into and starts (src/vita/vita_bench.h): it is installed once,
+# by hand or by the bench itself.
+kisak_vita_pack_vpk(KisakCOD-mp "${KISAK_VITA_TEST_TITLE_ID}" "KisakCOD Test" UNSAFE NAME KisakCOD-mp-test)
 
 # The graphics layer on its own (stage 2).
 include(${CMAKE_CURRENT_LIST_DIR}/gxm_probe.cmake)

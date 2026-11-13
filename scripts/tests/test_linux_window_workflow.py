@@ -975,6 +975,7 @@ class CiTriggerTests(unittest.TestCase):
         self.assertEqual(uploads['vita_dedicated']['with']['path'], 'out/vita-RelWithDebInfo/KisakCOD-dedi.vpk')
         self.assertEqual(uploads['vita_mp_client']['with']['name'], 'KisakCOD-mp-vita-RelWithDebInfo')
         for name in ('out/vita-mp-RelWithDebInfo/KisakCOD-mp.vpk', 'out/vita-mp-RelWithDebInfo/KisakCOD-mp.elf',
+                     'out/vita-mp-RelWithDebInfo/KisakCOD-mp-test.vpk',
                      'out/vita-mp-RelWithDebInfo/KisakCOD-gxm-probe.vpk'):
             self.assertIn(name, uploads['vita_mp_client']['with']['path'])
         for upload in uploads.values():
