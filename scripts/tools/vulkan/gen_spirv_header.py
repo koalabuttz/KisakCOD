@@ -64,6 +64,9 @@ SETS = [
             ("exposure_adapt.frag", "kExposureAdaptFrag"),
             ("normals.frag", "kNormalsFrag"),
             ("debug_normals.frag", "kDebugNormalsFrag"),
+            ("gtao.frag", "kGtaoFrag"),
+            ("ao_blur.frag", "kAoBlurFrag"),
+            ("debug_ao.frag", "kDebugAoFrag"),
         ],
     ),
     ShaderSet(

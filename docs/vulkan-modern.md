@@ -626,7 +626,7 @@ pass of 9 depth reads per pixel.
 
 | Setting | Default | Switch |
 | --- | --- | --- |
-| Normals buffer | built only when something reads it: the debug view below for now; ambient occlusion next | `KISAK_VK_MODERN_NORMALS=1` builds it (and turns the prepass on) with nothing reading it, to measure the cost; `KISAK_VK_MODERN_NORMALS=0` never builds it |
+| Normals buffer | built only when something reads it: the debug view below, or ambient occlusion | `KISAK_VK_MODERN_NORMALS=1` builds it (and turns the prepass on) with nothing reading it, to measure the cost; `KISAK_VK_MODERN_NORMALS=0` never builds it |
 | Debug view | off | `KISAK_VK_MODERN_DEBUG=normals` draws the buffer over the finished scene (after the tonemap): red faces right, green up, blue away; a wall seen head on is (128, 128, 0); the sky is left as it is |
 
 The statistics line: `vulkan d3d9: modern: N scenes with a normals buffer
@@ -643,6 +643,67 @@ a slope taken across the edge would be wrong (a version that always takes the
 right-hand side fails two of them). `test_vulkan_d3d9_front.py` runs it with
 the debug view (linear light on and off), with `KISAK_VK_MODERN_NORMALS=1`
 and with `KISAK_VK_MODERN_NORMALS=0`, and checks that a full run builds none.
+
+## Ambient occlusion
+
+Ambient occlusion darkens light that reaches a surface from all around (sky
+light, bounce light) where nearby geometry hides part of the sky: corners,
+the foot of a wall, under a car. CoD4's lightmaps hold some of this at the
+lightmap's resolution; the Modern path adds the small scale that they miss.
+It is meant for indirect light only. The sun is a direct light with its own
+shadow, and darkening it too would draw dark halos on sunlit ground.
+
+**How a scene goes with it.** Ambient occlusion is recorded right after the
+normals buffer, in the same `sceneDepth` hand-over, before the lit surfaces
+are drawn (`modern::BuildAmbientOcclusion`, `vk_modern_ao.cpp`, both passes
+timed as "modern ao"):
+
+1. `shaders/gtao.frag`: ground-truth ambient occlusion (Jimenez et al.,
+   "Practical Real-Time Strategies for Accurate Indirect Occlusion", 2016).
+   For 2 directions on screen around each pixel (slices of the hemisphere),
+   it steps 6 times to each side through the depth, within a radius in world
+   units, and keeps the highest horizon on each side. The visible arc between
+   the two horizons is integrated against the cosine of the pixel's normal
+   (from the normals buffer) projected into the slice. Samples fade out over
+   the outer 60% of the radius, so a distant wall does not darken the
+   ground. The slice angles and step positions are jittered per pixel and per
+   frame (interleaved gradient noise). It writes an `R16_SFLOAT` image. The
+   value is left unclamped: a single slice of an open surface seen at an angle
+   gives more than 1 or less, and only the average over the slices is 1.
+2. `shaders/ao_blur.frag`: a 5x5 blur that keeps to the pixel's own surface
+   (a tap's weight halves when its view depth is 2% away from this pixel's).
+   It clamps the average to 1 and raises it to the strength's power. The
+   result goes to a scene-sized Legacy texture, so a lit draw can sample it.
+   The temporal anti-aliasing averages the remaining noise over frames.
+
+**What a texel holds:** the visible share of the cosine-weighted sky, 1 open,
+0 fully hidden; 1 where there is no surface.
+
+**What reads it.** For now only the debug view. Applying it to the lit
+surfaces' indirect light comes next, in our own lit shaders (`lm_sun.frag`
+multiplies its sky term by it), so it is built only when something reads it.
+
+| Setting | Default | Switch |
+| --- | --- | --- |
+| Ambient occlusion | built only when something reads it: the debug view below for now | `KISAK_VK_MODERN_AO=1` builds it (and the normals buffer and the prepass) with nothing reading it, to measure the cost; `KISAK_VK_MODERN_AO=0` never builds it |
+| Radius | 48 world units (a little over a metre; a player is 70 tall) | `KISAK_VK_MODERN_AO_RADIUS=<units>` |
+| Strength | power 1 | `KISAK_VK_MODERN_AO_POWER=<p>`: the visibility is raised to p (2 darkens, 0.5 lightens, 0 turns it off) |
+| Debug view | off | `KISAK_VK_MODERN_DEBUG=ao` draws the visibility as grey over the finished scene (after the tonemap): white open, darker in corners |
+
+The statistics line: `vulkan d3d9: modern: N scenes with ambient occlusion
+(radius R, power P), X ms GPU each` (both passes).
+
+**Checks:** the D3D9 check's `modern_ao` scene draws a floor 120 units below
+a camera with the engine's 90-degree perspective, and a wall rising from it
+200 units ahead over the right half, with the engine's prepass order. With
+`KISAK_VK_MODERN_DEBUG=ao` it expects open floor and the wall's top at least
+240 of 255, and the floor 12 units in front of the wall and the wall 10 units
+above the floor at least 25 darker but not black (on lavapipe: 252 open
+floor, 244 wall, 200 corner floor, 212 wall foot). Without the view the
+scene comes back as drawn. `test_vulkan_d3d9_front.py` runs it with the debug
+view (linear light on and off), with `KISAK_VK_MODERN_AO=1`, and with
+`KISAK_VK_MODERN_AO=0` and `KISAK_VK_MODERN_NORMALS=0` beside the debug view,
+where none is built.
 
 ## Next
 

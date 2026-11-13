@@ -223,6 +223,44 @@ struct NormalsStats
 };
 NormalsStats Stats(const Normals *normals);
 
+// ---- Ambient occlusion (docs/vulkan-modern.md "Ambient occlusion") ----
+//
+// Ground-truth ambient occlusion (Jimenez et al. 2016) from the scene depth
+// and the normals buffer, recorded before the lit surfaces are drawn so that
+// they can darken their indirect light alone: two slices of six steps a side
+// per pixel, jittered per pixel and frame, then a 5x5 blur that keeps to each
+// surface. The result is the visible fraction (1 unoccluded) in the red
+// channel of a target the caller owns.
+
+struct AoParams
+{
+    float radius = 48.0f;  // world units (inches): about 1.2 m
+    float falloff = 0.6f;  // the outer share of the radius over which samples fade out
+    float power = 1.0f;    // the visibility is raised to it
+    uint32_t frame = 0;    // moves the noise
+};
+
+struct AmbientOcclusion;
+
+// The pipelines (the module's own image is made at the first build). Null
+// with the reason.
+AmbientOcclusion *CreateAmbientOcclusion(Core *core, std::string &error);
+// Waits for the GPU to finish what was recorded.
+void DestroyAmbientOcclusion(Core *core, AmbientOcclusion *ao);
+// Records the occlusion of view.area into `target` (a colour attachment as
+// large as the area's corner, single-sampled, sampled usage), from `depth`
+// and BuildNormals' `normals`. Outside the area `target` is left as it is.
+// Outside a pass, inside a frame. False with the reason, and nothing
+// recorded, when it cannot.
+bool BuildAmbientOcclusion(Core *core, AmbientOcclusion *ao, Image *depth, Image *normals, const SceneView &view,
+                           const AoParams &params, Image *target, std::string &error);
+
+struct AoStats
+{
+    uint64_t builds; // BuildAmbientOcclusion calls that recorded
+};
+AoStats Stats(const AmbientOcclusion *ao);
+
 // ---- Debug views (KISAK_VK_MODERN_DEBUG; docs/vulkan-modern.md) ----
 //
 // Drawn over the anti-aliased scene (TAA's history is kept apart, so a view
@@ -244,6 +282,9 @@ bool DrawVelocityDebug(Core *core, DebugView *debug, Image *velocity, Image *tar
 // stored), and leaves the rest. Outside a pass, inside a frame.
 bool DrawNormalsDebug(Core *core, DebugView *debug, Image *normals, Image *target, const VkRect2D &area,
                       std::string &error);
+// Draws the ambient occlusion in `ao` (its red channel) as grey over `area`
+// of `target`. Outside a pass, inside a frame.
+bool DrawAoDebug(Core *core, DebugView *debug, Image *ao, Image *target, const VkRect2D &area, std::string &error);
 
 // ---- Linear light (renderer plan MD1; docs/vulkan-modern.md) ----
 //
