@@ -520,6 +520,7 @@ public:
     void ModernExposure();
     void ModernVelocity();
     void ModernNormals();
+    void ModernReflections();
     void Bench();
     void BenchRuns();
     void BenchFrames(bool runs);
@@ -3146,6 +3147,138 @@ void Check::ModernNormals()
     SafeRelease(depth);
 }
 
+// The Modern path's screen-space reflections (docs/vulkan-modern.md
+// "Screen-space reflections"), traced from the depth prepass and the normals
+// buffer as the engine draws them, with the light of last scene's
+// anti-aliased colour. The camera looks along +z with a 90-degree
+// perspective (the engine's infinite projection, near plane 4); the basic
+// vertex shader takes positions already divided by w, which for flat quads
+// gives the same depth at every pixel as drawing them in perspective. A grey
+// floor 120 units below the camera runs from 60 to 300 units ahead, and a
+// red wall faces the camera 300 units ahead over the right half, rising from
+// the floor's far edge. The same scene is drawn twice: the first (a cut) has
+// no last scene to read light from, so it has no reflections; the second
+// does. With KISAK_VK_MODERN_DEBUG=reflections the view shows them on the
+// second: the floor in front of the wall mirrors the wall's red at full
+// confidence; the floor on the left mirrors only the sky, which reflects
+// nothing (black); the wall itself mirrors back towards the camera, which
+// the screen cannot show (black). Without the view (or with linear light
+// off, where nothing is traced) the scene comes back as drawn. Reflections
+// are traced with KISAK_VK_MODERN_SSR=1 or their debug view, never with
+// KISAK_VK_MODERN_SSR=0 or KISAK_VK_MODERN_NORMALS=0.
+void Check::ModernReflections()
+{
+    const auto envIs = [](const char *name, const char *value) {
+#if defined(_MSC_VER)
+        char *env = nullptr;
+        size_t envLength = 0;
+        const bool is = _dupenv_s(&env, &envLength, name) == 0 && env && !std::strcmp(env, value);
+        std::free(env);
+        return is;
+#else
+        const char *env = std::getenv(name);
+        return env && !std::strcmp(env, value);
+#endif
+    };
+    const bool normalsOff = envIs("KISAK_VK_MODERN_NORMALS", "0");
+    const bool wanted = !envIs("KISAK_VK_MODERN_SSR", "0") && !normalsOff
+                        && (envIs("KISAK_VK_MODERN_SSR", "1") || envIs("KISAK_VK_MODERN_DEBUG", "reflections"));
+    // The scene's depth is taken whenever the normals buffer is wanted.
+    const bool depthTaken =
+        wanted || (!normalsOff && (envIs("KISAK_VK_MODERN_NORMALS", "1") || envIs("KISAK_VK_MODERN_DEBUG", "normals")));
+    const bool traced = wanted && !envIs("KISAK_VK_MODERN_LINEAR", "0");
+    const bool shown = traced && envIs("KISAK_VK_MODERN_DEBUG", "reflections");
+    Equal("wants_scene_depth", front::ModernWantsSceneDepth(device), depthTaken);
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    // The engine's InfinitePerspectiveMatrix with tan(fov / 2) = 1 both ways.
+    constexpr float k = 0.99951172f, nearPlane = 4.0f;
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = 1.0f;
+    view.projection[0][0] = k;
+    view.projection[1][1] = k;
+    view.projection[2][2] = k;
+    view.projection[2][3] = 1.0f;
+    view.projection[3][2] = -nearPlane * k;
+    view.width = view.height = kSize;
+    const auto project = [&](float x, float y, float z, uint32_t color) {
+        return Vertex{k * x / z, k * y / z, k - nearPlane * k / z, 0.0f, 0.0f, color};
+    };
+    const uint32_t floorColor = Argb(255, 128, 128, 128), wallColor = Argb(255, 200, 40, 40);
+    const Vertex floorCorners[4] = {project(-300, -120, 60, floorColor), project(300, -120, 60, floorColor),
+                                    project(300, -120, 300, floorColor), project(-300, -120, 300, floorColor)};
+    const Vertex wallCorners[4] = {project(0, -120, 300, wallColor), project(300, -120, 300, wallColor),
+                                   project(300, 300, 300, wallColor), project(0, 300, 300, wallColor)};
+    Vertex surfaces[12];
+    const int order[6] = {0, 1, 2, 0, 2, 3};
+    for (int i = 0; i < 6; ++i)
+    {
+        surfaces[i] = floorCorners[order[i]];
+        surfaces[6 + i] = wallCorners[order[i]];
+    }
+    // Pixels of view points: x and y / z, NDC to pixels.
+    const auto pixelOf = [&](float x, float y, float z, UINT &px, UINT &py) {
+        px = static_cast<UINT>((k * x / z + 1.0f) * 0.5f * kSize);
+        py = static_cast<UINT>((1.0f - k * y / z) * 0.5f * kSize);
+    };
+    UINT mirrorX, mirrorY, openX, openY, wallX, wallY;
+    pixelOf(100, -120, 200, mirrorX, mirrorY);
+    pixelOf(-100, -120, 200, openX, openY);
+    pixelOf(150, 150, 300, wallX, wallY);
+    const auto scene = [&](const char *name, bool cut) {
+        Reset(Argb(255, 0, 0, 0));
+        front::ModernSceneBegin(device);
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0),
+           "Clear(scene)");
+        device->SetRenderState(D3DRS_ZENABLE, TRUE);
+        device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+        device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(prepass)");
+        device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xf);
+        view.cut = cut;
+        Equal((std::string(name) + "_scene_depth").c_str(), static_cast<int>(front::ModernSceneDepth(device, view)),
+              static_cast<int>(depthTaken ? front::ModernResult::Done : front::ModernResult::Skipped));
+        device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(lit)");
+        Equal((std::string(name) + "_scene_done").c_str(),
+              front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
+    };
+    const auto expectDrawn = [&](const char *prefix) {
+        const std::string p = prefix;
+        Expect((p + "_mirror_floor").c_str(), mirrorX, mirrorY, 128, 128, 128);
+        Expect((p + "_open_floor").c_str(), openX, openY, 128, 128, 128);
+        Expect((p + "_wall").c_str(), wallX, wallY, 200, 40, 40);
+        Expect((p + "_sky").c_str(), 20, 10, 0, 0, 0);
+    };
+
+    // The first scene: no last scene, no reflections, drawn as it is.
+    scene("first", true);
+    if (Read())
+        expectDrawn("first");
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+
+    scene("second", false);
+    if (Read())
+    {
+        if (shown)
+        {
+            Expect("mirror_floor_shows_wall", mirrorX, mirrorY, 200, 40, 40);
+            Expect("open_floor_shows_nothing", openX, openY, 0, 0, 0);
+            Expect("wall_shows_nothing", wallX, wallY, 0, 0, 0);
+            Expect("sky_shows_nothing", 20, 10, 0, 0, 0);
+        }
+        else
+            expectDrawn("second");
+    }
+    device->SetDepthStencilSurface(nullptr);
+    SafeRelease(depth);
+}
+
 // The Modern path's velocity for what moves on its own
 // (front::ModernSurfaceMoved, docs/vulkan-modern.md). A band of 2-pixel white
 // and black stripes moves 2 pixels right each frame, drawn indexed from a
@@ -4326,6 +4459,7 @@ int Run(const Options &options)
         {"modern_exposure", &Check::ModernExposure, true},
         {"modern_velocity", &Check::ModernVelocity, true},
         {"modern_normals", &Check::ModernNormals, true},
+        {"modern_reflections", &Check::ModernReflections, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},
