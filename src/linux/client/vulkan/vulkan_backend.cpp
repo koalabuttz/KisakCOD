@@ -384,7 +384,7 @@ void ModernJitterPixels(void *, uint32_t frame, float *x, float *y)
     gfx_vk::modern::JitterPixels(frame, *x, *y);
 }
 
-void ModernSceneDone(void *, IDirect3DDevice9 *device, const GfxModernScene *scene)
+void ModernSceneDone(void *, IDirect3DDevice9 *device, GfxModernScene *scene)
 {
     if (s_modernRefused.load(std::memory_order_relaxed))
         return;
@@ -396,7 +396,15 @@ void ModernSceneDone(void *, IDirect3DDevice9 *device, const GfxModernScene *sce
     view.width = uint32_t(std::max(0, scene->width));
     view.height = uint32_t(std::max(0, scene->height));
     view.cut = scene->cut;
-    if (front::ModernSceneDone(device, view) == front::ModernResult::Refused)
+    view.glow.on = scene->glow;
+    view.glow.radius = scene->glowRadius;
+    view.glow.intensity = scene->glowIntensity;
+    view.glow.cutoff = scene->glowCutoff;
+    view.glow.desaturation = scene->glowDesaturation;
+    bool glowDrawn = false;
+    const front::ModernResult result = front::ModernSceneDone(device, view, &glowDrawn);
+    scene->glowDrawn = glowDrawn;
+    if (result == front::ModernResult::Refused)
         s_modernRefused.store(true, std::memory_order_relaxed);
 }
 

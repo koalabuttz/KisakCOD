@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -99,6 +100,17 @@ struct Backend
     modern::Tonemap *tonemap = nullptr;
     uint64_t linearScenes = 0, linearScenesBase = 0;
     uint64_t linearCopies = 0, linearCopiesBase = 0;
+    // Bloom from the linear-light scene in place of the renderer's glow
+    // (vk_d3d9.h ModernSceneDone): made at the first scene with glow, unless
+    // KISAK_VK_MODERN_BLOOM=0; the scenes it ran for, and at the last reset.
+    bool bloomWanted = true;
+    bool bloomFailed = false;
+    modern::Bloom *bloom = nullptr;
+    uint64_t bloomScenes = 0, bloomScenesBase = 0;
+    uint64_t bloomPassesBase = 0;
+    // The bloom passes' GPU time at the last reset (pass timings add up over
+    // the device's life).
+    double bloomMsBase = 0.0;
 };
 
 namespace
@@ -244,6 +256,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     // The Modern path draws its scenes in linear light unless this says not to
     // (docs/vulkan-modern.md); without r_visuals modern nothing asks for it.
     backend->linearWanted = !EnvIsZero("KISAK_VK_MODERN_LINEAR");
+    backend->bloomWanted = !EnvIsZero("KISAK_VK_MODERN_BLOOM");
     if (!h.windowSystem || !h.windowSystem(h.user, desc.window, backend->windowSystem))
     {
         error = "the host has no Vulkan window system for this window";
@@ -450,10 +463,26 @@ void BackendLogStats(Backend *backend, bool reset)
                 static_cast<unsigned long long>(backend->linearCopies - backend->linearCopiesBase),
                 pass.supported ? average(pass) : 0.0);
     }
+    // Bloom: the scenes it ran for in place of the glow, the passes of each,
+    // and their GPU time per scene.
+    if (backend->bloom)
+    {
+        const PassTimings pass = PassTimingsFor(backend->core, "modern bloom");
+        const uint64_t scenes = backend->bloomScenes - backend->bloomScenesBase;
+        const uint64_t passes = modern::Stats(backend->bloom).passes - backend->bloomPassesBase;
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with bloom in place of the glow (%.1f passes each), "
+                   "%.3f ms GPU each",
+                static_cast<unsigned long long>(scenes), scenes ? double(passes) / double(scenes) : 0.0,
+                pass.supported && scenes ? (pass.totalMs - backend->bloomMsBase) / double(scenes) : 0.0);
+    }
     if (reset)
     {
         if (backend->taa)
             backend->taaBase = modern::Stats(backend->taa);
+        backend->bloomScenesBase = backend->bloomScenes;
+        backend->bloomPassesBase = modern::Stats(backend->bloom).passes;
+        if (backend->bloom)
+            backend->bloomMsBase = PassTimingsFor(backend->core, "modern bloom").totalMs;
         backend->linearScenesBase = backend->linearScenes;
         backend->linearCopiesBase = backend->linearCopies;
         backend->statsBase = stats;
@@ -476,6 +505,11 @@ void CloseBackend(Backend *backend)
     {
         modern::DestroyTaa(backend->core, backend->taa);
         backend->taa = nullptr;
+    }
+    if (backend->bloom)
+    {
+        modern::DestroyBloom(backend->core, backend->bloom);
+        backend->bloom = nullptr;
     }
     if (backend->tonemap)
     {
@@ -594,6 +628,54 @@ bool EnsureTonemap(Backend *backend)
     return true;
 }
 
+// The display value (0 to 1) as linear light: the sRGB curve, as the Legacy
+// adapter decodes the scene's colours.
+float DecodeSrgb(float value)
+{
+    value = std::clamp(value, 0.0f, 1.0f);
+    return value <= 0.04045f ? value / 12.92f : std::pow((value + 0.055f) / 1.055f, 2.4f);
+}
+
+// The bloom over the linear-light scene for the view's glow: null when the
+// view has no glow, bloom is off or cannot run (logged once). The scale for
+// the tonemap comes back in scale.
+Image *DrawBloom(Backend *backend, Image *scene, const VkRect2D &area, const ModernSceneView &view, float &scale)
+{
+    scale = 0.0f;
+    if (!view.glow.on || view.glow.intensity <= 0.0f || !backend->bloomWanted || backend->bloomFailed)
+        return nullptr;
+    if (!backend->bloom)
+    {
+        std::string error;
+        backend->bloom = modern::CreateBloom(backend->core, error);
+        if (!backend->bloom)
+        {
+            backend->bloomFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no bloom, the glow is drawn as before: %s", error.c_str());
+            return nullptr;
+        }
+    }
+    modern::BloomParams params;
+    // The glow's cutoff is a display value: its light is where bloom starts,
+    // with a narrow soft knee (a quarter of it) below, so that light just
+    // past the cutoff does not switch on with a hard edge.
+    params.threshold = DecodeSrgb(view.glow.cutoff);
+    params.knee = params.threshold * 0.25f;
+    params.desaturation = view.glow.desaturation;
+    params.levels = modern::BloomLevelsFor(view.glow.radius, area.extent.width, area.extent.height);
+    std::string error;
+    Image *bloom = modern::BuildBloom(backend->core, backend->bloom, scene, area, params, error);
+    if (!bloom)
+    {
+        LogModernOnce(backend, "no bloom, the glow is drawn as before", error);
+        return nullptr;
+    }
+    // The chain adds every level up: the intensity is shared among them.
+    scale = view.glow.intensity / static_cast<float>(params.levels);
+    ++backend->bloomScenes;
+    return bloom;
+}
+
 // The whole of a surface, or a rectangle of it, as a core rectangle.
 VkRect2D AreaOf(lg::Surface *surface, const lg::Rect *rect)
 {
@@ -694,7 +776,7 @@ bool BackendModernCopyScene(Backend *backend, lg::Surface *scene, const lg::Rect
 }
 
 ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surface *depth,
-                                const ModernSceneView &view, lg::Surface *display)
+                                const ModernSceneView &view, lg::Surface *display, bool *glowDrawn)
 {
     if (!backend || !backend->legacy || !backend->core)
         return ModernResult::Refused;
@@ -706,13 +788,18 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
         if (!lg::HandOverRecording(backend->legacy))
             return ModernResult::Skipped;
         const VkRect2D area = {{static_cast<int32_t>(view.x), static_cast<int32_t>(view.y)}, {view.width, view.height}};
+        Image *scene = lg::SurfaceImage(color);
+        float bloomScale = 0.0f;
+        Image *bloom = DrawBloom(backend, scene, area, view, bloomScale);
         std::string error;
-        if (!modern::WriteDisplay(backend->core, backend->tonemap, lg::SurfaceImage(color), area,
-                                  lg::SurfaceImage(display), area, VK_FILTER_NEAREST, "modern tonemap", error))
+        if (!modern::WriteDisplay(backend->core, backend->tonemap, scene, area, lg::SurfaceImage(display), area,
+                                  VK_FILTER_NEAREST, "modern tonemap", error, bloom, bloomScale))
         {
             LogModernOnce(backend, "the linear-light scene is not tonemapped", error);
             return ModernResult::Refused;
         }
+        if (bloom && glowDrawn)
+            *glowDrawn = true;
         return passes;
     };
     if (backend->taaFailed)

@@ -287,6 +287,9 @@ void R_ModernJitterScene(const refdef_s *refdef, GfxViewParms *viewParms);
 void R_ModernSceneBegin();
 // RB_EndSceneRendering's call.
 void R_ModernSceneDone(const GfxViewInfo *viewInfo);
+// True when the Modern path drew this view's glow as bloom at its last
+// R_ModernSceneDone: the post effects leave the glow out.
+bool R_ModernDrewGlow(const GfxViewInfo *viewInfo);
 void R_SetupProjection(float tanHalfFovX, float tanHalfFovY, GfxViewParms *viewParms);
 bool R_UpdateFrameSun();
 void R_LerpDir(

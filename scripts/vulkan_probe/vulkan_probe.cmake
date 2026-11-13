@@ -100,7 +100,9 @@ target_compile_options(kisak_gfx_vk PRIVATE ${KISAK_VULKAN_WARNINGS})
 # (vk_modern_shaders.h, scripts/tools/vulkan/gen_spirv_header.py).
 add_library(kisak_gfx_vk_modern STATIC
     "${SRC_DIR}/gfx_vk/modern/vk_modern_taa.cpp"
-    "${SRC_DIR}/gfx_vk/modern/vk_modern_tonemap.cpp")
+    "${SRC_DIR}/gfx_vk/modern/vk_modern_tonemap.cpp"
+    "${SRC_DIR}/gfx_vk/modern/vk_modern_bloom.cpp"
+    "${SRC_DIR}/gfx_vk/modern/vk_modern_fullscreen.cpp")
 target_link_libraries(kisak_gfx_vk_modern PUBLIC kisak_gfx_vk)
 target_compile_options(kisak_gfx_vk_modern PRIVATE ${KISAK_VULKAN_WARNINGS})
 

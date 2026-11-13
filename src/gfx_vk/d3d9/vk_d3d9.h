@@ -184,6 +184,16 @@ struct ModernSceneView
     uint32_t x, y, width, height;
     // A camera cut: no history from before it is used.
     bool cut;
+    // The view's glow (its vision set's bloom), when the renderer would draw
+    // it: in linear light the back end draws bloom from it instead.
+    struct Glow
+    {
+        bool on = false;
+        float radius = 0.0f;       // the glow's Gaussian sigma, in pixels of the scene
+        float intensity = 0.0f;    // how much of the glow's light is added
+        float cutoff = 0.0f;       // display value (0 to 1) below which nothing glows
+        float desaturation = 0.0f; // 0 keeps the colour, 1 makes the glow grey
+    } glow;
 };
 enum class ModernResult
 {
@@ -209,6 +219,8 @@ ModernResult ModernSceneBegin(IDirect3DDevice9 *device);
 // 0 and depth surface (temporal anti-aliasing), between the renderer's draws.
 // After a ModernSceneBegin that was Done, the scene is the linear-light image:
 // the passes run on it, the tonemap writes it into the back buffer within the
-// viewport, and the back buffer is render target 0 again.
-ModernResult ModernSceneDone(IDirect3DDevice9 *device, const ModernSceneView &view);
+// viewport, and the back buffer is render target 0 again. With view.glow on,
+// the bloom is drawn from the linear-light image before the tonemap, and
+// *glowDrawn (when given) is set true: the renderer leaves out its own glow.
+ModernResult ModernSceneDone(IDirect3DDevice9 *device, const ModernSceneView &view, bool *glowDrawn = nullptr);
 } // namespace gfx_vk::d3d9

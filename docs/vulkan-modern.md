@@ -11,7 +11,8 @@ the project files, `renderer/modern-renderer-plan.md`, sections 3, 6 and 7).
 early experiment (E1), temporal anti-aliasing (TAA) over the scene the Legacy
 path drew, and the first piece of linear light (the plan's MD1): the scene is
 drawn into a linear-light HDR image and tonemapped back
-([Linear light](#linear-light)). Velocity comes from the camera alone. No
+([Linear light](#linear-light)), with bloom from that image in place of the
+vision set's glow ([Bloom](#bloom)). Velocity comes from the camera alone. No
 material is drawn by shaders of the Modern path's own yet.
 
 ## Turning it on
@@ -188,9 +189,9 @@ buffer as before, with the anti-aliasing over it).
 sRGB curve, the exact inverse of the decode. An opaque surface therefore comes
 back exactly as the Legacy path would have stored it (a half float keeps the
 decoded value closely enough), and only blending differs. A tonemap with a
-shoulder, vision sets as its inputs, and bloom come once the world is drawn
-by the Modern path's own shaders and the scene holds light brighter than
-white.
+shoulder and the vision sets' film settings as its inputs come once the world
+is drawn by the Modern path's own shaders and the scene holds light brighter
+than white. Bloom is already there ([Bloom](#bloom)).
 
 **Cost:** the scene image (8 bytes a pixel, 8 MB at 1280x800), the decode in
 every pixel shader that draws the scene, one full-screen pass for the tonemap
@@ -211,9 +212,75 @@ every pixel shader case with `--linear-output` too
 
 **Not yet:** the world-lit family drawn by the Modern path's own shaders
 (colour maps decoded as sRGB, lightmaps and the light grid as light), the
-tonemap's shoulder and vision sets, bloom. The plan's MD1 lists them; the
-retail shaders' lightmap decoding is being read on the laptop first, as
-derived facts only.
+tonemap's shoulder and the vision sets' film settings. The plan's MD1 lists
+them; the retail shaders' lightmap decoding is being read on a machine with
+the game first, as derived facts only.
+
+## Bloom
+
+In linear light the Modern path draws bloom from the scene image in place of
+the glow the vision set asks for (`r_glow`, the vision set's `glow*` values).
+The Legacy glow cuts the 8-bit scene off at a display value, blurs a quarter-
+size copy with a Gaussian and adds it back to display values. The bloom
+works on light instead, before the tonemap, so it adds light where light is
+(an HDR source blooms by how bright it really is once the scene holds such
+light).
+
+1. **What the renderer passes.** `R_ModernSceneDone` (`src/gfx_d3d/r_scene.cpp`)
+   fills `GfxModernScene`'s glow fields when `R_UsingGlow` says the view
+   would draw its glow: the radius as a Gaussian sigma in scene pixels (as
+   `RB_ApplyGlowFilter` sizes it: radius x scene height / 1920), the
+   intensity, the cutoff and the desaturation. The host passes them to the
+   front's `ModernSceneDone` (`ModernSceneView::glow`).
+2. **The chain** (`gfx_vk::modern::BuildBloom`, `vk_modern_bloom.cpp`,
+   `shaders/bloom_down.frag`, `bloom_up.frag`, every pass named
+   `modern bloom`). After the anti-aliasing, the scene's viewport goes down a
+   chain of `R16G16B16A16_SFLOAT` images, each half the size of the one
+   before, through the 13-tap filter of Jimenez ("Next Generation Post
+   Processing in Call of Duty: Advanced Warfare", SIGGRAPH 2014). The first
+   step keeps the light above the threshold with a soft knee, takes the
+   desaturation out of it and weights each block of taps by 1 / (1 + luma)
+   so single bright pixels do not flicker. Then each level is blurred with a
+   3x3 tent and added to the level above it. The number of levels follows the
+   glow's radius (`BloomLevelsFor`: log2 of the sigma plus 3, from 3 to 7, no
+   level under 4 pixels).
+3. **The tonemap adds it.** The tonemap samples the largest level and adds
+   its light times the intensity divided by the number of levels, then
+   tonemaps as before.
+4. **The renderer leaves its glow out.** The host sets
+   `GfxModernScene::glowDrawn`; `R_ModernDrewGlow` then keeps
+   `RB_ProcessPostEffects` (`src/gfx_d3d/rb_postfx.cpp`) from drawing the
+   Legacy glow for that view. Depth of field, the film colour settings and
+   blur stay with the Legacy post effects, on the tonemapped back buffer, so
+   the order changes: the bloom now comes before the film colour settings
+   instead of after them.
+
+**Mapping.** The glow's cutoff is a display value: its linear light is the
+threshold, and the knee reaches a quarter of it below. The intensity is the
+amount of the bloom's light added (shared among the levels). Exact parity
+with the Legacy glow is not the aim, since the bloom adds light where the
+glow added display values; it should look like the same vision set, wider and
+softer. `KISAK_VK_MODERN_BLOOM=0` turns the bloom off, and the Legacy glow is
+then drawn on the tonemapped scene as before. Without linear light there is no
+bloom either.
+
+**Cost:** the chain's images (about a third of the scene image's memory for
+all levels), one pass per level down and one per level up but the last
+(7 passes for 4 levels), a few small full-screen passes. `r_vkStats` and the
+device's statistics print `vulkan d3d9: modern: N scenes with bloom in place
+of the glow (P passes each), X ms GPU each`.
+
+**Checks:** the D3D9 check's `modern_bloom` scene draws three scenes in
+linear light: a white square on black with glow (light spreads around the
+square, grey, fading with distance, and the renderer is told to leave its
+glow out); grey below the cutoff with glow (nothing spreads); the white
+square without glow (nothing spreads, the renderer keeps its glow).
+`test_vulkan_d3d9_front.py` also runs it with `KISAK_VK_MODERN_BLOOM=0` and
+with `KISAK_VK_MODERN_LINEAR=0`, where it never blooms.
+
+**Not yet:** the chain in `R11G11B10_UFLOAT` (half the memory traffic; the
+plan allows it once a test shows it is harmless); the film colour settings
+moved into the tonemap, so that bloom and film keep the Legacy order.
 
 ## Next
 
@@ -225,8 +292,8 @@ From the plan's E1, in order:
 * a reactive mask for effects;
 * then the rest of linear light: the world-lit family drawn by the Modern
   path's own shaders into the HDR scene ([Linear light](#linear-light) has
-  the image and the tonemap), a tonemap that matches Legacy at neutral
-  settings, vision sets and bloom.
+  the image, the tonemap and bloom), a tonemap with a shoulder, and the
+  vision sets' film settings in it.
 
 The first laptop run of this piece should compare `r_visuals legacy` and
 `modern` in the standing mp_crash scene: frame rate, the pass's GPU time,

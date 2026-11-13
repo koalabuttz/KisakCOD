@@ -117,7 +117,8 @@ void BackendCounters(const Backend *, DeviceCounters &out)
 void BackendPollProgress(Backend *) {}
 
 // No Modern path on the PS Vita.
-ModernResult BackendModernScene(Backend *, lg::Surface *, lg::Surface *, const ModernSceneView &, lg::Surface *)
+ModernResult BackendModernScene(Backend *, lg::Surface *, lg::Surface *, const ModernSceneView &, lg::Surface *,
+                                bool *)
 {
     return ModernResult::Refused;
 }
