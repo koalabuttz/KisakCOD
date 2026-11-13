@@ -108,6 +108,9 @@ struct Backend
     modern::Bloom *bloom = nullptr;
     uint64_t bloomScenes = 0, bloomScenesBase = 0;
     uint64_t bloomPassesBase = 0;
+    // The bloom passes' GPU time at the last reset (pass timings add up over
+    // the device's life).
+    double bloomMsBase = 0.0;
 };
 
 namespace
@@ -470,7 +473,7 @@ void BackendLogStats(Backend *backend, bool reset)
         HostLog(h, "vulkan d3d9: modern: %llu scenes with bloom in place of the glow (%.1f passes each), "
                    "%.3f ms GPU each",
                 static_cast<unsigned long long>(scenes), scenes ? double(passes) / double(scenes) : 0.0,
-                pass.supported && scenes ? pass.totalMs / double(scenes) : 0.0);
+                pass.supported && scenes ? (pass.totalMs - backend->bloomMsBase) / double(scenes) : 0.0);
     }
     if (reset)
     {
@@ -478,6 +481,8 @@ void BackendLogStats(Backend *backend, bool reset)
             backend->taaBase = modern::Stats(backend->taa);
         backend->bloomScenesBase = backend->bloomScenes;
         backend->bloomPassesBase = modern::Stats(backend->bloom).passes;
+        if (backend->bloom)
+            backend->bloomMsBase = PassTimingsFor(backend->core, "modern bloom").totalMs;
         backend->linearScenesBase = backend->linearScenes;
         backend->linearCopiesBase = backend->linearCopies;
         backend->statsBase = stats;
