@@ -66,7 +66,8 @@ int OutputLocation(const ls::Shader &vs, uint8_t usage, uint32_t index, uint8_t 
 
 // The lm_sun.frag and lp_sun.frag builds for each set of maps
 // (gen_spirv_header.py), by family and ModernLitShader flags (shadow 1,
-// normal 2, specular 4, detail 8).
+// normal 2, specular 4, detail 8); without the sun (ModernLitNoSun) the same
+// sources without it, by the maps alone.
 struct LitBuild
 {
     const uint32_t *words;
@@ -95,16 +96,39 @@ struct LitBuild
         return LIT_BUILD(k##prefix##ShadowDNSFrag);                                                                \
     default: return LitBuild{nullptr, 0};                                                                          \
     }
+#define LIT_NO_SUN(prefix)                                                                                         \
+    switch (maps)                                                                                                  \
+    {                                                                                                              \
+    case 0: return LIT_BUILD(k##prefix##Frag);                                                                     \
+    case ModernLitNormal: return LIT_BUILD(k##prefix##NFrag);                                                      \
+    case ModernLitSpecular: return LIT_BUILD(k##prefix##SFrag);                                                    \
+    case ModernLitNormal | ModernLitSpecular: return LIT_BUILD(k##prefix##NSFrag);                                 \
+    case ModernLitDetail: return LIT_BUILD(k##prefix##DFrag);                                                      \
+    case ModernLitDetail | ModernLitNormal: return LIT_BUILD(k##prefix##DNFrag);                                   \
+    case ModernLitDetail | ModernLitSpecular: return LIT_BUILD(k##prefix##DSFrag);                                 \
+    case ModernLitDetail | ModernLitNormal | ModernLitSpecular: return LIT_BUILD(k##prefix##DNSFrag);              \
+    default: return LitBuild{nullptr, 0};                                                                          \
+    }
 LitBuild LitBuildFor(uint8_t shader)
 {
+    if (!ModernLitSun(shader))
+    {
+        const uint8_t maps = shader & (ModernLitNormal | ModernLitSpecular | ModernLitDetail);
+        if (ModernLitModel(shader))
+        {
+            LIT_NO_SUN(LpNoSun)
+        }
+        LIT_NO_SUN(LmNoSun)
+    }
     const uint8_t maps = shader & (ModernLitShadow | ModernLitNormal | ModernLitSpecular | ModernLitDetail);
-    if ((shader & ModernLitFamilyMask) == ModernLitLpSun)
+    if (ModernLitModel(shader))
     {
         LIT_FAMILY(LpSun)
     }
     LIT_FAMILY(LmSun)
 }
 #undef LIT_FAMILY
+#undef LIT_NO_SUN
 #undef LIT_BUILD
 } // namespace
 
@@ -123,16 +147,22 @@ bool BuildModernLitSpirv(uint8_t shader, const ls::Shader &vs, float sunStrength
         {1, kUsageTexcoord, 1, 4},
         {10, kUsageColor, 0, 4},
     };
-    if (shader & ModernLitNormal)
+    // The world's normal-mapped surfaces without the sun need the normal (and
+    // so the binormal and tangent) only for the specular: their normal map
+    // turns only the lightmap's light (lit shader facts 5), and the game's
+    // vertex shader for them writes no tangent frame.
+    const bool tangentFrame = (shader & ModernLitNormal)
+        && (ModernLitSun(shader) || ModernLitModel(shader) || (shader & ModernLitSpecular));
+    if (tangentFrame)
     {
         placeholders.push_back({2, kUsageTexcoord, 2, 4});
         placeholders.push_back({3, kUsageTexcoord, 3, 4});
     }
-    if (shader & ModernLitShadow)
+    if (ModernLitShadowed(shader))
         placeholders.push_back({4, kUsageTexcoord, 4, 4});
     if (shader & ModernLitSpecular)
         placeholders.push_back({5, kUsageTexcoord, 5, 4});
-    if ((shader & ModernLitFamilyMask) == ModernLitLpSun)
+    if (ModernLitModel(shader))
         placeholders.push_back({6, kUsageTexcoord, 6, 4}); // the lighting-volume coordinate
     const uint32_t mode = (shader & ModernLitModeMask) >> ModernLitModeShift;
     // Where each placeholder goes.

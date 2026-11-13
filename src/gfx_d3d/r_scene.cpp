@@ -1458,25 +1458,35 @@ static bool R_ModernTakeWord(const char **name, size_t *length, const char *word
 // lm_[hsm_]sun_<r0|b0|t0>c0[d0][n0][s0]_sm3, or lm_[hsm_]sun_r0c0_sm2; and for
 // models lp_[hsm_][i_]sun_<r0|b0|t0>c0[d0][n0][s0]_sm3 (i_, instanced, shares
 // the pixel shader; skin_ and flag_ have shaders of their own that model-lit
-// shader facts did not read, sm_ compares in the shader).
+// shader facts did not read, sm_ compares in the shader). Without the sun
+// (interiors, lit shader facts 5): lm_<r0|b0|t0>c0[d0][n0][s0]_sm3 and
+// lp_[i_]<r0|b0|t0>c0[d0][n0][s0]_sm3 (their shader model 2 builds read the
+// lightmap's UV elsewhere; lp_skin_ s0 has a shader of its own, and flag_,
+// the same shader as lp_t0, is left with skin_ for now).
 static uint8_t R_ModernLitShaderFromName(const char *name)
 {
     size_t length = strlen(name);
     if (length > 5 && !strcmp(name + length - 5, ".hlsl"))
         length -= 5;
-    uint8_t shader = GFX_MODERN_LIT_SHADER_LM_SUN;
+    uint8_t shader;
     if (R_ModernTakeWord(&name, &length, "lm_hsm_sun_"))
-        shader |= GFX_MODERN_LIT_SHADER_SHADOW;
+        shader = GFX_MODERN_LIT_SHADER_LM_SUN | GFX_MODERN_LIT_SHADER_SHADOW;
+    else if (R_ModernTakeWord(&name, &length, "lm_sun_"))
+        shader = GFX_MODERN_LIT_SHADER_LM_SUN;
+    else if (R_ModernTakeWord(&name, &length, "lm_"))
+        shader = GFX_MODERN_LIT_SHADER_NO_SUN;
     else if (R_ModernTakeWord(&name, &length, "lp_"))
     {
-        shader = GFX_MODERN_LIT_SHADER_LP_SUN;
-        if (R_ModernTakeWord(&name, &length, "hsm_"))
-            shader |= GFX_MODERN_LIT_SHADER_SHADOW;
+        const bool shadow = R_ModernTakeWord(&name, &length, "hsm_");
         R_ModernTakeWord(&name, &length, "i_");
-        if (!R_ModernTakeWord(&name, &length, "sun_"))
+        if (R_ModernTakeWord(&name, &length, "sun_"))
+            shader = GFX_MODERN_LIT_SHADER_LP_SUN | (shadow ? GFX_MODERN_LIT_SHADER_SHADOW : 0);
+        else if (!shadow)
+            shader = GFX_MODERN_LIT_SHADER_NO_SUN | GFX_MODERN_LIT_SHADER_NO_SUN_MODEL;
+        else
             return GFX_MODERN_LIT_SHADER_NONE;
     }
-    else if (!R_ModernTakeWord(&name, &length, "lm_sun_"))
+    else
         return GFX_MODERN_LIT_SHADER_NONE;
     if (R_ModernTakeWord(&name, &length, "b0"))
         shader |= GFX_MODERN_LIT_SHADER_BLENDED;
@@ -1499,7 +1509,7 @@ static uint8_t R_ModernLitShaderFromName(const char *name)
     if (length == 4 && !strncmp(name, "_sm3", 4))
         return shader;
     if (length == 4 && !strncmp(name, "_sm2", 4) && !(shader & sm3Only)
-        && !(shader & GFX_MODERN_LIT_SHADER_LP_SUN))
+        && (shader & GFX_MODERN_LIT_SHADER_FAMILY) == GFX_MODERN_LIT_SHADER_LM_SUN)
         return shader;
     return GFX_MODERN_LIT_SHADER_NONE;
 }
@@ -1530,18 +1540,25 @@ static bool R_ModernMaterialConstIs(const Material *material, uint32_t nameHash,
 // Models (lp_) read the lighting volume at s4 and lightingLookupScale at c5
 // in place of the lightmaps, so the shadow map moves to s5 and everything
 // after it one sampler and one constant on (model-lit shader facts); the
-// probe is their only custom sampler. Anything else keeps the game's shader.
+// probe is their only custom sampler. Without the sun (interiors) the same
+// less the sun (c17, c18, c19), the primary lightmap and the shadow map
+// (lit shader facts 5). Anything else keeps the game's shader.
 static uint8_t R_ModernLitShader(const char *name, const Material *material, const MaterialPass *pass)
 {
     const uint8_t shader = R_ModernLitShaderFromName(name);
     if (shader == GFX_MODERN_LIT_SHADER_NONE)
         return GFX_MODERN_LIT_SHADER_NONE;
-    const bool shadow = (shader & GFX_MODERN_LIT_SHADER_SHADOW) != 0;
+    const uint8_t family = shader & GFX_MODERN_LIT_SHADER_FAMILY;
+    const bool sun = family != GFX_MODERN_LIT_SHADER_NO_SUN;
+    const bool shadow = sun && (shader & GFX_MODERN_LIT_SHADER_SHADOW) != 0;
     const bool normal = (shader & GFX_MODERN_LIT_SHADER_NORMAL) != 0;
     const bool specular = (shader & GFX_MODERN_LIT_SHADER_SPECULAR) != 0;
     const bool detail = (shader & GFX_MODERN_LIT_SHADER_DETAIL) != 0;
-    const bool model = (shader & GFX_MODERN_LIT_SHADER_LP_SUN) != 0;
-    const uint32_t customWanted = (specular ? 1u : 0u) | (model ? 0u : 6u);
+    const bool model = family == GFX_MODERN_LIT_SHADER_LP_SUN
+        || (!sun && (shader & GFX_MODERN_LIT_SHADER_NO_SUN_MODEL) != 0);
+    // The probe (1) with s0; the world's lightmaps, primary (2) with the sun
+    // and secondary (4).
+    const uint32_t customWanted = (specular ? 1u : 0u) | (model ? 0u : sun ? 6u : 4u);
     if ((pass->customSamplerFlags & customWanted) != customWanted)
         return GFX_MODERN_LIT_SHADER_NONE;
     const uint32_t step = model ? 1u : 0u; // the volume and its scale come first
@@ -1572,10 +1589,11 @@ static uint8_t R_ModernLitShader(const char *name, const Material *material, con
         LIGHTING_VOLUME = 1u << 13,
         LOOKUP_SCALE = 1u << 14,
     };
-    const uint32_t wanted = COLOR_MAP | FOG_COLOR | SUN_POSITION | SUN_DIFFUSE
+    const uint32_t wanted = COLOR_MAP | FOG_COLOR | (sun ? SUN_POSITION | SUN_DIFFUSE : 0u)
         | (model ? LIGHTING_VOLUME | LOOKUP_SCALE : 0u)
         | (shadow ? SHADOW_MAP | SWITCH_PARTITION | SHADOW_SCALE : 0u) | (normal ? NORMAL_MAP : 0u)
-        | (specular ? SPECULAR_MAP | ENV_MAP_PARMS | SUN_SPECULAR : 0u) | (detail ? DETAIL_MAP | DETAIL_SCALE : 0u);
+        | (specular ? SPECULAR_MAP | ENV_MAP_PARMS | (sun ? SUN_SPECULAR : 0u) : 0u)
+        | (detail ? DETAIL_MAP | DETAIL_SCALE : 0u);
     const uint32_t argCount = pass->perPrimArgCount + pass->perObjArgCount + pass->stableArgCount;
     for (uint32_t i = 0; i < argCount; ++i)
     {

@@ -655,6 +655,7 @@ are.
 | --- | --- |
 | `KISAK_VK_MODERN_SHADERS=0` | our shaders on (with linear light and lit passes on) |
 | `KISAK_VK_MODERN_MODEL_SHADERS=0` | the models' (`lp_`) on too |
+| `KISAK_VK_MODERN_NO_SUN_SHADERS=0` | those without the sun (interiors) on too |
 | `KISAK_VK_MODERN_SUN_STRENGTH=<value>` | 1 (as bright as the game's) |
 | `KISAK_VK_MODERN_SKY_STRENGTH=<value>` | 1 |
 
@@ -705,6 +706,8 @@ the lightmaps, so ours differs from `lm_sun.frag` only there:
   specular is masked by how much colour the specular map has (any channel
   over a tenth is whole) times the vertex alpha. That mask scales the
   gloss and envMapParms, and the vertex alpha scales the specular colour.
+  The world's `b0` does the same (the slopes also turn the lightmap's
+  light).
 
 `KISAK_VK_MODERN_MODEL_SHADERS=0` keeps the models on the game's shaders
 while the world uses ours.
@@ -717,6 +720,42 @@ volume is 1x1x2, black in the first slice. Only a lookup that moves along
 the normal by lightingLookupScale reaches the grey second slice.
 `test_vulkan_d3d9_front.py` also runs it with
 `KISAK_VK_MODERN_MODEL_SHADERS=0`.
+
+### Without the sun: interiors
+
+Surfaces with no primary light, `lm_<mode>c0[d0][n0][s0]` (code 0xc0 plus
+the map and mode flags) and `lp_[i_]<mode>c0[d0][n0][s0]` (0xc1: the bit
+the sun families use for the shadow map says model here, since this family
+has none), are drawn with the same two sources built without the sun
+(`LM_SUN_LIGHT=0`, `LP_SUN_LIGHT=0`; 8 builds each). The game's shaders for
+them are its sun shaders with the sun taken out (lit shader facts 5, project
+files, 2026-11-13):
+
+* **the world** reads only the secondary lightmap: no primary lightmap (s2),
+  sun (c17, c18, c19) or shadow map; the maps start at s4 as in
+  `lm_sun_`. With `n0` the normal map turns only the lightmap's light, so
+  the world normal and the tangent frame (texcoords 2 and 3, which the
+  game's vertex shader then does not write) are read only with `s0`.
+* **models** read only the lighting volume's light, doubled; its alpha is
+  unused. The volume is still sampled where the (mapped) normal points.
+* **specular** is the probe's reflection alone: specular colour * Fresnel
+  * probe; gloss only picks the probe's mip.
+* The pixel constants end at c0 (the world), c5 (models), envMapParms or
+  detailScale, so the adapter's fit check counts them by family.
+
+Their shader model 2 builds keep the game's shader: the world's reads the
+lightmap's UV from another texcoord. `lp_skin_` with `s0` has a pixel shader
+of its own and keeps the game's; `lp_flag_t0...` shares `lp_t0...`'s but is
+left with `skin_` for now. `KISAK_VK_MODERN_NO_SUN_SHADERS=0` keeps these
+surfaces on the game's shaders; `KISAK_VK_MODERN_MODEL_SHADERS=0` keeps
+models without the sun on them too.
+
+**Checks:** the `modern_lit_no_sun` scene draws the world's and the models'
+stand-ins as `lm_r0c0` and `lp_r0c0` (and half fog), `lm_r0c0d0n0s0` opaque
+and blended, `lm_r0c0n0` with a tilted normal map and `lp_r0c0d0n0s0`, with
+the sun's constants, a white primary lightmap and the volume's alpha all
+set: none of them may light anything. `test_vulkan_d3d9_front.py` also runs
+it with `KISAK_VK_MODERN_NO_SUN_SHADERS=0`.
 
 ## Normals buffer
 

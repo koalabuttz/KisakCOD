@@ -64,6 +64,13 @@ enum GfxModernLitShader : uint8_t
     // lp_[hsm_][i_]sun_<mode>c0[d0][n0][s0]: models lit by the lighting volume
     // and the sun, with a colour map.
     GFX_MODERN_LIT_SHADER_LP_SUN = 0x80,
+    // lm_<mode>c0[d0][n0][s0] and lp_[i_]<mode>c0[d0][n0][s0]: surfaces
+    // without a primary light (interiors), with a colour map; models set
+    // GFX_MODERN_LIT_SHADER_NO_SUN_MODEL (where the shadow bit is, which this
+    // family never has).
+    GFX_MODERN_LIT_SHADER_NO_SUN = 0xc0,
+    GFX_MODERN_LIT_SHADER_FAMILY = 0xc0,
+    GFX_MODERN_LIT_SHADER_NO_SUN_MODEL = 0x01,
     GFX_MODERN_LIT_SHADER_SHADOW = 0x01,   // hsm: the sun's shadow map
     GFX_MODERN_LIT_SHADER_NORMAL = 0x02,   // n0: a normal map
     GFX_MODERN_LIT_SHADER_SPECULAR = 0x04, // s0: a specular map and the reflection probe

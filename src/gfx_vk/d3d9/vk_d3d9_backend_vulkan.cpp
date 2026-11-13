@@ -123,8 +123,11 @@ struct Backend
     // game's (KISAK_VK_MODERN_SUN_STRENGTH and _SKY_STRENGTH override them); the
     // changes of lit inputs that named one, and their count at the last reset.
     bool shadersWanted = true;
-    // Models' (lp_) shaders of ours, unless KISAK_VK_MODERN_MODEL_SHADERS=0.
+    // Models' (lp_) shaders of ours, unless KISAK_VK_MODERN_MODEL_SHADERS=0;
+    // those for surfaces without the sun (interiors), unless
+    // KISAK_VK_MODERN_NO_SUN_SHADERS=0.
     bool modelShadersWanted = true;
+    bool noSunShadersWanted = true;
     float sunStrength = 1.0f;
     float skyStrength = 1.0f;
     uint64_t litShaderChanges = 0, litShaderChangesBase = 0;
@@ -365,6 +368,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     backend->exposureWanted = !EnvIsZero("KISAK_VK_MODERN_EXPOSURE");
     backend->shadersWanted = !EnvIsZero("KISAK_VK_MODERN_SHADERS");
     backend->modelShadersWanted = !EnvIsZero("KISAK_VK_MODERN_MODEL_SHADERS");
+    backend->noSunShadersWanted = !EnvIsZero("KISAK_VK_MODERN_NO_SUN_SHADERS");
     {
         const std::string sun = EnvText("KISAK_VK_MODERN_SUN_STRENGTH");
         const float sunValue = sun.empty() ? -1.0f : std::strtof(sun.c_str(), nullptr);
@@ -1033,7 +1037,8 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
     if (!backend || !backend->legacy || !backend->litWanted)
         return;
     uint8_t shader = inputs && backend->shadersWanted ? inputs->shader : uint8_t(lg::ModernLitNone);
-    if ((shader & lg::ModernLitFamilyMask) == lg::ModernLitLpSun && !backend->modelShadersWanted)
+    if ((lg::ModernLitModel(shader) && !backend->modelShadersWanted)
+        || (shader && !lg::ModernLitSun(shader) && !backend->noSunShadersWanted))
         shader = lg::ModernLitNone;
     if (inputs && backend->linearScene && !backend->linearFailed)
     {

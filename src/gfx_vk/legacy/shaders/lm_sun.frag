@@ -10,6 +10,12 @@
 //   LM_SUN_SPECULAR  s0: a specular map, the reflection probe (s1) and the
 //                    sun's specular
 //   LM_SUN_DETAIL    d0: a detail map
+//   LM_SUN_LIGHT=0   lm_<mode>c0[d0][n0][s0], without the sun (interiors; lit
+//                    shader facts 5): only the secondary lightmap's light and
+//                    the probe's reflection, no primary lightmap (s2), sun
+//                    (c17, c18, c19) or shadow map; the normal map turns only
+//                    the lightmap's light, so the world normal (and the
+//                    tangent frame) is read only for the specular
 // The mode (r0 opaque, b0 blended, t0 alpha-tested) is a specialization
 // constant: it changes no binding.
 //
@@ -48,6 +54,14 @@
 #ifndef LM_SUN_DETAIL
 #define LM_SUN_DETAIL 0
 #endif
+#ifndef LM_SUN_LIGHT
+#define LM_SUN_LIGHT 1
+#endif
+#if !LM_SUN_LIGHT && LM_SUN_SHADOW
+#error "the shadow map needs the sun"
+#endif
+// Whether the world normal is read: for the sun's N.L, or the specular.
+#define WORLD_NORMAL (LM_SUN_LIGHT || LM_SUN_SPECULAR)
 
 // The material's samplers follow the fixed ones (colour map s0, probe s1,
 // lightmaps s2 and s3, shadow map s4) in the order normal, specular, detail;
@@ -56,11 +70,19 @@
 #define SAMPLER_SPECULAR (SAMPLER_NORMAL + LM_SUN_NORMAL)
 #define SAMPLER_DETAIL (SAMPLER_SPECULAR + LM_SUN_SPECULAR)
 #define CONSTANT_DETAIL_SCALE (5 + LM_SUN_SPECULAR)
+#if LM_SUN_LIGHT
 #define CONSTANT_COUNT (19 + LM_SUN_SPECULAR)
+#elif LM_SUN_DETAIL
+#define CONSTANT_COUNT (CONSTANT_DETAIL_SCALE + 1)
+#elif LM_SUN_SPECULAR
+#define CONSTANT_COUNT 6
+#else
+#define CONSTANT_COUNT 1
+#endif
 
 layout(location = 0) in vec4 texcoord0; // xy colour map UV, zw lightmap UV
 layout(location = 1) in vec4 texcoord1; // xyz world normal, w fog factor (1 = no fog)
-#if LM_SUN_NORMAL
+#if LM_SUN_NORMAL && WORLD_NORMAL
 layout(location = 2) in vec4 texcoord2; // xyz world binormal
 layout(location = 3) in vec4 texcoord3; // xyz world tangent
 #endif
@@ -94,8 +116,10 @@ layout(set = 0, binding = 19, std140) uniform AlphaTest
 // Images at set 1 bindings 0-15 and their samplers at 16-31, by sampler.
 layout(set = 1, binding = 0) uniform texture2D colorMap;
 layout(set = 1, binding = 16) uniform sampler colorMapSampler;
+#if LM_SUN_LIGHT
 layout(set = 1, binding = 2) uniform texture2D lightmapPrimary;
 layout(set = 1, binding = 18) uniform sampler lightmapPrimarySampler;
+#endif
 layout(set = 1, binding = 3) uniform texture2D lightmapSecondary;
 layout(set = 1, binding = 19) uniform sampler lightmapSecondarySampler;
 #if LM_SUN_SHADOW
@@ -200,20 +224,29 @@ void main()
     const float b = bottom.a * 4.06452 - 2.06452;
     const float lengthD = inversesqrt(abs(a * a + b * b + 1.0));
 #if LM_SUN_NORMAL
-    // The normal map's slopes, in the same tangent space.
+    // The normal map's slopes, in the same tangent space; a blended
+    // surface's fade with its alpha.
     const vec4 normalSample = texture(sampler2D(normalMap, normalMapSampler), uv);
-    const float x = normalSample.a * 4.08 - 2.08;
-    const float y = normalSample.g * 4.06452 - 2.06452;
+    float x = normalSample.a * 4.08 - 2.08;
+    float y = normalSample.g * 4.06452 - 2.06452;
+    if (kMode == 1)
+    {
+        x *= alpha;
+        y *= alpha;
+    }
     const float lengthN = inversesqrt(abs(x * x + y * y + 1.0));
     const float facing = clamp((a * x + b * y + 1.0) * lengthN * lengthD, 0.0, 1.0);
     const vec3 skyDisplay = top.rgb * lengthN + bottom.rgb * facing;
+#if WORLD_NORMAL
     const vec3 normal = normalize(texcoord1.xyz + x * texcoord3.xyz + y * texcoord2.xyz);
+#endif
 #else
     const vec3 skyDisplay = top.rgb + bottom.rgb * clamp(lengthD, 0.0, 1.0);
     const vec3 normal = normalize(texcoord1.xyz);
 #endif
     const vec3 sky = Decode(skyDisplay);
 
+#if LM_SUN_LIGHT
     // The sun: the primary lightmap holds how much of it reaches here; the
     // shadow map replaces that where it covers the surface.
     const float primary = texture(sampler2D(lightmapPrimary, lightmapPrimarySampler), lightmapUv).r;
@@ -246,6 +279,10 @@ void main()
     // display-value sum: in linear light that share depends on how bright
     // the lightmap is there, so no one constant matches it (PC sun run 2).
     const vec3 sun = max(Decode(skyDisplay + sunDisplay) - sky, vec3(0.0));
+#else
+    const vec3 sunDisplay = vec3(0.0);
+    const vec3 sun = vec3(0.0);
+#endif
 
     // A blended surface is premultiplied by its alpha.
     if (kMode == 1)
@@ -256,20 +293,30 @@ void main()
     vec3 lit = albedo * (sky * kSkyStrength + sun * kSunStrength);
 #if LM_SUN_SPECULAR
     const vec4 specularSample = texture(sampler2D(specularMap, specularMapSampler), uv);
-    const float gloss = specularSample.a;
+    // A blended surface masks its specular: by how much colour the specular
+    // map has (any channel over a tenth is whole), times the vertex alpha.
+    const float mask = kMode == 1 ? clamp(dot(specularSample.rgb, vec3(10.0)), 0.0, 1.0) * color0.a : 1.0;
+    const float gloss = specularSample.a * mask;
     const vec3 view = normalize(texcoord5.xyz);
     const float viewFacing = dot(view, normal);
     const vec3 reflected = view - 2.0 * viewFacing * normal;
-    const float exponent = exp2(gloss * 9.37752) + 7.0;
-    const float highlight = clamp(exp((dot(reflected, sunDirection) - 0.99925) * exponent), 0.0, 1.0);
-    const vec4 envMap = pc.c[5]; // x at normal incidence, y grazing, z exponent, w sun highlight scale
+    // x at normal incidence, y grazing, z exponent, w sun highlight scale.
+    const vec4 envMap = pc.c[5] * mask;
     const float grazing = envMap.z != 0.0 ? pow(abs(1.0 - abs(viewFacing)), envMap.z) : 1.0;
     const float fresnel = envMap.x + (envMap.y - envMap.x) * grazing;
     const vec4 probe = textureLod(samplerCube(reflectionProbe, reflectionProbeSampler), reflected, 6.0 - 8.0 * gloss);
-    const vec3 sunHighlight = shadow * highlight * envMap.w * pc.c[19].rgb * kSunStrength;
+    vec3 reflection = probe.rgb * probe.a;
+#if LM_SUN_LIGHT
+    const float exponent = exp2(gloss * 9.37752) + 7.0;
+    const float highlight = clamp(exp((dot(reflected, sunDirection) - 0.99925) * exponent), 0.0, 1.0);
+    reflection += shadow * highlight * envMap.w * pc.c[19].rgb * kSunStrength;
+#endif
+    vec3 specularColor = specularSample.rgb;
+    if (kMode == 1)
+        specularColor *= color0.a;
     // Likewise what the specular adds on top of the game's diffuse colour.
     const vec3 diffuseDisplay = albedoDisplay * (skyDisplay + sunDisplay);
-    const vec3 specularDisplay = specularSample.rgb * fresnel * (sunHighlight + probe.rgb * probe.a);
+    const vec3 specularDisplay = specularColor * fresnel * reflection;
     lit += max(Decode(diffuseDisplay + specularDisplay) - Decode(diffuseDisplay), vec3(0.0));
 #endif
 
