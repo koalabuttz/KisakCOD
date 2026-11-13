@@ -548,7 +548,7 @@ image after the scene (the default, [Effects](#effects)) are not exposed.
 | --- | --- | --- |
 | On | yes | `KISAK_VK_MODERN_EXPOSURE=0` turns it off (exposure 0 EV) |
 | Key: the average luminance that needs no change | 0.115: mp_crash's and mp_backlot's outdoor views measured 0.117 and 0.110 (PC exposure run 1), so a typical outdoor scene stays at about 0 EV | `KISAK_VK_MODERN_EXPOSURE_KEY=<value>` |
-| Range | -1 to +1.5 EV | `KISAK_VK_MODERN_EXPOSURE_RANGE=<min>,<max>` |
+| Range | -1 to +1 EV (+1.5 until 2026-11-13: the covered arcade looked flatter than CoD4's at +1.4) | `KISAK_VK_MODERN_EXPOSURE_RANGE=<min>,<max>` (`-1,1.5` for the old range) |
 
 The statistics line, one in 16 results read back a few frames later:
 `vulkan d3d9: modern: N scenes with auto exposure (M taken at once), exposure
@@ -560,11 +560,11 @@ standing views (RTX 2080 SUPER): mp_crash outdoors -0.23 EV (L -3.09),
 mp_crash's covered arcade +1.18 EV (L -4.51), mp_backlot -0.14 EV (L -3.18),
 mp_bog at night +0.70 EV (L -4.02); no pumping standing still (the exposure
 within 0.02 EV, two captures 3 s apart alike), about 0.04 ms GPU per scene.
-With 0.115 the indoor view gets about +1.4 EV and mp_bog +0.9 EV.
+With 0.115 the indoor view wants about +1.4 EV (held at +1) and mp_bog +0.9 EV.
 
 **Checks:** the D3D9 check's `modern_exposure` scene draws four uniform greys
 and expects grey 100 brought exactly to the key (shown 95), white held at -1
-EV, grey 40 at +1.5 EV, and grey 40 after grey 100 without a cut only part
+EV, grey 40 at +1 EV, and grey 40 after grey 100 without a cut only part
 of the way there. `test_vulkan_d3d9_front.py` runs it with
 `KISAK_VK_MODERN_EXPOSURE=1` and every other scene with it off, since auto
 exposure moves their colours.
@@ -841,6 +841,105 @@ a slope taken across the edge would be wrong (a version that always takes the
 right-hand side fails two of them). `test_vulkan_d3d9_front.py` runs it with
 the debug view (linear light on and off), with `KISAK_VK_MODERN_NORMALS=1`
 and with `KISAK_VK_MODERN_NORMALS=0`, and checks that a full run builds none.
+
+## Screen-space reflections
+
+The reflection probe CoD4's lit shaders add is one baked cube map per area:
+it does not show what is really next to a surface. Screen-space reflections
+(SSR) find what each pixel's surface would mirror among what the screen
+shows, so that our own lit shaders can use that in place of the probe where
+it is found. This first piece traces them and shows them in a debug view;
+nothing in the lighting reads them yet.
+
+**How a scene goes with it:**
+
+1. Reflections want the normals buffer, so the renderer draws its depth
+   prepass ([Normals buffer](#normals-buffer)). In the `sceneDepth`
+   hand-over, right after the normals, the back end
+   (`TraceSceneReflections` in `vk_d3d9_backend_vulkan.cpp`) records one
+   full-screen pass (`modern::TraceReflections`,
+   `vk_modern_reflections.cpp`, `shaders/reflections.frag`, timed as
+   "modern reflections").
+2. For each pixel with a sure normal, the shader mirrors the view ray about
+   it and marches the mirrored ray across the screen through the prepass
+   depth (McGuire and Mara 2014: the ray's two ends are projected once, it
+   is stepped in pixels, at most one step a pixel and `steps` in all, its
+   depth kept perspective-correct). Each pixel starts its steps at a
+   different point, moved every frame, so the anti-aliasing averages away
+   the banding. Where the ray has gone behind a surface by less than the
+   surface's thickness (or less than the step just taken), five halvings
+   narrow the crossing down.
+3. This frame is not lit yet, so the light at a hit comes from **last
+   scene's anti-aliased colour** (`modern::LastHistory`, the TAA history:
+   linear light, before exposure, bloom and the tonemap; effects are drawn
+   after it by default and are not in it). The hit's point goes to last
+   scene's screen with the camera's motion (`inverse(view) * last view *
+   last projection` without its jitter, in double). Things that move on
+   their own are reflected where they were a frame ago.
+4. The pass writes an `R16G16B16A16_SFLOAT` image the size of the depth;
+   blits then make its mip levels, each a 2x2 average of the one before
+   (a pass can only draw into a single level, and a blit cannot read and
+   write one image, so the levels are made in images of their own and
+   copied in). The image belongs to the scene until it is finished, like
+   the normals.
+
+**What a texel holds:** the reflected light times a confidence in rgb and
+the confidence (0 to 1) in alpha, so a blurred level averages light with its
+weight. The confidence fades out where the mirrored ray points back at the
+camera (the screen holds nothing of what it would meet), over the outer 8%
+of the view, and over the last quarter of the ray's reach. It is 0 where the
+ray met nothing on the screen, met the sky, or met a surface from behind,
+where the normal is only a guess, and on a cut or the first scene (no last
+scene to read light from: no image at all then).
+
+**How the lighting will use it (agreed with the lit shaders' owners,
+2026-11-13):** a pipeline drawn by one of our lit shaders gets the image at
+pixel sampler 14 (a black, alpha 0 texture where the scene has none), and
+the shader mixes it into the reflection probe's light only, in the game's
+display values: `probe = mix(probe * specular occlusion, encode(ssr.rgb /
+ssr.a), ssr.a)`, at the level its gloss picks (`(6 - 8 gloss) / 6` of the
+way to the blurriest, as the game picks the probe's). The sun, its highlight
+and the lightmap are untouched. That step comes with the lit shaders' own
+pull requests.
+
+**Limits.** Only what the screen shows can be reflected: things off screen,
+behind the camera or hidden behind something else are not (the probe stays
+there). The normals are the geometry's, without normal maps, so bumpy
+surfaces mirror as if flat until the lit shader adds its normal map's tilt.
+The view model is in the depth with its own near plane (it looks about 40
+times as far away as it is), so a ray can meet that stretched copy of it and
+mirror the gun into a floor near it; the PC runs will show how often. Glass,
+decals and effects are not in the prepass, so rays pass through them.
+
+**Cost.** One full-screen pass of at most `steps` + 5 depth reads per pixel
+(less where the ray leaves the screen sooner), the normals read twice, one
+history read; then 2 x (levels - 1) + 1 blits. Memory: about 2.7 times the
+scene image (8 bytes a pixel for the traced image, the levels and the
+chain).
+
+| Setting | Default | Switch |
+| --- | --- | --- |
+| Reflections | traced only when something reads them: the debug view below for now; our lit shaders next. They need linear light (with `KISAK_VK_MODERN_LINEAR=0` they are not traced, logged once) and the normals buffer (`KISAK_VK_MODERN_NORMALS=0` turns them off too) | `KISAK_VK_MODERN_SSR=1` traces them (and turns the prepass and normals on) with nothing reading them, to measure the cost; `KISAK_VK_MODERN_SSR=0` never traces them |
+| Longest ray | 2000 units | `KISAK_VK_MODERN_SSR_DISTANCE` |
+| Thickness | 16 units | `KISAK_VK_MODERN_SSR_THICKNESS` |
+| Steps | 32 | `KISAK_VK_MODERN_SSR_STEPS` (at most 256) |
+| Levels | 5 | `KISAK_VK_MODERN_SSR_LEVELS` (1 to 8) |
+| Debug view | off | `KISAK_VK_MODERN_DEBUG=reflections` draws the sharpest level over the finished scene: the stored light over black, through the sRGB curve (no exposure, no tonemap); black is "no reflection" |
+
+The statistics line: `vulkan d3d9: modern: N scenes with screen-space
+reflections (L levels), X ms GPU each` (the trace pass; the blits are not
+timed).
+
+**Checks:** the D3D9 check's `modern_reflections` scene draws a grey floor
+and a red wall over the right half facing the camera, through the prepass
+as the engine does, twice (the first a cut). The first has no reflections;
+in the second, with `KISAK_VK_MODERN_DEBUG=reflections`, the floor in front
+of the wall shows the wall's red, the floor on the left (whose rays meet
+only the sky) and the wall (whose rays come back at the camera) show black.
+`test_vulkan_d3d9_front.py` runs it with the debug view, with
+`KISAK_VK_MODERN_SSR=1`, and with the debug view beside
+`KISAK_VK_MODERN_LINEAR=0`, `KISAK_VK_MODERN_SSR=0` and
+`KISAK_VK_MODERN_NORMALS=0`, and checks that a full run traces none.
 
 ## Next
 

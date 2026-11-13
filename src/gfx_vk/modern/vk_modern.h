@@ -67,6 +67,12 @@ bool Resolve(Core *core, Taa *taa, Image *color, Image *depth, const SceneView &
              Image *velocity = nullptr);
 // The view of the last scene Resolve recorded; false when there is no history.
 bool LastView(const Taa *taa, SceneView &out);
+// The image the last Resolve wrote (its LastView's area holds that scene,
+// anti-aliased, as the colour image held it: linear light when the scene
+// was); null when there is no history. Valid until the next Resolve, which
+// writes the other image, or a change of size: take it again each scene.
+// Make it Sampled (UseImage) before a pass reads it.
+Image *LastHistory(const Taa *taa);
 
 struct TaaStats
 {
@@ -223,6 +229,54 @@ struct NormalsStats
 };
 NormalsStats Stats(const Normals *normals);
 
+// ---- Screen-space reflections (docs/vulkan-modern.md "Screen-space reflections") ----
+//
+// What each pixel's surface would mirror, found on the screen: the view ray
+// is reflected about the normals buffer's normal and marched through the
+// scene depth (reflections.frag), right after the normals are built, before
+// the lit surfaces. The light at a hit is last scene's anti-aliased colour
+// (LastHistory), reprojected by the camera's motion. The result is an
+// R16G16B16A16_SFLOAT image with mip levels, each half the size of the one
+// before (a 2x2 average): rgb = reflected light (linear light, before
+// exposure) times the confidence, a = the confidence (0 where nothing was
+// met). The lit shaders are meant to read it in place of the reflection
+// probe, a blurrier level for a rougher surface.
+
+constexpr VkFormat kReflectionsFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+constexpr uint32_t kMaxReflectionLevels = 8;
+
+struct ReflectionParams
+{
+    float maxDistance = 2000.0f; // the longest ray, in world units
+    float thickness = 16.0f;     // how far behind a surface a ray still meets it, in world units
+    uint32_t steps = 32;         // the most steps a ray takes (one a pixel at most)
+    uint32_t levels = 5;         // mip levels, the first at full size (1 to kMaxReflectionLevels)
+};
+
+struct Reflections;
+
+// The pipeline (the images are made at the first TraceReflections and again
+// when the depth's size changes). Null with the reason.
+Reflections *CreateReflections(Core *core, std::string &error);
+// Waits for the GPU to finish what was recorded.
+void DestroyReflections(Core *core, Reflections *reflections);
+// Records the reflections of view.area of `depth` (single-sampled, sampled
+// usage) with `normals` (BuildNormals' image of the same depth) and the
+// light of `history` (LastHistory, whose scene was `historyView`) into the
+// module's image (the size of `depth`; outside the area it holds no
+// reflection) and returns it, ready to sample. Outside a pass, inside a
+// frame. Null with the reason, and nothing recorded, when it cannot.
+Image *TraceReflections(Core *core, Reflections *reflections, Image *depth, Image *normals, Image *history,
+                        const SceneView &view, const SceneView &historyView, const ReflectionParams &params,
+                        std::string &error);
+
+struct ReflectionStats
+{
+    uint64_t traces; // TraceReflections calls that recorded
+    uint32_t levels; // the last image's mip levels
+};
+ReflectionStats Stats(const Reflections *reflections);
+
 // ---- Debug views (KISAK_VK_MODERN_DEBUG; docs/vulkan-modern.md) ----
 //
 // Drawn over the anti-aliased scene (TAA's history is kept apart, so a view
@@ -244,6 +298,11 @@ bool DrawVelocityDebug(Core *core, DebugView *debug, Image *velocity, Image *tar
 // stored), and leaves the rest. Outside a pass, inside a frame.
 bool DrawNormalsDebug(Core *core, DebugView *debug, Image *normals, Image *target, const VkRect2D &area,
                       std::string &error);
+// Draws the sharpest level of `reflections` (TraceReflections' image, the
+// same size) over `area` of `target`: the stored light over black, through
+// the sRGB curve. Outside a pass, inside a frame.
+bool DrawReflectionsDebug(Core *core, DebugView *debug, Image *reflections, Image *target, const VkRect2D &area,
+                          std::string &error);
 
 // ---- Linear light (renderer plan MD1; docs/vulkan-modern.md) ----
 //
@@ -367,7 +426,7 @@ struct ExposureParams
     // mp_crash's and mp_backlot's outdoor views (PC exposure run 1).
     float key = 0.115f;
     float minEv = -1.0f;   // the range the exposure stays in
-    float maxEv = 1.5f;
+    float maxEv = 1.0f; // David 2026-11-13: +1, so dark interiors keep more of their mood
     // Time constants, in seconds: towards a lower exposure (the scene got
     // brighter) and towards a higher one (it got darker).
     float brighterSeconds = 1.0f;
