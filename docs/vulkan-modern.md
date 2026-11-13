@@ -240,9 +240,11 @@ decoded before the arithmetic, and the result is stored as it comes.
   lightmap and shadow maps (visibility), normal maps, light attenuation, and
   every alpha (lightmap and normal-map alphas hold directions).
 * **Doubled.** The model shaders double the lighting volume's colour (a 2x
-  overbright), and a detail map is drawn around grey and doubled. Their
-  samples become decode(2v) / 2, so that twice them is the decoded double
-  and grey stays a factor of 1.
+  overbright). Its samples become decode(2v) / 2, so that twice them is the
+  decoded double.
+* **Detail maps** are added to the colour map around grey (colour + detail -
+  0.5, no scale; PC shader facts, 2026-11-13), so the offset is not a colour
+  and stays as read.
 * **How.** The hook (`GfxModernHooks::litInputs`, called only when the inputs
   change, and with none at `sceneLit`) reaches the front's
   `SetModernLitInputs` and `legacy::SetLinearInputs`. For a draw into the
@@ -256,6 +258,13 @@ decoded before the arithmetic, and the result is stored as it comes.
   stay in the HDR scene until the tonemap clamps them.
 * `KISAK_VK_MODERN_LIT=0` turns this off: lit surfaces are drawn like the
   rest, with their stored colour decoded.
+* **Finding a fault.** `KISAK_VK_MODERN_LIT_PARTS` names the kinds of colour
+  to decode, comma-separated: `colormap`, `specmap`, `detail`, `lightmap`,
+  `probe`, `volume`, `fog`, `sun`, `light`, `material`, `vertex`; `all` (the
+  default, every kind but `detail`) or `none` (as `KISAK_VK_MODERN_LIT=0`). `KISAK_VK_MODERN_LIT_LOG=1`
+  prints, once per lit pixel shader, what it decodes and what each of its
+  sampler and constant registers binds (`Modern lit inputs: <shader>: ...`).
+  The engine reads both.
 
 What it changes: the lightmap halves, the sun and the specular now add as
 light, so where two light terms meet a surface is brighter than in Legacy,
