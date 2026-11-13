@@ -3526,6 +3526,23 @@ int ShownByte(double light)
     const double encoded = light <= 0.0031308 ? light * 12.92 : 1.055 * std::pow(light, 1.0 / 2.4) - 0.055;
     return static_cast<int>(std::lround(encoded * 255.0));
 }
+// Our lit shaders' fog (lm_sun.frag): a colour drawn as lit (linear light),
+// whose game colour in display values is gameDisplay, fogged by fog factor w
+// (1 = no fog) towards fogDisplay. The game blends in display values; ours
+// takes the linear share that gives the game's blend, decoded.
+double ModernLitFogged(double lit, double gameDisplay, double fogDisplay, double w)
+{
+    const auto decode = [](double v) {
+        v = std::max(v, 0.0);
+        return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+    };
+    const double fog = decode(fogDisplay), game = decode(gameDisplay);
+    const double span = fog - game;
+    const double share = std::abs(span) > 1e-5
+        ? std::clamp((decode(fogDisplay + (gameDisplay - fogDisplay) * w) - game) / span, 0.0, 1.0)
+        : 1.0 - w;
+    return lit + (fog - lit) * share;
+}
 // The curve the tonemap uses: KISAK_VK_MODERN_TONEMAP, neutral (the default)
 // for none or a name it does not know, clamp without linear light (the scene
 // is then drawn as always).
@@ -4159,7 +4176,10 @@ void Check::ModernLitShader()
             expect("sunlit", 16, 32, shown(sunlit, sunlit, sunlit));
             expect("shadow_lit", 48, 32, shown(sunlit, sunlit, sunlit));
             expect("shadow_shaded", 80, 32, shown(shaded, shaded, shaded));
-            expect("half_fog", 112, 32, shown(0.5 + 0.5 * sunlit, 0.5 * sunlit, 0.5 * sunlit));
+            const double sunlitDisplay = greyValue * diffuse(0.0, false, true).display;
+            expect("half_fog", 112, 32,
+                   shown(ModernLitFogged(sunlit, sunlitDisplay, 1.0, 0.5), ModernLitFogged(sunlit, sunlitDisplay, 0.0, 0.5),
+                         ModernLitFogged(sunlit, sunlitDisplay, 0.0, 0.5)));
 
             // The variants with maps, by the game's formulas. Looking straight
             // down at a normal within 0.5 degrees of the sun: the highlight is
@@ -4432,7 +4452,11 @@ void Check::ModernLitModels()
             expect("volume_sun", 16, 32, shown(volumeLit, volumeLit, volumeLit));
             expect("shadow_lit", 48, 32, shown(shadowLit, shadowLit, shadowLit));
             expect("shadow_shaded", 80, 32, shown(shaded, shaded, shaded));
-            expect("half_fog", 112, 32, shown(0.5 + 0.5 * volumeLit, 0.5 * volumeLit, 0.5 * volumeLit));
+            const double volumeDisplay = greyValue * diffuse(volumeSun, 1.0).display;
+            expect("half_fog", 112, 32,
+                   shown(ModernLitFogged(volumeLit, volumeDisplay, 1.0, 0.5),
+                         ModernLitFogged(volumeLit, volumeDisplay, 0.0, 0.5),
+                         ModernLitFogged(volumeLit, volumeDisplay, 0.0, 0.5)));
 
             // The variants with maps: the flat normal map's slopes are 0 and
             // y (a blended surface's times its alpha), which face the sun by
@@ -4683,8 +4707,13 @@ void Check::ModernLitNoSun()
                 const Rgb c = TonemapCurve(curve, {r, g, b});
                 return std::array<int, 3>{ShownByte(c[0]), ShownByte(c[1]), ShownByte(c[2])};
             };
-            const auto expect = [&](const char *name, bool ours, int x, int y, double value, double fog = 1.0) {
-                const std::array<int, 3> rgb = shown(fog * value + (1.0 - fog), fog * value, fog * value);
+            // value drawn as lit, its game colour valueDisplay, fog factor fog
+            // towards red.
+            const auto expect = [&](const char *name, bool ours, int x, int y, double value,
+                                    double valueDisplay = 0.0, double fog = 1.0) {
+                const std::array<int, 3> rgb = shown(ModernLitFogged(value, valueDisplay, 1.0, fog),
+                                                     ModernLitFogged(value, valueDisplay, 0.0, fog),
+                                                     ModernLitFogged(value, valueDisplay, 0.0, fog));
                 Expect(name, x, y, ours ? rgb[0] : 0, ours ? rgb[1] : 0, ours ? rgb[2] : 0);
             };
             const auto decode = [](double v) {
@@ -4713,12 +4742,14 @@ void Check::ModernLitNoSun()
                     + decode(diffuseDisplay + specularDisplay) - decode(diffuseDisplay);
             };
             const double flatY = slope(130, 4.06452, 2.06452);
-            const double world = decode(greyValue * lightmap(false, 0.0, 0.0)) * sky;
+            const double worldDisplay = greyValue * lightmap(false, 0.0, 0.0);
+            const double world = decode(worldDisplay) * sky;
             expect("world", on, 16, 32, world);
-            expect("world_half_fog", on, 48, 32, world, 0.5);
-            const double model = decode(greyValue * 2.0 * 48 / 255.0) * sky;
+            expect("world_half_fog", on, 48, 32, world, worldDisplay, 0.5);
+            const double modelDisplay = greyValue * 2.0 * 48 / 255.0;
+            const double model = decode(modelDisplay) * sky;
             expect("model", modelsOn, 80, 32, model);
-            expect("model_half_fog", modelsOn, 112, 32, model, 0.5);
+            expect("model_half_fog", modelsOn, 112, 32, model, modelDisplay, 0.5);
             expect("world_maps_opaque", on, 16, 96, withMaps(lightmap(true, 0.0, flatY), 1.0));
             const double tilted = decode(greyValue * lightmap(true, slope(192, 4.08, 2.08), flatY)) * sky;
             expect("world_normal_tilted", on, 48, 96, tilted);

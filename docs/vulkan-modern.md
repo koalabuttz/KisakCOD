@@ -611,18 +611,23 @@ to 3 in the project files, 2026-11-13):
 * **colour** = decode(albedo times the game's light, sky plus sun in
   display values), shared out between the sky and the sun as their decoded
   light is (sky / (sky + sun) of it to the sky), each share times its
-  strength, plus specular, then the fog
-  colour (decoded) blended over it in linear light by the vertex fog factor.
+  strength, plus specular, then fogged. The game blends the fog colour in
+  display values by the vertex fog factor; a blend in linear light lifts a
+  dark colour far more (a dark barrel in Crash's fog came out nearly twice
+  Legacy's light, PC interiors run 1). So the fog's share is the linear
+  blend towards the decoded fog colour that gives decode(the game's blend):
+  (decode(blend) - decode(game colour)) / (decode(fog) - decode(game
+  colour)), per channel. With strengths 1 that is the game's fogged colour;
+  a colour the strengths (or AO) change is fogged by the same share.
   `b0` premultiplies the albedo and fog colour by colour alpha times vertex
   alpha, which is the output alpha; `t0` keeps alpha 0.5 and over and writes
   black with alpha 0 elsewhere, as the game's shader does; then the alpha
   test of the render state.
 
 So with both strengths 1 every surface is as bright as the game's: its
-diffuse colour is the game's product decoded. Decoding the colour and the
-light apart and multiplying them would not be (the sRGB curve is not a
-power: a dark colour in bright light came out up to 36% brighter than
-Legacy's, a shaded one 11% darker, PC barrel check 1). The game
+colour is the game's fogged colour decoded. Decoding the colour and the
+light apart and multiplying them would not be, as the sRGB curve is not a
+power. The game
 added its terms in display values, so in linear light a term's share
 depends on what it is added to: a single sun strength over decoded terms
 matched the game at 2.9 on Crash and 4.3 on Backlot (PC sun run 2), which

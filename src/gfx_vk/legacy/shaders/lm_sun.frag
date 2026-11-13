@@ -32,7 +32,7 @@
 //            probe)) adds to the game's diffuse colour, decoded;
 //   colour = decode(albedo * the game's light) shared out between sky and
 //            sun as their decoded light is, each share times its strength,
-//            + spec, then fog blended in linear light.
+//            + spec, then fogged as the game's blend in display values fogs it.
 // The game's shader adds and multiplies its terms in display values, so in
 // linear light a term's share depends on what it is added to, and a dark
 // colour times bright light (or the other way round) is not the decoded
@@ -299,6 +299,8 @@ void main()
         lit *= alpha;
         albedoDisplay *= alpha;
     }
+    // The game's colour in display values, before the fog.
+    vec3 gameDisplay = albedoDisplay * (skyDisplay + sunDisplay);
 #if LM_SUN_SPECULAR
     const vec4 specularSample = texture(sampler2D(specularMap, specularMapSampler), uv);
     // A blended surface masks its specular: by how much colour the specular
@@ -323,15 +325,26 @@ void main()
     if (kMode == 1)
         specularColor *= color0.a;
     // Likewise what the specular adds on top of the game's diffuse colour.
-    const vec3 diffuseDisplay = albedoDisplay * (skyDisplay + sunDisplay);
     const vec3 specularDisplay = specularColor * fresnel * reflection;
-    lit += max(Decode(diffuseDisplay + specularDisplay) - Decode(diffuseDisplay), vec3(0.0));
+    lit += max(Decode(gameDisplay + specularDisplay) - Decode(gameDisplay), vec3(0.0));
+    gameDisplay += specularDisplay;
 #endif
 
-    vec3 fogColor = Decode(pc.c[0].rgb);
+    // The game blends the fog in display values, which fogs a dark colour
+    // less than a blend in linear light would. The fog's share here is the
+    // linear blend that gives the game's fogged colour, decoded: with
+    // strengths 1 the result is the game's own, and a colour the strengths
+    // (or AO) make darker or lighter is fogged by the same share.
+    vec3 fogDisplay = pc.c[0].rgb;
     if (kMode == 1)
-        fogColor *= alpha;
-    vec3 shown = mix(fogColor, lit, texcoord1.w);
+        fogDisplay *= alpha;
+    const vec3 fogColor = Decode(fogDisplay);
+    const vec3 game = Decode(gameDisplay);
+    const vec3 gameFogged = Decode(mix(fogDisplay, gameDisplay, texcoord1.w));
+    const vec3 span = fogColor - game;
+    const vec3 fogShare = mix(vec3(1.0 - texcoord1.w), clamp((gameFogged - game) / span, 0.0, 1.0),
+        greaterThan(abs(span), vec3(1e-5)));
+    vec3 shown = mix(lit, fogColor, fogShare);
     if ((kMode == 1 && alpha == 0.0) || !kept)
         shown = vec3(0.0);
     const float outAlpha = kMode == 1 ? alpha : (kept ? 1.0 : 0.0);
