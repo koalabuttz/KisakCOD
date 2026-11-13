@@ -186,6 +186,47 @@ struct KeptStats
 };
 KeptStats Stats(const KeptVertices *kept);
 
+// ---- Normals buffer (docs/vulkan-modern.md "Normals buffer") ----
+//
+// The view-space normal of the surface each pixel of the scene shows, worked
+// out from the scene depth (normals.frag) once the game's depth prepass has
+// drawn it, before the lit surfaces: what ambient occlusion and screen-space
+// reflections read. The normals are those of the geometry (no normal maps).
+// Each texel holds normal * 0.5 + 0.5 in the engine's view space (x right,
+// y up, z forward, so a surface facing the camera has z < 0) and alpha 1;
+// a pixel with no surface (the sky) holds (0.5, 0.5, 0.5, 0).
+
+constexpr VkFormat kNormalsFormat = VK_FORMAT_A2B10G10R10_UNORM_PACK32;
+
+// The scene's projection inverted (NDC x, y, depth and 1 to homogeneous view
+// space), row vectors as the engine's matrices; worked in double. False when
+// it cannot be inverted.
+bool ClipToView(const SceneView &view, float out[4][4]);
+// The depth at or past which the scene has no surface: just short of a point
+// at infinity's (or of 1, for a projection without one).
+float SkyDepth(const SceneView &view);
+
+struct Normals;
+
+// The pipeline (the image is made at the first BuildNormals and again when
+// the depth's size changes). Null with the reason.
+Normals *CreateNormals(Core *core, std::string &error);
+// Waits for the GPU to finish what was recorded.
+void DestroyNormals(Core *core, Normals *normals);
+// Records the normals of view.area of `depth` (single-sampled, sampled usage)
+// into the module's image (the size of `depth`; outside the area it holds "no
+// surface") and returns it, ready to sample. Outside a pass, inside a frame.
+// Null with the reason, and nothing recorded, when it cannot.
+Image *BuildNormals(Core *core, Normals *normals, Image *depth, const SceneView &view, std::string &error);
+// The image the last BuildNormals wrote; null before the first.
+Image *CurrentNormals(const Normals *normals);
+
+struct NormalsStats
+{
+    uint64_t builds; // BuildNormals calls that recorded
+};
+NormalsStats Stats(const Normals *normals);
+
 // ---- Debug views (KISAK_VK_MODERN_DEBUG; docs/vulkan-modern.md) ----
 //
 // Drawn over the anti-aliased scene (TAA's history is kept apart, so a view
@@ -202,6 +243,11 @@ void DestroyDebugView(Core *core, DebugView *debug);
 // length of that motion, and leaves the rest. Outside a pass, inside a frame.
 bool DrawVelocityDebug(Core *core, DebugView *debug, Image *velocity, Image *target, const VkRect2D &area,
                        std::string &error);
+// Colours each pixel of `area` in `target` that has a surface in `normals`
+// (BuildNormals' image, the same size) by its normal (normal * 0.5 + 0.5, as
+// stored), and leaves the rest. Outside a pass, inside a frame.
+bool DrawNormalsDebug(Core *core, DebugView *debug, Image *normals, Image *target, const VkRect2D &area,
+                      std::string &error);
 
 // ---- Linear light (renderer plan MD1; docs/vulkan-modern.md) ----
 //

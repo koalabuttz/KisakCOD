@@ -288,6 +288,11 @@ void R_ModernSceneBegin();
 // RB_EndSceneRendering's call.
 // The view's lit scene is drawn, before its emissive surfaces (effects and
 // other blended surfaces, R_DrawEmissive).
+// Whether the Modern path wants the view's depth before its lit surfaces:
+// RB_StandardDrawCommands then draws the depth prepass.
+bool R_ModernWantsSceneDepth();
+// The view's depth prepass is drawn and its lit surfaces come next.
+void R_ModernSceneDepth(const GfxViewInfo *viewInfo);
 void R_ModernSceneLit(const GfxViewInfo *viewInfo);
 void R_ModernSceneDone(const GfxViewInfo *viewInfo);
 // R_SetupPass's call: tells the back end which colours a lit pass's pixel

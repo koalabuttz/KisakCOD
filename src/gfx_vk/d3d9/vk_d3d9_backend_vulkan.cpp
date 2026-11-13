@@ -164,13 +164,28 @@ struct Backend
     std::vector<SkinnedSurface> skinned;
     modern::KeptVertices *kept = nullptr;
     modern::KeptStats keptBase{};
+    // The normals buffer (vk_modern.h BuildNormals), built from the depth the
+    // game's depth prepass draws before the lit surfaces (vk_d3d9.h
+    // ModernSceneDepth): wanted when something reads it (for now
+    // KISAK_VK_MODERN_NORMALS=1 or the normals debug view);
+    // KISAK_VK_MODERN_NORMALS=0 keeps it off whatever asks. The pass is made
+    // at its first scene; sceneNormals is the scene's own until it is
+    // finished; the counts at the last reset.
+    bool normalsWanted = false;
+    bool normalsFailed = false;
+    modern::Normals *normals = nullptr;
+    Image *sceneNormals = nullptr;
+    modern::NormalsStats normalsBase{};
     // KISAK_VK_MODERN_DEBUG=velocity: the velocity debug view over each
     // anti-aliased scene (docs/vulkan-modern.md), made at its first use.
     // velocity-all: the same, with every surface that moves on its own drawn
     // wherever it lands, hidden or not (the velocity pass skips its depth
     // test), to find them on the screen.
+    // KISAK_VK_MODERN_DEBUG=normals: the normals debug view over each
+    // finished scene (on the display image, after the tonemap).
     bool debugVelocity = false;
     bool debugVelocityAll = false;
+    bool debugNormals = false;
     bool debugFailed = false;
     modern::DebugView *debug = nullptr;
 };
@@ -363,6 +378,9 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     }
     backend->debugVelocityAll = EnvIs("KISAK_VK_MODERN_DEBUG", "velocity-all");
     backend->debugVelocity = backend->debugVelocityAll || EnvIs("KISAK_VK_MODERN_DEBUG", "velocity");
+    backend->debugNormals = EnvIs("KISAK_VK_MODERN_DEBUG", "normals");
+    backend->normalsWanted =
+        !EnvIsZero("KISAK_VK_MODERN_NORMALS") && (EnvIs("KISAK_VK_MODERN_NORMALS", "1") || backend->debugNormals);
     if (!h.windowSystem || !h.windowSystem(h.user, desc.window, backend->windowSystem))
     {
         error = "the host has no Vulkan window system for this window";
@@ -618,6 +636,15 @@ void BackendLogStats(Backend *backend, bool reset)
                 keptScenes ? double(kept.bytes - backend->keptBase.bytes) / 1024.0 / double(keptScenes) : 0.0,
                 static_cast<unsigned long long>(velocity.skinned - backend->velocityBase.skinned));
     }
+    // The normals buffer: the scenes it was built for and its pass's GPU time.
+    if (backend->normals)
+    {
+        const PassTimings pass = PassTimingsFor(backend->core, "modern normals");
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with a normals buffer from the depth prepass, "
+                   "%.3f ms GPU each",
+                static_cast<unsigned long long>(modern::Stats(backend->normals).builds - backend->normalsBase.builds),
+                pass.supported ? average(pass) : 0.0);
+    }
     // Bloom: the scenes it ran for in place of the glow, the passes of each,
     // and their GPU time per scene.
     if (backend->bloom)
@@ -640,6 +667,7 @@ void BackendLogStats(Backend *backend, bool reset)
             backend->bloomMsBase = PassTimingsFor(backend->core, "modern bloom").totalMs;
         if (backend->velocity)
             backend->velocityBase = modern::Stats(backend->velocity);
+        backend->normalsBase = modern::Stats(backend->normals);
         backend->keptBase = modern::Stats(backend->kept);
         backend->linearScenesBase = backend->linearScenes;
         modern::ResetStats(backend->exposure);
@@ -678,6 +706,12 @@ void CloseBackend(Backend *backend)
     {
         modern::DestroyKeptVertices(backend->core, backend->kept);
         backend->kept = nullptr;
+    }
+    if (backend->normals)
+    {
+        modern::DestroyNormals(backend->core, backend->normals);
+        backend->normals = nullptr;
+        backend->sceneNormals = nullptr;
     }
     if (backend->debug)
     {
@@ -1173,11 +1207,89 @@ void DrawVelocityDebug(Backend *backend, Image *velocity, Image *color, const Vk
 }
 } // namespace
 
+namespace
+{
+// The normals debug view over a finished scene (KISAK_VK_MODERN_DEBUG=normals).
+void DrawNormalsDebug(Backend *backend, Image *normals, Image *target, const VkRect2D &area)
+{
+    if (backend->debugFailed || !normals || !target)
+        return;
+    std::string error;
+    if (!backend->debug)
+    {
+        backend->debug = modern::CreateDebugView(backend->core, error);
+        if (!backend->debug)
+        {
+            backend->debugFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no normals debug view: %s", error.c_str());
+            return;
+        }
+    }
+    if (!modern::DrawNormalsDebug(backend->core, backend->debug, normals, target, area, error))
+        LogModernOnce(backend, "the normals debug view is not drawn", error);
+}
+
+modern::SceneView SceneViewOf(const ModernSceneView &view)
+{
+    modern::SceneView scene{};
+    std::memcpy(scene.view, view.view, sizeof(scene.view));
+    std::memcpy(scene.projection, view.projection, sizeof(scene.projection));
+    scene.area = {{static_cast<int32_t>(view.x), static_cast<int32_t>(view.y)}, {view.width, view.height}};
+    scene.cut = view.cut;
+    return scene;
+}
+} // namespace
+
+bool BackendModernWantsSceneDepth(Backend *backend)
+{
+    return backend && backend->legacy && backend->core && backend->normalsWanted && !backend->normalsFailed;
+}
+
+ModernResult BackendModernSceneDepth(Backend *backend, lg::Surface *depth, const ModernSceneView &view)
+{
+    if (!BackendModernWantsSceneDepth(backend))
+        return ModernResult::Skipped;
+    backend->sceneNormals = nullptr;
+    Image *depthImage = depth ? lg::SurfaceImage(depth) : nullptr;
+    if (!depthImage)
+    {
+        LogModernOnce(backend, "no normals buffer",
+                      depth ? "the depth surface is not level 0 of a 2D texture" : "no depth surface is set");
+        return ModernResult::Refused;
+    }
+    if (!backend->normals)
+    {
+        std::string error;
+        backend->normals = modern::CreateNormals(backend->core, error);
+        if (!backend->normals)
+        {
+            backend->normalsFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no normals buffer: %s", error.c_str());
+            return ModernResult::Refused;
+        }
+    }
+    // Ends the Legacy pass; the lit draws begin a new one on the same images.
+    if (!lg::HandOverRecording(backend->legacy))
+        return ModernResult::Skipped;
+    std::string error;
+    backend->sceneNormals = modern::BuildNormals(backend->core, backend->normals, depthImage, SceneViewOf(view), error);
+    if (!backend->sceneNormals)
+    {
+        LogModernOnce(backend, "no normals buffer", error);
+        return ModernResult::Refused;
+    }
+    return ModernResult::Done;
+}
+
 ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surface *depth,
                                 const ModernSceneView &view, lg::Surface *display, bool *glowDrawn)
 {
     if (!backend || !backend->legacy || !backend->core)
         return ModernResult::Refused;
+    // The scene's normals buffer, if its depth prepass built one; the next
+    // scene builds its own.
+    Image *normals = backend->sceneNormals;
+    backend->sceneNormals = nullptr;
     // The surfaces that moved in this scene; the next scene starts a new list.
     std::vector<modern::MovedSurface> moved;
     moved.swap(backend->moved);
@@ -1226,6 +1338,8 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
         }
         if (bloom && glowDrawn)
             *glowDrawn = true;
+        if (backend->debugNormals)
+            DrawNormalsDebug(backend, normals, lg::SurfaceImage(display), area);
         return passes;
     };
     if (backend->taaFailed)
@@ -1253,11 +1367,7 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
     }
     if (!lg::HandOverRecording(backend->legacy))
         return ModernResult::Skipped; // nothing of this frame is drawn either
-    modern::SceneView scene{};
-    std::memcpy(scene.view, view.view, sizeof(scene.view));
-    std::memcpy(scene.projection, view.projection, sizeof(scene.projection));
-    scene.area = {{static_cast<int32_t>(view.x), static_cast<int32_t>(view.y)}, {view.width, view.height}};
-    scene.cut = view.cut;
+    const modern::SceneView scene = SceneViewOf(view);
     std::string error;
     // Skinned surfaces whose vertices the last scene kept are drawn from
     // those and this scene's.
@@ -1276,6 +1386,9 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
         return refuse(error);
     if (backend->debugVelocity && velocity)
         DrawVelocityDebug(backend, velocity, colorImage, scene.area);
+    // Without linear light the scene is finished here.
+    if (backend->debugNormals && !display)
+        DrawNormalsDebug(backend, normals, colorImage, scene.area);
     return tonemap(ModernResult::Done);
 }
 
