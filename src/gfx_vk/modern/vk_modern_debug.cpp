@@ -1,5 +1,6 @@
 // The Modern path's debug views: see vk_modern.h and docs/vulkan-modern.md.
-// The shader is src/gfx_vk/modern/shaders/debug_velocity.frag.
+// The shaders are src/gfx_vk/modern/shaders/debug_velocity.frag and
+// debug_normals.frag.
 
 #include "vk_modern.h"
 #include "vk_modern_internal.h"
@@ -19,6 +20,14 @@ struct Push
     float halfSize[2];
 };
 static_assert(sizeof(Push) == 8, "debug_velocity.frag's push constant block is 8 bytes");
+
+// The views, each its own fragment shader.
+enum Kind : uint32_t
+{
+    kVelocityView = 0,
+    kNormalsView = 1,
+    kKinds = 2,
+};
 } // namespace
 
 struct DebugView
@@ -26,10 +35,10 @@ struct DebugView
     VkDescriptorSetLayout setLayout = VK_NULL_HANDLE;
     VkPipelineLayout layout = VK_NULL_HANDLE;
     VkShaderModule vertex = VK_NULL_HANDLE;
-    VkShaderModule fragment = VK_NULL_HANDLE;
+    VkShaderModule fragment[kKinds] = {};
     VkSampler nearest = VK_NULL_HANDLE;
-    // One pipeline per target format, made at its first use.
-    std::vector<std::pair<VkFormat, VkPipeline>> pipelines;
+    // One pipeline per view and target format, made at its first use.
+    std::vector<std::pair<uint64_t, VkPipeline>> pipelines;
 };
 
 DebugView *CreateDebugView(Core *core, std::string &error)
@@ -63,8 +72,11 @@ DebugView *CreateDebugView(Core *core, std::string &error)
     if (vk.vkCreatePipelineLayout(device, &layoutInfo, nullptr, &debug->layout) != VK_SUCCESS)
         return fail("vkCreatePipelineLayout failed");
     debug->vertex = CreateShaderModule(core, shaders::kFullscreenVert, sizeof(shaders::kFullscreenVert));
-    debug->fragment = CreateShaderModule(core, shaders::kDebugVelocityFrag, sizeof(shaders::kDebugVelocityFrag));
-    if (!debug->vertex || !debug->fragment)
+    debug->fragment[kVelocityView] =
+        CreateShaderModule(core, shaders::kDebugVelocityFrag, sizeof(shaders::kDebugVelocityFrag));
+    debug->fragment[kNormalsView] =
+        CreateShaderModule(core, shaders::kDebugNormalsFrag, sizeof(shaders::kDebugNormalsFrag));
+    if (!debug->vertex || !debug->fragment[kVelocityView] || !debug->fragment[kNormalsView])
         return fail(LastError(core));
     VkSamplerCreateInfo sampler{};
     sampler.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -84,7 +96,8 @@ void DestroyDebugView(Core *core, DebugView *debug)
     for (const auto &[format, pipeline] : debug->pipelines)
         DestroyPipeline(core, pipeline);
     DestroyShaderModule(core, debug->vertex);
-    DestroyShaderModule(core, debug->fragment);
+    for (VkShaderModule fragment : debug->fragment)
+        DestroyShaderModule(core, fragment);
     // The layouts are not tracked by the core: wait until no recorded work uses them.
     WaitIdle(core);
     const Dispatch &vk = Functions(core);
@@ -96,22 +109,25 @@ void DestroyDebugView(Core *core, DebugView *debug)
     delete debug;
 }
 
-bool DrawVelocityDebug(Core *core, DebugView *debug, Image *velocity, Image *target, const VkRect2D &area,
-                       std::string &error)
+namespace
 {
-    if (!debug || !velocity || !target || velocity == target)
+// Draws view `kind` of `source` over `area` of `target`.
+bool DrawDebug(Core *core, DebugView *debug, Kind kind, const char *passName, Image *source, Image *target,
+               const VkRect2D &area, std::string &error)
+{
+    if (!debug || !source || !target || source == target)
     {
-        error = "no velocity or target image";
+        error = "no source or target image";
         return false;
     }
-    const ImageDesc &velocityInfo = ImageInfo(velocity);
+    const ImageDesc &sourceInfo = ImageInfo(source);
     const ImageDesc &targetInfo = ImageInfo(target);
     if (!(targetInfo.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) || targetInfo.samples != 1)
     {
         error = "the target cannot be drawn into";
         return false;
     }
-    if (!Inside(area, velocityInfo) || !Inside(area, targetInfo))
+    if (!Inside(area, sourceInfo) || !Inside(area, targetInfo))
     {
         error = "the rectangle is not inside both images";
         return false;
@@ -121,17 +137,18 @@ bool DrawVelocityDebug(Core *core, DebugView *debug, Image *velocity, Image *tar
         error = "not between passes of a frame";
         return false;
     }
+    const uint64_t key = (static_cast<uint64_t>(kind) << 32) | static_cast<uint64_t>(targetInfo.format);
     VkPipeline pipeline = VK_NULL_HANDLE;
     for (const auto &[have, made] : debug->pipelines)
-        if (have == targetInfo.format)
+        if (have == key)
             pipeline = made;
     if (!pipeline)
     {
-        pipeline = CreateFullscreenPipeline(core, debug->layout, debug->vertex, debug->fragment, targetInfo.format,
-                                            false, error);
+        pipeline = CreateFullscreenPipeline(core, debug->layout, debug->vertex, debug->fragment[kind],
+                                            targetInfo.format, false, error);
         if (!pipeline)
             return false;
-        debug->pipelines.emplace_back(targetInfo.format, pipeline);
+        debug->pipelines.emplace_back(key, pipeline);
     }
     const VkDescriptorSet set = AllocateDescriptorSet(core, debug->setLayout);
     if (!set)
@@ -139,7 +156,7 @@ bool DrawVelocityDebug(Core *core, DebugView *debug, Image *velocity, Image *tar
         error = LastError(core);
         return false;
     }
-    const VkDescriptorImageInfo image{debug->nearest, ImageSampleView(velocity), VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL};
+    const VkDescriptorImageInfo image{debug->nearest, ImageSampleView(source), VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL};
     VkWriteDescriptorSet write{};
     write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     write.dstSet = set;
@@ -152,9 +169,9 @@ bool DrawVelocityDebug(Core *core, DebugView *debug, Image *velocity, Image *tar
     Push push{};
     push.halfSize[0] = 0.5f * static_cast<float>(area.extent.width);
     push.halfSize[1] = 0.5f * static_cast<float>(area.extent.height);
-    UseImage(core, velocity, ImageUse::Sampled);
+    UseImage(core, source, ImageUse::Sampled);
     PassDesc desc;
-    desc.name = "modern debug velocity";
+    desc.name = passName;
     desc.colorCount = 1;
     desc.color[0].image = target;
     desc.color[0].load = VK_ATTACHMENT_LOAD_OP_LOAD;
@@ -181,5 +198,18 @@ bool DrawVelocityDebug(Core *core, DebugView *debug, Image *velocity, Image *tar
     });
     EndPass(core);
     return true;
+}
+} // namespace
+
+bool DrawVelocityDebug(Core *core, DebugView *debug, Image *velocity, Image *target, const VkRect2D &area,
+                       std::string &error)
+{
+    return DrawDebug(core, debug, kVelocityView, "modern debug velocity", velocity, target, area, error);
+}
+
+bool DrawNormalsDebug(Core *core, DebugView *debug, Image *normals, Image *target, const VkRect2D &area,
+                      std::string &error)
+{
+    return DrawDebug(core, debug, kNormalsView, "modern debug normals", normals, target, area, error);
 }
 } // namespace gfx_vk::modern

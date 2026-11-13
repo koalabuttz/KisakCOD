@@ -519,6 +519,7 @@ public:
     void ModernTonemap();
     void ModernExposure();
     void ModernVelocity();
+    void ModernNormals();
     void Bench();
     void BenchRuns();
     void BenchFrames(bool runs);
@@ -3021,6 +3022,130 @@ void Check::ModernTaa()
     SafeRelease(depth);
 }
 
+// The Modern path's normals buffer (front::ModernSceneDepth,
+// docs/vulkan-modern.md "Normals buffer"), drawn as the engine draws a scene
+// with its depth prepass: the scene begins (in linear light unless
+// KISAK_VK_MODERN_LINEAR=0), three surfaces are drawn into depth alone, the
+// Modern path is told the depth is done, and the same surfaces are drawn
+// again in colour with the depth test LESSEQUAL, as the lit pass is. Each
+// must pass the test everywhere (the prepass's depth and the colour pass's
+// are the same), and the scene comes back in its colours. The projection is
+// the identity, so view space is NDC with the depth as z: top left (A) is
+// flat at depth 0.5, bottom left (B) leans back towards the top
+// (depth 0.6 + 0.4 y), bottom right (C) leans back towards the right
+// (depth 0.25 + 0.5 x), and top right (D) has no surface. With
+// KISAK_VK_MODERN_DEBUG=normals the normals debug view shows each surface's
+// normal instead (A (128, 128, 0), B (128, 175, 9), C (184, 128, 13)), also
+// in the pixels at the edges between them, where a normal taken across the
+// edge would mix the two, and D stays as drawn. The normals buffer is wanted
+// with that view or KISAK_VK_MODERN_NORMALS=1, never with
+// KISAK_VK_MODERN_NORMALS=0.
+void Check::ModernNormals()
+{
+    const auto envIs = [](const char *name, const char *value) {
+#if defined(_MSC_VER)
+        char *env = nullptr;
+        size_t envLength = 0;
+        const bool is = _dupenv_s(&env, &envLength, name) == 0 && env && !std::strcmp(env, value);
+        std::free(env);
+        return is;
+#else
+        const char *env = std::getenv(name);
+        return env && !std::strcmp(env, value);
+#endif
+    };
+    const bool linearOff = envIs("KISAK_VK_MODERN_LINEAR", "0");
+    const bool debugView = envIs("KISAK_VK_MODERN_DEBUG", "normals");
+    const bool wanted = !envIs("KISAK_VK_MODERN_NORMALS", "0") && (debugView || envIs("KISAK_VK_MODERN_NORMALS", "1"));
+    const bool shown = wanted && debugView;
+    Equal("wants_scene_depth", front::ModernWantsSceneDepth(device), wanted);
+
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    // Positions in NDC (the basic vertex shader adds c0, zero here).
+    const uint32_t colorA = Argb(255, 200, 40, 40), colorB = Argb(255, 40, 200, 40), colorC = Argb(255, 40, 40, 200);
+    const auto vertex = [](float x, float y, float z, uint32_t color) { return Vertex{x, y, z, 0.0f, 0.0f, color}; };
+    const auto quad = [&](Vertex *out, float x0, float y0, float x1, float y1, float (*depthAt)(float, float),
+                          uint32_t color) {
+        const Vertex corners[4] = {vertex(x0, y1, depthAt(x0, y1), color), vertex(x1, y1, depthAt(x1, y1), color),
+                                   vertex(x1, y0, depthAt(x1, y0), color), vertex(x0, y0, depthAt(x0, y0), color)};
+        const int order[6] = {0, 1, 2, 0, 2, 3};
+        for (int i = 0; i < 6; ++i)
+            out[i] = corners[order[i]];
+    };
+    Vertex surfaces[18];
+    quad(surfaces, -1.0f, 0.0f, 0.0f, 1.0f, [](float, float) { return 0.5f; }, colorA);
+    quad(surfaces + 6, -1.0f, -1.0f, 0.0f, 0.0f, [](float, float y) { return 0.6f + 0.4f * y; }, colorB);
+    quad(surfaces + 12, 0.0f, -1.0f, 1.0f, 0.0f, [](float x, float) { return 0.25f + 0.5f * x; }, colorC);
+
+    Reset(Argb(255, 0, 0, 0));
+    const front::ModernResult began = front::ModernSceneBegin(device);
+    Equal("begin", static_cast<int>(began),
+          static_cast<int>(linearOff ? front::ModernResult::Skipped : front::ModernResult::Done));
+    device->SetDepthStencilSurface(depth);
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0), "Clear(scene)");
+    device->SetRenderState(D3DRS_ZENABLE, TRUE);
+    device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+    device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+    // The depth prepass: depth alone.
+    device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+    Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 6, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(prepass)");
+    device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xf);
+
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    view.width = view.height = kSize;
+    view.cut = true;
+    const front::ModernResult depthDone = front::ModernSceneDepth(device, view);
+    Equal("scene_depth", static_cast<int>(depthDone),
+          static_cast<int>(wanted ? front::ModernResult::Done : front::ModernResult::Skipped));
+
+    // The lit pass: the same surfaces in colour, against the prepass's depth.
+    device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+    Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 6, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(lit)");
+    Equal("scene_done", front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
+    if (Read())
+    {
+        struct Point
+        {
+            const char *name;
+            UINT x, y;
+            char surface;
+        };
+        const Point points[] = {
+            {"a_inside", 32, 32, 'A'},  {"a_corner", 0, 0, 'A'},    {"a_above_b", 32, 63, 'A'},
+            {"b_below_a", 32, 64, 'B'}, {"b_inside", 32, 96, 'B'},  {"b_left_of_c", 63, 96, 'B'},
+            {"c_right_of_b", 64, 96, 'C'}, {"c_inside", 96, 96, 'C'}, {"c_corner", 127, 127, 'C'},
+            {"c_below_d", 96, 64, 'C'}, {"d_inside", 96, 32, 'D'},  {"d_right_of_a", 64, 32, 'D'},
+        };
+        for (const Point &point : points)
+        {
+            int r = 0, g = 0, b = 0;
+            if (shown)
+            {
+                if (point.surface == 'A')
+                    r = 128, g = 128, b = 0;
+                else if (point.surface == 'B')
+                    r = 128, g = 175, b = 9;
+                else if (point.surface == 'C')
+                    r = 184, g = 128, b = 13;
+            }
+            else if (point.surface != 'D')
+            {
+                const uint32_t color = point.surface == 'A' ? colorA : point.surface == 'B' ? colorB : colorC;
+                r = (color >> 16) & 0xff, g = (color >> 8) & 0xff, b = color & 0xff;
+            }
+            Expect(point.name, point.x, point.y, r, g, b);
+        }
+    }
+    device->SetDepthStencilSurface(nullptr);
+    SafeRelease(depth);
+}
+
 // The Modern path's velocity for what moves on its own
 // (front::ModernSurfaceMoved, docs/vulkan-modern.md). A band of 2-pixel white
 // and black stripes moves 2 pixels right each frame, drawn indexed from a
@@ -4200,6 +4325,7 @@ int Run(const Options &options)
         {"modern_tonemap", &Check::ModernTonemap, true},
         {"modern_exposure", &Check::ModernExposure, true},
         {"modern_velocity", &Check::ModernVelocity, true},
+        {"modern_normals", &Check::ModernNormals, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},
