@@ -364,7 +364,12 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
             RB_SunShadowMaps(data, viewInfo);
         RB_SpotShadowMaps(data, viewInfo);
     }
-    needsDepthPrepass = r_depthPrepass->current.enabled || KISAK_GXM_DEPTH_PREPASS();
+    // The Modern path (r_visuals modern, Vulkan) may want the view's depth
+    // before its lit surfaces, for its normals buffer.
+    const bool modernDepth = R_ModernWantsSceneDepth();
+    needsDepthPrepass = r_depthPrepass->current.enabled || KISAK_GXM_DEPTH_PREPASS() || modernDepth;
+    // Whether the scene's depth holds its opaque surfaces before R_DrawLit.
+    bool depthPrepassed = false;
     whichToClearForScene = 7;
     R_InitContext(data, &cmdBuf);
     iassert( !viewInfo->needsFloatZ || R_HaveFloatZ() );
@@ -395,6 +400,8 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
         {
             whichToClearForScene = 1;
             needsDepthPrepass = 0;
+            // The setup pass drew into the scene's own depth surface.
+            depthPrepassed = true;
         }
     }
     memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
@@ -409,7 +416,10 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     {
         R_InitContext(data, &cmdBuf);
         R_DepthPrepass(R_RENDERTARGET_SCENE, viewInfo, &cmdBuf);
+        depthPrepassed = true;
     }
+    if (modernDepth && depthPrepassed)
+        R_ModernSceneDepth(viewInfo);
     R_InitContext(data, &cmdBuf);
     R_DrawLit(viewInfo, &cmdBuf, 0);
     R_InitContext(data, &cmdBuf);

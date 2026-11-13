@@ -569,6 +569,81 @@ of the way there. `test_vulkan_d3d9_front.py` runs it with
 `KISAK_VK_MODERN_EXPOSURE=1` and every other scene with it off, since auto
 exposure moves their colours.
 
+## Normals buffer
+
+Ambient occlusion and screen-space reflections need the normal of the surface
+each pixel shows. The Modern path works it out from the scene depth, which the
+game's own depth prepass draws before the lit surfaces. Normals are then ready
+before any light is added, so ambient occlusion can darken the indirect light
+(the lightmap and the probe) and leave the sun alone.
+
+**How a scene goes with it:**
+
+1. `RB_StandardDrawCommands` (`src/gfx_d3d/rb_draw3d.cpp`) asks the hook
+   `wantsSceneDepth` (`R_ModernWantsSceneDepth`). When the back end wants the
+   depth, the renderer draws its depth prepass (`R_DepthPrepass`, the same pass
+   `r_depthPrepass 1` turns on) for the view, whatever the dvar says. The
+   prepass draws every opaque lit and decal surface with its material's
+   depth-only technique (alpha-tested ones with their alpha test) into the
+   scene's depth surface.
+2. Before `R_DrawLit` the hook `sceneDepth` (`R_ModernSceneDepth`) hands the
+   view to the front (`gfx_vk::d3d9::ModernSceneDepth`). The back end ends
+   the Legacy pass (`lg::HandOverRecording`) and records one full-screen pass
+   (`modern::BuildNormals`, `vk_modern_normals.cpp`, `shaders/normals.frag`,
+   timed as "modern normals") from the depth surface into an
+   `A2B10G10R10_UNORM` image the size of the depth. The lit surfaces then
+   draw on as before, against the prepass's depth (`LESSEQUAL`; the translated
+   vertex shaders' positions are `Invariant`, so both passes give the same
+   depth).
+3. The image belongs to the scene until it is finished (`ModernSceneLit` or
+   `ModernSceneDone`), where the passes that read it run.
+
+**What a texel holds:** `normal * 0.5 + 0.5` in the engine's view space (x
+right, y up, z forward, so a surface facing the camera has z < 0), alpha 1.
+A pixel with no surface (depth at or past a point at infinity's, the sky)
+holds (0.5, 0.5, 0.5, 0).
+
+**How the normal is found.** The view position of each pixel comes from its
+depth through the inverse of the scene's projection (with its jitter, worked
+in double). A plane's depth changes linearly across the screen, so for each
+axis the shader looks two pixels to each side and keeps the side whose
+straight line meets this pixel's depth best: that side is on the same
+surface. The normal is the cross product of the steps to those neighbours
+(Wu, "Accurate Normal Reconstruction from Depth Buffer", 2021). A pixel at a
+silhouette therefore keeps its own surface's normal instead of a blend of the
+two surfaces. Pixels outside the viewport count as having no surface.
+
+**Limits.** These are the normals of the geometry: normal maps are not in
+them (the lit shaders could add theirs later, for reflections). Only opaque
+surfaces are in the prepass: decals, glass and effects are not. The view model
+is drawn with its own near plane (`r_znear_depthhack`), so its positions are
+not to scale with the world's; its normals come out close but not exact.
+
+**Cost.** The prepass draws the opaque surfaces a second time, depth only
+(more draw calls on the CPU; on the GPU it usually saves shading under
+overdraw, which is why the game has it). The normals pass is one full-screen
+pass of 9 depth reads per pixel.
+
+| Setting | Default | Switch |
+| --- | --- | --- |
+| Normals buffer | built only when something reads it: the debug view below for now; ambient occlusion next | `KISAK_VK_MODERN_NORMALS=1` builds it (and turns the prepass on) with nothing reading it, to measure the cost; `KISAK_VK_MODERN_NORMALS=0` never builds it |
+| Debug view | off | `KISAK_VK_MODERN_DEBUG=normals` draws the buffer over the finished scene (after the tonemap): red faces right, green up, blue away; a wall seen head on is (128, 128, 0); the sky is left as it is |
+
+The statistics line: `vulkan d3d9: modern: N scenes with a normals buffer
+from the depth prepass, X ms GPU each`.
+
+**Checks:** the D3D9 check's `modern_normals` scene draws three surfaces as
+the engine does with its prepass (depth alone, `ModernSceneDepth`, then the
+same surfaces in colour with `LESSEQUAL`): a flat one, one leaning back
+towards the top and one leaning back towards the right, with no surface in
+the fourth quarter. It expects every colour pixel drawn (the prepass's depth
+and the colour pass's match), and with `KISAK_VK_MODERN_DEBUG=normals` each
+surface's exact normal, also in the pixels on both sides of each edge, where
+a slope taken across the edge would be wrong (a version that always takes the
+right-hand side fails two of them). `test_vulkan_d3d9_front.py` runs it with
+the debug view (linear light on and off), with `KISAK_VK_MODERN_NORMALS=1`
+and with `KISAK_VK_MODERN_NORMALS=0`, and checks that a full run builds none.
+
 ## Next
 
 From the plan's E1, in order:

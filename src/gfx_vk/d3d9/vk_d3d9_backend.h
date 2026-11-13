@@ -91,6 +91,14 @@ lg::Surface *BackendModernSceneTarget(Backend *backend, lg::Surface *backBuffer,
 // on the display image (vk_d3d9.h ModernSceneLit); false with
 // KISAK_VK_MODERN_EFFECTS=linear and on a back end without a Modern path.
 bool BackendModernEffectsOnDisplay(Backend *backend);
+// Whether the Modern path wants the scene's opaque depth before its lit
+// surfaces (vk_d3d9.h ModernWantsSceneDepth); false on a back end without one.
+bool BackendModernWantsSceneDepth(Backend *backend);
+// The depth prepass drew the scene's opaque surfaces into `depth` (vk_d3d9.h
+// ModernSceneDepth): the Modern path builds the scene's normals buffer from
+// it, for the passes of the scene's BackendModernScene. Skipped when it is
+// not wanted or the frame is not drawn; Refused (logged once) when it cannot.
+ModernResult BackendModernSceneDepth(Backend *backend, lg::Surface *depth, const ModernSceneView &view);
 // The colours lit draws read (vk_d3d9.h SetModernLitInputs), null for none.
 // A back end without linear light ignores them.
 void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs);

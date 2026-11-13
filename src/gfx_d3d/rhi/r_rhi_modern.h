@@ -85,6 +85,15 @@ struct GfxModernHooks
     // shader's colour is then taken as a display value, as before). Called
     // only when that changes, and with null at sceneLit. May be null.
     void (*litInputs)(void *user, IDirect3DDevice9 *device, const GfxModernLitInputs *inputs);
+    // Whether the back end wants the view's opaque depth before its lit
+    // surfaces (sceneDepth): the renderer then draws its depth prepass
+    // (r_depthPrepass) for the view, whatever the dvar says. Asked once per
+    // view, after sceneBegin. May be null (no).
+    bool (*wantsSceneDepth)(void *user, IDirect3DDevice9 *device);
+    // A view's depth prepass has drawn its opaque surfaces into the depth
+    // surface, and its lit surfaces come next (the scene is the same one
+    // sceneLit and sceneDone get after). May be null.
+    void (*sceneDepth)(void *user, IDirect3DDevice9 *device, GfxModernScene *scene);
 };
 
 // Null removes them. Called while no frame is being built (as the renderer
