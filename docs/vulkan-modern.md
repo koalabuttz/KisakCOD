@@ -112,7 +112,13 @@ Modern path draws their surfaces a second time with their own motion.
 
 * **The renderer** (`src/gfx_d3d/r_modern_motion.cpp`). When it skins a scene
   entity, each surface records its entity (`GfxModelSurfaceInfo::modernOwner`,
-  the entity number plus one, in what was retail's padding). When a rigid
+  the entity number plus one, in what was retail's padding). Entities drawn
+  as one model (scene models, such as parked cars) record theirs the same way
+  in `R_SkinXModel`, and dynamic entities (props the physics moves) record
+  `0x8000` plus their index plus one, so they never share an owner with an
+  entity. `R_SkinXModel` used to leave the rest of each record's info as the
+  stack had it; it is zeroed now, because the owner and first bone are the
+  key. When a rigid
   surface is drawn into the scene's render target (`r_draw_xmodel.cpp`), the
   matrix that took it to clip space (`CONST_SRC_CODE_WORLD_VIEW_PROJECTION_MATRIX`,
   with the jitter, and for the view model its own depth-hack projection) is
@@ -148,8 +154,7 @@ Modern path draws their surfaces a second time with their own motion.
   motion is the skinning's as well as the entity's. A camera cut, or a scene
   that keeps nothing, forgets what was kept.
 
-What it does not cover yet: models added without an entity (scene models),
-brush models and effects (whether drawn on the display image or, with
+What it does not cover yet: brush models and effects (whether drawn on the display image or, with
 `KISAK_VK_MODERN_EFFECTS=linear`, in the scene). `KISAK_VK_MODERN_VELOCITY=0`
 turns the pass off, for comparisons.
 
