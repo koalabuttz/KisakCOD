@@ -38,6 +38,9 @@ for linking. The checks:
   lit        --linear-inputs with everything marked (the Modern path's lit
              surfaces): every pixel shader case still passes spirv-val, and
              those that read a colour get more pows than without
+  over-white --linear-inputs with flag 2 (the Modern path's default for lit
+             surfaces): every pixel shader case still passes spirv-val, and
+             those that write a colour get the output decode
 
 Usage:
   test_vulkan_legacy_shaders.py --binary build/bin/KisakCOD-vulkan-shaders
@@ -514,6 +517,32 @@ def main():
                 lit_decoded += 1
         checks.expect(f'linear inputs build valid shaders ({lit_cases} pixel shader cases, {lit_decoded} decode)',
                       lit_cases > 0 and lit_decoded > 0 and not lit_problems, '\n  '.join(lit_problems[:20]))
+
+        # over white (--linear-inputs with flag 2, the Modern path's default
+        # for lit surfaces): no input decoded, the colour output decoded
+        # without its clamp to 1; the SPIR-V stays valid and those that write
+        # a colour get the decode (more pows)
+        over_problems = []
+        over_decoded = 0
+        for name, (found, base) in sorted(results.items()):
+            if not found['stage'].startswith('ps'):
+                continue
+            spv = os.path.join(work, f'{name}-over.spv')
+            code, stdout, _ = run(binary, ['translate', os.path.join(case_dir, name + '.bin'), '--linear-inputs',
+                                           '0xffff,0xffff,0xffffffffffffffff,2', '--out', spv])
+            if code != 0 or parse(stdout).get('result') != 'passed':
+                over_problems.append(f'{name}: {stdout.strip()[:200]}')
+                continue
+            problem = validate(spv)
+            if problem:
+                over_problems.append(f'{name}: spirv-val: {problem}')
+                continue
+            with open(spv, 'rb') as f:
+                spirv = Spirv(f.read())
+            if spirv.opcodes.get(OP_EXT_INST, 0) > base.opcodes.get(OP_EXT_INST, 0):
+                over_decoded += 1
+        checks.expect(f'over white builds valid shaders ({lit_cases} pixel shader cases, {over_decoded} decode)',
+                      over_decoded > 0 and not over_problems, '\n  '.join(over_problems[:20]))
 
         # legacy state: fixed by default (no fog, clip plane or point argument
         # block declared, no gather), read at run time with the switch (every

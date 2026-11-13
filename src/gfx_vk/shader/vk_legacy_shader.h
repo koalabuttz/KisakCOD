@@ -76,13 +76,17 @@ struct LinearInputs
     // Of those, the ones the shader doubles (a 2x overbright): their results
     // become decode(2v) / 2, so that twice them is the decoded double.
     uint16_t doubled = 0;
-    // kLinearColorInput.
+    // kLinearColorInput, kLinearOverWhite.
     uint8_t flags = 0;
     uint8_t unused[3] = {};
 };
 static_assert(sizeof(LinearInputs) == 16, "LinearInputs is compared and hashed as bytes");
 // LinearInputs::flags: the colour 0 input (the vertex colour) is a colour.
 constexpr uint8_t kLinearColorInput = 1u << 0;
+// LinearInputs::flags: no input is decoded; the stored colour is, as with
+// linearOutput, but only kept from going negative, not clamped to 1, so a
+// colour the shader computes over white stays over white in linear light.
+constexpr uint8_t kLinearOverWhite = 1u << 1;
 
 // Set 0: vertex shader blocks at 0-8, pixel shader blocks at 16-24.
 constexpr uint32_t UniformBinding(Stage stage, Uniform uniform)

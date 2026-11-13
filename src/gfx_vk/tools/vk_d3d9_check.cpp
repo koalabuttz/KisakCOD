@@ -3342,6 +3342,8 @@ void Check::ModernEffects()
 // the quad shows 128 + 64 = 192; with the colour map, the light and the
 // vertex colour decoded before the sum it shows encode(decode(128) +
 // decode(64)) = 141, and 197 with the colour map doubled (decode(2v) / 2).
+// Over white (nothing decoded but the stored colour, without its clamp) it
+// is 192 as without lit inputs: below white the two are the same.
 void Check::ModernLit()
 {
     const auto env = [](const char *name, const char *value) {
@@ -3385,8 +3387,12 @@ void Check::ModernLit()
     inputs.doubled = 1u << 0;
     front::SetModernLitInputs(device, &inputs);
     DrawQuad(0, 64, 64, 128, 0.5f, Argb(255, 255, 255, 255));
+    front::ModernLitInputs overWhite;
+    overWhite.overWhite = true;
+    front::SetModernLitInputs(device, &overWhite);
+    DrawQuad(64, 64, 128, 96, 0.5f, Argb(255, 255, 255, 255));
     front::SetModernLitInputs(device, nullptr);
-    DrawQuad(64, 64, 128, 128, 0.5f, Argb(255, 255, 255, 255));
+    DrawQuad(64, 96, 128, 128, 0.5f, Argb(255, 255, 255, 255));
 
     front::ModernSceneView view{};
     for (int i = 0; i < 4; ++i)
@@ -3402,7 +3408,8 @@ void Check::ModernLit()
         Expect("unlit", 32, 32, 192, 192, 192);
         Expect("lit", 96, 32, lit ? 141 : 192, lit ? 141 : 192, lit ? 141 : 192);
         Expect("lit_doubled", 32, 96, lit ? 197 : 192, lit ? 197 : 192, lit ? 197 : 192);
-        Expect("unlit_again", 96, 96, 192, 192, 192);
+        Expect("over_white", 96, 80, 192, 192, 192);
+        Expect("unlit_again", 96, 112, 192, 192, 192);
     }
     Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
     SafeRelease(depth);
@@ -3493,7 +3500,9 @@ int ShownByte(double light)
 // The tonemap's curve (KISAK_VK_MODERN_TONEMAP): grey 128 (0.216 of light),
 // white (1), and white added twice (2) and four times (4) in the linear-light
 // scene, as each curve shows them. Clamp shows 128, 255, 255, 255; the others
-// keep the brighter greys apart.
+// keep the brighter greys apart. A lit surface over white (front
+// ModernLitInputs::overWhite) that computes 1.5 is decode(1.5) = 2.54 of
+// light, where an ordinary draw clamps it to 1 first.
 void Check::ModernTonemap()
 {
     std::string curve = EnvText("KISAK_VK_MODERN_TONEMAP");
@@ -3512,6 +3521,23 @@ void Check::ModernTonemap()
     Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0), "Clear(scene)");
     DrawQuad(0, 0, 64, 64, 0.5f, Argb(255, 128, 128, 128));
     DrawQuad(64, 0, 128, 64, 0.5f, Argb(255, 255, 255, 255));
+    // White colour map times white plus 0.5 (psLit): 1.5, over white.
+    IDirect3DTexture9 *white = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
+    const bool overWhite = white != nullptr && EnvText("KISAK_VK_MODERN_LIT") != "0";
+    if (white)
+    {
+        device->SetTexture(0, white);
+        device->SetPixelShader(psLit);
+        const float half[4] = {0.5f, 0.5f, 0.5f, 0.0f};
+        device->SetPixelShaderConstantF(1, half, 1);
+        front::ModernLitInputs lit;
+        lit.overWhite = true;
+        front::SetModernLitInputs(device, &lit);
+        DrawQuad(40, 0, 64, 24, 0.5f, Argb(255, 255, 255, 255));
+        front::SetModernLitInputs(device, nullptr);
+        device->SetPixelShader(psColor);
+        device->SetTexture(0, nullptr);
+    }
     device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
     device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
     device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
@@ -3538,7 +3564,8 @@ void Check::ModernTonemap()
             UINT x, y;
             double light;
         } points[] = {{"grey", 32, 32, grey}, {"white", 96, 32, 1.0}, {"white_x2", 32, 96, 2.0},
-                      {"white_x4", 96, 96, 4.0}};
+                      {"white_x4", 96, 96, 4.0},
+                      {"lit_over_white", 52, 12, overWhite ? std::pow((1.5 + 0.055) / 1.055, 2.4) : 1.0}};
         for (const auto &point : points)
         {
             const Rgb shown = TonemapCurve(curve, {point.light, point.light, point.light});
@@ -3546,6 +3573,7 @@ void Check::ModernTonemap()
         }
     }
     Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    SafeRelease(white);
     SafeRelease(depth);
 }
 

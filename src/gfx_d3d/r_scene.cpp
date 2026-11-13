@@ -1285,7 +1285,8 @@ static void R_ModernSendInputs(const GfxModernLitInputs *inputs)
                 : s_modernInputsLit && s_modernInputsSent.constants == inputs->constants
                       && s_modernInputsSent.samplers == inputs->samplers
                       && s_modernInputsSent.doubled == inputs->doubled
-                      && s_modernInputsSent.colorInput == inputs->colorInput)
+                      && s_modernInputsSent.colorInput == inputs->colorInput
+                      && s_modernInputsSent.overWhite == inputs->overWhite)
         return;
     s_modernInputsLit = inputs != nullptr;
     if (inputs)
@@ -1312,11 +1313,138 @@ void R_ModernSceneBegin()
         hooks->sceneBegin(hooks->user, dx.device);
 }
 
+// The kinds of colour R_ModernPassInputs decodes, each its own bit, so that
+// KISAK_VK_MODERN_LIT_PARTS can leave some out to find which one a fault
+// comes from (comma-separated names below, "all" by default, "none").
+enum ModernLitPart : uint32_t
+{
+    MODERN_LIT_COLOR_MAP = 1u << 0,    // material colour maps
+    MODERN_LIT_SPECULAR_MAP = 1u << 1, // material specular maps
+    MODERN_LIT_DETAIL_MAP = 1u << 2,   // material detail maps (off unless named)
+    MODERN_LIT_LIGHTMAP = 1u << 3,     // the secondary lightmap
+    MODERN_LIT_PROBE = 1u << 4,        // the reflection probe
+    MODERN_LIT_VOLUME = 1u << 5,       // the model lighting volume
+    MODERN_LIT_FOG = 1u << 6,          // fog colour
+    MODERN_LIT_SUN = 1u << 7,          // sun diffuse and specular colours
+    MODERN_LIT_LIGHT = 1u << 8,        // light diffuse and specular colours
+    MODERN_LIT_MATERIAL = 1u << 9,     // material colour
+    MODERN_LIT_VERTEX = 1u << 10,      // the vertex colour
+};
+
+static const struct
+{
+    const char *name;
+    uint32_t part;
+} s_modernLitPartNames[] = {
+    {"colormap", MODERN_LIT_COLOR_MAP}, {"specmap", MODERN_LIT_SPECULAR_MAP}, {"detail", MODERN_LIT_DETAIL_MAP},
+    {"lightmap", MODERN_LIT_LIGHTMAP},  {"probe", MODERN_LIT_PROBE},          {"volume", MODERN_LIT_VOLUME},
+    {"fog", MODERN_LIT_FOG},            {"sun", MODERN_LIT_SUN},              {"light", MODERN_LIT_LIGHT},
+    {"material", MODERN_LIT_MATERIAL},  {"vertex", MODERN_LIT_VERTEX},
+};
+
+static uint32_t R_ModernLitParts()
+{
+    static const uint32_t parts = [] {
+        const uint32_t all = ~0u & ~uint32_t(MODERN_LIT_DETAIL_MAP);
+        const char *text = getenv("KISAK_VK_MODERN_LIT_PARTS");
+        if (!text || !*text || !I_stricmp(text, "all"))
+            return all;
+        uint32_t wanted = 0;
+        char name[32];
+        while (*text)
+        {
+            size_t length = strcspn(text, ",");
+            const size_t kept = length < sizeof(name) - 1 ? length : sizeof(name) - 1;
+            memcpy(name, text, kept);
+            name[kept] = 0;
+            for (const auto &part : s_modernLitPartNames)
+            {
+                if (!I_stricmp(name, part.name))
+                    wanted |= part.part;
+            }
+            text += length;
+            if (*text == ',')
+                ++text;
+        }
+        Com_Printf(CON_CHANNEL_GFX, "Modern lit inputs: KISAK_VK_MODERN_LIT_PARTS keeps 0x%03x\n", wanted);
+        return wanted;
+    }();
+    return parts;
+}
+
+// KISAK_VK_MODERN_LIT_LOG=1 prints what each lit pixel shader reads and what
+// is decoded, once per shader name (at most 96 names).
+static void R_ModernLogPassInputs(const char *name, const MaterialPass *pass, const Material *material,
+                                  const GfxModernLitInputs &inputs)
+{
+    static const bool on = [] {
+        const char *text = getenv("KISAK_VK_MODERN_LIT_LOG");
+        return text && *text && *text != '0';
+    }();
+    static const char *logged[96];
+    static int loggedCount;
+    if (!on || loggedCount >= 96)
+        return;
+    for (int i = 0; i < loggedCount; ++i)
+    {
+        if (logged[i] == name || !strcmp(logged[i], name))
+            return;
+    }
+    logged[loggedCount++] = name;
+    char args[512];
+    size_t used = 0;
+    args[0] = 0;
+    const uint32_t argCount = pass->perPrimArgCount + pass->perObjArgCount + pass->stableArgCount;
+    for (uint32_t i = 0; i < argCount && used < sizeof(args) - 32; ++i)
+    {
+        const MaterialShaderArgument &arg = pass->args[i];
+        int wrote = 0;
+        switch (arg.type)
+        {
+        case MTL_ARG_MATERIAL_PIXEL_SAMPLER:
+        {
+            int semantic = -1;
+            for (uint32_t t = 0; t < material->textureCount; ++t)
+            {
+                if (material->textureTable[t].nameHash == arg.u.nameHash)
+                    semantic = material->textureTable[t].semantic;
+            }
+            wrote = snprintf(args + used, sizeof(args) - used, " s%u=mat(sem %d)", arg.dest, semantic);
+            break;
+        }
+        case MTL_ARG_CODE_PIXEL_SAMPLER:
+            wrote = snprintf(args + used, sizeof(args) - used, " s%u=code %u", arg.dest, arg.u.codeSampler);
+            break;
+        case MTL_ARG_CODE_PIXEL_CONST:
+            wrote = snprintf(args + used, sizeof(args) - used, " c%u=code 0x%x(%u rows)", arg.dest,
+                             arg.u.codeConst.index, arg.u.codeConst.rowCount);
+            break;
+        case MTL_ARG_MATERIAL_PIXEL_CONST:
+            wrote = snprintf(args + used, sizeof(args) - used, " c%u=mat", arg.dest);
+            break;
+        case MTL_ARG_LITERAL_PIXEL_CONST:
+            wrote = snprintf(args + used, sizeof(args) - used, " c%u=lit", arg.dest);
+            break;
+        default:
+            break;
+        }
+        if (wrote > 0)
+            used += (size_t)wrote < sizeof(args) - used ? (size_t)wrote : sizeof(args) - used - 1;
+    }
+    Com_Printf(CON_CHANNEL_GFX,
+               "Modern lit inputs: %s: decode samplers 0x%04x (doubled 0x%04x), constants 0x%08x%08x, vertex %d; "
+               "custom samplers 0x%x;%s\n",
+               name, inputs.samplers, inputs.doubled, (uint32_t)(inputs.constants >> 32), (uint32_t)inputs.constants,
+               inputs.colorInput ? 1 : 0, pass->customSamplerFlags, args);
+}
+
 // Which colours a lit pass's pixel shader reads, by its kind (the pixel
 // shader's name: lm_ world surfaces lit by lightmaps, lp_ models lit by the
 // lighting volume, l_ dynamic lights) and what its arguments bind. The rest
 // (lightmap primary, shadow maps, normal maps, light attenuation, directions,
-// fog and shadow parameters) are not colours.
+// fog and shadow parameters) are not colours. A detail map is added to the
+// colour map around grey (colour + detail - 0.5), so it stays as it is: the
+// offset is not a colour of its own.
 void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
 {
     if (!s_modernLitPasses || !pass || !material)
@@ -1332,11 +1460,29 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
         R_ModernSendInputs(nullptr);
         return;
     }
-    // A detail map is drawn around grey and doubled: decode(2v) / 2 keeps it
-    // a factor of 1 at grey.
+    // By default a lit pass keeps the game's own sums of light (the colour
+    // stored is the game's) and only lets what it computes over white stay
+    // over white: CoD4's maps were balanced for light added in display
+    // values, and adding each term in linear light instead darkens every
+    // sum, the more the more terms it has, so the sun all but vanished next
+    // to the lightmap (PC lit runs 1-2, 2026-11-13). KISAK_VK_MODERN_LIT=inputs
+    // decodes each colour read instead, for experiments.
+    static const bool perInput = [] {
+        const char *text = getenv("KISAK_VK_MODERN_LIT");
+        return text && !I_stricmp(text, "inputs");
+    }();
+    if (!perInput)
+    {
+        GfxModernLitInputs inputs{};
+        inputs.overWhite = true;
+        R_ModernSendInputs(&inputs);
+        return;
+    }
+    const uint32_t parts = R_ModernLitParts();
     static const uint32_t detailMapHash = R_HashString("detailMap");
+    static const uint32_t specularMapHash = R_HashString("specularMap");
     GfxModernLitInputs inputs{};
-    inputs.colorInput = true;
+    inputs.colorInput = (parts & MODERN_LIT_VERTEX) != 0;
     const uint32_t argCount = pass->perPrimArgCount + pass->perObjArgCount + pass->stableArgCount;
     for (uint32_t i = 0; i < argCount; ++i)
     {
@@ -1349,22 +1495,25 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
                 const MaterialTextureDef &def = material->textureTable[t];
                 if (def.nameHash != arg.u.nameHash)
                     continue;
-                if (arg.dest < 16 && (def.semantic == TS_COLOR_MAP || def.semantic == TS_SPECULAR_MAP))
-                {
+                uint32_t part = 0;
+                if (def.nameHash == detailMapHash)
+                    part = MODERN_LIT_DETAIL_MAP;
+                else if (def.semantic == TS_SPECULAR_MAP || def.nameHash == specularMapHash)
+                    part = MODERN_LIT_SPECULAR_MAP;
+                else if (def.semantic == TS_COLOR_MAP)
+                    part = MODERN_LIT_COLOR_MAP;
+                if (arg.dest < 16 && (parts & part))
                     inputs.samplers |= (uint16_t)(1u << arg.dest);
-                    if (def.nameHash == detailMapHash)
-                        inputs.doubled |= (uint16_t)(1u << arg.dest);
-                }
                 break;
             }
             break;
         case MTL_ARG_CODE_PIXEL_SAMPLER:
             if (arg.dest >= 16)
                 break;
-            if (arg.u.codeSampler == TEXTURE_SRC_CODE_LIGHTMAP_SECONDARY
-                || arg.u.codeSampler == TEXTURE_SRC_CODE_REFLECTION_PROBE)
+            if ((arg.u.codeSampler == TEXTURE_SRC_CODE_LIGHTMAP_SECONDARY && (parts & MODERN_LIT_LIGHTMAP))
+                || (arg.u.codeSampler == TEXTURE_SRC_CODE_REFLECTION_PROBE && (parts & MODERN_LIT_PROBE)))
                 inputs.samplers |= (uint16_t)(1u << arg.dest);
-            else if (arg.u.codeSampler == TEXTURE_SRC_CODE_MODEL_LIGHTING)
+            else if (arg.u.codeSampler == TEXTURE_SRC_CODE_MODEL_LIGHTING && (parts & MODERN_LIT_VOLUME))
             {
                 // Its rgb is doubled in the shader (a 2x overbright).
                 inputs.samplers |= (uint16_t)(1u << arg.dest);
@@ -1372,26 +1521,46 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
             }
             break;
         case MTL_ARG_CODE_PIXEL_CONST:
+        {
             if (arg.dest >= 64)
                 break;
+            uint32_t part = 0;
             switch (arg.u.codeConst.index)
             {
             case CONST_SRC_CODE_FOG_COLOR:
+                part = MODERN_LIT_FOG;
+                break;
             case CONST_SRC_CODE_SUN_DIFFUSE:
             case CONST_SRC_CODE_SUN_SPECULAR:
+                part = MODERN_LIT_SUN;
+                break;
             case CONST_SRC_CODE_LIGHT_DIFFUSE:
             case CONST_SRC_CODE_LIGHT_SPECULAR:
+                part = MODERN_LIT_LIGHT;
+                break;
             case CONST_SRC_CODE_MATERIAL_COLOR:
-                inputs.constants |= 1ull << arg.dest;
+                part = MODERN_LIT_MATERIAL;
                 break;
             default:
                 break;
             }
+            if (parts & part)
+                inputs.constants |= 1ull << arg.dest;
             break;
+        }
         default:
             break;
         }
     }
+    // The lightmaps and the reflection probe are custom samplers, bound by
+    // the BSP and static model draws at fixed registers (g_customSamplerDest:
+    // probe s1, primary lightmap s2, secondary lightmap s3), and are not
+    // among the pass's arguments.
+    if ((pass->customSamplerFlags & 4) && (parts & MODERN_LIT_LIGHTMAP))
+        inputs.samplers |= (uint16_t)(1u << 3);
+    if ((pass->customSamplerFlags & 1) && (parts & MODERN_LIT_PROBE))
+        inputs.samplers |= (uint16_t)(1u << 1);
+    R_ModernLogPassInputs(name, pass, material, inputs);
     R_ModernSendInputs(&inputs);
 }
 
