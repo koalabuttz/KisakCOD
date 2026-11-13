@@ -33,7 +33,11 @@ class ShaderSet:
         self.shader_dir = os.path.join(ROOT, *shader_dir.split("/"))
         self.header = os.path.join(ROOT, *header.split("/"))
         self.namespace = namespace
-        self.shaders = shaders  # (source file, C++ symbol)
+        # (source file, C++ symbol) or (source file, C++ symbol, defines):
+        # defines ("NAME=VALUE" strings) are passed to the compiler as -D and
+        # are part of the recorded hash, so one source can make several
+        # shaders.
+        self.shaders = [entry if len(entry) == 3 else (entry[0], entry[1], ()) for entry in shaders]
 
 
 SETS = [
@@ -71,6 +75,8 @@ SETS = [
         [
             ("fullscreen.vert", "kFullscreenVert"),
             ("gamma.frag", "kGammaFrag"),
+            ("lm_sun.frag", "kLmSunFrag", ("LM_SUN_SHADOW=0",)),
+            ("lm_sun.frag", "kLmSunShadowFrag", ("LM_SUN_SHADOW=1",)),
         ],
     ),
 ]
@@ -78,17 +84,21 @@ SETS = [
 TARGET_ENV = "vulkan1.3"
 
 
-def source_hash(shader_set, name):
+def source_hash(shader_set, name, defines=()):
     with open(os.path.join(shader_set.shader_dir, name), "rb") as handle:
-        return hashlib.sha256(handle.read()).hexdigest()
+        digest = hashlib.sha256(handle.read())
+    for define in defines:
+        digest.update(b"\0-D" + define.encode("utf-8"))
+    return digest.hexdigest()
 
 
-def compile_shader(shader_set, name, out_path):
+def compile_shader(shader_set, name, out_path, defines=()):
     compiler = shutil.which("glslangValidator")
     if not compiler:
         sys.exit("gen_spirv_header.py: glslangValidator is not installed (apt install glslang-tools)")
     subprocess.run(
-        [compiler, "-V", "--target-env", TARGET_ENV, "-o", out_path, os.path.join(shader_set.shader_dir, name)],
+        [compiler, "-V", "--target-env", TARGET_ENV, *("-D" + define for define in defines), "-o", out_path,
+         os.path.join(shader_set.shader_dir, name)],
         check=True,
         stdout=subprocess.DEVNULL,
     )
@@ -157,13 +167,13 @@ def check_set(shader_set, validator):
     with open(shader_set.header, encoding="utf-8") as handle:
         parsed = parse_header(handle.read())
     failures = 0
-    for name, symbol in shader_set.shaders:
+    for name, symbol, defines in shader_set.shaders:
         if symbol not in parsed:
             print(f"FAIL {symbol}: missing from {os.path.relpath(shader_set.header, ROOT)}")
             failures += 1
             continue
         recorded_name, digest, words = parsed[symbol]
-        if recorded_name != name or digest != source_hash(shader_set, name):
+        if recorded_name != name or digest != source_hash(shader_set, name, defines):
             print(f"FAIL {symbol}: {name} changed since the header was generated; run gen_spirv_header.py")
             failures += 1
             continue
@@ -196,9 +206,9 @@ def main():
     for shader_set in SETS:
         entries = []
         with tempfile.TemporaryDirectory() as scratch:
-            for name, symbol in shader_set.shaders:
-                words = compile_shader(shader_set, name, os.path.join(scratch, symbol + ".spv"))
-                entries.append((name, symbol, source_hash(shader_set, name), words))
+            for name, symbol, defines in shader_set.shaders:
+                words = compile_shader(shader_set, name, os.path.join(scratch, symbol + ".spv"), defines)
+                entries.append((name, symbol, source_hash(shader_set, name, defines), words))
         with open(shader_set.header, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(render(shader_set, entries))
         print(f"wrote {os.path.relpath(shader_set.header, ROOT)}")

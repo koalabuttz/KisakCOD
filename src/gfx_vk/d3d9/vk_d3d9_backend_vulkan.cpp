@@ -117,6 +117,15 @@ struct Backend
     bool litWanted = true;
     bool litThisScene = false;
     bool litOverWhite = false; // the last lit inputs were over white (not per input)
+    // Lit passes drawn as Modern lit shaders of ours (vk_d3d9.h
+    // ModernLitInputs::shader), unless KISAK_VK_MODERN_SHADERS=0, with the
+    // sun's and the lightmap's strengths in linear light
+    // (KISAK_VK_MODERN_SUN_STRENGTH and _SKY_STRENGTH override them); the
+    // changes of lit inputs that named one, and their count at the last reset.
+    bool shadersWanted = true;
+    float sunStrength = 2.0f;
+    float skyStrength = 1.0f;
+    uint64_t litShaderChanges = 0, litShaderChangesBase = 0;
     uint64_t litScenes = 0, litScenesBase = 0;
     uint64_t litChanges = 0, litChangesBase = 0;
     // Bloom from the linear-light scene in place of the renderer's glow
@@ -337,6 +346,17 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     backend->effectsInLinear = EnvIs("KISAK_VK_MODERN_EFFECTS", "linear");
     backend->litWanted = !EnvIsZero("KISAK_VK_MODERN_LIT");
     backend->exposureWanted = !EnvIsZero("KISAK_VK_MODERN_EXPOSURE");
+    backend->shadersWanted = !EnvIsZero("KISAK_VK_MODERN_SHADERS");
+    {
+        const std::string sun = EnvText("KISAK_VK_MODERN_SUN_STRENGTH");
+        const float sunValue = sun.empty() ? -1.0f : std::strtof(sun.c_str(), nullptr);
+        if (sunValue >= 0.0f)
+            backend->sunStrength = sunValue;
+        const std::string sky = EnvText("KISAK_VK_MODERN_SKY_STRENGTH");
+        const float skyValue = sky.empty() ? -1.0f : std::strtof(sky.c_str(), nullptr);
+        if (skyValue >= 0.0f)
+            backend->skyStrength = skyValue;
+    }
     {
         const std::string key = EnvText("KISAK_VK_MODERN_EXPOSURE_KEY");
         const float value = key.empty() ? 0.0f : std::strtof(key.c_str(), nullptr);
@@ -411,6 +431,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         return nullptr;
     }
     backend->ownFeed = lg::GetGpuFeed(backend->legacy);
+    lg::SetModernLitStrengths(backend->legacy, backend->sunStrength, backend->skyStrength);
     return backend;
 }
 
@@ -591,6 +612,14 @@ void BackendLogStats(Backend *backend, bool reset)
                 static_cast<unsigned long long>(scenes),
                 backend->litOverWhite ? "kept over white" : "computed from decoded inputs",
                 double(backend->litChanges - backend->litChangesBase) / double(scenes));
+        // Of those, the passes drawn as our own lit shaders, and the pixel
+        // modules built as them (and that could not be).
+        if (backend->shadersWanted)
+            HostLog(h, "vulkan d3d9: modern: lit shaders of our own: %.1f changes to one each scene, %u pixel modules "
+                       "built as one (%u could not be), sun strength %.2f, sky strength %.2f",
+                    double(backend->litShaderChanges - backend->litShaderChangesBase) / double(scenes),
+                    stats.modernLitModules - was.modernLitModules, stats.modernLitRefused - was.modernLitRefused,
+                    backend->sunStrength, backend->skyStrength);
     }
     // Velocity: the surfaces drawn again with their own motion, and the
     // GPU time of that pass.
@@ -641,6 +670,7 @@ void BackendLogStats(Backend *backend, bool reset)
             backend->exposureMsBase = PassTimingsFor(backend->core, "modern exposure").totalMs;
         backend->litScenesBase = backend->litScenes;
         backend->litChangesBase = backend->litChanges;
+        backend->litShaderChangesBase = backend->litShaderChanges;
         backend->linearCopiesBase = backend->linearCopies;
         backend->statsBase = stats;
         backend->coreBase = core;
@@ -968,13 +998,16 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
     if (inputs && backend->linearScene && !backend->linearFailed)
     {
         ++backend->litChanges;
+        if (inputs->overWhite && inputs->shader && backend->shadersWanted)
+            ++backend->litShaderChanges;
         backend->litOverWhite = inputs->overWhite;
         if (!backend->litThisScene)
             ++backend->litScenes;
         backend->litThisScene = true;
     }
     lg::SetLinearInputs(backend->legacy, inputs ? inputs->constants : 0, inputs ? inputs->samplers : 0,
-                        inputs ? inputs->doubled : 0, inputs && inputs->colorInput, inputs && inputs->overWhite);
+                        inputs ? inputs->doubled : 0, inputs && inputs->colorInput, inputs && inputs->overWhite,
+                        inputs && backend->shadersWanted ? inputs->shader : uint8_t(0));
 }
 
 bool BackendModernEffectsOnDisplay(Backend *backend) { return backend && !backend->effectsInLinear; }

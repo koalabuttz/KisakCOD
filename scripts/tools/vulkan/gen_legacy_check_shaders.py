@@ -104,6 +104,51 @@ mov r1, c0.w
 mov_sat r1.xyz, r0.x
 mov oC0, r1
 """),
+    # The Modern lit shaders' check (vk_d3d9_check.cpp ModernLitShader): a
+    # vertex shader writing what lm_hsm_sun_r0c0's pixel shader reads
+    # (texcoord 0 colour and lightmap UVs, texcoord 1 normal and fog,
+    # texcoord 4 shadow-map coordinate, colour 0), each but the colour from a
+    # constant, and a stand-in for that pixel shader: it reads the same
+    # samplers and constants up to c18 but shows black (times c1, kept 0), so
+    # only the Modern shader drawn in its place shows light.
+    ("kVsLmSun", """vs_3_0
+dcl_position v0
+dcl_texcoord0 v1
+dcl_color0 v2
+dcl_position o0
+dcl_texcoord0 o1
+dcl_texcoord1 o2
+dcl_texcoord4 o3
+dcl_color0 o4
+add o0, v0, c0
+mov o1, c1
+mov o2, c2
+mov o3, c3
+mov o4, v2
+"""),
+    ("kPsLmSunStandIn", """ps_3_0
+dcl_texcoord0 v0
+dcl_texcoord1 v1
+dcl_texcoord4 v2
+dcl_color0 v3
+dcl_2d s0
+dcl_2d s2
+dcl_2d s3
+dcl_2d s4
+texld r0, v0, s0
+texld r1, v0, s2
+texld r2, v0, s3
+texld r3, v2, s4
+add r0, r0, r1
+add r0, r0, r2
+add r0, r0, r3
+add r0, r0, v1
+add r0, r0, v3
+add r0, r0, c0
+add r0, r0, c18
+mul r0, r0, c1
+mov oC0, r0
+"""),
     # Shader model 2: the same path through fixed output registers.
     ("kVs20", """vs_2_0
 dcl_position v0

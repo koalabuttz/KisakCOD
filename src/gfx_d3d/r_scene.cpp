@@ -1287,7 +1287,8 @@ static void R_ModernSendInputs(const GfxModernLitInputs *inputs)
                       && s_modernInputsSent.samplers == inputs->samplers
                       && s_modernInputsSent.doubled == inputs->doubled
                       && s_modernInputsSent.colorInput == inputs->colorInput
-                      && s_modernInputsSent.overWhite == inputs->overWhite)
+                      && s_modernInputsSent.overWhite == inputs->overWhite
+                      && s_modernInputsSent.shader == inputs->shader)
         return;
     s_modernInputsLit = inputs != nullptr;
     if (inputs)
@@ -1440,6 +1441,98 @@ static void R_ModernLogPassInputs(const char *name, const MaterialPass *pass, co
                inputs.colorInput ? 1 : 0, pass->customSamplerFlags, args);
 }
 
+// The Modern lit shader of the back end's own that a lit pass's pixel shader
+// can be drawn as (GfxModernLitInputs::shader): the shader's name says which,
+// and its arguments must bind exactly what that shader reads, where it reads
+// them (world-lit shader facts 1, 2026-11-13: lm_sun_r0c0 reads the colour
+// map at s0, fog colour c0, sun direction c17 and colour c18, and the
+// lightmaps at s2 and s3; lm_hsm_sun_r0c0 also the sun's shadow map at s4
+// and its partition switch and scale at c2 and c4). Anything else keeps the
+// game's shader.
+static uint8_t R_ModernLitShader(const char *name, const Material *material, const MaterialPass *pass)
+{
+    size_t length = strlen(name);
+    if (length > 5 && !strcmp(name + length - 5, ".hlsl"))
+        length -= 5;
+    uint8_t shader = GFX_MODERN_LIT_SHADER_NONE;
+    static const struct
+    {
+        const char *name;
+        uint8_t shader;
+    } kShaders[] = {
+        {"lm_sun_r0c0_sm3", GFX_MODERN_LIT_SHADER_LM_SUN},
+        {"lm_sun_r0c0_sm2", GFX_MODERN_LIT_SHADER_LM_SUN},
+        {"lm_hsm_sun_r0c0_sm3", GFX_MODERN_LIT_SHADER_LM_SUN_SHADOW},
+        {"lm_hsm_sun_r0c0_sm2", GFX_MODERN_LIT_SHADER_LM_SUN_SHADOW},
+    };
+    for (const auto &known : kShaders)
+    {
+        if (strlen(known.name) == length && !strncmp(name, known.name, length))
+            shader = known.shader;
+    }
+    if (shader == GFX_MODERN_LIT_SHADER_NONE || (pass->customSamplerFlags & 6) != 6)
+        return GFX_MODERN_LIT_SHADER_NONE;
+    const bool shadow = shader == GFX_MODERN_LIT_SHADER_LM_SUN_SHADOW;
+    // Every pixel argument, each where the shader reads it.
+    uint32_t found = 0;
+    enum : uint32_t
+    {
+        COLOR_MAP = 1u << 0,
+        FOG_COLOR = 1u << 1,
+        SUN_POSITION = 1u << 2,
+        SUN_DIFFUSE = 1u << 3,
+        SHADOW_MAP = 1u << 4,
+        SWITCH_PARTITION = 1u << 5,
+        SHADOW_SCALE = 1u << 6,
+    };
+    const uint32_t wanted =
+        COLOR_MAP | FOG_COLOR | SUN_POSITION | SUN_DIFFUSE | (shadow ? SHADOW_MAP | SWITCH_PARTITION | SHADOW_SCALE : 0u);
+    const uint32_t argCount = pass->perPrimArgCount + pass->perObjArgCount + pass->stableArgCount;
+    for (uint32_t i = 0; i < argCount; ++i)
+    {
+        const MaterialShaderArgument &arg = pass->args[i];
+        uint32_t what = 0;
+        switch (arg.type)
+        {
+        case MTL_ARG_MATERIAL_PIXEL_SAMPLER:
+            for (uint32_t t = 0; t < material->textureCount; ++t)
+            {
+                const MaterialTextureDef &def = material->textureTable[t];
+                if (def.nameHash == arg.u.nameHash && def.semantic == TS_COLOR_MAP && arg.dest == 0)
+                    what = COLOR_MAP;
+            }
+            break;
+        case MTL_ARG_CODE_PIXEL_SAMPLER:
+            if (arg.u.codeSampler == TEXTURE_SRC_CODE_SHADOWMAP_SUN && arg.dest == 4)
+                what = SHADOW_MAP;
+            break;
+        case MTL_ARG_CODE_PIXEL_CONST:
+            if (arg.u.codeConst.rowCount != 1)
+                break;
+            if (arg.u.codeConst.index == CONST_SRC_CODE_FOG_COLOR && arg.dest == 0)
+                what = FOG_COLOR;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_SUN_POSITION && arg.dest == 17)
+                what = SUN_POSITION;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_SUN_DIFFUSE && arg.dest == 18)
+                what = SUN_DIFFUSE;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_SHADOWMAP_SWITCH_PARTITION && arg.dest == 2)
+                what = SWITCH_PARTITION;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_SHADOWMAP_SCALE && arg.dest == 4)
+                what = SHADOW_SCALE;
+            break;
+        case MTL_ARG_MATERIAL_PIXEL_CONST:
+        case MTL_ARG_LITERAL_PIXEL_CONST:
+            return GFX_MODERN_LIT_SHADER_NONE; // a pixel constant it does not read
+        default:
+            continue; // vertex arguments
+        }
+        if (!what || (found & what) || !(wanted & what))
+            return GFX_MODERN_LIT_SHADER_NONE;
+        found |= what;
+    }
+    return found == wanted ? shader : GFX_MODERN_LIT_SHADER_NONE;
+}
+
 // Which colours a lit pass's pixel shader reads, by its kind (the pixel
 // shader's name: lm_ world surfaces lit by lightmaps, lp_ models lit by the
 // lighting volume, l_ dynamic lights) and what its arguments bind. The rest
@@ -1477,6 +1570,7 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
     {
         GfxModernLitInputs inputs{};
         inputs.overWhite = true;
+        inputs.shader = R_ModernLitShader(name, material, pass);
         R_ModernSendInputs(&inputs);
         return;
     }

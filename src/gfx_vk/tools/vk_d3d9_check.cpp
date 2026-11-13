@@ -332,6 +332,8 @@ public:
     IDirect3DVertexShader9 *vsBasic = nullptr;
     IDirect3DPixelShader9 *psColor = nullptr, *psTexture = nullptr, *psShadow = nullptr, *psVolume = nullptr;
     IDirect3DPixelShader9 *psLit = nullptr;
+    IDirect3DVertexShader9 *vsLmSun = nullptr;
+    IDirect3DPixelShader9 *psLmSunStandIn = nullptr;
     IDirect3DVertexDeclaration9 *decl = nullptr;
     IDirect3DSurface9 *readSurface = nullptr;
     IDirect3DSurface9 *backBuffer = nullptr;
@@ -516,6 +518,7 @@ public:
     void ModernBloom();
     void ModernEffects();
     void ModernLit();
+    void ModernLitShader();
     void ModernTonemap();
     void ModernExposure();
     void ModernVelocity();
@@ -3783,6 +3786,145 @@ void Check::ModernLit()
 }
 
 
+// The Modern lit shaders of our own (front::ModernLitInputs::shader): a
+// stand-in for lm_hsm_sun_r0c0 that reads what it reads but shows black is
+// drawn as our lm_sun shader instead, which adds its light in linear light.
+// Grey 128 colour map (0.2159 of light) under a white vertex colour, the
+// secondary lightmap's halves 64 each with flat directions (their sum, 128,
+// is 0.2159 of light), the primary lightmap 1, and a grey 128 sun straight
+// overhead: lit = 0.2159 * (0.2159 * sky + 0.2159 * sun strength). The shadow
+// map holds depth 0.5: a reference of 0.25 is lit (as without the shadow),
+// 0.75 is in shadow (the lightmap's light only). Half fog towards red blends
+// in linear light. Without our shaders (KISAK_VK_MODERN_SHADERS=0, no linear
+// light, or no lit inputs) the stand-in shows black.
+void Check::ModernLitShader()
+{
+    const bool on = EnvText("KISAK_VK_MODERN_LINEAR") != "0" && EnvText("KISAK_VK_MODERN_LIT") != "0"
+        && EnvText("KISAK_VK_MODERN_SHADERS") != "0";
+    const auto strength = [](const char *name, double fallback) {
+        const std::string text = EnvText(name);
+        const double value = text.empty() ? -1.0 : std::strtod(text.c_str(), nullptr);
+        return value >= 0.0 ? value : fallback;
+    };
+    const double sun = strength("KISAK_VK_MODERN_SUN_STRENGTH", 2.0);
+    const double sky = strength("KISAK_VK_MODERN_SKY_STRENGTH", 1.0);
+    IDirect3DTexture9 *color = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 128, 128, 128); });
+    IDirect3DTexture9 *primary = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
+    IDirect3DTexture9 *secondary = FilledTexture(1, 2, [](UINT, UINT) { return Argb(130, 64, 64, 64); });
+    IDirect3DTexture9 *shadow = nullptr, *shadowColor = nullptr;
+    IDirect3DSurface9 *shadowLevel = nullptr, *shadowColorLevel = nullptr, *depth = nullptr;
+    const bool made = color && primary && secondary
+        && Ok(device->CreateTexture(64, 64, 1, D3DUSAGE_DEPTHSTENCIL, D3DFMT_D24S8, D3DPOOL_DEFAULT, &shadow, nullptr),
+              "CreateTexture(D24S8 depth)")
+        && Ok(shadow->GetSurfaceLevel(0, &shadowLevel), "GetSurfaceLevel(depth)")
+        && Ok(device->CreateTexture(64, 64, 1, D3DUSAGE_RENDERTARGET, D3DFMT_R5G6B5, D3DPOOL_DEFAULT, &shadowColor,
+                                    nullptr),
+              "CreateTexture(R5G6B5 target)")
+        && Ok(shadowColor->GetSurfaceLevel(0, &shadowColorLevel), "GetSurfaceLevel(colour)")
+        && Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                                nullptr),
+              "CreateDepthStencilSurface");
+    if (made)
+    {
+        // The shadow pass: depth 0.5 everywhere.
+        Ok(device->SetRenderTarget(0, shadowColorLevel), "SetRenderTarget(shadow colour)");
+        Ok(device->SetDepthStencilSurface(shadowLevel), "SetDepthStencilSurface(shadow)");
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 0.5f, 0),
+           "Clear(shadow)");
+
+        Reset(Argb(255, 0, 0, 0));
+        front::ModernSceneBegin(device);
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0),
+           "Clear(scene)");
+        device->SetVertexShader(vsLmSun);
+        device->SetPixelShader(psLmSunStandIn);
+        device->SetTexture(0, color);
+        device->SetTexture(2, primary);
+        device->SetTexture(3, secondary);
+        device->SetTexture(4, shadow);
+        for (DWORD sampler : {2u, 3u, 4u})
+        {
+            device->SetSamplerState(sampler, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+            device->SetSamplerState(sampler, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+        }
+        const float grey = 128.0f / 255.0f;
+        const float pixel[19][4] = {
+            {1, 0, 0, 0},          // c0 fog colour: red
+            {0, 0, 0, 0},          // c1: the stand-in's black
+            {0, 0, 0, 1},          // c2 shadow partition switch: far = near
+            {0, 0, 0, 0},          // c3
+            {0, 0, 0, 0},          // c4 shadow-map scale (no edge fade)
+            {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+            {0, 0, 1, 0},          // c17 sun direction: overhead
+            {grey, grey, grey, 0}, // c18 sun colour
+        };
+        Ok(device->SetPixelShaderConstantF(0, &pixel[0][0], 19), "SetPixelShaderConstantF");
+        // Colour map and lightmap UVs; the normal straight up and the fog
+        // factor; the shadow-map coordinate (near partition).
+        const auto vertex = [&](float fog, float reference) {
+            const float values[3][4] = {{0.5f, 0.5f, 0.5f, 0.5f}, {0, 0, 1, fog}, {0.5f, 0.5f, reference, 0.5f}};
+            Ok(device->SetVertexShaderConstantF(1, &values[0][0], 3), "SetVertexShaderConstantF");
+        };
+        front::ModernLitInputs inputs;
+        inputs.overWhite = true;
+        inputs.shader = 1; // lm_sun_r0c0
+        front::SetModernLitInputs(device, &inputs);
+        vertex(1.0f, 0.25f);
+        DrawQuad(0, 0, 64, 64, 0.5f, Argb(255, 255, 255, 255));
+        vertex(0.5f, 0.25f);
+        DrawQuad(64, 64, 128, 128, 0.5f, Argb(255, 255, 255, 255));
+        inputs.shader = 2; // lm_hsm_sun_r0c0
+        front::SetModernLitInputs(device, &inputs);
+        vertex(1.0f, 0.25f);
+        DrawQuad(64, 0, 128, 64, 0.5f, Argb(255, 255, 255, 255));
+        vertex(1.0f, 0.75f);
+        DrawQuad(0, 64, 64, 128, 0.5f, Argb(255, 255, 255, 255));
+        front::SetModernLitInputs(device, nullptr);
+
+        front::ModernSceneView view{};
+        for (int i = 0; i < 4; ++i)
+            view.view[i][i] = view.projection[i][i] = 1.0f;
+        view.width = view.height = kSize;
+        view.cut = true;
+        if (front::ModernSceneLit(device, view) == front::ModernResult::Skipped)
+            front::ModernSceneDone(device, view);
+        device->SetDepthStencilSurface(nullptr);
+        for (DWORD sampler : {0u, 2u, 3u, 4u})
+            device->SetTexture(sampler, nullptr);
+        device->SetVertexShader(vsBasic);
+        device->SetPixelShader(psColor);
+        if (Read())
+        {
+            const std::string curve = ModernCurve();
+            const double light = 0.21586;
+            const auto shown = [&](double r, double g, double b) {
+                const Rgb c = TonemapCurve(curve, {r, g, b});
+                return std::array<int, 3>{ShownByte(c[0]), ShownByte(c[1]), ShownByte(c[2])};
+            };
+            const double sunlit = light * (light * sky + light * sun);
+            const double shaded = light * light * sky;
+            const auto expect = [&](const char *name, int x, int y, std::array<int, 3> rgb) {
+                Expect(name, x, y, on ? rgb[0] : 0, on ? rgb[1] : 0, on ? rgb[2] : 0);
+            };
+            expect("sunlit", 32, 32, shown(sunlit, sunlit, sunlit));
+            expect("shadow_lit", 96, 32, shown(sunlit, sunlit, sunlit));
+            expect("shadow_shaded", 32, 96, shown(shaded, shaded, shaded));
+            expect("half_fog", 96, 96, shown(0.5 + 0.5 * sunlit, 0.5 * sunlit, 0.5 * sunlit));
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    }
+    SafeRelease(depth);
+    SafeRelease(shadowColorLevel);
+    SafeRelease(shadowColor);
+    SafeRelease(shadowLevel);
+    SafeRelease(shadow);
+    SafeRelease(secondary);
+    SafeRelease(primary);
+    SafeRelease(color);
+}
+
+
 // The tonemap's curve (KISAK_VK_MODERN_TONEMAP): grey 128 (0.216 of light),
 // white (1), and white added twice (2) and four times (4) in the linear-light
 // scene, as each curve shows them. Clamp shows 128, 255, 255, 255; the others
@@ -4076,6 +4218,10 @@ bool Check::CreateObjects(std::string &error)
         hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsVolume), &psVolume);
     if (SUCCEEDED(hr))
         hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsLit), &psLit);
+    if (SUCCEEDED(hr))
+        hr = device->CreateVertexShader(reinterpret_cast<const DWORD *>(shaders::kVsLmSun), &vsLmSun);
+    if (SUCCEEDED(hr))
+        hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsLmSunStandIn), &psLmSunStandIn);
     const D3DVERTEXELEMENT9 elements[] = {
         {0, 0, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
         {0, 12, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
@@ -4118,6 +4264,8 @@ void Check::ReleaseObjects()
     SafeRelease(vsBasic);
     SafeRelease(psColor);
     SafeRelease(psLit);
+    SafeRelease(vsLmSun);
+    SafeRelease(psLmSunStandIn);
     SafeRelease(psTexture);
     SafeRelease(psShadow);
     SafeRelease(psVolume);
@@ -4189,6 +4337,7 @@ int Run(const Options &options)
         {"modern_bloom", &Check::ModernBloom, true},
         {"modern_effects", &Check::ModernEffects, true},
         {"modern_lit", &Check::ModernLit, true},
+        {"modern_lit_shader", &Check::ModernLitShader, true},
         {"modern_tonemap", &Check::ModernTonemap, true},
         {"modern_exposure", &Check::ModernExposure, true},
         {"modern_velocity", &Check::ModernVelocity, true},

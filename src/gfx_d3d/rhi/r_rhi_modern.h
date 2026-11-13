@@ -46,6 +46,20 @@ struct GfxModernLitInputs
     // stored colour is decoded without its clamp to 1, so a lit surface
     // computed over white stays over white for the tonemap and bloom.
     bool overWhite;
+    // With overWhite: a Modern lit shader of the back end's own that this
+    // pass's pixel shader can be drawn as instead (it reads the same samplers,
+    // registers and vertex outputs, which the renderer has checked), or
+    // GFX_MODERN_LIT_SHADER_NONE.
+    uint8_t shader;
+};
+
+enum GfxModernLitShader : uint8_t
+{
+    GFX_MODERN_LIT_SHADER_NONE = 0,
+    // lm_sun_r0c0: lightmaps and sun, colour map, no shadow map.
+    GFX_MODERN_LIT_SHADER_LM_SUN = 1,
+    // lm_hsm_sun_r0c0: the same with the sun's shadow map.
+    GFX_MODERN_LIT_SHADER_LM_SUN_SHADOW = 2,
 };
 
 struct GfxModernHooks

@@ -569,6 +569,79 @@ of the way there. `test_vulkan_d3d9_front.py` runs it with
 `KISAK_VK_MODERN_EXPOSURE=1` and every other scene with it off, since auto
 exposure moves their colours.
 
+## Lit shaders of our own
+
+The second stage of the Modern lit shaders plan: lit passes drawn with
+shaders of the Modern path's own, which add their light in linear light,
+in place of the game's. The first is the world's base sunlit shader.
+
+| Game shader | Ours | Reads |
+| --- | --- | --- |
+| `lm_sun_r0c0` | `lm_sun.frag` (`LM_SUN_SHADOW=0`) | colour map s0, primary lightmap s2, secondary lightmap s3; fog colour c0, sun direction c17, sun colour c18; texcoord 0 (colour and lightmap UVs), texcoord 1 (normal, fog), colour 0 |
+| `lm_hsm_sun_r0c0` | `lm_sun.frag` (`LM_SUN_SHADOW=1`) | the same, plus the sun's shadow map s4, its partition switch c2 and scale c4, and texcoord 4 (the shadow-map coordinate) |
+
+What ours computes (from the game shaders' maths, world-lit shader facts 1
+and 2 in the project files, 2026-11-13):
+
+* **albedo** = colour map times vertex colour, each decoded from sRGB;
+* **sky** = the secondary lightmap's two halves combined as the game
+  combines them (top plus bottom times the flat normal's N.D: one baked
+  light, encoded in two images), then decoded, times the sky strength;
+* **sun** = shadow times N.L times the sun's colour decoded, times the sun
+  strength. The shadow is the primary lightmap's sun visibility, or where
+  the shadow map covers the surface (and the lightmap's is not 0), the
+  game's four depth-compare taps a quarter each, near and far partitions
+  blended over w 0.75 to 1, faded back to the lightmap's towards the far
+  partition's edge;
+* **colour** = albedo times (sky plus sun), then the fog colour (decoded)
+  blended over it in linear light by the vertex fog factor.
+
+So shade is the game's: decode(colour times light) is decode(colour) times
+decode(light). Where the sun adds to the lightmap, the game added the two in
+display values, which in linear light is brighter than the parts added; the
+**sun strength** (default 2, provisional until a PC calibration run against
+Legacy) stands in for that. The sum is not clamped, so the tonemap and bloom
+see sunlit highlights as they are.
+
+* **Which passes.** `R_ModernPassInputs` (`r_scene.cpp`) names one in
+  `GfxModernLitInputs::shader` when the pass's pixel shader is one of the
+  names above (`_sm3` or `_sm2`, the lightmaps bound as custom samplers) and
+  its pixel arguments bind exactly what ours reads, where ours reads it;
+  any other pixel argument keeps the game's shader.
+* **How.** It travels with the over-white lit inputs (front
+  `ModernLitInputs::shader`, `legacy::SetLinearInputs`'s `shader`,
+  `PipelineKey::linearShader`). Building the pipeline's pixel module, the
+  adapter (`vk_legacy_modern_lit.cpp`) takes our SPIR-V (compiled at build
+  time into `vk_legacy_shaders.h`), moves its inputs from their placeholder
+  locations (texcoord N at N, colour 0 at 10) to where the vertex shader
+  writes those semantics, and sets the strengths and the depth reference
+  clamp as specialization constants' defaults. The pipeline layout and
+  descriptors stay the game shader's, so the adapter uses ours only where
+  that shader reads at least what ours does (constants to c18, 2D images at
+  those samplers), the vertex shader writes each input as one four-component
+  vector alone at its location, the alpha test is off and, for the shadow,
+  s4 is a depth image; otherwise it builds the game's shader, over white,
+  and counts it.
+
+| Switch | Default |
+| --- | --- |
+| `KISAK_VK_MODERN_SHADERS=0` | our shaders on (with linear light and lit passes on) |
+| `KISAK_VK_MODERN_SUN_STRENGTH=<value>` | 2 |
+| `KISAK_VK_MODERN_SKY_STRENGTH=<value>` | 1 |
+
+The statistics line, after the lit surfaces' one: `vulkan d3d9: modern: lit
+shaders of our own: C changes to one each scene, N pixel modules built as
+one (R could not be), sun strength S, sky strength K`.
+
+**Checks:** the D3D9 check's `modern_lit_shader` scene draws a stand-in for
+`lm_hsm_sun_r0c0` (it reads the same samplers and constants but shows black)
+as `lm_sun` and `lm_hsm_sun`: grey 128 colour map, lightmap halves 64 each,
+grey 128 sun overhead, a shadow map at depth 0.5. It expects 0.2159 *
+(0.2159 * sky + 0.2159 * sun) of light without a shadow and with a reference
+in front of the stored depth, the lightmap's alone behind it, and half fog
+towards red blended in linear light; black with our shaders off.
+`test_vulkan_d3d9_front.py` also runs it with `KISAK_VK_MODERN_SHADERS=0`.
+
 ## Next
 
 From the plan's E1, in order:
