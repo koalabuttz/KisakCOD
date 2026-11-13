@@ -2794,16 +2794,22 @@ void SetLinearLight(Texture *texture, bool linear)
         texture->linearLight = linear;
 }
 
-void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint16_t doubled, bool colorInput)
+void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint16_t doubled, bool colorInput,
+                     bool overWhite)
 {
     if (!device)
         return;
     ls::LinearInputs inputs;
-    inputs.constants = constants;
-    inputs.samplers = samplers;
-    inputs.doubled = static_cast<uint16_t>(doubled & samplers);
-    inputs.flags = colorInput ? ls::kLinearColorInput : 0;
-    const bool on = constants || samplers || colorInput;
+    if (overWhite)
+        inputs.flags = ls::kLinearOverWhite;
+    else
+    {
+        inputs.constants = constants;
+        inputs.samplers = samplers;
+        inputs.doubled = static_cast<uint16_t>(doubled & samplers);
+        inputs.flags = colorInput ? ls::kLinearColorInput : 0;
+    }
+    const bool on = inputs.constants || inputs.samplers || inputs.flags;
     if (on == device->linearInputsOn && std::memcmp(&inputs, &device->linearInputs, sizeof(inputs)) == 0)
         return;
     device->linearInputs = inputs;

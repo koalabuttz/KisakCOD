@@ -1285,7 +1285,8 @@ static void R_ModernSendInputs(const GfxModernLitInputs *inputs)
                 : s_modernInputsLit && s_modernInputsSent.constants == inputs->constants
                       && s_modernInputsSent.samplers == inputs->samplers
                       && s_modernInputsSent.doubled == inputs->doubled
-                      && s_modernInputsSent.colorInput == inputs->colorInput)
+                      && s_modernInputsSent.colorInput == inputs->colorInput
+                      && s_modernInputsSent.overWhite == inputs->overWhite)
         return;
     s_modernInputsLit = inputs != nullptr;
     if (inputs)
@@ -1457,6 +1458,24 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
     if (!lit)
     {
         R_ModernSendInputs(nullptr);
+        return;
+    }
+    // By default a lit pass keeps the game's own sums of light (the colour
+    // stored is the game's) and only lets what it computes over white stay
+    // over white: CoD4's maps were balanced for light added in display
+    // values, and adding each term in linear light instead darkens every
+    // sum, the more the more terms it has, so the sun all but vanished next
+    // to the lightmap (PC lit runs 1-2, 2026-11-13). KISAK_VK_MODERN_LIT=inputs
+    // decodes each colour read instead, for experiments.
+    static const bool perInput = [] {
+        const char *text = getenv("KISAK_VK_MODERN_LIT");
+        return text && !I_stricmp(text, "inputs");
+    }();
+    if (!perInput)
+    {
+        GfxModernLitInputs inputs{};
+        inputs.overWhite = true;
+        R_ModernSendInputs(&inputs);
         return;
     }
     const uint32_t parts = R_ModernLitParts();

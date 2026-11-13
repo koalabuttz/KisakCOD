@@ -42,6 +42,10 @@ struct GfxModernLitInputs
     uint16_t samplers;  // pixel samplers s0-s15 whose results are colours
     uint16_t doubled;   // of those, the ones the shader doubles (2x overbright)
     bool colorInput;    // the vertex colour (colour 0 input)
+    // Instead of the above (all zero then): no colour read is decoded, and the
+    // stored colour is decoded without its clamp to 1, so a lit surface
+    // computed over white stays over white for the tonemap and bloom.
+    bool overWhite;
 };
 
 struct GfxModernHooks

@@ -242,6 +242,9 @@ struct ModernLitInputs
     uint16_t samplers = 0;  // pixel samplers s0-s15 whose results are colours
     uint16_t doubled = 0;   // of those, the ones the shader doubles (2x overbright)
     bool colorInput = false; // the colour 0 input (the vertex colour)
+    // Instead of the above: none decoded, and the stored colour decoded
+    // without its clamp to 1 (legacy SetLinearInputs' overWhite).
+    bool overWhite = false;
 };
 void SetModernLitInputs(IDirect3DDevice9 *device, const ModernLitInputs *inputs);
 } // namespace gfx_vk::d3d9

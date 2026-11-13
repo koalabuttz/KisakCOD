@@ -428,12 +428,16 @@ uint32_t ChangeColorOutput(ir::Builder &builder, Change change)
 // drawing into the Modern path's linear-light scene (docs/vulkan-modern.md):
 // the game's shaders work in gamma space, and blending then happens in linear
 // light.
-uint32_t DecodeColorOutput(ir::Builder &builder)
+// With overWhite the colour is only kept from going negative: values over 1
+// follow the curve on (LinearInputs kLinearOverWhite).
+uint32_t DecodeColorOutput(ir::Builder &builder, bool overWhite = false)
 {
     const ir::Type f32 = ir::Type(ir::BasicType(ir::ScalarType::eF32));
     return ChangeColorOutput(builder, [&](ir::SsaDef store, ir::SsaDef value) {
-        const ir::SsaDef t = builder.addBefore(
-            store, ir::Op::FClamp(f32, value, builder.makeConstant(0.0f), builder.makeConstant(1.0f)));
+        const ir::SsaDef t = overWhite
+            ? builder.addBefore(store, ir::Op::FMax(f32, value, builder.makeConstant(0.0f)))
+            : builder.addBefore(store, ir::Op::FClamp(f32, value, builder.makeConstant(0.0f),
+                                                      builder.makeConstant(1.0f)));
         return DecodeSrgbBefore(builder, store, t);
     });
 }
@@ -968,7 +972,9 @@ bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<ui
         FixDepthCompare(builder, *fixedDepthCompare);
     if (fixedAlphaCompare)
         FixAlphaTest(builder, *fixedAlphaCompare);
-    if (linearInputs && shader.reflection.stage == Stage::Pixel)
+    if (linearInputs && shader.reflection.stage == Stage::Pixel && (linearInputs->flags & kLinearOverWhite))
+        DecodeColorOutput(builder, true);
+    else if (linearInputs && shader.reflection.stage == Stage::Pixel)
     {
         DecodeLinearInputs(builder, *linearInputs);
         KeepColorOutputPositive(builder);

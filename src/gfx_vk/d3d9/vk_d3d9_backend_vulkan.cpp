@@ -110,6 +110,7 @@ struct Backend
     // the changes of lit inputs, and their counts at the last reset.
     bool litWanted = true;
     bool litThisScene = false;
+    bool litOverWhite = false; // the last lit inputs were over white (not per input)
     uint64_t litScenes = 0, litScenesBase = 0;
     uint64_t litChanges = 0, litChangesBase = 0;
     // Bloom from the linear-light scene in place of the renderer's glow
@@ -484,9 +485,10 @@ void BackendLogStats(Backend *backend, bool reset)
     if (backend->litScenes != backend->litScenesBase)
     {
         const uint64_t scenes = backend->litScenes - backend->litScenesBase;
-        HostLog(h, "vulkan d3d9: modern: %llu scenes with lit surfaces computed in linear light "
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with lit surfaces in linear light, %s "
                    "(%.1f changes of lit inputs each)",
                 static_cast<unsigned long long>(scenes),
+                backend->litOverWhite ? "kept over white" : "computed from decoded inputs",
                 double(backend->litChanges - backend->litChangesBase) / double(scenes));
     }
     // Bloom: the scenes it ran for in place of the glow, the passes of each,
@@ -784,12 +786,13 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
     if (inputs && backend->linearScene && !backend->linearFailed)
     {
         ++backend->litChanges;
+        backend->litOverWhite = inputs->overWhite;
         if (!backend->litThisScene)
             ++backend->litScenes;
         backend->litThisScene = true;
     }
     lg::SetLinearInputs(backend->legacy, inputs ? inputs->constants : 0, inputs ? inputs->samplers : 0,
-                        inputs ? inputs->doubled : 0, inputs && inputs->colorInput);
+                        inputs ? inputs->doubled : 0, inputs && inputs->colorInput, inputs && inputs->overWhite);
 }
 
 bool BackendModernEffectsOnDisplay(Backend *backend) { return backend && !backend->effectsInLinear; }

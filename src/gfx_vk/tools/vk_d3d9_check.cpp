@@ -3339,6 +3339,8 @@ void Check::ModernEffects()
 // the quad shows 128 + 64 = 192; with the colour map, the light and the
 // vertex colour decoded before the sum it shows encode(decode(128) +
 // decode(64)) = 141, and 197 with the colour map doubled (decode(2v) / 2).
+// Over white (nothing decoded but the stored colour, without its clamp) it
+// is 192 as without lit inputs: below white the two are the same.
 void Check::ModernLit()
 {
     const auto env = [](const char *name, const char *value) {
@@ -3382,8 +3384,12 @@ void Check::ModernLit()
     inputs.doubled = 1u << 0;
     front::SetModernLitInputs(device, &inputs);
     DrawQuad(0, 64, 64, 128, 0.5f, Argb(255, 255, 255, 255));
+    front::ModernLitInputs overWhite;
+    overWhite.overWhite = true;
+    front::SetModernLitInputs(device, &overWhite);
+    DrawQuad(64, 64, 128, 96, 0.5f, Argb(255, 255, 255, 255));
     front::SetModernLitInputs(device, nullptr);
-    DrawQuad(64, 64, 128, 128, 0.5f, Argb(255, 255, 255, 255));
+    DrawQuad(64, 96, 128, 128, 0.5f, Argb(255, 255, 255, 255));
 
     front::ModernSceneView view{};
     for (int i = 0; i < 4; ++i)
@@ -3399,7 +3405,8 @@ void Check::ModernLit()
         Expect("unlit", 32, 32, 192, 192, 192);
         Expect("lit", 96, 32, lit ? 141 : 192, lit ? 141 : 192, lit ? 141 : 192);
         Expect("lit_doubled", 32, 96, lit ? 197 : 192, lit ? 197 : 192, lit ? 197 : 192);
-        Expect("unlit_again", 96, 96, 192, 192, 192);
+        Expect("over_white", 96, 80, 192, 192, 192);
+        Expect("unlit_again", 96, 112, 192, 192, 192);
     }
     Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
     SafeRelease(depth);

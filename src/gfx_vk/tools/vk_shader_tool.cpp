@@ -8,7 +8,8 @@
 //       the Modern path's linear-light scene. --linear-inputs S,D,C,V takes
 //       the colours it reads to linear light instead, as the Modern path
 //       draws lit surfaces (LinearInputs: sampler mask S, doubled samplers D,
-//       float constant mask C, V 1 for the colour 0 input).
+//       float constant mask C, V the flags: 1 the colour 0 input, 2 none of
+//       them and the colour output decoded without its clamp to 1).
 //   KisakCOD-vulkan-shaders batch DIR [--out-dir DIR] [--threads N]
 //       Translates every file in DIR (for example the bytecode the shader
 //       spike's shader_corpus.py --dump-dir writes) and prints counts only:
@@ -202,7 +203,7 @@ int RunTranslate(int argc, char **argv)
             linearInputs.samplers = static_cast<uint16_t>(values[0]);
             linearInputs.doubled = static_cast<uint16_t>(values[1]);
             linearInputs.constants = values[2];
-            linearInputs.flags = values[3] ? kLinearColorInput : 0;
+            linearInputs.flags = static_cast<uint8_t>(values[3] & (kLinearColorInput | kLinearOverWhite));
             linear = true;
         }
         else if (argv[i][0] != '-' && !file)

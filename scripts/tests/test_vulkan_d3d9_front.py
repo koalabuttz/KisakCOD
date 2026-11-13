@@ -181,7 +181,7 @@ def main():
         found, scenes = parse(stdout)
         checks.expect(f'modern_lit passes with {name}=0',
                       code == 0 and found.get('d3d9_check') == 'passed' and [s[0] for s in scenes] == ['modern_lit']
-                      and 'lit surfaces computed in linear light' not in stdout, f'status {code}\n{stdout}')
+                      and 'lit surfaces in linear light' not in stdout, f'status {code}\n{stdout}')
 
     # present-mode
     fifo = dict(env)
@@ -277,14 +277,14 @@ def main():
         checks.expect('the Modern path drew bloom for 2 scenes, 7 passes each',
                       bloom is not None and bloom.group(1) == '2' and bloom.group(2) == '7.0',
                       bloom.group(0) if bloom else 'missing')
-    lit = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with lit surfaces computed in linear '
-                    r'light \(([0-9.]+) changes of lit inputs each\)$', stdout, re.M)
+    lit = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with lit surfaces in linear light, '
+                    r'kept over white \(([0-9.]+) changes of lit inputs each\)$', stdout, re.M)
     if env.get('KISAK_VK_MODERN_LINEAR') == '0' or env.get('KISAK_VK_MODERN_LIT') == '0':
         checks.expect('no scene with lit surfaces in linear light with linear light or lit inputs off', lit is None,
                       lit.group(0) if lit else '')
     else:
-        checks.expect('the Modern path computed lit surfaces in linear light in 1 scene, inputs changed twice',
-                      lit is not None and lit.group(1) == '1' and lit.group(2) == '2.0',
+        checks.expect('the Modern path drew lit surfaces in linear light in 1 scene, inputs changed 3 times',
+                      lit is not None and lit.group(1) == '1' and lit.group(2) == '3.0',
                       lit.group(0) if lit else 'missing')
     checks.expect('no object outlived its release', found.get('d3d9_check.live_objects_at_teardown') == '0',
                   found.get('d3d9_check.live_objects_at_teardown', 'missing'))
