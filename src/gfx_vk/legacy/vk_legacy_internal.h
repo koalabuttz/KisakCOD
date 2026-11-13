@@ -557,6 +557,16 @@ struct Device
     VertexBind boundVertices[kMaxStreams + 1]; // by binding; a null buffer: nothing bound
     VkBuffer boundIndices = VK_NULL_HANDLE;
     VkIndexType boundIndexType = VK_INDEX_TYPE_UINT16;
+    // The last DrawIndexedPrimitive that recorded (LastIndexedDraw).
+    struct
+    {
+        bool triangleList = false;
+        VkBuffer indices = VK_NULL_HANDLE;
+        VkIndexType indexType = VK_INDEX_TYPE_UINT16;
+        uint32_t firstIndex = 0, indexCount = 0;
+        int32_t vertexBase = 0;
+        uint32_t minIndex = 0, vertexCount = 0;
+    } lastIndexed;
     UniformBind boundUniforms{};               // a null set: nothing bound
     // The texture set and the pipeline layout it was bound with. Binding set
     // 0 with another layout can unbind set 1, so both are forgotten together

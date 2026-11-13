@@ -99,4 +99,14 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs);
 // cannot (the caller copies the scene as it is).
 bool BackendModernCopyScene(Backend *backend, lg::Surface *scene, const lg::Rect *from, lg::Surface *dst,
                             const lg::Rect *to, bool linear);
+// The legacy device's last indexed draw was a surface that moves on its own
+// (vk_d3d9.h ModernSurfaceMoved): kept for the velocity pass of the next
+// BackendModernScene.
+void BackendModernSurfaceMoved(Backend *backend, lg::Device *legacy, const float clip[4][4],
+                               const float prevClip[4][4]);
+// The same for a skinned surface (vk_d3d9.h ModernSkinnedSurfaceMoved):
+// its vertices are kept under `key` at the next BackendModernScene, and its
+// velocity drawn there when the last one kept them. prevClip may be null.
+void BackendModernSkinnedSurfaceMoved(Backend *backend, lg::Device *legacy, uint64_t key, const float clip[4][4],
+                                      const float prevClip[4][4]);
 } // namespace gfx_vk::d3d9

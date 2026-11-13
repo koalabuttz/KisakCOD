@@ -9,9 +9,11 @@
 // projection, and the first piece of linear light (MD1), the scene drawn
 // into a linear-light image and tonemapped back (below). The engine jitters the projection (src/gfx_d3d/r_scene.cpp)
 // and, when the 3D scene is done, the D3D9 front's Vulkan back end hands this
-// module the scene's colour and depth images. Velocity comes from the camera
-// alone for now: what moves on its own is kept from smearing by clipping the
-// history to this frame's colours. See docs/vulkan-modern.md.
+// module the scene's colour and depth images. Velocity comes from the camera,
+// and for surfaces that move on its own from a velocity pass that draws them
+// again with this frame's and last frame's matrices (below); what neither
+// covers is kept from smearing by clipping the history to this frame's
+// colours. See docs/vulkan-modern.md.
 
 #include <gfx_vk/vk_core.h>
 
@@ -57,9 +59,14 @@ void DestroyTaa(Core *core, Taa *taa);
 // Records the anti-aliasing of the scene in `color` (read through `depth`):
 // the result replaces `color` within view.area and becomes the next frame's
 // history. Outside a pass, inside a frame. Both images single-sampled and
-// sampled-usage; `color` also a blit destination. False with the reason, and
-// nothing recorded, when they are not.
-bool Resolve(Core *core, Taa *taa, Image *color, Image *depth, const SceneView &view, std::string &error);
+// sampled-usage; `color` also a blit destination. `velocity`, when given, is
+// DrawVelocity's image for this scene: where it holds a motion, that replaces
+// the camera's. False with the reason, and nothing recorded, when they are
+// not.
+bool Resolve(Core *core, Taa *taa, Image *color, Image *depth, const SceneView &view, std::string &error,
+             Image *velocity = nullptr);
+// The view of the last scene Resolve recorded; false when there is no history.
+bool LastView(const Taa *taa, SceneView &out);
 
 struct TaaStats
 {
@@ -67,6 +74,130 @@ struct TaaStats
     uint64_t restarts;  // of those, ones with no history (first, cut, resize)
 };
 TaaStats Stats(const Taa *taa);
+
+// ---- Velocity of what moves on its own (E1, docs/vulkan-modern.md) ----
+//
+// A surface the scene drew that moves on its own (an entity, the view model)
+// is drawn again into an R16G16_SFLOAT image, with this frame's and last
+// frame's object-to-clip matrices. Where it is what the scene shows (its depth
+// matches the scene depth), the image holds where it was last frame relative
+// to where it is now, in NDC without either frame's jitter; everywhere else
+// it holds kNoOwnMotion and TAA uses the camera's motion.
+
+constexpr VkFormat kVelocityFormat = VK_FORMAT_R16G16_SFLOAT;
+// The clear value (the shaders test for at least 30000).
+constexpr float kNoOwnMotion = 65504.0f;
+
+// One indexed draw of the scene, by what the Legacy draw bound.
+struct MovedSurface
+{
+    // Positions are three floats at the start of each vertex.
+    VkBuffer vertices = VK_NULL_HANDLE;
+    VkDeviceSize vertexOffset = 0;
+    uint32_t stride = 0;
+    VkBuffer indices = VK_NULL_HANDLE;
+    VkIndexType indexType = VK_INDEX_TYPE_UINT16;
+    uint32_t firstIndex = 0;
+    uint32_t indexCount = 0;
+    int32_t vertexBase = 0;
+    // The Legacy draw's viewport: D3D9's, which is flipped and moved by
+    // half a pixel to Vulkan's as the Legacy adapter does.
+    float viewport[4] = {}; // x, y, width, height in pixels
+    float minDepth = 0.0f, maxDepth = 1.0f;
+    // D3D9 row-vector matrices (p_clip = p_object * M): object to this
+    // frame's clip space as the scene drew it (with its jitter), and to last
+    // frame's as that scene drew it (with that frame's jitter).
+    float clip[4][4];
+    float prevClip[4][4];
+    // A skinned surface: last frame's vertices, kept by KeepVertices (the
+    // same stride, from the first vertex the draw uses), and the range of
+    // vertices the draw reads, from vertexBase. Null: the surface's vertices
+    // are the same in both frames.
+    VkBuffer previous = VK_NULL_HANDLE;
+    VkDeviceSize previousOffset = 0;
+    uint32_t minIndex = 0;
+    uint32_t vertexCount = 0;
+};
+
+struct Velocity;
+
+Velocity *CreateVelocity(Core *core, std::string &error);
+// Waits for the GPU to finish what was recorded.
+void DestroyVelocity(Core *core, Velocity *velocity);
+
+// Records the velocity of `surfaces` within view.area into the module's
+// image (the size of `depth`, made or made again as needed) and returns it,
+// ready to sample. `previous` is last frame's view (for its jitter). Null
+// with nothing recorded when there are no surfaces; null with the reason when
+// it cannot. Outside a pass, inside a frame.
+Image *DrawVelocity(Core *core, Velocity *velocity, Image *depth, const SceneView &view, const SceneView &previous,
+                    const MovedSurface *surfaces, uint32_t count, std::string &error);
+
+struct VelocityStats
+{
+    uint64_t passes;   // DrawVelocity calls that recorded
+    uint64_t surfaces; // surfaces they drew
+    uint64_t skinned;  // of those, skinned surfaces drawn from last scene's vertices
+};
+VelocityStats Stats(const Velocity *velocity);
+
+// Skinned surfaces' vertices are written again each frame (by the CPU, into a
+// buffer locked with DISCARD), so last frame's are gone by the time the
+// velocity pass runs. The pass keeps a copy of each skinned surface's
+// vertices at the end of its scene, in a buffer of its own, for the next
+// scene's velocity: half of the buffer is written each scene while the other
+// half holds the last scene's.
+struct KeptVertices;
+
+// The vertices of one skinned surface the scene drew: vertexCount vertices of
+// 32 bytes from `offset` in `vertices`, kept under `key` (the renderer's key
+// for the surface, the same from one scene to the next).
+struct KeepRequest
+{
+    uint64_t key = 0;
+    VkBuffer vertices = VK_NULL_HANDLE;
+    VkDeviceSize offset = 0;
+    uint32_t vertexCount = 0;
+};
+
+KeptVertices *CreateKeptVertices();
+// The buffer is released once the GPU is done with it.
+void DestroyKeptVertices(Core *core, KeptVertices *kept);
+// Where the last KeepVertices kept `key`'s vertices; false when it did not
+// keep them, or kept another number of them.
+bool FindKept(const KeptVertices *kept, uint64_t key, uint32_t vertexCount, VkBuffer &buffer, VkDeviceSize &offset);
+// Records copies of these surfaces' vertices for the next scene (the buffer
+// is made at the first call) and forgets what the last call kept. Surfaces
+// that do not fit, or are asked for twice, are left out. Outside a pass,
+// inside a frame. False with the reason when nothing could be recorded.
+bool KeepVertices(Core *core, KeptVertices *kept, const KeepRequest *requests, uint32_t count, std::string &error);
+// Forgets what was kept (a camera cut, a scene without skinned surfaces).
+void ForgetKept(KeptVertices *kept);
+
+struct KeptStats
+{
+    uint64_t scenes;   // KeepVertices calls that recorded copies
+    uint64_t surfaces; // surfaces they kept
+    uint64_t bytes;    // bytes copied
+};
+KeptStats Stats(const KeptVertices *kept);
+
+// ---- Debug views (KISAK_VK_MODERN_DEBUG; docs/vulkan-modern.md) ----
+//
+// Drawn over the anti-aliased scene (TAA's history is kept apart, so a view
+// never feeds back into it).
+
+struct DebugView;
+
+// Null with the reason.
+DebugView *CreateDebugView(Core *core, std::string &error);
+// Waits for the GPU to finish what was recorded.
+void DestroyDebugView(Core *core, DebugView *debug);
+// Colours each pixel of `area` in `target` that has motion of its own in
+// `velocity` (DrawVelocity's image, the same size), by the direction and
+// length of that motion, and leaves the rest. Outside a pass, inside a frame.
+bool DrawVelocityDebug(Core *core, DebugView *debug, Image *velocity, Image *target, const VkRect2D &area,
+                       std::string &error);
 
 // ---- Linear light (renderer plan MD1; docs/vulkan-modern.md) ----
 //

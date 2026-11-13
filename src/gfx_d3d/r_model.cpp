@@ -285,7 +285,8 @@ int R_SkinXModel(
     const DObj_s *obj,
     const GfxPlacement *placement,
     float val,
-    __int16 gfxEntIndex)
+    __int16 gfxEntIndex,
+    uint16_t modernOwner)
 {
     uint32_t startSurfPos; // [esp+2Ch] [ebp-E58h]
     XSurface* xsurf; // [esp+38h] [ebp-E4Ch]
@@ -351,6 +352,11 @@ int R_SkinXModel(
             GfxModelRigidSurface *rigidSurf = (GfxModelRigidSurface *)surfPos;
             rigidSurf->surf.skinnedCachedOffset = startSurfPos;
             rigidSurf->surf.xsurf = xsurf;
+            // Port: retail left the rest of the info as the stack had it. It
+            // is zeroed so that modernOwner and boneIndex, the Modern path's
+            // key for the surface (r_modern_motion.h), are the model's own.
+            rigidSurf->surf.info = GfxModelSurfaceInfo{};
+            rigidSurf->surf.info.modernOwner = modernOwner;
             rigidSurf->surf.info.gfxEntIndex = gfxEntIndex;
             rigidSurf->surf.info.lightingHandle = 0;
             rigidSurf->placement.base = *placement;

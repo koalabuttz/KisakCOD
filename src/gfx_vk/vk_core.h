@@ -666,6 +666,11 @@ void ReleaseOcclusionCount(Core *core, uint32_t count);
 // use; images with SAMPLED usage go back to Sampled before the next pass.
 
 void *StageBufferWrite(Core *core, Buffer *buffer, VkDeviceSize offset, VkDeviceSize size);
+// Records copies from `source` (a buffer made with TRANSFER_SRC usage) into
+// `target`, ordered as StageBufferWrite's copy is: after everything recorded
+// before them, and finished before the next pass reads `target`. Not inside a
+// pass. False (LastError says why) when the core cannot record.
+bool CopyBufferRegions(Core *core, VkBuffer source, Buffer *target, const VkBufferCopy *regions, uint32_t count);
 
 struct ImageRegion
 {

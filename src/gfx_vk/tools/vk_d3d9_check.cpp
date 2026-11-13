@@ -514,6 +514,7 @@ public:
     void ModernBloom();
     void ModernEffects();
     void ModernLit();
+    void ModernVelocity();
     void Bench();
     void BenchRuns();
     void BenchFrames(bool runs);
@@ -3016,6 +3017,255 @@ void Check::ModernTaa()
     SafeRelease(depth);
 }
 
+// The Modern path's velocity for what moves on its own
+// (front::ModernSurfaceMoved, docs/vulkan-modern.md). A band of 2-pixel white
+// and black stripes moves 2 pixels right each frame, drawn indexed from a
+// buffer of 32-byte vertices (as the engine's models are); a static striped
+// quad in front of it hides part of it. Without its velocity, TAA takes each
+// band pixel's history from the same pixel, which held the other colour last
+// frame, and the stripes go grey. With it, the history follows the band and
+// the stripes stay as drawn; the velocity is not written where the band is
+// hidden, so the static quad stays as drawn too. A third run moves the band
+// in its vertices instead, as skinned surfaces move (front::
+// ModernSkinnedSurfaceMoved): a dynamic buffer written again with DISCARD each
+// frame, the same matrix both frames, and a draw that starts at a base vertex
+// and a minimum index. The stripes stay as drawn only if the velocity comes
+// from last frame's vertices, which the Modern path kept. With
+// KISAK_VK_MODERN_DEBUG=velocity the velocity debug view is drawn over the
+// reported runs instead: the band's pixels come back cyan at half brightness
+// (2 pixels a frame, from the left), and everything else as without it.
+void Check::ModernVelocity()
+{
+#if defined(_MSC_VER)
+    char *env = nullptr;
+    size_t envLength = 0;
+    const bool debugView =
+        _dupenv_s(&env, &envLength, "KISAK_VK_MODERN_DEBUG") == 0 && env && !std::strcmp(env, "velocity");
+    std::free(env);
+#else
+    const char *env = std::getenv("KISAK_VK_MODERN_DEBUG");
+    const bool debugView = env && !std::strcmp(env, "velocity");
+#endif
+    struct Vertex32
+    {
+        Vertex v;
+        uint32_t pad[2];
+    };
+    static_assert(sizeof(Vertex32) == 32, "the engine's vertices are 32 bytes");
+    constexpr int kStripes = 32;
+    IDirect3DSurface9 *depth = nullptr;
+    IDirect3DVertexBuffer9 *vb = nullptr;
+    IDirect3DIndexBuffer9 *ib = nullptr;
+    IDirect3DVertexBuffer9 *skinnedVb = nullptr;
+    IDirect3DIndexBuffer9 *skinnedIb = nullptr;
+    // The skinned band: 4 vertices before it, drawn with base vertex 2 and
+    // indices from 2.
+    constexpr int kSkinnedLead = 4, kSkinnedBase = 2;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface")
+        || !Ok(device->CreateVertexBuffer((kSkinnedLead + kStripes * 4) * sizeof(Vertex32),
+                                          D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY, 0, D3DPOOL_DEFAULT, &skinnedVb,
+                                          nullptr),
+               "CreateVertexBuffer(skinned)")
+        || !Ok(device->CreateIndexBuffer(kStripes * 6 * sizeof(uint16_t), D3DUSAGE_WRITEONLY, D3DFMT_INDEX16,
+                                         D3DPOOL_DEFAULT, &skinnedIb, nullptr),
+               "CreateIndexBuffer(skinned)")
+        || !Ok(device->CreateVertexBuffer(kStripes * 4 * sizeof(Vertex32), D3DUSAGE_WRITEONLY, 0, D3DPOOL_DEFAULT,
+                                          &vb, nullptr),
+               "CreateVertexBuffer")
+        || !Ok(device->CreateIndexBuffer(kStripes * 6 * sizeof(uint16_t), D3DUSAGE_WRITEONLY, D3DFMT_INDEX16,
+                                         D3DPOOL_DEFAULT, &ib, nullptr),
+               "CreateIndexBuffer"))
+    {
+        SafeRelease(depth);
+        SafeRelease(vb);
+        SafeRelease(skinnedVb);
+        SafeRelease(skinnedIb);
+        return;
+    }
+    // The band at rest covers pixels 8..71 by 32..95; stripe k is white when k is even.
+    void *data = nullptr;
+    if (Ok(vb->Lock(0, 0, &data, 0), "Lock(vertex buffer)"))
+    {
+        Vertex32 *out = static_cast<Vertex32 *>(data);
+        for (int k = 0; k < kStripes; ++k)
+        {
+            Vertex corners[4];
+            const uint32_t color = k % 2 ? Argb(255, 0, 0, 0) : Argb(255, 255, 255, 255);
+            QuadCorners(corners, 8.0f + 2.0f * k, 32.0f, 10.0f + 2.0f * k, 96.0f, 0.5f, color);
+            for (int c = 0; c < 4; ++c)
+                out[k * 4 + c] = Vertex32{corners[c], {0, 0}};
+        }
+        vb->Unlock();
+    }
+    if (Ok(ib->Lock(0, 0, &data, 0), "Lock(index buffer)"))
+    {
+        uint16_t *out = static_cast<uint16_t *>(data);
+        for (int k = 0; k < kStripes; ++k)
+        {
+            const uint16_t base = static_cast<uint16_t>(k * 4);
+            const uint16_t quad[6] = {base, uint16_t(base + 1), uint16_t(base + 2), base, uint16_t(base + 2),
+                                      uint16_t(base + 3)};
+            std::memcpy(out + k * 6, quad, sizeof(quad));
+        }
+        ib->Unlock();
+    }
+    if (Ok(skinnedIb->Lock(0, 0, &data, 0), "Lock(skinned index buffer)"))
+    {
+        uint16_t *out = static_cast<uint16_t *>(data);
+        for (int k = 0; k < kStripes; ++k)
+        {
+            const uint16_t base = static_cast<uint16_t>(kSkinnedLead - kSkinnedBase + k * 4);
+            const uint16_t quad[6] = {base, uint16_t(base + 1), uint16_t(base + 2), base, uint16_t(base + 2),
+                                      uint16_t(base + 3)};
+            std::memcpy(out + k * 6, quad, sizeof(quad));
+        }
+        skinnedIb->Unlock();
+    }
+
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    view.width = view.height = kSize;
+    // The band's object-to-clip matrix in frame f: the vertex shader adds c0
+    // to the position, so a translation by 2 f pixels.
+    const auto bandClip = [](int f, float out[4][4]) {
+        std::memset(out, 0, sizeof(float) * 16);
+        for (int i = 0; i < 4; ++i)
+            out[i][i] = 1.0f;
+        out[3][0] = 2.0f * (2.0f * f) / kSize;
+    };
+    // The skinned band's vertices in frame f: moved 2 f pixels right.
+    const auto writeSkinned = [&](int f) {
+        void *mapped = nullptr;
+        if (!Ok(skinnedVb->Lock(0, 0, &mapped, D3DLOCK_DISCARD), "Lock(skinned, DISCARD)"))
+            return;
+        Vertex32 *out = static_cast<Vertex32 *>(mapped);
+        Vertex corners[4];
+        QuadCorners(corners, 0.0f, 0.0f, 1.0f, 1.0f, 0.5f, Argb(255, 255, 0, 0));
+        for (int c = 0; c < kSkinnedLead; ++c)
+            out[c] = Vertex32{corners[c], {0, 0}};
+        for (int k = 0; k < kStripes; ++k)
+        {
+            const uint32_t color = k % 2 ? Argb(255, 0, 0, 0) : Argb(255, 255, 255, 255);
+            const float x = 8.0f + 2.0f * k + 2.0f * f;
+            QuadCorners(corners, x, 32.0f, x + 2.0f, 96.0f, 0.5f, color);
+            for (int c = 0; c < 4; ++c)
+                out[kSkinnedLead + k * 4 + c] = Vertex32{corners[c], {0, 0}};
+        }
+        skinnedVb->Unlock();
+    };
+    enum class Report
+    {
+        None,
+        Rigid,
+        Skinned,
+    };
+    const auto frame = [&](int f, Report report) {
+        Reset(Argb(255, 0, 0, 255));
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, 1.0f, 0), "Clear(depth)");
+        device->SetRenderState(D3DRS_ZENABLE, TRUE);
+        device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+        float clip[4][4], prevClip[4][4];
+        if (report == Report::Skinned)
+        {
+            bandClip(0, clip);
+            bandClip(0, prevClip);
+            const float zero[4] = {0, 0, 0, 0};
+            device->SetVertexShaderConstantF(0, zero, 1);
+            writeSkinned(f);
+            Ok(device->SetStreamSource(0, skinnedVb, 0, sizeof(Vertex32)), "SetStreamSource(skinned)");
+            Ok(device->SetIndices(skinnedIb), "SetIndices(skinned)");
+            Ok(device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, kSkinnedBase, kSkinnedLead - kSkinnedBase,
+                                            kStripes * 4, 0, kStripes * 2),
+               "DrawIndexedPrimitive(skinned)");
+            front::ModernSkinnedSurfaceMoved(device, 1, clip, f == 0 ? nullptr : prevClip);
+        }
+        else
+        {
+            bandClip(f, clip);
+            bandClip(f - 1, prevClip);
+            const float move[4] = {clip[3][0], clip[3][1], 0.0f, 0.0f};
+            device->SetVertexShaderConstantF(0, move, 1);
+            Ok(device->SetStreamSource(0, vb, 0, sizeof(Vertex32)), "SetStreamSource");
+            Ok(device->SetIndices(ib), "SetIndices");
+            Ok(device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, kStripes * 4, 0, kStripes * 2),
+               "DrawIndexedPrimitive");
+            if (report == Report::Rigid)
+                front::ModernSurfaceMoved(device, clip, prevClip);
+        }
+        // The static quad in front: pixels 40..55 by 56..71, white where x / 2 is even.
+        const float zero[4] = {0, 0, 0, 0};
+        device->SetVertexShaderConstantF(0, zero, 1);
+        for (int x = 40; x < 56; x += 2)
+            DrawQuad(float(x), 56, float(x + 2), 72, 0.25f,
+                     (x / 2) % 2 ? Argb(255, 0, 0, 0) : Argb(255, 255, 255, 255));
+        view.cut = f == 0;
+        return front::ModernSceneDone(device, view) == front::ModernResult::Done;
+    };
+    const auto present = [&]() { Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present"); };
+    // After frame 7 the band covers 22..85: stripe k at 22 + 2 k.
+    const auto run = [&](Report report) {
+        bool done = true;
+        for (int f = 0; f < 8; ++f)
+        {
+            done = frame(f, report) && done;
+            if (f < 7)
+                present();
+        }
+        return done;
+    };
+
+    Equal("camera_only_resolved", run(Report::None), true);
+    if (Read())
+    {
+        const int white = pixels[(40 * readSize + 30) * 4 + 1], black = pixels[(40 * readSize + 32) * 4 + 1];
+        Equal("camera_only_stripes_grey", white < 200 || black > 55, true);
+        result->detail += " camera_only_stripes=" + std::to_string(white) + "/" + std::to_string(black);
+    }
+    present();
+
+    for (const Report report : {Report::Rigid, Report::Skinned})
+    {
+        const std::string name = report == Report::Rigid ? "velocity" : "skinned";
+        Equal((name + "_resolved").c_str(), run(report), true);
+        if (Read())
+        {
+            if (debugView)
+            {
+                // Cyan at half brightness: 0.5 of 255 either way of the rounding.
+                for (const UINT x : {30u, 31u, 32u, 85u})
+                    Expect((name + "_debug_" + std::to_string(x)).c_str(), x, 40, 0, 128, 128);
+            }
+            else
+            {
+                Expect((name + "_white_stripe").c_str(), 30, 40, 255, 255, 255);
+                Expect((name + "_white_stripe_2").c_str(), 31, 40, 255, 255, 255);
+                Expect((name + "_black_stripe").c_str(), 32, 40, 0, 0, 0);
+                Expect((name + "_band_end").c_str(), 85, 40, 0, 0, 0);
+            }
+            Expect((name + "_background").c_str(), 100, 40, 0, 0, 255);
+            // The static quad: the band's velocity is not written behind it.
+            Expect((name + "_hidden_white").c_str(), 44, 64, 255, 255, 255);
+            Expect((name + "_hidden_black").c_str(), 46, 64, 0, 0, 0);
+        }
+        present();
+    }
+
+    device->SetDepthStencilSurface(nullptr);
+    const float zero[4] = {0, 0, 0, 0};
+    device->SetVertexShaderConstantF(0, zero, 1);
+    device->SetStreamSource(0, nullptr, 0, 0);
+    device->SetIndices(nullptr);
+    SafeRelease(ib);
+    SafeRelease(vb);
+    SafeRelease(skinnedIb);
+    SafeRelease(skinnedVb);
+    SafeRelease(depth);
+}
+
 // D3D9 switches the display for a fullscreen device and back for a windowed
 // one; the front asks the host (Host::fullscreen). This host only records the
 // asks, so nothing on the machine changes.
@@ -3657,6 +3907,7 @@ int Run(const Options &options)
         {"modern_bloom", &Check::ModernBloom, true},
         {"modern_effects", &Check::ModernEffects, true},
         {"modern_lit", &Check::ModernLit, true},
+        {"modern_velocity", &Check::ModernVelocity, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},

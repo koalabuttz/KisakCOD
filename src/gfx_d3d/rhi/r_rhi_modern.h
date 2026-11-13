@@ -65,6 +65,21 @@ struct GfxModernHooks
     // scene. A back end that draws effects on the display image finishes the
     // scene here (and then does nothing at sceneDone). May be null.
     void (*sceneLit)(void *user, IDirect3DDevice9 *device, GfxModernScene *scene);
+    // The last DrawIndexedPrimitive drew a surface that moves on its own
+    // (an entity's model, the view model) into the scene: the back end draws
+    // it again for its velocity when the scene is finished (at sceneLit or
+    // sceneDone). clip and prevClip take its vertices to this frame's and
+    // last frame's clip space (row vectors, p_clip = p * M), each with its
+    // frame's jitter (r_modern_motion.cpp). May be null.
+    void (*surfaceMoved)(void *user, IDirect3DDevice9 *device, const float clip[4][4], const float prevClip[4][4]);
+    // The same for a skinned surface, whose vertices were written this frame
+    // (an entity's animated model, the view model's hands), reported in every
+    // scene it is drawn in, the first time with a null prevClip. The back end
+    // keeps the vertices the draw read, under `key` (the same surface's key in
+    // the next scene), and draws the surface's velocity from last scene's
+    // vertices and this scene's. May be null.
+    void (*skinnedSurfaceMoved)(void *user, IDirect3DDevice9 *device, uint64_t key, const float clip[4][4],
+                                const float prevClip[4][4]);
     // From sceneBegin to sceneLit, when a pass is set up for draws: the
     // colours its pixel shader reads when the pass is lit, else null (the
     // shader's colour is then taken as a display value, as before). Called

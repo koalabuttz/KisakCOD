@@ -56,6 +56,9 @@ SETS = [
             ("tonemap.frag", "kTonemapFrag"),
             ("bloom_down.frag", "kBloomDownFrag"),
             ("bloom_up.frag", "kBloomUpFrag"),
+            ("velocity.vert", "kVelocityVert"),
+            ("velocity.frag", "kVelocityFrag"),
+            ("debug_velocity.frag", "kDebugVelocityFrag"),
         ],
     ),
     ShaderSet(

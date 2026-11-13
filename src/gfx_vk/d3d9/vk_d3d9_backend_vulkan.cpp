@@ -124,6 +124,33 @@ struct Backend
     // The bloom passes' GPU time at the last reset (pass timings add up over
     // the device's life).
     double bloomMsBase = 0.0;
+    // The velocity of what moves on its own (vk_d3d9.h ModernSurfaceMoved):
+    // the pass, made at the first scene that has such surfaces; whether it is
+    // wanted (KISAK_VK_MODERN_VELOCITY=0 turns it off) or failed; the
+    // surfaces of the scene being drawn; its counts at the last reset.
+    bool velocityWanted = true;
+    bool velocityFailed = false;
+    modern::Velocity *velocity = nullptr;
+    std::vector<modern::MovedSurface> moved;
+    modern::VelocityStats velocityBase{};
+    // Skinned surfaces (vk_d3d9.h ModernSkinnedSurfaceMoved): those of the
+    // scene being drawn, each with its key and whether it has a last matrix;
+    // their vertices kept from one scene to the next; the counts at the last
+    // reset.
+    struct SkinnedSurface
+    {
+        modern::MovedSurface draw;
+        uint64_t key;
+        bool hasLast;
+    };
+    std::vector<SkinnedSurface> skinned;
+    modern::KeptVertices *kept = nullptr;
+    modern::KeptStats keptBase{};
+    // KISAK_VK_MODERN_DEBUG=velocity: the velocity debug view over each
+    // anti-aliased scene (docs/vulkan-modern.md), made at its first use.
+    bool debugVelocity = false;
+    bool debugFailed = false;
+    modern::DebugView *debug = nullptr;
 };
 
 namespace
@@ -272,8 +299,11 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     // (docs/vulkan-modern.md); without r_visuals modern nothing asks for it.
     backend->linearWanted = !EnvIsZero("KISAK_VK_MODERN_LINEAR");
     backend->bloomWanted = !EnvIsZero("KISAK_VK_MODERN_BLOOM");
+    // And gives what moves on its own a velocity of its own unless this says not to.
+    backend->velocityWanted = !EnvIsZero("KISAK_VK_MODERN_VELOCITY");
     backend->effectsInLinear = EnvIs("KISAK_VK_MODERN_EFFECTS", "linear");
     backend->litWanted = !EnvIsZero("KISAK_VK_MODERN_LIT");
+    backend->debugVelocity = EnvIs("KISAK_VK_MODERN_DEBUG", "velocity");
     if (!h.windowSystem || !h.windowSystem(h.user, desc.window, backend->windowSystem))
     {
         error = "the host has no Vulkan window system for this window";
@@ -491,6 +521,26 @@ void BackendLogStats(Backend *backend, bool reset)
                 backend->litOverWhite ? "kept over white" : "computed from decoded inputs",
                 double(backend->litChanges - backend->litChangesBase) / double(scenes));
     }
+    // Velocity: the surfaces drawn again with their own motion, and the
+    // GPU time of that pass.
+    if (backend->velocity)
+    {
+        const modern::VelocityStats velocity = modern::Stats(backend->velocity);
+        const PassTimings pass = PassTimingsFor(backend->core, "modern velocity");
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with surfaces that move on their own (%llu surfaces), "
+                   "%.3f ms GPU each for their velocity",
+                static_cast<unsigned long long>(velocity.passes - backend->velocityBase.passes),
+                static_cast<unsigned long long>(velocity.surfaces - backend->velocityBase.surfaces),
+                pass.supported ? average(pass) : 0.0);
+        const modern::KeptStats kept = modern::Stats(backend->kept);
+        const uint64_t keptScenes = kept.scenes - backend->keptBase.scenes;
+        HostLog(h, "vulkan d3d9: modern: %llu scenes kept skinned vertices (%llu surfaces, %.1f KB each scene), "
+                   "%llu skinned surfaces drawn from last scene's",
+                static_cast<unsigned long long>(keptScenes),
+                static_cast<unsigned long long>(kept.surfaces - backend->keptBase.surfaces),
+                keptScenes ? double(kept.bytes - backend->keptBase.bytes) / 1024.0 / double(keptScenes) : 0.0,
+                static_cast<unsigned long long>(velocity.skinned - backend->velocityBase.skinned));
+    }
     // Bloom: the scenes it ran for in place of the glow, the passes of each,
     // and their GPU time per scene.
     if (backend->bloom)
@@ -511,6 +561,9 @@ void BackendLogStats(Backend *backend, bool reset)
         backend->bloomPassesBase = modern::Stats(backend->bloom).passes;
         if (backend->bloom)
             backend->bloomMsBase = PassTimingsFor(backend->core, "modern bloom").totalMs;
+        if (backend->velocity)
+            backend->velocityBase = modern::Stats(backend->velocity);
+        backend->keptBase = modern::Stats(backend->kept);
         backend->linearScenesBase = backend->linearScenes;
         backend->litScenesBase = backend->litScenes;
         backend->litChangesBase = backend->litChanges;
@@ -535,6 +588,21 @@ void CloseBackend(Backend *backend)
     {
         modern::DestroyTaa(backend->core, backend->taa);
         backend->taa = nullptr;
+    }
+    if (backend->velocity)
+    {
+        modern::DestroyVelocity(backend->core, backend->velocity);
+        backend->velocity = nullptr;
+    }
+    if (backend->kept)
+    {
+        modern::DestroyKeptVertices(backend->core, backend->kept);
+        backend->kept = nullptr;
+    }
+    if (backend->debug)
+    {
+        modern::DestroyDebugView(backend->core, backend->debug);
+        backend->debug = nullptr;
     }
     if (backend->bloom)
     {
@@ -824,11 +892,186 @@ bool BackendModernCopyScene(Backend *backend, lg::Surface *scene, const lg::Rect
     return true;
 }
 
+namespace
+{
+// A scene has a few hundred surfaces that move on their own at most; more
+// means no scene ends.
+constexpr size_t kMostSurfaces = 8192;
+
+// The legacy device's last indexed draw as a surface for the velocity pass;
+// false when it was not an indexed triangle list. prevClip may be null.
+bool MovedFromLastDraw(lg::Device *legacy, const float clip[4][4], const float prevClip[4][4],
+                       modern::MovedSurface &surface)
+{
+    lg::IndexedDraw draw;
+    if (!lg::LastIndexedDraw(legacy, draw))
+        return false;
+    surface.vertices = draw.vertices;
+    surface.vertexOffset = draw.vertexOffset;
+    surface.stride = draw.stride;
+    surface.indices = draw.indices;
+    surface.indexType = draw.indexType;
+    surface.firstIndex = draw.firstIndex;
+    surface.indexCount = draw.indexCount;
+    surface.vertexBase = draw.vertexBase;
+    surface.viewport[0] = static_cast<float>(draw.viewport.x);
+    surface.viewport[1] = static_cast<float>(draw.viewport.y);
+    surface.viewport[2] = static_cast<float>(draw.viewport.width);
+    surface.viewport[3] = static_cast<float>(draw.viewport.height);
+    // As the Legacy adapter does: a depth range that is never empty.
+    surface.minDepth = std::clamp(draw.viewport.minZ, 0.0f, 1.0f);
+    surface.maxDepth =
+        std::clamp(std::max(draw.viewport.maxZ, draw.viewport.minZ + (draw.viewport.minZ >= 0.5f ? 0.0f : 0.001f)),
+                   0.0f, 1.0f);
+    surface.minIndex = draw.minIndex;
+    surface.vertexCount = draw.vertexCount;
+    std::memcpy(surface.clip, clip, sizeof(surface.clip));
+    if (prevClip)
+        std::memcpy(surface.prevClip, prevClip, sizeof(surface.prevClip));
+    return true;
+}
+} // namespace
+
+void BackendModernSurfaceMoved(Backend *backend, lg::Device *legacy, const float clip[4][4],
+                               const float prevClip[4][4])
+{
+    if (!backend || !legacy || !backend->velocityWanted || backend->velocityFailed || !prevClip)
+        return;
+    if (backend->moved.size() >= kMostSurfaces)
+        return;
+    modern::MovedSurface surface;
+    if (MovedFromLastDraw(legacy, clip, prevClip, surface))
+        backend->moved.push_back(surface);
+}
+
+void BackendModernSkinnedSurfaceMoved(Backend *backend, lg::Device *legacy, uint64_t key, const float clip[4][4],
+                                      const float prevClip[4][4])
+{
+    if (!backend || !legacy || !backend->velocityWanted || backend->velocityFailed)
+        return;
+    if (backend->skinned.size() >= kMostSurfaces)
+        return;
+    Backend::SkinnedSurface surface{};
+    if (!MovedFromLastDraw(legacy, clip, prevClip, surface.draw) || !surface.draw.vertexCount)
+        return;
+    surface.key = key;
+    surface.hasLast = prevClip != nullptr;
+    backend->skinned.push_back(surface);
+}
+
+namespace
+{
+// The velocity of the scene's surfaces that move on their own, recorded now
+// (between passes); null when there are none or it cannot run (the reason
+// is logged once), and TAA then uses the camera's motion alone.
+Image *SceneVelocity(Backend *backend, Image *depth, const modern::SceneView &scene,
+                     const std::vector<modern::MovedSurface> &moved)
+{
+    modern::SceneView previous{};
+    if (moved.empty() || scene.cut || !modern::LastView(backend->taa, previous))
+        return nullptr;
+    if (!backend->velocity)
+    {
+        std::string error;
+        backend->velocity = modern::CreateVelocity(backend->core, error);
+        if (!backend->velocity)
+        {
+            backend->velocityFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no velocity for what moves on its own: %s", error.c_str());
+            return nullptr;
+        }
+    }
+    std::string error;
+    Image *image = modern::DrawVelocity(backend->core, backend->velocity, depth, scene, previous, moved.data(),
+                                        static_cast<uint32_t>(moved.size()), error);
+    if (!image && !error.empty())
+        LogModernOnce(backend, "what moves on its own has no velocity of its own", error);
+    return image;
+}
+} // namespace
+
+namespace
+{
+// Keeps the scene's skinned surfaces' vertices for the next scene (between
+// passes); false when they are not kept (the reason is logged once).
+bool KeepSkinned(Backend *backend, const std::vector<Backend::SkinnedSurface> &skinned)
+{
+    if (skinned.empty() || !backend->velocityWanted || backend->velocityFailed)
+        return false;
+    if (!backend->kept)
+        backend->kept = modern::CreateKeptVertices();
+    std::vector<modern::KeepRequest> requests;
+    requests.reserve(skinned.size());
+    for (const Backend::SkinnedSurface &surface : skinned)
+    {
+        const modern::MovedSurface &draw = surface.draw;
+        const int64_t first = static_cast<int64_t>(draw.vertexBase) + draw.minIndex;
+        if (first < 0 || draw.stride != 32)
+            continue;
+        modern::KeepRequest &request = requests.emplace_back();
+        request.key = surface.key;
+        request.vertices = draw.vertices;
+        request.offset = draw.vertexOffset + static_cast<VkDeviceSize>(first) * draw.stride;
+        request.vertexCount = draw.vertexCount;
+    }
+    std::string error;
+    if (!modern::KeepVertices(backend->core, backend->kept, requests.data(), static_cast<uint32_t>(requests.size()),
+                              error))
+    {
+        LogModernOnce(backend, "skinned surfaces have no velocity of their own", error);
+        return false;
+    }
+    return true;
+}
+} // namespace
+
+namespace
+{
+// The velocity debug view over the anti-aliased scene (KISAK_VK_MODERN_DEBUG=velocity).
+void DrawVelocityDebug(Backend *backend, Image *velocity, Image *color, const VkRect2D &area)
+{
+    if (backend->debugFailed)
+        return;
+    std::string error;
+    if (!backend->debug)
+    {
+        backend->debug = modern::CreateDebugView(backend->core, error);
+        if (!backend->debug)
+        {
+            backend->debugFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no velocity debug view: %s", error.c_str());
+            return;
+        }
+    }
+    if (!modern::DrawVelocityDebug(backend->core, backend->debug, velocity, color, area, error))
+        LogModernOnce(backend, "the velocity debug view is not drawn", error);
+}
+} // namespace
+
 ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surface *depth,
                                 const ModernSceneView &view, lg::Surface *display, bool *glowDrawn)
 {
     if (!backend || !backend->legacy || !backend->core)
         return ModernResult::Refused;
+    // The surfaces that moved in this scene; the next scene starts a new list.
+    std::vector<modern::MovedSurface> moved;
+    moved.swap(backend->moved);
+    backend->moved.reserve(moved.capacity());
+    std::vector<Backend::SkinnedSurface> skinned;
+    skinned.swap(backend->skinned);
+    backend->skinned.reserve(skinned.capacity());
+    // Unless this scene keeps its skinned vertices, the next has none of
+    // last scene's to draw from (what was kept before is older than that).
+    struct ForgetUnlessKept
+    {
+        modern::KeptVertices *kept;
+        bool done = false;
+        ~ForgetUnlessKept()
+        {
+            if (!done)
+                modern::ForgetKept(kept);
+        }
+    } keptGuard{backend->kept};
     // In linear light the scene must reach the back buffer whatever the
     // anti-aliasing does.
     const auto tonemap = [&](ModernResult passes) {
@@ -882,8 +1125,23 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
     scene.area = {{static_cast<int32_t>(view.x), static_cast<int32_t>(view.y)}, {view.width, view.height}};
     scene.cut = view.cut;
     std::string error;
-    if (!modern::Resolve(backend->core, backend->taa, colorImage, depthImage, scene, error))
+    // Skinned surfaces whose vertices the last scene kept are drawn from
+    // those and this scene's.
+    if (!scene.cut)
+        for (const Backend::SkinnedSurface &surface : skinned)
+        {
+            if (!surface.hasLast)
+                continue;
+            modern::MovedSurface draw = surface.draw;
+            if (modern::FindKept(backend->kept, surface.key, draw.vertexCount, draw.previous, draw.previousOffset))
+                moved.push_back(draw);
+        }
+    Image *velocity = SceneVelocity(backend, depthImage, scene, moved);
+    keptGuard.done = KeepSkinned(backend, skinned);
+    if (!modern::Resolve(backend->core, backend->taa, colorImage, depthImage, scene, error, velocity))
         return refuse(error);
+    if (backend->debugVelocity && velocity)
+        DrawVelocityDebug(backend, velocity, colorImage, scene.area);
     return tonemap(ModernResult::Done);
 }
 

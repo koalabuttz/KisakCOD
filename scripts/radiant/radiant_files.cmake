@@ -206,6 +206,7 @@ set(RADIANT_GFX_D3D
     "${SRC_DIR}/gfx_d3d/r_draw_staticmodel.cpp"
     "${SRC_DIR}/gfx_d3d/r_draw_staticmodel.h"
     "${SRC_DIR}/gfx_d3d/r_draw_xmodel.cpp"
+    "${SRC_DIR}/gfx_d3d/r_modern_motion.cpp"
     "${SRC_DIR}/gfx_d3d/r_draw_xmodel.h"
     "${SRC_DIR}/gfx_d3d/r_drawsurf.cpp"
     "${SRC_DIR}/gfx_d3d/r_drawsurf.h"

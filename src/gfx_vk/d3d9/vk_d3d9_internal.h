@@ -545,6 +545,14 @@ public:
     ModernResult ModernSceneBegin();
     ModernResult ModernSceneDone(const ModernSceneView &view, bool *glowDrawn);
     ModernResult ModernSceneLit(const ModernSceneView &view, bool *glowDrawn);
+    void ModernSurfaceMoved(const float clip[4][4], const float prevClip[4][4])
+    {
+        BackendModernSurfaceMoved(backend_, legacy_, clip, prevClip);
+    }
+    void ModernSkinnedSurfaceMoved(uint64_t key, const float clip[4][4], const float prevClip[4][4])
+    {
+        BackendModernSkinnedSurfaceMoved(backend_, legacy_, key, clip, prevClip);
+    }
     void SetModernLitInputs(const ModernLitInputs *inputs);
     const Host &host() const { return parent_->host(); }
     HRESULT Unsupported(const char *method);
