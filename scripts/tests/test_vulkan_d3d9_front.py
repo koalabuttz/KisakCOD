@@ -317,7 +317,7 @@ def main():
 
     # ao
     ao_line = re.compile(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with ambient occlusion \(radius '
-                         r'48\.0, thickness ([0-9.]+), power 1\.50\), ([0-9.]+) ms GPU each$', re.M)
+                         r'48\.0, thickness ([0-9.]+), power 2\.00\), ([0-9.]+) ms GPU each$', re.M)
     for settings, built in (({}, True),
                             ({'KISAK_VK_MODERN_DEBUG': 'ao'}, True),
                             ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_AO_THICKNESS': '1000'}, True),
