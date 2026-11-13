@@ -94,12 +94,63 @@ void DestroyTonemap(Core *core, Tonemap *tonemap);
 // With different sizes the scene is sampled with the filter. `pass` names the
 // pass in the core's pass timings. Outside a pass, inside a frame. False with
 // the reason, and nothing recorded, when the images cannot take part.
+//
+// With `bloom` (an image from BuildBloom over `from`) and a bloomScale above
+// 0, the bloom's light times bloomScale is added to the scene's before the
+// tonemap.
 bool WriteDisplay(Core *core, Tonemap *tonemap, Image *scene, const VkRect2D &from, Image *target,
-                  const VkRect2D &to, VkFilter filter, const char *pass, std::string &error);
+                  const VkRect2D &to, VkFilter filter, const char *pass, std::string &error,
+                  Image *bloom = nullptr, float bloomScale = 0.0f);
 
 struct TonemapStats
 {
     uint64_t passes; // WriteDisplay calls that recorded
 };
 TonemapStats Stats(const Tonemap *tonemap);
+
+// ---- Bloom (renderer plan MD1; docs/vulkan-modern.md) ----
+//
+// Light above a threshold in the linear-light scene, spread over a chain of
+// images each half the size of the one before (13-tap filter down, tent
+// filter up, as in Jimenez, SIGGRAPH 2014), for the tonemap to add. The
+// engine's vision set glow sets it: its cutoff (in display values) is the
+// threshold, its radius chooses how many levels the chain has, its intensity
+// the amount added and its desaturation the colour taken out.
+
+struct BloomParams
+{
+    float threshold = 1.0f;    // linear light; below it no bloom
+    float knee = 0.5f;         // soft knee width below the threshold
+    float desaturation = 0.0f; // 0 keeps the colour, 1 is grey
+    uint32_t levels = 5;       // the chain's images, the first at half size (1 to kMaxBloomLevels)
+};
+constexpr uint32_t kMaxBloomLevels = 7;
+
+// How many levels spread light about as far as a Gaussian of `sigma` pixels of
+// the scene (Legacy's glow radius in scene pixels) and a bit wider: at least
+// 3, at most kMaxBloomLevels, never a level under 4 pixels on a side.
+uint32_t BloomLevelsFor(float sigma, uint32_t width, uint32_t height);
+
+struct Bloom;
+
+// The pipelines (the images are made at the first BuildBloom and again when
+// the area's size changes). Null with the reason.
+Bloom *CreateBloom(Core *core, std::string &error);
+// Waits for the GPU to finish what was recorded (a device teardown calls it).
+void DestroyBloom(Core *core, Bloom *bloom);
+
+// Records the chain over `area` of `scene`: the image returned (sampled
+// usage, half the area's size) holds the sum of every level's light, ready
+// for WriteDisplay's `bloom` (scale it by intensity / levels). Outside a
+// pass, inside a frame. Null with the reason, and nothing recorded, when the
+// scene cannot take part. The passes are timed under "modern bloom".
+Image *BuildBloom(Core *core, Bloom *bloom, Image *scene, const VkRect2D &area, const BloomParams &params,
+                  std::string &error);
+
+struct BloomStats
+{
+    uint64_t builds; // BuildBloom calls that recorded
+    uint64_t passes; // the passes they recorded
+};
+BloomStats Stats(const Bloom *bloom);
 } // namespace gfx_vk::modern
