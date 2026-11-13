@@ -26,6 +26,17 @@ void UnpackColor(uint32_t color, float out[4])
     out[3] = float((color >> 24) & 0xff) / 255.0f;
 }
 
+// A clear colour for a target that holds linear light (SetLinearLight): red,
+// green and blue from sRGB to linear light, as the pixel shaders' outputs are.
+void UnpackColorFor(const Texture &target, uint32_t color, float out[4])
+{
+    UnpackColor(color, out);
+    if (!target.linearLight)
+        return;
+    for (int i = 0; i < 3; ++i)
+        out[i] = out[i] <= 0.04045f ? out[i] / 12.92f : std::pow((out[i] + 0.055f) / 1.055f, 2.4f);
+}
+
 VkCompareOp CompareOp(uint32_t func)
 {
     // D3DCMPFUNC - 1 is VkCompareOp.
@@ -469,21 +480,23 @@ LayoutKey LayoutFor(const Shader &vs, const Shader &ps)
 }
 
 VkShaderModule FindPixelModule(Device &device, Shader &ps, const Shader &vs, uint32_t depthSamplers,
-                               uint32_t alphaCompare, PixelModuleRecipe &recipe)
+                               uint32_t alphaCompare, uint32_t linearOutput, PixelModuleRecipe &recipe)
 {
     recipe = PixelModuleRecipe{};
     recipe.direct = ls::StagesLinkDirectly(vs.translated, ps.translated);
     const bool fixed = Features(device.core).fixedDepthCompare;
-    if (recipe.direct && !fixed && !alphaCompare)
+    if (recipe.direct && !fixed && !alphaCompare && !linearOutput)
     {
         recipe.plain = true;
         return ps.module;
     }
     // The vertex shader's id (none when the stages link as they stand), the
-    // depth samplers above it where they are fixed, and the alpha test's
-    // compare plus 1 above those where it is fixed (PipelineKey::alphaCompare).
-    recipe.moduleKey = uint64_t(alphaCompare & 0xf) << 52
+    // depth samplers above it where they are fixed, the alpha test's compare
+    // plus 1 above those where it is fixed (PipelineKey::alphaCompare), and
+    // above that whether the colour output is decoded (linearOutput).
+    recipe.moduleKey = uint64_t(linearOutput ? 1u : 0u) << 56 | uint64_t(alphaCompare & 0xf) << 52
         | (fixed ? uint64_t(depthSamplers | 0x10000u) << 32 : 0) | (recipe.direct ? 0xffffffffu : vs.pipelineId);
+    recipe.linearOutput = linearOutput != 0;
     // Where depth compare is fixed, so is the reference's clamp
     // (SamplerStateBlock::drefClamp, as FillUniformBlock writes it).
     recipe.fixDepth = fixed;
@@ -502,7 +515,7 @@ bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Sh
         return ls::BuildSpirv(ps.translated, nullptr, spirv, error);
     return ls::BuildSpirv(ps.translated, recipe.direct ? nullptr : &vs.translated, spirv, error,
                           recipe.fixDepth ? &recipe.depthCompare : nullptr,
-                          recipe.fixAlpha ? &recipe.alphaCompare : nullptr);
+                          recipe.fixAlpha ? &recipe.alphaCompare : nullptr, recipe.linearOutput);
 }
 
 bool KeepPixelModule(Device &device, Shader &ps, const PixelModuleRecipe &recipe, VkShaderModule module)
@@ -523,10 +536,12 @@ bool KeepPixelModule(Device &device, Shader &ps, const PixelModuleRecipe &recipe
 
 namespace
 {
-VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t depthSamplers, uint32_t alphaCompare)
+VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t depthSamplers, uint32_t alphaCompare,
+                           uint32_t linearOutput)
 {
     PixelModuleRecipe recipe;
-    if (const VkShaderModule kept = FindPixelModule(device, ps, vs, depthSamplers, alphaCompare, recipe))
+    if (const VkShaderModule kept =
+            FindPixelModule(device, ps, vs, depthSamplers, alphaCompare, linearOutput, recipe))
         return kept;
     const TimeInto timer(device.stats.pixelModuleMicros);
     ++device.stats.pixelModules;
@@ -598,7 +613,8 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
 {
     const TimeInto timer(device.stats.pipelineMicros);
     Layout *layout = GetLayout(device, LayoutFor(vs, ps));
-    const VkShaderModule fragment = layout ? PixelModule(device, ps, vs, key.depthSamplers, key.alphaCompare) : VK_NULL_HANDLE;
+    const VkShaderModule fragment =
+        layout ? PixelModule(device, ps, vs, key.depthSamplers, key.alphaCompare, key.linearOutput) : VK_NULL_HANDLE;
     if (!fragment)
     {
         if (device.error.empty())
@@ -795,6 +811,7 @@ PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, co
     key.colorCount = static_cast<uint8_t>(ColorCount(device.passTargets));
     for (uint32_t i = 0; i < key.colorCount; ++i)
         key.colorFormats[i] = static_cast<uint32_t>(device.passTargets[i]->texture->vkFormat);
+    key.linearOutput = key.colorCount && device.passTargets[0]->texture->linearLight ? 1 : 0;
     key.depthFormat = device.passDepth ? static_cast<uint32_t>(device.depthFormat) : 0;
     key.samples = static_cast<uint8_t>(device.passSamples);
     key.topologyClass = TopologyClass(type);
@@ -2283,7 +2300,9 @@ bool ClearAtPassStart(Device &device, uint32_t rectCount, const Rect *rects, uin
     };
     for (uint32_t i = 0; clearColor && i < colors; ++i)
     {
-        if (!whole(device.renderTargets[i]))
+        // One colour loads every target: not when only some hold linear light.
+        if (!whole(device.renderTargets[i])
+            || device.renderTargets[i]->texture->linearLight != device.renderTargets[0]->texture->linearLight)
             return false;
     }
     if (clearDepth && !whole(device.depthStencil))
@@ -2293,7 +2312,7 @@ bool ClearAtPassStart(Device &device, uint32_t rectCount, const Rect *rects, uin
     if (clearColor)
     {
         loads.clearColor = true;
-        UnpackColor(color, loads.color);
+        UnpackColorFor(*device.renderTargets[0]->texture, color, loads.color);
     }
     if (clearDepth)
     {
@@ -2333,7 +2352,7 @@ void Clear(Device *device_, uint32_t rectCount, const Rect *rects, uint32_t flag
             attachments[count] = {};
             attachments[count].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             attachments[count].colorAttachment = i;
-            UnpackColor(color, attachments[count].clearValue.color.float32);
+            UnpackColorFor(*device.passTargets[i]->texture, color, attachments[count].clearValue.color.float32);
             ++count;
         }
     }
@@ -2740,6 +2759,12 @@ gfx_vk::Image *SurfaceImage(const Surface *surface)
         || surface->texture->desc.kind != TextureKind::Tex2D)
         return nullptr;
     return surface->texture->image;
+}
+
+void SetLinearLight(Texture *texture, bool linear)
+{
+    if (texture)
+        texture->linearLight = linear;
 }
 
 PresentResult Present(Device *device) { return Present(device, nullptr); }

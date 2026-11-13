@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 namespace gfx_vk::d3d9
@@ -86,6 +87,18 @@ struct Backend
     modern::TaaStats taaBase{};
     bool taaFailed = false;
     std::string modernRefusals;
+    // Linear light (vk_d3d9.h ModernSceneBegin): the scene image, made at the
+    // first scene and again when the back buffer changes size; the tonemap;
+    // whether it is wanted (KISAK_VK_MODERN_LINEAR=0 turns it off) or failed;
+    // the scenes drawn in linear light and the copies read back from them, and
+    // their counts at the last reset.
+    bool linearWanted = true;
+    bool linearFailed = false;
+    lg::Texture *linearScene = nullptr;
+    lg::Surface *linearSceneSurface = nullptr;
+    modern::Tonemap *tonemap = nullptr;
+    uint64_t linearScenes = 0, linearScenesBase = 0;
+    uint64_t linearCopies = 0, linearCopiesBase = 0;
 };
 
 namespace
@@ -205,11 +218,32 @@ void LogSlowFrames(const Backend &backend)
 }
 } // namespace
 
+namespace
+{
+// Whether the environment variable is set to "0".
+bool EnvIsZero(const char *name)
+{
+#if defined(_MSC_VER)
+    char *text = nullptr;
+    size_t length = 0;
+    const bool zero = _dupenv_s(&text, &length, name) == 0 && text && std::strcmp(text, "0") == 0;
+    std::free(text);
+    return zero;
+#else
+    const char *text = std::getenv(name);
+    return text && std::strcmp(text, "0") == 0;
+#endif
+}
+} // namespace
+
 Backend *OpenBackend(const BackendDesc &desc, std::string &error)
 {
     const Host &h = *desc.host;
     Backend *backend = new Backend;
     backend->host = desc.host;
+    // The Modern path draws its scenes in linear light unless this says not to
+    // (docs/vulkan-modern.md); without r_visuals modern nothing asks for it.
+    backend->linearWanted = !EnvIsZero("KISAK_VK_MODERN_LINEAR");
     if (!h.windowSystem || !h.windowSystem(h.user, desc.window, backend->windowSystem))
     {
         error = "the host has no Vulkan window system for this window";
@@ -405,10 +439,23 @@ void BackendLogStats(Backend *backend, bool reset)
                 static_cast<unsigned long long>(taa.restarts - backend->taaBase.restarts),
                 pass.supported ? average(pass) : 0.0);
     }
+    // Linear light: the scenes drawn in it, and the GPU time of the tonemap
+    // pass that writes each back as display values.
+    if (backend->tonemap)
+    {
+        const PassTimings pass = PassTimingsFor(backend->core, "modern tonemap");
+        HostLog(h, "vulkan d3d9: modern: %llu scenes in linear light (%llu copies read from them), "
+                   "%.3f ms GPU each for the tonemap",
+                static_cast<unsigned long long>(backend->linearScenes - backend->linearScenesBase),
+                static_cast<unsigned long long>(backend->linearCopies - backend->linearCopiesBase),
+                pass.supported ? average(pass) : 0.0);
+    }
     if (reset)
     {
         if (backend->taa)
             backend->taaBase = modern::Stats(backend->taa);
+        backend->linearScenesBase = backend->linearScenes;
+        backend->linearCopiesBase = backend->linearCopies;
         backend->statsBase = stats;
         backend->coreBase = core;
         backend->statsSince = now;
@@ -429,6 +476,17 @@ void CloseBackend(Backend *backend)
     {
         modern::DestroyTaa(backend->core, backend->taa);
         backend->taa = nullptr;
+    }
+    if (backend->tonemap)
+    {
+        modern::DestroyTonemap(backend->core, backend->tonemap);
+        backend->tonemap = nullptr;
+    }
+    if (backend->legacy && backend->linearScene)
+    {
+        lg::DestroyTexture(backend->legacy, backend->linearScene);
+        backend->linearScene = nullptr;
+        backend->linearSceneSurface = nullptr;
     }
     if (backend->legacy)
     {
@@ -506,20 +564,162 @@ void BackendCounters(const Backend *backend, DeviceCounters &out)
     out.textureUploadBytes = backend && backend->legacy ? lg::Stats(backend->legacy).uploadBytes : 0;
 }
 
-ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surface *depth,
-                                const ModernSceneView &view)
+namespace
 {
-    if (!backend || !backend->legacy || !backend->core || backend->taaFailed)
-        return ModernResult::Refused;
-    const auto refuse = [backend](const std::string &reason) {
-        // Logged once per reason: a refusal would repeat every frame.
-        const std::string line = reason + "\n";
-        if (backend->modernRefusals.find(line) == std::string::npos)
+// Logs a reason the Modern path cannot do something, once per reason: a
+// refusal would repeat every frame.
+void LogModernOnce(Backend *backend, const char *what, const std::string &reason)
+{
+    const std::string line = std::string(what) + ": " + reason + "\n";
+    if (backend->modernRefusals.find(line) != std::string::npos)
+        return;
+    backend->modernRefusals += line;
+    HostLog(*backend->host, "vulkan d3d9: modern: %s: %s", what, reason.c_str());
+}
+
+bool EnsureTonemap(Backend *backend)
+{
+    if (backend->tonemap)
+        return true;
+    if (backend->linearFailed)
+        return false;
+    std::string error;
+    backend->tonemap = modern::CreateTonemap(backend->core, error);
+    if (!backend->tonemap)
+    {
+        backend->linearFailed = true;
+        HostLog(*backend->host, "vulkan d3d9: modern: no linear light: %s", error.c_str());
+        return false;
+    }
+    return true;
+}
+
+// The whole of a surface, or a rectangle of it, as a core rectangle.
+VkRect2D AreaOf(lg::Surface *surface, const lg::Rect *rect)
+{
+    if (rect)
+        return {{rect->left, rect->top},
+                {static_cast<uint32_t>(std::max(0, rect->right - rect->left)),
+                 static_cast<uint32_t>(std::max(0, rect->bottom - rect->top))}};
+    uint32_t width = 0, height = 0;
+    lg::d3d::Format format = lg::d3d::FMT_UNKNOWN;
+    lg::SurfaceSize(surface, width, height, format);
+    return {{0, 0}, {width, height}};
+}
+} // namespace
+
+lg::Surface *BackendModernSceneTarget(Backend *backend, lg::Surface *backBuffer, ModernResult &result)
+{
+    result = ModernResult::Skipped;
+    if (!backend || !backend->legacy || !backend->core || !backBuffer || !backend->linearWanted)
+        return nullptr;
+    result = ModernResult::Refused;
+    if (backend->linearFailed)
+        return nullptr;
+    if (lg::SurfaceSamples(backBuffer) != 1)
+    {
+        LogModernOnce(backend, "the scene is not drawn in linear light", "the back buffer is multisampled");
+        return nullptr;
+    }
+    if (!EnsureTonemap(backend))
+        return nullptr;
+    uint32_t width = 0, height = 0;
+    lg::d3d::Format format = lg::d3d::FMT_UNKNOWN;
+    lg::SurfaceSize(backBuffer, width, height, format);
+    if (backend->linearScene)
+    {
+        const lg::TextureDesc &have = lg::Describe(backend->linearScene);
+        if (have.width != width || have.height != height)
         {
-            backend->modernRefusals += line;
-            HostLog(*backend->host, "vulkan d3d9: modern: the scene is not anti-aliased: %s", reason.c_str());
+            lg::DestroyTexture(backend->legacy, backend->linearScene);
+            backend->linearScene = nullptr;
+            backend->linearSceneSurface = nullptr;
         }
+    }
+    if (!backend->linearScene)
+    {
+        lg::TextureDesc desc;
+        desc.width = width;
+        desc.height = height;
+        desc.levels = 1;
+        desc.usage = lg::d3d::USAGE_RENDERTARGET;
+        desc.format = lg::d3d::FMT_A16B16G16R16F;
+        desc.pool = lg::d3d::POOL_DEFAULT;
+        desc.name = "modern linear scene";
+        backend->linearScene = lg::CreateTexture(backend->legacy, desc);
+        backend->linearSceneSurface =
+            backend->linearScene ? lg::GetSurfaceLevel(backend->legacy, backend->linearScene, 0, 0) : nullptr;
+        if (!backend->linearSceneSurface)
+        {
+            if (backend->linearScene)
+                lg::DestroyTexture(backend->legacy, backend->linearScene);
+            backend->linearScene = nullptr;
+            backend->linearFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no linear light: cannot make the %ux%u scene image",
+                    width, height);
+            return nullptr;
+        }
+        lg::SetLinearLight(backend->linearScene, true);
+    }
+    ++backend->linearScenes;
+    result = ModernResult::Done;
+    return backend->linearSceneSurface;
+}
+
+bool BackendModernCopyScene(Backend *backend, lg::Surface *scene, const lg::Rect *from, lg::Surface *dst,
+                            const lg::Rect *to, bool linear)
+{
+    if (!backend || !backend->tonemap || !scene || !dst)
+        return false;
+    Image *sceneImage = lg::SurfaceImage(scene);
+    Image *dstImage = lg::SurfaceImage(dst);
+    if (!sceneImage || !dstImage)
+    {
+        LogModernOnce(backend, "a copy of the linear-light scene is not tonemapped",
+                      "the target is not level 0 of a 2D texture");
+        return false;
+    }
+    if (!lg::HandOverRecording(backend->legacy))
+        return true; // the frame is not drawn: neither is the copy
+    std::string error;
+    if (!modern::WriteDisplay(backend->core, backend->tonemap, sceneImage, AreaOf(scene, from), dstImage,
+                              AreaOf(dst, to), linear ? VK_FILTER_LINEAR : VK_FILTER_NEAREST, "modern scene copy",
+                              error))
+    {
+        LogModernOnce(backend, "a copy of the linear-light scene is not tonemapped", error);
+        return false;
+    }
+    ++backend->linearCopies;
+    return true;
+}
+
+ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surface *depth,
+                                const ModernSceneView &view, lg::Surface *display)
+{
+    if (!backend || !backend->legacy || !backend->core)
         return ModernResult::Refused;
+    // In linear light the scene must reach the back buffer whatever the
+    // anti-aliasing does.
+    const auto tonemap = [&](ModernResult passes) {
+        if (!display)
+            return passes;
+        if (!lg::HandOverRecording(backend->legacy))
+            return ModernResult::Skipped;
+        const VkRect2D area = {{static_cast<int32_t>(view.x), static_cast<int32_t>(view.y)}, {view.width, view.height}};
+        std::string error;
+        if (!modern::WriteDisplay(backend->core, backend->tonemap, lg::SurfaceImage(color), area,
+                                  lg::SurfaceImage(display), area, VK_FILTER_NEAREST, "modern tonemap", error))
+        {
+            LogModernOnce(backend, "the linear-light scene is not tonemapped", error);
+            return ModernResult::Refused;
+        }
+        return passes;
+    };
+    if (backend->taaFailed)
+        return tonemap(ModernResult::Refused);
+    const auto refuse = [&](const std::string &reason) {
+        LogModernOnce(backend, "the scene is not anti-aliased", reason);
+        return tonemap(ModernResult::Refused);
     };
     if (!color || !depth)
         return refuse(color ? "no depth surface is set" : "no render target 0 is set");
@@ -535,7 +735,7 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
         {
             backend->taaFailed = true;
             HostLog(*backend->host, "vulkan d3d9: modern: no anti-aliasing: %s", error.c_str());
-            return ModernResult::Refused;
+            return tonemap(ModernResult::Refused);
         }
     }
     if (!lg::HandOverRecording(backend->legacy))
@@ -548,7 +748,7 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
     std::string error;
     if (!modern::Resolve(backend->core, backend->taa, colorImage, depthImage, scene, error))
         return refuse(error);
-    return ModernResult::Done;
+    return tonemap(ModernResult::Done);
 }
 
 void BackendPollProgress(Backend *backend)

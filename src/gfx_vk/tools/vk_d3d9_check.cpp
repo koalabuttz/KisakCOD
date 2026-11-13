@@ -509,6 +509,7 @@ public:
     void KeptState();
     void Multisample();
     void ModernTaa();
+    void ModernLinear();
     void Bench();
     void BenchRuns();
     void BenchFrames(bool runs);
@@ -3054,6 +3055,117 @@ void Check::Fullscreen()
     Ok(device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer), "GetBackBuffer");
 }
 
+// The Modern path's linear light (front::ModernSceneBegin, docs/vulkan-modern.md):
+// between ModernSceneBegin and ModernSceneDone the back buffer as render
+// target 0 stands for an R16G16B16A16_SFLOAT image in linear light, and the
+// tonemap writes it back within the scene's viewport. An opaque draw and a
+// clear come back exactly as the Legacy path would have stored them; a blend
+// happens in linear light (white at 50% over black is 188, not 128); a
+// StretchRect from the back buffer during the scene reads display values;
+// outside the viewport the back buffer keeps what it had; afterwards the back
+// buffer is render target 0 again. With KISAK_VK_MODERN_LINEAR=0 the scene is
+// Skipped and drawn as always (the blend is 128, the clear reaches the whole
+// back buffer).
+void Check::ModernLinear()
+{
+#if defined(_MSC_VER)
+    char *env = nullptr;
+    size_t envLength = 0;
+    const bool off = _dupenv_s(&env, &envLength, "KISAK_VK_MODERN_LINEAR") == 0 && env && !std::strcmp(env, "0");
+    std::free(env);
+#else
+    const char *env = std::getenv("KISAK_VK_MODERN_LINEAR");
+    const bool off = env && !std::strcmp(env, "0");
+#endif
+    IDirect3DSurface9 *depth = nullptr;
+    IDirect3DTexture9 *copy = nullptr;
+    IDirect3DSurface9 *copyLevel = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface")
+        || !Ok(device->CreateTexture(kSize, kSize, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &copy,
+                                     nullptr),
+               "CreateTexture(copy)")
+        || !Ok(copy->GetSurfaceLevel(0, &copyLevel), "GetSurfaceLevel(copy)"))
+    {
+        SafeRelease(depth);
+        SafeRelease(copy);
+        return;
+    }
+
+    // Before the scene: the back buffer is grey (outside the viewport it stays so).
+    Reset(Argb(255, 90, 90, 90));
+    const front::ModernResult began = front::ModernSceneBegin(device);
+    Equal("begin", static_cast<int>(began), static_cast<int>(off ? front::ModernResult::Skipped
+                                                                   : front::ModernResult::Done));
+    device->SetDepthStencilSurface(depth);
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 40, 120, 200), 1.0f, 0),
+       "Clear(scene)");
+    // Opaque, left half; black, top right; white at 50% over the black.
+    DrawQuad(0, 0, 64, 128, 0.5f, Argb(255, 10, 128, 250));
+    DrawQuad(64, 0, 128, 64, 0.5f, Argb(255, 0, 0, 0));
+    device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+    device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+    device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+    DrawQuad(64, 0, 128, 64, 0.5f, Argb(128, 255, 255, 255));
+    device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+    // The renderer's resolve for distortion, during the scene.
+    Ok(device->StretchRect(backBuffer, nullptr, copyLevel, nullptr, D3DTEXF_NONE), "StretchRect(scene)");
+    // The application still sees the back buffer as render target 0.
+    IDirect3DSurface9 *target = nullptr;
+    if (Ok(device->GetRenderTarget(0, &target), "GetRenderTarget"))
+    {
+        Equal("target_is_back_buffer", target == backBuffer, true);
+        SafeRelease(target);
+    }
+
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    view.width = 96; // the scene's viewport: the right quarter is not the scene
+    view.height = kSize;
+    view.cut = true;
+    Equal("done", static_cast<int>(front::ModernSceneDone(device, view)),
+          static_cast<int>(front::ModernResult::Done));
+    // After the scene: 2D goes straight to the back buffer.
+    device->SetDepthStencilSurface(nullptr);
+    DrawQuad(0, 120, 8, 128, 0.5f, Argb(255, 33, 66, 99));
+
+    const int blend = off ? 128 : 188; // 0.502 of white over black, in gamma or in linear light
+    if (Read())
+    {
+        // Exactly, where the Legacy path stores 8-bit values.
+        const auto exact = [&](const char *name, UINT x, UINT y, int r, int g, int b) {
+            const uint8_t *p = &pixels[(y * readSize + x) * 4];
+            const bool same = p[2] == r && p[1] == g && p[0] == b;
+            Equal(name, same, true);
+            if (!same)
+                result->detail += " " + std::string(name) + "_got=" + std::to_string(p[2]) + "," +
+                    std::to_string(p[1]) + "," + std::to_string(p[0]);
+        };
+        exact("opaque_exact", 32, 64, 10, 128, 250);
+        exact("clear_exact", 80, 96, 40, 120, 200);
+        Expect("blend_in_light", 80, 32, blend, blend, blend);
+        // Linear light writes back only the scene's viewport; without it the
+        // clear reached the back buffer itself.
+        if (off)
+            exact("outside_viewport_cleared", 112, 96, 40, 120, 200);
+        else
+            exact("outside_viewport_kept", 112, 96, 90, 90, 90);
+        exact("after_scene_exact", 4, 124, 33, 66, 99);
+    }
+    if (Read(copyLevel, kSize))
+    {
+        Expect("copy_opaque", 32, 64, 10, 128, 250);
+        Expect("copy_clear", 80, 96, 40, 120, 200);
+        Expect("copy_blend", 80, 32, blend, blend, blend);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    SafeRelease(copyLevel);
+    SafeRelease(copy);
+    SafeRelease(depth);
+}
+
 void Check::ResetDevice()
 {
     SafeRelease(backBuffer);
@@ -3291,6 +3403,7 @@ int Run(const Options &options)
         {"kept_state", &Check::KeptState, true},
         {"multisample", &Check::Multisample, true},
         {"modern_taa", &Check::ModernTaa, true},
+        {"modern_linear", &Check::ModernLinear, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},

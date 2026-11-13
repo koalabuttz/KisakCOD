@@ -8,9 +8,11 @@ on the same images. It is the renderer plan's "Modern visuals" (the plan is in
 the project files, `renderer/modern-renderer-plan.md`, sections 3, 6 and 7).
 
 **State: experimental.** So far the path has the first piece of the plan's
-early experiment (E1): temporal anti-aliasing (TAA) over the scene the Legacy
-path drew. Velocity comes from the camera alone. There is no linear lighting,
-HDR or material of its own yet.
+early experiment (E1), temporal anti-aliasing (TAA) over the scene the Legacy
+path drew, and the first piece of linear light (the plan's MD1): the scene is
+drawn into a linear-light HDR image and tonemapped back
+([Linear light](#linear-light)). Velocity comes from the camera alone. No
+material is drawn by shaders of the Modern path's own yet.
 
 ## Turning it on
 
@@ -106,8 +108,10 @@ as the Legacy path draws: pixel (i, j) holds the scene at NDC
   come with the plan's temporal upscaler (MD3).
 * **One history for all views.** Splitscreen would share it; the PC
   multiplayer game has one view.
-* **Gamma space.** The scene is still the Legacy path's gamma-space colour.
-  Linear light and HDR come with the plan's MD1.
+* **Light from Legacy shaders only.** In linear light the scene is the
+  Legacy path's colour decoded as it is drawn (below), so nothing in it is
+  brighter than white yet; the HDR range comes with the world drawn by the
+  Modern path's own shaders.
 * **Legacy shaders that read the scene** (the distortion resolve after the
   sun, `R_RENDERTARGET_RESOLVED_POST_SUN`) read it before the pass, jittered.
 
@@ -138,6 +142,79 @@ passes `spirv-val`. Regenerate the header with
 `gen_spirv_header.py` (it needs `glslangValidator`, Debian's `glslang-tools`)
 after changing a shader.
 
+## Linear light
+
+The renderer plan's MD1 puts the Modern path in linear light: the scene is
+kept as light, in an HDR image, and turned into display values once, by a
+tonemap. This first piece gives the scene that image and the tonemap, with
+everything still drawn by the Legacy path. It is on with `r_visuals modern`;
+`KISAK_VK_MODERN_LINEAR=0` turns it off (the scene is then drawn into the back
+buffer as before, with the anti-aliasing over it).
+
+1. **Begin (render thread).** `RB_Draw3DInternal` (`src/gfx_d3d/rb_draw3d.cpp`)
+   calls `R_ModernSceneBegin` before a view's 3D scene, shadow maps included.
+   The hook (`GfxModernHooks::sceneBegin`) reaches the front's
+   `ModernSceneBegin`, whose back end hands it an `R16G16B16A16_SFLOAT` image
+   of the back buffer's size (`BackendModernSceneTarget`, made at the first
+   scene and again when the back buffer changes size).
+2. **The scene goes there.** Until the scene is done, whenever the engine
+   sets the back buffer as render target 0 the front gives the Legacy adapter
+   that image instead (`Device::DrawTarget`); `GetRenderTarget` still answers
+   the back buffer. The image is marked with `legacy::SetLinearLight`, so the
+   adapter builds each pixel shader that draws into it with its colour output
+   decoded: red, green and blue clamped to [0, 1], as an 8-bit target would
+   have kept them, then the sRGB curve (`legacy_shader::BuildSpirv`'s
+   `linearOutput`, `DecodeColorOutput` in `vk_legacy_shader.cpp`). Clears of
+   it decode their colour the same way. Alpha is not decoded. **Blending
+   therefore happens in linear light**: effects, decals and other blended
+   surfaces add and mix light rather than display values, and look different
+   (brighter where they add up, softer where they fade).
+3. **Copies during the scene.** The renderer resolves the scene for
+   distortion after the sun (`R_RENDERTARGET_RESOLVED_POST_SUN`), a
+   `StretchRect` from the back buffer. While the scene is in linear light the
+   front has the tonemap write the rectangle into the copy instead
+   (`BackendModernCopyScene`, pass `modern scene copy`), so the Legacy shaders
+   that read it get display values as before.
+4. **Done.** At `ModernSceneDone` the anti-aliasing runs on the linear-light
+   image, where its 1 + brightness weighting belongs, and then the tonemap
+   (`gfx_vk::modern::WriteDisplay`, `vk_modern_tonemap.cpp`,
+   `shaders/tonemap.frag`, pass `modern tonemap`) writes the scene's viewport
+   into the back buffer. The back buffer is render target 0 again, and post
+   effects, 2D and the HUD draw on it as always. If the anti-aliasing is
+   refused the tonemap still runs. A scene begun and never handed back is
+   tonemapped whole at `Present` (logged once).
+
+**The tonemap today is neutral**: the light clamped to 1 and encoded with the
+sRGB curve, the exact inverse of the decode. An opaque surface therefore comes
+back exactly as the Legacy path would have stored it (a half float keeps the
+decoded value closely enough), and only blending differs. A tonemap with a
+shoulder, vision sets as its inputs, and bloom come once the world is drawn
+by the Modern path's own shaders and the scene holds light brighter than
+white.
+
+**Cost:** the scene image (8 bytes a pixel, 8 MB at 1280x800), the decode in
+every pixel shader that draws the scene, one full-screen pass for the tonemap
+and one more for each distortion resolve. `r_vkStats` and the device's
+statistics print `vulkan d3d9: modern: N scenes in linear light (M copies read
+from them), X ms GPU each for the tonemap`.
+
+**Checks:** the D3D9 check's `modern_linear` scene draws a scene in linear
+light with a clear, an opaque quad and white at 50% over black, reads a copy
+during the scene, and draws 2D after it. The clear and the opaque quad come
+back byte for byte, the blend is 188 (128 in gamma space), the copy holds the
+same values, the back buffer outside the scene's viewport is left as it was,
+and the 2D goes straight to the back buffer. With `KISAK_VK_MODERN_LINEAR=0`
+the scene is Skipped and drawn as always (the blend is 128);
+`test_vulkan_d3d9_front.py` runs it both ways. The translator's test builds
+every pixel shader case with `--linear-output` too
+([vulkan-legacy-shaders.md](vulkan-legacy-shaders.md)).
+
+**Not yet:** the world-lit family drawn by the Modern path's own shaders
+(colour maps decoded as sRGB, lightmaps and the light grid as light), the
+tonemap's shoulder and vision sets, bloom. The plan's MD1 lists them; the
+retail shaders' lightmap decoding is being read on the laptop first, as
+derived facts only.
+
 ## Next
 
 From the plan's E1, in order:
@@ -146,9 +223,10 @@ From the plan's E1, in order:
   (the previous frame's skinned vertices, which the renderer already keeps
   per frame) and the view model (its own current and previous projection);
 * a reactive mask for effects;
-* then linear light: the world-lit family drawn by the Modern path's own
-  shaders into an HDR target, with a tonemap that matches Legacy at neutral
-  settings.
+* then the rest of linear light: the world-lit family drawn by the Modern
+  path's own shaders into the HDR scene ([Linear light](#linear-light) has
+  the image and the tonemap), a tonemap that matches Legacy at neutral
+  settings, vision sets and bloom.
 
 The first laptop run of this piece should compare `r_visuals legacy` and
 `modern` in the standing mp_crash scene: frame rate, the pass's GPU time,

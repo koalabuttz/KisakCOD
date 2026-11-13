@@ -198,6 +198,11 @@ needs no GPU, game data or network. It covers:
   block is built again with `--alpha-compare 7` (ALWAYS) and `4` (GREATER).
   Both pass `spirv-val`. With ALWAYS the test's discard is gone (a `texkill`
   keeps its own) and the block is not read; with GREATER the test stays.
+- **Linear output:** every pixel shader case that writes colour 0 is built
+  again with `--linear-output` (as for the Modern path's linear-light scene,
+  [vulkan-modern.md](vulkan-modern.md#linear-light)). It passes `spirv-val`
+  and has a clamp, a `pow` and a select more for each colour channel it
+  writes.
 - **Legacy state:** every case is translated again with
   `KISAK_VK_LEGACY_STATE=dynamic` and passes `spirv-val` and the layout check
   that way too (the fog, clip plane and point blocks are checked there). By

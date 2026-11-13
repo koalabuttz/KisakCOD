@@ -3,7 +3,9 @@
 //
 //   KisakCOD-vulkan-shaders translate FILE [--vertex VSFILE] [--out SPV] [--ir]
 //       Translates one shader and prints what it reads and writes. With
-//       --vertex, a pixel shader is linked to that vertex shader.
+//       --vertex, a pixel shader is linked to that vertex shader; with
+//       --linear-output its colour output is taken to linear light, as for
+//       the Modern path's linear-light scene.
 //   KisakCOD-vulkan-shaders batch DIR [--out-dir DIR] [--threads N]
 //       Translates every file in DIR (for example the bytecode the shader
 //       spike's shader_corpus.py --dump-dir writes) and prints counts only:
@@ -37,7 +39,7 @@ namespace
 int Usage()
 {
     std::fprintf(stderr,
-                 "usage: KisakCOD-vulkan-shaders translate FILE [--vertex VSFILE] [--out SPV] [--ir] [--depth-samplers MASK] [--alpha-compare OP]\n"
+                 "usage: KisakCOD-vulkan-shaders translate FILE [--vertex VSFILE] [--out SPV] [--ir] [--depth-samplers MASK] [--alpha-compare OP] [--linear-output]\n"
                  "       KisakCOD-vulkan-shaders batch DIR [--out-dir DIR] [--threads N]\n"
                  "KISAK_VK_STRICT_FLOATS=1 translates with D3D9's strict multiply, as the game does with it.\n"
                  "KISAK_VK_LEGACY_STATE=dynamic keeps fog, clip planes, point sprites and unbound samplers as\n"
@@ -149,6 +151,7 @@ int RunTranslate(int argc, char **argv)
     uint32_t depthSamplers = 0;
     bool fixAlpha = false;
     uint32_t alphaCompare = 0;
+    bool linearOutput = false;
     for (int i = 0; i < argc; ++i)
     {
         const char *next = i + 1 < argc ? argv[i + 1] : nullptr;
@@ -177,6 +180,8 @@ int RunTranslate(int argc, char **argv)
                 return Usage();
             fixAlpha = true;
         }
+        else if (!std::strcmp(argv[i], "--linear-output"))
+            linearOutput = true; // as for the Modern path's linear-light scene
         else if (argv[i][0] != '-' && !file)
             file = argv[i];
         else
@@ -209,7 +214,7 @@ int RunTranslate(int argc, char **argv)
     }
     std::vector<uint32_t> spirv;
     if (!BuildSpirv(shader, vertexFile ? &vertexShader : nullptr, spirv, error, fixDepth ? &depthSamplers : nullptr,
-                    fixAlpha ? &alphaCompare : nullptr))
+                    fixAlpha ? &alphaCompare : nullptr, linearOutput))
     {
         std::printf("legacy_shader=failed reason=%s\n", error.c_str());
         return 1;

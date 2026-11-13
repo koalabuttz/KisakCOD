@@ -539,13 +539,11 @@ public:
     void DetachWindow();
     // Under FrontLock (LogDeviceStats).
     void LogStats(bool reset);
-    // Under FrontLock (vk_d3d9.h ModernSceneDone): the scene is render
-    // target 0 and the depth surface as they are set now.
-    ModernResult ModernSceneDone(const ModernSceneView &view)
-    {
-        return BackendModernScene(backend_, renderTargets_[0] ? renderTargets_[0]->handle() : nullptr,
-                                  depthStencil_ ? depthStencil_->handle() : nullptr, view);
-    }
+    // Under FrontLock (vk_d3d9.h ModernSceneBegin and ModernSceneDone): the
+    // scene is render target 0 and the depth surface as they are set now, or
+    // the linear-light image standing in for the back buffer.
+    ModernResult ModernSceneBegin();
+    ModernResult ModernSceneDone(const ModernSceneView &view);
     const Host &host() const { return parent_->host(); }
     HRESULT Unsupported(const char *method);
     DeviceCounters counters() const;
@@ -720,6 +718,12 @@ private:
     template <class T>
     static void Rebind(T *&slot, T *object);
     void UnbindAll();
+    // What the adapter draws into for a render target the program set: the
+    // linear-light scene for the back buffer while a scene is drawn there.
+    lg::Surface *DrawTarget(DWORD index, Surface *target) const;
+    // Sets render target 0 in the adapter again (it resets the viewport and
+    // scissor there), with the program's viewport and scissor after it.
+    void RebindTarget0();
     // The state D3D9 has after CreateDevice and Reset: the back buffer as
     // render target 0, no depth surface, everything else at its default.
     void DefaultState();
@@ -737,6 +741,11 @@ private:
     Backend *backend_ = nullptr; // the GPU (vk_d3d9_backend.h)
     lg::Device *legacy_ = nullptr; // the back end's Legacy device
     std::unique_ptr<Surface> backBuffer_;
+    // While a 3D scene is drawn in linear light (ModernSceneBegin until
+    // ModernSceneDone): the back end's image that stands in for the back
+    // buffer as render target 0. The program still sees the back buffer.
+    lg::Surface *linearScene_ = nullptr;
+    bool linearSceneUnfinished_ = false; // logged once (Present)
     std::unique_ptr<SwapChain> swapChain_;
     D3DGAMMARAMP gamma_{};
     bool fullscreen_ = false; // the host was asked for a display mode (ApplyDisplayMode)

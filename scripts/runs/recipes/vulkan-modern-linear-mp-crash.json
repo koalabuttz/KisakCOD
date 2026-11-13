@@ -1,0 +1,279 @@
+{
+  "format": "kisak-run/1",
+  "id": "vulkan-modern-linear-mp-crash",
+  "title": "Modern visuals with linear light (the scene drawn into a linear-light image and tonemapped back) against Modern without it and Legacy, on the Vulkan back end: frame rate, the TAA and tonemap GPU time, on mp_crash with 12 bots",
+  "asker": "Add linear light to Modern visuals",
+  "game": {
+    "binary": "{build}/bin/KisakCOD-mp",
+    "args": [
+      "+set",
+      "fs_basepath",
+      "{game}",
+      "+set",
+      "net_ip",
+      "127.0.0.1",
+      "+set",
+      "snd_volume",
+      "0",
+      "+set",
+      "com_maxfps",
+      "0",
+      "+set",
+      "r_vsync",
+      "0",
+      "+set",
+      "r_fullscreen",
+      "0",
+      "+set",
+      "vid_xpos",
+      "0",
+      "+set",
+      "vid_ypos",
+      "0",
+      "+set",
+      "r_mode",
+      "1280x800",
+      "+set",
+      "developer_script",
+      "1"
+    ],
+    "args_after": [
+      "+devmap",
+      "mp_crash"
+    ],
+    "env": {
+      "ALSOFT_DRIVERS": "pulse",
+      "DXVK_LOG_PATH": "{out}/{row}",
+      "LD_LIBRARY_PATH": "{libs}",
+      "DXVK_CONFIG": "d3d9.presentInterval = 0",
+      "MESA_SHADER_CACHE_DIR": "{mesa_cache}",
+      "TRACY_NO_SAMPLING": "1"
+    },
+    "clear_env": [
+      "TRACY_NO_SAMPLING",
+      "KISAK_VK_*",
+      "DXVK_LOG_LEVEL",
+      "SDL_VIDEODRIVER",
+      "SDL_VIDEO_DRIVER",
+      "DXVK_WSI_DRIVER",
+      "DXVK_STATE_CACHE_PATH"
+    ],
+    "home_template": "{home_template}",
+    "quit_timeout": 40
+  },
+  "variants": {
+    "L": {
+      "args": [
+        "+set",
+        "r_backend",
+        "vulkan",
+        "+set",
+        "r_aaSamples",
+        "1",
+        "+set",
+        "r_visuals",
+        "legacy"
+      ],
+      "note": "Vulkan, Legacy visuals, no anti-aliasing"
+    },
+    "M": {
+      "args": [
+        "+set",
+        "r_backend",
+        "vulkan",
+        "+set",
+        "r_aaSamples",
+        "1",
+        "+set",
+        "r_visuals",
+        "modern"
+      ],
+      "note": "Vulkan, Modern visuals with linear light (the default): TAA in linear light, then the tonemap"
+    },
+    "N": {
+      "args": [
+        "+set",
+        "r_backend",
+        "vulkan",
+        "+set",
+        "r_aaSamples",
+        "1",
+        "+set",
+        "r_visuals",
+        "modern"
+      ],
+      "env": {
+        "KISAK_VK_MODERN_LINEAR": "0"
+      },
+      "note": "Vulkan, Modern visuals without linear light: TAA over the 8-bit scene, as before"
+    }
+  },
+  "rows": [
+    "L",
+    "M",
+    "N",
+    "N",
+    "M",
+    "L"
+  ],
+  "scene": [
+    {
+      "wait_quiet": 15,
+      "min": 20,
+      "timeout": 150
+    },
+    {
+      "send": "sv_serverid"
+    },
+    {
+      "expect": "\"sv_serverid\" is: \"(?P<serverid>[0-9]+)",
+      "timeout": 30
+    },
+    {
+      "send": "mr {serverid} 8 autoassign"
+    },
+    {
+      "sleep": 3
+    },
+    {
+      "send": "mr {serverid} 15 assault_mp,0"
+    },
+    {
+      "sleep": 5
+    },
+    {
+      "send": [
+        "god",
+        "setviewpos -716 461 295 121",
+        "viewpos"
+      ],
+      "gap": 1
+    },
+    {
+      "expect": "^\\(-716 461 ",
+      "timeout": 5
+    },
+    {
+      "send": "sv_botsPressAttackBtn 1"
+    },
+    {
+      "send": [
+        "r_backend",
+        "developer",
+        "developer_script",
+        "g_gametype",
+        "sv_cheats",
+        "r_mode",
+        "r_fullscreen",
+        "r_aaSamples",
+        "r_visuals",
+        "r_depthPrepass",
+        "com_maxfps",
+        "r_vsync",
+        "snd_volume",
+        "sv_maxclients",
+        "sm_enable",
+        "sm_sunEnable",
+        "sm_spotEnable",
+        "sm_maxLights",
+        "cl_yawspeed",
+        "r_gpuSync"
+      ],
+      "gap": 0.3
+    },
+    {
+      "send": "set scr_testclients 12"
+    },
+    {
+      "poll": "status",
+      "count": "^(?!.* (CNCT|ZMBI) ).*bot[0-9]+\\^7",
+      "at_least": 12,
+      "every": 2,
+      "timeout": 120,
+      "name": "bots"
+    },
+    {
+      "sleep": 10
+    },
+    {
+      "send": [
+        "setviewpos -716 461 295 121",
+        "cl_yawspeed 40",
+        "viewpos"
+      ],
+      "gap": 0.5
+    },
+    {
+      "expect": "^\\((?P<capture_start_viewpos>[-0-9. ]+)\\) : ",
+      "timeout": 5
+    },
+    {
+      "send": "+left"
+    },
+    {
+      "sleep": 1
+    },
+    {
+      "send": "r_vkStats"
+    },
+    {
+      "sleep": 1
+    },
+    {
+      "framelog": 120
+    },
+    {
+      "send": "r_vkStats"
+    },
+    {
+      "sleep": 2
+    },
+    {
+      "send": [
+        "-left",
+        "viewpos"
+      ],
+      "gap": 0.5
+    },
+    {
+      "expect": "^\\((?P<capture_end_viewpos>[-0-9. ]+)\\) : ",
+      "timeout": 5,
+      "optional": true
+    }
+  ],
+  "lines": [
+    "^Vulkan: legacy: device ready:",
+    "^Vulkan: swapchain",
+    "frame stats:",
+    "GPU time:",
+    "anti-aliasing",
+    "\" is: \"",
+    "^Graphics back end:",
+    "modern:",
+    "vulkan d3d9: modern"
+  ],
+  "counts": {
+    "validation": "validation error"
+  },
+  "power": {
+    "require": "mains",
+    "battery_floor": 10,
+    "battery_per_launch": 8,
+    "profile": "power-saver",
+    "wait": 300,
+    "retries": 1
+  },
+  "load": {
+    "max_cpu_percent": 50,
+    "wait": 600
+  },
+  "stop_if_running": [
+    "Vita3K"
+  ],
+  "guard": [
+    "{game}",
+    "{game}/main",
+    "{game}/players/**",
+    "{dxvk_prefix}/**"
+  ]
+}

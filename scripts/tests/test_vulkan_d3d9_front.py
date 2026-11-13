@@ -39,9 +39,14 @@ involved. The checks:
                  settings, logged every change and ended on the device's own
                  setting (what each setting did to its frame, and that the
                  statistics count from where they were last started, are the
-                 scene's own points); and the Modern path's statistics line
-                 counts the modern_taa scene's 20 anti-aliased scenes, 2 of
-                 them without history
+                 scene's own points); and the Modern path's statistics lines
+                 count the 21 anti-aliased scenes of modern_taa and
+                 modern_linear, 3 of them without history, and modern_linear's
+                 one scene in linear light with one copy read from it (none
+                 with KISAK_VK_MODERN_LINEAR=0)
+  linear-off     --scene modern_linear passes with KISAK_VK_MODERN_LINEAR=0
+                 too, where the scene is drawn as always (the scene's own
+                 points tell the two apart)
 
 Usage:
   test_vulkan_d3d9_front.py --binary build/bin/KisakCOD-vulkan-d3d9-check
@@ -57,7 +62,7 @@ import sys
 # The scenes the check runs, in order. A scene added to the check is added here.
 SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'model_lighting', 'dirty_update',
           'references', 'threads', 'queries', 'occlusion', 'frame_loop', 'gpu_feed', 'tuning', 'slow_frames',
-          'kept_state', 'multisample', 'modern_taa', 'reset', 'fullscreen', 'present')
+          'kept_state', 'multisample', 'modern_taa', 'modern_linear', 'reset', 'fullscreen', 'present')
 
 
 def run(binary, args, env, timeout=300):
@@ -126,6 +131,15 @@ def main():
                   found.get('d3d9_check.unsupported_calls') == '0 expected=0',
                   found.get('d3d9_check.unsupported_calls', 'missing'))
 
+    # linear-off
+    off = dict(env)
+    off['KISAK_VK_MODERN_LINEAR'] = '0'
+    code, stdout, _ = run(binary, ['--scene', 'modern_linear', '--validation', args.validation], off)
+    found, scenes = parse(stdout)
+    checks.expect('modern_linear passes with linear light off',
+                  code == 0 and found.get('d3d9_check') == 'passed' and [s[0] for s in scenes] == ['modern_linear']
+                  and 'scenes in linear light' not in stdout, f'status {code}\n{stdout}')
+
     # present-mode
     fifo = dict(env)
     fifo['KISAK_VK_PRESENT_MODE'] = 'fifo'
@@ -189,13 +203,24 @@ def main():
     presents = re.match(r'(\d+) skipped=(\d+)$', found.get('d3d9_check.presents', ''))
     checks.expect('frames presented', bool(presents) and int(presents.group(1)) >= len(SCENES),
                   found.get('d3d9_check.presents', 'missing'))
-    # The Modern path's line at teardown: the modern_taa scene's frames (4
-    # still, 16 jittered; the first of each starts the history again).
+    # The Modern path's lines at teardown: the modern_taa scene's frames (4
+    # still, 16 jittered; the first of each starts the history again) and the
+    # modern_linear scene's one (a cut); that scene was drawn in linear light,
+    # with one copy read from it, unless KISAK_VK_MODERN_LINEAR=0.
     modern = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes anti-aliased \((\d+) without history\)',
                        stdout, re.M)
-    checks.expect('the Modern path anti-aliased 20 scenes, 2 without history',
-                  modern is not None and modern.group(1) == '20' and modern.group(2) == '2',
+    checks.expect('the Modern path anti-aliased 21 scenes, 3 without history',
+                  modern is not None and modern.group(1) == '21' and modern.group(2) == '3',
                   modern.group(0) if modern else 'missing')
+    linear = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes in linear light \((\d+) copies read '
+                       r'from them\), ([0-9.]+) ms GPU each for the tonemap$', stdout, re.M)
+    if env.get('KISAK_VK_MODERN_LINEAR') == '0':
+        checks.expect('no scene in linear light with KISAK_VK_MODERN_LINEAR=0', linear is None,
+                      linear.group(0) if linear else '')
+    else:
+        checks.expect('the Modern path drew 1 scene in linear light and read 1 copy from it',
+                      linear is not None and linear.group(1) == '1' and linear.group(2) == '1',
+                      linear.group(0) if linear else 'missing')
     checks.expect('no object outlived its release', found.get('d3d9_check.live_objects_at_teardown') == '0',
                   found.get('d3d9_check.live_objects_at_teardown', 'missing'))
     checks.expect('device destroyed at its last release',
