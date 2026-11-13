@@ -65,8 +65,9 @@ involved. The checks:
                  KISAK_VK_MODERN_EFFECTS=linear, where effects add as light in
                  the scene instead of on the display image
   tonemap        --scene modern_tonemap passes with each
-                 KISAK_VK_MODERN_TONEMAP curve (neutral, agx, aces, and an
-                 unknown name, which logs that and keeps clamp), and the
+                 KISAK_VK_MODERN_TONEMAP curve (clamp, agx, aces, and an
+                 unknown name, which logs that and keeps the default,
+                 neutral), and the
                  device logs the curve it uses
   lit-off        --scene modern_lit passes with KISAK_VK_MODERN_LIT=0 and
                  with KISAK_VK_MODERN_LINEAR=0, where lit surfaces store
@@ -188,14 +189,14 @@ def main():
                   f'status {code}\n{stdout}')
 
     # tonemap
-    for curve in ('neutral', 'agx', 'aces', 'filmic'):
+    for curve in ('clamp', 'agx', 'aces', 'filmic'):
         chosen = dict(env)
         chosen['KISAK_VK_MODERN_TONEMAP'] = curve
         code, stdout, _ = run(binary, ['--scene', 'modern_tonemap', '--validation', args.validation], chosen)
         found, scenes = parse(stdout)
         logged = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: tonemap curve (\w+)( \(KISAK_VK_MODERN_TONEMAP '
                            r'names no curve)?', stdout, re.M)
-        want = 'clamp' if curve == 'filmic' else curve
+        want = 'neutral' if curve == 'filmic' else curve
         linear_off = env.get('KISAK_VK_MODERN_LINEAR') == '0'
         checks.expect(f'modern_tonemap passes with KISAK_VK_MODERN_TONEMAP={curve}',
                       code == 0 and found.get('d3d9_check') == 'passed' and [s[0] for s in scenes] == ['modern_tonemap']

@@ -97,7 +97,9 @@ struct Backend
     bool linearFailed = false;
     // The tonemap's curve (KISAK_VK_MODERN_TONEMAP: clamp, neutral, agx or
     // aces; clamp when unset), and whether the variable named none of them.
-    modern::TonemapCurve tonemapCurve = modern::TonemapCurve::Clamp;
+    // Neutral unless KISAK_VK_MODERN_TONEMAP names another (David chose it by
+    // eye, tonemap comparison 1, 2026-11-13).
+    modern::TonemapCurve tonemapCurve = modern::TonemapCurve::Neutral;
     bool tonemapCurveUnknown = false;
     lg::Texture *linearScene = nullptr;
     lg::Surface *linearSceneSurface = nullptr;
