@@ -233,7 +233,10 @@ decoded before the arithmetic, and the result is stored as it comes.
   are not, and keep the decode of their stored colour.
 * **Which inputs.** From the pass's arguments: material samplers whose
   texture is a colour map or specular map (semantic `TS_COLOR_MAP`,
-  `TS_SPECULAR_MAP`); the secondary lightmap and the reflection probe; the
+  `TS_SPECULAR_MAP`); the secondary lightmap and the reflection probe (custom
+  samplers: the BSP and static model draws bind them at s3 and s1 themselves,
+  so they are found from `MaterialPass::customSamplerFlags`, not the
+  arguments); the
   lighting volume, doubled (below); the float constants for the fog colour,
   sun diffuse and specular, light diffuse and specular and the material
   colour; and the vertex colour (colour 0 input). Not decoded: the primary

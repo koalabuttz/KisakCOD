@@ -1431,9 +1431,10 @@ static void R_ModernLogPassInputs(const char *name, const MaterialPass *pass, co
             used += (size_t)wrote < sizeof(args) - used ? (size_t)wrote : sizeof(args) - used - 1;
     }
     Com_Printf(CON_CHANNEL_GFX,
-               "Modern lit inputs: %s: decode samplers 0x%04x (doubled 0x%04x), constants 0x%08x%08x, vertex %d;%s\n",
+               "Modern lit inputs: %s: decode samplers 0x%04x (doubled 0x%04x), constants 0x%08x%08x, vertex %d; "
+               "custom samplers 0x%x;%s\n",
                name, inputs.samplers, inputs.doubled, (uint32_t)(inputs.constants >> 32), (uint32_t)inputs.constants,
-               inputs.colorInput ? 1 : 0, args);
+               inputs.colorInput ? 1 : 0, pass->customSamplerFlags, args);
 }
 
 // Which colours a lit pass's pixel shader reads, by its kind (the pixel
@@ -1532,6 +1533,14 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
             break;
         }
     }
+    // The lightmaps and the reflection probe are custom samplers, bound by
+    // the BSP and static model draws at fixed registers (g_customSamplerDest:
+    // probe s1, primary lightmap s2, secondary lightmap s3), and are not
+    // among the pass's arguments.
+    if ((pass->customSamplerFlags & 4) && (parts & MODERN_LIT_LIGHTMAP))
+        inputs.samplers |= (uint16_t)(1u << 3);
+    if ((pass->customSamplerFlags & 1) && (parts & MODERN_LIT_PROBE))
+        inputs.samplers |= (uint16_t)(1u << 1);
     R_ModernLogPassInputs(name, pass, material, inputs);
     R_ModernSendInputs(&inputs);
 }
