@@ -40,11 +40,12 @@ involved. The checks:
                  setting (what each setting did to its frame, and that the
                  statistics count from where they were last started, are the
                  scene's own points); and the Modern path's statistics lines
-                 count the 51 anti-aliased scenes of modern_taa,
+                 count the 56 anti-aliased scenes of modern_taa,
                  modern_linear, modern_bloom, modern_effects, modern_lit,
-                 modern_tonemap and modern_velocity, 12 of them without
-                 history, the 7 scenes of modern_linear, modern_bloom,
-                 modern_effects, modern_lit and modern_tonemap in
+                 modern_tonemap, modern_exposure and modern_velocity, 16 of
+                 them without history, the 12 scenes of modern_linear,
+                 modern_bloom, modern_effects, modern_lit, modern_tonemap and
+                 modern_exposure in
                  linear light with one copy read from them (none with
                  KISAK_VK_MODERN_LINEAR=0), modern_bloom's 2 scenes with
                  bloom (none with KISAK_VK_MODERN_LINEAR=0 or
@@ -69,6 +70,10 @@ involved. The checks:
                  unknown name, which logs that and keeps the default,
                  neutral), and the
                  device logs the curve it uses
+  exposure       --scene modern_exposure passes with KISAK_VK_MODERN_EXPOSURE=1
+                 (the other runs set it to 0 unless the caller set it, since
+                 auto exposure moves their colours), with its 5 scenes
+                 measured, 4 of them cuts
   lit-off        --scene modern_lit passes with KISAK_VK_MODERN_LIT=0 and
                  with KISAK_VK_MODERN_LINEAR=0, where lit surfaces store
                  their colour as a display value and no lit line is logged
@@ -91,7 +96,7 @@ import sys
 SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'model_lighting', 'dirty_update',
           'references', 'threads', 'queries', 'occlusion', 'frame_loop', 'gpu_feed', 'tuning', 'slow_frames',
           'kept_state', 'multisample', 'modern_taa', 'modern_linear', 'modern_bloom', 'modern_effects',
-          'modern_lit', 'modern_tonemap', 'modern_velocity', 'reset', 'fullscreen', 'present')
+          'modern_lit', 'modern_tonemap', 'modern_exposure', 'modern_velocity', 'reset', 'fullscreen', 'present')
 
 
 def run(binary, args, env, timeout=300):
@@ -137,6 +142,9 @@ def main():
     binary = os.path.abspath(args.binary)
     env = dict(os.environ)
     env['SDL_VIDEODRIVER'] = args.video_driver
+    # Auto exposure would move the other scenes' colours: off unless the
+    # caller sets it; the exposure variant runs modern_exposure with it on.
+    env.setdefault('KISAK_VK_MODERN_EXPOSURE', '0')
     env.pop('VK_INSTANCE_LAYERS', None)
     checks = Checks()
 
@@ -203,6 +211,20 @@ def main():
                       and (linear_off or (logged is not None and logged.group(1) == want
                                           and bool(logged.group(2)) == (curve == 'filmic'))),
                       f'status {code}\n{stdout}')
+
+    # exposure
+    exposed = dict(env)
+    exposed['KISAK_VK_MODERN_EXPOSURE'] = '1'
+    code, stdout, _ = run(binary, ['--scene', 'modern_exposure', '--validation', args.validation], exposed)
+    found, scenes = parse(stdout)
+    measured = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with auto exposure \((\d+) taken at '
+                         r'once\), exposure (-?[0-9.]+) EV', stdout, re.M)
+    linear_off = env.get('KISAK_VK_MODERN_LINEAR') == '0'
+    checks.expect('modern_exposure passes with KISAK_VK_MODERN_EXPOSURE=1',
+                  code == 0 and found.get('d3d9_check') == 'passed' and [s[0] for s in scenes] == ['modern_exposure']
+                  and (measured is None if linear_off
+                       else measured is not None and measured.group(1) == '5' and measured.group(2) == '4'),
+                  f'status {code}\n{stdout}')
 
     # lit-off
     for name in ('KISAK_VK_MODERN_LIT', 'KISAK_VK_MODERN_LINEAR'):
@@ -290,9 +312,10 @@ def main():
     # still, 16 jittered; the first of each starts the history again), the
     # modern_linear scene's one, the modern_bloom scene's three, the
     # modern_effects scene's one, the modern_lit scene's one and the
-    # modern_tonemap scene's one (all cuts), and the modern_velocity scene's
-    # (three runs of 8, each starting with a cut); those seven before
-    # modern_velocity were drawn in linear light, with one copy read from
+    # modern_tonemap scene's one (all cuts), the modern_exposure scene's five
+    # (four cuts), and the modern_velocity scene's (three runs of 8, each
+    # starting with a cut); those twelve before modern_velocity were drawn in
+    # linear light, with one copy read from
     # them, two of modern_bloom's with bloom and modern_lit's and
     # modern_tonemap's with lit surfaces, unless KISAK_VK_MODERN_LINEAR=0 (or
     # KISAK_VK_MODERN_BLOOM=0 for the bloom, KISAK_VK_MODERN_LIT=0 for the lit
@@ -301,8 +324,8 @@ def main():
     # a skinned one, whose 128 vertices every scene of that run kept.
     modern = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes anti-aliased \((\d+) without history\)',
                        stdout, re.M)
-    checks.expect('the Modern path anti-aliased 51 scenes, 12 without history',
-                  modern is not None and modern.group(1) == '51' and modern.group(2) == '12',
+    checks.expect('the Modern path anti-aliased 56 scenes, 16 without history',
+                  modern is not None and modern.group(1) == '56' and modern.group(2) == '16',
                   modern.group(0) if modern else 'missing')
     velocity = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with surfaces that move on their own '
                          r'\((\d+) surfaces\), ([0-9.]+) ms GPU each for their velocity$', stdout, re.M)
@@ -315,14 +338,16 @@ def main():
                   kept is not None and kept.group(1) == '8' and kept.group(2) == '8' and kept.group(3) == '4.0'
                   and kept.group(4) == '7',
                   kept.group(0) if kept else 'missing')
+    if env.get('KISAK_VK_MODERN_EXPOSURE') == '0':
+        checks.expect('no auto exposure with KISAK_VK_MODERN_EXPOSURE=0', 'scenes with auto exposure' not in stdout)
     linear = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes in linear light \((\d+) copies read '
                        r'from them\), ([0-9.]+) ms GPU each for the tonemap$', stdout, re.M)
     if env.get('KISAK_VK_MODERN_LINEAR') == '0':
         checks.expect('no scene in linear light with KISAK_VK_MODERN_LINEAR=0', linear is None,
                       linear.group(0) if linear else '')
     else:
-        checks.expect('the Modern path drew 7 scenes in linear light and read 1 copy from them',
-                      linear is not None and linear.group(1) == '7' and linear.group(2) == '1',
+        checks.expect('the Modern path drew 12 scenes in linear light and read 1 copy from them',
+                      linear is not None and linear.group(1) == '12' and linear.group(2) == '1',
                       linear.group(0) if linear else 'missing')
     bloom = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with bloom in place of the glow '
                       r'\(([0-9.]+) passes each\), ([0-9.]+) ms GPU each$', stdout, re.M)

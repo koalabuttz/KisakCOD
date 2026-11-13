@@ -230,9 +230,12 @@ void DestroyTonemap(Core *core, Tonemap *tonemap);
 // With `bloom` (an image from BuildBloom over `from`) and a bloomScale above
 // 0, the bloom's light times bloomScale is added to the scene's before the
 // tonemap.
+//
+// With `exposure` (a 1x1 result of MeasureExposure) the light, the bloom's
+// included, is multiplied by exp2 of its red first; without, by 1.
 bool WriteDisplay(Core *core, Tonemap *tonemap, Image *scene, const VkRect2D &from, Image *target,
                   const VkRect2D &to, VkFilter filter, const char *pass, std::string &error,
-                  Image *bloom = nullptr, float bloomScale = 0.0f);
+                  Image *bloom = nullptr, float bloomScale = 0.0f, Image *exposure = nullptr);
 
 // The curve the tonemap takes the light through before the sRGB curve
 // (tonemap.frag): Clamp (light over 1 clips; the exact inverse of the Legacy
@@ -302,4 +305,62 @@ struct BloomStats
     uint64_t passes; // the passes they recorded
 };
 BloomStats Stats(const Bloom *bloom);
+
+// ---- Auto exposure (docs/vulkan-modern.md "Auto exposure") ----
+//
+// Each scene the linear-light scene's area is measured on a 64x64 grid (the
+// log2 of its luminance, clamped to [-12, 4] per tap and weighted towards the
+// centre of the view), and an exposure in EV moves from last scene's towards
+// the one that brings the weighted average to the key, within a range. The
+// result is a 1x1 image for WriteDisplay's `exposure`: the tonemap multiplies
+// the light by exp2 of its red. Nothing is read back to adapt.
+
+struct ExposureParams
+{
+    // The average luminance that needs no change (exposure 0 EV): the mean of
+    // mp_crash's and mp_backlot's outdoor views (PC exposure run 1).
+    float key = 0.115f;
+    float minEv = -1.0f;   // the range the exposure stays in
+    float maxEv = 1.5f;
+    // Time constants, in seconds: towards a lower exposure (the scene got
+    // brighter) and towards a higher one (it got darker).
+    float brighterSeconds = 1.0f;
+    float darkerSeconds = 2.5f;
+    float seconds = 0.0f;  // since the last scene measured
+    bool reset = false;    // take the target at once (a camera cut)
+};
+
+struct Exposure;
+
+// The pipelines and the small images. Null with the reason.
+Exposure *CreateExposure(Core *core, std::string &error);
+// Waits for the GPU to finish what was recorded (a device teardown calls it).
+void DestroyExposure(Core *core, Exposure *exposure);
+
+// Records the measure, reduce and adapt passes over `area` of `scene` and
+// returns this scene's 1x1 result (red: exposure in EV; green: the measured
+// weighted average log2 luminance; blue: the EV the scene asked for before
+// the range). Outside a pass, inside a frame. Null with the reason, and
+// nothing recorded, when the scene cannot take part. The passes are timed
+// under "modern exposure".
+Image *MeasureExposure(Core *core, Exposure *exposure, Image *scene, const VkRect2D &area,
+                       const ExposureParams &params, std::string &error);
+// The last result MeasureExposure returned; null before the first.
+Image *CurrentExposure(const Exposure *exposure);
+
+struct ExposureStats
+{
+    uint64_t scenes;  // MeasureExposure calls that recorded
+    uint64_t resets;  // of those, ones that took the target at once
+    uint64_t passes;  // the passes they recorded
+    // Results read back now and then (one in 16 scenes), as they came in.
+    uint64_t samples;
+    double evSum, evMin, evMax;     // the exposure used, in EV
+    double log2LuminanceSum;        // the measured weighted average log2 luminance
+    double wantedEvSum;             // the EV asked for before the range
+};
+// With waitForReading, a read back still on its way is waited for first.
+ExposureStats Stats(Core *core, Exposure *exposure, bool waitForReading = false);
+// Starts the statistics again (a read back on its way still counts).
+void ResetStats(Exposure *exposure);
 } // namespace gfx_vk::modern

@@ -19,9 +19,12 @@
 //
 // With bloom (vk_modern_bloom.cpp) its light is added first, in linear light:
 // the bloom image covers the rectangle drawn, and bloomScale is 0 without it.
+// With auto exposure (vk_modern_exposure.cpp) the light is then multiplied by
+// exp2 of the exposure image's red (EV).
 
 layout(set = 0, binding = 0) uniform sampler2D scene;
 layout(set = 0, binding = 1) uniform sampler2D bloom;
+layout(set = 0, binding = 2) uniform sampler2D exposure;
 
 layout(push_constant, std430) uniform Push
 {
@@ -30,6 +33,7 @@ layout(push_constant, std430) uniform Push
     vec2 invSceneSize;  // 1 / the scene image's size
     float bloomScale;   // the bloom's light is multiplied by it; 0 for none
     uint curve;         // 0 clamp, 1 neutral, 2 agx, 3 aces
+    uint useExposure;   // 1: multiply the light by exp2(exposure.r)
 } push;
 
 layout(location = 0) out vec4 outColor;
@@ -98,6 +102,8 @@ void main()
     vec4 light = texture(scene, at * push.invSceneSize);
     if (push.bloomScale > 0.0)
         light.rgb += push.bloomScale * texture(bloom, (gl_FragCoord.xy - push.to.xy) / push.to.zw).rgb;
+    if (push.useExposure != 0u)
+        light.rgb *= exp2(texelFetch(exposure, ivec2(0, 0), 0).r);
     vec3 shown = max(light.rgb, vec3(0.0));
     if (push.curve == 1u)
         shown = Neutral(shown);

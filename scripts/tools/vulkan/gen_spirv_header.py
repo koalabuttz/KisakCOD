@@ -59,6 +59,9 @@ SETS = [
             ("velocity.vert", "kVelocityVert"),
             ("velocity.frag", "kVelocityFrag"),
             ("debug_velocity.frag", "kDebugVelocityFrag"),
+            ("exposure_measure.frag", "kExposureMeasureFrag"),
+            ("exposure_reduce.frag", "kExposureReduceFrag"),
+            ("exposure_adapt.frag", "kExposureAdaptFrag"),
         ],
     ),
     ShaderSet(

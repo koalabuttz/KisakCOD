@@ -23,8 +23,10 @@ struct Push
     float invSceneSize[2];
     float bloomScale;
     uint32_t curve;
+    uint32_t exposure; // 1: multiply by exp2 of the exposure image's red
+    float pad[3];
 };
-static_assert(sizeof(Push) == 48, "tonemap.frag's push constant block is 48 bytes");
+static_assert(sizeof(Push) == 64, "tonemap.frag's push constant block is 64 bytes (52 used)");
 } // namespace
 
 struct Tonemap
@@ -74,9 +76,9 @@ Tonemap *CreateTonemap(Core *core, std::string &error)
         return nullptr;
     };
 
-    // The scene, and the bloom (the scene again when there is none).
-    VkDescriptorSetLayoutBinding bindings[2]{};
-    for (uint32_t i = 0; i < 2; ++i)
+    // The scene, the bloom and the exposure (the scene again when there is none).
+    VkDescriptorSetLayoutBinding bindings[3]{};
+    for (uint32_t i = 0; i < 3; ++i)
     {
         bindings[i].binding = i;
         bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -85,7 +87,7 @@ Tonemap *CreateTonemap(Core *core, std::string &error)
     }
     VkDescriptorSetLayoutCreateInfo setInfo{};
     setInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    setInfo.bindingCount = 2;
+    setInfo.bindingCount = 3;
     setInfo.pBindings = bindings;
     if (vk.vkCreateDescriptorSetLayout(device, &setInfo, nullptr, &tonemap->setLayout) != VK_SUCCESS)
         return fail("vkCreateDescriptorSetLayout failed");
@@ -175,7 +177,7 @@ bool CurveFromName(const char *name, TonemapCurve &curve)
 
 bool WriteDisplay(Core *core, Tonemap *tonemap, Image *scene, const VkRect2D &from, Image *target,
                   const VkRect2D &to, VkFilter filter, const char *pass, std::string &error, Image *bloom,
-                  float bloomScale)
+                  float bloomScale, Image *exposure)
 {
     if (!tonemap || !scene || !target)
     {
@@ -229,6 +231,10 @@ bool WriteDisplay(Core *core, Tonemap *tonemap, Image *scene, const VkRect2D &fr
         push.bloomScale = bloomScale;
     else
         bloom = nullptr;
+    if (exposure && exposure != target && (ImageInfo(exposure).usage & VK_IMAGE_USAGE_SAMPLED_BIT))
+        push.exposure = 1;
+    else
+        exposure = nullptr;
 
     const VkDescriptorSet set = AllocateDescriptorSet(core, tonemap->setLayout);
     if (!set)
@@ -236,12 +242,13 @@ bool WriteDisplay(Core *core, Tonemap *tonemap, Image *scene, const VkRect2D &fr
         error = LastError(core);
         return false;
     }
-    const VkDescriptorImageInfo images[2] = {
+    const VkDescriptorImageInfo images[3] = {
         {filter == VK_FILTER_LINEAR ? tonemap->linear : tonemap->nearest, ImageView(scene),
          VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL},
-        {tonemap->linear, ImageView(bloom ? bloom : scene), VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL}};
-    VkWriteDescriptorSet writes[2]{};
-    for (uint32_t i = 0; i < 2; ++i)
+        {tonemap->linear, ImageView(bloom ? bloom : scene), VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL},
+        {tonemap->nearest, ImageView(exposure ? exposure : scene), VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL}};
+    VkWriteDescriptorSet writes[3]{};
+    for (uint32_t i = 0; i < 3; ++i)
     {
         writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[i].dstSet = set;
@@ -250,11 +257,13 @@ bool WriteDisplay(Core *core, Tonemap *tonemap, Image *scene, const VkRect2D &fr
         writes[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         writes[i].pImageInfo = &images[i];
     }
-    Functions(core).vkUpdateDescriptorSets(DeviceHandle(core), 2, writes, 0, nullptr);
+    Functions(core).vkUpdateDescriptorSets(DeviceHandle(core), 3, writes, 0, nullptr);
 
     UseImage(core, scene, ImageUse::Sampled);
     if (bloom)
         UseImage(core, bloom, ImageUse::Sampled);
+    if (exposure)
+        UseImage(core, exposure, ImageUse::Sampled);
     PassDesc desc;
     desc.name = pass;
     desc.colorCount = 1;
