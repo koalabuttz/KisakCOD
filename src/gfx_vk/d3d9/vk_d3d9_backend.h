@@ -101,4 +101,9 @@ bool BackendModernCopyScene(Backend *backend, lg::Surface *scene, const lg::Rect
 // BackendModernScene.
 void BackendModernSurfaceMoved(Backend *backend, lg::Device *legacy, const float clip[4][4],
                                const float prevClip[4][4]);
+// The same for a skinned surface (vk_d3d9.h ModernSkinnedSurfaceMoved):
+// its vertices are kept under `key` at the next BackendModernScene, and its
+// velocity drawn there when the last one kept them. prevClip may be null.
+void BackendModernSkinnedSurfaceMoved(Backend *backend, lg::Device *legacy, uint64_t key, const float clip[4][4],
+                                      const float prevClip[4][4]);
 } // namespace gfx_vk::d3d9

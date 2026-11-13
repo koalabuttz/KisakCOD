@@ -556,8 +556,18 @@ void ModernSurfaceMoved(void *, IDirect3DDevice9 *device, const float clip[4][4]
         front::ModernSurfaceMoved(device, clip, prevClip);
 }
 
-const GfxModernHooks s_modernHooks = {nullptr,         ModernJitterPixels, ModernSceneDone,
-                                      ModernSceneBegin, ModernSceneLit,     ModernSurfaceMoved};
+// The same for a skinned surface: the front keeps its vertices for the next
+// scene's velocity, and draws its velocity from last scene's.
+void ModernSkinnedSurfaceMoved(void *, IDirect3DDevice9 *device, uint64_t key, const float clip[4][4],
+                               const float prevClip[4][4])
+{
+    if (!s_modernRefused.load(std::memory_order_relaxed))
+        front::ModernSkinnedSurfaceMoved(device, key, clip, prevClip);
+}
+
+const GfxModernHooks s_modernHooks = {nullptr,          ModernJitterPixels, ModernSceneDone,
+                                      ModernSceneBegin, ModernSceneLit,     ModernSurfaceMoved,
+                                      ModernSkinnedSurfaceMoved};
 } // namespace
 
 int Kisak_VulkanBackendSelected()

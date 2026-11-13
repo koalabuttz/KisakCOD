@@ -239,4 +239,10 @@ ModernResult ModernSceneLit(IDirect3DDevice9 *device, const ModernSceneView &vie
 // jitter. Ignored by a back
 // end without a Modern path, and when the draw was not a triangle list.
 void ModernSurfaceMoved(IDirect3DDevice9 *device, const float clip[4][4], const float prevClip[4][4]);
+// The same for a skinned surface, whose vertices change from frame to frame:
+// the Modern path keeps a copy of the vertices the draw read under `key`
+// when the scene is finished, and draws the surface's velocity from last
+// scene's copy when the key comes again. prevClip is null the first time.
+void ModernSkinnedSurfaceMoved(IDirect3DDevice9 *device, uint64_t key, const float clip[4][4],
+                               const float prevClip[4][4]);
 } // namespace gfx_vk::d3d9

@@ -18,6 +18,7 @@
 #include "r_draw_staticmodel.h"
 #include "r_draw_xmodel.h"
 #include "r_pretess.h"
+#include "r_modern_motion.h"
 #include <EffectsCore/fx_marks.h>
 
 GfxScaledPlacement s_manualObjectPlacement;
@@ -618,6 +619,21 @@ void RB_CreateParticleCloud2dAxis(const GfxParticleCloud *cloud, const float *vi
     }
 }
 
+// The Modern path (r_modern_motion.h): a skinned surface of an entity's
+// model was just drawn into the scene; report it with the matrix that drew it.
+static void R_ModernMotionSkinnedSurf(GfxCmdBufContext context, const GfxModelSkinnedSurface *modelSurf)
+{
+    if (!R_ModernMotionWanted())
+        return;
+    const GfxRenderTargetId target = context.state->renderTargetId;
+    if (target != R_RENDERTARGET_SCENE && target != R_RENDERTARGET_FRAME_BUFFER)
+        return;
+    float clip[4][4];
+    memcpy(clip, R_GetCodeMatrix(context.source, CONST_SRC_CODE_WORLD_VIEW_PROJECTION_MATRIX, 0), sizeof(clip));
+    R_ModernMotionSkinnedSurface(context.state->prim.device, modelSurf->info.modernOwner, modelSurf->info.boneIndex,
+                                 modelSurf->xsurf, clip);
+}
+
 uint32_t R_TessXModelSkinnedDrawSurfList(
     const GfxDrawSurfListArgs *listArgs,
     GfxCmdBufContext prepassContext)
@@ -711,6 +727,7 @@ uint32_t R_TessXModelSkinnedDrawSurfList(
                 R_SetReflectionProbe(context, drawSurf.fields.reflectionProbeIndex);
                 R_SetupPassPerPrimArgs(context);
                 R_DrawXModelSkinnedModelSurf(context, modelSurf);
+                R_ModernMotionSkinnedSurf(context, modelSurf);
 
                 if (++drawSurfIndex == drawSurfCount)
                     break;
@@ -748,6 +765,7 @@ uint32_t R_TessXModelSkinnedDrawSurfList(
             while (1)
             {
                 R_DrawXModelSkinnedModelSurf(context, modelSurf);
+                R_ModernMotionSkinnedSurf(context, modelSurf);
                 if (++drawSurfIndex == drawSurfCount)
                     break;
                 drawSurf.packed_low = drawSurfList[drawSurfIndex].packed_low;

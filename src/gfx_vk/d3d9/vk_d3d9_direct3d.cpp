@@ -287,6 +287,18 @@ void ModernSurfaceMoved(IDirect3DDevice9 *device, const float clip[4][4], const 
         }
 }
 
+void ModernSkinnedSurfaceMoved(IDirect3DDevice9 *device, uint64_t key, const float clip[4][4],
+                               const float prevClip[4][4])
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+        {
+            live->ModernSkinnedSurfaceMoved(key, clip, prevClip);
+            return;
+        }
+}
+
 // ---- IUnknown -------------------------------------------------------------------------------------
 
 HRESULT STDMETHODCALLTYPE Direct3D::QueryInterface(REFIID, void **object)

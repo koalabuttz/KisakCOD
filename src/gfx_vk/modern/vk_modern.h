@@ -109,6 +109,14 @@ struct MovedSurface
     // frame's as that scene drew it (with that frame's jitter).
     float clip[4][4];
     float prevClip[4][4];
+    // A skinned surface: last frame's vertices, kept by KeepVertices (the
+    // same stride, from the first vertex the draw uses), and the range of
+    // vertices the draw reads, from vertexBase. Null: the surface's vertices
+    // are the same in both frames.
+    VkBuffer previous = VK_NULL_HANDLE;
+    VkDeviceSize previousOffset = 0;
+    uint32_t minIndex = 0;
+    uint32_t vertexCount = 0;
 };
 
 struct Velocity;
@@ -129,8 +137,50 @@ struct VelocityStats
 {
     uint64_t passes;   // DrawVelocity calls that recorded
     uint64_t surfaces; // surfaces they drew
+    uint64_t skinned;  // of those, skinned surfaces drawn from last scene's vertices
 };
 VelocityStats Stats(const Velocity *velocity);
+
+// Skinned surfaces' vertices are written again each frame (by the CPU, into a
+// buffer locked with DISCARD), so last frame's are gone by the time the
+// velocity pass runs. The pass keeps a copy of each skinned surface's
+// vertices at the end of its scene, in a buffer of its own, for the next
+// scene's velocity: half of the buffer is written each scene while the other
+// half holds the last scene's.
+struct KeptVertices;
+
+// The vertices of one skinned surface the scene drew: vertexCount vertices of
+// 32 bytes from `offset` in `vertices`, kept under `key` (the renderer's key
+// for the surface, the same from one scene to the next).
+struct KeepRequest
+{
+    uint64_t key = 0;
+    VkBuffer vertices = VK_NULL_HANDLE;
+    VkDeviceSize offset = 0;
+    uint32_t vertexCount = 0;
+};
+
+KeptVertices *CreateKeptVertices();
+// The buffer is released once the GPU is done with it.
+void DestroyKeptVertices(Core *core, KeptVertices *kept);
+// Where the last KeepVertices kept `key`'s vertices; false when it did not
+// keep them, or kept another number of them.
+bool FindKept(const KeptVertices *kept, uint64_t key, uint32_t vertexCount, VkBuffer &buffer, VkDeviceSize &offset);
+// Records copies of these surfaces' vertices for the next scene (the buffer
+// is made at the first call) and forgets what the last call kept. Surfaces
+// that do not fit, or are asked for twice, are left out. Outside a pass,
+// inside a frame. False with the reason when nothing could be recorded.
+bool KeepVertices(Core *core, KeptVertices *kept, const KeepRequest *requests, uint32_t count, std::string &error);
+// Forgets what was kept (a camera cut, a scene without skinned surfaces).
+void ForgetKept(KeptVertices *kept);
+
+struct KeptStats
+{
+    uint64_t scenes;   // KeepVertices calls that recorded copies
+    uint64_t surfaces; // surfaces they kept
+    uint64_t bytes;    // bytes copied
+};
+KeptStats Stats(const KeptVertices *kept);
 
 // ---- Linear light (renderer plan MD1; docs/vulkan-modern.md) ----
 //

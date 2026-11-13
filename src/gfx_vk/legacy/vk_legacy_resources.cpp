@@ -152,7 +152,10 @@ T *CreateGpuBuffer(Device &device, uint32_t bytes, uint32_t usage, d3d::Pool poo
     buffer->dynamic = (usage & d3d::USAGE_DYNAMIC) || pool == d3d::POOL_SYSTEMMEM;
     BufferDesc desc;
     desc.size = bytes;
-    desc.usage = index ? VK_BUFFER_USAGE_INDEX_BUFFER_BIT : VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    // Vertices can be copied from: the Modern path keeps skinned vertices
+    // for the next frame's velocity (modern::KeepVertices).
+    desc.usage = index ? VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+                       : VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     desc.memory = buffer->dynamic ? MemoryKind::Upload : MemoryKind::Device;
     desc.name = buffer->name.c_str();
     Buffer *gpu = CreateBuffer(device.core, desc);
@@ -227,7 +230,8 @@ void *LockGpuBuffer(Device &device, GpuBuffer *buffer, uint32_t offset, uint32_t
         {
             BufferDesc desc;
             desc.size = buffer->size;
-            desc.usage = buffer->index ? VK_BUFFER_USAGE_INDEX_BUFFER_BIT : VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+            desc.usage = buffer->index ? VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+                                       : VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
             desc.memory = MemoryKind::Upload;
             desc.name = buffer->name.c_str();
             Buffer *gpu = CreateBuffer(device.core, desc);

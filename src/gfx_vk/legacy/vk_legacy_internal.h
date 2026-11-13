@@ -536,6 +536,7 @@ struct Device
         VkIndexType indexType = VK_INDEX_TYPE_UINT16;
         uint32_t firstIndex = 0, indexCount = 0;
         int32_t vertexBase = 0;
+        uint32_t minIndex = 0, vertexCount = 0;
     } lastIndexed;
     UniformBind boundUniforms{};               // a null set: nothing bound
     // The texture set and the pipeline layout it was bound with. Binding set

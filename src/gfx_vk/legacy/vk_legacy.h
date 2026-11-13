@@ -658,6 +658,9 @@ struct IndexedDraw
     VkIndexType indexType = VK_INDEX_TYPE_UINT16;
     uint32_t firstIndex = 0, indexCount = 0;
     int32_t vertexBase = 0;
+    // D3D9's MinVertexIndex and NumVertices: the draw reads vertices
+    // vertexBase + minIndex onwards, vertexCount of them.
+    uint32_t minIndex = 0, vertexCount = 0;
     Viewport viewport{};
 };
 bool LastIndexedDraw(Device *device, IndexedDraw &out);

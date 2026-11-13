@@ -35,7 +35,7 @@ uint64_t SurfaceKey(uint32_t owner, uint32_t bone, const void *surface)
 void R_ModernMotionSceneBegin()
 {
     const GfxModernHooks *hooks = R_ModernHooks();
-    s_sceneOpen = hooks && hooks->surfaceMoved;
+    s_sceneOpen = hooks && (hooks->surfaceMoved || hooks->skinnedSurfaceMoved);
     s_reported.clear();
     s_now.clear();
     if (!s_sceneOpen)
@@ -53,20 +53,48 @@ void R_ModernMotionSceneDone()
 
 bool R_ModernMotionWanted() { return s_sceneOpen; }
 
+namespace
+{
+// Keeps the surface's matrix for the next scene, once per scene: returns
+// last scene's (null when it was not drawn then), or false when the surface
+// was reported already.
+bool Note(uint32_t owner, uint32_t bone, const void *surface, const float clip[4][4], uint64_t &key,
+          const Matrix *&now, const Matrix *&last)
+{
+    if (!s_sceneOpen || !owner || !surface)
+        return false;
+    key = SurfaceKey(owner, bone, surface);
+    if (!s_reported.insert(key).second)
+        return false;
+    Matrix &kept = s_now[key];
+    std::memcpy(kept.m, clip, sizeof(kept.m));
+    now = &kept;
+    const auto found = s_last.find(key);
+    last = found == s_last.end() ? nullptr : &found->second;
+    return true;
+}
+} // namespace
+
 void R_ModernMotionSurface(IDirect3DDevice9 *device, uint32_t owner, uint32_t bone, const void *surface,
                            const float clip[4][4])
 {
-    if (!s_sceneOpen || !owner || !surface)
-        return;
-    const uint64_t key = SurfaceKey(owner, bone, surface);
-    if (!s_reported.insert(key).second)
-        return;
-    Matrix &now = s_now[key];
-    std::memcpy(now.m, clip, sizeof(now.m));
-    const auto last = s_last.find(key);
-    if (last == s_last.end())
+    uint64_t key = 0;
+    const Matrix *now = nullptr, *last = nullptr;
+    if (!Note(owner, bone, surface, clip, key, now, last) || !last)
         return;
     const GfxModernHooks *hooks = R_ModernHooks();
     if (hooks && hooks->surfaceMoved)
-        hooks->surfaceMoved(hooks->user, device, now.m, last->second.m);
+        hooks->surfaceMoved(hooks->user, device, now->m, last->m);
+}
+
+void R_ModernMotionSkinnedSurface(IDirect3DDevice9 *device, uint32_t owner, uint32_t bone, const void *surface,
+                                  const float clip[4][4])
+{
+    uint64_t key = 0;
+    const Matrix *now = nullptr, *last = nullptr;
+    if (!Note(owner, bone, surface, clip, key, now, last))
+        return;
+    const GfxModernHooks *hooks = R_ModernHooks();
+    if (hooks && hooks->skinnedSurfaceMoved)
+        hooks->skinnedSurfaceMoved(hooks->user, device, key, now->m, last ? last->m : nullptr);
 }

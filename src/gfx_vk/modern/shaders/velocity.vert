@@ -8,8 +8,13 @@
 // The matrices are D3D9's (row vectors: p_clip = p_object * M), uploaded row
 // by row, so in GLSL clip = M * p. The draw uses the Legacy draw's viewport,
 // so the surface lands on the pixels the scene drew it on.
+//
+// A skinned surface's vertices change from frame to frame: last frame's come
+// from the copy the pass kept of them (prevPosition). For any other surface
+// both attributes read the same vertices.
 
 layout(location = 0) in vec3 position;
+layout(location = 1) in vec3 prevPosition;
 
 layout(push_constant) uniform Params
 {
@@ -23,8 +28,7 @@ layout(location = 1) out vec4 previousClip;
 
 void main()
 {
-    const vec4 at = vec4(position, 1.0);
-    currentClip = p.clip * at;
-    previousClip = p.prevClip * at;
+    currentClip = p.clip * vec4(position, 1.0);
+    previousClip = p.prevClip * vec4(prevPosition, 1.0);
     gl_Position = currentClip;
 }
