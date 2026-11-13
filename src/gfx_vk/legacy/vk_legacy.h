@@ -694,6 +694,17 @@ enum ModernLitShader : uint8_t
     // c18; texcoord 0 (colour and lightmap UVs), texcoord 1 (normal, fog) and
     // colour 0 in. The flags below add to that.
     ModernLitLmSun = 0x40,
+    // lp_[hsm_][i_]sun_<mode>c0[d0][n0][s0]: a model lit by the lighting
+    // volume and the sun. Always: colour map at s0, the lighting volume (a 3D
+    // image) at s4, fog colour at c0, lightingLookupScale at c5, sun
+    // direction and colour at c17 and c18; texcoord 0 (colour UV), texcoord
+    // 1 (normal, fog), texcoord 6 (the volume coordinate) and colour 0 in.
+    // The flags below add to that one sampler and one constant further on
+    // than the world's: the shadow map at s5, the material's maps from s5
+    // (s6 with the shadow map), envMapParms at c6, detailScale at c6 (c7
+    // with s0).
+    ModernLitLpSun = 0x80,
+    ModernLitFamilyMask = 0xc0,
     // hsm: the sun's shadow map at s4, its partition switch and scale at c2
     // and c4, its coordinate in texcoord 4.
     ModernLitShadow = 0x01,
@@ -720,7 +731,8 @@ enum ModernLitShader : uint8_t
 // Whether shader names a Modern lit shader of ours.
 constexpr bool ModernLitShaderValid(uint8_t shader)
 {
-    return (shader & 0xc0) == ModernLitLmSun && (shader & ModernLitModeMask) != 0x30;
+    const uint8_t family = shader & ModernLitFamilyMask;
+    return (family == ModernLitLmSun || family == ModernLitLpSun) && (shader & ModernLitModeMask) != 0x30;
 }
 void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint16_t doubled, bool colorInput,
                      bool overWhite = false, uint8_t shader = ModernLitNone);

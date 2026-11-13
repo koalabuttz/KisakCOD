@@ -1455,7 +1455,10 @@ static bool R_ModernTakeWord(const char **name, size_t *length, const char *word
 
 // The Modern lit shader of the back end's own a pixel shader's name says it
 // can be drawn as, before its arguments are checked:
-// lm_[hsm_]sun_<r0|b0|t0>c0[d0][n0][s0]_sm3, or lm_[hsm_]sun_r0c0_sm2.
+// lm_[hsm_]sun_<r0|b0|t0>c0[d0][n0][s0]_sm3, or lm_[hsm_]sun_r0c0_sm2; and for
+// models lp_[hsm_][i_]sun_<r0|b0|t0>c0[d0][n0][s0]_sm3 (i_, instanced, shares
+// the pixel shader; skin_ and flag_ have shaders of their own that model-lit
+// shader facts did not read, sm_ compares in the shader).
 static uint8_t R_ModernLitShaderFromName(const char *name)
 {
     size_t length = strlen(name);
@@ -1464,6 +1467,15 @@ static uint8_t R_ModernLitShaderFromName(const char *name)
     uint8_t shader = GFX_MODERN_LIT_SHADER_LM_SUN;
     if (R_ModernTakeWord(&name, &length, "lm_hsm_sun_"))
         shader |= GFX_MODERN_LIT_SHADER_SHADOW;
+    else if (R_ModernTakeWord(&name, &length, "lp_"))
+    {
+        shader = GFX_MODERN_LIT_SHADER_LP_SUN;
+        if (R_ModernTakeWord(&name, &length, "hsm_"))
+            shader |= GFX_MODERN_LIT_SHADER_SHADOW;
+        R_ModernTakeWord(&name, &length, "i_");
+        if (!R_ModernTakeWord(&name, &length, "sun_"))
+            return GFX_MODERN_LIT_SHADER_NONE;
+    }
     else if (!R_ModernTakeWord(&name, &length, "lm_sun_"))
         return GFX_MODERN_LIT_SHADER_NONE;
     if (R_ModernTakeWord(&name, &length, "b0"))
@@ -1486,7 +1498,8 @@ static uint8_t R_ModernLitShaderFromName(const char *name)
         | GFX_MODERN_LIT_SHADER_DETAIL | GFX_MODERN_LIT_SHADER_BLENDED | GFX_MODERN_LIT_SHADER_ALPHA_TESTED;
     if (length == 4 && !strncmp(name, "_sm3", 4))
         return shader;
-    if (length == 4 && !strncmp(name, "_sm2", 4) && !(shader & sm3Only))
+    if (length == 4 && !strncmp(name, "_sm2", 4) && !(shader & sm3Only)
+        && !(shader & GFX_MODERN_LIT_SHADER_LP_SUN))
         return shader;
     return GFX_MODERN_LIT_SHADER_NONE;
 }
@@ -1514,7 +1527,10 @@ static bool R_ModernMaterialConstIs(const Material *material, uint32_t nameHash,
 // left out; s0 also reads the reflection
 // probe at s1, envMapParms at c5 and the sun's specular colour at c19, and
 // d0 its detailScale at the constant after those (c5, or c6 with s0).
-// Anything else keeps the game's shader.
+// Models (lp_) read the lighting volume at s4 and lightingLookupScale at c5
+// in place of the lightmaps, so the shadow map moves to s5 and everything
+// after it one sampler and one constant on (model-lit shader facts); the
+// probe is their only custom sampler. Anything else keeps the game's shader.
 static uint8_t R_ModernLitShader(const char *name, const Material *material, const MaterialPass *pass)
 {
     const uint8_t shader = R_ModernLitShaderFromName(name);
@@ -1524,13 +1540,17 @@ static uint8_t R_ModernLitShader(const char *name, const Material *material, con
     const bool normal = (shader & GFX_MODERN_LIT_SHADER_NORMAL) != 0;
     const bool specular = (shader & GFX_MODERN_LIT_SHADER_SPECULAR) != 0;
     const bool detail = (shader & GFX_MODERN_LIT_SHADER_DETAIL) != 0;
-    const uint32_t customWanted = specular ? 7u : 6u;
+    const bool model = (shader & GFX_MODERN_LIT_SHADER_LP_SUN) != 0;
+    const uint32_t customWanted = (specular ? 1u : 0u) | (model ? 0u : 6u);
     if ((pass->customSamplerFlags & customWanted) != customWanted)
         return GFX_MODERN_LIT_SHADER_NONE;
-    const uint32_t normalDest = shadow ? 5u : 4u;
+    const uint32_t step = model ? 1u : 0u; // the volume and its scale come first
+    const uint32_t shadowDest = 4u + step;
+    const uint32_t normalDest = shadowDest + (shadow ? 1u : 0u);
     const uint32_t specularDest = normalDest + (normal ? 1u : 0u);
     const uint32_t detailDest = specularDest + (specular ? 1u : 0u);
-    const uint32_t detailScaleDest = specular ? 6u : 5u;
+    const uint32_t envMapDest = 5u + step;
+    const uint32_t detailScaleDest = envMapDest + (specular ? 1u : 0u);
     static const uint32_t detailMapHash = R_HashString("detailMap");
     // Every pixel argument, each where the shader reads it.
     uint32_t found = 0;
@@ -1549,8 +1569,11 @@ static uint8_t R_ModernLitShader(const char *name, const Material *material, con
         ENV_MAP_PARMS = 1u << 10,
         SUN_SPECULAR = 1u << 11,
         DETAIL_SCALE = 1u << 12,
+        LIGHTING_VOLUME = 1u << 13,
+        LOOKUP_SCALE = 1u << 14,
     };
     const uint32_t wanted = COLOR_MAP | FOG_COLOR | SUN_POSITION | SUN_DIFFUSE
+        | (model ? LIGHTING_VOLUME | LOOKUP_SCALE : 0u)
         | (shadow ? SHADOW_MAP | SWITCH_PARTITION | SHADOW_SCALE : 0u) | (normal ? NORMAL_MAP : 0u)
         | (specular ? SPECULAR_MAP | ENV_MAP_PARMS | SUN_SPECULAR : 0u) | (detail ? DETAIL_MAP | DETAIL_SCALE : 0u);
     const uint32_t argCount = pass->perPrimArgCount + pass->perObjArgCount + pass->stableArgCount;
@@ -1578,8 +1601,10 @@ static uint8_t R_ModernLitShader(const char *name, const Material *material, con
             }
             break;
         case MTL_ARG_CODE_PIXEL_SAMPLER:
-            if (arg.u.codeSampler == TEXTURE_SRC_CODE_SHADOWMAP_SUN && arg.dest == 4)
+            if (arg.u.codeSampler == TEXTURE_SRC_CODE_SHADOWMAP_SUN && arg.dest == shadowDest)
                 what = SHADOW_MAP;
+            else if (arg.u.codeSampler == TEXTURE_SRC_CODE_MODEL_LIGHTING && arg.dest == 4)
+                what = LIGHTING_VOLUME;
             break;
         case MTL_ARG_CODE_PIXEL_CONST:
             if (arg.u.codeConst.rowCount != 1)
@@ -1596,9 +1621,11 @@ static uint8_t R_ModernLitShader(const char *name, const Material *material, con
                 what = SWITCH_PARTITION;
             else if (arg.u.codeConst.index == CONST_SRC_CODE_SHADOWMAP_SCALE && arg.dest == 4)
                 what = SHADOW_SCALE;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_LIGHTING_LOOKUP_SCALE && arg.dest == 5)
+                what = LOOKUP_SCALE;
             break;
         case MTL_ARG_MATERIAL_PIXEL_CONST:
-            if (arg.dest == 5 && R_ModernMaterialConstIs(material, arg.u.nameHash, "envMapParms"))
+            if (arg.dest == envMapDest && R_ModernMaterialConstIs(material, arg.u.nameHash, "envMapParms"))
                 what = ENV_MAP_PARMS;
             else if (arg.dest == detailScaleDest && R_ModernMaterialConstIs(material, arg.u.nameHash, "detailScale"))
                 what = DETAIL_SCALE;

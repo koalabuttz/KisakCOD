@@ -654,6 +654,7 @@ are.
 | Switch | Default |
 | --- | --- |
 | `KISAK_VK_MODERN_SHADERS=0` | our shaders on (with linear light and lit passes on) |
+| `KISAK_VK_MODERN_MODEL_SHADERS=0` | the models' (`lp_`) on too |
 | `KISAK_VK_MODERN_SUN_STRENGTH=<value>` | 1 (as bright as the game's) |
 | `KISAK_VK_MODERN_SKY_STRENGTH=<value>` | 1 |
 
@@ -673,6 +674,49 @@ opaque, blended and alpha-tested (kept and dropped), and as `lm_sun_r0c0n0`
 with a normal map tilted along the tangent; the expectations follow the
 game's formulas.
 `test_vulkan_d3d9_front.py` also runs it with `KISAK_VK_MODERN_SHADERS=0`.
+
+### Models: `lp_sun.frag`
+
+The models' sunlit family, `lp_[hsm_][i_]sun_<mode>c0[d0][n0][s0]` (code 0x80
+plus the same flags), is drawn with `lp_sun.frag` the same way: 16 builds,
+the mode a specialization constant. `i_` (instanced) shares the pixel shader
+and only changes the vertex shader. `skin_` and `flag_` names keep the game's
+shader: some of them have pixel shaders of their own that model-lit shader
+facts (project files, 2026-11-13) did not read; so does `sm_`, which compares
+the shadow map in the shader.
+
+The game's model shader is the world's with the lighting volume in place of
+the lightmaps, so ours differs from `lm_sun.frag` only there:
+
+* **reads** the lighting volume (a 3D image) at s4 and lightingLookupScale
+  at c5, and texcoord 6 (the model's volume coordinate). Everything after
+  them moves one on: the shadow map at s5, the material's maps from s5 (s6
+  with the shadow map), envMapParms at c6, detailScale at c6 (c7 with
+  `s0`). The probe is the only custom sampler.
+* **sky** = the volume's colour, doubled as the game doubles it, then
+  decoded. The volume is sampled where the normal (with `n0` the mapped
+  one) points: the coordinate plus the normal times lightingLookupScale
+  over the normal's largest component.
+* **sun**: the shadow is the volume's alpha (the sun's visibility there).
+  With `hsm_` the shadow map's taps are always taken (there is no primary
+  lightmap to skip them), and the far partition's edge fades to the
+  volume's alpha.
+* **`b0`**: the normal map's slopes are scaled by the alpha, and the
+  specular is masked by how much colour the specular map has (any channel
+  over a tenth is whole) times the vertex alpha. That mask scales the
+  gloss and envMapParms, and the vertex alpha scales the specular colour.
+
+`KISAK_VK_MODERN_MODEL_SHADERS=0` keeps the models on the game's shaders
+while the world uses ours.
+
+**Checks:** the `modern_lit_models` scene draws a stand-in for
+`lp_hsm_sun_r0c0d0n0s0` as `lp_sun_r0c0` (sunlit by the volume's alpha,
+then half fog), `lp_hsm_sun_r0c0` (lit, shaded), the `d0n0s0` variant opaque,
+blended and alpha-tested, and `lp_sun_r0c0n0` with a tilted normal. Its
+volume is 1x1x2, black in the first slice. Only a lookup that moves along
+the normal by lightingLookupScale reaches the grey second slice.
+`test_vulkan_d3d9_front.py` also runs it with
+`KISAK_VK_MODERN_MODEL_SHADERS=0`.
 
 ## Normals buffer
 

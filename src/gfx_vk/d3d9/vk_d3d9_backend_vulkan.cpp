@@ -123,6 +123,8 @@ struct Backend
     // game's (KISAK_VK_MODERN_SUN_STRENGTH and _SKY_STRENGTH override them); the
     // changes of lit inputs that named one, and their count at the last reset.
     bool shadersWanted = true;
+    // Models' (lp_) shaders of ours, unless KISAK_VK_MODERN_MODEL_SHADERS=0.
+    bool modelShadersWanted = true;
     float sunStrength = 1.0f;
     float skyStrength = 1.0f;
     uint64_t litShaderChanges = 0, litShaderChangesBase = 0;
@@ -362,6 +364,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     backend->litWanted = !EnvIsZero("KISAK_VK_MODERN_LIT");
     backend->exposureWanted = !EnvIsZero("KISAK_VK_MODERN_EXPOSURE");
     backend->shadersWanted = !EnvIsZero("KISAK_VK_MODERN_SHADERS");
+    backend->modelShadersWanted = !EnvIsZero("KISAK_VK_MODERN_MODEL_SHADERS");
     {
         const std::string sun = EnvText("KISAK_VK_MODERN_SUN_STRENGTH");
         const float sunValue = sun.empty() ? -1.0f : std::strtof(sun.c_str(), nullptr);
@@ -1029,10 +1032,13 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
 {
     if (!backend || !backend->legacy || !backend->litWanted)
         return;
+    uint8_t shader = inputs && backend->shadersWanted ? inputs->shader : uint8_t(lg::ModernLitNone);
+    if ((shader & lg::ModernLitFamilyMask) == lg::ModernLitLpSun && !backend->modelShadersWanted)
+        shader = lg::ModernLitNone;
     if (inputs && backend->linearScene && !backend->linearFailed)
     {
         ++backend->litChanges;
-        if (inputs->overWhite && inputs->shader && backend->shadersWanted)
+        if (inputs->overWhite && shader)
             ++backend->litShaderChanges;
         backend->litOverWhite = inputs->overWhite;
         if (!backend->litThisScene)
@@ -1041,7 +1047,7 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
     }
     lg::SetLinearInputs(backend->legacy, inputs ? inputs->constants : 0, inputs ? inputs->samplers : 0,
                         inputs ? inputs->doubled : 0, inputs && inputs->colorInput, inputs && inputs->overWhite,
-                        inputs && backend->shadersWanted ? inputs->shader : uint8_t(0));
+                        shader);
 }
 
 bool BackendModernEffectsOnDisplay(Backend *backend) { return backend && !backend->effectsInLinear; }

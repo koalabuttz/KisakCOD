@@ -50,6 +50,13 @@ LM_SUN_VARIANTS = [
     for shadow in (0, 1)
     for maps in ("", "N", "S", "NS", "D", "DN", "DS", "DNS")
 ]
+LP_SUN_VARIANTS = [
+    ("lp_sun.frag", f"kLpSun{'Shadow' if shadow else ''}{maps}Frag",
+     (f"LP_SUN_SHADOW={shadow}", f"LP_SUN_DETAIL={int('D' in maps)}", f"LP_SUN_NORMAL={int('N' in maps)}",
+      f"LP_SUN_SPECULAR={int('S' in maps)}"))
+    for shadow in (0, 1)
+    for maps in ("", "N", "S", "NS", "D", "DN", "DS", "DNS")
+]
 
 
 SETS = [
@@ -89,7 +96,7 @@ SETS = [
         [
             ("fullscreen.vert", "kFullscreenVert"),
             ("gamma.frag", "kGammaFrag"),
-        ] + LM_SUN_VARIANTS,
+        ] + LM_SUN_VARIANTS + LP_SUN_VARIANTS,
     ),
 ]
 
