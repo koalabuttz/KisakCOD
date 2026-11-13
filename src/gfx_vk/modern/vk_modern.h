@@ -426,7 +426,7 @@ struct ExposureParams
     // mp_crash's and mp_backlot's outdoor views (PC exposure run 1).
     float key = 0.115f;
     float minEv = -1.0f;   // the range the exposure stays in
-    float maxEv = 1.5f;
+    float maxEv = 1.0f; // David 2026-11-13: +1, so dark interiors keep more of their mood
     // Time constants, in seconds: towards a lower exposure (the scene got
     // brighter) and towards a higher one (it got darker).
     float brighterSeconds = 1.0f;

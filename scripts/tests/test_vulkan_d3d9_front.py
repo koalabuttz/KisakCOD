@@ -132,6 +132,16 @@ def run(binary, args, env, timeout=300):
     return result.returncode, result.stdout, result.stderr
 
 
+def last_line(pattern, stdout):
+    """The last match of a log-line pattern: the totals at the device's end
+    come after any statistics a scene logs on its way (modern_exposure logs
+    them inside a pass)."""
+    found = None
+    for found in re.finditer(pattern, stdout, re.M):
+        pass
+    return found
+
+
 def parse(stdout):
     found = {}
     scenes = []
@@ -244,8 +254,8 @@ def main():
     exposed['KISAK_VK_MODERN_EXPOSURE'] = '1'
     code, stdout, _ = run(binary, ['--scene', 'modern_exposure', '--validation', args.validation], exposed)
     found, scenes = parse(stdout)
-    measured = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with auto exposure \((\d+) taken at '
-                         r'once\), exposure (-?[0-9.]+) EV', stdout, re.M)
+    measured = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with auto exposure \((\d+) taken at '
+                         r'once\), exposure (-?[0-9.]+) EV', stdout)
     linear_off = env.get('KISAK_VK_MODERN_LINEAR') == '0'
     checks.expect('modern_exposure passes with KISAK_VK_MODERN_EXPOSURE=1',
                   code == 0 and found.get('d3d9_check') == 'passed' and [s[0] for s in scenes] == ['modern_exposure']
@@ -412,18 +422,18 @@ def main():
     # the modern_normals scene's one (a cut) and the modern_reflections
     # scene's two (the first a cut), in linear light unless
     # KISAK_VK_MODERN_LINEAR=0.
-    modern = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes anti-aliased \((\d+) without history\)',
-                       stdout, re.M)
+    modern = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes anti-aliased \((\d+) without history\)',
+                       stdout)
     checks.expect('the Modern path anti-aliased 60 scenes, 19 without history',
                   modern is not None and modern.group(1) == '60' and modern.group(2) == '19',
                   modern.group(0) if modern else 'missing')
-    velocity = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with surfaces that move on their own '
-                         r'\((\d+) surfaces\), ([0-9.]+) ms GPU each for their velocity$', stdout, re.M)
+    velocity = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with surfaces that move on their own '
+                         r'\((\d+) surfaces\), ([0-9.]+) ms GPU each for their velocity$', stdout)
     checks.expect('the Modern path drew the velocity of 14 surfaces in 14 scenes',
                   velocity is not None and velocity.group(1) == '14' and velocity.group(2) == '14',
                   velocity.group(0) if velocity else 'missing')
-    kept = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes kept skinned vertices \((\d+) surfaces, '
-                     r'([0-9.]+) KB each scene\), (\d+) skinned surfaces drawn from last scene\'s$', stdout, re.M)
+    kept = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes kept skinned vertices \((\d+) surfaces, '
+                     r'([0-9.]+) KB each scene\), (\d+) skinned surfaces drawn from last scene\'s$', stdout)
     checks.expect("the Modern path kept a skinned surface's vertices in 8 scenes and drew 7 from them",
                   kept is not None and kept.group(1) == '8' and kept.group(2) == '8' and kept.group(3) == '4.0'
                   and kept.group(4) == '7',
@@ -435,8 +445,8 @@ def main():
     if 'KISAK_VK_MODERN_SSR' not in env and 'KISAK_VK_MODERN_DEBUG' not in env:
         checks.expect('no screen-space reflections when nothing reads them',
                       'scenes with screen-space reflections' not in stdout)
-    linear = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes in linear light \((\d+) copies read '
-                       r'from them\), ([0-9.]+) ms GPU each for the tonemap$', stdout, re.M)
+    linear = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes in linear light \((\d+) copies read '
+                       r'from them\), ([0-9.]+) ms GPU each for the tonemap$', stdout)
     if env.get('KISAK_VK_MODERN_LINEAR') == '0':
         checks.expect('no scene in linear light with KISAK_VK_MODERN_LINEAR=0', linear is None,
                       linear.group(0) if linear else '')
@@ -444,8 +454,8 @@ def main():
         checks.expect('the Modern path drew 16 scenes in linear light and read 1 copy from them',
                       linear is not None and linear.group(1) == '16' and linear.group(2) == '1',
                       linear.group(0) if linear else 'missing')
-    bloom = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with bloom in place of the glow '
-                      r'\(([0-9.]+) passes each\), ([0-9.]+) ms GPU each$', stdout, re.M)
+    bloom = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with bloom in place of the glow '
+                      r'\(([0-9.]+) passes each\), ([0-9.]+) ms GPU each$', stdout)
     if env.get('KISAK_VK_MODERN_LINEAR') == '0' or env.get('KISAK_VK_MODERN_BLOOM') == '0':
         checks.expect('no scene with bloom with linear light or bloom off', bloom is None,
                       bloom.group(0) if bloom else '')
@@ -453,8 +463,8 @@ def main():
         checks.expect('the Modern path drew bloom for 2 scenes, 7 passes each',
                       bloom is not None and bloom.group(1) == '2' and bloom.group(2) == '7.0',
                       bloom.group(0) if bloom else 'missing')
-    lit = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with lit surfaces in linear light, '
-                    r'kept over white \(([0-9.]+) changes of lit inputs each\)$', stdout, re.M)
+    lit = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with lit surfaces in linear light, '
+                    r'kept over white \(([0-9.]+) changes of lit inputs each\)$', stdout)
     if env.get('KISAK_VK_MODERN_LINEAR') == '0' or env.get('KISAK_VK_MODERN_LIT') == '0':
         checks.expect('no scene with lit surfaces in linear light with linear light or lit inputs off', lit is None,
                       lit.group(0) if lit else '')
@@ -462,8 +472,8 @@ def main():
         checks.expect('the Modern path drew lit surfaces in linear light in 3 scenes, inputs changed 3.3 times each',
                       lit is not None and lit.group(1) == '3' and lit.group(2) == '3.3',
                       lit.group(0) if lit else 'missing')
-    shaders = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: lit shaders of our own: ([0-9.]+) changes to one '
-                        r'each scene, (\d+) pixel modules built as one \((\d+) could not be\)', stdout, re.M)
+    shaders = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: lit shaders of our own: ([0-9.]+) changes to one '
+                        r'each scene, (\d+) pixel modules built as one \((\d+) could not be\)', stdout)
     if (env.get('KISAK_VK_MODERN_LINEAR') == '0' or env.get('KISAK_VK_MODERN_LIT') == '0'
             or env.get('KISAK_VK_MODERN_SHADERS') == '0'):
         checks.expect('no lit shaders of our own with linear light, lit inputs or our shaders off', shaders is None,
