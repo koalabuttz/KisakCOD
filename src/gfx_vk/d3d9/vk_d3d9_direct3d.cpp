@@ -258,12 +258,12 @@ ModernResult ModernSceneBegin(IDirect3DDevice9 *device)
     return ModernResult::Refused;
 }
 
-ModernResult ModernSceneDone(IDirect3DDevice9 *device, const ModernSceneView &view)
+ModernResult ModernSceneDone(IDirect3DDevice9 *device, const ModernSceneView &view, bool *glowDrawn)
 {
     const FrontLock lock;
     for (Device *live : LiveDevices())
         if (static_cast<IDirect3DDevice9 *>(live) == device)
-            return live->ModernSceneDone(view);
+            return live->ModernSceneDone(view, glowDrawn);
     return ModernResult::Refused;
 }
 

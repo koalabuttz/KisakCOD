@@ -1,6 +1,7 @@
 #include <universal/q_shared.h>
 #include "rb_postfx.h"
 #include "r_dvars.h"
+#include "r_scene.h"
 #include "rb_state.h"
 #include "r_image.h"
 #include "r_state.h"
@@ -106,7 +107,7 @@ void RB_ProcessPostEffects(const GfxViewInfo *viewInfo)
         if (RB_UsingMergedPostEffects(viewInfo))
             RB_ApplyMergedPostEffects(viewInfo);
 
-        if (R_UsingGlow(viewInfo))
+        if (R_UsingGlow(viewInfo) && !R_ModernDrewGlow(viewInfo))
         {
             RB_CalcGlowEffect(viewInfo);
             R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_FRAME_BUFFER);
@@ -134,7 +135,7 @@ bool RB_UsingBlur(float blurRadius)
 
 bool RB_UsingPostEffects(const GfxViewInfo *viewInfo)
 {
-    if (R_UsingGlow(viewInfo))
+    if (R_UsingGlow(viewInfo) && !R_ModernDrewGlow(viewInfo))
         return 1;
     if (r_showFbColorDebug->current.integer == 2)
         return 1;

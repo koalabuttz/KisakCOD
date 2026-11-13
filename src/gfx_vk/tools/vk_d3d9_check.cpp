@@ -510,6 +510,7 @@ public:
     void Multisample();
     void ModernTaa();
     void ModernLinear();
+    void ModernBloom();
     void ModernVelocity();
     void Bench();
     void BenchRuns();
@@ -3314,6 +3315,101 @@ void Check::ModernLinear()
     SafeRelease(depth);
 }
 
+// Bloom in place of the glow (vk_d3d9.h ModernSceneDone, view.glow): three
+// scenes drawn in linear light. A white square on black with glow: light
+// spreads around it and the renderer is told to leave its glow out. Grey
+// below the glow's cutoff with glow: nothing spreads. The white square
+// without glow: nothing spreads and the renderer keeps its glow. With
+// KISAK_VK_MODERN_LINEAR=0 or KISAK_VK_MODERN_BLOOM=0 there is never bloom.
+void Check::ModernBloom()
+{
+    const auto envZero = [](const char *name) {
+#if defined(_MSC_VER)
+        char *env = nullptr;
+        size_t envLength = 0;
+        const bool zero = _dupenv_s(&env, &envLength, name) == 0 && env && !std::strcmp(env, "0");
+        std::free(env);
+        return zero;
+#else
+        const char *env = std::getenv(name);
+        return env && !std::strcmp(env, "0");
+#endif
+    };
+    const bool bloomOn = !envZero("KISAK_VK_MODERN_LINEAR") && !envZero("KISAK_VK_MODERN_BLOOM");
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    const auto value = [&](UINT x, UINT y) {
+        const uint8_t *p = &pixels[(y * readSize + x) * 4];
+        return std::max(std::max(int(p[2]), int(p[1])), int(p[0]));
+    };
+    // One scene: black, with a white 16x16 square in the middle or grey on
+    // the left; returns whether the renderer would leave its glow out.
+    const auto scene = [&](bool square, bool glow) {
+        Reset(Argb(255, 0, 0, 0));
+        front::ModernSceneBegin(device);
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0),
+           "Clear(scene)");
+        if (square)
+            DrawQuad(56, 56, 72, 72, 0.5f, Argb(255, 255, 255, 255));
+        else
+            DrawQuad(0, 0, 32, kSize, 0.5f, Argb(255, 100, 100, 100));
+        front::ModernSceneView view{};
+        for (int i = 0; i < 4; ++i)
+            view.view[i][i] = view.projection[i][i] = 1.0f;
+        view.width = view.height = kSize;
+        view.cut = true;
+        view.glow.on = glow;
+        view.glow.radius = 2.0f;
+        view.glow.intensity = 1.0f;
+        view.glow.cutoff = 0.5f; // grey 100 is about 0.39: below it
+        view.glow.desaturation = 0.0f;
+        bool glowDrawn = false;
+        Equal("done", static_cast<int>(front::ModernSceneDone(device, view, &glowDrawn)),
+              static_cast<int>(front::ModernResult::Done));
+        device->SetDepthStencilSurface(nullptr);
+        return glowDrawn;
+    };
+
+    const bool drawn = scene(true, true);
+    Equal("square_glow_drawn", drawn, bloomOn);
+    if (Read())
+    {
+        Expect("square_white", 64, 64, 255, 255, 255);
+        // Four pixels below the square's edge: lit by the bloom, or black.
+        const int spread = value(64, 76);
+        Equal("square_spreads", bloomOn ? spread >= 8 : spread == 0, true);
+        if (bloomOn ? spread < 8 : spread != 0)
+            result->detail += " square_spreads_got=" + std::to_string(spread);
+        // The bloom fades with distance and stays white's colour.
+        Equal("square_fades", value(64, 100) <= spread, true);
+        const uint8_t *p = &pixels[(76 * readSize + 64) * 4];
+        Equal("square_bloom_grey", std::abs(int(p[2]) - int(p[0])) <= 1 && std::abs(int(p[1]) - int(p[0])) <= 1,
+              true);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+
+    Equal("grey_glow_drawn", scene(false, true), bloomOn);
+    if (Read())
+    {
+        Expect("grey_kept", 16, 64, 100, 100, 100);
+        Equal("grey_below_cutoff", value(36, 64), 0);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+
+    Equal("no_glow_kept", scene(true, false), false);
+    if (Read())
+    {
+        Expect("no_glow_white", 64, 64, 255, 255, 255);
+        Equal("no_glow_no_spread", value(64, 76), 0);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    SafeRelease(depth);
+}
+
 void Check::ResetDevice()
 {
     SafeRelease(backBuffer);
@@ -3552,6 +3648,7 @@ int Run(const Options &options)
         {"multisample", &Check::Multisample, true},
         {"modern_taa", &Check::ModernTaa, true},
         {"modern_linear", &Check::ModernLinear, true},
+        {"modern_bloom", &Check::ModernBloom, true},
         {"modern_velocity", &Check::ModernVelocity, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},

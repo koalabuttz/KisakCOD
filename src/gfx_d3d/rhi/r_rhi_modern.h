@@ -21,6 +21,15 @@ struct GfxModernScene
     float projection[4][4];  // with the frame's jitter in [2][0] and [2][1]
     int x, y, width, height; // the scene's viewport
     bool cut;                // the camera jumped: no history from before
+    // The view's glow (vision set bloom), when the renderer would draw it.
+    bool glow;
+    float glowRadius;       // Gaussian sigma, in pixels of the scene
+    float glowIntensity;
+    float glowCutoff;       // display value, 0 to 1
+    float glowDesaturation; // 0 to 1
+    // Set by sceneDone when the back end drew bloom in place of the glow:
+    // the renderer then leaves its own glow out of this view.
+    bool glowDrawn;
 };
 
 struct GfxModernHooks
@@ -30,7 +39,7 @@ struct GfxModernHooks
     void (*jitterPixels)(void *user, uint32_t frame, float *x, float *y);
     // A view's 3D scene is drawn (render target 0 and the depth surface hold
     // it), before post effects and 2D: the back end runs its passes over it.
-    void (*sceneDone)(void *user, IDirect3DDevice9 *device, const GfxModernScene *scene);
+    void (*sceneDone)(void *user, IDirect3DDevice9 *device, GfxModernScene *scene);
     // A view's 3D scene is about to be drawn (before its shadow maps and its
     // first draw into the back buffer). With linear light the back end gives
     // it an image of its own until sceneDone. May be null.

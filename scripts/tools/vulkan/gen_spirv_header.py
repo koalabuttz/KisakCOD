@@ -54,6 +54,8 @@ SETS = [
             ("fullscreen.vert", "kFullscreenVert"),
             ("taa.frag", "kTaaFrag"),
             ("tonemap.frag", "kTonemapFrag"),
+            ("bloom_down.frag", "kBloomDownFrag"),
+            ("bloom_up.frag", "kBloomUpFrag"),
             ("velocity.vert", "kVelocityVert"),
             ("velocity.frag", "kVelocityFrag"),
         ],

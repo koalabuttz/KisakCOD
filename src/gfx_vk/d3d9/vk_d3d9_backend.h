@@ -77,9 +77,11 @@ void BackendPollProgress(Backend *backend);
 // cannot run; the back end logs why, once per reason. With display, color is
 // the linear-light scene (BackendModernSceneTarget): after the passes the
 // tonemap writes it into display within the view's viewport, and that is
-// done even when the passes are refused.
+// done even when the passes are refused. With display and view.glow on, the
+// bloom is drawn before the tonemap and *glowDrawn set true.
 ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surface *depth,
-                                const ModernSceneView &view, lg::Surface *display = nullptr);
+                                const ModernSceneView &view, lg::Surface *display = nullptr,
+                                bool *glowDrawn = nullptr);
 // The linear-light image a 3D scene is drawn into instead of this back buffer
 // (vk_d3d9.h ModernSceneBegin), made or made again at its size; null when
 // linear light is off or cannot run (logged once). Refused tells the two

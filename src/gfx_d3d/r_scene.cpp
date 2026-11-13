@@ -1245,6 +1245,8 @@ void R_SetViewParmsForScene(const refdef_s *refdef, GfxViewParms *viewParms)
 static uint32_t s_modernSceneCount;
 static float s_modernLastOrigin[3];
 static bool s_modernHaveOrigin;
+// The last view whose glow the back end drew as bloom (R_ModernDrewGlow).
+static const GfxViewInfo *s_modernGlowView;
 
 void R_ModernJitterScene(const refdef_s *refdef, GfxViewParms *viewParms)
 {
@@ -1294,7 +1296,26 @@ void R_ModernSceneDone(const GfxViewInfo *viewInfo)
     s_modernLastOrigin[1] = parms.origin[1];
     s_modernLastOrigin[2] = parms.origin[2];
     s_modernHaveOrigin = true;
+    // The glow, as RB_ApplyGlowFilter sizes it: the radius is in 480-line
+    // units, quartered twice on its way to the quarter-size glow image's
+    // pixels; four of those make one of the scene's.
+    modern.glow = R_UsingGlow(viewInfo);
+    if (modern.glow)
+    {
+        modern.glowRadius = viewInfo->glow.radius * (float)viewInfo->sceneViewport.height / 1920.0f;
+        modern.glowIntensity = viewInfo->glow.bloomIntensity;
+        modern.glowCutoff = viewInfo->glow.bloomCutoff;
+        modern.glowDesaturation = viewInfo->glow.bloomDesaturation;
+    }
+    s_modernGlowView = nullptr;
     hooks->sceneDone(hooks->user, dx.device, &modern);
+    if (modern.glow && modern.glowDrawn)
+        s_modernGlowView = viewInfo;
+}
+
+bool R_ModernDrewGlow(const GfxViewInfo *viewInfo)
+{
+    return viewInfo && s_modernGlowView == viewInfo && R_ModernHooks();
 }
 
 void R_SetupProjection(float tanHalfFovX, float tanHalfFovY, GfxViewParms *viewParms)
