@@ -182,6 +182,23 @@ struct KeptStats
 };
 KeptStats Stats(const KeptVertices *kept);
 
+// ---- Debug views (KISAK_VK_MODERN_DEBUG; docs/vulkan-modern.md) ----
+//
+// Drawn over the anti-aliased scene (TAA's history is kept apart, so a view
+// never feeds back into it).
+
+struct DebugView;
+
+// Null with the reason.
+DebugView *CreateDebugView(Core *core, std::string &error);
+// Waits for the GPU to finish what was recorded.
+void DestroyDebugView(Core *core, DebugView *debug);
+// Colours each pixel of `area` in `target` that has motion of its own in
+// `velocity` (DrawVelocity's image, the same size), by the direction and
+// length of that motion, and leaves the rest. Outside a pass, inside a frame.
+bool DrawVelocityDebug(Core *core, DebugView *debug, Image *velocity, Image *target, const VkRect2D &area,
+                       std::string &error);
+
 // ---- Linear light (renderer plan MD1; docs/vulkan-modern.md) ----
 //
 // With linear light the 3D scene is drawn into an R16G16B16A16_SFLOAT image

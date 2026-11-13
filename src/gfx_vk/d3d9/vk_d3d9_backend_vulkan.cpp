@@ -138,6 +138,11 @@ struct Backend
     std::vector<SkinnedSurface> skinned;
     modern::KeptVertices *kept = nullptr;
     modern::KeptStats keptBase{};
+    // KISAK_VK_MODERN_DEBUG=velocity: the velocity debug view over each
+    // anti-aliased scene (docs/vulkan-modern.md), made at its first use.
+    bool debugVelocity = false;
+    bool debugFailed = false;
+    modern::DebugView *debug = nullptr;
 };
 
 namespace
@@ -289,6 +294,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     // And gives what moves on its own a velocity of its own unless this says not to.
     backend->velocityWanted = !EnvIsZero("KISAK_VK_MODERN_VELOCITY");
     backend->effectsInLinear = EnvIs("KISAK_VK_MODERN_EFFECTS", "linear");
+    backend->debugVelocity = EnvIs("KISAK_VK_MODERN_DEBUG", "velocity");
     if (!h.windowSystem || !h.windowSystem(h.user, desc.window, backend->windowSystem))
     {
         error = "the host has no Vulkan window system for this window";
@@ -570,6 +576,11 @@ void CloseBackend(Backend *backend)
     {
         modern::DestroyKeptVertices(backend->core, backend->kept);
         backend->kept = nullptr;
+    }
+    if (backend->debug)
+    {
+        modern::DestroyDebugView(backend->core, backend->debug);
+        backend->debug = nullptr;
     }
     if (backend->bloom)
     {
@@ -975,6 +986,29 @@ bool KeepSkinned(Backend *backend, const std::vector<Backend::SkinnedSurface> &s
 }
 } // namespace
 
+namespace
+{
+// The velocity debug view over the anti-aliased scene (KISAK_VK_MODERN_DEBUG=velocity).
+void DrawVelocityDebug(Backend *backend, Image *velocity, Image *color, const VkRect2D &area)
+{
+    if (backend->debugFailed)
+        return;
+    std::string error;
+    if (!backend->debug)
+    {
+        backend->debug = modern::CreateDebugView(backend->core, error);
+        if (!backend->debug)
+        {
+            backend->debugFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no velocity debug view: %s", error.c_str());
+            return;
+        }
+    }
+    if (!modern::DrawVelocityDebug(backend->core, backend->debug, velocity, color, area, error))
+        LogModernOnce(backend, "the velocity debug view is not drawn", error);
+}
+} // namespace
+
 ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surface *depth,
                                 const ModernSceneView &view, lg::Surface *display, bool *glowDrawn)
 {
@@ -1067,6 +1101,8 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
     keptGuard.done = KeepSkinned(backend, skinned);
     if (!modern::Resolve(backend->core, backend->taa, colorImage, depthImage, scene, error, velocity))
         return refuse(error);
+    if (backend->debugVelocity && velocity)
+        DrawVelocityDebug(backend, velocity, colorImage, scene.area);
     return tonemap(ModernResult::Done);
 }
 
