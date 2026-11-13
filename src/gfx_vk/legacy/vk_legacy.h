@@ -664,6 +664,16 @@ struct IndexedDraw
     Viewport viewport{};
 };
 bool LastIndexedDraw(Device *device, IndexedDraw &out);
+// Keeps the dynamic buffers LastIndexedDraw reports (stream 0's and the index
+// buffer, when dynamic) from being written again until ReleaseHeldBuffers:
+// a lock, even with DISCARD, moves to another backing although the GPU has
+// finished the draw. The Modern path draws the surface again later in the
+// scene, and by then the GPU may have run the draw (a mid-frame submission).
+void HoldLastIndexedBuffers(Device *device);
+// Ends every hold: the held backings count as read by what is being recorded
+// now (the velocity pass), and are written again once that has run. Present
+// ends them too, for a scene that never reached its velocity pass.
+void ReleaseHeldBuffers(Device *device);
 // The colours the pixel shaders of the draws that follow read, for draws into
 // a linear-light render target 0 (SetLinearLight): the red, green and blue of
 // the float constants in constants (bit per register c0-c63), of what the

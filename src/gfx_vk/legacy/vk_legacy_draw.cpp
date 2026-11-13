@@ -2505,6 +2505,35 @@ bool LastIndexedDraw(Device *device, IndexedDraw &out)
     out.viewport = device->viewport;
     return true;
 }
+
+void HoldLastIndexedBuffers(Device *device)
+{
+    const auto hold = [device](GpuBuffer *buffer) {
+        if (!buffer || !buffer->dynamic || buffer->current >= buffer->backings.size())
+            return;
+        Backing &backing = buffer->backings[buffer->current];
+        if (backing.held)
+            return;
+        backing.held = true;
+        device->heldBackings.emplace_back(buffer, buffer->current);
+    };
+    hold(device->streams[0].buffer);
+    hold(device->indices);
+}
+
+void ReleaseHeldBuffers(Device *device)
+{
+    if (device->heldBackings.empty())
+        return;
+    const uint64_t serial = SubmissionSerial(device->core);
+    for (const auto &[buffer, index] : device->heldBackings)
+    {
+        Backing &backing = buffer->backings[index];
+        backing.held = false;
+        backing.lastUse = std::max(backing.lastUse, serial);
+    }
+    device->heldBackings.clear();
+}
 #endif
 
 void DrawPrimitive(Device *device, d3d::PrimitiveType type, uint32_t startVertex, uint32_t primitiveCount)
@@ -2861,6 +2890,9 @@ PresentResult Present(Device *device_, gfx_vk::Readback **shownRead)
         return skipped ? PresentResult::Skipped : PresentResult::Failed;
     }
     EndPassIfOpen(device);
+#if !defined(KISAK_GFX_GXM)
+    ReleaseHeldBuffers(&device);
+#endif
     // A multisampled back buffer is resolved into the front buffer, which is
     // what is shown; the back buffer stays the back buffer.
     const bool multisampled = device.backBuffer->samples > 1;

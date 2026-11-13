@@ -15,6 +15,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace gfx_vk::legacy
@@ -110,6 +111,7 @@ struct Backing
 {
     Buffer *buffer = nullptr;
     uint64_t lastUse = 0; // submission serial of the last draw that read it; 0: none
+    bool held = false;    // HoldLastIndexedBuffers: not written again until ReleaseHeldBuffers
 };
 
 struct GpuBuffer
@@ -519,6 +521,9 @@ struct Device
     VertexDecl *decl = nullptr;
     StreamBinding streams[kMaxStreams];
     IndexBuffer *indices = nullptr;
+    // Backings held for the Modern path's velocity pass (HoldLastIndexedBuffers):
+    // the buffer and its backing's index.
+    std::vector<std::pair<GpuBuffer *, uint32_t>> heldBackings;
     float vsConstants[kVsFloatRegisters][4] = {};
     float psConstants[kPsFloatRegisters][4] = {};
     Viewport viewport{};

@@ -1021,6 +1021,10 @@ bool MovedFromLastDraw(lg::Device *legacy, const float clip[4][4], const float p
     lg::IndexedDraw draw;
     if (!lg::LastIndexedDraw(legacy, draw))
         return false;
+    // The velocity pass reads these buffers at the scene's end; a dynamic
+    // one must not be written again before then (BackendModernScene ends the
+    // hold once the pass is recorded).
+    lg::HoldLastIndexedBuffers(legacy);
     surface.vertices = draw.vertices;
     surface.vertexOffset = draw.vertexOffset;
     surface.stride = draw.stride;
@@ -1187,6 +1191,14 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
                 modern::ForgetKept(kept);
         }
     } keptGuard{backend->kept};
+    // The buffers the scene's moved surfaces were drawn from are held until
+    // the velocity pass and the copy of skinned vertices are recorded, and
+    // so to the end of this scene whatever it does.
+    struct ReleaseHeld
+    {
+        lg::Device *legacy;
+        ~ReleaseHeld() { lg::ReleaseHeldBuffers(legacy); }
+    } heldGuard{backend->legacy};
     // In linear light the scene must reach the back buffer whatever the
     // anti-aliasing does.
     const auto tonemap = [&](ModernResult passes) {

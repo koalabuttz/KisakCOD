@@ -135,7 +135,12 @@ draws their surfaces a second time with their own motion.
 * **The front** (`gfx_vk::d3d9::ModernSurfaceMoved`) takes the Legacy
   adapter's last indexed draw as it is still bound (`lg::LastIndexedDraw`:
   stream 0, the index buffer and range, the viewport) and keeps it with both
-  matrices until the scene is finished: at `ModernSceneLit` when effects
+  matrices until the scene is finished. Dynamic buffers it read from (brush
+  models' indices, skinned vertices) are held (`lg::HoldLastIndexedBuffers`)
+  until the velocity pass is recorded: a later lock, even with DISCARD, moves
+  to another backing, though the GPU may have run the draw already (the GPU
+  feed submits during a frame) and would otherwise let the engine write over
+  what the pass reads. The scene is finished at `ModernSceneLit` when effects
   blend on the display image (the default), else at `ModernSceneDone`. The
   renderer closes its scene's motion at either, so surfaces drawn after
   `R_ModernSceneLit` (effects) report none.
@@ -237,7 +242,10 @@ that does nothing); and the static quad in front stays as drawn, so the band's
 motion is not written where it is hidden. It draws the band again from
 skinned vertices (a dynamic buffer locked with DISCARD) and once more from
 44-byte vertices with indices written into a dynamic index buffer for each
-draw, as brush models are.
+draw, as brush models are; in that run the GPU finishes each draw (an event
+query polled with FLUSH) and the indices are written over with DISCARD before
+the scene ends, so the band stays sharp only if the pass still reads the
+draw's.
 
 `scripts/tests/test_vulkan_d3d9_front.py` checks the scenes in the full run and
 the `modern:` statistics lines. `scripts/tools/vulkan/gen_spirv_header.py

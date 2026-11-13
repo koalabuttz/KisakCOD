@@ -3073,6 +3073,7 @@ void Check::ModernVelocity()
     // buffer for each draw, as R_SetIndexData does.
     IDirect3DVertexBuffer9 *brushVb = nullptr;
     IDirect3DIndexBuffer9 *brushIb = nullptr;
+    IDirect3DQuery9 *event = nullptr;
     // The skinned band: 4 vertices before it, drawn with base vertex 2 and
     // indices from 2.
     constexpr int kSkinnedLead = 4, kSkinnedBase = 2;
@@ -3097,7 +3098,8 @@ void Check::ModernVelocity()
                "CreateVertexBuffer(brush)")
         || !Ok(device->CreateIndexBuffer(kStripes * 6 * sizeof(uint16_t), D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY,
                                          D3DFMT_INDEX16, D3DPOOL_DEFAULT, &brushIb, nullptr),
-               "CreateIndexBuffer(brush)"))
+               "CreateIndexBuffer(brush)")
+        || !Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &event), "CreateQuery(event)"))
     {
         SafeRelease(depth);
         SafeRelease(vb);
@@ -3193,8 +3195,9 @@ void Check::ModernVelocity()
         }
         skinnedVb->Unlock();
     };
-    // The brush band's indices for this draw, as R_SetIndexData writes them.
-    const auto writeBrushIndices = [&]() {
+    // The brush band's indices for this draw, as R_SetIndexData writes them;
+    // zero writes all zeros (no triangles).
+    const auto writeBrushIndices = [&](bool zero) {
         void *mapped = nullptr;
         if (!Ok(brushIb->Lock(0, 0, &mapped, D3DLOCK_DISCARD), "Lock(brush indices, DISCARD)"))
             return;
@@ -3204,9 +3207,23 @@ void Check::ModernVelocity()
             const uint16_t base = static_cast<uint16_t>(k * 4);
             const uint16_t quad[6] = {base, uint16_t(base + 1), uint16_t(base + 2), base, uint16_t(base + 2),
                                       uint16_t(base + 3)};
-            std::memcpy(out + k * 6, quad, sizeof(quad));
+            if (zero)
+                std::memset(out + k * 6, 0, sizeof(quad));
+            else
+                std::memcpy(out + k * 6, quad, sizeof(quad));
         }
         brushIb->Unlock();
+    };
+    // Hands what is recorded to the GPU and waits for it, as the GPU feed
+    // and the swap fence's flush do in the middle of a frame.
+    const auto finishGpu = [&]() {
+        Ok(event->Issue(D3DISSUE_END), "Issue(event)");
+        BOOL done = FALSE;
+        HRESULT hr = S_FALSE;
+        for (int polls = 0; (hr = event->GetData(&done, sizeof(done), D3DGETDATA_FLUSH)) == S_FALSE && polls < 5000;
+             ++polls)
+            SDL_Delay(1);
+        Equal("brush_gpu_finished", hr == S_OK && done == TRUE, true);
     };
     enum class Report
     {
@@ -3242,12 +3259,17 @@ void Check::ModernVelocity()
             bandClip(f - 1, prevClip);
             const float move[4] = {clip[3][0], clip[3][1], 0.0f, 0.0f};
             device->SetVertexShaderConstantF(0, move, 1);
-            writeBrushIndices();
+            writeBrushIndices(false);
             Ok(device->SetStreamSource(0, brushVb, 0, sizeof(Vertex44)), "SetStreamSource(brush)");
             Ok(device->SetIndices(brushIb), "SetIndices(brush)");
             Ok(device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, kStripes * 4, 0, kStripes * 2),
                "DrawIndexedPrimitive(brush)");
             front::ModernSurfaceMoved(device, clip, prevClip);
+            // The GPU finishes the draw before the scene ends, and the
+            // indices are written again (the dynamic buffer wrapped): the
+            // velocity pass must still draw the band from this draw's.
+            finishGpu();
+            writeBrushIndices(true);
         }
         else
         {
@@ -3333,6 +3355,7 @@ void Check::ModernVelocity()
     SafeRelease(skinnedVb);
     SafeRelease(brushIb);
     SafeRelease(brushVb);
+    SafeRelease(event);
     SafeRelease(depth);
 }
 
