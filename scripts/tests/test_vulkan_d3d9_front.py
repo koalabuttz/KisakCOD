@@ -40,15 +40,17 @@ involved. The checks:
                  setting (what each setting did to its frame, and that the
                  statistics count from where they were last started, are the
                  scene's own points); and the Modern path's statistics lines
-                 count the 50 anti-aliased scenes of modern_taa,
-                 modern_linear, modern_bloom, modern_effects, modern_lit and
-                 modern_velocity, 11 of them without history, the 6 scenes of
-                 modern_linear, modern_bloom, modern_effects and modern_lit in
+                 count the 51 anti-aliased scenes of modern_taa,
+                 modern_linear, modern_bloom, modern_effects, modern_lit,
+                 modern_tonemap and modern_velocity, 12 of them without
+                 history, the 7 scenes of modern_linear, modern_bloom,
+                 modern_effects, modern_lit and modern_tonemap in
                  linear light with one copy read from them (none with
                  KISAK_VK_MODERN_LINEAR=0), modern_bloom's 2 scenes with
                  bloom (none with KISAK_VK_MODERN_LINEAR=0 or
-                 KISAK_VK_MODERN_BLOOM=0), modern_lit's scene with lit
-                 surfaces kept over white, its inputs changed twice (none
+                 KISAK_VK_MODERN_BLOOM=0), modern_lit's and modern_tonemap's
+                 scenes with lit surfaces kept over white, inputs changed
+                 twice in each (none
                  with KISAK_VK_MODERN_LINEAR=0 or KISAK_VK_MODERN_LIT=0),
                  modern_velocity's 14 scenes with a surface that moves on its
                  own (14 surfaces), and its 8 scenes that kept a skinned
@@ -62,6 +64,11 @@ involved. The checks:
   effects-linear --scene modern_effects passes with
                  KISAK_VK_MODERN_EFFECTS=linear, where effects add as light in
                  the scene instead of on the display image
+  tonemap        --scene modern_tonemap passes with each
+                 KISAK_VK_MODERN_TONEMAP curve (clamp, agx, aces, and an
+                 unknown name, which logs that and keeps the default,
+                 neutral), and the
+                 device logs the curve it uses
   lit-off        --scene modern_lit passes with KISAK_VK_MODERN_LIT=0 and
                  with KISAK_VK_MODERN_LINEAR=0, where lit surfaces store
                  their colour as a display value and no lit line is logged
@@ -84,7 +91,7 @@ import sys
 SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'model_lighting', 'dirty_update',
           'references', 'threads', 'queries', 'occlusion', 'frame_loop', 'gpu_feed', 'tuning', 'slow_frames',
           'kept_state', 'multisample', 'modern_taa', 'modern_linear', 'modern_bloom', 'modern_effects',
-          'modern_lit', 'modern_velocity', 'reset', 'fullscreen', 'present')
+          'modern_lit', 'modern_tonemap', 'modern_velocity', 'reset', 'fullscreen', 'present')
 
 
 def run(binary, args, env, timeout=300):
@@ -181,6 +188,22 @@ def main():
                   code == 0 and found.get('d3d9_check') == 'passed' and [s[0] for s in scenes] == ['modern_effects'],
                   f'status {code}\n{stdout}')
 
+    # tonemap
+    for curve in ('clamp', 'agx', 'aces', 'filmic'):
+        chosen = dict(env)
+        chosen['KISAK_VK_MODERN_TONEMAP'] = curve
+        code, stdout, _ = run(binary, ['--scene', 'modern_tonemap', '--validation', args.validation], chosen)
+        found, scenes = parse(stdout)
+        logged = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: tonemap curve (\w+)( \(KISAK_VK_MODERN_TONEMAP '
+                           r'names no curve)?', stdout, re.M)
+        want = 'neutral' if curve == 'filmic' else curve
+        linear_off = env.get('KISAK_VK_MODERN_LINEAR') == '0'
+        checks.expect(f'modern_tonemap passes with KISAK_VK_MODERN_TONEMAP={curve}',
+                      code == 0 and found.get('d3d9_check') == 'passed' and [s[0] for s in scenes] == ['modern_tonemap']
+                      and (linear_off or (logged is not None and logged.group(1) == want
+                                          and bool(logged.group(2)) == (curve == 'filmic'))),
+                      f'status {code}\n{stdout}')
+
     # lit-off
     for name in ('KISAK_VK_MODERN_LIT', 'KISAK_VK_MODERN_LINEAR'):
         off = dict(env)
@@ -266,19 +289,20 @@ def main():
     # The Modern path's lines at teardown: the modern_taa scene's frames (4
     # still, 16 jittered; the first of each starts the history again), the
     # modern_linear scene's one, the modern_bloom scene's three, the
-    # modern_effects scene's one and the modern_lit scene's one (all cuts),
-    # and the modern_velocity scene's (three runs of 8, each starting with a
-    # cut); those six before modern_velocity were drawn in linear light, with
-    # one copy read from them, two of modern_bloom's with bloom and
-    # modern_lit's with lit surfaces, unless KISAK_VK_MODERN_LINEAR=0 (or
+    # modern_effects scene's one, the modern_lit scene's one and the
+    # modern_tonemap scene's one (all cuts), and the modern_velocity scene's
+    # (three runs of 8, each starting with a cut); those seven before
+    # modern_velocity were drawn in linear light, with one copy read from
+    # them, two of modern_bloom's with bloom and modern_lit's and
+    # modern_tonemap's with lit surfaces, unless KISAK_VK_MODERN_LINEAR=0 (or
     # KISAK_VK_MODERN_BLOOM=0 for the bloom, KISAK_VK_MODERN_LIT=0 for the lit
     # surfaces); in the second and third modern_velocity runs the 7 scenes
     # after the cut each had one surface that moves on its own, in the third
     # a skinned one, whose 128 vertices every scene of that run kept.
     modern = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes anti-aliased \((\d+) without history\)',
                        stdout, re.M)
-    checks.expect('the Modern path anti-aliased 50 scenes, 11 without history',
-                  modern is not None and modern.group(1) == '50' and modern.group(2) == '11',
+    checks.expect('the Modern path anti-aliased 51 scenes, 12 without history',
+                  modern is not None and modern.group(1) == '51' and modern.group(2) == '12',
                   modern.group(0) if modern else 'missing')
     velocity = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with surfaces that move on their own '
                          r'\((\d+) surfaces\), ([0-9.]+) ms GPU each for their velocity$', stdout, re.M)
@@ -297,8 +321,8 @@ def main():
         checks.expect('no scene in linear light with KISAK_VK_MODERN_LINEAR=0', linear is None,
                       linear.group(0) if linear else '')
     else:
-        checks.expect('the Modern path drew 6 scenes in linear light and read 1 copy from them',
-                      linear is not None and linear.group(1) == '6' and linear.group(2) == '1',
+        checks.expect('the Modern path drew 7 scenes in linear light and read 1 copy from them',
+                      linear is not None and linear.group(1) == '7' and linear.group(2) == '1',
                       linear.group(0) if linear else 'missing')
     bloom = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with bloom in place of the glow '
                       r'\(([0-9.]+) passes each\), ([0-9.]+) ms GPU each$', stdout, re.M)
@@ -315,8 +339,8 @@ def main():
         checks.expect('no scene with lit surfaces in linear light with linear light or lit inputs off', lit is None,
                       lit.group(0) if lit else '')
     else:
-        checks.expect('the Modern path drew lit surfaces in linear light in 1 scene, inputs changed 3 times',
-                      lit is not None and lit.group(1) == '1' and lit.group(2) == '3.0',
+        checks.expect('the Modern path drew lit surfaces in linear light in 2 scenes, inputs changed 2 times each',
+                      lit is not None and lit.group(1) == '2' and lit.group(2) == '2.0',
                       lit.group(0) if lit else 'missing')
     checks.expect('no object outlived its release', found.get('d3d9_check.live_objects_at_teardown') == '0',
                   found.get('d3d9_check.live_objects_at_teardown', 'missing'))

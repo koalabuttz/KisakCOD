@@ -220,8 +220,9 @@ void DestroyTonemap(Core *core, Tonemap *tonemap);
 
 // Records one pass that writes the linear-light scene in `scene` (the
 // rectangle `from`) into `target` (the rectangle `to`) as display values:
-// today the neutral tonemap, the light clamped to 1 and encoded with the sRGB
-// curve, the exact inverse of the Legacy adapter's decode. Alpha is copied.
+// the light through the tonemap's curve (SetCurve; Clamp, the exact inverse
+// of the Legacy adapter's decode, until set), then the sRGB curve. Alpha is
+// copied.
 // With different sizes the scene is sampled with the filter. `pass` names the
 // pass in the core's pass timings. Outside a pass, inside a frame. False with
 // the reason, and nothing recorded, when the images cannot take part.
@@ -232,6 +233,23 @@ void DestroyTonemap(Core *core, Tonemap *tonemap);
 bool WriteDisplay(Core *core, Tonemap *tonemap, Image *scene, const VkRect2D &from, Image *target,
                   const VkRect2D &to, VkFilter filter, const char *pass, std::string &error,
                   Image *bloom = nullptr, float bloomScale = 0.0f);
+
+// The curve the tonemap takes the light through before the sRGB curve
+// (tonemap.frag): Clamp (light over 1 clips; the exact inverse of the Legacy
+// adapter's decode), Neutral (the same up to 0.76, then a soft shoulder: the
+// Khronos PBR Neutral tonemap's, without its toe), Agx (AgX's base look) or
+// Aces (Stephen Hill's fit of the ACES transforms). Clamp until set.
+enum class TonemapCurve : uint32_t
+{
+    Clamp = 0,
+    Neutral = 1,
+    Agx = 2,
+    Aces = 3,
+};
+void SetCurve(Tonemap *tonemap, TonemapCurve curve);
+// "clamp", "neutral", "agx", "aces"; CurveFromName is false for anything else.
+const char *CurveName(TonemapCurve curve);
+bool CurveFromName(const char *name, TonemapCurve &curve);
 
 struct TonemapStats
 {

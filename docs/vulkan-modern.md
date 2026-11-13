@@ -277,13 +277,14 @@ buffer as before, with the anti-aliasing over it).
    refused the tonemap still runs. A scene begun and never handed back is
    tonemapped whole at `Present` (logged once).
 
-**The tonemap today is neutral**: the light clamped to 1 and encoded with the
-sRGB curve, the exact inverse of the decode. An opaque surface therefore comes
-back exactly as the Legacy path would have stored it (a half float keeps the
-decoded value closely enough), and only blending differs. A tonemap with a
-shoulder and the vision sets' film settings as its inputs come once the world
-is drawn by the Modern path's own shaders and the scene holds light brighter
-than white. Bloom is already there ([Bloom](#bloom)).
+**The tonemap's curve is Khronos PBR Neutral** by default
+([Tonemap curves](#tonemap-curves)): below 0.76 of light (display 227) it is
+the exact inverse of the decode, so an opaque surface comes back as the Legacy
+path would have stored it (a half float keeps the decoded value closely
+enough) and only blending differs; brighter light, which lit surfaces now keep
+([Lit surfaces](#lit-surfaces)), rolls off towards white instead of clipping.
+The vision sets' film settings as the tonemap's inputs come later. Bloom is
+already there ([Bloom](#bloom)).
 
 **Cost:** the scene image (8 bytes a pixel, 8 MB at 1280x800), the decode in
 every pixel shader that draws the scene, one full-screen pass for the tonemap
@@ -302,8 +303,9 @@ the scene is Skipped and drawn as always (the blend is 128);
 every pixel shader case with `--linear-output` too
 ([vulkan-legacy-shaders.md](vulkan-legacy-shaders.md)).
 
-**Not yet:** the tonemap's shoulder and the vision sets' film settings. Lit
-surfaces keep what they compute over white ([Lit surfaces](#lit-surfaces)).
+**Not yet:** the vision sets' film settings in the tonemap. Lit surfaces
+keep what they compute over white ([Lit surfaces](#lit-surfaces)); other
+tonemap curves are there to compare ([Tonemap curves](#tonemap-curves)).
 
 ## Lit surfaces
 
@@ -467,6 +469,50 @@ with `KISAK_VK_MODERN_LINEAR=0`, where it never blooms.
 **Not yet:** the chain in `R11G11B10_UFLOAT` (half the memory traffic; the
 plan allows it once a test shows it is harmless); the film colour settings
 moved into the tonemap, so that bloom and film keep the Legacy order.
+
+## Tonemap curves
+
+The tonemap can turn light into display values with one of four curves,
+chosen at start-up with the environment variable `KISAK_VK_MODERN_TONEMAP`.
+The default is `neutral`, chosen by eye after the four were compared on
+mp_crash, mp_backlot, mp_bog and mp_farm (2026-11-13): it keeps the game's
+look and only rolls off what would have clipped. The other three stay for
+comparison.
+
+| `KISAK_VK_MODERN_TONEMAP` | Curve |
+|---|---|
+| `clamp` | light clamped to 1, then the sRGB encode: an opaque surface comes back as Legacy stored it |
+| `neutral` (default) | the Khronos PBR Neutral shoulder without its toe: unchanged up to 0.76 linear (display 227), then light above white rolls off towards 1 and its colour desaturates a little |
+| `agx` | AgX (Sobotka; Wrensch's polynomial fit): a log-encoded film-like curve, lower contrast, bright colours fade to white |
+| `aces` | the ACES fit by Stephen Hill (input scaled by 1/0.6 so mid grey stays near the Legacy value): more contrast, deeper shadows |
+
+What each curve makes of grey light (display bytes after the sRGB encode):
+
+| Linear light | 0.05 | 0.216 (Legacy 128) | 0.5 | 1 | 2 | 4 |
+|---|---|---|---|---|---|---|
+| clamp | 63 | 128 | 188 | 255 | 255 | 255 |
+| neutral | 63 | 128 | 188 | 241 | 251 | 253 |
+| agx | 70 | 136 | 174 | 202 | 224 | 239 |
+| aces | 50 | 141 | 197 | 226 | 242 | 250 |
+
+Only `neutral` keeps everything below 0.76 linear exactly as Legacy; the other
+two change the whole picture. A name the switch does not know falls back to
+`neutral`. The device's log names the curve once, when the tonemap is made:
+`vulkan d3d9: modern: tonemap curve neutral` (with `(KISAK_VK_MODERN_TONEMAP
+names no curve: clamp, neutral, agx or aces)` after an unknown name). The
+curve is applied to the scene and to bloom's added light, before the Legacy
+post effects (vision set film settings, blur), which still run on the
+tonemapped back buffer.
+
+**Checks:** the D3D9 check's `modern_tonemap` scene draws Legacy grey 128,
+white, and white added two and four times in linear light, and expects the
+curve's bytes for each (neutral's with an unknown name, clamp's with
+`KISAK_VK_MODERN_LINEAR=0`). `modern_linear` and `modern_bloom` expect their
+brightest colours through the curve in use. `test_vulkan_d3d9_front.py` runs it with every curve and with
+an unknown name.
+
+**Not yet:** the vision sets' film settings (contrast, brightness,
+desaturation, tint) moved into the tonemap; exposure.
 
 ## Next
 
