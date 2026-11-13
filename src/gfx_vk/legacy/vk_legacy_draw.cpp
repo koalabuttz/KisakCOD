@@ -7,7 +7,7 @@
 
 namespace gfx_vk::legacy
 {
-static_assert(sizeof(PipelineKey) == 56 + 2 * kMaxStreams, "PipelineKey must have no padding: it is hashed and compared as bytes");
+static_assert(sizeof(PipelineKey) == 72 + 2 * kMaxStreams, "PipelineKey must have no padding: it is hashed and compared as bytes");
 
 namespace
 {
@@ -480,11 +480,12 @@ LayoutKey LayoutFor(const Shader &vs, const Shader &ps)
 }
 
 VkShaderModule FindPixelModule(Device &device, Shader &ps, const Shader &vs, uint32_t depthSamplers,
-                               uint32_t alphaCompare, uint32_t linearOutput, PixelModuleRecipe &recipe)
+                               uint32_t alphaCompare, const PipelineKey &linear, PixelModuleRecipe &recipe)
 {
     recipe = PixelModuleRecipe{};
     recipe.direct = ls::StagesLinkDirectly(vs.translated, ps.translated);
     const bool fixed = Features(device.core).fixedDepthCompare;
+    const uint32_t linearOutput = linear.linearOutput;
     if (recipe.direct && !fixed && !alphaCompare && !linearOutput)
     {
         recipe.plain = true;
@@ -493,10 +494,20 @@ VkShaderModule FindPixelModule(Device &device, Shader &ps, const Shader &vs, uin
     // The vertex shader's id (none when the stages link as they stand), the
     // depth samplers above it where they are fixed, the alpha test's compare
     // plus 1 above those where it is fixed (PipelineKey::alphaCompare), and
-    // above that whether the colour output is decoded (linearOutput).
-    recipe.moduleKey = uint64_t(linearOutput ? 1u : 0u) << 56 | uint64_t(alphaCompare & 0xf) << 52
+    // above that how the colour is taken to linear light (linearOutput), with
+    // the linear inputs beside it.
+    recipe.moduleKey.key = uint64_t(linearOutput & 0x3u) << 56 | uint64_t(alphaCompare & 0xf) << 52
         | (fixed ? uint64_t(depthSamplers | 0x10000u) << 32 : 0) | (recipe.direct ? 0xffffffffu : vs.pipelineId);
-    recipe.linearOutput = linearOutput != 0;
+    recipe.linearOutput = linearOutput == 1;
+    recipe.linearInputs = linearOutput == 2;
+    if (recipe.linearInputs)
+    {
+        ls::LinearInputs &inputs = recipe.moduleKey.inputs;
+        inputs.constants = uint64_t(linear.linearConstants[1]) << 32 | linear.linearConstants[0];
+        inputs.samplers = linear.linearSamplers;
+        inputs.doubled = linear.linearDoubled;
+        inputs.flags = linear.linearColorInput;
+    }
     // Where depth compare is fixed, so is the reference's clamp
     // (SamplerStateBlock::drefClamp, as FillUniformBlock writes it).
     recipe.fixDepth = fixed;
@@ -515,7 +526,8 @@ bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Sh
         return ls::BuildSpirv(ps.translated, nullptr, spirv, error);
     return ls::BuildSpirv(ps.translated, recipe.direct ? nullptr : &vs.translated, spirv, error,
                           recipe.fixDepth ? &recipe.depthCompare : nullptr,
-                          recipe.fixAlpha ? &recipe.alphaCompare : nullptr, recipe.linearOutput);
+                          recipe.fixAlpha ? &recipe.alphaCompare : nullptr, recipe.linearOutput,
+                          recipe.linearInputs ? &recipe.moduleKey.inputs : nullptr);
 }
 
 bool KeepPixelModule(Device &device, Shader &ps, const PixelModuleRecipe &recipe, VkShaderModule module)
@@ -537,11 +549,11 @@ bool KeepPixelModule(Device &device, Shader &ps, const PixelModuleRecipe &recipe
 namespace
 {
 VkShaderModule PixelModule(Device &device, Shader &ps, Shader &vs, uint32_t depthSamplers, uint32_t alphaCompare,
-                           uint32_t linearOutput)
+                           const PipelineKey &linear)
 {
     PixelModuleRecipe recipe;
     if (const VkShaderModule kept =
-            FindPixelModule(device, ps, vs, depthSamplers, alphaCompare, linearOutput, recipe))
+            FindPixelModule(device, ps, vs, depthSamplers, alphaCompare, linear, recipe))
         return kept;
     const TimeInto timer(device.stats.pixelModuleMicros);
     ++device.stats.pixelModules;
@@ -614,7 +626,7 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
     const TimeInto timer(device.stats.pipelineMicros);
     Layout *layout = GetLayout(device, LayoutFor(vs, ps));
     const VkShaderModule fragment =
-        layout ? PixelModule(device, ps, vs, key.depthSamplers, key.alphaCompare, key.linearOutput) : VK_NULL_HANDLE;
+        layout ? PixelModule(device, ps, vs, key.depthSamplers, key.alphaCompare, key) : VK_NULL_HANDLE;
     if (!fragment)
     {
         if (device.error.empty())
@@ -812,6 +824,21 @@ PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, co
     for (uint32_t i = 0; i < key.colorCount; ++i)
         key.colorFormats[i] = static_cast<uint32_t>(device.passTargets[i]->texture->vkFormat);
     key.linearOutput = key.colorCount && device.passTargets[0]->texture->linearLight ? 1 : 0;
+    if (key.linearOutput && device.linearInputsOn)
+    {
+        // The colours the pixel shader reads, as far as it reads them.
+        const ls::Reflection &pr = ps.translated.reflection;
+        const ls::LinearInputs &inputs = device.linearInputs;
+        const uint64_t constants = pr.floatConstants >= 64 || pr.floatIndexed
+            ? inputs.constants
+            : inputs.constants & ((1ull << pr.floatConstants) - 1u);
+        key.linearOutput = 2;
+        key.linearSamplers = static_cast<uint16_t>(inputs.samplers & pr.samplers);
+        key.linearDoubled = static_cast<uint16_t>(inputs.doubled & key.linearSamplers);
+        key.linearColorInput = inputs.flags;
+        key.linearConstants[0] = static_cast<uint32_t>(constants);
+        key.linearConstants[1] = static_cast<uint32_t>(constants >> 32);
+    }
     key.depthFormat = device.passDepth ? static_cast<uint32_t>(device.depthFormat) : 0;
     key.samples = static_cast<uint8_t>(device.passSamples);
     key.topologyClass = TopologyClass(type);
@@ -2793,6 +2820,29 @@ void SetLinearLight(Texture *texture, bool linear)
 {
     if (texture)
         texture->linearLight = linear;
+}
+
+void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint16_t doubled, bool colorInput,
+                     bool overWhite)
+{
+    if (!device)
+        return;
+    ls::LinearInputs inputs;
+    if (overWhite)
+        inputs.flags = ls::kLinearOverWhite;
+    else
+    {
+        inputs.constants = constants;
+        inputs.samplers = samplers;
+        inputs.doubled = static_cast<uint16_t>(doubled & samplers);
+        inputs.flags = colorInput ? ls::kLinearColorInput : 0;
+    }
+    const bool on = inputs.constants || inputs.samplers || inputs.flags;
+    if (on == device->linearInputsOn && std::memcmp(&inputs, &device->linearInputs, sizeof(inputs)) == 0)
+        return;
+    device->linearInputs = inputs;
+    device->linearInputsOn = on;
+    device->keyStale = true;
 }
 
 PresentResult Present(Device *device) { return Present(device, nullptr); }

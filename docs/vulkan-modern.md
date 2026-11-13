@@ -11,12 +11,13 @@ the project files, `renderer/modern-renderer-plan.md`, sections 3, 6 and 7).
 early experiment (E1), temporal anti-aliasing (TAA) over the scene the Legacy
 path drew, and the first piece of linear light (the plan's MD1): the scene is
 drawn into a linear-light HDR image and tonemapped back
-([Linear light](#linear-light)), with bloom from that image in place of the
-vision set's glow ([Bloom](#bloom)). Velocity comes from the camera, and for
-entities' models (rigid and skinned surfaces, the view model's included) from
-a velocity pass of their own ([Velocity](#velocity-of-what-moves-on-its-own));
-effects do not have their own yet. No material is drawn by shaders of the
-Modern path's own yet.
+([Linear light](#linear-light)), with lit surfaces keeping what they
+compute over white ([Lit surfaces](#lit-surfaces)) and bloom from that image in
+place of the vision set's glow ([Bloom](#bloom)). Velocity comes from the
+camera, and for entities' models (rigid and skinned surfaces, the view model's
+included) from a velocity pass of their own
+([Velocity](#velocity-of-what-moves-on-its-own)); effects do not have their own
+yet. No material is drawn by shaders of the Modern path's own yet.
 
 ## Turning it on
 
@@ -301,11 +302,72 @@ the scene is Skipped and drawn as always (the blend is 128);
 every pixel shader case with `--linear-output` too
 ([vulkan-legacy-shaders.md](vulkan-legacy-shaders.md)).
 
-**Not yet:** the world-lit family drawn by the Modern path's own shaders
-(colour maps decoded as sRGB, lightmaps and the light grid as light), the
-tonemap's shoulder and the vision sets' film settings. The plan's MD1 lists
-them; the retail shaders' lightmap decoding is being read on a machine with
-the game first, as derived facts only.
+**Not yet:** the tonemap's shoulder and the vision sets' film settings. Lit
+surfaces keep what they compute over white ([Lit surfaces](#lit-surfaces)).
+
+## Lit surfaces
+
+The game's lit shaders (`lm_` world surfaces lit by lightmaps, `lp_` models
+lit by the lighting volume, `l_` dynamic lights) add their light terms in
+display values: a world surface adds the two halves of its secondary
+lightmap and the sun, a model the lighting volume's ambient and the sun.
+CoD4's maps were balanced for that. What such a shader computes over white
+(sunlit sand, bright metal: colour times a light over 1) the 8-bit target
+used to clip.
+
+**Default: kept over white.** A lit pass's stored colour is decoded as every
+other draw's, but without the clamp to 1 first: below white the scene is
+exactly the game's, and a colour computed over white follows the sRGB curve
+on (1.5 becomes 2.5 in linear light), so the tonemap and bloom see real
+highlights. Unlit draws, effects, the sky and 2D keep the clamp.
+
+* **Which draws.** `R_SetupPass` (`src/gfx_d3d/r_shade.cpp`) calls
+  `R_ModernPassInputs` (`r_scene.cpp`) for every pass between `sceneBegin`
+  and `sceneLit`; a pass is lit when its pixel shader's name starts with
+  `lm_`, `lp_` or `l_`.
+* **How.** The hook (`GfxModernHooks::litInputs`, called only when what it
+  says changes, and with nothing at `sceneLit`) reaches the front's
+  `SetModernLitInputs` and `legacy::SetLinearInputs`. For a draw into the
+  linear-light scene the adapter keys the pipeline on it
+  (`PipelineKey::linearOutput` 2 and the flags) and builds the pixel shader
+  with `legacy_shader::BuildSpirv`'s `linearInputs` flag `kLinearOverWhite`:
+  colour output 0 kept from going negative, then decoded.
+* `KISAK_VK_MODERN_LIT=0` turns lit passes back into ordinary draws (clamped).
+
+**Decoded inputs (an experiment, `KISAK_VK_MODERN_LIT=inputs`).** Every
+colour the shader reads is decoded before its arithmetic and the result is
+stored as computed: material colour and specular maps, the secondary
+lightmap and reflection probe (custom samplers, bound by the BSP and static
+model draws at s3 and s1 themselves, found from
+`MaterialPass::customSamplerFlags`), the lighting volume (doubled: its
+samples become decode(2v) / 2, as the shader doubles them), the fog, sun,
+light and material colour constants, and the vertex colour. Not decoded:
+the primary lightmap and shadow maps (visibility), normal maps, light
+attenuation, every alpha, and detail maps (added around grey: colour +
+detail - 0.5). **It does not suit CoD4's data:** the decode is convex, so a
+sum of decoded terms is darker than the decoded sum, the more so the more
+terms it has; sunlit ground (two lightmap halves plus the sun) lost the most
+and the sun all but vanished next to the shade (PC lit runs 1 and 2,
+2026-11-13). Its tools stay for experiments: `KISAK_VK_MODERN_LIT_PARTS`
+names the kinds to decode (`colormap`, `specmap`, `detail`, `lightmap`,
+`probe`, `volume`, `fog`, `sun`, `light`, `material`, `vertex`; `all`, the
+default, is every kind but `detail`; `none`), and `KISAK_VK_MODERN_LIT_LOG=1`
+prints once per lit pixel shader what it decodes and what each of its
+sampler and constant registers binds (`Modern lit inputs: <shader>: ...`).
+The engine reads these three.
+
+**Cost:** one pixel shader module per lit shader (the same count as without
+it). `r_vkStats` prints `vulkan d3d9: modern: N scenes with lit surfaces in
+linear light, kept over white (C changes of lit inputs each)` (`computed
+from decoded inputs` in the experiment).
+
+**Checks:** the D3D9 check's `modern_lit` scene draws a grey 128 colour map
+times a white vertex colour plus a light of 64 in a constant: 192 (128 + 64)
+without lit inputs and kept over white, encode(decode(128) + decode(64)) =
+141 with decoded inputs, 197 with the colour map doubled.
+`test_vulkan_d3d9_front.py` also runs it with `KISAK_VK_MODERN_LIT=0` and
+`KISAK_VK_MODERN_LINEAR=0` (192 everywhere). The translator tool takes
+`--linear-inputs S,D,C,V` (V the flags: 1 the colour input, 2 over white).
 
 ## Effects
 
@@ -411,10 +473,10 @@ moved into the tonemap, so that bloom and film keep the Legacy order.
 From the plan's E1, in order:
 
 * a reactive mask for effects;
-* then the rest of linear light: the world-lit family drawn by the Modern
-  path's own shaders into the HDR scene ([Linear light](#linear-light) has
-  the image, the tonemap and bloom), a tonemap with a shoulder, and the
-  vision sets' film settings in it.
+* then the rest of linear light: a tonemap with a shoulder and the vision
+  sets' film settings in it ([Linear light](#linear-light) has the image,
+  the tonemap and bloom; [Lit surfaces](#lit-surfaces) keeps the lit
+  families' colours over white).
 
 The first laptop run of this piece should compare `r_visuals legacy` and
 `modern` in the standing mp_crash scene: frame rate, the pass's GPU time,

@@ -50,6 +50,17 @@ dcl_2d s0
 texld r0, v0, s0
 mov oC0, r0
 """),
+    # A lit surface in miniature: a colour map times the vertex colour plus a
+    # light in c1, summed as the game's lit shaders sum their light terms.
+    ("kPsLit", """ps_3_0
+dcl_texcoord0 v0.xy
+dcl_color0 v1
+dcl_2d s0
+texld r0, v0, s0
+mul r0, r0, v1
+add r0.xyz, r0, c1
+mov oC0, r0
+"""),
     # Texture coordinates as the cube direction (x, y, and z from the colour's red).
     ("kPsCube", """ps_3_0
 dcl_texcoord0 v0.xy

@@ -553,6 +553,7 @@ public:
     {
         BackendModernSkinnedSurfaceMoved(backend_, legacy_, key, clip, prevClip);
     }
+    void SetModernLitInputs(const ModernLitInputs *inputs);
     const Host &host() const { return parent_->host(); }
     HRESULT Unsupported(const char *method);
     DeviceCounters counters() const;

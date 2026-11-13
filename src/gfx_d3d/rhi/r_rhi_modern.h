@@ -32,6 +32,22 @@ struct GfxModernScene
     bool glowDrawn;
 };
 
+// The colours a lit surface's pixel shader reads (world surfaces lit by
+// lightmaps, models lit by the lighting volume, dynamic lights). With linear
+// light the back end takes them from display values to linear light, so the
+// shader adds its light terms and blends its fog in linear light.
+struct GfxModernLitInputs
+{
+    uint64_t constants; // float constants c0-c63, bit per register
+    uint16_t samplers;  // pixel samplers s0-s15 whose results are colours
+    uint16_t doubled;   // of those, the ones the shader doubles (2x overbright)
+    bool colorInput;    // the vertex colour (colour 0 input)
+    // Instead of the above (all zero then): no colour read is decoded, and the
+    // stored colour is decoded without its clamp to 1, so a lit surface
+    // computed over white stays over white for the tonemap and bloom.
+    bool overWhite;
+};
+
 struct GfxModernHooks
 {
     void *user;
@@ -64,6 +80,11 @@ struct GfxModernHooks
     // vertices and this scene's. May be null.
     void (*skinnedSurfaceMoved)(void *user, IDirect3DDevice9 *device, uint64_t key, const float clip[4][4],
                                 const float prevClip[4][4]);
+    // From sceneBegin to sceneLit, when a pass is set up for draws: the
+    // colours its pixel shader reads when the pass is lit, else null (the
+    // shader's colour is then taken as a display value, as before). Called
+    // only when that changes, and with null at sceneLit. May be null.
+    void (*litInputs)(void *user, IDirect3DDevice9 *device, const GfxModernLitInputs *inputs);
 };
 
 // Null removes them. Called while no frame is being built (as the renderer

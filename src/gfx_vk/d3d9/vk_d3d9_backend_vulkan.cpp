@@ -105,6 +105,14 @@ struct Backend
     // the scene is finished before them and they draw on the display image
     // (vk_d3d9.h ModernSceneLit).
     bool effectsInLinear = false;
+    // Lit surfaces computing in linear light (vk_d3d9.h SetModernLitInputs),
+    // unless KISAK_VK_MODERN_LIT=0: the linear-light scenes with lit draws and
+    // the changes of lit inputs, and their counts at the last reset.
+    bool litWanted = true;
+    bool litThisScene = false;
+    bool litOverWhite = false; // the last lit inputs were over white (not per input)
+    uint64_t litScenes = 0, litScenesBase = 0;
+    uint64_t litChanges = 0, litChangesBase = 0;
     // Bloom from the linear-light scene in place of the renderer's glow
     // (vk_d3d9.h ModernSceneDone): made at the first scene with glow, unless
     // KISAK_VK_MODERN_BLOOM=0; the scenes it ran for, and at the last reset.
@@ -294,6 +302,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     // And gives what moves on its own a velocity of its own unless this says not to.
     backend->velocityWanted = !EnvIsZero("KISAK_VK_MODERN_VELOCITY");
     backend->effectsInLinear = EnvIs("KISAK_VK_MODERN_EFFECTS", "linear");
+    backend->litWanted = !EnvIsZero("KISAK_VK_MODERN_LIT");
     backend->debugVelocity = EnvIs("KISAK_VK_MODERN_DEBUG", "velocity");
     if (!h.windowSystem || !h.windowSystem(h.user, desc.window, backend->windowSystem))
     {
@@ -501,6 +510,17 @@ void BackendLogStats(Backend *backend, bool reset)
                 static_cast<unsigned long long>(backend->linearCopies - backend->linearCopiesBase),
                 pass.supported ? average(pass) : 0.0);
     }
+    // Lit surfaces in linear light: the scenes with them, and how often the
+    // lit inputs changed in each.
+    if (backend->litScenes != backend->litScenesBase)
+    {
+        const uint64_t scenes = backend->litScenes - backend->litScenesBase;
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with lit surfaces in linear light, %s "
+                   "(%.1f changes of lit inputs each)",
+                static_cast<unsigned long long>(scenes),
+                backend->litOverWhite ? "kept over white" : "computed from decoded inputs",
+                double(backend->litChanges - backend->litChangesBase) / double(scenes));
+    }
     // Velocity: the surfaces drawn again with their own motion, and the
     // GPU time of that pass.
     if (backend->velocity)
@@ -545,6 +565,8 @@ void BackendLogStats(Backend *backend, bool reset)
             backend->velocityBase = modern::Stats(backend->velocity);
         backend->keptBase = modern::Stats(backend->kept);
         backend->linearScenesBase = backend->linearScenes;
+        backend->litScenesBase = backend->litScenes;
+        backend->litChangesBase = backend->litChanges;
         backend->linearCopiesBase = backend->linearCopies;
         backend->statsBase = stats;
         backend->coreBase = core;
@@ -820,8 +842,25 @@ lg::Surface *BackendModernSceneTarget(Backend *backend, lg::Surface *backBuffer,
         lg::SetLinearLight(backend->linearScene, true);
     }
     ++backend->linearScenes;
+    backend->litThisScene = false;
     result = ModernResult::Done;
     return backend->linearSceneSurface;
+}
+
+void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
+{
+    if (!backend || !backend->legacy || !backend->litWanted)
+        return;
+    if (inputs && backend->linearScene && !backend->linearFailed)
+    {
+        ++backend->litChanges;
+        backend->litOverWhite = inputs->overWhite;
+        if (!backend->litThisScene)
+            ++backend->litScenes;
+        backend->litThisScene = true;
+    }
+    lg::SetLinearInputs(backend->legacy, inputs ? inputs->constants : 0, inputs ? inputs->samplers : 0,
+                        inputs ? inputs->doubled : 0, inputs && inputs->colorInput, inputs && inputs->overWhite);
 }
 
 bool BackendModernEffectsOnDisplay(Backend *backend) { return backend && !backend->effectsInLinear; }

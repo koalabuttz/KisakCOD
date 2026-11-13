@@ -664,6 +664,18 @@ struct IndexedDraw
     Viewport viewport{};
 };
 bool LastIndexedDraw(Device *device, IndexedDraw &out);
+// The colours the pixel shaders of the draws that follow read, for draws into
+// a linear-light render target 0 (SetLinearLight): the red, green and blue of
+// the float constants in constants (bit per register c0-c63), of what the
+// samplers in samplers return (bit per sampler; decode(2v) / 2 for those also
+// in doubled) and, with colorInput, of the colour 0 input are taken from sRGB
+// to linear light, and the colour output is stored as computed
+// (legacy_shader::BuildSpirv's linearInputs). With overWhite instead, no input
+// is decoded and the colour output is decoded without its clamp to 1, so a
+// colour computed over white stays over white (the masks are ignored). All
+// zero (and false): none, and the colour output is decoded as always.
+void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint16_t doubled, bool colorInput,
+                     bool overWhite = false);
 #endif
 
 // The device's window is about to be destroyed: an open pass and frame end

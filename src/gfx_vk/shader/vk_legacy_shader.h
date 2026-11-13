@@ -63,6 +63,31 @@ constexpr uint32_t kUniformCount = static_cast<uint32_t>(Uniform::Count);
 constexpr uint32_t kSamplerCount = 16; // ps s0-s15; vs s0-s3 (D3DVERTEXTEXTURESAMPLER0-3)
 constexpr uint32_t kFixedDepthClamp = 1u << 31; // in BuildSpirv's fixedDepthCompare
 
+// The colours a pixel shader reads that BuildSpirv takes from sRGB to linear
+// light (its linearInputs), with the sRGB curve (IEC 61966-2-1) unclamped, so
+// values over 1 keep growing. Alphas stay as they are. 16 bytes, no padding:
+// pipeline keys hold it as bytes.
+struct LinearInputs
+{
+    // Float constant registers c0-c63, bit per register, read as colours.
+    uint64_t constants = 0;
+    // Samplers s0-s15, bit per sampler, whose results are colours.
+    uint16_t samplers = 0;
+    // Of those, the ones the shader doubles (a 2x overbright): their results
+    // become decode(2v) / 2, so that twice them is the decoded double.
+    uint16_t doubled = 0;
+    // kLinearColorInput, kLinearOverWhite.
+    uint8_t flags = 0;
+    uint8_t unused[3] = {};
+};
+static_assert(sizeof(LinearInputs) == 16, "LinearInputs is compared and hashed as bytes");
+// LinearInputs::flags: the colour 0 input (the vertex colour) is a colour.
+constexpr uint8_t kLinearColorInput = 1u << 0;
+// LinearInputs::flags: no input is decoded; the stored colour is, as with
+// linearOutput, but only kept from going negative, not clamped to 1, so a
+// colour the shader computes over white stays over white in linear light.
+constexpr uint8_t kLinearOverWhite = 1u << 1;
+
 // Set 0: vertex shader blocks at 0-8, pixel shader blocks at 16-24.
 constexpr uint32_t UniformBinding(Stage stage, Uniform uniform)
 {
@@ -256,9 +281,17 @@ bool Translate(const void *bytecode, size_t bytes, Shader &shader, std::string &
 // blue from sRGB to linear light as they are stored (clamped to [0, 1], then
 // the sRGB curve); alpha stays. The Modern path's linear-light scene is drawn
 // this way (docs/vulkan-modern.md).
+//
+// linearInputs, for a pixel shader, instead takes the colours it reads to
+// linear light, so that it computes in linear light: the red, green and blue
+// of what the marked samplers return, of the marked float constants and of
+// the colour 0 input (LinearInputs). Colour output 0 is then stored as
+// computed, only kept from going negative, and linearOutput is ignored. The
+// Modern path draws lit surfaces this way.
 bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<uint32_t> &spirv,
                 std::string &error, const uint32_t *fixedDepthCompare = nullptr,
-                const uint32_t *fixedAlphaCompare = nullptr, bool linearOutput = false);
+                const uint32_t *fixedAlphaCompare = nullptr, bool linearOutput = false,
+                const LinearInputs *linearInputs = nullptr);
 
 // True when the pixel shader's inputs read the vertex shader's outputs as they
 // stand (BuildSpirv then needs no linking).

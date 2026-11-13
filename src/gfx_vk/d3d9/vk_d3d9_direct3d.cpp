@@ -267,6 +267,14 @@ ModernResult ModernSceneLit(IDirect3DDevice9 *device, const ModernSceneView &vie
     return ModernResult::Refused;
 }
 
+void SetModernLitInputs(IDirect3DDevice9 *device, const ModernLitInputs *inputs)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->SetModernLitInputs(inputs);
+}
+
 ModernResult ModernSceneDone(IDirect3DDevice9 *device, const ModernSceneView &view, bool *glowDrawn)
 {
     const FrontLock lock;

@@ -91,6 +91,9 @@ lg::Surface *BackendModernSceneTarget(Backend *backend, lg::Surface *backBuffer,
 // on the display image (vk_d3d9.h ModernSceneLit); false with
 // KISAK_VK_MODERN_EFFECTS=linear and on a back end without a Modern path.
 bool BackendModernEffectsOnDisplay(Backend *backend);
+// The colours lit draws read (vk_d3d9.h SetModernLitInputs), null for none.
+// A back end without linear light ignores them.
+void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs);
 // A StretchRect from the back buffer while the scene is drawn into scene: the
 // tonemap writes the rectangle into dst as display values. False when it
 // cannot (the caller copies the scene as it is).

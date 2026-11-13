@@ -245,4 +245,20 @@ void ModernSurfaceMoved(IDirect3DDevice9 *device, const float clip[4][4], const 
 // scene's copy when the key comes again. prevClip is null the first time.
 void ModernSkinnedSurfaceMoved(IDirect3DDevice9 *device, uint64_t key, const float clip[4][4],
                                const float prevClip[4][4]);
+// The colours the pixel shaders of the draws that follow read, for lit
+// surfaces; null for draws that are not lit. With linear light (and unless
+// KISAK_VK_MODERN_LIT=0) a draw into the linear-light scene then takes these
+// from sRGB to linear light, computes in linear light and stores its colour
+// as it is, instead of decoding the colour it stores. Ignored elsewhere.
+struct ModernLitInputs
+{
+    uint64_t constants = 0; // float constants c0-c63, bit per register
+    uint16_t samplers = 0;  // pixel samplers s0-s15 whose results are colours
+    uint16_t doubled = 0;   // of those, the ones the shader doubles (2x overbright)
+    bool colorInput = false; // the colour 0 input (the vertex colour)
+    // Instead of the above: none decoded, and the stored colour decoded
+    // without its clamp to 1 (legacy SetLinearInputs' overWhite).
+    bool overWhite = false;
+};
+void SetModernLitInputs(IDirect3DDevice9 *device, const ModernLitInputs *inputs);
 } // namespace gfx_vk::d3d9
