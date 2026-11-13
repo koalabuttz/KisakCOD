@@ -131,6 +131,9 @@ struct Backend
     modern::Exposure *exposure = nullptr;
     modern::ExposureParams exposureParams{};
     std::chrono::steady_clock::time_point exposureLast{};
+    // The exposure passes' GPU time at the last reset (pass timings add up
+    // over the device's life, the exposure's scene count from the reset).
+    double exposureMsBase = 0.0;
     bool bloomWanted = true;
     bool bloomFailed = false;
     modern::Bloom *bloom = nullptr;
@@ -575,7 +578,8 @@ void BackendLogStats(Backend *backend, bool reset)
                 exposure.evSum / samples, exposure.samples ? exposure.evMin : 0.0,
                 exposure.samples ? exposure.evMax : 0.0, exposure.log2LuminanceSum / samples,
                 exposure.wantedEvSum / samples,
-                pass.supported && exposure.scenes ? pass.totalMs / double(exposure.scenes) : 0.0);
+                pass.supported && exposure.scenes ? (pass.totalMs - backend->exposureMsBase) / double(exposure.scenes)
+                                                  : 0.0);
     }
     // Lit surfaces in linear light: the scenes with them, and how often the
     // lit inputs changed in each.
@@ -633,6 +637,8 @@ void BackendLogStats(Backend *backend, bool reset)
         backend->keptBase = modern::Stats(backend->kept);
         backend->linearScenesBase = backend->linearScenes;
         modern::ResetStats(backend->exposure);
+        if (backend->exposure)
+            backend->exposureMsBase = PassTimingsFor(backend->core, "modern exposure").totalMs;
         backend->litScenesBase = backend->litScenes;
         backend->litChangesBase = backend->litChanges;
         backend->linearCopiesBase = backend->linearCopies;

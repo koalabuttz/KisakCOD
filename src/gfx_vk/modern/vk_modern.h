@@ -317,7 +317,9 @@ BloomStats Stats(const Bloom *bloom);
 
 struct ExposureParams
 {
-    float key = 0.1f;      // the average luminance that needs no change (exposure 0 EV)
+    // The average luminance that needs no change (exposure 0 EV): the mean of
+    // mp_crash's and mp_backlot's outdoor views (PC exposure run 1).
+    float key = 0.115f;
     float minEv = -1.0f;   // the range the exposure stays in
     float maxEv = 1.5f;
     // Time constants, in seconds: towards a lower exposure (the scene got

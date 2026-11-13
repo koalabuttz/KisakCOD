@@ -547,7 +547,7 @@ image after the scene (the default, [Effects](#effects)) are not exposed.
 | Parameter | Default | Switch |
 | --- | --- | --- |
 | On | yes | `KISAK_VK_MODERN_EXPOSURE=0` turns it off (exposure 0 EV) |
-| Key: the average luminance that needs no change | 0.1 (provisional, to be set from a PC run so a typical outdoor scene stays at about 0 EV) | `KISAK_VK_MODERN_EXPOSURE_KEY=<value>` |
+| Key: the average luminance that needs no change | 0.115: mp_crash's and mp_backlot's outdoor views measured 0.117 and 0.110 (PC exposure run 1), so a typical outdoor scene stays at about 0 EV | `KISAK_VK_MODERN_EXPOSURE_KEY=<value>` |
 | Range | -1 to +1.5 EV | `KISAK_VK_MODERN_EXPOSURE_RANGE=<min>,<max>` |
 
 The statistics line, one in 16 results read back a few frames later:
@@ -555,8 +555,15 @@ The statistics line, one in 16 results read back a few frames later:
 E EV on average (min to max), scene log2 luminance L on average (W EV
 wanted), T ms GPU each`. L and W are what a key is chosen from.
 
+What PC exposure run 1 measured with the first key (0.1), at the framelog's
+standing views (RTX 2080 SUPER): mp_crash outdoors -0.23 EV (L -3.09),
+mp_crash's covered arcade +1.18 EV (L -4.51), mp_backlot -0.14 EV (L -3.18),
+mp_bog at night +0.70 EV (L -4.02); no pumping standing still (the exposure
+within 0.02 EV, two captures 3 s apart alike), about 0.04 ms GPU per scene.
+With 0.115 the indoor view gets about +1.4 EV and mp_bog +0.9 EV.
+
 **Checks:** the D3D9 check's `modern_exposure` scene draws four uniform greys
-and expects grey 100 brought exactly to the key (shown 89), white held at -1
+and expects grey 100 brought exactly to the key (shown 95), white held at -1
 EV, grey 40 at +1.5 EV, and grey 40 after grey 100 without a cut only part
 of the way there. `test_vulkan_d3d9_front.py` runs it with
 `KISAK_VK_MODERN_EXPOSURE=1` and every other scene with it off, since auto
