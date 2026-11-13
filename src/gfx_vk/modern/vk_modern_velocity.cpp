@@ -336,7 +336,7 @@ Image *DrawVelocity(Core *core, Velocity *velocity, Image *depth, const SceneVie
     uint32_t boundSlot = kStrideCount;
     const float jitters[4] = {view.projection[2][0], view.projection[2][1], previous.projection[2][0],
                               previous.projection[2][1]};
-    uint32_t drawn = 0, skinned = 0;
+    uint32_t drawn = 0, skinned = 0, world = 0;
     for (uint32_t i = 0; i < count; ++i)
     {
         const MovedSurface &s = surfaces[i];
@@ -394,12 +394,14 @@ Image *DrawVelocity(Core *core, Velocity *velocity, Image *depth, const SceneVie
             vk.vkCmdDrawIndexed(cmd, indexCount, 1, firstIndex, drawBase, 0);
         });
         ++drawn;
+        world += s.stride == 44 ? 1 : 0;
     }
     EndPass(core);
     UseImage(core, velocity->image, ImageUse::Sampled);
     ++velocity->stats.passes;
     velocity->stats.surfaces += drawn;
     velocity->stats.skinned += skinned;
+    velocity->stats.world += world;
     return velocity->image;
 }
 

@@ -598,10 +598,11 @@ void BackendLogStats(Backend *backend, bool reset)
     {
         const modern::VelocityStats velocity = modern::Stats(backend->velocity);
         const PassTimings pass = PassTimingsFor(backend->core, "modern velocity");
-        HostLog(h, "vulkan d3d9: modern: %llu scenes with surfaces that move on their own (%llu surfaces), "
-                   "%.3f ms GPU each for their velocity",
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with surfaces that move on their own (%llu surfaces, %llu "
+                   "of them brush models), %.3f ms GPU each for their velocity",
                 static_cast<unsigned long long>(velocity.passes - backend->velocityBase.passes),
                 static_cast<unsigned long long>(velocity.surfaces - backend->velocityBase.surfaces),
+                static_cast<unsigned long long>(velocity.world - backend->velocityBase.world),
                 pass.supported ? average(pass) : 0.0);
         const modern::KeptStats kept = modern::Stats(backend->kept);
         const uint64_t keptScenes = kept.scenes - backend->keptBase.scenes;

@@ -54,7 +54,7 @@ involved. The checks:
                  twice in each (none
                  with KISAK_VK_MODERN_LINEAR=0 or KISAK_VK_MODERN_LIT=0),
                  modern_velocity's 21 scenes with a surface that moves on its
-                 own (21 surfaces), and its 8 scenes that kept a skinned
+                 own (21 surfaces, 7 of them from brush model vertices), and its 8 scenes that kept a skinned
                  surface's vertices, 7 of them drawn from in the scene after
   linear-off     --scene modern_linear passes with KISAK_VK_MODERN_LINEAR=0
                  too, where the scene is drawn as always (the scene's own
@@ -329,9 +329,11 @@ def main():
                   modern is not None and modern.group(1) == '64' and modern.group(2) == '17',
                   modern.group(0) if modern else 'missing')
     velocity = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with surfaces that move on their own '
-                         r'\((\d+) surfaces\), ([0-9.]+) ms GPU each for their velocity$', stdout, re.M)
-    checks.expect('the Modern path drew the velocity of 21 surfaces in 21 scenes',
-                  velocity is not None and velocity.group(1) == '21' and velocity.group(2) == '21',
+                         r'\((\d+) surfaces, (\d+) of them brush models\), ([0-9.]+) ms GPU each for their velocity$',
+                         stdout, re.M)
+    checks.expect('the Modern path drew the velocity of 21 surfaces in 21 scenes, 7 of them brush models',
+                  velocity is not None and velocity.group(1) == '21' and velocity.group(2) == '21'
+                  and velocity.group(3) == '7',
                   velocity.group(0) if velocity else 'missing')
     kept = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes kept skinned vertices \((\d+) surfaces, '
                      r'([0-9.]+) KB each scene\), (\d+) skinned surfaces drawn from last scene\'s$', stdout, re.M)

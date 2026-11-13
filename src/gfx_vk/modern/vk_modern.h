@@ -139,6 +139,7 @@ struct VelocityStats
     uint64_t passes;   // DrawVelocity calls that recorded
     uint64_t surfaces; // surfaces they drew
     uint64_t skinned;  // of those, skinned surfaces drawn from last scene's vertices
+    uint64_t world;    // of those, surfaces drawn from the world's 44-byte vertices (brush models)
 };
 VelocityStats Stats(const Velocity *velocity);
 

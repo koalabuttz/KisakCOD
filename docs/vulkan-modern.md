@@ -215,7 +215,8 @@ each`. The last number is the pass's own GPU time from the core's pass
 timestamps (`KISAK_VK_PASS_TIMESTAMPS`). It leaves out the blit back, which
 the frame's GPU time includes. When surfaces that move on their own were
 drawn, it also prints `vulkan d3d9: modern: N scenes with surfaces that move
-on their own (M surfaces), X ms GPU each for their velocity`, and
+on their own (M surfaces, B of them brush models), X ms GPU each for their
+velocity` (B counts the surfaces drawn from the world's 44-byte vertices), and
 `vulkan d3d9: modern: N scenes kept skinned vertices (M surfaces, K KB each
 scene), S skinned surfaces drawn from last scene's`: the copies at the end of
 each scene, and how many skinned surfaces had last scene's vertices to be
