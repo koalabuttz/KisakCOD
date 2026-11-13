@@ -3028,9 +3028,22 @@ void Check::ModernTaa()
 // ModernSkinnedSurfaceMoved): a dynamic buffer written again with DISCARD each
 // frame, the same matrix both frames, and a draw that starts at a base vertex
 // and a minimum index. The stripes stay as drawn only if the velocity comes
-// from last frame's vertices, which the Modern path kept.
+// from last frame's vertices, which the Modern path kept. With
+// KISAK_VK_MODERN_DEBUG=velocity the velocity debug view is drawn over the
+// reported runs instead: the band's pixels come back cyan at half brightness
+// (2 pixels a frame, from the left), and everything else as without it.
 void Check::ModernVelocity()
 {
+#if defined(_MSC_VER)
+    char *env = nullptr;
+    size_t envLength = 0;
+    const bool debugView =
+        _dupenv_s(&env, &envLength, "KISAK_VK_MODERN_DEBUG") == 0 && env && !std::strcmp(env, "velocity");
+    std::free(env);
+#else
+    const char *env = std::getenv("KISAK_VK_MODERN_DEBUG");
+    const bool debugView = env && !std::strcmp(env, "velocity");
+#endif
     struct Vertex32
     {
         Vertex v;
@@ -3218,10 +3231,19 @@ void Check::ModernVelocity()
         Equal((name + "_resolved").c_str(), run(report), true);
         if (Read())
         {
-            Expect((name + "_white_stripe").c_str(), 30, 40, 255, 255, 255);
-            Expect((name + "_white_stripe_2").c_str(), 31, 40, 255, 255, 255);
-            Expect((name + "_black_stripe").c_str(), 32, 40, 0, 0, 0);
-            Expect((name + "_band_end").c_str(), 85, 40, 0, 0, 0);
+            if (debugView)
+            {
+                // Cyan at half brightness: 0.5 of 255 either way of the rounding.
+                for (const UINT x : {30u, 31u, 32u, 85u})
+                    Expect((name + "_debug_" + std::to_string(x)).c_str(), x, 40, 0, 128, 128);
+            }
+            else
+            {
+                Expect((name + "_white_stripe").c_str(), 30, 40, 255, 255, 255);
+                Expect((name + "_white_stripe_2").c_str(), 31, 40, 255, 255, 255);
+                Expect((name + "_black_stripe").c_str(), 32, 40, 0, 0, 0);
+                Expect((name + "_band_end").c_str(), 85, 40, 0, 0, 0);
+            }
             Expect((name + "_background").c_str(), 100, 40, 0, 0, 255);
             // The static quad: the band's velocity is not written behind it.
             Expect((name + "_hidden_white").c_str(), 44, 64, 255, 255, 255);

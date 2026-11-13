@@ -153,6 +153,17 @@ brush models and effects (whether drawn on the display image or, with
 `KISAK_VK_MODERN_EFFECTS=linear`, in the scene). `KISAK_VK_MODERN_VELOCITY=0`
 turns the pass off, for comparisons.
 
+**Debug view.** `KISAK_VK_MODERN_DEBUG=velocity` draws the velocity image over
+each anti-aliased scene (`vk_modern_debug.cpp`, `debug_velocity.frag`), so a
+wrong or missing report shows at a glance. Each pixel with motion of its own
+is coloured, and every other pixel is left as the scene drew it. The hue is
+the direction the surface came from on screen: red from the right, cyan from
+the left, about green from above, about violet from below. The brightness
+grows with the distance, from a quarter at none to full at 6 pixels or more,
+so a reported surface that did not move shows dim grey. TAA's history is kept
+apart from the image the view draws on, so the view never feeds back into it.
+It is drawn only in scenes that have a velocity image.
+
 There is no history on the first scene, after a cut, or when the scene's size
 changes. Those scenes are drawn as they came. Pixel positions follow D3D9's,
 as the Legacy path draws: pixel (i, j) holds the scene at NDC

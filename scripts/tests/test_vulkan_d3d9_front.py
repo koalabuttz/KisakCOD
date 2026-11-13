@@ -60,6 +60,9 @@ involved. The checks:
   effects-linear --scene modern_effects passes with
                  KISAK_VK_MODERN_EFFECTS=linear, where effects add as light in
                  the scene instead of on the display image
+  debug-velocity --scene modern_velocity passes with
+                 KISAK_VK_MODERN_DEBUG=velocity, where the velocity debug
+                 view colours the moving band (the scene's own points)
 
 Usage:
   test_vulkan_d3d9_front.py --binary build/bin/KisakCOD-vulkan-d3d9-check
@@ -171,6 +174,16 @@ def main():
     found, scenes = parse(stdout)
     checks.expect('modern_effects passes with KISAK_VK_MODERN_EFFECTS=linear',
                   code == 0 and found.get('d3d9_check') == 'passed' and [s[0] for s in scenes] == ['modern_effects'],
+                  f'status {code}\n{stdout}')
+
+    # debug-velocity
+    debug = dict(env)
+    debug['KISAK_VK_MODERN_DEBUG'] = 'velocity'
+    code, stdout, _ = run(binary, ['--scene', 'modern_velocity', '--validation', args.validation], debug)
+    found, scenes = parse(stdout)
+    checks.expect('modern_velocity passes with KISAK_VK_MODERN_DEBUG=velocity',
+                  code == 0 and found.get('d3d9_check') == 'passed' and [s[0] for s in scenes] == ['modern_velocity']
+                  and 'no velocity debug view' not in stdout and 'velocity debug view is not drawn' not in stdout,
                   f'status {code}\n{stdout}')
 
     # present-mode
