@@ -525,6 +525,7 @@ public:
     void ModernExposure();
     void ModernVelocity();
     void ModernNormals();
+    void ModernAo();
     void Bench();
     void BenchRuns();
     void BenchFrames(bool runs);
@@ -3043,8 +3044,8 @@ void Check::ModernTaa()
 // normal instead (A (128, 128, 0), B (128, 175, 9), C (184, 128, 13)), also
 // in the pixels at the edges between them, where a normal taken across the
 // edge would mix the two, and D stays as drawn. The normals buffer is wanted
-// with that view or KISAK_VK_MODERN_NORMALS=1, never with
-// KISAK_VK_MODERN_NORMALS=0.
+// for ambient occlusion (KISAK_VK_MODERN_AO=1 or its debug view), that view or
+// KISAK_VK_MODERN_NORMALS=1, never with KISAK_VK_MODERN_NORMALS=0.
 void Check::ModernNormals()
 {
     const auto envIs = [](const char *name, const char *value) {
@@ -3061,7 +3062,10 @@ void Check::ModernNormals()
     };
     const bool linearOff = envIs("KISAK_VK_MODERN_LINEAR", "0");
     const bool debugView = envIs("KISAK_VK_MODERN_DEBUG", "normals");
-    const bool wanted = !envIs("KISAK_VK_MODERN_NORMALS", "0") && (debugView || envIs("KISAK_VK_MODERN_NORMALS", "1"));
+    const bool wanted = !envIs("KISAK_VK_MODERN_NORMALS", "0")
+        && (debugView || envIs("KISAK_VK_MODERN_NORMALS", "1")
+            || (!envIs("KISAK_VK_MODERN_AO", "0")
+                && (envIs("KISAK_VK_MODERN_AO", "1") || envIs("KISAK_VK_MODERN_DEBUG", "ao"))));
     const bool shown = wanted && debugView;
     Equal("wants_scene_depth", front::ModernWantsSceneDepth(device), wanted);
 
@@ -3145,6 +3149,131 @@ void Check::ModernNormals()
                 r = (color >> 16) & 0xff, g = (color >> 8) & 0xff, b = color & 0xff;
             }
             Expect(point.name, point.x, point.y, r, g, b);
+        }
+    }
+    device->SetDepthStencilSurface(nullptr);
+    SafeRelease(depth);
+}
+
+// The Modern path's ambient occlusion (docs/vulkan-modern.md "Ambient
+// occlusion"), from the depth prepass and the normals buffer as the engine
+// draws them. The camera looks along +z with a 90-degree perspective (the
+// engine's infinite projection, near plane 4); the basic vertex shader takes
+// positions already divided by w, which for flat quads gives the same depth
+// at every pixel as drawing them in perspective. A floor 120 units below the
+// camera runs from 60 to 400 units ahead, and a wall faces the camera 200
+// units ahead over the right half, rising from the floor: the floor in front
+// of the wall's foot and the wall above it are in a corner. With
+// KISAK_VK_MODERN_DEBUG=ao the view shows the visibility: open floor and the
+// wall's top stay about white, the floor 12 units from the wall and the wall
+// 10 units above the floor are darker by a clear margin (and not black), and
+// the sky is white. Without the view the scene comes back as drawn. Ambient
+// occlusion is built with KISAK_VK_MODERN_AO=1 or its debug view, never with
+// KISAK_VK_MODERN_AO=0 or KISAK_VK_MODERN_NORMALS=0.
+void Check::ModernAo()
+{
+    const auto envIs = [](const char *name, const char *value) {
+#if defined(_MSC_VER)
+        char *env = nullptr;
+        size_t envLength = 0;
+        const bool is = _dupenv_s(&env, &envLength, name) == 0 && env && !std::strcmp(env, value);
+        std::free(env);
+        return is;
+#else
+        const char *env = std::getenv(name);
+        return env && !std::strcmp(env, value);
+#endif
+    };
+    const bool built = !envIs("KISAK_VK_MODERN_AO", "0") && !envIs("KISAK_VK_MODERN_NORMALS", "0")
+                       && (envIs("KISAK_VK_MODERN_AO", "1") || envIs("KISAK_VK_MODERN_DEBUG", "ao"));
+    // The scene's depth is taken whenever the normals buffer is wanted.
+    const bool depthTaken = built || (!envIs("KISAK_VK_MODERN_NORMALS", "0")
+                                      && (envIs("KISAK_VK_MODERN_NORMALS", "1")
+                                          || envIs("KISAK_VK_MODERN_DEBUG", "normals")));
+    const bool shown = built && envIs("KISAK_VK_MODERN_DEBUG", "ao");
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    // The engine's InfinitePerspectiveMatrix with tan(fov / 2) = 1 both ways.
+    constexpr float k = 0.99951172f, nearPlane = 4.0f;
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = 1.0f;
+    view.projection[0][0] = k;
+    view.projection[1][1] = k;
+    view.projection[2][2] = k;
+    view.projection[2][3] = 1.0f;
+    view.projection[3][2] = -nearPlane * k;
+    view.width = view.height = kSize;
+    view.cut = true;
+    const auto project = [&](float x, float y, float z, uint32_t color) {
+        return Vertex{k * x / z, k * y / z, k - nearPlane * k / z, 0.0f, 0.0f, color};
+    };
+    const uint32_t floorColor = Argb(255, 128, 128, 128), wallColor = Argb(255, 90, 110, 150);
+    const Vertex floorCorners[4] = {project(-200, -120, 60, floorColor), project(200, -120, 60, floorColor),
+                                    project(200, -120, 400, floorColor), project(-200, -120, 400, floorColor)};
+    const Vertex wallCorners[4] = {project(0, -120, 200, wallColor), project(200, -120, 200, wallColor),
+                                   project(200, 300, 200, wallColor), project(0, 300, 200, wallColor)};
+    Vertex surfaces[12];
+    const int order[6] = {0, 1, 2, 0, 2, 3};
+    for (int i = 0; i < 6; ++i)
+    {
+        surfaces[i] = floorCorners[order[i]];
+        surfaces[6 + i] = wallCorners[order[i]];
+    }
+
+    Reset(Argb(255, 0, 0, 0));
+    front::ModernSceneBegin(device);
+    device->SetDepthStencilSurface(depth);
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0), "Clear(scene)");
+    device->SetRenderState(D3DRS_ZENABLE, TRUE);
+    device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+    device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+    Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(prepass)");
+    device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xf);
+    Equal("scene_depth", static_cast<int>(front::ModernSceneDepth(device, view)),
+          static_cast<int>(depthTaken ? front::ModernResult::Done : front::ModernResult::Skipped));
+    device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+    Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(lit)");
+    Equal("scene_done", front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
+    // Pixels of view points: x and y / z, NDC to pixels.
+    const auto pixelOf = [&](float x, float y, float z, UINT &px, UINT &py) {
+        px = static_cast<UINT>((k * x / z + 1.0f) * 0.5f * kSize);
+        py = static_cast<UINT>((1.0f - k * y / z) * 0.5f * kSize);
+    };
+    UINT openX, openY, cornerX, cornerY, footX, footY, wallX, wallY;
+    pixelOf(-100, -120, 160, openX, openY);
+    pixelOf(100, -120, 188, cornerX, cornerY);
+    pixelOf(100, -110, 200, footX, footY);
+    pixelOf(100, 150, 200, wallX, wallY);
+    if (Read())
+    {
+        const auto at = [&](UINT x, UINT y) { return static_cast<int>(pixels[(y * readSize + x) * 4 + 1]); };
+        if (shown)
+        {
+            const int open = at(openX, openY), corner = at(cornerX, cornerY), foot = at(footX, footY),
+                      wall = at(wallX, wallY);
+            Equal("open_floor_unoccluded", open >= 240, true);
+            Equal("wall_top_unoccluded", wall >= 240, true);
+            Equal("corner_darker", corner + 25 <= open, true);
+            Equal("corner_not_black", corner >= 64, true);
+            Equal("wall_foot_darker", foot + 25 <= wall, true);
+            Equal("wall_foot_not_black", foot >= 64, true);
+            Expect("sky_white", 20, 10, 255, 255, 255);
+            char line[128];
+            std::snprintf(line, sizeof(line), " ao_open=%d ao_corner=%d ao_foot=%d ao_wall=%d", open, corner, foot,
+                          wall);
+            result->detail += line;
+        }
+        else
+        {
+            Expect("open_floor", openX, openY, 128, 128, 128);
+            Expect("corner_floor", cornerX, cornerY, 128, 128, 128);
+            Expect("wall_foot", footX, footY, 90, 110, 150);
+            Expect("wall", wallX, wallY, 90, 110, 150);
+            Expect("sky", 20, 10, 0, 0, 0);
         }
     }
     device->SetDepthStencilSurface(nullptr);
@@ -4616,6 +4745,7 @@ int Run(const Options &options)
         {"modern_exposure", &Check::ModernExposure, true},
         {"modern_velocity", &Check::ModernVelocity, true},
         {"modern_normals", &Check::ModernNormals, true},
+        {"modern_ao", &Check::ModernAo, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},
