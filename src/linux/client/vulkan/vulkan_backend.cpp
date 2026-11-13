@@ -452,7 +452,16 @@ void ModernSceneBegin(void *, IDirect3DDevice9 *device)
         front::ModernSceneBegin(device);
 }
 
-const GfxModernHooks s_modernHooks = {nullptr, ModernJitterPixels, ModernSceneDone, ModernSceneBegin, ModernSceneLit};
+// A surface that moves on its own was just drawn (r_modern_motion.cpp): the
+// front keeps it for the scene's velocity pass.
+void ModernSurfaceMoved(void *, IDirect3DDevice9 *device, const float clip[4][4], const float prevClip[4][4])
+{
+    if (!s_modernRefused.load(std::memory_order_relaxed))
+        front::ModernSurfaceMoved(device, clip, prevClip);
+}
+
+const GfxModernHooks s_modernHooks = {nullptr,         ModernJitterPixels, ModernSceneDone,
+                                      ModernSceneBegin, ModernSceneLit,     ModernSurfaceMoved};
 } // namespace
 
 void Kisak_VulkanRegisterDvars()

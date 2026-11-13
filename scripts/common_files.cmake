@@ -231,6 +231,7 @@ set(GFX_D3D
     "${SRC_DIR}/gfx_d3d/r_draw_sunshadow.cpp"
     "${SRC_DIR}/gfx_d3d/r_draw_sunshadow.h"
     "${SRC_DIR}/gfx_d3d/r_draw_xmodel.cpp"
+    "${SRC_DIR}/gfx_d3d/r_modern_motion.cpp"
     "${SRC_DIR}/gfx_d3d/r_draw_xmodel.h"
     "${SRC_DIR}/gfx_d3d/r_dvars.cpp"
     "${SRC_DIR}/gfx_d3d/r_dvars.h"

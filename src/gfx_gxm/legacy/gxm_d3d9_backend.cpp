@@ -133,6 +133,7 @@ bool BackendModernCopyScene(Backend *, lg::Surface *, const lg::Rect *, lg::Surf
 {
     return false;
 }
+void BackendModernSurfaceMoved(Backend *, lg::Device *, const float[4][4], const float[4][4]) {}
 
 // No frame statistics are kept here, and the host has no settings to take up.
 void BackendLogStats(Backend *, bool) {}

@@ -49,6 +49,13 @@ struct GfxModernHooks
     // scene. A back end that draws effects on the display image finishes the
     // scene here (and then does nothing at sceneDone). May be null.
     void (*sceneLit)(void *user, IDirect3DDevice9 *device, GfxModernScene *scene);
+    // The last DrawIndexedPrimitive drew a surface that moves on its own
+    // (an entity's model, the view model) into the scene: the back end draws
+    // it again for its velocity when the scene is finished (at sceneLit or
+    // sceneDone). clip and prevClip take its vertices to this frame's and
+    // last frame's clip space (row vectors, p_clip = p * M), each with its
+    // frame's jitter (r_modern_motion.cpp). May be null.
+    void (*surfaceMoved)(void *user, IDirect3DDevice9 *device, const float clip[4][4], const float prevClip[4][4]);
 };
 
 // Null removes them. Called while no frame is being built (as the renderer

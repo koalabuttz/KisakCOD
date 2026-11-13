@@ -3,11 +3,18 @@
 // Temporal anti-aliasing over a scene the Legacy path drew with a jittered
 // projection (src/gfx_vk/modern/vk_modern_taa.cpp, docs/vulkan-modern.md).
 //
-// Each pixel finds where its surface was last frame from the scene depth and
-// the camera's motion alone (clipToPrevClip), takes the history there and
-// blends it with this frame's colour. The history is first clipped to the box
-// of colours around the pixel this frame, in YCoCg, which keeps what moved on
-// its own (entities have no motion vectors yet) from leaving long trails.
+// Each pixel finds where its surface was last frame, takes the history there
+// and blends it with this frame's colour. Where the velocity pass drew a
+// surface that moves on its own (vk_modern_velocity.cpp), its motion says
+// where; elsewhere the scene depth and the camera's motion (clipToPrevClip)
+// do. The history is first clipped to the box of colours around the pixel
+// this frame, in YCoCg, which keeps what the motion misses from leaving long
+// trails.
+//
+// Colours are compressed with c / (1 + max(c)) for the box, the clip and the
+// blend, and expanded again after (Karis 2014): on linear light, one bright
+// sample then does not outweigh its dark neighbours, and light above 1 does
+// not flicker through the average.
 //
 // Pixel positions follow D3D9, as the Legacy path draws: pixel (i, j) holds
 // the scene at NDC x = 2 i / width - 1, y = 1 - 2 j / height of the area.
@@ -15,6 +22,7 @@
 layout(set = 0, binding = 0) uniform sampler2D currentColor; // nearest
 layout(set = 0, binding = 1) uniform sampler2D sceneDepth;   // nearest, depth aspect
 layout(set = 0, binding = 2) uniform sampler2D history;      // linear
+layout(set = 0, binding = 3) uniform sampler2D velocity;     // nearest, RG: motion in NDC
 
 layout(push_constant) uniform Params
 {
@@ -32,7 +40,12 @@ layout(push_constant) uniform Params
     float farDepth;
     // The weight of the history; 0 when there is none.
     float feedback;
+    // 1 when the velocity image holds this frame's motion, else 0.
+    float haveVelocity;
 } p;
+
+// The velocity pass's clear value: no motion of its own here.
+const float kNoOwnMotion = 30000.0;
 
 layout(location = 0) out vec4 outColor;
 
@@ -44,6 +57,18 @@ vec3 ToYCoCg(vec3 c)
 vec3 FromYCoCg(vec3 c)
 {
     return vec3(c.x + c.y - c.z, c.x + c.z, c.x - c.y - c.z);
+}
+
+// Into the compressed space the clip and blend work in, and back.
+vec3 Compress(vec3 c)
+{
+    c = max(c, vec3(0.0));
+    return c / (1.0 + max(c.r, max(c.g, c.b)));
+}
+
+vec3 Expand(vec3 c)
+{
+    return c / max(1.0 - max(c.r, max(c.g, c.b)), 1.0 / 65504.0);
 }
 
 // Moves h towards the box's centre until it is inside the box.
@@ -64,7 +89,7 @@ void main()
     const ivec2 last = first + ivec2(p.area.zw) - 1;
 
     const vec4 centre = texelFetch(currentColor, pixel, 0);
-    const vec3 current = ToYCoCg(centre.rgb);
+    const vec3 current = ToYCoCg(Compress(centre.rgb));
 
     // The colour box and the nearest depth around the pixel.
     vec3 sum = vec3(0.0);
@@ -72,17 +97,23 @@ void main()
     vec3 lo = current;
     vec3 hi = current;
     float nearest = texelFetch(sceneDepth, pixel, 0).r;
+    ivec2 nearestAt = pixel;
     for (int y = -1; y <= 1; ++y)
     {
         for (int x = -1; x <= 1; ++x)
         {
             const ivec2 at = clamp(pixel + ivec2(x, y), first, last);
-            const vec3 c = ToYCoCg(texelFetch(currentColor, at, 0).rgb);
+            const vec3 c = ToYCoCg(Compress(texelFetch(currentColor, at, 0).rgb));
             sum += c;
             sumSquares += c * c;
             lo = min(lo, c);
             hi = max(hi, c);
-            nearest = min(nearest, texelFetch(sceneDepth, at, 0).r);
+            const float depth = texelFetch(sceneDepth, at, 0).r;
+            if (depth < nearest)
+            {
+                nearest = depth;
+                nearestAt = at;
+            }
         }
     }
     const vec3 mean = sum / 9.0;
@@ -90,30 +121,37 @@ void main()
     lo = max(lo, mean - 1.25 * deviation);
     hi = min(hi, mean + 1.25 * deviation);
 
-    // Where the surface was last frame: the camera's motion at the surface
-    // this pixel shows (which lies at ndc - jitter without the jitter),
-    // added to the pixel. The history is on the pixel grid, so a camera
-    // that stays still reads it at the same pixel whatever the jitter.
+    // Where the surface was last frame: its motion added to the pixel. The
+    // motion is the velocity pass's where a surface that moves on its own is
+    // nearest in the neighbourhood (so its edges move with it), else the
+    // camera's motion at the surface this pixel shows (which lies at ndc -
+    // jitter without the jitter). The history is on the pixel grid, so a
+    // camera that stays still reads it at the same pixel whatever the jitter.
     const vec2 index = vec2(pixel - first);
     const vec2 ndc = vec2(2.0 * index.x / p.area.z - 1.0, 1.0 - 2.0 * index.y / p.area.w);
     const vec2 surface = ndc - p.jitter;
-    const vec4 previous = p.clipToPrevClip * vec4(surface, min(nearest, p.farDepth), 1.0);
+    vec2 motion = vec2(kNoOwnMotion);
+    if (p.haveVelocity > 0.5)
+        motion = texelFetch(velocity, nearestAt, 0).rg;
+    bool found = true;
+    if (motion.x >= kNoOwnMotion)
+    {
+        const vec4 previous = p.clipToPrevClip * vec4(surface, min(nearest, p.farDepth), 1.0);
+        found = previous.w > 0.0;
+        motion = found ? previous.xy / previous.w - surface : vec2(0.0);
+    }
     const float weight = p.feedback;
     vec3 blended = current;
-    if (previous.w > 0.0 && weight > 0.0)
+    if (found && weight > 0.0)
     {
-        const vec2 prevNdc = ndc + (previous.xy / previous.w - surface);
+        const vec2 prevNdc = ndc + motion;
         const vec2 prevIndex = vec2((prevNdc.x + 1.0) * 0.5 * p.area.z, (1.0 - prevNdc.y) * 0.5 * p.area.w);
         if (all(greaterThanEqual(prevIndex, vec2(-0.5))) && all(lessThan(prevIndex, p.area.zw - 0.5)))
         {
             const vec2 at = (p.area.xy + prevIndex + 0.5) * p.invImageSize;
-            const vec3 h = ClipToBox(ToYCoCg(texture(history, at).rgb), lo, hi);
-            // Weighted by inverse brightness (Karis 2014), so one bright
-            // sample does not flicker through the average.
-            const float wc = (1.0 - weight) / (1.0 + current.x);
-            const float wh = weight / (1.0 + h.x);
-            blended = (current * wc + h * wh) / (wc + wh);
+            const vec3 h = ClipToBox(ToYCoCg(Compress(texture(history, at).rgb)), lo, hi);
+            blended = mix(current, h, weight);
         }
     }
-    outColor = vec4(FromYCoCg(blended), centre.a);
+    outColor = vec4(Expand(FromYCoCg(blended)), centre.a);
 }

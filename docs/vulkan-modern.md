@@ -12,7 +12,10 @@ early experiment (E1), temporal anti-aliasing (TAA) over the scene the Legacy
 path drew, and the first piece of linear light (the plan's MD1): the scene is
 drawn into a linear-light HDR image and tonemapped back
 ([Linear light](#linear-light)), with bloom from that image in place of the
-vision set's glow ([Bloom](#bloom)). Velocity comes from the camera alone. No
+vision set's glow ([Bloom](#bloom)). Velocity comes from the camera, and for the
+rigid surfaces of entities' models (the view model's included) from a velocity
+pass of their own ([Velocity](#velocity-of-what-moves-on-its-own)); skinned
+surfaces (characters' bodies) and effects do not have their own yet. No
 material is drawn by shaders of the Modern path's own yet.
 
 ## Turning it on
@@ -44,7 +47,9 @@ looks as it does with `legacy`.
    the 3D scene is moved the same way, the view model included. 2D and the HUD
    have their own projection and are not moved.
 2. **The scene is drawn** by the Legacy path as always: depth prepass if on,
-   lit, decals, sun, point lights, emissive (effects).
+   lit, decals, sun, point lights, emissive (effects). Each rigid surface of
+   an entity's model it draws into the scene is reported with its matrix
+   ([Velocity](#velocity-of-what-moves-on-its-own)).
 3. **Hand-over (render thread).** `RB_EndSceneRendering` (`src/gfx_d3d/rb_draw3d.cpp`)
    calls `R_ModernSceneDone` first, before post effects and 2D. It gives the
    hook the view and projection matrices and the scene viewport. It also sets a
@@ -56,7 +61,10 @@ looks as it does with `legacy`.
    Legacy adapter to end its pass and forget what it has bound
    (`lg::HandOverRecording`), takes the two surfaces' core images
    (`lg::SurfaceImage`) and calls the Modern path.
-5. **TAA** (`gfx_vk::modern::Resolve`, `src/gfx_vk/modern/vk_modern_taa.cpp`,
+5. **Velocity** (`gfx_vk::modern::DrawVelocity`,
+   `src/gfx_vk/modern/vk_modern_velocity.cpp`) draws the reported surfaces
+   again into a motion image, when there are any.
+6. **TAA** (`gfx_vk::modern::Resolve`, `src/gfx_vk/modern/vk_modern_taa.cpp`,
    shaders in `src/gfx_vk/modern/shaders`) records one full-screen pass. The
    pass writes the result into one of two `R16G16B16A16_SFLOAT` history
    images, then blits that history image over the scene's colour image within
@@ -72,6 +80,11 @@ before: no jitter and no extra pass.
 
 For each pixel, `taa.frag`:
 
+* compresses every colour it reads with `c / (1 + max(c))` and expands the
+  result again at the end (Karis 2014), so the box, the clip and the blend
+  below work on values in [0, 1): one bright sample does not outweigh its dark
+  neighbours, and on linear light, light above 1 does not flicker through the
+  average;
 * reads this frame's colour and builds the box of colours in its 3x3
   neighbourhood in YCoCg: the minimum and maximum, narrowed to the mean ±1.25
   standard deviations;
@@ -79,7 +92,9 @@ For each pixel, `taa.frag`:
   surface in front), clamped to the depth of a point at infinity
   (`projection[2][2]` for the engine's infinite projection), so the sky
   reprojects by the camera's rotation alone;
-* finds where that surface was last frame with one matrix. The matrix is this
+* where the velocity image holds a motion at that nearest pixel (a surface
+  that moves on its own), takes that motion;
+* otherwise finds where that surface was last frame with one matrix. The matrix is this
   frame's clip space without the jitter, mapped to last frame's
   (`gfx_vk::modern::Reprojection`: `inverse(VP_now) * VP_before`, worked in
   double on the CPU because world positions reach tens of thousands of
@@ -87,8 +102,45 @@ For each pixel, `taa.frag`:
   stands still reads the history at the same pixel whatever the jitter;
 * reads the history there (bilinear), clips it towards the box's centre until
   it is inside the box, and blends it with this frame's colour. The history's
-  weight is 0.9, and both weights are divided by 1 + brightness (Karis 2014),
-  so one bright sample does not flicker through.
+  weight is 0.9.
+
+## Velocity of what moves on its own
+
+Camera reprojection is exact for the world and static models, which do not
+move. Entities' models do, and the view model moves with the camera, so the
+Modern path draws their surfaces a second time with their own motion.
+
+* **The renderer** (`src/gfx_d3d/r_modern_motion.cpp`). When it skins a scene
+  entity, each surface records its entity (`GfxModelSurfaceInfo::modernOwner`,
+  the entity number plus one, in what was retail's padding). When a rigid
+  surface is drawn into the scene's render target (`r_draw_xmodel.cpp`), the
+  matrix that took it to clip space (`CONST_SRC_CODE_WORLD_VIEW_PROJECTION_MATRIX`,
+  with the jitter, and for the view model its own depth-hack projection) is
+  kept by entity, model and surface. From the second scene it is seen in, it
+  is reported through the `surfaceMoved` hook with last scene's matrix, once
+  per scene however many passes draw it.
+* **The front** (`gfx_vk::d3d9::ModernSurfaceMoved`) takes the Legacy
+  adapter's last indexed draw as it is still bound (`lg::LastIndexedDraw`:
+  stream 0, the index buffer and range, the viewport) and keeps it with both
+  matrices until the scene is finished: at `ModernSceneLit` when effects
+  blend on the display image (the default), else at `ModernSceneDone`. The
+  renderer closes its scene's motion at either, so surfaces drawn after
+  `R_ModernSceneLit` (effects) report none.
+* **The velocity pass** (`vk_modern_velocity.cpp`, `velocity.vert` and
+  `velocity.frag`) draws those surfaces into an `R16G16_SFLOAT` image cleared
+  to "no motion of its own" (65504). Each fragment whose depth matches the
+  scene depth (so the surface is what the scene shows there) writes where the
+  surface was last frame relative to where it is now, in NDC without either
+  frame's jitter. Hidden fragments write nothing, so what hides a moving
+  surface keeps the camera's motion. The pipeline reads 32-byte vertices with
+  the position first, as the engine's models are.
+
+What it does not cover yet: skinned surfaces (characters' bodies, whose
+vertices the renderer skins on the CPU each frame; their last positions are
+not kept, so they come next), models added without an entity (scene models),
+brush models and effects (whether drawn on the display image or, with
+`KISAK_VK_MODERN_EFFECTS=linear`, in the scene). `KISAK_VK_MODERN_VELOCITY=0` turns the pass off, for
+comparisons.
 
 There is no history on the first scene, after a cut, or when the scene's size
 changes. Those scenes are drawn as they came. Pixel positions follow D3D9's,
@@ -97,14 +149,13 @@ as the Legacy path draws: pixel (i, j) holds the scene at NDC
 
 ## What it does not do yet
 
-* **No motion of its own for what moves:** players, vehicles, effects and the
-  view model are reprojected as if they stood still in the world. Clipping the
-  history to this frame's colours keeps them from leaving trails, at the cost
-  of some softness on them while they move. The view model moves with the
-  camera, so while the camera turns it gets the world's motion and loses most
-  of its history. The plan's next steps give it velocity of its own (rigid and
-  skinned models, the view model's own projection) and give effects a reactive
-  mask.
+* **Skinned surfaces and effects have no motion of their own:** characters'
+  bodies and effects are reprojected as if they stood still in the world.
+  Clipping the history to this frame's colours keeps them from leaving trails,
+  at the cost of some softness on them while they move. Rigid surfaces of
+  entities' models and the view model have their own
+  ([Velocity](#velocity-of-what-moves-on-its-own)); skinned surfaces come
+  next, and effects get a reactive mask.
 * **No sharpening.** TAA softens the picture somewhat. A sharpening pass would
   come with the plan's temporal upscaler (MD3).
 * **One history for all views.** Splitscreen would share it; the PC
@@ -122,7 +173,9 @@ as the Legacy path draws: pixel (i, j) holds the scene at NDC
 `vulkan d3d9: modern: N scenes anti-aliased (M without history), X ms GPU
 each`. The last number is the pass's own GPU time from the core's pass
 timestamps (`KISAK_VK_PASS_TIMESTAMPS`). It leaves out the blit back, which
-the frame's GPU time includes.
+the frame's GPU time includes. When surfaces that move on their own were
+drawn, it also prints `vulkan d3d9: modern: N scenes with surfaces that move
+on their own (M surfaces), X ms GPU each for their velocity`.
 
 ## Checks
 
@@ -136,8 +189,16 @@ validation layer where it is installed:
 * a jittered edge, which ends between its two colours;
 * a scene without a depth surface, which is refused.
 
-`scripts/tests/test_vulkan_d3d9_front.py` checks the scene in the full run and
-the `modern:` statistics line. `scripts/tools/vulkan/gen_spirv_header.py
+Its `modern_velocity` scene moves a band of 2-pixel white and black stripes 2
+pixels a frame, drawn indexed from 32-byte vertices as the engine's models
+are, behind a static striped quad. Reported to the velocity pass
+(`front::ModernSurfaceMoved`), the band's stripes stay exactly as drawn; not
+reported, they go grey (the scene checks that too, so it would notice a pass
+that does nothing); and the static quad in front stays as drawn, so the band's
+motion is not written where it is hidden.
+
+`scripts/tests/test_vulkan_d3d9_front.py` checks the scenes in the full run and
+the `modern:` statistics lines. `scripts/tools/vulkan/gen_spirv_header.py
 --check` (CI) checks that `vk_modern_shaders.h` matches the GLSL sources and
 passes `spirv-val`. Regenerate the header with
 `gen_spirv_header.py` (it needs `glslangValidator`, Debian's `glslang-tools`)
@@ -319,9 +380,12 @@ moved into the tonemap, so that bloom and film keep the Legacy order.
 
 From the plan's E1, in order:
 
-* velocity for rigid models (a previous placement per entity), skinned models
-  (the previous frame's skinned vertices, which the renderer already keeps
-  per frame) and the view model (its own current and previous projection);
+* velocity for skinned surfaces. The renderer does not keep their last
+  positions: it skins them on the CPU into a vertex buffer it locks with
+  DISCARD every frame, and `oldSkinnedCachedOffset` is about the CPU-side
+  normals only. The plan is to copy each reported skinned surface's positions
+  on the GPU into a buffer of the Modern path's own at the end of the scene,
+  and draw the next frame's velocity from both;
 * a reactive mask for effects;
 * then the rest of linear light: the world-lit family drawn by the Modern
   path's own shaders into the HDR scene ([Linear light](#linear-light) has

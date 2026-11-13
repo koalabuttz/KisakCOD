@@ -116,6 +116,15 @@ struct Backend
     // The bloom passes' GPU time at the last reset (pass timings add up over
     // the device's life).
     double bloomMsBase = 0.0;
+    // The velocity of what moves on its own (vk_d3d9.h ModernSurfaceMoved):
+    // the pass, made at the first scene that has such surfaces; whether it is
+    // wanted (KISAK_VK_MODERN_VELOCITY=0 turns it off) or failed; the
+    // surfaces of the scene being drawn; its counts at the last reset.
+    bool velocityWanted = true;
+    bool velocityFailed = false;
+    modern::Velocity *velocity = nullptr;
+    std::vector<modern::MovedSurface> moved;
+    modern::VelocityStats velocityBase{};
 };
 
 namespace
@@ -264,6 +273,8 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     // (docs/vulkan-modern.md); without r_visuals modern nothing asks for it.
     backend->linearWanted = !EnvIsZero("KISAK_VK_MODERN_LINEAR");
     backend->bloomWanted = !EnvIsZero("KISAK_VK_MODERN_BLOOM");
+    // And gives what moves on its own a velocity of its own unless this says not to.
+    backend->velocityWanted = !EnvIsZero("KISAK_VK_MODERN_VELOCITY");
     backend->effectsInLinear = EnvIs("KISAK_VK_MODERN_EFFECTS", "linear");
     if (!h.windowSystem || !h.windowSystem(h.user, desc.window, backend->windowSystem))
     {
@@ -471,6 +482,18 @@ void BackendLogStats(Backend *backend, bool reset)
                 static_cast<unsigned long long>(backend->linearCopies - backend->linearCopiesBase),
                 pass.supported ? average(pass) : 0.0);
     }
+    // Velocity: the surfaces drawn again with their own motion, and the
+    // GPU time of that pass.
+    if (backend->velocity)
+    {
+        const modern::VelocityStats velocity = modern::Stats(backend->velocity);
+        const PassTimings pass = PassTimingsFor(backend->core, "modern velocity");
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with surfaces that move on their own (%llu surfaces), "
+                   "%.3f ms GPU each for their velocity",
+                static_cast<unsigned long long>(velocity.passes - backend->velocityBase.passes),
+                static_cast<unsigned long long>(velocity.surfaces - backend->velocityBase.surfaces),
+                pass.supported ? average(pass) : 0.0);
+    }
     // Bloom: the scenes it ran for in place of the glow, the passes of each,
     // and their GPU time per scene.
     if (backend->bloom)
@@ -491,6 +514,8 @@ void BackendLogStats(Backend *backend, bool reset)
         backend->bloomPassesBase = modern::Stats(backend->bloom).passes;
         if (backend->bloom)
             backend->bloomMsBase = PassTimingsFor(backend->core, "modern bloom").totalMs;
+        if (backend->velocity)
+            backend->velocityBase = modern::Stats(backend->velocity);
         backend->linearScenesBase = backend->linearScenes;
         backend->linearCopiesBase = backend->linearCopies;
         backend->statsBase = stats;
@@ -513,6 +538,11 @@ void CloseBackend(Backend *backend)
     {
         modern::DestroyTaa(backend->core, backend->taa);
         backend->taa = nullptr;
+    }
+    if (backend->velocity)
+    {
+        modern::DestroyVelocity(backend->core, backend->velocity);
+        backend->velocity = nullptr;
     }
     if (backend->bloom)
     {
@@ -785,11 +815,80 @@ bool BackendModernCopyScene(Backend *backend, lg::Surface *scene, const lg::Rect
     return true;
 }
 
+void BackendModernSurfaceMoved(Backend *backend, lg::Device *legacy, const float clip[4][4],
+                               const float prevClip[4][4])
+{
+    if (!backend || !legacy || !backend->velocityWanted || backend->velocityFailed)
+        return;
+    // A scene has a few hundred at most; more means no scene ends.
+    constexpr size_t kMostSurfaces = 8192;
+    if (backend->moved.size() >= kMostSurfaces)
+        return;
+    lg::IndexedDraw draw;
+    if (!lg::LastIndexedDraw(legacy, draw))
+        return;
+    modern::MovedSurface &surface = backend->moved.emplace_back();
+    surface.vertices = draw.vertices;
+    surface.vertexOffset = draw.vertexOffset;
+    surface.stride = draw.stride;
+    surface.indices = draw.indices;
+    surface.indexType = draw.indexType;
+    surface.firstIndex = draw.firstIndex;
+    surface.indexCount = draw.indexCount;
+    surface.vertexBase = draw.vertexBase;
+    surface.viewport[0] = static_cast<float>(draw.viewport.x);
+    surface.viewport[1] = static_cast<float>(draw.viewport.y);
+    surface.viewport[2] = static_cast<float>(draw.viewport.width);
+    surface.viewport[3] = static_cast<float>(draw.viewport.height);
+    // As the Legacy adapter does: a depth range that is never empty.
+    surface.minDepth = std::clamp(draw.viewport.minZ, 0.0f, 1.0f);
+    surface.maxDepth =
+        std::clamp(std::max(draw.viewport.maxZ, draw.viewport.minZ + (draw.viewport.minZ >= 0.5f ? 0.0f : 0.001f)),
+                   0.0f, 1.0f);
+    std::memcpy(surface.clip, clip, sizeof(surface.clip));
+    std::memcpy(surface.prevClip, prevClip, sizeof(surface.prevClip));
+}
+
+namespace
+{
+// The velocity of the scene's surfaces that move on their own, recorded now
+// (between passes); null when there are none or it cannot run (the reason
+// is logged once), and TAA then uses the camera's motion alone.
+Image *SceneVelocity(Backend *backend, Image *depth, const modern::SceneView &scene,
+                     const std::vector<modern::MovedSurface> &moved)
+{
+    modern::SceneView previous{};
+    if (moved.empty() || scene.cut || !modern::LastView(backend->taa, previous))
+        return nullptr;
+    if (!backend->velocity)
+    {
+        std::string error;
+        backend->velocity = modern::CreateVelocity(backend->core, error);
+        if (!backend->velocity)
+        {
+            backend->velocityFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no velocity for what moves on its own: %s", error.c_str());
+            return nullptr;
+        }
+    }
+    std::string error;
+    Image *image = modern::DrawVelocity(backend->core, backend->velocity, depth, scene, previous, moved.data(),
+                                        static_cast<uint32_t>(moved.size()), error);
+    if (!image && !error.empty())
+        LogModernOnce(backend, "what moves on its own has no velocity of its own", error);
+    return image;
+}
+} // namespace
+
 ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surface *depth,
                                 const ModernSceneView &view, lg::Surface *display, bool *glowDrawn)
 {
     if (!backend || !backend->legacy || !backend->core)
         return ModernResult::Refused;
+    // The surfaces that moved in this scene; the next scene starts a new list.
+    std::vector<modern::MovedSurface> moved;
+    moved.swap(backend->moved);
+    backend->moved.reserve(moved.capacity());
     // In linear light the scene must reach the back buffer whatever the
     // anti-aliasing does.
     const auto tonemap = [&](ModernResult passes) {
@@ -843,7 +942,8 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
     scene.area = {{static_cast<int32_t>(view.x), static_cast<int32_t>(view.y)}, {view.width, view.height}};
     scene.cut = view.cut;
     std::string error;
-    if (!modern::Resolve(backend->core, backend->taa, colorImage, depthImage, scene, error))
+    Image *velocity = SceneVelocity(backend, depthImage, scene, moved);
+    if (!modern::Resolve(backend->core, backend->taa, colorImage, depthImage, scene, error, velocity))
         return refuse(error);
     return tonemap(ModernResult::Done);
 }
