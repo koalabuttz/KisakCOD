@@ -544,6 +544,7 @@ public:
     // the linear-light image standing in for the back buffer.
     ModernResult ModernSceneBegin();
     ModernResult ModernSceneDone(const ModernSceneView &view, bool *glowDrawn);
+    ModernResult ModernSceneLit(const ModernSceneView &view, bool *glowDrawn);
     void ModernSurfaceMoved(const float clip[4][4], const float prevClip[4][4])
     {
         BackendModernSurfaceMoved(backend_, legacy_, clip, prevClip);

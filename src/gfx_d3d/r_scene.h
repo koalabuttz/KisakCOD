@@ -286,6 +286,9 @@ void R_ModernJitterScene(const refdef_s *refdef, GfxViewParms *viewParms);
 // RB_Draw3DInternal's call, before a view's 3D scene is drawn.
 void R_ModernSceneBegin();
 // RB_EndSceneRendering's call.
+// The view's lit scene is drawn, before its emissive surfaces (effects and
+// other blended surfaces, R_DrawEmissive).
+void R_ModernSceneLit(const GfxViewInfo *viewInfo);
 void R_ModernSceneDone(const GfxViewInfo *viewInfo);
 // True when the Modern path drew this view's glow as bloom at its last
 // R_ModernSceneDone: the post effects leave the glow out.

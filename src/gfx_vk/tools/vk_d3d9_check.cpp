@@ -511,6 +511,7 @@ public:
     void ModernTaa();
     void ModernLinear();
     void ModernBloom();
+    void ModernEffects();
     void ModernVelocity();
     void Bench();
     void BenchRuns();
@@ -3410,6 +3411,74 @@ void Check::ModernBloom()
     SafeRelease(depth);
 }
 
+// Effects after the lit scene (vk_d3d9.h ModernSceneLit): black, then two
+// additive layers of grey 64. On the display image (the default) they add as
+// display values, 128, as in the Legacy path; with KISAK_VK_MODERN_EFFECTS=
+// linear they add as light in the scene, 90. Without linear light the scene
+// is in the back buffer either way: 128.
+void Check::ModernEffects()
+{
+    const auto env = [](const char *name, const char *value) {
+#if defined(_MSC_VER)
+        char *text = nullptr;
+        size_t length = 0;
+        const bool same = _dupenv_s(&text, &length, name) == 0 && text && !std::strcmp(text, value);
+        std::free(text);
+        return same;
+#else
+        const char *text = std::getenv(name);
+        return text && !std::strcmp(text, value);
+#endif
+    };
+    const bool linearOff = env("KISAK_VK_MODERN_LINEAR", "0");
+    const bool effectsInLinear = env("KISAK_VK_MODERN_EFFECTS", "linear");
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    Reset(Argb(255, 0, 0, 0));
+    front::ModernSceneBegin(device);
+    device->SetDepthStencilSurface(depth);
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0), "Clear(scene)");
+    DrawQuad(0, 0, kSize, kSize, 0.5f, Argb(255, 0, 0, 0));
+
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    view.width = view.height = kSize;
+    view.cut = true;
+    // As the program does: a scene finished at Lit has nothing left at Done.
+    const front::ModernResult lit = front::ModernSceneLit(device, view);
+    Equal("lit", static_cast<int>(lit), static_cast<int>(effectsInLinear ? front::ModernResult::Skipped
+                                                                         : front::ModernResult::Done));
+    IDirect3DSurface9 *target = nullptr;
+    if (Ok(device->GetRenderTarget(0, &target), "GetRenderTarget"))
+    {
+        Equal("target_is_back_buffer", target == backBuffer, true);
+        SafeRelease(target);
+    }
+    device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+    device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+    device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+    DrawQuad(32, 32, 96, 96, 0.5f, Argb(255, 64, 64, 64));
+    DrawQuad(32, 32, 96, 96, 0.5f, Argb(255, 64, 64, 64));
+    device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+    if (lit == front::ModernResult::Skipped)
+        Equal("done", static_cast<int>(front::ModernSceneDone(device, view)),
+              static_cast<int>(front::ModernResult::Done));
+    device->SetDepthStencilSurface(nullptr);
+
+    const int added = effectsInLinear && !linearOff ? 90 : 128;
+    if (Read())
+    {
+        Expect("effects_added", 64, 64, added, added, added);
+        Expect("scene_black", 8, 8, 0, 0, 0);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    SafeRelease(depth);
+}
+
 void Check::ResetDevice()
 {
     SafeRelease(backBuffer);
@@ -3649,6 +3718,7 @@ int Run(const Options &options)
         {"modern_taa", &Check::ModernTaa, true},
         {"modern_linear", &Check::ModernLinear, true},
         {"modern_bloom", &Check::ModernBloom, true},
+        {"modern_effects", &Check::ModernEffects, true},
         {"modern_velocity", &Check::ModernVelocity, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},

@@ -1247,6 +1247,10 @@ static float s_modernLastOrigin[3];
 static bool s_modernHaveOrigin;
 // The last view whose glow the back end drew as bloom (R_ModernDrewGlow).
 static const GfxViewInfo *s_modernGlowView;
+// The scene handed to the hooks, made once per view at its first hook
+// (sceneLit or sceneDone) so the camera-cut test runs once per scene.
+static GfxModernScene s_modernScene;
+static const GfxViewInfo *s_modernSceneView;
 
 void R_ModernJitterScene(const refdef_s *refdef, GfxViewParms *viewParms)
 {
@@ -1265,20 +1269,21 @@ void R_ModernJitterScene(const refdef_s *refdef, GfxViewParms *viewParms)
 
 void R_ModernSceneBegin()
 {
+    s_modernSceneView = nullptr;
     R_ModernMotionSceneBegin();
     const GfxModernHooks *hooks = R_ModernHooks();
     if (hooks && hooks->sceneBegin)
         hooks->sceneBegin(hooks->user, dx.device);
 }
 
-void R_ModernSceneDone(const GfxViewInfo *viewInfo)
+static GfxModernScene &R_ModernScene(const GfxViewInfo *viewInfo)
 {
-    R_ModernMotionSceneDone();
-    const GfxModernHooks *hooks = R_ModernHooks();
-    if (!hooks || !hooks->sceneDone)
-        return;
+    GfxModernScene &modern = s_modernScene;
+    if (s_modernSceneView == viewInfo)
+        return modern;
+    s_modernSceneView = viewInfo;
+    modern = GfxModernScene{};
     const GfxViewParms &parms = viewInfo->viewParms;
-    GfxModernScene modern{};
     memcpy(modern.view, parms.viewMatrix.m, sizeof(modern.view));
     memcpy(modern.projection, parms.projectionMatrix.m, sizeof(modern.projection));
     modern.x = viewInfo->sceneViewport.x;
@@ -1307,10 +1312,32 @@ void R_ModernSceneDone(const GfxViewInfo *viewInfo)
         modern.glowCutoff = viewInfo->glow.bloomCutoff;
         modern.glowDesaturation = viewInfo->glow.bloomDesaturation;
     }
+    return modern;
+}
+
+void R_ModernSceneLit(const GfxViewInfo *viewInfo)
+{
+    // The back end may finish the scene here, so what moved in it is
+    // complete: surfaces drawn after this (effects) report no motion.
+    R_ModernMotionSceneDone();
+    const GfxModernHooks *hooks = R_ModernHooks();
+    if (!hooks || !hooks->sceneLit)
+        return;
+    hooks->sceneLit(hooks->user, dx.device, &R_ModernScene(viewInfo));
+}
+
+void R_ModernSceneDone(const GfxViewInfo *viewInfo)
+{
+    R_ModernMotionSceneDone();
+    const GfxModernHooks *hooks = R_ModernHooks();
+    if (!hooks || !hooks->sceneDone)
+        return;
+    GfxModernScene &modern = R_ModernScene(viewInfo);
     s_modernGlowView = nullptr;
     hooks->sceneDone(hooks->user, dx.device, &modern);
     if (modern.glow && modern.glowDrawn)
         s_modernGlowView = viewInfo;
+    s_modernSceneView = nullptr;
 }
 
 bool R_ModernDrewGlow(const GfxViewInfo *viewInfo)

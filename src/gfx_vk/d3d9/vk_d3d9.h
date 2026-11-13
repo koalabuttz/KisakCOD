@@ -223,11 +223,20 @@ ModernResult ModernSceneBegin(IDirect3DDevice9 *device);
 // the bloom is drawn from the linear-light image before the tonemap, and
 // *glowDrawn (when given) is set true: the renderer leaves out its own glow.
 ModernResult ModernSceneDone(IDirect3DDevice9 *device, const ModernSceneView &view, bool *glowDrawn = nullptr);
+// The scene's lit surfaces are drawn and its effects (the renderer's
+// emissive surfaces) come next. Unless KISAK_VK_MODERN_EFFECTS=linear, the
+// scene is finished here as ModernSceneDone would, so the effects blend on
+// the tonemapped back buffer the way they were made to: Done (also when the
+// frame is not drawn) or Refused as ModernSceneDone, and the program then
+// skips ModernSceneDone for this scene. Skipped only when the effects stay
+// in the scene, and ModernSceneDone finishes it.
+ModernResult ModernSceneLit(IDirect3DDevice9 *device, const ModernSceneView &view, bool *glowDrawn = nullptr);
 // The last DrawIndexedPrimitive drew a surface that moves on its own into the
-// scene: the Modern path draws it again for its velocity before the next
-// ModernSceneDone (docs/vulkan-modern.md). clip and prevClip take the
-// surface's vertices to this frame's and last frame's clip space (row
-// vectors, p_clip = p * M), each with its frame's jitter. Ignored by a back
+// scene: the Modern path draws it again for its velocity when the scene is
+// finished, by ModernSceneLit or ModernSceneDone (docs/vulkan-modern.md).
+// clip and prevClip take the surface's vertices to this frame's and last
+// frame's clip space (row vectors, p_clip = p * M), each with its frame's
+// jitter. Ignored by a back
 // end without a Modern path, and when the draw was not a triangle list.
 void ModernSurfaceMoved(IDirect3DDevice9 *device, const float clip[4][4], const float prevClip[4][4]);
 } // namespace gfx_vk::d3d9

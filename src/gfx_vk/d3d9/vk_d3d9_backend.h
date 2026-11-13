@@ -87,6 +87,10 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
 // linear light is off or cannot run (logged once). Refused tells the two
 // apart; Skipped means the frame is not drawn.
 lg::Surface *BackendModernSceneTarget(Backend *backend, lg::Surface *backBuffer, ModernResult &result);
+// Whether the Modern path finishes a scene before its effects, so they blend
+// on the display image (vk_d3d9.h ModernSceneLit); false with
+// KISAK_VK_MODERN_EFFECTS=linear and on a back end without a Modern path.
+bool BackendModernEffectsOnDisplay(Backend *backend);
 // A StretchRect from the back buffer while the scene is drawn into scene: the
 // tonemap writes the rectangle into dst as display values. False when it
 // cannot (the caller copies the scene as it is).

@@ -384,10 +384,9 @@ void ModernJitterPixels(void *, uint32_t frame, float *x, float *y)
     gfx_vk::modern::JitterPixels(frame, *x, *y);
 }
 
-void ModernSceneDone(void *, IDirect3DDevice9 *device, GfxModernScene *scene)
+// The front's view of the engine's scene.
+front::ModernSceneView ModernViewOf(const GfxModernScene *scene)
 {
-    if (s_modernRefused.load(std::memory_order_relaxed))
-        return;
     front::ModernSceneView view{};
     std::memcpy(view.view, scene->view, sizeof(view.view));
     std::memcpy(view.projection, scene->projection, sizeof(view.projection));
@@ -401,17 +400,54 @@ void ModernSceneDone(void *, IDirect3DDevice9 *device, GfxModernScene *scene)
     view.glow.intensity = scene->glowIntensity;
     view.glow.cutoff = scene->glowCutoff;
     view.glow.desaturation = scene->glowDesaturation;
-    bool glowDrawn = false;
-    const front::ModernResult result = front::ModernSceneDone(device, view, &glowDrawn);
-    scene->glowDrawn = glowDrawn;
+    return view;
+}
+
+// Whether the scene was finished before its effects (ModernSceneLit): its
+// sceneDone then has nothing to do. Render thread only.
+bool s_modernSceneFinished = false;
+
+void ModernFinish(GfxModernScene *scene, front::ModernResult result, bool glowDrawn)
+{
+    if (glowDrawn)
+        scene->glowDrawn = true;
     if (result == front::ModernResult::Refused)
         s_modernRefused.store(true, std::memory_order_relaxed);
+}
+
+// Effects on the display image (unless KISAK_VK_MODERN_EFFECTS=linear): the
+// front finishes the scene here.
+void ModernSceneLit(void *, IDirect3DDevice9 *device, GfxModernScene *scene)
+{
+    if (s_modernRefused.load(std::memory_order_relaxed))
+        return;
+    bool glowDrawn = false;
+    const front::ModernResult result = front::ModernSceneLit(device, ModernViewOf(scene), &glowDrawn);
+    if (result == front::ModernResult::Skipped)
+        return;
+    s_modernSceneFinished = true;
+    ModernFinish(scene, result, glowDrawn);
+}
+
+void ModernSceneDone(void *, IDirect3DDevice9 *device, GfxModernScene *scene)
+{
+    if (s_modernSceneFinished)
+    {
+        s_modernSceneFinished = false;
+        return;
+    }
+    if (s_modernRefused.load(std::memory_order_relaxed))
+        return;
+    bool glowDrawn = false;
+    const front::ModernResult result = front::ModernSceneDone(device, ModernViewOf(scene), &glowDrawn);
+    ModernFinish(scene, result, glowDrawn);
 }
 
 // Linear light (KISAK_VK_MODERN_LINEAR): a refusal here (logged once by the
 // front) leaves the scene in the back buffer, and the anti-aliasing runs on.
 void ModernSceneBegin(void *, IDirect3DDevice9 *device)
 {
+    s_modernSceneFinished = false;
     if (!s_modernRefused.load(std::memory_order_relaxed))
         front::ModernSceneBegin(device);
 }
@@ -424,8 +460,8 @@ void ModernSurfaceMoved(void *, IDirect3DDevice9 *device, const float clip[4][4]
         front::ModernSurfaceMoved(device, clip, prevClip);
 }
 
-const GfxModernHooks s_modernHooks = {nullptr, ModernJitterPixels, ModernSceneDone, ModernSceneBegin,
-                                      ModernSurfaceMoved};
+const GfxModernHooks s_modernHooks = {nullptr,         ModernJitterPixels, ModernSceneDone,
+                                      ModernSceneBegin, ModernSceneLit,     ModernSurfaceMoved};
 } // namespace
 
 void Kisak_VulkanRegisterDvars()

@@ -122,7 +122,10 @@ Modern path draws their surfaces a second time with their own motion.
 * **The front** (`gfx_vk::d3d9::ModernSurfaceMoved`) takes the Legacy
   adapter's last indexed draw as it is still bound (`lg::LastIndexedDraw`:
   stream 0, the index buffer and range, the viewport) and keeps it with both
-  matrices until `ModernSceneDone`.
+  matrices until the scene is finished: at `ModernSceneLit` when effects
+  blend on the display image (the default), else at `ModernSceneDone`. The
+  renderer closes its scene's motion at either, so surfaces drawn after
+  `R_ModernSceneLit` (effects) report none.
 * **The velocity pass** (`vk_modern_velocity.cpp`, `velocity.vert` and
   `velocity.frag`) draws those surfaces into an `R16G16_SFLOAT` image cleared
   to "no motion of its own" (65504). Each fragment whose depth matches the
@@ -135,7 +138,8 @@ Modern path draws their surfaces a second time with their own motion.
 What it does not cover yet: skinned surfaces (characters' bodies, whose
 vertices the renderer skins on the CPU each frame; their last positions are
 not kept, so they come next), models added without an entity (scene models),
-brush models and effects. `KISAK_VK_MODERN_VELOCITY=0` turns the pass off, for
+brush models and effects (whether drawn on the display image or, with
+`KISAK_VK_MODERN_EFFECTS=linear`, in the scene). `KISAK_VK_MODERN_VELOCITY=0` turns the pass off, for
 comparisons.
 
 There is no history on the first scene, after a cut, or when the scene's size
@@ -272,6 +276,39 @@ every pixel shader case with `--linear-output` too
 tonemap's shoulder and the vision sets' film settings. The plan's MD1 lists
 them; the retail shaders' lightmap decoding is being read on a machine with
 the game first, as derived facts only.
+
+## Effects
+
+The renderer draws a view's effects and other blended surfaces (its emissive
+surfaces, `R_DrawEmissive`) last, after the lit scene and the distortion
+resolve. They were made for blending in display values: in linear light a
+stack of dim additive sprites adds up to much less (PC screenshots 1: the
+fire on mp_crash, a big yellow-white blob in Legacy, became a small orange
+flame). So by default the Modern path finishes the scene before them:
+
+* `RB_StandardDrawCommands` (`src/gfx_d3d/rb_draw3d.cpp`) calls
+  `R_ModernSceneLit` just before `R_DrawEmissive`. The hook
+  (`GfxModernHooks::sceneLit`) reaches the front's `ModernSceneLit`, which
+  runs what `ModernSceneDone` would (anti-aliasing, bloom, tonemap); the
+  effects then blend on the tonemapped back buffer exactly as in the Legacy
+  path, and the host does nothing at the scene's `sceneDone`.
+* The engine builds the hooks' `GfxModernScene` once per view
+  (`R_ModernScene`), so the camera-cut test runs once whichever hook comes
+  first.
+* `KISAK_VK_MODERN_EFFECTS=linear` keeps the effects in the linear-light
+  scene instead: they blend as light, bloom and are anti-aliased, and look
+  weaker than made.
+
+What finishing early costs: effects are not anti-aliased (they move by the
+jitter, half a pixel at most, which soft sprites hide; it also means they
+cannot ghost) and do not bloom. The Legacy glow, when bloom is off, still
+sees them. The fullbright and debug draw modes have no emissive step and
+finish at `sceneDone` as before.
+
+**Checks:** the D3D9 check's `modern_effects` scene draws black, finishes
+the lit scene, then adds two layers of grey 64: 128 on the display image
+(and without linear light), 90 with `KISAK_VK_MODERN_EFFECTS=linear`.
+`test_vulkan_d3d9_front.py` runs it both ways.
 
 ## Bloom
 

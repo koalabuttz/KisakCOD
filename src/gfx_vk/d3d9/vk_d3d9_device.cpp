@@ -233,6 +233,16 @@ ModernResult Device::ModernSceneDone(const ModernSceneView &view, bool *glowDraw
     return result;
 }
 
+ModernResult Device::ModernSceneLit(const ModernSceneView &view, bool *glowDrawn)
+{
+    if (!BackendModernEffectsOnDisplay(backend_))
+        return ModernResult::Skipped;
+    // Skipped from here means only that the effects stay in the scene: a
+    // frame with nothing to draw is finished all the same.
+    const ModernResult result = ModernSceneDone(view, glowDrawn);
+    return result == ModernResult::Skipped ? ModernResult::Done : result;
+}
+
 void Device::UnbindAll()
 {
     linearScene_ = nullptr;
