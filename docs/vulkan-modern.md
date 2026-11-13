@@ -12,8 +12,9 @@ early experiment (E1), temporal anti-aliasing (TAA) over the scene the Legacy
 path drew, and the first piece of linear light (the plan's MD1): the scene is
 drawn into a linear-light HDR image and tonemapped back
 ([Linear light](#linear-light)), with lit surfaces keeping what they
-compute over white ([Lit surfaces](#lit-surfaces)) and bloom from that image in
-place of the vision set's glow ([Bloom](#bloom)). Velocity comes from the
+compute over white ([Lit surfaces](#lit-surfaces)), bloom from that image in
+place of the vision set's glow ([Bloom](#bloom)) and auto exposure before the
+tonemap ([Auto exposure](#auto-exposure)). Velocity comes from the
 camera, and for entities' models (rigid and skinned surfaces, the view model's
 included) from a velocity pass of their own
 ([Velocity](#velocity-of-what-moves-on-its-own)); effects do not have their own
@@ -512,7 +513,54 @@ brightest colours through the curve in use. `test_vulkan_d3d9_front.py` runs it 
 an unknown name.
 
 **Not yet:** the vision sets' film settings (contrast, brightness,
-desaturation, tint) moved into the tonemap; exposure.
+desaturation, tint) moved into the tonemap.
+
+## Auto exposure
+
+Before the tonemap, the linear-light scene is multiplied by an exposure that
+follows its brightness, the way an eye or a camera adapts: a dark room is
+brought up a little and a bright yard down, within a limited range, so the
+picture stays the game's at rest. It is the first stage of the Modern lit
+shaders plan (project files: the "Modern lit shaders plan" document).
+
+Each scene (`modern::MeasureExposure`, `vk_modern_exposure.cpp`, three small
+passes timed as "modern exposure"):
+
+1. **Measure** (`exposure_measure.frag`): the scene's area on a 64x64 grid,
+   each texel four bilinear taps; the log2 of their luminance (Rec. 709),
+   clamped to [-12, 4] so a patch of sky or a flash cannot swing the average
+   far, weighted from 1 in the middle of the view to 1/4 in its corners.
+2. **Reduce** (`exposure_reduce.frag`): 8x8 blocks of the grid added up.
+3. **Adapt** (`exposure_adapt.frag`, into a 1x1 image): the weighted average
+   log2 luminance, the EV that brings it to the key (log2 key minus the
+   average), clamped to the range, and last scene's EV moved towards it with
+   a time constant of 1 s when the scene got brighter and 2.5 s when it got
+   darker (`1 - exp(-dt / tau)` of the way per scene, dt clamped to 1 s). A
+   camera cut, and the first scene, take the target at once. Two 1x1 images
+   take turns, so nothing is read back to adapt.
+
+The tonemap multiplies the scene's light and the bloom's by exp2 of that EV
+before its curve. A copy of the scene read during it (the renderer's resolve
+for distortion) uses the last scene's exposure. Effects drawn on the display
+image after the scene (the default, [Effects](#effects)) are not exposed.
+
+| Parameter | Default | Switch |
+| --- | --- | --- |
+| On | yes | `KISAK_VK_MODERN_EXPOSURE=0` turns it off (exposure 0 EV) |
+| Key: the average luminance that needs no change | 0.1 (provisional, to be set from a PC run so a typical outdoor scene stays at about 0 EV) | `KISAK_VK_MODERN_EXPOSURE_KEY=<value>` |
+| Range | -1 to +1.5 EV | `KISAK_VK_MODERN_EXPOSURE_RANGE=<min>,<max>` |
+
+The statistics line, one in 16 results read back a few frames later:
+`vulkan d3d9: modern: N scenes with auto exposure (M taken at once), exposure
+E EV on average (min to max), scene log2 luminance L on average (W EV
+wanted), T ms GPU each`. L and W are what a key is chosen from.
+
+**Checks:** the D3D9 check's `modern_exposure` scene draws four uniform greys
+and expects grey 100 brought exactly to the key (shown 89), white held at -1
+EV, grey 40 at +1.5 EV, and grey 40 after grey 100 without a cut only part
+of the way there. `test_vulkan_d3d9_front.py` runs it with
+`KISAK_VK_MODERN_EXPOSURE=1` and every other scene with it off, since auto
+exposure moves their colours.
 
 ## Next
 

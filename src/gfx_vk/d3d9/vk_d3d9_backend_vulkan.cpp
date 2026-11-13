@@ -122,6 +122,15 @@ struct Backend
     // Bloom from the linear-light scene in place of the renderer's glow
     // (vk_d3d9.h ModernSceneDone): made at the first scene with glow, unless
     // KISAK_VK_MODERN_BLOOM=0; the scenes it ran for, and at the last reset.
+    // Auto exposure of the linear-light scene before the tonemap (vk_modern.h
+    // MeasureExposure), unless KISAK_VK_MODERN_EXPOSURE=0; its parameters
+    // (KISAK_VK_MODERN_EXPOSURE_KEY and _RANGE "min,max" in EV override the
+    // key and range); when the last scene was measured.
+    bool exposureWanted = true;
+    bool exposureFailed = false;
+    modern::Exposure *exposure = nullptr;
+    modern::ExposureParams exposureParams{};
+    std::chrono::steady_clock::time_point exposureLast{};
     bool bloomWanted = true;
     bool bloomFailed = false;
     modern::Bloom *bloom = nullptr;
@@ -324,6 +333,22 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     backend->velocityWanted = !EnvIsZero("KISAK_VK_MODERN_VELOCITY");
     backend->effectsInLinear = EnvIs("KISAK_VK_MODERN_EFFECTS", "linear");
     backend->litWanted = !EnvIsZero("KISAK_VK_MODERN_LIT");
+    backend->exposureWanted = !EnvIsZero("KISAK_VK_MODERN_EXPOSURE");
+    {
+        const std::string key = EnvText("KISAK_VK_MODERN_EXPOSURE_KEY");
+        const float value = key.empty() ? 0.0f : std::strtof(key.c_str(), nullptr);
+        if (value > 0.0f)
+            backend->exposureParams.key = value;
+        const std::string range = EnvText("KISAK_VK_MODERN_EXPOSURE_RANGE");
+        char *end = nullptr;
+        const float low = range.empty() ? 0.0f : std::strtof(range.c_str(), &end);
+        const float high = end && *end == ',' ? std::strtof(end + 1, nullptr) : low - 1.0f;
+        if (!range.empty() && low <= high)
+        {
+            backend->exposureParams.minEv = low;
+            backend->exposureParams.maxEv = high;
+        }
+    }
     {
         const std::string curve = EnvText("KISAK_VK_MODERN_TONEMAP");
         if (!curve.empty() && !modern::CurveFromName(curve.c_str(), backend->tonemapCurve))
@@ -536,6 +561,22 @@ void BackendLogStats(Backend *backend, bool reset)
                 static_cast<unsigned long long>(backend->linearCopies - backend->linearCopiesBase),
                 pass.supported ? average(pass) : 0.0);
     }
+    // Auto exposure: the scenes measured, the exposures read back now and then,
+    // and the GPU time of its passes.
+    if (backend->exposure)
+    {
+        const modern::ExposureStats exposure = modern::Stats(backend->core, backend->exposure, true);
+        const PassTimings pass = PassTimingsFor(backend->core, "modern exposure");
+        const double samples = exposure.samples ? double(exposure.samples) : 1.0;
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with auto exposure (%llu taken at once), exposure %.2f EV "
+                   "on average (%.2f to %.2f), scene log2 luminance %.2f on average (%.2f EV wanted), "
+                   "%.3f ms GPU each",
+                static_cast<unsigned long long>(exposure.scenes), static_cast<unsigned long long>(exposure.resets),
+                exposure.evSum / samples, exposure.samples ? exposure.evMin : 0.0,
+                exposure.samples ? exposure.evMax : 0.0, exposure.log2LuminanceSum / samples,
+                exposure.wantedEvSum / samples,
+                pass.supported && exposure.scenes ? pass.totalMs / double(exposure.scenes) : 0.0);
+    }
     // Lit surfaces in linear light: the scenes with them, and how often the
     // lit inputs changed in each.
     if (backend->litScenes != backend->litScenesBase)
@@ -591,6 +632,7 @@ void BackendLogStats(Backend *backend, bool reset)
             backend->velocityBase = modern::Stats(backend->velocity);
         backend->keptBase = modern::Stats(backend->kept);
         backend->linearScenesBase = backend->linearScenes;
+        modern::ResetStats(backend->exposure);
         backend->litScenesBase = backend->litScenes;
         backend->litChangesBase = backend->litChanges;
         backend->linearCopiesBase = backend->linearCopies;
@@ -634,6 +676,11 @@ void CloseBackend(Backend *backend)
     {
         modern::DestroyBloom(backend->core, backend->bloom);
         backend->bloom = nullptr;
+    }
+    if (backend->exposure)
+    {
+        modern::DestroyExposure(backend->core, backend->exposure);
+        backend->exposure = nullptr;
     }
     if (backend->tonemap)
     {
@@ -804,6 +851,37 @@ Image *DrawBloom(Backend *backend, Image *scene, const VkRect2D &area, const Mod
     return bloom;
 }
 
+// This scene's auto exposure (a 1x1 image for the tonemap): null when it is
+// off or cannot run (logged once).
+Image *MeasureExposure(Backend *backend, Image *scene, const VkRect2D &area, bool cut)
+{
+    if (!backend->exposureWanted || backend->exposureFailed)
+        return nullptr;
+    if (!backend->exposure)
+    {
+        std::string error;
+        backend->exposure = modern::CreateExposure(backend->core, error);
+        if (!backend->exposure)
+        {
+            backend->exposureFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no auto exposure: %s", error.c_str());
+            return nullptr;
+        }
+    }
+    const auto now = std::chrono::steady_clock::now();
+    modern::ExposureParams params = backend->exposureParams;
+    params.seconds = backend->exposureLast.time_since_epoch().count()
+                         ? std::chrono::duration<float>(now - backend->exposureLast).count()
+                         : 0.0f;
+    params.reset = cut;
+    backend->exposureLast = now;
+    std::string error;
+    Image *result = modern::MeasureExposure(backend->core, backend->exposure, scene, area, params, error);
+    if (!result)
+        LogModernOnce(backend, "no auto exposure", error);
+    return result;
+}
+
 // The whole of a surface, or a rectangle of it, as a core rectangle.
 VkRect2D AreaOf(lg::Surface *surface, const lg::Rect *rect)
 {
@@ -913,7 +991,8 @@ bool BackendModernCopyScene(Backend *backend, lg::Surface *scene, const lg::Rect
     std::string error;
     if (!modern::WriteDisplay(backend->core, backend->tonemap, sceneImage, AreaOf(scene, from), dstImage,
                               AreaOf(dst, to), linear ? VK_FILTER_LINEAR : VK_FILTER_NEAREST, "modern scene copy",
-                              error))
+                              error, nullptr, 0.0f,
+                              backend->exposureWanted ? modern::CurrentExposure(backend->exposure) : nullptr))
     {
         LogModernOnce(backend, "a copy of the linear-light scene is not tonemapped", error);
         return false;
@@ -1113,9 +1192,10 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
         Image *scene = lg::SurfaceImage(color);
         float bloomScale = 0.0f;
         Image *bloom = DrawBloom(backend, scene, area, view, bloomScale);
+        Image *exposure = MeasureExposure(backend, scene, area, view.cut);
         std::string error;
         if (!modern::WriteDisplay(backend->core, backend->tonemap, scene, area, lg::SurfaceImage(display), area,
-                                  VK_FILTER_NEAREST, "modern tonemap", error, bloom, bloomScale))
+                                  VK_FILTER_NEAREST, "modern tonemap", error, bloom, bloomScale, exposure))
         {
             LogModernOnce(backend, "the linear-light scene is not tonemapped", error);
             return ModernResult::Refused;

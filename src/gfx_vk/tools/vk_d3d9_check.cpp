@@ -517,6 +517,7 @@ public:
     void ModernEffects();
     void ModernLit();
     void ModernTonemap();
+    void ModernExposure();
     void ModernVelocity();
     void Bench();
     void BenchRuns();
@@ -3858,6 +3859,92 @@ void Check::ModernTonemap()
     SafeRelease(depth);
 }
 
+// Auto exposure (vk_modern.h MeasureExposure), with the default key 0.1 and
+// range -1 to +1.5 EV: four scenes, each one grey all over. A cut takes the
+// exposure at once: grey 100 (0.127 of light) is brought to the key exactly
+// (0.1, shown 89); white (1) wants -3.3 EV and gets -1 (0.5, 188); grey 40
+// (0.021) wants +2.25 and gets +1.5. Then grey 40 without a cut after grey
+// 100 moves only part of the way from grey 100's exposure towards +1.5 (at
+// most a second's worth of the 2.5 s time constant). With
+// KISAK_VK_MODERN_EXPOSURE=0, or without linear light, every grey is shown
+// through the curve alone.
+void Check::ModernExposure()
+{
+    const std::string curve = ModernCurve();
+    const bool on = EnvText("KISAK_VK_MODERN_EXPOSURE") != "0" && EnvText("KISAK_VK_MODERN_LINEAR") != "0";
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    const auto decode = [](int v) {
+        const double x = v / 255.0;
+        return x <= 0.04045 ? x / 12.92 : std::pow((x + 0.055) / 1.055, 2.4);
+    };
+    const auto shown = [&](double light) { return ShownByte(TonemapCurve(curve, {light, light, light})[0]); };
+    const auto scene = [&](int grey, bool cut) {
+        Reset(Argb(255, 0, 0, 0));
+        front::ModernSceneBegin(device);
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, grey, grey, grey), 1.0f, 0),
+           "Clear(scene)");
+        front::ModernSceneView view{};
+        for (int i = 0; i < 4; ++i)
+            view.view[i][i] = view.projection[i][i] = 1.0f;
+        view.width = view.height = kSize;
+        view.cut = cut;
+        Equal("done", static_cast<int>(front::ModernSceneDone(device, view)),
+              static_cast<int>(front::ModernResult::Done));
+        device->SetDepthStencilSurface(nullptr);
+    };
+    const double key = 0.1;
+    const auto exposed = [&](int grey, double ev) { return shown(decode(grey) * (on ? std::exp2(ev) : 1.0)); };
+    const auto target = [&](int grey) { return std::clamp(std::log2(key / decode(grey)), -1.0, 1.5); };
+
+    scene(100, true);
+    if (Read())
+    {
+        const int v = exposed(100, target(100));
+        Expect("grey100_to_key", 64, 64, v, v, v);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    scene(255, true);
+    if (Read())
+    {
+        const int v = exposed(255, target(255));
+        Expect("white_lowest", 64, 64, v, v, v);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    scene(40, true);
+    if (Read())
+    {
+        const int v = exposed(40, target(40));
+        Expect("grey40_highest", 64, 64, v, v, v);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    // Grey 100 again (a cut), then grey 40 without one: part of the way.
+    scene(100, true);
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    scene(40, false);
+    if (Read())
+    {
+        const uint8_t *p = &pixels[(64 * readSize + 64) * 4];
+        const int got = p[1];
+        const int from = exposed(40, target(100));
+        const int to = exposed(40, target(40));
+        // At most a second's worth of the 2.5 s time constant: under a third of the way.
+        const int most = exposed(40, target(100) + (target(40) - target(100)) / 3.0);
+        const bool ok = on ? got >= from - kTolerance && got <= most + kTolerance && got < to
+                           : std::abs(got - from) <= kTolerance;
+        Equal("grey40_adapting", ok, true);
+        if (!ok)
+            result->detail += " grey40_adapting_got=" + std::to_string(got) + " from=" + std::to_string(from) +
+                " most=" + std::to_string(most) + " to=" + std::to_string(to);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    SafeRelease(depth);
+}
+
 void Check::ResetDevice()
 {
     SafeRelease(backBuffer);
@@ -4103,6 +4190,7 @@ int Run(const Options &options)
         {"modern_effects", &Check::ModernEffects, true},
         {"modern_lit", &Check::ModernLit, true},
         {"modern_tonemap", &Check::ModernTonemap, true},
+        {"modern_exposure", &Check::ModernExposure, true},
         {"modern_velocity", &Check::ModernVelocity, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
