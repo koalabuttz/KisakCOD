@@ -545,6 +545,9 @@ public:
     ModernResult ModernSceneBegin();
     ModernResult ModernSceneDone(const ModernSceneView &view, bool *glowDrawn);
     ModernResult ModernSceneLit(const ModernSceneView &view, bool *glowDrawn);
+    bool ModernWantsSceneDepth() { return BackendModernWantsSceneDepth(backend_); }
+    // The depth surface as it is set now.
+    ModernResult ModernSceneDepth(const ModernSceneView &view);
     void ModernSurfaceMoved(const float clip[4][4], const float prevClip[4][4])
     {
         BackendModernSurfaceMoved(backend_, legacy_, clip, prevClip);

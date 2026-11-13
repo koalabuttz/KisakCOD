@@ -231,6 +231,18 @@ ModernResult ModernSceneDone(IDirect3DDevice9 *device, const ModernSceneView &vi
 // skips ModernSceneDone for this scene. Skipped only when the effects stay
 // in the scene, and ModernSceneDone finishes it.
 ModernResult ModernSceneLit(IDirect3DDevice9 *device, const ModernSceneView &view, bool *glowDrawn = nullptr);
+// Whether the Modern path wants the view's opaque depth before its lit
+// surfaces (ModernSceneDepth): the renderer then draws its depth prepass.
+// True when something reads the normals buffer (docs/vulkan-modern.md
+// "Normals buffer"); false on a back end without a Modern path.
+bool ModernWantsSceneDepth(IDirect3DDevice9 *device);
+// The renderer's depth prepass has drawn the view's opaque surfaces into the
+// depth surface, and its lit surfaces come next: the Modern path builds the
+// scene's normals buffer from that depth now, for the passes that read it
+// (ModernSceneLit or ModernSceneDone finishes the scene). Done, Skipped
+// (nothing wants it, or the frame is not drawn) or Refused (it cannot run:
+// no depth surface, say; logged once).
+ModernResult ModernSceneDepth(IDirect3DDevice9 *device, const ModernSceneView &view);
 // The last DrawIndexedPrimitive drew a surface that moves on its own into the
 // scene: the Modern path draws it again for its velocity when the scene is
 // finished, by ModernSceneLit or ModernSceneDone (docs/vulkan-modern.md).
