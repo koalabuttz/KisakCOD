@@ -78,7 +78,11 @@ struct LinearInputs
     uint16_t doubled = 0;
     // kLinearColorInput, kLinearOverWhite.
     uint8_t flags = 0;
-    uint8_t unused[3] = {};
+    // A Modern lit shader of our own that the pixel shader is drawn as
+    // instead (the Legacy adapter's ModernLitShader; 0 for none). BuildSpirv
+    // ignores it: the adapter builds that shader itself.
+    uint8_t shader = 0;
+    uint8_t unused[2] = {};
 };
 static_assert(sizeof(LinearInputs) == 16, "LinearInputs is compared and hashed as bytes");
 // LinearInputs::flags: the colour 0 input (the vertex colour) is a colour.

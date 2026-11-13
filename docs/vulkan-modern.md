@@ -582,7 +582,7 @@ image after the scene (the default, [Effects](#effects)) are not exposed.
 | --- | --- | --- |
 | On | yes | `KISAK_VK_MODERN_EXPOSURE=0` turns it off (exposure 0 EV) |
 | Key: the average luminance that needs no change | 0.115: mp_crash's and mp_backlot's outdoor views measured 0.117 and 0.110 (PC exposure run 1), so a typical outdoor scene stays at about 0 EV | `KISAK_VK_MODERN_EXPOSURE_KEY=<value>` |
-| Range | -1 to +1.5 EV | `KISAK_VK_MODERN_EXPOSURE_RANGE=<min>,<max>` |
+| Range | -1 to +1 EV (+1.5 until 2026-11-13: the covered arcade looked flatter than CoD4's at +1.4) | `KISAK_VK_MODERN_EXPOSURE_RANGE=<min>,<max>` (`-1,1.5` for the old range) |
 
 The statistics line, one in 16 results read back a few frames later:
 `vulkan d3d9: modern: N scenes with auto exposure (M taken at once), exposure
@@ -594,14 +594,119 @@ standing views (RTX 2080 SUPER): mp_crash outdoors -0.23 EV (L -3.09),
 mp_crash's covered arcade +1.18 EV (L -4.51), mp_backlot -0.14 EV (L -3.18),
 mp_bog at night +0.70 EV (L -4.02); no pumping standing still (the exposure
 within 0.02 EV, two captures 3 s apart alike), about 0.04 ms GPU per scene.
-With 0.115 the indoor view gets about +1.4 EV and mp_bog +0.9 EV.
+With 0.115 the indoor view wants about +1.4 EV (held at +1) and mp_bog +0.9 EV.
 
 **Checks:** the D3D9 check's `modern_exposure` scene draws four uniform greys
 and expects grey 100 brought exactly to the key (shown 95), white held at -1
-EV, grey 40 at +1.5 EV, and grey 40 after grey 100 without a cut only part
+EV, grey 40 at +1 EV, and grey 40 after grey 100 without a cut only part
 of the way there. `test_vulkan_d3d9_front.py` runs it with
 `KISAK_VK_MODERN_EXPOSURE=1` and every other scene with it off, since auto
 exposure moves their colours.
+
+## Lit shaders of our own
+
+The second stage of the Modern lit shaders plan: lit passes drawn with
+shaders of the Modern path's own, which add their light in linear light,
+in place of the game's. The first is the world's sunlit family,
+`lm_[hsm_]sun_<mode>c0[d0][n0][s0]`: one source, `lm_sun.frag`, compiled
+for each set of maps (16 builds), with the mode a specialization constant.
+
+| Part of the name | Define | Reads, beyond the base |
+| --- | --- | --- |
+| (base) `lm_sun_r0c0` | | colour map s0, primary lightmap s2, secondary lightmap s3; fog colour c0, sun direction c17, sun colour c18; texcoord 0 (colour and lightmap UVs), texcoord 1 (normal, fog), colour 0 |
+| `hsm_` | `LM_SUN_SHADOW` | the sun's shadow map s4, its partition switch c2 and scale c4; texcoord 4 (the shadow-map coordinate) |
+| `n0` | `LM_SUN_NORMAL` | a normal map at the next sampler (s4, s5 with the shadow map); texcoords 2 and 3 (binormal, tangent) |
+| `s0` | `LM_SUN_SPECULAR` | the reflection probe (cube) s1, a specular map after the normal map (in its place without one); envMapParms c5, the sun's specular colour c19; texcoord 5 (eye-to-point) |
+| `d0` | `LM_SUN_DETAIL` | a detail map after the others; detailScale at c5 (c6 with `s0`) |
+| `r0` / `b0` / `t0` | (mode) | opaque / blended / alpha-tested: nothing more |
+
+What ours computes (from the game shaders' maths, world-lit shader facts 1
+to 3 in the project files, 2026-11-13):
+
+* **albedo** = colour map (plus the detail map around grey, `d0`) times
+  vertex colour, each decoded from sRGB;
+* **sky** = the secondary lightmap's two halves combined as the game
+  combines them (top plus bottom times N.D, with the flat normal or, `n0`,
+  the normal map's slopes, which also scale the top: one baked light,
+  encoded in two images), then decoded;
+* **sun** = what the sun adds to that light in the game's sum, decoded:
+  decode(sky + sun) - decode(sky), the sun being shadow times N.L times
+  the sun's colour, N from the normal map in the tangent frame with `n0`.
+  The shadow is the primary lightmap's sun visibility, or where the shadow
+  map covers the surface (and the lightmap's is not 0), the game's four
+  depth-compare taps a quarter each, near and far partitions blended over
+  w 0.75 to 1, faded back to the lightmap's towards the far partition's
+  edge;
+* **specular** (`s0`) = likewise what the game's specular adds to the
+  game's diffuse colour, decoded: the specular map times the Fresnel
+  (envMapParms) times (shadow times the sun's highlight, exponent from the
+  gloss, times envMapParms.w, the sun's specular colour and the sun
+  strength, plus the reflection probe at LOD 6 - 8 gloss times its alpha);
+* **colour** = albedo times (sky times the sky strength plus sun times the
+  sun strength) plus specular, then the fog
+  colour (decoded) blended over it in linear light by the vertex fog factor.
+  `b0` premultiplies the albedo and fog colour by colour alpha times vertex
+  alpha, which is the output alpha; `t0` keeps alpha 0.5 and over and writes
+  black with alpha 0 elsewhere, as the game's shader does; then the alpha
+  test of the render state.
+
+So with both strengths 1 every surface is as bright as the game's:
+decode(colour times light) is decode(colour) times decode(light). The game
+added its terms in display values, so in linear light a term's share
+depends on what it is added to: a single sun strength over decoded terms
+matched the game at 2.9 on Crash and 4.3 on Backlot (PC sun run 2), which
+is why each share is taken from the game's sum. The terms stay apart, so
+the **sun strength** scales the sun's share (a punchier sun above 1). The
+sum is not clamped, so the tonemap and bloom see sunlit highlights as they
+are.
+
+* **Which passes.** `R_ModernPassInputs` (`r_scene.cpp`) names one in
+  `GfxModernLitInputs::shader` (a code: 0x40 plus flags for the shadow 1,
+  normal 2, specular 4 and detail 8 maps and the mode times 16) when the
+  pass's pixel shader's name is one of the family (`_sm3`; `_sm2` only for
+  `r0c0` without maps; the lightmaps, and the probe with `s0`, bound as
+  custom samplers) and its pixel arguments bind exactly what ours reads,
+  where ours reads it; any other pixel argument keeps the game's shader.
+  `KISAK_VK_MODERN_LIT_LOG=1` prints each lit pixel shader's arguments and
+  the code it was given.
+* **How.** It travels with the over-white lit inputs (front
+  `ModernLitInputs::shader`, `legacy::SetLinearInputs`'s `shader`,
+  `PipelineKey::linearShader`). Building the pipeline's pixel module, the
+  adapter (`vk_legacy_modern_lit.cpp`) takes our SPIR-V (compiled at build
+  time into `vk_legacy_shaders.h`), moves its inputs from their placeholder
+  locations (texcoord N at N, colour 0 at 10) to where the vertex shader
+  writes those semantics, and sets the strengths, the depth reference
+  clamp, the mode and whether it runs the alpha test (not where the compare
+  is fixed as always) as specialization constants' defaults. The pipeline
+  layout and descriptors stay the game shader's, so the adapter uses ours
+  only where that shader reads at least what ours does (constants to c18 or
+  c19, 2D images and the probe cube at those samplers, the alpha test's
+  block), the vertex shader writes each input as one four-component vector
+  alone at its location and, for the shadow, s4 is a depth image; otherwise
+  it builds the game's shader, over white, and counts it.
+
+| Switch | Default |
+| --- | --- |
+| `KISAK_VK_MODERN_SHADERS=0` | our shaders on (with linear light and lit passes on) |
+| `KISAK_VK_MODERN_SUN_STRENGTH=<value>` | 1 (as bright as the game's) |
+| `KISAK_VK_MODERN_SKY_STRENGTH=<value>` | 1 |
+
+The statistics line, after the lit surfaces' one: `vulkan d3d9: modern: lit
+shaders of our own: C changes to one each scene, N pixel modules built as
+one (R could not be), sun strength S, sky strength K`.
+
+**Checks:** the D3D9 check's `modern_lit_shader` scene draws a stand-in for
+`lm_hsm_sun_r0c0` (it reads the same samplers and constants but shows black)
+as `lm_sun` and `lm_hsm_sun`: grey 128 colour map, lightmap halves 64 each,
+grey 128 sun overhead, a shadow map at depth 0.5. It expects 0.2159 *
+(0.2159 * sky + 0.2159 * sun) of light without a shadow and with a reference
+in front of the stored depth, the lightmap's alone behind it, and half fog
+towards red blended in linear light; black with our shaders off. A second
+stand-in, for `lm_hsm_sun_r0c0d0n0s0`, is drawn as the `d0n0s0` variant
+opaque, blended and alpha-tested (kept and dropped), and as `lm_sun_r0c0n0`
+with a normal map tilted along the tangent; the expectations follow the
+game's formulas.
+`test_vulkan_d3d9_front.py` also runs it with `KISAK_VK_MODERN_SHADERS=0`.
 
 ## Normals buffer
 
@@ -677,6 +782,105 @@ a slope taken across the edge would be wrong (a version that always takes the
 right-hand side fails two of them). `test_vulkan_d3d9_front.py` runs it with
 the debug view (linear light on and off), with `KISAK_VK_MODERN_NORMALS=1`
 and with `KISAK_VK_MODERN_NORMALS=0`, and checks that a full run builds none.
+
+## Screen-space reflections
+
+The reflection probe CoD4's lit shaders add is one baked cube map per area:
+it does not show what is really next to a surface. Screen-space reflections
+(SSR) find what each pixel's surface would mirror among what the screen
+shows, so that our own lit shaders can use that in place of the probe where
+it is found. This first piece traces them and shows them in a debug view;
+nothing in the lighting reads them yet.
+
+**How a scene goes with it:**
+
+1. Reflections want the normals buffer, so the renderer draws its depth
+   prepass ([Normals buffer](#normals-buffer)). In the `sceneDepth`
+   hand-over, right after the normals, the back end
+   (`TraceSceneReflections` in `vk_d3d9_backend_vulkan.cpp`) records one
+   full-screen pass (`modern::TraceReflections`,
+   `vk_modern_reflections.cpp`, `shaders/reflections.frag`, timed as
+   "modern reflections").
+2. For each pixel with a sure normal, the shader mirrors the view ray about
+   it and marches the mirrored ray across the screen through the prepass
+   depth (McGuire and Mara 2014: the ray's two ends are projected once, it
+   is stepped in pixels, at most one step a pixel and `steps` in all, its
+   depth kept perspective-correct). Each pixel starts its steps at a
+   different point, moved every frame, so the anti-aliasing averages away
+   the banding. Where the ray has gone behind a surface by less than the
+   surface's thickness (or less than the step just taken), five halvings
+   narrow the crossing down.
+3. This frame is not lit yet, so the light at a hit comes from **last
+   scene's anti-aliased colour** (`modern::LastHistory`, the TAA history:
+   linear light, before exposure, bloom and the tonemap; effects are drawn
+   after it by default and are not in it). The hit's point goes to last
+   scene's screen with the camera's motion (`inverse(view) * last view *
+   last projection` without its jitter, in double). Things that move on
+   their own are reflected where they were a frame ago.
+4. The pass writes an `R16G16B16A16_SFLOAT` image the size of the depth;
+   blits then make its mip levels, each a 2x2 average of the one before
+   (a pass can only draw into a single level, and a blit cannot read and
+   write one image, so the levels are made in images of their own and
+   copied in). The image belongs to the scene until it is finished, like
+   the normals.
+
+**What a texel holds:** the reflected light times a confidence in rgb and
+the confidence (0 to 1) in alpha, so a blurred level averages light with its
+weight. The confidence fades out where the mirrored ray points back at the
+camera (the screen holds nothing of what it would meet), over the outer 8%
+of the view, and over the last quarter of the ray's reach. It is 0 where the
+ray met nothing on the screen, met the sky, or met a surface from behind,
+where the normal is only a guess, and on a cut or the first scene (no last
+scene to read light from: no image at all then).
+
+**How the lighting will use it (agreed with the lit shaders' owners,
+2026-11-13):** a pipeline drawn by one of our lit shaders gets the image at
+pixel sampler 14 (a black, alpha 0 texture where the scene has none), and
+the shader mixes it into the reflection probe's light only, in the game's
+display values: `probe = mix(probe * specular occlusion, encode(ssr.rgb /
+ssr.a), ssr.a)`, at the level its gloss picks (`(6 - 8 gloss) / 6` of the
+way to the blurriest, as the game picks the probe's). The sun, its highlight
+and the lightmap are untouched. That step comes with the lit shaders' own
+pull requests.
+
+**Limits.** Only what the screen shows can be reflected: things off screen,
+behind the camera or hidden behind something else are not (the probe stays
+there). The normals are the geometry's, without normal maps, so bumpy
+surfaces mirror as if flat until the lit shader adds its normal map's tilt.
+The view model is in the depth with its own near plane (it looks about 40
+times as far away as it is), so a ray can meet that stretched copy of it and
+mirror the gun into a floor near it; the PC runs will show how often. Glass,
+decals and effects are not in the prepass, so rays pass through them.
+
+**Cost.** One full-screen pass of at most `steps` + 5 depth reads per pixel
+(less where the ray leaves the screen sooner), the normals read twice, one
+history read; then 2 x (levels - 1) + 1 blits. Memory: about 2.7 times the
+scene image (8 bytes a pixel for the traced image, the levels and the
+chain).
+
+| Setting | Default | Switch |
+| --- | --- | --- |
+| Reflections | traced only when something reads them: the debug view below for now; our lit shaders next. They need linear light (with `KISAK_VK_MODERN_LINEAR=0` they are not traced, logged once) and the normals buffer (`KISAK_VK_MODERN_NORMALS=0` turns them off too) | `KISAK_VK_MODERN_SSR=1` traces them (and turns the prepass and normals on) with nothing reading them, to measure the cost; `KISAK_VK_MODERN_SSR=0` never traces them |
+| Longest ray | 2000 units | `KISAK_VK_MODERN_SSR_DISTANCE` |
+| Thickness | 16 units | `KISAK_VK_MODERN_SSR_THICKNESS` |
+| Steps | 32 | `KISAK_VK_MODERN_SSR_STEPS` (at most 256) |
+| Levels | 5 | `KISAK_VK_MODERN_SSR_LEVELS` (1 to 8) |
+| Debug view | off | `KISAK_VK_MODERN_DEBUG=reflections` draws the sharpest level over the finished scene: the stored light over black, through the sRGB curve (no exposure, no tonemap); black is "no reflection" |
+
+The statistics line: `vulkan d3d9: modern: N scenes with screen-space
+reflections (L levels), X ms GPU each` (the trace pass; the blits are not
+timed).
+
+**Checks:** the D3D9 check's `modern_reflections` scene draws a grey floor
+and a red wall over the right half facing the camera, through the prepass
+as the engine does, twice (the first a cut). The first has no reflections;
+in the second, with `KISAK_VK_MODERN_DEBUG=reflections`, the floor in front
+of the wall shows the wall's red, the floor on the left (whose rays meet
+only the sky) and the wall (whose rays come back at the camera) show black.
+`test_vulkan_d3d9_front.py` runs it with the debug view, with
+`KISAK_VK_MODERN_SSR=1`, and with the debug view beside
+`KISAK_VK_MODERN_LINEAR=0`, `KISAK_VK_MODERN_SSR=0` and
+`KISAK_VK_MODERN_NORMALS=0`, and checks that a full run traces none.
 
 ## Next
 

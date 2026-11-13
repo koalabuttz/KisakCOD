@@ -159,7 +159,8 @@ struct LinkedKeyHash
     {
         uint64_t hash = key.key ^ key.inputs.constants * 0x9e3779b97f4a7c15ull;
         hash ^= (uint64_t(key.inputs.samplers) | uint64_t(key.inputs.doubled) << 16
-                 | uint64_t(key.inputs.flags) << 32) * 0xc2b2ae3d27d4eb4full;
+                 | uint64_t(key.inputs.flags) << 32 | uint64_t(key.inputs.shader) << 40)
+            * 0xc2b2ae3d27d4eb4full;
         return std::hash<uint64_t>()(hash);
     }
 };
@@ -248,7 +249,10 @@ struct PipelineKey
     uint16_t linearSamplers = 0;  // ls::LinearInputs::samplers, with linearOutput 2
     uint16_t linearDoubled = 0;   // ls::LinearInputs::doubled, with linearOutput 2
     uint32_t linearConstants[2] = {}; // ls::LinearInputs::constants (low, high), with linearOutput 2
-    uint8_t unused[8] = {};
+    // ls::LinearInputs::shader, with linearOutput 2: the pixel shader is
+    // drawn as that Modern lit shader of ours (ModernLitShader in vk_legacy.h).
+    uint8_t linearShader = 0;
+    uint8_t unused[7] = {};
     bool operator==(const PipelineKey &other) const { return std::memcmp(this, &other, sizeof(*this)) == 0; }
 };
 struct PipelineKeyHash
@@ -339,6 +343,12 @@ struct PixelModuleRecipe
     uint32_t alphaCompare = 0;
     bool linearOutput = false;    // colour output decoded from sRGB (PipelineKey::linearOutput 1)
     bool linearInputs = false;    // colours read decoded instead (PipelineKey::linearOutput 2): moduleKey.inputs
+    // moduleKey.inputs.shader names a Modern lit shader of ours: these are
+    // its strengths (Device::modernSunStrength, modernSkyStrength).
+    float sunStrength = 1.0f, skyStrength = 1.0f;
+    // Set by BuildPixelSpirv when it built that shader (not the pixel
+    // shader as it is), for KeepPixelModule's counts.
+    mutable bool modernBuilt = false;
 };
 
 // The create info of a graphics pipeline and everything it points at
@@ -590,6 +600,10 @@ struct Device
     // linear-light render target 0; on when any is marked.
     ls::LinearInputs linearInputs{};
     bool linearInputsOn = false;
+    // SetModernLitStrengths: what the Modern lit shaders built from now on
+    // multiply the sun and the lightmap's light by.
+    float modernSunStrength = 1.0f;
+    float modernSkyStrength = 1.0f;
     bool dynamicStale = true;
     // Checks every shortcut a draw takes (these two, and uniform blocks kept
     // from an earlier draw) against the full work, and fails the device when
@@ -733,6 +747,13 @@ VkShaderModule FindPixelModule(Device &device, Shader &ps, const Shader &vs, uin
 // never change: safe on any thread.
 bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Shader &vs,
                      std::vector<uint32_t> &spirv, std::string &error);
+// The SPIR-V of a Modern lit shader of ours (ModernLitShader) for a pixel
+// shader drawn with vs: its inputs moved to where vs writes their semantics,
+// and its strengths, depth reference clamp, mode and whether it runs the
+// alpha test set. False, with nothing built, when vs does not write one of
+// them as the shader reads it. vk_legacy_modern_lit.cpp; safe on any thread.
+bool BuildModernLitSpirv(uint8_t shader, const ls::Shader &vs, float sunStrength, float skyStrength,
+                         bool clampDepthReference, bool alphaTest, std::vector<uint32_t> &spirv);
 // Gives the shader a module built from recipe to keep; false (and the module
 // is left to the caller) when it already keeps one there.
 bool KeepPixelModule(Device &device, Shader &ps, const PixelModuleRecipe &recipe, VkShaderModule module);

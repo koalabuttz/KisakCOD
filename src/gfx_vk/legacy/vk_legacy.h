@@ -300,6 +300,11 @@ struct DeviceStats
     // the time that took, the rest of pipelineMicros being the driver's.
     uint32_t pixelModules;
     uint64_t pixelModuleMicros;
+    // Of the pixel modules kept (built ahead or not), those built as a Modern
+    // lit shader of ours (SetLinearInputs' shader), and those that wanted one
+    // but were built from the pixel shader as it is (it did not link).
+    uint32_t modernLitModules;
+    uint32_t modernLitRefused;
     // Pipelines built ahead on worker threads (see "Pipelines built ahead"),
     // not counted in pipelines or pipelineMicros: those built, the workers'
     // time on them, those a draw then used, the draws that had to wait for
@@ -684,8 +689,55 @@ void ReleaseHeldBuffers(Device *device);
 // is decoded and the colour output is decoded without its clamp to 1, so a
 // colour computed over white stays over white (the masks are ignored). All
 // zero (and false): none, and the colour output is decoded as always.
+//
+// shader, with overWhite, names a Modern lit shader of ours to draw the pixel
+// shader as instead (ModernLitShader): it reads the same samplers, constant
+// registers and vertex shader outputs, and computes in linear light itself.
+// Where it cannot be linked to the vertex shader, the pixel shader is drawn
+// as with overWhite alone.
+enum ModernLitShader : uint8_t
+{
+    ModernLitNone = 0,
+    // lm_[hsm_]sun_<mode>c0[d0][n0][s0]: a world surface lit by its lightmaps
+    // and the sun. Always: colour map at s0, primary and secondary lightmaps
+    // at s2 and s3, fog colour at c0, sun direction and colour at c17 and
+    // c18; texcoord 0 (colour and lightmap UVs), texcoord 1 (normal, fog) and
+    // colour 0 in. The flags below add to that.
+    ModernLitLmSun = 0x40,
+    // hsm: the sun's shadow map at s4, its partition switch and scale at c2
+    // and c4, its coordinate in texcoord 4.
+    ModernLitShadow = 0x01,
+    // n0: a normal map at the next sampler (s4, or s5 with the shadow map);
+    // binormal and tangent in texcoords 2 and 3.
+    ModernLitNormal = 0x02,
+    // s0: the reflection probe (a cube) at s1, a specular map at the sampler
+    // after the normal map's (or in its place without one), envMapParms at
+    // c5, the sun's specular colour at c19; the eye-to-point vector in
+    // texcoord 5.
+    ModernLitSpecular = 0x04,
+    // d0: a detail map at the sampler after the others, its UV scale at the
+    // constant after c4 (c5, or c6 with s0).
+    ModernLitDetail = 0x08,
+    // The mode in bits 4-5: r0 opaque, b0 blended (premultiplied, the alpha
+    // is colour alpha times vertex alpha), t0 alpha-tested (kept at alpha
+    // 0.5 and over).
+    ModernLitModeShift = 4,
+    ModernLitModeMask = 0x30,
+    ModernLitOpaque = 0x00,
+    ModernLitBlended = 0x10,
+    ModernLitAlphaTested = 0x20,
+};
+// Whether shader names a Modern lit shader of ours.
+constexpr bool ModernLitShaderValid(uint8_t shader)
+{
+    return (shader & 0xc0) == ModernLitLmSun && (shader & ModernLitModeMask) != 0x30;
+}
 void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint16_t doubled, bool colorInput,
-                     bool overWhite = false);
+                     bool overWhite = false, uint8_t shader = ModernLitNone);
+// The Modern lit shaders' light strengths in linear light: the sun's colour
+// and the lightmap's light are multiplied by these (1 and 1 by default). Set
+// before the first draw that uses one: shaders already built keep theirs.
+void SetModernLitStrengths(Device *device, float sun, float sky);
 #endif
 
 // The device's window is about to be destroyed: an open pass and frame end

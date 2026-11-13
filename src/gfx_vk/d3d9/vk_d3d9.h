@@ -271,6 +271,9 @@ struct ModernLitInputs
     // Instead of the above: none decoded, and the stored colour decoded
     // without its clamp to 1 (legacy SetLinearInputs' overWhite).
     bool overWhite = false;
+    // With overWhite: a Modern lit shader of ours to draw the pixel shader as
+    // (legacy ModernLitShader; 0 for none), unless KISAK_VK_MODERN_SHADERS=0.
+    uint8_t shader = 0;
 };
 void SetModernLitInputs(IDirect3DDevice9 *device, const ModernLitInputs *inputs);
 } // namespace gfx_vk::d3d9
