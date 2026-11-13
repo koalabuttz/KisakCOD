@@ -217,7 +217,7 @@ ModernResult Device::ModernSceneBegin()
     return ModernResult::Done;
 }
 
-ModernResult Device::ModernSceneDone(const ModernSceneView &view)
+ModernResult Device::ModernSceneDone(const ModernSceneView &view, bool *glowDrawn)
 {
     lg::Surface *depth = depthStencil_ ? depthStencil_->handle() : nullptr;
     if (!linearScene_)
@@ -227,7 +227,7 @@ ModernResult Device::ModernSceneDone(const ModernSceneView &view)
     // points now: it is tonemapped into the back buffer.
     lg::Surface *scene = linearScene_;
     linearScene_ = nullptr;
-    const ModernResult result = BackendModernScene(backend_, scene, depth, view, backBuffer_->handle());
+    const ModernResult result = BackendModernScene(backend_, scene, depth, view, backBuffer_->handle(), glowDrawn);
     if (renderTargets_[0] == backBuffer_.get())
         RebindTarget0();
     return result;
