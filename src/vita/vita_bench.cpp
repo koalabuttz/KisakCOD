@@ -1,10 +1,15 @@
 // The PS Vita's own part of the bench that fetches its work: starting the
-// other build, the buttons, the wait for the network. vita_bench.h says what
-// a bench is and vita_bench_client.h does the work.
+// other title, the system's installer, the buttons, the wait for the
+// network. vita_bench.h says what a bench is and vita_bench_client.h does
+// the work.
 //
-// The multiplayer client only: its package may write beside its own
-// eboot.bin, which is where a fetched build has to be to be started. The
-// dedicated server's package may not, and its runs need no bench.
+// The multiplayer client only. The same program runs as two applications:
+// the installed client (KISAK_VITA_MP_TITLE_ID), which talks to the computer,
+// and the test title (KISAK_VITA_TEST_TITLE_ID, "KisakCOD Test"), whose
+// eboot.bin the client replaces with each job's build. The client's package
+// is unsafe, so it may write in another application's folder and load the
+// installer; no application may write in its own (console run AB). The
+// dedicated server's runs need no bench.
 
 #include "vita_platform.h"
 
@@ -18,13 +23,30 @@
 #include <psp2/kernel/rng.h>
 #include <psp2/kernel/threadmgr.h>
 #include <psp2/net/netctl.h>
+#include <psp2/promoterutil.h>
+#include <psp2/sysmodule.h>
+
+#ifndef KISAK_VITA_MP_TITLE_ID
+#define KISAK_VITA_MP_TITLE_ID "KSKD00002"
+#endif
+#ifndef KISAK_VITA_TEST_TITLE_ID
+#define KISAK_VITA_TEST_TITLE_ID "KSKD00004"
+#endif
 
 namespace
 {
     using namespace kisak::vita_bench;
 
+    // What a start of the other title finds: that the bench started it, not
+    // a tap. The system passes no argument that way; the time keeps a file
+    // from a start that never came from making a later tap look like one.
+    constexpr char kLaunchFile[] = "bench-launch.txt";
+    constexpr long kLaunchSeconds = 120;
+
     struct VitaPlatform final : Platform
     {
+        char self[16] = {};
+
         bool Network() override
         {
             if (!Vita_StartNetwork())
@@ -41,19 +63,90 @@ namespace
             return true;
         }
 
-        void StartBuild(bool fetched) override
+        void StartBuild(bool testTitle) override
         {
-            char first[sizeof(kStartedAsFetched)], second[sizeof(kStartedByBench)];
-            memcpy(first, kStartedAsFetched, sizeof(first));
-            memcpy(second, kStartedByBench, sizeof(second));
-            char *arguments[3] = {fetched ? first : second, fetched ? second : nullptr, nullptr};
-            const int result = sceAppMgrLoadExec(fetched ? "app0:eboot-bench.bin" : "app0:eboot.bin", arguments, nullptr);
-            if (result < 0)
+            const char *const title = testTitle ? KISAK_VITA_TEST_TITLE_ID : KISAK_VITA_MP_TITLE_ID;
+            if (!strcmp(title, self))
+            {
+                // This application again, as the list of starts does.
+                char again[sizeof(kStartedByBench)];
+                memcpy(again, kStartedByBench, sizeof(again));
+                char *arguments[2] = {again, nullptr};
+                if (sceAppMgrLoadExec("app0:eboot.bin", arguments, nullptr) < 0)
+                    return;
+                // The system takes this process away for the other program.
+                // Wait for that; should it not come, end as a start does.
+                sceKernelDelayThread(3 * 1000 * 1000);
+                sceKernelExitProcess(0);
+            }
+            char path[160], text[48];
+            snprintf(path, sizeof(path), "%s/%s", Sys_VitaDataPath(), kLaunchFile);
+            snprintf(text, sizeof(text), "%s %lld\n", title, (long long)time(nullptr));
+            if (FILE *file = fopen(path, "wb"))
+            {
+                fputs(text, file);
+                fclose(file);
+            }
+            // The other application by its title id, straight into it
+            // (0x20000; another value opens its LiveArea), and this one ends
+            // as package managers do, so the system has one to close.
+            char uri[48];
+            snprintf(uri, sizeof(uri), "psgm:play?titleid=%s", title);
+            if (sceAppMgrLaunchAppByUri(0x20000, uri) < 0)
+            {
+                unlink(path);
                 return;
-            // The system takes this process away for the other program. Wait
-            // for that; should it not come, end as a start does.
-            sceKernelDelayThread(3 * 1000 * 1000);
+            }
             sceKernelExitProcess(0);
+        }
+
+        bool Install(const char *folder, char *error, size_t errorSize) override
+        {
+            // The installer needs the system's user interface library
+            // loaded first, with these arguments (as VitaShell loads it).
+            static uint32_t pafArguments[] = {0x180000, 0xffffffffu, 0xffffffffu, 1, 0xffffffffu, 0xffffffffu};
+            int pafResult = -1;
+            SceSysmoduleOpt option;
+            memset(&option, 0, sizeof(option));
+            option.flags = sizeof(option);
+            option.result = &pafResult;
+            option.unused[0] = -1;
+            option.unused[1] = -1;
+            int result = sceSysmoduleLoadModuleInternalWithArg(SCE_SYSMODULE_INTERNAL_PAF, sizeof(pafArguments),
+                pafArguments, &option);
+            if (result < 0)
+                return snprintf(error, errorSize, "the interface library did not load (0x%08x)", (unsigned)result),
+                       false;
+            const char *step = "load";
+            result = sceSysmoduleLoadModuleInternal(SCE_SYSMODULE_INTERNAL_PROMOTER_UTIL);
+            if (result >= 0)
+            {
+                step = "start";
+                result = scePromoterUtilityInit();
+                if (result >= 0)
+                {
+                    step = "install";
+                    result = scePromoterUtilityPromotePkgWithRif(folder, 1);
+                    // Synchronous, but should it not be: wait up to 2 min.
+                    int state = 1;
+                    for (int tries = 0; result >= 0 && tries < 1200 && scePromoterUtilityGetState(&state) >= 0 && state;
+                         ++tries)
+                        sceKernelDelayThread(100 * 1000);
+                    int finished = 0;
+                    if (result >= 0 && scePromoterUtilityGetResult(&finished) >= 0 && finished < 0)
+                        result = finished;
+                    scePromoterUtilityExit();
+                }
+                sceSysmoduleUnloadModuleInternal(SCE_SYSMODULE_INTERNAL_PROMOTER_UTIL);
+            }
+            uint32_t none = 0;
+            SceSysmoduleOpt unloadOption;
+            memset(&unloadOption, 0, sizeof(unloadOption));
+            unloadOption.result = reinterpret_cast<int *>(&none);
+            sceSysmoduleUnloadModuleInternalWithArg(SCE_SYSMODULE_INTERNAL_PAF, 0, nullptr, &unloadOption);
+            if (result < 0)
+                return snprintf(error, errorSize, "the installer's %s step said 0x%08x", step, (unsigned)result), false;
+            return true;
         }
 
         bool Wait(unsigned seconds) override
@@ -90,25 +183,38 @@ namespace
 
 bool Vita_BenchBegin(int argc, char **argv)
 {
-    bool fetched = false, byBench = false;
+    bool byBench = false;
     for (int i = 0; i < argc; ++i)
+        byBench |= argv[i] && !strcmp(argv[i], kStartedByBench);
+    // Which of the two applications this is.
+    if (sceAppMgrAppParamGetString(0, 12, s_platform.self, sizeof(s_platform.self)) < 0)
+        s_platform.self[0] = '\0';
+    const bool testTitle = !strcmp(s_platform.self, KISAK_VITA_TEST_TITLE_ID);
+    // Started by the other one?
+    char launch[160], text[48] = {};
+    snprintf(launch, sizeof(launch), "%s/%s", Sys_VitaDataPath(), kLaunchFile);
+    if (FILE *file = fopen(launch, "rb"))
     {
-        if (!argv[i])
-            continue;
-        fetched |= !strcmp(argv[i], kStartedAsFetched);
-        byBench |= !strcmp(argv[i], kStartedByBench);
+        const size_t length = fread(text, 1, sizeof(text) - 1, file);
+        text[length] = '\0';
+        fclose(file);
+        unlink(launch);
+        char title[16] = {};
+        long long when = 0;
+        const long long now = (long long)time(nullptr);
+        if (sscanf(text, "%15s %lld", title, &when) == 2 && !strcmp(title, s_platform.self) && when <= now &&
+            now - when <= kLaunchSeconds)
+            byBench = true;
     }
     Paths paths;
     snprintf(paths.data, sizeof(paths.data), "%s", Sys_VitaDataPath());
     snprintf(paths.programs, sizeof(paths.programs), "%s/gxp", Sys_VitaDataPath());
-    // The fetched build goes beside the installed one, the only place the
-    // system starts a program of this application from.
-    char titleId[32] = {};
-    if (sceAppMgrAppParamGetString(0, 12, titleId, sizeof(titleId)) >= 0 && PlainName(titleId, sizeof(titleId)))
-        snprintf(paths.eboot, sizeof(paths.eboot), "ux0:app/%s/eboot-bench.bin", titleId);
+    snprintf(paths.eboot, sizeof(paths.eboot), "ux0:app/%s/eboot.bin", KISAK_VITA_TEST_TITLE_ID);
+    snprintf(paths.testTitle, sizeof(paths.testTitle), "%s", KISAK_VITA_TEST_TITLE_ID);
+    snprintf(paths.install, sizeof(paths.install), "%s/bench-install", Sys_VitaDataPath());
     static Bench bench(paths, &s_platform);
     s_bench = &bench;
-    return bench.Begin(fetched, byBench) != Start::Quit;
+    return bench.Begin(testTitle, byBench) != Start::Quit;
 }
 
 const char *Vita_BenchNote()

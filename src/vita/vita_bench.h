@@ -9,13 +9,24 @@
 // and sends the logs back, then asks again. The computer runs
 // scripts/platform/vita/vita_bench_server.py.
 //
+// The build runs as a second application, "KisakCOD Test" (its own title id
+// and bubble): the system lets no application write in its own folder
+// (console run AB), but the installed client may write in the test title's
+// and starts it by its title id. When the test title is not installed yet,
+// or its folder takes no file, the client installs it from the job's files
+// with the system's own installer, as a package manager does.
+//
 // This file is the part that makes no system call, checked on the host by
 // scripts/tests/test_vita_bench.py: the text formats, the names a job may
 // write, SHA-256, the message codes and reading an HTTP answer's head.
 // vita_bench_client.h does the network and the files, vita_bench.cpp the
 // calls only a Vita has.
 //
-// bench.txt, one line:   <IPv4 address> <port> <key> [wait <seconds>]
+// bench.txt, one line:   <IPv4 address> <port> <key> [wait <seconds>|forever]
+//
+// "wait forever" keeps the Vita asking until a person holds START + SELECT:
+// a Vita left on its charger takes each job as it is queued, with nobody
+// there.
 //
 // The key is a secret the card and the computer share. It never travels:
 // every request carries a code made with it (HMAC-SHA-256), and so does the
@@ -27,8 +38,12 @@
 // A job as the computer describes it, one item a line:
 //
 //     job <id>
-//     eboot <sha256> <bytes>            the build to run it on; without the
-//                                       line, the installed one
+//     eboot <sha256> <bytes>            the build to run it on, as the test
+//                                       title; without the line, the
+//                                       installed client
+//     sfo <sha256> <bytes>              with eboot: the test title's
+//     head <sha256> <bytes>             param.sfo and package head, to
+//                                       install it when it is not there
 //     file <name>.txt <sha256> <bytes>  into the data folder
 //     pack <sha256> <bytes>             compiled programs, as the program
 //                                       folder's programs.pack
@@ -56,6 +71,10 @@ constexpr size_t kMaxFileName = 64;
 constexpr uint32_t kMaxEbootBytes = 64u << 20;
 constexpr uint32_t kMaxFileBytes = 1u << 20;
 constexpr uint32_t kMaxPackBytes = 64u << 20;
+constexpr uint32_t kMaxSfoBytes = 8u << 10;
+constexpr uint32_t kMaxHeadBytes = 16u << 10;
+// The wait that "wait forever" stands for.
+constexpr uint32_t kWaitForever = 0xffffffffu;
 
 // ---- SHA-256 ------------------------------------------------------------------------------
 
@@ -338,7 +357,7 @@ inline bool ParseServer(const char *text, Server *out, char *error, size_t error
     const size_t count = Words(line, words, 5);
     if (count != 3 && count != 5)
     {
-        snprintf(error, errorSize, "bench.txt: expected <address> <port> <key> [wait <seconds>]");
+        snprintf(error, errorSize, "bench.txt: expected <address> <port> <key> [wait <seconds>|forever]");
         return false;
     }
     unsigned a = 0, b = 0, c = 0, d = 0;
@@ -365,9 +384,11 @@ inline bool ParseServer(const char *text, Server *out, char *error, size_t error
         return false;
     }
     memcpy(out->key, words[2], keyLength);
-    if (count == 5 && (strcmp(words[3], "wait") || !Number(words[4], 86400, &out->waitSeconds)))
+    if (count == 5 && !strcmp(words[3], "wait") && !strcmp(words[4], "forever"))
+        out->waitSeconds = kWaitForever;
+    else if (count == 5 && (strcmp(words[3], "wait") || !Number(words[4], 86400, &out->waitSeconds)))
     {
-        snprintf(error, errorSize, "bench.txt: after the key only \"wait <seconds>\" (up to 86400)");
+        snprintf(error, errorSize, "bench.txt: after the key only \"wait <seconds>\" (up to 86400) or \"wait forever\"");
         return false;
     }
     return true;
@@ -378,7 +399,7 @@ inline bool ParseServer(const char *text, Server *out, char *error, size_t error
 enum class Eboot : uint8_t
 {
     Installed, // the job names none
-    Given,     // "eboot <sha256> <bytes>"
+    Given,     // "eboot <sha256> <bytes>": run as the test title
 };
 
 struct JobFile
@@ -400,6 +421,12 @@ struct Job
     bool hasPack = false;
     char packSha256[65] = {};
     uint32_t packBytes = 0;
+    // The test title's param.sfo and head.bin, to install it ("sfo", "head").
+    bool hasPackage = false;
+    char sfoSha256[65] = {};
+    uint32_t sfoBytes = 0;
+    char headSha256[65] = {};
+    uint32_t headBytes = 0;
     char send[kMaxJobFiles][kMaxFileName] = {};
     size_t sendCount = 0;
 
@@ -417,7 +444,7 @@ inline bool ParseJob(const char *text, Job *out, char *error, size_t errorSize)
     *out = Job();
     if (errorSize)
         error[0] = '\0';
-    bool sawJob = false, sawEboot = false, sawNone = false;
+    bool sawJob = false, sawEboot = false, sawNone = false, sawSfo = false, sawHead = false;
     unsigned lineNumber = 0;
     const char *from = text;
     while (*from)
@@ -489,6 +516,18 @@ inline bool ParseJob(const char *text, Job *out, char *error, size_t errorSize)
             out->hasPack = true;
             memcpy(out->packSha256, words[1], 65);
         }
+        else if (!strcmp(words[0], "sfo") || !strcmp(words[0], "head"))
+        {
+            const bool sfo = words[0][0] == 's';
+            bool &seen = sfo ? sawSfo : sawHead;
+            uint32_t &bytes = sfo ? out->sfoBytes : out->headBytes;
+            if (seen || count != 3 || !Sha256Text(words[1]) ||
+                !Number(words[2], sfo ? kMaxSfoBytes : kMaxHeadBytes, &bytes) || bytes == 0)
+                return fail(sfo ? "expected one \"sfo <sha256> <bytes>\" (up to 8 KB)"
+                                : "expected one \"head <sha256> <bytes>\" (up to 16 KB)");
+            seen = true;
+            memcpy(sfo ? out->sfoSha256 : out->headSha256, words[1], 65);
+        }
         else if (!strcmp(words[0], "send"))
         {
             if (count != 2 || !SendFileName(words[1]))
@@ -498,11 +537,18 @@ inline bool ParseJob(const char *text, Job *out, char *error, size_t errorSize)
             snprintf(out->send[out->sendCount++], kMaxFileName, "%s", words[1]);
         }
         else
-            return fail("not a job, eboot, file, pack or send line");
+            return fail("not a job, eboot, sfo, head, file, pack or send line");
     }
+    if (sawSfo != sawHead || (sawSfo && !sawEboot))
+    {
+        snprintf(error, errorSize, "job: \"sfo\" and \"head\" come together, and with an eboot line");
+        *out = Job();
+        return false;
+    }
+    out->hasPackage = sawSfo;
     if (sawNone)
     {
-        if (sawJob || sawEboot || out->fileCount || out->sendCount || out->hasPack)
+        if (sawJob || sawEboot || out->fileCount || out->sendCount || out->hasPack || out->hasPackage)
             return snprintf(error, errorSize, "job: \"none\" with more beside it"), *out = Job(), false;
         return true;
     }
@@ -514,6 +560,45 @@ inline bool ParseJob(const char *text, Job *out, char *error, size_t errorSize)
     }
     out->none = false;
     return true;
+}
+
+// ---- param.sfo -----------------------------------------------------------------------------
+//
+// An application's system file: "\0PSF", a version, where the key and value
+// tables start, the count, then 16 bytes an entry (key offset u16, format
+// u16, length u32, room u32, value offset u32), all little-endian. Reads one
+// text value (format 0x0204), for the title id a package says it installs.
+
+inline uint32_t Little32(const uint8_t *at)
+{
+    return uint32_t(at[0]) | uint32_t(at[1]) << 8 | uint32_t(at[2]) << 16 | uint32_t(at[3]) << 24;
+}
+
+inline bool SfoText(const uint8_t *data, size_t size, const char *key, char *value, size_t valueSize)
+{
+    if (!valueSize || size < 20 || memcmp(data, "\0PSF", 4))
+        return false;
+    value[0] = '\0';
+    const uint32_t keys = Little32(data + 8), values = Little32(data + 12), count = Little32(data + 16);
+    if (keys > size || values > size || count > (size - 20) / 16)
+        return false;
+    const size_t keyLength = strlen(key);
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        const uint8_t *entry = data + 20 + i * 16;
+        const uint32_t keyAt = keys + (uint32_t(entry[0]) | uint32_t(entry[1]) << 8);
+        const uint32_t format = uint32_t(entry[2]) | uint32_t(entry[3]) << 8;
+        const uint32_t length = Little32(entry + 4), valueAt = values + Little32(entry + 12);
+        if (keyAt >= size || size - keyAt <= keyLength || memcmp(data + keyAt, key, keyLength + 1))
+            continue;
+        // The length counts the terminator.
+        if (format != 0x0204 || valueAt > size || length > size - valueAt || length == 0 || length > valueSize)
+            return false;
+        memcpy(value, data + valueAt, length);
+        value[length - 1] = '\0';
+        return value[0] != '\0';
+    }
+    return false;
 }
 
 // ---- An HTTP answer's head ----------------------------------------------------------------

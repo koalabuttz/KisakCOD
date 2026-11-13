@@ -7,15 +7,16 @@
 //
 // What a start does (Begin), in the installed build:
 //
-//   - a job in the middle of its list: goes on with it, on the fetched build
-//     when the job named one;
+//   - a job in the middle of its list: goes on with it, on the test title
+//     when the job named a build;
 //   - a job whose list is over: sends its logs, tells the computer;
-//   - no job: asks for one, fetches and checks its files, starts its list.
+//   - no job: asks for one, fetches and checks its files, puts the build in
+//     the test title (installing that when it must), starts its list.
 //
-// Only the installed build talks to the computer and writes the fetched
-// build. The fetched build runs the list's starts and hands back, so a build
-// that cannot do this any more does not break the bench, and one that does
-// not start at all is given up after two tries.
+// Only the installed client talks to the computer and writes the test title.
+// The test title runs the list's starts and hands back, so a build that
+// cannot do this any more does not break the bench, and one that does not
+// start at all is given up after two tries.
 
 #pragma once
 
@@ -35,9 +36,9 @@
 namespace kisak::vita_bench
 {
 constexpr uint32_t kMaxSendBytes = 16u << 20;
-// What a build started by the bench finds among its arguments: that it is
-// the fetched build, and that no person tapped the bubble for this start.
-constexpr char kStartedAsFetched[] = "-bench-fetched-build";
+// What a build started by the bench finds among its arguments: no person
+// tapped the bubble for this start. (A start of the other title finds
+// bench-launch.txt instead: the system passes it no argument.)
 constexpr char kStartedByBench[] = "-bench-restart";
 
 enum class Start
@@ -52,9 +53,14 @@ struct Platform
     virtual ~Platform() = default;
     // The network, before the first message. False when there is none.
     virtual bool Network() = 0;
-    // Starts the installed build (false) or the fetched one (true) in this
+    // Starts the installed client (false) or the test title (true) in this
     // process's place. Returns only when that could not be done.
-    virtual void StartBuild(bool fetched) = 0;
+    virtual void StartBuild(bool testTitle) = 0;
+    // Installs the package laid out in `folder` (eboot.bin,
+    // sce_sys/param.sfo, sce_sys/package/head.bin) with the system's
+    // installer, which moves it into the application's folder. False, with
+    // why, when it did not.
+    virtual bool Install(const char *folder, char *error, size_t errorSize) = 0;
     // No work yet: waits about that long. False when the person asks for an
     // ordinary start.
     virtual bool Wait(unsigned seconds) = 0;
@@ -64,7 +70,9 @@ struct Platform
 struct Paths
 {
     char data[96] = {};   // the data folder: bench.txt, a job's files, the logs
-    char eboot[128] = {}; // where the fetched build is kept
+    char eboot[128] = {};    // the test title's eboot.bin, in its folder
+    char testTitle[16] = {}; // its title id, which a package must install
+    char install[128] = {};  // where a package is laid out for the installer
     char programs[128] = {}; // the program folder, for a job's pack
     const char *runList = "runlist-mp.txt";
     const char *runListAt = "runlist-mp.at";
@@ -103,14 +111,14 @@ class Bench
         {
             if (have && !state.send && state.fetched && listLeft)
             {
-                Log("job %s: a start on the fetched build", state.id);
+                Log("job %s: a start on the test title", state.id);
                 state_ = state;
                 active_ = true;
                 return Start::OfJob;
             }
-            Log("the fetched build has no start to run: back to the installed build");
+            Log("the test title has no start to run: back to the installed client");
             platform_->StartBuild(false);
-            Log("the installed build could not be started; %s", idleText);
+            Log("the installed client could not be started; %s", idleText);
             return idle;
         }
         if (have && !state.send)
@@ -123,7 +131,7 @@ class Bench
             }
             else if (!state.fetched)
             {
-                Log("job %s: a start on the installed build", state.id);
+                Log("job %s: a start on the installed client", state.id);
                 state_ = state;
                 active_ = true;
                 return Start::OfJob;
@@ -179,7 +187,7 @@ class Bench
                         WriteState(state);
                         if (!state.fetched)
                         {
-                            Log("job %s: starting its list on the installed build", state.id);
+                            Log("job %s: starting its list on the installed client", state.id);
                             state_ = state;
                             active_ = true;
                             return Start::OfJob;
@@ -197,7 +205,10 @@ class Bench
                 }
                 reached = got == 0;
             }
-            if (waited >= server_.waitSeconds)
+            if (waited == 0 && server_.waitSeconds == kWaitForever)
+                Log("%s; asking every 5 s until START + SELECT is held",
+                    reached ? "no job waits" : "the computer does not answer");
+            if (server_.waitSeconds != kWaitForever && waited >= server_.waitSeconds)
             {
                 Log("%s; %s", reached ? "no job waits" : "the computer does not answer", idleText);
                 return idle;
@@ -454,22 +465,22 @@ class Bench
         WriteText(Path(path, "bench-job.txt"), text);
     }
 
-    // Hands over to the fetched build. When that cannot be done, or it did
-    // not come up twice running, the job has failed and its logs go back.
+    // Hands over to the test title. When that cannot be done, or it did not
+    // come up twice running, the job has failed and its logs go back.
     void StartFetched(State *state)
     {
         char path[224], text[32];
         ReadText(Path(path, "bench-hop.txt"), text, sizeof(text));
         const unsigned tries = (unsigned)atoi(text);
         if (tries >= 2)
-            snprintf(state->note, sizeof(state->note), "the fetched build did not come up, tried twice");
+            snprintf(state->note, sizeof(state->note), "the test title did not come up, tried twice");
         else
         {
             snprintf(text, sizeof(text), "%u\n", tries + 1);
             WriteText(path, text);
-            Log("job %s: handing over to the fetched build (try %u)", state->id, tries + 1);
+            Log("job %s: handing over to the test title (try %u)", state->id, tries + 1);
             platform_->StartBuild(true);
-            snprintf(state->note, sizeof(state->note), "the fetched build could not be started");
+            snprintf(state->note, sizeof(state->note), "the test title could not be started");
         }
         unlink(path);
         Log("job %s: %s", state->id, state->note);
@@ -677,34 +688,11 @@ class Bench
             return dropParts(), 0;
         }
 
-        if (job.eboot == Eboot::Given && !paths_.eboot[0])
-        {
-            snprintf(reason, reasonSize, "this program has no place for a fetched build");
-            return dropParts(), 0;
-        }
         if (job.eboot == Eboot::Given)
         {
-            char have[80];
-            ReadText(Path(path, "bench-eboot.txt"), have, sizeof(have));
-            if (strncmp(have, job.ebootSha256, 64) || FileBytes(paths_.eboot) != (long)job.ebootBytes)
-            {
-                unlink(path);
-                snprintf(part, sizeof(part), "%s.part", paths_.eboot);
-                const int fetched = Fetch(job.ebootSha256, job.ebootBytes, part, reason, reasonSize);
-                if (fetched != 1)
-                    return dropParts(), fetched;
-                if (!Replace(part, paths_.eboot))
-                {
-                    snprintf(reason, reasonSize, "the build cannot be put at %s (errno %d)", paths_.eboot, errno);
-                    unlink(part);
-                    return dropParts(), 0;
-                }
-                WriteText(Path(path, "bench-eboot.txt"), job.ebootSha256);
-                Log("job %s: fetched the build %.12s, %u bytes", job.id, job.ebootSha256,
-                    (unsigned int)job.ebootBytes);
-            }
-            else
-                Log("job %s: the build %.12s is on the card already", job.id, job.ebootSha256);
+            const int placed = PlaceTestTitle(job, reason, reasonSize);
+            if (placed != 1)
+                return dropParts(), placed;
         }
 
         if (job.hasPack)
@@ -751,6 +739,126 @@ class Bench
                 }
             }
         Log("job %s: %u files in place, %u starts", job.id, (unsigned int)job.fileCount, (unsigned int)starts);
+        return 1;
+    }
+
+    // The folder that holds a file: its path up to the last '/'.
+    static void Folder(const char *file, char *folder, size_t size)
+    {
+        snprintf(folder, size, "%s", file);
+        if (char *slash = strrchr(folder, '/'))
+            *slash = '\0';
+    }
+
+    // Puts the job's build in the test title: written into its folder when
+    // it is installed and the folder takes it, else installed from the job's
+    // package. 1: there. 0: the job has failed, with the reason. -1: the
+    // computer did not give a file this time.
+    int PlaceTestTitle(const Job &job, char *reason, size_t reasonSize)
+    {
+        if (!paths_.eboot[0] || !paths_.testTitle[0])
+            return snprintf(reason, reasonSize, "this program has no test title to run a build on"), 0;
+        char path[224], part[232], app[160], sfo[192], have[80];
+        Folder(paths_.eboot, app, sizeof(app));
+        snprintf(sfo, sizeof(sfo), "%s/sce_sys/param.sfo", app);
+        const bool installed = FileBytes(sfo) >= 0;
+        ReadText(Path(path, "bench-eboot.txt"), have, sizeof(have));
+        if (installed && !strncmp(have, job.ebootSha256, 64) && FileBytes(paths_.eboot) == (long)job.ebootBytes)
+        {
+            Log("job %s: the build %.12s is in the test title already", job.id, job.ebootSha256);
+            return 1;
+        }
+        unlink(path);
+        char refused[160] = {};
+        if (installed)
+        {
+            snprintf(part, sizeof(part), "%s.part", paths_.eboot);
+            const int fetched = Fetch(job.ebootSha256, job.ebootBytes, part, refused, sizeof(refused));
+            if (fetched < 0)
+                return snprintf(reason, reasonSize, "%s", refused), -1;
+            if (fetched == 1 && Replace(part, paths_.eboot))
+            {
+                WriteText(path, job.ebootSha256);
+                Log("job %s: fetched the build %.12s, %u bytes, into the test title", job.id, job.ebootSha256,
+                    (unsigned int)job.ebootBytes);
+                return 1;
+            }
+            if (fetched == 1)
+            {
+                snprintf(refused, sizeof(refused), "the build cannot be put at %.100s (errno %d)", paths_.eboot, errno);
+                unlink(part);
+            }
+        }
+        else
+            snprintf(refused, sizeof(refused), "the test title %s is not installed", paths_.testTitle);
+        if (!job.hasPackage)
+            return snprintf(reason, reasonSize, "%.110s; the job has no package to install it", refused), 0;
+        Log("job %s: %s; installing it", job.id, refused);
+        return InstallTestTitle(job, reason, reasonSize);
+    }
+
+    void ClearInstallFolder() const
+    {
+        char path[192];
+        static const char *const kFiles[] = {"sce_sys/package/head.bin", "sce_sys/param.sfo", "eboot.bin",
+                                             "sce_sys/package", "sce_sys", ""};
+        for (const char *name : kFiles)
+        {
+            snprintf(path, sizeof(path), "%s%s%s", paths_.install, name[0] ? "/" : "", name);
+            if (unlink(path) != 0)
+                rmdir(path);
+        }
+    }
+
+    int InstallTestTitle(const Job &job, char *reason, size_t reasonSize)
+    {
+        char sce[160], package[176], eboot[192], sfo[192], head[192];
+        snprintf(sce, sizeof(sce), "%s/sce_sys", paths_.install);
+        snprintf(package, sizeof(package), "%s/package", sce);
+        snprintf(eboot, sizeof(eboot), "%s/eboot.bin", paths_.install);
+        snprintf(sfo, sizeof(sfo), "%s/param.sfo", sce);
+        snprintf(head, sizeof(head), "%s/head.bin", package);
+        ClearInstallFolder();
+        mkdir(paths_.install, 0777);
+        mkdir(sce, 0777);
+        mkdir(package, 0777);
+        struct
+        {
+            const char *sha256;
+            uint32_t bytes;
+            const char *path;
+        } const parts[] = {{job.sfoSha256, job.sfoBytes, sfo}, {job.headSha256, job.headBytes, head},
+                           {job.ebootSha256, job.ebootBytes, eboot}};
+        for (const auto &file : parts)
+        {
+            const int fetched = Fetch(file.sha256, file.bytes, file.path, reason, reasonSize);
+            if (fetched != 1)
+                return ClearInstallFolder(), fetched;
+        }
+        // The package must install the test title, never the client itself
+        // or another application.
+        char title[16] = {};
+        FILE *file = fopen(sfo, "rb");
+        const size_t length = file ? fread(buffer_, 1, sizeof(buffer_), file) : 0;
+        if (file)
+            fclose(file);
+        if (!SfoText(reinterpret_cast<const uint8_t *>(buffer_), length, "TITLE_ID", title, sizeof(title)) ||
+            strcmp(title, paths_.testTitle))
+        {
+            snprintf(reason, reasonSize, "the package installs \"%s\", not the test title %s", title, paths_.testTitle);
+            return ClearInstallFolder(), 0;
+        }
+        char error[128] = {};
+        const bool done = platform_->Install(paths_.install, error, sizeof(error));
+        ClearInstallFolder();
+        if (!done)
+            return snprintf(reason, reasonSize, "the system did not install the test title: %.100s", error), 0;
+        if (FileBytes(paths_.eboot) != (long)job.ebootBytes)
+            return snprintf(reason, reasonSize, "after the install the test title holds no build of that size"), 0;
+        char path[224];
+        WriteText(Path(path, "bench-eboot.txt"), job.ebootSha256);
+        Log("job %s: installed the test title %s with the build %.12s, %u bytes", job.id, paths_.testTitle,
+            job.ebootSha256, (unsigned int)job.ebootBytes);
         return 1;
     }
 

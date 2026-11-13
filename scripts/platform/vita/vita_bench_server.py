@@ -3,18 +3,30 @@
 
 A Vita with ``bench.txt`` in its data folder asks this server for work when
 its multiplayer client starts (docs/vita.md, "A bench that fetches its work";
-the Vita's side is src/vita/vita_bench.h). A job is a build's ``eboot.bin``
-(or none, for the installed build), a run list and its step files. The Vita
-fetches them, runs the list and sends each start's log back. Standard library
-only.
+the Vita's side is src/vita/vita_bench.h). A job is a build (or none, for the
+installed client), a run list and its step files. The Vita fetches them, puts
+the build in its second application, KisakCOD Test (installing that when it
+is not there), runs the list and sends each start's log back. Standard
+library only.
 
     vita_bench_server.py key   --root DIR
         Makes the bench's folder and its key, and prints the line for the
         card's bench.txt.
+    vita_bench_server.py head-template --root DIR [--from FILE]
+        Fetches the package head that the Vita's installer needs (VitaShell's
+        resources/head.bin, at a fixed commit and checked by its SHA-256),
+        or takes it from FILE. Once; without it a job can only replace the
+        build of a test title that is installed already.
     vita_bench_server.py add   --root DIR --name NAME --run-list FILE
-                               [--vpk FILE | --eboot FILE] [--file FILE ...]
-                               [--pack FILE] [--send NAME ...]
-        Queues a job. --vpk takes the eboot.bin out of a build's package.
+                               [--vpk FILE | --eboot FILE | --ci-commit SHA]
+                               [--file FILE ...] [--pack FILE] [--send NAME ...]
+        Queues a job. --vpk is the build's KisakCOD-mp-test.vpk (the test
+        title's package, which CI builds beside KisakCOD-mp.vpk): its
+        eboot.bin, and its param.sfo and a head made for it, so the Vita can
+        install the test title. --eboot is a bare eboot.bin. --ci-commit
+        fetches the commit's KisakCOD-mp-test.vpk from hosted CI with gh
+        (the workflow "PS Vita server and client"; it must have finished
+        green) into ci/<sha>/ and queues that.
         The run list goes to the card as runlist-mp.txt, the files under
         their own names (.txt). --pack is a programs.pack of compiled
         programs (vita_pack_programs.py) for the card's program folder.
@@ -24,8 +36,9 @@ only.
     vita_bench_server.py list  --root DIR
         What waits and what is done.
 
-The folder: ``key.txt``; ``queue/<job>/`` (``eboot.bin``, ``programs.pack``,
-``files/``, ``send.txt``, and ``logs/`` as they arrive); ``done/<job>/`` with
+The folder: ``key.txt``; ``head-template.bin``; ``queue/<job>/``
+(``eboot.bin``, ``param.sfo``, ``head.bin``, ``programs.pack``, ``files/``,
+``send.txt``, and ``logs/`` as they arrive); ``done/<job>/`` with
 ``result.txt`` once the Vita says the job is over.
 
 The key never travels. Every request carries a code made with it
@@ -44,7 +57,11 @@ import re
 import secrets
 import shutil
 import sys
+import json
+import struct
+import subprocess
 import time
+import urllib.request
 import zipfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -55,6 +72,16 @@ MAX_FILE_BYTES = 1 << 20
 MAX_EBOOT_BYTES = 64 << 20
 MAX_PACK_BYTES = 64 << 20
 MAX_LOG_BYTES = 16 << 20
+MAX_SFO_BYTES = 8 << 10
+TEST_TITLE = "KSKD00004"
+CI_REPO = "koalabuttz/KisakCOD"
+CI_WORKFLOW = "build-kisakcod-vita.yaml"
+CI_ARTIFACT = "KisakCOD-mp-vita-RelWithDebInfo"
+# The package head VitaShell installs homebrew with (GPLv3, as this project):
+# a fixed commit, checked by its SHA-256.
+HEAD_TEMPLATE_URL = ("https://raw.githubusercontent.com/TheOfficialFloW/VitaShell/"
+                     "81af70971ba18b8ce86215b04180f1e3d21cdfc9/resources/head.bin")
+HEAD_TEMPLATE_SHA256 = "cbb88299319048e19115a1fc9c76b04e33745291749de0e08963b9b425623f45"
 PLAIN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]*$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 NONCE = re.compile(r"^[0-9a-f]{32}$")
@@ -85,6 +112,59 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def sfo_text(data: bytes, key: str):
+    """A text value of a param.sfo, or None (src/vita/vita_bench.h, SfoText)."""
+    if len(data) < 20 or data[:4] != b"\0PSF":
+        return None
+    keys, values, count = struct.unpack_from("<III", data, 8)
+    if keys > len(data) or values > len(data) or count > (len(data) - 20) // 16:
+        return None
+    for index in range(count):
+        key_at, form, length, _, value_at = struct.unpack_from("<HHIII", data, 20 + index * 16)
+        key_at += keys
+        value_at += values
+        end = data.find(b"\0", key_at)
+        if key_at >= len(data) or end < 0 or data[key_at:end] != key.encode():
+            continue
+        if form != 0x0204 or value_at + length > len(data) or not length:
+            return None
+        return data[value_at:value_at + length].split(b"\0")[0].decode(errors="replace") or None
+    return None
+
+
+def fpkg_hmac(data: bytes) -> bytes:
+    """The code a homebrew package's head carries in place of Sony's (after
+    VitaShell's package_installer.c, fpkg_hmac)."""
+    sha = hashlib.sha1(data).digest()
+    buffer = bytearray(64)
+    buffer[0:8] = sha[4:12]
+    buffer[8:16] = sha[4:12]
+    buffer[16:20] = sha[12:16]
+    buffer[20] = sha[16]
+    buffer[21:24] = sha[1:4]
+    buffer[24:32] = buffer[16:24]
+    return hashlib.sha1(bytes(buffer)).digest()[:16]
+
+
+def make_head(template: bytes, sfo: bytes) -> bytes:
+    """sce_sys/package/head.bin for a homebrew package (after VitaShell's
+    makeHeadBin): the template with the content id and three codes."""
+    title = sfo_text(sfo, "TITLE_ID")
+    if not title or len(title) != 9 or title != title.upper():
+        raise SystemExit("the param.sfo has no title id of nine capitals and digits")
+    content = sfo_text(sfo, "CONTENT_ID") or f"EP9000-{title}_00-0000000000000000"
+    head = bytearray(template)
+    head[0x30:0x30 + 48] = content.encode()[:48].ljust(48, b"\0")
+    big = lambda at: struct.unpack_from(">I", head, at)[0]
+    for start, length, out in ((0, big(0xD0), big(0xD0)),
+                               (big(0x8), big(0x10) - 64, big(0xD4)),
+                               (0, big(0xE8), big(0xE8))):
+        if not (0 <= start and start + length <= len(head) and out + 16 <= len(head)):
+            raise SystemExit("head-template.bin is not a package head")
+        head[out:out + 16] = fpkg_hmac(bytes(head[start:start + length]))
+    return bytes(head)
+
+
 def read_key(root: Path) -> str:
     key = (root / "key.txt").read_text().strip()
     if not (16 <= len(key) < 48 and key.isalnum() and key.isascii()):
@@ -102,7 +182,8 @@ def queued_jobs(root: Path) -> list:
 def job_blobs(job: Path) -> dict:
     """What a job is made of: {name on the card, 'eboot' or 'pack': (path, sha256, bytes)}."""
     blobs = {}
-    for kind, name in (("eboot", "eboot.bin"), ("pack", "programs.pack")):
+    for kind, name in (("eboot", "eboot.bin"), ("pack", "programs.pack"), ("sfo", "param.sfo"),
+                       ("head", "head.bin")):
         path = job / name
         if path.is_file():
             blobs[kind] = (path, sha256_file(path), path.stat().st_size)
@@ -117,7 +198,8 @@ def job_blobs(job: Path) -> dict:
 def job_text(job: Path) -> str:
     lines = [f"job {job.name}"]
     for name, (_, digest, size) in job_blobs(job).items():
-        lines.append(f"{name} {digest} {size}" if name in ("eboot", "pack") else f"file {name} {digest} {size}")
+        lines.append(f"{name} {digest} {size}" if name in ("eboot", "pack", "sfo", "head")
+                     else f"file {name} {digest} {size}")
     send = job / "send.txt"
     if send.is_file():
         lines += [f"send {name}" for name in send.read_text().split() if send_file_name(name)]
@@ -258,6 +340,32 @@ def command_key(args) -> int:
     return 0
 
 
+def ci_vpk(root: Path, commit: str, repo: str) -> Path:
+    """The commit's test .vpk from hosted CI, fetched once into ci/<sha>/."""
+    if not re.match(r"^[0-9a-f]{7,40}$", commit):
+        raise SystemExit("--ci-commit: a commit's hex name")
+    runs = subprocess.run(["gh", "run", "list", "--repo", repo, "--commit", commit, "--workflow", CI_WORKFLOW,
+                           "--json", "databaseId,status,conclusion,headSha"],
+                          capture_output=True, text=True, timeout=120)
+    if runs.returncode:
+        raise SystemExit(f"gh run list: {runs.stderr.strip()}")
+    green = [run for run in json.loads(runs.stdout or "[]")
+             if run.get("status") == "completed" and run.get("conclusion") == "success"]
+    if not green:
+        raise SystemExit(f"no finished green {CI_WORKFLOW} run of {commit} yet")
+    folder = root / "ci" / green[0]["headSha"]
+    vpk = folder / "KisakCOD-mp-test.vpk"
+    if not vpk.is_file():
+        folder.mkdir(parents=True, exist_ok=True)
+        fetched = subprocess.run(["gh", "run", "download", str(green[0]["databaseId"]), "--repo", repo,
+                                  "--name", CI_ARTIFACT, "--dir", str(folder)],
+                                 capture_output=True, text=True, timeout=900)
+        if fetched.returncode or not vpk.is_file():
+            raise SystemExit(f"gh run download: {fetched.stderr.strip() or 'no KisakCOD-mp-test.vpk in the artifact'}")
+    print(f"the build of {green[0]['headSha'][:12]} from CI run {green[0]['databaseId']}: {vpk}")
+    return vpk
+
+
 def command_add(args) -> int:
     root = Path(args.root)
     read_key(root)
@@ -291,10 +399,24 @@ def command_add(args) -> int:
         if not send_file_name(name):
             raise SystemExit(f"--send {name}: a plain name ending in .txt, .log, .json or .csv")
 
-    eboot = None
+    eboot = sfo = head = None
+    if args.ci_commit:
+        args.vpk = str(ci_vpk(root, args.ci_commit, args.repo))
     if args.vpk:
         with zipfile.ZipFile(args.vpk) as package:
             eboot = package.read("eboot.bin")
+            sfo = package.read("sce_sys/param.sfo")
+        title = sfo_text(sfo, "TITLE_ID")
+        if title != args.title or len(sfo) > MAX_SFO_BYTES:
+            raise SystemExit(f"--vpk {args.vpk}: the package installs {title}, not the test title {args.title}; "
+                             f"queue the build's KisakCOD-mp-test.vpk (or --eboot with its eboot.bin)")
+        template = root / "head-template.bin"
+        if template.is_file():
+            head = make_head(template.read_bytes(), sfo)
+        else:
+            print(f"no head-template.bin (the head-template command): the Vita can only replace the build "
+                  f"of a test title that is installed already")
+            sfo = None
     elif args.eboot:
         eboot = Path(args.eboot).read_bytes()
     if eboot is not None and not 0 < len(eboot) <= MAX_EBOOT_BYTES:
@@ -313,13 +435,32 @@ def command_add(args) -> int:
         shutil.copyfile(path, work / "files" / name)
     if eboot is not None:
         (work / "eboot.bin").write_bytes(eboot)
+    if sfo is not None and head is not None:
+        (work / "param.sfo").write_bytes(sfo)
+        (work / "head.bin").write_bytes(head)
     if args.pack:
         shutil.copyfile(args.pack, work / "programs.pack")
     if args.send:
         (work / "send.txt").write_text("\n".join(args.send) + "\n")
     work.rename(root / "queue" / job_id)
-    build = f"its own build ({hashlib.sha256(eboot).hexdigest()[:12]})" if eboot is not None else "the installed build"
-    print(f"queued {job_id}: {starts} starts on {build}, {len(files)} files" + (", a program pack" if args.pack else ""))
+    build = f"its own build ({hashlib.sha256(eboot).hexdigest()[:12]})" if eboot is not None else "the installed client"
+    print(f"queued {job_id}: {starts} starts on {build}, {len(files)} files" + (", a program pack" if args.pack else "")
+          + (", a package to install the test title" if head is not None else ""))
+    return 0
+
+
+def command_head_template(args) -> int:
+    root = Path(args.root)
+    read_key(root)
+    if args.source:
+        data = Path(args.source).read_bytes()
+    else:
+        with urllib.request.urlopen(HEAD_TEMPLATE_URL, timeout=60) as answer:
+            data = answer.read(1 << 16)
+    if hashlib.sha256(data).hexdigest() != HEAD_TEMPLATE_SHA256:
+        raise SystemExit("that is not the package head this expects (its SHA-256 differs)")
+    (root / "head-template.bin").write_bytes(data)
+    print(f"head-template.bin is in place ({len(data)} bytes): jobs from a test .vpk can install the test title")
     return 0
 
 
@@ -352,7 +493,7 @@ def command_serve(args) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("key", "add", "serve", "list"):
+    for name in ("key", "add", "serve", "list", "head-template"):
         sub = commands.add_parser(name)
         sub.add_argument("--root", required=True)
         if name in ("key", "serve"):
@@ -365,11 +506,17 @@ def main() -> int:
             build = sub.add_mutually_exclusive_group()
             build.add_argument("--vpk")
             build.add_argument("--eboot")
+            build.add_argument("--ci-commit")
+            sub.add_argument("--repo", default=CI_REPO)
             sub.add_argument("--file", action="append")
             sub.add_argument("--pack")
             sub.add_argument("--send", action="append")
+            sub.add_argument("--title", default=TEST_TITLE, help="the test title's id (default %(default)s)")
+        if name == "head-template":
+            sub.add_argument("--from", dest="source")
     args = parser.parse_args()
-    return {"key": command_key, "add": command_add, "serve": command_serve, "list": command_list}[args.command](args)
+    return {"key": command_key, "add": command_add, "serve": command_serve, "list": command_list,
+            "head-template": command_head_template}[args.command](args)
 
 
 if __name__ == "__main__":
