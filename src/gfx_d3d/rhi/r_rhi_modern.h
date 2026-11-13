@@ -46,6 +46,27 @@ struct GfxModernLitInputs
     // stored colour is decoded without its clamp to 1, so a lit surface
     // computed over white stays over white for the tonemap and bloom.
     bool overWhite;
+    // With overWhite: a Modern lit shader of the back end's own that this
+    // pass's pixel shader can be drawn as instead (it reads the same samplers,
+    // registers and vertex outputs, which the renderer has checked), or
+    // GFX_MODERN_LIT_SHADER_NONE.
+    uint8_t shader;
+};
+
+// The Modern lit shader's code: the family, plus flags for its maps and its
+// mode (the same values as the Vulkan back end's ModernLitShader).
+enum GfxModernLitShader : uint8_t
+{
+    GFX_MODERN_LIT_SHADER_NONE = 0,
+    // lm_[hsm_]sun_<mode>c0[d0][n0][s0]: world surfaces lit by lightmaps and
+    // the sun, with a colour map.
+    GFX_MODERN_LIT_SHADER_LM_SUN = 0x40,
+    GFX_MODERN_LIT_SHADER_SHADOW = 0x01,   // hsm: the sun's shadow map
+    GFX_MODERN_LIT_SHADER_NORMAL = 0x02,   // n0: a normal map
+    GFX_MODERN_LIT_SHADER_SPECULAR = 0x04, // s0: a specular map and the reflection probe
+    GFX_MODERN_LIT_SHADER_DETAIL = 0x08,   // d0: a detail map
+    GFX_MODERN_LIT_SHADER_BLENDED = 0x10,  // b0 (else r0, opaque)
+    GFX_MODERN_LIT_SHADER_ALPHA_TESTED = 0x20, // t0
 };
 
 struct GfxModernHooks

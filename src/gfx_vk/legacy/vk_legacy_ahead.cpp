@@ -25,7 +25,8 @@ namespace
 // ---- The list ------------------------------------------------------------------------------
 
 constexpr char kMagic[8] = {'K', 'V', 'K', 'P', 'L', 'S', 'T', '1'};
-constexpr uint32_t kListVersion = 3; // 2: ContentHash reads 8-byte words; 3: linear inputs in the key
+constexpr uint32_t kListVersion = 4; // 2: ContentHash reads 8-byte words; 3: linear inputs in the key;
+                                     // 4: the Modern lit shader's flags in the key
 constexpr uint32_t kMaxEntries = 16384;
 
 // A pipeline as the list names it: its shaders and declaration by their

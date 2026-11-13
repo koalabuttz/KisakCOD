@@ -579,6 +579,7 @@ void ModernLitInputs(void *, IDirect3DDevice9 *device, const GfxModernLitInputs 
     lit.doubled = inputs->doubled;
     lit.colorInput = inputs->colorInput;
     lit.overWhite = inputs->overWhite;
+    lit.shader = inputs->shader;
     front::SetModernLitInputs(device, &lit);
 }
 

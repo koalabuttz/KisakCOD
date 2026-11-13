@@ -507,6 +507,9 @@ VkShaderModule FindPixelModule(Device &device, Shader &ps, const Shader &vs, uin
         inputs.samplers = linear.linearSamplers;
         inputs.doubled = linear.linearDoubled;
         inputs.flags = linear.linearColorInput;
+        inputs.shader = linear.linearShader;
+        recipe.sunStrength = device.modernSunStrength;
+        recipe.skyStrength = device.modernSkyStrength;
     }
     // Where depth compare is fixed, so is the reference's clamp
     // (SamplerStateBlock::drefClamp, as FillUniformBlock writes it).
@@ -524,6 +527,49 @@ bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Sh
 {
     if (recipe.plain)
         return ls::BuildSpirv(ps.translated, nullptr, spirv, error);
+    // A Modern lit shader of ours in place of the pixel shader, where it links
+    // to the vertex shader; else the pixel shader as it is (its key keeps the
+    // shader, so this is decided once). The pipeline's layout is the pixel
+    // shader's, so it must read at least what ours reads (the constants to
+    // c18, or c19 with the specular; 2D images at s0, s2, s3 and the shadow,
+    // normal, specular and detail maps' samplers; a cube at s1 with the
+    // specular; the alpha test's block), and the shadow map must be a depth
+    // image where depth compare is fixed.
+    const uint8_t shader = recipe.linearInputs ? recipe.moduleKey.inputs.shader : uint8_t(ModernLitNone);
+    if (ModernLitShaderValid(shader))
+    {
+        const ls::Reflection &pr = ps.translated.reflection;
+        const uint32_t normal = 4u + (shader & ModernLitShadow ? 1u : 0u);
+        const uint32_t specular = normal + (shader & ModernLitNormal ? 1u : 0u);
+        const uint32_t detail = specular + (shader & ModernLitSpecular ? 1u : 0u);
+        const uint32_t images = 1u << 0 | 1u << 2 | 1u << 3 | (shader & ModernLitShadow ? 1u << 4 : 0u)
+            | (shader & ModernLitNormal ? 1u << normal : 0u) | (shader & ModernLitSpecular ? 1u << specular : 0u)
+            | (shader & ModernLitDetail ? 1u << detail : 0u);
+        const uint32_t cubes = shader & ModernLitSpecular ? 1u << 1 : 0u;
+        const uint32_t uniforms = 1u << static_cast<uint32_t>(ls::Uniform::FloatConstants)
+            | 1u << static_cast<uint32_t>(ls::Uniform::AlphaTest);
+        bool fits = pr.floatConstants >= (shader & ModernLitSpecular ? 20u : 19u)
+            && (pr.uniforms & uniforms) == uniforms && (pr.samplers & (images | cubes)) == (images | cubes)
+            && (!(shader & ModernLitShadow) || !recipe.fixDepth || (recipe.depthCompare & (1u << 4)));
+        for (uint32_t sampler = 0; sampler < ls::kSamplerCount && fits; ++sampler)
+        {
+            if (images & (1u << sampler))
+                fits = pr.samplerTypes[sampler] == ls::TextureType::Tex2D;
+            else if (cubes & (1u << sampler))
+                fits = pr.samplerTypes[sampler] == ls::TextureType::Cube;
+        }
+        // Where the alpha test's compare is fixed as Always, ours leaves it out.
+        const bool alphaTest =
+            !recipe.fixAlpha || recipe.alphaCompare != static_cast<uint32_t>(ls::AlphaCompare::Always);
+        if (fits
+            && BuildModernLitSpirv(shader, vs.translated, recipe.sunStrength, recipe.skyStrength,
+                                   (recipe.depthCompare & ls::kFixedDepthClamp) != 0, alphaTest, spirv))
+        {
+            recipe.modernBuilt = true;
+            return true;
+        }
+    }
+    recipe.modernBuilt = false;
     return ls::BuildSpirv(ps.translated, recipe.direct ? nullptr : &vs.translated, spirv, error,
                           recipe.fixDepth ? &recipe.depthCompare : nullptr,
                           recipe.fixAlpha ? &recipe.alphaCompare : nullptr, recipe.linearOutput,
@@ -543,6 +589,10 @@ bool KeepPixelModule(Device &device, Shader &ps, const PixelModuleRecipe &recipe
         return false;
     if (!recipe.direct)
         ++device.stats.shaderPairs;
+    if (recipe.modernBuilt)
+        ++device.stats.modernLitModules;
+    else if (recipe.linearInputs && recipe.moduleKey.inputs.shader)
+        ++device.stats.modernLitRefused;
     return true;
 }
 
@@ -838,6 +888,7 @@ PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, co
         key.linearColorInput = inputs.flags;
         key.linearConstants[0] = static_cast<uint32_t>(constants);
         key.linearConstants[1] = static_cast<uint32_t>(constants >> 32);
+        key.linearShader = inputs.shader;
     }
     key.depthFormat = device.passDepth ? static_cast<uint32_t>(device.depthFormat) : 0;
     key.samples = static_cast<uint8_t>(device.passSamples);
@@ -2823,13 +2874,16 @@ void SetLinearLight(Texture *texture, bool linear)
 }
 
 void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint16_t doubled, bool colorInput,
-                     bool overWhite)
+                     bool overWhite, uint8_t shader)
 {
     if (!device)
         return;
     ls::LinearInputs inputs;
     if (overWhite)
+    {
         inputs.flags = ls::kLinearOverWhite;
+        inputs.shader = ModernLitShaderValid(shader) ? shader : uint8_t(ModernLitNone);
+    }
     else
     {
         inputs.constants = constants;
@@ -2843,6 +2897,14 @@ void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint
     device->linearInputs = inputs;
     device->linearInputsOn = on;
     device->keyStale = true;
+}
+
+void SetModernLitStrengths(Device *device, float sun, float sky)
+{
+    if (!device)
+        return;
+    device->modernSunStrength = sun;
+    device->modernSkyStrength = sky;
 }
 
 PresentResult Present(Device *device) { return Present(device, nullptr); }
