@@ -4118,11 +4118,11 @@ void Check::ModernTonemap()
 }
 
 // Auto exposure (vk_modern.h MeasureExposure), with the default key 0.115 and
-// range -1 to +1.5 EV: four scenes, each one grey all over. A cut takes the
+// range -1 to +1 EV: four scenes, each one grey all over. A cut takes the
 // exposure at once: grey 100 (0.127 of light) is brought to the key exactly
 // (0.115, shown 95); white (1) wants -3.1 EV and gets -1 (0.5, 188); grey 40
-// (0.021) wants +2.4 and gets +1.5. Then grey 40 without a cut after grey
-// 100 moves only part of the way from grey 100's exposure towards +1.5 (at
+// (0.021) wants +2.4 and gets +1. Then grey 40 without a cut after grey
+// 100 moves only part of the way from grey 100's exposure towards +1 (at
 // most a second's worth of the 2.5 s time constant). With
 // KISAK_VK_MODERN_EXPOSURE=0, or without linear light, every grey is shown
 // through the curve alone.
@@ -4157,7 +4157,7 @@ void Check::ModernExposure()
     };
     const double key = 0.115;
     const auto exposed = [&](int grey, double ev) { return shown(decode(grey) * (on ? std::exp2(ev) : 1.0)); };
-    const auto target = [&](int grey) { return std::clamp(std::log2(key / decode(grey)), -1.0, 1.5); };
+    const auto target = [&](int grey) { return std::clamp(std::log2(key / decode(grey)), -1.0, 1.0); };
 
     scene(100, true);
     if (Read())
