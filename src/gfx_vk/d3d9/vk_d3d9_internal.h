@@ -544,6 +544,10 @@ public:
     // the linear-light image standing in for the back buffer.
     ModernResult ModernSceneBegin();
     ModernResult ModernSceneDone(const ModernSceneView &view);
+    void ModernSurfaceMoved(const float clip[4][4], const float prevClip[4][4])
+    {
+        BackendModernSurfaceMoved(backend_, legacy_, clip, prevClip);
+    }
     const Host &host() const { return parent_->host(); }
     HRESULT Unsupported(const char *method);
     DeviceCounters counters() const;

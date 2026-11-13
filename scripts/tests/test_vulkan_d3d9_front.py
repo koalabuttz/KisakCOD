@@ -40,10 +40,12 @@ involved. The checks:
                  setting (what each setting did to its frame, and that the
                  statistics count from where they were last started, are the
                  scene's own points); and the Modern path's statistics lines
-                 count the 21 anti-aliased scenes of modern_taa and
-                 modern_linear, 3 of them without history, and modern_linear's
-                 one scene in linear light with one copy read from it (none
-                 with KISAK_VK_MODERN_LINEAR=0)
+                 count the 37 anti-aliased scenes of modern_taa,
+                 modern_linear and modern_velocity, 5 of them without
+                 history, modern_velocity's 7 scenes with a surface that
+                 moves on its own (7 surfaces), and modern_linear's one
+                 scene in linear light with one copy read from it (none with
+                 KISAK_VK_MODERN_LINEAR=0)
   linear-off     --scene modern_linear passes with KISAK_VK_MODERN_LINEAR=0
                  too, where the scene is drawn as always (the scene's own
                  points tell the two apart)
@@ -62,7 +64,7 @@ import sys
 # The scenes the check runs, in order. A scene added to the check is added here.
 SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'model_lighting', 'dirty_update',
           'references', 'threads', 'queries', 'occlusion', 'frame_loop', 'gpu_feed', 'tuning', 'slow_frames',
-          'kept_state', 'multisample', 'modern_taa', 'modern_linear', 'reset', 'fullscreen', 'present')
+          'kept_state', 'multisample', 'modern_taa', 'modern_linear', 'modern_velocity', 'reset', 'fullscreen', 'present')
 
 
 def run(binary, args, env, timeout=300):
@@ -204,14 +206,22 @@ def main():
     checks.expect('frames presented', bool(presents) and int(presents.group(1)) >= len(SCENES),
                   found.get('d3d9_check.presents', 'missing'))
     # The Modern path's lines at teardown: the modern_taa scene's frames (4
-    # still, 16 jittered; the first of each starts the history again) and the
-    # modern_linear scene's one (a cut); that scene was drawn in linear light,
-    # with one copy read from it, unless KISAK_VK_MODERN_LINEAR=0.
+    # still, 16 jittered; the first of each starts the history again), the
+    # modern_linear scene's one (a cut) and the modern_velocity scene's (two
+    # runs of 8, each starting with a cut); modern_linear's scene was drawn in
+    # linear light, with one copy read from it, unless KISAK_VK_MODERN_LINEAR=0;
+    # in the second modern_velocity run the 7 scenes after the cut each had
+    # one surface that moves on its own.
     modern = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes anti-aliased \((\d+) without history\)',
                        stdout, re.M)
-    checks.expect('the Modern path anti-aliased 21 scenes, 3 without history',
-                  modern is not None and modern.group(1) == '21' and modern.group(2) == '3',
+    checks.expect('the Modern path anti-aliased 37 scenes, 5 without history',
+                  modern is not None and modern.group(1) == '37' and modern.group(2) == '5',
                   modern.group(0) if modern else 'missing')
+    velocity = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with surfaces that move on their own '
+                         r'\((\d+) surfaces\), ([0-9.]+) ms GPU each for their velocity$', stdout, re.M)
+    checks.expect('the Modern path drew the velocity of 7 surfaces in 7 scenes',
+                  velocity is not None and velocity.group(1) == '7' and velocity.group(2) == '7',
+                  velocity.group(0) if velocity else 'missing')
     linear = re.search(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes in linear light \((\d+) copies read '
                        r'from them\), ([0-9.]+) ms GPU each for the tonemap$', stdout, re.M)
     if env.get('KISAK_VK_MODERN_LINEAR') == '0':

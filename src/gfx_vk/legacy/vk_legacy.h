@@ -644,6 +644,23 @@ gfx_vk::Image *SurfaceImage(const Surface *surface);
 // (legacy_shader::BuildSpirv's linearOutput), and clears of it take their
 // colour from sRGB to linear light too. Blending then happens in linear light.
 void SetLinearLight(Texture *texture, bool linear);
+// What the last DrawIndexedPrimitive of a triangle list drew from, as it is
+// still bound: stream 0's buffer, the index buffer and range, and the
+// viewport. The Modern path draws a surface that moves on its own again from
+// it (its velocity pass). False when the last indexed draw was not a
+// triangle list or stream 0 is not a vertex buffer.
+struct IndexedDraw
+{
+    VkBuffer vertices = VK_NULL_HANDLE;
+    VkDeviceSize vertexOffset = 0;
+    uint32_t stride = 0;
+    VkBuffer indices = VK_NULL_HANDLE;
+    VkIndexType indexType = VK_INDEX_TYPE_UINT16;
+    uint32_t firstIndex = 0, indexCount = 0;
+    int32_t vertexBase = 0;
+    Viewport viewport{};
+};
+bool LastIndexedDraw(Device *device, IndexedDraw &out);
 #endif
 
 // The device's window is about to be destroyed: an open pass and frame end

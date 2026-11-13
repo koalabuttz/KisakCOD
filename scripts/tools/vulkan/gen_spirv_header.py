@@ -54,6 +54,8 @@ SETS = [
             ("fullscreen.vert", "kFullscreenVert"),
             ("taa.frag", "kTaaFrag"),
             ("tonemap.frag", "kTonemapFrag"),
+            ("velocity.vert", "kVelocityVert"),
+            ("velocity.frag", "kVelocityFrag"),
         ],
     ),
     ShaderSet(

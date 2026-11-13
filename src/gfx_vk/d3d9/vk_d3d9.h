@@ -211,4 +211,11 @@ ModernResult ModernSceneBegin(IDirect3DDevice9 *device);
 // the passes run on it, the tonemap writes it into the back buffer within the
 // viewport, and the back buffer is render target 0 again.
 ModernResult ModernSceneDone(IDirect3DDevice9 *device, const ModernSceneView &view);
+// The last DrawIndexedPrimitive drew a surface that moves on its own into the
+// scene: the Modern path draws it again for its velocity before the next
+// ModernSceneDone (docs/vulkan-modern.md). clip and prevClip take the
+// surface's vertices to this frame's and last frame's clip space (row
+// vectors, p_clip = p * M), each with its frame's jitter. Ignored by a back
+// end without a Modern path, and when the draw was not a triangle list.
+void ModernSurfaceMoved(IDirect3DDevice9 *device, const float clip[4][4], const float prevClip[4][4]);
 } // namespace gfx_vk::d3d9
