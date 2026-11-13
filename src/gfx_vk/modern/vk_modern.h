@@ -77,8 +77,8 @@ TaaStats Stats(const Taa *taa);
 
 // ---- Velocity of what moves on its own (E1, docs/vulkan-modern.md) ----
 //
-// A surface the scene drew that moves on its own (an entity, the view model)
-// is drawn again into an R16G16_SFLOAT image, with this frame's and last
+// A surface the scene drew that moves on its own (an entity, the view model,
+// a brush model such as a door) is drawn again into an R16G16_SFLOAT image, with this frame's and last
 // frame's object-to-clip matrices. Where it is what the scene shows (its depth
 // matches the scene depth), the image holds where it was last frame relative
 // to where it is now, in NDC without either frame's jitter; everywhere else
@@ -91,7 +91,8 @@ constexpr float kNoOwnMotion = 65504.0f;
 // One indexed draw of the scene, by what the Legacy draw bound.
 struct MovedSurface
 {
-    // Positions are three floats at the start of each vertex.
+    // Positions are three floats at the start of each vertex; strides of 32
+    // (models' vertices) and 44 (brush models') are drawn, others skipped.
     VkBuffer vertices = VK_NULL_HANDLE;
     VkDeviceSize vertexOffset = 0;
     uint32_t stride = 0;

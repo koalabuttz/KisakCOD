@@ -109,8 +109,9 @@ For each pixel, `taa.frag`:
 ## Velocity of what moves on its own
 
 Camera reprojection is exact for the world and static models, which do not
-move. Entities' models do, and the view model moves with the camera, so the
-Modern path draws their surfaces a second time with their own motion.
+move. Entities' models and brush models (doors, elevators, other map pieces
+that move) do, and the view model moves with the camera, so the Modern path
+draws their surfaces a second time with their own motion.
 
 * **The renderer** (`src/gfx_d3d/r_modern_motion.cpp`). When it skins a scene
   entity, each surface records its entity (`GfxModelSurfaceInfo::modernOwner`,
@@ -126,7 +127,11 @@ Modern path draws their surfaces a second time with their own motion.
   with the jitter, and for the view model its own depth-hack projection) is
   kept by entity, model and surface. From the second scene it is seen in, it
   is reported through the `surfaceMoved` hook with last scene's matrix, once
-  per scene however many passes draw it.
+  per scene however many passes draw it. Brush models are reported the same
+  way from `R_TessBModel` (`rb_tess.cpp`), with the matrix their placement
+  gave them; a brush model belongs to one entity, so its surface (a
+  `GfxSurface` of the world) is its key, under the owner
+  `R_MODERN_OWNER_BRUSH`.
 * **The front** (`gfx_vk::d3d9::ModernSurfaceMoved`) takes the Legacy
   adapter's last indexed draw as it is still bound (`lg::LastIndexedDraw`:
   stream 0, the index buffer and range, the viewport) and keeps it with both
@@ -140,8 +145,9 @@ Modern path draws their surfaces a second time with their own motion.
   scene depth (so the surface is what the scene shows there) writes where the
   surface was last frame relative to where it is now, in NDC without either
   frame's jitter. Hidden fragments write nothing, so what hides a moving
-  surface keeps the camera's motion. The pipeline reads 32-byte vertices with
-  the position first, as the engine's models are.
+  surface keeps the camera's motion. It has a pipeline for 32-byte vertices
+  (models') and one for 44-byte vertices (the world's, which brush models
+  are drawn from), both with the position first.
 * **Skinned surfaces** (characters' bodies, the view model's arms) have
   vertices the renderer writes again each frame, on the CPU, into a buffer it
   locks with DISCARD (its skinned cache, or the dynamic vertex buffer when
@@ -156,8 +162,8 @@ Modern path draws their surfaces a second time with their own motion.
   motion is the skinning's as well as the entity's. A camera cut, or a scene
   that keeps nothing, forgets what was kept.
 
-What it does not cover yet: brush models and effects (whether drawn on the display image or, with
-`KISAK_VK_MODERN_EFFECTS=linear`, in the scene). `KISAK_VK_MODERN_VELOCITY=0`
+What it does not cover yet: effects (whether drawn on the display image or,
+with `KISAK_VK_MODERN_EFFECTS=linear`, in the scene). `KISAK_VK_MODERN_VELOCITY=0`
 turns the pass off, for comparisons.
 
 **Debug view.** `KISAK_VK_MODERN_DEBUG=velocity` draws the velocity image over
@@ -181,9 +187,10 @@ as the Legacy path draws: pixel (i, j) holds the scene at NDC
 * **Effects have no motion of their own:** they are reprojected as if they
   stood still in the world. Clipping the history to this frame's colours keeps
   them from leaving trails, at the cost of some softness on them while they
-  move. Entities' models and the view model have their own
-  ([Velocity](#velocity-of-what-moves-on-its-own)); effects get a reactive
-  mask next.
+  move. Entities' models, brush models and the view model have their own
+  ([Velocity](#velocity-of-what-moves-on-its-own)); effects would get a
+  reactive mask together with an upgrade of their own, since they are drawn
+  after the anti-aliasing by default ([Effects](#effects)).
 * **No sharpening.** TAA softens the picture somewhat. A sharpening pass would
   come with the plan's temporal upscaler (MD3).
 * **One history for all views.** Splitscreen would share it; the PC
@@ -227,7 +234,10 @@ are, behind a static striped quad. Reported to the velocity pass
 (`front::ModernSurfaceMoved`), the band's stripes stay exactly as drawn; not
 reported, they go grey (the scene checks that too, so it would notice a pass
 that does nothing); and the static quad in front stays as drawn, so the band's
-motion is not written where it is hidden.
+motion is not written where it is hidden. It draws the band again from
+skinned vertices (a dynamic buffer locked with DISCARD) and once more from
+44-byte vertices with indices written into a dynamic index buffer for each
+draw, as brush models are.
 
 `scripts/tests/test_vulkan_d3d9_front.py` checks the scenes in the full run and
 the `modern:` statistics lines. `scripts/tools/vulkan/gen_spirv_header.py

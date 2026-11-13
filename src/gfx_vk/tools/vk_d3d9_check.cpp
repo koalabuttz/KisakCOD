@@ -3056,12 +3056,23 @@ void Check::ModernVelocity()
         uint32_t pad[2];
     };
     static_assert(sizeof(Vertex32) == 32, "the engine's vertices are 32 bytes");
+    // Brush models' (GfxWorldVertex).
+    struct Vertex44
+    {
+        Vertex v;
+        uint32_t pad[5];
+    };
+    static_assert(sizeof(Vertex44) == 44, "the world's vertices are 44 bytes");
     constexpr int kStripes = 32;
     IDirect3DSurface9 *depth = nullptr;
     IDirect3DVertexBuffer9 *vb = nullptr;
     IDirect3DIndexBuffer9 *ib = nullptr;
     IDirect3DVertexBuffer9 *skinnedVb = nullptr;
     IDirect3DIndexBuffer9 *skinnedIb = nullptr;
+    // The brush band: 44-byte vertices, and indices written into a dynamic
+    // buffer for each draw, as R_SetIndexData does.
+    IDirect3DVertexBuffer9 *brushVb = nullptr;
+    IDirect3DIndexBuffer9 *brushIb = nullptr;
     // The skinned band: 4 vertices before it, drawn with base vertex 2 and
     // indices from 2.
     constexpr int kSkinnedLead = 4, kSkinnedBase = 2;
@@ -3080,12 +3091,21 @@ void Check::ModernVelocity()
                "CreateVertexBuffer")
         || !Ok(device->CreateIndexBuffer(kStripes * 6 * sizeof(uint16_t), D3DUSAGE_WRITEONLY, D3DFMT_INDEX16,
                                          D3DPOOL_DEFAULT, &ib, nullptr),
-               "CreateIndexBuffer"))
+               "CreateIndexBuffer")
+        || !Ok(device->CreateVertexBuffer(kStripes * 4 * sizeof(Vertex44), D3DUSAGE_WRITEONLY, 0, D3DPOOL_DEFAULT,
+                                          &brushVb, nullptr),
+               "CreateVertexBuffer(brush)")
+        || !Ok(device->CreateIndexBuffer(kStripes * 6 * sizeof(uint16_t), D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY,
+                                         D3DFMT_INDEX16, D3DPOOL_DEFAULT, &brushIb, nullptr),
+               "CreateIndexBuffer(brush)"))
     {
         SafeRelease(depth);
         SafeRelease(vb);
+        SafeRelease(ib);
         SafeRelease(skinnedVb);
         SafeRelease(skinnedIb);
+        SafeRelease(brushVb);
+        SafeRelease(brushIb);
         return;
     }
     // The band at rest covers pixels 8..71 by 32..95; stripe k is white when k is even.
@@ -3102,6 +3122,19 @@ void Check::ModernVelocity()
                 out[k * 4 + c] = Vertex32{corners[c], {0, 0}};
         }
         vb->Unlock();
+    }
+    if (Ok(brushVb->Lock(0, 0, &data, 0), "Lock(brush vertex buffer)"))
+    {
+        Vertex44 *out = static_cast<Vertex44 *>(data);
+        for (int k = 0; k < kStripes; ++k)
+        {
+            Vertex corners[4];
+            const uint32_t color = k % 2 ? Argb(255, 0, 0, 0) : Argb(255, 255, 255, 255);
+            QuadCorners(corners, 8.0f + 2.0f * k, 32.0f, 10.0f + 2.0f * k, 96.0f, 0.5f, color);
+            for (int c = 0; c < 4; ++c)
+                out[k * 4 + c] = Vertex44{corners[c], {0, 0, 0, 0, 0}};
+        }
+        brushVb->Unlock();
     }
     if (Ok(ib->Lock(0, 0, &data, 0), "Lock(index buffer)"))
     {
@@ -3160,11 +3193,27 @@ void Check::ModernVelocity()
         }
         skinnedVb->Unlock();
     };
+    // The brush band's indices for this draw, as R_SetIndexData writes them.
+    const auto writeBrushIndices = [&]() {
+        void *mapped = nullptr;
+        if (!Ok(brushIb->Lock(0, 0, &mapped, D3DLOCK_DISCARD), "Lock(brush indices, DISCARD)"))
+            return;
+        uint16_t *out = static_cast<uint16_t *>(mapped);
+        for (int k = 0; k < kStripes; ++k)
+        {
+            const uint16_t base = static_cast<uint16_t>(k * 4);
+            const uint16_t quad[6] = {base, uint16_t(base + 1), uint16_t(base + 2), base, uint16_t(base + 2),
+                                      uint16_t(base + 3)};
+            std::memcpy(out + k * 6, quad, sizeof(quad));
+        }
+        brushIb->Unlock();
+    };
     enum class Report
     {
         None,
         Rigid,
         Skinned,
+        Brush,
     };
     const auto frame = [&](int f, Report report) {
         Reset(Argb(255, 0, 0, 255));
@@ -3186,6 +3235,19 @@ void Check::ModernVelocity()
                                             kStripes * 4, 0, kStripes * 2),
                "DrawIndexedPrimitive(skinned)");
             front::ModernSkinnedSurfaceMoved(device, 1, clip, f == 0 ? nullptr : prevClip);
+        }
+        else if (report == Report::Brush)
+        {
+            bandClip(f, clip);
+            bandClip(f - 1, prevClip);
+            const float move[4] = {clip[3][0], clip[3][1], 0.0f, 0.0f};
+            device->SetVertexShaderConstantF(0, move, 1);
+            writeBrushIndices();
+            Ok(device->SetStreamSource(0, brushVb, 0, sizeof(Vertex44)), "SetStreamSource(brush)");
+            Ok(device->SetIndices(brushIb), "SetIndices(brush)");
+            Ok(device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, kStripes * 4, 0, kStripes * 2),
+               "DrawIndexedPrimitive(brush)");
+            front::ModernSurfaceMoved(device, clip, prevClip);
         }
         else
         {
@@ -3231,9 +3293,11 @@ void Check::ModernVelocity()
     }
     present();
 
-    for (const Report report : {Report::Rigid, Report::Skinned})
+    for (const Report report : {Report::Rigid, Report::Skinned, Report::Brush})
     {
-        const std::string name = report == Report::Rigid ? "velocity" : "skinned";
+        const std::string name = report == Report::Rigid     ? "velocity"
+                                 : report == Report::Skinned ? "skinned"
+                                                             : "brush";
         Equal((name + "_resolved").c_str(), run(report), true);
         if (Read())
         {
@@ -3267,6 +3331,8 @@ void Check::ModernVelocity()
     SafeRelease(vb);
     SafeRelease(skinnedIb);
     SafeRelease(skinnedVb);
+    SafeRelease(brushIb);
+    SafeRelease(brushVb);
     SafeRelease(depth);
 }
 
