@@ -63,7 +63,7 @@ enum GfxModernLitShader : uint8_t
     GFX_MODERN_LIT_SHADER_LM_SUN = 0x40,
     GFX_MODERN_LIT_SHADER_SHADOW = 0x01,   // hsm: the sun's shadow map
     GFX_MODERN_LIT_SHADER_NORMAL = 0x02,   // n0: a normal map
-    GFX_MODERN_LIT_SHADER_SPECULAR = 0x04, // s0 (with n0): a specular map and the reflection probe
+    GFX_MODERN_LIT_SHADER_SPECULAR = 0x04, // s0: a specular map and the reflection probe
     GFX_MODERN_LIT_SHADER_DETAIL = 0x08,   // d0: a detail map
     GFX_MODERN_LIT_SHADER_BLENDED = 0x10,  // b0 (else r0, opaque)
     GFX_MODERN_LIT_SHADER_ALPHA_TESTED = 0x20, // t0

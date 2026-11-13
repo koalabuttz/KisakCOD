@@ -42,13 +42,13 @@ class ShaderSet:
 
 # The lm_[hsm_]sun world shader's variants (vk_legacy_modern_lit.cpp): with or
 # without the shadow map, times the material maps the game's shaders come
-# with (D detail, N normal, S specular; specular comes only with the normal).
+# with (D detail, N normal, S specular).
 LM_SUN_VARIANTS = [
     ("lm_sun.frag", f"kLmSun{'Shadow' if shadow else ''}{maps}Frag",
      (f"LM_SUN_SHADOW={shadow}", f"LM_SUN_DETAIL={int('D' in maps)}", f"LM_SUN_NORMAL={int('N' in maps)}",
       f"LM_SUN_SPECULAR={int('S' in maps)}"))
     for shadow in (0, 1)
-    for maps in ("", "N", "NS", "D", "DN", "DNS")
+    for maps in ("", "N", "S", "NS", "D", "DN", "DS", "DNS")
 ]
 
 

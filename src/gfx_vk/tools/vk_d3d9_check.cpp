@@ -3794,7 +3794,8 @@ void Check::ModernLit()
 // Grey 128 colour map (0.2159 of light) under a white vertex colour, the
 // secondary lightmap's halves 64 each with flat directions (their sum, 128,
 // is 0.2159 of light), the primary lightmap 1, and a grey 128 sun straight
-// overhead: lit = 0.2159 * (0.2159 * sky + 0.2159 * sun strength). The shadow
+// overhead: lit = 0.2159 * (0.2159 * sky + (decode(128 + 128) - 0.2159) * sun
+// strength), the sun adding what it adds in the game's display sum. The shadow
 // map holds depth 0.5: a reference of 0.25 is lit (as without the shadow),
 // 0.75 is in shadow (the lightmap's light only). Half fog towards red blends
 // in linear light. Those four are the top half; the bottom half draws the
@@ -3816,7 +3817,7 @@ void Check::ModernLitShader()
         const double value = text.empty() ? -1.0 : std::strtod(text.c_str(), nullptr);
         return value >= 0.0 ? value : fallback;
     };
-    const double sun = strength("KISAK_VK_MODERN_SUN_STRENGTH", 2.0);
+    const double sun = strength("KISAK_VK_MODERN_SUN_STRENGTH", 1.0);
     const double sky = strength("KISAK_VK_MODERN_SKY_STRENGTH", 1.0);
     IDirect3DTexture9 *color = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 128, 128, 128); });
     IDirect3DTexture9 *primary = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
@@ -3982,22 +3983,13 @@ void Check::ModernLitShader()
         if (Read())
         {
             const std::string curve = ModernCurve();
-            const double light = 0.21586;
             const auto shown = [&](double r, double g, double b) {
                 const Rgb c = TonemapCurve(curve, {r, g, b});
                 return std::array<int, 3>{ShownByte(c[0]), ShownByte(c[1]), ShownByte(c[2])};
             };
-            const double sunlit = light * (light * sky + light * sun);
-            const double shaded = light * light * sky;
             const auto expect = [&](const char *name, int x, int y, std::array<int, 3> rgb) {
                 Expect(name, x, y, on ? rgb[0] : 0, on ? rgb[1] : 0, on ? rgb[2] : 0);
             };
-            expect("sunlit", 16, 32, shown(sunlit, sunlit, sunlit));
-            expect("shadow_lit", 48, 32, shown(sunlit, sunlit, sunlit));
-            expect("shadow_shaded", 80, 32, shown(shaded, shaded, shaded));
-            expect("half_fog", 112, 32, shown(0.5 + 0.5 * sunlit, 0.5 * sunlit, 0.5 * sunlit));
-
-            // The variants with maps, by the game's formulas.
             const auto decode = [](double v) {
                 v = std::max(v, 0.0);
                 return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
@@ -4005,23 +3997,50 @@ void Check::ModernLitShader()
             const auto slope = [](int byte, double scale, double offset) { return byte / 255.0 * scale - offset; };
             const double b = slope(130, 4.06452, 2.06452); // the lightmap's direction (a is 0)
             const double lengthD = 1.0 / std::sqrt(b * b + 1.0);
-            const double greyLight = decode(128 / 255.0);
-            // Flat: x 0, y as b; the normal (0, y, 1) faces the sun by lengthN.
-            const auto lit = [&](double x, double albedo) {
-                const double y = b;
-                const double lengthN = 1.0 / std::sqrt(x * x + y * y + 1.0);
-                const double facing = std::clamp((b * y + 1.0) * lengthN * lengthD, 0.0, 1.0);
-                const double skyLight = decode(64 / 255.0 * lengthN + 64 / 255.0 * facing) * sky;
-                const double sunLight = lengthN * greyLight * sun;
-                return albedo * (skyLight + sunLight);
+            const double grey = 128 / 255.0, greyLight = decode(grey);
+            // The diffuse light of a surface whose normal map's slope along
+            // the tangent is x (0 without a normal map; y is b's), in the
+            // shade or the sun: the lightmap's decoded, plus what the sun
+            // adds to it in the game's display-value sum. In display values
+            // too, for the specular's share.
+            struct Light
+            {
+                double linear, display;
             };
-            const double detailAlbedo = decode(128 / 255.0 + 160 / 255.0 - 0.5);
-            // Looking straight down at a normal within 0.5 degrees of the sun:
-            // the highlight is whole, the Fresnel 1, the probe grey 64.
-            const double specular = greyLight * (0.5 * greyLight * sun + decode(64 / 255.0));
-            const double opaque = lit(0.0, detailAlbedo) + specular;
-            const double blended = 128 / 255.0 * lit(0.0, detailAlbedo) + specular;
-            const double tilted = lit(slope(192, 4.08, 2.08), greyLight);
+            const auto diffuse = [&](double x, bool normalMap, bool sunlit) {
+                const double y = b;
+                const double lengthN = normalMap ? 1.0 / std::sqrt(x * x + y * y + 1.0) : 1.0;
+                const double facing = normalMap ? std::clamp((b * y + 1.0) * lengthN * lengthD, 0.0, 1.0)
+                                                : std::clamp(lengthD, 0.0, 1.0);
+                const double skyDisplay = 64 / 255.0 * lengthN + 64 / 255.0 * facing;
+                // The normal (x, y, 1) or (0, 0, 1) faces the sun by lengthN.
+                const double sunDisplay = sunlit ? (normalMap ? lengthN : 1.0) * grey : 0.0;
+                const double skyLight = decode(skyDisplay);
+                const double sunLight = decode(skyDisplay + sunDisplay) - skyLight;
+                return Light{skyLight * sky + sunLight * sun, skyDisplay + sunDisplay};
+            };
+            const double sunlit = greyLight * diffuse(0.0, false, true).linear;
+            const double shaded = greyLight * diffuse(0.0, false, false).linear;
+            expect("sunlit", 16, 32, shown(sunlit, sunlit, sunlit));
+            expect("shadow_lit", 48, 32, shown(sunlit, sunlit, sunlit));
+            expect("shadow_shaded", 80, 32, shown(shaded, shaded, shaded));
+            expect("half_fog", 112, 32, shown(0.5 + 0.5 * sunlit, 0.5 * sunlit, 0.5 * sunlit));
+
+            // The variants with maps, by the game's formulas. Looking straight
+            // down at a normal within 0.5 degrees of the sun: the highlight is
+            // whole, the Fresnel 1, the probe grey 64; the specular adds what
+            // it adds to the game's diffuse colour.
+            const double detailDisplay = grey + 160 / 255.0 - 0.5;
+            const auto withMaps = [&](double alpha) {
+                const Light light = diffuse(0.0, true, true);
+                const double diffuseDisplay = alpha * detailDisplay * light.display;
+                const double specularDisplay = grey * (0.5 * grey * sun + 64 / 255.0);
+                return alpha * decode(detailDisplay) * light.linear + decode(diffuseDisplay + specularDisplay)
+                    - decode(diffuseDisplay);
+            };
+            const double opaque = withMaps(1.0);
+            const double blended = withMaps(128 / 255.0);
+            const double tilted = greyLight * diffuse(slope(192, 4.08, 2.08), true, true).linear;
             expect("maps_opaque", 16, 96, shown(opaque, opaque, opaque));
             expect("maps_normal_tilted", 48, 96, shown(tilted, tilted, tilted));
             expect("maps_blended", 80, 96, shown(blended, blended, blended));

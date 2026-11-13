@@ -1479,11 +1479,7 @@ static uint8_t R_ModernLitShaderFromName(const char *name)
     if (R_ModernTakeWord(&name, &length, "n0"))
         shader |= GFX_MODERN_LIT_SHADER_NORMAL;
     if (R_ModernTakeWord(&name, &length, "s0"))
-    {
-        if (!(shader & GFX_MODERN_LIT_SHADER_NORMAL))
-            return GFX_MODERN_LIT_SHADER_NONE;
         shader |= GFX_MODERN_LIT_SHADER_SPECULAR;
-    }
     // The shader model 2 builds are known only without maps or a mode (world-lit
     // shader facts 1 and 2); facts 3 read the shader model 3 ones.
     const uint8_t sm3Only = GFX_MODERN_LIT_SHADER_NORMAL | GFX_MODERN_LIT_SHADER_SPECULAR
@@ -1514,7 +1510,8 @@ static bool R_ModernMaterialConstIs(const Material *material, uint32_t nameHash,
 // s0, fog colour c0, sun direction c17 and colour c18, the lightmaps at s2
 // and s3. hsm: the sun's shadow map at s4, its partition switch and scale at
 // c2 and c4. Then, from the next sampler on, the normal map (n0), the
-// specular map (s0) and the detail map (d0); s0 also reads the reflection
+// specular map (s0) and the detail map (d0), each where the one before it is
+// left out; s0 also reads the reflection
 // probe at s1, envMapParms at c5 and the sun's specular colour at c19, and
 // d0 its detailScale at the constant after those (c5, or c6 with s0).
 // Anything else keeps the game's shader.

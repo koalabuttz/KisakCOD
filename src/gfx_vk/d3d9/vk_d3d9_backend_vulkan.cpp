@@ -119,11 +119,11 @@ struct Backend
     bool litOverWhite = false; // the last lit inputs were over white (not per input)
     // Lit passes drawn as Modern lit shaders of ours (vk_d3d9.h
     // ModernLitInputs::shader), unless KISAK_VK_MODERN_SHADERS=0, with the
-    // sun's and the lightmap's strengths in linear light
-    // (KISAK_VK_MODERN_SUN_STRENGTH and _SKY_STRENGTH override them); the
+    // sun's and the lightmap's strengths in linear light, 1 as bright as the
+    // game's (KISAK_VK_MODERN_SUN_STRENGTH and _SKY_STRENGTH override them); the
     // changes of lit inputs that named one, and their count at the last reset.
     bool shadersWanted = true;
-    float sunStrength = 2.0f;
+    float sunStrength = 1.0f;
     float skyStrength = 1.0f;
     uint64_t litShaderChanges = 0, litShaderChangesBase = 0;
     uint64_t litScenes = 0, litScenesBase = 0;

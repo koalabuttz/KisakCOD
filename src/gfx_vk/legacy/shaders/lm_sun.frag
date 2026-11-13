@@ -17,16 +17,19 @@
 // shader facts 1 to 3, 2026-11-13), but adds its light in linear light:
 //   albedo = colour map (plus detail around grey) * vertex colour, decoded;
 //   sky    = the secondary lightmap's two halves combined as the game's shader
-//            combines them (an encoding of one baked light), then decoded,
-//            times the sky strength;
-//   sun    = the shadow (or the primary lightmap's sun visibility) * N.L *
-//            the sun's colour decoded, times the sun strength;
-//   spec   = specular colour * Fresnel * (shadow * the sun's highlight * its
-//            colour decoded * the sun strength + the reflection probe decoded);
-//   colour = albedo * (sky + sun) + spec, then fog blended in linear light.
-// The game's shader adds its terms in display values, which in linear light
-// makes their sum brighter than the parts; the sun strength stands in for
-// that (calibrated against Legacy on the PC).
+//            combines them (an encoding of one baked light), then decoded;
+//   sun    = what the sun (the shadow, or the primary lightmap's sun
+//            visibility, * N.L * the sun's colour) adds to that light in
+//            the game's sum, decoded: decode(sky + sun) - decode(sky);
+//   spec   = likewise what the game's specular (specular colour * Fresnel *
+//            (shadow * the sun's highlight * its colour + the reflection
+//            probe)) adds to the game's diffuse colour, decoded;
+//   colour = albedo * (sky * sky strength + sun * sun strength) + spec, then
+//            fog blended in linear light.
+// The game's shader adds its terms in display values, so in linear light a
+// term's share depends on what it is added to; taking each share from the
+// game's sum keeps every surface as bright as the game's (strengths 1),
+// while the terms stay apart for the strengths to scale.
 //
 // The inputs' locations here are placeholders (texcoord N at N, colour 0 at
 // 10): the Legacy adapter moves them to where the vertex shader writes those
@@ -184,6 +187,7 @@ void main()
     // elsewhere, for the render state's alpha test to drop.
     const bool kept = kMode != 2 || alpha >= 0.5;
     vec3 albedo = Decode(color) * Decode(color0.rgb);
+    vec3 albedoDisplay = max(color, vec3(0.0)) * color0.rgb;
 
     // The secondary lightmap: two images stacked, their alphas a direction
     // in tangent space; the top half is light from every side, the bottom
@@ -202,12 +206,13 @@ void main()
     const float y = normalSample.g * 4.06452 - 2.06452;
     const float lengthN = inversesqrt(abs(x * x + y * y + 1.0));
     const float facing = clamp((a * x + b * y + 1.0) * lengthN * lengthD, 0.0, 1.0);
-    const vec3 sky = Decode(top.rgb * lengthN + bottom.rgb * facing) * kSkyStrength;
+    const vec3 skyDisplay = top.rgb * lengthN + bottom.rgb * facing;
     const vec3 normal = normalize(texcoord1.xyz + x * texcoord3.xyz + y * texcoord2.xyz);
 #else
-    const vec3 sky = Decode(top.rgb + bottom.rgb * clamp(lengthD, 0.0, 1.0)) * kSkyStrength;
+    const vec3 skyDisplay = top.rgb + bottom.rgb * clamp(lengthD, 0.0, 1.0);
     const vec3 normal = normalize(texcoord1.xyz);
 #endif
+    const vec3 sky = Decode(skyDisplay);
 
     // The sun: the primary lightmap holds how much of it reaches here; the
     // shadow map replaces that where it covers the surface.
@@ -236,12 +241,19 @@ void main()
 #endif
     const vec3 sunDirection = pc.c[17].xyz;
     const float facingSun = clamp(dot(sunDirection, normal), 0.0, 1.0);
-    const vec3 sun = shadow * facingSun * Decode(pc.c[18].rgb) * kSunStrength;
+    const vec3 sunDisplay = shadow * facingSun * pc.c[18].rgb;
+    // The sun adds what it added to the lightmap's light in the game's
+    // display-value sum: in linear light that share depends on how bright
+    // the lightmap is there, so no one constant matches it (PC sun run 2).
+    const vec3 sun = max(Decode(skyDisplay + sunDisplay) - sky, vec3(0.0));
 
     // A blended surface is premultiplied by its alpha.
     if (kMode == 1)
+    {
         albedo *= alpha;
-    vec3 lit = albedo * (sky + sun);
+        albedoDisplay *= alpha;
+    }
+    vec3 lit = albedo * (sky * kSkyStrength + sun * kSunStrength);
 #if LM_SUN_SPECULAR
     const vec4 specularSample = texture(sampler2D(specularMap, specularMapSampler), uv);
     const float gloss = specularSample.a;
@@ -254,8 +266,11 @@ void main()
     const float grazing = envMap.z != 0.0 ? pow(abs(1.0 - abs(viewFacing)), envMap.z) : 1.0;
     const float fresnel = envMap.x + (envMap.y - envMap.x) * grazing;
     const vec4 probe = textureLod(samplerCube(reflectionProbe, reflectionProbeSampler), reflected, 6.0 - 8.0 * gloss);
-    const vec3 sunHighlight = shadow * highlight * envMap.w * Decode(pc.c[19].rgb) * kSunStrength;
-    lit += Decode(specularSample.rgb) * fresnel * (sunHighlight + Decode(probe.rgb) * probe.a);
+    const vec3 sunHighlight = shadow * highlight * envMap.w * pc.c[19].rgb * kSunStrength;
+    // Likewise what the specular adds on top of the game's diffuse colour.
+    const vec3 diffuseDisplay = albedoDisplay * (skyDisplay + sunDisplay);
+    const vec3 specularDisplay = specularSample.rgb * fresnel * (sunHighlight + probe.rgb * probe.a);
+    lit += max(Decode(diffuseDisplay + specularDisplay) - Decode(diffuseDisplay), vec3(0.0));
 #endif
 
     vec3 fogColor = Decode(pc.c[0].rgb);

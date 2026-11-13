@@ -78,15 +78,19 @@ LmSunBuild LmSunBuildFor(uint8_t maps)
     {
     case 0: return LM_SUN_BUILD(kLmSunFrag);
     case ModernLitNormal: return LM_SUN_BUILD(kLmSunNFrag);
+    case ModernLitSpecular: return LM_SUN_BUILD(kLmSunSFrag);
     case ModernLitNormal | ModernLitSpecular: return LM_SUN_BUILD(kLmSunNSFrag);
     case ModernLitDetail: return LM_SUN_BUILD(kLmSunDFrag);
     case ModernLitDetail | ModernLitNormal: return LM_SUN_BUILD(kLmSunDNFrag);
+    case ModernLitDetail | ModernLitSpecular: return LM_SUN_BUILD(kLmSunDSFrag);
     case ModernLitDetail | ModernLitNormal | ModernLitSpecular: return LM_SUN_BUILD(kLmSunDNSFrag);
     case ModernLitShadow: return LM_SUN_BUILD(kLmSunShadowFrag);
     case ModernLitShadow | ModernLitNormal: return LM_SUN_BUILD(kLmSunShadowNFrag);
+    case ModernLitShadow | ModernLitSpecular: return LM_SUN_BUILD(kLmSunShadowSFrag);
     case ModernLitShadow | ModernLitNormal | ModernLitSpecular: return LM_SUN_BUILD(kLmSunShadowNSFrag);
     case ModernLitShadow | ModernLitDetail: return LM_SUN_BUILD(kLmSunShadowDFrag);
     case ModernLitShadow | ModernLitDetail | ModernLitNormal: return LM_SUN_BUILD(kLmSunShadowDNFrag);
+    case ModernLitShadow | ModernLitDetail | ModernLitSpecular: return LM_SUN_BUILD(kLmSunShadowDSFrag);
     case ModernLitShadow | ModernLitDetail | ModernLitNormal | ModernLitSpecular:
         return LM_SUN_BUILD(kLmSunShadowDNSFrag);
     default: return LmSunBuild{nullptr, 0};

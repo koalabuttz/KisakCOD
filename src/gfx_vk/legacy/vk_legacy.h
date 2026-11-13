@@ -700,9 +700,10 @@ enum ModernLitShader : uint8_t
     // n0: a normal map at the next sampler (s4, or s5 with the shadow map);
     // binormal and tangent in texcoords 2 and 3.
     ModernLitNormal = 0x02,
-    // s0 (only with n0): the reflection probe (a cube) at s1, a specular map
-    // at the sampler after the normal map's, envMapParms at c5, the sun's
-    // specular colour at c19; the eye-to-point vector in texcoord 5.
+    // s0: the reflection probe (a cube) at s1, a specular map at the sampler
+    // after the normal map's (or in its place without one), envMapParms at
+    // c5, the sun's specular colour at c19; the eye-to-point vector in
+    // texcoord 5.
     ModernLitSpecular = 0x04,
     // d0: a detail map at the sampler after the others, its UV scale at the
     // constant after c4 (c5, or c6 with s0).
@@ -719,8 +720,7 @@ enum ModernLitShader : uint8_t
 // Whether shader names a Modern lit shader of ours.
 constexpr bool ModernLitShaderValid(uint8_t shader)
 {
-    return (shader & 0xc0) == ModernLitLmSun && (shader & ModernLitModeMask) != 0x30
-        && (!(shader & ModernLitSpecular) || (shader & ModernLitNormal));
+    return (shader & 0xc0) == ModernLitLmSun && (shader & ModernLitModeMask) != 0x30;
 }
 void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint16_t doubled, bool colorInput,
                      bool overWhite = false, uint8_t shader = ModernLitNone);

@@ -575,14 +575,14 @@ The second stage of the Modern lit shaders plan: lit passes drawn with
 shaders of the Modern path's own, which add their light in linear light,
 in place of the game's. The first is the world's sunlit family,
 `lm_[hsm_]sun_<mode>c0[d0][n0][s0]`: one source, `lm_sun.frag`, compiled
-for each set of maps (12 builds), with the mode a specialization constant.
+for each set of maps (16 builds), with the mode a specialization constant.
 
 | Part of the name | Define | Reads, beyond the base |
 | --- | --- | --- |
 | (base) `lm_sun_r0c0` | | colour map s0, primary lightmap s2, secondary lightmap s3; fog colour c0, sun direction c17, sun colour c18; texcoord 0 (colour and lightmap UVs), texcoord 1 (normal, fog), colour 0 |
 | `hsm_` | `LM_SUN_SHADOW` | the sun's shadow map s4, its partition switch c2 and scale c4; texcoord 4 (the shadow-map coordinate) |
 | `n0` | `LM_SUN_NORMAL` | a normal map at the next sampler (s4, s5 with the shadow map); texcoords 2 and 3 (binormal, tangent) |
-| `s0` (only with `n0`) | `LM_SUN_SPECULAR` | the reflection probe (cube) s1, a specular map after the normal map; envMapParms c5, the sun's specular colour c19; texcoord 5 (eye-to-point) |
+| `s0` | `LM_SUN_SPECULAR` | the reflection probe (cube) s1, a specular map after the normal map (in its place without one); envMapParms c5, the sun's specular colour c19; texcoord 5 (eye-to-point) |
 | `d0` | `LM_SUN_DETAIL` | a detail map after the others; detailScale at c5 (c6 with `s0`) |
 | `r0` / `b0` / `t0` | (mode) | opaque / blended / alpha-tested: nothing more |
 
@@ -594,32 +594,37 @@ to 3 in the project files, 2026-11-13):
 * **sky** = the secondary lightmap's two halves combined as the game
   combines them (top plus bottom times N.D, with the flat normal or, `n0`,
   the normal map's slopes, which also scale the top: one baked light,
-  encoded in two images), then decoded, times the sky strength;
-* **sun** = shadow times N.L times the sun's colour decoded, times the sun
-  strength, N from the normal map in the tangent frame with `n0`. The
-  shadow is the primary lightmap's sun visibility, or where the shadow map
-  covers the surface (and the lightmap's is not 0), the game's four
+  encoded in two images), then decoded;
+* **sun** = what the sun adds to that light in the game's sum, decoded:
+  decode(sky + sun) - decode(sky), the sun being shadow times N.L times
+  the sun's colour, N from the normal map in the tangent frame with `n0`.
+  The shadow is the primary lightmap's sun visibility, or where the shadow
+  map covers the surface (and the lightmap's is not 0), the game's four
   depth-compare taps a quarter each, near and far partitions blended over
   w 0.75 to 1, faded back to the lightmap's towards the far partition's
   edge;
-* **specular** (`s0`) = the specular map decoded times the game's Fresnel
+* **specular** (`s0`) = likewise what the game's specular adds to the
+  game's diffuse colour, decoded: the specular map times the Fresnel
   (envMapParms) times (shadow times the sun's highlight, exponent from the
-  gloss, times envMapParms.w and the sun's specular colour decoded and the
-  sun strength, plus the reflection probe decoded, at LOD 6 - 8 gloss,
-  times its alpha), added after albedo times light;
-* **colour** = albedo times (sky plus sun) plus specular, then the fog
+  gloss, times envMapParms.w, the sun's specular colour and the sun
+  strength, plus the reflection probe at LOD 6 - 8 gloss times its alpha);
+* **colour** = albedo times (sky times the sky strength plus sun times the
+  sun strength) plus specular, then the fog
   colour (decoded) blended over it in linear light by the vertex fog factor.
   `b0` premultiplies the albedo and fog colour by colour alpha times vertex
   alpha, which is the output alpha; `t0` keeps alpha 0.5 and over and writes
   black with alpha 0 elsewhere, as the game's shader does; then the alpha
   test of the render state.
 
-So shade is the game's: decode(colour times light) is decode(colour) times
-decode(light). Where the sun adds to the lightmap, the game added the two in
-display values, which in linear light is brighter than the parts added; the
-**sun strength** (default 2, provisional until a PC calibration run against
-Legacy) stands in for that. The sum is not clamped, so the tonemap and bloom
-see sunlit highlights as they are.
+So with both strengths 1 every surface is as bright as the game's:
+decode(colour times light) is decode(colour) times decode(light). The game
+added its terms in display values, so in linear light a term's share
+depends on what it is added to: a single sun strength over decoded terms
+matched the game at 2.9 on Crash and 4.3 on Backlot (PC sun run 2), which
+is why each share is taken from the game's sum. The terms stay apart, so
+the **sun strength** scales the sun's share (a punchier sun above 1). The
+sum is not clamped, so the tonemap and bloom see sunlit highlights as they
+are.
 
 * **Which passes.** `R_ModernPassInputs` (`r_scene.cpp`) names one in
   `GfxModernLitInputs::shader` (a code: 0x40 plus flags for the shadow 1,
@@ -649,7 +654,7 @@ see sunlit highlights as they are.
 | Switch | Default |
 | --- | --- |
 | `KISAK_VK_MODERN_SHADERS=0` | our shaders on (with linear light and lit passes on) |
-| `KISAK_VK_MODERN_SUN_STRENGTH=<value>` | 2 (PC sun run 1 measured about 1.5 to 2 against Legacy, on the few surfaces then drawn as ours) |
+| `KISAK_VK_MODERN_SUN_STRENGTH=<value>` | 1 (as bright as the game's) |
 | `KISAK_VK_MODERN_SKY_STRENGTH=<value>` | 1 |
 
 The statistics line, after the lit surfaces' one: `vulkan d3d9: modern: lit
