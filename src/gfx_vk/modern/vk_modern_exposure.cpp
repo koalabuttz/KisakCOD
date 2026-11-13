@@ -169,8 +169,17 @@ void CollectReading(Core *core, Exposure &exposure, bool wait)
 {
     if (!exposure.reading)
         return;
-    if (!wait && !SerialFinished(core, exposure.readingSerial))
-        return;
+    if (!SerialFinished(core, exposure.readingSerial))
+    {
+        if (!wait)
+            return;
+        // The statistics can be asked for at any point of a frame (r_vkStats
+        // is a console command). A copy not submitted yet can be waited for
+        // only between passes, where WaitReadback submits it first; inside a
+        // pass that wait fails the device, so the reading is left for later.
+        if (InPass(core) && exposure.readingSerial >= SubmissionSerial(core))
+            return;
+    }
     ReadbackData data{};
     if (WaitReadback(core, exposure.reading, &data) && data.pixels && data.format == kResultFormat)
     {
