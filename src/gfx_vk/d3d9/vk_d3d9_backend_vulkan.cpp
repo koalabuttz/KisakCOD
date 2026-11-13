@@ -95,6 +95,10 @@ struct Backend
     // their counts at the last reset.
     bool linearWanted = true;
     bool linearFailed = false;
+    // The tonemap's curve (KISAK_VK_MODERN_TONEMAP: clamp, neutral, agx or
+    // aces; clamp when unset), and whether the variable named none of them.
+    modern::TonemapCurve tonemapCurve = modern::TonemapCurve::Clamp;
+    bool tonemapCurveUnknown = false;
     lg::Texture *linearScene = nullptr;
     lg::Surface *linearSceneSurface = nullptr;
     modern::Tonemap *tonemap = nullptr;
@@ -260,6 +264,21 @@ bool EnvIs(const char *name, const char *value)
 }
 
 bool EnvIsZero(const char *name) { return EnvIs(name, "0"); }
+
+// The variable's text, empty when unset.
+std::string EnvText(const char *name)
+{
+#if defined(_MSC_VER)
+    char *text = nullptr;
+    size_t length = 0;
+    std::string value = _dupenv_s(&text, &length, name) == 0 && text ? text : "";
+    std::free(text);
+    return value;
+#else
+    const char *text = std::getenv(name);
+    return text ? text : "";
+#endif
+}
 } // namespace
 
 Backend *OpenBackend(const BackendDesc &desc, std::string &error)
@@ -273,6 +292,11 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     backend->bloomWanted = !EnvIsZero("KISAK_VK_MODERN_BLOOM");
     backend->effectsInLinear = EnvIs("KISAK_VK_MODERN_EFFECTS", "linear");
     backend->litWanted = !EnvIsZero("KISAK_VK_MODERN_LIT");
+    {
+        const std::string curve = EnvText("KISAK_VK_MODERN_TONEMAP");
+        if (!curve.empty() && !modern::CurveFromName(curve.c_str(), backend->tonemapCurve))
+            backend->tonemapCurveUnknown = true;
+    }
     if (!h.windowSystem || !h.windowSystem(h.user, desc.window, backend->windowSystem))
     {
         error = "the host has no Vulkan window system for this window";
@@ -653,6 +677,10 @@ bool EnsureTonemap(Backend *backend)
         HostLog(*backend->host, "vulkan d3d9: modern: no linear light: %s", error.c_str());
         return false;
     }
+    modern::SetCurve(backend->tonemap, backend->tonemapCurve);
+    HostLog(*backend->host, "vulkan d3d9: modern: tonemap curve %s%s", modern::CurveName(backend->tonemapCurve),
+            backend->tonemapCurveUnknown ? " (KISAK_VK_MODERN_TONEMAP names no curve: clamp, neutral, agx or aces)"
+                                         : "");
     return true;
 }
 

@@ -29,6 +29,8 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -514,6 +516,7 @@ public:
     void ModernBloom();
     void ModernEffects();
     void ModernLit();
+    void ModernTonemap();
     void Bench();
     void BenchRuns();
     void BenchFrames(bool runs);
@@ -3406,6 +3409,146 @@ void Check::ModernLit()
     SafeRelease(texture);
 }
 
+namespace
+{
+// tonemap.frag's curves, for a grey of light v (the check's expectations).
+using Rgb = std::array<double, 3>;
+Rgb Times(const double (&m)[9], const Rgb &c) // GLSL mat3(column-major) * c
+{
+    return {m[0] * c[0] + m[3] * c[1] + m[6] * c[2], m[1] * c[0] + m[4] * c[1] + m[7] * c[2],
+            m[2] * c[0] + m[5] * c[1] + m[8] * c[2]};
+}
+Rgb TonemapCurve(const std::string &curve, Rgb c)
+{
+    if (curve == "neutral")
+    {
+        const double start = 0.8 - 0.04, desaturation = 0.15;
+        const double peak = std::max(c[0], std::max(c[1], c[2]));
+        if (peak < start)
+            return c;
+        const double d = 1.0 - start;
+        const double newPeak = 1.0 - d * d / (peak + d - start);
+        const double g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
+        for (double &x : c)
+            x = x * newPeak / peak * (1.0 - g) + newPeak * g;
+        return c;
+    }
+    if (curve == "agx")
+    {
+        static const double inset[9] = {0.842479062253094, 0.0423282422610123, 0.0423756549057051,
+                                        0.0784335999999992, 0.878468636469772, 0.0784336,
+                                        0.0792237451477643, 0.0791661274605434, 0.879142973793104};
+        static const double outset[9] = {1.19687900512017, -0.0528968517574562, -0.0529716355144438,
+                                         -0.0980208811401368, 1.15190312990417, -0.0980434501171241,
+                                         -0.0990297440797205, -0.0989611768448433, 1.15107367264116};
+        const double minEv = -12.47393, maxEv = 4.026069;
+        c = Times(inset, c);
+        for (double &x : c)
+        {
+            x = (std::clamp(std::log2(std::max(x, 1e-10)), minEv, maxEv) - minEv) / (maxEv - minEv);
+            const double x2 = x * x, x4 = x2 * x2;
+            x = 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4 - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
+        }
+        c = Times(outset, c);
+        for (double &x : c)
+            x = std::pow(std::max(x, 0.0), 2.2);
+        return c;
+    }
+    if (curve == "aces")
+    {
+        static const double toAces[9] = {0.59719, 0.07600, 0.02840, 0.35458, 0.90834,
+                                         0.13383, 0.04823, 0.01566, 0.83777};
+        static const double fromAces[9] = {1.60475, -0.10208, -0.00327, -0.53108, 1.10813,
+                                           -0.07276, -0.07367, -0.00605, 1.07602};
+        for (double &x : c)
+            x /= 0.6;
+        c = Times(toAces, c);
+        for (double &x : c)
+            x = (x * (x + 0.0245786) - 0.000090537) / (x * (0.983729 * x + 0.4329510) + 0.238081);
+        return Times(fromAces, c);
+    }
+    return c;
+}
+std::string EnvText(const char *name)
+{
+#if defined(_MSC_VER)
+    char *text = nullptr;
+    size_t length = 0;
+    std::string value = _dupenv_s(&text, &length, name) == 0 && text ? text : "";
+    std::free(text);
+    return value;
+#else
+    const char *text = std::getenv(name);
+    return text ? text : "";
+#endif
+}
+int ShownByte(double light)
+{
+    light = std::clamp(light, 0.0, 1.0);
+    const double encoded = light <= 0.0031308 ? light * 12.92 : 1.055 * std::pow(light, 1.0 / 2.4) - 0.055;
+    return static_cast<int>(std::lround(encoded * 255.0));
+}
+} // namespace
+
+// The tonemap's curve (KISAK_VK_MODERN_TONEMAP): grey 128 (0.216 of light),
+// white (1), and white added twice (2) and four times (4) in the linear-light
+// scene, as each curve shows them. Clamp shows 128, 255, 255, 255; the others
+// keep the brighter greys apart.
+void Check::ModernTonemap()
+{
+    std::string curve = EnvText("KISAK_VK_MODERN_TONEMAP");
+    if (curve != "neutral" && curve != "agx" && curve != "aces")
+        curve = "clamp";
+    if (EnvText("KISAK_VK_MODERN_LINEAR") == "0")
+        curve = "clamp"; // no linear light: the scene is drawn as always
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    Reset(Argb(255, 0, 0, 0));
+    front::ModernSceneBegin(device);
+    device->SetDepthStencilSurface(depth);
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0), "Clear(scene)");
+    DrawQuad(0, 0, 64, 64, 0.5f, Argb(255, 128, 128, 128));
+    DrawQuad(64, 0, 128, 64, 0.5f, Argb(255, 255, 255, 255));
+    device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+    device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+    device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+    for (int i = 0; i < 2; ++i)
+        DrawQuad(0, 64, 64, 128, 0.5f, Argb(255, 255, 255, 255));
+    for (int i = 0; i < 4; ++i)
+        DrawQuad(64, 64, 128, 128, 0.5f, Argb(255, 255, 255, 255));
+    device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    view.width = view.height = kSize;
+    view.cut = true;
+    if (front::ModernSceneLit(device, view) == front::ModernResult::Skipped)
+        front::ModernSceneDone(device, view);
+    device->SetDepthStencilSurface(nullptr);
+    if (Read())
+    {
+        const double grey = std::pow((128.0 / 255.0 + 0.055) / 1.055, 2.4);
+        const struct
+        {
+            const char *name;
+            UINT x, y;
+            double light;
+        } points[] = {{"grey", 32, 32, grey}, {"white", 96, 32, 1.0}, {"white_x2", 32, 96, 2.0},
+                      {"white_x4", 96, 96, 4.0}};
+        for (const auto &point : points)
+        {
+            const Rgb shown = TonemapCurve(curve, {point.light, point.light, point.light});
+            Expect(point.name, point.x, point.y, ShownByte(shown[0]), ShownByte(shown[1]), ShownByte(shown[2]));
+        }
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    SafeRelease(depth);
+}
+
 void Check::ResetDevice()
 {
     SafeRelease(backBuffer);
@@ -3650,6 +3793,7 @@ int Run(const Options &options)
         {"modern_bloom", &Check::ModernBloom, true},
         {"modern_effects", &Check::ModernEffects, true},
         {"modern_lit", &Check::ModernLit, true},
+        {"modern_tonemap", &Check::ModernTonemap, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},

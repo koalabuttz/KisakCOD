@@ -7,6 +7,7 @@
 
 #include "vk_modern_shaders.h"
 
+#include <cstring>
 #include <utility>
 #include <vector>
 
@@ -21,7 +22,7 @@ struct Push
     float to[4];
     float invSceneSize[2];
     float bloomScale;
-    float pad;
+    uint32_t curve;
 };
 static_assert(sizeof(Push) == 48, "tonemap.frag's push constant block is 48 bytes");
 } // namespace
@@ -36,6 +37,7 @@ struct Tonemap
     VkSampler linear = VK_NULL_HANDLE;
     // One pipeline per target format, made at its first use.
     std::vector<std::pair<VkFormat, VkPipeline>> pipelines;
+    TonemapCurve curve = TonemapCurve::Clamp;
     TonemapStats stats{};
 };
 
@@ -135,6 +137,42 @@ void DestroyTonemap(Core *core, Tonemap *tonemap)
 
 TonemapStats Stats(const Tonemap *tonemap) { return tonemap ? tonemap->stats : TonemapStats{}; }
 
+void SetCurve(Tonemap *tonemap, TonemapCurve curve)
+{
+    if (tonemap)
+        tonemap->curve = curve;
+}
+
+const char *CurveName(TonemapCurve curve)
+{
+    switch (curve)
+    {
+    case TonemapCurve::Neutral:
+        return "neutral";
+    case TonemapCurve::Agx:
+        return "agx";
+    case TonemapCurve::Aces:
+        return "aces";
+    default:
+        return "clamp";
+    }
+}
+
+bool CurveFromName(const char *name, TonemapCurve &curve)
+{
+    if (!name)
+        return false;
+    for (TonemapCurve each : {TonemapCurve::Clamp, TonemapCurve::Neutral, TonemapCurve::Agx, TonemapCurve::Aces})
+    {
+        if (std::strcmp(name, CurveName(each)) == 0)
+        {
+            curve = each;
+            return true;
+        }
+    }
+    return false;
+}
+
 bool WriteDisplay(Core *core, Tonemap *tonemap, Image *scene, const VkRect2D &from, Image *target,
                   const VkRect2D &to, VkFilter filter, const char *pass, std::string &error, Image *bloom,
                   float bloomScale)
@@ -186,6 +224,7 @@ bool WriteDisplay(Core *core, Tonemap *tonemap, Image *scene, const VkRect2D &fr
     push.to[3] = static_cast<float>(to.extent.height);
     push.invSceneSize[0] = 1.0f / sceneInfo.width;
     push.invSceneSize[1] = 1.0f / sceneInfo.height;
+    push.curve = static_cast<uint32_t>(tonemap->curve);
     if (bloom && bloom != target && bloomScale > 0.0f && (ImageInfo(bloom).usage & VK_IMAGE_USAGE_SAMPLED_BIT))
         push.bloomScale = bloomScale;
     else
