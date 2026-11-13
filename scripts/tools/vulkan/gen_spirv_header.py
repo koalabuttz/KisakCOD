@@ -69,6 +69,21 @@ NO_SUN_VARIANTS = [
 # lp_[i_]amb[_<light>]_t0c0: the model shader's ambient-only build (lit shader
 # facts 6).
 AMBIENT_VARIANTS = [("lp_sun.frag", "kLpAmbFrag", ("LP_SUN_AMBIENT=1",))]
+# The same sources with a spot (2) or omni (3) light in place of the sun
+# (lm_/lp_[hsm_][i_]spot|omni_<mode>c0...: lit shader facts 6 and 7), with or
+# without its shadow map; facts 7 did not read the shadowed ones with a
+# detail map, so those are not built.
+LIGHT_VARIANTS = [
+    (f"{family}_sun.frag", f"k{family.capitalize()}{light}{'Shadow' if shadow else ''}{maps}Frag",
+     (f"{family.upper()}_SUN_LIGHT={value}", f"{family.upper()}_SUN_SHADOW={shadow}",
+      f"{family.upper()}_SUN_DETAIL={int('D' in maps)}", f"{family.upper()}_SUN_NORMAL={int('N' in maps)}",
+      f"{family.upper()}_SUN_SPECULAR={int('S' in maps)}"))
+    for family in ("lm", "lp")
+    for light, value in (("Spot", 2), ("Omni", 3))
+    for shadow in (0, 1)
+    for maps in ("", "N", "S", "NS", "D", "DN", "DS", "DNS")
+    if not (shadow and "D" in maps)
+]
 
 
 SETS = [
@@ -110,7 +125,7 @@ SETS = [
         [
             ("fullscreen.vert", "kFullscreenVert"),
             ("gamma.frag", "kGammaFrag"),
-        ] + LM_SUN_VARIANTS + LP_SUN_VARIANTS + NO_SUN_VARIANTS + AMBIENT_VARIANTS,
+        ] + LM_SUN_VARIANTS + LP_SUN_VARIANTS + NO_SUN_VARIANTS + AMBIENT_VARIANTS + LIGHT_VARIANTS,
     ),
 ]
 

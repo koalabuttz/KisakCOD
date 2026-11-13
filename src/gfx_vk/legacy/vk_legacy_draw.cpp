@@ -531,10 +531,11 @@ bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Sh
     // to the vertex shader; else the pixel shader as it is (its key keeps the
     // shader, so this is decided once). The pipeline's layout is the pixel
     // shader's, so it must read at least what ours reads (the constants to
-    // c18, or c19 with the specular, fewer without the sun
-    // (ModernLitConstantCount); 2D images at s0, s2 (with the sun) and s3
-    // (the world's lightmaps) and the shadow, normal, specular and detail
-    // maps' samplers; a 3D image at s4 for models' lighting volume, which
+    // c18, or c19 with the specular, fewer without the sun, a spot or omni
+    // light's to its last (ModernLitConstantCount); 2D images at s0, s2
+    // (with a primary light) and s3 (the world's lightmaps) and the shadow,
+    // normal, specular, a model's light attenuation and detail maps'
+    // samplers; a 3D image at s4 for models' lighting volume, which
     // moves the samplers after it one on; a cube at s1 with the specular; the
     // alpha test's block), and the shadow map must be a depth image where
     // depth compare is fixed.
@@ -547,9 +548,14 @@ bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Sh
         const uint32_t shadowMap = model ? 5u : 4u;
         const uint32_t normal = shadowMap + (shadowed ? 1u : 0u);
         const uint32_t specular = normal + (shader & ModernLitNormal ? 1u : 0u);
-        const uint32_t detail = specular + (shader & ModernLitSpecular ? 1u : 0u);
-        const uint32_t lightmaps = model ? 0u : (ModernLitSun(shader) ? 1u << 2 : 0u) | 1u << 3;
-        const uint32_t images = 1u << 0 | lightmaps
+        // A model's spot or omni light reads its attenuation after the
+        // specular map, before the detail map.
+        const bool attenuation = model && ModernLitPointLight(shader);
+        const uint32_t attenuationMap = specular + (shader & ModernLitSpecular ? 1u : 0u);
+        const uint32_t detail = attenuationMap + (attenuation ? 1u : 0u);
+        const bool primary = ModernLitSun(shader) || ModernLitPointLight(shader);
+        const uint32_t lightmaps = model ? 0u : (primary ? 1u << 2 : 0u) | 1u << 3;
+        const uint32_t images = 1u << 0 | lightmaps | (attenuation ? 1u << attenuationMap : 0u)
             | (shadowed ? 1u << shadowMap : 0u) | (shader & ModernLitNormal ? 1u << normal : 0u)
             | (shader & ModernLitSpecular ? 1u << specular : 0u) | (shader & ModernLitDetail ? 1u << detail : 0u);
         const uint32_t cubes = shader & ModernLitSpecular ? 1u << 1 : 0u;

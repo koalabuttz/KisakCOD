@@ -1437,7 +1437,7 @@ static void R_ModernLogPassInputs(const char *name, const MaterialPass *pass, co
     }
     Com_Printf(CON_CHANNEL_GFX,
                "Modern lit inputs: %s: decode samplers 0x%04x (doubled 0x%04x), constants 0x%08x%08x, vertex %d; "
-               "custom samplers 0x%x; our shader 0x%02x;%s\n",
+               "custom samplers 0x%x; our shader 0x%03x;%s\n",
                name, inputs.samplers, inputs.doubled, (uint32_t)(inputs.constants >> 32), (uint32_t)inputs.constants,
                inputs.colorInput ? 1 : 0, pass->customSamplerFlags, inputs.shader, args);
 }
@@ -1462,19 +1462,38 @@ static bool R_ModernTakeWord(const char **name, size_t *length, const char *word
 // (interiors, lit shader facts 5): lm_<r0|b0|t0>c0[d0][n0][s0]_sm3 and
 // lp_[i_]<r0|b0|t0>c0[d0][n0][s0]_sm3 (their shader model 2 builds read the
 // lightmap's UV elsewhere; lp_skin_ s0 has a shader of its own, and flag_,
-// the same shader as lp_t0, is left with skin_ for now).
+// the same shader as lp_t0, is left with skin_ for now). A spot or omni light
+// as the primary light (lit shader facts 6 and 7): lm_[hsm_]<spot|omni>_...
+// and lp_[hsm_][i_]<spot|omni>_..., shader model 3 only, and with the light's
+// shadow map not with a detail map (facts 7 did not read those).
+static uint16_t R_ModernLitPointLight(const char **name, size_t *length)
+{
+    if (R_ModernTakeWord(name, length, "spot_"))
+        return GFX_MODERN_LIT_SHADER_SPOT;
+    if (R_ModernTakeWord(name, length, "omni_"))
+        return GFX_MODERN_LIT_SHADER_OMNI;
+    return 0;
+}
+
 static uint16_t R_ModernLitShaderFromName(const char *name)
 {
     size_t length = strlen(name);
     if (length > 5 && !strcmp(name + length - 5, ".hlsl"))
         length -= 5;
     uint16_t shader;
-    if (R_ModernTakeWord(&name, &length, "lm_hsm_sun_"))
-        shader = GFX_MODERN_LIT_SHADER_LM_SUN | GFX_MODERN_LIT_SHADER_SHADOW;
-    else if (R_ModernTakeWord(&name, &length, "lm_sun_"))
-        shader = GFX_MODERN_LIT_SHADER_LM_SUN;
-    else if (R_ModernTakeWord(&name, &length, "lm_"))
-        shader = GFX_MODERN_LIT_SHADER_NO_SUN;
+    if (R_ModernTakeWord(&name, &length, "lm_"))
+    {
+        const bool shadow = R_ModernTakeWord(&name, &length, "hsm_");
+        const uint16_t shadowBit = shadow ? GFX_MODERN_LIT_SHADER_SHADOW : 0;
+        if (const uint16_t light = R_ModernLitPointLight(&name, &length))
+            shader = GFX_MODERN_LIT_SHADER_LM_SUN | shadowBit | light;
+        else if (R_ModernTakeWord(&name, &length, "sun_"))
+            shader = GFX_MODERN_LIT_SHADER_LM_SUN | shadowBit;
+        else if (!shadow)
+            shader = GFX_MODERN_LIT_SHADER_NO_SUN;
+        else
+            return GFX_MODERN_LIT_SHADER_NONE;
+    }
     else if (R_ModernTakeWord(&name, &length, "lp_"))
     {
         const bool shadow = R_ModernTakeWord(&name, &length, "hsm_");
@@ -1489,7 +1508,9 @@ static uint16_t R_ModernLitShaderFromName(const char *name)
                 return GFX_MODERN_LIT_SHADER_NONE;
             return GFX_MODERN_LIT_SHADER_LP_SUN | GFX_MODERN_LIT_SHADER_AMBIENT | GFX_MODERN_LIT_SHADER_ALPHA_TESTED;
         }
-        if (R_ModernTakeWord(&name, &length, "sun_"))
+        if (const uint16_t light = R_ModernLitPointLight(&name, &length))
+            shader = GFX_MODERN_LIT_SHADER_LP_SUN | (shadow ? GFX_MODERN_LIT_SHADER_SHADOW : 0) | light;
+        else if (R_ModernTakeWord(&name, &length, "sun_"))
             shader = GFX_MODERN_LIT_SHADER_LP_SUN | (shadow ? GFX_MODERN_LIT_SHADER_SHADOW : 0);
         else if (!shadow)
             shader = GFX_MODERN_LIT_SHADER_NO_SUN | GFX_MODERN_LIT_SHADER_NO_SUN_MODEL;
@@ -1512,13 +1533,16 @@ static uint16_t R_ModernLitShaderFromName(const char *name)
         shader |= GFX_MODERN_LIT_SHADER_NORMAL;
     if (R_ModernTakeWord(&name, &length, "s0"))
         shader |= GFX_MODERN_LIT_SHADER_SPECULAR;
+    const bool pointLight = (shader & GFX_MODERN_LIT_SHADER_LIGHT) != 0;
+    if (pointLight && (shader & GFX_MODERN_LIT_SHADER_SHADOW) && (shader & GFX_MODERN_LIT_SHADER_DETAIL))
+        return GFX_MODERN_LIT_SHADER_NONE;
     // The shader model 2 builds are known only without maps or a mode (world-lit
     // shader facts 1 and 2); facts 3 read the shader model 3 ones.
     const uint16_t sm3Only = GFX_MODERN_LIT_SHADER_NORMAL | GFX_MODERN_LIT_SHADER_SPECULAR
         | GFX_MODERN_LIT_SHADER_DETAIL | GFX_MODERN_LIT_SHADER_BLENDED | GFX_MODERN_LIT_SHADER_ALPHA_TESTED;
     if (length == 4 && !strncmp(name, "_sm3", 4))
         return shader;
-    if (length == 4 && !strncmp(name, "_sm2", 4) && !(shader & sm3Only)
+    if (length == 4 && !strncmp(name, "_sm2", 4) && !(shader & sm3Only) && !pointLight
         && (shader & GFX_MODERN_LIT_SHADER_FAMILY) == GFX_MODERN_LIT_SHADER_LM_SUN)
         return shader;
     return GFX_MODERN_LIT_SHADER_NONE;
@@ -1552,7 +1576,12 @@ static bool R_ModernMaterialConstIs(const Material *material, uint32_t nameHash,
 // after it one sampler and one constant on (model-lit shader facts); the
 // probe is their only custom sampler. Without the sun (interiors) the same
 // less the sun (c17, c18, c19), the primary lightmap and the shadow map
-// (lit shader facts 5). Anything else keeps the game's shader.
+// (lit shader facts 5). A spot or omni light in place of the sun (lit shader
+// facts 6 and 7) reads the sun's samplers (its own shadow map in the sun's
+// shadow map's place, and for models its attenuation after the specular map)
+// and, in place of the sun's constants, its own from c5 (models c6) as
+// ModernLitSpot in vk_legacy.h lists them. Anything else keeps the game's
+// shader.
 static uint16_t R_ModernLitShader(const char *name, const Material *material, const MaterialPass *pass)
 {
     const uint16_t shader = R_ModernLitShaderFromName(name);
@@ -1561,26 +1590,53 @@ static uint16_t R_ModernLitShader(const char *name, const Material *material, co
     const uint16_t family = shader & GFX_MODERN_LIT_SHADER_FAMILY;
     // lp_amb reads the sun's colour (c18) but neither its direction nor the
     // lookup scale.
-    const bool ambient = (shader & GFX_MODERN_LIT_SHADER_LIGHT) == GFX_MODERN_LIT_SHADER_AMBIENT;
-    const bool sun = family != GFX_MODERN_LIT_SHADER_NO_SUN && !ambient;
-    const bool shadow = sun && (shader & GFX_MODERN_LIT_SHADER_SHADOW) != 0;
+    const uint16_t light = shader & GFX_MODERN_LIT_SHADER_LIGHT;
+    const bool ambient = light == GFX_MODERN_LIT_SHADER_AMBIENT;
+    const bool pointLight = light == GFX_MODERN_LIT_SHADER_SPOT || light == GFX_MODERN_LIT_SHADER_OMNI;
+    const bool spot = light == GFX_MODERN_LIT_SHADER_SPOT;
+    const bool sun = family != GFX_MODERN_LIT_SHADER_NO_SUN && !light;
+    const bool shadow = (sun || pointLight) && (shader & GFX_MODERN_LIT_SHADER_SHADOW) != 0;
     const bool normal = (shader & GFX_MODERN_LIT_SHADER_NORMAL) != 0;
     const bool specular = (shader & GFX_MODERN_LIT_SHADER_SPECULAR) != 0;
     const bool detail = (shader & GFX_MODERN_LIT_SHADER_DETAIL) != 0;
     const bool model = family == GFX_MODERN_LIT_SHADER_LP_SUN
-        || (!sun && (shader & GFX_MODERN_LIT_SHADER_NO_SUN_MODEL) != 0);
+        || (family == GFX_MODERN_LIT_SHADER_NO_SUN && (shader & GFX_MODERN_LIT_SHADER_NO_SUN_MODEL) != 0);
     // The probe (1) with s0; the world's lightmaps, primary (2) with the sun
-    // and secondary (4).
-    const uint32_t customWanted = (specular ? 1u : 0u) | (model ? 0u : sun ? 6u : 4u);
+    // or a spot or omni light, and secondary (4).
+    const uint32_t customWanted = (specular ? 1u : 0u) | (model ? 0u : sun || pointLight ? 6u : 4u);
     if ((pass->customSamplerFlags & customWanted) != customWanted)
         return GFX_MODERN_LIT_SHADER_NONE;
     const uint32_t step = model ? 1u : 0u; // the volume and its scale come first
     const uint32_t shadowDest = 4u + step;
     const uint32_t normalDest = shadowDest + (shadow ? 1u : 0u);
     const uint32_t specularDest = normalDest + (normal ? 1u : 0u);
-    const uint32_t detailDest = specularDest + (specular ? 1u : 0u);
-    const uint32_t envMapDest = 5u + step;
-    const uint32_t detailScaleDest = envMapDest + (specular ? 1u : 0u);
+    const uint32_t attenuationDest = specularDest + (specular ? 1u : 0u); // models' spot and omni lights
+    const uint32_t detailDest = attenuationDest + (model && pointLight ? 1u : 0u);
+    uint32_t envMapDest = 5u + step;
+    uint32_t detailScaleDest = envMapDest + (specular ? 1u : 0u);
+    // A spot or omni light's constants, in order from c5 (models c6); 0 for
+    // those it does not read.
+    uint32_t lightPositionDest = 0, lightDiffuseDest = 0, lightSpecularDest = 0, spotDirDest = 0;
+    uint32_t spotFactorsDest = 0, falloffDest = 0, pixelAdjustDest = 0;
+    if (pointLight)
+    {
+        uint32_t next = 5u + step;
+        lightPositionDest = next++;
+        lightDiffuseDest = next++;
+        if (specular)
+            lightSpecularDest = next++;
+        if (spot || shadow)
+        {
+            spotDirDest = next++;
+            spotFactorsDest = next++;
+        }
+        if (!model)
+            falloffDest = next++;
+        if (shadow)
+            pixelAdjustDest = next++;
+        envMapDest = shadow ? 20u : next;
+        detailScaleDest = 20u;
+    }
     static const uint32_t detailMapHash = R_HashString("detailMap");
     // Every pixel argument, each where the shader reads it.
     uint32_t found = 0;
@@ -1601,10 +1657,22 @@ static uint16_t R_ModernLitShader(const char *name, const Material *material, co
         DETAIL_SCALE = 1u << 12,
         LIGHTING_VOLUME = 1u << 13,
         LOOKUP_SCALE = 1u << 14,
+        LIGHT_POSITION = 1u << 15,
+        LIGHT_DIFFUSE = 1u << 16,
+        LIGHT_SPECULAR = 1u << 17,
+        SPOT_DIR = 1u << 18,
+        SPOT_FACTORS = 1u << 19,
+        FALLOFF_PLACEMENT = 1u << 20,
+        PIXEL_ADJUST = 1u << 21,
+        ATTENUATION = 1u << 22,
     };
     const uint32_t wanted = COLOR_MAP | FOG_COLOR | (sun ? SUN_POSITION | SUN_DIFFUSE : 0u)
         | (ambient ? SUN_DIFFUSE | LIGHTING_VOLUME : 0u) | (model && !ambient ? LIGHTING_VOLUME | LOOKUP_SCALE : 0u)
-        | (shadow ? SHADOW_MAP | SWITCH_PARTITION | SHADOW_SCALE : 0u) | (normal ? NORMAL_MAP : 0u)
+        | (shadow ? SHADOW_MAP | (sun ? SWITCH_PARTITION | SHADOW_SCALE : PIXEL_ADJUST) : 0u)
+        | (pointLight ? LIGHT_POSITION | LIGHT_DIFFUSE | (specular ? LIGHT_SPECULAR : 0u)
+                   | (spot || shadow ? SPOT_DIR | SPOT_FACTORS : 0u) | (model ? ATTENUATION : FALLOFF_PLACEMENT)
+                         : 0u)
+        | (normal ? NORMAL_MAP : 0u)
         | (specular ? SPECULAR_MAP | ENV_MAP_PARMS | (sun ? SUN_SPECULAR : 0u) : 0u)
         | (detail ? DETAIL_MAP | DETAIL_SCALE : 0u);
     const uint32_t argCount = pass->perPrimArgCount + pass->perObjArgCount + pass->stableArgCount;
@@ -1632,8 +1700,11 @@ static uint16_t R_ModernLitShader(const char *name, const Material *material, co
             }
             break;
         case MTL_ARG_CODE_PIXEL_SAMPLER:
-            if (arg.u.codeSampler == TEXTURE_SRC_CODE_SHADOWMAP_SUN && arg.dest == shadowDest)
+            if (arg.u.codeSampler == (sun ? TEXTURE_SRC_CODE_SHADOWMAP_SUN : TEXTURE_SRC_CODE_SHADOWMAP_SPOT)
+                && arg.dest == shadowDest)
                 what = SHADOW_MAP;
+            else if (arg.u.codeSampler == TEXTURE_SRC_CODE_LIGHT_ATTENUATION && arg.dest == attenuationDest)
+                what = ATTENUATION;
             else if (arg.u.codeSampler == TEXTURE_SRC_CODE_MODEL_LIGHTING && arg.dest == 4)
                 what = LIGHTING_VOLUME;
             break;
@@ -1654,6 +1725,22 @@ static uint16_t R_ModernLitShader(const char *name, const Material *material, co
                 what = SHADOW_SCALE;
             else if (arg.u.codeConst.index == CONST_SRC_CODE_LIGHTING_LOOKUP_SCALE && arg.dest == 5)
                 what = LOOKUP_SCALE;
+            else if (!pointLight)
+                break;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_LIGHT_POSITION && arg.dest == lightPositionDest)
+                what = LIGHT_POSITION;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_LIGHT_DIFFUSE && arg.dest == lightDiffuseDest)
+                what = LIGHT_DIFFUSE;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_LIGHT_SPECULAR && arg.dest == lightSpecularDest)
+                what = LIGHT_SPECULAR;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_LIGHT_SPOTDIR && arg.dest == spotDirDest)
+                what = SPOT_DIR;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_LIGHT_SPOTFACTORS && arg.dest == spotFactorsDest)
+                what = SPOT_FACTORS;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_LIGHT_FALLOFF_PLACEMENT && arg.dest == falloffDest)
+                what = FALLOFF_PLACEMENT;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_SPOT_SHADOWMAP_PIXEL_ADJUST && arg.dest == pixelAdjustDest)
+                what = PIXEL_ADJUST;
             break;
         case MTL_ARG_MATERIAL_PIXEL_CONST:
             if (arg.dest == envMapDest && R_ModernMaterialConstIs(material, arg.u.nameHash, "envMapParms"))

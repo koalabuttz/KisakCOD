@@ -96,6 +96,24 @@ struct LitBuild
         return LIT_BUILD(k##prefix##ShadowDNSFrag);                                                                \
     default: return LitBuild{nullptr, 0};                                                                          \
     }
+// A spot or omni light's: no shadow map with a detail map.
+#define LIT_LIGHT(prefix)                                                                                          \
+    switch (maps)                                                                                                  \
+    {                                                                                                              \
+    case 0: return LIT_BUILD(k##prefix##Frag);                                                                     \
+    case ModernLitNormal: return LIT_BUILD(k##prefix##NFrag);                                                      \
+    case ModernLitSpecular: return LIT_BUILD(k##prefix##SFrag);                                                    \
+    case ModernLitNormal | ModernLitSpecular: return LIT_BUILD(k##prefix##NSFrag);                                 \
+    case ModernLitDetail: return LIT_BUILD(k##prefix##DFrag);                                                      \
+    case ModernLitDetail | ModernLitNormal: return LIT_BUILD(k##prefix##DNFrag);                                   \
+    case ModernLitDetail | ModernLitSpecular: return LIT_BUILD(k##prefix##DSFrag);                                 \
+    case ModernLitDetail | ModernLitNormal | ModernLitSpecular: return LIT_BUILD(k##prefix##DNSFrag);              \
+    case ModernLitShadow: return LIT_BUILD(k##prefix##ShadowFrag);                                                 \
+    case ModernLitShadow | ModernLitNormal: return LIT_BUILD(k##prefix##ShadowNFrag);                              \
+    case ModernLitShadow | ModernLitSpecular: return LIT_BUILD(k##prefix##ShadowSFrag);                            \
+    case ModernLitShadow | ModernLitNormal | ModernLitSpecular: return LIT_BUILD(k##prefix##ShadowNSFrag);         \
+    default: return LitBuild{nullptr, 0};                                                                          \
+    }
 #define LIT_NO_SUN(prefix)                                                                                         \
     switch (maps)                                                                                                  \
     {                                                                                                              \
@@ -113,6 +131,24 @@ LitBuild LitBuildFor(uint16_t shader)
 {
     if (ModernLitAmbientOnly(shader))
         return LIT_BUILD(kLpAmbFrag);
+    if (ModernLitPointLight(shader))
+    {
+        const uint8_t maps = shader & (ModernLitShadow | ModernLitNormal | ModernLitSpecular | ModernLitDetail);
+        const bool spot = (shader & ModernLitLightMask) == ModernLitSpot;
+        if (ModernLitModel(shader))
+        {
+            if (spot)
+            {
+                LIT_LIGHT(LpSpot)
+            }
+            LIT_LIGHT(LpOmni)
+        }
+        if (spot)
+        {
+            LIT_LIGHT(LmSpot)
+        }
+        LIT_LIGHT(LmOmni)
+    }
     if (!ModernLitSun(shader))
     {
         const uint8_t maps = shader & (ModernLitNormal | ModernLitSpecular | ModernLitDetail);
@@ -130,6 +166,7 @@ LitBuild LitBuildFor(uint16_t shader)
     LIT_FAMILY(LmSun)
 }
 #undef LIT_FAMILY
+#undef LIT_LIGHT
 #undef LIT_NO_SUN
 #undef LIT_BUILD
 } // namespace
@@ -154,7 +191,8 @@ bool BuildModernLitSpirv(uint16_t shader, const ls::Shader &vs, float sunStrengt
     // turns only the lightmap's light (lit shader facts 5), and the game's
     // vertex shader for them writes no tangent frame.
     const bool tangentFrame = (shader & ModernLitNormal)
-        && (ModernLitSun(shader) || ModernLitModel(shader) || (shader & ModernLitSpecular));
+        && (ModernLitSun(shader) || ModernLitPointLight(shader) || ModernLitModel(shader)
+            || (shader & ModernLitSpecular));
     if (tangentFrame)
     {
         placeholders.push_back({2, kUsageTexcoord, 2, 4});
@@ -162,7 +200,9 @@ bool BuildModernLitSpirv(uint16_t shader, const ls::Shader &vs, float sunStrengt
     }
     if (ModernLitShadowed(shader))
         placeholders.push_back({4, kUsageTexcoord, 4, 4});
-    if (shader & ModernLitSpecular)
+    // The eye-to-point vector: for the specular, and a spot or omni light's
+    // direction and distance.
+    if ((shader & ModernLitSpecular) || ModernLitPointLight(shader))
         placeholders.push_back({5, kUsageTexcoord, 5, 4});
     if (ModernLitModel(shader) && !ModernLitAmbientOnly(shader))
         placeholders.push_back({6, kUsageTexcoord, 6, 4}); // the lighting-volume coordinate (lp_amb: texcoord 1)

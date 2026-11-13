@@ -14,6 +14,13 @@
 //                    lit shader facts 5): only the volume's light (its alpha,
 //                    c17, c18 and c19 unread) and the probe's reflection, no
 //                    shadow map
+//   LP_SUN_LIGHT=2   lp_[hsm_][i_]spot_<mode>c0[d0][n0][s0]: a spot light in
+//                    place of the sun (lit shader facts 6 and 7)
+//   LP_SUN_LIGHT=3   lp_[hsm_][i_]omni_<mode>c0[d0][n0][s0]: an omni light
+// A spot or omni light is the model's primary light, as in lm_sun.frag, with
+// the volume's alpha for its visibility and its attenuation curve in a
+// sampler of its own (after the specular map's); only the volume's light is
+// doubled.
 // The mode (r0 opaque, b0 blended, t0 alpha-tested) is a specialization
 // constant: it changes no binding. i_ (instanced) changes only the vertex
 // shader.
@@ -63,6 +70,20 @@
 #if !LP_SUN_LIGHT && LP_SUN_SHADOW
 #error "the shadow map needs the sun"
 #endif
+#if LP_SUN_LIGHT >= 2
+#define POINT_LIGHT 1
+#else
+#define POINT_LIGHT 0
+#endif
+#if POINT_LIGHT && LP_SUN_SHADOW && LP_SUN_DETAIL
+#error "lit shader facts 7 did not read hsm spot or omni lights with a detail map"
+#endif
+// The spot direction and factors: a spot's cone, and a shadowed light's fade.
+#if LP_SUN_LIGHT == 2 || (POINT_LIGHT && LP_SUN_SHADOW)
+#define SPOT_FACTORS 1
+#else
+#define SPOT_FACTORS 0
+#endif
 // lp_[i_]amb[_<light>]_t0c0 (lit shader facts 6): the volume's light plus its
 // visibility times the sun's colour, with no normal (so no N.L, no lookup
 // push), no shadow and no maps; texcoord 1 holds the volume coordinate (xyz)
@@ -70,20 +91,44 @@
 #ifndef LP_SUN_AMBIENT
 #define LP_SUN_AMBIENT 0
 #endif
-#if LP_SUN_AMBIENT && (!LP_SUN_LIGHT || LP_SUN_SHADOW || LP_SUN_NORMAL || LP_SUN_SPECULAR || LP_SUN_DETAIL)
+#if LP_SUN_AMBIENT && (LP_SUN_LIGHT != 1 || LP_SUN_SHADOW || LP_SUN_NORMAL || LP_SUN_SPECULAR || LP_SUN_DETAIL)
 #error "lp_amb has the sun's colour and no maps"
 #endif
 
 // The material's samplers follow the fixed ones (colour map s0, probe s1,
 // lighting volume s4, shadow map s5) in the order normal, specular, detail;
 // its constants follow c5 lightingLookupScale the same way (envMapParms,
-// then detailScale).
+// then detailScale). A spot or omni light's attenuation comes after the
+// specular map, before the detail map; its constants start at c6:
+// lightPosition, lightDiffuse, lightSpecular (s0), spotDir and spotFactors
+// (spot, or the shadow map), spotShadowmapPixelAdjust (hsm), envMapParms
+// (s0; c20 with the shadow map); detailScale at c20.
 #define SAMPLER_NORMAL (LP_SUN_SHADOW + 5)
 #define SAMPLER_SPECULAR (SAMPLER_NORMAL + LP_SUN_NORMAL)
-#define SAMPLER_DETAIL (SAMPLER_SPECULAR + LP_SUN_SPECULAR)
+#define SAMPLER_ATTENUATION (SAMPLER_SPECULAR + LP_SUN_SPECULAR)
+#define SAMPLER_DETAIL (SAMPLER_SPECULAR + LP_SUN_SPECULAR + POINT_LIGHT)
+#if POINT_LIGHT
+#define CONSTANT_LIGHT_POSITION 6
+#define CONSTANT_LIGHT_DIFFUSE 7
+#define CONSTANT_LIGHT_SPECULAR 8
+#define CONSTANT_SPOT_DIR (8 + LP_SUN_SPECULAR)
+#define CONSTANT_SPOT_FACTORS (CONSTANT_SPOT_DIR + 1)
+#define CONSTANT_PIXEL_ADJUST (CONSTANT_SPOT_DIR + 2 * SPOT_FACTORS)
+#define CONSTANT_ENV_MAP (LP_SUN_SHADOW != 0 ? 20 : CONSTANT_PIXEL_ADJUST)
+#define CONSTANT_DETAIL_SCALE 20
+#if LP_SUN_DETAIL || (LP_SUN_SHADOW && LP_SUN_SPECULAR)
+#define CONSTANT_COUNT 21
+#elif LP_SUN_SPECULAR
+#define CONSTANT_COUNT (CONSTANT_ENV_MAP + 1)
+#else
+#define CONSTANT_COUNT (CONSTANT_PIXEL_ADJUST + LP_SUN_SHADOW)
+#endif
+#else
 #define CONSTANT_ENV_MAP 6
 #define CONSTANT_DETAIL_SCALE (6 + LP_SUN_SPECULAR)
-#if LP_SUN_LIGHT
+#endif
+#if POINT_LIGHT
+#elif LP_SUN_LIGHT
 #define CONSTANT_COUNT (19 + LP_SUN_SPECULAR)
 #elif LP_SUN_DETAIL
 #define CONSTANT_COUNT (CONSTANT_DETAIL_SCALE + 1)
@@ -98,10 +143,12 @@ layout(location = 2) in vec4 texcoord2; // xyz world binormal
 layout(location = 3) in vec4 texcoord3; // xyz world tangent
 #endif
 #if LP_SUN_SHADOW
-layout(location = 4) in vec4 texcoord4; // xy near shadow-map UV, z depth, w partition
+// The sun's: xy near shadow-map UV, z depth, w partition; a spot or omni
+// light's: projective (xy UV and z depth over w).
+layout(location = 4) in vec4 texcoord4;
 #endif
-#if LP_SUN_SPECULAR
-layout(location = 5) in vec4 texcoord5; // xyz eye-to-point vector
+#if LP_SUN_SPECULAR || POINT_LIGHT
+layout(location = 5) in vec4 texcoord5; // xyz eye-to-point vector (the point, relative to the eye)
 #endif
 #if !LP_SUN_AMBIENT
 layout(location = 6) in vec4 texcoord6; // xyz the model's lighting-volume coordinate
@@ -112,8 +159,9 @@ layout(location = 0) out vec4 outColor;
 
 // The pixel shader's float constants (c0 fogColor, c2 shadowmapSwitchPartition,
 // c4 shadowmapScale, c5 lightingLookupScale, c6 envMapParms, c6/c7
-// detailScale, c17 sunPosition, c18 sunDiffuse, c19 sunSpecular), as the
-// Legacy adapter binds them: set 0, binding 16, 16 bytes a register.
+// detailScale, c17 sunPosition, c18 sunDiffuse, c19 sunSpecular; a spot or
+// omni light's above), as the Legacy adapter binds them: set 0, binding 16,
+// 16 bytes a register.
 layout(set = 0, binding = 16, std140) uniform PixelConstants
 {
     vec4 c[CONSTANT_COUNT];
@@ -145,6 +193,11 @@ layout(set = 1, binding = 1) uniform textureCube reflectionProbe;
 layout(set = 1, binding = 17) uniform sampler reflectionProbeSampler;
 layout(set = 1, binding = SAMPLER_SPECULAR) uniform texture2D specularMap;
 layout(set = 1, binding = SAMPLER_SPECULAR + 16) uniform sampler specularMapSampler;
+#endif
+#if POINT_LIGHT
+// The light's attenuation over distance: a curve along the diagonal.
+layout(set = 1, binding = SAMPLER_ATTENUATION) uniform texture2D attenuationMap;
+layout(set = 1, binding = SAMPLER_ATTENUATION + 16) uniform sampler attenuationMapSampler;
 #endif
 #if LP_SUN_DETAIL
 layout(set = 1, binding = SAMPLER_DETAIL) uniform texture2D detailMap;
@@ -189,7 +242,19 @@ bool AlphaPasses(float alpha)
     }
 }
 
-#if LP_SUN_SHADOW
+#if LP_SUN_SHADOW && POINT_LIGHT
+// A spot shadow's four depth-compare taps, a quarter each, at xy plus and
+// minus the tile's two offsets (spotShadowmapPixelAdjust).
+float SpotShadowTaps(vec2 xy, float reference, vec4 adjust)
+{
+    float lit = 0.0;
+    lit += textureLod(sampler2DShadow(shadowMap, shadowMapSampler), vec3(xy + adjust.xy, reference), 0.0);
+    lit += textureLod(sampler2DShadow(shadowMap, shadowMapSampler), vec3(xy - adjust.xy, reference), 0.0);
+    lit += textureLod(sampler2DShadow(shadowMap, shadowMapSampler), vec3(xy + adjust.zw, reference), 0.0);
+    lit += textureLod(sampler2DShadow(shadowMap, shadowMapSampler), vec3(xy - adjust.zw, reference), 0.0);
+    return 0.25 * lit;
+}
+#elif LP_SUN_SHADOW
 // Four depth-compare taps around xy, a quarter each (the game's pattern).
 float ShadowTaps(vec2 xy, float reference)
 {
@@ -251,7 +316,43 @@ void main()
     const vec3 skyDisplay = 2.0 * volume.rgb;
     const vec3 sky = Decode(skyDisplay);
 
-#if LP_SUN_LIGHT
+#if POINT_LIGHT
+    // A spot or omni light (lm_sun.frag), visible as far as the volume's
+    // alpha says (the shadow map fades in over that).
+    const vec4 lightPosition = pc.c[CONSTANT_LIGHT_POSITION];
+    const vec3 toLight = lightPosition.xyz - texcoord5.xyz;
+    const vec3 lightDirection = normalize(toLight);
+    const float distanceShare = clamp(length(toLight) * lightPosition.w, 0.0, 1.0);
+    const vec3 attenuation = textureLod(sampler2D(attenuationMap, attenuationMapSampler),
+        vec2(distanceShare), 0.0).rgb;
+#if SPOT_FACTORS
+    const vec4 spotFactors = pc.c[CONSTANT_SPOT_FACTORS];
+    const float ramp = clamp(dot(lightDirection, pc.c[CONSTANT_SPOT_DIR].xyz) * spotFactors.x + spotFactors.y, 0.0, 1.0);
+#endif
+#if LP_SUN_LIGHT == 2
+    const float cone = ramp <= 0.0 ? 0.0 : (spotFactors.z != 0.0 ? pow(ramp, spotFactors.z) : 1.0);
+#else
+    const float cone = 1.0;
+#endif
+    float shadow = volume.a;
+#if LP_SUN_SHADOW
+    {
+        const vec2 shadowUv = texcoord4.xy / texcoord4.w;
+        const float depth = texcoord4.z / texcoord4.w;
+        const float reference = kClampDepthReference != 0 ? clamp(depth, 0.0, 1.0) : depth;
+#if LP_SUN_LIGHT == 2
+        const float fade = spotFactors.w;
+#else
+        const float fade = ramp * spotFactors.w;
+#endif
+        shadow = mix(volume.a, SpotShadowTaps(shadowUv, reference, pc.c[CONSTANT_PIXEL_ADJUST]), fade);
+    }
+#endif
+    const vec3 visibility = shadow * attenuation * cone;
+    const float facingLight = clamp(dot(lightDirection, normal), 0.0, 1.0);
+    const vec3 sunDisplay = visibility * facingLight * pc.c[CONSTANT_LIGHT_DIFFUSE].rgb;
+    const vec3 sun = max(Decode(skyDisplay + sunDisplay) - sky, vec3(0.0));
+#elif LP_SUN_LIGHT
     float shadow = volume.a;
 #if LP_SUN_SHADOW
     {
@@ -317,7 +418,11 @@ void main()
     const float fresnel = envMap.x + (envMap.y - envMap.x) * grazing;
     const vec4 probe = textureLod(samplerCube(reflectionProbe, reflectionProbeSampler), reflected, 6.0 - 8.0 * gloss);
     vec3 reflection = probe.rgb * probe.a;
-#if LP_SUN_LIGHT
+#if POINT_LIGHT
+    const float exponent = exp2(gloss * 9.37752) + 7.0;
+    const float highlight = clamp(exp((dot(reflected, lightDirection) - 0.99925) * exponent), 0.0, 1.0);
+    reflection += visibility * highlight * envMap.w * pc.c[CONSTANT_LIGHT_SPECULAR].rgb * kSunStrength;
+#elif LP_SUN_LIGHT
     const float exponent = exp2(gloss * 9.37752) + 7.0;
     const float highlight = clamp(exp((dot(reflected, sunDirection) - 0.99925) * exponent), 0.0, 1.0);
     reflection += shadow * highlight * envMap.w * pc.c[19].rgb * kSunStrength;

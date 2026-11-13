@@ -742,6 +742,18 @@ enum ModernLitShader : uint16_t
     // shadow: lp_[i_]amb[_<light>]_t0c0, the volume's light plus its
     // visibility times the sun's colour (c18), with no normal; texcoord 1
     // holds the volume coordinate and the fog (lit shader facts 6).
+    // ModernLitSpot and ModernLitOmni: lm_/lp_[hsm_][i_]spot|omni_..., a spot
+    // or omni light as the primary light in place of the sun (lit shader
+    // facts 6 and 7): the sun's samplers, less the sun's (c17 to c19), and
+    // the light's constants from c5 (models c6): lightPosition,
+    // lightDiffuse, lightSpecular (s0), spotDir and spotFactors (spot, or
+    // the shadow map), lightFalloffPlacement (the world's), and
+    // spotShadowmapPixelAdjust (the shadow map); then envMapParms (s0; c20
+    // with the shadow map) and detailScale at c20. The shadow bit is the
+    // light's shadow map (one tile, at the sun's shadow map's sampler), not
+    // read with a detail map; models read the light's attenuation at the
+    // sampler after the specular map's, which moves the detail map one on;
+    // texcoord 5 holds the point.
     ModernLitSpot = 0x100,
     ModernLitOmni = 0x200,
     ModernLitAmbient = 0x300,
@@ -757,8 +769,16 @@ constexpr bool ModernLitShaderValid(uint16_t shader)
     if (light == ModernLitAmbient)
         return family == ModernLitLpSun
             && !(shader & (ModernLitShadow | ModernLitNormal | ModernLitSpecular | ModernLitDetail));
-    // Spot and omni lights are not built yet.
-    return light == 0;
+    if (light != 0) // spot and omni: with the sun's families only, no shadow map with a detail map
+        return (family == ModernLitLmSun || family == ModernLitLpSun)
+            && (shader & (ModernLitShadow | ModernLitDetail)) != (ModernLitShadow | ModernLitDetail);
+    return true;
+}
+// Whether its primary light is a spot or omni light.
+constexpr bool ModernLitPointLight(uint16_t shader)
+{
+    const uint16_t light = shader & ModernLitLightMask;
+    return light == ModernLitSpot || light == ModernLitOmni;
 }
 // Whether it is lp_amb.
 constexpr bool ModernLitAmbientOnly(uint16_t shader)
@@ -777,10 +797,10 @@ constexpr bool ModernLitSun(uint16_t shader)
     const uint16_t family = shader & ModernLitFamilyMask;
     return (family == ModernLitLmSun || family == ModernLitLpSun) && !(shader & ModernLitLightMask);
 }
-// Whether it reads the sun's shadow map.
+// Whether it reads a shadow map: the sun's, or a spot or omni light's.
 constexpr bool ModernLitShadowed(uint16_t shader)
 {
-    return ModernLitSun(shader) && (shader & ModernLitShadow);
+    return (ModernLitSun(shader) || ModernLitPointLight(shader)) && (shader & ModernLitShadow);
 }
 // How many pixel constants it reads: to c18 (c19 with s0) with the sun;
 // without, to envMapParms (s0) or detailScale (d0), at least c0 for the world
@@ -789,6 +809,19 @@ constexpr uint32_t ModernLitConstantCount(uint16_t shader)
 {
     if (ModernLitAmbientOnly(shader))
         return 19u;
+    if (ModernLitPointLight(shader))
+    {
+        // As ModernLitSpot says: to c20 with a detail map, or envMapParms
+        // there; else to the last of the light's.
+        const bool shadow = (shader & ModernLitShadow) != 0;
+        const bool specular = (shader & ModernLitSpecular) != 0;
+        if ((shader & ModernLitDetail) || (shadow && specular))
+            return 21u;
+        const bool spotFactors = (shader & ModernLitLightMask) == ModernLitSpot || shadow;
+        const uint32_t first = ModernLitModel(shader) ? 6u : 5u;
+        return first + 2u + (specular ? 1u : 0u) + (spotFactors ? 2u : 0u) + (ModernLitModel(shader) ? 0u : 1u)
+            + (shadow ? 1u : 0u) + (specular ? 1u : 0u);
+    }
     if (ModernLitSun(shader))
         return shader & ModernLitSpecular ? 20u : 19u;
     const uint32_t first = ModernLitModel(shader) ? 6u : 5u; // envMapParms, or detailScale without s0
