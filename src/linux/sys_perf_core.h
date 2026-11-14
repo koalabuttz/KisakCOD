@@ -17,6 +17,8 @@
 // made-up clock and made-up counters.
 // ---------------------------------------------------------------------------
 
+// (std::max) stays in parentheses: the Windows build includes <windows.h>,
+// whose max macro would replace it.
 #include <algorithm>
 #include <cmath>
 #include <cstdarg>
@@ -262,7 +264,7 @@ public:
                 // Unsigned 32-bit differences stay right across one wrap.
                 probeTotals_[i].ns += (uint32_t)(probeNow_[i].ns - probeLast_[i].ns);
                 probeTotals_[i].calls += (uint32_t)(probeNow_[i].calls - probeLast_[i].calls);
-                probeTotals_[i].maxNs = std::max(probeTotals_[i].maxNs, probeNow_[i].maxNs);
+                probeTotals_[i].maxNs = (std::max)(probeTotals_[i].maxNs, probeNow_[i].maxNs);
             }
             if (config_.tickProbe >= 0)
             {
@@ -550,7 +552,7 @@ private:
         for (const VariantMean &mean : means)
         {
             if (mean.fps > 0.0)
-                spread = std::max(spread, 100.0 * (mean.fpsMax - mean.fpsMin) / mean.fps);
+                spread = (std::max)(spread, 100.0 * (mean.fpsMax - mean.fpsMin) / mean.fps);
         }
         std::string line;
         Appendf(&line, "perf: B against A: fps %+.1f %%, frame %+.3f ms, cpu all %+.3f ms/frame",

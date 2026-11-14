@@ -268,8 +268,8 @@ namespace
         }
     };
 
-    GameHost s_host;
-    PerfRunner s_runner(&s_host);
+    GameHost s_gameHost;
+    PerfRunner s_runner(&s_gameHost);
 
     double ArgSeconds(int index, double fallback)
     {
