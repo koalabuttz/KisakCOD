@@ -56,6 +56,7 @@ def production_code() -> str:
             raise ValueError(f"{name} was not found")
         parts.append(line.group(0))
     parts.append(extract(source, r"^void SND_ReleaseChannelBuffer\(int index\)\s*\{", "SND_ReleaseChannelBuffer"))
+    parts.append(extract(source, r"^static void AL_StreamPlayedThrough\([^)]*\)\s*\{", "AL_StreamPlayedThrough"))
     parts.append(extract(source, r"^static bool SND_FillStreamBuffers\([^)]*\)\s*\{", "SND_FillStreamBuffers"))
     return "\n\n".join(parts)
 
@@ -84,6 +85,26 @@ static int cutsNoted = 0;
 static int underrunsNoted = 0;
 static void SND_AlDebugNoteCut(int) { ++cutsNoted; }
 static void SND_AlDebugNoteUnderrun(int) { ++underrunsNoted; }
+
+// What AL_StreamPlayedThrough calls. The table of kept lengths has its own
+// test (test_openal_stream_lengths.py); here its entry point records what the
+// stream code hands it.
+static int lengthsCounted = 0;
+static char countedName[128];
+static uint32_t countedBytes = 0;
+static uint64_t countedFrames = 0;
+static bool AL_CountStreamLength(const char *name, uint32_t fileBytes, uint64_t framesPlayed, uint64_t *was)
+{
+    ++lengthsCounted;
+    std::snprintf(countedName, sizeof(countedName), "%%s", name);
+    countedBytes = fileBytes;
+    countedFrames = framesPlayed;
+    *was = 0;
+    return false;
+}
+static bool SND_AlDebug(int) { return false; }
+static const int CON_CHANNEL_SOUND = 0;
+static void Com_Printf(int, const char *, ...) {}
 
 %(production)s
 
@@ -267,9 +288,116 @@ static void CloseStream(int index)
         alDeleteBuffers(1, &buf);
     }
     alSourcei(source, AL_BUFFER, 0);
-    drwav_uninit(&g_streamState[index].wav);
+    if (g_streamState[index].isMp3)
+        drmp3_uninit(&g_streamState[index].mp3);
+    else
+        drwav_uninit(&g_streamState[index].wav);
     g_streamState[index].active = false;
     alGetError();
+}
+
+// An MP3 file in memory: `frames` layer 3 frames of 128 kbit/s at 44.1 kHz
+// with nothing in them, which decode to silence, 1152 samples each.
+static const int MP3_FRAME_SAMPLES = 1152;
+static std::vector<uint8_t> SilentMp3(int frames)
+{
+    const int frameBytes = 417; // 144 * 128000 / 44100, no padding byte
+    std::vector<uint8_t> file((size_t)frames * frameBytes, 0);
+    for (int i = 0; i < frames; ++i)
+    {
+        uint8_t *frame = file.data() + (size_t)i * frameBytes;
+        frame[0] = 0xFF;
+        frame[1] = 0xFB;
+        frame[2] = 0x90;
+        frame[3] = 0x00;
+    }
+    return file;
+}
+
+static void OpenMp3Stream(int index, const std::vector<uint8_t> &file, bool looping)
+{
+    AlStreamState *stream = &g_streamState[index];
+    std::memset(stream, 0, sizeof(*stream));
+    drmp3_init_memory(&stream->mp3, file.data(), file.size(), nullptr);
+    stream->isMp3 = true;
+    stream->looping = looping;
+    stream->channels = stream->mp3.channels;
+    stream->sampleRate = stream->mp3.sampleRate;
+    stream->active = true;
+    // As SND_StartAliasStreamOnChannel leaves a stream that starts at its first frame.
+    std::snprintf(stream->lengthName, sizeof(stream->lengthName), "sound/music/made_up.mp3");
+    stream->fileBytes = (uint32_t)file.size();
+    stream->countsFromStart = true;
+}
+
+// A stream the decoder took from its first frame to its end hands the count
+// of its frames to the table of kept lengths, once a pass.
+static void StreamCountsItsLength()
+{
+    const int ch = 43;
+    const int mp3Frames = 20; // 23040 samples: less than the four buffers one refill queues
+    const uint64_t length = (uint64_t)mp3Frames * MP3_FRAME_SAMPLES;
+    const std::vector<uint8_t> file = SilentMp3(mp3Frames);
+    ALuint source = alGlob.source[ch];
+    char what[200];
+
+    lengthsCounted = 0;
+    OpenMp3Stream(ch, file, false);
+    SND_FillStreamBuffers(ch, false);
+    std::snprintf(what, sizeof(what), "stream: an MP3 read from its start to its end reports its length (%%llu frames, %%d reports)",
+                  (unsigned long long)countedFrames, lengthsCounted);
+    Check(lengthsCounted == 1 && countedFrames == length && countedBytes == file.size()
+              && !std::strcmp(countedName, "sound/music/made_up.mp3"), what);
+    SND_FillStreamBuffers(ch, false);
+    SND_FillStreamBuffers(ch, true);
+    Check(lengthsCounted == 1, "stream: a stream that has ended reports its length once");
+    CloseStream(ch);
+
+    // Started part of the way in: what it read is not the file's length.
+    lengthsCounted = 0;
+    OpenMp3Stream(ch, file, false);
+    drmp3_seek_to_pcm_frame(&g_streamState[ch].mp3, 5000);
+    g_streamState[ch].framesQueued = 5000;
+    g_streamState[ch].countsFromStart = false;
+    SND_FillStreamBuffers(ch, false);
+    Check(lengthsCounted == 0, "stream: a stream started part of the way in reports no length");
+    CloseStream(ch);
+
+    // A looping stream reports every pass that began at the first frame.
+    lengthsCounted = 0;
+    OpenMp3Stream(ch, file, true);
+    SND_FillStreamBuffers(ch, false);   // three buffers to the end, the fourth from the start again
+    Check(lengthsCounted == 1 && countedFrames == length, "stream: a looping MP3 reports its length at the end of its first pass");
+    alSourcePlay(source);
+    Render(AL_STREAM_BUFFER_COUNT * AL_STREAM_BUFFER_FRAMES + 4096);
+    SND_FillStreamBuffers(ch, true);
+    std::snprintf(what, sizeof(what), "stream: and the same length at the end of its second (%%llu frames, %%d reports)",
+                  (unsigned long long)countedFrames, lengthsCounted);
+    Check(lengthsCounted == 2 && countedFrames == length, what);
+    CloseStream(ch);
+
+    // A looping stream started part of the way in reports from its second pass.
+    lengthsCounted = 0;
+    OpenMp3Stream(ch, file, true);
+    drmp3_seek_to_pcm_frame(&g_streamState[ch].mp3, 5000);
+    g_streamState[ch].framesQueued = 5000;
+    g_streamState[ch].countsFromStart = false;
+    SND_FillStreamBuffers(ch, false);   // to the end (no report), then from the start
+    Check(lengthsCounted == 0, "stream: a looping stream started part of the way in reports nothing for that pass");
+    alSourcePlay(source);
+    Render(AL_STREAM_BUFFER_COUNT * AL_STREAM_BUFFER_FRAMES + 4096);
+    SND_FillStreamBuffers(ch, true);
+    Check(lengthsCounted == 1 && countedFrames == length, "stream: and its length for the next, which began at the first frame");
+    CloseStream(ch);
+
+    // A WAV stream says its own length; nothing is counted for it.
+    lengthsCounted = 0;
+    std::vector<uint8_t> wav = WavFile(AL_STREAM_BUFFER_FRAMES + 100, NEW_HZ);
+    OpenStream(ch, wav);
+    g_streamState[ch].countsFromStart = true;
+    SND_FillStreamBuffers(ch, false);
+    Check(lengthsCounted == 0, "stream: a WAV stream reports no length");
+    CloseStream(ch);
 }
 
 static void StreamUnderrun()
@@ -369,6 +497,7 @@ int main()
     StreamUnderrun();
     StreamDelayed();
     StreamEnds();
+    StreamCountsItsLength();
 
     alDeleteSources(53, alGlob.source);
     alcMakeContextCurrent(nullptr);
