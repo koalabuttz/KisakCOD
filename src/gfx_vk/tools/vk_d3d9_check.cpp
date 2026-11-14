@@ -526,10 +526,13 @@ public:
     void ModernLitModels();
     void ModernLitNoSun();
     void ModernTonemap();
+    void ModernTonemapAs(const std::string &curve);
     void ModernExposure();
     void ModernVelocity();
     void ModernNormals();
     void ModernAo();
+    void ModernAoAs(bool liveOff);
+    void ModernLive();
     void ModernReflections();
     void Bench();
     void BenchRuns();
@@ -3198,7 +3201,11 @@ void Check::ModernNormals()
 // shaders (linear light, lit inputs and our shaders on), with
 // KISAK_VK_MODERN_AO=1 or its debug view, never with KISAK_VK_MODERN_AO=0 or
 // KISAK_VK_MODERN_NORMALS=0.
-void Check::ModernAo()
+void Check::ModernAo() { ModernAoAs(false); }
+
+// The same, with ambient occlusion switched off while the device exists
+// (front::ModernTuning::ao 0) when `liveOff` is set.
+void Check::ModernAoAs(bool liveOff)
 {
     const auto envIs = [](const char *name, const char *value) {
 #if defined(_MSC_VER)
@@ -3215,7 +3222,7 @@ void Check::ModernAo()
     // Our lit shaders draw (and read ambient occlusion).
     const bool ours = !envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
                       && !envIs("KISAK_VK_MODERN_SHADERS", "0");
-    const bool built = !envIs("KISAK_VK_MODERN_AO", "0") && !envIs("KISAK_VK_MODERN_NORMALS", "0")
+    const bool built = !liveOff && !envIs("KISAK_VK_MODERN_AO", "0") && !envIs("KISAK_VK_MODERN_NORMALS", "0")
                        && (ours || envIs("KISAK_VK_MODERN_AO", "1") || envIs("KISAK_VK_MODERN_DEBUG", "ao"));
     // The scene's depth is taken whenever the normals buffer is wanted.
     const bool depthTaken = built || (!envIs("KISAK_VK_MODERN_NORMALS", "0")
@@ -5416,9 +5423,11 @@ void Check::ModernLitNoSun()
 // keep the brighter greys apart. A lit surface over white (front
 // ModernLitInputs::overWhite) that computes 1.5 is decode(1.5) = 2.54 of
 // light, where an ordinary draw clamps it to 1 first.
-void Check::ModernTonemap()
+void Check::ModernTonemap() { ModernTonemapAs(ModernCurve()); }
+
+// The same, shown through `curve` ("clamp", "neutral", "agx" or "aces").
+void Check::ModernTonemapAs(const std::string &curve)
 {
-    const std::string curve = ModernCurve();
     IDirect3DSurface9 *depth = nullptr;
     if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
                                               nullptr),
@@ -5484,6 +5493,67 @@ void Check::ModernTonemap()
     Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
     SafeRelease(white);
     SafeRelease(depth);
+}
+
+// The Modern switches changed while the device exists (front::Tuning::modern,
+// the engine's r_modern* dvars; docs/vulkan-modern.md "Live switches"): each
+// change is taken up at the next Present and logged once. The tonemap scene
+// is drawn through the clamp curve, then through ACES (both the clamp's
+// without linear light, which has no tonemap), then the ambient occlusion
+// scene with ambient occlusion switched off, which leaves the floor's corner
+// as light as the open floor; then the velocity debug view without its depth
+// test, which makes the velocity pass again if there is one; then every
+// switch goes back to what the device started with.
+void Check::ModernLive()
+{
+    std::vector<std::string> lines;
+    const auto keep = [&](std::vector<std::string> *kept) {
+        const std::lock_guard<std::mutex> lock(host->mutex);
+        host->logKept = kept;
+    };
+    const auto take = [&](const front::ModernTuning &modern) {
+        {
+            const std::lock_guard<std::mutex> lock(host->mutex);
+            host->tuning = front::Tuning{};
+            host->tuning.modern = modern;
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    };
+    const bool linear = EnvText("KISAK_VK_MODERN_LINEAR") != "0";
+    keep(&lines);
+    front::ModernTuning modern;
+    modern.tonemap = 0; // clamp
+    take(modern);
+    ModernTonemapAs("clamp");
+    modern.tonemap = 3; // aces
+    take(modern);
+    // Taken up once: the Present at the end of the scene before changes nothing.
+    ModernTonemapAs(linear ? "aces" : "clamp");
+    modern = front::ModernTuning{};
+    modern.ao = 0;
+    take(modern);
+    ModernAoAs(true);
+    // The velocity debug view without its depth test: the velocity pass, if
+    // made (the full run's modern_velocity), is made again (its counts kept).
+    modern = front::ModernTuning{};
+    modern.debug = 2; // velocity-all
+    take(modern);
+    take(front::ModernTuning{});
+    keep(nullptr);
+    // The changes in order: clamp, ACES, ambient occlusion off (the curve
+    // back to the device's own), velocity-all, everything back.
+    std::vector<std::string> changes;
+    for (const std::string &line : lines)
+        if (line.find("modern: switches now: ") != std::string::npos)
+            changes.push_back(line);
+    Equal("logged_changes", changes.size(), size_t(5));
+    if (changes.size() == 5)
+    {
+        Equal("logged_clamp", changes[0].find("tonemap clamp,") != std::string::npos, true);
+        Equal("logged_aces", changes[1].find("tonemap aces,") != std::string::npos, true);
+        Equal("logged_ao_off", changes[2].find("ambient occlusion off") != std::string::npos, true);
+        Equal("logged_velocity_all", changes[3].find("debug view velocity-all") != std::string::npos, true);
+    }
 }
 
 // Auto exposure (vk_modern.h MeasureExposure), with the default key 0.115 and
@@ -5845,6 +5915,7 @@ int Run(const Options &options)
         {"modern_normals", &Check::ModernNormals, true},
         {"modern_ao", &Check::ModernAo, true},
         {"modern_reflections", &Check::ModernReflections, true},
+        {"modern_live", &Check::ModernLive, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},

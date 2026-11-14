@@ -165,6 +165,9 @@ struct Backend
     modern::Velocity *velocity = nullptr;
     std::vector<modern::MovedSurface> moved;
     modern::VelocityStats velocityBase{};
+    // The pass was destroyed to be made again (ApplyModernTuning): its
+    // counts stay in the statistics until the next is made.
+    bool velocityRemade = false;
     // Skinned surfaces (vk_d3d9.h ModernSkinnedSurfaceMoved): those of the
     // scene being drawn, each with its key and whether it has a last matrix;
     // their vertices kept from one scene to the next; the counts at the last
@@ -242,6 +245,24 @@ struct Backend
     bool debugReflections = false;
     bool debugFailed = false;
     modern::DebugView *debug = nullptr;
+    // The Modern switches the device started with (the KISAK_VK_MODERN_*
+    // variables, or the built-in defaults), which a ModernTuning field of -1
+    // keeps (ApplyModernTuning), and the Modern tuning last taken up. The
+    // variables that turn a pass on or off whatever asks are kept as -1
+    // (unset: on when something reads it), 0 or 1.
+    struct ModernStart
+    {
+        bool bloom = true, exposure = true, velocity = true;
+        bool shaders = true, modelShaders = true, noSunShaders = true;
+        int ao = -1, reflections = -1, normals = -1;
+        ModernDebugView debug = ModernDebugNone;
+        modern::TonemapCurve curve = modern::TonemapCurve::Neutral;
+        float sunStrength = 1.0f, skyStrength = 1.0f;
+        modern::ExposureParams exposureParams{};
+        modern::AoParams aoParams{};
+        modern::ReflectionParams reflectionParams{};
+    } modernStart;
+    ModernTuning modernTuning{};
 };
 
 namespace
@@ -394,6 +415,143 @@ std::string EnvText(const char *name)
     return text ? text : "";
 #endif
 }
+
+const char *DebugViewName(ModernDebugView view)
+{
+    switch (view)
+    {
+    case ModernDebugVelocity:
+        return "velocity";
+    case ModernDebugVelocityAll:
+        return "velocity-all";
+    case ModernDebugNormals:
+        return "normals";
+    case ModernDebugAo:
+        return "ao";
+    case ModernDebugReflections:
+        return "reflections";
+    default:
+        return "none";
+    }
+}
+
+// Takes up the Modern switches: each field of `tuning` that is not negative
+// (or, for the numbers, not outside what the variable of the same name
+// takes) in place of what the device started with. Called as the device
+// opens and then at a Present whose tuning changed (BackendFrame), so a scene
+// is drawn with one set of switches throughout. A pass turned off is not
+// destroyed (turned on again, it carries on); its image stops being read at
+// once. With `log`, says what the switches are now.
+void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = false)
+{
+    const Backend::ModernStart &start = backend->modernStart;
+    const auto pick = [](int value, bool startValue) { return value >= 0 ? value != 0 : startValue; };
+    backend->bloomWanted = pick(tuning.bloom, start.bloom);
+    backend->exposureWanted = pick(tuning.exposure, start.exposure);
+    backend->velocityWanted = pick(tuning.velocity, start.velocity);
+    backend->shadersWanted = pick(tuning.shaders, start.shaders);
+    backend->modelShadersWanted = pick(tuning.modelShaders, start.modelShaders);
+    backend->noSunShadersWanted = pick(tuning.noSunShaders, start.noSunShaders);
+
+    const ModernDebugView view = tuning.debug >= ModernDebugNone && tuning.debug <= ModernDebugReflections
+                                     ? static_cast<ModernDebugView>(tuning.debug)
+                                     : start.debug;
+    const bool velocityAllBefore = backend->debugVelocityAll;
+    backend->debugVelocityAll = view == ModernDebugVelocityAll;
+    backend->debugVelocity = view == ModernDebugVelocity || view == ModernDebugVelocityAll;
+    backend->debugNormals = view == ModernDebugNormals;
+    backend->debugAo = view == ModernDebugAo;
+    backend->debugReflections = view == ModernDebugReflections;
+    // The velocity pass takes its depth test when it is made: made again at
+    // its next scene (a wait for the GPU, once; only the debug view asks).
+    if (velocityAllBefore != backend->debugVelocityAll && backend->velocity)
+    {
+        // Its counts carry over to the next (unsigned: the base wraps back
+        // when the new pass counts up again).
+        const modern::VelocityStats was = modern::Stats(backend->velocity);
+        backend->velocityBase.passes -= was.passes;
+        backend->velocityBase.surfaces -= was.surfaces;
+        backend->velocityBase.skinned -= was.skinned;
+        backend->velocityBase.world -= was.world;
+        backend->velocityRemade = true;
+        modern::DestroyVelocity(backend->core, backend->velocity);
+        backend->velocity = nullptr;
+    }
+
+    // Ambient occlusion and reflections are wanted for what reads them unless
+    // switched on or off outright; the normals buffer for those.
+    const bool ours = backend->linearWanted && backend->litWanted && backend->shadersWanted;
+    const int ao = tuning.ao >= 0 ? tuning.ao : start.ao;
+    backend->aoWanted = ao == 1 || (ao < 0 && (backend->debugAo || ours));
+    const int reflections = tuning.reflections >= 0 ? tuning.reflections : start.reflections;
+    backend->reflectionsWanted = reflections == 1 || (reflections < 0 && (backend->debugReflections || ours));
+    backend->normalsWanted = start.normals != 0 && (start.normals == 1 || backend->debugNormals
+                                                    || backend->aoWanted || backend->reflectionsWanted);
+    if (backend->legacy)
+    {
+        if (!backend->aoWanted || !backend->normalsWanted)
+        {
+            backend->sceneAo = false;
+            lg::SetModernAmbientOcclusion(backend->legacy, nullptr);
+        }
+        if (!backend->reflectionsWanted || !backend->normalsWanted)
+        {
+            backend->sceneReflections = nullptr;
+            lg::SetModernReflections(backend->legacy, nullptr);
+        }
+    }
+    if (!backend->normalsWanted)
+        backend->sceneNormals = nullptr;
+
+    const auto number = [](float value, float startValue, float low, float high, bool lowIn) {
+        return (lowIn ? value >= low : value > low) && value <= high ? value : startValue;
+    };
+    constexpr float kAny = 1.0e9f;
+    const float sun = number(tuning.sunStrength, start.sunStrength, 0.0f, kAny, true);
+    const float sky = number(tuning.skyStrength, start.skyStrength, 0.0f, kAny, true);
+    if (sun != backend->sunStrength || sky != backend->skyStrength)
+    {
+        backend->sunStrength = sun;
+        backend->skyStrength = sky;
+        if (backend->legacy)
+            lg::SetModernLitStrengths(backend->legacy, sun, sky);
+    }
+    backend->exposureParams.key = number(tuning.exposureKey, start.exposureParams.key, 0.0f, kAny, false);
+    backend->exposureParams.minEv = start.exposureParams.minEv;
+    backend->exposureParams.maxEv = start.exposureParams.maxEv;
+    modern::AoParams &aoParams = backend->aoParams;
+    aoParams = start.aoParams;
+    aoParams.radius = number(tuning.aoRadius, start.aoParams.radius, 0.0f, kAny, false);
+    aoParams.power = number(tuning.aoPower, start.aoParams.power, 0.0f, kAny, true);
+    aoParams.thickness = number(tuning.aoThickness, start.aoParams.thickness, 0.0f, kAny, false);
+    aoParams.floor = tuning.aoFloor >= 0.0f && tuning.aoFloor < 1.0f ? tuning.aoFloor : start.aoParams.floor;
+    aoParams.edge = number(tuning.aoEdge, start.aoParams.edge, 0.0f, 10.0f, false);
+    modern::ReflectionParams &reflectionParams = backend->reflectionParams;
+    reflectionParams = start.reflectionParams;
+    reflectionParams.maxDistance = number(tuning.ssrDistance, start.reflectionParams.maxDistance, 0.0f, kAny, false);
+    reflectionParams.thickness = number(tuning.ssrThickness, start.reflectionParams.thickness, 0.0f, kAny, false);
+
+    backend->tonemapCurve = tuning.tonemap >= static_cast<int>(modern::TonemapCurve::Clamp)
+                                    && tuning.tonemap <= static_cast<int>(modern::TonemapCurve::Aces)
+                                ? static_cast<modern::TonemapCurve>(tuning.tonemap)
+                                : start.curve;
+    modern::SetCurve(backend->tonemap, backend->tonemapCurve);
+
+    if (!log)
+        return;
+    const auto onOff = [](bool on) { return on ? "on" : "off"; };
+    HostLog(*backend->host,
+            "vulkan d3d9: modern: switches now: bloom %s, exposure %s (key %.3f), velocity %s, our shaders %s "
+            "(models %s, without the sun %s; sun %.2f, sky %.2f), ambient occlusion %s (radius %.1f, power %.2f, "
+            "thickness %.1f, floor %.2f, edge %.3f), reflections %s (distance %.0f, thickness %.1f), normals %s, "
+            "tonemap %s, debug view %s",
+            onOff(backend->bloomWanted), onOff(backend->exposureWanted), backend->exposureParams.key,
+            onOff(backend->velocityWanted), onOff(backend->shadersWanted), onOff(backend->modelShadersWanted),
+            onOff(backend->noSunShadersWanted), backend->sunStrength, backend->skyStrength, onOff(backend->aoWanted),
+            aoParams.radius, aoParams.power, aoParams.thickness, aoParams.floor, aoParams.edge,
+            onOff(backend->reflectionsWanted), reflectionParams.maxDistance, reflectionParams.thickness,
+            onOff(backend->normalsWanted), modern::CurveName(backend->tonemapCurve), DebugViewName(view));
+}
 } // namespace
 
 Backend *OpenBackend(const BackendDesc &desc, std::string &error)
@@ -403,85 +561,91 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     backend->host = desc.host;
     // The Modern path draws its scenes in linear light unless this says not to
     // (docs/vulkan-modern.md); without r_visuals modern nothing asks for it.
+    // Linear light, lit inputs and where effects blend are kept for the
+    // device's life; the rest are where the device starts, and the engine's
+    // r_modern* dvars may change them from one frame to the next
+    // (ApplyModernTuning).
     backend->linearWanted = !EnvIsZero("KISAK_VK_MODERN_LINEAR");
-    backend->bloomWanted = !EnvIsZero("KISAK_VK_MODERN_BLOOM");
-    // And gives what moves on its own a velocity of its own unless this says not to.
-    backend->velocityWanted = !EnvIsZero("KISAK_VK_MODERN_VELOCITY");
     backend->effectsInLinear = EnvIs("KISAK_VK_MODERN_EFFECTS", "linear");
     backend->litWanted = !EnvIsZero("KISAK_VK_MODERN_LIT");
-    backend->exposureWanted = !EnvIsZero("KISAK_VK_MODERN_EXPOSURE");
-    backend->shadersWanted = !EnvIsZero("KISAK_VK_MODERN_SHADERS");
-    backend->modelShadersWanted = !EnvIsZero("KISAK_VK_MODERN_MODEL_SHADERS");
-    backend->noSunShadersWanted = !EnvIsZero("KISAK_VK_MODERN_NO_SUN_SHADERS");
+    Backend::ModernStart &start = backend->modernStart;
+    start.bloom = !EnvIsZero("KISAK_VK_MODERN_BLOOM");
+    // And gives what moves on its own a velocity of its own unless this says not to.
+    start.velocity = !EnvIsZero("KISAK_VK_MODERN_VELOCITY");
+    start.exposure = !EnvIsZero("KISAK_VK_MODERN_EXPOSURE");
+    start.shaders = !EnvIsZero("KISAK_VK_MODERN_SHADERS");
+    start.modelShaders = !EnvIsZero("KISAK_VK_MODERN_MODEL_SHADERS");
+    start.noSunShaders = !EnvIsZero("KISAK_VK_MODERN_NO_SUN_SHADERS");
     {
         const std::string sun = EnvText("KISAK_VK_MODERN_SUN_STRENGTH");
         const float sunValue = sun.empty() ? -1.0f : std::strtof(sun.c_str(), nullptr);
         if (sunValue >= 0.0f)
-            backend->sunStrength = sunValue;
+            start.sunStrength = sunValue;
         const std::string sky = EnvText("KISAK_VK_MODERN_SKY_STRENGTH");
         const float skyValue = sky.empty() ? -1.0f : std::strtof(sky.c_str(), nullptr);
         if (skyValue >= 0.0f)
-            backend->skyStrength = skyValue;
+            start.skyStrength = skyValue;
     }
     {
         const std::string key = EnvText("KISAK_VK_MODERN_EXPOSURE_KEY");
         const float value = key.empty() ? 0.0f : std::strtof(key.c_str(), nullptr);
         if (value > 0.0f)
-            backend->exposureParams.key = value;
+            start.exposureParams.key = value;
         const std::string range = EnvText("KISAK_VK_MODERN_EXPOSURE_RANGE");
         char *end = nullptr;
         const float low = range.empty() ? 0.0f : std::strtof(range.c_str(), &end);
         const float high = end && *end == ',' ? std::strtof(end + 1, nullptr) : low - 1.0f;
         if (!range.empty() && low <= high)
         {
-            backend->exposureParams.minEv = low;
-            backend->exposureParams.maxEv = high;
+            start.exposureParams.minEv = low;
+            start.exposureParams.maxEv = high;
         }
     }
     {
         const std::string curve = EnvText("KISAK_VK_MODERN_TONEMAP");
-        if (!curve.empty() && !modern::CurveFromName(curve.c_str(), backend->tonemapCurve))
+        if (!curve.empty() && !modern::CurveFromName(curve.c_str(), start.curve))
             backend->tonemapCurveUnknown = true;
     }
-    backend->debugVelocityAll = EnvIs("KISAK_VK_MODERN_DEBUG", "velocity-all");
-    backend->debugVelocity = backend->debugVelocityAll || EnvIs("KISAK_VK_MODERN_DEBUG", "velocity");
-    backend->debugNormals = EnvIs("KISAK_VK_MODERN_DEBUG", "normals");
-    backend->debugAo = EnvIs("KISAK_VK_MODERN_DEBUG", "ao");
-    backend->aoWanted = !EnvIsZero("KISAK_VK_MODERN_AO")
-        && (EnvIs("KISAK_VK_MODERN_AO", "1") || backend->debugAo
-            || (backend->linearWanted && backend->litWanted && backend->shadersWanted));
+    {
+        const std::string debug = EnvText("KISAK_VK_MODERN_DEBUG");
+        start.debug = debug == "velocity"       ? ModernDebugVelocity
+                      : debug == "velocity-all" ? ModernDebugVelocityAll
+                      : debug == "normals"      ? ModernDebugNormals
+                      : debug == "ao"           ? ModernDebugAo
+                      : debug == "reflections"  ? ModernDebugReflections
+                                                : ModernDebugNone;
+    }
+    const auto onOff = [](const char *name) { return EnvIs(name, "0") ? 0 : EnvIs(name, "1") ? 1 : -1; };
+    start.ao = onOff("KISAK_VK_MODERN_AO");
     {
         const std::string radius = EnvText("KISAK_VK_MODERN_AO_RADIUS");
         const float value = radius.empty() ? 0.0f : std::strtof(radius.c_str(), nullptr);
         if (value > 0.0f)
-            backend->aoParams.radius = value;
+            start.aoParams.radius = value;
         const std::string power = EnvText("KISAK_VK_MODERN_AO_POWER");
         const float strength = power.empty() ? -1.0f : std::strtof(power.c_str(), nullptr);
         if (strength >= 0.0f)
-            backend->aoParams.power = strength;
+            start.aoParams.power = strength;
         const std::string thickness = EnvText("KISAK_VK_MODERN_AO_THICKNESS");
         const float depth = thickness.empty() ? 0.0f : std::strtof(thickness.c_str(), nullptr);
         if (depth > 0.0f)
-            backend->aoParams.thickness = depth;
+            start.aoParams.thickness = depth;
         const std::string grazing = EnvText("KISAK_VK_MODERN_AO_GRAZING");
         const float angle = grazing.empty() ? 0.0f : std::strtof(grazing.c_str(), nullptr);
         if (angle > 0.0f && angle <= 1.0f)
-            backend->aoParams.grazing = angle;
+            start.aoParams.grazing = angle;
         const std::string floorText = EnvText("KISAK_VK_MODERN_AO_FLOOR");
         const float floorValue = floorText.empty() ? -1.0f : std::strtof(floorText.c_str(), nullptr);
         if (floorValue >= 0.0f && floorValue < 1.0f)
-            backend->aoParams.floor = floorValue;
+            start.aoParams.floor = floorValue;
         const std::string edgeText = EnvText("KISAK_VK_MODERN_AO_EDGE");
         const float edge = edgeText.empty() ? 0.0f : std::strtof(edgeText.c_str(), nullptr);
         if (edge > 0.0f && edge <= 10.0f)
-            backend->aoParams.edge = edge;
+            start.aoParams.edge = edge;
     }
-    backend->debugReflections = EnvIs("KISAK_VK_MODERN_DEBUG", "reflections");
-    backend->reflectionsWanted = !EnvIsZero("KISAK_VK_MODERN_SSR")
-        && (EnvIs("KISAK_VK_MODERN_SSR", "1") || backend->debugReflections
-            || (backend->linearWanted && backend->litWanted && backend->shadersWanted));
+    start.reflections = onOff("KISAK_VK_MODERN_SSR");
     {
-        modern::ReflectionParams &p = backend->reflectionParams;
+        modern::ReflectionParams &p = start.reflectionParams;
         const auto number = [](const char *name, float &out) {
             const std::string text = EnvText(name);
             const float value = text.empty() ? 0.0f : std::strtof(text.c_str(), nullptr);
@@ -498,9 +662,8 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     }
     // The normals buffer is built for what reads it; KISAK_VK_MODERN_NORMALS=0
     // keeps it (and so ambient occlusion and reflections) off whatever asks.
-    backend->normalsWanted = !EnvIsZero("KISAK_VK_MODERN_NORMALS")
-                             && (EnvIs("KISAK_VK_MODERN_NORMALS", "1") || backend->debugNormals
-                                 || backend->aoWanted || backend->reflectionsWanted);
+    start.normals = onOff("KISAK_VK_MODERN_NORMALS");
+    ApplyModernTuning(backend, backend->modernTuning);
     if (!h.windowSystem || !h.windowSystem(h.user, desc.window, backend->windowSystem))
     {
         error = "the host has no Vulkan window system for this window";
@@ -568,6 +731,11 @@ void BackendFrame(Backend *backend)
         return;
     Tuning tuning;
     backend->host->tuning(backend->host->user, tuning);
+    if (std::memcmp(&tuning.modern, &backend->modernTuning, sizeof(ModernTuning)) != 0)
+    {
+        backend->modernTuning = tuning.modern;
+        ApplyModernTuning(backend, tuning.modern, true);
+    }
     Tuning &old = backend->tuning;
     if (tuning.keepDrawState != old.keepDrawState)
     {
@@ -746,7 +914,7 @@ void BackendLogStats(Backend *backend, bool reset)
     }
     // Velocity: the surfaces drawn again with their own motion, and the
     // GPU time of that pass.
-    if (backend->velocity)
+    if (backend->velocity || backend->velocityRemade)
     {
         const modern::VelocityStats velocity = modern::Stats(backend->velocity);
         const PassTimings pass = PassTimingsFor(backend->core, "modern velocity");
@@ -815,8 +983,7 @@ void BackendLogStats(Backend *backend, bool reset)
         backend->bloomPassesBase = modern::Stats(backend->bloom).passes;
         if (backend->bloom)
             backend->bloomMsBase = PassTimingsFor(backend->core, "modern bloom").totalMs;
-        if (backend->velocity)
-            backend->velocityBase = modern::Stats(backend->velocity);
+        backend->velocityBase = modern::Stats(backend->velocity);
         backend->normalsBase = modern::Stats(backend->normals);
         backend->aoBase = modern::Stats(backend->ao);
         backend->reflectionsBase = modern::Stats(backend->reflections);
