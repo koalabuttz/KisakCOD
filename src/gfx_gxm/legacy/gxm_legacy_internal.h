@@ -303,6 +303,12 @@ struct Device
     std::vector<float> vsConstants, psConstants;
     // Count the calls that changed a value (SetConstants).
     uint64_t vsConstantsVersion = 0, psConstantsVersion = 0;
+    // Counts the calls that changed what a draw's programs and fixed state
+    // come from: render states, shaders, the vertex declaration, stream
+    // strides, the viewport, the scissor rect and the targets. A draw that
+    // finds it as the last draw left it takes that draw's programs and state
+    // (Draw, gxm_legacy_draw.cpp).
+    uint64_t stateSerial = 0;
 
     // Things the back end does not do yet, each logged once.
     std::vector<const char *> notYet;
