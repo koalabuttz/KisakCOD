@@ -62,6 +62,7 @@ def main():
     log = home / "main" / "console_mp.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     lines = [f"env KISAK_VK_MODERN_AO={os.environ.get('KISAK_VK_MODERN_AO', '-')}",
+             f"env KISAK_NO_DIALOGS={os.environ.get('KISAK_NO_DIALOGS', '-')}",
              f"run: run_atMap \"{setting(argv, 'run_atMap')}\"",
              f"run: run_quitAfterMap {setting(argv, 'run_quitAfterMap') or 0}",
              "vulkan d3d9: modern: 1 scenes with ambient occlusion, 0.50 ms GPU each",

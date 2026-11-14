@@ -638,16 +638,12 @@ int Sys_IsGameProcess(uint32_t id)
 // here and sys_exitCmdLine holds the parameters.
 static char s_exitProgram[PATH_MAX];
 
-// The value of a folder dvar the new program is given, or nullptr when it
-// could not be passed whole: a '+' or a newline would split the engine's
-// command line and a quote would end the argument.
-static const char *FolderToPass(const char *dvarName)
-{
-    const char *const value = Dvar_GetString(dvarName);
-    if (!value || !value[0] || strpbrk(value, "+\n\r\""))
-        return nullptr;
-    return value;
-}
+// The game and home folders this program started with, for the program
+// Sys_QuitAndStartProcess starts. main() remembers them right after Com_Init,
+// before any server is joined: a game server can set fs_basepath and
+// fs_homepath on a client, so they are not read from the dvars later
+// (sys_desktop.h).
+static SysStartFolders s_startFolders;
 #endif
 
 // win_main.cpp starts `exeName` from the working folder once the game has
@@ -655,8 +651,8 @@ static const char *FolderToPass(const char *dvarName)
 // Here the program must sit beside this one (Sys_DefaultInstallPath, the
 // executable's folder) and is named without a folder: CL_DownloadsComplete's
 // auto-update would start a file a server sent ("updates/<name>", a Windows
-// program), which is refused. The new program is told this one's game and
-// home folders, which the command line may have set.
+// program), which is refused. The new program is told the game and home
+// folders this one started with, which the command line may have set.
 void Sys_QuitAndStartProcess(const char *exeName, const char *parameters)
 {
     char shown[128];
@@ -691,9 +687,9 @@ void Sys_QuitAndStartProcess(const char *exeName, const char *parameters)
 
     char line[sizeof(sys_exitCmdLine)];
     line[0] = '\0';
-    if (const char *const basePath = FolderToPass("fs_basepath"))
+    if (const char *const basePath = s_startFolders.BasePath())
         Com_sprintf(line, (uint32_t)sizeof(line), "+set fs_basepath \"%s\" ", basePath);
-    if (const char *const homePath = FolderToPass("fs_homepath"))
+    if (const char *const homePath = s_startFolders.HomePath())
         I_strncat(line, (int)sizeof(line), va("+set fs_homepath \"%s\" ", homePath));
     if (parameters)
         I_strncat(line, (int)sizeof(line), parameters);
@@ -1052,6 +1048,21 @@ int main(int argc, char **argv)
     Steam_Init();
 #endif
     Com_Init(sys_cmdline);
+#if !defined(__vita__)
+    // Before the first frame, so before any server's packet is read: what
+    // Sys_QuitAndStartProcess passes on is this program's own start, never a
+    // folder a server set later.
+    const char *const startBasePath = Dvar_GetString("fs_basepath");
+    const char *const startHomePath = Dvar_GetString("fs_homepath");
+    s_startFolders.Remember(startBasePath, startHomePath);
+    if ((startBasePath && startBasePath[0] && !s_startFolders.BasePath())
+        || (startHomePath && startHomePath[0] && !s_startFolders.HomePath()))
+    {
+        Com_PrintWarning(CON_CHANNEL_SYSTEM,
+            "WARNING: the game or home folder is too long or has a '+', a quote or a line break in its name; "
+            "the other game program, when started from the menu, will look for its own\n");
+    }
+#endif
 
     PrintWorkingDir();
 

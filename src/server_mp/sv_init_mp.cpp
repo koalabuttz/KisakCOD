@@ -833,6 +833,13 @@ void SV_Init()
         DVAR_NOFLAG,
         "Time in seconds for a player to be banned from the server after being kicked");
     sv_botsPressAttackBtn = Dvar_RegisterBool("sv_botsPressAttackBtn", 1, DVAR_NOFLAG, "Allow testclients to press attack button");
+    // Port setting (docs/server-test-clients.md): a test client's snapshots
+    // go to an address that drops them, so 0 skips building and writing them.
+    sv_botSnapshots = Dvar_RegisterBool(
+        "sv_botSnapshots",
+        1,
+        DVAR_NOFLAG,
+        "Build and send snapshots to test clients, which drop them; 0 skips that work");
     sv_debugMessageKey = Dvar_RegisterBool("sv_debugMessageKey", 0, DVAR_NOFLAG, "net message key generation debugging");
     sv_debugPacketContents = Dvar_RegisterBool(
         "sv_debugPacketContents",

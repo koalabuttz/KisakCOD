@@ -81,6 +81,14 @@ perf: done
     (pings, configstrings, objectives, hud elements, team status) is the
     rest of `server frame`.
   - `hud`: `CG_Draw2D`.
+  - `hud: <part>`: parts of the HUD, inside `hud`: `menus` (`Menu_PaintAll`,
+    the HUD's menus), `script elements` (`CG_Draw2dHudElems`, two calls a
+    frame), `crosshair and names` (`CG_ScanForCrosshairEntity` and
+    `CG_UpdatePlayerNames`), `compass` (`CG_CompassUpdateActors`) and
+    `scoreboard` (`CG_DrawScoreboard`).
+  - `menu expressions`: `EvaluateExpression`, every menu expression
+    (`visible when`, `exp text` and the like), in the HUD or in any other
+    menu.
   - `wait for workers: <type>`: the main thread asleep until the worker
     threads finish the commands of that type; `all` is the wait for every
     front-end command before the frame is handed over, `other` any other.
@@ -185,6 +193,27 @@ at 1024 blends and at every doubling after that, and a warning for each of
 the first eight that differ. The setting stays at 0 until a run on real
 animations has shown 0 differed; `perf_ab "set xanim_blendOnce 0" "set
 xanim_blendOnce 1"` measures what it saves.
+
+## `ui_fastExpressions`
+
+Menu expressions (`visible when`, `exp text`, `exp rect` and the like) run
+every frame for every HUD item, and `menu expressions` in the timed line
+shows what they cost. Two pieces of that work give nothing:
+`EvaluateExpression` clears its whole 5 KB operand stack before each
+expression, and `dvarInt`, `dvarBool` and `dvarFloat` format the dvar's value
+as text and parse the text back.
+
+`ui_fastExpressions` (default 0 = unchanged) set to 1 clears only what can be
+read before it is written, reads bool, int and string dvars directly (float,
+vector, colour and enum dvars keep the text, whose `%g` rounding or enum name
+decides the result), and lets `dvarString` use the dvar it already found
+instead of looking it up again. Every result is the same as with 0:
+`scripts/tests/test_ui_fast_expressions.py` compares the two dvar reads bit
+for bit, and every operand list is written before it is read except
+`stack[0]` in the error path of a malformed expression, which the fast path
+clears as the memset did.
+`perf_ab "set ui_fastExpressions 0" "set ui_fastExpressions 1"` measures what
+it saves.
 
 ## Checks
 

@@ -37,6 +37,24 @@ decoder, a human second player, or proof of multi-player synchronization.
   randomized commands. `sv_botsPressAttackBtn` controls the attack bit; these
   clients have no pathfinding, aiming or objectives.
 
+## Snapshots for test clients (`sv_botSnapshots`)
+
+Every server frame (20 a second) the server builds a snapshot for each client
+whose turn it is: the entities it can see, its player state, the message
+delta-compressed and Huffman-coded, then sent. A test client's address is
+`NA_BOT`, where a sent packet goes nowhere, and nothing reads its snapshots:
+its moves come from `SV_BotUserMove`, it never acknowledges one (its ping is
+999 either way) and `SV_AddServerCommand` gives it no server commands.
+
+PC server frame run 1 (`perf_sample` on the dedicated server in WSL, mp_crash,
+`server: <part>` probes, docs/perf-ab.md) timed a server frame at about 1.2 ms
+with 12 bots and 2.6 ms with 24, and snapshots at about 0.5 and 1.3 ms of that:
+the largest part, and the one that grows fastest with the number of bots.
+
+`sv_botSnapshots 0` skips building, writing and sending snapshots for test
+clients; a drop that was put off until the next send still happens. `1`, the
+default, sends them as retail did, until a run has compared the two.
+
 The loopback authentication test mode deliberately rejects pseudo-addresses.
 Do not enable `sv_loopbackTestAuth` for this bot probe. Leave both authentication
 opt-ins off; the diagnostic script checks their effective values in GSC.

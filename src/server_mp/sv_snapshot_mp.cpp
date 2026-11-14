@@ -1909,6 +1909,19 @@ void SV_SendClientVoiceData(client_t *client)
     //LargeLocal::~LargeLocal(&msg_buf_large_local);
 }
 
+// A test client's address is NA_BOT, where a sent packet goes nowhere: it
+// reads nothing of its snapshots (its moves come from SV_BotUserMove), never
+// acknowledges one (its ping is 999 either way) and gets no server commands
+// (SV_AddServerCommand). Building and writing them was, with 12 to 24 bots,
+// 40 to 50 % of a server frame (PC server frame run 1). sv_botSnapshots 0
+// skips them; 1, the default, sends them as retail did.
+static bool SV_SkipsSnapshotsFor(const client_t *client)
+{
+    return !sv_botSnapshots->current.enabled
+        && client->bIsTestClient
+        && client->header.netchan.remoteAddress.type == NA_BOT;
+}
+
 void SV_SendClientMessages()
 {
     float comp_ratio; // [esp+C0h] [ebp-94h]
@@ -1940,7 +1953,14 @@ void SV_SendClientMessages()
     c = svs.clients;
     while (i < maxclients)
     {
-        if (c->header.state && svs.time >= c->nextSnapshotTime)
+        if (c->header.state && svs.time >= c->nextSnapshotTime && SV_SkipsSnapshotsFor(c))
+        {
+            // The one thing of a send that is not about the snapshot: a drop
+            // that was put off until the next send (as SV_SendMessageToClient).
+            if (c->dropReason)
+                SV_DropClient(c, c->dropReason, 1);
+        }
+        else if (c->header.state && svs.time >= c->nextSnapshotTime)
         {
             ++numclients;
             if (c->header.netchan.unsentFragments)
