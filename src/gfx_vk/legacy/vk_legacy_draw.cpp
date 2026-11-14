@@ -455,6 +455,12 @@ Layout *GetLayout(Device &device, const LayoutKey &key)
     pipelineInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineInfo.setLayoutCount = 2;
     pipelineInfo.pSetLayouts = sets;
+    const VkPushConstantRange push{VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(ModernPlanarParams)};
+    if (key.modernPush)
+    {
+        pipelineInfo.pushConstantRangeCount = 1;
+        pipelineInfo.pPushConstantRanges = &push;
+    }
     if (vk.vkCreatePipelineLayout(device.dev, &pipelineInfo, nullptr, &layout->pipeline) != VK_SUCCESS)
     {
         if (layout->uniformSet)
@@ -470,9 +476,10 @@ Layout *GetLayout(Device &device, const LayoutKey &key)
 }
 
 // A pipeline drawn as a Modern lit shader of ours (linearShader) also has the
-// ambient occlusion at kModernAoSampler and the reflections at
-// kModernReflectionsSampler, which the game's shader leaves free (else ours
-// is not built, and the game's does not read them).
+// ambient occlusion at kModernAoSampler, the reflections at
+// kModernReflectionsSampler and the planar reflection at kModernPlanarSampler,
+// which the game's shader leaves free (else ours is not built, and the game's
+// does not read them), and the planar reflection's push constants.
 LayoutKey LayoutFor(const Shader &vs, const Shader &ps, uint16_t linearShader)
 {
     const ls::Reflection &vr = vs.translated.reflection;
@@ -481,7 +488,10 @@ LayoutKey LayoutFor(const Shader &vs, const Shader &ps, uint16_t linearShader)
     key.uniforms = (vr.uniforms & 0xffffu) | (pr.uniforms & 0xffffu) << 16;
     key.samplers = (pr.samplers & 0xffffu) | (vr.samplers & ((1u << kVertexSamplers) - 1)) << 16;
     if (ModernLitShaderValid(linearShader))
-        key.samplers |= 1u << kModernAoSampler | 1u << kModernReflectionsSampler;
+    {
+        key.samplers |= 1u << kModernAoSampler | 1u << kModernReflectionsSampler | 1u << kModernPlanarSampler;
+        key.modernPush = true;
+    }
     return key;
 }
 
@@ -568,7 +578,7 @@ bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Sh
         const uint32_t volumes = model ? 1u << 4 : 0u;
         const uint32_t uniforms = 1u << static_cast<uint32_t>(ls::Uniform::FloatConstants)
             | 1u << static_cast<uint32_t>(ls::Uniform::AlphaTest);
-        bool fits = !(pr.samplers & (1u << kModernAoSampler | 1u << kModernReflectionsSampler))
+        bool fits = !(pr.samplers & (1u << kModernAoSampler | 1u << kModernReflectionsSampler | 1u << kModernPlanarSampler))
             && pr.floatConstants >= ModernLitConstantCount(shader)
             && (pr.uniforms & uniforms) == uniforms
             && (pr.samplers & (images | cubes | volumes)) == (images | cubes | volumes)
@@ -1080,8 +1090,10 @@ struct DrawTextures
     // the mask is the ambient occlusion (Device::modernAo), not a D3D9 sampler.
     bool modernAo = false;
     // Likewise kModernReflectionsSampler's bit: the reflections
-    // (Device::modernReflections).
+    // (Device::modernReflections), and kModernPlanarSampler's: the planar
+    // reflection (Device::modernPlanar).
     bool modernReflections = false;
+    bool modernPlanar = false;
     Texture *bound[kSamplerSlots] = {}; // null: nothing usable bound
     // Four bits for each sampler with a texture: bit 3 set, bit 2 for a depth
     // format, and TextureTypeValue. With the shader they are everything a
@@ -1119,7 +1131,7 @@ ls::TextureType DeclaredType(const Shader &vs, const Shader &ps, uint32_t bit)
 bool BindTextures(Device &device, const Shader &vs, const Shader &ps, DrawTextures &textures)
 {
     textures.mask = LayoutFor(vs, ps).samplers;
-    Image *settle[kSamplerSlots + 2];
+    Image *settle[kSamplerSlots + 3];
     uint32_t settleCount = 0;
     for (uint32_t left = textures.mask; left; left &= left - 1)
     {
@@ -1162,6 +1174,8 @@ bool BindTextures(Device &device, const Shader &vs, const Shader &ps, DrawTextur
                                      : (device.clearTexture ? device.clearTexture->image : nullptr);
         if (reflections && !ImageReadyToSample(reflections))
             settle[settleCount++] = reflections;
+        if (device.modernPlanar && !ImageReadyToSample(device.modernPlanar))
+            settle[settleCount++] = device.modernPlanar;
     }
     if (settleCount)
     {
@@ -1565,6 +1579,13 @@ void TextureSetContents(Device &device, const Shader &vs, const Shader &ps, cons
             out.samplers[bit] = ModernReflectionsSampler(device);
             continue;
         }
+        if (textures.modernPlanar && bit == kModernPlanarSampler)
+        {
+            out.views[bit] =
+                ImageSampleView(device.modernPlanar ? device.modernPlanar : device.clearTexture->image);
+            out.samplers[bit] = ModernReflectionsSampler(device);
+            continue;
+        }
         const Texture *bound = textures.bound[slot];
         const Texture *texture = bound ? bound : NullTexture(device, DeclaredType(vs, ps, bit));
         out.views[bit] = ImageSampleView(texture->image);
@@ -1929,12 +1950,19 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
         textures.mask |= 1u << kModernReflectionsSampler;
         textures.modernReflections = true;
     }
+    // And the planar reflection.
+    if (layout.key.samplers & ~textures.mask & (1u << kModernPlanarSampler))
+    {
+        textures.mask |= 1u << kModernPlanarSampler;
+        textures.modernPlanar = true;
+    }
     if (device.boundLayout != layout.pipeline)
     {
         // Sets bound with another pipeline layout may not carry over.
         device.boundLayout = layout.pipeline;
         device.boundUniforms.set = VK_NULL_HANDLE;
         device.boundTextureSet = VK_NULL_HANDLE;
+        device.pushedPlanarGeneration = 0;
     }
     if (device.keepDrawState)
         CheckLastingSets(device);
@@ -1980,6 +2008,18 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
                                            &set, 0, nullptr);
             });
         }
+    }
+    // A Modern lit shader of ours: the planar reflection's parameters, pushed
+    // when they change (about once a scene) or a layout was bound since (a
+    // layout without the range disturbs them).
+    if (layout.key.modernPush && device.pushedPlanarGeneration != device.modernPlanarGeneration)
+    {
+        device.pushedPlanarGeneration = device.modernPlanarGeneration;
+        const VkPipelineLayout pipelineLayout = layout.pipeline;
+        const ModernPlanarParams params = device.modernPlanarParams;
+        Record(device.core, [pipelineLayout, params](VkCommandBuffer cmd, const Dispatch &vk) {
+            vk.vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(params), &params);
+        });
     }
     return Usable(device);
 }
@@ -2156,6 +2196,7 @@ void ForgetRecordingState(Device &device)
     device.boundUniforms.set = VK_NULL_HANDLE;
     device.boundLayout = VK_NULL_HANDLE;
     device.boundTextureSet = VK_NULL_HANDLE;
+    device.pushedPlanarGeneration = 0;
 }
 
 void EndPassIfOpen(Device &device)
@@ -3029,6 +3070,19 @@ void SetModernReflections(Device *device, Image *image)
 {
     if (device)
         device->modernReflections = image;
+}
+
+void SetModernPlanar(Device *device, Image *image, const ModernPlanarParams *params)
+{
+    if (!device)
+        return;
+    const ModernPlanarParams next = image && params && params->on != 0.0f ? *params : ModernPlanarParams{};
+    device->modernPlanar = next.on != 0.0f ? image : nullptr;
+    if (std::memcmp(&next, &device->modernPlanarParams, sizeof(next)) != 0)
+    {
+        device->modernPlanarParams = next;
+        ++device->modernPlanarGeneration;
+    }
 }
 
 void SetModernLitStrengths(Device *device, float sun, float sky)

@@ -92,8 +92,8 @@ GPU, once). Linear light (`KISAK_VK_MODERN_LINEAR`), lit inputs
 normals buffer's own switch (`KISAK_VK_MODERN_NORMALS`), the reflection
 probes' filter (`KISAK_VK_MODERN_PROBES`, applied as their textures load), the
 exposure range, the reflections' steps and levels, and planar reflections
-(`KISAK_VK_MODERN_PLANAR` and `KISAK_VK_MODERN_DEBUG=planar`, which
-`r_modernDebug` does not list) stay start-up only, and `r_visuals` itself is
+(`KISAK_VK_MODERN_PLANAR` and `KISAK_VK_MODERN_DEBUG=planar` or
+`planar-read`, which `r_modernDebug` does not list) stay start-up only, and `r_visuals` itself is
 latched (above).
 
 ## How a frame goes
@@ -1340,9 +1340,9 @@ that a full run filters 2 (none without linear light).
 
 ## Planar reflections
 
-A first piece, for checking only: the mirrored view is drawn, but nothing
-reads it yet. Screen-space reflections cannot show what the screen does not
-(the underside of a car over a wet street, what is behind the camera), and
+Off by default while it is measured. Screen-space reflections cannot show
+what the screen does not (the underside of a car over a wet street, what is
+behind the camera), and
 the probes are a few fixed points; a flat floor or street can instead see
 the scene drawn again from the camera mirrored in it.
 
@@ -1384,12 +1384,37 @@ and again when the size changes. The game's pass for the view is
 `planarWanted`, `planarBegin` and `planarDone` hooks (`r_rhi_modern.h`) move
 the draws there and back.
 
+**The read.** The next frame's main view reads the image in our sun-lit world
+shader (`lm_sun.frag`, the `lm_[hsm_]sun` family with a specular map, opaque
+surfaces only; agreed with the lit shaders' owner): at the scene's depth
+prepass the back end hands the Legacy adapter last frame's image at pixel
+sampler 13 (`kModernPlanarSampler`, a bilinear sampler clamped to the edge;
+ours is not built where the game's shader reads s13, and a 1x1 (0, 0, 0, 0)
+texture stands in where there is no image) and, as push constants
+(`ModernPlanarParams`), where a point of this frame is in it (the planar
+view's view and projection, moved to the eye, since the shader knows its
+point only relative to the eye) and the plane. A pixel reads it when its
+point is within 4 units of the plane and its surface faces up (within about
+18 degrees). The point read is moved by the normal map's tilt (4 units at
+most), as a ripple moves a reflection, and a rougher surface reads a wider
+spread of five taps. The image then takes the probe's place, faded out over
+the image's outer 5% and below gloss 0.8 (gone at 0.6): only surfaces whose
+probe was already near its sharpest read it. With the screen-space
+reflections' fade (from 0.3) Strike's fairly rough street mirrored the sky
+sharply and looked wet (PC planar run 2); it keeps the probe's soft sheen
+now. Screen-space reflections, being this frame's, still take the image's
+place where they find something. Being last frame's, the image lags the camera by a
+frame where the scene moves; on a camera cut it is not read.
+
 | Setting | Default | Switch |
 | --- | --- | --- |
 | Planar view | off | `KISAK_VK_MODERN_PLANAR=1` draws it (with linear light only) |
-| Debug view | off | `KISAK_VK_MODERN_DEBUG=planar` draws it too, and puts the last planar image, as it is (upside down, no exposure), over the top left of the finished scene; `KISAK_VK_MODERN_PLANAR=0` turns both off |
+| Debug view | off | `KISAK_VK_MODERN_DEBUG=planar` draws it too, and puts the last planar image, as it is (upside down, no exposure), over the top left of the finished scene; `KISAK_VK_MODERN_DEBUG=planar-read` draws it and shows, on every surface that reads it, only what it read there (in linear light, unweighted by gloss and Fresnel; the rest of the scene at a quarter), to check that a reflection lines up with what it mirrors; `KISAK_VK_MODERN_PLANAR=0` turns them off |
+| Reach | 4 | `KISAK_VK_MODERN_PLANAR_REACH=N`: how far from the plane (units) a surface still reads the image |
+| Ripple | 4 | `KISAK_VK_MODERN_PLANAR_RIPPLE=N`: how far (units) the normal map's tilt moves the point read; 0 reads a flat mirror |
 
-The statistics line: `vulkan d3d9: modern: N planar reflection views (WxH)`.
+The statistics lines: `vulkan d3d9: modern: N planar reflection views (WxH)`
+and `vulkan d3d9: modern: N scenes read the planar reflection`.
 
 **Cost.** Not measured yet: the view draws the world's and the models' lit
 surfaces a second time at a quarter of the pixels, and the visibility walk
@@ -1397,17 +1422,27 @@ runs again on the CPU.
 
 **Checks:** the D3D9 check's `modern_planar` scene draws a grey scene in
 linear light, then a 64x64 planar view in which it sets the back buffer and
-its depth as the targets (as the game does) and draws a red quad. The back
-buffer must stay grey (the draw went to the planar image), and with
-`KISAK_VK_MODERN_DEBUG=planar` the top left shows the red. With
+its depth as the targets (as the game does) and draws four quadrants (red top
+left, green top right, blue bottom left, yellow bottom right). The back
+buffer must stay grey (the draws went to the planar image), and with
+`KISAK_VK_MODERN_DEBUG=planar` the top left shows the red. A third frame,
+its camera moved off the origin, draws a floor on the plane in two halves
+with our lit shader (a black probe, a white specular map of gloss 1), each
+half at one point, through a planar projection that is not symmetric: the
+left half must show the image's blue and the right half its green, so a
+transposed matrix, an eye of the wrong sign, or an image read upside down or
+mirrored each fails, and the floor stays black where the image is not read
+(no switch, or `KISAK_VK_MODERN_SHADERS=0`). With
 `KISAK_VK_MODERN_LINEAR=0` or without either switch nothing is drawn.
 `test_vulkan_d3d9_front.py` runs it with no switch, with
-`KISAK_VK_MODERN_PLANAR=1`, with `KISAK_VK_MODERN_DEBUG=planar` (beside
-`KISAK_VK_MODERN_PLANAR=0` and `KISAK_VK_MODERN_LINEAR=0` or not), and checks
-that a full run draws no planar view unless asked.
+`KISAK_VK_MODERN_PLANAR=1` (beside `KISAK_VK_MODERN_SHADERS=0` or not), with
+`KISAK_VK_MODERN_DEBUG=planar` (beside `KISAK_VK_MODERN_PLANAR=0` and
+`KISAK_VK_MODERN_LINEAR=0` or not), with `KISAK_VK_MODERN_DEBUG=planar-read`
+(the floor's halves show the same colours, unweighted), checks the two lines, and that a full
+run draws and reads no planar view unless asked.
 
-**Next.** The lit shaders reading the planar image on the plane (a second
-piece), then water (`mp_bog`, whose water has its own shader).
+**Next.** Water (`mp_bog`, whose water has its own shader), and planes found
+on their own.
 
 ## Next
 
