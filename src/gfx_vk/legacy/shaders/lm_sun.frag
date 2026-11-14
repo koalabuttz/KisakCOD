@@ -230,6 +230,14 @@ layout(set = 1, binding = 30) uniform sampler reflectionsSampler;
 const float kReflectionsGlossNone = 0.3;
 const float kReflectionsGlossFull = 0.5;
 #endif
+#if LM_SUN_SPECULAR && LM_SUN_LIGHT == 1
+// The planar reflection's own fade: only glossy surfaces, whose probe level
+// was already sharp (level 1.2 of 6 at 0.6), read it, so a rough street
+// keeps the probe's soft sheen instead of a sharp mirror of the sky (PC
+// planar run 2, mp_strike).
+const float kPlanarGlossNone = 0.6;
+const float kPlanarGlossFull = 0.8;
+#endif
 
 #if LM_SUN_SPECULAR && LM_SUN_LIGHT == 1
 // The Modern path's planar reflection (vk_legacy.h kModernPlanarSampler,
@@ -516,10 +524,10 @@ void main()
     // On the plane of the Modern path's planar reflection, its mirror image
     // takes the probe's place (and screen-space reflections, below, take
     // its place where they find something: they are this frame's). Opaque,
-    // glossy surfaces only, as those. The point read is this one, moved by
-    // the normal map's tilt as a ripple moves a reflection; a rougher
-    // surface reads a wider spread of it.
-    if (kMode == 0 && planar.on > 0.5 && gloss > kReflectionsGlossNone)
+    // glossy surfaces only (above kPlanarGlossNone). The point read is this
+    // one, moved by the normal map's tilt as a ripple moves a reflection; a
+    // rougher surface reads a wider spread of it.
+    if (kMode == 0 && planar.on > 0.5 && gloss > kPlanarGlossNone)
     {
         const vec3 surfaceNormal = normalize(texcoord1.xyz);
         const float height = dot(planar.plane.xyz, texcoord5.xyz) + planar.plane.w;
@@ -544,7 +552,7 @@ void main()
                 seen /= 6.0;
                 if (edge > 0.0)
                     planarRead = max(seen, vec3(0.0));
-                const float weight = edge * smoothstep(kReflectionsGlossNone, kReflectionsGlossFull, gloss);
+                const float weight = edge * smoothstep(kPlanarGlossNone, kPlanarGlossFull, gloss);
                 if (edge > 0.0)
                     reflection = mix(reflection, Encode(max(seen, vec3(0.0))), weight);
             }

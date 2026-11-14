@@ -1398,9 +1398,12 @@ point is within 4 units of the plane and its surface faces up (within about
 18 degrees). The point read is moved by the normal map's tilt (4 units at
 most), as a ripple moves a reflection, and a rougher surface reads a wider
 spread of five taps. The image then takes the probe's place, faded out over
-the image's outer 5% and below gloss 0.5 (gone at 0.3), as screen-space
-reflections fade; those, being this frame's, still take its place where
-they find something. Being last frame's, the image lags the camera by a
+the image's outer 5% and below gloss 0.8 (gone at 0.6): only surfaces whose
+probe was already near its sharpest read it. With the screen-space
+reflections' fade (from 0.3) Strike's fairly rough street mirrored the sky
+sharply and looked wet (PC planar run 2); it keeps the probe's soft sheen
+now. Screen-space reflections, being this frame's, still take the image's
+place where they find something. Being last frame's, the image lags the camera by a
 frame where the scene moves; on a camera cut it is not read.
 
 | Setting | Default | Switch |
