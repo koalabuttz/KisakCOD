@@ -139,8 +139,13 @@ set(vita_mp_input_sound_sources
     "${SRC_DIR}/vita/client/sound/vita_al.cpp"
     "${SRC_DIR}/vita/client/sound/vita_al_output.cpp")
 
+# The engine's iassert checks in a release build. Retail and the Windows
+# release builds leave them out; on the Vita's CPU they are measured by a
+# console run before the default changes (EXPERIMENT: off on this branch).
+option(KISAK_VITA_RELEASE_ASSERTS "Keep the engine's assertions in a Vita release build" OFF)
 set(KISAK_VITA_MP_DEFINITIONS
-    KISAK_MP USE_SEPARATE_BLIT_TEXTURE KISAK_OPENAL RELEASE_ASSERTS
+    KISAK_MP USE_SEPARATE_BLIT_TEXTURE KISAK_OPENAL
+    $<$<BOOL:${KISAK_VITA_RELEASE_ASSERTS}>:RELEASE_ASSERTS>
     KISAK_LINUX_MP_CLIENT KISAK_VITA_MP_CLIENT KISAK_GFX_GXM
     ENABLE_VITASDK_BUILD_ASSERT
     $<$<CONFIG:Debug>:_DEBUG>)
