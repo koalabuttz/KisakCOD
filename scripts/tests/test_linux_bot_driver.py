@@ -3,7 +3,8 @@
 import unittest
 from test_linux_bots import (FIXTURE_GSC, transition_fixture, transition_plan,
                              final_cohort_log, refill_fixture, validate_refills,
-                             validate_kick_window, validate_hold, validate_transitions)
+                             validate_kick_window, validate_hold, validate_transitions,
+                             validate_brain_view)
 
 
 def healthy_log():
@@ -13,6 +14,44 @@ def healthy_log():
             log += (f'0:05 BOTFEATURE held entity={i} sample={sample} state=playing '
                     'health=100 team=allies class=CLASS_ASSAULT weapon=m16_mp\n')
     return log
+
+
+def view_log(yaws, pitch=0.0, bots=3):
+    log = ''
+    for sample, yaw in enumerate(yaws):
+        for i in range(bots):
+            log += f'0:05 BOTFEATURE view entity={i} sample={sample} angles=({pitch}, {yaw + i}, 0)\n'
+    return log
+
+
+class BrainViewTests(unittest.TestCase):
+    def passed(self, log, hold=4):
+        return all(ok for ok, _ in validate_brain_view(log, 3, hold))
+
+    def test_a_bot_that_looks_around_passes(self):
+        self.assertTrue(self.passed(view_log([0, 60, 100, 100, 40])))
+
+    def test_turning_through_the_back_takes_the_short_way(self):
+        self.assertTrue(self.passed(view_log([170, -170, -120, -120, -170])))
+
+    def test_a_bot_that_never_turns_fails(self):
+        self.assertFalse(self.passed(view_log([30, 30, 30, 31, 30])))
+
+    def test_a_snap_faster_than_the_motor_fails(self):
+        self.assertFalse(self.passed(view_log([0, 160, 160, 160, 160])))
+
+    def test_pitch_past_the_limit_fails(self):
+        self.assertFalse(self.passed(view_log([0, 60, 100, 100, 40], pitch=-89.0)))
+
+    def test_missing_or_extra_samples_fail(self):
+        log = view_log([0, 60, 100, 100, 40])
+        self.assertFalse(self.passed(log.replace(log.splitlines(keepends=True)[4], '', 1)))
+        self.assertFalse(self.passed(log + log.splitlines(keepends=True)[0]))
+        self.assertFalse(self.passed(''))
+
+    def test_fixture_logs_the_view(self):
+        self.assertIn('BOTFEATURE view entity=', FIXTURE_GSC)
+        self.assertIn('getplayerangles', FIXTURE_GSC)
 
 
 class HoldEvidenceTests(unittest.TestCase):

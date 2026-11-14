@@ -83,5 +83,19 @@ to one second behind.
   extracted `SV_UpdateBots` asks the brain about active bots only, and a brain
   that takes the command replaces the random inputs.
 
-Not covered by these checks: a bot in a real match. That needs the game's
-assets, so it runs on a machine that has them.
+- `bot_driver` (`scripts/tests/test_linux_bot_driver.py`): the live probe's
+  view evidence cannot pass with missing samples, a bot that never turns, a
+  snap faster than the motor or a pitch past the limit.
+
+Live, with the game's assets (a machine that has them):
+
+```
+python3 scripts/tests/test_linux_bots.py <cod4 dir> --binary bin/KisakCOD-dedi \
+    --bots 6 --hold-seconds 20 --brain 1
+```
+
+holds six bots on mp_crash with `bot_brain 1` and, besides the usual admission,
+health, team, class and clean-quit checks, logs every bot's view once a second
+and requires that each bot looked around, never turned faster than 120 degrees
+a second (with a margin for a server frame) and kept its pitch within the
+player's limits.
