@@ -1048,16 +1048,18 @@ as one of ours the texture at pixel sampler 15 (`lg::kModernAoSampler`,
 which the game's lit shaders leave free; set 1 bindings 15 and 31), or a 1x1
 white texture where the scene has none (`lg::SetModernAmbientOcclusion`,
 from the scene's depth hand-over until the scene is lit). `lm_sun.frag`
-reads it by pixel position and darkens only the light from all around:
+(the world) and `lp_sun.frag` (models) read it by pixel position and darken
+only the light from all around:
 
-* the lightmap's sky term: `sky * sky strength * ao`. The sun's share is
-  still taken from the undarkened sky (`decode(sky + sun) - decode(sky)`),
-  and the sun keeps its own shadow;
+* the sky term (the lightmap's, or the model's lighting volume):
+  `sky * sky strength * ao`. The sun's share (or the spot or omni light's)
+  is still taken from the undarkened sky (`decode(sky + sun) - decode(sky)`),
+  and that light keeps its own shadow;
 * the reflection probe (`s0`), through a specular occlusion for the view
   angle and gloss (Lagarde and de Rousiers 2014, roughness `1 - gloss`).
 
-Surfaces drawn with the game's shaders (models, effects, families we have no
-shader for yet) are not darkened.
+Surfaces drawn with the game's shaders (effects, families we have no shader
+for yet) are not darkened.
 
 | Setting | Default | Switch |
 | --- | --- | --- |
