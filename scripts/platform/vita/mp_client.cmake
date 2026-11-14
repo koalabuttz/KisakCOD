@@ -139,8 +139,14 @@ set(vita_mp_input_sound_sources
     "${SRC_DIR}/vita/client/sound/vita_al.cpp"
     "${SRC_DIR}/vita/client/sound/vita_al_output.cpp")
 
+# The engine's iassert checks in a release build. Retail and the Windows
+# release builds leave them out, and so does the Vita's: console run AS
+# (2026-11-14, mp_crash) found them 5 to 8% of the frame at the busy view.
+# -DKISAK_VITA_RELEASE_ASSERTS=ON keeps them, as for a hunt for a bug.
+option(KISAK_VITA_RELEASE_ASSERTS "Keep the engine's assertions in a Vita release build" OFF)
 set(KISAK_VITA_MP_DEFINITIONS
-    KISAK_MP USE_SEPARATE_BLIT_TEXTURE KISAK_OPENAL RELEASE_ASSERTS
+    KISAK_MP USE_SEPARATE_BLIT_TEXTURE KISAK_OPENAL
+    $<$<BOOL:${KISAK_VITA_RELEASE_ASSERTS}>:RELEASE_ASSERTS>
     KISAK_LINUX_MP_CLIENT KISAK_VITA_MP_CLIENT KISAK_GFX_GXM
     ENABLE_VITASDK_BUILD_ASSERT
     $<$<CONFIG:Debug>:_DEBUG>)
