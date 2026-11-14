@@ -553,8 +553,24 @@ it opens it: the seek to the end read the whole file and the step back to the
 tag read it again. AY's 3.5 MB was one 1.2 MB file read three times. The
 driver now opens a stream without that callback, so the open reads the file's
 head only; a tag at the end of a file reaches the decoder as bytes that are no
-frame, which it skips. The same host test opens a made-up MP3 both ways and
-counts the bytes.
+frame, which it skips (and with them the last frame before the tag, 26 ms,
+which the decoder cannot confirm against what follows). The same host test
+opens a made-up MP3 both ways and counts the bytes.
+
+That left the first play of each file, one read for the length: a quarter of
+a second for a 1.2 MB file. The game's music is constant bit rate (128 kbit/s,
+44.1 kHz), where every frame has the same length, so the file's size says how
+many frames it holds. The driver reads the first 32 KB of a file it has no
+length for: past an ID3v2 tag, every frame there has to be a layer 3 frame of
+one bit rate and sample rate, each starting where the one before ends, and at
+least 16 of them. Then the length comes from the size, and nothing more is
+read. Any other file (variable bit rate, as the ambient streams are; a tag
+longer than the head) is read through once as before. A file that changes its
+bit rate only after the head would get a wrong length; none of the game's
+does. `snd_alDebug 1` prints which way each file went, and level 2 also reads
+a constant bit rate file through and prints both counts. The host test holds
+the size's answer against the decoder's own count on made-up files, and
+`test_openal_stream_lengths.py --survey <folder>` does the same for real ones.
 
 **Loaded sounds in memory** (`snd_adpcm`). The OpenAL driver keeps every
 loaded sound as 16-bit PCM, and that is also how the fastfiles hold the sounds

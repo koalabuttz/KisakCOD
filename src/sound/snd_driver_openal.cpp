@@ -408,6 +408,108 @@ static void AL_KeepStreamLength(const char *name, uint32_t fileBytes, uint64_t f
     length.frames = frames;
 }
 
+// The length of a constant bit rate MP3 from its size.
+//
+// The first play of a stream still read the file through for its length: a
+// quarter of a second of a frozen picture on the PS Vita for a 1.2 MB file,
+// more for a larger one. Every frame of a constant bit rate file has the same
+// length (give or take its padding byte), so the file's size says how many
+// frames it holds. The game's music is such files (128 kbit/s, 44.1 kHz).
+//
+// The head of the file decides: an ID3v2 tag is stepped over, and then every
+// frame in the head has to be a layer 3 frame of one bit rate and sample
+// rate, each starting where the one before ends. Anything else (a variable
+// bit rate file, bytes between frames, a tag longer than the head) is read
+// through as before.
+struct AlMp3Head
+{
+    uint32_t audioStart;      // bytes before the first frame
+    uint32_t sampleRate;
+    uint32_t samplesPerFrame; // 1152 (MPEG-1) or 576
+    uint32_t bitsPerSecond;
+    uint32_t frames;          // whole frames seen in the head
+};
+static const uint32_t AL_MP3_HEAD_BYTES = 32768;
+static const uint32_t AL_MP3_HEAD_MIN_FRAMES = 16;
+
+// The size in bytes of the layer 3 frame whose header is at `at` (4 bytes
+// readable), 0 if that is no such header.
+static uint32_t AL_Mp3FrameBytes(const uint8_t *at, uint32_t *sampleRate, uint32_t *samplesPerFrame, uint32_t *bitsPerSecond)
+{
+    static const uint16_t kKbps[2][15] = {
+        { 0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320 }, // MPEG-1
+        { 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 },     // MPEG-2 and 2.5
+    };
+    static const uint16_t kRate[3] = { 44100, 48000, 32000 };
+    if (at[0] != 0xFF || (at[1] & 0xE0) != 0xE0)
+        return 0;
+    const uint32_t version = (at[1] >> 3) & 3; // 3: MPEG-1, 2: MPEG-2, 0: MPEG-2.5
+    const uint32_t layer = (at[1] >> 1) & 3;   // 1: layer 3
+    const uint32_t rateIndex = at[2] >> 4;
+    const uint32_t sampleIndex = (at[2] >> 2) & 3;
+    if (version == 1 || layer != 1 || rateIndex == 0 || rateIndex == 15 || sampleIndex == 3)
+        return 0;
+    const bool mpeg1 = version == 3;
+    *sampleRate = kRate[sampleIndex] >> (mpeg1 ? 0 : (version == 2 ? 1 : 2));
+    *samplesPerFrame = mpeg1 ? 1152 : 576;
+    *bitsPerSecond = kKbps[mpeg1 ? 0 : 1][rateIndex] * 1000u;
+    const uint32_t padding = (at[2] >> 1) & 1;
+    return *samplesPerFrame / 8 * *bitsPerSecond / *sampleRate + padding;
+}
+
+static bool AL_Mp3ConstantRateHead(const uint8_t *head, uint32_t headBytes, AlMp3Head *found)
+{
+    memset(found, 0, sizeof(*found));
+    uint32_t at = 0;
+    // "ID3", version, flags, then the tag's size as four 7-bit bytes; a flag
+    // says whether a 10 byte footer follows it.
+    if (headBytes >= 10 && head[0] == 'I' && head[1] == 'D' && head[2] == '3')
+    {
+        at = 10 + (((uint32_t)(head[6] & 0x7F) << 21) | ((uint32_t)(head[7] & 0x7F) << 14)
+                   | ((uint32_t)(head[8] & 0x7F) << 7) | (uint32_t)(head[9] & 0x7F));
+        if (head[5] & 0x10)
+            at += 10;
+    }
+    found->audioStart = at;
+    while (at < headBytes && headBytes - at >= 4)
+    {
+        uint32_t sampleRate, samplesPerFrame, bitsPerSecond;
+        const uint32_t bytes = AL_Mp3FrameBytes(head + at, &sampleRate, &samplesPerFrame, &bitsPerSecond);
+        if (!bytes)
+            return false;
+        if (!found->frames)
+        {
+            found->sampleRate = sampleRate;
+            found->samplesPerFrame = samplesPerFrame;
+            found->bitsPerSecond = bitsPerSecond;
+        }
+        else if (sampleRate != found->sampleRate || samplesPerFrame != found->samplesPerFrame
+                 || bitsPerSecond != found->bitsPerSecond)
+        {
+            return false;
+        }
+        if (bytes > headBytes - at)
+            break; // the head ends inside this frame
+        ++found->frames;
+        at += bytes;
+    }
+    return found->frames >= AL_MP3_HEAD_MIN_FRAMES;
+}
+
+// PCM frames in a file of `fileBytes` whose head is `head`. A frame is
+// samplesPerFrame / 8 * bitsPerSecond / sampleRate bytes, a fraction: the
+// padding byte of some frames keeps the file within a byte of it, which is
+// the byte added before dividing.
+static uint64_t AL_Mp3FramesFromSize(const AlMp3Head &head, uint32_t fileBytes)
+{
+    if (fileBytes <= head.audioStart)
+        return 0;
+    const uint64_t audioBytes = fileBytes - head.audioStart;
+    const uint64_t frameBytesTimesRate = (uint64_t)(head.samplesPerFrame / 8) * head.bitsPerSecond;
+    const uint64_t frames = (audioBytes + 1) * head.sampleRate / frameBytesTimesRate;
+    return frames * head.samplesPerFrame;
+}
+
 // Miles' MSS_File*Callback (snd_mss.cpp) bridges AIL's file I/O to FS_*; these do the same
 // for dr_wav/dr_mp3, since neither library has a concept of a game virtual filesystem.
 // Format extension is reachable from data (see WORK.md Phase 5 - Com_GetSoundFileName's
@@ -1038,13 +1140,30 @@ int SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int index)
     size_t nameLen = strlen(filename);
     stream->isMp3 = nameLen >= 4 && I_stricmp(filename + nameLen - 4, ".mp3") == 0;
 
+    // A file whose length is not kept yet shows its head first: if that says constant
+    // bit rate, the length comes from the size and the file is not read through
+    // (AL_Mp3ConstantRateHead). Sounds start on one thread, so one buffer does.
+    uint64_t keptFrames = 0;
+    const bool lengthKept = stream->isMp3 && AL_FindStreamLength(realname, fileBytes, &keptFrames);
+    AlMp3Head mp3Head = {};
+    bool constantRate = false;
+    if (stream->isMp3 && !lengthKept)
+    {
+        static uint8_t head[AL_MP3_HEAD_BYTES];
+        const uint32_t wanted = fileBytes < AL_MP3_HEAD_BYTES ? fileBytes : AL_MP3_HEAD_BYTES;
+        const int got = (int)FS_Read(head, wanted, stream->fsHandle);
+        constantRate = got > 0 && AL_Mp3ConstantRateHead(head, (uint32_t)got, &mp3Head);
+        FS_Seek(stream->fsHandle, 0, AL_FsSeekOrigin(0)); // back to the start
+    }
+
     // No tell callback for an MP3. With one, dr_mp3 first looks for an ID3v1 or APE tag
     // at the end of the file. The game's streams sit deflated in the .iwd files, where
     // FS_Seek reaches a place by inflating up to it: the seek to the end reads the whole
     // file, and the step back from the end to the tag reads it all again. That was two
     // full reads at every start of a stream (console run BB: 0.48 s of a frozen picture
     // on the PS Vita). Without the check a tag at the end of a file reaches the decoder
-    // as bytes that are no frame, and it skips them.
+    // as bytes that are no frame, and it skips them, along with the last frame before
+    // them (26 ms), which it cannot confirm against what follows.
     bool decoderOk = stream->isMp3
         ? drmp3_init(&stream->mp3, AL_StreamReadCallback, AL_Mp3SeekCallback, NULL, NULL, stream, NULL)
         : drwav_init(&stream->wav, AL_StreamReadCallback, AL_WavSeekCallback, AL_WavTellCallback, stream, NULL);
@@ -1066,24 +1185,41 @@ int SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int index)
 
     // dr_mp3 doesn't know its total frame count up front the way dr_wav does from the RIFF
     // header: unless the file has a Xing or Info tag, drmp3_get_pcm_frame_count reads the
-    // whole file to find it. That is paid the first time a file plays; after that the count
-    // comes from g_streamLengths.
+    // whole file to find it. A constant bit rate file's size says it instead; any other
+    // file is read through the first time it plays. After that the count comes from
+    // g_streamLengths.
     uint64_t totalFrames;
     if (!stream->isMp3)
     {
         totalFrames = stream->wav.totalPCMFrameCount;
     }
-    else if (!AL_FindStreamLength(realname, fileBytes, &totalFrames))
+    else if (lengthKept)
+    {
+        totalFrames = keptFrames;
+    }
+    else
     {
         const bool tagged = stream->mp3.totalPCMFrameCount != DRMP3_UINT64_MAX;
+        const bool fromSize = !tagged && constantRate;
         const uint32_t countStart = Sys_MillisecondsRaw();
-        totalFrames = drmp3_get_pcm_frame_count(&stream->mp3);
+        totalFrames = fromSize ? AL_Mp3FramesFromSize(mp3Head, fileBytes) : drmp3_get_pcm_frame_count(&stream->mp3);
         // A count of 0 is a file that could not be read through; it is not kept.
         if (totalFrames)
             AL_KeepStreamLength(realname, fileBytes, totalFrames);
-        if (!tagged && SND_AlDebug(1))
+        if (fromSize && SND_AlDebug(1))
+        {
+            Com_Printf(CON_CHANNEL_SOUND, "snd_al: stream '%s' (%u KB) is %u bit/s all through its head: %u frames by its size\n",
+                realname, (unsigned int)(fileBytes / 1024u), (unsigned int)mp3Head.bitsPerSecond, (unsigned int)totalFrames);
+            // Level 2 reads the file through as well, to check the size's answer.
+            if (SND_AlDebug(2))
+                Com_Printf(CON_CHANNEL_SOUND, "snd_al: stream '%s' read through: %u frames\n",
+                    realname, (unsigned int)drmp3_get_pcm_frame_count(&stream->mp3));
+        }
+        else if (!tagged && SND_AlDebug(1))
+        {
             Com_Printf(CON_CHANNEL_SOUND, "snd_al: read all of stream '%s' (%u KB) to find its length: %u ms\n",
                 realname, (unsigned int)(fileBytes / 1024u), (unsigned int)(Sys_MillisecondsRaw() - countStart));
+        }
     }
 
     ALuint source = alGlob.source[index];

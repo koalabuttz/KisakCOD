@@ -124,7 +124,11 @@ also prints every sound start. It is off by default and changes nothing that is
 played. At level 1 it also prints `snd_al: read all of stream '<file>' (N KB)
 to find its length: M ms` the first time an MP3 stream without a length tag
 plays: the decoder has to read such a file through to know how long it is,
-and the driver keeps the answer for the next start of that file.
+and the driver keeps the answer for the next start of that file. A constant
+bit rate file is not read through: its size says its length, and the line is
+`snd_al: stream '<file>' (N KB) is R bit/s all through its head: F frames by
+its size` (level 2 adds `read through: F frames`, the decoder's own count, to
+compare).
 
 The OpenAL headers (`AL/al.h`) are needed too, whichever library is linked,
 because the sound headers include them. Without `libopenal-dev` installed, unpack
