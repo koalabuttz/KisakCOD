@@ -755,13 +755,28 @@ What the GXM back end does so far (step 2d):
   drops both when either program changes and at every scene's start, and
   always writes for a pixel shader that takes a volume texture's depth).
   Draws a run diagnostic looks at or changes take the old path. The quit
-  summary says how often each applied: `draw work left out: N of N draws
-  found their programs in the table; of N texture binds N were set already
-  and N set their filters anew; of N uniform buffers N were the last
-  draw's`. A file named `no-draw-reuse` in the folder of the compiled
-  programs turns all three off (the log says so at start-up), so that a
-  console run can tell a fault of theirs without another build. What they
-  save in a frame's time is not measured yet, in Vita3K or on a console.
+  summary says how often each applied: `draw work left out: N draws kept
+  the last draw's programs and fixed state; N of N others found their
+  programs in the table; of N texture binds N were set already and N set
+  their filters anew; of N uniform buffers N were the last draw's`. A file
+  named `no-draw-reuse` in the folder of the compiled programs turns all of
+  them off (the log says so at start-up), so that a console run can tell a
+  fault of theirs without another build. Console run AR (2026-11-14) put a
+  draw at about 10.5 us of the render thread's time, of which working out
+  its programs and its fixed state (viewport, clip, cull, depth, stencil,
+  bias) took about 4.
+- **The last draw's state kept.** The D3D9 front counts every call that
+  changes what a draw's programs and fixed state come from (a render
+  state, a shader, the vertex declaration, a stream's stride, the
+  viewport, the scissor rect, a target). A draw that finds that count, the
+  open scene, its primitive type, its index width and its vertex stride as
+  the last draw left them takes the last draw's programs and leaves the
+  fixed state as it is, without the table lookup, the blend and the fixed
+  state worked out again. Clears, copies and dropped programs end it. Most
+  draws of one material (a run of static models or of world surfaces)
+  change only their buffers and constants. An empty file `no-same-state`
+  in the folder of the compiled programs, or `vita_gxm no-same-state 1`,
+  turns it off.
 - **Depth first.** The scene's depth is always drawn before its lit pass
   on the Vita (src/gfx_gxm/gxm_engine_options.h), whatever r_depthPrepass
   says, so that the GPU skips hidden pixels of the lit pass early. Console
