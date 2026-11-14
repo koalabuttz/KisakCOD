@@ -370,11 +370,11 @@ commands:
             "8 setviewpos 30 -10 200 140"],
  "variants": [{"name": "B", "set": {"r_modernAo": "off"}},
               {"name": "A", "set": {"r_modernAo": "on"}}],
- "variant_timing": {"start": 10, "settle": 3, "framelog": 8, "compare": true}}
+ "variant_timing": {"start": 20, "settle": 3, "framelog": 8, "compare": true}}
 ```
 
-From `start` seconds after the map is up (default: 2 s after the last `at_map`
-command), each variant sets its dvars, waits `settle` seconds (TAA history and
+From `start` seconds after the map is up (default 20 s, or 2 s after the last
+`at_map` command if that is later), each variant sets its dvars, waits `settle` seconds (TAA history and
 auto exposure catch up after a change), takes the screenshot
 `<launch>-<variant>` the first time round and, with `framelog`, a frame log
 `<launch>-<variant>-<pass>`. With a frame log the variants run twice in
@@ -394,9 +394,17 @@ fit with two passes and 9 with one.
 - Start-up only, still one launch per value: `KISAK_VK_MODERN_LINEAR`, `_LIT`,
   `_EFFECTS`, `_NORMALS`, `_EXPOSURE_RANGE`, `_SSR_STEPS`/`_LEVELS`, and
   `r_visuals`.
-- Things that move (smoke, the helicopter) move between the screenshots of
-  one launch. `timescale 0.001` in `at_map` (devmap has cheats on) may hold
-  them still; not yet tried on the PC.
+- Start after the pre-match countdown (about 16-17 s on mp_crash under
+  devmap). The countdown draws a grey picture with no HUD, so in variants
+  proof 1 (start 10) two shots with AO off but either side of it differed by
+  47 levels, more than AO itself.
+- Things that move (smoke, the helicopter, the countdown) move between the
+  screenshots of one launch. `timescale 0.001` in `at_map` (devmap has cheats
+  on) holds them still: in proof 1 the same variant shot twice differed by
+  0.29 levels (arch 0.33), while AO on against off made 19.5 in the arch.
+  Use it for picture launches; leave it out where frame logs are read.
+- A pass spread over 5% is flagged in the report: the launch drifted, or a
+  pass ran during a change of scene.
 
 ## Menus without a person: `menu_check.py`
 

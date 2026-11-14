@@ -90,10 +90,11 @@ the timed commands::
                 "8 setviewpos 30 -10 200 140"],
      "variants": [{"name": "B", "set": {"r_modernAo": "off"}},
                   {"name": "A", "set": {"r_modernAo": "on"}}],
-     "variant_timing": {"start": 10, "settle": 3, "framelog": 8}}
+     "variant_timing": {"start": 20, "settle": 3, "framelog": 8}}
 
-From ``start`` seconds after the map is up (default: 2 s after the last
-``at_map`` command) each variant in turn sets its dvars, waits ``settle``
+From ``start`` seconds after the map is up (default: 20 s, after the
+pre-match countdown, whose grey picture and missing HUD would swamp any
+difference; or 2 s after the last ``at_map`` command if that is later) each variant in turn sets its dvars, waits ``settle``
 seconds (TAA and auto exposure catch up), takes the screenshot
 ``<launch>-<variant>`` the first time round and, when ``framelog`` is given,
 a frame log ``<launch>-<variant>-<pass>`` of that many seconds; then the
@@ -104,8 +105,9 @@ other one's. Per launch, results.json gets ``variants`` (fps per pass, mean
 fps, and the difference from the first variant) and the report a table. Each
 variant's ``set`` should name every dvar any variant changes, so the order of
 the passes does not matter. Moving things (smoke, the helicopter) move
-between the screenshots; ``"8 timescale 0.001"`` in ``at_map`` (devmap,
-cheats on) may hold them still.
+between the screenshots; ``"18 timescale 0.001"`` in ``at_map`` (devmap,
+cheats on) holds them still (variants proof 1: the same variant twice differed
+by 0.29 levels), so use it for picture launches but not for frame logs.
 
 The game splits its command line at every ``+`` (Com_ParseCommandLine) and
 keeps 31 parts, so a timed command or a variant value with a ``+`` in it
@@ -134,7 +136,11 @@ from pathlib import Path
 
 FORMAT = "kisak-pc-run/1"
 MAX_CONSOLE_LINES = 31  # Com_ParseCommandLine keeps 32 lines, the first is what comes before the first '+'
-SAFETY_AFTER_LAST = 30  # seconds after the last timed command before the safety quit
+SAFETY_AFTER_LAST = 30
+# Variants start after the pre-match countdown (about 16-17 s on mp_crash under
+# devmap: a grey vision set and no HUD, pc_run variants proof 1).
+DEFAULT_VARIANT_START = 20
+SPREAD_WARNING_PCT = 5  # seconds after the last timed command before the safety quit
 FRAME_LOG = re.compile(r"^frame log (\S+): .*$")
 FRAME_LOG_FPS = re.compile(r"^frame log (\S+): (\d+) frames in ([\d.]+) s: ([\d.]+) fps; ms mean ([\d.]+), "
                            r"median ([\d.]+), p95 ([\d.]+), p99 ([\d.]+)")
@@ -262,7 +268,7 @@ def variant_plan(launch):
     framelog = float(timing.get("framelog", 0))
     passes = int(timing.get("passes", 2 if framelog else 1))
     last = max([float(TIMED.match(c).group(1)) for c in launch.get("at_map") or [] if TIMED.match(c)] or [0])
-    t = float(timing.get("start", last + 2))
+    t = float(timing.get("start", max(DEFAULT_VARIANT_START, last + 2)))
     order = list(variants) + (list(reversed(variants)) if passes == 2 else [])
     commands, plan = [], []
     for index, variant in enumerate(order):
@@ -769,6 +775,10 @@ def report_text(results):
                 lines.append(f"| {entry['name']} | {sets} | {per_pass} | {entry.get('mean_fps', '-')} | "
                              f"{'-' if vs is None else f'{vs:+.2f}%'} | {'-' if ms is None else f'{ms:+.3f}'} | "
                              f"{'-' if spread is None else f'{spread}%'} |")
+            wide = [e["name"] for e in launch["variants"] if (e.get("pass_spread_pct") or 0) > SPREAD_WARNING_PCT]
+            if wide:
+                lines.append(f"- passes differ by more than {SPREAD_WARNING_PCT}% for {', '.join(wide)}: "
+                             "the launch drifted, or a pass ran during a change of scene")
             lines.append("")
         verbatim = (launch.get("frame_logs") or []) + (launch.get("lines") or [])
         if verbatim:
