@@ -253,6 +253,27 @@ struct AoParams
     // further behind stays lit (a thin sign or arch edge in front of a wall
     // no longer darkens the wall beside it as a solid block would).
     float thickness = 8.0f;
+    // |N.V| from which the effect is whole on walls; on walls seen at a
+    // shallower angle it fades out from here to 0.02. Floors and ceilings
+    // keep 0.08, so ground seen from far off keeps its contact shadows. PC
+    // AO run 4: at 0.08 a corner on a wall seen nearly side-on (the crash-in
+    // arch edge) read as a dark line; David chose to soften that alone.
+    float grazing = 0.2f;
+    // The darkest the visibility may go after the power, reached through a
+    // soft knee 0.1 wide (0 turns it off). PC AO run 7: the crash-in arch
+    // line is a narrow slot between the pillar's side and the arch's inside
+    // face that went near black (0.13) and ended in a hard edge; the ground's
+    // contact shadows stay far above it (about 0.85).
+    float floor = 0.35f;
+    // The blur's depth tolerance: a tap whose view depth is this share of
+    // the pixel's away counts half. PC AO run 8: at 0.02 the blur stops dead
+    // at the crash-in arch slot's edge (the pillar's side face against the
+    // arch's inside face a little behind it), a hard step from 91 to 253
+    // that reads as a line. PC AO run 9: at 0.08 it ramps over 4 pixels
+    // (94, 120, 175, 225), with no halos round outlines and the ground
+    // within 2 levels; 0.25 and 0.6 soften it no further but lighten the
+    // ceiling beams' edges more.
+    float edge = 0.08f;
     uint32_t frame = 0;    // moves the noise
 };
 
@@ -276,6 +297,7 @@ struct AoStats
     uint64_t builds; // BuildAmbientOcclusion calls that recorded
 };
 AoStats Stats(const AmbientOcclusion *ao);
+
 // ---- Screen-space reflections (docs/vulkan-modern.md "Screen-space reflections") ----
 //
 // What each pixel's surface would mirror, found on the screen: the view ray
@@ -476,7 +498,7 @@ struct ExposureParams
     // mp_crash's and mp_backlot's outdoor views (PC exposure run 1).
     float key = 0.115f;
     float minEv = -1.0f;   // the range the exposure stays in
-    float maxEv = 1.0f; // David 2026-11-13: +1, so dark interiors keep more of their mood
+    float maxEv = 1.5f;
     // Time constants, in seconds: towards a lower exposure (the scene got
     // brighter) and towards a higher one (it got darker).
     float brighterSeconds = 1.0f;

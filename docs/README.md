@@ -29,6 +29,7 @@ what is still missing. Build steps are in the
 - [Settings a game server may not set](server-set-dvars.md): a server sets
   client dvars by name, as in retail, except the settings this port added
   (all platforms)
+- [Options menu additions](options-menu.md): the Display and Controller pages, borderless fullscreen and ultrawide screens (all platforms)
 
 ## Linux dedicated server
 
@@ -94,6 +95,7 @@ in a build with `KISAK_BUILD_VULKAN_BACKEND`. Bottom to top:
 - [Legacy shader translator](vulkan-legacy-shaders.md): the game's D3D9 shader bytecode to SPIR-V through dxbc-spirv ([how the converter was picked](shader-translator-spike.md))
 - [Legacy adapter](vulkan-legacy-adapter.md): the part of D3D9 the renderer uses, on the core, with a pixel check
 - [D3D9 front](vulkan-d3d9-front.md): the D3D9 interfaces on the adapter, and [the back end in the game](vulkan-d3d9-front.md#in-the-game-r_backend-vulkan) on Linux and Windows, its dvars, caches and the comparison with DXVK
+- [Modern path](vulkan-modern.md): `r_visuals modern`, an experimental look on top of the back end: temporal anti-aliasing, linear light, bloom, auto exposure, tonemap curves, motion vectors, ambient occlusion, screen-space reflections and lit shaders of its own
 
 ## Performance
 

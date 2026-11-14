@@ -123,6 +123,11 @@ struct Backend
     // game's (KISAK_VK_MODERN_SUN_STRENGTH and _SKY_STRENGTH override them); the
     // changes of lit inputs that named one, and their count at the last reset.
     bool shadersWanted = true;
+    // Models' (lp_) shaders of ours, unless KISAK_VK_MODERN_MODEL_SHADERS=0;
+    // those for surfaces without the sun (interiors), unless
+    // KISAK_VK_MODERN_NO_SUN_SHADERS=0.
+    bool modelShadersWanted = true;
+    bool noSunShadersWanted = true;
     float sunStrength = 1.0f;
     float skyStrength = 1.0f;
     uint64_t litShaderChanges = 0, litShaderChangesBase = 0;
@@ -191,7 +196,7 @@ struct Backend
     // and our shaders on; KISAK_VK_MODERN_AO=1 or the ambient occlusion debug
     // view), which makes the normals buffer wanted too; KISAK_VK_MODERN_AO=0
     // keeps it off whatever asks. Its parameters (KISAK_VK_MODERN_AO_RADIUS,
-    // _THICKNESS, _POWER); the scene-sized image it writes, a Legacy texture the lit
+    // _THICKNESS, _POWER, _GRAZING, _FLOOR, _EDGE); the scene-sized image it writes, a Legacy texture the lit
     // shaders read (lg::SetModernAmbientOcclusion) until the scene is lit;
     // whether this scene has it; the scenes counted at the last reset.
     bool aoWanted = false;
@@ -205,13 +210,14 @@ struct Backend
     modern::AoStats aoBase{};
     // Screen-space reflections (vk_modern.h TraceReflections), traced right
     // after the normals buffer from the prepass depth and last scene's
-    // anti-aliased linear-light colour: wanted when something reads it (for
-    // now KISAK_VK_MODERN_SSR=1 or the reflections debug view; the lit
-    // shaders next), which wants the normals buffer too;
-    // KISAK_VK_MODERN_SSR=0 keeps it off. Its settings
+    // anti-aliased linear-light colour: wanted when something reads it (our
+    // lit shaders, so with linear light, lit inputs and our shaders on;
+    // KISAK_VK_MODERN_SSR=1 or the reflections debug view), which wants the
+    // normals buffer too; KISAK_VK_MODERN_SSR=0 keeps it off. Its settings
     // (KISAK_VK_MODERN_SSR_DISTANCE, _THICKNESS, _STEPS, _LEVELS); the pass,
     // made at its first scene; sceneReflections is the scene's own until it
-    // is finished; the counts at the last reset.
+    // is finished, which the lit shaders read (lg::SetModernReflections)
+    // until the scene is lit; the counts at the last reset.
     bool reflectionsWanted = false;
     bool reflectionsFailed = false;
     modern::ReflectionParams reflectionParams{};
@@ -405,6 +411,8 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     backend->litWanted = !EnvIsZero("KISAK_VK_MODERN_LIT");
     backend->exposureWanted = !EnvIsZero("KISAK_VK_MODERN_EXPOSURE");
     backend->shadersWanted = !EnvIsZero("KISAK_VK_MODERN_SHADERS");
+    backend->modelShadersWanted = !EnvIsZero("KISAK_VK_MODERN_MODEL_SHADERS");
+    backend->noSunShadersWanted = !EnvIsZero("KISAK_VK_MODERN_NO_SUN_SHADERS");
     {
         const std::string sun = EnvText("KISAK_VK_MODERN_SUN_STRENGTH");
         const float sunValue = sun.empty() ? -1.0f : std::strtof(sun.c_str(), nullptr);
@@ -455,10 +463,23 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         const float depth = thickness.empty() ? 0.0f : std::strtof(thickness.c_str(), nullptr);
         if (depth > 0.0f)
             backend->aoParams.thickness = depth;
+        const std::string grazing = EnvText("KISAK_VK_MODERN_AO_GRAZING");
+        const float angle = grazing.empty() ? 0.0f : std::strtof(grazing.c_str(), nullptr);
+        if (angle > 0.0f && angle <= 1.0f)
+            backend->aoParams.grazing = angle;
+        const std::string floorText = EnvText("KISAK_VK_MODERN_AO_FLOOR");
+        const float floorValue = floorText.empty() ? -1.0f : std::strtof(floorText.c_str(), nullptr);
+        if (floorValue >= 0.0f && floorValue < 1.0f)
+            backend->aoParams.floor = floorValue;
+        const std::string edgeText = EnvText("KISAK_VK_MODERN_AO_EDGE");
+        const float edge = edgeText.empty() ? 0.0f : std::strtof(edgeText.c_str(), nullptr);
+        if (edge > 0.0f && edge <= 10.0f)
+            backend->aoParams.edge = edge;
     }
     backend->debugReflections = EnvIs("KISAK_VK_MODERN_DEBUG", "reflections");
-    backend->reflectionsWanted =
-        !EnvIsZero("KISAK_VK_MODERN_SSR") && (EnvIs("KISAK_VK_MODERN_SSR", "1") || backend->debugReflections);
+    backend->reflectionsWanted = !EnvIsZero("KISAK_VK_MODERN_SSR")
+        && (EnvIs("KISAK_VK_MODERN_SSR", "1") || backend->debugReflections
+            || (backend->linearWanted && backend->litWanted && backend->shadersWanted));
     {
         modern::ReflectionParams &p = backend->reflectionParams;
         const auto number = [](const char *name, float &out) {
@@ -759,9 +780,9 @@ void BackendLogStats(Backend *backend, bool reset)
         const PassTimings pass = PassTimingsFor(backend->core, "modern ao");
         const uint64_t scenes = modern::Stats(backend->ao).builds - backend->aoBase.builds;
         HostLog(h, "vulkan d3d9: modern: %llu scenes with ambient occlusion (radius %.1f, thickness %.1f, "
-                   "power %.2f), %.3f ms GPU each",
+                   "power %.2f, floor %.2f, edge %.2f), %.3f ms GPU each",
                 static_cast<unsigned long long>(scenes), backend->aoParams.radius, backend->aoParams.thickness,
-                backend->aoParams.power,
+                backend->aoParams.power, backend->aoParams.floor, backend->aoParams.edge,
                 pass.supported ? 2.0 * average(pass) : 0.0);
     }
     // Screen-space reflections: the scenes traced, the levels of the last,
@@ -856,6 +877,8 @@ void CloseBackend(Backend *backend)
         backend->normals = nullptr;
         backend->sceneNormals = nullptr;
     }
+    if (backend->legacy)
+        lg::SetModernReflections(backend->legacy, nullptr);
     if (backend->reflections)
     {
         modern::DestroyReflections(backend->core, backend->reflections);
@@ -1154,10 +1177,14 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
 {
     if (!backend || !backend->legacy || !backend->litWanted)
         return;
+    uint8_t shader = inputs && backend->shadersWanted ? inputs->shader : uint8_t(lg::ModernLitNone);
+    if ((lg::ModernLitModel(shader) && !backend->modelShadersWanted)
+        || (shader && !lg::ModernLitSun(shader) && !backend->noSunShadersWanted))
+        shader = lg::ModernLitNone;
     if (inputs && backend->linearScene && !backend->linearFailed)
     {
         ++backend->litChanges;
-        if (inputs->overWhite && inputs->shader && backend->shadersWanted)
+        if (inputs->overWhite && shader)
             ++backend->litShaderChanges;
         backend->litOverWhite = inputs->overWhite;
         if (!backend->litThisScene)
@@ -1166,7 +1193,7 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
     }
     lg::SetLinearInputs(backend->legacy, inputs ? inputs->constants : 0, inputs ? inputs->samplers : 0,
                         inputs ? inputs->doubled : 0, inputs && inputs->colorInput, inputs && inputs->overWhite,
-                        inputs && backend->shadersWanted ? inputs->shader : uint8_t(0));
+                        shader);
 }
 
 bool BackendModernEffectsOnDisplay(Backend *backend) { return backend && !backend->effectsInLinear; }
@@ -1534,6 +1561,8 @@ void TraceSceneReflections(Backend *backend, Image *depth, const modern::SceneVi
                                                          backend->reflectionParams, error);
     if (!backend->sceneReflections)
         LogModernOnce(backend, "no screen-space reflections", error);
+    // The lit shaders of ours read them until the scene is lit (BackendModernScene).
+    lg::SetModernReflections(backend->legacy, backend->sceneReflections);
 }
 } // namespace
 
@@ -1549,6 +1578,7 @@ ModernResult BackendModernSceneDepth(Backend *backend, lg::Surface *depth, const
     backend->sceneNormals = nullptr;
     backend->sceneAo = false;
     lg::SetModernAmbientOcclusion(backend->legacy, nullptr);
+    lg::SetModernReflections(backend->legacy, nullptr);
     Image *depthImage = depth ? lg::SurfaceImage(depth) : nullptr;
     if (!depthImage)
     {
@@ -1597,6 +1627,7 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
     lg::SetModernAmbientOcclusion(backend->legacy, nullptr);
     Image *reflections = backend->sceneReflections;
     backend->sceneReflections = nullptr;
+    lg::SetModernReflections(backend->legacy, nullptr);
     // The surfaces that moved in this scene; the next scene starts a new list.
     std::vector<modern::MovedSurface> moved;
     moved.swap(backend->moved);

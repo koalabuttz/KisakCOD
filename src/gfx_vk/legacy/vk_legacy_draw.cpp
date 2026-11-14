@@ -470,8 +470,9 @@ Layout *GetLayout(Device &device, const LayoutKey &key)
 }
 
 // A pipeline drawn as a Modern lit shader of ours (linearShader) also has the
-// ambient occlusion at kModernAoSampler, which the game's shader leaves free
-// (else ours is not built, and the game's does not read it).
+// ambient occlusion at kModernAoSampler and the reflections at
+// kModernReflectionsSampler, which the game's shader leaves free (else ours
+// is not built, and the game's does not read them).
 LayoutKey LayoutFor(const Shader &vs, const Shader &ps, uint8_t linearShader)
 {
     const ls::Reflection &vr = vs.translated.reflection;
@@ -480,7 +481,7 @@ LayoutKey LayoutFor(const Shader &vs, const Shader &ps, uint8_t linearShader)
     key.uniforms = (vr.uniforms & 0xffffu) | (pr.uniforms & 0xffffu) << 16;
     key.samplers = (pr.samplers & 0xffffu) | (vr.samplers & ((1u << kVertexSamplers) - 1)) << 16;
     if (ModernLitShaderValid(linearShader))
-        key.samplers |= 1u << kModernAoSampler;
+        key.samplers |= 1u << kModernAoSampler | 1u << kModernReflectionsSampler;
     return key;
 }
 
@@ -536,33 +537,44 @@ bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Sh
     // to the vertex shader; else the pixel shader as it is (its key keeps the
     // shader, so this is decided once). The pipeline's layout is the pixel
     // shader's, so it must read at least what ours reads (the constants to
-    // c18, or c19 with the specular; 2D images at s0, s2, s3 and the shadow,
-    // normal, specular and detail maps' samplers; a cube at s1 with the
-    // specular; the alpha test's block), and the shadow map must be a depth
-    // image where depth compare is fixed.
+    // c18, or c19 with the specular, fewer without the sun
+    // (ModernLitConstantCount); 2D images at s0, s2 (with the sun) and s3
+    // (the world's lightmaps) and the shadow, normal, specular and detail
+    // maps' samplers; a 3D image at s4 for models' lighting volume, which
+    // moves the samplers after it one on; a cube at s1 with the specular; the
+    // alpha test's block), and the shadow map must be a depth image where
+    // depth compare is fixed.
     const uint8_t shader = recipe.linearInputs ? recipe.moduleKey.inputs.shader : uint8_t(ModernLitNone);
     if (ModernLitShaderValid(shader))
     {
         const ls::Reflection &pr = ps.translated.reflection;
-        const uint32_t normal = 4u + (shader & ModernLitShadow ? 1u : 0u);
+        const bool model = ModernLitModel(shader);
+        const bool shadowed = ModernLitShadowed(shader);
+        const uint32_t shadowMap = model ? 5u : 4u;
+        const uint32_t normal = shadowMap + (shadowed ? 1u : 0u);
         const uint32_t specular = normal + (shader & ModernLitNormal ? 1u : 0u);
         const uint32_t detail = specular + (shader & ModernLitSpecular ? 1u : 0u);
-        const uint32_t images = 1u << 0 | 1u << 2 | 1u << 3 | (shader & ModernLitShadow ? 1u << 4 : 0u)
-            | (shader & ModernLitNormal ? 1u << normal : 0u) | (shader & ModernLitSpecular ? 1u << specular : 0u)
-            | (shader & ModernLitDetail ? 1u << detail : 0u);
+        const uint32_t lightmaps = model ? 0u : (ModernLitSun(shader) ? 1u << 2 : 0u) | 1u << 3;
+        const uint32_t images = 1u << 0 | lightmaps
+            | (shadowed ? 1u << shadowMap : 0u) | (shader & ModernLitNormal ? 1u << normal : 0u)
+            | (shader & ModernLitSpecular ? 1u << specular : 0u) | (shader & ModernLitDetail ? 1u << detail : 0u);
         const uint32_t cubes = shader & ModernLitSpecular ? 1u << 1 : 0u;
+        const uint32_t volumes = model ? 1u << 4 : 0u;
         const uint32_t uniforms = 1u << static_cast<uint32_t>(ls::Uniform::FloatConstants)
             | 1u << static_cast<uint32_t>(ls::Uniform::AlphaTest);
-        bool fits = !(pr.samplers & (1u << kModernAoSampler))
-            && pr.floatConstants >= (shader & ModernLitSpecular ? 20u : 19u)
-            && (pr.uniforms & uniforms) == uniforms && (pr.samplers & (images | cubes)) == (images | cubes)
-            && (!(shader & ModernLitShadow) || !recipe.fixDepth || (recipe.depthCompare & (1u << 4)));
+        bool fits = !(pr.samplers & (1u << kModernAoSampler | 1u << kModernReflectionsSampler))
+            && pr.floatConstants >= ModernLitConstantCount(shader)
+            && (pr.uniforms & uniforms) == uniforms
+            && (pr.samplers & (images | cubes | volumes)) == (images | cubes | volumes)
+            && (!shadowed || !recipe.fixDepth || (recipe.depthCompare & (1u << shadowMap)));
         for (uint32_t sampler = 0; sampler < ls::kSamplerCount && fits; ++sampler)
         {
             if (images & (1u << sampler))
                 fits = pr.samplerTypes[sampler] == ls::TextureType::Tex2D;
             else if (cubes & (1u << sampler))
                 fits = pr.samplerTypes[sampler] == ls::TextureType::Cube;
+            else if (volumes & (1u << sampler))
+                fits = pr.samplerTypes[sampler] == ls::TextureType::Tex3D;
         }
         // Where the alpha test's compare is fixed as Always, ours leaves it out.
         const bool alphaTest =
@@ -1061,6 +1073,9 @@ struct DrawTextures
     // The pipeline is a Modern lit shader of ours: kModernAoSampler's bit in
     // the mask is the ambient occlusion (Device::modernAo), not a D3D9 sampler.
     bool modernAo = false;
+    // Likewise kModernReflectionsSampler's bit: the reflections
+    // (Device::modernReflections).
+    bool modernReflections = false;
     Texture *bound[kSamplerSlots] = {}; // null: nothing usable bound
     // Four bits for each sampler with a texture: bit 3 set, bit 2 for a depth
     // format, and TextureTypeValue. With the shader they are everything a
@@ -1098,7 +1113,7 @@ ls::TextureType DeclaredType(const Shader &vs, const Shader &ps, uint32_t bit)
 bool BindTextures(Device &device, const Shader &vs, const Shader &ps, DrawTextures &textures)
 {
     textures.mask = LayoutFor(vs, ps).samplers;
-    Image *settle[kSamplerSlots];
+    Image *settle[kSamplerSlots + 2];
     uint32_t settleCount = 0;
     for (uint32_t left = textures.mask; left; left &= left - 1)
     {
@@ -1136,6 +1151,11 @@ bool BindTextures(Device &device, const Shader &vs, const Shader &ps, DrawTextur
         Texture *ao = device.modernAo ? device.modernAo : device.whiteTexture;
         if (ao && ao->image && !ImageReadyToSample(ao->image))
             settle[settleCount++] = ao->image;
+        Image *reflections =
+            device.modernReflections ? device.modernReflections
+                                     : (device.clearTexture ? device.clearTexture->image : nullptr);
+        if (reflections && !ImageReadyToSample(reflections))
+            settle[settleCount++] = reflections;
     }
     if (settleCount)
     {
@@ -1496,6 +1516,26 @@ bool BindUniforms(Device &device, const Shader &vs, const Shader &ps, const Draw
     return true;
 }
 
+// The Modern lit shaders' reflections are read between mip levels by gloss:
+// trilinear, clamped to the edge, made once.
+VkSampler ModernReflectionsSampler(Device &device)
+{
+    if (!device.modernReflectionsSampler)
+    {
+        VkSamplerCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        info.magFilter = VK_FILTER_LINEAR;
+        info.minFilter = VK_FILTER_LINEAR;
+        info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        info.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        info.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        info.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        info.maxLod = VK_LOD_CLAMP_NONE;
+        device.modernReflectionsSampler = GetSampler(device.core, info);
+    }
+    return device.modernReflectionsSampler;
+}
+
 // The views and samplers a draw's texture set holds, by LayoutKey::samplers bit.
 void TextureSetContents(Device &device, const Shader &vs, const Shader &ps, const DrawTextures &textures,
                         Device::TextureSetCache &out)
@@ -1510,6 +1550,13 @@ void TextureSetContents(Device &device, const Shader &vs, const Shader &ps, cons
             const Texture *ao = device.modernAo ? device.modernAo : device.whiteTexture;
             out.views[bit] = ImageSampleView(ao->image);
             out.samplers[bit] = SamplerFor(device, slot, nullptr); // read with texelFetch: any sampler
+            continue;
+        }
+        if (textures.modernReflections && bit == kModernReflectionsSampler)
+        {
+            out.views[bit] = ImageSampleView(device.modernReflections ? device.modernReflections
+                                                                       : device.clearTexture->image);
+            out.samplers[bit] = ModernReflectionsSampler(device);
             continue;
         }
         const Texture *bound = textures.bound[slot];
@@ -1869,6 +1916,12 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
     {
         textures.mask |= 1u << kModernAoSampler;
         textures.modernAo = true;
+    }
+    // And the reflections.
+    if (layout.key.samplers & ~textures.mask & (1u << kModernReflectionsSampler))
+    {
+        textures.mask |= 1u << kModernReflectionsSampler;
+        textures.modernReflections = true;
     }
     if (device.boundLayout != layout.pipeline)
     {
@@ -2964,6 +3017,12 @@ void SetModernAmbientOcclusion(Device *device, Texture *texture)
 {
     if (device)
         device->modernAo = texture;
+}
+
+void SetModernReflections(Device *device, Image *image)
+{
+    if (device)
+        device->modernReflections = image;
 }
 
 void SetModernLitStrengths(Device *device, float sun, float sky)

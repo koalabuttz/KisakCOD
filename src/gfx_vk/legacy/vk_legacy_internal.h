@@ -484,6 +484,7 @@ struct Device
     Buffer *zeroVertices = nullptr;
     Texture *nullTexture[3] = {}; // 2D, cube, volume (TextureKind order)
     Texture *whiteTexture = nullptr; // 1x1 2D, (1, 1, 1, 1): the Modern lit shaders' ambient occlusion when none
+    Texture *clearTexture = nullptr; // 1x1 2D, (0, 0, 0, 0): the Modern lit shaders' reflections when none
 
     // Present swaps the two textures; the surfaces keep their addresses.
     // With a multisampled back buffer (backBufferSamples over 1) it resolves
@@ -608,6 +609,11 @@ struct Device
     // SetModernAmbientOcclusion: what the Modern lit shaders read at
     // kModernAoSampler, the white texture when null.
     Texture *modernAo = nullptr;
+    // SetModernReflections: what the Modern lit shaders read at
+    // kModernReflectionsSampler, the clear texture when null; and the
+    // trilinear, edge-clamped sampler they read it with (made at first use).
+    Image *modernReflections = nullptr;
+    VkSampler modernReflectionsSampler = VK_NULL_HANDLE;
     bool dynamicStale = true;
     // Checks every shortcut a draw takes (these two, and uniform blocks kept
     // from an earlier draw) against the full work, and fails the device when
@@ -742,7 +748,8 @@ void ResetState(Device &device);
 // Pipelines (vk_legacy_draw.cpp), shared with the workers that build them
 // ahead. LayoutFor and GetLayout run on the device's thread.
 // linearShader: PipelineKey::linearShader (a Modern lit shader of ours also
-// reads the ambient occlusion, kModernAoSampler).
+// reads the ambient occlusion, kModernAoSampler, and the reflections,
+// kModernReflectionsSampler).
 LayoutKey LayoutFor(const Shader &vs, const Shader &ps, uint8_t linearShader = 0);
 Layout *GetLayout(Device &device, const LayoutKey &key);
 // The pixel module a pipeline of this key needs: the one the shader keeps, or

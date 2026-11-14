@@ -624,7 +624,7 @@ What ours computes (from the game shaders' maths, world-lit shader facts 1
 to 3 in the project files, 2026-11-13):
 
 * **albedo** = colour map (plus the detail map around grey, `d0`) times
-  vertex colour, each decoded from sRGB;
+  vertex colour, as the game has it (display values);
 * **sky** = the secondary lightmap's two halves combined as the game
   combines them (top plus bottom times N.D, with the flat normal or, `n0`,
   the normal map's slopes, which also scale the top: one baked light,
@@ -641,18 +641,32 @@ to 3 in the project files, 2026-11-13):
   game's diffuse colour, decoded: the specular map times the Fresnel
   (envMapParms) times (shadow times the sun's highlight, exponent from the
   gloss, times envMapParms.w, the sun's specular colour and the sun
-  strength, plus the reflection probe at LOD 6 - 8 gloss times its alpha);
-* **colour** = albedo times (sky times the sky strength plus sun times the
-  sun strength) plus specular, the sky (and the probe) also darkened by the
-  [ambient occlusion](#ambient-occlusion), then the fog
-  colour (decoded) blended over it in linear light by the vertex fog factor.
+  strength, plus the reflection probe at LOD 6 - 8 gloss times its alpha,
+  which on opaque surfaces of gloss over 0.3 gives way to the
+  [screen-space reflections](#screen-space-reflections) where they found
+  something);
+* **colour** = decode(albedo times the game's light, sky plus sun in
+  display values), shared out between the sky and the sun as their decoded
+  light is (sky / (sky + sun) of it to the sky), each share times its
+  strength, the sky's (and the probe) also darkened by the
+  [ambient occlusion](#ambient-occlusion), plus specular, then fogged. The
+  game blends the fog colour in display values by the vertex fog factor; a
+  blend in linear light lifts a dark colour far more (a dark barrel in
+  Crash's fog came out nearly twice Legacy's light, PC interiors run 1). So
+  the fog's share is the linear blend towards the decoded fog colour that
+  gives decode(the game's blend): (decode(blend) - decode(game colour)) /
+  (decode(fog) - decode(game colour)), per channel. With strengths 1 that is
+  the game's fogged colour; a colour the strengths (or AO) change is fogged
+  by the same share.
   `b0` premultiplies the albedo and fog colour by colour alpha times vertex
   alpha, which is the output alpha; `t0` keeps alpha 0.5 and over and writes
   black with alpha 0 elsewhere, as the game's shader does; then the alpha
   test of the render state.
 
-So with both strengths 1 every surface is as bright as the game's:
-decode(colour times light) is decode(colour) times decode(light). The game
+So with both strengths 1 every surface is as bright as the game's: its
+colour is the game's fogged colour decoded. Decoding the colour and the
+light apart and multiplying them would not be, as the sRGB curve is not a
+power. The game
 added its terms in display values, so in linear light a term's share
 depends on what it is added to: a single sun strength over decoded terms
 matched the game at 2.9 on Crash and 4.3 on Backlot (PC sun run 2), which
@@ -689,6 +703,8 @@ are.
 | Switch | Default |
 | --- | --- |
 | `KISAK_VK_MODERN_SHADERS=0` | our shaders on (with linear light and lit passes on) |
+| `KISAK_VK_MODERN_MODEL_SHADERS=0` | the models' (`lp_`) on too |
+| `KISAK_VK_MODERN_NO_SUN_SHADERS=0` | those without the sun (interiors) on too |
 | `KISAK_VK_MODERN_SUN_STRENGTH=<value>` | 1 (as bright as the game's) |
 | `KISAK_VK_MODERN_SKY_STRENGTH=<value>` | 1 |
 
@@ -708,6 +724,87 @@ opaque, blended and alpha-tested (kept and dropped), and as `lm_sun_r0c0n0`
 with a normal map tilted along the tangent; the expectations follow the
 game's formulas.
 `test_vulkan_d3d9_front.py` also runs it with `KISAK_VK_MODERN_SHADERS=0`.
+
+### Models: `lp_sun.frag`
+
+The models' sunlit family, `lp_[hsm_][i_]sun_<mode>c0[d0][n0][s0]` (code 0x80
+plus the same flags), is drawn with `lp_sun.frag` the same way: 16 builds,
+the mode a specialization constant. `i_` (instanced) shares the pixel shader
+and only changes the vertex shader. `skin_` and `flag_` names keep the game's
+shader: some of them have pixel shaders of their own that model-lit shader
+facts (project files, 2026-11-13) did not read; so does `sm_`, which compares
+the shadow map in the shader.
+
+The game's model shader is the world's with the lighting volume in place of
+the lightmaps, so ours differs from `lm_sun.frag` only there:
+
+* **reads** the lighting volume (a 3D image) at s4 and lightingLookupScale
+  at c5, and texcoord 6 (the model's volume coordinate). Everything after
+  them moves one on: the shadow map at s5, the material's maps from s5 (s6
+  with the shadow map), envMapParms at c6, detailScale at c6 (c7 with
+  `s0`). The probe is the only custom sampler.
+* **sky** = the volume's colour, doubled as the game doubles it, then
+  decoded. The volume is sampled where the normal (with `n0` the mapped
+  one) points: the coordinate plus the normal times lightingLookupScale
+  over the normal's largest component.
+* **sun**: the shadow is the volume's alpha (the sun's visibility there).
+  With `hsm_` the shadow map's taps are always taken (there is no primary
+  lightmap to skip them), and the far partition's edge fades to the
+  volume's alpha.
+* **`b0`**: the normal map's slopes are scaled by the alpha, and the
+  specular is masked by how much colour the specular map has (any channel
+  over a tenth is whole) times the vertex alpha. That mask scales the
+  gloss and envMapParms, and the vertex alpha scales the specular colour.
+  The world's `b0` does the same (the slopes also turn the lightmap's
+  light).
+
+`KISAK_VK_MODERN_MODEL_SHADERS=0` keeps the models on the game's shaders
+while the world uses ours.
+
+**Checks:** the `modern_lit_models` scene draws a stand-in for
+`lp_hsm_sun_r0c0d0n0s0` as `lp_sun_r0c0` (sunlit by the volume's alpha,
+then half fog), `lp_hsm_sun_r0c0` (lit, shaded), the `d0n0s0` variant opaque,
+blended and alpha-tested, and `lp_sun_r0c0n0` with a tilted normal. Its
+volume is 1x1x2, black in the first slice. Only a lookup that moves along
+the normal by lightingLookupScale reaches the grey second slice.
+`test_vulkan_d3d9_front.py` also runs it with
+`KISAK_VK_MODERN_MODEL_SHADERS=0`.
+
+### Without the sun: interiors
+
+Surfaces with no primary light, `lm_<mode>c0[d0][n0][s0]` (code 0xc0 plus
+the map and mode flags) and `lp_[i_]<mode>c0[d0][n0][s0]` (0xc1: the bit
+the sun families use for the shadow map says model here, since this family
+has none), are drawn with the same two sources built without the sun
+(`LM_SUN_LIGHT=0`, `LP_SUN_LIGHT=0`; 8 builds each). The game's shaders for
+them are its sun shaders with the sun taken out (lit shader facts 5, project
+files, 2026-11-13):
+
+* **the world** reads only the secondary lightmap: no primary lightmap (s2),
+  sun (c17, c18, c19) or shadow map; the maps start at s4 as in
+  `lm_sun_`. With `n0` the normal map turns only the lightmap's light, so
+  the world normal and the tangent frame (texcoords 2 and 3, which the
+  game's vertex shader then does not write) are read only with `s0`.
+* **models** read only the lighting volume's light, doubled; its alpha is
+  unused. The volume is still sampled where the (mapped) normal points.
+* **specular** is the probe's reflection alone: specular colour * Fresnel
+  * probe; gloss only picks the probe's mip.
+* The pixel constants end at c0 (the world), c5 (models), envMapParms or
+  detailScale, so the adapter's fit check counts them by family.
+
+Their shader model 2 builds keep the game's shader: the world's reads the
+lightmap's UV from another texcoord. `lp_skin_` with `s0` has a pixel shader
+of its own and keeps the game's; `lp_flag_t0...` shares `lp_t0...`'s but is
+left with `skin_` for now. `KISAK_VK_MODERN_NO_SUN_SHADERS=0` keeps these
+surfaces on the game's shaders; `KISAK_VK_MODERN_MODEL_SHADERS=0` keeps
+models without the sun on them too.
+
+**Checks:** the `modern_lit_no_sun` scene draws the world's and the models'
+stand-ins as `lm_r0c0` and `lp_r0c0` (and half fog), `lm_r0c0d0n0s0` opaque
+and blended, `lm_r0c0n0` with a tilted normal map and `lp_r0c0d0n0s0`, with
+the sun's constants, a white primary lightmap and the volume's alpha all
+set: none of them may light anything. `test_vulkan_d3d9_front.py` also runs
+it with `KISAK_VK_MODERN_NO_SUN_SHADERS=0`.
 
 ## Normals buffer
 
@@ -770,7 +867,7 @@ pass of 9 depth reads per pixel.
 
 | Setting | Default | Switch |
 | --- | --- | --- |
-| Normals buffer | built only when something reads it: ambient occlusion (on with our lit shaders), screen-space reflections, or the debug view below | `KISAK_VK_MODERN_NORMALS=1` builds it (and turns the prepass on) with nothing reading it, to measure the cost; `KISAK_VK_MODERN_NORMALS=0` never builds it |
+| Normals buffer | built only when something reads it: ambient occlusion (on with our lit shaders), screen-space reflections (also on with our lit shaders), or the debug view below | `KISAK_VK_MODERN_NORMALS=1` builds it (and turns the prepass on) with nothing reading it, to measure the cost; `KISAK_VK_MODERN_NORMALS=0` never builds it |
 | Debug view | off | `KISAK_VK_MODERN_DEBUG=normals` draws the buffer over the finished scene (after the tonemap): red faces right, green up, blue away; a wall seen head on is (128, 128, 0); the sky is left as it is |
 
 The statistics line: `vulkan d3d9: modern: N scenes with a normals buffer
@@ -826,7 +923,13 @@ timed as "modern ao"):
    pixels whose normal is a guess (the normals buffer marks a strip a pixel
    or two wide, whose neighbours are all on other surfaces), and surfaces
    seen nearly edge on (the effect fades out as the normal turns across the
-   view, from 5 to 1 degrees of the surface to the view ray). It writes an
+   view: on walls from about 12 degrees of the surface to the view ray, on
+   floors and ceilings from 5, down to 1). On a wall seen side-on a corner's
+   shading is squeezed into a few pixels and reads as a dark line: PC AO
+   run 4 found one down the crash-in arch edge with the fade at 5 degrees.
+   Ground seen from far off is always at a shallow angle, so floors keep the
+   5 degrees and their contact shadows. World up comes from the view
+   matrix. It writes an
    `R16_SFLOAT` image. The
    value is left unclamped: a single slice of an open surface seen at an angle
    gives more than 1 or less, and only the average over the slices is 1.
@@ -861,11 +964,15 @@ shader for yet) are not darkened.
 | Ambient occlusion | on with our lit shaders (linear light, lit inputs and our shaders on); it turns the normals buffer and the prepass on | `KISAK_VK_MODERN_AO=0` turns it off (our shaders read white); `KISAK_VK_MODERN_AO=1` builds it even with nothing reading it, to measure the cost |
 | Radius | 48 world units (a little over a metre; a player is 70 tall) | `KISAK_VK_MODERN_AO_RADIUS=<units>` |
 | Thickness | 8 world units: how far behind a sample's surface it is taken to reach | `KISAK_VK_MODERN_AO_THICKNESS=<units>`: less keeps thin things from darkening what is behind them but weakens contact shadows; 1000 behaves as plain GTAO (everything below the horizon hidden) |
+| Walls seen side-on | on walls the effect is whole from \|N.V\| 0.2 (about 12 degrees of the surface to the view ray) and fades out below it, to none at 0.02; floors and ceilings fade from 0.08, sloped faces in between | `KISAK_VK_MODERN_AO_GRAZING=<0 to 1>` sets the walls' figure: 0.08 treats walls as floors (as before PC AO run 4, with its dark line down the crash-in arch edge) |
 | Strength | power 2 (PC AO run 1: 1 read slightly weak, 2 about right in the shade; with the thickness, PC AO run 3 found 1.5 as weak as run 1's 1) | `KISAK_VK_MODERN_AO_POWER=<p>`: the visibility is raised to p (2 darkens, 1 lightens, 0 turns it off) |
+| Floor | 0.35: after the power the visibility is kept above it, through a soft knee from 0.45 down (lighter shading is unchanged). PC AO run 7: the crash-in arch line is a narrow slot between the pillar's side and the arch's inside face that went near black (0.13) and ended in a hard edge; ground contact shadows sit near 0.85 | `KISAK_VK_MODERN_AO_FLOOR=<0 to 1>`: 0 turns it off |
+| Blur edge | 0.08: the blur counts a tap half when its view depth is 8% of the pixel's away, so it keeps to each surface but runs across small depth steps. PC AO run 9: at 0.02 the crash-in arch slot ended in a one-pixel step; at 0.08 it ramps over four, with no halos and the ground unchanged | `KISAK_VK_MODERN_AO_EDGE=<share>`: 0.02 is the old, stricter blur; more lightens depth edges such as ceiling beams' |
 | Debug view | off | `KISAK_VK_MODERN_DEBUG=ao` draws the visibility as grey over the finished scene (after the tonemap): white open, darker in corners |
 
 The statistics line: `vulkan d3d9: modern: N scenes with ambient occlusion
-(radius R, thickness T, power P), X ms GPU each` (both passes).
+(radius R, thickness T, power P, floor F, edge E), X ms GPU each` (both
+passes).
 
 **Checks:** the D3D9 check's `modern_ao` scene draws a floor 120 units below
 a camera with the engine's 90-degree perspective, and a wall rising from it
@@ -898,9 +1005,8 @@ our shaders read white.
 The reflection probe CoD4's lit shaders add is one baked cube map per area:
 it does not show what is really next to a surface. Screen-space reflections
 (SSR) find what each pixel's surface would mirror among what the screen
-shows, so that our own lit shaders can use that in place of the probe where
-it is found. This first piece traces them and shows them in a debug view;
-nothing in the lighting reads them yet.
+shows, and our own lit shaders use that in place of the probe where it is
+found.
 
 **How a scene goes with it:**
 
@@ -943,15 +1049,28 @@ ray met nothing on the screen, met the sky, or met a surface from behind,
 where the normal is only a guess, and on a cut or the first scene (no last
 scene to read light from: no image at all then).
 
-**How the lighting will use it (agreed with the lit shaders' owners,
-2026-11-13):** a pipeline drawn by one of our lit shaders gets the image at
-pixel sampler 14 (a black, alpha 0 texture where the scene has none), and
-the shader mixes it into the reflection probe's light only, in the game's
-display values: `probe = mix(probe * specular occlusion, encode(ssr.rgb /
-ssr.a), ssr.a)`, at the level its gloss picks (`(6 - 8 gloss) / 6` of the
-way to the blurriest, as the game picks the probe's). The sun, its highlight
-and the lightmap are untouched. That step comes with the lit shaders' own
-pull requests.
+**How the lighting uses it (agreed with the lit shaders' owners,
+2026-11-13):** the back end hands the scene's image to the Legacy adapter
+(`lg::SetModernReflections`) from the depth hand-over until the scene is
+lit, null after. A pipeline drawn by one of our lit shaders
+(`PipelineKey::linearShader`) gets it at pixel sampler 14
+(`kModernReflectionsSampler`, in `LayoutFor`; ours is not built where the
+game's shader reads s14), read with a trilinear sampler clamped to the
+edge, and a 1x1 (0, 0, 0, 0) texture where the scene has none. `lm_sun.frag`
+with a specular map (`s0`) mixes it into the reflection probe's light only,
+in the game's display values: `probe = mix(probe * specular occlusion,
+encode(ssr.rgb / ssr.a), ssr.a)` (encode unclamped), at the level its gloss
+picks (`(6 - 8 gloss) / 6` of the way to the blurriest, as the game picks
+the probe's), on opaque surfaces only (a blended one is not in the prepass,
+so the reflections there belong to what is behind it). Rough surfaces keep
+the probe: the mix fades out below gloss 0.5 and is gone at 0.3. The
+reflections' blurriest level is only a few pixels wide, not the half of the
+world around the surface that the probe's blurriest level averages, so on a
+matte wall seen at a grazing angle they showed the one bright wall they hit
+at full strength (PC reflections run 3: a bright band on the Crash arcade's
+plaster pillar). The sun, its
+highlight and the lightmap are untouched, and so is the Fresnel and the
+specular map that scale the result.
 
 **Limits.** Only what the screen shows can be reflected: things off screen,
 behind the camera or hidden behind something else are not (the probe stays
@@ -970,7 +1089,7 @@ chain).
 
 | Setting | Default | Switch |
 | --- | --- | --- |
-| Reflections | traced only when something reads them: the debug view below for now; our lit shaders next. They need linear light (with `KISAK_VK_MODERN_LINEAR=0` they are not traced, logged once) and the normals buffer (`KISAK_VK_MODERN_NORMALS=0` turns them off too) | `KISAK_VK_MODERN_SSR=1` traces them (and turns the prepass and normals on) with nothing reading them, to measure the cost; `KISAK_VK_MODERN_SSR=0` never traces them |
+| Reflections | traced when something reads them: our lit shaders (on with linear light, lit inputs and our shaders), or the debug view below. They need linear light (with `KISAK_VK_MODERN_LINEAR=0` they are not traced, logged once) and the normals buffer (`KISAK_VK_MODERN_NORMALS=0` turns them off too) | `KISAK_VK_MODERN_SSR=1` traces them (and turns the prepass and normals on) with nothing reading them, to measure the cost; `KISAK_VK_MODERN_SSR=0` never traces them |
 | Longest ray | 2000 units | `KISAK_VK_MODERN_SSR_DISTANCE` |
 | Thickness | 16 units | `KISAK_VK_MODERN_SSR_THICKNESS` |
 | Steps | 32 | `KISAK_VK_MODERN_SSR_STEPS` (at most 256) |
@@ -986,11 +1105,22 @@ and a red wall over the right half facing the camera, through the prepass
 as the engine does, twice (the first a cut). The first has no reflections;
 in the second, with `KISAK_VK_MODERN_DEBUG=reflections`, the floor in front
 of the wall shows the wall's red, the floor on the left (whose rays meet
-only the sky) and the wall (whose rays come back at the camera) show black.
-`test_vulkan_d3d9_front.py` runs it with the debug view, with
-`KISAK_VK_MODERN_SSR=1`, and with the debug view beside
+only the sky) and the wall (whose rays come back at the camera) show black. Without the debug
+view it draws the scene three times more with the floor as `lm_sun_r0c0s0` (the
+`modern_lit_shader` stand-in): black colour map, lightmaps, probe and sun,
+and a white specular map of gloss 1 with Fresnel 1, seen from straight
+above. In the second, our shader shows the wall's red (199, 40, 40) where
+the reflections found it and black elsewhere; black everywhere with
+`KISAK_VK_MODERN_SSR=0`, and the stand-in's black without our shaders. The
+third (not a cut) has a specular map of gloss 0: that floor keeps its black
+probe, near black (the anti-aliasing keeps a trace of the red before it).
+`test_vulkan_d3d9_front.py` runs it as it is, with the debug view, with
+`KISAK_VK_MODERN_SSR=1` (also beside `KISAK_VK_MODERN_SHADERS=0`), with
+`KISAK_VK_MODERN_SSR=0`, `KISAK_VK_MODERN_LIT=0` and
+`KISAK_VK_MODERN_SHADERS=0`, and with the debug view beside
 `KISAK_VK_MODERN_LINEAR=0`, `KISAK_VK_MODERN_SSR=0` and
-`KISAK_VK_MODERN_NORMALS=0`, and checks that a full run traces none.
+`KISAK_VK_MODERN_NORMALS=0`, and checks that a full run traces 3 scenes
+(none with our lit shaders off).
 
 ## Next
 
