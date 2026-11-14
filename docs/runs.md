@@ -240,6 +240,89 @@ stand-in game (`tests/runs/fake_game.cpp`) and a made-up power-supply folder:
 the scene steps, every check above, the pause and the resume, and a tampered
 results file. The driver has met the real client on no machine yet.
 
+## A Windows run from one recipe: `pc_run.py`
+
+`scripts/runs/pc_run.py` runs a picture or frame-rate run of the game from one
+recipe and nobody at the screen. It was written for the Windows PC, where every
+launch used to be driven by hand, and it needs only the standard library, so
+the PC's own Python runs it; it runs on Linux too.
+
+Each launch plays its own scene with the client's timed commands (`run_atMap`,
+"Runs that play themselves" above; a build older than that has no such
+setting and runs nothing). The game takes its screenshots by name
+(`screenshot crash-in-B` writes `screenshots/crash-in-B.tga`) and quits by
+itself; a launch that hangs is ended after its `timeout`. Then the runner
+works out the numbers run steps keep asking for:
+
+- per launch: status and exit code, the frame log lines and the wanted log
+  lines verbatim, which named screenshots are missing;
+- per screenshot: mean R, G, B of the whole picture and of each named region;
+- per comparison `a` against `b`: the mean difference (a pixel's difference
+  is its largest channel difference), the mean signed difference, the share of
+  pixels that differ by more than each of `levels`, and boxes around the areas
+  that changed most; and three PNGs: the pair side by side at half size, the
+  difference x4 over black, and a full-size crop of both around the biggest
+  change.
+
+```
+python pc_run.py recipe.json --out C:\kisak\runs\ao-10            run it
+python pc_run.py recipe.json --out ... --dry-run                     print the launches
+python pc_run.py recipe.json --out ... --resume                      skip launches that passed
+python pc_run.py recipe.json --out ... --pictures-only               redo the numbers
+```
+
+A recipe (format `kisak-pc-run/1`, the whole description is at the top of the
+script):
+
+```json
+{
+  "format": "kisak-pc-run/1",
+  "id": "pc-ao-run-10",
+  "title": "AO, crash-in, without and with",
+  "game": {
+    "exe": "C:/kisak/builds/b204c3a-vk/KisakCOD-mp.exe",
+    "cwd": "C:/kisak/builds/b204c3a-vk",
+    "args": ["+set", "r_fullscreen", "1", "+set", "r_mode", "1280x720", "+set", "snd_volume", "0",
+             "+set", "logfile", "2", "+set", "r_backend", "vulkan", "+set", "r_visuals", "modern"],
+    "env": {"KISAK_VK_MODERN_EXPOSURE": "0"},
+    "clear_env": ["KISAK_VK_*"],
+    "home_template": "C:/kisak/homes/template",
+    "timeout": 300,
+    "forbid_processes": ["steam.exe"]
+  },
+  "launches": [
+    {"name": "crash-in-B", "env": {"KISAK_VK_MODERN_AO": "0"}, "args": ["+devmap", "mp_crash"],
+     "at_map": ["5 setviewpos 30 -10 200 140", "10 framelog 10 crash-in-B", "21 screenshot crash-in-B", "23 quit"]},
+    {"name": "crash-in-A", "args": ["+devmap", "mp_crash"],
+     "at_map": ["5 setviewpos 30 -10 200 140", "10 framelog 10 crash-in-A", "21 screenshot crash-in-A", "23 quit"]}
+  ],
+  "lines": ["modern:", "device destroyed after", "refused", "unsupported", "could not", "failed"],
+  "pictures": {"regions": {"arch": [455, 300, 505, 400]}, "levels": [2, 16],
+               "compare": [{"a": "crash-in-B", "b": "crash-in-A"}]}
+}
+```
+
+- `home_template` is copied for every launch and given as `fs_homepath`, so
+  each launch starts from the same home and its log and screenshots are its
+  own (they are found under that home afterwards).
+- `at_map` gets a safety `run_quitAfterMap` 30 s after its last command.
+- `forbid_processes`, and another copy of the game, are checked before and
+  after each launch; a launch waits up to 2 minutes for them to end and is
+  marked `blocked` otherwise.
+- It writes `results.json` (checksummed as perf_run.py's results are),
+  `report.md`, the logs and screenshots per launch, and `pictures/`. Game
+  pictures and logs stay on the machine; the report and results.json cross.
+- A file named `PAUSE` in the output folder stops the run before the next
+  launch; `--resume` goes on.
+
+`scripts/tests/test_pc_run.py` checks it on the host against a stand-in game
+(`tests/runs/fake_pc_game.py`) that writes plain and RLE TGAs, bottom row first:
+the command line, the recipe checks, the collected lines and screenshots, the
+picture numbers against values worked out by hand, the PNGs, the checksum, a
+failing and a hanging launch, and `--resume`. Not yet run against the real
+game; whether `screenshot` works under `r_backend vulkan` on Windows is the
+first thing its first run shows.
+
 ## Menus without a person: `menu_check.py`
 
 `scripts/runs/menu_check.py` clicks through the multiplayer menus of the native
