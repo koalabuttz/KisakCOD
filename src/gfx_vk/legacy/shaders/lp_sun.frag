@@ -366,7 +366,11 @@ void main()
 #else
         const float fade = ramp * spotFactors.w;
 #endif
-        shadow = mix(volume.a, SpotShadowTaps(shadowUv, reference, pc.c[CONSTANT_PIXEL_ADJUST]), fade);
+        // With no shadow map for the light (spot shadows off) the game
+        // sets the fade to 0 and binds none: the taps are left out, as the
+        // game's D3D9 shader's 0 * anything is 0, whatever the lookup holds.
+        if (fade > 0.0)
+            shadow = mix(volume.a, SpotShadowTaps(shadowUv, reference, pc.c[CONSTANT_PIXEL_ADJUST]), fade);
     }
 #endif
     const vec3 visibility = shadow * attenuation * cone;
