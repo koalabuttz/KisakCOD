@@ -31,6 +31,7 @@ CHECKS = [
     'test_ci_apt_install.py',
     'test_ci_each_config.py',
     'test_changed_units.py',
+    'test_openal_msvc_ranges.py',
 ]
 NATIVE = ['run_linux_checks.py', '--build-dir', 'build-linux', '--binary', 'bin/KisakCOD-dedi']
 

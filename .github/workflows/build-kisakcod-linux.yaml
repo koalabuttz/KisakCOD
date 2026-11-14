@@ -355,6 +355,7 @@ jobs:
           python3 scripts/tests/test_menu_check.py
           python3 scripts/tests/test_vita3k_runner.py
           python3 scripts/tests/test_changed_units.py
+          python3 scripts/tests/test_openal_msvc_ranges.py
           python3 scripts/tests/test_float_int_rounding.py
           python3 scripts/tests/test_retail_float_int_scan.py
           python3 scripts/tests/test_openal_sound_formats.py
