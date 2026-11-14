@@ -52,6 +52,7 @@ void CL_UpdateSound();
 #include "r_state.h"
 #include "r_utils.h"
 #include "r_draw_sunshadow.h"
+#include <linux/sys_perf.h>
 
 //struct GfxScene scene      859c8280     gfx_d3d : r_scene.obj
 GfxViewParms lockPvsViewParms;
@@ -2521,6 +2522,7 @@ void R_GenerateSortedDrawSurfs(
     R_FilterEntitiesIntoCells(cameraCellIndex);
     {
         PROF_SCOPED("R_AddWorldSurfacesDpvs");
+        SysPerfScope perfScope(SYS_PERF_PROBE_SCENE_CELLS);
         R_AddWorldSurfacesDpvs(viewParmsDpvs, cameraCellIndex);
     }
     R_BeginAllStaticModelLighting();
@@ -2535,6 +2537,7 @@ void R_GenerateSortedDrawSurfs(
     R_WaitWorkerCmdsOfType(WRKCMD_DPVS_CELL_STATIC);
     {
         PROF_SCOPED("bsp surfaces");
+        SysPerfScope perfScope(SYS_PERF_PROBE_SCENE_WORLD);
         if (gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD)
         {
             R_AddAllBspDrawSurfacesCamera();
@@ -2567,7 +2570,10 @@ void R_GenerateSortedDrawSurfs(
         }
         R_AddAllBspDrawSurfacesCameraNonlit(rgp.world->dpvs.emissiveSurfsBegin, rgp.world->dpvs.emissiveSurfsEnd, 9u);
     }
-    R_AddAllStaticModelSurfacesCamera();
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_SCENE_STATIC_MODELS);
+        R_AddAllStaticModelSurfacesCamera();
+    }
     {
         PROF_SCOPED("DynEntPieces_AddDrawSurfs");
         DynEntPieces_AddDrawSurfs();
@@ -2612,7 +2618,10 @@ void R_GenerateSortedDrawSurfs(
     R_WaitWorkerCmdsOfType(WRKCMD_DPVS_ENTITY);
     R_WaitWorkerCmdsOfType(WRKCMD_SPOT_SHADOW_ENT);
     KISAK_NULLSUB();
-    R_DrawAllSceneEnt(viewInfo);
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_SCENE_ENTITIES);
+        R_DrawAllSceneEnt(viewInfo);
+    }
     R_WaitWorkerCmdsOfType(WRKCMD_SKIN_ENT_DELAYED);
     sceneEntCmd.viewInfo = viewInfo;
     R_AddWorkerCmd(WRKCMD_ADD_SCENE_ENT, (uint8_t *)&sceneEntCmd);
@@ -2662,7 +2671,10 @@ void R_GenerateSortedDrawSurfs(
     viewOrigin[3] = viewParmsDraw->origin[3];
     litInfo->cameraView = 1;
     firstDrawSurfCount = frontEndDataOut->drawSurfCount;
-    R_MergeAndEmitDrawSurfLists(DRAW_SURF_CAMERA_LIT_BEGIN, 3);
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_SCENE_MERGE);
+        R_MergeAndEmitDrawSurfLists(DRAW_SURF_CAMERA_LIT_BEGIN, 3);
+    }
     litInfo->drawSurfs = &frontEndDataOut->drawSurfs[firstDrawSurfCount];
     litInfo->drawSurfCount = frontEndDataOut->drawSurfCount - firstDrawSurfCount;
     pointLightCount = 0;
@@ -2692,7 +2704,10 @@ void R_GenerateSortedDrawSurfs(
             R_GenerateMarkVertsForDynamicModels();
     }
     KISAK_NULLSUB();
-    R_SortDrawSurfs(scene.drawSurfs[6], scene.drawSurfCount[6]);
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_SCENE_MERGE);
+        R_SortDrawSurfs(scene.drawSurfs[6], scene.drawSurfCount[6]);
+    }
     decalInfo = &viewInfo->decalInfo;
     R_InitDrawSurfListInfo(&viewInfo->decalInfo);
     decalInfo->baseTechType = gfxDrawMethod.baseTechType;
@@ -2703,12 +2718,18 @@ void R_GenerateSortedDrawSurfs(
     decalInfo->viewOrigin[3] = viewParmsDraw->origin[3];
     decalInfo->cameraView = 1;
     firstDrawSurfCount = frontEndDataOut->drawSurfCount;
-    R_MergeAndEmitDrawSurfLists(DRAW_SURF_BSP_CAMERA_DECAL, 6);
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_SCENE_MERGE);
+        R_MergeAndEmitDrawSurfLists(DRAW_SURF_BSP_CAMERA_DECAL, 6);
+    }
     decalInfo->drawSurfs = &frontEndDataOut->drawSurfs[firstDrawSurfCount];
     decalInfo->drawSurfCount = frontEndDataOut->drawSurfCount - firstDrawSurfCount;
     R_WaitWorkerCmdsOfType(WRKCMD_GENERATE_FX_VERTS);
     KISAK_NULLSUB();
-    R_SortDrawSurfs(scene.drawSurfs[DRAW_SURF_FX_CAMERA_EMISSIVE], scene.drawSurfCount[DRAW_SURF_FX_CAMERA_EMISSIVE]);
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_SCENE_MERGE);
+        R_SortDrawSurfs(scene.drawSurfs[DRAW_SURF_FX_CAMERA_EMISSIVE], scene.drawSurfCount[DRAW_SURF_FX_CAMERA_EMISSIVE]);
+    }
     emissiveInfo = &viewInfo->emissiveInfo;
     R_InitDrawSurfListInfo(&viewInfo->emissiveInfo);
     EmissiveTechnique = R_GetEmissiveTechnique(viewInfo, gfxDrawMethod.emissiveTechType);
@@ -2725,7 +2746,10 @@ void R_GenerateSortedDrawSurfs(
         emissiveInfo->light = &viewInfo->emissiveSpotLight;
     }
     firstDrawSurfCount = frontEndDataOut->drawSurfCount;
-    R_MergeAndEmitDrawSurfLists(DRAW_SURF_CAMERA_EMISSIVE_BEGIN, 6);
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_SCENE_MERGE);
+        R_MergeAndEmitDrawSurfLists(DRAW_SURF_CAMERA_EMISSIVE_BEGIN, 6);
+    }
     emissiveInfo->drawSurfs = &frontEndDataOut->drawSurfs[firstDrawSurfCount];
     emissiveInfo->drawSurfCount = frontEndDataOut->drawSurfCount - firstDrawSurfCount;
     if (!viewInfo->needsFloatZ)

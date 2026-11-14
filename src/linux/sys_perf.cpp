@@ -31,8 +31,8 @@
 // The game's side of the A/B measuring in sys_perf_core.h: the commands, the
 // clock, and where the counters and readings come from on this machine.
 //
-//   perf_ab "<commands A>" "<commands B>" [seconds] [rounds] [settle seconds]
-//   perf_sample [seconds] [windows] [settle seconds]
+//   perf_ab "<commands A>" "<commands B>" [seconds] [rounds] [settle seconds] [timed rows]
+//   perf_sample [seconds] [windows] [settle seconds] [timed rows]
 //   perf_stop
 //
 // Everything is read from the main thread between frames: CPU time from the
@@ -261,6 +261,17 @@ namespace
                     "rigid skinned models", "skinned models", "code meshes", "marks", "particle clouds"};
                 return std::string("render: tess ") + kTess[probe - SYS_PERF_PROBE_RENDER_TESS];
             }
+            if (probe >= SYS_PERF_PROBE_WORK_MAIN)
+            {
+                const bool main = probe < SYS_PERF_PROBE_WORK_OTHER;
+                const uint32_t type =
+                    (uint32_t)(probe - (main ? SYS_PERF_PROBE_WORK_MAIN : SYS_PERF_PROBE_WORK_OTHER));
+                const size_t named = sizeof(s_workerTypeNames) / sizeof(s_workerTypeNames[0]);
+                return NumberedName(main ? "main thread runs:" : "other threads run:",
+                                    type < named ? s_workerTypeNames[type] : nullptr, type);
+            }
+            if (probe == SYS_PERF_PROBE_WORKERS_AWAKE)
+                return "workers: awake";
             if (probe >= SYS_PERF_PROBE_WAIT_WORKER_TYPE)
             {
                 const uint32_t type = (uint32_t)(probe - SYS_PERF_PROBE_WAIT_WORKER_TYPE);
@@ -284,6 +295,21 @@ namespace
             case SYS_PERF_PROBE_HUD_COMPASS: return "hud: compass";
             case SYS_PERF_PROBE_HUD_SCOREBOARD: return "hud: scoreboard";
             case SYS_PERF_PROBE_UI_EXPRESSIONS: return "menu expressions";
+            case SYS_PERF_PROBE_CLIENT_FRAME: return "client: frame";
+            case SYS_PERF_PROBE_CLIENT_SCREEN: return "client: screen";
+            case SYS_PERF_PROBE_CLIENT_SNAPSHOTS: return "client: snapshots";
+            case SYS_PERF_PROBE_CLIENT_ENTITIES: return "client: entities";
+            case SYS_PERF_PROBE_CLIENT_PREDICT: return "client: input and prediction";
+            case SYS_PERF_PROBE_CLIENT_VIEW: return "client: view and weapon";
+            case SYS_PERF_PROBE_CLIENT_SCENE: return "client: scene";
+            case SYS_PERF_PROBE_CLIENT_SOUND: return "client: sound";
+            case SYS_PERF_PROBE_CLIENT_2D: return "client: 2d";
+            case SYS_PERF_PROBE_CLIENT_HAND_OVER: return "client: hand over the frame";
+            case SYS_PERF_PROBE_SCENE_CELLS: return "scene: cells";
+            case SYS_PERF_PROBE_SCENE_WORLD: return "scene: world surfaces";
+            case SYS_PERF_PROBE_SCENE_STATIC_MODELS: return "scene: static models";
+            case SYS_PERF_PROBE_SCENE_ENTITIES: return "scene: entities";
+            case SYS_PERF_PROBE_SCENE_MERGE: return "scene: sorted lists";
             case SYS_PERF_PROBE_RENDER_3D: return "render: 3d";
             case SYS_PERF_PROBE_RENDER_DEPTH: return "render: depth pass";
             case SYS_PERF_PROBE_RENDER_LIT: return "render: lit";
@@ -358,7 +384,8 @@ namespace
         if (Cmd_Argc() < 3)
         {
             Com_Printf(CON_CHANNEL_SYSTEM,
-                "usage: perf_ab \"<commands A>\" \"<commands B>\" [seconds 10] [rounds 4] [settle seconds 2]\n"
+                "usage: perf_ab \"<commands A>\" \"<commands B>\" [seconds 10] [rounds 4] [settle seconds 2]"
+                " [timed rows 16]\n"
                 "Measures frame time, CPU time and power in windows that alternate A B B A.\n");
             return;
         }
@@ -368,6 +395,7 @@ namespace
         config.sampleSeconds = ArgSeconds(3, 10.0);
         config.rounds = ArgCount(4, 4);
         config.settleSeconds = ArgSeconds(5, 2.0);
+        config.probeRows = (size_t)ArgCount(6, (int)config.probeRows);
         StartRun(config);
     }
 
@@ -378,6 +406,7 @@ namespace
         config.sampleSeconds = ArgSeconds(1, 10.0);
         config.rounds = ArgCount(2, 1);
         config.settleSeconds = ArgSeconds(3, 1.0);
+        config.probeRows = (size_t)ArgCount(4, (int)config.probeRows);
         StartRun(config);
     }
 

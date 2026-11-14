@@ -25,6 +25,9 @@ perf_stop
 - `perf_sample 20 3` measures three windows of 20 s without changing anything.
 - Defaults: 10 s windows, 4 rounds for `perf_ab` and 1 window for
   `perf_sample`, 2 s (`perf_ab`) or 1 s (`perf_sample`) to settle.
+- A last number after the settle time is how many timed pieces a window
+  lists (16 by default): `perf_sample 15 2 1 48` lists the 48 with the most
+  time, sixteen to a line.
 - A run leaves the last window's variant applied. With an even number of
   rounds that is A.
 
@@ -66,7 +69,8 @@ perf: done
   below). Threads of one name are
   added up.
 - **timed** lists pieces of the frame that are timed while a run is active,
-  the sixteen with the most time: per frame, calls per frame, and the longest
+  the sixteen with the most time (or as many as the command's last number
+  asks for, sixteen to a line): per frame, calls per frame, and the longest
   single call of the window.
   - `server frame`: one frame of a server (20 a second) with its sends. Its
     time per server frame is its ms/frame divided by its calls/frame.
@@ -89,6 +93,33 @@ perf: done
   - `menu expressions`: `EvaluateExpression`, every menu expression
     (`visible when`, `exp text` and the like), in the HUD or in any other
     menu.
+  - `client: <part>`: the main thread's client frame (multiplayer client).
+    `frame` is `CL_Frame` (packets in and out). `screen` is
+    `SCR_UpdateScreen` and holds the others and `hud`: `snapshots`
+    (`CG_ProcessSnapshots`), `entities` (`CG_AddPacketEntities`, every
+    entity of the snapshot), `input and prediction` (`CL_Input`,
+    `CG_PredictPlayerState`), `view and weapon` (the view's values, the view
+    weapon, the player's own entity), `scene` (`CG_DrawActive`:
+    `R_RenderScene` with its waits for workers), `sound` (`CL_UpdateSound`,
+    inside `scene` in a map), `2d` (menus over the game, the console) and
+    `hand over the frame` (`R_EndFrame` and `R_IssueRenderCommands`, which
+    holds `wait for the render thread`).
+  - `scene: <part>`: the main thread's own parts of the scene, inside
+    `client: scene`: `cells` (`R_AddWorldSurfacesDpvs`: the visible cells,
+    handed to the workers), `world surfaces` (the world's surfaces added and
+    the sun shadow's maps set up), `static models`
+    (`R_AddAllStaticModelSurfacesCamera`), `entities`
+    (`R_DrawAllSceneEnt`) and `sorted lists`
+    (`R_MergeAndEmitDrawSurfLists`, `R_SortDrawSurfs`).
+  - `workers: awake`: a worker thread from waking to its next sleep, both
+    workers added up. Its calls are wake-ups; a wake-up that finds no
+    command still counts.
+  - `main thread runs: <type>` and `other threads run: <type>`: worker
+    commands of that type as they run (`R_ProcessWorkerCmdInternal`), by who
+    ran them. The main thread runs commands while it waits, so its share is
+    inside its `wait for workers` time; the other threads are the two
+    workers and the render thread. A command that waits for commands of
+    another type holds their time too.
   - `wait for workers: <type>`: the main thread asleep until the worker
     threads finish the commands of that type; `all` is the wait for every
     front-end command before the frame is handed over, `other` any other.

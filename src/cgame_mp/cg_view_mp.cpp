@@ -21,6 +21,7 @@
 #include <gfx_d3d/r_workercmds_common.h>
 #include <universal/profile.h>
 #include <game_mp/g_main_mp.h>
+#include <linux/sys_perf.h>
 
 TestEffect s_testEffect[1];
 // One full-screen view, in fractions of the render target. The shellshock
@@ -1337,7 +1338,10 @@ int32_t CG_DrawActiveFrame(
     bgs = &cgameGlob->bgs;
     if (cgameGlob->snap)
         prevState = cgameGlob->snap->ps.pm_type;
-    CG_ProcessSnapshots(localClientNum);
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_CLIENT_SNAPSHOTS);
+        CG_ProcessSnapshots(localClientNum);
+    }
     if (cgameGlob->renderScreen)
     {
         if (cgameGlob->nextSnap && (cgameGlob->nextSnap->snapFlags & 2) == 0)
@@ -1391,10 +1395,13 @@ int32_t CG_DrawActiveFrame(
                 CG_ClearHudGrenades();
                 CG_UpdateEntInfo(localClientNum);
                 AimTarget_ClearTargetList(localClientNum);
-                if (CG_AddPacketEntities(localClientNum))
-                    viewlocked_entNum = cgameGlob->predictedPlayerState.viewlocked_entNum;
-                else
-                    viewlocked_entNum = ENTITYNUM_NONE;
+                {
+                    SysPerfScope perfScope(SYS_PERF_PROBE_CLIENT_ENTITIES);
+                    if (CG_AddPacketEntities(localClientNum))
+                        viewlocked_entNum = cgameGlob->predictedPlayerState.viewlocked_entNum;
+                    else
+                        viewlocked_entNum = ENTITYNUM_NONE;
+                }
                 if (!cgameGlob->predictedPlayerState.locationSelectionInfo
                     || (cgameGlob->predictedPlayerState.otherFlags & 2) != 0)
                 {
@@ -1423,10 +1430,15 @@ int32_t CG_DrawActiveFrame(
                     cgameGlob->kickAngles[2] = 0.0;
                 }
                 CL_SyncGpu(0);
-                CL_Input(localClientNum);
+                {
+                    SysPerfScope perfScope(SYS_PERF_PROBE_CLIENT_PREDICT);
+                    CL_Input(localClientNum);
+                    KISAK_NULLSUB();
+                    CG_PredictPlayerState(localClientNum);
+                }
                 KISAK_NULLSUB();
-                CG_PredictPlayerState(localClientNum);
-                KISAK_NULLSUB();
+                // Up to the scene: SYS_PERF_PROBE_CLIENT_VIEW.
+                const uint64_t viewStartNs = Sys_PerfProbesOn() ? Sys_PerfNowNs() : 0;
                 CG_UpdateViewWeaponAnim(localClientNum);
                 KISAK_NULLSUB();
                 CG_CalcViewValues(localClientNum);
@@ -1456,6 +1468,8 @@ int32_t CG_DrawActiveFrame(
                 }
                 if (viewlocked_entNum != ENTITYNUM_NONE)
                     CG_AddPacketEntity(localClientNum, viewlocked_entNum);
+                if (viewStartNs)
+                    Sys_PerfProbeAdd(SYS_PERF_PROBE_CLIENT_VIEW, Sys_PerfNowNs() - viewStartNs);
                 GetCeilingHeight(cgameGlob);
                 if (!localClientNum)
                     DumpAnims(0);
@@ -1496,7 +1510,10 @@ int32_t CG_DrawActiveFrame(
                         }
                     }
                 }
-                CG_DrawActive(localClientNum);
+                {
+                    SysPerfScope perfScope(SYS_PERF_PROBE_CLIENT_SCENE);
+                    CG_DrawActive(localClientNum);
+                }
                 iassert(bgs == &cgameGlob->bgs);
                 bgs = 0;
                 return 1;

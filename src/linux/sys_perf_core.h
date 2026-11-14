@@ -158,6 +158,7 @@ struct PerfConfig
     double gaugeSeconds = 0.25;        // time between gauge samples
     size_t threadRows = 8;             // busiest threads listed per window
     size_t probeRows = 16;             // probes with the most time listed per window
+    size_t probesPerLine = 16;         // a longer list goes on with further lines
     // Frames in which this probe ran are also reported apart from the others
     // (the server's 20 Hz frame on a listen server). -1 for none.
     int tickProbe = -1;
@@ -425,13 +426,17 @@ private:
 
     void PrintProbes(const PerfWindowResult &result)
     {
-        if (!result.probes.empty())
+        // A line stays well under what a console print holds (4 KB), so a
+        // long list is several lines, each with the same start.
+        const size_t rows = (std::min)(result.probes.size(), config_.probeRows);
+        const size_t perLine = (std::max)(config_.probesPerLine, (size_t)1);
+        for (size_t first = 0; first < rows; first += perLine)
         {
             std::string line = "perf:   timed, ms/frame (calls/frame, longest ms):";
-            for (size_t i = 0; i < result.probes.size() && i < config_.probeRows; ++i)
+            for (size_t i = first; i < rows && i < first + perLine; ++i)
             {
                 const PerfProbeResult &probe = result.probes[i];
-                Appendf(&line, "%s %s %.3f (%.2f, %.3f)", i ? "," : "", probe.name.c_str(), probe.msPerFrame,
+                Appendf(&line, "%s %s %.3f (%.2f, %.3f)", i > first ? "," : "", probe.name.c_str(), probe.msPerFrame,
                         probe.callsPerFrame, probe.maxMs);
             }
             host_->Print(line.c_str());
