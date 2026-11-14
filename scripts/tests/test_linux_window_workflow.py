@@ -851,6 +851,15 @@ class CiTriggerTests(unittest.TestCase):
         'src/gfx_gxm/legacy/gxm_legacy.cpp',
         'scripts/platform/vita/mp_client.cmake',
         'scripts/tests/test_vita_run_plan.py',
+        'scripts/tests/test_vita_run_list.py',
+        'scripts/tests/test_vita_bench.py',
+        'scripts/platform/vita/vita_bench_server.py',
+        'scripts/platform/vita/vita_pack_programs.py',
+        'scripts/tests/test_vita_program_pack.py',
+        'src/gfx_gxm/gxm_program_pack.h',
+        'tests/vita_gxm/program_pack_test.cpp',
+        'src/vita/vita_bench_client.h',
+        'tests/vita_client/bench_test.cpp',
         'scripts/ci/install-vitasdk.sh',
         'tests/vita_client/run_plan_test.cpp',
         'tests/vita_gxm/heap_test.cpp',
@@ -970,6 +979,7 @@ class CiTriggerTests(unittest.TestCase):
         self.assertEqual(uploads['vita_dedicated']['with']['path'], 'out/vita-RelWithDebInfo/KisakCOD-dedi.vpk')
         self.assertEqual(uploads['vita_mp_client']['with']['name'], 'KisakCOD-mp-vita-RelWithDebInfo')
         for name in ('out/vita-mp-RelWithDebInfo/KisakCOD-mp.vpk', 'out/vita-mp-RelWithDebInfo/KisakCOD-mp.elf',
+                     'out/vita-mp-RelWithDebInfo/KisakCOD-mp-test.vpk',
                      'out/vita-mp-RelWithDebInfo/KisakCOD-gxm-probe.vpk'):
             self.assertIn(name, uploads['vita_mp_client']['with']['path'])
         for upload in uploads.values():

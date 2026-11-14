@@ -53,6 +53,8 @@ struct DisplayDesc
 bool InitDisplay(const DisplayDesc &desc, std::string &error);
 void ShutdownDisplay();
 bool DisplayReady();
+// Whether a flip waits for the vertical blank, for a comparing run.
+void SetDisplayVsync(bool on);
 
 SceGxmContext *Context();
 SceGxmShaderPatcher *ShaderPatcher();

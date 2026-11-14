@@ -68,6 +68,9 @@ REFUSED = {
     "vs3_output_relative": "loop",
     "ps2x_dsx_predicate": "predicated",
     "vs2_loop": "loop",
+    "ps1_vita_coissue_reads_partner": "runs beside",
+    "ps1_vita_bump": "ps 1.x opcode 67",
+    "ps1_vita_model_4": "ps_1_4",
 }
 
 # Cases of this test alone. HLSL writes float4(v.xyz, 1) as a mad with a
@@ -82,11 +85,41 @@ VITA_CASES = {
                          "mad r2.xz, v0, c8.xxyy, c9.yyww\nmul r3.yw, c9, v0\nmad r4, r0, -c8.y, r0.wzyx\n"
                          "mad r5, v0, c9.yyww, c1\nadd r0, r0, r1\nadd r2, r2, r3\nadd r4, r4, r5\n"
                          "add o0, r0, r2\nmov o1, r4",
+    # The oldest pixel shader model, which the game's shader model 2 set
+    # draws its depth pass with: a texture instruction names one register,
+    # the colour is what r0 holds at the end, an instruction may run beside
+    # the one before it.
+    "ps1_vita_constant": "ps_1_1\nmov r0, c0",
+    "ps1_vita_texture": "ps_1_1\ntex t0\nmov r0, t0",
+    "ps1_vita_modulate": "ps_1_1\ndef c7, 0.25, 0.5, 0.75, 1\ntex t0\ntex t1\nmul r0.rgb, t0, v0\n"
+                         "+mov r0.a, t0.a\nmul_x2 r1, t1_bx2, c7\nlrp_sat r0.rgb, v1.a, r0, r1\n"
+                         "mad r0.a, t1.b, c1_comp.a, r0.a",
+    "ps1_vita_texcoord_kill": "ps_1_3\ntexcoord t0\ntexkill t1\ntex t2\ndp3_sat r1, t0_bx2, t2_bx2\n"
+                              "mul r0, r1, t2\ncnd r0, r0.a, r0, c2\nadd_d2 r0.rgb, r0, t0",
+    "ps1_vita_coissue_reads_partner": "ps_1_1\ntex t0\nmul r0.rgb, t0, v0\n+mov r0.a, r0.b",
+    "ps1_vita_coissue_other_lanes": "ps_1_1\ntex t0\nmov r0, t0\nmul r0.rgb, r0, v0\n+mul r0.a, r0.a, v0.a",
+    "ps1_vita_bump": "ps_1_1\ntex t0\ntexbem t1, t0\nmov r0, t1",
+    "ps1_vita_model_4": "ps_1_4\ntexld r0, t0",
 }
 
 # (case, extra tool arguments, text the program must contain, text the
 # reflection line must contain)
 CHECKS = [
+    ("ps1_vita_constant", [], "    oC0 = r0;\n", "constants=1 "),
+    ("ps1_vita_constant", ["--alpha", "5"], "if (!(a > ref)) discard;", "varyings= "),
+    ("ps1_vita_texture", [], "    r2 = tex2D(s0, (t0).xy);\n    r0 = r2;\n    oC0 = r0;\n",
+     "samplers=0:2d"),
+    ("ps1_vita_texture", [], "float4 in_TEXCOORD0 : TEXCOORD0", "varyings=TEXCOORD0"),
+    ("ps1_vita_modulate", [], "    r0.xyz = ((r2 * v0)).xyz;\n    r0.w = (r2.wwww).w;\n", "samplers=0:2d,1:2d"),
+    ("ps1_vita_modulate", [], "r1 = (((r3 * 2.0 - 1.0) * float4(0.25, 0.5, 0.75, 1.0)) * 2.0);",
+     "varyings=TEXCOORD0,TEXCOORD1,COLOR0,COLOR1"),
+    ("ps1_vita_modulate", [], "(1.0 - c[1].wwww)", "constants=2 "),
+    ("ps1_vita_texcoord_kill", [], "    r2.xyz = (saturate(t0)).xyz;\n    r2.w = (float4(1.0, 1.0, 1.0, 1.0)).w;\n",
+     "kills=1"),
+    ("ps1_vita_texcoord_kill", [], "if (t1.x < 0.0 || t1.y < 0.0 || t1.z < 0.0)", "samplers=2:2d"),
+    ("ps1_vita_texcoord_kill", [], "r0.xyz = (((r0 + r2) * 0.5)).xyz;", "varyings=TEXCOORD0,TEXCOORD1,TEXCOORD2"),
+    ("ps1_vita_coissue_other_lanes", [], "    r0.xyz = ((r0 * v0)).xyz;\n    r0.w = ((r0.wwww * v0.wwww)).w;\n",
+     "samplers=0:2d"),
     ("vs2_oT_oD_fog", ["--bgra", "2"], "float4 v1 = in_v1.zyxw;", "varyings=TEXCOORD0,COLOR0,FOG0"),
     ("vs2_oT_oD_fog", [], "float4 v1 = in_v1;", "constants=6"),
     ("vs2_oT_oD_fog", ["--absent", "2"], "float4 v1 = float4(0.0, 0.0, 0.0, 1.0);", "inputs=0:0.0,1:5.0"),

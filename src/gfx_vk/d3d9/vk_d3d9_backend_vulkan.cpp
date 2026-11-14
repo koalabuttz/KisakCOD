@@ -126,9 +126,11 @@ struct Backend
     bool shadersWanted = true;
     // Models' (lp_) shaders of ours, unless KISAK_VK_MODERN_MODEL_SHADERS=0;
     // those for surfaces without the sun (interiors), unless
-    // KISAK_VK_MODERN_NO_SUN_SHADERS=0.
+    // KISAK_VK_MODERN_NO_SUN_SHADERS=0; those for surfaces lit by a spot or
+    // omni light, unless KISAK_VK_MODERN_LIGHT_SHADERS=0.
     bool modelShadersWanted = true;
     bool noSunShadersWanted = true;
+    bool lightShadersWanted = true;
     float sunStrength = 1.0f;
     float skyStrength = 1.0f;
     uint64_t litShaderChanges = 0, litShaderChangesBase = 0;
@@ -440,6 +442,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     backend->shadersWanted = !EnvIsZero("KISAK_VK_MODERN_SHADERS");
     backend->modelShadersWanted = !EnvIsZero("KISAK_VK_MODERN_MODEL_SHADERS");
     backend->noSunShadersWanted = !EnvIsZero("KISAK_VK_MODERN_NO_SUN_SHADERS");
+    backend->lightShadersWanted = !EnvIsZero("KISAK_VK_MODERN_LIGHT_SHADERS");
     {
         const std::string sun = EnvText("KISAK_VK_MODERN_SUN_STRENGTH");
         const float sunValue = sun.empty() ? -1.0f : std::strtof(sun.c_str(), nullptr);
@@ -1228,9 +1231,10 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
 {
     if (!backend || !backend->legacy || !backend->litWanted)
         return;
-    uint8_t shader = inputs && backend->shadersWanted ? inputs->shader : uint8_t(lg::ModernLitNone);
+    uint16_t shader = inputs && backend->shadersWanted ? inputs->shader : uint16_t(lg::ModernLitNone);
     if ((lg::ModernLitModel(shader) && !backend->modelShadersWanted)
-        || (shader && !lg::ModernLitSun(shader) && !backend->noSunShadersWanted))
+        || ((shader & lg::ModernLitFamilyMask) == lg::ModernLitNoSun && !backend->noSunShadersWanted)
+        || (lg::ModernLitPointLight(shader) && !backend->lightShadersWanted))
         shader = lg::ModernLitNone;
     if (inputs && backend->linearScene && !backend->linearFailed)
     {

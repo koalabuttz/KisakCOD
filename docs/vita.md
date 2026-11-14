@@ -128,6 +128,7 @@ types. Cast and use `%u` or `%llu`; the same test reads `src/vita` and
 | `vita_statsEvery <s>` | The period of the load, memory, GPU memory and sound lines (60 by default). The lines also come the moment the menu or the map is up, and the period counts from there. |
 | `vita_atMenu "<s> <command> \| <s> <command>"` | Console commands to send that many seconds after the menu first showed. Read at start-up only. |
 | `vita_atMap "..."` | The same after the map was first in play. `{serverid}` in a command stands for the server id. Read at start-up only. |
+| `vita_atMenu "@<file>"`, `vita_atMap "@<file>"` | The same steps from a file in the data folder (`ux0:data/KisakCOD/<file>`), one `<s> <command>` a line, up to 32; blank lines and lines starting with `#` are left out, and a line may not hold a `\|`. The name is letters, digits, `.`, `_` and `-` only. The log says `Vita: vita_atMap from ux0:data/KisakCOD/<file>: N steps`. Read at start-up only. |
 | `vita_assertExit 1` | A failed assertion or an exception nothing caught ends the process with exit code 1 where it would stop for a core dump. Vita3K hangs on that stop and loses the log's tail. Off by default: a console's dump is worth keeping. |
 
 Every quit timer first prints all figures (`Vita: vita_quitAfterMenu 15
@@ -143,7 +144,8 @@ happened: `Vita: the menu is up`, `Vita: the map is up`, and with the map
 server named. After start-up it says what the start was asked to do, since it
 does not hold the command line (`Vita: run switches: vita_quitAfter 600,
 vita_quitAfterMenu 0, vita_quitAfterMap 30, vita_statsEvery 10,
-vita_assertExit 1`, then `Vita: vita_atMap "..."` when one is set).
+vita_assertExit 1`, then `Vita: vita_atMap "..."` when one is set, or the
+step file's name and step count).
 
 An exception nothing caught (a `std::bad_alloc` when the heap is spent) logs
 `Vita: ERROR: uncaught exception (std::bad_alloc); the process ends` and the
@@ -178,11 +180,232 @@ engine's note of the largest snapshot so far. A timed-command list that cannot b
 vita_atMap: part 2 ... does not start with a time in seconds`) and none of
 its commands is sent.
 
+A sweep that needs more than the command line holds goes in a step file:
+one start can try every switch at both views. `+set vita_atMap "@sweep.txt"`
+with `ux0:data/KisakCOD/sweep.txt`:
+
+    # team and class
+    3 cmd mr {serverid} 8 autoassign
+    8 cmd mr {serverid} 15 assault_mp,0
+    # facing the busy way, then without the world
+    30 setviewpos 1264 -1896 124 90 0
+    60 r_drawWorld 0
+    80 r_drawWorld 1
+
 `vita_atMenu` and `vita_atMap` are taken from the command line (`+set`) when
 the game starts and not read again. A game server sets a client's dvars by
 name, and what these two hold is run as console commands, so a value that
 arrives later, from a server or from the console, sends nothing. The same
 goes for the client's `vita_keyboardAnswer`.
+
+### A list of starts
+
+A console run compares several starts of one build, each with its own
+command line and its own marker files in the program folder. Done by hand
+every start costs a person an FTP round trip. With a list on the card one
+tap on the bubble runs them all: `ux0:data/KisakCOD/runlist-mp.txt` for the
+client (`runlist.txt` for the server), one start a line:
+
+    # name | markers, or - for none | command line
+    W1 | - | +devmap mp_crash +set vita_quitAfterMap 185 +set vita_atMap "@run-w.txt"
+    W2 | no-frame-overlap | +devmap mp_crash +set vita_quitAfterMap 185 +set vita_atMap "@run-w.txt"
+    W3 | no-vsync | +devmap mp_crash +set vita_quitAfterMap 185 +set vita_atMap "@run-w.txt"
+
+At start-up the program takes the next line and, before anything else:
+
+- writes the number of the start after it to `runlist-mp.at`, so a start
+  that faults is not run again by the next tap; with the last start the list
+  is renamed `runlist-mp.done.txt` and the next tap is an ordinary start;
+- leaves the program folder (`gxp`) with this start's markers and no other:
+  every empty file there without a dot in its name is removed, then the
+  line's markers are made;
+- writes its log to `console-mp-<name>.log` (the server: `console-<name>.log`);
+- takes the line's command line. An empty one means the command line file,
+  as in an ordinary start.
+
+When the start ends, by its quit timer or by an error that exits
+(`vita_assertExit 1`), the program starts itself again for the next line
+(`Vita: run list: starting again for start 2 of 3` is the log's last line).
+After the restart call the program waits up to 3 seconds to be taken away
+before it ends: Vita3K carries the restart out only when the program does
+not end itself straight after asking (PC run Z25).
+START + SELECT ends the start and the chain: the next line waits for the
+next tap. A fault ends the chain too. So give every line a quit timer and
+`vita_quitAfter` as the safety net.
+
+A start after which the list goes no further (its last start, or one ended
+by hand) removes every marker as it ends, so a list leaves the program
+folder without markers and the next ordinary start is the plain build
+(`Vita: run list: that was its last start; 1 markers removed`). Markers
+that were there before the list are gone with it: make them again by hand.
+A last start that faults cannot do this and leaves its markers.
+
+The log's second line says which start it is and what was done to the
+markers. A name is letters, digits, `.`, `_` and `-`; a marker lower-case
+letters, digits and `-`; up to 32 starts and 8 markers a start. A list with
+a line that cannot be read is left alone, the reason is logged and the start
+is an ordinary one. The reading is `src/vita/vita_run_list.h`, checked on
+the host by `scripts/tests/test_vita_run_list.py`.
+
+### Two ways in one start
+
+Some of the client's marker files can also be turned while the game runs,
+by the console command `vita_gxm <marker> <0|1>`, where 1 is "as if the
+marker were there". A step file can then measure the old way and the new
+way minutes apart in one start, at the same temperature and battery state,
+where two starts were needed:
+
+    30 setviewpos 1264 -1896 124 90 0
+    60 vita_gxm no-depth-prepass 1
+    90 vita_gxm no-depth-prepass 0
+
+The switches that can be turned: `no-depth-prepass`, `no-frame-overlap`,
+`no-vsync` and `no-draw-reuse`. The others size or make things at start-up
+and are refused by name. A switch is turned between two frames and the log
+says so (`diag: switch no-depth-prepass is on from frame 1840 on
+(vita_gxm)`). The marker files themselves are not touched. Leave a window
+at least 20 seconds and drop its first 10 second line, which holds the
+frames of both ways.
+
+### A bench that fetches its work
+
+The list of starts still leaves a person two things per build: installing
+the `.vpk` and carrying the files and logs by FTP. With one more file on the
+card the multiplayer client fetches its own work from a computer on the same
+network, installs each build itself and sends the logs back, so a Vita left
+on its charger tests every build that is queued, with nobody there.
+
+The build runs as a second application, **KisakCOD Test** (title id
+`KSKD00004`, its own bubble), which CI packs from the same program beside
+the client (`KisakCOD-mp-test.vpk` in the client's artifact). The system
+lets no application write in its own folder, so a build cannot replace the
+client that fetched it (console run AB); the client writes the build into
+the test title's folder instead and starts it by its title id. When the
+test title is not installed yet, or its folder takes no file, the client
+installs it from the job's package with the system's own installer, as a
+package manager such as VitaShell does. Installing it once by hand from
+its `.vpk` works as well.
+
+On the computer (Python 3, standard library only):
+
+    python3 scripts/platform/vita/vita_bench_server.py key --root ~/vita-bench
+    python3 scripts/platform/vita/vita_bench_server.py head-template --root ~/vita-bench
+    python3 scripts/platform/vita/vita_bench_server.py serve --root ~/vita-bench --bind 192.168.8.213
+
+`key` makes the folder and a key and prints the line for the card's
+`ux0:data/KisakCOD/bench.txt`: the computer's address in numbers, the port,
+the key, and optionally `wait <seconds>` or `wait forever`:
+
+    192.168.8.213 28970 5f0c...e1 wait forever
+
+`head-template` fetches, once, the package head the system's installer
+needs (VitaShell's `resources/head.bin` at a fixed commit, checked by its
+SHA-256; `--from FILE` takes a copy instead). Without it a job can only
+replace the build of a test title that is installed already.
+
+A job is queued with `add`: a run list, its step files, the names of files
+to send back beside the logs, and the build to run it on: a commit's build
+from hosted CI (`--ci-commit <sha>`, fetched with `gh` once the workflow
+"PS Vita server and client" finished green), a `KisakCOD-mp-test.vpk`
+(`--vpk`), a bare `eboot.bin` (`--eboot`), or none for the installed
+client; and optionally a pack of compiled programs (`--pack`, see "A pack
+of programs" below):
+
+    python3 scripts/platform/vita/vita_bench_server.py add --root ~/vita-bench --name run-w \
+        --ci-commit 3b19d867 --run-list runlist-mp.txt --file run-w.txt
+
+What a start of the client then does, before anything else:
+
+- asks the computer for a job. None: an ordinary start (with `wait`, it asks
+  again every 5 seconds for that long first; `wait forever` asks until a
+  person holds START + SELECT, which ends the wait and starts the game; the
+  screen stays black meanwhile);
+- fetches the job's files into the data folder and its build into the test
+  title (`ux0:app/KSKD00004/eboot.bin`), each checked against the SHA-256 the
+  job names; a build already there is not fetched again. When that cannot
+  be written, the build, the test title's `param.sfo` and a package head
+  made for it go to `ux0:data/KisakCOD/bench-install` and the installer
+  takes them; a package that would install any other title is refused;
+- runs the list: every start in the test title, which the client starts in
+  its place. The client's own `eboot.bin` is never changed;
+- after the last start, back in the client, sends each start's
+  `console-mp-<name>.log`, the files the job asked for and `bench.log`, tells
+  the computer the job is over and asks for the next. With none left the
+  process ends, where a person's tap would go on to the menu; with `wait
+  forever` it waits for the next job.
+
+A start of the other application is marked by `bench-launch.txt` in the
+data folder (the title it is for and the time), since the system passes no
+argument that way; a file older than two minutes counts for nothing.
+
+The computer keeps a finished job in `done/<job>/` with its `logs/` and a
+`result.txt` (`ok`, or `failed:` and why); `list` shows what waits and what
+is done. A job fails, and says so, when its run list cannot be read, a file
+is not the one it names, the test title is not there and the job has no
+package, the installer refuses it, the test title cannot be started, or it
+did not come up in two tries; its list is then set aside, not run on the
+client. A file the computer did not give (the Wi-Fi dropped) leaves the job
+waiting for the next start. A start that faults ends the chain as it does
+for any list; the next tap goes on, and after the last start sends what
+there is. `ux0:data/KisakCOD/bench.log` says what the bench did, and the
+start's own log repeats it in `Vita: bench:` lines.
+
+What to know before leaving `bench.txt` on a card:
+
+- It makes the Vita run, and install, a program it fetched over the
+  network. The key in `bench.txt` and in the computer's `key.txt` is what
+  limits that to the holder of the key: it never travels, every request and
+  the job's description carry a code made with it (HMAC-SHA-256, the
+  description's with a number the Vita picks for that one question), and
+  the files are fetched by the SHA-256 the description names. Keep the key
+  to those two files.
+- Nothing is encrypted. Another device on the network can read the builds
+  and logs that pass. Use it on a network you trust, bind the server to that
+  network's address and stop it when the bench is not in use.
+- A job writes `.txt` files with plain names into the data folder and the
+  test title's build, nothing else; it cannot name the game's data, a
+  config, the bench's own files or another application.
+- With `bench.txt` on the card and no computer answering, every start of the
+  client first waits up to 5 seconds (and the whole `wait`). Remove the file
+  to have the client as it was. The address is of one network: at another
+  place the file needs the computer's address there.
+- Vita3K starts neither another application by its title id nor the
+  installer: there a job on a build of its own fails with "the test title
+  could not be started" after the build is in place. Jobs on the installed
+  client run in full.
+
+The dedicated server has no bench. The Vita's side is
+`src/vita/vita_bench.h` (formats and codes), `vita_bench_client.h` (network
+and files) and `vita_bench.cpp` (the system calls); the first two make no
+Vita call, and `scripts/tests/test_vita_bench.py` runs them on the host
+against the real server script, playing the restarts and the installer.
+
+### A pack of programs
+
+The client compiles each shader program once and keeps it in a file of its
+own in `ux0:data/KisakCOD/gxp`. Two things about that cost a console run
+time: a build whose translator changed compiles everything again, a second
+or so a program and over a thousand of them, and every start opens each
+program's file on the card. With `programs.pack` in the program folder the
+client looks in it first: one open for all of them, and the pack can come
+from another machine. Vita3K runs the Vita's own compiler, so the folder a
+PC run of the same build leaves holds the programs the console would
+compile:
+
+    python3 scripts/platform/vita/vita_pack_programs.py pack --out programs.pack <Vita3K's ux0>/data/KisakCOD/gxp
+
+Copy `programs.pack` into the console's `gxp` folder, or give it to a
+bench's job with `--pack` (above). A program is found in the pack by the
+same key as its file, a hash of its source, so a pack from another
+translator is not used and does no harm; a program the pack lacks is read
+from its own file or compiled as before, and what is compiled still goes
+to a file. Folders and packs can be packed together, the later source
+winning.
+The quit lines say `program pack ...: programs.pack holds N programs; M of
+the K read from the card came out of it`. The programs come from the game's
+shaders, so a pack stays on the owner's machines like the game's files.
+The reading is `src/gfx_gxm/gxm_program_pack.h`, checked on the host by
+`scripts/tests/test_vita_program_pack.py`.
 
 ## Testing in Vita3K
 

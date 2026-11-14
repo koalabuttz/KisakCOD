@@ -25,6 +25,8 @@ char Sys_SpawnRenderThread(void(* function)(uint32_t));
 void Sys_CreateEvent(bool manualReset, bool initialState, void** event);
 void Sys_CreateThread(void(* function)(uint32_t), ThreadContext_t threadContext);
 void SetThreadName(uint32_t threadId, const char* threadName);
+// The engine's name of a thread context ("Main", "Backend", ...), or null.
+const char *Sys_GetThreadContextName(int threadContext);
 uint32_t __stdcall Sys_ThreadMain(ThreadContext_t parameter);
 char Sys_SpawnDatabaseThread(void(* function)(uint32_t));
 void Sys_SuspendDatabaseThread(ThreadOwner owner);
