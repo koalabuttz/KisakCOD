@@ -1,8 +1,10 @@
 #include <universal/q_shared.h>
 #include "ui_input_core.h"
+#include "ui_registration.h"
 #include <client/client.h>
 #include <qcommon/cmd.h>
 #include <universal/profile.h>
+#include <atomic>
 #ifdef KISAK_MP
 #include <client_mp/client_mp.h>
 #elif defined(KISAK_SP)
@@ -1076,14 +1078,37 @@ int Menus_MenuIsInStack(UiContext *dc, menuDef_t *menu)
     return 0;
 }
 
+// Where the menu found last time through each name pointer sits in its list.
+// Callers mostly pass the same pointer for the same name every time (a string
+// literal, or a menu expression's operand for menuisopen), and the walk below
+// touches every menu before it finds one. A remembered place is used only when
+// no menu list has changed since (UI_MenuListChanged), it is still inside the
+// list and the menu there still has the name: that is then the first menu with
+// the name, which is what the walk returns. A name that is not found is never
+// remembered. One word holds the place (10 bits, a list has at most 640 menus)
+// and the change count, so a reader on another thread sees a whole entry.
+static std::atomic<uint32_t> s_menuFoundByPointer[256];
+
 menuDef_t *Menus_FindByName(const UiContext *dc, const char *p)
 {
     int i; // [esp+0h] [ebp-4h]
 
+    const uint32_t bits = (uint32_t)(uintptr_t)p ^ ((uint32_t)(uintptr_t)dc * 31u);
+    std::atomic<uint32_t> &slot = s_menuFoundByPointer[(bits * 2654435761u) >> 24];
+    const uint32_t changes = g_uiMenuListChanges.load(std::memory_order_relaxed) << 10;
+    const uint32_t found = slot.load(std::memory_order_relaxed);
+    i = (int)(found & 0x3ff);
+    if ((found & ~0x3ffu) == changes && i < dc->menuCount && !I_stricmp(dc->Menus[i]->window.name, p))
+        return dc->Menus[i];
+
     for (i = 0; i < dc->menuCount; ++i)
     {
         if (!I_stricmp(dc->Menus[i]->window.name, p))
+        {
+            if (i <= 0x3ff)
+                slot.store(changes | (uint32_t)i, std::memory_order_relaxed);
             return dc->Menus[i];
+        }
     }
     return 0;
 }
