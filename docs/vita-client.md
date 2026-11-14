@@ -545,6 +545,17 @@ now keeps each file's count after its first play (`g_streamLengths` in
 once in a start of the game. `snd_alDebug 1` prints a line each time a file
 is read through.
 
+Console run BB showed that was a third of it: the repeat stalls went from
+0.75 s to 0.48 s. The streams sit deflated in the `.iwd` files, where a seek
+reaches a place by inflating up to it, and the MP3 decoder, given a way to ask
+where it is in the file, looks for an ID3v1 or APE tag at the file's end when
+it opens it: the seek to the end read the whole file and the step back to the
+tag read it again. AY's 3.5 MB was one 1.2 MB file read three times. The
+driver now opens a stream without that callback, so the open reads the file's
+head only; a tag at the end of a file reaches the decoder as bytes that are no
+frame, which it skips. The same host test opens a made-up MP3 both ways and
+counts the bytes.
+
 **Loaded sounds in memory** (`snd_adpcm`). The OpenAL driver keeps every
 loaded sound as 16-bit PCM, and that is also how the fastfiles hold the sounds
 counted so far: all 702 the menu loads and the nine Crash adds came as 16-bit

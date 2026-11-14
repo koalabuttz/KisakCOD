@@ -455,13 +455,6 @@ static drmp3_bool32 AL_Mp3SeekCallback(void *pUserData, int offset, drmp3_seek_o
     return DRMP3_TRUE;
 }
 
-static drmp3_bool32 AL_Mp3TellCallback(void *pUserData, drmp3_int64 *pCursor)
-{
-    AlStreamState *stream = (AlStreamState *)pUserData;
-    *pCursor = FS_FTell(stream->fsHandle);
-    return DRMP3_TRUE;
-}
-
 // Stops, unqueues/deletes all buffers, closes the decoder and file handle for a stream
 // channel. Safe to call on an already-inactive channel (no-op).
 static void SND_ReleaseStreamChannel(int index)
@@ -1045,8 +1038,15 @@ int SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int index)
     size_t nameLen = strlen(filename);
     stream->isMp3 = nameLen >= 4 && I_stricmp(filename + nameLen - 4, ".mp3") == 0;
 
+    // No tell callback for an MP3. With one, dr_mp3 first looks for an ID3v1 or APE tag
+    // at the end of the file. The game's streams sit deflated in the .iwd files, where
+    // FS_Seek reaches a place by inflating up to it: the seek to the end reads the whole
+    // file, and the step back from the end to the tag reads it all again. That was two
+    // full reads at every start of a stream (console run BB: 0.48 s of a frozen picture
+    // on the PS Vita). Without the check a tag at the end of a file reaches the decoder
+    // as bytes that are no frame, and it skips them.
     bool decoderOk = stream->isMp3
-        ? drmp3_init(&stream->mp3, AL_StreamReadCallback, AL_Mp3SeekCallback, AL_Mp3TellCallback, NULL, stream, NULL)
+        ? drmp3_init(&stream->mp3, AL_StreamReadCallback, AL_Mp3SeekCallback, NULL, NULL, stream, NULL)
         : drwav_init(&stream->wav, AL_StreamReadCallback, AL_WavSeekCallback, AL_WavTellCallback, stream, NULL);
 
     if (!decoderOk)

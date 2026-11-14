@@ -11,6 +11,15 @@ and compiled with a small harness: a kept file is found again, case does not
 matter (the game's file system ignores it), another size of the same name is
 another file, a name too long to hold is not kept, and a full table drops the
 oldest file, not the newest.
+
+Console run BB showed the other two thirds of the stall: with a tell callback
+dr_mp3 looks for a tag at the end of the file when it opens it, and in a
+deflated .iwd entry a place is only reached by inflating up to it, so the open
+read the file twice. A second harness opens a made-up MP3 (silent frames,
+nothing from the game) through dr_mp3 itself over a file that works like such
+an entry, and counts the bytes: the open the driver makes reads the file's
+head only, and the open with a tell callback is shown to read it twice, so the
+check fails if dr_mp3 or the driver's call changes.
 """
 
 from pathlib import Path
@@ -126,22 +135,156 @@ int main()
 """
 
 
+OPEN_HARNESS = r"""
+#define DR_MP3_IMPLEMENTATION
+#include <dr_libs/dr_mp3.h>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <vector>
+
+// A file that works like a deflated .iwd entry does under FS_Seek: a place is
+// reached by reading up to it, and a place behind by starting over.
+struct Entry
+{
+    std::vector<uint8_t> bytes;
+    size_t at = 0;
+    uint64_t passed = 0; // bytes read or skipped over
+};
+
+static size_t Read(void *user, void *out, size_t count)
+{
+    Entry *entry = (Entry *)user;
+    const size_t left = entry->bytes.size() - entry->at;
+    if (count > left)
+        count = left;
+    if (out)
+        memcpy(out, entry->bytes.data() + entry->at, count);
+    entry->at += count;
+    entry->passed += count;
+    return count;
+}
+
+static drmp3_bool32 Seek(void *user, int offset, drmp3_seek_origin origin)
+{
+    Entry *entry = (Entry *)user;
+    int64_t target = offset;
+    if (origin == DRMP3_SEEK_CUR)
+        target += (int64_t)entry->at;
+    else if (origin == DRMP3_SEEK_END)
+        target += (int64_t)entry->bytes.size();
+    if (target < 0 || target > (int64_t)entry->bytes.size())
+        return DRMP3_FALSE;
+    if ((size_t)target < entry->at)
+        entry->at = 0; // open the entry again
+    Read(user, nullptr, (size_t)target - entry->at);
+    return DRMP3_TRUE;
+}
+
+static drmp3_bool32 Tell(void *user, drmp3_int64 *cursor)
+{
+    *cursor = (drmp3_int64)((Entry *)user)->at;
+    return DRMP3_TRUE;
+}
+
+static int failures;
+static void Check(bool ok, const char *what)
+{
+    if (!ok)
+    {
+        ++failures;
+        printf("FAIL: %s\n", what);
+    }
+}
+
+int main()
+{
+    // 2000 silent frames: MPEG-1 layer 3, 128 kbit/s, 44.1 kHz, no padding
+    // (417 bytes, 1152 samples each). A frame of zeros after its header is
+    // one with nothing in it.
+    const size_t frameBytes = 417, frames = 2000;
+    Entry made;
+    made.bytes.assign(frameBytes * frames, 0);
+    for (size_t i = 0; i < frames; ++i)
+    {
+        uint8_t *frame = made.bytes.data() + i * frameBytes;
+        frame[0] = 0xFF; frame[1] = 0xFB; frame[2] = 0x90; frame[3] = 0x00;
+    }
+    const uint64_t size = made.bytes.size();
+
+    // The driver's open: no tell callback.
+    {
+        Entry entry = made;
+        drmp3 mp3;
+        Check(drmp3_init(&mp3, Read, Seek, @TELL@, NULL, &entry, NULL), "the made-up stream opens");
+        Check(mp3.sampleRate == 44100 && mp3.channels == 2, "the made-up stream is 44.1 kHz stereo");
+        Check(entry.passed < size / 8, "opening a stream reads its head, not the file");
+        const uint64_t opened = entry.passed;
+        Check(drmp3_get_pcm_frame_count(&mp3) == frames * 1152, "a read through the file counts its frames");
+        Check(entry.passed - opened <= size + size / 8, "the count reads the file once");
+        drmp3_int16 pcm[2 * 1152];
+        Check(drmp3_read_pcm_frames_s16(&mp3, 1152, pcm) == 1152, "the stream plays from its start after the count");
+        drmp3_uninit(&mp3);
+    }
+
+    // With a tell callback dr_mp3 looks for a tag at the end first: two reads
+    // of the whole file here. If this stops holding, dr_mp3 changed and the
+    // driver's reason to leave the callback out needs another look.
+    {
+        Entry entry = made;
+        drmp3 mp3;
+        Check(drmp3_init(&mp3, Read, Seek, Tell, NULL, &entry, NULL), "the made-up stream opens with a tell callback");
+        Check(entry.passed >= 2 * size - 256, "with a tell callback the open reads the file twice");
+        drmp3_uninit(&mp3);
+    }
+
+    if (failures)
+        return 1;
+    printf("ok: 8 checks of what opening a stream reads\n");
+    return 0;
+}
+"""
+
+
+def driver_tell_argument() -> str:
+    """The tell callback the driver hands drmp3_init for a stream, as written."""
+    source = SOURCE.read_text(errors="replace")
+    call = re.search(r"drmp3_init\(&stream->mp3,\s*AL_StreamReadCallback,\s*AL_Mp3SeekCallback,\s*([A-Za-z_0-9]+)\s*,",
+                     source)
+    if call is None:
+        raise ValueError("the driver's drmp3_init call for a stream was not found")
+    return call.group(1)
+
+
+def build_and_run(folder: Path, name: str, code: str, extra: list) -> int:
+    source = folder / f"{name}.cpp"
+    binary = folder / name
+    source.write_text(code)
+    build = subprocess.run(
+        ["g++", "-std=c++20", "-O1", *extra, str(source), "-o", str(binary)],
+        capture_output=True, text=True)
+    if build.returncode != 0:
+        print(build.stdout + build.stderr)
+        print(f"FAIL: the {name} harness did not compile")
+        return 1
+    run = subprocess.run([str(binary)], capture_output=True, text=True)
+    print(run.stdout + run.stderr, end="")
+    return run.returncode
+
+
 def main() -> int:
-    code = HARNESS.replace("@PRODUCTION@", production_code())
+    tell = driver_tell_argument()
+    if tell != "NULL":
+        print(f"FAIL: the driver opens an MP3 stream with the tell callback {tell};"
+              " dr_mp3 then reads a deflated stream twice at every start")
+        return 1
     with tempfile.TemporaryDirectory() as folder:
-        source = Path(folder) / "stream_lengths.cpp"
-        binary = Path(folder) / "stream_lengths"
-        source.write_text(code)
-        build = subprocess.run(
-            ["g++", "-std=c++20", "-Wall", "-Wextra", "-Werror", "-O1", str(source), "-o", str(binary)],
-            capture_output=True, text=True)
-        if build.returncode != 0:
-            print(build.stdout + build.stderr)
-            print("FAIL: the harness did not compile")
-            return 1
-        run = subprocess.run([str(binary)], capture_output=True, text=True)
-        print(run.stdout + run.stderr, end="")
-        return run.returncode
+        result = build_and_run(Path(folder), "stream_lengths", HARNESS.replace("@PRODUCTION@", production_code()),
+                               ["-Wall", "-Wextra", "-Werror"])
+        # dr_mp3 is not ours: no -Werror for it.
+        opened = build_and_run(Path(folder), "stream_open", OPEN_HARNESS.replace("@TELL@", tell),
+                               ["-I", str(ROOT / "deps")])
+        return result or opened
 
 
 if __name__ == "__main__":
