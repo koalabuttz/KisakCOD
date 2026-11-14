@@ -122,6 +122,13 @@ involved. The checks:
                  KISAK_VK_MODERN_AO=0 alone the reflections still read it);
                  the full run builds it for ambient occlusion (6 scenes)
                  unless linear light, lit inputs or our lit shaders are off
+  probes         --scene modern_probes passes as it is, with
+                 KISAK_VK_MODERN_PROBES=1 (beside KISAK_VK_MODERN_LINEAR=0 or
+                 not), where the reflection probe's levels below the top are
+                 filtered again from it (logged), and with
+                 KISAK_VK_MODERN_PROBES=0 or KISAK_VK_MODERN_LINEAR=0, where
+                 they are kept as the game made them; the full run filters
+                 its 2 unless either is off
   ao             --scene modern_ao passes as it is, where our lit shader
                  darkens the floor in the corner by the ambient occlusion
                  (the scene's own points), with KISAK_VK_MODERN_DEBUG=ao (and
@@ -168,8 +175,8 @@ SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'model_lig
           'references', 'threads', 'queries', 'occlusion', 'frame_loop', 'gpu_feed', 'tuning', 'slow_frames',
           'kept_state', 'multisample', 'modern_taa', 'modern_linear', 'modern_bloom', 'modern_effects',
           'modern_lit', 'modern_lit_shader', 'modern_lit_models', 'modern_lit_no_sun', 'modern_tonemap',
-          'modern_exposure', 'modern_velocity', 'modern_normals', 'modern_ao', 'modern_reflections', 'modern_live',
-          'reset', 'fullscreen', 'present')
+          'modern_exposure', 'modern_velocity', 'modern_normals', 'modern_ao', 'modern_reflections',
+          'modern_probes', 'modern_live', 'reset', 'fullscreen', 'present')
 
 
 def run(binary, args, env, timeout=300):
@@ -466,6 +473,30 @@ def main():
                       and 'no reflections debug view' not in stdout,
                       f'status {code}\n{stdout}')
 
+    # probes
+    probes_line = re.compile(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) reflection probes filtered by gloss in '
+                             r'linear light \((\d+) left as they are\), ([0-9.]+) ms each$', re.M)
+    # The scene filters its probe, then the same again to show it settles.
+    for settings, filtered in (({}, 2),
+                               ({'KISAK_VK_MODERN_PROBES': '1'}, 2),
+                               ({'KISAK_VK_MODERN_PROBES': '1', 'KISAK_VK_MODERN_LINEAR': '0'}, 2),
+                               ({'KISAK_VK_MODERN_PROBES': '0'}, 0),
+                               ({'KISAK_VK_MODERN_LINEAR': '0'}, 0)):
+        chosen = dict(env)
+        for name in ('KISAK_VK_MODERN_PROBES', 'KISAK_VK_MODERN_LINEAR'):
+            chosen.pop(name, None)
+        chosen.update(settings)
+        code, stdout, _ = run(binary, ['--scene', 'modern_probes', '--validation', args.validation], chosen)
+        found, scenes = parse(stdout)
+        line = probes_line.search(stdout)
+        named = ' '.join(f'{k}={v}' for k, v in settings.items()) or 'the defaults'
+        checks.expect(f'modern_probes passes with {named}',
+                      code == 0 and found.get('d3d9_check') == 'passed'
+                      and [s[0] for s in scenes] == ['modern_probes']
+                      and (line is not None and line.group(1) == str(filtered) and line.group(2) == '0'
+                           if filtered else line is None),
+                      f'status {code}\n{stdout}')
+
     # present-mode
     fifo = dict(env)
     fifo['KISAK_VK_PRESENT_MODE'] = 'fifo'
@@ -615,6 +646,15 @@ def main():
                           reflections.group(0) if reflections else 'no reflections line')
         else:
             checks.expect('no screen-space reflections when nothing reads them', reflections is None)
+    # Reflection probes, filtered again at load: modern_probes' one, twice.
+    if 'KISAK_VK_MODERN_PROBES' not in env:
+        probes = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) reflection probes filtered', stdout)
+        if env.get('KISAK_VK_MODERN_LINEAR') != '0':
+            checks.expect('2 reflection probes filtered by gloss in linear light',
+                          probes is not None and probes.group(1) == '2',
+                          probes.group(0) if probes else 'no reflection probes line')
+        else:
+            checks.expect('no reflection probe filtered outside linear light', probes is None)
     linear = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes in linear light \((\d+) copies read '
                        r'from them\), ([0-9.]+) ms GPU each for the tonemap$', stdout)
     if env.get('KISAK_VK_MODERN_LINEAR') == '0':

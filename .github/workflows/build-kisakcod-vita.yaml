@@ -24,6 +24,7 @@ on:
       # The test machines' run scripts and their tests: run-scripts.yaml.
       - '!scripts/runs/**'
       - '!scripts/tests/test_perf_run.py'
+      - '!scripts/tests/test_pc_run.py'
       - '!scripts/tests/test_vita3k_runner.py'
       - src/**
       - deps/**
@@ -38,6 +39,7 @@ on:
       # The test machines' run scripts and their tests: run-scripts.yaml.
       - '!scripts/runs/**'
       - '!scripts/tests/test_perf_run.py'
+      - '!scripts/tests/test_pc_run.py'
       - '!scripts/tests/test_vita3k_runner.py'
       - src/**
       - deps/**
@@ -302,6 +304,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/tests/test_vita_run_plan.py
+          python3 scripts/tests/test_vita_run_list.py
           python3 scripts/tests/test_vita_input.py
           python3 scripts/tests/test_vita_sound.py --al-include "$RUNNER_TEMP/al-include"
           python3 scripts/tests/test_vita_program_queue.py

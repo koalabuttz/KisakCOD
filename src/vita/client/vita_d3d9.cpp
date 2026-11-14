@@ -10,12 +10,16 @@
 
 #include <linux/d3d9_types.h>
 
+#include <gfx_gxm/gxm_live_switch.h>
 #include <gfx_vk/d3d9/vk_d3d9.h>
 
 #include <universal/q_shared.h>
 #include <qcommon/qcommon.h>
+#include <qcommon/cmd.h>
 
 #include <win32/win_local.h>
+
+#include <cstring>
 
 namespace
 {
@@ -50,6 +54,23 @@ void HostLog(void *, const char *line)
 {
     Com_Printf(CON_CHANNEL_GFX, "%s\n", line);
 }
+
+// "vita_gxm <marker> <0|1>": turns one of the back end's run switches while
+// the game runs, as if its marker file had come or gone, so a run's step
+// file compares two ways in one start (gxm_live_switch.h).
+cmd_function_s s_gxmSwitchCommand;
+
+void GxmSwitch_f()
+{
+    if (Cmd_Argc() != 3 || (strcmp(Cmd_Argv(2), "0") && strcmp(Cmd_Argv(2), "1")))
+    {
+        Com_Printf(CON_CHANNEL_GFX, "usage: vita_gxm <marker> <0|1>\n");
+        return;
+    }
+    if (!gfx_gxm::RequestLiveSwitch(Cmd_Argv(1), Cmd_Argv(2)[0] == '1'))
+        Com_PrintError(CON_CHANNEL_GFX, "vita_gxm: %s is not a switch that can change while the game runs\n",
+            Cmd_Argv(1));
+}
 } // namespace
 
 IDirect3D9 *WINAPI Direct3DCreate9(UINT)
@@ -62,6 +83,12 @@ IDirect3D9 *WINAPI Direct3DCreate9(UINT)
     host.log = HostLog;
     // Compiled GXM programs, one file each (gxm_program_cache.h).
     host.shaderCachePath = "ux0:data/KisakCOD/gxp";
+    static bool s_commandAdded;
+    if (!s_commandAdded)
+    {
+        s_commandAdded = true;
+        Cmd_AddCommandInternal("vita_gxm", GxmSwitch_f, &s_gxmSwitchCommand);
+    }
     Com_Printf(CON_CHANNEL_GFX, "Graphics back end: GXM (stage 2d: first draws)\n");
     return front::CreateDirect3D9(host);
 }

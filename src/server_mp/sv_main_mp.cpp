@@ -1151,6 +1151,9 @@ void SV_UpdateBots()
     int i; // [esp+34h] [ebp-4h]
 
     PROF_SCOPED("SV_UpdateBots");
+#if !defined(_WIN32)
+    SysPerfScope perfScope(SYS_PERF_PROBE_SERVER_BOTS);
+#endif
     SV_ResetSkeletonCache();
     i = 0;
     clients = svs.clients;
@@ -1321,7 +1324,12 @@ void SV_PostFrame()
         SV_CheckTimeouts();
     }
     
-    SV_SendClientMessages();
+    {
+#if !defined(_WIN32)
+        SysPerfScope perfScope(SYS_PERF_PROBE_SERVER_SEND);
+#endif
+        SV_SendClientMessages();
+    }
     SV_MasterHeartbeat("COD-4");
 
     // LWSS ADD: Steam Periodic Auth Check

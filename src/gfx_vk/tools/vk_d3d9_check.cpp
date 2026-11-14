@@ -534,6 +534,7 @@ public:
     void ModernAoAs(bool liveOff);
     void ModernLive();
     void ModernReflections();
+    void ModernProbes();
     void Bench();
     void BenchRuns();
     void BenchFrames(bool runs);
@@ -2442,6 +2443,96 @@ void Check::KeptState()
 // is the last draw's, which is the usual case in the game and the one the
 // adapter can do least for in `bench`, where every draw changes everything.
 // Its last frame is read back: every cell must hold its run's texture.
+// The Modern path's reflection probes (docs/vulkan-modern.md "Reflection
+// probes"): a 64-texel cube with all its levels in the game's encoding, level
+// 0 black but for a white +Y face, the levels below holding a marker. With
+// linear light (unless KISAK_VK_MODERN_PROBES=0, or with =1)
+// front::ModernReflectionProbe makes those levels again: the +Y face's
+// blurriest level stays near white, the +X face's takes light from +Y
+// across the edge (a box filter in display values leaves it black), and
+// filtering again gives the same levels. Otherwise the marker stays.
+void Check::ModernProbes()
+{
+    const auto envIs = [](const char *name, const char *value) {
+#if defined(_MSC_VER)
+        char *env = nullptr;
+        size_t envLength = 0;
+        const bool is = _dupenv_s(&env, &envLength, name) == 0 && env && !std::strcmp(env, value);
+        std::free(env);
+        return is;
+#else
+        const char *env = std::getenv(name);
+        return env && !std::strcmp(env, value);
+#endif
+    };
+    const bool wanted = !envIs("KISAK_VK_MODERN_PROBES", "0")
+                        && (envIs("KISAK_VK_MODERN_PROBES", "1") || !envIs("KISAK_VK_MODERN_LINEAR", "0"));
+    constexpr UINT kEdge = 64;
+    IDirect3DCubeTexture9 *probe = nullptr;
+    if (!Ok(device->CreateCubeTexture(kEdge, 0, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &probe, nullptr),
+            "CreateCubeTexture(probe)"))
+        return;
+    const UINT levels = probe->GetLevelCount();
+    Equal("probe_levels", static_cast<int>(levels), 7);
+    for (UINT face = 0; face < 6 && levels == 7; ++face)
+        for (UINT level = 0; level < levels; ++level)
+        {
+            D3DLOCKED_RECT rect{};
+            if (!Ok(probe->LockRect(static_cast<D3DCUBEMAP_FACES>(face), level, &rect, nullptr, 0), "LockRect(probe)"))
+                continue;
+            const UINT size = std::max(kEdge >> level, 1u);
+            for (UINT y = 0; y < size; ++y)
+            {
+                uint32_t *row = reinterpret_cast<uint32_t *>(static_cast<uint8_t *>(rect.pBits) + y * rect.Pitch);
+                for (UINT x = 0; x < size; ++x)
+                    // Display value rgb * a * 4: white at alpha 64 is 1.
+                    row[x] = level ? Argb(4, 3, 2, 1)
+                                   : (face == D3DCUBEMAP_FACE_POSITIVE_Y ? Argb(64, 255, 255, 255) : Argb(64, 0, 0, 0));
+            }
+            probe->UnlockRect(static_cast<D3DCUBEMAP_FACES>(face), level);
+        }
+    const bool filtered = front::ModernReflectionProbe(device, probe);
+    Equal("probe_filtered", filtered, wanted);
+    // The centre texel of a face's level, read back.
+    const auto texel = [&](D3DCUBEMAP_FACES face, UINT level) {
+        uint32_t value = 0;
+        D3DLOCKED_RECT rect{};
+        if (Ok(probe->LockRect(face, level, &rect, nullptr, D3DLOCK_READONLY), "LockRect(probe read)"))
+        {
+            const UINT size = std::max(kEdge >> level, 1u);
+            value = *reinterpret_cast<const uint32_t *>(static_cast<const uint8_t *>(rect.pBits)
+                                                        + (size / 2) * rect.Pitch + (size / 2) * 4);
+            probe->UnlockRect(face, level);
+        }
+        return value;
+    };
+    // A texel's display value (its red), in 255ths.
+    const auto display = [](uint32_t argb) {
+        return static_cast<int>(((argb >> 16) & 0xff) * (argb >> 24) * 4 / 255);
+    };
+    const uint32_t up6 = texel(D3DCUBEMAP_FACE_POSITIVE_Y, 6);
+    const uint32_t side6 = texel(D3DCUBEMAP_FACE_POSITIVE_X, 6);
+    const uint32_t side3 = texel(D3DCUBEMAP_FACE_POSITIVE_X, 3);
+    if (wanted)
+    {
+        Equal("probe_up_blurriest_bright", display(up6) >= 160, true);
+        Equal("probe_side_blurriest_lit_from_up",
+              display(side6) >= 40 && display(side6) < display(up6) && display(side3) < display(side6), true);
+        front::ModernReflectionProbe(device, probe);
+        Equal("probe_filtered_again_same", texel(D3DCUBEMAP_FACE_POSITIVE_X, 3) == side3
+                  && texel(D3DCUBEMAP_FACE_POSITIVE_X, 6) == side6, true);
+    }
+    else
+    {
+        Equal("probe_levels_kept", up6 == Argb(4, 3, 2, 1) && side6 == Argb(4, 3, 2, 1), true);
+    }
+    char line[96];
+    std::snprintf(line, sizeof(line), " probe_up6=%d probe_side6=%d probe_side3=%d", display(up6), display(side6),
+                  display(side3));
+    result->detail += line;
+    SafeRelease(probe);
+}
+
 void Check::Bench() { BenchFrames(false); }
 void Check::BenchRuns() { BenchFrames(true); }
 
@@ -5915,6 +6006,7 @@ int Run(const Options &options)
         {"modern_normals", &Check::ModernNormals, true},
         {"modern_ao", &Check::ModernAo, true},
         {"modern_reflections", &Check::ModernReflections, true},
+        {"modern_probes", &Check::ModernProbes, true},
         {"modern_live", &Check::ModernLive, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},

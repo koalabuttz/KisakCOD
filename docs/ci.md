@@ -31,7 +31,8 @@ of them.
   Windows workflow skips documentation, the Linux, macOS and PS Vita ports' own
   sources and tests, and the test machines' run scripts; the macOS workflow
   skips the PS Vita port's sources. The test machines' run scripts
-  (`scripts/runs`, `tests/runs`, `test_perf_run.py`, `test_vita3k_runner.py`)
+  (`scripts/runs`, `tests/runs`, `test_perf_run.py`, `test_pc_run.py`,
+  `test_vita3k_runner.py`)
   start only the one-job **Machine run scripts** workflow (`run-scripts.yaml`);
   on 2026-11-10 a PowerShell-only change had started 26 Linux and PS Vita
   jobs. The filters look at the whole pull request, not the last push.

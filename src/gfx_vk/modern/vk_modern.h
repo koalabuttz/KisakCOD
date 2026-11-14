@@ -346,6 +346,32 @@ struct ReflectionStats
 };
 ReflectionStats Stats(const Reflections *reflections);
 
+// ---- Reflection probes (docs/vulkan-modern.md "Reflection probes") ----
+//
+// The game's reflection probes are cube maps baked when the map was made:
+// level 0 the scene around the probe, the levels below it box-filtered, and
+// the lit shaders pick level 6 - 8 gloss, so a rough surface reads a face's
+// average (six flat colours at level 6) mixed in display values, which dims
+// what is bright. FilterReflectionProbe makes those levels again for the
+// Modern path from level 0 alone, in linear light.
+
+// The power of the cosine lobe about the reflected ray that level `level` of
+// a filtered probe sums: the gloss that picks the level (6 - level) / 8,
+// whose Blinn-Phong power 2^(9.37752 gloss) + 7 (the sun's highlight in
+// lm_sun.frag) is about four times the power about the reflected ray.
+float ReflectionProbeLobePower(uint32_t level);
+// A probe cube `edge` texels wide with `levels` levels (edge >> level each),
+// texels of 4 bytes B, G, R, A as D3DFMT_A8R8G8B8 holds them, in the game's
+// encoding (R_ColorCorrectBGRAPixel: the display value is rgb * a * 4).
+// bits[face * levels + level] is that face's level (D3D9's face order),
+// pitches[...] its bytes per row. Writes levels 1 on of every face: each
+// texel the light of ReflectionProbeLobePower(level) about its direction,
+// summed in linear light from level 0, stored in the same encoding. Level 0
+// is left as it is, so filtering a probe again gives the same levels. False,
+// and nothing written, when there is nothing to filter (edge or levels
+// under 2) or bits are missing.
+bool FilterReflectionProbe(uint32_t edge, uint32_t levels, uint8_t *const *bits, const uint32_t *pitches);
+
 // ---- Debug views (KISAK_VK_MODERN_DEBUG; docs/vulkan-modern.md) ----
 //
 // Drawn over the anti-aliased scene (TAA's history is kept apart, so a view

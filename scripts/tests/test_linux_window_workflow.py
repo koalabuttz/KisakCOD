@@ -851,6 +851,7 @@ class CiTriggerTests(unittest.TestCase):
         'src/gfx_gxm/legacy/gxm_legacy.cpp',
         'scripts/platform/vita/mp_client.cmake',
         'scripts/tests/test_vita_run_plan.py',
+        'scripts/tests/test_vita_run_list.py',
         'scripts/ci/install-vitasdk.sh',
         'tests/vita_client/run_plan_test.cpp',
         'tests/vita_gxm/heap_test.cpp',
@@ -886,8 +887,11 @@ class CiTriggerTests(unittest.TestCase):
         'scripts/runs/recipes/vulkan-ab-mp-crash.json',
         'scripts/runs/vita3k/vita-run.ps1',
         'scripts/runs/vita3k/wsl/03-build.sh',
+        'scripts/runs/pc_run.py',
         'tests/runs/fake_game.cpp',
+        'tests/runs/fake_pc_game.py',
         'scripts/tests/test_perf_run.py',
+        'scripts/tests/test_pc_run.py',
         'scripts/tests/test_vita3k_runner.py',
     )
 
@@ -910,7 +914,8 @@ class CiTriggerTests(unittest.TestCase):
         # whenever a wider change starts it.
         commands = '\n'.join(step.get('run', '') for job in scripts['jobs'].values() for step in job['steps'])
         native = '\n'.join(step.get('run', '') for step in self.linux['jobs']['native']['steps'])
-        for test in ('scripts/tests/test_perf_run.py', 'scripts/tests/test_vita3k_runner.py'):
+        for test in ('scripts/tests/test_perf_run.py', 'scripts/tests/test_pc_run.py',
+                     'scripts/tests/test_vita3k_runner.py'):
             with self.subTest(test=test):
                 self.assertIn(f'python3 {test}', commands)
                 self.assertIn(f'python3 {test}', native)

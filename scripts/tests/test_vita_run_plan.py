@@ -17,8 +17,9 @@ not know (``%zu``, ``%jd``, ``%td``): it prints the letters and reads every
 later argument as the wrong type. That is how the first frame log line on the
 Vita came out as "zu frames" with a wild read behind it.
 
-And it reads them for the text settings (``vita_atMenu``, ``vita_atMap``,
-``vita_keyboardAnswer``): their text is run as console commands or typed for the
+And it reads them, and the other clients' ``src/client_mp/cl_main_mp.cpp``,
+for the text settings (``vita_atMenu``, ``vita_atMap``, ``vita_keyboardAnswer``,
+``run_atMenu``, ``run_atMap``): their text is run as console commands or typed for the
 player, and a game server sets a client's dvars by name, so each dvar may be
 read in one place only, where start-up hands it to a ``StartText`` that keeps
 the first value it is given.
@@ -66,7 +67,9 @@ def unknown_formats(root=ROOT):
 
 
 # The dvars whose text is run as commands or typed for the player.
-START_TEXT_DVARS = ("vita_atMenu", "vita_atMap", "vita_keyboardAnswer")
+START_TEXT_DVARS = ("vita_atMenu", "vita_atMap", "vita_keyboardAnswer", "run_atMenu", "run_atMap")
+# Where the other clients' run plan reads run_atMenu and run_atMap.
+OTHER_CLIENT_SOURCES = ("src/client_mp/cl_main_mp.cpp",)
 TEXT_READ = re.compile(
     r"\b(" + "|".join(START_TEXT_DVARS) + r")\s*->\s*(current|latched|reset)\b"
     r"|Dvar_Get\w*\s*\(\s*\"(" + "|".join(START_TEXT_DVARS) + r")\"")
@@ -75,10 +78,11 @@ TAKEN_AT_START = re.compile(r"\.Take\(\s*(\w+)\s*\?\s*(\w+)\s*->\s*current\.stri
 
 
 def text_setting_reads(root=ROOT):
-    """(problems, dvars taken at start-up) for the text settings in the Vita's sources."""
+    """(problems, dvars taken at start-up) for the text settings in the Vita's and the other clients' sources."""
     problems = []
     taken = []
-    for path in sorted(path for path in (root / "src" / "vita").rglob("*") if path.suffix in (".cpp", ".h", ".c", ".inl")):
+    paths = sorted(path for path in (root / "src" / "vita").rglob("*") if path.suffix in (".cpp", ".h", ".c", ".inl"))
+    for path in paths + [root / name for name in OTHER_CLIENT_SOURCES]:
         for number, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
             code = line.split("//", 1)[0]
             reads = [match.group(1) or match.group(3) for match in TEXT_READ.finditer(code)]

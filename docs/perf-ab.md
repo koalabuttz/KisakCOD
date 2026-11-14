@@ -64,9 +64,20 @@ perf: done
 - **threads** comes from `/proc/self/task/*/schedstat`. Threads of one name are
   added up.
 - **timed** lists pieces of the frame that are timed while a run is active,
-  the twelve with the most time: per frame, calls per frame, and the longest
+  the sixteen with the most time: per frame, calls per frame, and the longest
   single call of the window.
-  - `server frame`: one frame of a listen server (20 a second) with its sends.
+  - `server frame`: one frame of a server (20 a second) with its sends. Its
+    time per server frame is its ms/frame divided by its calls/frame.
+  - `server: <part>`: the parts of a server frame, inside `server frame`:
+    `bot moves` (`SV_UpdateBots`, the bots' `ClientThink`), `triggers`
+    (players touching triggers, then the trigger notifies and their scripts;
+    two calls a server frame), `animation` (`G_RunFrame`'s two passes over
+    every entity's animation; two calls), `scripts` (`Scr_IncTime`: the script
+    threads whose wait ended), `entities` (`G_RunFrameForEntity` for every
+    entity), `player end frame` (`ClientEndFrame`) and `snapshots`
+    (`SV_SendClientMessages`). What a server frame does besides these
+    (pings, configstrings, objectives, hud elements, team status) is the
+    rest of `server frame`.
   - `hud`: `CG_Draw2D`.
   - `wait for workers: <type>`: the main thread asleep until the worker
     threads finish the commands of that type; `all` is the wait for every
