@@ -2889,6 +2889,7 @@ void RB_Draw3D()
     if (backEndData->viewInfoCount)
     {
         PROF_SCOPED("ExecuteRenderCmds");
+        SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_3D);
         RB_Draw3DInternal(&data->viewInfo[data->viewInfoIndex]);
     }
 }
@@ -2947,6 +2948,7 @@ void RB_CallExecuteRenderCommands()
     int hr; // [esp+40h] [ebp-4h]
     
     PROF_SCOPED("ExecuteRenderCmds");
+    SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_2D);
     if ((backEndData->drawType & 2) != 0)
     {
         if (g_primStats)
@@ -3094,6 +3096,7 @@ void RB_RenderThread(uint32_t threadContext)
         {
             {
                 PROF_SCOPED("WaitBackendEvent");
+                SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_IDLE);
                 KISAK_NULLSUB();
                 R_ProcessWorkerCmdsWithTimeout(Sys_WaitBackendEvent, 1);
             }
@@ -3191,11 +3194,13 @@ void RB_RenderCommandFrame(const GfxBackEndData *data)
     Sys_RenderCompleted();
     {
         PROF_SCOPED("WaitRenderSwap");
+        SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_SWAP_WAIT);
         R_ProcessWorkerCmdsWithTimeout(RB_BackendTimeout, 1);
     }
     if (allowRendering)
     {
         KISAK_NULLSUB();
+        SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_PRESENT);
         RB_EndFrame(drawType);
     }
     //Profile_Begin(172);

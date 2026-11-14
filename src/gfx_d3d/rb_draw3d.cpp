@@ -25,6 +25,7 @@
 #include "r_meshdata.h"
 #include "r_drawsurf.h"
 #include <gfx_gxm/gxm_engine_options.h>
+#include <linux/sys_perf.h>
 
 void R_HW_InsertFence(IDirect3DQuery9 **fence)
 {
@@ -495,16 +496,23 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
     if (needsDepthPrepass)
     {
+        SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_DEPTH);
         R_InitContext(data, &cmdBuf);
         R_DepthPrepass(R_RENDERTARGET_SCENE, viewInfo, &cmdBuf);
         depthPrepassed = true;
     }
     if (modernDepth && depthPrepassed)
         R_ModernSceneDepth(viewInfo);
-    R_InitContext(data, &cmdBuf);
-    R_DrawLit(viewInfo, &cmdBuf, 0);
-    R_InitContext(data, &cmdBuf);
-    R_DrawDecal(viewInfo, &cmdBuf, 0);
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_LIT);
+        R_InitContext(data, &cmdBuf);
+        R_DrawLit(viewInfo, &cmdBuf, 0);
+    }
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_DECAL);
+        R_InitContext(data, &cmdBuf);
+        R_DrawDecal(viewInfo, &cmdBuf, 0);
+    }
     KISAK_NULLSUB();
     KISAK_NULLSUB();
     iassert(viewInfo->isRenderingFullScreen == isRenderingFullScreen);
@@ -516,11 +524,17 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_SCENE);
     R_BeginView(&gfxCmdBufSourceState, &viewInfo->sceneDef, &viewInfo->viewParms);
     R_SetViewportStruct(&gfxCmdBufSourceState, &viewInfo->sceneViewport);
-    RB_DrawSun(viewInfo->localClientNum);
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_SUN);
+        RB_DrawSun(viewInfo->localClientNum);
+    }
     memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
     R_InitContext(data, &cmdBuf);
     KISAK_NULLSUB();
-    R_DrawLights(viewInfo, &cmdBuf);
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_LIGHTS);
+        R_DrawLights(viewInfo, &cmdBuf);
+    }
     if (rg.distortion && (!KISAK_GXM_RESOLVE_WHEN_USED() || RB_ListReadsResolvedPostSun(&viewInfo->emissiveInfo)))
     {
         PROF_SCOPED("RB_ApplyPostEffects");
@@ -531,9 +545,13 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     // The Modern path may finish the scene here, so that effects blend on
     // the tonemapped image as they were made to (r_visuals modern, Vulkan).
     R_ModernSceneLit(viewInfo);
-    R_InitContext(data, &cmdBuf);
-    KISAK_NULLSUB();
-    R_DrawEmissive(viewInfo, &cmdBuf);
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_EMISSIVE);
+        R_InitContext(data, &cmdBuf);
+        KISAK_NULLSUB();
+        R_DrawEmissive(viewInfo, &cmdBuf);
+    }
+    SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_POSTFX);
     RB_EndSceneRendering(gfxCmdBufContext, &viewInfo->input, viewInfo);
 }
 

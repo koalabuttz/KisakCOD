@@ -252,6 +252,18 @@ namespace
             case SYS_PERF_PROBE_HUD_COMPASS: return "hud: compass";
             case SYS_PERF_PROBE_HUD_SCOREBOARD: return "hud: scoreboard";
             case SYS_PERF_PROBE_UI_EXPRESSIONS: return "menu expressions";
+            case SYS_PERF_PROBE_RENDER_3D: return "render: 3d";
+            case SYS_PERF_PROBE_RENDER_DEPTH: return "render: depth pass";
+            case SYS_PERF_PROBE_RENDER_LIT: return "render: lit";
+            case SYS_PERF_PROBE_RENDER_DECAL: return "render: decals";
+            case SYS_PERF_PROBE_RENDER_SUN: return "render: sun";
+            case SYS_PERF_PROBE_RENDER_LIGHTS: return "render: point lights";
+            case SYS_PERF_PROBE_RENDER_EMISSIVE: return "render: emissive";
+            case SYS_PERF_PROBE_RENDER_POSTFX: return "render: post effects";
+            case SYS_PERF_PROBE_RENDER_2D: return "render: 2d";
+            case SYS_PERF_PROBE_RENDER_SWAP_WAIT: return "render: wait before present";
+            case SYS_PERF_PROBE_RENDER_PRESENT: return "render: present";
+            case SYS_PERF_PROBE_RENDER_IDLE: return "render: waiting for a frame";
             case SYS_PERF_PROBE_WAIT_RENDERER: return "wait for the render thread";
             case SYS_PERF_PROBE_WAIT_WORKERS_ALL: return "wait for workers: all";
             default: return "wait for workers: other";
