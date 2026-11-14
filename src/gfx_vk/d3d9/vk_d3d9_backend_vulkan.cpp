@@ -1858,6 +1858,28 @@ void SetScenePlanar(Backend *backend, const ModernSceneView &view)
     params.facing = 0.95f;
     params.ripple = backend->planarRipple;
     lg::SetModernPlanar(backend->legacy, image, &params);
+    // With the read's debug view, the matrices behind it now and then, to
+    // check a reflection's place against the scene's own geometry.
+    if (backend->debugPlanarRead && backend->planarReads % 600 == 0)
+    {
+        const float (*pv)[4] = planar.view;
+        const float (*pp)[4] = planar.projection;
+        float mirrorEye[3];
+        for (int i = 0; i < 3; ++i)
+            mirrorEye[i] = -(pv[3][0] * pv[i][0] + pv[3][1] * pv[i][1] + pv[3][2] * pv[i][2]);
+        HostLog(*backend->host,
+                "vulkan d3d9: modern: planar read: eye %.2f %.2f %.2f, mirror eye %.2f %.2f %.2f, plane %.3f %.3f "
+                "%.3f %.2f",
+                eye[0], eye[1], eye[2], mirrorEye[0], mirrorEye[1], mirrorEye[2], planar.plane[0], planar.plane[1],
+                planar.plane[2], planar.plane[3]);
+        for (int r = 0; r < 4; ++r)
+            HostLog(*backend->host,
+                    "vulkan d3d9: modern: planar read: row %d: view %.4f %.4f %.4f %.4f, projection %.4f %.4f %.4f "
+                    "%.4f, main view %.4f %.4f %.4f %.4f, main projection %.4f %.4f %.4f %.4f",
+                    r, pv[r][0], pv[r][1], pv[r][2], pv[r][3], pp[r][0], pp[r][1], pp[r][2], pp[r][3], v[r][0],
+                    v[r][1], v[r][2], v[r][3], view.projection[r][0], view.projection[r][1], view.projection[r][2],
+                    view.projection[r][3]);
+    }
     ++backend->planarReads;
 }
 } // namespace
