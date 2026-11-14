@@ -282,8 +282,9 @@ script):
   "game": {
     "exe": "C:/kisak/builds/b204c3a-vk/KisakCOD-mp.exe",
     "cwd": "C:/kisak/builds/b204c3a-vk",
-    "args": ["+set", "r_fullscreen", "1", "+set", "r_mode", "1280x720", "+set", "snd_volume", "0",
-             "+set", "logfile", "2", "+set", "r_backend", "vulkan", "+set", "r_visuals", "modern"],
+    "args": ["+set", "r_fullscreen", "1", "+set", "r_mode", "1280x720", "+set", "r_aaSamples", "1",
+             "+set", "snd_volume", "0", "+set", "logfile", "2", "+set", "net_ip", "127.0.0.1",
+             "+set", "r_backend", "vulkan", "+set", "r_visuals", "modern"],
     "env": {"KISAK_VK_MODERN_EXPOSURE": "0"},
     "clear_env": ["KISAK_VK_*"],
     "home_template": "C:/kisak/homes/template",
@@ -292,9 +293,11 @@ script):
   },
   "launches": [
     {"name": "crash-in-B", "env": {"KISAK_VK_MODERN_AO": "0"}, "args": ["+devmap", "mp_crash"],
-     "at_map": ["5 setviewpos 30 -10 200 140", "10 framelog 10 crash-in-B", "21 screenshot crash-in-B", "23 quit"]},
+     "at_map": ["3 cmd mr {serverid} 8 autoassign", "5 cmd mr {serverid} 15 assault_mp,0",
+                "8 setviewpos 30 -10 200 140", "10 framelog 10 crash-in-B", "21 screenshot crash-in-B", "23 quit"]},
     {"name": "crash-in-A", "args": ["+devmap", "mp_crash"],
-     "at_map": ["5 setviewpos 30 -10 200 140", "10 framelog 10 crash-in-A", "21 screenshot crash-in-A", "23 quit"]}
+     "at_map": ["3 cmd mr {serverid} 8 autoassign", "5 cmd mr {serverid} 15 assault_mp,0",
+                "8 setviewpos 30 -10 200 140", "10 framelog 10 crash-in-A", "21 screenshot crash-in-A", "23 quit"]}
   ],
   "lines": ["modern:", "device destroyed after", "refused", "unsupported", "could not", "failed"],
   "pictures": {"regions": {"arch": [455, 300, 505, 400]}, "levels": [2, 16],
@@ -302,6 +305,18 @@ script):
 }
 ```
 
+- Every launch gets `KISAK_NO_DIALOGS=1` unless the recipe sets it: the game
+  then answers its own questions "No" and prints them, as on the other ports.
+  On Windows that is the "Set Optimal Settings?" box, which a start asks
+  whenever its CPU speed measurement differs by more than a tenth from the
+  stored one, so on a busy machine some starts ask and others do not
+  (pc_run proof 1 lost a launch to it).
+- Pin in `game.args` every setting the run depends on: the home template's
+  profile holds the player's own. `r_aaSamples 1` matters for anything Modern,
+  because a multisampled back buffer turns the Modern path off ("not drawn in
+  linear light: back buffer is multisampled"). The team and class menus are
+  answered by number (`cmd mr {serverid} 8 autoassign`, then `15
+  assault_mp,0`; the log lists the numbers when the map comes up on the Vita).
 - `home_template` is copied for every launch and given as `fs_homepath`, so
   each launch starts from the same home and its log and screenshots are its
   own (they are found under that home afterwards).
@@ -319,9 +334,11 @@ script):
 (`tests/runs/fake_pc_game.py`) that writes plain and RLE TGAs, bottom row first:
 the command line, the recipe checks, the collected lines and screenshots, the
 picture numbers against values worked out by hand, the PNGs, the checksum, a
-failing and a hanging launch, and `--resume`. Not yet run against the real
-game; whether `screenshot` works under `r_backend vulkan` on Windows is the
-first thing its first run shows.
+failing and a hanging launch, and `--resume`. pc_run proof 1 (Windows PC,
+2026-11-14, master 058d5eb, local Vulkan build) ran it against the real game:
+the timed commands, a named screenshot under `r_backend vulkan`, the quit by
+itself, the frame log and the report all worked; it found the three traps above
+(the question box, the profile's multisampling, the team menu).
 
 ## Menus without a person: `menu_check.py`
 
