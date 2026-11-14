@@ -74,15 +74,41 @@ void R_ShowTris(GfxCmdBufContext context, const GfxDrawSurfListInfo *info)
 // out, since a picture cannot be read while it is drawn into, and stretched
 // back over the whole viewport with linear filtering. The post effects and
 // the HUD that follow then see a full-size picture and draw at full size.
+// True when the view's only post effect is the film colour filter, drawn
+// over the whole screen from a copy of the picture (RB_ProcessPostEffects:
+// no depth of field, glow, blur or debug view).
+static bool RB_FilmFilterOnly(const GfxViewInfo *viewInfo)
+{
+    return viewInfo->isRenderingFullScreen && RB_UsingColorManipulation(viewInfo) &&
+           !R_UsingDepthOfField(viewInfo) && !(R_UsingGlow(viewInfo) && !R_ModernDrewGlow(viewInfo)) &&
+           !RB_UsingBlur(viewInfo->blurRadius) && !r_showFbColorDebug->current.integer &&
+           !r_showFloatZDebug->current.enabled && !sc_showDebug->current.enabled;
+}
+
 static void RB_StretchScaledScene(const GfxViewInfo *viewInfo)
 {
     const float scale = KISAK_GXM_SCENE_SCALE();
     gfx_gxm::g_sceneScale = 1.0f;
+    gfx_gxm::g_filterReadS = 1.0f;
+    gfx_gxm::g_filterReadT = 1.0f;
     if (scale >= 1.0f)
         return;
     if (tess.indexCount)
         RB_EndTessSurface();
     const GfxViewport &view = viewInfo->sceneViewport;
+    const int width = gfxCmdBufSourceState.renderTargetWidth;
+    const int height = gfxCmdBufSourceState.renderTargetHeight;
+    if (KISAK_GXM_STRETCH_IN_FILTER() && RB_FilmFilterOnly(viewInfo) && view.x == 0 && view.y == 0 &&
+        view.width == width && view.height == height)
+    {
+        // The film filter's full-screen quad reads only the drawn corner of
+        // the copy (RB_ApplyColorManipulationFullscreen). Half a texel is
+        // kept off the far edges so the linear filter never mixes in the
+        // part of the copy that was not drawn this frame.
+        gfx_gxm::g_filterReadS = (float(gfx_gxm::SceneScaled(view.width, scale)) - 0.5f) / float(width);
+        gfx_gxm::g_filterReadT = (float(gfx_gxm::SceneScaled(view.height, scale)) - 0.5f) / float(height);
+        return;
+    }
     const RECT whole = {view.x, view.y, view.x + view.width, view.y + view.height};
     const RECT drawn = {view.x, view.y, view.x + gfx_gxm::SceneScaled(view.width, scale),
                         view.y + gfx_gxm::SceneScaled(view.height, scale)};
@@ -835,6 +861,10 @@ void RB_StandardDrawCommandsCommon()
             if (viewInfo->isRenderingFullScreen)
             {
                 RB_ApplyLatePostEffects(viewInfo);
+#ifdef KISAK_GFX_GXM
+                gfx_gxm::g_filterReadS = 1.0f;
+                gfx_gxm::g_filterReadT = 1.0f;
+#endif
             }
             else
             {

@@ -28,6 +28,17 @@
 // The engine sets it from vita_sceneScale when a full-screen 3D view starts
 // and puts it back to 1 once the picture is stretched, so nothing drawn
 // after (the sun's flare, the HUD) is scaled.
+//
+// g_stretchInFilter: the copy and the stretch of the scaled picture are two
+// more scenes a frame (console run AH, 2026-11-14: 5 became 7). When the
+// only post effect of the view is the map's film colour filter, which reads
+// a copy of the picture anyway and draws it over the whole screen, the
+// filter reads just the drawn corner of that copy instead and so does the
+// stretch itself: no scene is added. RB_StretchScaledScene then sets
+// g_filterReadS and g_filterReadT, the part of the copy the filter reads,
+// and the filter puts them back to 1. An empty file `no-filter-stretch` in
+// the folder of the compiled programs, or "vita_gxm no-filter-stretch 1",
+// turns it off.
 
 #pragma once
 
@@ -38,6 +49,9 @@ namespace gfx_gxm
 extern bool g_depthPrepass;
 extern bool g_resolveWhenUsed;
 extern float g_sceneScale;
+extern bool g_stretchInFilter;
+extern float g_filterReadS;
+extern float g_filterReadT;
 
 // A size of the screen as the scaled picture has it.
 inline int SceneScaled(int size, float scale)
@@ -50,8 +64,10 @@ inline int SceneScaled(int size, float scale)
 #define KISAK_GXM_DEPTH_PREPASS() (::gfx_gxm::g_depthPrepass)
 #define KISAK_GXM_RESOLVE_WHEN_USED() (::gfx_gxm::g_resolveWhenUsed)
 #define KISAK_GXM_SCENE_SCALE() (::gfx_gxm::g_sceneScale)
+#define KISAK_GXM_STRETCH_IN_FILTER() (::gfx_gxm::g_stretchInFilter)
 #else
 #define KISAK_GXM_DEPTH_PREPASS() false
 #define KISAK_GXM_RESOLVE_WHEN_USED() false
 #define KISAK_GXM_SCENE_SCALE() 1.0f
+#define KISAK_GXM_STRETCH_IN_FILTER() false
 #endif

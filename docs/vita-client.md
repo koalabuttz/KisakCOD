@@ -793,7 +793,14 @@ What the GXM back end does so far (step 2d):
   copy and the stretch are two short scenes (src/gfx_d3d/rb_draw3d.cpp,
   RB_StretchScaledScene; src/gfx_gxm/gxm_engine_options.h). Fullbright,
   the debug shaders and split views keep the full size. A game server
-  cannot set it (server_dvar_guard.h).
+  cannot set it (server_dvar_guard.h). Console run AH (2026-11-14,
+  mp_crash, busy view, David's settings): 63.1 ms a frame at 1, 57.8 at
+  0.85, 49.8 at 0.7, 47.3 at 0.6 and 43.9 at 0.5, where the CPU's 40 ms
+  becomes the limit. When the map's film colour filter is the view's only
+  post effect, the filter's full-screen quad reads just the drawn corner of
+  the copy it makes anyway, so the stretch costs no scene of its own; an
+  empty file `no-filter-stretch` in the folder of the compiled programs, or
+  `vita_gxm no-filter-stretch 1`, keeps the two scenes.
 - **The CPU a frame ahead of the GPU.** The CPU fills frame N while the GPU
   still draws frame N - 1, so a frame costs the longer of the two times and
   not their sum. Console run U (2026-11-11, mp_crash) had shown them taking
