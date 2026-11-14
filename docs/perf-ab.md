@@ -6,9 +6,10 @@ battery, the machine is shared between threads of work, and its speed drifts
 by more from one launch to the next than most changes are worth (perf run 4:
 the drift was +8.6 fps per launch, the change under test +5.4).
 
-The commands are in every native build that uses `src/linux` (the Linux
-client, the dedicated server, singleplayer, macOS, the Vita). The Windows
-build does not have them yet.
+The commands are in every build: the native builds that use `src/linux` (the
+Linux client, the dedicated server, singleplayer, macOS, the Vita) and the
+Windows builds (MSVC and MinGW: client, dedicated server, singleplayer). What
+Windows reads differs in places; see [On Windows](#on-windows).
 
 ## Commands
 
@@ -61,7 +62,8 @@ perf: done
   (which includes work it does while it waits) and how long the render thread
   waited for the previous frame's fence at the end of a frame. Both are 0 with
   `r_gpuSync 0` and in builds without a renderer.
-- **threads** comes from `/proc/self/task/*/schedstat`. Threads of one name are
+- **threads** comes from `/proc/self/task/*/schedstat` (on Windows, see
+  below). Threads of one name are
   added up.
 - **timed** lists pieces of the frame that are timed while a run is active,
   the sixteen with the most time: per frame, calls per frame, and the longest
@@ -103,6 +105,25 @@ perf: done
   when power is the question.
 - **windows of one variant differ by up to** is the yardstick: a difference
   between A and B smaller than that is not shown by this run.
+
+## On Windows
+
+The same commands, lines and probes, with these differences:
+
+- **cpu ms/frame** comes from `GetThreadTimes` and `GetProcessTimes`. Windows
+  counts these in whole scheduler ticks (about 15.6 ms), so a window gathers
+  a tick's error at most per thread: use windows of 10 s or more.
+- **threads** lists the threads of a Toolhelp snapshot of the process, with
+  the same CPU times. The engine's own threads carry its names (`Main`,
+  `Backend`, `Worker0`, ...); every other thread, the graphics driver's and the
+  sound library's among them, is added up as `other`.
+- **gpu wait ms/frame** counts the same two waits, but without `r_gpuSyncSleep`
+  (Linux only) both always spin.
+- No machine readings (battery, package energy, frequencies, temperature).
+
+The Windows PC is a desktop with a GPU much faster than its CPU, so there a
+frame's time is mostly the CPU's and what the CPU saves shows as frames per
+second, which a laptop that waits for its GPU does not show.
 
 ## `r_gpuSyncSleep`
 

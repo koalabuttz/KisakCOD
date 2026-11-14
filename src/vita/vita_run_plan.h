@@ -11,14 +11,17 @@ namespace kisak::vita_run
 
 using run_plan::kMaxCommandLength;
 using run_plan::kMaxTimedCommands;
+using run_plan::kMaxStepFileName;
 using run_plan::kMaxTimedListLength;
 using run_plan::kQuitGrace;
 using run_plan::kQuitGraceFrames;
 using run_plan::kSecond;
 using run_plan::ParseTimedCommands;
+using run_plan::JoinStepFile;
 using run_plan::Plan;
 using run_plan::StartText;
 using run_plan::Step;
+using run_plan::StepFileName;
 using run_plan::TimedCommand;
 using run_plan::TimedCommands;
 

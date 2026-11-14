@@ -13,6 +13,10 @@
 #include "profile.h"
 
 #if defined(_WIN32)
+#include <linux/sys_perf.h>
+#endif
+
+#if defined(_WIN32)
 _RTL_CRITICAL_SECTION s_criticalSections[CRITSECT_COUNT];
 #else
 #include <mutex>
@@ -35,6 +39,10 @@ void Sys_EnterCriticalSection(int critSect)
 
 	iassert(critSect >= 0 && critSect < CRITSECT_COUNT);
 #if defined(_WIN32)
+	// How long getting in takes, per section, while a perf run is active
+	// (as src/linux/sys_critical.cpp).
+	static_assert((uint32_t)CRITSECT_COUNT <= SYS_PERF_LOCK_SLOTS, "more critical sections than perf probe slots");
+	SysPerfScope perfScope(SYS_PERF_PROBE_LOCK + (uint32_t)critSect);
 	EnterCriticalSection(&s_criticalSections[critSect]);
 #else
     s_criticalSections[critSect].lock();

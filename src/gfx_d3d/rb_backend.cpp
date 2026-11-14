@@ -88,8 +88,9 @@ void TRACK_rb_backend()
     track_static_alloc_internal(&gfxCmdBufInput, 1072, "gfxCmdBufInput", 18);
 }
 
-#if !defined(_WIN32)
 #include <linux/sys_perf.h> // the sleep and the wait counters perf_ab reads
+
+#if !defined(_WIN32)
 
 // R_SyncGpu calls R_GpuFenceTimeout in a tight loop, and between worker
 // commands, until the previous frame's GPU fence passes or the adaptive delay
@@ -183,13 +184,6 @@ void R_GpuSyncMainIdle()
     }
 }
 
-void R_GpuSyncMainDone()
-{
-    Sys_PerfAddMicroseconds(
-        SYS_PERF_GPU_WAIT_MAIN,
-        (uint32_t)((double)(__rdtsc() - dx.gpuSyncStart) * msecPerRawTimerTick * 1000.0));
-}
-
 static void R_GpuSyncBackendIdle()
 {
     const int sleepUsec = r_gpuSyncSleep->current.integer;
@@ -197,6 +191,14 @@ static void R_GpuSyncBackendIdle()
         Sys_PerfSleepMicroseconds((uint32_t)sleepUsec);
 }
 #endif
+
+// How long R_SyncGpu waited, for perf_ab's "gpu wait" (every build).
+void R_GpuSyncMainDone()
+{
+    Sys_PerfAddMicroseconds(
+        SYS_PERF_GPU_WAIT_MAIN,
+        (uint32_t)((double)(__rdtsc() - dx.gpuSyncStart) * msecPerRawTimerTick * 1000.0));
+}
 
 bool R_GpuFenceTimeout()
 {
@@ -2934,12 +2936,10 @@ int RB_AdaptiveGpuSyncFinal()
         }
         LODWORD(v0) = __rdtsc() - startTime;
         waitedTime = v0;
-#if !defined(_WIN32)
         if (waitedTime > 0)
             Sys_PerfAddMicroseconds(
                 SYS_PERF_GPU_WAIT_BACKEND,
                 (uint32_t)((double)waitedTime * msecPerRawTimerTick * 1000.0));
-#endif
         if ((v0 & 0x80000000) == 0LL)
         {
             LODWORD(v0) = LODWORD(dx.gpuSyncDelay) + v0 / 16;
