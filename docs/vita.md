@@ -260,8 +260,8 @@ where two starts were needed:
     90 vita_gxm no-depth-prepass 0
 
 The switches that can be turned: `no-depth-prepass`, `no-frame-overlap`,
-`no-vsync` and `no-draw-reuse`. The others size or make things at start-up
-and are refused by name. A switch is turned between two frames and the log
+`no-vsync`, `no-draw-reuse` and `no-filter-stretch`. The others size or
+make things at start-up and are refused by name. A switch is turned between two frames and the log
 says so (`diag: switch no-depth-prepass is on from frame 1840 on
 (vita_gxm)`). The marker files themselves are not touched. Leave a window
 at least 20 seconds and drop its first 10 second line, which holds the
