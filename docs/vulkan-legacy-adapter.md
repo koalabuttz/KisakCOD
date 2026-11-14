@@ -396,14 +396,24 @@ printed as `validation_ignored`), not as an error, and logs it once. The
 On a device with the portability subset (MoltenVK), the core enables every
 subset feature the device has. The D3D9 formats need swizzled image views
 (`imageViewFormatSwizzle`), and the validation layer holds the device to what
-was enabled. The adapter also takes three other paths. The Legacy device's
-ready line names them (`vertex stride static, depth compare fixed, 16-bit
-targets wide`):
+was enabled. The adapter also takes four other paths. The Legacy device's
+ready line names them (`vertex stride static, index memory own, depth compare
+fixed, 16-bit targets wide`):
 
 - **Vertex strides in the pipeline.** MoltenVK has
   `VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE` only from macOS 14 on Mac2 or
   Apple4 GPUs, and no Vulkan query says so. The pipeline key carries each
   stream's stride instead, and buffers are bound without strides.
+- **Index buffers in mapped memory alone in theirs.** On CI's Apple
+  Paravirtual device (MoltenVK on arm64, 2026-11-14) a dynamic index buffer,
+  bound into the shared host-visible block at an offset as every mapped buffer
+  is, drew nothing: the D3D9 check's `modern_velocity` brush band, the only
+  check drawing from a dynamic index buffer, lost its pixels in the Legacy draw
+  and the velocity pass alike. The same indices drew from a static index
+  buffer (device memory) and from a dynamic one alone in its memory at offset
+  0, which is what each index buffer in Upload memory now gets there
+  (`OptionalFeatures::ownIndexMemory`). Whether a real Apple Silicon Mac does
+  the same is not known; vertex buffers in the same block draw.
 - **Depth compare fixed per pipeline**, which every device does by default
   ([Depth compare](#depth-compare)) but MoltenVK cannot do without:
   `KISAK_VK_DEPTH_COMPARE=dynamic` is ignored there. MoltenVK's shader
@@ -419,8 +429,9 @@ targets wide`):
   MoltenVK. Copies between such a target and a lockable texture of the D3D9
   format are refused, since the formats differ.
 
-`KISAK_VK_VERTEX_STRIDE=static` and `KISAK_VK_RENDER_TARGETS=wide` force the
-other two paths on any device. The Linux lavapipe job runs the adapter and
+`KISAK_VK_VERTEX_STRIDE=static`, `KISAK_VK_INDEX_MEMORY=own` and
+`KISAK_VK_RENDER_TARGETS=wide` force the other paths on any device
+(`KISAK_VK_INDEX_MEMORY=shared` turns the index one off on MoltenVK). The Linux lavapipe job runs the adapter and
 D3D9 front checks with both set (and depth compare fixed), and with
 `KISAK_VK_UNIFORMS=static` (plain uniform buffers, above), with the
 validation layer required; it also runs them with
