@@ -1,4 +1,5 @@
-// Host checks for the PS Vita build's run plan (src/vita/vita_run_plan.h), run
+// Host checks for the run plan (src/qcommon/run_plan.h, the PS Vita's
+// src/vita/vita_run_plan.h), run
 // by scripts/tests/test_vita_run_plan.py. The plan makes no engine call and no
 // Vita call: this feeds it a made-up clock and what the client would show, and
 // reads when it reports, sends its commands and quits.
@@ -371,6 +372,38 @@ void TestStartTextIsReadOnce()
     }
 }
 
+// The other clients' plan (src/client_mp/cl_main_mp.cpp) is the same plan
+// under run_* names: its messages name the setting a test machine gave.
+void TestOtherClientsNames()
+{
+    g_test = "run_* names";
+    kisak::run_plan::Settings settings;
+    settings.quitAfterMap = 12;
+    settings.statsEvery = 86400;
+    settings.atMap = "1 setviewpos 0 0 0 0 | 2 screenshot | x quit";
+    kisak::run_plan::Plan plan;
+    plan.Start(0, 0);
+    std::string error;
+    const char *quitDvar = nullptr;
+    unsigned commands = 0, quits = 0;
+    for (uint64_t now = 0; now <= 30 * kSecond; now += 16 * kMs)
+    {
+        const kisak::run_plan::Step step = plan.Frame(now, false, now >= 5 * kSecond, settings);
+        if (step.commandError[0])
+            error = step.commandError;
+        commands += unsigned(step.commandCount);
+        if (step.quitDvar)
+            quitDvar = step.quitDvar;
+        quits += step.quit ? 1u : 0u;
+    }
+    CHECK(error.rfind("run_atMap: part 3", 0) == 0);
+    CHECK(commands == 0);
+    CHECK(quitDvar && !strcmp(quitDvar, "run_quitAfterMap"));
+    CHECK(quits == 1);
+    // The Vita's settings keep the Vita's names.
+    CHECK(Settings().names == &kisak::run_plan::kVitaDvarNames);
+}
+
 } // namespace
 
 int main()
@@ -384,6 +417,7 @@ int main()
     TestBadCommandsAreReportedOnce();
     TestNothingBeforeStart();
     TestStartTextIsReadOnce();
+    TestOtherClientsNames();
     if (g_failures)
     {
         printf("%d vita run plan check(s) failed\n", g_failures);
