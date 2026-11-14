@@ -7,6 +7,7 @@
 
 #include "vk_modern_shaders.h"
 
+#include <cmath>
 #include <utility>
 #include <vector>
 
@@ -15,7 +16,7 @@ namespace gfx_vk::modern
 namespace
 {
 // The push constants both shaders share (gtao.frag; ao_blur.frag reads the
-// first three members).
+// members up to the power, and up[3], the floor).
 struct Push
 {
     float clipToView[4][4];
@@ -27,9 +28,10 @@ struct Push
     float power;
     uint32_t frame;
     float thickness;
-    float pad;
+    float grazing;
+    float up[4];
 };
-static_assert(sizeof(Push) == 112, "gtao.frag's push constant block fits 112 bytes");
+static_assert(sizeof(Push) == 128, "gtao.frag's push constant block fits 128 bytes, the least a device offers");
 
 constexpr VkFormat kRawFormat = VK_FORMAT_R16_SFLOAT;
 } // namespace
@@ -245,6 +247,19 @@ bool BuildAmbientOcclusion(Core *core, AmbientOcclusion *ao, Image *depth, Image
     push.power = params.power;
     push.frame = params.frame;
     push.thickness = params.thickness;
+    push.grazing = params.grazing;
+    push.up[3] = params.floor;
+    // World up (the engine's +z) in view space: p_view = p_world * view.
+    {
+        const float x = view.view[2][0], y = view.view[2][1], z = view.view[2][2];
+        const float norm = std::sqrt(x * x + y * y + z * z);
+        if (norm > 1e-6f)
+        {
+            push.up[0] = x / norm;
+            push.up[1] = y / norm;
+            push.up[2] = z / norm;
+        }
+    }
 
     if (ao->raw)
     {

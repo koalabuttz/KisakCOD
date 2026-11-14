@@ -889,7 +889,13 @@ timed as "modern ao"):
    pixels whose normal is a guess (the normals buffer marks a strip a pixel
    or two wide, whose neighbours are all on other surfaces), and surfaces
    seen nearly edge on (the effect fades out as the normal turns across the
-   view, from 5 to 1 degrees of the surface to the view ray). It writes an
+   view: on walls from about 12 degrees of the surface to the view ray, on
+   floors and ceilings from 5, down to 1). On a wall seen side-on a corner's
+   shading is squeezed into a few pixels and reads as a dark line: PC AO
+   run 4 found one down the crash-in arch edge with the fade at 5 degrees.
+   Ground seen from far off is always at a shallow angle, so floors keep the
+   5 degrees and their contact shadows. World up comes from the view
+   matrix. It writes an
    `R16_SFLOAT` image. The
    value is left unclamped: a single slice of an open surface seen at an angle
    gives more than 1 or less, and only the average over the slices is 1.
@@ -924,11 +930,13 @@ shader for yet) are not darkened.
 | Ambient occlusion | on with our lit shaders (linear light, lit inputs and our shaders on); it turns the normals buffer and the prepass on | `KISAK_VK_MODERN_AO=0` turns it off (our shaders read white); `KISAK_VK_MODERN_AO=1` builds it even with nothing reading it, to measure the cost |
 | Radius | 48 world units (a little over a metre; a player is 70 tall) | `KISAK_VK_MODERN_AO_RADIUS=<units>` |
 | Thickness | 8 world units: how far behind a sample's surface it is taken to reach | `KISAK_VK_MODERN_AO_THICKNESS=<units>`: less keeps thin things from darkening what is behind them but weakens contact shadows; 1000 behaves as plain GTAO (everything below the horizon hidden) |
+| Walls seen side-on | on walls the effect is whole from \|N.V\| 0.2 (about 12 degrees of the surface to the view ray) and fades out below it, to none at 0.02; floors and ceilings fade from 0.08, sloped faces in between | `KISAK_VK_MODERN_AO_GRAZING=<0 to 1>` sets the walls' figure: 0.08 treats walls as floors (as before PC AO run 4, with its dark line down the crash-in arch edge) |
 | Strength | power 2 (PC AO run 1: 1 read slightly weak, 2 about right in the shade; with the thickness, PC AO run 3 found 1.5 as weak as run 1's 1) | `KISAK_VK_MODERN_AO_POWER=<p>`: the visibility is raised to p (2 darkens, 1 lightens, 0 turns it off) |
+| Floor | 0.35: after the power the visibility is kept above it, through a soft knee from 0.45 down (lighter shading is unchanged). PC AO run 7: the crash-in arch line is a narrow slot between the pillar's side and the arch's inside face that went near black (0.13) and ended in a hard edge; ground contact shadows sit near 0.85 | `KISAK_VK_MODERN_AO_FLOOR=<0 to 1>`: 0 turns it off |
 | Debug view | off | `KISAK_VK_MODERN_DEBUG=ao` draws the visibility as grey over the finished scene (after the tonemap): white open, darker in corners |
 
 The statistics line: `vulkan d3d9: modern: N scenes with ambient occlusion
-(radius R, thickness T, power P), X ms GPU each` (both passes).
+(radius R, thickness T, power P, floor F), X ms GPU each` (both passes).
 
 **Checks:** the D3D9 check's `modern_ao` scene draws a floor 120 units below
 a camera with the engine's 90-degree perspective, and a wall rising from it
