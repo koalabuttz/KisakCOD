@@ -124,7 +124,12 @@ to one second behind.
   step but not a 40-unit ledge, up a 25 degree ramp but not a 60 degree one;
   it never walks on a floor's underside or between islands; a cache blob with
   a wrong checksum, a cut or a bad tile size is refused; and an 8000 by 8000
-  yard builds in tiles.
+  yard builds in tiles. It also builds the engine's brush-to-faces code
+  (`CM_ShowSingleBrushCollision`, until now only a debug drawing) with
+  AddressSanitizer and checks a box and a wedge give exactly their faces. PC
+  bot brain run 3 crashed there: its corner buffer held one point where up to
+  1024 are written, and a corner on an axial plane was compared with the
+  previous brush's sides.
 - `bot_driver` (`scripts/tests/test_linux_bot_driver.py`): the live probe's
   view and place evidence cannot pass with missing samples, a bot that never
   turns or never walks, a snap faster than the motor, a pitch past the limit or

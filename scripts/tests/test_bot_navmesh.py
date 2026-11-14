@@ -14,8 +14,16 @@ refuses anything truncated, padded or of another version.
 Built 64-bit with AddressSanitizer and UBSan when available, and 32-bit
 (``--m32`` makes the 32-bit build a requirement), as the i386 game builds it.
 
+It also builds ``tests/bots/brush_faces_test.cpp`` with the engine's
+``cm_showcollision.cpp``, which turns each brush into the faces the mesh is
+built from, with clang and AddressSanitizer on both widths: a box and a
+wedge give exactly their faces, without overrunning the corner buffer or
+letting a neighbouring brush's side admit corners outside the brush (PC bot
+brain run 3 crashed there). The decompiled unit indexes plane arrays in ways
+UBSan reports, so this build uses AddressSanitizer alone.
+
 Usage:
-    python3 scripts/tests/test_bot_navmesh.py [--cxx c++] [--m32]
+    python3 scripts/tests/test_bot_navmesh.py [--cxx c++] [--engine-cxx clang++] [--m32]
 """
 
 import argparse
@@ -34,8 +42,17 @@ BASE_FLAGS = ["-std=c++20", "-g", "-O1", f"-I{ROOT / 'src'}", f"-I{ROOT / 'deps'
               "-Wno-unknown-warning-option", "-Wno-class-memaccess", "-Wno-maybe-uninitialized"]
 
 
-def build_and_run(cxx, out, flags, label):
-    build = subprocess.run([cxx, *BASE_FLAGS, *flags, *map(str, SOURCES), "-o", str(out)],
+BRUSH_SOURCES = [ROOT / "tests" / "bots" / "brush_faces_test.cpp", ROOT / "src" / "qcommon" / "cm_showcollision.cpp",
+                 ROOT / "src" / "universal" / "com_math.cpp"]
+# Engine units: the defines and dialect of the dedicated server's build.
+BRUSH_FLAGS = ["-std=gnu++20", "-g", "-O1", "-fms-extensions", "-w", "-DKISAK_MP", "-DDEDICATED", "-DKISAK_DEDICATED",
+               "-D_DEBUG", f"-I{ROOT / 'src'}", f"-I{ROOT / 'deps'}", "-fsanitize=address"]
+
+
+def build_and_run(cxx, out, flags, label, base=None, sources=None):
+    base = BASE_FLAGS if base is None else base
+    sources = SOURCES if sources is None else sources
+    build = subprocess.run([cxx, *base, *flags, *map(str, sources), "-o", str(out)],
                            capture_output=True, text=True)
     if build.returncode != 0:
         return None, build.stdout + build.stderr
@@ -50,6 +67,7 @@ def build_and_run(cxx, out, flags, label):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--cxx", default="c++")
+    parser.add_argument("--engine-cxx", default="clang++", help="compiler for the engine's brush faces unit")
     parser.add_argument("--m32", action="store_true", help="fail when the 32-bit build cannot be made")
     options = parser.parse_args()
 
@@ -75,6 +93,18 @@ def main():
                 return 1
             print("test_bot_navmesh: no 32-bit toolchain, 32-bit run skipped")
         else:
+            failed |= code != 0
+
+        for flags, label in (([], "brush faces, 64-bit, AddressSanitizer"),
+                             (["-m32", "-msse2", "-mfpmath=sse"], "brush faces, 32-bit, AddressSanitizer")):
+            code, log = build_and_run(options.engine_cxx, tmp / "brush", flags, label, BRUSH_FLAGS, BRUSH_SOURCES)
+            if code is None:
+                if flags and not options.m32:
+                    print("test_bot_navmesh: no 32-bit toolchain, 32-bit brush faces run skipped")
+                    continue
+                print(log, file=sys.stderr)
+                print(f"test_bot_navmesh: the {label} build failed", file=sys.stderr)
+                return 1
             failed |= code != 0
 
     if failed:
