@@ -837,7 +837,7 @@ void SV_Init()
     // go to an address that drops them, so 0 skips building and writing them.
     sv_botSnapshots = Dvar_RegisterBool(
         "sv_botSnapshots",
-        1,
+        0,
         DVAR_NOFLAG,
         "Build and send snapshots to test clients, which drop them; 0 skips that work");
     sv_debugMessageKey = Dvar_RegisterBool("sv_debugMessageKey", 0, DVAR_NOFLAG, "net message key generation debugging");
