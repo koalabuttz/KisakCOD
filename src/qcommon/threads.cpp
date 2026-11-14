@@ -181,6 +181,13 @@ void Sys_CreateThread(void(* function)(uint32_t), ThreadContext_t threadContext)
     SetThreadName(threadId[threadContext], s_threadNames[threadContext]);
 }
 
+const char *Sys_GetThreadContextName(int threadContext)
+{
+    if (threadContext < 0 || threadContext >= THREAD_CONTEXT_COUNT)
+        return nullptr;
+    return s_threadNames[threadContext];
+}
+
 #define MS_VC_EXCEPTION 0x406d1388
 struct tagTHREADNAME_INFO // sizeof=0x10
 {                                     

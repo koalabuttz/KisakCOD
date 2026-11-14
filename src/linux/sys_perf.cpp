@@ -7,10 +7,17 @@
 
 #include "sys_perf.h"
 #include "sys_perf_core.h"
-#include "sys_posix.h"
 
 #include <stdlib.h>
+
+#if defined(_WIN32)
+#include <qcommon/threads.h>
+#include <windows.h>
+#include <tlhelp32.h>
+#else
+#include "sys_posix.h"
 #include <time.h>
+#endif
 
 #if defined(__linux__)
 #include "sys_perf_readings.h"
@@ -29,6 +36,12 @@
 // battery power, GPU and CPU frequency, package temperature and package energy
 // from sysfs where this machine and this user can read them. A reading that is
 // not there is left out of the lines; nothing is guessed.
+//
+// On Windows the CPU times come from GetThreadTimes and GetProcessTimes, which
+// count in whole scheduler ticks (about 15.6 ms), so use windows of 10 s or
+// more; the threads are listed with a Toolhelp snapshot and named by the
+// engine's thread table ("other" for threads the engine did not start, such
+// as the driver's). There are no machine readings.
 // ---------------------------------------------------------------------------
 
 namespace
@@ -37,6 +50,78 @@ namespace
     cmd_function_s s_perfSampleCmd;
     cmd_function_s s_perfStopCmd;
 
+#if defined(_WIN32)
+    uint64_t NowNs()
+    {
+        return Sys_PerfNowNs();
+    }
+
+    uint64_t FileTimeNs(const FILETIME &time)
+    {
+        return ((uint64_t)time.dwHighDateTime << 32 | time.dwLowDateTime) * 100ull;
+    }
+
+    // Kernel plus user time of a thread, or 0 when it cannot be read.
+    uint64_t ThreadCpuNs(HANDLE thread)
+    {
+        FILETIME created, exited, kernel, user;
+        if (!GetThreadTimes(thread, &created, &exited, &kernel, &user))
+            return 0;
+        return FileTimeNs(kernel) + FileTimeNs(user);
+    }
+
+    uint64_t ProcessCpuNs()
+    {
+        FILETIME created, exited, kernel, user;
+        if (!GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user))
+            return 0;
+        return FileTimeNs(kernel) + FileTimeNs(user);
+    }
+
+    const char *EngineThreadName(DWORD id)
+    {
+        for (int context = 0; context < THREAD_CONTEXT_COUNT; ++context)
+        {
+            if (threadId[context] == id)
+                return Sys_GetThreadContextName(context);
+        }
+        return nullptr;
+    }
+
+    // Every thread of this process with its CPU time, as Perf_ReadThreads
+    // does from /proc on Linux.
+    void ReadThreads(std::vector<PerfThreadTime> *threads)
+    {
+        threads->clear();
+        HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+        if (snapshot == INVALID_HANDLE_VALUE)
+            return;
+        const DWORD process = GetCurrentProcessId();
+        THREADENTRY32 entry;
+        entry.dwSize = sizeof(entry);
+        for (BOOL more = Thread32First(snapshot, &entry); more; more = Thread32Next(snapshot, &entry))
+        {
+            if (entry.th32OwnerProcessID != process)
+                continue;
+            HANDLE thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, entry.th32ThreadID);
+            if (!thread)
+                continue;
+            PerfThreadTime time;
+            time.tid = (int)entry.th32ThreadID;
+            time.runNs = ThreadCpuNs(thread);
+            CloseHandle(thread);
+            const char *name = EngineThreadName(entry.th32ThreadID);
+            time.name = name ? name : "other";
+            threads->push_back(time);
+        }
+        CloseHandle(snapshot);
+    }
+#else
+    uint64_t NowNs()
+    {
+        return Posix_MonotonicNanoseconds();
+    }
+
     [[maybe_unused]] uint64_t ClockNs(clockid_t clock)
     {
         struct timespec ts;
@@ -44,6 +129,7 @@ namespace
             return 0;
         return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
     }
+#endif
 
 #if defined(__linux__)
     PerfReadingPaths s_paths;
@@ -109,7 +195,12 @@ namespace
         void ReadCounters(PerfCounters *counters) override
         {
             *counters = PerfCounters();
-#if defined(CLOCK_THREAD_CPUTIME_ID) && defined(CLOCK_PROCESS_CPUTIME_ID) && !defined(__vita__)
+#if defined(_WIN32)
+            // Called on the main thread.
+            counters->mainCpuNs = ThreadCpuNs(GetCurrentThread());
+            counters->processCpuNs = ProcessCpuNs();
+            ReadThreads(&counters->threads);
+#elif defined(CLOCK_THREAD_CPUTIME_ID) && defined(CLOCK_PROCESS_CPUTIME_ID) && !defined(__vita__)
             counters->mainCpuNs = ClockNs(CLOCK_THREAD_CPUTIME_ID);
             counters->processCpuNs = ClockNs(CLOCK_PROCESS_CPUTIME_ID);
 #endif
@@ -208,7 +299,7 @@ namespace
 #endif
         PerfConfig withTick = config;
         withTick.tickProbe = SYS_PERF_PROBE_SERVER_FRAME;
-        s_runner.Start(withTick, Posix_MonotonicNanoseconds());
+        s_runner.Start(withTick, NowNs());
     }
 
     void PerfAb_f()
@@ -255,5 +346,5 @@ void Sys_PerfInit()
 void Sys_PerfFrame()
 {
     if (s_runner.Active())
-        s_runner.Frame(Posix_MonotonicNanoseconds());
+        s_runner.Frame(NowNs());
 }
