@@ -101,6 +101,15 @@ starting `Vita` come from the Vita layer:
   frame at `sv_fps 20`. The minute with the map load shows the load as its
   slowest frame. Busy near 100% or frames over 50 ms in play mean the Vita is
   not keeping up with that player count.
+- `Vita: long frame, 863 ms; the main thread at 250 ms: running, core 0,
+  priority 0xa0; at 350 ms: waiting, ran 12 ms of 100, 0 thread and 3
+  interrupt preemptions (wait type 0x... on 0x...), ...`: a frame of the main
+  loop that took more than 250 ms. A watcher thread looks at the main thread
+  250 ms into such a frame and every 100 ms after, up to 8 times: running,
+  ready (another thread has its core) or waiting and on what, and how much it
+  ran between two looks. Console runs found one or two frames of 0.3 to
+  0.9 s a start in which nothing was loaded and no timed part ran long; this
+  line is there to say why.
 
 The `vitastats` command (console or rcon) prints both lines on demand, and
 has the client's renderer and sound add theirs; the engine's `meminfo` lists
