@@ -32,13 +32,18 @@ inline GpuClocks CurrentGpuClocks()
     return {scePowerGetGpuClockFrequency(), scePowerGetGpuXbarClockFrequency()};
 }
 
-// Raises the GPU clocks, or puts back the ones found at start-up.
+// Raises the GPU clocks, or puts back the ones found at start-up. On the
+// console the GPU's clock reads 0 before an application has set it (console
+// run AK, 2026-11-14: "GPU at 222 MHz (was 0), GPU crossbar at 166 MHz (was
+// 111)"), so a reading that is not a clock stands for 111 MHz, the clock an
+// application's GPU runs at by default.
 inline void SetGpuBoost(bool on)
 {
     constexpr int kGpuMhz = 222;
     constexpr int kXbarMhz = 166;
+    constexpr int kDefaultMhz = 111;
     const GpuClocks &boot = BootGpuClocks();
-    scePowerSetGpuClockFrequency(on ? kGpuMhz : boot.gpu);
-    scePowerSetGpuXbarClockFrequency(on ? kXbarMhz : boot.xbar);
+    scePowerSetGpuClockFrequency(on ? kGpuMhz : (boot.gpu > 0 ? boot.gpu : kDefaultMhz));
+    scePowerSetGpuXbarClockFrequency(on ? kXbarMhz : (boot.xbar > 0 ? boot.xbar : kDefaultMhz));
 }
 } // namespace vita
