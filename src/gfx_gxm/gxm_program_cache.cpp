@@ -100,9 +100,22 @@ void UnloadIdleCompiler()
         UnloadCompiler();
 }
 
+// Fragment programs that sample a cube map at a level they give
+// (texCUBElod) are built without fast maths. With it, the world decals'
+// specular programs on mp_crash drew a speckle that ignored the specular
+// map; without it they drew as on Windows (PC runs Z9 and Z10). Building
+// every fragment program that way made the compiler fail with a fatal
+// internal error on one of them, and then stop making programs at all (run
+// Z11), so it is kept to these.
+bool WithoutFastMaths(const std::string &cg, ShaderStage stage)
+{
+    return stage == ShaderStage::Fragment && cg.find("texCUBElod(") != std::string::npos;
+}
+
 uint64_t KeyFor(const std::string &cg, ShaderStage stage)
 {
-    const uint8_t tag = stage == ShaderStage::Vertex ? 'v' : 'f';
+    // Their own tag, so that no file built with fast maths is read for them.
+    const uint8_t tag = stage == ShaderStage::Vertex ? 'v' : WithoutFastMaths(cg, stage) ? 'g' : 'f';
     return cg::Hash(cg.data(), cg.size(), cg::Hash(&tag, 1));
 }
 
@@ -276,7 +289,13 @@ bool GetProgram(const std::string &cg, ShaderStage stage, std::vector<uint8_t> &
         return false;
     }
     const uint64_t begin = Micros();
-    const bool compiled = CompileCg(cg.data(), cg.size(), stage, program, log, fastMath, optimization);
+    const bool fast = fastMath && !WithoutFastMaths(cg, stage);
+    const bool compiled = CompileCg(cg.data(), cg.size(), stage, program, log, fast, optimization);
+    // After a fatal internal error the compiler failed every later program
+    // the same way (PC run Z11: 279 in a row): the next program gets a
+    // compiler loaded afresh.
+    if (!compiled)
+        UnloadCompiler();
     const uint64_t end = Micros();
     g_lastCompile.store(end, std::memory_order_release);
     size_t held = 0, peak = 0;
