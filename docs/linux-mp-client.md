@@ -121,7 +121,10 @@ mixes at. For sound problems, `+set snd_alDebug 1` adds OpenAL errors, stream
 underruns and a summary every 5 seconds (sounds started, sounds cut while still
 playing, sources playing, longest gap between sound updates); `snd_alDebug 2`
 also prints every sound start. It is off by default and changes nothing that is
-played.
+played. At level 1 it also prints `snd_al: read all of stream '<file>' (N KB)
+to find its length: M ms` the first time an MP3 stream without a length tag
+plays: the decoder has to read such a file through to know how long it is,
+and the driver keeps the answer for the next start of that file.
 
 The OpenAL headers (`AL/al.h`) are needed too, whichever library is linked,
 because the sound headers include them. Without `libopenal-dev` installed, unpack

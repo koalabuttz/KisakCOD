@@ -357,6 +357,57 @@ static AlStreamState g_streamState[53];
 static const int AL_STREAM_BUFFER_COUNT = 4;
 static const int AL_STREAM_BUFFER_FRAMES = 8192;
 
+// The lengths of the MP3 streams that have played, by file.
+//
+// An MP3 without a Xing or Info tag does not say how long it is: dr_mp3 finds
+// out by reading the whole file (drmp3_get_pcm_frame_count), on the thread
+// that starts the sound. The game's own streams have no such tag. On the PS
+// Vita one start of a 3.5 MB stream held the main thread for 0.75 s, and the
+// same stream started again every minute or two of a match (console run AY,
+// 2026-11-14). A file is now read through once: the count is kept here with
+// the file's size, so a file replaced by another of another size is counted
+// anew. Sounds start on one thread, so nothing guards the table.
+struct AlStreamLength
+{
+    char name[128];
+    uint32_t fileBytes;
+    uint64_t frames;
+};
+static const int AL_STREAM_LENGTHS = 64;
+static AlStreamLength g_streamLengths[AL_STREAM_LENGTHS];
+static int g_streamLengthCount;
+static int g_streamLengthNext;
+
+static bool AL_FindStreamLength(const char *name, uint32_t fileBytes, uint64_t *frames)
+{
+    for (int i = 0; i < g_streamLengthCount; ++i)
+    {
+        const AlStreamLength &length = g_streamLengths[i];
+        if (length.fileBytes == fileBytes && !I_stricmp(length.name, name))
+        {
+            *frames = length.frames;
+            return true;
+        }
+    }
+    return false;
+}
+
+static void AL_KeepStreamLength(const char *name, uint32_t fileBytes, uint64_t frames)
+{
+    // A name that does not fit could be taken for another file's.
+    if (strlen(name) >= sizeof(g_streamLengths[0].name))
+        return;
+    // The table is a ring: when it is full the oldest file is counted again
+    // the next time it plays.
+    AlStreamLength &length = g_streamLengths[g_streamLengthNext];
+    g_streamLengthNext = (g_streamLengthNext + 1) % AL_STREAM_LENGTHS;
+    if (g_streamLengthCount < AL_STREAM_LENGTHS)
+        ++g_streamLengthCount;
+    I_strncpyz(length.name, name, sizeof(length.name));
+    length.fileBytes = fileBytes;
+    length.frames = frames;
+}
+
 // Miles' MSS_File*Callback (snd_mss.cpp) bridges AIL's file I/O to FS_*; these do the same
 // for dr_wav/dr_mp3, since neither library has a concept of a game virtual filesystem.
 // Format extension is reachable from data (see WORK.md Phase 5 - Com_GetSoundFileName's
@@ -983,7 +1034,8 @@ int SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int index)
     AlStreamState *stream = &g_streamState[index];
     memset(stream, 0, sizeof(*stream));
 
-    uint32_t openResult = (FS_FOpenFileReadStream(realname, &stream->fsHandle) & 0x80000000) == 0;
+    const uint32_t fileBytes = FS_FOpenFileReadStream(realname, &stream->fsHandle);
+    uint32_t openResult = (fileBytes & 0x80000000) == 0;
     if (!openResult)
     {
         Com_PrintError(CON_CHANNEL_SOUND, "Couldn't play stream '%s' from alias '%s' - file not found\n", realname, startAliasInfo->alias0->aliasName);
@@ -1013,11 +1065,26 @@ int SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int index)
     int baserate = stream->sampleRate;
 
     // dr_mp3 doesn't know its total frame count up front the way dr_wav does from the RIFF
-    // header - drmp3_get_pcm_frame_count does a one-time scan to find it, paid once here at
-    // stream start (same spirit as the one-time cost of opening/parsing the file at all).
-    uint64_t totalFrames = stream->isMp3
-        ? drmp3_get_pcm_frame_count(&stream->mp3)
-        : stream->wav.totalPCMFrameCount;
+    // header: unless the file has a Xing or Info tag, drmp3_get_pcm_frame_count reads the
+    // whole file to find it. That is paid the first time a file plays; after that the count
+    // comes from g_streamLengths.
+    uint64_t totalFrames;
+    if (!stream->isMp3)
+    {
+        totalFrames = stream->wav.totalPCMFrameCount;
+    }
+    else if (!AL_FindStreamLength(realname, fileBytes, &totalFrames))
+    {
+        const bool tagged = stream->mp3.totalPCMFrameCount != DRMP3_UINT64_MAX;
+        const uint32_t countStart = Sys_MillisecondsRaw();
+        totalFrames = drmp3_get_pcm_frame_count(&stream->mp3);
+        // A count of 0 is a file that could not be read through; it is not kept.
+        if (totalFrames)
+            AL_KeepStreamLength(realname, fileBytes, totalFrames);
+        if (!tagged && SND_AlDebug(1))
+            Com_Printf(CON_CHANNEL_SOUND, "snd_al: read all of stream '%s' (%u KB) to find its length: %u ms\n",
+                realname, (unsigned int)(fileBytes / 1024u), (unsigned int)(Sys_MillisecondsRaw() - countStart));
+    }
 
     ALuint source = alGlob.source[index];
     MSS_ApplyEqFilter(source, entchannel);

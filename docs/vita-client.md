@@ -532,6 +532,19 @@ Gains are Q15 and move toward their targets every 64 frames, so a volume or
 position change does not click. One lock guards all of it; the mixer holds it
 for one update.
 
+**Streamed sounds' lengths.** The engine wants a stream's length when it
+starts, and an MP3 without a Xing or Info tag does not say: the decoder reads
+the whole file to count its frames, on the main thread. The game's streams
+have no tag. Console run AY (2026-11-14, `Vita: long frame's calls`) caught
+it: a 3.5 MB stream in `iw_11.iwd` started every minute or two of a match on
+Crash, and each start held the main thread for about 0.75 s (0.42 s in 72
+file reads, the rest counting), which is a frozen picture. The OpenAL driver
+now keeps each file's count after its first play (`g_streamLengths` in
+`src/sound/snd_driver_openal.cpp`, on every platform; host test
+`scripts/tests/test_openal_stream_lengths.py`), so a stream is read through
+once in a start of the game. `snd_alDebug 1` prints a line each time a file
+is read through.
+
 **Loaded sounds in memory** (`snd_adpcm`). The OpenAL driver keeps every
 loaded sound as 16-bit PCM, and that is also how the fastfiles hold the sounds
 counted so far: all 702 the menu loads and the nine Crash adds came as 16-bit
