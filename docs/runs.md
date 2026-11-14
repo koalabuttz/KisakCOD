@@ -283,8 +283,8 @@ script):
     "exe": "C:/kisak/builds/b204c3a-vk/KisakCOD-mp.exe",
     "cwd": "C:/kisak/builds/b204c3a-vk",
     "args": ["+set", "r_fullscreen", "1", "+set", "r_mode", "1280x720", "+set", "r_aaSamples", "1",
-             "+set", "snd_volume", "0", "+set", "logfile", "2", "+set", "net_ip", "127.0.0.1",
-             "+set", "r_backend", "vulkan", "+set", "r_visuals", "modern"],
+             "+set", "com_maxfps", "0", "+set", "snd_volume", "0", "+set", "logfile", "2",
+             "+set", "net_ip", "127.0.0.1", "+set", "r_backend", "vulkan", "+set", "r_visuals", "modern"],
     "env": {"KISAK_VK_MODERN_EXPOSURE": "0"},
     "clear_env": ["KISAK_VK_*"],
     "home_template": "C:/kisak/homes/template",
@@ -317,6 +317,9 @@ script):
   linear light: back buffer is multisampled"). The team and class menus are
   answered by number (`cmd mr {serverid} 8 autoassign`, then `15
   assault_mp,0`; the log lists the numbers when the map comes up on the Vita).
+  Give `com_maxfps 0` to any launch whose frame log is read for speed: proof 2
+  left it out and both frame logs read about 91 fps where the same view reads
+  about 430 without a cap.
 - `home_template` is copied for every launch and given as `fs_homepath`, so
   each launch starts from the same home and its log and screenshots are its
   own (they are found under that home afterwards).
@@ -338,7 +341,12 @@ failing and a hanging launch, and `--resume`. pc_run proof 1 (Windows PC,
 2026-11-14, master 058d5eb, local Vulkan build) ran it against the real game:
 the timed commands, a named screenshot under `r_backend vulkan`, the quit by
 itself, the frame log and the report all worked; it found the three traps above
-(the question box, the profile's multisampling, the team menu).
+(the question box, the profile's multisampling, the team menu). pc_run proof 2
+(PR 315's head 7ed84e5, local Vulkan build) ran the recipe above with nobody at
+the PC: two launches in 91 s, both ending by themselves with 0 validation
+errors; a CPU burn made one start ask "Set Optimal Settings?" and the game
+answered it "No" (`KISAK_NO_DIALOGS is set; leaving the player profile
+unchanged`); both screenshots show the map, not a menu, at one sample.
 
 ## Menus without a person: `menu_check.py`
 

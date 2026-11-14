@@ -39,7 +39,7 @@ The recipe (JSON)::
         "exe": "C:/kisak/builds/b204c3a-vk/KisakCOD-mp.exe",
         "cwd": "C:/kisak/builds/b204c3a-vk",
         "args": ["+set", "r_fullscreen", "1", "+set", "r_mode", "1280x720", "+set", "r_aaSamples", "1",
-                 "+set", "snd_volume", "0", "+set", "logfile", "2"],
+                 "+set", "com_maxfps", "0", "+set", "snd_volume", "0", "+set", "logfile", "2"],
         "env": {"KISAK_VK_MODERN_EXPOSURE": "0"},
         "clear_env": ["KISAK_VK_*"],
         "home_template": "C:/kisak/homes/template",
@@ -72,7 +72,8 @@ gives its own; ``timeout`` (seconds, whole launch) ends a launch that hangs.
 Every launch gets ``KISAK_NO_DIALOGS=1`` unless the recipe sets it, so the
 game answers its own questions ("Set Optimal Settings?") "No" instead of
 waiting. Pin the settings a run depends on in ``game.args`` (``r_aaSamples 1``
-for anything Modern: a multisampled back buffer turns the Modern path off),
+for anything Modern: a multisampled back buffer turns the Modern path off;
+``com_maxfps 0`` for anything timed, or the frame log reads the cap),
 since the home template's profile holds the player's own.
 ``forbid_processes`` are checked before and after every launch (Windows:
 tasklist); a launch never starts while one runs, nor while another copy of
