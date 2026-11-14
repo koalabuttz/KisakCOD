@@ -324,6 +324,32 @@ bool ModernReflectionProbe(IDirect3DDevice9 *device, IDirect3DCubeTexture9 *prob
     return false;
 }
 
+bool ModernPlanarWanted(IDirect3DDevice9 *device)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernPlanarWanted();
+    return false;
+}
+
+bool ModernPlanarBegin(IDirect3DDevice9 *device, const ModernPlanarView &view)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernPlanarBegin(view);
+    return false;
+}
+
+void ModernPlanarDone(IDirect3DDevice9 *device, const ModernPlanarView &view)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernPlanarDone(view);
+}
+
 void ModernSurfaceMoved(IDirect3DDevice9 *device, const float clip[4][4], const float prevClip[4][4])
 {
     const FrontLock lock;

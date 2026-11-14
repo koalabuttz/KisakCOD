@@ -40,17 +40,17 @@ involved. The checks:
                  setting (what each setting did to its frame, and that the
                  statistics count from where they were last started, are the
                  scene's own points); and the Modern path's statistics lines
-                 count the 74 anti-aliased scenes of modern_taa,
+                 count the 76 anti-aliased scenes of modern_taa,
                  modern_linear, modern_bloom, modern_effects, modern_lit,
                  modern_lit_shader, modern_lit_models, modern_lit_no_sun,
                  modern_tonemap, modern_exposure, modern_velocity,
-                 modern_normals, modern_ao and modern_reflections, 24 of them
-                 without history, the 22 scenes of modern_linear,
+                 modern_normals, modern_ao, modern_reflections and
+                 modern_planar, 25 of them without history, the 24 scenes of
+                 modern_linear,
                  modern_bloom, modern_effects, modern_lit, modern_lit_shader,
                  modern_lit_models, modern_lit_no_sun, modern_tonemap,
-                 modern_exposure, modern_normals, modern_ao and
-                 modern_reflections in
-                 linear light with one copy read from them (none with
+                 modern_exposure, modern_normals, modern_ao,
+                 modern_reflections and modern_planar in linear light with one copy read from them (none with
                  KISAK_VK_MODERN_LINEAR=0), modern_bloom's 2 scenes with
                  bloom (none with KISAK_VK_MODERN_LINEAR=0 or
                  KISAK_VK_MODERN_BLOOM=0), modern_lit's, modern_lit_shader's,
@@ -128,6 +128,14 @@ involved. The checks:
                  KISAK_VK_MODERN_PROBES=0 or KISAK_VK_MODERN_LINEAR=0, where
                  they are kept as the game made them; the full run filters
                  its 2 unless either is off
+  planar         --scene modern_planar passes as it is and with
+                 KISAK_VK_MODERN_PLANAR=0 beside the debug view or
+                 KISAK_VK_MODERN_LINEAR=0 beside it, where no planar view is
+                 taken, and with KISAK_VK_MODERN_PLANAR=1 or
+                 KISAK_VK_MODERN_DEBUG=planar, where its two planar views are
+                 drawn into their own image (logged), never onto the screen,
+                 and the debug view shows the first over the second frame's
+                 scene; the full run takes none
   ao             --scene modern_ao passes as it is, where our lit shader
                  darkens the floor in the corner by the ambient occlusion
                  (the scene's own points), with KISAK_VK_MODERN_DEBUG=ao (and
@@ -175,7 +183,7 @@ SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'model_lig
           'kept_state', 'multisample', 'modern_taa', 'modern_linear', 'modern_bloom', 'modern_effects',
           'modern_lit', 'modern_lit_shader', 'modern_lit_models', 'modern_lit_no_sun', 'modern_tonemap',
           'modern_exposure', 'modern_velocity', 'modern_normals', 'modern_ao', 'modern_reflections',
-          'modern_probes', 'reset',
+          'modern_probes', 'modern_planar', 'reset',
           'fullscreen', 'present')
 
 
@@ -497,6 +505,29 @@ def main():
                            if filtered else line is None),
                       f'status {code}\n{stdout}')
 
+    # planar
+    planar_line = re.compile(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) planar reflection views \((\d+)x(\d+)\)$',
+                             re.M)
+    for settings, views in (({}, 0),
+                            ({'KISAK_VK_MODERN_PLANAR': '1'}, 2),
+                            ({'KISAK_VK_MODERN_DEBUG': 'planar'}, 2),
+                            ({'KISAK_VK_MODERN_DEBUG': 'planar', 'KISAK_VK_MODERN_PLANAR': '0'}, 0),
+                            ({'KISAK_VK_MODERN_DEBUG': 'planar', 'KISAK_VK_MODERN_LINEAR': '0'}, 0)):
+        chosen = dict(env)
+        for name in ('KISAK_VK_MODERN_PLANAR', 'KISAK_VK_MODERN_LINEAR', 'KISAK_VK_MODERN_DEBUG'):
+            chosen.pop(name, None)
+        chosen.update(settings)
+        code, stdout, _ = run(binary, ['--scene', 'modern_planar', '--validation', args.validation], chosen)
+        found, scenes = parse(stdout)
+        line = planar_line.search(stdout)
+        named = ' '.join(f'{k}={v}' for k, v in settings.items()) or 'the defaults'
+        checks.expect(f'modern_planar passes with {named}',
+                      code == 0 and found.get('d3d9_check') == 'passed'
+                      and [s[0] for s in scenes] == ['modern_planar']
+                      and (line is not None and line.group(1) == str(views) and line.group(2) == '64'
+                           and line.group(3) == '64' if views else line is None),
+                      f'status {code}\n{stdout}')
+
     # present-mode
     fifo = dict(env)
     fifo['KISAK_VK_PRESENT_MODE'] = 'fifo'
@@ -583,11 +614,12 @@ def main():
     # in the fourth a brush model's (44-byte vertices). Last,
     # the modern_normals scene's one (a cut), the modern_ao scene's one, the
     # same, and the modern_reflections scene's five (the first and the third
-    # cuts), in linear light unless KISAK_VK_MODERN_LINEAR=0.
+    # cuts), and the modern_planar scene's two (the first a cut), in linear
+    # light unless KISAK_VK_MODERN_LINEAR=0.
     modern = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes anti-aliased \((\d+) without history\)',
                        stdout)
-    checks.expect('the Modern path anti-aliased 74 scenes, 24 without history',
-                  modern is not None and modern.group(1) == '74' and modern.group(2) == '24',
+    checks.expect('the Modern path anti-aliased 76 scenes, 25 without history',
+                  modern is not None and modern.group(1) == '76' and modern.group(2) == '25',
                   modern.group(0) if modern else 'missing')
     velocity = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with surfaces that move on their own '
                          r'\((\d+) surfaces, (\d+) of them brush models\), ([0-9.]+) ms GPU each for their velocity$',
@@ -637,6 +669,10 @@ def main():
                           reflections.group(0) if reflections else 'no reflections line')
         else:
             checks.expect('no screen-space reflections when nothing reads them', reflections is None)
+    # Planar reflections: modern_planar's two views, only when asked for.
+    if 'KISAK_VK_MODERN_PLANAR' not in env and 'KISAK_VK_MODERN_DEBUG' not in env:
+        planar = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) planar reflection views', stdout)
+        checks.expect('no planar reflection view unless asked for', planar is None, planar.group(0) if planar else '')
     # Reflection probes, filtered again at load: modern_probes' one, twice.
     if 'KISAK_VK_MODERN_PROBES' not in env:
         probes = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) reflection probes filtered', stdout)
@@ -652,8 +688,8 @@ def main():
         checks.expect('no scene in linear light with KISAK_VK_MODERN_LINEAR=0', linear is None,
                       linear.group(0) if linear else '')
     else:
-        checks.expect('the Modern path drew 22 scenes in linear light and read 1 copy from them',
-                      linear is not None and linear.group(1) == '22' and linear.group(2) == '1',
+        checks.expect('the Modern path drew 24 scenes in linear light and read 1 copy from them',
+                      linear is not None and linear.group(1) == '24' and linear.group(2) == '1',
                       linear.group(0) if linear else 'missing')
     bloom = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with bloom in place of the glow '
                       r'\(([0-9.]+) passes each\), ([0-9.]+) ms GPU each$', stdout)

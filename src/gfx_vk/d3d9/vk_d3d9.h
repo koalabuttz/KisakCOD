@@ -284,4 +284,23 @@ void SetModernLitInputs(IDirect3DDevice9 *device, const ModernLitInputs *inputs)
 // texture is not an 8-bit colour cube with levels, or on a back end without
 // a Modern path. Filtering a probe again gives the same levels.
 bool ModernReflectionProbe(IDirect3DDevice9 *device, IDirect3DCubeTexture9 *probe);
+// A planar reflection view (docs/vulkan-modern.md "Planar reflections"): the
+// scene seen in a mirror laid on one plane, which the renderer draws after
+// the main view.
+struct ModernPlanarView
+{
+    float view[4][4];       // the mirrored camera (row vectors, as ModernSceneView)
+    float projection[4][4]; // its near plane is the reflection plane
+    uint32_t width, height; // the view's size; it is drawn at 0, 0
+    float plane[4];         // the world plane: n.p + d >= 0 is kept
+};
+// Whether the Modern path wants a planar view this frame (false on a back end
+// without one).
+bool ModernPlanarWanted(IDirect3DDevice9 *device);
+// The planar view's draws come next: render target 0 and the depth surface
+// go to the Modern path's planar image and its own depth (cleared), whatever
+// the program sets, until ModernPlanarDone. False when it does not take the
+// view (the program then draws nothing for it).
+bool ModernPlanarBegin(IDirect3DDevice9 *device, const ModernPlanarView &view);
+void ModernPlanarDone(IDirect3DDevice9 *device, const ModernPlanarView &view);
 } // namespace gfx_vk::d3d9

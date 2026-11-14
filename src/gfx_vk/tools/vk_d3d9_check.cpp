@@ -532,6 +532,7 @@ public:
     void ModernAo();
     void ModernReflections();
     void ModernProbes();
+    void ModernPlanar();
     void Bench();
     void BenchRuns();
     void BenchFrames(bool runs);
@@ -2943,6 +2944,94 @@ void Check::Multisample()
 // engine applies, a pixel the jitter covers in some frames and not in others
 // ends between the two colours, where without the pass it would be one or the
 // other; a scene with no depth surface is refused.
+// Planar reflections (vk_d3d9.h ModernPlanarBegin): two frames, each a scene
+// in linear light (a grey clear) and then a planar view of half its size, in
+// which the renderer sets the back buffer and the scene's depth as its targets
+// and draws red. The red must land in the planar image, never on the screen;
+// with KISAK_VK_MODERN_DEBUG=planar the second frame shows the first frame's
+// planar image over the scene's top left. Without KISAK_VK_MODERN_PLANAR=1 or
+// the debug view, or with KISAK_VK_MODERN_LINEAR=0, no view is taken.
+void Check::ModernPlanar()
+{
+    const auto envIs = [](const char *name, const char *value) {
+#if defined(_MSC_VER)
+        char *env = nullptr;
+        size_t envLength = 0;
+        const bool is = _dupenv_s(&env, &envLength, name) == 0 && env && !std::strcmp(env, value);
+        std::free(env);
+        return is;
+#else
+        const char *env = std::getenv(name);
+        return env && !std::strcmp(env, value);
+#endif
+    };
+    const bool debug = envIs("KISAK_VK_MODERN_DEBUG", "planar");
+    const bool wanted = !envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_PLANAR", "0")
+                        && (envIs("KISAK_VK_MODERN_PLANAR", "1") || debug);
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    Equal("planar_wanted", front::ModernPlanarWanted(device), wanted);
+    constexpr UINT kHalf = kSize / 2;
+    for (int frame = 0; frame < 2; ++frame)
+    {
+        Reset(Argb(255, 90, 90, 90));
+        front::ModernSceneBegin(device);
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 60, 60, 60), 1.0f, 0),
+           "Clear(scene)");
+        front::ModernSceneView view{};
+        for (int i = 0; i < 4; ++i)
+            view.view[i][i] = view.projection[i][i] = 1.0f;
+        view.width = kSize;
+        view.height = kSize;
+        view.cut = frame == 0;
+        front::ModernSceneDone(device, view);
+
+        front::ModernPlanarView planar{};
+        for (int i = 0; i < 4; ++i)
+            planar.view[i][i] = planar.projection[i][i] = 1.0f;
+        planar.width = kHalf;
+        planar.height = kHalf;
+        planar.plane[2] = 1.0f;
+        const bool began = front::ModernPlanarBegin(device, planar);
+        Equal("planar_began", began, wanted);
+        if (began)
+        {
+            // As the renderer does: its scene target and depth, which stay
+            // the planar image's until the view is done.
+            Ok(device->SetRenderTarget(0, backBuffer), "SetRenderTarget(planar)");
+            device->SetDepthStencilSurface(depth);
+            const D3DVIEWPORT9 viewport{0, 0, kHalf, kHalf, 0.0f, 1.0f};
+            device->SetViewport(&viewport);
+            device->SetRenderState(D3DRS_ZENABLE, TRUE);
+            device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+            DrawQuad(0, 0, kHalf, kHalf, 0.5f, Argb(255, 250, 20, 20), kHalf);
+            front::ModernPlanarDone(device, planar);
+            IDirect3DSurface9 *target = nullptr;
+            if (Ok(device->GetRenderTarget(0, &target), "GetRenderTarget"))
+            {
+                Equal("planar_target_is_back_buffer", target == backBuffer, true);
+                SafeRelease(target);
+            }
+        }
+        if (frame == 1 && Read())
+        {
+            // The scene's grey wherever the planar image is not shown.
+            Expect("planar_scene_kept", 100, 100, 60, 60, 60);
+            if (debug && wanted)
+                Expect("planar_debug_red", 16, 16, 250, 20, 20);
+            else
+                Expect("planar_not_on_screen", 16, 16, 60, 60, 60);
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    }
+    device->SetDepthStencilSurface(nullptr);
+    SafeRelease(depth);
+}
+
 void Check::ModernTaa()
 {
     // ---- Reprojection, in double and as the float matrix the shader gets ----
@@ -5937,6 +6026,7 @@ int Run(const Options &options)
         {"modern_ao", &Check::ModernAo, true},
         {"modern_reflections", &Check::ModernReflections, true},
         {"modern_probes", &Check::ModernProbes, true},
+        {"modern_planar", &Check::ModernPlanar, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},

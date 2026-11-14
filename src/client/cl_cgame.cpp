@@ -659,6 +659,8 @@ void CL_RenderScene(const refdef_s *fd)
     cls.renderForward[1] = fd->viewaxis[0][1];
     cls.renderForward[2] = fd->viewaxis[0][2];
     R_RenderScene(fd);
+    // The Modern path's planar reflection view, when it wants one.
+    R_ModernPlanarScene(fd);
 }
 
 void CL_SetFullScreenViewport()

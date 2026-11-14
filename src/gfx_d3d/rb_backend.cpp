@@ -22,6 +22,8 @@
 #include "rb_drawprofile.h"
 #include <stringed/stringed_hooks.h>
 #include "rb_draw3d.h"
+#include "r_scene.h"
+#include "r_draw_method.h"
 #include "r_dvars.h"
 #include "r_pixelcost_load_obj.h"
 #include <win32/win_net.h>
@@ -2888,6 +2890,12 @@ void RB_Draw3D()
     {
         PROF_SCOPED("ExecuteRenderCmds");
         RB_Draw3DInternal(&data->viewInfo[data->viewInfoIndex]);
+        // Then the Modern path's planar reflection view, which reuses the
+        // main view's shadow maps (R_ModernPlanarScene).
+        if (gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD)
+            for (uint32_t viewInfoIndex = 0; viewInfoIndex < data->viewInfoCount; ++viewInfoIndex)
+                if (viewInfoIndex != data->viewInfoIndex && R_IsModernPlanarView(&data->viewInfo[viewInfoIndex]))
+                    RB_ModernPlanarDrawCommands(&data->viewInfo[viewInfoIndex]);
     }
 }
 

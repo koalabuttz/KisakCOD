@@ -188,6 +188,8 @@ lg::Surface *Device::DrawTarget(DWORD index, Surface *target) const
 {
     if (!target)
         return nullptr;
+    if (index == 0 && planarScene_)
+        return planarScene_;
     if (index == 0 && linearScene_ && target == backBuffer_.get())
         return linearScene_;
     return target->handle();
@@ -233,6 +235,34 @@ ModernResult Device::ModernSceneDone(const ModernSceneView &view, bool *glowDraw
     return result;
 }
 
+bool Device::ModernPlanarBegin(const ModernPlanarView &view)
+{
+    if (planarScene_)
+        return false;
+    lg::Surface *color = nullptr;
+    lg::Surface *depth = nullptr;
+    if (!BackendModernPlanarBegin(backend_, view, color, depth))
+        return false;
+    planarScene_ = color;
+    planarDepth_ = depth;
+    lg::SetRenderTarget(legacy_, 0, color);
+    lg::SetDepthStencilSurface(legacy_, depth);
+    // Setting the target set the viewport and scissor to the whole image.
+    lg::Clear(legacy_, 0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER | D3DCLEAR_STENCIL, 0, 1.0f, 0);
+    return true;
+}
+
+void Device::ModernPlanarDone(const ModernPlanarView &view)
+{
+    if (!planarScene_)
+        return;
+    planarScene_ = nullptr;
+    planarDepth_ = nullptr;
+    BackendModernPlanarDone(backend_, view);
+    RebindTarget0();
+    lg::SetDepthStencilSurface(legacy_, depthStencil_ ? depthStencil_->handle() : nullptr);
+}
+
 ModernResult Device::ModernSceneDepth(const ModernSceneView &view)
 {
     return BackendModernSceneDepth(backend_, depthStencil_ ? depthStencil_->handle() : nullptr, view);
@@ -253,6 +283,8 @@ ModernResult Device::ModernSceneLit(const ModernSceneView &view, bool *glowDrawn
 void Device::UnbindAll()
 {
     linearScene_ = nullptr;
+    planarScene_ = nullptr;
+    planarDepth_ = nullptr;
     for (Surface *&target : renderTargets_)
         Rebind(target, static_cast<Surface *>(nullptr));
     Rebind(depthStencil_, static_cast<Surface *>(nullptr));
@@ -1038,7 +1070,7 @@ HRESULT STDMETHODCALLTYPE Device::SetDepthStencilSurface(IDirect3DSurface9 *surf
         if (!(desc.Usage & D3DUSAGE_DEPTHSTENCIL))
             return D3DERR_INVALIDCALL;
     }
-    lg::SetDepthStencilSurface(legacy_, depth ? depth->handle() : nullptr);
+    lg::SetDepthStencilSurface(legacy_, planarDepth_ ? planarDepth_ : depth ? depth->handle() : nullptr);
     Rebind(depthStencil_, depth);
     return D3D_OK;
 }

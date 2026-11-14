@@ -602,10 +602,39 @@ void ModernReflectionProbe(void *, IDirect3DDevice9 *device, IDirect3DCubeTextur
         front::ModernReflectionProbe(device, probe);
 }
 
+front::ModernPlanarView ModernPlanarViewOf(const GfxModernPlanar *planar)
+{
+    front::ModernPlanarView view{};
+    std::memcpy(view.view, planar->view, sizeof(view.view));
+    std::memcpy(view.projection, planar->projection, sizeof(view.projection));
+    view.width = planar->width > 0 ? static_cast<uint32_t>(planar->width) : 0u;
+    view.height = planar->height > 0 ? static_cast<uint32_t>(planar->height) : 0u;
+    std::memcpy(view.plane, planar->plane, sizeof(view.plane));
+    return view;
+}
+
+bool ModernPlanarWanted(void *, IDirect3DDevice9 *device)
+{
+    return !s_modernRefused.load(std::memory_order_relaxed) && front::ModernPlanarWanted(device);
+}
+
+bool ModernPlanarBegin(void *, IDirect3DDevice9 *device, const GfxModernPlanar *planar)
+{
+    return !s_modernRefused.load(std::memory_order_relaxed) && planar
+           && front::ModernPlanarBegin(device, ModernPlanarViewOf(planar));
+}
+
+void ModernPlanarDone(void *, IDirect3DDevice9 *device, const GfxModernPlanar *planar)
+{
+    if (planar)
+        front::ModernPlanarDone(device, ModernPlanarViewOf(planar));
+}
+
 const GfxModernHooks s_modernHooks = {nullptr,          ModernJitterPixels, ModernSceneDone,
                                       ModernSceneBegin, ModernSceneLit,     ModernSurfaceMoved,
                                       ModernSkinnedSurfaceMoved, ModernLitInputs, ModernWantsSceneDepth,
-                                      ModernSceneDepth, ModernReflectionProbe};
+                                      ModernSceneDepth, ModernReflectionProbe, ModernPlanarWanted,
+                                      ModernPlanarBegin, ModernPlanarDone};
 } // namespace
 
 int Kisak_VulkanBackendSelected()
