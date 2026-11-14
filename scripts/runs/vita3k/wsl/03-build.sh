@@ -54,10 +54,10 @@ fi
 if [ -n "$touch_file" ]; then test -f "$touch_file"; touch "$touch_file"; echo "touched $touch_file"; fi
 ccache --zero-stats > /dev/null
 t=$(date +%s%N)
-cmake --build "$BUILD_DIR" --target KisakCOD-mp-vpk KisakCOD-gxm-probe-vpk --parallel "$(nproc)" > "$RUNNER_TEMP/logs/build.log" 2>&1 || { grep -n -E 'error|FAILED' "$RUNNER_TEMP/logs/build.log" | head -40; tail -15 "$RUNNER_TEMP/logs/build.log"; exit 1; }
+cmake --build "$BUILD_DIR" --target KisakCOD-mp-vpk KisakCOD-mp-test-vpk KisakCOD-gxm-probe-vpk --parallel "$(nproc)" > "$RUNNER_TEMP/logs/build.log" 2>&1 || { grep -n -E 'error|FAILED' "$RUNNER_TEMP/logs/build.log" | head -40; tail -15 "$RUNNER_TEMP/logs/build.log"; exit 1; }
 echo "build: $(( ($(date +%s%N) - t) / 1000000 )) ms; ninja steps run: $(grep -c -E '^\[[0-9]+/[0-9]+\]' "$RUNNER_TEMP/logs/build.log" || true); warnings: $(grep -c 'warning:' "$RUNNER_TEMP/logs/build.log" || true)"
 ccache --show-stats | grep -E 'Hits|Misses|Cacheable|Cache size' | tr -s ' ' | tr '\n' ';'; echo
-ls -l "$BINARY" "$BINARY.vpk" "$OUT_DIR/KisakCOD-gxm-probe.vpk"
+ls -l "$BINARY" "$BINARY.vpk" "$BINARY-test.vpk" "$OUT_DIR/KisakCOD-gxm-probe.vpk"
 "$VITASDK/bin/arm-vita-eabi-size" -A "$BINARY" | grep -E '^\.(text|rodata|data|bss) '
 
 if [ -z "$touch_file" ]; then
@@ -74,8 +74,8 @@ if [ -z "$touch_file" ]; then
   dest="${DEST_ROOT:?DEST_ROOT: the local-builds folder}/${DEST_NAME:-$sha}"
   mkdir -p "$dest"
   git log -1 --format='head %H%nparents %P%nsubject %s' > "$dest/COMMIT.txt"
-  cp "$BINARY.vpk" "$OUT_DIR/KisakCOD-gxm-probe.vpk" "$dest/"
+  cp "$BINARY.vpk" "$BINARY-test.vpk" "$OUT_DIR/KisakCOD-gxm-probe.vpk" "$dest/"
   cp "$BINARY" "$dest/KisakCOD-mp.elf"
   { echo "local build of $sha"; date -u +"built %Y-%m-%dT%H:%M:%SZ"; clang++ --version | head -1; grep -E '^tag=' scripts/ci/install-vitasdk.sh; git status --porcelain --untracked-files=no | sed 's/^/changed: /'; } > "$dest/BUILD.txt"
-  ( cd "$dest" && sha256sum KisakCOD-mp.vpk KisakCOD-gxm-probe.vpk KisakCOD-mp.elf | tee SHA256SUMS && ls -l )
+  ( cd "$dest" && sha256sum KisakCOD-mp.vpk KisakCOD-mp-test.vpk KisakCOD-gxm-probe.vpk KisakCOD-mp.elf | tee SHA256SUMS && ls -l )
 fi
