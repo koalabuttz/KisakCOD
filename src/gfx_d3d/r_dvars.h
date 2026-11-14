@@ -170,6 +170,9 @@ extern const dvar_t *r_lightTweakSunColor;
 extern const dvar_t *r_clearColor2;
 extern const dvar_t *r_filmTweakDarkTint;
 extern const dvar_t *r_scaleViewport;
+#ifdef KISAK_GFX_GXM
+extern const dvar_t *vita_sceneScale;
+#endif
 extern const dvar_t *r_normal;
 extern const dvar_t *sm_sunShadowCenter;
 extern const dvar_t *r_glowTweakEnable;

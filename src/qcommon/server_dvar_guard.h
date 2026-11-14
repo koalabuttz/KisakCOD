@@ -93,6 +93,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "vita_quitAfterMap",
     "vita_quitAfterMenu",
     "vita_rearTouch",
+    "vita_sceneScale",
     "vita_statsEvery",
     "vita_stickDeadzone",
 };
