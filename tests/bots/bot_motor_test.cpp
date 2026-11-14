@@ -169,6 +169,46 @@ static void Motor()
           "the turn does not depend on the frame rate");
 }
 
+static void Steering()
+{
+    std::printf("\n== walking toward a place ==\n");
+    const float from[2] = {0.0f, 0.0f};
+    const float east[2] = {100.0f, 0.0f};
+    const float north[2] = {0.0f, 100.0f};
+    kb::MoveKeys k = kb::MoveToward(0.0f, from, east);
+    Check(k.forward == 127 && k.right == 0, "looking at the place: straight forward");
+    k = kb::MoveToward(0.0f, from, north);
+    Check(k.forward == 0 && k.right == -127, "the place on the left (+y): strafe left");
+    k = kb::MoveToward(90.0f, from, east);
+    Check(k.forward == 0 && k.right == 127, "looking along +y, the place on the right (+x): strafe right");
+    k = kb::MoveToward(180.0f, from, east);
+    Check(k.forward == -127 && k.right == 0, "the place behind: walk backwards");
+    k = kb::MoveToward(45.0f, from, east);
+    Check(k.forward == 90 && k.right == 90, "45 degrees off: forward and right together");
+    k = kb::MoveToward(0.0f, from, from);
+    Check(k.forward == 0 && k.right == 0, "already there: no keys");
+    Check(Near(kb::YawToward(from, north), 90.0f, 1e-3f) && Near(kb::YawToward(from, east), 0.0f, 1e-3f),
+          "yaw toward +y is 90, toward +x is 0");
+    // The keys and the view agree with Pmove's frame: forward is
+    // (cos yaw, sin yaw), right is (sin yaw, -cos yaw).
+    bool agree = true;
+    kb::Rng rng;
+    rng.Seed(5);
+    for (int i = 0; i < 1000; ++i)
+    {
+        float yaw = rng.Range(-180.0f, 180.0f);
+        float to[2] = {rng.Range(-500.0f, 500.0f), rng.Range(-500.0f, 500.0f)};
+        kb::MoveKeys m = kb::MoveToward(yaw, from, to);
+        float r = yaw * 3.14159265f / 180.0f;
+        float wx = m.forward * std::cos(r) + m.right * std::sin(r);
+        float wy = m.forward * std::sin(r) - m.right * std::cos(r);
+        float len = std::hypot(to[0], to[1]);
+        if (len > 1.0f && (wx * to[0] + wy * to[1]) / (std::hypot(wx, wy) * len) < 0.999f)
+            agree = false;
+    }
+    Check(agree, "the keys always move toward the place, whatever the view");
+}
+
 static void Random()
 {
     std::printf("\n== each bot's random source replays from its seed ==\n");
@@ -214,6 +254,7 @@ int main()
     AngleHelpers();
     CommandAngles();
     Motor();
+    Steering();
     Random();
     if (gFailures)
     {
