@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 namespace gfx_vk::d3d9
 {
@@ -224,6 +225,16 @@ struct Backend
     modern::Reflections *reflections = nullptr;
     Image *sceneReflections = nullptr;
     modern::ReflectionStats reflectionsBase{};
+    // The game's reflection probes, filtered again in linear light as the
+    // world loads (modern::FilterReflectionProbe): wanted with linear light
+    // or KISAK_VK_MODERN_PROBES=1, never with KISAK_VK_MODERN_PROBES=0. The
+    // counts since the device was made (a world loads before statistics are
+    // started): filtered, left as they are (not 8-bit colour, too small),
+    // and the time taken.
+    bool probesWanted = false;
+    uint32_t probesFiltered = 0;
+    uint32_t probesLeft = 0;
+    double probesMs = 0.0;
     // KISAK_VK_MODERN_DEBUG=velocity: the velocity debug view over each
     // anti-aliased scene (docs/vulkan-modern.md), made at its first use.
     // velocity-all: the same, with every surface that moves on its own drawn
@@ -476,6 +487,8 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         if (edge > 0.0f && edge <= 10.0f)
             backend->aoParams.edge = edge;
     }
+    backend->probesWanted = !EnvIsZero("KISAK_VK_MODERN_PROBES")
+        && (EnvIs("KISAK_VK_MODERN_PROBES", "1") || backend->linearWanted);
     backend->debugReflections = EnvIs("KISAK_VK_MODERN_DEBUG", "reflections");
     backend->reflectionsWanted = !EnvIsZero("KISAK_VK_MODERN_SSR")
         && (EnvIs("KISAK_VK_MODERN_SSR", "1") || backend->debugReflections
@@ -795,6 +808,12 @@ void BackendLogStats(Backend *backend, bool reset)
                 static_cast<unsigned long long>(reflections.traces - backend->reflectionsBase.traces),
                 reflections.levels, pass.supported ? average(pass) : 0.0);
     }
+    // Reflection probes: filtered as the world loaded, since the device was made.
+    if (backend->probesFiltered || backend->probesLeft)
+        HostLog(h, "vulkan d3d9: modern: %u reflection probes filtered by gloss in linear light (%u left as they "
+                   "are), %.1f ms each",
+                backend->probesFiltered, backend->probesLeft,
+                backend->probesFiltered ? backend->probesMs / double(backend->probesFiltered) : 0.0);
     // Bloom: the scenes it ran for in place of the glow, the passes of each,
     // and their GPU time per scene.
     if (backend->bloom)
@@ -1565,6 +1584,74 @@ void TraceSceneReflections(Backend *backend, Image *depth, const modern::SceneVi
     lg::SetModernReflections(backend->legacy, backend->sceneReflections);
 }
 } // namespace
+
+bool BackendModernReflectionProbe(Backend *backend, lg::Device *legacy, lg::Texture *probe)
+{
+    if (!backend || !backend->probesWanted || !legacy || !probe)
+        return false;
+    const lg::TextureDesc &desc = lg::Describe(probe);
+    const uint32_t levels = desc.levels;
+    if (desc.kind != lg::TextureKind::Cube || desc.width < 2 || levels < 2 || levels > 16
+        || (desc.format != lg::d3d::FMT_A8R8G8B8 && desc.format != lg::d3d::FMT_X8R8G8B8))
+    {
+        ++backend->probesLeft;
+        return false;
+    }
+    const auto started = std::chrono::steady_clock::now();
+    // Every level read back (level 0 is what the filter reads; the others
+    // are written whole), filtered, and the levels below 0 written back.
+    std::vector<std::vector<uint8_t>> copies(6 * levels);
+    std::vector<uint8_t *> bits(6 * levels);
+    std::vector<uint32_t> pitches(6 * levels);
+    for (uint32_t face = 0; face < 6; ++face)
+        for (uint32_t level = 0; level < levels; ++level)
+        {
+            const uint32_t size = std::max(desc.width >> level, 1u);
+            std::vector<uint8_t> &copy = copies[face * levels + level];
+            copy.assign(static_cast<size_t>(size) * size * 4, 0);
+            if (level == 0)
+            {
+                lg::LockedRect locked;
+                if (!lg::LockRect(legacy, probe, face, 0, nullptr, lg::d3d::LOCK_READONLY, locked))
+                {
+                    ++backend->probesLeft;
+                    return false;
+                }
+                for (uint32_t y = 0; y < size; ++y)
+                    std::memcpy(copy.data() + static_cast<size_t>(y) * size * 4,
+                                static_cast<const uint8_t *>(locked.bits) + static_cast<size_t>(y) * locked.pitch,
+                                static_cast<size_t>(size) * 4);
+                lg::UnlockRect(legacy, probe, face, 0);
+                if (desc.format == lg::d3d::FMT_X8R8G8B8)
+                    for (size_t i = 3; i < copy.size(); i += 4)
+                        copy[i] = 255;
+            }
+            bits[face * levels + level] = copy.data();
+            pitches[face * levels + level] = size * 4;
+        }
+    if (!modern::FilterReflectionProbe(desc.width, levels, bits.data(), pitches.data()))
+    {
+        ++backend->probesLeft;
+        return false;
+    }
+    for (uint32_t face = 0; face < 6; ++face)
+        for (uint32_t level = 1; level < levels; ++level)
+        {
+            const uint32_t size = std::max(desc.width >> level, 1u);
+            lg::LockedRect locked;
+            if (!lg::LockRect(legacy, probe, face, level, nullptr, lg::d3d::LOCK_DISCARD, locked))
+                continue;
+            const std::vector<uint8_t> &copy = copies[face * levels + level];
+            for (uint32_t y = 0; y < size; ++y)
+                std::memcpy(static_cast<uint8_t *>(locked.bits) + static_cast<size_t>(y) * locked.pitch,
+                            copy.data() + static_cast<size_t>(y) * size * 4, static_cast<size_t>(size) * 4);
+            lg::UnlockRect(legacy, probe, face, level);
+        }
+    ++backend->probesFiltered;
+    backend->probesMs +=
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+    return true;
+}
 
 bool BackendModernWantsSceneDepth(Backend *backend)
 {

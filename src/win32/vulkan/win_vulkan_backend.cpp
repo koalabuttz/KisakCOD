@@ -596,10 +596,16 @@ void ModernSceneDepth(void *, IDirect3DDevice9 *device, GfxModernScene *scene)
         front::ModernSceneDepth(device, ModernViewOf(scene));
 }
 
+void ModernReflectionProbe(void *, IDirect3DDevice9 *device, IDirect3DCubeTexture9 *probe)
+{
+    if (!s_modernRefused.load(std::memory_order_relaxed))
+        front::ModernReflectionProbe(device, probe);
+}
+
 const GfxModernHooks s_modernHooks = {nullptr,          ModernJitterPixels, ModernSceneDone,
                                       ModernSceneBegin, ModernSceneLit,     ModernSurfaceMoved,
                                       ModernSkinnedSurfaceMoved, ModernLitInputs, ModernWantsSceneDepth,
-                                      ModernSceneDepth};
+                                      ModernSceneDepth, ModernReflectionProbe};
 } // namespace
 
 int Kisak_VulkanBackendSelected()

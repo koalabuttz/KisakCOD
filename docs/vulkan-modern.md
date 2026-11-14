@@ -1131,6 +1131,64 @@ probe, near black (the anti-aliasing keeps a trace of the red before it).
 `KISAK_VK_MODERN_NORMALS=0`, and checks that a full run traces 3 scenes
 (none with our lit shaders off).
 
+## Reflection probes
+
+The game's reflection probes are 64-texel cubes of 7 levels, made when the
+map was compiled: level 0 is the view from the probe, and each level below
+it the one above halved, in display values (sRGB), as box filters do. Lit
+surfaces read level 6 - 8 x gloss: the rough ones the bottom levels, which
+are blocky (a face of 1 or 2 texels) and darker than the light they stand
+for (averaging display values darkens the bright).
+
+With linear light, the Modern path makes levels 1 to 6 again from level 0
+as each map is set up (`R_LoadWorld` calls the `reflectionProbe` hook for
+each of the map's probes, not the default one), in
+`src/gfx_vk/modern/vk_modern_probes.cpp`:
+
+* level 0 is read in linear light (the game's encoding, rgb over the
+  largest channel and alpha that channel over 4, then the sRGB curve
+  undone);
+* each texel of level L is the mean of the light around its direction,
+  weighted by a cosine lobe of power (2^(9.37752 g) + 7) / 4 with
+  g = (6 - L) / 8: the power `lm_sun.frag` gives the sun's highlight at
+  that gloss, about the reflected ray (a quarter of the half-vector's).
+  That is 16.3 at level 1 to 2 at level 6. Each texel's light counts by the
+  solid angle it covers, and directions where the lobe is under a
+  thousandth are left out;
+* the lobes read a box-filtered copy of level 0 one level finer than they
+  write, at least 16 texels a face (level 2) and at most 4 (level 4);
+* each texel is stored back in the game's encoding (the alpha rounded up,
+  the colour making up for it).
+
+The bottom level is then a smooth sky-and-ground light, every direction
+with its own colour, instead of six flat faces; glossy surfaces keep their
+sharp level 0. Filtering again gives the same levels (level 0 is never
+written). Screen-space reflections replace this term where they find
+something, so the probe shows where they do not.
+
+**Cost.** About 17 ms a probe on one core at `-O2` (80 ms in a debug
+build), at map load only: a map with 40 probes loads about 0.7 s slower.
+Nothing is done per frame.
+
+| Setting | Default | Switch |
+| --- | --- | --- |
+| Probe filter | on with linear light | `KISAK_VK_MODERN_PROBES=0` keeps the game's levels; `KISAK_VK_MODERN_PROBES=1` filters them also without linear light |
+
+The statistics line: `vulkan d3d9: modern: N reflection probes filtered by
+gloss in linear light (M left as they are), X ms each` (M counts the cubes
+whose size or format the filter does not take).
+
+**Checks:** the D3D9 check's `modern_probes` scene makes a 64-texel cube of
+7 levels whose level 0 is black with a white top face, and marks its
+lower levels. Filtered, the middle of the top face's level 6 stays bright,
+a side face's level 6 picks up some of the top's light (more than at
+level 3, less than the top), and filtering a second time leaves the same
+levels. With `KISAK_VK_MODERN_PROBES=0` or `KISAK_VK_MODERN_LINEAR=0` the
+marks are kept. `test_vulkan_d3d9_front.py` runs it as it is, with
+`KISAK_VK_MODERN_PROBES=1` (beside `KISAK_VK_MODERN_LINEAR=0` or not), with
+`KISAK_VK_MODERN_PROBES=0` and with `KISAK_VK_MODERN_LINEAR=0`, and checks
+that a full run filters 2 (none without linear light).
+
 ## Next
 
 What this guide still lists as missing is in [What it does not do
