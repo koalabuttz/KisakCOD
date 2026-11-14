@@ -55,6 +55,8 @@
 namespace gfx_gxm
 {
 bool g_depthPrepass = true;
+bool g_prepassWorldOnly = true;
+bool g_prepassSkipModels = false;
 bool g_resolveWhenUsed = true;
 float g_sceneScale = 1.0f;
 bool g_stretchInFilter = true;
@@ -1764,6 +1766,9 @@ bool InitDraw(Device &device, std::string &error)
     if (!gfx_gxm::g_resolveWhenUsed)
         Log(device, "diag: no-resolve-skip is there: the picture is copied for distortion in every frame, drawn or "
                     "not");
+    gfx_gxm::g_prepassWorldOnly = !gxm::ProgramCacheMarker("no-world-only-prepass");
+    if (!gfx_gxm::g_prepassWorldOnly)
+        Log(device, "diag: no-world-only-prepass is there: the forced depth pass draws the models too");
     gfx_gxm::g_stretchInFilter = !gxm::ProgramCacheMarker("no-filter-stretch");
     if (!gfx_gxm::g_stretchInFilter)
         Log(device, "diag: no-filter-stretch is there: a scaled picture is always copied and stretched in two "
@@ -2350,7 +2355,7 @@ void LogWaitCauses(Device &device)
 // (gxm_live_switch.h). The others size or make things at start-up.
 const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "no-vsync",
                                      "no-draw-reuse",     "no-filter-stretch", "no-gpu-boost",
-                                     "no-prepass-governor", "no-same-state"};
+                                     "no-prepass-governor", "no-same-state",     "no-world-only-prepass"};
 struct LiveSwitch
 {
     const char *name;
@@ -2390,6 +2395,12 @@ void ApplyLiveSwitches(Device &device)
             gxm::SetDisplayVsync(!s.on);
         else if (name == "no-draw-reuse")
             d.reuse = !s.on;
+        else if (name == "no-world-only-prepass")
+        {
+            // The pass costs another time now: the governor times it anew.
+            gfx_gxm::g_prepassWorldOnly = !s.on;
+            d.prepassGovernor.Reset(gfx_gxm::g_depthPrepass);
+        }
         else if (name == "no-same-state")
         {
             d.sameState = !s.on;

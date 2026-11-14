@@ -11,6 +11,21 @@
 // the compiled programs turns it off, for a run that compares, and
 // `no-prepass-governor` keeps it on in every frame.
 //
+// g_prepassWorldOnly: the forced depth pass draws the map's own surfaces
+// and leaves the models out. The pass draws every opaque surface a second
+// time, and console run AR (2026-11-14, mp_crash) found static models the
+// largest part of the render thread's draws (240 runs and 12 ms a frame over
+// both passes) though walls and ground hide most of what a view hides. The
+// lit pass tests and writes depth itself, so what the pass leaves out is
+// drawn as it would be with no pass at all and the picture is the same.
+// The engine sets g_prepassSkipModels while it draws that pass
+// (rb_draw3d.cpp), and the surface loop (rb_backend.cpp) passes the models
+// by. Only the pass this back end forces: a pass r_depthPrepass asks for,
+// and the one that fills the depth copy for soft particles and depth of
+// field, draw everything. An empty file `no-world-only-prepass` in the
+// folder of the compiled programs, or "vita_gxm no-world-only-prepass 1",
+// turns it off.
+//
 // g_resolveWhenUsed: with r_distortion on, the engine copies the picture
 // for the surfaces that bend it (heat haze, glass) before the emissive pass
 // of every frame, whether or not such a surface is drawn. On the Vita the
@@ -51,6 +66,8 @@
 namespace gfx_gxm
 {
 extern bool g_depthPrepass;
+extern bool g_prepassWorldOnly;
+extern bool g_prepassSkipModels;
 extern bool g_resolveWhenUsed;
 extern float g_sceneScale;
 extern bool g_stretchInFilter;
@@ -66,11 +83,15 @@ inline int SceneScaled(int size, float scale)
 
 #ifdef KISAK_GFX_GXM
 #define KISAK_GXM_DEPTH_PREPASS() (::gfx_gxm::g_depthPrepass)
+#define KISAK_GXM_PREPASS_SKIP_MODELS() (::gfx_gxm::g_prepassSkipModels)
+#define KISAK_GXM_SET_PREPASS_SKIP_MODELS(on) (::gfx_gxm::g_prepassSkipModels = (on) && ::gfx_gxm::g_prepassWorldOnly)
 #define KISAK_GXM_RESOLVE_WHEN_USED() (::gfx_gxm::g_resolveWhenUsed)
 #define KISAK_GXM_SCENE_SCALE() (::gfx_gxm::g_sceneScale)
 #define KISAK_GXM_STRETCH_IN_FILTER() (::gfx_gxm::g_stretchInFilter)
 #else
 #define KISAK_GXM_DEPTH_PREPASS() false
+#define KISAK_GXM_PREPASS_SKIP_MODELS() false
+#define KISAK_GXM_SET_PREPASS_SKIP_MODELS(on) ((void)0)
 #define KISAK_GXM_RESOLVE_WHEN_USED() false
 #define KISAK_GXM_SCENE_SCALE() 1.0f
 #define KISAK_GXM_STRETCH_IN_FILTER() false
