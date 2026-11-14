@@ -7,18 +7,25 @@ shared core ([core](vulkan-core.md)), into the frame the Legacy path draws and
 on the same images. It is the renderer plan's "Modern visuals" (the plan is in
 the project files, `renderer/modern-renderer-plan.md`, sections 3, 6 and 7).
 
-**State: experimental.** So far the path has the first piece of the plan's
-early experiment (E1), temporal anti-aliasing (TAA) over the scene the Legacy
-path drew, and the first piece of linear light (the plan's MD1): the scene is
-drawn into a linear-light HDR image and tonemapped back
-([Linear light](#linear-light)), with lit surfaces keeping what they
-compute over white ([Lit surfaces](#lit-surfaces)), bloom from that image in
-place of the vision set's glow ([Bloom](#bloom)) and auto exposure before the
-tonemap ([Auto exposure](#auto-exposure)). Velocity comes from the
-camera, and for entities' models (rigid and skinned surfaces, the view model's
-included) from a velocity pass of their own
-([Velocity](#velocity-of-what-moves-on-its-own)); effects do not have their own
-yet. No material is drawn by shaders of the Modern path's own yet.
+**State: experimental.** The path has temporal anti-aliasing (TAA) over the
+scene the Legacy path drew (the plan's early experiment, E1) and linear light
+(the plan's MD1): the scene is drawn into a linear-light HDR image and
+tonemapped back ([Linear light](#linear-light)), with bloom from that image
+in place of the vision set's glow ([Bloom](#bloom)), auto exposure before the
+tonemap ([Auto exposure](#auto-exposure)) and a choice of tonemap curves
+([Tonemap curves](#tonemap-curves)). Velocity comes from the camera, and for
+entities' models (rigid and skinned surfaces, the view model's included) from
+a velocity pass of their own
+([Velocity](#velocity-of-what-moves-on-its-own)); effects do not have their
+own yet. On top of that it draws part of the scene with its own shaders
+([Lit shaders of our own](#lit-shaders-of-our-own): the world's and the
+models' sunlit surfaces, and the surfaces without the sun, interiors), and
+adds a [normals buffer](#normals-buffer), [ambient
+occlusion](#ambient-occlusion) and [screen-space
+reflections](#screen-space-reflections), which those shaders use. What has
+not been moved to our own shaders keeps the game's, over white ([Lit
+surfaces](#lit-surfaces)). It has been measured on one PC only (see the
+[status page](status.md)).
 
 ## Turning it on
 
@@ -188,10 +195,12 @@ as the Legacy path draws: pixel (i, j) holds the scene at NDC
   come with the plan's temporal upscaler (MD3).
 * **One history for all views.** Splitscreen would share it; the PC
   multiplayer game has one view.
-* **Light from Legacy shaders only.** In linear light the scene is the
-  Legacy path's colour decoded as it is drawn (below), so nothing in it is
-  brighter than white yet; the HDR range comes with the world drawn by the
-  Modern path's own shaders.
+* **Some light still comes from Legacy shaders.** Surfaces whose shaders are
+  not yet replaced ([Lit shaders of our own](#lit-shaders-of-our-own): spot
+  and omni lights, ambient-only models, the skinned and flag models) are the
+  Legacy path's colour decoded as it is drawn (below), so nothing on them is
+  brighter than white. The sunlit and interior surfaces drawn by our own
+  shaders can be.
 * **Legacy shaders that read the scene** (the distortion resolve after the
   sun, `R_RENDERTARGET_RESOLVED_POST_SUN`) read it before the pass, jittered.
 
@@ -1090,14 +1099,11 @@ probe, near black (the anti-aliasing keeps a trace of the red before it).
 
 ## Next
 
-From the plan's E1, in order:
-
-* a reactive mask for effects;
-* then the rest of linear light: a tonemap with a shoulder and the vision
-  sets' film settings in it ([Linear light](#linear-light) has the image,
-  the tonemap and bloom; [Lit surfaces](#lit-surfaces) keeps the lit
-  families' colours over white).
-
-The first laptop run of this piece should compare `r_visuals legacy` and
-`modern` in the standing mp_crash scene: frame rate, the pass's GPU time,
-and numbers for how much the edges change.
+What this guide still lists as missing is in [What it does not do
+yet](#what-it-does-not-do-yet): a reactive mask for effects, sharpening, one
+history per view and the rest of the lit shaders. The plan's later stages
+(volumetric fog and light shafts, screen-space global illumination, and a
+ray-tracing tier for GPUs that have it) are in the project files'
+`renderer/modern-renderer-plan.md`, section 6.5; the Modern switches becoming
+dvars that change mid-match is section 6.6. Which pieces are in review is on
+the [status page](status.md#open-pull-requests).
