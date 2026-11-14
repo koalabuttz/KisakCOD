@@ -1102,6 +1102,14 @@ textures. ...`. How to read it:
   2 ms (a program made on the spot) counts its excess once; the line says how
   many there were. Scene work and waits inside a draw, a clear or a copy are
   counted under their own names only.
+- **A draw's parts** end the line once some draws were timed step by step:
+  about one in 32 of the draws not timed whole reads the clock after each
+  step (setup and finding the programs, the fixed state, setting the
+  programs and the vertex constants, the fragment constants, binding the
+  textures, the streams and `sceGxmDraw`), and the line gives each step's
+  mean in microseconds with one clock read taken off. Those draws are left
+  out of the draws' sum, and one with scene work or a wait inside, or one
+  that ended early, is dropped.
 - **The rest** is everything outside those calls. The system's `Vita load`
   line beside it says how busy the processor was.
 

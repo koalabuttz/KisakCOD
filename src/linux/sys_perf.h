@@ -67,6 +67,7 @@ inline void Sys_PerfSleepMicroseconds(uint32_t microseconds)
 
 inline constexpr uint32_t SYS_PERF_WORKER_TYPE_SLOTS = 24; // at least WRKCMD_COUNT
 inline constexpr uint32_t SYS_PERF_LOCK_SLOTS = 40;        // at least CRITSECT_COUNT
+inline constexpr uint32_t SYS_PERF_TESS_SLOTS = 13;        // rb_tessTable's surface types
 
 enum SysPerfProbe : uint32_t
 {
@@ -102,7 +103,11 @@ enum SysPerfProbe : uint32_t
     SYS_PERF_PROBE_RENDER_SWAP_WAIT,   // the render thread's wait before Present
     SYS_PERF_PROBE_RENDER_PRESENT,     // RB_EndFrame: Present
     SYS_PERF_PROBE_RENDER_IDLE,        // the render thread asleep until the main thread hands it a frame
-    SYS_PERF_PROBE_WAIT_RENDERER,      // main thread asleep until the render thread takes the frame
+    // Inside the 3D parts' R_DrawSurfs: a run of surfaces of one material.
+    SYS_PERF_PROBE_RENDER_MATERIAL,    // R_SetupMaterial and R_SetupPass: the material's state and constants
+    SYS_PERF_PROBE_RENDER_TESS,        // + surface type: rb_tessTable's function, with its draws
+    SYS_PERF_PROBE_WAIT_RENDERER = SYS_PERF_PROBE_RENDER_TESS + SYS_PERF_TESS_SLOTS,
+                                       // main thread asleep until the render thread takes the frame
     SYS_PERF_PROBE_WAIT_WORKERS_ALL,   // ... until every front-end worker command is done
     SYS_PERF_PROBE_WAIT_WORKERS_OTHER, // ... in any other wait that runs worker commands
     SYS_PERF_PROBE_WAIT_WORKER_TYPE,   // + WorkerCmdType: ... until the commands of that type are done

@@ -1438,7 +1438,14 @@ template <typename Call> void TimedDraw(Device &device, Call &&call)
     gxm::FrameTime &time = device.frameTime;
     if (!time.PickDraw())
     {
+        if (!time.PickPartedDraw())
+        {
+            call();
+            return;
+        }
+        time.BeginParts(Micros());
         call();
+        time.EndParts();
         return;
     }
     const uint64_t inner = time.Inner();
