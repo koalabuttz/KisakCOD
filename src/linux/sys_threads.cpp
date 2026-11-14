@@ -128,6 +128,9 @@ uint32_t Sys_GetCurrentThreadId()
 void Sys_InitMainThread()
 {
     threadId[THREAD_CONTEXT_MAIN] = Sys_GetCurrentThreadId();
+#if defined(__vita__)
+    Vita_NoteThread(s_threadNames[THREAD_CONTEXT_MAIN]);
+#endif
     s_threadSlots[THREAD_CONTEXT_MAIN].tid = pthread_self();
     s_threadSlots[THREAD_CONTEXT_MAIN].id = threadId[THREAD_CONTEXT_MAIN];
 
@@ -177,6 +180,8 @@ static void *ThreadTrampoline(void *argument)
     // Each Vita thread starts with the kernel's float mode; use the IEEE one
     // the main thread set (src/vita/vita_main.cpp).
     Vita_SetIeeeFloatMode();
+    // For the perf windows' thread table (vita_threads.cpp).
+    Vita_NoteThread(s_threadNames[context]);
 #endif
 
     SetThreadName(0xFFFFFFFFu, s_threadNames[context]);
