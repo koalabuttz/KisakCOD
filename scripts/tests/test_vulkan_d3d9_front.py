@@ -40,13 +40,14 @@ involved. The checks:
                  setting (what each setting did to its frame, and that the
                  statistics count from where they were last started, are the
                  scene's own points); and the Modern path's statistics lines
-                 count the 80 anti-aliased scenes of modern_taa,
+                 count the 100 anti-aliased scenes of modern_taa,
                  modern_linear, modern_bloom, modern_effects, modern_lit,
                  modern_lit_shader, modern_lit_models, modern_lit_no_sun,
                  modern_lit_lights, modern_tonemap, modern_exposure,
                  modern_velocity, modern_normals, modern_ao,
-                 modern_reflections, modern_planar and modern_live, 29 of
-                 them without history, the 28 scenes of modern_linear,
+                 modern_reflections, modern_planar, modern_live and
+                 modern_live_cut (a second modern_taa run), 31 of them
+                 without history, the 28 scenes of modern_linear,
                  modern_bloom, modern_effects, modern_lit, modern_lit_shader,
                  modern_lit_models, modern_lit_no_sun, modern_lit_lights,
                  modern_tonemap, modern_exposure, modern_normals, modern_ao,
@@ -193,7 +194,7 @@ SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'model_lig
           'kept_state', 'multisample', 'modern_taa', 'modern_linear', 'modern_bloom', 'modern_effects',
           'modern_lit', 'modern_lit_shader', 'modern_lit_models', 'modern_lit_no_sun', 'modern_lit_lights',
           'modern_tonemap', 'modern_exposure', 'modern_velocity', 'modern_normals', 'modern_ao',
-          'modern_reflections', 'modern_probes', 'modern_planar', 'modern_live', 'reset',
+          'modern_reflections', 'modern_probes', 'modern_planar', 'modern_live', 'modern_live_cut', 'reset',
           'fullscreen', 'present')
 
 
@@ -644,11 +645,12 @@ def main():
     # cuts), the modern_planar scene's two (the first a cut), then
     # modern_live's three (cuts: two of modern_tonemap's and one of
     # modern_ao's, with lit surfaces), in linear light unless
-    # KISAK_VK_MODERN_LINEAR=0.
+    # KISAK_VK_MODERN_LINEAR=0. Then modern_live_cut, modern_taa's twenty
+    # scenes again (two without history).
     modern = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes anti-aliased \((\d+) without history\)',
                        stdout)
-    checks.expect('the Modern path anti-aliased 80 scenes, 29 without history',
-                  modern is not None and modern.group(1) == '80' and modern.group(2) == '29',
+    checks.expect('the Modern path anti-aliased 100 scenes, 31 without history',
+                  modern is not None and modern.group(1) == '100' and modern.group(2) == '31',
                   modern.group(0) if modern else 'missing')
     velocity = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with surfaces that move on their own '
                          r'\((\d+) surfaces, (\d+) of them brush models\), ([0-9.]+) ms GPU each for their velocity$',

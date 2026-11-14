@@ -75,7 +75,7 @@ back to them.
 | `r_modernLightShaders` | default, off, on | `KISAK_VK_MODERN_LIGHT_SHADERS` |
 | `r_modernSunStrength`, `r_modernSkyStrength` | -1, or 0 to 16 | `KISAK_VK_MODERN_SUN_STRENGTH`, `_SKY_STRENGTH` |
 | `r_modernAo` | default, off, on | `KISAK_VK_MODERN_AO` |
-| `r_modernAoRadius`, `r_modernAoPower`, `r_modernAoThickness`, `r_modernAoFloor`, `r_modernAoEdge` | -1, or the variable's range | `KISAK_VK_MODERN_AO_RADIUS`, `_POWER`, `_THICKNESS`, `_FLOOR`, `_EDGE` |
+| `r_modernAoRadius`, `r_modernAoPower`, `r_modernAoThickness`, `r_modernAoGrazing`, `r_modernAoFloor`, `r_modernAoEdge` | -1, or the variable's range | `KISAK_VK_MODERN_AO_RADIUS`, `_POWER`, `_THICKNESS`, `_GRAZING`, `_FLOOR`, `_EDGE` |
 | `r_modernSsr` | default, off, on | `KISAK_VK_MODERN_SSR` |
 | `r_modernSsrDistance`, `r_modernSsrThickness` | -1, or above 0 | `KISAK_VK_MODERN_SSR_DISTANCE`, `_THICKNESS` |
 | `r_modernTonemap` | default, clamp, neutral, agx, aces | `KISAK_VK_MODERN_TONEMAP` |

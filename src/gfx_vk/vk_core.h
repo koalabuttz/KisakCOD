@@ -308,6 +308,15 @@ struct OptionalFeatures
     // (and when KISAK_VK_VERTEX_STRIDE=static): strides are then baked into
     // the pipelines.
     bool dynamicVertexStride;
+    // Each index buffer in mapped (Upload) memory gets a memory allocation of
+    // its own, at offset 0, instead of a range of a shared block. On by
+    // default on every portability-subset device: on CI's Apple Paravirtual
+    // device (MoltenVK, arm64, 2026-11-14) indices read from a buffer bound
+    // into a shared host-visible block at an offset drew nothing, while the
+    // same buffer alone in its memory, or in device memory, drew. Dynamic
+    // index buffers (D3DUSAGE_DYNAMIC, R_SetIndexData) are the ones there.
+    // KISAK_VK_INDEX_MEMORY=own or shared forces either way.
+    bool ownIndexMemory;
     // Translated pixel shaders get each sampler's depth compare fixed when
     // they are built for a pipeline (legacy_shader::BuildSpirv's
     // fixedDepthCompare, PipelineKey::depthSamplers) instead of choosing
