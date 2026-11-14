@@ -562,6 +562,7 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
     aoParams.radius = number(tuning.aoRadius, start.aoParams.radius, 0.0f, kAny, false);
     aoParams.power = number(tuning.aoPower, start.aoParams.power, 0.0f, kAny, true);
     aoParams.thickness = number(tuning.aoThickness, start.aoParams.thickness, 0.0f, kAny, false);
+    aoParams.grazing = number(tuning.aoGrazing, start.aoParams.grazing, 0.0f, 1.0f, false);
     aoParams.floor = tuning.aoFloor >= 0.0f && tuning.aoFloor < 1.0f ? tuning.aoFloor : start.aoParams.floor;
     aoParams.edge = number(tuning.aoEdge, start.aoParams.edge, 0.0f, 10.0f, false);
     modern::ReflectionParams &reflectionParams = backend->reflectionParams;
@@ -581,12 +582,12 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
     HostLog(*backend->host,
             "vulkan d3d9: modern: switches now: bloom %s, exposure %s (key %.3f), velocity %s, our shaders %s "
             "(models %s, without the sun %s, lights %s; sun %.2f, sky %.2f), ambient occlusion %s (radius %.1f, power %.2f, "
-            "thickness %.1f, floor %.2f, edge %.3f), reflections %s (distance %.0f, thickness %.1f), normals %s, "
+            "thickness %.1f, grazing %.2f, floor %.2f, edge %.3f), reflections %s (distance %.0f, thickness %.1f), normals %s, "
             "tonemap %s, debug view %s",
             onOff(backend->bloomWanted), onOff(backend->exposureWanted), backend->exposureParams.key,
             onOff(backend->velocityWanted), onOff(backend->shadersWanted), onOff(backend->modelShadersWanted),
             onOff(backend->noSunShadersWanted), onOff(backend->lightShadersWanted), backend->sunStrength, backend->skyStrength, onOff(backend->aoWanted),
-            aoParams.radius, aoParams.power, aoParams.thickness, aoParams.floor, aoParams.edge,
+            aoParams.radius, aoParams.power, aoParams.thickness, aoParams.grazing, aoParams.floor, aoParams.edge,
             onOff(backend->reflectionsWanted), reflectionParams.maxDistance, reflectionParams.thickness,
             onOff(backend->normalsWanted), modern::CurveName(backend->tonemapCurve), DebugViewName(view));
 }

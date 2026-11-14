@@ -54,6 +54,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "r_modernAo",
     "r_modernAoEdge",
     "r_modernAoFloor",
+    "r_modernAoGrazing",
     "r_modernAoPower",
     "r_modernAoRadius",
     "r_modernAoThickness",

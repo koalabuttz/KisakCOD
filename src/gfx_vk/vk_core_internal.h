@@ -425,7 +425,9 @@ BuildResult BuildSwapchain(Core &core);
 bool SurfaceExtent(Core &core, VkSurfaceCapabilitiesKHR &caps, VkExtent2D &extent);
 
 // vk_memory.cpp
-bool Allocate(Core &core, const VkMemoryRequirements &requirements, MemoryKind kind, bool image, Allocation &out);
+// own: a memory allocation of its own (offset 0) whatever the size.
+bool Allocate(Core &core, const VkMemoryRequirements &requirements, MemoryKind kind, bool image, Allocation &out,
+              bool own = false);
 void Free(Core &core, Allocation &allocation);
 void DestroyBufferNow(Core &core, Buffer *buffer);
 void DestroyImageNow(Core &core, Image *image);

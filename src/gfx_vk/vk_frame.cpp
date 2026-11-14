@@ -930,10 +930,16 @@ bool Flush(Core *core_, bool wait)
 
 void WaitIdle(Core *core)
 {
-    // vkDeviceWaitIdle needs the queue to itself.
+    // Every submission signals the timeline, so waiting for the last one
+    // waits for all the GPU work there is. Not vkDeviceWaitIdle: the
+    // synchronization validation layer (lavapipe, 2026-11-14) then took the
+    // next submission's barriers against what images held before the last
+    // frames before the wait, reporting write-after-read hazards on the
+    // anti-aliasing's history in the first scene after the live switches'
+    // velocity-all change (the D3D9 check's modern_live_cut).
     DrainRecorder(*core);
     if (core->dev)
-        core->vk.vkDeviceWaitIdle(core->dev);
+        WaitSerial(*core, core->nextSerial - 1);
     PollCompletedSerial(*core, true);
     for (uint32_t slot = 0; slot < kFramesInFlight; ++slot)
     {

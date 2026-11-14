@@ -6524,6 +6524,10 @@ int Run(const Options &options)
         {"modern_probes", &Check::ModernProbes, true},
         {"modern_planar", &Check::ModernPlanar, true},
         {"modern_live", &Check::ModernLive, true},
+        // A scene that starts with a cut after modern_live's switch changes
+        // (the velocity pass made again waits for the GPU): its barriers must
+        // still hold for the validation layer.
+        {"modern_live_cut", &Check::ModernTaa, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},

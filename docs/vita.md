@@ -260,9 +260,12 @@ where two starts were needed:
     90 vita_gxm no-depth-prepass 0
 
 The switches that can be turned: `no-depth-prepass`, `no-frame-overlap`,
-`no-vsync`, `no-draw-reuse` and `no-filter-stretch`. The others size or
-make things at start-up and are refused by name. A switch is turned between two frames and the log
-says so (`diag: switch no-depth-prepass is on from frame 1840 on
+`no-vsync`, `no-draw-reuse`, `no-filter-stretch`, `no-gpu-boost` (the
+GPU back at its default clocks) and `no-prepass-governor` (the depth pass
+on in every frame instead of timed both ways). Turning `no-depth-prepass`
+or `no-prepass-governor` starts the governor afresh. The others size or make things at
+start-up and are refused by name. A switch is turned between two frames
+and the log says so (`diag: switch no-depth-prepass is on from frame 1840 on
 (vita_gxm)`). The marker files themselves are not touched. Leave a window
 at least 20 seconds and drop its first 10 second line, which holds the
 frames of both ways.
@@ -562,7 +565,7 @@ the challenge random number (`sceKernelGetRandomNumber`).
 | --- | --- |
 | Virtual memory | No API for it. `src/vita/vita_mman.cpp` backs `mmap`, `mprotect`, `madvise` and `munmap` with memory blocks: a reserve allocates its full size at once (zeroed), protection changes do nothing, a decommit zeroes the range. |
 | Memory budget | See "Memory" below. |
-| Start-up | `Vita_Startup` (`src/vita/vita_main.cpp`): CPU to 444 MHz and bus to 222 MHz, data folder `ux0:data/KisakCOD` created and made the working directory, console log opened, network started (module, `sceNetInit` with a 1 MB pool, `sceNetCtlInit`), command line read from `cmdline.txt`. |
+| Start-up | `Vita_Startup` (`src/vita/vita_main.cpp`): CPU to 444 MHz and bus to 222 MHz (the client also raises the GPU to 222 MHz and its crossbar to 166 MHz, `src/vita/vita_gpu_clock.h`, and logs both clocks; console run AK, 2026-11-14: mp_crash's busy view went from 63 ms a frame, GPU-bound, to 41 ms, CPU-bound), data folder `ux0:data/KisakCOD` created and made the working directory, console log opened, network started (module, `sceNetInit` with a 1 MB pool, `sceNetCtlInit`), command line read from `cmdline.txt`. |
 | Paths | `fs_basepath` defaults to `ux0:data/KisakCOD`. Paths with a device (`ux0:`) count as absolute. Directory entries carry their `SceIoStat` instead of `d_type`; the tree removal walks by path (no symbolic links on the Vita). |
 | Files | newlib's `off_t` is 32-bit: positional reads and writes past 2 GiB fail instead of wrapping. The stock fastfiles and IWDs are far smaller. |
 | Network | BSD sockets through newlib. No `getifaddrs`: the local addresses are loopback and the Wi-Fi address from `sceNetCtlInetGetInfo`. No `MSG_TRUNC`: a datagram that fills the receive buffer is dropped as oversize. |
