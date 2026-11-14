@@ -472,7 +472,7 @@ Layout *GetLayout(Device &device, const LayoutKey &key)
 // A pipeline drawn as a Modern lit shader of ours (linearShader) also has the
 // ambient occlusion at kModernAoSampler, which the game's shader leaves free
 // (else ours is not built, and the game's does not read it).
-LayoutKey LayoutFor(const Shader &vs, const Shader &ps, uint8_t linearShader)
+LayoutKey LayoutFor(const Shader &vs, const Shader &ps, uint16_t linearShader)
 {
     const ls::Reflection &vr = vs.translated.reflection;
     const ls::Reflection &pr = ps.translated.reflection;
