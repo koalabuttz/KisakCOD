@@ -7,6 +7,7 @@
 
 #include <win32/win_storage.h>
 #include <universal/profile.h>
+#include <linux/sys_perf.h>
 
 #ifdef KISAK_MP
 #include <cgame_mp/cg_local_mp.h>
@@ -2561,6 +2562,8 @@ Operand *EvaluateExpression(int localClientNum, const statement_s *statement, Op
     OperatorStack opStack; // [esp+4h] [ebp-14B8h] BYREF
     OperandStack dst; // [esp+FCh] [ebp-13C0h] BYREF
     int i; // [esp+14B8h] [ebp-4h]
+
+    SysPerfScope perfScope(SYS_PERF_PROBE_UI_EXPRESSIONS);
 
     g_releaseBuildStatement = statement;
     memset((uint8_t *)&dst, 0, sizeof(dst));
