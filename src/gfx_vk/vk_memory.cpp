@@ -263,7 +263,8 @@ VkImageAspectFlags FormatAspect(VkFormat format)
     }
 }
 
-bool Allocate(Core &core, const VkMemoryRequirements &requirements, MemoryKind kind, bool image, Allocation &out)
+bool Allocate(Core &core, const VkMemoryRequirements &requirements, MemoryKind kind, bool image, Allocation &out,
+              bool own)
 {
     const uint32_t type = FindMemoryType(core, requirements.memoryTypeBits, kind);
     if (type == UINT32_MAX)
@@ -296,7 +297,7 @@ bool Allocate(Core &core, const VkMemoryRequirements &requirements, MemoryKind k
     const VkDeviceSize blockSize = host ? kHostBlockSize : kDeviceBlockSize;
     uint32_t blockIndex = UINT32_MAX;
     VkDeviceSize offset = 0;
-    if (requirements.size > blockSize / 2)
+    if (own || requirements.size > blockSize / 2)
     {
         if (!NewBlock(core, pool, requirements.size, true, blockIndex))
             return false;
@@ -440,7 +441,11 @@ Buffer *CreateBuffer(Core *core, const BufferDesc &desc)
     ++core->stats.buffersAlive;
     VkMemoryRequirements requirements{};
     core->vk.vkGetBufferMemoryRequirements(core->dev, buffer->buffer, &requirements);
-    if (!Allocate(*core, requirements, desc.memory, false, buffer->allocation)
+    // Index buffers in mapped memory alone in theirs where the device needs
+    // it (OptionalFeatures::ownIndexMemory).
+    const bool own = core->optional.ownIndexMemory && desc.memory == MemoryKind::Upload
+                     && (info.usage & VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+    if (!Allocate(*core, requirements, desc.memory, false, buffer->allocation, own)
         || !Check(*core,
                   core->vk.vkBindBufferMemory(core->dev, buffer->buffer, buffer->allocation.memory,
                                               buffer->allocation.offset),
