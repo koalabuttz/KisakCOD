@@ -757,8 +757,9 @@ What the GXM back end does so far (step 2d):
   Draws a run diagnostic looks at or changes take the old path. The quit
   summary says how often each applied: `draw work left out: N draws kept
   the last draw's programs and fixed state; N of N others found their
-  programs in the table; of N texture binds N were set already and N set
-  their filters anew; of N uniform buffers N were the last draw's`. A file
+  programs in the table; N draws kept the last draw's textures; of N
+  texture binds N were set already and N set their filters anew; of N
+  uniform buffers N were the last draw's`. A file
   named `no-draw-reuse` in the folder of the compiled programs turns all of
   them off (the log says so at start-up), so that a console run can tell a
   fault of theirs without another build. Console run AR (2026-11-14) put a
@@ -776,7 +777,18 @@ What the GXM back end does so far (step 2d):
   draws of one material (a run of static models or of world surfaces)
   change only their buffers and constants. An empty file `no-same-state`
   in the folder of the compiled programs, or `vita_gxm no-same-state 1`,
-  turns it off.
+  turns it off. Console run AU (2026-11-14) measured the busy view at
+  37.9 ms a frame with it against 43.0 without, and about half of all
+  draws kept the last draw's state.
+- **The last draw's textures kept.** The same for the texture units: the
+  front counts every call that may change what they hold (a texture or a
+  sampler state set to another value, and every lock, unlock, update,
+  set-up, copy or destruction of a texture). A draw with the last draw's
+  fragment program that finds that count, the scene, the frame and the
+  count of waits for the GPU unchanged sets no texture, where it used to
+  look at every unit to find each one set already. Never for a program
+  that takes a volume texture's depth as a uniform. An empty file
+  `no-same-textures`, or `vita_gxm no-same-textures 1`, turns it off.
 - **Depth first.** The scene's depth is always drawn before its lit pass
   on the Vita (src/gfx_gxm/gxm_engine_options.h), whatever r_depthPrepass
   says, so that the GPU skips hidden pixels of the lit pass early. Console

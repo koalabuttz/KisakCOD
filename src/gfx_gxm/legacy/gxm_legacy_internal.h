@@ -309,6 +309,12 @@ struct Device
     // finds it as the last draw left it takes that draw's programs and state
     // (Draw, gxm_legacy_draw.cpp).
     uint64_t stateSerial = 0;
+    // Counts the calls that may change what a draw's texture units hold: a
+    // texture or a sampler state set to another value, and every lock,
+    // unlock, update, set-up, copy or destruction of a texture. A draw that
+    // finds it as the last draw left it, with the same fragment program in
+    // the same scene, sets no texture (Draw, gxm_legacy_draw.cpp).
+    uint64_t textureSerial = 0;
 
     // Things the back end does not do yet, each logged once.
     std::vector<const char *> notYet;
