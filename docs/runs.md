@@ -37,7 +37,39 @@ The arithmetic is `src/qcommon/com_frame_log.h`, checked on the host by
 On the native Linux client the console is the process's standard input, so a
 driver sends `framelog 120 A-1` after its settle time and waits for the line.
 On the PS Vita the timed commands do it: `+set vita_atMap "20 framelog 30
-map"`.
+map"`, and on the Windows and Linux clients `+set run_atMap "20 framelog 30
+map"` (next section).
+
+## Runs that play themselves: `run_atMap`
+
+The multiplayer client on Windows, Linux and macOS takes the PS Vita's timed
+console commands and quit timers under `run_*` names. A start with
+
+    +set run_atMap "5 setviewpos 336 60 268 65 | 10 framelog 10 A | 21 screenshot | 23 quit"
+
+sends each command that many seconds after the map was first in play, so a
+picture or frame-rate launch needs nobody to type into the console, hold the
+window's focus or time anything by eye.
+
+| Setting | What it does |
+| --- | --- |
+| `run_atMenu`, `run_atMap` | `"<seconds> <command> \| <seconds> <command>"`, sent that long after the main menu first showed or the map was first in play; up to 32 commands of up to 159 characters, in any order; `{serverid}` stands for the server id a menu response carries (`cmd mr {serverid} 8 autoassign`) |
+| `run_quitAfterMenu`, `run_quitAfterMap`, `run_quitAfter` | quit that many seconds after the menu, the map, or the first frame (0: never) |
+
+- Nothing changes unless one of them is given. When one is, the log says so
+  (`run: run_atMap "..."`), marks the menu and the map coming up (`run: the map
+  is up`), echoes every command it sends (`run: sending "screenshot"`) and the
+  quit (`run: run_quitAfterMap 30 reached`, `run: quitting as asked`).
+- A list it cannot read is reported once (`run: run_atMap: part 3 "x quit" does
+  not start with a time in seconds; none of its commands will be sent`) and
+  sends nothing.
+- The two lists are read once, at the first frame: a game server sets a
+  client's dvars by name, so a later change does nothing, and none of these
+  settings can be set by a server at all (`src/qcommon/server_dvar_guard.h`).
+
+The plan is `src/qcommon/run_plan.h`, shared with the Vita
+(`src/vita/vita_run_plan.h` gives it the `vita_*` names) and checked on the
+host by `scripts/tests/test_vita_run_plan.py`.
 
 ## A frame-rate run from one recipe: `perf_run.py`
 

@@ -40,6 +40,10 @@
 #include "cl_connection_mp.h"
 #include "cl_master.h"
 
+#if !defined(__vita__)
+#include <qcommon/run_plan.h>
+#endif
+
 // KISAK: the operating system's random generator, for the LAN scan token (as
 // SV_NewChallengeValue in server_mp/sv_client_mp.cpp).
 #include <ctime>
@@ -1538,12 +1542,143 @@ void CL_CheckForUpdateKeyAuth(int localClientNum)
     }
 }
 
+#if !defined(__vita__)
+// KISAK: runs that play themselves (docs/runs.md, "Runs that play
+// themselves"). The PS Vita's timed console commands and quit timers
+// (src/vita/vita_stats.cpp) for the Windows and Linux clients, under run_*
+// names: a test machine starts the game with, for example,
+//   +set run_atMap "5 setviewpos 336 60 268 65 | 12 screenshot | 14 quit"
+// and nobody has to type into the console, hold the window's focus or time
+// anything by eye. Off unless one of the settings is given.
+namespace
+{
+    const dvar_t *run_quitAfter;
+    const dvar_t *run_quitAfterMenu;
+    const dvar_t *run_quitAfterMap;
+    const dvar_t *run_atMenu;
+    const dvar_t *run_atMap;
+    // Their text goes to the console as commands and a game server sets a
+    // client's dvars by name, so it is read once, at the first frame after
+    // start-up (kisak::run_plan::StartText), and never again.
+    kisak::run_plan::StartText<kisak::run_plan::kMaxTimedListLength> s_runAtMenu;
+    kisak::run_plan::StartText<kisak::run_plan::kMaxTimedListLength> s_runAtMap;
+    kisak::run_plan::Plan s_runPlan;
+    bool s_runPlanChecked;
+    bool s_runPlanOn;
+
+    void CL_RegisterRunPlanDvars()
+    {
+        run_quitAfter = Dvar_RegisterInt("run_quitAfter", 0, 0, 86400, DVAR_NOFLAG,
+            "Quit this many seconds after start-up, for runs nobody watches (0: never)");
+        run_quitAfterMenu = Dvar_RegisterInt("run_quitAfterMenu", 0, 0, 86400, DVAR_NOFLAG,
+            "Quit this many seconds after the main menu first showed (0: never)");
+        run_quitAfterMap = Dvar_RegisterInt("run_quitAfterMap", 0, 0, 86400, DVAR_NOFLAG,
+            "Quit this many seconds after the map was first in play (0: never)");
+        run_atMenu = Dvar_RegisterString("run_atMenu", "", DVAR_NOFLAG,
+            "Console commands to send after the main menu first showed: \"<seconds> <command> | <seconds> <command>\" "
+            "(read at start-up only)");
+        run_atMap = Dvar_RegisterString("run_atMap", "", DVAR_NOFLAG,
+            "Console commands to send after the map was first in play: \"<seconds> <command> | <seconds> <command>\"; "
+            "{serverid} stands for the server id (read at start-up only)");
+    }
+
+    unsigned int CL_RunPlanSeconds(const dvar_t *dvar)
+    {
+        return dvar && dvar->current.integer > 0 ? (unsigned int)dvar->current.integer : 0;
+    }
+
+    // A timed command goes to the console as it is, with "{serverid}"
+    // replaced by the server id a menu response has to carry.
+    void CL_RunPlanSend(const char *command)
+    {
+        char text[kisak::run_plan::kMaxCommandLength + 32];
+        size_t used = 0;
+        static const char kToken[] = "{serverid}";
+        for (const char *from = command; *from && used + 16 < sizeof(text);)
+        {
+            if (!strncmp(from, kToken, sizeof(kToken) - 1))
+            {
+                used += size_t(snprintf(text + used, sizeof(text) - used, "%d", Dvar_GetInt("sv_serverId")));
+                from += sizeof(kToken) - 1;
+            }
+            else
+                text[used++] = *from++;
+        }
+        text[used] = '\0';
+        Com_Printf(CON_CHANNEL_SYSTEM, "run: sending \"%s\"\n", text);
+        Cbuf_AddText(0, text);
+        Cbuf_AddText(0, "\n");
+    }
+
+    void CL_RunPlanFrame()
+    {
+        const uint64_t now = uint64_t(Sys_Milliseconds()) * 1000u;
+        if (!s_runPlanChecked)
+        {
+            s_runPlanChecked = true;
+            const unsigned int maxText = (unsigned int)(kisak::run_plan::kMaxTimedListLength - 1);
+            if (!s_runAtMenu.Take(run_atMenu ? run_atMenu->current.string : ""))
+                Com_PrintError(CON_CHANNEL_SYSTEM, "run: run_atMenu is longer than %u characters; none of its commands will be sent\n", maxText);
+            if (!s_runAtMap.Take(run_atMap ? run_atMap->current.string : ""))
+                Com_PrintError(CON_CHANNEL_SYSTEM, "run: run_atMap is longer than %u characters; none of its commands will be sent\n", maxText);
+            s_runPlanOn = s_runAtMenu.Get()[0] || s_runAtMap.Get()[0] || CL_RunPlanSeconds(run_quitAfter)
+                          || CL_RunPlanSeconds(run_quitAfterMenu) || CL_RunPlanSeconds(run_quitAfterMap);
+            if (!s_runPlanOn)
+                return;
+            Com_Printf(CON_CHANNEL_SYSTEM, "run: run_quitAfter %u, run_quitAfterMenu %u, run_quitAfterMap %u\n",
+                CL_RunPlanSeconds(run_quitAfter), CL_RunPlanSeconds(run_quitAfterMenu), CL_RunPlanSeconds(run_quitAfterMap));
+            if (s_runAtMenu.Get()[0])
+                Com_Printf(CON_CHANNEL_SYSTEM, "run: run_atMenu \"%s\"\n", s_runAtMenu.Get());
+            if (s_runAtMap.Get()[0])
+                Com_Printf(CON_CHANNEL_SYSTEM, "run: run_atMap \"%s\"\n", s_runAtMap.Get());
+            // run_quitAfter counts from here, the first frame.
+            s_runPlan.Start(now, now);
+        }
+        if (!s_runPlanOn)
+            return;
+
+        kisak::run_plan::Settings settings;
+        settings.quitAfter = CL_RunPlanSeconds(run_quitAfter);
+        settings.quitAfterMenu = CL_RunPlanSeconds(run_quitAfterMenu);
+        settings.quitAfterMap = CL_RunPlanSeconds(run_quitAfterMap);
+        // No figures of its own on these clients: framelog and the renderer's
+        // switches print theirs. A long period keeps the plan quiet.
+        settings.statsEvery = 86400;
+        settings.atMenu = s_runAtMenu.Get();
+        settings.atMap = s_runAtMap.Get();
+        const bool menuUp = cls.uiStarted && CL_GetLocalClientConnectionState(0) == CA_DISCONNECTED && UI_IsFullscreen(0);
+        const bool mapUp = CL_GetLocalClientConnectionState(0) == CA_ACTIVE;
+        const kisak::run_plan::Step step = s_runPlan.Frame(now, menuUp, mapUp, settings);
+
+        if (step.menuCameUp)
+            Com_Printf(CON_CHANNEL_SYSTEM, "run: the menu is up\n");
+        if (step.mapCameUp)
+            Com_Printf(CON_CHANNEL_SYSTEM, "run: the map is up\n");
+        if (step.commandError[0])
+            Com_PrintError(CON_CHANNEL_SYSTEM, "run: %s; none of its commands will be sent\n", step.commandError);
+        for (size_t i = 0; i < step.commandCount; ++i)
+            CL_RunPlanSend(step.commands[i]);
+        if (step.quitDvar)
+            Com_Printf(CON_CHANNEL_SYSTEM, "run: %s %u reached\n", step.quitDvar, step.quitSeconds);
+        if (step.quit)
+        {
+            Com_Printf(CON_CHANNEL_SYSTEM, "run: quitting as asked\n");
+            Cbuf_AddText(0, "quit\n");
+        }
+    }
+}
+#endif
+
 void CL_Frame(int localClientNum)
 {
     clientUIActive_t *clUI = CL_GetLocalClientUIGlobals(localClientNum);
     connstate_t connstate = CL_GetLocalClientConnectionState(localClientNum);
     Hunk_CheckTempMemoryClear();
     Hunk_CheckTempMemoryHighClear();
+#if !defined(__vita__)
+    if (localClientNum == 0 && run_atMap)
+        CL_RunPlanFrame();
+#endif
     if (clUI->isRunning)
     {
         CL_DevGuiFrame(localClientNum);
@@ -2929,6 +3064,9 @@ void CL_InitOnceForAllClients()
     Dvar_SetBool(onlinegame, 1);
     cl_hudDrawsBehindUI = Dvar_RegisterBool("cl_hudDrawsBehindUI", true, DVAR_NOFLAG, "Should the HUD draw when the UI is up?");
     cl_voice = Dvar_RegisterBool("cl_voice", true, DVAR_ARCHIVE | DVAR_USERINFO, "Use voice communications");
+#if !defined(__vita__)
+    CL_RegisterRunPlanDvars();
+#endif
     cl_keyCodeOnly = Dvar_RegisterBool("cl_keyCodeOnly", false, DVAR_ARCHIVE,
         "Join remote servers with your CoD4 key code (codkey.txt in the home folder) even when Steam is running");
     // KISAK: Steam_Init reads +set cl_steam from the command line before
