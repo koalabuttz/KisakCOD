@@ -64,6 +64,7 @@ struct ModernTuning
     float aoRadius = -1.0f;
     float aoPower = -1.0f;
     float aoThickness = -1.0f;
+    float aoGrazing = -1.0f;
     float aoFloor = -1.0f;
     float aoEdge = -1.0f;
     float ssrDistance = -1.0f;
