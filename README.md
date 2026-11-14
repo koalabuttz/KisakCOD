@@ -117,9 +117,16 @@ unattended too, in local runs on the laptop ([status](docs/status.md)).
 **Vulkan.** An opt-in back end (`-DKISAK_BUILD_VULKAN_BACKEND=ON`, then
 `+set r_backend vulkan`) draws the same renderer through Vulkan directly,
 without DXVK on Linux or `d3d9.dll` on Windows. It plays a map on a developer
-laptop and a Windows PC; on the laptop one measured view runs at 141 frames
-a second against 151 through DXVK
-([guide](docs/vulkan-d3d9-front.md#in-the-game-r_backend-vulkan)).
+laptop and a Windows PC. At the same 4 samples one measured view on the laptop
+ran at 170.5 frames a second against 166.8 through DXVK, and on the PC's
+CPU-bound view it is within a few percent of Direct3D 9
+([guide](docs/vulkan-d3d9-front.md#in-the-game-r_backend-vulkan)). On top of it,
+`+set r_visuals modern` is an experimental, off-by-default look: anti-aliasing
+over time, linear light with bloom, auto exposure and a tonemap, motion for
+what moves, ambient occlusion and screen-space reflections, with the world's
+and models' lit shaders replaced by ones of its own
+([Modern path](docs/vulkan-modern.md)). It costs frame rate (7.9% on one PC
+view with 12 bots) and is measured on one PC only.
 
 **Authentication.** Steam authentication on Linux is opt-in
 (`KISAK_LINUX_STEAM`, [guide](docs/linux-steam.md)); without it the dedicated
