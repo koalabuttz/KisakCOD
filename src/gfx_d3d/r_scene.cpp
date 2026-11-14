@@ -1996,9 +1996,11 @@ void R_ModernPlanarScene(const refdef_s *refdef)
         || gfxDrawMethod.drawScene != GFX_DRAW_SCENE_STANDARD || !frontEndDataOut->viewInfoCount
         || rg.viewInfoCount >= GFX_MAX_CLIENT_VIEWS)
         return;
+    if (!hooks->planarWanted(hooks->user, dx.device))
+        return;
     if (s_modernPlanarWorld != rgp.world)
         R_ModernPlanarFindPlane();
-    if (!s_modernPlanarHavePlane || !hooks->planarWanted(hooks->user, dx.device))
+    if (!s_modernPlanarHavePlane)
         return;
     const float *n = s_modernPlanarPlane;
     const float *o = refdef->vieworg;
@@ -2021,7 +2023,8 @@ void R_ModernPlanarScene(const refdef_s *refdef)
         const float *a = refdef->viewaxis[axis];
         const float along = n[0] * a[0] + n[1] * a[1] + n[2] * a[2];
         // The left axis is negated too, so the basis stays right-handed (no
-        // change of winding): the image comes out mirrored left to right.
+        // change of winding). A reader finds a point on the plane in the
+        // image through this view's own matrices (GfxModernPlanar).
         const float sign = axis == 1 ? -1.0f : 1.0f;
         for (int i = 0; i < 3; ++i)
             mirror.viewaxis[axis][i] = sign * (a[i] - 2.0f * along * n[i]);

@@ -39,7 +39,7 @@ struct GfxModernScene
 struct GfxModernPlanar
 {
     float view[4][4];       // the mirrored camera's (its left axis negated, so
-                            // the image is mirrored left to right)
+                            // its basis stays right-handed)
     float projection[4][4]; // its near plane is the reflection plane
     int width, height;      // the view's size; it is drawn at 0, 0
     float plane[4];         // the world plane: n.p + d >= 0 is kept

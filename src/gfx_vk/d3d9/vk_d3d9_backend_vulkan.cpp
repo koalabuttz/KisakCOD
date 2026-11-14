@@ -256,7 +256,7 @@ struct Backend
     // light only. The renderer draws the planar view into planarColor (linear
     // light) with its own depth after each main view; planarReady once one
     // was drawn, planarView the last. KISAK_VK_MODERN_DEBUG=planar draws the
-    // planar image (as it is, mirrored left to right) over the top left of
+    // planar image (as it is, upside down) over the top left of
     // each finished scene.
     bool planarWanted = false;
     bool planarFailed = false;

@@ -1208,8 +1208,9 @@ listed now (picked from the reflections' PC run 4).
 the camera is above the plane, `R_ModernPlanarScene` draws the scene again:
 
 * from the camera mirrored in the plane, its left axis negated so the view
-  stays right-handed (the image comes out mirrored left to right, and a
-  reader flips u);
+  stays right-handed (the image shows the scene as a puddle on the plane
+  would: upside down; a reader finds a point of the plane in it through the
+  view's own matrices);
 * at half the main view's size, with no jitter;
 * with an oblique near plane (Lengyel 2005) one unit above the reflecting
   plane, scaled so the far plane stays outside the view, so nothing below
@@ -1222,6 +1223,11 @@ the camera is above the plane, `R_ModernPlanarScene` draws the scene again:
 * without the view model, effects, post effects, sound, physics or marks
   updated, and without 2D.
 
+Both views are drawn by the back end after the front end has made them, so
+the planar view keeps what the main view left for it: its world surfaces'
+indices go after the main view's in the frame's pre-tessellated index buffer
+(`R_BeginPreTess`, no discard), not over them.
+
 The back end draws its lit and decal passes into an image of its own
 (RGBA16F, linear light) with its own depth, made at the first planar view
 and again when the size changes. The game's pass for the view is
@@ -1232,7 +1238,7 @@ the draws there and back.
 | Setting | Default | Switch |
 | --- | --- | --- |
 | Planar view | off | `KISAK_VK_MODERN_PLANAR=1` draws it (with linear light only) |
-| Debug view | off | `KISAK_VK_MODERN_DEBUG=planar` draws it too, and puts the last planar image, as it is (mirrored, no exposure), over the top left of the finished scene; `KISAK_VK_MODERN_PLANAR=0` turns both off |
+| Debug view | off | `KISAK_VK_MODERN_DEBUG=planar` draws it too, and puts the last planar image, as it is (upside down, no exposure), over the top left of the finished scene; `KISAK_VK_MODERN_PLANAR=0` turns both off |
 
 The statistics line: `vulkan d3d9: modern: N planar reflection views (WxH)`.
 
