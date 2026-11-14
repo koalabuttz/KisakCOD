@@ -176,12 +176,18 @@ void R_EndPreTess()
 void R_BeginPreTess()
 {
     iassert( gfxBuf.preTessIndexBuffer->indices == NULL );
+    // A Modern planar reflection view (R_ModernPlanarScene) is a second view
+    // in the same frame: it adds its indices after the main view's, which the
+    // back end has not drawn yet (D3DLOCK_NOOVERWRITE), where a discard would
+    // hand the main view's draws the planar view's indices.
+    const bool keep = R_ModernPlanarViewActive();
     gfxBuf.preTessIndexBuffer->indices = (uint16_t *)R_LockIndexBuffer(
         gfxBuf.preTessIndexBuffer->buffer,
         0,
         2 * gfxBuf.preTessIndexBuffer->total,
-        0x2000);
-    gfxBuf.preTessIndexBuffer->used = 0;
+        keep ? 0x1000 : 0x2000);
+    if (!keep)
+        gfxBuf.preTessIndexBuffer->used = 0;
 }
 
 int R_ReadBspPreTessDrawSurfs(
