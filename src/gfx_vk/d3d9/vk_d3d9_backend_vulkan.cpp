@@ -210,13 +210,14 @@ struct Backend
     modern::AoStats aoBase{};
     // Screen-space reflections (vk_modern.h TraceReflections), traced right
     // after the normals buffer from the prepass depth and last scene's
-    // anti-aliased linear-light colour: wanted when something reads it (for
-    // now KISAK_VK_MODERN_SSR=1 or the reflections debug view; the lit
-    // shaders next), which wants the normals buffer too;
-    // KISAK_VK_MODERN_SSR=0 keeps it off. Its settings
+    // anti-aliased linear-light colour: wanted when something reads it (our
+    // lit shaders, so with linear light, lit inputs and our shaders on;
+    // KISAK_VK_MODERN_SSR=1 or the reflections debug view), which wants the
+    // normals buffer too; KISAK_VK_MODERN_SSR=0 keeps it off. Its settings
     // (KISAK_VK_MODERN_SSR_DISTANCE, _THICKNESS, _STEPS, _LEVELS); the pass,
     // made at its first scene; sceneReflections is the scene's own until it
-    // is finished; the counts at the last reset.
+    // is finished, which the lit shaders read (lg::SetModernReflections)
+    // until the scene is lit; the counts at the last reset.
     bool reflectionsWanted = false;
     bool reflectionsFailed = false;
     modern::ReflectionParams reflectionParams{};
@@ -459,8 +460,9 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
             backend->aoParams.thickness = depth;
     }
     backend->debugReflections = EnvIs("KISAK_VK_MODERN_DEBUG", "reflections");
-    backend->reflectionsWanted =
-        !EnvIsZero("KISAK_VK_MODERN_SSR") && (EnvIs("KISAK_VK_MODERN_SSR", "1") || backend->debugReflections);
+    backend->reflectionsWanted = !EnvIsZero("KISAK_VK_MODERN_SSR")
+        && (EnvIs("KISAK_VK_MODERN_SSR", "1") || backend->debugReflections
+            || (backend->linearWanted && backend->litWanted && backend->shadersWanted));
     {
         modern::ReflectionParams &p = backend->reflectionParams;
         const auto number = [](const char *name, float &out) {
@@ -857,6 +859,8 @@ void CloseBackend(Backend *backend)
         backend->normals = nullptr;
         backend->sceneNormals = nullptr;
     }
+    if (backend->legacy)
+        lg::SetModernReflections(backend->legacy, nullptr);
     if (backend->reflections)
     {
         modern::DestroyReflections(backend->core, backend->reflections);
@@ -1535,6 +1539,8 @@ void TraceSceneReflections(Backend *backend, Image *depth, const modern::SceneVi
                                                          backend->reflectionParams, error);
     if (!backend->sceneReflections)
         LogModernOnce(backend, "no screen-space reflections", error);
+    // The lit shaders of ours read them until the scene is lit (BackendModernScene).
+    lg::SetModernReflections(backend->legacy, backend->sceneReflections);
 }
 } // namespace
 
@@ -1550,6 +1556,7 @@ ModernResult BackendModernSceneDepth(Backend *backend, lg::Surface *depth, const
     backend->sceneNormals = nullptr;
     backend->sceneAo = false;
     lg::SetModernAmbientOcclusion(backend->legacy, nullptr);
+    lg::SetModernReflections(backend->legacy, nullptr);
     Image *depthImage = depth ? lg::SurfaceImage(depth) : nullptr;
     if (!depthImage)
     {
@@ -1598,6 +1605,7 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
     lg::SetModernAmbientOcclusion(backend->legacy, nullptr);
     Image *reflections = backend->sceneReflections;
     backend->sceneReflections = nullptr;
+    lg::SetModernReflections(backend->legacy, nullptr);
     // The surfaces that moved in this scene; the next scene starts a new list.
     std::vector<modern::MovedSurface> moved;
     moved.swap(backend->moved);

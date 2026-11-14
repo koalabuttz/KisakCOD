@@ -29,7 +29,12 @@
 //            the game's sum, decoded: decode(sky + sun) - decode(sky);
 //   spec   = likewise what the game's specular (specular colour * Fresnel *
 //            (shadow * the sun's highlight * its colour + the reflection
-//            probe)) adds to the game's diffuse colour, decoded;
+//            probe)) adds to the game's diffuse colour, decoded; on an
+//            opaque surface the probe gives way, by the reflections'
+//            confidence, to what the Modern path's screen-space reflections
+//            found (s14, a blurrier level for a rougher surface, faded out
+//            below gloss 0.5 and gone at 0.3; none where the scene has
+//            none);
 //   ao     = the Modern path's ambient occlusion at this pixel (s15, white
 //            where the scene has none), which darkens only the light from
 //            all around: the sky term, and the probe through a specular
@@ -156,6 +161,20 @@ layout(set = 1, binding = SAMPLER_DETAIL + 16) uniform sampler detailMapSampler;
 layout(set = 1, binding = 15) uniform texture2D ambientOcclusion;
 layout(set = 1, binding = 31) uniform sampler ambientOcclusionSampler;
 
+#if LM_SUN_SPECULAR
+// The Modern path's screen-space reflections (vk_legacy.h
+// kModernReflectionsSampler): an image the size of the render target with mip
+// levels, rgb the reflected light (linear light, before exposure) times the
+// confidence, alpha the confidence; trilinear, clamped. The Legacy adapter
+// binds a 1x1 (0, 0, 0, 0) one where the scene has none.
+layout(set = 1, binding = 14) uniform texture2D reflections;
+layout(set = 1, binding = 30) uniform sampler reflectionsSampler;
+// The gloss below which a surface keeps its probe, and from which the
+// reflections take its place in full.
+const float kReflectionsGlossNone = 0.3;
+const float kReflectionsGlossFull = 0.5;
+#endif
+
 layout(constant_id = 0) const float kSunStrength = 1.0;
 layout(constant_id = 1) const float kSkyStrength = 1.0;
 // The depth reference is clamped to [0, 1] (a D32 image standing in for D24,
@@ -174,6 +193,14 @@ vec3 Decode(vec3 value)
 {
     const vec3 v = max(value, vec3(0.0));
     return mix(pow((v + 0.055) / 1.055, vec3(2.4)), v / 12.92, lessThanEqual(v, vec3(0.04045)));
+}
+
+// The sRGB curve's inverse, unclamped above 1 like Decode: linear light to
+// a display value.
+vec3 Encode(vec3 light)
+{
+    const vec3 v = max(light, vec3(0.0));
+    return mix(1.055 * pow(v, vec3(1.0 / 2.4)) - 0.055, v * 12.92, lessThanEqual(v, vec3(0.0031308)));
 }
 
 // The visibility of the light from all around at this pixel, 1 open.
@@ -343,6 +370,28 @@ void main()
     const float specularOcclusion =
         clamp(pow(abs(viewFacing) + ao, exp2(-16.0 * (1.0 - gloss) - 1.0)) - 1.0 + ao, 0.0, 1.0);
     vec3 reflection = probe.rgb * probe.a * specularOcclusion;
+    // Where the screen-space reflections found what this pixel mirrors, that
+    // takes the probe's place by their confidence: the level as blurry as
+    // the probe's (LOD 6 - 8 gloss of its 6), the light averaged with its
+    // confidence, put in display values as the probe is. Opaque surfaces
+    // only: the reflections are traced from the depth prepass, which a
+    // blended surface is not in. Rough surfaces keep the probe: below gloss
+    // 0.5 the reflections fade out, gone at 0.3. Their blurriest level is a
+    // few pixels wide, not the half of the world around a rough surface the
+    // probe's blurriest level averages, so on a matte wall at a grazing view
+    // they showed the one bright wall they hit at full strength (PC
+    // reflections run 3, the Crash arcade pillar).
+    if (kMode == 0 && gloss > kReflectionsGlossNone)
+    {
+        const vec2 size = vec2(textureSize(sampler2D(reflections, reflectionsSampler), 0));
+        const float levels = float(textureQueryLevels(sampler2D(reflections, reflectionsSampler)));
+        const float level = clamp((6.0 - 8.0 * gloss) / 6.0, 0.0, 1.0) * (levels - 1.0);
+        const vec4 found = textureLod(sampler2D(reflections, reflectionsSampler), gl_FragCoord.xy / size, level);
+        const float weight =
+            clamp(found.a, 0.0, 1.0) * smoothstep(kReflectionsGlossNone, kReflectionsGlossFull, gloss);
+        if (found.a > 1e-4)
+            reflection = mix(reflection, Encode(found.rgb / found.a), weight);
+    }
 #if LM_SUN_LIGHT
     const float exponent = exp2(gloss * 9.37752) + 7.0;
     const float highlight = clamp(exp((dot(reflected, sunDirection) - 0.99925) * exponent), 0.0, 1.0);
