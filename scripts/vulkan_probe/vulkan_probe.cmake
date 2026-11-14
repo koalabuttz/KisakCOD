@@ -109,6 +109,7 @@ add_library(kisak_gfx_vk_modern STATIC
     "${SRC_DIR}/gfx_vk/modern/vk_modern_normals.cpp"
     "${SRC_DIR}/gfx_vk/modern/vk_modern_ao.cpp"
     "${SRC_DIR}/gfx_vk/modern/vk_modern_reflections.cpp"
+    "${SRC_DIR}/gfx_vk/modern/vk_modern_probes.cpp"
     "${SRC_DIR}/gfx_vk/modern/vk_modern_debug.cpp")
 target_link_libraries(kisak_gfx_vk_modern PUBLIC kisak_gfx_vk)
 target_compile_options(kisak_gfx_vk_modern PRIVATE ${KISAK_VULKAN_WARNINGS})

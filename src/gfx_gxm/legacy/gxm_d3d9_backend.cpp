@@ -129,6 +129,7 @@ lg::Surface *BackendModernSceneTarget(Backend *, lg::Surface *, ModernResult &re
 }
 bool BackendModernEffectsOnDisplay(Backend *) { return false; }
 bool BackendModernWantsSceneDepth(Backend *) { return false; }
+bool BackendModernReflectionProbe(Backend *, lg::Device *, lg::Texture *) { return false; }
 ModernResult BackendModernSceneDepth(Backend *, lg::Surface *, const ModernSceneView &) { return ModernResult::Refused; }
 
 void BackendModernLitInputs(Backend *, const ModernLitInputs *) {}

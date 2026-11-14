@@ -10,6 +10,7 @@
 #include "r_dpvs.h"
 #include "r_shadowcookie.h"
 #include "r_sky.h"
+#include "rhi/r_rhi_modern.h"
 #include <database/database.h>
 
 
@@ -157,6 +158,17 @@ void R_LoadWorld(char *name, int *checksum, int savegame)
     R_GenerateShadowMapCasterCells();
     for (reflectionProbeIndex = 0; reflectionProbeIndex < rgp.world->reflectionProbeCount; ++reflectionProbeIndex)
         rgp.world->reflectionProbeTextures[reflectionProbeIndex].basemap = rgp.world->reflectionProbes[reflectionProbeIndex].reflectionImage->texture.basemap;
+    // The Modern path may make the probes' blurrier levels again (index 0 is
+    // the default probe, not one of the map's).
+    if (const GfxModernHooks *hooks = R_ModernHooks(); hooks && hooks->reflectionProbe)
+    {
+        for (reflectionProbeIndex = 1; reflectionProbeIndex < rgp.world->reflectionProbeCount; ++reflectionProbeIndex)
+        {
+            const GfxImage *image = rgp.world->reflectionProbes[reflectionProbeIndex].reflectionImage;
+            if (image && image->texture.cubemap)
+                hooks->reflectionProbe(hooks->user, dx.device, image->texture.cubemap);
+        }
+    }
     for (lightmapIndex = 0; lightmapIndex < rgp.world->lightmapCount; ++lightmapIndex)
     {
         rgp.world->lightmapPrimaryTextures[lightmapIndex].basemap = rgp.world->lightmaps[lightmapIndex].primary->texture.basemap;

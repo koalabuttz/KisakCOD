@@ -14,6 +14,7 @@
 #include <cstdint>
 
 struct IDirect3DDevice9;
+struct IDirect3DCubeTexture9;
 
 struct GfxModernScene
 {
@@ -125,6 +126,10 @@ struct GfxModernHooks
     // surface, and its lit surfaces come next (the scene is the same one
     // sceneLit and sceneDone get after). May be null.
     void (*sceneDepth)(void *user, IDirect3DDevice9 *device, GfxModernScene *scene);
+    // One of the world's reflection probes, as the world is set up (each
+    // time it is): the back end may make the cube's levels below the first
+    // again from level 0 (the same levels each time). May be null.
+    void (*reflectionProbe)(void *user, IDirect3DDevice9 *device, IDirect3DCubeTexture9 *probe);
 };
 
 // Null removes them. Called while no frame is being built (as the renderer
