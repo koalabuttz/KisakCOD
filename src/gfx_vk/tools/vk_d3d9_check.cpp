@@ -3322,14 +3322,24 @@ void Check::ModernAo()
             // few levels under white; the anti-aliasing averages it.
             Equal("open_floor_unoccluded", open >= 230, true);
             Equal("wall_top_unoccluded", wall >= 230, true);
-            Equal("corner_darker", corner + 25 <= open, true);
-            Equal("corner_not_black", corner >= 64, true);
-            Equal("wall_foot_darker", foot + 25 <= wall, true);
-            Equal("wall_foot_not_black", foot >= 64, true);
-            if (envIs("KISAK_VK_MODERN_AO_THICKNESS", "1000"))
-                Equal("floor_behind_plate_dark_as_behind_a_block", beside <= 120, true);
+            if (envIs("KISAK_VK_MODERN_AO_FLOOR", "0.6"))
+            {
+                // Nothing goes under the floor (0.6 of 255, less a level).
+                Equal("corner_at_or_over_floor", corner >= 152, true);
+                Equal("wall_foot_at_or_over_floor", foot >= 152, true);
+                Equal("floor_behind_plate_at_or_over_floor", beside >= 152, true);
+            }
             else
-                Equal("floor_behind_plate_light", beside >= 150, true);
+            {
+                Equal("corner_darker", corner + 25 <= open, true);
+                Equal("corner_not_black", corner >= 64, true);
+                Equal("wall_foot_darker", foot + 25 <= wall, true);
+                Equal("wall_foot_not_black", foot >= 64, true);
+                if (envIs("KISAK_VK_MODERN_AO_THICKNESS", "1000"))
+                    Equal("floor_behind_plate_dark_as_behind_a_block", beside <= 120, true);
+                else
+                    Equal("floor_behind_plate_light", beside >= 150, true);
+            }
             Expect("sky_white", 20, 10, 255, 255, 255);
             char line[160];
             std::snprintf(line, sizeof(line), " ao_open=%d ao_corner=%d ao_foot=%d ao_wall=%d ao_beside_plate=%d",

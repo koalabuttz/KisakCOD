@@ -374,10 +374,12 @@ def main():
 
     # ao
     ao_line = re.compile(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with ambient occlusion \(radius '
-                         r'48\.0, thickness ([0-9.]+), power 2\.00\), ([0-9.]+) ms GPU each$', re.M)
+                         r'48\.0, thickness ([0-9.]+), power 2\.00, floor ([0-9.]+)\), ([0-9.]+) ms GPU each$', re.M)
     for settings, built in (({}, True),
                             ({'KISAK_VK_MODERN_DEBUG': 'ao'}, True),
                             ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_AO_THICKNESS': '1000'}, True),
+                            ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_AO_THICKNESS': '1000',
+                              'KISAK_VK_MODERN_AO_FLOOR': '0.6'}, True),
                             ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_LINEAR': '0'}, True),
                             ({'KISAK_VK_MODERN_AO': '1'}, True),
                             ({'KISAK_VK_MODERN_AO': '0'}, False),
@@ -388,7 +390,8 @@ def main():
                             ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_NORMALS': '0'}, False)):
         chosen = dict(env)
         for name in ('KISAK_VK_MODERN_NORMALS', 'KISAK_VK_MODERN_AO', 'KISAK_VK_MODERN_AO_RADIUS',
-                     'KISAK_VK_MODERN_AO_POWER', 'KISAK_VK_MODERN_AO_THICKNESS', 'KISAK_VK_MODERN_LINEAR', 'KISAK_VK_MODERN_LIT',
+                     'KISAK_VK_MODERN_AO_POWER', 'KISAK_VK_MODERN_AO_THICKNESS', 'KISAK_VK_MODERN_AO_GRAZING',
+                     'KISAK_VK_MODERN_AO_FLOOR', 'KISAK_VK_MODERN_LINEAR', 'KISAK_VK_MODERN_LIT',
                      'KISAK_VK_MODERN_SHADERS', 'KISAK_VK_MODERN_DEBUG'):
             chosen.pop(name, None)
         chosen.update(settings)
@@ -396,10 +399,12 @@ def main():
         found, scenes = parse(stdout)
         line = ao_line.search(stdout)
         thickness = '1000.0' if settings.get('KISAK_VK_MODERN_AO_THICKNESS') == '1000' else '8.0'
+        floor = '0.60' if settings.get('KISAK_VK_MODERN_AO_FLOOR') == '0.6' else '0.35'
         named = ' '.join(f'{k}={v}' for k, v in settings.items()) or 'the defaults'
         checks.expect(f'modern_ao passes with {named}',
                       code == 0 and found.get('d3d9_check') == 'passed' and [s[0] for s in scenes] == ['modern_ao']
                       and (line is not None and line.group(1) == '1' and line.group(2) == thickness
+                           and line.group(3) == floor
                            if built else line is None)
                       and 'no ambient occlusion' not in stdout,
                       f'status {code}\n{stdout}')

@@ -52,7 +52,7 @@ layout(push_constant) uniform Params
     uint frame;      // moves the noise from frame to frame
     float thickness; // world units a sample's surface is taken to reach behind it
     float grazing;   // |N.V| from which the effect is whole on walls; below it, it fades out
-    vec4 up;         // xyz: world up in view space
+    vec4 up;         // xyz: world up in view space; w: the floor (ao_blur.frag)
 } params;
 
 layout(location = 0) out vec4 outVisibility;

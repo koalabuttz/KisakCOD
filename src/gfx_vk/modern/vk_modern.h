@@ -255,6 +255,12 @@ struct AoParams
     // AO run 4: at 0.08 a corner on a wall seen nearly side-on (the crash-in
     // arch edge) read as a dark line; David chose to soften that alone.
     float grazing = 0.2f;
+    // The darkest the visibility may go after the power, reached through a
+    // soft knee 0.1 wide (0 turns it off). PC AO run 7: the crash-in arch
+    // line is a narrow slot between the pillar's side and the arch's inside
+    // face that went near black (0.13) and ended in a hard edge; the ground's
+    // contact shadows stay far above it (about 0.85).
+    float floor = 0.35f;
     uint32_t frame = 0;    // moves the noise
 };
 
