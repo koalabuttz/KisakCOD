@@ -21,9 +21,7 @@
 #include <script/scr_debugger.h>
 #include <universal/profile.h>
 
-#if !defined(_WIN32)
 #include <linux/sys_perf.h>
-#endif
 
 #include <ctime>
 
@@ -72,6 +70,7 @@ const dvar_t *sv_endGameIfISuck;
 const dvar_t *sv_debugMessageKey;
 const dvar_t *sv_fps;
 const dvar_t *sv_botsPressAttackBtn;
+const dvar_t *sv_botSnapshots;
 const dvar_t *sv_serverid;
 const dvar_t *sv_allowProtocol6;
 const dvar_t *sv_advertisedProtocol;
@@ -1151,9 +1150,7 @@ void SV_UpdateBots()
     int i; // [esp+34h] [ebp-4h]
 
     PROF_SCOPED("SV_UpdateBots");
-#if !defined(_WIN32)
     SysPerfScope perfScope(SYS_PERF_PROBE_SERVER_BOTS);
-#endif
     SV_ResetSkeletonCache();
     i = 0;
     clients = svs.clients;
@@ -1294,9 +1291,7 @@ void SV_FrameInternal(int msec)
     sv.timeResidual += msec;
     if (sv.timeResidual >= frameMsec && !SV_CheckOverflow())
     {
-#if !defined(_WIN32)
         SysPerfScope perfScope(SYS_PERF_PROBE_SERVER_FRAME);
-#endif
         SV_CalcPings();
         SV_PreFrame();
         while (1)
@@ -1325,9 +1320,7 @@ void SV_PostFrame()
     }
     
     {
-#if !defined(_WIN32)
         SysPerfScope perfScope(SYS_PERF_PROBE_SERVER_SEND);
-#endif
         SV_SendClientMessages();
     }
     SV_MasterHeartbeat("COD-4");

@@ -87,6 +87,63 @@ inline bool Sys_IsSiblingProgramName(const char *name)
     return true;
 }
 
+// True when a folder can be handed to the other game program whole, as
+// +set <dvar> "<folder>": it is not empty, and has no '+' or line break, which
+// would split the engine's command line, and no quote, which would end the
+// argument.
+inline bool Sys_FolderCanBePassed(const char *folder)
+{
+    return folder && folder[0] && !strpbrk(folder, "+\n\r\"");
+}
+
+// The game and home folders this program started with (fs_basepath and
+// fs_homepath once Com_Init has read the command line), which
+// Sys_QuitAndStartProcess hands to the program it starts.
+//
+// They are kept here, and not read from the dvars when the other program is
+// started, because a game server sets a client's dvars by name and retail's
+// settings stay settable (docs/server-set-dvars.md): after a visit to a server
+// the dvars may name a folder the server chose, and the other program would
+// load its game data from there.
+class SysStartFolders
+{
+public:
+    // Keeps both folders, the first time only. A folder that cannot be passed
+    // whole or does not fit is kept as "none", and the other program then finds
+    // its own.
+    void Remember(const char *basePath, const char *homePath)
+    {
+        if (remembered_)
+            return;
+        remembered_ = true;
+        Keep(basePath, basePath_);
+        Keep(homePath, homePath_);
+    }
+
+    bool Remembered() const { return remembered_; }
+    // nullptr when there is none to pass.
+    const char *BasePath() const { return basePath_[0] ? basePath_ : nullptr; }
+    const char *HomePath() const { return homePath_[0] ? homePath_ : nullptr; }
+
+private:
+    // Shorter than sys_exitCmdLine (1024), which has to hold both.
+    static constexpr size_t kFolderSize = 448;
+
+    static void Keep(const char *folder, char (&kept)[kFolderSize])
+    {
+        kept[0] = '\0';
+        if (!Sys_FolderCanBePassed(folder))
+            return;
+        const size_t length = strlen(folder);
+        if (length < kFolderSize)
+            memcpy(kept, folder, length + 1);
+    }
+
+    bool remembered_ = false;
+    char basePath_[kFolderSize] = {};
+    char homePath_[kFolderSize] = {};
+};
+
 // Splits the parameters Sys_QuitAndStartProcess was given into arguments, as
 // the engine's own tokenizer reads a Windows command line: whitespace ends an
 // argument and a pair of double quotes groups one, quotes removed. Writes the

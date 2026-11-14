@@ -199,6 +199,7 @@ extern const dvar_t *ui_mousePitch;
 extern const dvar_t *ui_extraBigFont;
 extern const dvar_t *ui_nextMission;
 extern const dvar_t *uiscript_debug;
+extern const dvar_t *ui_fastExpressions; // ui_expressions.cpp
 extern const dvar_t *ui_autoContinue;
 extern const dvar_t *ui_smallFont;
 extern const dvar_t *ui_hideMap;

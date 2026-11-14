@@ -8,14 +8,20 @@ on:
     paths:
       - src/ui/ui_expressions.cpp
       - src/ui/ui_shared.h
+      - src/universal/dvar.cpp
+      - src/universal/q_shared.h
       - scripts/tests/test_ui_expression_dispatch.py
+      - scripts/tests/test_ui_fast_expressions.py
       - .github/workflows/ui-expression-dispatch.yaml
   push:
     branches: [master]
     paths:
       - src/ui/ui_expressions.cpp
       - src/ui/ui_shared.h
+      - src/universal/dvar.cpp
+      - src/universal/q_shared.h
       - scripts/tests/test_ui_expression_dispatch.py
+      - scripts/tests/test_ui_fast_expressions.py
       - .github/workflows/ui-expression-dispatch.yaml
 
 # Read-only token: these jobs only check out, build and upload artifacts.
@@ -30,3 +36,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 scripts/tests/test_ui_expression_dispatch.py --sanitize
+      # ui_fastExpressions reads dvars exactly as the text path does.
+      - run: python3 scripts/tests/test_ui_fast_expressions.py --sanitize

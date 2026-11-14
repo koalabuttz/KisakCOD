@@ -45,6 +45,55 @@ is refused, the reason is logged once (`vulkan d3d9: modern: the scene is not
 anti-aliased: the scene is multisampled`), and the jitter stops, so the game
 looks as it does with `legacy`.
 
+## Live switches
+
+Most of the Modern path's switches can be changed while the game runs, from
+the console, in a match: the engine's `r_modern*` dvars. The host reads them at
+every Present (`src/gfx_d3d/rhi/r_rhi_modern_dvars.h`) and hands them to the
+back end as `front::Tuning::modern` (`ModernTuning`, `vk_d3d9.h`), which takes
+them up from the next frame, so each scene is drawn with one set throughout
+(`ApplyModernTuning`, `vk_d3d9_backend_vulkan.cpp`). Each change is logged once:
+`vulkan d3d9: modern: switches now: bloom on, exposure on (key 0.115), ...,
+tonemap neutral, debug view none`. They are not saved, and a server may not set
+them (`src/qcommon/server_dvar_guard.h`).
+
+Every dvar's default keeps what the device started with: the
+`KISAK_VK_MODERN_*` environment variable of the same switch, read once as the
+device opens, or the built-in default. So the variables keep working for older
+recipes, and setting a dvar back to `default` (or `-1` for the numbers) goes
+back to them.
+
+| Dvar | Values | Variable it overrides |
+| --- | --- | --- |
+| `r_modernBloom` | default, off, on | `KISAK_VK_MODERN_BLOOM` |
+| `r_modernExposure` | default, off, on | `KISAK_VK_MODERN_EXPOSURE` |
+| `r_modernExposureKey` | -1, or above 0 to 4 | `KISAK_VK_MODERN_EXPOSURE_KEY` |
+| `r_modernVelocity` | default, off, on | `KISAK_VK_MODERN_VELOCITY` |
+| `r_modernShaders` | default, off, on | `KISAK_VK_MODERN_SHADERS` |
+| `r_modernModelShaders` | default, off, on | `KISAK_VK_MODERN_MODEL_SHADERS` |
+| `r_modernNoSunShaders` | default, off, on | `KISAK_VK_MODERN_NO_SUN_SHADERS` |
+| `r_modernLightShaders` | default, off, on | `KISAK_VK_MODERN_LIGHT_SHADERS` |
+| `r_modernSunStrength`, `r_modernSkyStrength` | -1, or 0 to 16 | `KISAK_VK_MODERN_SUN_STRENGTH`, `_SKY_STRENGTH` |
+| `r_modernAo` | default, off, on | `KISAK_VK_MODERN_AO` |
+| `r_modernAoRadius`, `r_modernAoPower`, `r_modernAoThickness`, `r_modernAoFloor`, `r_modernAoEdge` | -1, or the variable's range | `KISAK_VK_MODERN_AO_RADIUS`, `_POWER`, `_THICKNESS`, `_FLOOR`, `_EDGE` |
+| `r_modernSsr` | default, off, on | `KISAK_VK_MODERN_SSR` |
+| `r_modernSsrDistance`, `r_modernSsrThickness` | -1, or above 0 | `KISAK_VK_MODERN_SSR_DISTANCE`, `_THICKNESS` |
+| `r_modernTonemap` | default, clamp, neutral, agx, aces | `KISAK_VK_MODERN_TONEMAP` |
+| `r_modernDebug` | default, none, velocity, velocity-all, normals, ao, reflections | `KISAK_VK_MODERN_DEBUG` |
+
+As with the variables, `r_modernAo` and `r_modernSsr` at `default` turn the
+pass on for what reads it (our lit shaders, or its debug view), so
+`r_modernShaders off` turns them off too unless they are set `on`. A pass
+switched off keeps what it made and carries on when switched on again; what it
+drew stops being read at once. Changing `r_modernDebug` to or from
+`velocity-all` makes the velocity pass again at its next scene (a wait for the
+GPU, once). Linear light (`KISAK_VK_MODERN_LINEAR`), lit inputs
+(`KISAK_VK_MODERN_LIT`), where effects blend (`KISAK_VK_MODERN_EFFECTS`), the
+normals buffer's own switch (`KISAK_VK_MODERN_NORMALS`), the reflection
+probes' filter (`KISAK_VK_MODERN_PROBES`, applied as their textures load), the
+exposure range and the reflections' steps and levels stay start-up only, and `r_visuals` itself is
+latched (above).
+
 ## How a frame goes
 
 1. **Jitter (front end).** `R_RenderScene` sets up the scene's view
@@ -271,6 +320,13 @@ the scene ends, so the band stays sharp only if the pass still reads the
 draw's. That band's vertices are also far from the origin and drawn with the
 world shaders' two matrices, while it is reported with their product, so it
 stays sharp only if the pass allows for the depth's rounding.
+
+The `modern_live` scene changes the switches while the device exists: the
+tonemap scene through the clamp curve and then ACES, the ambient occlusion
+scene with ambient occlusion off, and the velocity debug view without its
+depth test (in the full run, after `modern_velocity`, that makes the velocity
+pass again, and its statistics keep the counts from before), each change
+logged once.
 
 `scripts/tests/test_vulkan_d3d9_front.py` checks the scenes in the full run and
 the `modern:` statistics lines. `scripts/tools/vulkan/gen_spirv_header.py
@@ -714,6 +770,7 @@ are.
 | `KISAK_VK_MODERN_SHADERS=0` | our shaders on (with linear light and lit passes on) |
 | `KISAK_VK_MODERN_MODEL_SHADERS=0` | the models' (`lp_`) on too |
 | `KISAK_VK_MODERN_NO_SUN_SHADERS=0` | those without the sun (interiors) on too |
+| `KISAK_VK_MODERN_LIGHT_SHADERS=0` | those lit by a spot or omni light on too |
 | `KISAK_VK_MODERN_SUN_STRENGTH=<value>` | 1 (as bright as the game's) |
 | `KISAK_VK_MODERN_SKY_STRENGTH=<value>` | 1 |
 
@@ -814,6 +871,96 @@ and blended, `lm_r0c0n0` with a tilted normal map and `lp_r0c0d0n0s0`, with
 the sun's constants, a white primary lightmap and the volume's alpha all
 set: none of them may light anything. `test_vulkan_d3d9_front.py` also runs
 it with `KISAK_VK_MODERN_NO_SUN_SHADERS=0`.
+
+### Ambient-only models: lp_amb
+
+`lp_[i_]amb[_sun|_spot|_omni]_t0c0` is one program whatever the light (lit
+shader facts 6). It reads the colour map, the lighting volume at texcoord 1's
+xyz (with no normal, so no lookup push and no N.L), fog colour c0 and the
+sun's colour c18. Its light is the volume's, doubled, plus the volume's alpha
+times c18. `lp_sun.frag` builds it with `LP_SUN_AMBIENT=1`: the sun's share is
+that second term, taken from the game's sum as for the sun family. The code
+is 0x3a0, the `lp_sun` family (0x80) with the light field (bits 8-9) set to
+ambient (0x300) and `t0`. Spot (0x100) and omni (0x200) in that field are
+the spot and omni families (next section). The code is 16 bits wide.
+`PipelineKey::linearShader`'s low byte is where the one-byte code was, so
+`pipelines.list` keeps its version.
+
+The renderer takes it only when c18 is bound to the sun's colour.
+`KISAK_VK_MODERN_MODEL_SHADERS=0` keeps it on the game's shader;
+`KISAK_VK_MODERN_NO_SUN_SHADERS=0` does not, since it has the sun's colour.
+The `modern_lit_no_sun` scene draws it over the bottom of the
+`lp_r0c0d0n0s0` quad.
+
+### Spot and omni lights
+
+CoD4's spot and omni lights reach the lit passes in two ways (lit shader
+facts 6 and 7, from the PC):
+
+- **As a surface's primary light**, in place of the sun:
+  `lm_[hsm_]<spot|omni>_<mode>c0[d0][n0][s0]` for the world and
+  `lp_[hsm_][i_]<spot|omni>_...` for models. These are base passes, chosen
+  per surface by its primary light: they draw the lightmap's (or volume's)
+  light plus that light's, exactly as the sun family does with the sun.
+  Backlot draws `lm_hsm_spot_...` and `lp_hsm_spot_...` from its spawn
+  on.
+- **As an extra light**, `l_<spot|omni>_...`, drawn additively after the
+  lit passes (muzzle flashes, explosions). Those stay on the game's shader
+  for now.
+
+Our shaders draw the first kind. `lm_sun.frag` and `lp_sun.frag` build them
+with `*_SUN_LIGHT=2` (spot) or `3` (omni): 24 builds each for the world and
+models (spot and omni, with or without the light's shadow map, times the
+maps; facts 7 did not read the shadowed ones with a detail map, so those
+keep the game's shader). The light's term replaces the sun's:
+
+- L = lightPosition.xyz - the point (texcoord 5, the point relative to the
+  eye); u = |L| / radius (lightPosition.w is 1/radius), clamped to 1.
+- The attenuation A is a coloured curve at u: for the world, row 0 of the
+  secondary lightmap at x = u * lightFalloffPlacement.x + .z (the game copies
+  each light's curve into a strip there at load); for models, a sampler of
+  its own at (u, u).
+- A spot's cone: ramp = saturate(dot(L/|L|, spotDir) * spotFactors.x +
+  spotFactors.y), with spotDir pointing back to the light; cone =
+  ramp^spotFactors.z (1 when z is 0), and nothing at all (not even the
+  highlight) where the ramp is 0.
+- Visibility V is the primary lightmap's value (world) or the volume's alpha
+  (models). With the light's shadow map (`hsm_`), four depth-compare taps a
+  quarter each at the projected point plus and minus
+  spotShadowmapPixelAdjust's two offsets, faded in from V by
+  spotFactors.w (an omni's by its spot ramp times spotFactors.w).
+- The light adds N.L * lightDiffuse * V * A * cone to the lightmap's (or
+  the volume's doubled) light, in display values as the sun does, and its
+  highlight is the sun's with the direction to the light, times V * A *
+  cone * lightSpecular. The colours have no doubling or overbright.
+
+So the shader shares the light out against the lightmap's in linear light
+exactly as the sun's, and the sun strength (`KISAK_VK_MODERN_SUN_STRENGTH`)
+scales the primary light, whichever it is.
+
+The constants start where the sun family's material constants would:
+lightPosition, lightDiffuse, lightSpecular (s0), spotDir and spotFactors
+(a spot, or any light with the shadow map), lightFalloffPlacement (the
+world's), spotShadowmapPixelAdjust (the shadow map), then envMapParms (s0;
+c20 with the shadow map); detailScale is at c20. The world's start at c5,
+models' at c6 after lightingLookupScale. The samplers are the sun family's,
+with the light's shadow map in the sun's shadow map's place; a model's
+attenuation comes after its specular map, before the detail map. The
+renderer checks every argument against that layout (code constants 0x0-0x4,
+0xb, 0x32; code samplers 8 and 15) before it names our shader.
+
+| Switch | Default |
+| --- | --- |
+| `KISAK_VK_MODERN_LIGHT_SHADERS=0` | spot and omni lights' on too |
+
+**Checks:** the `modern_lit_lights` scene draws `lm_spot_r0c0n0s0` at
+half the cone's ramp with exponent 2, `lm_spot_r0c0` facing away (the
+lightmap's light alone), `lm_omni_r0c0`, `lp_spot_r0c0` and
+`lp_omni_r0c0n0s0` (with the light's whole highlight), each light one unit
+above the point at half its radius, against the formulas above (5 of 5
+points; with `KISAK_VK_MODERN_LIGHT_SHADERS=0` the stand-ins show black).
+The shadowed builds are not drawn there; a PC run on Backlot's lamp-lit
+rooms checks them against the game's.
 
 ## Normals buffer
 

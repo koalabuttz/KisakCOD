@@ -19,9 +19,7 @@
 #include <stringed/stringed_hooks.h>
 #include <universal/profile.h>
 
-#if !defined(_WIN32)
 #include <linux/sys_perf.h>
-#endif
 
 extern const dvar_t *ui_showEndOfGame;
 
@@ -120,6 +118,19 @@ void CG_ClearOverheadFade()
     memset((uint8_t *)overheadFade, 0, sizeof(overheadFade));
 }
 
+// The parts of the HUD that perf_ab times (docs/perf-ab.md).
+static void CG_Draw2dHudElemsTimed(int32_t localClientNum, int32_t foreground)
+{
+    SysPerfScope perfScope(SYS_PERF_PROBE_HUD_ELEMS);
+    CG_Draw2dHudElems(localClientNum, foreground);
+}
+
+static void CG_PaintHudMenusTimed(int32_t localClientNum)
+{
+    SysPerfScope perfScope(SYS_PERF_PROBE_HUD_MENUS);
+    Menu_PaintAll(&cgDC[localClientNum]);
+}
+
 void CG_Draw2D(int32_t localClientNum)
 {
     bool drawHud; // [esp+37h] [ebp-Dh]
@@ -129,9 +140,7 @@ void CG_Draw2D(int32_t localClientNum)
 
     const cg_s *cgameGlob;
 
-#if !defined(_WIN32)
     SysPerfScope perfScope(SYS_PERF_PROBE_HUD);
-#endif
 
     cgameGlob = CG_GetLocalClientGlobals(0);
 
@@ -159,43 +168,58 @@ void CG_Draw2D(int32_t localClientNum)
             else
             {
                 Dvar_SetBool(ui_showEndOfGame, 0);
-                CG_CompassUpdateActors(localClientNum);
+                {
+                    SysPerfScope partScope(SYS_PERF_PROBE_HUD_COMPASS);
+                    CG_CompassUpdateActors(localClientNum);
+                }
                 chatOverScoreboard = CG_IsScoreboardDisplayed(localClientNum);
                 if (ps->pm_type == PM_SPECTATOR)
                 {
                     if (drawHud)
                     {
-                        CG_ScanForCrosshairEntity(localClientNum);
-                        CG_UpdatePlayerNames(localClientNum);
+                        {
+                            SysPerfScope partScope(SYS_PERF_PROBE_HUD_NAMES);
+                            CG_ScanForCrosshairEntity(localClientNum);
+                            CG_UpdatePlayerNames(localClientNum);
+                        }
                         if (!chatOverScoreboard)
                             CG_DrawChatMessages(localClientNum);
-                        CG_Draw2dHudElems(localClientNum, 0);
-                        Menu_PaintAll(&cgDC[localClientNum]);
-                        CG_Draw2dHudElems(localClientNum, 1);
+                        CG_Draw2dHudElemsTimed(localClientNum, 0);
+                        CG_PaintHudMenusTimed(localClientNum);
+                        CG_Draw2dHudElemsTimed(localClientNum, 1);
                     }
                 }
                 else
                 {
                     CG_DrawNightVisionOverlay(localClientNum);
-                    CG_ScanForCrosshairEntity(localClientNum);
+                    {
+                        SysPerfScope partScope(SYS_PERF_PROBE_HUD_NAMES);
+                        CG_ScanForCrosshairEntity(localClientNum);
+                    }
                     if (ps->pm_type < PM_DEAD)
                         CG_DrawCrosshair(localClientNum);
                     if (drawHud)
                     {
                         if (ps->pm_type < PM_DEAD)
+                        {
+                            SysPerfScope partScope(SYS_PERF_PROBE_HUD_NAMES);
                             CG_UpdatePlayerNames(localClientNum);
+                        }
                         if (!chatOverScoreboard)
                             CG_DrawChatMessages(localClientNum);
                     }
                     CG_CheckTimedMenus(localClientNum);
                     if (drawHud)
                     {
-                        CG_Draw2dHudElems(localClientNum, 0);
-                        Menu_PaintAll(&cgDC[localClientNum]);
+                        CG_Draw2dHudElemsTimed(localClientNum, 0);
+                        CG_PaintHudMenusTimed(localClientNum);
                     }
-                    CG_Draw2dHudElems(localClientNum, 1);
+                    CG_Draw2dHudElemsTimed(localClientNum, 1);
                 }
-                isScoreboardVisible = CG_DrawScoreboard(localClientNum);
+                {
+                    SysPerfScope partScope(SYS_PERF_PROBE_HUD_SCOREBOARD);
+                    isScoreboardVisible = CG_DrawScoreboard(localClientNum);
+                }
                 if (drawHud)
                 {
                     if (chatOverScoreboard)

@@ -68,11 +68,50 @@ void R_ShowTris(GfxCmdBufContext context, const GfxDrawSurfListInfo *info)
     }
 }
 
+#ifdef KISAK_GFX_GXM
+// The Vita's scaled 3D picture (gxm_engine_options.h, g_sceneScale): the 3D
+// passes drew it in the top left part of the scene's viewport. It is copied
+// out, since a picture cannot be read while it is drawn into, and stretched
+// back over the whole viewport with linear filtering. The post effects and
+// the HUD that follow then see a full-size picture and draw at full size.
+static void RB_StretchScaledScene(const GfxViewInfo *viewInfo)
+{
+    const float scale = KISAK_GXM_SCENE_SCALE();
+    gfx_gxm::g_sceneScale = 1.0f;
+    if (scale >= 1.0f)
+        return;
+    if (tess.indexCount)
+        RB_EndTessSurface();
+    const GfxViewport &view = viewInfo->sceneViewport;
+    const RECT whole = {view.x, view.y, view.x + view.width, view.y + view.height};
+    const RECT drawn = {view.x, view.y, view.x + gfx_gxm::SceneScaled(view.width, scale),
+                        view.y + gfx_gxm::SceneScaled(view.height, scale)};
+    IDirect3DSurface9 *scene = gfxRenderTargets[R_RENDERTARGET_SCENE].surface.color;
+    IDirect3DSurface9 *copy = Image_GetSurface(gfxRenderTargets[R_RENDERTARGET_RESOLVED_SCENE].image);
+    if (!scene || !copy)
+        return;
+    R_HW_StretchRect(gfxCmdBufState.prim.device, scene, &drawn, copy, &drawn, D3DTEXF_POINT);
+    R_HW_StretchRect(gfxCmdBufState.prim.device, copy, &drawn, scene, &whole, D3DTEXF_LINEAR);
+    R_HW_Release(copy);
+}
+#endif
+
 void RB_Draw3DInternal(const GfxViewInfo *viewInfo)
 {
     PROF_SCOPED("RB_Draw3D");
 
     iassert(rgp.world);
+
+#ifdef KISAK_GFX_GXM
+    // Every 3D pass of this view draws the smaller picture until
+    // RB_StretchScaledScene. Only the standard full-screen scene: a view
+    // that is not the whole screen, fullbright and the debug shaders keep
+    // the full size.
+    gfx_gxm::g_sceneScale = gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD && viewInfo->isRenderingFullScreen &&
+                                    vita_sceneScale
+                                ? std::clamp(vita_sceneScale->current.value, 0.5f, 1.0f)
+                                : 1.0f;
+#endif
 
     if (gfxDrawMethod.drawScene)
     {
@@ -790,6 +829,9 @@ void RB_StandardDrawCommandsCommon()
             R_SetResolvedScene(gfxCmdBufContext);
             R_BeginView(&gfxCmdBufSourceState, &viewInfo->sceneDef, &viewInfo->viewParms);
             R_SetViewportStruct(&gfxCmdBufSourceState, &viewInfo->displayViewport);
+#ifdef KISAK_GFX_GXM
+            RB_StretchScaledScene(viewInfo);
+#endif
             if (viewInfo->isRenderingFullScreen)
             {
                 RB_ApplyLatePostEffects(viewInfo);

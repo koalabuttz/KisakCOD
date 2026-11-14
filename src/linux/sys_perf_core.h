@@ -17,6 +17,8 @@
 // made-up clock and made-up counters.
 // ---------------------------------------------------------------------------
 
+// (std::max) stays in parentheses: the Windows build includes <windows.h>,
+// whose max macro would replace it.
 #include <algorithm>
 #include <cmath>
 #include <cstdarg>
@@ -24,6 +26,13 @@
 #include <cstdio>
 #include <string>
 #include <vector>
+
+// printf format checks where the compiler has them (not MSVC).
+#if defined(__GNUC__) || defined(__clang__)
+#define PERF_PRINTF_FORMAT(formatIndex, firstArg) __attribute__((format(printf, formatIndex, firstArg)))
+#else
+#define PERF_PRINTF_FORMAT(formatIndex, firstArg)
+#endif
 
 struct PerfThreadTime
 {
@@ -262,7 +271,7 @@ public:
                 // Unsigned 32-bit differences stay right across one wrap.
                 probeTotals_[i].ns += (uint32_t)(probeNow_[i].ns - probeLast_[i].ns);
                 probeTotals_[i].calls += (uint32_t)(probeNow_[i].calls - probeLast_[i].calls);
-                probeTotals_[i].maxNs = std::max(probeTotals_[i].maxNs, probeNow_[i].maxNs);
+                probeTotals_[i].maxNs = (std::max)(probeTotals_[i].maxNs, probeNow_[i].maxNs);
             }
             if (config_.tickProbe >= 0)
             {
@@ -301,7 +310,7 @@ private:
     int WindowCount() const { return config_.rounds * (int)config_.variants.size(); }
     static double NsToSeconds(uint64_t ns) { return (double)ns / 1e9; }
 
-    void Printf(const char *format, ...) __attribute__((format(printf, 2, 3)))
+    void Printf(const char *format, ...) PERF_PRINTF_FORMAT(2, 3)
     {
         char line[1024];
         va_list args;
@@ -550,7 +559,7 @@ private:
         for (const VariantMean &mean : means)
         {
             if (mean.fps > 0.0)
-                spread = std::max(spread, 100.0 * (mean.fpsMax - mean.fpsMin) / mean.fps);
+                spread = (std::max)(spread, 100.0 * (mean.fpsMax - mean.fpsMin) / mean.fps);
         }
         std::string line;
         Appendf(&line, "perf: B against A: fps %+.1f %%, frame %+.3f ms, cpu all %+.3f ms/frame",
@@ -563,7 +572,7 @@ private:
         host_->Print(line.c_str());
     }
 
-    static void Appendf(std::string *line, const char *format, ...) __attribute__((format(printf, 2, 3)))
+    static void Appendf(std::string *line, const char *format, ...) PERF_PRINTF_FORMAT(2, 3)
     {
         char text[512];
         va_list args;
