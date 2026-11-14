@@ -769,6 +769,20 @@ What the GXM back end does so far (step 2d):
   showed black. An empty file
   `no-depth-prepass` in the folder of the compiled programs turns the
   forced pass off.
+- **No distortion copy in frames that do not need it.** The Vita's GPU
+  works a scene at a time: every change of render target ends one, stores
+  its whole colour and depth targets and loads them again when the frame
+  comes back. With r_distortion on the engine copied the picture for the
+  surfaces that bend it (heat haze, glass) before the emissive pass of
+  every frame, which split the back buffer's scene. The copy is now made
+  only in frames whose emissive list holds a technique that reads it
+  (src/gfx_gxm/gxm_engine_options.h). Console run AD (2026-11-14, mp_crash,
+  busy view, 12 MB parameter buffer): the GPU took 79.4 ms a frame without
+  the copy against 82.6 with it, 5 scenes a frame instead of 7. An empty
+  file `no-resolve-skip` in the folder of the compiled programs turns it
+  off. (Drawing the forced depth pass inside the scene's own targets, the
+  other half of that work, made the GPU slower on the console: 90.8 against
+  79.4 ms in the same run, so it was left out.)
 - **The CPU a frame ahead of the GPU.** The CPU fills frame N while the GPU
   still draws frame N - 1, so a frame costs the longer of the two times and
   not their sum. Console run U (2026-11-11, mp_crash) had shown them taking
