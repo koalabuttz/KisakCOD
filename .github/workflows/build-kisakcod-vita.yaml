@@ -305,6 +305,7 @@ jobs:
           set -euo pipefail
           python3 scripts/tests/test_vita_run_plan.py
           python3 scripts/tests/test_vita_run_list.py
+          python3 scripts/tests/test_vita_bench.py
           python3 scripts/tests/test_vita_input.py
           python3 scripts/tests/test_vita_sound.py --al-include "$RUNNER_TEMP/al-include"
           python3 scripts/tests/test_vita_program_queue.py
@@ -347,8 +348,9 @@ jobs:
           scripts/ci/each-config.sh <<'COMMANDS'
           export BUILD_DIR="build-vita-mp/$config"
           export BINARY="out/vita-mp-$config/KisakCOD-mp"
-          cmake --build "$BUILD_DIR" --target KisakCOD-mp-vpk KisakCOD-gxm-probe-vpk --parallel "$(nproc)"
-          ls -l "$BINARY" "$BINARY.vpk" "$(dirname "$BINARY")/KisakCOD-gxm-probe.vpk"
+          cmake --build "$BUILD_DIR" --target KisakCOD-mp-vpk KisakCOD-mp-test-vpk KisakCOD-gxm-probe-vpk \
+            --parallel "$(nproc)"
+          ls -l "$BINARY" "$BINARY.vpk" "$BINARY-test.vpk" "$(dirname "$BINARY")/KisakCOD-gxm-probe.vpk"
           "$VITASDK/bin/arm-vita-eabi-size" -A "$BINARY" | grep -E '^\.(text|rodata|data|bss) '
           # Float results have to match x86 (docs/vita.md): client prediction
           # replays the server's movement math.
@@ -377,7 +379,7 @@ jobs:
           # so a crash dump's addresses can be named with arm-vita-eabi-addr2line
           # on whatever machine fetched the artifact.
           cp "$BINARY" "$BINARY.elf"
-          sha256sum "$BINARY.vpk" "$BINARY.elf"
+          sha256sum "$BINARY.vpk" "$BINARY-test.vpk" "$BINARY.elf"
           COMMANDS
 
       # RelWithDebInfo is the build the machines install; the artifact keeps its name.
@@ -387,6 +389,7 @@ jobs:
           name: KisakCOD-mp-vita-RelWithDebInfo
           path: |
             out/vita-mp-RelWithDebInfo/KisakCOD-mp.vpk
+            out/vita-mp-RelWithDebInfo/KisakCOD-mp-test.vpk
             out/vita-mp-RelWithDebInfo/KisakCOD-mp.elf
             ${{ github.workspace }}/out/vita-mp-RelWithDebInfo/KisakCOD-gxm-probe.vpk
           if-no-files-found: error

@@ -118,33 +118,40 @@ add_dependencies(KisakCOD-dedi update_build_number)
 # a homebrew eboot.bin, and vita-pack-vpk zips it with the app's param.sfo.
 # ATTRIBUTE2=12 asks for the larger memory budget (extended mode): the engine's
 # reservations alone take about 154 MB (docs/vita.md).
-# kisak_vita_pack_vpk(<target> <title id> <title> [UNSAFE]) adds <target>-vpk,
-# which packs the target into <target>.vpk beside it. Programs are packed
+# kisak_vita_pack_vpk(<target> <title id> <title> [UNSAFE] [NAME <name>]) adds
+# <name>-vpk, which packs the target into <name>.vpk beside it (<name> is the
+# target's own unless given: one program may be packed as two applications).
+# Programs are packed
 # "safe" (vita-make-fself -s: no restricted system calls, only the app's own
 # and ux0:data's files) unless UNSAFE is given; the client needs UNSAFE to
 # load the user's shader compiler from ur0:data (src/gfx_gxm/gxm_shader_compiler.h).
 function(kisak_vita_pack_vpk target title_id title)
-    cmake_parse_arguments(PARSE_ARGV 3 pack "UNSAFE" "" "")
+    cmake_parse_arguments(PARSE_ARGV 3 pack "UNSAFE" "NAME" "")
     if(pack_UNSAFE)
         set(fself_safety)
     else()
         set(fself_safety -s)
     endif()
+    if(pack_NAME)
+        set(name "${pack_NAME}")
+    else()
+        set(name "${target}")
+    endif()
     set(out "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
-    set(work "${CMAKE_CURRENT_BINARY_DIR}/${target}-vpk")
+    set(work "${CMAKE_CURRENT_BINARY_DIR}/${name}-vpk")
     add_custom_command(
-        OUTPUT "${out}/${target}.vpk"
+        OUTPUT "${out}/${name}.vpk"
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${work}"
         COMMAND "${VITASDK}/bin/vita-elf-create" "$<TARGET_FILE:${target}>" "${work}/${target}.velf"
         COMMAND "${VITASDK}/bin/vita-make-fself" ${fself_safety} -c "${work}/${target}.velf" "${work}/eboot.bin"
         COMMAND "${VITASDK}/bin/vita-mksfoex" -s TITLE_ID=${title_id} -d ATTRIBUTE2=12
             "${title}" "${work}/param.sfo"
         COMMAND "${VITASDK}/bin/vita-pack-vpk" -s "${work}/param.sfo"
-            -b "${work}/eboot.bin" "${out}/${target}.vpk"
+            -b "${work}/eboot.bin" "${out}/${name}.vpk"
         DEPENDS ${target}
-        COMMENT "Packing ${target}.vpk"
+        COMMENT "Packing ${name}.vpk"
         VERBATIM)
-    add_custom_target(${target}-vpk ALL DEPENDS "${out}/${target}.vpk")
+    add_custom_target(${name}-vpk ALL DEPENDS "${out}/${name}.vpk")
 endfunction()
 
 set(KISAK_VITA_TITLE_ID "KSKD00001" CACHE STRING "PS Vita title ID of the dedicated server .vpk (9 characters)")
