@@ -161,6 +161,9 @@
  const dvar_t *r_clearColor2;
  const dvar_t *r_filmTweakDarkTint;
  const dvar_t *r_scaleViewport;
+#ifdef KISAK_GFX_GXM
+ const dvar_t *vita_sceneScale;
+#endif
  const dvar_t *r_normal;
  const dvar_t *sm_sunShadowCenter;
  const dvar_t *r_glowTweakEnable;
@@ -933,6 +936,19 @@
          minv,
          DVAR_CHEAT,
          "Scale 3D viewports by this fraction.  Use this to see if framerate is pixel shader bound.");
+#ifdef KISAK_GFX_GXM
+     // The Vita's 3D picture at a fraction of the screen, stretched to it
+     // before the HUD (src/gfx_gxm/gxm_engine_options.h, g_sceneScale).
+     minv.value.max = 1.0f;
+     minv.value.min = 0.5f;
+     vita_sceneScale = Dvar_RegisterFloat(
+         "vita_sceneScale",
+         1.0f,
+         minv,
+         DVAR_NOFLAG,
+         "Draw the 3D picture at this fraction of the screen's width and height and stretch it to the screen; "
+         "the HUD keeps the full resolution");
+#endif
      r_smp_backend = Dvar_RegisterBool("r_smp_backend", true, DVAR_NOFLAG, "Process renderer back end in a separate thread");
      r_smp_worker = Dvar_RegisterBool("r_smp_worker", true, DVAR_NOFLAG, "Process renderer front end in a separate thread");
      r_smp_worker_thread[0] = R_RegisterWorkerThreadDvar("r_smp_worker_thread0", 0);
