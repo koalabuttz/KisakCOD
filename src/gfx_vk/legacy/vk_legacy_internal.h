@@ -251,8 +251,10 @@ struct PipelineKey
     uint32_t linearConstants[2] = {}; // ls::LinearInputs::constants (low, high), with linearOutput 2
     // ls::LinearInputs::shader, with linearOutput 2: the pixel shader is
     // drawn as that Modern lit shader of ours (ModernLitShader in vk_legacy.h).
-    uint8_t linearShader = 0;
-    uint8_t unused[7] = {};
+    // Its low byte is where the one-byte code was (pipelines.list keeps its
+    // version: the high byte was unused and 0).
+    uint16_t linearShader = 0;
+    uint8_t unused[6] = {};
     bool operator==(const PipelineKey &other) const { return std::memcmp(this, &other, sizeof(*this)) == 0; }
 };
 struct PipelineKeyHash
@@ -750,7 +752,7 @@ void ResetState(Device &device);
 // linearShader: PipelineKey::linearShader (a Modern lit shader of ours also
 // reads the ambient occlusion, kModernAoSampler, and the reflections,
 // kModernReflectionsSampler).
-LayoutKey LayoutFor(const Shader &vs, const Shader &ps, uint8_t linearShader = 0);
+LayoutKey LayoutFor(const Shader &vs, const Shader &ps, uint16_t linearShader = 0);
 Layout *GetLayout(Device &device, const LayoutKey &key);
 // The pixel module a pipeline of this key needs: the one the shader keeps, or
 // null with how to build it in recipe.
@@ -765,7 +767,7 @@ bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Sh
 // and its strengths, depth reference clamp, mode and whether it runs the
 // alpha test set. False, with nothing built, when vs does not write one of
 // them as the shader reads it. vk_legacy_modern_lit.cpp; safe on any thread.
-bool BuildModernLitSpirv(uint8_t shader, const ls::Shader &vs, float sunStrength, float skyStrength,
+bool BuildModernLitSpirv(uint16_t shader, const ls::Shader &vs, float sunStrength, float skyStrength,
                          bool clampDepthReference, bool alphaTest, std::vector<uint32_t> &spirv);
 // Gives the shader a module built from recipe to keep; false (and the module
 // is left to the caller) when it already keeps one there.
