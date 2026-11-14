@@ -268,16 +268,19 @@ struct LayoutKey
 {
     uint32_t uniforms = 0; // bit per set 0 binding (vertex 0-8, pixel 16-24)
     uint32_t samplers = 0; // pixel samplers in bits 0-15, vertex samplers in bits 16-19
+    // The pixel stage has the Modern lit shaders' push constants
+    // (ModernPlanarParams): a pipeline drawn as one of ours.
+    bool modernPush = false;
     bool operator==(const LayoutKey &other) const
     {
-        return uniforms == other.uniforms && samplers == other.samplers;
+        return uniforms == other.uniforms && samplers == other.samplers && modernPush == other.modernPush;
     }
 };
 struct LayoutKeyHash
 {
     size_t operator()(const LayoutKey &key) const
     {
-        return std::hash<uint64_t>()(uint64_t(key.uniforms) << 32 | key.samplers);
+        return std::hash<uint64_t>()(uint64_t(key.uniforms) << 32 | key.samplers) ^ (key.modernPush ? 0x9e3779b9u : 0u);
     }
 };
 struct Layout
@@ -616,6 +619,11 @@ struct Device
     // trilinear, edge-clamped sampler they read it with (made at first use).
     Image *modernReflections = nullptr;
     VkSampler modernReflectionsSampler = VK_NULL_HANDLE;
+    // SetModernPlanar: what the Modern lit shaders read at
+    // kModernPlanarSampler (the clear texture when null, read with
+    // modernReflectionsSampler) and in their push constants.
+    Image *modernPlanar = nullptr;
+    ModernPlanarParams modernPlanarParams{};
     bool dynamicStale = true;
     // Checks every shortcut a draw takes (these two, and uniform blocks kept
     // from an earlier draw) against the full work, and fails the device when

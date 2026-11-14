@@ -869,6 +869,31 @@ void SetModernAmbientOcclusion(Device *device, Texture *texture);
 // reads it) and outlive the scene's draws.
 constexpr uint32_t kModernReflectionsSampler = 14;
 void SetModernReflections(Device *device, Image *image);
+// The Modern path's planar reflection for the lit shaders of ours: the image
+// of the scene mirrored in one plane of the world (linear light, before
+// exposure), drawn last frame, and how a point of this frame's surfaces finds
+// itself in it. Every pipeline drawn as one of ours reads the image at pixel
+// sampler kModernPlanarSampler (bilinear, clamped to the edge; null reads as
+// the 1x1 (0, 0, 0, 0) image) and the parameters as its push constants
+// (fragment stage, offset 0). Set while the scene that reads it draws, null
+// after; params.on 0 turns the read off. The image must be ready to sample
+// and outlive the scene's draws.
+constexpr uint32_t kModernPlanarSampler = 13;
+struct ModernPlanarParams
+{
+    // A point relative to the eye (p - eye, row vector) to the planar image's
+    // clip space: clip = [p - eye, 1] * clip, D3D9's NDC.
+    float clip[4][4];
+    // The plane's normal and its distance at the eye: n . (p - eye) +
+    // plane[3] is a point's height above it.
+    float plane[4];
+    float on;        // 1 reads the image, 0 not
+    float reach;     // how far from the plane (units) a surface still reads it
+    float facing;    // the cosine of the angle from the plane's normal a surface's normal must reach
+    float ripple;    // how far (units) the normal map's tilt moves the point read
+};
+static_assert(sizeof(ModernPlanarParams) == 96, "the lit shaders' push constant block");
+void SetModernPlanar(Device *device, Image *image, const ModernPlanarParams *params);
 #endif
 
 // The device's window is about to be destroyed: an open pass and frame end

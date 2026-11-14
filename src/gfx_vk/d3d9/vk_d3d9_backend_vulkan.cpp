@@ -269,6 +269,13 @@ struct Backend
     bool planarReady = false;
     ModernPlanarView planarView{};
     uint64_t planarViews = 0, planarViewsBase = 0;
+    // How far from the plane (units) a lit surface still reads the planar
+    // image, and how far its normal map's tilt moves the point it reads
+    // (KISAK_VK_MODERN_PLANAR_REACH, _RIPPLE).
+    float planarReach = 4.0f;
+    float planarRipple = 4.0f;
+    // Scenes whose lit shaders read the planar image (SetScenePlanar).
+    uint64_t planarReads = 0, planarReadsBase = 0;
     bool debugFailed = false;
     modern::DebugView *debug = nullptr;
 };
@@ -530,12 +537,16 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         number("KISAK_VK_MODERN_SSR_LEVELS", levels);
         p.steps = static_cast<uint32_t>(std::min(steps, 256.0f));
         p.levels = static_cast<uint32_t>(std::min(levels, static_cast<float>(modern::kMaxReflectionLevels)));
+        number("KISAK_VK_MODERN_PLANAR_REACH", backend->planarReach);
+        const std::string ripple = EnvText("KISAK_VK_MODERN_PLANAR_RIPPLE");
+        if (!ripple.empty())
+            backend->planarRipple = std::max(0.0f, std::strtof(ripple.c_str(), nullptr));
     }
     // The normals buffer is built for what reads it; KISAK_VK_MODERN_NORMALS=0
     // keeps it (and so ambient occlusion and reflections) off whatever asks.
     backend->normalsWanted = !EnvIsZero("KISAK_VK_MODERN_NORMALS")
                              && (EnvIs("KISAK_VK_MODERN_NORMALS", "1") || backend->debugNormals
-                                 || backend->aoWanted || backend->reflectionsWanted);
+                                 || backend->aoWanted || backend->reflectionsWanted || backend->planarWanted);
     if (!h.windowSystem || !h.windowSystem(h.user, desc.window, backend->windowSystem))
     {
         error = "the host has no Vulkan window system for this window";
@@ -841,6 +852,9 @@ void BackendLogStats(Backend *backend, bool reset)
         HostLog(h, "vulkan d3d9: modern: %llu planar reflection views (%ux%u)",
                 static_cast<unsigned long long>(backend->planarViews - backend->planarViewsBase),
                 backend->planarView.width, backend->planarView.height);
+    if (backend->planarReads > backend->planarReadsBase)
+        HostLog(h, "vulkan d3d9: modern: %llu scenes read the planar reflection",
+                static_cast<unsigned long long>(backend->planarReads - backend->planarReadsBase));
     // Bloom: the scenes it ran for in place of the glow, the passes of each,
     // and their GPU time per scene.
     if (backend->bloom)
@@ -869,6 +883,7 @@ void BackendLogStats(Backend *backend, bool reset)
         backend->keptBase = modern::Stats(backend->kept);
         backend->linearScenesBase = backend->linearScenes;
         backend->planarViewsBase = backend->planarViews;
+        backend->planarReadsBase = backend->planarReads;
         modern::ResetStats(backend->exposure);
         if (backend->exposure)
             backend->exposureMsBase = PassTimingsFor(backend->core, "modern exposure").totalMs;
@@ -925,7 +940,10 @@ void CloseBackend(Backend *backend)
         backend->sceneNormals = nullptr;
     }
     if (backend->legacy)
+    {
         lg::SetModernReflections(backend->legacy, nullptr);
+        lg::SetModernPlanar(backend->legacy, nullptr, nullptr);
+    }
     if (backend->reflections)
     {
         modern::DestroyReflections(backend->core, backend->reflections);
@@ -1619,6 +1637,55 @@ void TraceSceneReflections(Backend *backend, Image *depth, const modern::SceneVi
     // The lit shaders of ours read them until the scene is lit (BackendModernScene).
     lg::SetModernReflections(backend->legacy, backend->sceneReflections);
 }
+
+// The planar reflection the scene's lit shaders read: last frame's planar
+// image (drawn after last frame's main view), with where this frame's points
+// are in it. None on a cut (last frame's camera was elsewhere) or before the
+// first planar view.
+void SetScenePlanar(Backend *backend, const ModernSceneView &view)
+{
+    lg::SetModernPlanar(backend->legacy, nullptr, nullptr);
+    if (!BackendModernPlanarWanted(backend) || !backend->planarReady || !backend->planarColorSurface || view.cut)
+        return;
+    Image *image = lg::SurfaceImage(backend->planarColorSurface);
+    if (!image)
+        return;
+    // The eye: the view matrix takes it to the origin (row vectors,
+    // p_view = p * R + t, so eye = -t * R^T).
+    const float (*v)[4] = view.view;
+    float eye[3];
+    for (int i = 0; i < 3; ++i)
+        eye[i] = -(v[3][0] * v[i][0] + v[3][1] * v[i][1] + v[3][2] * v[i][2]);
+    // [p - eye, 1] * T(eye) * view * projection, T(eye) the translation by eye.
+    const ModernPlanarView &planar = backend->planarView;
+    float viewProjection[4][4];
+    for (int r = 0; r < 4; ++r)
+        for (int c = 0; c < 4; ++c)
+        {
+            float sum = 0.0f;
+            for (int k = 0; k < 4; ++k)
+                sum += planar.view[r][k] * planar.projection[k][c];
+            viewProjection[r][c] = sum;
+        }
+    lg::ModernPlanarParams params{};
+    for (int c = 0; c < 4; ++c)
+    {
+        for (int r = 0; r < 3; ++r)
+            params.clip[r][c] = viewProjection[r][c];
+        params.clip[3][c] = viewProjection[3][c] + eye[0] * viewProjection[0][c] + eye[1] * viewProjection[1][c]
+                            + eye[2] * viewProjection[2][c];
+    }
+    params.plane[0] = planar.plane[0];
+    params.plane[1] = planar.plane[1];
+    params.plane[2] = planar.plane[2];
+    params.plane[3] = planar.plane[0] * eye[0] + planar.plane[1] * eye[1] + planar.plane[2] * eye[2] + planar.plane[3];
+    params.on = 1.0f;
+    params.reach = backend->planarReach;
+    params.facing = 0.95f;
+    params.ripple = backend->planarRipple;
+    lg::SetModernPlanar(backend->legacy, image, &params);
+    ++backend->planarReads;
+}
 } // namespace
 
 bool BackendModernReflectionProbe(Backend *backend, lg::Device *legacy, lg::Texture *probe)
@@ -1743,6 +1810,8 @@ bool BackendModernPlanarBegin(Backend *backend, const ModernPlanarView &view, lg
         }
         lg::SetLinearLight(backend->planarColor, true);
     }
+    // The planar view's own lit shaders do not read the image they draw into.
+    lg::SetModernPlanar(backend->legacy, nullptr, nullptr);
     ++backend->planarViews;
     color = backend->planarColorSurface;
     depth = backend->planarDepth;
@@ -1801,6 +1870,7 @@ ModernResult BackendModernSceneDepth(Backend *backend, lg::Surface *depth, const
     }
     SceneAmbientOcclusion(backend, depthImage, scene);
     TraceSceneReflections(backend, depthImage, scene);
+    SetScenePlanar(backend, view);
     return ModernResult::Done;
 }
 
@@ -1819,6 +1889,7 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
     Image *reflections = backend->sceneReflections;
     backend->sceneReflections = nullptr;
     lg::SetModernReflections(backend->legacy, nullptr);
+    lg::SetModernPlanar(backend->legacy, nullptr, nullptr);
     // The surfaces that moved in this scene; the next scene starts a new list.
     std::vector<modern::MovedSurface> moved;
     moved.swap(backend->moved);

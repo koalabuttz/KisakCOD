@@ -2969,6 +2969,9 @@ void Check::ModernPlanar()
     const bool debug = envIs("KISAK_VK_MODERN_DEBUG", "planar");
     const bool wanted = !envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_PLANAR", "0")
                         && (envIs("KISAK_VK_MODERN_PLANAR", "1") || debug);
+    // Our lit shaders draw the floor of the third frame (and read the image).
+    const bool ours = !envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
+                      && !envIs("KISAK_VK_MODERN_SHADERS", "0");
     IDirect3DSurface9 *depth = nullptr;
     if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
                                               nullptr),
@@ -2993,10 +2996,15 @@ void Check::ModernPlanar()
 
         front::ModernPlanarView planar{};
         for (int i = 0; i < 4; ++i)
-            planar.view[i][i] = planar.projection[i][i] = 1.0f;
+            planar.view[i][i] = 1.0f;
+        // Every point to the middle of the image (clip (0, 0, 0, 1)).
+        planar.projection[3][3] = 1.0f;
         planar.width = kHalf;
         planar.height = kHalf;
+        // z = -1 (n.p + d with d = 1): the third frame's floor, one unit
+        // below the eye.
         planar.plane[2] = 1.0f;
+        planar.plane[3] = 1.0f;
         const bool began = front::ModernPlanarBegin(device, planar);
         Equal("planar_began", began, wanted);
         if (began)
@@ -3029,6 +3037,110 @@ void Check::ModernPlanar()
         }
         Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
     }
+
+    // A third frame: a floor on the plane drawn by our lit shader
+    // (lm_sun_r0c0s0 with a black colour map, lightmaps and probe, a white
+    // specular map of gloss 1 and Fresnel 1, the point one unit below the eye,
+    // as ModernReflections draws its floor) reads last frame's planar image.
+    // Its planar view's projection takes every point to the image's middle,
+    // which is red, so the floor shows red where it reads it and black
+    // where it does not.
+    IDirect3DTexture9 *black = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 0, 0, 0); });
+    IDirect3DTexture9 *blackLight = FilledTexture(1, 2, [](UINT, UINT) { return Argb(130, 0, 0, 0); });
+    IDirect3DTexture9 *glossy = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
+    IDirect3DCubeTexture9 *probe = nullptr;
+    if (Ok(device->CreateCubeTexture(1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &probe, nullptr),
+           "CreateCubeTexture(probe)"))
+    {
+        for (UINT face = 0; face < 6; ++face)
+        {
+            D3DLOCKED_RECT rect{};
+            if (Ok(probe->LockRect(static_cast<D3DCUBEMAP_FACES>(face), 0, &rect, nullptr, 0), "LockRect(probe)"))
+            {
+                *static_cast<uint32_t *>(rect.pBits) = Argb(255, 0, 0, 0);
+                probe->UnlockRect(static_cast<D3DCUBEMAP_FACES>(face), 0);
+            }
+        }
+    }
+    if (black && blackLight && glossy && probe)
+    {
+        // The engine's InfinitePerspectiveMatrix with tan(fov / 2) = 1 both ways.
+        constexpr float k = 0.99951172f, nearPlane = 4.0f;
+        const auto project = [&](float x, float y, float z) {
+            return Vertex{k * x / z, k * y / z, k - nearPlane * k / z, 0.0f, 0.0f, Argb(255, 128, 128, 128)};
+        };
+        const Vertex corners[4] = {project(-300, -120, 60), project(300, -120, 60), project(300, -120, 300),
+                                   project(-300, -120, 300)};
+        Vertex floor[6];
+        const int order[6] = {0, 1, 2, 0, 2, 3};
+        for (int i = 0; i < 6; ++i)
+            floor[i] = corners[order[i]];
+        // A pixel of the floor in the bottom right, clear of the debug view.
+        const UINT floorX = static_cast<UINT>((k * 100.0f / 200.0f + 1.0f) * 0.5f * kSize);
+        const UINT floorY = static_cast<UINT>((1.0f + k * 120.0f / 200.0f) * 0.5f * kSize);
+        front::ModernSceneView view{};
+        for (int i = 0; i < 4; ++i)
+            view.view[i][i] = 1.0f;
+        view.projection[0][0] = k;
+        view.projection[1][1] = k;
+        view.projection[2][2] = k;
+        view.projection[2][3] = 1.0f;
+        view.projection[3][2] = -nearPlane * k;
+        view.width = view.height = kSize;
+        Reset(Argb(255, 0, 0, 0));
+        front::ModernSceneBegin(device);
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0),
+           "Clear(lit scene)");
+        device->SetRenderState(D3DRS_ZENABLE, TRUE);
+        device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+        device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, floor, sizeof(Vertex)), "DrawPrimitiveUP(prepass)");
+        device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xf);
+        if (front::ModernWantsSceneDepth(device))
+            Equal("planar_lit_scene_depth", static_cast<int>(front::ModernSceneDepth(device, view)),
+                  static_cast<int>(front::ModernResult::Done));
+        device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+        device->SetVertexShader(vsLmSunMaps);
+        device->SetPixelShader(psLmSunMapsStandIn);
+        device->SetTexture(0, black);
+        device->SetTexture(1, probe);
+        device->SetTexture(2, black);
+        device->SetTexture(3, blackLight);
+        device->SetTexture(4, glossy);
+        float pixel[20][4] = {};
+        pixel[5][0] = pixel[5][1] = 1.0f;
+        pixel[17][2] = 1.0f;
+        Ok(device->SetPixelShaderConstantF(0, &pixel[0][0], 20), "SetPixelShaderConstantF(planar floor)");
+        const float vertex[7][4] = {{0, 0, 0, 0}, {0.5f, 0.5f, 0.5f, 0.5f}, {0, 0, 1, 1}, {0, 1, 0, 0},
+                                    {1, 0, 0, 0}, {0.5f, 0.5f, 0.25f, 0.5f}, {0, 0, -1, 0}};
+        Ok(device->SetVertexShaderConstantF(0, &vertex[0][0], 7), "SetVertexShaderConstantF(planar floor)");
+        front::ModernLitInputs inputs;
+        inputs.overWhite = true;
+        inputs.shader = 0x44; // lm_sun_r0c0s0
+        front::SetModernLitInputs(device, &inputs);
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, floor, sizeof(Vertex)), "DrawPrimitiveUP(planar floor)");
+        front::SetModernLitInputs(device, nullptr);
+        for (DWORD sampler : {0u, 1u, 2u, 3u, 4u})
+            device->SetTexture(sampler, nullptr);
+        device->SetVertexShader(vsBasic);
+        device->SetPixelShader(psColor);
+        Equal("planar_lit_scene_done", front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
+        if (Read())
+        {
+            const uint8_t *at = &pixels[(floorY * readSize + floorX) * 4];
+            const int red = at[2], green = at[1], blue = at[0]; // B, G, R, A
+            if (ours && wanted)
+                Equal("planar_floor_shows_red", red >= 60 && red >= green + 40 && red >= blue + 40, true);
+            else
+                Expect("planar_floor_black", floorX, floorY, 0, 0, 0);
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    }
+    SafeRelease(black);
+    SafeRelease(blackLight);
+    SafeRelease(glossy);
+    SafeRelease(probe);
     device->SetDepthStencilSurface(nullptr);
     SafeRelease(depth);
 }

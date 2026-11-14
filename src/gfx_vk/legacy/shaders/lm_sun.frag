@@ -42,7 +42,10 @@
 //   spec   = likewise what the game's specular (specular colour * Fresnel *
 //            (shadow * the sun's highlight * its colour + the reflection
 //            probe)) adds to the game's diffuse colour, decoded; on an
-//            opaque surface the probe gives way, by the reflections'
+//            opaque surface lying on the plane of the Modern path's planar
+//            reflection (the sun family only) the probe gives way to that
+//            mirror image (s13 and the push constants), and on any opaque
+//            surface the probe gives way, by the reflections'
 //            confidence, to what the Modern path's screen-space reflections
 //            found (s14, a blurrier level for a rougher surface, faded out
 //            below gloss 0.5 and gone at 0.3; none where the scene has
@@ -226,6 +229,28 @@ layout(set = 1, binding = 30) uniform sampler reflectionsSampler;
 // reflections take its place in full.
 const float kReflectionsGlossNone = 0.3;
 const float kReflectionsGlossFull = 0.5;
+#endif
+
+#if LM_SUN_SPECULAR && LM_SUN_LIGHT == 1
+// The Modern path's planar reflection (vk_legacy.h kModernPlanarSampler,
+// ModernPlanarParams): last frame's image of the scene mirrored in one plane
+// of the world (linear light, before exposure; bilinear, clamped), and where
+// a point of this surface is in it. The Legacy adapter binds a 1x1
+// (0, 0, 0, 0) image, and on 0, where the scene has none.
+layout(set = 1, binding = 13) uniform texture2D planarImage;
+layout(set = 1, binding = 29) uniform sampler planarSampler;
+layout(push_constant) uniform ModernPlanar
+{
+    // A point relative to the eye to the image's clip space (D3D9's NDC).
+    mat4 clip;
+    // The plane's normal, and its distance at the eye: dot(n, point) + w is
+    // a point's height above it.
+    vec4 plane;
+    float on;     // 1 reads the image
+    float reach;  // how far from the plane a surface still reads it (units)
+    float facing; // the cosine from the plane's normal a surface's must reach
+    float ripple; // how far the normal map's tilt moves the point read (units)
+} planar;
 #endif
 
 layout(constant_id = 0) const float kSunStrength = 1.0;
@@ -484,6 +509,43 @@ void main()
     const float specularOcclusion =
         clamp(pow(abs(viewFacing) + ao, exp2(-16.0 * (1.0 - gloss) - 1.0)) - 1.0 + ao, 0.0, 1.0);
     vec3 reflection = probe.rgb * probe.a * specularOcclusion;
+#if LM_SUN_LIGHT == 1
+    // On the plane of the Modern path's planar reflection, its mirror image
+    // takes the probe's place (and screen-space reflections, below, take
+    // its place where they find something: they are this frame's). Opaque,
+    // glossy surfaces only, as those. The point read is this one, moved by
+    // the normal map's tilt as a ripple moves a reflection; a rougher
+    // surface reads a wider spread of it.
+    if (kMode == 0 && planar.on > 0.5 && gloss > kReflectionsGlossNone)
+    {
+        const vec3 surfaceNormal = normalize(texcoord1.xyz);
+        const float height = dot(planar.plane.xyz, texcoord5.xyz) + planar.plane.w;
+        if (abs(height) < planar.reach && dot(surfaceNormal, planar.plane.xyz) > planar.facing)
+        {
+            const vec3 tilt = normal - surfaceNormal * dot(normal, surfaceNormal);
+            const vec4 clip = planar.clip * vec4(texcoord5.xyz + tilt * planar.ripple, 1.0);
+            if (clip.w > 0.0)
+            {
+                const vec2 ndc = clip.xy / clip.w;
+                const vec2 at = vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+                // Faded out over the image's outer 5%.
+                const vec2 inside = min(at, 1.0 - at) / 0.05;
+                const float edge = clamp(min(inside.x, inside.y), 0.0, 1.0);
+                const vec2 texel = 1.0 / vec2(textureSize(sampler2D(planarImage, planarSampler), 0));
+                const vec2 spread = texel * (1.0 + 16.0 * (1.0 - gloss));
+                vec3 seen = textureLod(sampler2D(planarImage, planarSampler), at, 0.0).rgb * 2.0;
+                seen += textureLod(sampler2D(planarImage, planarSampler), at + vec2(spread.x, spread.y), 0.0).rgb;
+                seen += textureLod(sampler2D(planarImage, planarSampler), at + vec2(-spread.x, spread.y), 0.0).rgb;
+                seen += textureLod(sampler2D(planarImage, planarSampler), at + vec2(spread.x, -spread.y), 0.0).rgb;
+                seen += textureLod(sampler2D(planarImage, planarSampler), at + vec2(-spread.x, -spread.y), 0.0).rgb;
+                seen /= 6.0;
+                const float weight = edge * smoothstep(kReflectionsGlossNone, kReflectionsGlossFull, gloss);
+                if (edge > 0.0)
+                    reflection = mix(reflection, Encode(max(seen, vec3(0.0))), weight);
+            }
+        }
+    }
+#endif
     // Where the screen-space reflections found what this pixel mirrors, that
     // takes the probe's place by their confidence: the level as blurry as
     // the probe's (LOD 6 - 8 gloss of its 6), the light averaged with its
