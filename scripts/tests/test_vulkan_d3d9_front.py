@@ -56,15 +56,16 @@ involved. The checks:
                  KISAK_VK_MODERN_BLOOM=0), modern_lit's, modern_lit_shader's,
                  modern_lit_models', modern_lit_no_sun's, modern_lit_lights',
                  modern_tonemap's and modern_ao's scenes with lit surfaces
-                 kept over white, inputs changed 4.1 times in each (twice in
-                 modern_lit and modern_tonemap, five times in
+                 kept over white, inputs changed 4.3 times in each (twice in
+                 modern_lit, modern_tonemap and modern_ao, five times in
                  modern_lit_lights, six in modern_lit_shader and
-                 modern_lit_models, seven in modern_lit_no_sun, once in
-                 modern_ao), and the twenty-five pixel modules
+                 modern_lit_models, seven in modern_lit_no_sun; 4.1 with
+                 KISAK_VK_MODERN_MODEL_SHADERS=0, where modern_ao's wall is
+                 not ours), and the twenty-six pixel modules
                  modern_lit_shader's, modern_lit_models', modern_lit_no_sun's
-                 and modern_lit_lights' twenty-four and modern_ao's one (its
-                 floor is depth-tested against the prepass, a depth compare
-                 of its own; twenty-four in all with
+                 and modern_lit_lights' twenty-four and modern_ao's two (its
+                 floor and wall are depth-tested against the prepass, a depth
+                 compare of their own; twenty-four in all with
                  KISAK_VK_DEPTH_COMPARE=dynamic, where the compare is not
                  built in) built as our own lit shaders (the world's
                  fourteen with KISAK_VK_MODERN_MODEL_SHADERS=0; those with
@@ -609,8 +610,11 @@ def main():
         checks.expect('no scene with lit surfaces in linear light with linear light or lit inputs off', lit is None,
                       lit.group(0) if lit else '')
     else:
-        checks.expect('the Modern path drew lit surfaces in linear light in 7 scenes, inputs changed 4.1 times each',
-                      lit is not None and lit.group(1) == '7' and lit.group(2) == '4.1',
+        # modern_ao changes them twice, its floor's and its wall's, with our
+        # model shaders (30 in 7 scenes); once without them (29).
+        changes = '4.1' if env.get('KISAK_VK_MODERN_MODEL_SHADERS') == '0' else '4.3'
+        checks.expect(f'the Modern path drew lit surfaces in linear light in 7 scenes, inputs changed {changes} times each',
+                      lit is not None and lit.group(1) == '7' and lit.group(2) == changes,
                       lit.group(0) if lit else 'missing')
     shaders = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: lit shaders of our own: ([0-9.]+) changes to one '
                         r'each scene, (\d+) pixel modules built as one \((\d+) could not be\)', stdout)
@@ -619,11 +623,15 @@ def main():
         checks.expect('no lit shaders of our own with linear light, lit inputs or our shaders off', shaders is None,
                       shaders.group(0) if shaders else '')
     else:
-        # modern_ao's floor tests depth against its prepass: a depth compare
-        # of its own, built into its module unless chosen at run time.
-        modules = 25 if env.get('KISAK_VK_DEPTH_COMPARE') != 'dynamic' else 24
+        # modern_ao's floor and wall test depth against its prepass: a depth
+        # compare of their own, built into their modules unless chosen at run
+        # time (then the wall's is modern_lit_models' lp_sun_r0c0).
+        dynamic = env.get('KISAK_VK_DEPTH_COMPARE') == 'dynamic'
+        modules = 26 if not dynamic else 24
         if env.get('KISAK_VK_MODERN_MODEL_SHADERS') == '0':
-            modules -= 11  # the models' with the sun (6), without (2), lp_amb and with a spot or omni light (2)
+            # the models' with the sun (6), without (2), lp_amb and with a spot
+            # or omni light (2), and modern_ao's wall unless the compare is dynamic
+            modules -= 11 if dynamic else 12
         if env.get('KISAK_VK_MODERN_NO_SUN_SHADERS') == '0':
             modules -= 4 if env.get('KISAK_VK_MODERN_MODEL_SHADERS') == '0' else 6
         if env.get('KISAK_VK_MODERN_LIGHT_SHADERS') == '0':

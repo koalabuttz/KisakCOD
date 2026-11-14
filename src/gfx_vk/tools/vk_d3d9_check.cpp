@@ -3192,7 +3192,10 @@ void Check::ModernNormals()
 // shader multiplies that light by the ambient occlusion, so the floor in the
 // corner is darker than open floor by a clear margin; without ambient
 // occlusion the two are the same, and without our shaders the floor is black.
-// The wall is drawn in its colour. Ambient occlusion is built for our lit
+// The wall is drawn as lp_sun_r0c0 (the model shaders' stand-in), lit by a
+// grey lighting volume alone, when our model shader draws: its foot in the
+// corner is darker than its top by the ambient occlusion (the same without
+// it); else (and the plate always) in its colour. Ambient occlusion is built for our lit
 // shaders (linear light, lit inputs and our shaders on), with
 // KISAK_VK_MODERN_AO=1 or its debug view, never with KISAK_VK_MODERN_AO=0 or
 // KISAK_VK_MODERN_NORMALS=0.
@@ -3220,6 +3223,9 @@ void Check::ModernAo()
                                       && (envIs("KISAK_VK_MODERN_NORMALS", "1")
                                           || envIs("KISAK_VK_MODERN_DEBUG", "normals")));
     const bool shown = built && envIs("KISAK_VK_MODERN_DEBUG", "ao");
+    // The wall is drawn as lp_sun_r0c0 by our model shader (which reads the
+    // ambient occlusion too) when that draws; else in its vertex colour.
+    const bool models = ours && !envIs("KISAK_VK_MODERN_MODEL_SHADERS", "0");
     IDirect3DSurface9 *depth = nullptr;
     if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
                                               nullptr),
@@ -3273,6 +3279,20 @@ void Check::ModernAo()
     IDirect3DTexture9 *colorMap = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
     IDirect3DTexture9 *primary = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
     IDirect3DTexture9 *secondary = FilledTexture(1, 2, [](UINT, UINT) { return Argb(130, 96, 96, 96); });
+    // The wall's lighting volume: grey 128 all round (doubled to 1.0 by the
+    // game), the sun not visible.
+    IDirect3DVolumeTexture9 *volume = nullptr;
+    if (Ok(device->CreateVolumeTexture(1, 1, 1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &volume, nullptr),
+           "CreateVolumeTexture(lighting)"))
+    {
+        D3DLOCKED_BOX locked{};
+        if (Ok(volume->LockBox(0, &locked, nullptr, 0), "LockBox(lighting)"))
+        {
+            *static_cast<uint32_t *>(locked.pBits) = Argb(0, 128, 128, 128);
+            volume->UnlockBox(0);
+        }
+    }
+    bool wallDrawn = false;
     if (colorMap && primary && secondary)
     {
         device->SetVertexShader(vsLmSun);
@@ -3290,17 +3310,44 @@ void Check::ModernAo()
         inputs.shader = 0x40; // lm_sun_r0c0
         front::SetModernLitInputs(device, &inputs);
         Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(floor)");
+        if (models && volume)
+        {
+            // The wall as lp_sun_r0c0: white colour map times its vertex
+            // colour, lit by the volume alone (no sun), its normal towards
+            // the camera, no fog.
+            device->SetTexture(2, nullptr);
+            device->SetTexture(3, nullptr);
+            device->SetVertexShader(vsLpSunMaps);
+            device->SetPixelShader(psLpSunMapsStandIn);
+            device->SetTexture(4, volume);
+            const float modelPixel[20][4] = {{}, {}, {0, 0, 0, 1}, {}, {}, {}, {}, {}, {}, {},
+                                             {}, {}, {}, {}, {}, {}, {}, {0, 0, 1, 0}, {}, {}};
+            Ok(device->SetPixelShaderConstantF(0, &modelPixel[0][0], 20), "SetPixelShaderConstantF");
+            const float modelVertex[8][4] = {{0, 0, 0, 0},       {0.5f, 0.5f, 0, 0}, {0, 0, -1, 1},
+                                             {0, 1, 0, 0},       {1, 0, 0, 0},       {0.5f, 0.5f, 0.25f, 0.5f},
+                                             {0, 0, 1, 0},       {0.5f, 0.5f, 0.5f, 0}};
+            Ok(device->SetVertexShaderConstantF(0, &modelVertex[0][0], 8), "SetVertexShaderConstantF");
+            inputs.shader = 0x80; // lp_sun_r0c0
+            front::SetModernLitInputs(device, &inputs);
+            Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, surfaces + 6, sizeof(Vertex)), "DrawPrimitiveUP(wall)");
+            device->SetTexture(4, nullptr);
+            wallDrawn = true;
+        }
         front::SetModernLitInputs(device, nullptr);
         for (DWORD sampler : {0u, 2u, 3u})
             device->SetTexture(sampler, nullptr);
         device->SetVertexShader(vsBasic);
         device->SetPixelShader(psColor);
     }
-    Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces + 6, sizeof(Vertex)), "DrawPrimitiveUP(wall)");
+    if (wallDrawn)
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, surfaces + 12, sizeof(Vertex)), "DrawPrimitiveUP(plate)");
+    else
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces + 6, sizeof(Vertex)), "DrawPrimitiveUP(wall)");
     Equal("scene_done", front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
     SafeRelease(colorMap);
     SafeRelease(primary);
     SafeRelease(secondary);
+    SafeRelease(volume);
     // Pixels of view points: x and y / z, NDC to pixels.
     const auto pixelOf = [&](float x, float y, float z, UINT &px, UINT &py) {
         px = static_cast<UINT>((k * x / z + 1.0f) * 0.5f * kSize);
@@ -3350,11 +3397,31 @@ void Check::ModernAo()
             {
                 Equal("corner_floor_as_open", std::abs(corner - open) <= 1, true);
             }
-            Expect("wall_foot", footX, footY, 90, 110, 150);
-            Expect("wall", wallX, wallY, 90, 110, 150);
+            const int wall = at(wallX, wallY), foot = at(footX, footY);
+            if (wallDrawn)
+            {
+                // The model shader's wall: its foot, in the corner with the
+                // floor, darker by the ambient occlusion.
+                Equal("model_wall_lit", wall >= 60, true);
+                if (built)
+                {
+                    Equal("model_wall_foot_darker", foot + 6 <= wall, true);
+                    Equal("model_wall_foot_not_black", foot >= wall / 2, true);
+                }
+                else
+                {
+                    Equal("model_wall_foot_as_wall", std::abs(foot - wall) <= 1, true);
+                }
+            }
+            else
+            {
+                Expect("wall_foot", footX, footY, 90, 110, 150);
+                Expect("wall", wallX, wallY, 90, 110, 150);
+            }
             Expect("sky", 20, 10, 0, 0, 0);
-            char line[96];
-            std::snprintf(line, sizeof(line), " lit_open=%d lit_corner=%d", open, corner);
+            char line[128];
+            std::snprintf(line, sizeof(line), " lit_open=%d lit_corner=%d model_wall=%d model_wall_foot=%d", open,
+                          corner, wall, foot);
             result->detail += line;
         }
         else
