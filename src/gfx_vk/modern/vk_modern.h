@@ -229,6 +229,49 @@ struct NormalsStats
 };
 NormalsStats Stats(const Normals *normals);
 
+// ---- Ambient occlusion (docs/vulkan-modern.md "Ambient occlusion") ----
+//
+// Ground-truth ambient occlusion (Jimenez et al. 2016) from the scene depth
+// and the normals buffer, recorded before the lit surfaces are drawn so that
+// they can darken their indirect light alone: two slices of six steps a side
+// per pixel, jittered per pixel and frame, then a 5x5 blur that keeps to each
+// surface. The result is the visible fraction (1 unoccluded) in the red
+// channel of a target the caller owns.
+
+struct AoParams
+{
+    float radius = 48.0f;  // world units (inches): about 1.2 m
+    float falloff = 0.6f;  // the outer share of the radius over which samples fade out
+    // The visibility is raised to it. PC AO run 1: 1 weak, 2 about right in the
+    // shade; with the thickness (PC AO run 3) 1.5 read like run 1's 1.
+    float power = 2.0f;
+    // World units a sample's surface is taken to reach behind it: what lies
+    // further behind stays lit (a thin sign or arch edge in front of a wall
+    // no longer darkens the wall beside it as a solid block would).
+    float thickness = 8.0f;
+    uint32_t frame = 0;    // moves the noise
+};
+
+struct AmbientOcclusion;
+
+// The pipelines (the module's own image is made at the first build). Null
+// with the reason.
+AmbientOcclusion *CreateAmbientOcclusion(Core *core, std::string &error);
+// Waits for the GPU to finish what was recorded.
+void DestroyAmbientOcclusion(Core *core, AmbientOcclusion *ao);
+// Records the occlusion of view.area into `target` (a colour attachment as
+// large as the area's corner, single-sampled, sampled usage), from `depth`
+// and BuildNormals' `normals`. Outside the area `target` is left as it is.
+// Outside a pass, inside a frame. False with the reason, and nothing
+// recorded, when it cannot.
+bool BuildAmbientOcclusion(Core *core, AmbientOcclusion *ao, Image *depth, Image *normals, const SceneView &view,
+                           const AoParams &params, Image *target, std::string &error);
+
+struct AoStats
+{
+    uint64_t builds; // BuildAmbientOcclusion calls that recorded
+};
+AoStats Stats(const AmbientOcclusion *ao);
 // ---- Screen-space reflections (docs/vulkan-modern.md "Screen-space reflections") ----
 //
 // What each pixel's surface would mirror, found on the screen: the view ray
@@ -298,6 +341,9 @@ bool DrawVelocityDebug(Core *core, DebugView *debug, Image *velocity, Image *tar
 // stored), and leaves the rest. Outside a pass, inside a frame.
 bool DrawNormalsDebug(Core *core, DebugView *debug, Image *normals, Image *target, const VkRect2D &area,
                       std::string &error);
+// Draws the ambient occlusion in `ao` (its red channel) as grey over `area`
+// of `target`. Outside a pass, inside a frame.
+bool DrawAoDebug(Core *core, DebugView *debug, Image *ao, Image *target, const VkRect2D &area, std::string &error);
 // Draws the sharpest level of `reflections` (TraceReflections' image, the
 // same size) over `area` of `target`: the stored light over black, through
 // the sRGB curve. Outside a pass, inside a frame.

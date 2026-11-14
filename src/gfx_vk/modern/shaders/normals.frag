@@ -14,7 +14,10 @@
 // surface they belong to instead of a blend of the two surfaces.
 //
 // Out: rgb = normal * 0.5 + 0.5 in the engine's view space (x right, y up,
-// z forward: a surface facing the camera has z < 0), a = 1. Pixels with no
+// z forward: a surface facing the camera has z < 0), a = 1, or 2/3 where the
+// normal is a guess: on some axis neither side's straight line meets this
+// pixel's depth (a strip a pixel or two wide, such as thin trim or a face
+// seen edge on, whose neighbours are all on other surfaces). Pixels with no
 // surface (depth at or past `sky`) get (0.5, 0.5, 0.5, 0).
 //
 // Pixel positions follow D3D9, as the Legacy path draws: pixel (i, j) holds
@@ -56,8 +59,10 @@ vec3 ViewAt(ivec2 pixel, float depth)
 
 // The step from this pixel to the neighbour along `axis` on the side whose
 // surface this pixel is on, as a difference of view positions in the
-// direction of +axis. False when neither neighbour has a surface.
-bool Slope(ivec2 pixel, ivec2 axis, float depth, vec3 here, out vec3 slope)
+// direction of +axis. False when neither neighbour has a surface. sure:
+// that side's straight line meets this pixel's depth (a quarter of the step
+// to the neighbour, or a few steps of a 24-bit depth buffer).
+bool Slope(ivec2 pixel, ivec2 axis, float depth, vec3 here, out vec3 slope, out bool sure)
 {
     const float before1 = DepthAt(pixel - axis), before2 = DepthAt(pixel - 2 * axis);
     const float after1 = DepthAt(pixel + axis), after2 = DepthAt(pixel + 2 * axis);
@@ -71,6 +76,9 @@ bool Slope(ivec2 pixel, ivec2 axis, float depth, vec3 here, out vec3 slope)
     const float missAfter = after2 < params.sky ? abs(2.0 * after1 - after2 - depth) : abs(after1 - depth) * 2.0;
     const bool useBefore = haveBefore && (!haveAfter || missBefore < missAfter);
     slope = useBefore ? here - ViewAt(pixel - axis, before1) : ViewAt(pixel + axis, after1) - here;
+    const float miss = useBefore ? missBefore : missAfter;
+    const float step = abs((useBefore ? before1 : after1) - depth);
+    sure = miss <= 0.25 * step + 4.0 / 16777215.0;
     return true;
 }
 
@@ -86,9 +94,11 @@ void main()
     const vec3 here = ViewAt(pixel, depth);
     vec3 alongX, alongY;
     vec3 normal = vec3(0.0);
+    bool sureX = false, sureY = false;
     // Pixel x grows with view x and pixel y with view -y: the cross product
     // of the two steps faces the camera or away; it is turned to face it.
-    if (Slope(pixel, ivec2(1, 0), depth, here, alongX) && Slope(pixel, ivec2(0, 1), depth, here, alongY))
+    if (Slope(pixel, ivec2(1, 0), depth, here, alongX, sureX)
+        && Slope(pixel, ivec2(0, 1), depth, here, alongY, sureY))
         normal = cross(alongX, alongY);
     const float size = length(normal);
     // A pixel alone on its surface (both sides of an axis differ): it faces
@@ -96,5 +106,5 @@ void main()
     normal = size > 1e-20 ? normal / size : -normalize(here);
     if (dot(normal, here) > 0.0)
         normal = -normal;
-    outNormal = vec4(normal * 0.5 + 0.5, 1.0);
+    outNormal = vec4(normal * 0.5 + 0.5, size > 1e-20 && sureX && sureY ? 1.0 : 2.0 / 3.0);
 }

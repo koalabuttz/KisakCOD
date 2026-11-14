@@ -611,14 +611,16 @@ to 3 in the project files, 2026-11-13):
 * **colour** = decode(albedo times the game's light, sky plus sun in
   display values), shared out between the sky and the sun as their decoded
   light is (sky / (sky + sun) of it to the sky), each share times its
-  strength, plus specular, then fogged. The game blends the fog colour in
-  display values by the vertex fog factor; a blend in linear light lifts a
-  dark colour far more (a dark barrel in Crash's fog came out nearly twice
-  Legacy's light, PC interiors run 1). So the fog's share is the linear
-  blend towards the decoded fog colour that gives decode(the game's blend):
-  (decode(blend) - decode(game colour)) / (decode(fog) - decode(game
-  colour)), per channel. With strengths 1 that is the game's fogged colour;
-  a colour the strengths (or AO) change is fogged by the same share.
+  strength, the sky's (and the probe) also darkened by the
+  [ambient occlusion](#ambient-occlusion), plus specular, then fogged. The
+  game blends the fog colour in display values by the vertex fog factor; a
+  blend in linear light lifts a dark colour far more (a dark barrel in
+  Crash's fog came out nearly twice Legacy's light, PC interiors run 1). So
+  the fog's share is the linear blend towards the decoded fog colour that
+  gives decode(the game's blend): (decode(blend) - decode(game colour)) /
+  (decode(fog) - decode(game colour)), per channel. With strengths 1 that is
+  the game's fogged colour; a colour the strengths (or AO) change is fogged
+  by the same share.
   `b0` premultiplies the albedo and fog colour by colour alpha times vertex
   alpha, which is the output alpha; `t0` keeps alpha 0.5 and over and writes
   black with alpha 0 elsewhere, as the game's shader does; then the alpha
@@ -888,7 +890,11 @@ before any light is added, so ambient occlusion can darken the indirect light
    `ModernSceneDone`), where the passes that read it run.
 
 **What a texel holds:** `normal * 0.5 + 0.5` in the engine's view space (x
-right, y up, z forward, so a surface facing the camera has z < 0), alpha 1.
+right, y up, z forward, so a surface facing the camera has z < 0), alpha 1,
+or 2/3 where the normal is a guess: on some axis neither side's straight
+line meets the pixel's depth (within a quarter of the step to the
+neighbour, or four steps of a 24-bit depth), as on thin trim or a face seen
+edge on a pixel or two wide.
 A pixel with no surface (depth at or past a point at infinity's, the sky)
 holds (0.5, 0.5, 0.5, 0).
 
@@ -915,7 +921,7 @@ pass of 9 depth reads per pixel.
 
 | Setting | Default | Switch |
 | --- | --- | --- |
-| Normals buffer | built only when something reads it: the debug view below for now; ambient occlusion next | `KISAK_VK_MODERN_NORMALS=1` builds it (and turns the prepass on) with nothing reading it, to measure the cost; `KISAK_VK_MODERN_NORMALS=0` never builds it |
+| Normals buffer | built only when something reads it: ambient occlusion (on with our lit shaders), screen-space reflections, or the debug view below | `KISAK_VK_MODERN_NORMALS=1` builds it (and turns the prepass on) with nothing reading it, to measure the cost; `KISAK_VK_MODERN_NORMALS=0` never builds it |
 | Debug view | off | `KISAK_VK_MODERN_DEBUG=normals` draws the buffer over the finished scene (after the tonemap): red faces right, green up, blue away; a wall seen head on is (128, 128, 0); the sky is left as it is |
 
 The statistics line: `vulkan d3d9: modern: N scenes with a normals buffer
@@ -931,7 +937,112 @@ surface's exact normal, also in the pixels on both sides of each edge, where
 a slope taken across the edge would be wrong (a version that always takes the
 right-hand side fails two of them). `test_vulkan_d3d9_front.py` runs it with
 the debug view (linear light on and off), with `KISAK_VK_MODERN_NORMALS=1`
-and with `KISAK_VK_MODERN_NORMALS=0`, and checks that a full run builds none.
+and with `KISAK_VK_MODERN_NORMALS=0`, and checks that a full run builds it only where ambient occlusion reads it.
+
+## Ambient occlusion
+
+Ambient occlusion darkens light that reaches a surface from all around (sky
+light, bounce light) where nearby geometry hides part of the sky: corners,
+the foot of a wall, under a car. CoD4's lightmaps hold some of this at the
+lightmap's resolution; the Modern path adds the small scale that they miss.
+It is meant for indirect light only. The sun is a direct light with its own
+shadow, and darkening it too would draw dark halos on sunlit ground.
+
+**How a scene goes with it.** Ambient occlusion is recorded right after the
+normals buffer, in the same `sceneDepth` hand-over, before the lit surfaces
+are drawn (`modern::BuildAmbientOcclusion`, `vk_modern_ao.cpp`, both passes
+timed as "modern ao"):
+
+1. `shaders/gtao.frag`: ground-truth ambient occlusion (Jimenez et al.,
+   "Practical Real-Time Strategies for Accurate Indirect Occlusion", 2016).
+   For 2 directions on screen around each pixel (slices of the hemisphere),
+   it steps 6 times to each side through the depth, within a radius in world
+   units. Each sample hides only the directions between its surface and a
+   point a set thickness (8 units) further along its view ray, kept as 32
+   sectors of the slice (a visibility bitmask: Therrien, Levesque and Gilet,
+   "Screen Space Indirect Lighting with Visibility Bitmask", 2023); the
+   sectors are spaced evenly in the slice's cosine-weighted measure, so the
+   visible share is the share of sectors left open, scaled by the cosine of
+   the pixel's normal (from the normals buffer) projected into the slice.
+   Plain GTAO keeps only the highest horizon on each side and so takes
+   everything below it as hidden: a thin thing in front of a surface (a sign
+   hung off a pillar on brackets, the edge of an arch) then darkened the
+   surface beside it as a solid block would, the dark bands of PC AO runs 1
+   and 2. With the thickness, the directions behind it stay open. Samples
+   fade out over the outer 60% of the radius (a fading sample's sector
+   slides to the edge of the hemisphere, where the cosine leaves it little
+   weight), so a distant wall does not darken the ground. The slice angles and step positions are jittered per pixel and per
+   frame (interleaved gradient noise). Two kinds of pixel are left
+   unoccluded, because the depth buffer cannot tell what is around them:
+   pixels whose normal is a guess (the normals buffer marks a strip a pixel
+   or two wide, whose neighbours are all on other surfaces), and surfaces
+   seen nearly edge on (the effect fades out as the normal turns across the
+   view, from 5 to 1 degrees of the surface to the view ray). It writes an
+   `R16_SFLOAT` image. The
+   value is left unclamped: a single slice of an open surface seen at an angle
+   gives more than 1 or less, and only the average over the slices is 1.
+2. `shaders/ao_blur.frag`: a 5x5 blur that keeps to the pixel's own surface
+   (a tap's weight halves when its view depth is 2% away from this pixel's).
+   It clamps the average to 1 and raises it to the strength's power. The
+   result goes to a scene-sized Legacy texture, so a lit draw can sample it.
+   The temporal anti-aliasing averages the remaining noise over frames.
+
+**What a texel holds:** the visible share of the cosine-weighted sky, 1 open,
+0 fully hidden; 1 where there is no surface.
+
+**What reads it.** Our own lit shaders ([Lit shaders of our
+own](#lit-shaders-of-our-own)). The Legacy adapter gives every pipeline drawn
+as one of ours the texture at pixel sampler 15 (`lg::kModernAoSampler`,
+which the game's lit shaders leave free; set 1 bindings 15 and 31), or a 1x1
+white texture where the scene has none (`lg::SetModernAmbientOcclusion`,
+from the scene's depth hand-over until the scene is lit). `lm_sun.frag`
+reads it by pixel position and darkens only the light from all around:
+
+* the lightmap's sky term: `sky * sky strength * ao`. The sun's share is
+  still taken from the undarkened sky (`decode(sky + sun) - decode(sky)`),
+  and the sun keeps its own shadow;
+* the reflection probe (`s0`), through a specular occlusion for the view
+  angle and gloss (Lagarde and de Rousiers 2014, roughness `1 - gloss`).
+
+Surfaces drawn with the game's shaders (models, effects, families we have no
+shader for yet) are not darkened.
+
+| Setting | Default | Switch |
+| --- | --- | --- |
+| Ambient occlusion | on with our lit shaders (linear light, lit inputs and our shaders on); it turns the normals buffer and the prepass on | `KISAK_VK_MODERN_AO=0` turns it off (our shaders read white); `KISAK_VK_MODERN_AO=1` builds it even with nothing reading it, to measure the cost |
+| Radius | 48 world units (a little over a metre; a player is 70 tall) | `KISAK_VK_MODERN_AO_RADIUS=<units>` |
+| Thickness | 8 world units: how far behind a sample's surface it is taken to reach | `KISAK_VK_MODERN_AO_THICKNESS=<units>`: less keeps thin things from darkening what is behind them but weakens contact shadows; 1000 behaves as plain GTAO (everything below the horizon hidden) |
+| Strength | power 2 (PC AO run 1: 1 read slightly weak, 2 about right in the shade; with the thickness, PC AO run 3 found 1.5 as weak as run 1's 1) | `KISAK_VK_MODERN_AO_POWER=<p>`: the visibility is raised to p (2 darkens, 1 lightens, 0 turns it off) |
+| Debug view | off | `KISAK_VK_MODERN_DEBUG=ao` draws the visibility as grey over the finished scene (after the tonemap): white open, darker in corners |
+
+The statistics line: `vulkan d3d9: modern: N scenes with ambient occlusion
+(radius R, thickness T, power P), X ms GPU each` (both passes).
+
+**Checks:** the D3D9 check's `modern_ao` scene draws a floor 120 units below
+a camera with the engine's 90-degree perspective, and a wall rising from it
+200 units ahead over the right half, with the engine's prepass order. The
+floor is drawn as `lm_sun_r0c0` (our shader, through the stand-in of
+`modern_lit_shader`) lit by its lightmap alone. Our shader darkens the floor
+12 units in front of the wall by the ambient occlusion (on lavapipe 155
+against 190 for open floor); without ambient occlusion the two are the same,
+and without our shaders the floor is black. With `KISAK_VK_MODERN_DEBUG=ao`
+it expects open floor and the wall's top at least 230 of 255 (one frame's
+noise leaves them a few levels under white), and that corner floor and the
+wall 10 units above the floor at least 25 darker but not black (on
+lavapipe: 250 open floor, 235 wall, 159 corner floor, 173 wall foot). A thin
+plate facing the camera hovers 16 units above the open floor, as a sign hangs
+off a pillar on brackets; the floor seen just past its lower edge lies behind
+it. The check expects that floor at least 150 (lavapipe 178), and with
+`KISAK_VK_MODERN_AO_THICKNESS=1000`, where the plate hides everything behind
+it as a solid block would, at most 120 (lavapipe 44): the dark band of PC AO
+run 2.
+`test_vulkan_d3d9_front.py` runs it as it is, with the debug view (linear
+light on and off, and with a thickness of 1000), with `KISAK_VK_MODERN_AO=1`,
+and with
+`KISAK_VK_MODERN_AO=0`, `KISAK_VK_MODERN_NORMALS=0` (with the debug view or
+not), `KISAK_VK_MODERN_LINEAR=0` or `KISAK_VK_MODERN_SHADERS=0`, where none
+is built. `modern_lit_shader` passes as before: its scene has no prepass, so
+our shaders read white.
 
 ## Screen-space reflections
 

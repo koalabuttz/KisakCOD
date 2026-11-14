@@ -483,6 +483,7 @@ struct Device
     // Stand-ins for missing vertex inputs and unbound textures.
     Buffer *zeroVertices = nullptr;
     Texture *nullTexture[3] = {}; // 2D, cube, volume (TextureKind order)
+    Texture *whiteTexture = nullptr; // 1x1 2D, (1, 1, 1, 1): the Modern lit shaders' ambient occlusion when none
 
     // Present swaps the two textures; the surfaces keep their addresses.
     // With a multisampled back buffer (backBufferSamples over 1) it resolves
@@ -601,6 +602,9 @@ struct Device
     // multiply the sun and the lightmap's light by.
     float modernSunStrength = 1.0f;
     float modernSkyStrength = 1.0f;
+    // SetModernAmbientOcclusion: what the Modern lit shaders read at
+    // kModernAoSampler, the white texture when null.
+    Texture *modernAo = nullptr;
     bool dynamicStale = true;
     // Checks every shortcut a draw takes (these two, and uniform blocks kept
     // from an earlier draw) against the full work, and fails the device when
@@ -734,7 +738,9 @@ void ResetState(Device &device);
 
 // Pipelines (vk_legacy_draw.cpp), shared with the workers that build them
 // ahead. LayoutFor and GetLayout run on the device's thread.
-LayoutKey LayoutFor(const Shader &vs, const Shader &ps);
+// linearShader: PipelineKey::linearShader (a Modern lit shader of ours also
+// reads the ambient occlusion, kModernAoSampler).
+LayoutKey LayoutFor(const Shader &vs, const Shader &ps, uint8_t linearShader = 0);
 Layout *GetLayout(Device &device, const LayoutKey &key);
 // The pixel module a pipeline of this key needs: the one the shader keeps, or
 // null with how to build it in recipe.

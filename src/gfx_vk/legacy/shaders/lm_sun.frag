@@ -42,9 +42,14 @@
 //   spec   = likewise what the game's specular (specular colour * Fresnel *
 //            (shadow * the sun's highlight * its colour + the reflection
 //            probe)) adds to the game's diffuse colour, decoded;
+//   ao     = the Modern path's ambient occlusion at this pixel (s15, white
+//            where the scene has none), which darkens only the light from
+//            all around: the sky term, and the probe through a specular
+//            occlusion; the sun keeps its own shadow;
 //   colour = decode(albedo * the game's light) shared out between sky and
-//            sun as their decoded light is, each share times its strength,
-//            + spec, then fogged as the game's blend in display values fogs it.
+//            sun as their decoded light is, each share times its strength
+//            (the sky's times ao too), + spec, then fogged as the game's
+//            blend in display values fogs it.
 // The game's shader adds and multiplies its terms in display values, so in
 // linear light a term's share depends on what it is added to, and a dark
 // colour times bright light (or the other way round) is not the decoded
@@ -198,6 +203,12 @@ layout(set = 1, binding = SAMPLER_DETAIL) uniform texture2D detailMap;
 layout(set = 1, binding = SAMPLER_DETAIL + 16) uniform sampler detailMapSampler;
 #endif
 
+// The Modern path's ambient occlusion (vk_legacy.h kModernAoSampler): a
+// texture the size of the render target, the visibility in red; the Legacy
+// adapter binds a 1x1 white one where the scene has none.
+layout(set = 1, binding = 15) uniform texture2D ambientOcclusion;
+layout(set = 1, binding = 31) uniform sampler ambientOcclusionSampler;
+
 layout(constant_id = 0) const float kSunStrength = 1.0;
 layout(constant_id = 1) const float kSkyStrength = 1.0;
 // The depth reference is clamped to [0, 1] (a D32 image standing in for D24,
@@ -216,6 +227,14 @@ vec3 Decode(vec3 value)
 {
     const vec3 v = max(value, vec3(0.0));
     return mix(pow((v + 0.055) / 1.055, vec3(2.4)), v / 12.92, lessThanEqual(v, vec3(0.04045)));
+}
+
+// The visibility of the light from all around at this pixel, 1 open.
+float AmbientOcclusion()
+{
+    const ivec2 size = textureSize(sampler2D(ambientOcclusion, ambientOcclusionSampler), 0);
+    const ivec2 at = min(ivec2(gl_FragCoord.xy), size - 1);
+    return texelFetch(sampler2D(ambientOcclusion, ambientOcclusionSampler), at, 0).r;
 }
 
 // D3D9's alpha test on the output alpha, in 8 bits.
@@ -399,9 +418,12 @@ void main()
 
     // The game's diffuse colour, decoded, shared out between the sky and the
     // sun as their light is (sky + sun is the decoded light), each share
-    // scaled by its strength.
+    // scaled by its strength. Ambient occlusion darkens the sky's share, not
+    // the sun's: that is taken from the undarkened sky, as the game's sum
+    // gives it.
+    const float ao = AmbientOcclusion();
     const vec3 light = sky + sun;
-    vec3 lit = Decode(albedoDisplay * (skyDisplay + sunDisplay)) * (sky * kSkyStrength + sun * kSunStrength)
+    vec3 lit = Decode(albedoDisplay * (skyDisplay + sunDisplay)) * (sky * kSkyStrength * ao + sun * kSunStrength)
         / max(light, vec3(1e-6));
     // A blended surface is premultiplied by its alpha.
     if (kMode == 1)
@@ -425,7 +447,12 @@ void main()
     const float grazing = envMap.z != 0.0 ? pow(abs(1.0 - abs(viewFacing)), envMap.z) : 1.0;
     const float fresnel = envMap.x + (envMap.y - envMap.x) * grazing;
     const vec4 probe = textureLod(samplerCube(reflectionProbe, reflectionProbeSampler), reflected, 6.0 - 8.0 * gloss);
-    vec3 reflection = probe.rgb * probe.a;
+    // The probe is light from around too: darkened by the specular occlusion
+    // that ambient occlusion gives for this view and gloss (Lagarde and de
+    // Rousiers 2014, roughness 1 - gloss).
+    const float specularOcclusion =
+        clamp(pow(abs(viewFacing) + ao, exp2(-16.0 * (1.0 - gloss) - 1.0)) - 1.0 + ao, 0.0, 1.0);
+    vec3 reflection = probe.rgb * probe.a * specularOcclusion;
 #if POINT_LIGHT
     const float exponent = exp2(gloss * 9.37752) + 7.0;
     const float highlight = clamp(exp((dot(reflected, lightDirection) - 0.99925) * exponent), 0.0, 1.0);
