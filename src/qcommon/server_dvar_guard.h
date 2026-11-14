@@ -63,6 +63,8 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "snd_adpcm",
     "snd_alDebug",
     "xanim_blendOnce",
+    // Menus.
+    "ui_fastExpressions",
     // How the player's own server admits players.
     "sv_advertisedProtocol",
     "sv_allowProtocol6",
