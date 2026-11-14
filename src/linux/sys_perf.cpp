@@ -246,6 +246,12 @@ namespace
             case SYS_PERF_PROBE_SERVER_ENTITIES: return "server: entities";
             case SYS_PERF_PROBE_SERVER_CLIENT_END: return "server: player end frame";
             case SYS_PERF_PROBE_SERVER_SEND: return "server: snapshots";
+            case SYS_PERF_PROBE_HUD_MENUS: return "hud: menus";
+            case SYS_PERF_PROBE_HUD_ELEMS: return "hud: script elements";
+            case SYS_PERF_PROBE_HUD_NAMES: return "hud: crosshair and names";
+            case SYS_PERF_PROBE_HUD_COMPASS: return "hud: compass";
+            case SYS_PERF_PROBE_HUD_SCOREBOARD: return "hud: scoreboard";
+            case SYS_PERF_PROBE_UI_EXPRESSIONS: return "menu expressions";
             case SYS_PERF_PROBE_WAIT_RENDERER: return "wait for the render thread";
             case SYS_PERF_PROBE_WAIT_WORKERS_ALL: return "wait for workers: all";
             default: return "wait for workers: other";

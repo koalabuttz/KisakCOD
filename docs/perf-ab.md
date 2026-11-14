@@ -81,6 +81,14 @@ perf: done
     (pings, configstrings, objectives, hud elements, team status) is the
     rest of `server frame`.
   - `hud`: `CG_Draw2D`.
+  - `hud: <part>`: parts of the HUD, inside `hud`: `menus` (`Menu_PaintAll`,
+    the HUD's menus), `script elements` (`CG_Draw2dHudElems`, two calls a
+    frame), `crosshair and names` (`CG_ScanForCrosshairEntity` and
+    `CG_UpdatePlayerNames`), `compass` (`CG_CompassUpdateActors`) and
+    `scoreboard` (`CG_DrawScoreboard`).
+  - `menu expressions`: `EvaluateExpression`, every menu expression
+    (`visible when`, `exp text` and the like), in the HUD or in any other
+    menu.
   - `wait for workers: <type>`: the main thread asleep until the worker
     threads finish the commands of that type; `all` is the wait for every
     front-end command before the frame is handed over, `other` any other.
