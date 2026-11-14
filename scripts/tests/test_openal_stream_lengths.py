@@ -25,8 +25,9 @@ head only, and the open with a tell callback is shown to read it twice, so the
 check fails if dr_mp3 or the driver's call changes.
 
 The first play of a file no longer reads it through either when its head says
-constant bit rate: the size gives the length (AL_Mp3ConstantRateHead,
-AL_Mp3FramesFromSize, extracted here too). The same harness makes up constant
+constant bit rate and its size is a whole number of such frames: the size
+gives the length (AL_Mp3ConstantRateHead, AL_Mp3FramesFromSize, extracted
+here too). The same harness makes up constant
 bit rate files of several rates, with and without tags, and holds the size's
 answer against dr_mp3's own count of the same bytes; files that are not
 constant bit rate must be turned down.
@@ -70,6 +71,7 @@ def production_code() -> str:
             raise ValueError(f"{name} was not found")
         parts.append(line.group(0))
     parts.append(extract(source, r"^static bool AL_FindStreamLength\([^)]*\)\s*\{", "AL_FindStreamLength"))
+    parts.append(extract(source, r"^static bool AL_CountStreamLength\([^)]*\)\s*\{", "AL_CountStreamLength"))
     parts.append(extract(source, r"^static void AL_KeepStreamLength\([^)]*\)\s*\{", "AL_KeepStreamLength"))
     return "\n\n".join(parts)
 
@@ -84,7 +86,7 @@ def size_code() -> str:
         parts.append(line.group(0))
     parts.append(extract(source, r"^static uint32_t AL_Mp3FrameBytes\([^)]*\)\s*\{", "AL_Mp3FrameBytes"))
     parts.append(extract(source, r"^static bool AL_Mp3ConstantRateHead\([^)]*\)\s*\{", "AL_Mp3ConstantRateHead"))
-    parts.append(extract(source, r"^static uint64_t AL_Mp3FramesFromSize\([^)]*\)\s*\{", "AL_Mp3FramesFromSize"))
+    parts.append(extract(source, r"^static bool AL_Mp3FramesFromSize\([^)]*\)\s*\{", "AL_Mp3FramesFromSize"))
     return "\n\n".join(parts)
 
 
@@ -119,7 +121,7 @@ int main()
     uint64_t frames = 0;
     Check(!AL_FindStreamLength("sound/ambient/a.mp3", 1000, &frames), "an empty table finds nothing");
 
-    AL_KeepStreamLength("sound/ambient/a.mp3", 1000, 4410000);
+    AL_KeepStreamLength("sound/ambient/a.mp3", 1000, 4410000, false);
     Check(AL_FindStreamLength("sound/ambient/a.mp3", 1000, &frames) && frames == 4410000, "a kept file is found");
     frames = 0;
     Check(AL_FindStreamLength("SOUND/Ambient/A.MP3", 1000, &frames) && frames == 4410000, "case does not matter");
@@ -130,11 +132,11 @@ int main()
     // shorter one.
     const std::string longName(sizeof(g_streamLengths[0].name), 'x');
     const int before = g_streamLengthCount;
-    AL_KeepStreamLength(longName.c_str(), 5, 7);
+    AL_KeepStreamLength(longName.c_str(), 5, 7, false);
     Check(g_streamLengthCount == before, "a name too long is not kept");
     Check(!AL_FindStreamLength(longName.c_str(), 5, &frames), "a name too long is not found");
     const std::string fits(sizeof(g_streamLengths[0].name) - 1, 'y');
-    AL_KeepStreamLength(fits.c_str(), 5, 7);
+    AL_KeepStreamLength(fits.c_str(), 5, 7, false);
     Check(AL_FindStreamLength(fits.c_str(), 5, &frames) && frames == 7, "the longest name that fits is kept");
 
     // Fill the table: the first file kept is the first to go.
@@ -142,18 +144,35 @@ int main()
     for (int i = 0; g_streamLengthCount < AL_STREAM_LENGTHS; ++i)
     {
         snprintf(name, sizeof(name), "sound/fill%d.mp3", i);
-        AL_KeepStreamLength(name, 10 + i, 100 + i);
+        AL_KeepStreamLength(name, 10 + i, 100 + i, false);
     }
     Check(AL_FindStreamLength("sound/ambient/a.mp3", 1000, &frames), "a full table still holds its first file");
-    AL_KeepStreamLength("sound/new.mp3", 77, 88);
+    AL_KeepStreamLength("sound/new.mp3", 77, 88, false);
     Check(g_streamLengthCount == AL_STREAM_LENGTHS, "the table does not grow past its size");
     Check(!AL_FindStreamLength("sound/ambient/a.mp3", 1000, &frames), "the oldest file went");
     Check(AL_FindStreamLength("sound/new.mp3", 77, &frames) && frames == 88, "the newest file is there");
     Check(AL_FindStreamLength(fits.c_str(), 5, &frames) && frames == 7, "the second oldest file is still there");
 
+    // A length that came from a size gives way to the count of a full play,
+    // once. A counted length does not.
+    uint64_t was = 0;
+    AL_KeepStreamLength("sound/music/sized.mp3", 2000, 5000, true);
+    Check(!AL_CountStreamLength("sound/music/sized.mp3", 2000, 0, &was), "a play of no frames counts nothing");
+    Check(!AL_CountStreamLength("sound/music/sized.mp3", 2001, 4000, &was), "a file of another size is not counted");
+    Check(AL_CountStreamLength("SOUND/music/sized.mp3", 2000, 3848, &was) && was == 5000, "a full play replaces a length from a size");
+    Check(AL_FindStreamLength("sound/music/sized.mp3", 2000, &frames) && frames == 3848, "the count is what is found after");
+    Check(!AL_CountStreamLength("sound/music/sized.mp3", 2000, 3000, &was), "a counted length is not replaced again");
+    Check(AL_FindStreamLength("sound/music/sized.mp3", 2000, &frames) && frames == 3848, "and stays as counted");
+    AL_KeepStreamLength("sound/music/right.mp3", 2000, 5000, true);
+    Check(!AL_CountStreamLength("sound/music/right.mp3", 2000, 5000, &was), "a size that was right changes nothing");
+    Check(!AL_CountStreamLength("sound/music/right.mp3", 2000, 4000, &was), "and the file then counts as counted");
+    Check(!AL_CountStreamLength("sound/new.mp3", 77, 99, &was), "a length counted by the decoder is left alone");
+    Check(AL_FindStreamLength("sound/new.mp3", 77, &frames) && frames == 88, "and is still what it was");
+    Check(!AL_CountStreamLength("sound/unknown.mp3", 1, 99, &was), "a file not in the table is not counted");
+
     if (failures)
         return 1;
-    printf("ok: 14 checks of the stream length table\n");
+    printf("ok: 25 checks of the stream length table\n");
     return 0;
 }
 """
@@ -267,10 +286,8 @@ static bool FromSize(const std::vector<uint8_t> &file, uint64_t *frames)
 {
     AlMp3Head head;
     const uint32_t headBytes = file.size() < AL_MP3_HEAD_BYTES ? (uint32_t)file.size() : AL_MP3_HEAD_BYTES;
-    if (!AL_Mp3ConstantRateHead(file.data(), headBytes, &head))
-        return false;
-    *frames = AL_Mp3FramesFromSize(head, (uint32_t)file.size());
-    return true;
+    return AL_Mp3ConstantRateHead(file.data(), headBytes, &head)
+           && AL_Mp3FramesFromSize(head, (uint32_t)file.size(), frames);
 }
 
 static std::vector<uint8_t> Id3v2(uint32_t body)
@@ -330,6 +347,17 @@ static void CheckSizes()
                       && (tagged.size() <= AL_MP3_HEAD_BYTES ? !constant : constant && bySize == counted + kind.samples),
                   what);
             ++sizeChecks;
+
+            // Both tags, as every one of the game's music files has them.
+            const std::vector<uint8_t> both = MadeUp(kind.h1, kind.h2, frames, Id3v2(1014), 128);
+            uint64_t bothBySize = 0;
+            const bool bothConstant = FromSize(both, &bothBySize);
+            snprintf(what, sizeof(what), "%s, %u frames between two tags: the size says %llu", kind.name,
+                     (unsigned)frames, (unsigned long long)bothBySize);
+            Check(both.size() <= AL_MP3_HEAD_BYTES ? !bothConstant
+                                                    : bothConstant && bothBySize == (uint64_t)frames * kind.samples,
+                  what);
+            ++sizeChecks;
         }
     }
 
@@ -349,20 +377,32 @@ static void CheckSizes()
     Check(!FromSize(varied, &frames), "frames of two bit rates: read through");
     Check(CountedByDrMp3(varied) == 200u * 1152u, "dr_mp3 still counts the two-rate file");
 
-    // One bit rate through the head and another after it is not caught: the
-    // head is all the driver reads. The check is here so that this stays a
-    // known limit and not a surprise.
+    // One bit rate through the head and another after it: the head cannot
+    // see that, but the size no longer fits a whole number of frames. (The
+    // game has six such files.)
     std::vector<uint8_t> late = MadeUp(0xFB, 0x90, 100, {}, 0); // 41.8 KB: past the head
-    const std::vector<uint8_t> tail = MadeUp(0xFB, 0xB0, 100, {}, 0);
+    const std::vector<uint8_t> tail = MadeUp(0xFB, 0xA0, 99, {}, 0);
     late.insert(late.end(), tail.begin(), tail.end());
-    Check(FromSize(late, &frames) && frames != CountedByDrMp3(late), "a rate change after the head is not seen (known limit)");
-    sizeChecks += 6;
+    Check(!FromSize(late, &frames), "a rate change after the head: the size does not fit, read through");
+    // Bytes that are neither frames nor a 128 byte tag behind the last frame.
+    Check(!FromSize(MadeUp(0xFB, 0x90, 400, {}, 57), &frames), "a tail that is no tag: read through");
+    Check(!FromSize(MadeUp(0xFB, 0x90, 400, {}, 200), &frames), "a longer tail that is no tag: read through");
+    // What stays unseen: a later stretch of another rate that happens to be
+    // a whole number of the head's frames long, to the byte (98 frames at
+    // 128 kbit/s are 40960 bytes, 98 at 192 are 61440: 245 frames at 128).
+    // The check is here so that this stays a known limit.
+    std::vector<uint8_t> unseen = MadeUp(0xFB, 0x90, 98, {}, 0);
+    const std::vector<uint8_t> fitting = MadeUp(0xFB, 0xB0, 98, {}, 0);
+    unseen.insert(unseen.end(), fitting.begin(), fitting.end());
+    Check(FromSize(unseen, &frames) && frames != CountedByDrMp3(unseen),
+          "a rate change after the head whose bytes fit whole frames is not seen (known limit)");
+    sizeChecks += 9;
 }
 
 // --survey: what the driver would do with real files, next to dr_mp3's count.
 static int Survey(int count, char **paths)
 {
-    int constantFiles = 0, exact = 0, oneFrameOff = 0, further = 0, endTags = 0;
+    int constantFiles = 0, exact = 0, oneFrameOff = 0, further = 0, endTags = 0, headOnly = 0;
     for (int i = 0; i < count; ++i)
     {
         FILE *in = fopen(paths[i], "rb");
@@ -383,8 +423,16 @@ static int Survey(int count, char **paths)
         const uint64_t counted = CountedByDrMp3(file);
         if (!constant)
         {
-            printf("%s: %zu bytes, not constant bit rate in its head, read through: %llu frames%s\n", paths[i],
-                   file.size(), (unsigned long long)counted, endTag ? ", tag at the end" : "");
+            AlMp3Head head;
+            const uint32_t headBytes = file.size() < AL_MP3_HEAD_BYTES ? (uint32_t)file.size() : AL_MP3_HEAD_BYTES;
+            const bool headConstant = AL_Mp3ConstantRateHead(file.data(), headBytes, &head);
+            headOnly += headConstant;
+            printf("%s: %zu bytes, %s, read through: %llu frames%s", paths[i], file.size(),
+                   headConstant ? "constant bit rate in its head but its size does not fit" : "not constant bit rate in its head",
+                   (unsigned long long)counted, endTag ? ", tag at the end" : "");
+            if (headConstant)
+                printf(", %u bit/s from byte %u", (unsigned)head.bitsPerSecond, (unsigned)head.audioStart);
+            printf("\n");
             continue;
         }
         ++constantFiles;
@@ -398,9 +446,10 @@ static int Survey(int count, char **paths)
         printf("%s: %zu bytes, constant bit rate, by size %llu frames, counted %llu, difference %lld%s\n", paths[i],
                file.size(), (unsigned long long)bySize, (unsigned long long)counted, off, endTag ? ", tag at the end" : "");
     }
-    printf("survey: %d files, %d constant bit rate by their head; of those %d exact, %d one MP3 frame off, %d further off;"
+    printf("survey: %d files, %d taken as constant bit rate (head and size); of those %d exact, %d one MP3 frame off,"
+           " %d further off; %d more are constant in their head only and are read through;"
            " %d files have an ID3v1 tag at the end\n",
-           count, constantFiles, exact, oneFrameOff, further, endTags);
+           count, constantFiles, exact, oneFrameOff, further, headOnly, endTags);
     return 0;
 }
 

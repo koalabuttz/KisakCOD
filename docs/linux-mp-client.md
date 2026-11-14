@@ -128,7 +128,10 @@ and the driver keeps the answer for the next start of that file. A constant
 bit rate file is not read through: its size says its length, and the line is
 `snd_al: stream '<file>' (N KB) is R bit/s all through its head: F frames by
 its size` (level 2 adds `read through: F frames`, the decoder's own count, to
-compare).
+compare). The size has to fit a whole number of frames as well, or the file is
+read through. A length from a size gives way to the decoder's count the first
+time the file plays from its start to its end: `snd_al: stream '<file>' played
+through: F frames, not the G its size gave`.
 
 The OpenAL headers (`AL/al.h`) are needed too, whichever library is linked,
 because the sound headers include them. Without `libopenal-dev` installed, unpack
