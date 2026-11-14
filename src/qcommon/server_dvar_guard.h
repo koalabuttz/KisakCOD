@@ -68,6 +68,8 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "sv_allowProtocol6",
     "sv_allowUnverifiedGuids",
     "sv_loopbackTestAuth",
+    // Test clients on the player's own server.
+    "sv_botSnapshots",
     // Runs that play themselves (the run plan's timed console commands).
     "run_atMap",
     "run_atMenu",
