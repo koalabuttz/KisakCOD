@@ -2,6 +2,7 @@
 #include "r_state.h"
 #include "rb_logfile.h"
 #include "r_dvars.h"
+#include <gfx_gxm/gxm_engine_options.h>
 #include "rb_stats.h"
 #include "r_draw_bsp.h"
 #include "rb_state.h"
@@ -930,6 +931,15 @@ void R_GetViewport(GfxCmdBufSourceState *source, GfxViewport *outViewport)
                 "%s\n\t(outViewport->height) = %i",
                 "(outViewport->height > 0)",
                 outViewport->height);
+#ifdef KISAK_GFX_GXM
+        // The Vita's scaled 3D picture: the top left part of the scene's
+        // viewport, stretched to all of it before the HUD.
+        if (source->viewMode != VIEW_MODE_2D && KISAK_GXM_SCENE_SCALE() < 1.0f)
+        {
+            outViewport->width = gfx_gxm::SceneScaled(outViewport->width, KISAK_GXM_SCENE_SCALE());
+            outViewport->height = gfx_gxm::SceneScaled(outViewport->height, KISAK_GXM_SCENE_SCALE());
+        }
+#endif
     }
     if (source->viewMode != VIEW_MODE_2D && r_scaleViewport->current.value != 1.0)
     {

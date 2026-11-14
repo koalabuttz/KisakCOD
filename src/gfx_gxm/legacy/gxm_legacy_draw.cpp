@@ -54,6 +54,7 @@ namespace gfx_gxm
 {
 bool g_depthPrepass = true;
 bool g_resolveWhenUsed = true;
+float g_sceneScale = 1.0f;
 } // namespace gfx_gxm
 
 namespace gfx_vk::legacy
