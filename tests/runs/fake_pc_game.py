@@ -9,7 +9,8 @@ log line, ``screenshot <name>`` writes ``<home>/main/screenshots/<name>.tga``,
 
 The picture is grey (FAKE_SHADE, default 100) with a square of FAKE_SQUARE
 (default the same grey) at 100,60 to 164,124, written bottom row first and
-RLE-packed when FAKE_RLE=1. FAKE_EXIT sets the exit code, FAKE_HANG=1 hangs.
+RLE-packed when FAKE_RLE=1. FAKE_EXIT sets the exit code, FAKE_HANG=1 hangs,
+FAKE_REFUSE_LIST=1 refuses the timed list as the client does and exits 0.
 
 A timed entry may hold several commands split by ';', as the console takes
 them. ``<dvar> <value>`` sets a dvar: ``r_fakeSquare`` then shades the square
@@ -76,6 +77,10 @@ def main():
     square = int(os.environ.get("FAKE_SQUARE", str(shade)))
     dvars = {}
     quit_now = False
+    if os.environ.get("FAKE_REFUSE_LIST") == "1":
+        lines.append('run: run_atMap: part 7 "45" has no command after its time; none of its commands will be sent')
+        log.write_text("\n".join(lines) + "\n")
+        return 0
     for part in setting(argv, "run_atMap").split("|"):
         words = part.split(None, 1)
         if len(words) < 2:

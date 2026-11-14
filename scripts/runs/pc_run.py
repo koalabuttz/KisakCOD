@@ -107,8 +107,15 @@ the passes does not matter. Moving things (smoke, the helicopter) move
 between the screenshots; ``"8 timescale 0.001"`` in ``at_map`` (devmap,
 cheats on) may hold them still.
 
-Exit status: 0 when every launch exited 0 and wrote every screenshot it
-named, 1 otherwise (the report says which), 2 on a bad recipe.
+The game splits its command line at every ``+`` (Com_ParseCommandLine) and
+keeps 31 parts, so a timed command or a variant value with a ``+`` in it
+(``45 +left``) would break the whole list: the recipe check refuses it. Put
+such commands in a cfg in the home template and send ``exec <cfg>``. A launch
+whose timed list the game refused anyway ends with status ``run_error``.
+
+Exit status: 0 when every launch exited 0, ran its timed commands and wrote
+every screenshot it named, 1 otherwise (the report says which), 2 on a bad
+recipe.
 """
 
 import argparse
@@ -126,6 +133,7 @@ import zlib
 from pathlib import Path
 
 FORMAT = "kisak-pc-run/1"
+MAX_CONSOLE_LINES = 31  # Com_ParseCommandLine keeps 32 lines, the first is what comes before the first '+'
 SAFETY_AFTER_LAST = 30  # seconds after the last timed command before the safety quit
 FRAME_LOG = re.compile(r"^frame log (\S+): .*$")
 FRAME_LOG_FPS = re.compile(r"^frame log (\S+): (\d+) frames in ([\d.]+) s: ([\d.]+) fps; ms mean ([\d.]+), "
@@ -170,8 +178,16 @@ def load_recipe(path):
             for command in commands:
                 if "|" in command or not TIMED.match(command):
                     raise RecipeError(f"{name}: {key} entry {command!r} is not '<seconds> <command>' without '|'")
+                if "+" in command or "\n" in command:
+                    raise RecipeError(f"{name}: {key} entry {command!r} has a '+': the game splits its command line "
+                                      "at every '+', so the whole list would be refused; put '+left' and the like "
+                                      "in a cfg and send 'exec <cfg>'")
                 if len(command.split(None, 1)[1]) >= 160:
                     raise RecipeError(f"{name}: {key} entry {command!r} is longer than the client takes")
+        lines = command_line_parts(recipe, launch)
+        if lines > MAX_CONSOLE_LINES:
+            raise RecipeError(f"{name}: the command line has {lines} '+' parts; the game reads the first "
+                              f"{MAX_CONSOLE_LINES} and drops the rest")
         for shot in launch_shots(launch):
             if shot in shots:
                 raise RecipeError(f"screenshot {shot!r} is named twice; the second would overwrite the first")
@@ -185,6 +201,14 @@ def load_recipe(path):
         if len(box) != 4 or not (box[0] < box[2] and box[1] < box[3]):
             raise RecipeError(f"region {name}: [x0, y0, x1, y1] with x0 < x1 and y0 < y1")
     return recipe
+
+
+def command_line_parts(recipe, launch):
+    """How many '+' parts the game's command line splitter (Com_ParseCommandLine)
+    makes of a launch's arguments: it splits at every '+' and keeps 31."""
+    exe = recipe["game"]["exe"]
+    skip = len(exe) if isinstance(exe, list) else 1
+    return " ".join(launch_argv(recipe, launch, Path("home"))[skip:]).count("+")
 
 
 def check_variants(launch):
@@ -207,9 +231,9 @@ def check_variants(launch):
         if not isinstance(settings, dict) or not settings:
             raise RecipeError(f"{name}: variant {label!r} sets nothing")
         for dvar, value in settings.items():
-            if not DVAR_NAME.match(dvar) or re.search(r"[|;\"\s]", str(value)) or str(value) == "":
+            if not DVAR_NAME.match(dvar) or re.search(r"[|;+\"\s]", str(value)) or str(value) == "":
                 raise RecipeError(f"{name}: variant {label!r} sets {dvar!r} to {value!r}: one dvar name, "
-                                  "one value without spaces, ';', '|' or quotes")
+                                  "one value without spaces, ';', '|', '+' or quotes")
     timing = launch.get("variant_timing") or {}
     for key in timing:
         if key not in ("start", "settle", "framelog", "passes", "compare"):
@@ -414,6 +438,10 @@ def run_launch(recipe, launch, out, dry_run=False):
     result["lines"] = wanted_lines(log_text, recipe.get("lines") or [])
     result["frame_logs"] = [line for line in log_text.splitlines() if FRAME_LOG.match(line.strip())]
     result["run_errors"] = [line for line in log_text.splitlines() if "none of its commands will be sent" in line]
+    if result["run_errors"] and result["status"] == "ok":
+        # The game refused the timed list, so nothing the recipe asked for ran:
+        # the launch only idled until its safety quit.
+        result["status"] = "run_error"
     if launch.get("variants"):
         result["variants"] = variant_summary(launch, result["frame_logs"])
 
@@ -784,6 +812,10 @@ def main(argv=None):
         print(f"pc_run: {error}", file=sys.stderr)
         return 2
     out = Path(options.out)
+    if recipe["game"].get("home_template") and "+" in str(out.resolve()):
+        print(f"pc_run: the output folder {out.resolve()} has a '+'; each launch's fs_homepath is under it and "
+              "the game would split its command line there", file=sys.stderr)
+        return 2
     if options.dry_run:
         for launch in recipe["launches"]:
             result = run_launch(recipe, launch, out, dry_run=True)

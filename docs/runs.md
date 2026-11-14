@@ -320,6 +320,14 @@ script):
   Give `com_maxfps 0` to any launch whose frame log is read for speed: proof 2
   left it out and both frame logs read about 91 fps where the same view reads
   about 430 without a cap.
+- No `+` inside a timed command or a value: the game splits its whole command
+  line at every `+` (and keeps 31 parts), so `"45 +left"` turns into a part
+  `45` with no command and the client refuses the entire `run_atMap` list
+  (`none of its commands will be sent`), after which the launch only idles to
+  its safety quit. The recipe check refuses such entries; put `+left` and the
+  like in a cfg in the home template and send `exec <cfg>` (`-left` is
+  harmless). A launch whose list was refused anyway is reported `run_error`,
+  not `ok` (found by the perf_ab Windows proof, attempt 1).
 - `home_template` is copied for every launch and given as `fs_homepath`, so
   each launch starts from the same home and its log and screenshots are its
   own (they are found under that home afterwards).

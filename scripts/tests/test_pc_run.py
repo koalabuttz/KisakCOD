@@ -79,6 +79,8 @@ def test_recipe_checks(work):
         ([{"name": "a", "at_map": ["soon quit"]}], "not '<seconds> <command>'"),
         ([{"name": "a", "at_map": ["1 echo x | 2 quit"]}], "without '|'"),
         ([{"name": "a", "at_map": ["1 screenshot s"]}, {"name": "b", "at_map": ["1 screenshot s"]}], "named twice"),
+        ([{"name": "a", "at_map": ["45 +left", "50 -left"]}], "has a '+'"),
+        ([{"name": "a", "args": ["+set", "x", "1"] * 30, "at_map": ["1 quit"]}], "'+' parts"),
     ]
     for launches, message in bad:
         result = run(recipe(work, launches), work / "out-bad")
@@ -193,6 +195,7 @@ def test_variants(work):
         ({"variants": []}, "variants is a list"),
         ({"variants": [{"name": "x", "set": {}}]}, "sets nothing"),
         ({"variants": [{"name": "x", "set": {"r_a": "1; quit"}}]}, "one value without spaces"),
+        ({"variants": [{"name": "x", "set": {"r_a": "+1"}}]}, "one value without spaces"),
         ({"variants": [{"name": "x", "set": {"r_a": "1"}}, {"name": "x", "set": {"r_a": "2"}}]}, "given twice"),
         ({"variants": [{"name": "x", "set": {"r_a": "1"}}], "variant_timing": {"start": 3}}, "not after the last"),
         ({"variants": [{"name": "x", "set": {"r_a": "1"}}], "variant_timing": {"passes": 3}}, "passes is 1 or 2"),
@@ -210,6 +213,7 @@ def test_failures(work):
         {"name": "fails", "env": {"FAKE_EXIT": "3"}, "at_map": ["1 screenshot f-1", "2 quit"]},
         {"name": "noshot", "at_map": ["1 screenshot", "2 quit"]},
         {"name": "hangs", "env": {"FAKE_HANG": "1"}, "timeout": 2, "at_map": ["1 screenshot h-1"]},
+        {"name": "refused", "env": {"FAKE_REFUSE_LIST": "1"}, "at_map": ["1 echo x", "2 quit"]},
     ]
     out = work / "out-fail"
     result = run(recipe(work, launches), out)
@@ -218,6 +222,8 @@ def test_failures(work):
     check(results["fails"]["status"] == "exit" and results["fails"]["exit_code"] == 3, "exit code kept")
     check(results["hangs"]["status"] == "timeout", "a hung launch is ended")
     check(results["hangs"]["missing_shots"] == ["h-1"], "its screenshot is missing")
+    check(results["refused"]["status"] == "run_error" and results["refused"]["exit_code"] == 0
+          and results["refused"]["run_errors"], "a refused timed list fails the launch though the game exits 0")
 
 
 def main():
