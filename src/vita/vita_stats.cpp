@@ -11,6 +11,7 @@
 // map, and the commands sent after the menu or the map came up.
 
 #include "vita_platform.h"
+#include "vita_call_watch.h"
 #include "vita_mman.h"
 #include "vita_run_plan.h"
 
@@ -66,8 +67,9 @@ namespace
     // 0.9 s while nothing was loaded or made and no timed part of the frame
     // ran long. A watcher thread looks at the main thread while a frame runs
     // long: whether it is running, ready (another thread has its core) or
-    // waiting and on what, and how much it ran. Vita_FrameEnd logs what it
-    // saw (WatchFrames, LogLongFrame).
+    // waiting and on what, how much it ran, and which file, memory block or
+    // packet call it is inside (vita_call_watch.h). Vita_FrameEnd logs what
+    // it saw (WatchFrames, LogLongFrame).
     constexpr uint64_t kLongFrame = 250u * 1000u;
     constexpr uint64_t kLookEvery = 100u * 1000u;
     constexpr int kMaxLooks = 8;
@@ -80,6 +82,8 @@ namespace
         uint64_t runClocks; // the main thread's run time so far, us
         uint32_t threadPreempts, intrPreempts;
         int32_t cpu, priority;
+        bool inCall;
+        kisak::vita_calls::Inside call;
     };
     SceUID s_mainThread = -1;
     // The frame being watched (its start, 0 between frames) and the looks
@@ -361,6 +365,7 @@ namespace
         look.intrPreempts = info.intrPreemptCount;
         look.cpu = info.currentCpuId;
         look.priority = info.currentPriority;
+        look.inCall = kisak::vita_calls::Look(look.call, Now());
         return true;
     }
 
@@ -408,8 +413,11 @@ namespace
 
     void LogLongFrame(uint64_t length, int count)
     {
+        // The frame's calls first: printing adds a write to them.
+        char calls[256];
+        kisak::vita_calls::DescribeFrame(calls, sizeof(calls));
         // Each look and what the main thread did since the one before.
-        char line[1024];
+        char line[2048];
         int used = snprintf(line, sizeof(line), "Vita: long frame, %.0f ms; the main thread", length / 1000.0);
         for (int i = 0; i < count && used > 0 && used < (int)sizeof(line); ++i)
         {
@@ -437,11 +445,21 @@ namespace
                 more = snprintf(line + used, sizeof(line) - used, ", core %d, priority 0x%x", (int)look.cpu,
                     (unsigned int)look.priority);
             }
+            if (more > 0 && used + more < (int)sizeof(line))
+            {
+                used += more;
+                if (!look.inCall)
+                    more = snprintf(line + used, sizeof(line) - used, ", in no timed call");
+                else
+                    more = snprintf(line + used, sizeof(line) - used, ", %u ms into %s%s%s", (unsigned int)look.call.forMs,
+                        look.call.name, look.call.path[0] ? " on " : "", look.call.path);
+            }
             if (more <= 0 || used + more >= (int)sizeof(line))
                 break;
             used += more;
         }
         Com_Printf(CON_CHANNEL_SYSTEM, "%s\n", line);
+        Com_Printf(CON_CHANNEL_SYSTEM, "Vita: long frame's calls: %s\n", calls);
     }
 }
 
@@ -485,6 +503,7 @@ void Vita_StatsInit()
     s_atMapUsed = StepsOf("vita_atMap", s_atMap.Get(), s_atMapSteps, sizeof(s_atMapSteps));
     PrintMemory("after start-up");
     s_mainThread = sceKernelGetThreadId();
+    kisak::vita_calls::SetMainThread();
     // High priority so that it sees the main thread even when the main
     // thread's core is taken; it sleeps all but a moment of every 20 ms.
     const SceUID watcher = sceKernelCreateThread("kisak_frame_watch", WatchFrames, 0x40, 16 * 1024, 0, 0, nullptr);
@@ -500,6 +519,7 @@ void Vita_FrameBegin()
 {
     s_frameStart = Now();
     s_frameIdle = 0;
+    kisak::vita_calls::FrameBegin();
     s_watchedStart.store(s_frameStart, std::memory_order_release);
 }
 

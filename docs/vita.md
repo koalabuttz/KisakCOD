@@ -102,14 +102,26 @@ starting `Vita` come from the Vita layer:
   slowest frame. Busy near 100% or frames over 50 ms in play mean the Vita is
   not keeping up with that player count.
 - `Vita: long frame, 863 ms; the main thread at 250 ms: running, core 0,
-  priority 0xa0; at 350 ms: waiting, ran 12 ms of 100, 0 thread and 3
-  interrupt preemptions (wait type 0x... on 0x...), ...`: a frame of the main
-  loop that took more than 250 ms. A watcher thread looks at the main thread
-  250 ms into such a frame and every 100 ms after, up to 8 times: running,
-  ready (another thread has its core) or waiting and on what, and how much it
-  ran between two looks. Console runs found one or two frames of 0.3 to
-  0.9 s a start in which nothing was loaded and no timed part ran long; this
-  line is there to say why.
+  priority 0xa0, in no timed call; at 350 ms: waiting, ran 12 ms of 100, 0
+  thread and 3 interrupt preemptions (wait type 0x... on 0x...), core 0,
+  priority 0xa0, 80 ms into sceIoRead on <the end of a path>, ...`: a frame of
+  the main loop that took more than 250 ms. A watcher thread looks at the main
+  thread 250 ms into such a frame and every 100 ms after, up to 8 times:
+  running, ready (another thread has its core) or waiting and on what, how
+  much it ran between two looks, and which timed call it is inside. Console
+  runs found one or two frames of 0.3 to 0.9 s a start in which nothing was
+  loaded and no timed part ran long; this line is there to say why.
+- `Vita: long frame's calls: 14 file, memory block and packet calls on the
+  main thread took 412.0 ms, 3.0 KB read and 1.2 KB written; the longest,
+  sceIoWrite on <the end of a path>, took 380.1 ms`: follows each long frame
+  line. The link sends the main thread's file calls (`sceIoOpen`, `sceIoRead`,
+  `sceIoWrite` and the rest, which is also what the C library's `fopen`,
+  `read` and `write` end in), `sceKernelAllocMemBlock`,
+  `sceKernelFreeMemBlock`, `sceNetRecvfrom` and `sceNetSendto` through
+  wrappers that time them (`src/vita/vita_call_watch.cpp`, `-Wl,--wrap` in
+  `scripts/platform/vita/CMakeLists.txt`). A long frame whose calls took
+  next to nothing spent its time somewhere else; one whose looks say "in no
+  timed call" while it waits is inside a system call that is not on the list.
 
 The `vitastats` command (console or rcon) prints both lines on demand, and
 has the client's renderer and sound add theirs; the engine's `meminfo` lists

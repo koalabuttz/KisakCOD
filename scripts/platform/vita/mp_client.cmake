@@ -242,7 +242,7 @@ target_compile_definitions(KisakCOD-mp PRIVATE ${KISAK_VITA_MP_DEFINITIONS})
 target_compile_options(KisakCOD-mp PRIVATE ${KISAK_VITA_MP_OPTIONS})
 target_include_directories(KisakCOD-mp PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
 # The dedicated server's link rules (CMakeLists.txt beside this file).
-target_link_options(KisakCOD-mp PRIVATE ${KISAK_VITA_LINK_OPTIONS})
+target_link_options(KisakCOD-mp PRIVATE ${KISAK_VITA_LINK_OPTIONS} ${KISAK_VITA_CALL_WATCH_LINK_OPTIONS})
 # The shader compiler is the user's own libshacccg.suprx, loaded at run time
 # (gxm_shader_compiler.h): weak imports, so the client starts without it.
 # The bench loads the system's installer at run time (vita_bench.cpp): weak
