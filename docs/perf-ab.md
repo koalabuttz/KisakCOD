@@ -203,7 +203,7 @@ shows what they cost. Two pieces of that work give nothing:
 expression, and `dvarInt`, `dvarBool` and `dvarFloat` format the dvar's value
 as text and parse the text back.
 
-`ui_fastExpressions` (default 0 = unchanged) set to 1 clears only what can be
+`ui_fastExpressions` (default 1; 0 = the retail way) at 1 clears only what can be
 read before it is written, reads bool, int and string dvars directly (float,
 vector, colour and enum dvars keep the text, whose `%g` rounding or enum name
 decides the result), and lets `dvarString` use the dvar it already found
@@ -213,7 +213,11 @@ for bit, and every operand list is written before it is read except
 `stack[0]` in the error path of a malformed expression, which the fast path
 clears as the memset did.
 `perf_ab "set ui_fastExpressions 0" "set ui_fastExpressions 1"` measures what
-it saves.
+it saves. On the PC (Windows, 12 bots on mp_crash) `menu expressions` went from
+0.111-0.118 to 0.094-0.098 ms a frame; on the Vita at mp_crash's busiest view
+from 2.88 to 2.21 ms a frame. Neither changed the frame rate beyond the spread
+(the PC's HUD is small, and the Vita waits for its render thread), so 1 is the
+default because it does less work for the same results.
 
 ## Checks
 
