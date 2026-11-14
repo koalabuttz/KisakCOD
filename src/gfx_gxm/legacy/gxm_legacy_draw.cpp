@@ -56,6 +56,9 @@ namespace gfx_gxm
 bool g_depthPrepass = true;
 bool g_resolveWhenUsed = true;
 float g_sceneScale = 1.0f;
+bool g_stretchInFilter = true;
+float g_filterReadS = 1.0f;
+float g_filterReadT = 1.0f;
 } // namespace gfx_gxm
 
 namespace gfx_vk::legacy
@@ -1734,6 +1737,10 @@ bool InitDraw(Device &device, std::string &error)
     if (!gfx_gxm::g_resolveWhenUsed)
         Log(device, "diag: no-resolve-skip is there: the picture is copied for distortion in every frame, drawn or "
                     "not");
+    gfx_gxm::g_stretchInFilter = !gxm::ProgramCacheMarker("no-filter-stretch");
+    if (!gfx_gxm::g_stretchInFilter)
+        Log(device, "diag: no-filter-stretch is there: a scaled picture is always copied and stretched in two "
+                    "scenes of its own");
     d.notifications = sceGxmGetNotificationRegion();
     if (gxm::ProgramCacheMarker("no-frame-overlap"))
     {
@@ -2310,7 +2317,7 @@ void LogWaitCauses(Device &device)
 // The switches "vita_gxm <marker> <0|1>" may turn while the game runs
 // (gxm_live_switch.h). The others size or make things at start-up.
 const char *const kLiveSwitches[] = {"no-depth-prepass", "no-frame-overlap", "no-vsync", "no-draw-reuse",
-                                     "no-gpu-boost"};
+                                     "no-filter-stretch", "no-gpu-boost"};
 struct LiveSwitch
 {
     const char *name;
@@ -2345,6 +2352,8 @@ void ApplyLiveSwitches(Device &device)
             gxm::SetDisplayVsync(!s.on);
         else if (name == "no-draw-reuse")
             d.reuse = !s.on;
+        else if (name == "no-filter-stretch")
+            gfx_gxm::g_stretchInFilter = !s.on;
         else if (name == "no-gpu-boost")
         {
             vita::SetGpuBoost(!s.on);
