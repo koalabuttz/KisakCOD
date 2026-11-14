@@ -590,7 +590,7 @@ What ours computes (from the game shaders' maths, world-lit shader facts 1
 to 3 in the project files, 2026-11-13):
 
 * **albedo** = colour map (plus the detail map around grey, `d0`) times
-  vertex colour, each decoded from sRGB;
+  vertex colour, as the game has it (display values);
 * **sky** = the secondary lightmap's two halves combined as the game
   combines them (top plus bottom times N.D, with the flat normal or, `n0`,
   the normal map's slopes, which also scale the top: one baked light,
@@ -608,17 +608,28 @@ to 3 in the project files, 2026-11-13):
   (envMapParms) times (shadow times the sun's highlight, exponent from the
   gloss, times envMapParms.w, the sun's specular colour and the sun
   strength, plus the reflection probe at LOD 6 - 8 gloss times its alpha);
-* **colour** = albedo times (sky times the sky strength plus sun times the
-  sun strength) plus specular, the sky (and the probe) also darkened by the
-  [ambient occlusion](#ambient-occlusion), then the fog
-  colour (decoded) blended over it in linear light by the vertex fog factor.
+* **colour** = decode(albedo times the game's light, sky plus sun in
+  display values), shared out between the sky and the sun as their decoded
+  light is (sky / (sky + sun) of it to the sky), each share times its
+  strength, the sky's (and the probe) also darkened by the
+  [ambient occlusion](#ambient-occlusion), plus specular, then fogged. The
+  game blends the fog colour in display values by the vertex fog factor; a
+  blend in linear light lifts a dark colour far more (a dark barrel in
+  Crash's fog came out nearly twice Legacy's light, PC interiors run 1). So
+  the fog's share is the linear blend towards the decoded fog colour that
+  gives decode(the game's blend): (decode(blend) - decode(game colour)) /
+  (decode(fog) - decode(game colour)), per channel. With strengths 1 that is
+  the game's fogged colour; a colour the strengths (or AO) change is fogged
+  by the same share.
   `b0` premultiplies the albedo and fog colour by colour alpha times vertex
   alpha, which is the output alpha; `t0` keeps alpha 0.5 and over and writes
   black with alpha 0 elsewhere, as the game's shader does; then the alpha
   test of the render state.
 
-So with both strengths 1 every surface is as bright as the game's:
-decode(colour times light) is decode(colour) times decode(light). The game
+So with both strengths 1 every surface is as bright as the game's: its
+colour is the game's fogged colour decoded. Decoding the colour and the
+light apart and multiplying them would not be, as the sRGB curve is not a
+power. The game
 added its terms in display values, so in linear light a term's share
 depends on what it is added to: a single sun strength over decoded terms
 matched the game at 2.9 on Crash and 4.3 on Backlot (PC sun run 2), which
@@ -655,6 +666,8 @@ are.
 | Switch | Default |
 | --- | --- |
 | `KISAK_VK_MODERN_SHADERS=0` | our shaders on (with linear light and lit passes on) |
+| `KISAK_VK_MODERN_MODEL_SHADERS=0` | the models' (`lp_`) on too |
+| `KISAK_VK_MODERN_NO_SUN_SHADERS=0` | those without the sun (interiors) on too |
 | `KISAK_VK_MODERN_SUN_STRENGTH=<value>` | 1 (as bright as the game's) |
 | `KISAK_VK_MODERN_SKY_STRENGTH=<value>` | 1 |
 
@@ -674,6 +687,87 @@ opaque, blended and alpha-tested (kept and dropped), and as `lm_sun_r0c0n0`
 with a normal map tilted along the tangent; the expectations follow the
 game's formulas.
 `test_vulkan_d3d9_front.py` also runs it with `KISAK_VK_MODERN_SHADERS=0`.
+
+### Models: `lp_sun.frag`
+
+The models' sunlit family, `lp_[hsm_][i_]sun_<mode>c0[d0][n0][s0]` (code 0x80
+plus the same flags), is drawn with `lp_sun.frag` the same way: 16 builds,
+the mode a specialization constant. `i_` (instanced) shares the pixel shader
+and only changes the vertex shader. `skin_` and `flag_` names keep the game's
+shader: some of them have pixel shaders of their own that model-lit shader
+facts (project files, 2026-11-13) did not read; so does `sm_`, which compares
+the shadow map in the shader.
+
+The game's model shader is the world's with the lighting volume in place of
+the lightmaps, so ours differs from `lm_sun.frag` only there:
+
+* **reads** the lighting volume (a 3D image) at s4 and lightingLookupScale
+  at c5, and texcoord 6 (the model's volume coordinate). Everything after
+  them moves one on: the shadow map at s5, the material's maps from s5 (s6
+  with the shadow map), envMapParms at c6, detailScale at c6 (c7 with
+  `s0`). The probe is the only custom sampler.
+* **sky** = the volume's colour, doubled as the game doubles it, then
+  decoded. The volume is sampled where the normal (with `n0` the mapped
+  one) points: the coordinate plus the normal times lightingLookupScale
+  over the normal's largest component.
+* **sun**: the shadow is the volume's alpha (the sun's visibility there).
+  With `hsm_` the shadow map's taps are always taken (there is no primary
+  lightmap to skip them), and the far partition's edge fades to the
+  volume's alpha.
+* **`b0`**: the normal map's slopes are scaled by the alpha, and the
+  specular is masked by how much colour the specular map has (any channel
+  over a tenth is whole) times the vertex alpha. That mask scales the
+  gloss and envMapParms, and the vertex alpha scales the specular colour.
+  The world's `b0` does the same (the slopes also turn the lightmap's
+  light).
+
+`KISAK_VK_MODERN_MODEL_SHADERS=0` keeps the models on the game's shaders
+while the world uses ours.
+
+**Checks:** the `modern_lit_models` scene draws a stand-in for
+`lp_hsm_sun_r0c0d0n0s0` as `lp_sun_r0c0` (sunlit by the volume's alpha,
+then half fog), `lp_hsm_sun_r0c0` (lit, shaded), the `d0n0s0` variant opaque,
+blended and alpha-tested, and `lp_sun_r0c0n0` with a tilted normal. Its
+volume is 1x1x2, black in the first slice. Only a lookup that moves along
+the normal by lightingLookupScale reaches the grey second slice.
+`test_vulkan_d3d9_front.py` also runs it with
+`KISAK_VK_MODERN_MODEL_SHADERS=0`.
+
+### Without the sun: interiors
+
+Surfaces with no primary light, `lm_<mode>c0[d0][n0][s0]` (code 0xc0 plus
+the map and mode flags) and `lp_[i_]<mode>c0[d0][n0][s0]` (0xc1: the bit
+the sun families use for the shadow map says model here, since this family
+has none), are drawn with the same two sources built without the sun
+(`LM_SUN_LIGHT=0`, `LP_SUN_LIGHT=0`; 8 builds each). The game's shaders for
+them are its sun shaders with the sun taken out (lit shader facts 5, project
+files, 2026-11-13):
+
+* **the world** reads only the secondary lightmap: no primary lightmap (s2),
+  sun (c17, c18, c19) or shadow map; the maps start at s4 as in
+  `lm_sun_`. With `n0` the normal map turns only the lightmap's light, so
+  the world normal and the tangent frame (texcoords 2 and 3, which the
+  game's vertex shader then does not write) are read only with `s0`.
+* **models** read only the lighting volume's light, doubled; its alpha is
+  unused. The volume is still sampled where the (mapped) normal points.
+* **specular** is the probe's reflection alone: specular colour * Fresnel
+  * probe; gloss only picks the probe's mip.
+* The pixel constants end at c0 (the world), c5 (models), envMapParms or
+  detailScale, so the adapter's fit check counts them by family.
+
+Their shader model 2 builds keep the game's shader: the world's reads the
+lightmap's UV from another texcoord. `lp_skin_` with `s0` has a pixel shader
+of its own and keeps the game's; `lp_flag_t0...` shares `lp_t0...`'s but is
+left with `skin_` for now. `KISAK_VK_MODERN_NO_SUN_SHADERS=0` keeps these
+surfaces on the game's shaders; `KISAK_VK_MODERN_MODEL_SHADERS=0` keeps
+models without the sun on them too.
+
+**Checks:** the `modern_lit_no_sun` scene draws the world's and the models'
+stand-ins as `lm_r0c0` and `lp_r0c0` (and half fog), `lm_r0c0d0n0s0` opaque
+and blended, `lm_r0c0n0` with a tilted normal map and `lp_r0c0d0n0s0`, with
+the sun's constants, a white primary lightmap and the volume's alpha all
+set: none of them may light anything. `test_vulkan_d3d9_front.py` also runs
+it with `KISAK_VK_MODERN_NO_SUN_SHADERS=0`.
 
 ## Normals buffer
 

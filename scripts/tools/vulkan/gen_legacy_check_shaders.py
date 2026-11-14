@@ -218,6 +218,77 @@ add r0, r0, c19
 mul r0, r0, c1
 mov oC0, r0
 """),
+    # The same for the lp_hsm_sun_<mode>c0d0n0s0 family (models): the vertex
+    # shader writes texcoords 0-6 from c1-c7 (texcoord 6 the lighting-volume
+    # coordinate) and the colour, and the stand-in reads the colour map at s0,
+    # the probe cube at s1, the lighting volume (3D) at s4, the shadow map at
+    # s5, the normal, specular and detail maps at s6-s8 and the constants up
+    # to c19, showing black.
+    ("kVsLpSunMaps", """vs_3_0
+dcl_position v0
+dcl_texcoord0 v1
+dcl_color0 v2
+dcl_position o0
+dcl_texcoord0 o1
+dcl_texcoord1 o2
+dcl_texcoord2 o3
+dcl_texcoord3 o4
+dcl_texcoord4 o5
+dcl_texcoord5 o6
+dcl_texcoord6 o7
+dcl_color0 o8
+add o0, v0, c0
+mov o1, c1
+mov o2, c2
+mov o3, c3
+mov o4, c4
+mov o5, c5
+mov o6, c6
+mov o7, c7
+mov o8, v2
+"""),
+    ("kPsLpSunMapsStandIn", """ps_3_0
+dcl_texcoord0 v0
+dcl_texcoord1 v1
+dcl_texcoord2 v2
+dcl_texcoord3 v3
+dcl_texcoord4 v4
+dcl_texcoord5 v5
+dcl_texcoord6 v6
+dcl_color0 v7
+dcl_2d s0
+dcl_cube s1
+dcl_volume s4
+dcl_2d s5
+dcl_2d s6
+dcl_2d s7
+dcl_2d s8
+texld r0, v0, s0
+texld r1, v5, s1
+add r0, r0, r1
+texld r1, v6, s4
+add r0, r0, r1
+texld r1, v4, s5
+add r0, r0, r1
+texld r1, v0, s6
+add r0, r0, r1
+texld r1, v0, s7
+add r0, r0, r1
+texld r1, v0, s8
+add r0, r0, r1
+add r0, r0, v1
+add r0, r0, v2
+add r0, r0, v3
+add r0, r0, v7
+add r0, r0, c0
+add r0, r0, c5
+add r0, r0, c6
+add r0, r0, c7
+add r0, r0, c18
+add r0, r0, c19
+mul r0, r0, c1
+mov oC0, r0
+"""),
     # Shader model 2: the same path through fixed output registers.
     ("kVs20", """vs_2_0
 dcl_position v0

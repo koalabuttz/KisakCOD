@@ -40,28 +40,33 @@ involved. The checks:
                  setting (what each setting did to its frame, and that the
                  statistics count from where they were last started, are the
                  scene's own points); and the Modern path's statistics lines
-                 count the 61 anti-aliased scenes of modern_taa,
+                 count the 63 anti-aliased scenes of modern_taa,
                  modern_linear, modern_bloom, modern_effects, modern_lit,
-                 modern_lit_shader, modern_tonemap, modern_exposure,
-                 modern_velocity, modern_normals, modern_ao and
-                 modern_reflections, 20 of them without history, the 17
-                 scenes of modern_linear, modern_bloom, modern_effects,
-                 modern_lit, modern_lit_shader, modern_tonemap,
+                 modern_lit_shader, modern_lit_models, modern_lit_no_sun,
+                 modern_tonemap, modern_exposure, modern_velocity,
+                 modern_normals, modern_ao and modern_reflections, 22 of them
+                 without history, the 19 scenes of modern_linear,
+                 modern_bloom, modern_effects, modern_lit, modern_lit_shader,
+                 modern_lit_models, modern_lit_no_sun, modern_tonemap,
                  modern_exposure, modern_normals, modern_ao and
                  modern_reflections in
                  linear light with one copy read from them (none with
                  KISAK_VK_MODERN_LINEAR=0), modern_bloom's 2 scenes with
                  bloom (none with KISAK_VK_MODERN_LINEAR=0 or
                  KISAK_VK_MODERN_BLOOM=0), modern_lit's, modern_lit_shader's,
-                 modern_tonemap's and modern_ao's scenes with lit surfaces
-                 kept over white, inputs changed 2.8 times in each (twice in
-                 modern_lit and modern_tonemap, six times in
-                 modern_lit_shader, once in modern_ao), and the seven pixel
-                 modules modern_lit_shader (six) and modern_ao (one: its
-                 floor is depth-tested against the prepass, a depth compare
-                 of its own; six in all with KISAK_VK_DEPTH_COMPARE=dynamic,
-                 where the compare is not built in) built as our own lit
-                 shaders (none
+                 modern_lit_models', modern_lit_no_sun's, modern_tonemap's
+                 and modern_ao's scenes with lit surfaces kept over white,
+                 inputs changed 3.8 times in each (twice in modern_lit and
+                 modern_tonemap, six times in modern_lit_shader,
+                 modern_lit_models and modern_lit_no_sun, once in modern_ao),
+                 and the nineteen pixel modules modern_lit_shader's,
+                 modern_lit_models' and modern_lit_no_sun's eighteen and
+                 modern_ao's one (its floor is depth-tested against the
+                 prepass, a depth compare of its own; eighteen in all with
+                 KISAK_VK_DEPTH_COMPARE=dynamic, where the compare is not
+                 built in) built as our own lit shaders (the world's
+                 eleven with KISAK_VK_MODERN_MODEL_SHADERS=0; those with the
+                 sun with KISAK_VK_MODERN_NO_SUN_SHADERS=0; none
                  with KISAK_VK_MODERN_LINEAR=0 or KISAK_VK_MODERN_LIT=0, and
                  no lit shaders of our own with KISAK_VK_MODERN_SHADERS=0),
                  modern_velocity's 14 scenes with a surface that moves on its
@@ -91,6 +96,13 @@ involved. The checks:
   shaders-off    --scene modern_lit_shader passes with
                  KISAK_VK_MODERN_SHADERS=0, where the game's pixel shader is
                  drawn as it is and no line of our lit shaders is logged
+  models-off     --scene modern_lit_models passes with
+                 KISAK_VK_MODERN_MODEL_SHADERS=0, where the models' pixel
+                 shader is drawn as it is and no pixel module is built as ours
+  no-sun-off     --scene modern_lit_no_sun passes with
+                 KISAK_VK_MODERN_NO_SUN_SHADERS=0, where the pixel shaders
+                 without the sun are drawn as they are and no pixel module is
+                 built as ours
   debug-velocity --scene modern_velocity passes with
                  KISAK_VK_MODERN_DEBUG=velocity, where the velocity debug
                  view colours the moving band (the scene's own points)
@@ -141,8 +153,8 @@ import sys
 SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'model_lighting', 'dirty_update',
           'references', 'threads', 'queries', 'occlusion', 'frame_loop', 'gpu_feed', 'tuning', 'slow_frames',
           'kept_state', 'multisample', 'modern_taa', 'modern_linear', 'modern_bloom', 'modern_effects',
-          'modern_lit', 'modern_lit_shader', 'modern_tonemap', 'modern_exposure', 'modern_velocity',
-          'modern_normals', 'modern_ao', 'modern_reflections', 'reset',
+          'modern_lit', 'modern_lit_shader', 'modern_lit_models', 'modern_lit_no_sun', 'modern_tonemap',
+          'modern_exposure', 'modern_velocity', 'modern_normals', 'modern_ao', 'modern_reflections', 'reset',
           'fullscreen', 'present')
 
 
@@ -300,6 +312,28 @@ def main():
     checks.expect('modern_lit_shader passes with KISAK_VK_MODERN_SHADERS=0',
                   code == 0 and found.get('d3d9_check') == 'passed'
                   and [s[0] for s in scenes] == ['modern_lit_shader'] and 'lit shaders of our own' not in stdout,
+                  f'status {code}\n{stdout}')
+    # models-off
+    off = dict(env)
+    off['KISAK_VK_MODERN_MODEL_SHADERS'] = '0'
+    code, stdout, _ = run(binary, ['--scene', 'modern_lit_models', '--validation', args.validation], off)
+    found, scenes = parse(stdout)
+    checks.expect('modern_lit_models passes with KISAK_VK_MODERN_MODEL_SHADERS=0',
+                  code == 0 and found.get('d3d9_check') == 'passed'
+                  and [s[0] for s in scenes] == ['modern_lit_models']
+                  and all(m == '0' for m in re.findall(r'lit shaders of our own: [0-9.]+ changes to one each scene, '
+                                                        r'(\d+) pixel modules', stdout)),
+                  f'status {code}\n{stdout}')
+    # no-sun-off
+    off = dict(env)
+    off['KISAK_VK_MODERN_NO_SUN_SHADERS'] = '0'
+    code, stdout, _ = run(binary, ['--scene', 'modern_lit_no_sun', '--validation', args.validation], off)
+    found, scenes = parse(stdout)
+    checks.expect('modern_lit_no_sun passes with KISAK_VK_MODERN_NO_SUN_SHADERS=0',
+                  code == 0 and found.get('d3d9_check') == 'passed'
+                  and [s[0] for s in scenes] == ['modern_lit_no_sun']
+                  and all(m == '0' for m in re.findall(r'lit shaders of our own: [0-9.]+ changes to one each scene, '
+                                                        r'(\d+) pixel modules', stdout)),
                   f'status {code}\n{stdout}')
     # debug-velocity
     debug = dict(env)
@@ -465,15 +499,19 @@ def main():
     # The Modern path's lines at teardown: the modern_taa scene's frames (4
     # still, 16 jittered; the first of each starts the history again), the
     # modern_linear scene's one, the modern_bloom scene's three, the
-    # modern_effects scene's one, the modern_lit, modern_lit_shader and
-    # modern_tonemap scenes' one each (all cuts), the modern_exposure scene's
+    # modern_effects scene's one, the modern_lit, modern_lit_shader,
+    # modern_lit_models, modern_lit_no_sun and modern_tonemap scenes' one each
+    # (all cuts), the modern_exposure scene's
     # five (four cuts), and the modern_velocity scene's (three runs of 8, each
-    # starting with a cut); those thirteen before modern_velocity were drawn
+    # starting with a cut); those fifteen before modern_velocity were drawn
     # in linear light, with one copy read from
     # them, two of modern_bloom's with bloom and modern_lit's,
-    # modern_lit_shader's and modern_tonemap's with lit surfaces (six pixel
-    # modules of modern_lit_shader's built as our own lit shaders, unless
-    # KISAK_VK_MODERN_SHADERS=0), unless KISAK_VK_MODERN_LINEAR=0 (or
+    # modern_lit_shader's, modern_lit_models', modern_lit_no_sun's and
+    # modern_tonemap's with lit surfaces (six pixel modules each of
+    # modern_lit_shader's, modern_lit_models' and modern_lit_no_sun's built
+    # as our own lit shaders, unless KISAK_VK_MODERN_SHADERS=0; the world's
+    # ten with KISAK_VK_MODERN_MODEL_SHADERS=0, the twelve with the sun with
+    # KISAK_VK_MODERN_NO_SUN_SHADERS=0), unless KISAK_VK_MODERN_LINEAR=0 (or
     # KISAK_VK_MODERN_BLOOM=0 for the bloom, KISAK_VK_MODERN_LIT=0 for the lit
     # surfaces); in the second and third modern_velocity runs the 7 scenes
     # after the cut each had one surface that moves on its own, in the third
@@ -483,8 +521,8 @@ def main():
     # linear light unless KISAK_VK_MODERN_LINEAR=0.
     modern = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes anti-aliased \((\d+) without history\)',
                        stdout)
-    checks.expect('the Modern path anti-aliased 61 scenes, 20 without history',
-                  modern is not None and modern.group(1) == '61' and modern.group(2) == '20',
+    checks.expect('the Modern path anti-aliased 63 scenes, 22 without history',
+                  modern is not None and modern.group(1) == '63' and modern.group(2) == '22',
                   modern.group(0) if modern else 'missing')
     velocity = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with surfaces that move on their own '
                          r'\((\d+) surfaces\), ([0-9.]+) ms GPU each for their velocity$', stdout)
@@ -528,8 +566,8 @@ def main():
         checks.expect('no scene in linear light with KISAK_VK_MODERN_LINEAR=0', linear is None,
                       linear.group(0) if linear else '')
     else:
-        checks.expect('the Modern path drew 17 scenes in linear light and read 1 copy from them',
-                      linear is not None and linear.group(1) == '17' and linear.group(2) == '1',
+        checks.expect('the Modern path drew 19 scenes in linear light and read 1 copy from them',
+                      linear is not None and linear.group(1) == '19' and linear.group(2) == '1',
                       linear.group(0) if linear else 'missing')
     bloom = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with bloom in place of the glow '
                       r'\(([0-9.]+) passes each\), ([0-9.]+) ms GPU each$', stdout)
@@ -546,8 +584,8 @@ def main():
         checks.expect('no scene with lit surfaces in linear light with linear light or lit inputs off', lit is None,
                       lit.group(0) if lit else '')
     else:
-        checks.expect('the Modern path drew lit surfaces in linear light in 4 scenes, inputs changed 2.8 times each',
-                      lit is not None and lit.group(1) == '4' and lit.group(2) == '2.8',
+        checks.expect('the Modern path drew lit surfaces in linear light in 6 scenes, inputs changed 3.8 times each',
+                      lit is not None and lit.group(1) == '6' and lit.group(2) == '3.8',
                       lit.group(0) if lit else 'missing')
     shaders = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: lit shaders of our own: ([0-9.]+) changes to one '
                         r'each scene, (\d+) pixel modules built as one \((\d+) could not be\)', stdout)
@@ -558,7 +596,12 @@ def main():
     else:
         # modern_ao's floor tests depth against its prepass: a depth compare
         # of its own, built into its module unless chosen at run time.
-        modules = '6' if env.get('KISAK_VK_DEPTH_COMPARE') == 'dynamic' else '7'
+        modules = 19 if env.get('KISAK_VK_DEPTH_COMPARE') != 'dynamic' else 18
+        if env.get('KISAK_VK_MODERN_MODEL_SHADERS') == '0':
+            modules -= 8  # the models' with the sun (6) and without (2)
+        if env.get('KISAK_VK_MODERN_NO_SUN_SHADERS') == '0':
+            modules -= 4 if env.get('KISAK_VK_MODERN_MODEL_SHADERS') == '0' else 6
+        modules = str(modules)
         checks.expect(f'the Modern path built {modules} pixel modules as our own lit shaders, none refused',
                       shaders is not None and shaders.group(2) == modules and shaders.group(3) == '0',
                       shaders.group(0) if shaders else 'missing')
