@@ -116,6 +116,30 @@ void BackendCounters(const Backend *, DeviceCounters &out)
 // sceGxm's queries need no system call under the front's lock.
 void BackendPollProgress(Backend *) {}
 
+// No Modern path on the PS Vita.
+ModernResult BackendModernScene(Backend *, lg::Surface *, lg::Surface *, const ModernSceneView &, lg::Surface *,
+                                bool *)
+{
+    return ModernResult::Refused;
+}
+lg::Surface *BackendModernSceneTarget(Backend *, lg::Surface *, ModernResult &result)
+{
+    result = ModernResult::Refused;
+    return nullptr;
+}
+bool BackendModernEffectsOnDisplay(Backend *) { return false; }
+bool BackendModernWantsSceneDepth(Backend *) { return false; }
+ModernResult BackendModernSceneDepth(Backend *, lg::Surface *, const ModernSceneView &) { return ModernResult::Refused; }
+
+void BackendModernLitInputs(Backend *, const ModernLitInputs *) {}
+
+bool BackendModernCopyScene(Backend *, lg::Surface *, const lg::Rect *, lg::Surface *, const lg::Rect *, bool)
+{
+    return false;
+}
+void BackendModernSurfaceMoved(Backend *, lg::Device *, const float[4][4], const float[4][4]) {}
+void BackendModernSkinnedSurfaceMoved(Backend *, lg::Device *, uint64_t, const float[4][4], const float[4][4]) {}
+
 // No frame statistics are kept here, and the host has no settings to take up.
 void BackendLogStats(Backend *, bool) {}
 void BackendFrame(Backend *) {}

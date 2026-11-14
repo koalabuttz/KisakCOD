@@ -16,7 +16,10 @@ int R_SkinXModel(
     const DObj_s* obj,
     const GfxPlacement* placement,
     float scale,
-    __int16 gfxEntIndex);
+    __int16 gfxEntIndex,
+    // Port: the surfaces' GfxModelSurfaceInfo::modernOwner, the Modern
+    // path's owner for them (r_modern_motion.h); 0 for none.
+    uint16_t modernOwner = 0);
 void R_SkinSceneEnt(GfxSceneEntity *sceneEnt);
 int R_SkinAndBoundSceneEnt(GfxSceneEntity *sceneEnt);
 void R_UnlockSkinnedCache();

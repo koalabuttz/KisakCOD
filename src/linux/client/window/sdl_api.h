@@ -170,7 +170,11 @@ struct Event {
     uint32_t window = 0;
     uint32_t time = 0; // SDL clock, whole milliseconds
     int scancode = -1;
+    // Key events: the layout's key code for the scancode (SDL_Keycode, the
+    // unshifted character for printable keys), or 0 when unknown.
+    uint32_t keycode = 0;
     bool repeat = false;
+    bool numLock = false; // key events: Num Lock was on
     // Borrowed input text: valid only while the event is being dispatched.
     const char *text = nullptr;
     std::size_t size = 0; // 0 when absent, unterminated or over the bound
@@ -218,7 +222,9 @@ inline Event Decode(const SDL_Event &source)
         event.kind = source.type == SDL_EVENT_KEY_DOWN ? Kind::KeyDown : Kind::KeyUp;
         event.window = source.key.windowID;
         event.scancode = int(source.key.scancode);
+        event.keycode = uint32_t(source.key.key);
         event.repeat = source.key.repeat;
+        event.numLock = (source.key.mod & SDL_KMOD_NUM) != 0;
         break;
     case SDL_EVENT_TEXT_INPUT: {
         event.kind = Kind::Text;
@@ -280,7 +286,9 @@ inline Event Decode(const SDL_Event &source)
         event.kind = source.type == SDL_KEYDOWN ? Kind::KeyDown : Kind::KeyUp;
         event.window = source.key.windowID;
         event.scancode = int(source.key.keysym.scancode);
+        event.keycode = uint32_t(source.key.keysym.sym);
         event.repeat = source.key.repeat != 0;
+        event.numLock = (source.key.keysym.mod & KMOD_NUM) != 0;
         break;
     case SDL_TEXTINPUT: {
         event.kind = Kind::Text;
@@ -360,7 +368,8 @@ inline SDL_Event MakeWindow(uint32_t window, Kind kind, int first = 0, int secon
 
 // A key event at an explicit whole-nanosecond timestamp. SDL3 stores it as
 // given; SDL2 only has milliseconds, so the same instant is divided once here.
-inline SDL_Event MakeKeyAt(uint32_t window, int scancode, bool down, bool repeat, uint64_t nanoseconds)
+inline SDL_Event MakeKeyAt(uint32_t window, int scancode, bool down, bool repeat, uint64_t nanoseconds,
+                           bool numLock = false, uint32_t keycode = 0)
 {
     SDL_Event event{};
 #if KISAK_LINUX_SDL_MAJOR == 3
@@ -369,19 +378,24 @@ inline SDL_Event MakeKeyAt(uint32_t window, int scancode, bool down, bool repeat
     event.key.scancode = SDL_Scancode(scancode);
     event.key.repeat = repeat;
     event.key.timestamp = nanoseconds;
+    event.key.mod = numLock ? SDL_KMOD_NUM : SDL_KMOD_NONE;
+    event.key.key = SDL_Keycode(keycode);
 #else
     event.type = down ? SDL_KEYDOWN : SDL_KEYUP;
     event.key.windowID = window;
     event.key.keysym.scancode = SDL_Scancode(scancode);
     event.key.repeat = repeat ? 1 : 0;
     event.key.timestamp = static_cast<uint32_t>(nanoseconds / UINT64_C(1000000));
+    event.key.keysym.mod = numLock ? KMOD_NUM : KMOD_NONE;
+    event.key.keysym.sym = SDL_Keycode(keycode);
 #endif
     return event;
 }
 
-inline SDL_Event MakeKey(uint32_t window, int scancode, bool down, bool repeat = false, uint32_t milliseconds = 0)
+inline SDL_Event MakeKey(uint32_t window, int scancode, bool down, bool repeat = false, uint32_t milliseconds = 0,
+                         bool numLock = false, uint32_t keycode = 0)
 {
-    return MakeKeyAt(window, scancode, down, repeat, uint64_t(milliseconds) * UINT64_C(1000000));
+    return MakeKeyAt(window, scancode, down, repeat, uint64_t(milliseconds) * UINT64_C(1000000), numLock, keycode);
 }
 
 inline SDL_Event MakeText(uint32_t window, const char *utf8)

@@ -48,8 +48,9 @@ and RelWithDebInfo. It runs the server's float checks (no fused multiply-add, no
 NEON float) and link checks (weak pthread references, the main stack size), and
 uploads the RelWithDebInfo `.vpk`. It also runs the controls' and the sound's
 host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`), the run
-plan's, the GPU heap's, the frame time figures' and the shader translator's
-(`test_vita_run_plan.py`, `test_vita_gxm_heap.py`, `test_vita_frame_time.py`,
+plan's, the GPU heap's, the frame time figures', the GPU progress bookkeeping's
+and the shader translator's (`test_vita_run_plan.py`, `test_vita_gxm_heap.py`,
+`test_vita_frame_time.py`, `test_vita_gpu_progress.py`,
 `test_vita_cg_translate.py`), and the static model cache's size arithmetic
 (`test_static_model_cache_sizes.py`).
 
@@ -201,7 +202,7 @@ The main pool is too small for the dynamic buffers, so 14.5 MB of them spill int
 
 - **The sizes are estimates, and the log reports them.** Once a minute the log says how full each got (`r_dynamicBufferReport`, in seconds; 60 on the Vita, 0 and so silent elsewhere): `dynamic buffers, the most one frame asked for in N frames: skinned cache X of 3072 KB (N models left out), pretess X of 524288 indices (N batches left unbatched), dynamic indices X of 1048576, dynamic vertices X of 1024 KB; static model cache X of 2048 KB at most (N times a model found it full and was drawn by itself)`. A skinned cache figure above its size is what the frame wanted. In run V (one player on mp_crash) the most a frame asked for was 100 KB of skinned cache, 178056 pretess indices, 5904 dynamic indices and 107 KB of dynamic vertices, and nothing was left out or left unbatched. A full game's players have not been measured.
 - **The static model cache is back, at half its size.** The cache holds static models' vertices already moved to their place in the world, so that all of one model in view go out in one draw. The first Vita sizes left it out to save its 8 MB, and in Vita3K mp_crash then took about 3600 draws a frame where it had taken 1600, at 14 frames a second against 25 (PC runs X and H2, 2026-11-10; the two builds differ in more than the cache, so this is a reading and not a measurement). The Vita build now makes it with 64 trees a section instead of 128: 4 MB of vertices, asked for as a write-only buffer so that it goes to CDRAM and not to the main pool, and 1 MB of indices in main memory. It is never locked with DISCARD, so it is never renamed. The size is what a console can spare: mp_crash left 6.5 of its 104 MB of CDRAM free with no cache (run L). PC run AB measured three sizes in Vita3K on mp_crash's ground view (2026-11-10, one build, starts alone): no cache 67.0 ms a frame and 3321 draws, 2 MB 58.4 ms and 2697 draws (full in every frame, 328 models a frame drawn by themselves), 4 MB 46.5 ms and 2059 draws (7 a frame); the pictures were the same and Vita3K's CDRAM peak rose from 97.5 to 99.5 of 108 MB. What a view asks for is more: the Windows build's cache of 8 MB held 2.2 MB at mp_crash's team menu, which looks over the map, and 6.3 MB after a walk (`r_smc_stats`; it frees nothing before it is full). A full cache gives up the trees no frame has used for four frames, and a model that still finds no room is drawn by itself that frame, so too small a cache costs draws and never a model; the log's `dynamic buffers` line counts those. `r_smc_enable 0` draws every static model by itself again, for comparing. `KISAK_VITA_SMC_SECTION_TREE_BITS` (CMake, 1 to 7; 5 is 2 MB) builds another size. The arithmetic is checked at every size by `scripts/tests/test_static_model_cache_sizes.py`.
-- **A renamed buffer's copies stay in its own pool.** The engine locks most dynamic buffers with DISCARD every frame. The back end then gives the buffer fresh memory (a rename) and frees the old once the frames that might read it are done, up to three frames later, so a buffer can hold four times its size. Those copies used to spill from the main pool into CDRAM, where they took the room the scene's render targets needed. Now a rename takes memory from the buffer's own pool only (main, for dynamic buffers). With no room there, the lock ends the scene, waits for the GPU and writes in place, which costs time and no memory. One wait serves every buffer drawn before it: after it the GPU reads none of them, so until a draw reads one again its locks write in place without a rename or another wait. The draw summary counts all three: `buffer renames: N took fresh memory, N waited for the GPU instead (their pool was full) and N needed neither (a wait since their last draw); old copies the GPU might still read took N KB at most`. A refused rename no longer writes two lines to the log each time. In run V's 1356 frames 248 renames took fresh memory, 953 waited and 2013 needed neither, and old copies took 3072 KB at most. What the waits cost in frame time on a console is not known.
+- **A renamed buffer's copies stay in its own pool.** The engine locks most dynamic buffers with DISCARD every frame. The back end then gives the buffer fresh memory (a rename) and frees the old once the frames that might read it are done, up to three frames later, so a buffer can hold four times its size. Those copies used to spill from the main pool into CDRAM, where they took the room the scene's render targets needed. Now a rename takes memory from the buffer's own pool only (main, for dynamic buffers). With no room there, the lock ends the scene, waits for the GPU and writes in place, which costs time and no memory. One wait serves every buffer drawn before it: after it the GPU reads none of them, so until a draw reads one again its locks write in place without a rename or another wait. The draw summary counts all three: `buffer renames: N took fresh memory, N waited for the GPU instead (their pool was full) and N needed neither (a wait since their last draw); old copies the GPU might still read took N KB at most`. A refused rename no longer writes two lines to the log each time. In run V's 1356 frames 248 renames took fresh memory, 953 waited and 2013 needed neither, and old copies took 3072 KB at most. What the waits cost in frame time on a console is not known. (Later console runs answered that: one such wait in every frame, for the whole of the GPU's work on it, so that the CPU and the GPU took turns. The back end now keeps the pieces of memory and lets the two work at once; see "The CPU a frame ahead of the GPU" under the GXM back end below.)
 
 **In a game, on the console.** Run L (2026-11-10, David's Vita, a build of master with the Vita changes up to the stereo frame count fix): mp_crash loaded for the first time on a console, in three starts.
 - **The load:** the map was up 106 and 122 s after a start from the command line (starts 1 and 3), and 61 s after the server was started from the menu (start 2). Nothing was refused GPU memory and nothing failed; every start quit cleanly.
@@ -757,6 +758,66 @@ What the GXM back end does so far (step 2d):
   programs turns all three off (the log says so at start-up), so that a
   console run can tell a fault of theirs without another build. What they
   save in a frame's time is not measured yet, in Vita3K or on a console.
+- **Depth first.** The scene's depth is always drawn before its lit pass
+  on the Vita (src/gfx_gxm/gxm_engine_options.h), whatever r_depthPrepass
+  says, so that the GPU skips hidden pixels of the lit pass early. Console
+  run T (2026-11-11, mp_crash) measured the GPU's time a frame at 80 ms with
+  it against 108 without at the busy view, and 27 against 50 facing the
+  other way. The gun keeps its own narrow depth range; in the depth pass that
+  range moves to a sliver just past it (1/64 to 1/64 + 1/65536), since the
+  two passes' programs wrote depths a hair apart there and parts of the gun
+  showed black. An empty file
+  `no-depth-prepass` in the folder of the compiled programs turns the
+  forced pass off.
+- **The CPU a frame ahead of the GPU.** The CPU fills frame N while the GPU
+  still draws frame N - 1, so a frame costs the longer of the two times and
+  not their sum. Console run U (2026-11-11, mp_crash) had shown them taking
+  turns: every frame held one `sceGxmFinish`, 85 to 92 ms at the busy view
+  beside 47 ms of CPU work, 135 ms a frame. The wait came from the game's
+  DISCARD locks. The game discards its dynamic buffers every frame, the two
+  skinned vertex caches and the two pretess index buffers in turn between
+  frames, when the GPU has just been sent the frame that read them. The
+  back end asked the main pool for fresh memory each time, found it full,
+  and waited for the whole GPU instead. Three things replace that:
+  - *Which frames are drawn* (`src/gfx_gxm/gxm_gpu_progress.h`). The last
+    scene of every frame ends with a sceGxm notification: the GPU writes a
+    value to a word of the notification region when that scene's fragment
+    job ends. Every buffer and texture remembers the frame that last read
+    it, and the CPU overwrites it only once that frame is drawn.
+  - *Kept pieces of memory.* A discarded buffer the GPU still reads changes
+    memory with a kept piece of its size and use that the GPU is done with;
+    the first discard that finds none makes one. On mp_crash that is one
+    more skinned cache (3 MB), dynamic index buffer (2 MB), pretess buffer
+    and dynamic vertex buffer (1 MB each) and some small ones, which is why
+    the main pool grew from 20 to 26 MB. A texture the game rewrites whole
+    every frame while the GPU samples it (the model lighting volume, 1 MB)
+    gets a second piece the same way. Only when there is no piece and no
+    room for one does a lock still wait for the whole GPU.
+  - *The pacing wait.* After each Present the back end waits until the frame
+    before last is drawn, and for that frame only. The CPU is then one
+    frame ahead of the GPU and no more, which keeps the delay between the
+    controls and the picture at what it was.
+  The quit summary counts it: `buffer discards: N wrote in place (the GPU
+  was done with the buffer), N took a kept piece of memory, N made a new
+  one and N waited for the whole GPU (none free and no room); N texture
+  rewrites took the second piece; kept pieces and second pieces hold N KB`
+  and `frames overlap: yes ...; N of N frames waited for the frame before
+  last, X ms each on average; N notifications did not come`. With the frame
+  time line the log names the cause of every wait for the whole GPU since
+  the last one: `waits for the whole GPU since the last such line: N x a
+  buffer lock without a copy to write, ...`; no such line means none.
+  If a notification does not come within 2 s three times, the back end
+  says so and goes back to one wait a frame. An empty file
+  `no-frame-overlap` in the folder of the compiled programs asks for that
+  from the start, so that one console sitting can compare the two. An empty
+  file `no-vsync` there shows each frame without waiting for the display's
+  refresh (it tears): for measuring what that wait costs. With two frames
+  on their way, sceGxm's parameter buffer (8 MB here) and the context's
+  ring buffers hold the geometry, draw calls and uniform buffers of both at
+  times; `big-parameter-buffer` (12 MB) and `big-gxm-rings` (twice the
+  defaults, 3 MB more of main memory) are there for a console run to say
+  whether either is too small for that.
+  Not run on a console or in Vita3K yet.
 - **Textures** are linear: rows of whole multiples of 8 texels, and the
   levels of a mipmapped texture sized from the power of two above the base,
   which is how sceGxm reads them and also a layout LockRect can hand out.
@@ -962,12 +1023,17 @@ With the same figures, and once more when the device goes, it says where a
 frame's time went since the last such line, as a frame's mean:
 `gxm legacy: frame time, last N frames: X ms a frame. In this back end: N
 draws X ms (one in 16 timed), N clears and copies X ms, N scenes' starts and
-ends X ms, N waits for the GPU X ms (longest X ms), showing the frame X ms
-(longest X ms). The rest, X ms, is the game, the D3D9 front and the filling of
-buffers and textures. ...`. How to read it:
-- **Waits for the GPU** are `sceGxmFinish` calls: a renamed buffer that found
-  no room, a target read back. Each stops the CPU until the GPU has drawn
-  everything sent so far.
+ends X ms, N waits for the GPU X ms (longest X ms), N waits for the frame
+before last X ms (longest X ms), showing the frame X ms (longest X ms). The
+rest, X ms, is the game, the D3D9 front and the filling of buffers and
+textures. ...`. How to read it:
+- **Waits for the GPU** are `sceGxmFinish` calls: a discarded buffer with no
+  piece of memory to write, a target read back. Each stops the CPU until the
+  GPU has drawn everything sent so far, so one in every frame makes the CPU
+  and the GPU take turns. The line after it names their causes.
+- **Waits for the frame before last** are the pacing wait. The GPU draws the
+  last frame meanwhile, so a large figure here means the GPU holds the frame
+  and the CPU has time to spare; a figure near zero means the CPU does.
 - **Showing the frame** is `sceGxmDisplayQueueAddEntry`, which waits while
   every display buffer is still queued. A large figure there with small ones
   elsewhere means the GPU, or the screen's 60 frames a second, is what holds

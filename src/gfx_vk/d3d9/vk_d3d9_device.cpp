@@ -102,11 +102,14 @@ bool Device::Init()
     desc.width = params_.BackBufferWidth;
     desc.height = params_.BackBufferHeight;
     desc.samples = SamplesOf(params_.MultiSampleType);
+    // The display's mode first, so the window's surface starts at its size.
+    ApplyDisplayMode();
     std::string error;
     backend_ = OpenBackend(desc, error);
     if (!backend_)
     {
         HostLog(h, "vulkan d3d9: CreateDevice: %s", error.c_str());
+        LeaveFullscreen();
         return false;
     }
     legacy_ = LegacyDevice(backend_);
@@ -181,8 +184,75 @@ HRESULT STDMETHODCALLTYPE Device::QueryInterface(REFIID riid, void **object)
     return E_NOINTERFACE;
 }
 
+lg::Surface *Device::DrawTarget(DWORD index, Surface *target) const
+{
+    if (!target)
+        return nullptr;
+    if (index == 0 && linearScene_ && target == backBuffer_.get())
+        return linearScene_;
+    return target->handle();
+}
+
+void Device::RebindTarget0()
+{
+    if (!renderTargets_[0])
+        return;
+    lg::SetRenderTarget(legacy_, 0, DrawTarget(0, renderTargets_[0]));
+    lg::SetViewport(legacy_, lg::Viewport{viewport_.X, viewport_.Y, viewport_.Width, viewport_.Height,
+                                          viewport_.MinZ, viewport_.MaxZ});
+    lg::SetScissorRect(legacy_, ToRect(scissor_));
+}
+
+ModernResult Device::ModernSceneBegin()
+{
+    if (linearScene_)
+        return ModernResult::Done; // a second call for the same scene
+    ModernResult result = ModernResult::Skipped;
+    lg::Surface *scene = BackendModernSceneTarget(backend_, backBuffer_->handle(), result);
+    if (!scene)
+        return result;
+    linearScene_ = scene;
+    if (renderTargets_[0] == backBuffer_.get())
+        RebindTarget0();
+    return ModernResult::Done;
+}
+
+ModernResult Device::ModernSceneDone(const ModernSceneView &view, bool *glowDrawn)
+{
+    lg::Surface *depth = depthStencil_ ? depthStencil_->handle() : nullptr;
+    if (!linearScene_)
+        return BackendModernScene(backend_, renderTargets_[0] ? renderTargets_[0]->handle() : nullptr, depth,
+                                  view);
+    // The scene went to the linear-light image, wherever render target 0
+    // points now: it is tonemapped into the back buffer.
+    lg::Surface *scene = linearScene_;
+    linearScene_ = nullptr;
+    const ModernResult result = BackendModernScene(backend_, scene, depth, view, backBuffer_->handle(), glowDrawn);
+    if (renderTargets_[0] == backBuffer_.get())
+        RebindTarget0();
+    return result;
+}
+
+ModernResult Device::ModernSceneDepth(const ModernSceneView &view)
+{
+    return BackendModernSceneDepth(backend_, depthStencil_ ? depthStencil_->handle() : nullptr, view);
+}
+
+void Device::SetModernLitInputs(const ModernLitInputs *inputs) { BackendModernLitInputs(backend_, inputs); }
+
+ModernResult Device::ModernSceneLit(const ModernSceneView &view, bool *glowDrawn)
+{
+    if (!BackendModernEffectsOnDisplay(backend_))
+        return ModernResult::Skipped;
+    // Skipped from here means only that the effects stay in the scene: a
+    // frame with nothing to draw is finished all the same.
+    const ModernResult result = ModernSceneDone(view, glowDrawn);
+    return result == ModernResult::Skipped ? ModernResult::Done : result;
+}
+
 void Device::UnbindAll()
 {
+    linearScene_ = nullptr;
     for (Surface *&target : renderTargets_)
         Rebind(target, static_cast<Surface *>(nullptr));
     Rebind(depthStencil_, static_cast<Surface *>(nullptr));
@@ -246,12 +316,17 @@ void Device::Destroy()
         const lg::DeviceStats &stats = lg::Stats(legacy_);
         HostLog(host(),
                 "vulkan d3d9: device stats: %llu draws, %u shaders (%u translated in %.1f ms), "
-                "%u pipelines (%.1f ms building, %u pixel shaders of them in %.1f ms), %llu texture uploads (%.1f MB, %.1f ms), %llu read back to lock "
+                "%u pipelines (%.1f ms building, %u pixel shaders of them in %.1f ms), %u built ahead on workers "
+                "(%.1f ms there, %u pixel shaders of them in %.1f ms, %u drawn, %u waited for in %.1f ms, %u in the "
+                "pipeline list, %.1f ms queueing them), %llu texture uploads (%.1f MB, %.1f ms), %llu read back to lock "
                 "again, %llu descriptor sets kept across frames (all given up %u times), %llu clears (%llu at a "
                 "pass's start)",
                 static_cast<unsigned long long>(stats.draws), stats.shaders,
                 stats.shaders - std::min(stats.shaders, stats.shadersCached), stats.shaderMicros / 1000.0,
                 stats.pipelines, stats.pipelineMicros / 1000.0, stats.pixelModules, stats.pixelModuleMicros / 1000.0,
+                stats.pipelinesAhead, stats.aheadMicros / 1000.0, stats.aheadPixelModules,
+                stats.aheadPixelModuleMicros / 1000.0, stats.aheadUsed, stats.aheadWaits,
+                stats.aheadWaitMicros / 1000.0, stats.pipelinesListed, stats.aheadQueueMicros / 1000.0,
                 static_cast<unsigned long long>(stats.textureUploads),
                 stats.uploadBytes / (1024.0 * 1024.0), stats.uploadMicros / 1000.0,
                 static_cast<unsigned long long>(stats.textureReadbacks),
@@ -262,6 +337,7 @@ void Device::Destroy()
     CloseBackend(backend_);
     backend_ = nullptr;
     legacy_ = nullptr;
+    LeaveFullscreen();
     if (parent_)
     {
         parent_->Release();
@@ -439,6 +515,8 @@ HRESULT STDMETHODCALLTYPE Device::Reset(D3DPRESENT_PARAMETERS *params)
     params_.MultiSampleType = samples > 1 ? static_cast<D3DMULTISAMPLE_TYPE>(samples) : D3DMULTISAMPLE_NONE;
     params_.MultiSampleQuality = 0;
     DefaultState();
+    ApplyDisplayMode(); // windowed or fullscreen, and the size, may have changed
+    ApplyGamma();
     return D3D_OK;
 }
 
@@ -447,6 +525,18 @@ HRESULT STDMETHODCALLTYPE Device::Present(const RECT *src, const RECT *dst, D3D9
     const FrontLock lock;
     if (src || dst || dirty || (window && window != window_))
         Unsupported("IDirect3DDevice9::Present with rects, a dirty region or another window (presented whole)");
+    if (linearScene_)
+    {
+        // A scene began in linear light and was never handed back
+        // (ModernSceneDone): it is shown as it is, tonemapped whole.
+        if (!linearSceneUnfinished_)
+            HostLog(host(), "vulkan d3d9: modern: a scene in linear light was not finished before Present");
+        linearSceneUnfinished_ = true;
+        BackendModernCopyScene(backend_, linearScene_, nullptr, backBuffer_->handle(), nullptr, false);
+        linearScene_ = nullptr;
+        if (renderTargets_[0] == backBuffer_.get())
+            RebindTarget0();
+    }
     BackendFrame(backend_);
     switch (lg::Present(legacy_))
     {
@@ -495,10 +585,67 @@ HRESULT STDMETHODCALLTYPE Device::SetDialogBoxMode(BOOL)
 void STDMETHODCALLTYPE Device::SetGammaRamp(UINT swapChain, DWORD, const D3DGAMMARAMP *ramp)
 {
     const FrontLock lock;
-    // Kept for GetGammaRamp. DXVK applies the ramp only to fullscreen
-    // swapchains; the Vulkan front draws windowed and leaves it out.
     if (swapChain == 0 && ramp)
+    {
         gamma_ = *ramp;
+        ApplyGamma();
+    }
+}
+
+// D3D9 (and DXVK) apply the ramp of a fullscreen swapchain only; a windowed
+// one keeps it for GetGammaRamp. The adapter applies it as Present draws the
+// image into the window, so the desktop's own gamma is never changed.
+void Device::ApplyGamma()
+{
+#if !defined(KISAK_GFX_GXM)
+    if (params_.Windowed)
+    {
+        lg::SetGammaRamp(legacy_, nullptr);
+        return;
+    }
+    static_assert(sizeof(lg::GammaRamp) == sizeof(D3DGAMMARAMP), "a ramp is 3 x 256 16-bit entries");
+    lg::GammaRamp ramp;
+    std::memcpy(ramp.red, gamma_.red, sizeof(ramp.red));
+    std::memcpy(ramp.green, gamma_.green, sizeof(ramp.green));
+    std::memcpy(ramp.blue, gamma_.blue, sizeof(ramp.blue));
+    lg::SetGammaRamp(legacy_, &ramp);
+#endif
+}
+
+// D3D9 switches the monitor to a fullscreen device's mode and covers it with
+// the device window (and DXVK does the same); without this, r_fullscreen 1
+// gave a borderless window at the saved window position, at the desktop's
+// mode. The host does the switching (Host::fullscreen).
+void Device::ApplyDisplayMode()
+{
+    const Host &h = host();
+    if (!h.fullscreen)
+        return;
+    if (params_.Windowed)
+    {
+        LeaveFullscreen();
+        return;
+    }
+    FullscreenMode mode;
+    mode.width = params_.BackBufferWidth;
+    mode.height = params_.BackBufferHeight;
+    mode.refreshRate = params_.FullScreen_RefreshRateInHz;
+    fullscreen_ = true;
+    if (h.fullscreen(h.user, window_, &mode))
+        HostLog(h, "vulkan d3d9: fullscreen at %ux%u, %u Hz", mode.width, mode.height, mode.refreshRate);
+    else
+        HostLog(h, "vulkan d3d9: fullscreen: the display could not be set to %ux%u at %u Hz", mode.width,
+                mode.height, mode.refreshRate);
+}
+
+void Device::LeaveFullscreen()
+{
+    if (!fullscreen_)
+        return;
+    fullscreen_ = false;
+    const Host &h = host();
+    if (h.fullscreen && !h.fullscreen(h.user, window_, nullptr))
+        HostLog(h, "vulkan d3d9: fullscreen: the desktop's display mode could not be set back");
 }
 
 void STDMETHODCALLTYPE Device::GetGammaRamp(UINT swapChain, D3DGAMMARAMP *ramp)
@@ -818,8 +965,19 @@ HRESULT STDMETHODCALLTYPE Device::StretchRect(IDirect3DSurface9 *src, const RECT
         from = ToRect(*srcRect);
     if (dstRect)
         to = ToRect(*dstRect);
-    lg::StretchRect(legacy_, static_cast<Surface *>(src)->handle(), srcRect ? &from : nullptr,
-                    static_cast<Surface *>(dst)->handle(), dstRect ? &to : nullptr, filter == D3DTEXF_LINEAR);
+    // From the back buffer while the scene is drawn in linear light: the scene
+    // as the player would see it (the renderer's resolves for distortion).
+    lg::Surface *from_ = static_cast<Surface *>(src)->handle();
+    if (linearScene_ && src == backBuffer_.get())
+    {
+        if (BackendModernCopyScene(backend_, linearScene_, srcRect ? &from : nullptr,
+                                   static_cast<Surface *>(dst)->handle(), dstRect ? &to : nullptr,
+                                   filter == D3DTEXF_LINEAR))
+            return D3D_OK;
+        from_ = linearScene_;
+    }
+    lg::StretchRect(legacy_, from_, srcRect ? &from : nullptr, static_cast<Surface *>(dst)->handle(),
+                    dstRect ? &to : nullptr, filter == D3DTEXF_LINEAR);
     return D3D_OK;
 }
 
@@ -844,7 +1002,7 @@ HRESULT STDMETHODCALLTYPE Device::SetRenderTarget(DWORD index, IDirect3DSurface9
         if (!(desc.Usage & D3DUSAGE_RENDERTARGET))
             return D3DERR_INVALIDCALL;
     }
-    lg::SetRenderTarget(legacy_, index, target ? target->handle() : nullptr);
+    lg::SetRenderTarget(legacy_, index, DrawTarget(index, target));
     Rebind(renderTargets_[index], target);
     if (index == 0)
     {

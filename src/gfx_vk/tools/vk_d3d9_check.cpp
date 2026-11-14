@@ -17,6 +17,7 @@
 // passed, 1 a failure, 2 a usage error. See docs/vulkan-d3d9-front.md.
 
 #include <gfx_vk/d3d9/vk_d3d9.h>
+#include <gfx_vk/modern/vk_modern.h>
 
 #include "vk_legacy_check_shaders.h"
 
@@ -28,6 +29,8 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -156,6 +159,14 @@ struct SdlHost
     front::Tuning tuning{};
     std::vector<std::string> *logKept = nullptr;
     bool benchKeepsDrawState = true; // Options::benchKeepsDrawState
+    // Host::fullscreen's calls, in order: the mode asked for, or windowed
+    // (null) as all zeros with asked false. The front calls it under its lock.
+    struct FullscreenCall
+    {
+        bool fullscreen;
+        front::FullscreenMode mode;
+    };
+    std::vector<FullscreenCall> fullscreenCalls;
 };
 
 void LogLine(void *user, const char *line)
@@ -243,6 +254,15 @@ bool HostWindowOrigin(void *, front::D3D9Window, int32_t &x, int32_t &y)
     return true;
 }
 
+bool HostFullscreen(void *user, front::D3D9Window window, const front::FullscreenMode *mode)
+{
+    SdlHost *host = static_cast<SdlHost *>(user);
+    if (window != WindowHandle(*host))
+        return false;
+    host->fullscreenCalls.push_back({mode != nullptr, mode ? *mode : front::FullscreenMode{}});
+    return true;
+}
+
 void HostCoreDestroyed(void *user, const gfx_vk::CoreStats &stats)
 {
     SdlHost *host = static_cast<SdlHost *>(user);
@@ -311,6 +331,13 @@ public:
     IDirect3DDevice9 *device = nullptr;
     IDirect3DVertexShader9 *vsBasic = nullptr;
     IDirect3DPixelShader9 *psColor = nullptr, *psTexture = nullptr, *psShadow = nullptr, *psVolume = nullptr;
+    IDirect3DPixelShader9 *psLit = nullptr;
+    IDirect3DVertexShader9 *vsLmSun = nullptr;
+    IDirect3DPixelShader9 *psLmSunStandIn = nullptr;
+    IDirect3DVertexShader9 *vsLmSunMaps = nullptr;
+    IDirect3DPixelShader9 *psLmSunMapsStandIn = nullptr;
+    IDirect3DVertexShader9 *vsLpSunMaps = nullptr;
+    IDirect3DPixelShader9 *psLpSunMapsStandIn = nullptr;
     IDirect3DVertexDeclaration9 *decl = nullptr;
     IDirect3DSurface9 *readSurface = nullptr;
     IDirect3DSurface9 *backBuffer = nullptr;
@@ -490,10 +517,25 @@ public:
     void SlowFrames();
     void KeptState();
     void Multisample();
+    void ModernTaa();
+    void ModernLinear();
+    void ModernBloom();
+    void ModernEffects();
+    void ModernLit();
+    void ModernLitShader();
+    void ModernLitModels();
+    void ModernLitNoSun();
+    void ModernTonemap();
+    void ModernExposure();
+    void ModernVelocity();
+    void ModernNormals();
+    void ModernAo();
+    void ModernReflections();
     void Bench();
     void BenchRuns();
     void BenchFrames(bool runs);
     void ResetDevice();
+    void Fullscreen();
     void Present();
 };
 
@@ -2803,6 +2845,2457 @@ void Check::Multisample()
     SafeRelease(target);
 }
 
+// The Modern path's temporal anti-aliasing (front::ModernSceneDone,
+// docs/vulkan-modern.md): its camera reprojection on the CPU, then frames
+// drawn into the back buffer with a depth surface and handed to it. A scene
+// that stands still comes back as it was drawn; with the sub-pixel jitter the
+// engine applies, a pixel the jitter covers in some frames and not in others
+// ends between the two colours, where without the pass it would be one or the
+// other; a scene with no depth surface is refused.
+void Check::ModernTaa()
+{
+    // ---- Reprojection, in double and as the float matrix the shader gets ----
+    // A camera far from the origin (the engine's maps reach tens of
+    // thousands of units) that moves and turns between two frames.
+    using Row4 = double[4];
+    const auto viewMatrix = [](const double origin[3], double yaw, float out[4][4]) {
+        const double forward[3] = {std::cos(yaw), std::sin(yaw), 0.0};
+        const double left[3] = {-std::sin(yaw), std::cos(yaw), 0.0};
+        const double up[3] = {0.0, 0.0, 1.0};
+        for (int i = 0; i < 3; ++i)
+        {
+            out[i][0] = static_cast<float>(-left[i]);
+            out[i][1] = static_cast<float>(up[i]);
+            out[i][2] = static_cast<float>(forward[i]);
+            out[i][3] = 0.0f;
+        }
+        for (int c = 0; c < 3; ++c)
+        {
+            const double axis[3] = {c == 0 ? -left[0] : c == 1 ? up[0] : forward[0],
+                                    c == 0 ? -left[1] : c == 1 ? up[1] : forward[1],
+                                    c == 0 ? -left[2] : c == 1 ? up[2] : forward[2]};
+            out[3][c] = static_cast<float>(-(origin[0] * axis[0] + origin[1] * axis[1] + origin[2] * axis[2]));
+        }
+        out[3][3] = 1.0f;
+    };
+    // The engine's InfinitePerspectiveMatrix (src/universal/com_math.cpp).
+    const auto projectionMatrix = [](float jitterX, float jitterY, float out[4][4]) {
+        std::memset(out, 0, sizeof(float) * 16);
+        const float k = 0.99951172f;
+        out[0][0] = k / 0.75f;
+        out[1][1] = k / 0.5625f;
+        out[2][2] = k;
+        out[2][3] = 1.0f;
+        out[3][2] = -4.0f * k;
+        out[2][0] = jitterX;
+        out[2][1] = jitterY;
+    };
+    // p * view * projection with the jitter left out, in double.
+    const auto toClip = [](const Row4 p, const gfx_vk::modern::SceneView &scene, Row4 out) {
+        double viewed[4];
+        for (int c = 0; c < 4; ++c)
+            viewed[c] = p[0] * scene.view[0][c] + p[1] * scene.view[1][c] + p[2] * scene.view[2][c]
+                + p[3] * scene.view[3][c];
+        for (int c = 0; c < 4; ++c)
+        {
+            double sum = 0.0;
+            for (int k = 0; k < 4; ++k)
+                sum += viewed[k] * ((k == 2 && c < 2) ? 0.0 : scene.projection[k][c]);
+            out[c] = sum;
+        }
+    };
+    gfx_vk::modern::SceneView before{}, now{};
+    const double originBefore[3] = {52000.0, -31000.0, 900.0};
+    const double originNow[3] = {52012.0, -30995.0, 901.5};
+    viewMatrix(originBefore, 0.70, before.view);
+    viewMatrix(originNow, 0.72, now.view);
+    projectionMatrix(0.004f, -0.003f, before.projection);
+    projectionMatrix(-0.002f, 0.005f, now.projection);
+    double reprojection[4][4];
+    Equal("reprojection_made", gfx_vk::modern::Reprojection(now, before, reprojection), true);
+    // World points 30 to 6000 units in front, and a direction (the sky).
+    const Row4 points[] = {
+        {52030.0 + 5.0, -30995.0 + 25.0, 902.0, 1.0},
+        {52012.0 + 400.0, -30995.0 + 300.0, 950.0, 1.0},
+        {52012.0 + 4500.0, -30995.0 + 3800.0, 1200.0, 1.0},
+        {0.75, 0.65, 0.05, 0.0},
+    };
+    double worstDouble = 0.0, worstFloat = 0.0;
+    for (const Row4 &point : points)
+    {
+        double clipNow[4], clipBefore[4];
+        toClip(point, now, clipNow);
+        toClip(point, before, clipBefore);
+        // What the shader starts from: NDC x, y and the depth, w = 1.
+        const double start[4] = {clipNow[0] / clipNow[3], clipNow[1] / clipNow[3], clipNow[2] / clipNow[3], 1.0};
+        const double wantX = clipBefore[0] / clipBefore[3], wantY = clipBefore[1] / clipBefore[3];
+        double viaDouble[4] = {}, viaFloat[4] = {};
+        for (int c = 0; c < 4; ++c)
+            for (int k = 0; k < 4; ++k)
+            {
+                viaDouble[c] += start[k] * reprojection[k][c];
+                viaFloat[c] += static_cast<float>(start[k]) * static_cast<float>(reprojection[k][c]);
+            }
+        worstDouble = std::max(worstDouble, std::max(std::fabs(viaDouble[0] / viaDouble[3] - wantX),
+                                                     std::fabs(viaDouble[1] / viaDouble[3] - wantY)));
+        worstFloat = std::max(worstFloat, std::max(std::fabs(viaFloat[0] / viaFloat[3] - wantX),
+                                                   std::fabs(viaFloat[1] / viaFloat[3] - wantY)));
+    }
+    // In NDC; a pixel of a 1920-wide image is 0.00104.
+    Equal("reprojection_exact", worstDouble < 1e-9, true);
+    Equal("reprojection_float_under_quarter_pixel", worstFloat < 0.00026, true);
+    if (worstFloat >= 0.00026)
+        result->detail += " reprojection_float_error=" + std::to_string(worstFloat);
+    float jx = 0.0f, jy = 0.0f;
+    gfx_vk::modern::JitterPixels(0, jx, jy);
+    Equal("jitter_first_x_milli", std::lround(jx * 1000.0f), 0);
+    Equal("jitter_first_y_milli", std::lround(jy * 1000.0f), -167);
+    gfx_vk::modern::JitterPixels(9, jx, jy);
+    Equal("jitter_wraps_x_milli", std::lround(jx * 1000.0f), -250);
+
+    // ---- Frames through the front ----
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    view.width = view.height = kSize;
+    // One frame: black, with a white quad over the left half whose right
+    // edge sits 0.4 pixels past pixel 63's, so that pixel 64 is covered when
+    // the jitter moves the scene right by more than 0.1 pixels.
+    const auto frame = [&](float pixelsX, float pixelsY, bool first) {
+        Reset(Argb(255, 0, 0, 0));
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, 1.0f, 0), "Clear(depth)");
+        device->SetRenderState(D3DRS_ZENABLE, TRUE);
+        device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+        const float jitter[4] = {2.0f * pixelsX / kSize, -2.0f * pixelsY / kSize, 0.0f, 0.0f};
+        device->SetVertexShaderConstantF(0, jitter, 1);
+        DrawQuad(0, 0, 64.4f, 128, 0.5f, Argb(255, 255, 255, 255));
+        view.projection[2][0] = jitter[0];
+        view.projection[2][1] = jitter[1];
+        view.cut = first;
+        return front::ModernSceneDone(device, view) == front::ModernResult::Done;
+    };
+    const auto present = [&]() { Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present"); };
+
+    // Still: what was drawn comes back.
+    bool done = true;
+    for (int i = 0; i < 4; ++i)
+    {
+        done = frame(0.0f, 0.0f, i == 0) && done;
+        if (i < 3)
+            present();
+    }
+    Equal("still_resolved", done, true);
+    if (Read())
+    {
+        Expect("still_inside", 32, 64, 255, 255, 255);
+        Expect("still_edge_in", 63, 64, 255, 255, 255);
+        Expect("still_edge_out", 64, 64, 0, 0, 0);
+        Expect("still_outside", 96, 64, 0, 0, 0);
+    }
+    present();
+
+    // Jittered: pixel 64 is covered in 3 of the 8 frames of the sequence.
+    done = true;
+    for (uint32_t i = 0; i < 16; ++i)
+    {
+        gfx_vk::modern::JitterPixels(i, jx, jy);
+        done = frame(jx, jy, i == 0) && done;
+        if (i < 15)
+            present();
+    }
+    Equal("jittered_resolved", done, true);
+    if (Read())
+    {
+        Expect("jittered_inside", 32, 64, 255, 255, 255);
+        Expect("jittered_outside", 96, 64, 0, 0, 0);
+        const int edge = pixels[(64 * readSize + 64) * 4 + 1];
+        Equal("jittered_edge_between", edge > 20 && edge < 235, true);
+        if (!(edge > 20 && edge < 235))
+            result->detail += " jittered_edge=" + std::to_string(edge);
+    }
+    present();
+
+    // No depth surface: refused, and the scene is left as drawn.
+    Reset(Argb(255, 0, 0, 0));
+    DrawQuad(0, 0, 64, 128, 0.5f, Argb(255, 255, 255, 255));
+    Equal("no_depth_refused", front::ModernSceneDone(device, view) == front::ModernResult::Refused, true);
+    if (Read())
+        Expect("no_depth_untouched", 32, 64, 255, 255, 255);
+    device->SetDepthStencilSurface(nullptr);
+    const float zero[4] = {0, 0, 0, 0};
+    device->SetVertexShaderConstantF(0, zero, 1);
+    SafeRelease(depth);
+}
+
+// The Modern path's normals buffer (front::ModernSceneDepth,
+// docs/vulkan-modern.md "Normals buffer"), drawn as the engine draws a scene
+// with its depth prepass: the scene begins (in linear light unless
+// KISAK_VK_MODERN_LINEAR=0), three surfaces are drawn into depth alone, the
+// Modern path is told the depth is done, and the same surfaces are drawn
+// again in colour with the depth test LESSEQUAL, as the lit pass is. Each
+// must pass the test everywhere (the prepass's depth and the colour pass's
+// are the same), and the scene comes back in its colours. The projection is
+// the identity, so view space is NDC with the depth as z: top left (A) is
+// flat at depth 0.5, bottom left (B) leans back towards the top
+// (depth 0.6 + 0.4 y), bottom right (C) leans back towards the right
+// (depth 0.25 + 0.5 x), and top right (D) has no surface. With
+// KISAK_VK_MODERN_DEBUG=normals the normals debug view shows each surface's
+// normal instead (A (128, 128, 0), B (128, 175, 9), C (184, 128, 13)), also
+// in the pixels at the edges between them, where a normal taken across the
+// edge would mix the two, and D stays as drawn. The normals buffer is wanted
+// for ambient occlusion (our lit shaders, KISAK_VK_MODERN_AO=1 or its debug
+// view; not with KISAK_VK_MODERN_AO=0), that view or
+// KISAK_VK_MODERN_NORMALS=1 (and for screen-space reflections), never with
+// KISAK_VK_MODERN_NORMALS=0.
+void Check::ModernNormals()
+{
+    const auto envIs = [](const char *name, const char *value) {
+#if defined(_MSC_VER)
+        char *env = nullptr;
+        size_t envLength = 0;
+        const bool is = _dupenv_s(&env, &envLength, name) == 0 && env && !std::strcmp(env, value);
+        std::free(env);
+        return is;
+#else
+        const char *env = std::getenv(name);
+        return env && !std::strcmp(env, value);
+#endif
+    };
+    const bool linearOff = envIs("KISAK_VK_MODERN_LINEAR", "0");
+    const bool debugView = envIs("KISAK_VK_MODERN_DEBUG", "normals");
+    const bool wanted = !envIs("KISAK_VK_MODERN_NORMALS", "0")
+        && (debugView || envIs("KISAK_VK_MODERN_NORMALS", "1")
+            || (!envIs("KISAK_VK_MODERN_AO", "0")
+                && (envIs("KISAK_VK_MODERN_AO", "1") || envIs("KISAK_VK_MODERN_DEBUG", "ao")
+                    || (!envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
+                        && !envIs("KISAK_VK_MODERN_SHADERS", "0"))))
+            || (!envIs("KISAK_VK_MODERN_SSR", "0")
+                && (envIs("KISAK_VK_MODERN_SSR", "1") || envIs("KISAK_VK_MODERN_DEBUG", "reflections"))));
+    const bool shown = wanted && debugView;
+    Equal("wants_scene_depth", front::ModernWantsSceneDepth(device), wanted);
+
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    // Positions in NDC (the basic vertex shader adds c0, zero here).
+    const uint32_t colorA = Argb(255, 200, 40, 40), colorB = Argb(255, 40, 200, 40), colorC = Argb(255, 40, 40, 200);
+    const auto vertex = [](float x, float y, float z, uint32_t color) { return Vertex{x, y, z, 0.0f, 0.0f, color}; };
+    const auto quad = [&](Vertex *out, float x0, float y0, float x1, float y1, float (*depthAt)(float, float),
+                          uint32_t color) {
+        const Vertex corners[4] = {vertex(x0, y1, depthAt(x0, y1), color), vertex(x1, y1, depthAt(x1, y1), color),
+                                   vertex(x1, y0, depthAt(x1, y0), color), vertex(x0, y0, depthAt(x0, y0), color)};
+        const int order[6] = {0, 1, 2, 0, 2, 3};
+        for (int i = 0; i < 6; ++i)
+            out[i] = corners[order[i]];
+    };
+    Vertex surfaces[18];
+    quad(surfaces, -1.0f, 0.0f, 0.0f, 1.0f, [](float, float) { return 0.5f; }, colorA);
+    quad(surfaces + 6, -1.0f, -1.0f, 0.0f, 0.0f, [](float, float y) { return 0.6f + 0.4f * y; }, colorB);
+    quad(surfaces + 12, 0.0f, -1.0f, 1.0f, 0.0f, [](float x, float) { return 0.25f + 0.5f * x; }, colorC);
+
+    Reset(Argb(255, 0, 0, 0));
+    const front::ModernResult began = front::ModernSceneBegin(device);
+    Equal("begin", static_cast<int>(began),
+          static_cast<int>(linearOff ? front::ModernResult::Skipped : front::ModernResult::Done));
+    device->SetDepthStencilSurface(depth);
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0), "Clear(scene)");
+    device->SetRenderState(D3DRS_ZENABLE, TRUE);
+    device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+    device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+    // The depth prepass: depth alone.
+    device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+    Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 6, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(prepass)");
+    device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xf);
+
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    view.width = view.height = kSize;
+    view.cut = true;
+    const front::ModernResult depthDone = front::ModernSceneDepth(device, view);
+    Equal("scene_depth", static_cast<int>(depthDone),
+          static_cast<int>(wanted ? front::ModernResult::Done : front::ModernResult::Skipped));
+
+    // The lit pass: the same surfaces in colour, against the prepass's depth.
+    device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+    Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 6, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(lit)");
+    Equal("scene_done", front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
+    if (Read())
+    {
+        struct Point
+        {
+            const char *name;
+            UINT x, y;
+            char surface;
+        };
+        const Point points[] = {
+            {"a_inside", 32, 32, 'A'},  {"a_corner", 0, 0, 'A'},    {"a_above_b", 32, 63, 'A'},
+            {"b_below_a", 32, 64, 'B'}, {"b_inside", 32, 96, 'B'},  {"b_left_of_c", 63, 96, 'B'},
+            {"c_right_of_b", 64, 96, 'C'}, {"c_inside", 96, 96, 'C'}, {"c_corner", 127, 127, 'C'},
+            {"c_below_d", 96, 64, 'C'}, {"d_inside", 96, 32, 'D'},  {"d_right_of_a", 64, 32, 'D'},
+        };
+        for (const Point &point : points)
+        {
+            int r = 0, g = 0, b = 0;
+            if (shown)
+            {
+                if (point.surface == 'A')
+                    r = 128, g = 128, b = 0;
+                else if (point.surface == 'B')
+                    r = 128, g = 175, b = 9;
+                else if (point.surface == 'C')
+                    r = 184, g = 128, b = 13;
+            }
+            else if (point.surface != 'D')
+            {
+                const uint32_t color = point.surface == 'A' ? colorA : point.surface == 'B' ? colorB : colorC;
+                r = (color >> 16) & 0xff, g = (color >> 8) & 0xff, b = color & 0xff;
+            }
+            Expect(point.name, point.x, point.y, r, g, b);
+        }
+    }
+    device->SetDepthStencilSurface(nullptr);
+    SafeRelease(depth);
+}
+
+// The Modern path's ambient occlusion (docs/vulkan-modern.md "Ambient
+// occlusion"), from the depth prepass and the normals buffer as the engine
+// draws them. The camera looks along +z with a 90-degree perspective (the
+// engine's infinite projection, near plane 4); the basic vertex shader takes
+// positions already divided by w, which for flat quads gives the same depth
+// at every pixel as drawing them in perspective. A floor 120 units below the
+// camera runs from 60 to 400 units ahead, and a wall faces the camera 200
+// units ahead over the right half, rising from the floor: the floor in front
+// of the wall's foot and the wall above it are in a corner. With
+// KISAK_VK_MODERN_DEBUG=ao the view shows the visibility: open floor and the
+// wall's top stay about white, the floor 12 units from the wall and the wall
+// 10 units above the floor are darker by a clear margin (and not black), and
+// the sky is white. A thin plate facing the camera hovers 16 units above the
+// open floor on the left, 160 units ahead, as a sign hangs off a wall on
+// brackets: the floor seen just past its lower edge lies behind it (172 units
+// ahead). Each sample is taken to reach only a few units behind its surface,
+// so that floor stays light (at least 150); with
+// KISAK_VK_MODERN_AO_THICKNESS=1000 the plate hides everything behind it as a
+// solid block would, and the floor there goes dark (at most 120, the dark
+// band of PC AO run 2). Without the view the floor is drawn as lm_sun_r0c0 (the
+// Modern lit shaders' stand-in) lit by its lightmap alone: white colour map,
+// the secondary lightmap's halves 96 each (0.53 of light), no sun. Our
+// shader multiplies that light by the ambient occlusion, so the floor in the
+// corner is darker than open floor by a clear margin; without ambient
+// occlusion the two are the same, and without our shaders the floor is black.
+// The wall is drawn in its colour. Ambient occlusion is built for our lit
+// shaders (linear light, lit inputs and our shaders on), with
+// KISAK_VK_MODERN_AO=1 or its debug view, never with KISAK_VK_MODERN_AO=0 or
+// KISAK_VK_MODERN_NORMALS=0.
+void Check::ModernAo()
+{
+    const auto envIs = [](const char *name, const char *value) {
+#if defined(_MSC_VER)
+        char *env = nullptr;
+        size_t envLength = 0;
+        const bool is = _dupenv_s(&env, &envLength, name) == 0 && env && !std::strcmp(env, value);
+        std::free(env);
+        return is;
+#else
+        const char *env = std::getenv(name);
+        return env && !std::strcmp(env, value);
+#endif
+    };
+    // Our lit shaders draw (and read ambient occlusion).
+    const bool ours = !envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
+                      && !envIs("KISAK_VK_MODERN_SHADERS", "0");
+    const bool built = !envIs("KISAK_VK_MODERN_AO", "0") && !envIs("KISAK_VK_MODERN_NORMALS", "0")
+                       && (ours || envIs("KISAK_VK_MODERN_AO", "1") || envIs("KISAK_VK_MODERN_DEBUG", "ao"));
+    // The scene's depth is taken whenever the normals buffer is wanted.
+    const bool depthTaken = built || (!envIs("KISAK_VK_MODERN_NORMALS", "0")
+                                      && (envIs("KISAK_VK_MODERN_NORMALS", "1")
+                                          || envIs("KISAK_VK_MODERN_DEBUG", "normals")));
+    const bool shown = built && envIs("KISAK_VK_MODERN_DEBUG", "ao");
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    // The engine's InfinitePerspectiveMatrix with tan(fov / 2) = 1 both ways.
+    constexpr float k = 0.99951172f, nearPlane = 4.0f;
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = 1.0f;
+    view.projection[0][0] = k;
+    view.projection[1][1] = k;
+    view.projection[2][2] = k;
+    view.projection[2][3] = 1.0f;
+    view.projection[3][2] = -nearPlane * k;
+    view.width = view.height = kSize;
+    view.cut = true;
+    const auto project = [&](float x, float y, float z, uint32_t color) {
+        return Vertex{k * x / z, k * y / z, k - nearPlane * k / z, 0.0f, 0.0f, color};
+    };
+    const uint32_t floorColor = Argb(255, 255, 255, 255), wallColor = Argb(255, 90, 110, 150);
+    const Vertex floorCorners[4] = {project(-200, -120, 60, floorColor), project(200, -120, 60, floorColor),
+                                    project(200, -120, 400, floorColor), project(-200, -120, 400, floorColor)};
+    const Vertex wallCorners[4] = {project(0, -120, 200, wallColor), project(200, -120, 200, wallColor),
+                                   project(200, 300, 200, wallColor), project(0, 300, 200, wallColor)};
+    const Vertex plateCorners[4] = {project(-40, -104, 160, wallColor), project(-5, -104, 160, wallColor),
+                                    project(-5, -40, 160, wallColor), project(-40, -40, 160, wallColor)};
+    Vertex surfaces[18];
+    const int order[6] = {0, 1, 2, 0, 2, 3};
+    for (int i = 0; i < 6; ++i)
+    {
+        surfaces[i] = floorCorners[order[i]];
+        surfaces[6 + i] = wallCorners[order[i]];
+        surfaces[12 + i] = plateCorners[order[i]];
+    }
+
+    Reset(Argb(255, 0, 0, 0));
+    front::ModernSceneBegin(device);
+    device->SetDepthStencilSurface(depth);
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0), "Clear(scene)");
+    device->SetRenderState(D3DRS_ZENABLE, TRUE);
+    device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+    device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+    Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 6, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(prepass)");
+    device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xf);
+    Equal("scene_depth", static_cast<int>(front::ModernSceneDepth(device, view)),
+          static_cast<int>(depthTaken ? front::ModernResult::Done : front::ModernResult::Skipped));
+    device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+    // The floor as lm_sun_r0c0: colour map and lightmap UVs, the normal up and
+    // no fog, the shadow-map coordinate (unread); no sun.
+    IDirect3DTexture9 *colorMap = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
+    IDirect3DTexture9 *primary = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
+    IDirect3DTexture9 *secondary = FilledTexture(1, 2, [](UINT, UINT) { return Argb(130, 96, 96, 96); });
+    if (colorMap && primary && secondary)
+    {
+        device->SetVertexShader(vsLmSun);
+        device->SetPixelShader(psLmSunStandIn);
+        device->SetTexture(0, colorMap);
+        device->SetTexture(2, primary);
+        device->SetTexture(3, secondary);
+        const float pixel[19][4] = {{}, {}, {0, 0, 0, 1}, {}, {}, {}, {}, {}, {}, {},
+                                    {}, {}, {}, {}, {}, {}, {}, {0, 0, 1, 0}, {}};
+        Ok(device->SetPixelShaderConstantF(0, &pixel[0][0], 19), "SetPixelShaderConstantF");
+        const float vertex[4][4] = {{0, 0, 0, 0}, {0.5f, 0.5f, 0.5f, 0.5f}, {0, 0, 1, 1}, {0.5f, 0.5f, 0.25f, 0.5f}};
+        Ok(device->SetVertexShaderConstantF(0, &vertex[0][0], 4), "SetVertexShaderConstantF");
+        front::ModernLitInputs inputs;
+        inputs.overWhite = true;
+        inputs.shader = 0x40; // lm_sun_r0c0
+        front::SetModernLitInputs(device, &inputs);
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(floor)");
+        front::SetModernLitInputs(device, nullptr);
+        for (DWORD sampler : {0u, 2u, 3u})
+            device->SetTexture(sampler, nullptr);
+        device->SetVertexShader(vsBasic);
+        device->SetPixelShader(psColor);
+    }
+    Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces + 6, sizeof(Vertex)), "DrawPrimitiveUP(wall)");
+    Equal("scene_done", front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
+    SafeRelease(colorMap);
+    SafeRelease(primary);
+    SafeRelease(secondary);
+    // Pixels of view points: x and y / z, NDC to pixels.
+    const auto pixelOf = [&](float x, float y, float z, UINT &px, UINT &py) {
+        px = static_cast<UINT>((k * x / z + 1.0f) * 0.5f * kSize);
+        py = static_cast<UINT>((1.0f - k * y / z) * 0.5f * kSize);
+    };
+    UINT openX, openY, cornerX, cornerY, footX, footY, wallX, wallY, besideX, besideY;
+    pixelOf(-22, -120, 172, besideX, besideY);
+    pixelOf(-100, -120, 160, openX, openY);
+    pixelOf(100, -120, 188, cornerX, cornerY);
+    pixelOf(100, -110, 200, footX, footY);
+    pixelOf(100, 150, 200, wallX, wallY);
+    if (Read())
+    {
+        const auto at = [&](UINT x, UINT y) { return static_cast<int>(pixels[(y * readSize + x) * 4 + 1]); };
+        if (shown)
+        {
+            const int open = at(openX, openY), corner = at(cornerX, cornerY), foot = at(footX, footY),
+                      wall = at(wallX, wallY), beside = at(besideX, besideY);
+            // One frame's noise (two slices a pixel) leaves open surfaces a
+            // few levels under white; the anti-aliasing averages it.
+            Equal("open_floor_unoccluded", open >= 230, true);
+            Equal("wall_top_unoccluded", wall >= 230, true);
+            Equal("corner_darker", corner + 25 <= open, true);
+            Equal("corner_not_black", corner >= 64, true);
+            Equal("wall_foot_darker", foot + 25 <= wall, true);
+            Equal("wall_foot_not_black", foot >= 64, true);
+            if (envIs("KISAK_VK_MODERN_AO_THICKNESS", "1000"))
+                Equal("floor_behind_plate_dark_as_behind_a_block", beside <= 120, true);
+            else
+                Equal("floor_behind_plate_light", beside >= 150, true);
+            Expect("sky_white", 20, 10, 255, 255, 255);
+            char line[160];
+            std::snprintf(line, sizeof(line), " ao_open=%d ao_corner=%d ao_foot=%d ao_wall=%d ao_beside_plate=%d",
+                          open, corner, foot, wall, beside);
+            result->detail += line;
+        }
+        else if (ours)
+        {
+            const int open = at(openX, openY), corner = at(cornerX, cornerY);
+            Equal("open_floor_lit", open >= 100, true);
+            if (built)
+            {
+                Equal("corner_floor_darker", corner + 10 <= open, true);
+                Equal("corner_floor_not_black", corner >= open / 2, true);
+            }
+            else
+            {
+                Equal("corner_floor_as_open", std::abs(corner - open) <= 1, true);
+            }
+            Expect("wall_foot", footX, footY, 90, 110, 150);
+            Expect("wall", wallX, wallY, 90, 110, 150);
+            Expect("sky", 20, 10, 0, 0, 0);
+            char line[96];
+            std::snprintf(line, sizeof(line), " lit_open=%d lit_corner=%d", open, corner);
+            result->detail += line;
+        }
+        else
+        {
+            Expect("open_floor", openX, openY, 0, 0, 0);
+            Expect("corner_floor", cornerX, cornerY, 0, 0, 0);
+            Expect("wall_foot", footX, footY, 90, 110, 150);
+            Expect("wall", wallX, wallY, 90, 110, 150);
+            Expect("sky", 20, 10, 0, 0, 0);
+        }
+    }
+    device->SetDepthStencilSurface(nullptr);
+    SafeRelease(depth);
+}
+
+// The Modern path's screen-space reflections (docs/vulkan-modern.md
+// "Screen-space reflections"), traced from the depth prepass and the normals
+// buffer as the engine draws them, with the light of last scene's
+// anti-aliased colour. The camera looks along +z with a 90-degree
+// perspective (the engine's infinite projection, near plane 4); the basic
+// vertex shader takes positions already divided by w, which for flat quads
+// gives the same depth at every pixel as drawing them in perspective. A grey
+// floor 120 units below the camera runs from 60 to 300 units ahead, and a
+// red wall faces the camera 300 units ahead over the right half, rising from
+// the floor's far edge. The same scene is drawn twice: the first (a cut) has
+// no last scene to read light from, so it has no reflections; the second
+// does. With KISAK_VK_MODERN_DEBUG=reflections the view shows them on the
+// second: the floor in front of the wall mirrors the wall's red at full
+// confidence; the floor on the left mirrors only the sky, which reflects
+// nothing (black); the wall itself mirrors back towards the camera, which
+// the screen cannot show (black). Without the view (or with linear light
+// off, where nothing is traced) the scene comes back as drawn. Reflections
+// are traced with KISAK_VK_MODERN_SSR=1 or their debug view, never with
+// KISAK_VK_MODERN_SSR=0 or KISAK_VK_MODERN_NORMALS=0.
+void Check::ModernReflections()
+{
+    const auto envIs = [](const char *name, const char *value) {
+#if defined(_MSC_VER)
+        char *env = nullptr;
+        size_t envLength = 0;
+        const bool is = _dupenv_s(&env, &envLength, name) == 0 && env && !std::strcmp(env, value);
+        std::free(env);
+        return is;
+#else
+        const char *env = std::getenv(name);
+        return env && !std::strcmp(env, value);
+#endif
+    };
+    const bool normalsOff = envIs("KISAK_VK_MODERN_NORMALS", "0");
+    const bool wanted = !envIs("KISAK_VK_MODERN_SSR", "0") && !normalsOff
+                        && (envIs("KISAK_VK_MODERN_SSR", "1") || envIs("KISAK_VK_MODERN_DEBUG", "reflections"));
+    // The scene's depth is taken whenever the normals buffer is wanted: for
+    // the reflections, its own debug view or KISAK_VK_MODERN_NORMALS=1, or
+    // for ambient occlusion (our lit shaders read it; this scene's surfaces
+    // are not drawn with them, so it changes nothing here).
+    const bool aoWanted = !envIs("KISAK_VK_MODERN_AO", "0")
+                          && (envIs("KISAK_VK_MODERN_AO", "1") || envIs("KISAK_VK_MODERN_DEBUG", "ao")
+                              || (!envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
+                                  && !envIs("KISAK_VK_MODERN_SHADERS", "0")));
+    const bool depthTaken = wanted
+                            || (!normalsOff && (envIs("KISAK_VK_MODERN_NORMALS", "1")
+                                                || envIs("KISAK_VK_MODERN_DEBUG", "normals") || aoWanted));
+    const bool traced = wanted && !envIs("KISAK_VK_MODERN_LINEAR", "0");
+    const bool shown = traced && envIs("KISAK_VK_MODERN_DEBUG", "reflections");
+    Equal("wants_scene_depth", front::ModernWantsSceneDepth(device), depthTaken);
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    // The engine's InfinitePerspectiveMatrix with tan(fov / 2) = 1 both ways.
+    constexpr float k = 0.99951172f, nearPlane = 4.0f;
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = 1.0f;
+    view.projection[0][0] = k;
+    view.projection[1][1] = k;
+    view.projection[2][2] = k;
+    view.projection[2][3] = 1.0f;
+    view.projection[3][2] = -nearPlane * k;
+    view.width = view.height = kSize;
+    const auto project = [&](float x, float y, float z, uint32_t color) {
+        return Vertex{k * x / z, k * y / z, k - nearPlane * k / z, 0.0f, 0.0f, color};
+    };
+    const uint32_t floorColor = Argb(255, 128, 128, 128), wallColor = Argb(255, 200, 40, 40);
+    const Vertex floorCorners[4] = {project(-300, -120, 60, floorColor), project(300, -120, 60, floorColor),
+                                    project(300, -120, 300, floorColor), project(-300, -120, 300, floorColor)};
+    const Vertex wallCorners[4] = {project(0, -120, 300, wallColor), project(300, -120, 300, wallColor),
+                                   project(300, 300, 300, wallColor), project(0, 300, 300, wallColor)};
+    Vertex surfaces[12];
+    const int order[6] = {0, 1, 2, 0, 2, 3};
+    for (int i = 0; i < 6; ++i)
+    {
+        surfaces[i] = floorCorners[order[i]];
+        surfaces[6 + i] = wallCorners[order[i]];
+    }
+    // Pixels of view points: x and y / z, NDC to pixels.
+    const auto pixelOf = [&](float x, float y, float z, UINT &px, UINT &py) {
+        px = static_cast<UINT>((k * x / z + 1.0f) * 0.5f * kSize);
+        py = static_cast<UINT>((1.0f - k * y / z) * 0.5f * kSize);
+    };
+    UINT mirrorX, mirrorY, openX, openY, wallX, wallY;
+    pixelOf(100, -120, 200, mirrorX, mirrorY);
+    pixelOf(-100, -120, 200, openX, openY);
+    pixelOf(150, 150, 300, wallX, wallY);
+    const auto scene = [&](const char *name, bool cut) {
+        Reset(Argb(255, 0, 0, 0));
+        front::ModernSceneBegin(device);
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0),
+           "Clear(scene)");
+        device->SetRenderState(D3DRS_ZENABLE, TRUE);
+        device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+        device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(prepass)");
+        device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xf);
+        view.cut = cut;
+        Equal((std::string(name) + "_scene_depth").c_str(), static_cast<int>(front::ModernSceneDepth(device, view)),
+              static_cast<int>(depthTaken ? front::ModernResult::Done : front::ModernResult::Skipped));
+        device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(lit)");
+        Equal((std::string(name) + "_scene_done").c_str(),
+              front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
+    };
+    const auto expectDrawn = [&](const char *prefix) {
+        const std::string p = prefix;
+        Expect((p + "_mirror_floor").c_str(), mirrorX, mirrorY, 128, 128, 128);
+        Expect((p + "_open_floor").c_str(), openX, openY, 128, 128, 128);
+        Expect((p + "_wall").c_str(), wallX, wallY, 200, 40, 40);
+        Expect((p + "_sky").c_str(), 20, 10, 0, 0, 0);
+    };
+
+    // The first scene: no last scene, no reflections, drawn as it is.
+    scene("first", true);
+    if (Read())
+        expectDrawn("first");
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+
+    scene("second", false);
+    if (Read())
+    {
+        if (shown)
+        {
+            Expect("mirror_floor_shows_wall", mirrorX, mirrorY, 200, 40, 40);
+            Expect("open_floor_shows_nothing", openX, openY, 0, 0, 0);
+            Expect("wall_shows_nothing", wallX, wallY, 0, 0, 0);
+            Expect("sky_shows_nothing", 20, 10, 0, 0, 0);
+        }
+        else
+            expectDrawn("second");
+    }
+    device->SetDepthStencilSurface(nullptr);
+    SafeRelease(depth);
+}
+
+// The Modern path's velocity for what moves on its own
+// (front::ModernSurfaceMoved, docs/vulkan-modern.md). A band of 2-pixel white
+// and black stripes moves 2 pixels right each frame, drawn indexed from a
+// buffer of 32-byte vertices (as the engine's models are); a static striped
+// quad in front of it hides part of it. Without its velocity, TAA takes each
+// band pixel's history from the same pixel, which held the other colour last
+// frame, and the stripes go grey. With it, the history follows the band and
+// the stripes stay as drawn; the velocity is not written where the band is
+// hidden, so the static quad stays as drawn too. A third run moves the band
+// in its vertices instead, as skinned surfaces move (front::
+// ModernSkinnedSurfaceMoved): a dynamic buffer written again with DISCARD each
+// frame, the same matrix both frames, and a draw that starts at a base vertex
+// and a minimum index. The stripes stay as drawn only if the velocity comes
+// from last frame's vertices, which the Modern path kept. With
+// KISAK_VK_MODERN_DEBUG=velocity the velocity debug view is drawn over the
+// reported runs instead: the band's pixels come back cyan at half brightness
+// (2 pixels a frame, from the left), and everything else as without it.
+void Check::ModernVelocity()
+{
+#if defined(_MSC_VER)
+    char *env = nullptr;
+    size_t envLength = 0;
+    const bool debugView =
+        _dupenv_s(&env, &envLength, "KISAK_VK_MODERN_DEBUG") == 0 && env && !std::strcmp(env, "velocity");
+    std::free(env);
+#else
+    const char *env = std::getenv("KISAK_VK_MODERN_DEBUG");
+    const bool debugView = env && !std::strcmp(env, "velocity");
+#endif
+    struct Vertex32
+    {
+        Vertex v;
+        uint32_t pad[2];
+    };
+    static_assert(sizeof(Vertex32) == 32, "the engine's vertices are 32 bytes");
+    constexpr int kStripes = 32;
+    IDirect3DSurface9 *depth = nullptr;
+    IDirect3DVertexBuffer9 *vb = nullptr;
+    IDirect3DIndexBuffer9 *ib = nullptr;
+    IDirect3DVertexBuffer9 *skinnedVb = nullptr;
+    IDirect3DIndexBuffer9 *skinnedIb = nullptr;
+    // The skinned band: 4 vertices before it, drawn with base vertex 2 and
+    // indices from 2.
+    constexpr int kSkinnedLead = 4, kSkinnedBase = 2;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface")
+        || !Ok(device->CreateVertexBuffer((kSkinnedLead + kStripes * 4) * sizeof(Vertex32),
+                                          D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY, 0, D3DPOOL_DEFAULT, &skinnedVb,
+                                          nullptr),
+               "CreateVertexBuffer(skinned)")
+        || !Ok(device->CreateIndexBuffer(kStripes * 6 * sizeof(uint16_t), D3DUSAGE_WRITEONLY, D3DFMT_INDEX16,
+                                         D3DPOOL_DEFAULT, &skinnedIb, nullptr),
+               "CreateIndexBuffer(skinned)")
+        || !Ok(device->CreateVertexBuffer(kStripes * 4 * sizeof(Vertex32), D3DUSAGE_WRITEONLY, 0, D3DPOOL_DEFAULT,
+                                          &vb, nullptr),
+               "CreateVertexBuffer")
+        || !Ok(device->CreateIndexBuffer(kStripes * 6 * sizeof(uint16_t), D3DUSAGE_WRITEONLY, D3DFMT_INDEX16,
+                                         D3DPOOL_DEFAULT, &ib, nullptr),
+               "CreateIndexBuffer"))
+    {
+        SafeRelease(depth);
+        SafeRelease(vb);
+        SafeRelease(skinnedVb);
+        SafeRelease(skinnedIb);
+        return;
+    }
+    // The band at rest covers pixels 8..71 by 32..95; stripe k is white when k is even.
+    void *data = nullptr;
+    if (Ok(vb->Lock(0, 0, &data, 0), "Lock(vertex buffer)"))
+    {
+        Vertex32 *out = static_cast<Vertex32 *>(data);
+        for (int k = 0; k < kStripes; ++k)
+        {
+            Vertex corners[4];
+            const uint32_t color = k % 2 ? Argb(255, 0, 0, 0) : Argb(255, 255, 255, 255);
+            QuadCorners(corners, 8.0f + 2.0f * k, 32.0f, 10.0f + 2.0f * k, 96.0f, 0.5f, color);
+            for (int c = 0; c < 4; ++c)
+                out[k * 4 + c] = Vertex32{corners[c], {0, 0}};
+        }
+        vb->Unlock();
+    }
+    if (Ok(ib->Lock(0, 0, &data, 0), "Lock(index buffer)"))
+    {
+        uint16_t *out = static_cast<uint16_t *>(data);
+        for (int k = 0; k < kStripes; ++k)
+        {
+            const uint16_t base = static_cast<uint16_t>(k * 4);
+            const uint16_t quad[6] = {base, uint16_t(base + 1), uint16_t(base + 2), base, uint16_t(base + 2),
+                                      uint16_t(base + 3)};
+            std::memcpy(out + k * 6, quad, sizeof(quad));
+        }
+        ib->Unlock();
+    }
+    if (Ok(skinnedIb->Lock(0, 0, &data, 0), "Lock(skinned index buffer)"))
+    {
+        uint16_t *out = static_cast<uint16_t *>(data);
+        for (int k = 0; k < kStripes; ++k)
+        {
+            const uint16_t base = static_cast<uint16_t>(kSkinnedLead - kSkinnedBase + k * 4);
+            const uint16_t quad[6] = {base, uint16_t(base + 1), uint16_t(base + 2), base, uint16_t(base + 2),
+                                      uint16_t(base + 3)};
+            std::memcpy(out + k * 6, quad, sizeof(quad));
+        }
+        skinnedIb->Unlock();
+    }
+
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    view.width = view.height = kSize;
+    // The band's object-to-clip matrix in frame f: the vertex shader adds c0
+    // to the position, so a translation by 2 f pixels.
+    const auto bandClip = [](int f, float out[4][4]) {
+        std::memset(out, 0, sizeof(float) * 16);
+        for (int i = 0; i < 4; ++i)
+            out[i][i] = 1.0f;
+        out[3][0] = 2.0f * (2.0f * f) / kSize;
+    };
+    // The skinned band's vertices in frame f: moved 2 f pixels right.
+    const auto writeSkinned = [&](int f) {
+        void *mapped = nullptr;
+        if (!Ok(skinnedVb->Lock(0, 0, &mapped, D3DLOCK_DISCARD), "Lock(skinned, DISCARD)"))
+            return;
+        Vertex32 *out = static_cast<Vertex32 *>(mapped);
+        Vertex corners[4];
+        QuadCorners(corners, 0.0f, 0.0f, 1.0f, 1.0f, 0.5f, Argb(255, 255, 0, 0));
+        for (int c = 0; c < kSkinnedLead; ++c)
+            out[c] = Vertex32{corners[c], {0, 0}};
+        for (int k = 0; k < kStripes; ++k)
+        {
+            const uint32_t color = k % 2 ? Argb(255, 0, 0, 0) : Argb(255, 255, 255, 255);
+            const float x = 8.0f + 2.0f * k + 2.0f * f;
+            QuadCorners(corners, x, 32.0f, x + 2.0f, 96.0f, 0.5f, color);
+            for (int c = 0; c < 4; ++c)
+                out[kSkinnedLead + k * 4 + c] = Vertex32{corners[c], {0, 0}};
+        }
+        skinnedVb->Unlock();
+    };
+    enum class Report
+    {
+        None,
+        Rigid,
+        Skinned,
+    };
+    const auto frame = [&](int f, Report report) {
+        Reset(Argb(255, 0, 0, 255));
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, 1.0f, 0), "Clear(depth)");
+        device->SetRenderState(D3DRS_ZENABLE, TRUE);
+        device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+        float clip[4][4], prevClip[4][4];
+        if (report == Report::Skinned)
+        {
+            bandClip(0, clip);
+            bandClip(0, prevClip);
+            const float zero[4] = {0, 0, 0, 0};
+            device->SetVertexShaderConstantF(0, zero, 1);
+            writeSkinned(f);
+            Ok(device->SetStreamSource(0, skinnedVb, 0, sizeof(Vertex32)), "SetStreamSource(skinned)");
+            Ok(device->SetIndices(skinnedIb), "SetIndices(skinned)");
+            Ok(device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, kSkinnedBase, kSkinnedLead - kSkinnedBase,
+                                            kStripes * 4, 0, kStripes * 2),
+               "DrawIndexedPrimitive(skinned)");
+            front::ModernSkinnedSurfaceMoved(device, 1, clip, f == 0 ? nullptr : prevClip);
+        }
+        else
+        {
+            bandClip(f, clip);
+            bandClip(f - 1, prevClip);
+            const float move[4] = {clip[3][0], clip[3][1], 0.0f, 0.0f};
+            device->SetVertexShaderConstantF(0, move, 1);
+            Ok(device->SetStreamSource(0, vb, 0, sizeof(Vertex32)), "SetStreamSource");
+            Ok(device->SetIndices(ib), "SetIndices");
+            Ok(device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, kStripes * 4, 0, kStripes * 2),
+               "DrawIndexedPrimitive");
+            if (report == Report::Rigid)
+                front::ModernSurfaceMoved(device, clip, prevClip);
+        }
+        // The static quad in front: pixels 40..55 by 56..71, white where x / 2 is even.
+        const float zero[4] = {0, 0, 0, 0};
+        device->SetVertexShaderConstantF(0, zero, 1);
+        for (int x = 40; x < 56; x += 2)
+            DrawQuad(float(x), 56, float(x + 2), 72, 0.25f,
+                     (x / 2) % 2 ? Argb(255, 0, 0, 0) : Argb(255, 255, 255, 255));
+        view.cut = f == 0;
+        return front::ModernSceneDone(device, view) == front::ModernResult::Done;
+    };
+    const auto present = [&]() { Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present"); };
+    // After frame 7 the band covers 22..85: stripe k at 22 + 2 k.
+    const auto run = [&](Report report) {
+        bool done = true;
+        for (int f = 0; f < 8; ++f)
+        {
+            done = frame(f, report) && done;
+            if (f < 7)
+                present();
+        }
+        return done;
+    };
+
+    Equal("camera_only_resolved", run(Report::None), true);
+    if (Read())
+    {
+        const int white = pixels[(40 * readSize + 30) * 4 + 1], black = pixels[(40 * readSize + 32) * 4 + 1];
+        Equal("camera_only_stripes_grey", white < 200 || black > 55, true);
+        result->detail += " camera_only_stripes=" + std::to_string(white) + "/" + std::to_string(black);
+    }
+    present();
+
+    for (const Report report : {Report::Rigid, Report::Skinned})
+    {
+        const std::string name = report == Report::Rigid ? "velocity" : "skinned";
+        Equal((name + "_resolved").c_str(), run(report), true);
+        if (Read())
+        {
+            if (debugView)
+            {
+                // Cyan at half brightness: 0.5 of 255 either way of the rounding.
+                for (const UINT x : {30u, 31u, 32u, 85u})
+                    Expect((name + "_debug_" + std::to_string(x)).c_str(), x, 40, 0, 128, 128);
+            }
+            else
+            {
+                Expect((name + "_white_stripe").c_str(), 30, 40, 255, 255, 255);
+                Expect((name + "_white_stripe_2").c_str(), 31, 40, 255, 255, 255);
+                Expect((name + "_black_stripe").c_str(), 32, 40, 0, 0, 0);
+                Expect((name + "_band_end").c_str(), 85, 40, 0, 0, 0);
+            }
+            Expect((name + "_background").c_str(), 100, 40, 0, 0, 255);
+            // The static quad: the band's velocity is not written behind it.
+            Expect((name + "_hidden_white").c_str(), 44, 64, 255, 255, 255);
+            Expect((name + "_hidden_black").c_str(), 46, 64, 0, 0, 0);
+        }
+        present();
+    }
+
+    device->SetDepthStencilSurface(nullptr);
+    const float zero[4] = {0, 0, 0, 0};
+    device->SetVertexShaderConstantF(0, zero, 1);
+    device->SetStreamSource(0, nullptr, 0, 0);
+    device->SetIndices(nullptr);
+    SafeRelease(ib);
+    SafeRelease(vb);
+    SafeRelease(skinnedIb);
+    SafeRelease(skinnedVb);
+    SafeRelease(depth);
+}
+
+// D3D9 switches the display for a fullscreen device and back for a windowed
+// one; the front asks the host (Host::fullscreen). This host only records the
+// asks, so nothing on the machine changes.
+void Check::Fullscreen()
+{
+    host->fullscreenCalls.clear();
+    SafeRelease(backBuffer);
+    D3DPRESENT_PARAMETERS fullscreen = params;
+    fullscreen.Windowed = FALSE;
+    fullscreen.BackBufferWidth = fullscreen.BackBufferHeight = 96;
+    fullscreen.FullScreen_RefreshRateInHz = 60;
+    if (Ok(device->Reset(&fullscreen), "Reset(fullscreen)"))
+    {
+        Equal("fullscreen_asks", host->fullscreenCalls.size(), size_t(1));
+        if (!host->fullscreenCalls.empty())
+        {
+            const SdlHost::FullscreenCall &call = host->fullscreenCalls.back();
+            Equal("fullscreen_mode", call.fullscreen, true);
+            Equal("fullscreen_width", call.mode.width, 96u);
+            Equal("fullscreen_height", call.mode.height, 96u);
+            Equal("fullscreen_refresh", call.mode.refreshRate, 60u);
+        }
+        if (Ok(device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer), "GetBackBuffer(fullscreen)"))
+        {
+            Reset(Argb(255, 0, 128, 0));
+            Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present(fullscreen)");
+        }
+        SafeRelease(backBuffer);
+    }
+    // Windowed again: the desktop's mode back, once.
+    host->fullscreenCalls.clear();
+    if (Ok(device->Reset(&params), "Reset(windowed)"))
+    {
+        Equal("windowed_asks", host->fullscreenCalls.size(), size_t(1));
+        if (!host->fullscreenCalls.empty())
+            Equal("windowed_mode", host->fullscreenCalls.back().fullscreen, false);
+    }
+    host->fullscreenCalls.clear();
+    if (Ok(device->Reset(&params), "Reset(windowed again)"))
+        Equal("windowed_again_asks", host->fullscreenCalls.size(), size_t(0));
+    Ok(device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer), "GetBackBuffer");
+}
+
+namespace
+{
+// tonemap.frag's curves, for a grey of light v (the check's expectations).
+using Rgb = std::array<double, 3>;
+Rgb Times(const double (&m)[9], const Rgb &c) // GLSL mat3(column-major) * c
+{
+    return {m[0] * c[0] + m[3] * c[1] + m[6] * c[2], m[1] * c[0] + m[4] * c[1] + m[7] * c[2],
+            m[2] * c[0] + m[5] * c[1] + m[8] * c[2]};
+}
+Rgb TonemapCurve(const std::string &curve, Rgb c)
+{
+    if (curve == "neutral")
+    {
+        const double start = 0.8 - 0.04, desaturation = 0.15;
+        const double peak = std::max(c[0], std::max(c[1], c[2]));
+        if (peak < start)
+            return c;
+        const double d = 1.0 - start;
+        const double newPeak = 1.0 - d * d / (peak + d - start);
+        const double g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
+        for (double &x : c)
+            x = x * newPeak / peak * (1.0 - g) + newPeak * g;
+        return c;
+    }
+    if (curve == "agx")
+    {
+        static const double inset[9] = {0.842479062253094, 0.0423282422610123, 0.0423756549057051,
+                                        0.0784335999999992, 0.878468636469772, 0.0784336,
+                                        0.0792237451477643, 0.0791661274605434, 0.879142973793104};
+        static const double outset[9] = {1.19687900512017, -0.0528968517574562, -0.0529716355144438,
+                                         -0.0980208811401368, 1.15190312990417, -0.0980434501171241,
+                                         -0.0990297440797205, -0.0989611768448433, 1.15107367264116};
+        const double minEv = -12.47393, maxEv = 4.026069;
+        c = Times(inset, c);
+        for (double &x : c)
+        {
+            x = (std::clamp(std::log2(std::max(x, 1e-10)), minEv, maxEv) - minEv) / (maxEv - minEv);
+            const double x2 = x * x, x4 = x2 * x2;
+            x = 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4 - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
+        }
+        c = Times(outset, c);
+        for (double &x : c)
+            x = std::pow(std::max(x, 0.0), 2.2);
+        return c;
+    }
+    if (curve == "aces")
+    {
+        static const double toAces[9] = {0.59719, 0.07600, 0.02840, 0.35458, 0.90834,
+                                         0.13383, 0.04823, 0.01566, 0.83777};
+        static const double fromAces[9] = {1.60475, -0.10208, -0.00327, -0.53108, 1.10813,
+                                           -0.07276, -0.07367, -0.00605, 1.07602};
+        for (double &x : c)
+            x /= 0.6;
+        c = Times(toAces, c);
+        for (double &x : c)
+            x = (x * (x + 0.0245786) - 0.000090537) / (x * (0.983729 * x + 0.4329510) + 0.238081);
+        return Times(fromAces, c);
+    }
+    return c;
+}
+std::string EnvText(const char *name)
+{
+#if defined(_MSC_VER)
+    char *text = nullptr;
+    size_t length = 0;
+    std::string value = _dupenv_s(&text, &length, name) == 0 && text ? text : "";
+    std::free(text);
+    return value;
+#else
+    const char *text = std::getenv(name);
+    return text ? text : "";
+#endif
+}
+int ShownByte(double light)
+{
+    light = std::clamp(light, 0.0, 1.0);
+    const double encoded = light <= 0.0031308 ? light * 12.92 : 1.055 * std::pow(light, 1.0 / 2.4) - 0.055;
+    return static_cast<int>(std::lround(encoded * 255.0));
+}
+// Our lit shaders' fog (lm_sun.frag): a colour drawn as lit (linear light),
+// whose game colour in display values is gameDisplay, fogged by fog factor w
+// (1 = no fog) towards fogDisplay. The game blends in display values; ours
+// takes the linear share that gives the game's blend, decoded.
+double ModernLitFogged(double lit, double gameDisplay, double fogDisplay, double w)
+{
+    const auto decode = [](double v) {
+        v = std::max(v, 0.0);
+        return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+    };
+    const double fog = decode(fogDisplay), game = decode(gameDisplay);
+    const double span = fog - game;
+    const double share = std::abs(span) > 1e-5
+        ? std::clamp((decode(fogDisplay + (gameDisplay - fogDisplay) * w) - game) / span, 0.0, 1.0)
+        : 1.0 - w;
+    return lit + (fog - lit) * share;
+}
+// The curve the tonemap uses: KISAK_VK_MODERN_TONEMAP, neutral (the default)
+// for none or a name it does not know, clamp without linear light (the scene
+// is then drawn as always).
+std::string ModernCurve()
+{
+    std::string curve = EnvText("KISAK_VK_MODERN_TONEMAP");
+    if (curve != "clamp" && curve != "agx" && curve != "aces")
+        curve = "neutral";
+    if (EnvText("KISAK_VK_MODERN_LINEAR") == "0")
+        curve = "clamp";
+    return curve;
+}
+// What an opaque Legacy colour comes back as through that curve: decoded to
+// light, the curve, encoded again (clamp gives the colour back).
+std::array<int, 3> ThroughCurve(int r, int g, int b)
+{
+    const auto decode = [](int v) {
+        const double x = v / 255.0;
+        return x <= 0.04045 ? x / 12.92 : std::pow((x + 0.055) / 1.055, 2.4);
+    };
+    const Rgb shown = TonemapCurve(ModernCurve(), {decode(r), decode(g), decode(b)});
+    return {ShownByte(shown[0]), ShownByte(shown[1]), ShownByte(shown[2])};
+}
+} // namespace
+
+// The Modern path's linear light (front::ModernSceneBegin, docs/vulkan-modern.md):
+// between ModernSceneBegin and ModernSceneDone the back buffer as render
+// target 0 stands for an R16G16B16A16_SFLOAT image in linear light, and the
+// tonemap writes it back within the scene's viewport. An opaque draw and a
+// clear come back exactly as the Legacy path would have stored them, through
+// the tonemap's curve (neutral by default changes only colours over 227); a blend
+// happens in linear light (white at 50% over black is 188, not 128); a
+// StretchRect from the back buffer during the scene reads display values;
+// outside the viewport the back buffer keeps what it had; afterwards the back
+// buffer is render target 0 again. With KISAK_VK_MODERN_LINEAR=0 the scene is
+// Skipped and drawn as always (the blend is 128, the clear reaches the whole
+// back buffer).
+void Check::ModernLinear()
+{
+#if defined(_MSC_VER)
+    char *env = nullptr;
+    size_t envLength = 0;
+    const bool off = _dupenv_s(&env, &envLength, "KISAK_VK_MODERN_LINEAR") == 0 && env && !std::strcmp(env, "0");
+    std::free(env);
+#else
+    const char *env = std::getenv("KISAK_VK_MODERN_LINEAR");
+    const bool off = env && !std::strcmp(env, "0");
+#endif
+    IDirect3DSurface9 *depth = nullptr;
+    IDirect3DTexture9 *copy = nullptr;
+    IDirect3DSurface9 *copyLevel = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface")
+        || !Ok(device->CreateTexture(kSize, kSize, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &copy,
+                                     nullptr),
+               "CreateTexture(copy)")
+        || !Ok(copy->GetSurfaceLevel(0, &copyLevel), "GetSurfaceLevel(copy)"))
+    {
+        SafeRelease(depth);
+        SafeRelease(copy);
+        return;
+    }
+
+    // Before the scene: the back buffer is grey (outside the viewport it stays so).
+    Reset(Argb(255, 90, 90, 90));
+    const front::ModernResult began = front::ModernSceneBegin(device);
+    Equal("begin", static_cast<int>(began), static_cast<int>(off ? front::ModernResult::Skipped
+                                                                   : front::ModernResult::Done));
+    device->SetDepthStencilSurface(depth);
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 40, 120, 200), 1.0f, 0),
+       "Clear(scene)");
+    // Opaque, left half; black, top right; white at 50% over the black.
+    DrawQuad(0, 0, 64, 128, 0.5f, Argb(255, 10, 128, 250));
+    DrawQuad(64, 0, 128, 64, 0.5f, Argb(255, 0, 0, 0));
+    device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+    device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+    device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+    DrawQuad(64, 0, 128, 64, 0.5f, Argb(128, 255, 255, 255));
+    device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+    // The renderer's resolve for distortion, during the scene.
+    Ok(device->StretchRect(backBuffer, nullptr, copyLevel, nullptr, D3DTEXF_NONE), "StretchRect(scene)");
+    // The application still sees the back buffer as render target 0.
+    IDirect3DSurface9 *target = nullptr;
+    if (Ok(device->GetRenderTarget(0, &target), "GetRenderTarget"))
+    {
+        Equal("target_is_back_buffer", target == backBuffer, true);
+        SafeRelease(target);
+    }
+
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    view.width = 96; // the scene's viewport: the right quarter is not the scene
+    view.height = kSize;
+    view.cut = true;
+    Equal("done", static_cast<int>(front::ModernSceneDone(device, view)),
+          static_cast<int>(front::ModernResult::Done));
+    // After the scene: 2D goes straight to the back buffer.
+    device->SetDepthStencilSurface(nullptr);
+    DrawQuad(0, 120, 8, 128, 0.5f, Argb(255, 33, 66, 99));
+
+    const int blend = off ? 128 : 188; // 0.502 of white over black, in gamma or in linear light
+    const std::array<int, 3> opaque = ThroughCurve(10, 128, 250);
+    if (Read())
+    {
+        // Exactly, where the Legacy path stores 8-bit values.
+        const auto exact = [&](const char *name, UINT x, UINT y, int r, int g, int b) {
+            const uint8_t *p = &pixels[(y * readSize + x) * 4];
+            const bool same = p[2] == r && p[1] == g && p[0] == b;
+            Equal(name, same, true);
+            if (!same)
+                result->detail += " " + std::string(name) + "_got=" + std::to_string(p[2]) + "," +
+                    std::to_string(p[1]) + "," + std::to_string(p[0]);
+        };
+        // (through the tonemap's curve: the default, neutral, rolls 250 off)
+        exact("opaque_exact", 32, 64, opaque[0], opaque[1], opaque[2]);
+        exact("clear_exact", 80, 96, 40, 120, 200);
+        Expect("blend_in_light", 80, 32, blend, blend, blend);
+        // Linear light writes back only the scene's viewport; without it the
+        // clear reached the back buffer itself.
+        if (off)
+            exact("outside_viewport_cleared", 112, 96, 40, 120, 200);
+        else
+            exact("outside_viewport_kept", 112, 96, 90, 90, 90);
+        exact("after_scene_exact", 4, 124, 33, 66, 99);
+    }
+    if (Read(copyLevel, kSize))
+    {
+        Expect("copy_opaque", 32, 64, opaque[0], opaque[1], opaque[2]);
+        Expect("copy_clear", 80, 96, 40, 120, 200);
+        Expect("copy_blend", 80, 32, blend, blend, blend);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    SafeRelease(copyLevel);
+    SafeRelease(copy);
+    SafeRelease(depth);
+}
+
+// Bloom in place of the glow (vk_d3d9.h ModernSceneDone, view.glow): three
+// scenes drawn in linear light. A white square on black with glow: light
+// spreads around it and the renderer is told to leave its glow out. Grey
+// below the glow's cutoff with glow: nothing spreads. The white square
+// without glow: nothing spreads and the renderer keeps its glow. With
+// KISAK_VK_MODERN_LINEAR=0 or KISAK_VK_MODERN_BLOOM=0 there is never bloom.
+void Check::ModernBloom()
+{
+    const auto envZero = [](const char *name) {
+#if defined(_MSC_VER)
+        char *env = nullptr;
+        size_t envLength = 0;
+        const bool zero = _dupenv_s(&env, &envLength, name) == 0 && env && !std::strcmp(env, "0");
+        std::free(env);
+        return zero;
+#else
+        const char *env = std::getenv(name);
+        return env && !std::strcmp(env, "0");
+#endif
+    };
+    const bool bloomOn = !envZero("KISAK_VK_MODERN_LINEAR") && !envZero("KISAK_VK_MODERN_BLOOM");
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    const auto value = [&](UINT x, UINT y) {
+        const uint8_t *p = &pixels[(y * readSize + x) * 4];
+        return std::max(std::max(int(p[2]), int(p[1])), int(p[0]));
+    };
+    // One scene: black, with a white 16x16 square in the middle or grey on
+    // the left; returns whether the renderer would leave its glow out.
+    const auto scene = [&](bool square, bool glow) {
+        Reset(Argb(255, 0, 0, 0));
+        front::ModernSceneBegin(device);
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0),
+           "Clear(scene)");
+        if (square)
+            DrawQuad(56, 56, 72, 72, 0.5f, Argb(255, 255, 255, 255));
+        else
+            DrawQuad(0, 0, 32, kSize, 0.5f, Argb(255, 100, 100, 100));
+        front::ModernSceneView view{};
+        for (int i = 0; i < 4; ++i)
+            view.view[i][i] = view.projection[i][i] = 1.0f;
+        view.width = view.height = kSize;
+        view.cut = true;
+        view.glow.on = glow;
+        view.glow.radius = 2.0f;
+        view.glow.intensity = 1.0f;
+        view.glow.cutoff = 0.5f; // grey 100 is about 0.39: below it
+        view.glow.desaturation = 0.0f;
+        bool glowDrawn = false;
+        Equal("done", static_cast<int>(front::ModernSceneDone(device, view, &glowDrawn)),
+              static_cast<int>(front::ModernResult::Done));
+        device->SetDepthStencilSurface(nullptr);
+        return glowDrawn;
+    };
+
+    const bool drawn = scene(true, true);
+    Equal("square_glow_drawn", drawn, bloomOn);
+    if (Read())
+    {
+        // White through the curve, brighter still where the bloom adds to it.
+        const int white = ThroughCurve(255, 255, 255)[0];
+        const uint8_t *c = &pixels[(64 * readSize + 64) * 4];
+        const bool whiteOk = c[0] == c[1] && c[1] == c[2] && c[0] >= white;
+        Equal("square_white", whiteOk, true);
+        if (!whiteOk)
+            result->detail += " square_white_got=" + std::to_string(c[2]) + "," + std::to_string(c[1]) + "," +
+                std::to_string(c[0]) + " want_at_least=" + std::to_string(white);
+        // Four pixels below the square's edge: lit by the bloom, or black.
+        const int spread = value(64, 76);
+        Equal("square_spreads", bloomOn ? spread >= 8 : spread == 0, true);
+        if (bloomOn ? spread < 8 : spread != 0)
+            result->detail += " square_spreads_got=" + std::to_string(spread);
+        // The bloom fades with distance and stays white's colour.
+        Equal("square_fades", value(64, 100) <= spread, true);
+        const uint8_t *p = &pixels[(76 * readSize + 64) * 4];
+        Equal("square_bloom_grey", std::abs(int(p[2]) - int(p[0])) <= 1 && std::abs(int(p[1]) - int(p[0])) <= 1,
+              true);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+
+    Equal("grey_glow_drawn", scene(false, true), bloomOn);
+    if (Read())
+    {
+        Expect("grey_kept", 16, 64, 100, 100, 100);
+        Equal("grey_below_cutoff", value(36, 64), 0);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+
+    Equal("no_glow_kept", scene(true, false), false);
+    if (Read())
+    {
+        const int white = ThroughCurve(255, 255, 255)[0];
+        Expect("no_glow_white", 64, 64, white, white, white);
+        Equal("no_glow_no_spread", value(64, 76), 0);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    SafeRelease(depth);
+}
+
+// Effects after the lit scene (vk_d3d9.h ModernSceneLit): black, then two
+// additive layers of grey 64. On the display image (the default) they add as
+// display values, 128, as in the Legacy path; with KISAK_VK_MODERN_EFFECTS=
+// linear they add as light in the scene, 90. Without linear light the scene
+// is in the back buffer either way: 128.
+void Check::ModernEffects()
+{
+    const auto env = [](const char *name, const char *value) {
+#if defined(_MSC_VER)
+        char *text = nullptr;
+        size_t length = 0;
+        const bool same = _dupenv_s(&text, &length, name) == 0 && text && !std::strcmp(text, value);
+        std::free(text);
+        return same;
+#else
+        const char *text = std::getenv(name);
+        return text && !std::strcmp(text, value);
+#endif
+    };
+    const bool linearOff = env("KISAK_VK_MODERN_LINEAR", "0");
+    const bool effectsInLinear = env("KISAK_VK_MODERN_EFFECTS", "linear");
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    Reset(Argb(255, 0, 0, 0));
+    front::ModernSceneBegin(device);
+    device->SetDepthStencilSurface(depth);
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0), "Clear(scene)");
+    DrawQuad(0, 0, kSize, kSize, 0.5f, Argb(255, 0, 0, 0));
+
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    view.width = view.height = kSize;
+    view.cut = true;
+    // As the program does: a scene finished at Lit has nothing left at Done.
+    const front::ModernResult lit = front::ModernSceneLit(device, view);
+    Equal("lit", static_cast<int>(lit), static_cast<int>(effectsInLinear ? front::ModernResult::Skipped
+                                                                         : front::ModernResult::Done));
+    IDirect3DSurface9 *target = nullptr;
+    if (Ok(device->GetRenderTarget(0, &target), "GetRenderTarget"))
+    {
+        Equal("target_is_back_buffer", target == backBuffer, true);
+        SafeRelease(target);
+    }
+    device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+    device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+    device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+    DrawQuad(32, 32, 96, 96, 0.5f, Argb(255, 64, 64, 64));
+    DrawQuad(32, 32, 96, 96, 0.5f, Argb(255, 64, 64, 64));
+    device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+    if (lit == front::ModernResult::Skipped)
+        Equal("done", static_cast<int>(front::ModernSceneDone(device, view)),
+              static_cast<int>(front::ModernResult::Done));
+    device->SetDepthStencilSurface(nullptr);
+
+    const int added = effectsInLinear && !linearOff ? 90 : 128;
+    if (Read())
+    {
+        Expect("effects_added", 64, 64, added, added, added);
+        Expect("scene_black", 8, 8, 0, 0, 0);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    SafeRelease(depth);
+}
+
+// Lit surfaces computing in linear light (front::SetModernLitInputs): a grey
+// 128 colour map times a white vertex colour, plus a light of 64 in c1. Taken
+// to linear light only as the stored sum (no lit inputs, or linear light off)
+// the quad shows 128 + 64 = 192; with the colour map, the light and the
+// vertex colour decoded before the sum it shows encode(decode(128) +
+// decode(64)) = 141, and 197 with the colour map doubled (decode(2v) / 2).
+// Over white (nothing decoded but the stored colour, without its clamp) it
+// is 192 as without lit inputs: below white the two are the same.
+void Check::ModernLit()
+{
+    const auto env = [](const char *name, const char *value) {
+#if defined(_MSC_VER)
+        char *text = nullptr;
+        size_t length = 0;
+        const bool same = _dupenv_s(&text, &length, name) == 0 && text && !std::strcmp(text, value);
+        std::free(text);
+        return same;
+#else
+        const char *text = std::getenv(name);
+        return text && !std::strcmp(text, value);
+#endif
+    };
+    const bool lit = !env("KISAK_VK_MODERN_LINEAR", "0") && !env("KISAK_VK_MODERN_LIT", "0");
+    IDirect3DTexture9 *texture = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 128, 128, 128); });
+    IDirect3DSurface9 *depth = nullptr;
+    if (!texture
+        || !Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                                 nullptr),
+               "CreateDepthStencilSurface"))
+    {
+        SafeRelease(texture);
+        return;
+    }
+    Reset(Argb(255, 0, 0, 0));
+    front::ModernSceneBegin(device);
+    device->SetDepthStencilSurface(depth);
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0), "Clear(scene)");
+    Ok(device->SetTexture(0, texture), "SetTexture");
+    Ok(device->SetPixelShader(psLit), "SetPixelShader");
+    const float light[4] = {64.0f / 255.0f, 64.0f / 255.0f, 64.0f / 255.0f, 0.0f};
+    Ok(device->SetPixelShaderConstantF(1, light, 1), "SetPixelShaderConstantF");
+    DrawQuad(0, 0, 64, 64, 0.5f, Argb(255, 255, 255, 255));
+    front::ModernLitInputs inputs;
+    inputs.samplers = 1u << 0;
+    inputs.constants = 1ull << 1;
+    inputs.colorInput = true;
+    front::SetModernLitInputs(device, &inputs);
+    DrawQuad(64, 0, 128, 64, 0.5f, Argb(255, 255, 255, 255));
+    inputs.doubled = 1u << 0;
+    front::SetModernLitInputs(device, &inputs);
+    DrawQuad(0, 64, 64, 128, 0.5f, Argb(255, 255, 255, 255));
+    front::ModernLitInputs overWhite;
+    overWhite.overWhite = true;
+    front::SetModernLitInputs(device, &overWhite);
+    DrawQuad(64, 64, 128, 96, 0.5f, Argb(255, 255, 255, 255));
+    front::SetModernLitInputs(device, nullptr);
+    DrawQuad(64, 96, 128, 128, 0.5f, Argb(255, 255, 255, 255));
+
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    view.width = view.height = kSize;
+    view.cut = true;
+    if (front::ModernSceneLit(device, view) == front::ModernResult::Skipped)
+        front::ModernSceneDone(device, view);
+    device->SetDepthStencilSurface(nullptr);
+    device->SetTexture(0, nullptr);
+    if (Read())
+    {
+        Expect("unlit", 32, 32, 192, 192, 192);
+        Expect("lit", 96, 32, lit ? 141 : 192, lit ? 141 : 192, lit ? 141 : 192);
+        Expect("lit_doubled", 32, 96, lit ? 197 : 192, lit ? 197 : 192, lit ? 197 : 192);
+        Expect("over_white", 96, 80, 192, 192, 192);
+        Expect("unlit_again", 96, 112, 192, 192, 192);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    SafeRelease(depth);
+    SafeRelease(texture);
+}
+
+
+// The Modern lit shaders of our own (front::ModernLitInputs::shader): a
+// stand-in for lm_hsm_sun_r0c0 that reads what it reads but shows black is
+// drawn as our lm_sun shader instead, which adds its light in linear light.
+// Grey 128 colour map (0.2159 of light) under a white vertex colour, the
+// secondary lightmap's halves 64 each with flat directions (their sum, 128,
+// is 0.2159 of light), the primary lightmap 1, and a grey 128 sun straight
+// overhead: lit = 0.2159 * (0.2159 * sky + (decode(128 + 128) - 0.2159) * sun
+// strength), the sun adding what it adds in the game's display sum. The shadow
+// map holds depth 0.5: a reference of 0.25 is lit (as without the shadow),
+// 0.75 is in shadow (the lightmap's light only). Half fog towards red blends
+// in linear light. Those four are the top half; the bottom half draws the
+// variants with maps (lm_hsm_sun_<mode>c0d0n0s0 and lm_sun_r0c0n0) through a
+// second stand-in: a flat normal map, a grey specular map of gloss 0 under a
+// probe of grey 64 and the sun's grey specular colour, and a detail map of 160
+// added around grey, opaque, blended (colour alpha 128, premultiplied) and
+// alpha-tested (kept at alpha 200, dropped at 200 times a vertex alpha of
+// 100); and a normal map tilted along the tangent without the shadow map.
+// The expectations follow the game's formulas (world-lit shader facts 3).
+// Without our shaders (KISAK_VK_MODERN_SHADERS=0, no linear light, or no lit
+// inputs) the stand-ins show black.
+void Check::ModernLitShader()
+{
+    const bool on = EnvText("KISAK_VK_MODERN_LINEAR") != "0" && EnvText("KISAK_VK_MODERN_LIT") != "0"
+        && EnvText("KISAK_VK_MODERN_SHADERS") != "0";
+    const auto strength = [](const char *name, double fallback) {
+        const std::string text = EnvText(name);
+        const double value = text.empty() ? -1.0 : std::strtod(text.c_str(), nullptr);
+        return value >= 0.0 ? value : fallback;
+    };
+    const double sun = strength("KISAK_VK_MODERN_SUN_STRENGTH", 1.0);
+    const double sky = strength("KISAK_VK_MODERN_SKY_STRENGTH", 1.0);
+    IDirect3DTexture9 *color = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 128, 128, 128); });
+    IDirect3DTexture9 *primary = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
+    IDirect3DTexture9 *secondary = FilledTexture(1, 2, [](UINT, UINT) { return Argb(130, 64, 64, 64); });
+    IDirect3DTexture9 *colorHalf = FilledTexture(1, 1, [](UINT, UINT) { return Argb(128, 128, 128, 128); });
+    IDirect3DTexture9 *colorTested = FilledTexture(1, 1, [](UINT, UINT) { return Argb(200, 128, 128, 128); });
+    // Normal maps hold their slopes in alpha (along the tangent) and green
+    // (along the binormal): 130 is flat (0 and 0.0076), 192 is 0.992.
+    IDirect3DTexture9 *normalFlat = FilledTexture(1, 1, [](UINT, UINT) { return Argb(130, 0, 130, 0); });
+    IDirect3DTexture9 *normalTilted = FilledTexture(1, 1, [](UINT, UINT) { return Argb(192, 0, 130, 0); });
+    IDirect3DTexture9 *specularMap = FilledTexture(1, 1, [](UINT, UINT) { return Argb(0, 128, 128, 128); });
+    IDirect3DTexture9 *detailMap = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 160, 160, 160); });
+    IDirect3DCubeTexture9 *probe = nullptr;
+    if (Ok(device->CreateCubeTexture(1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &probe, nullptr),
+           "CreateCubeTexture(probe)"))
+    {
+        for (UINT face = 0; face < 6; ++face)
+        {
+            D3DLOCKED_RECT rect{};
+            if (Ok(probe->LockRect(static_cast<D3DCUBEMAP_FACES>(face), 0, &rect, nullptr, 0), "LockRect(probe)"))
+            {
+                *static_cast<uint32_t *>(rect.pBits) = Argb(255, 64, 64, 64);
+                probe->UnlockRect(static_cast<D3DCUBEMAP_FACES>(face), 0);
+            }
+        }
+    }
+    IDirect3DTexture9 *shadow = nullptr, *shadowColor = nullptr;
+    IDirect3DSurface9 *shadowLevel = nullptr, *shadowColorLevel = nullptr, *depth = nullptr;
+    const bool made = color && primary && secondary && colorHalf && colorTested && normalFlat && normalTilted
+        && specularMap && detailMap && probe
+        && Ok(device->CreateTexture(64, 64, 1, D3DUSAGE_DEPTHSTENCIL, D3DFMT_D24S8, D3DPOOL_DEFAULT, &shadow, nullptr),
+              "CreateTexture(D24S8 depth)")
+        && Ok(shadow->GetSurfaceLevel(0, &shadowLevel), "GetSurfaceLevel(depth)")
+        && Ok(device->CreateTexture(64, 64, 1, D3DUSAGE_RENDERTARGET, D3DFMT_R5G6B5, D3DPOOL_DEFAULT, &shadowColor,
+                                    nullptr),
+              "CreateTexture(R5G6B5 target)")
+        && Ok(shadowColor->GetSurfaceLevel(0, &shadowColorLevel), "GetSurfaceLevel(colour)")
+        && Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                                nullptr),
+              "CreateDepthStencilSurface");
+    if (made)
+    {
+        // The shadow pass: depth 0.5 everywhere.
+        Ok(device->SetRenderTarget(0, shadowColorLevel), "SetRenderTarget(shadow colour)");
+        Ok(device->SetDepthStencilSurface(shadowLevel), "SetDepthStencilSurface(shadow)");
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 0.5f, 0),
+           "Clear(shadow)");
+
+        Reset(Argb(255, 0, 0, 0));
+        front::ModernSceneBegin(device);
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0),
+           "Clear(scene)");
+        device->SetVertexShader(vsLmSun);
+        device->SetPixelShader(psLmSunStandIn);
+        device->SetTexture(0, color);
+        device->SetTexture(2, primary);
+        device->SetTexture(3, secondary);
+        device->SetTexture(4, shadow);
+        for (DWORD sampler : {2u, 3u, 4u})
+        {
+            device->SetSamplerState(sampler, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+            device->SetSamplerState(sampler, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+        }
+        const float grey = 128.0f / 255.0f;
+        const float pixel[19][4] = {
+            {1, 0, 0, 0},          // c0 fog colour: red
+            {0, 0, 0, 0},          // c1: the stand-in's black
+            {0, 0, 0, 1},          // c2 shadow partition switch: far = near
+            {0, 0, 0, 0},          // c3
+            {0, 0, 0, 0},          // c4 shadow-map scale (no edge fade)
+            {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+            {0, 0, 1, 0},          // c17 sun direction: overhead
+            {grey, grey, grey, 0}, // c18 sun colour
+        };
+        Ok(device->SetPixelShaderConstantF(0, &pixel[0][0], 19), "SetPixelShaderConstantF");
+        // Colour map and lightmap UVs; the normal straight up and the fog
+        // factor; the shadow-map coordinate (near partition).
+        const auto vertex = [&](float fog, float reference) {
+            const float values[3][4] = {{0.5f, 0.5f, 0.5f, 0.5f}, {0, 0, 1, fog}, {0.5f, 0.5f, reference, 0.5f}};
+            Ok(device->SetVertexShaderConstantF(1, &values[0][0], 3), "SetVertexShaderConstantF");
+        };
+        const uint32_t white = Argb(255, 255, 255, 255);
+        front::ModernLitInputs inputs;
+        inputs.overWhite = true;
+        inputs.shader = 0x40; // lm_sun_r0c0
+        front::SetModernLitInputs(device, &inputs);
+        vertex(1.0f, 0.25f);
+        DrawQuad(0, 0, 32, 64, 0.5f, white);
+        vertex(0.5f, 0.25f);
+        DrawQuad(96, 0, 128, 64, 0.5f, white);
+        inputs.shader = 0x41; // lm_hsm_sun_r0c0
+        front::SetModernLitInputs(device, &inputs);
+        vertex(1.0f, 0.25f);
+        DrawQuad(32, 0, 64, 64, 0.5f, white);
+        vertex(1.0f, 0.75f);
+        DrawQuad(64, 0, 96, 64, 0.5f, white);
+
+        // The variants with maps: probe s1, shadow s4, normal s5, specular s6,
+        // detail s7; envMapParms c5 (Fresnel 1, sun highlight 0.5), the
+        // detail scale c6 and the sun's specular colour c19.
+        device->SetVertexShader(vsLmSunMaps);
+        device->SetPixelShader(psLmSunMapsStandIn);
+        device->SetTexture(1, probe);
+        device->SetTexture(5, normalFlat);
+        device->SetTexture(6, specularMap);
+        device->SetTexture(7, detailMap);
+        for (DWORD sampler : {1u, 5u, 6u, 7u})
+        {
+            device->SetSamplerState(sampler, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+            device->SetSamplerState(sampler, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+        }
+        const float maps[2][4] = {{1, 1, 0, 0.5f}, {1, 1, 0, 0}};
+        Ok(device->SetPixelShaderConstantF(5, &maps[0][0], 2), "SetPixelShaderConstantF(maps)");
+        const float sunSpecular[4] = {grey, grey, grey, 0};
+        Ok(device->SetPixelShaderConstantF(19, sunSpecular, 1), "SetPixelShaderConstantF(c19)");
+        // Colour map and lightmap UVs; the normal straight up and no fog; the
+        // binormal along y and tangent along x; the shadow-map coordinate (lit);
+        // looking straight down.
+        const float mapVertex[6][4] = {{0.5f, 0.5f, 0.5f, 0.5f}, {0, 0, 1, 1}, {0, 1, 0, 0},
+                                       {1, 0, 0, 0},             {0.5f, 0.5f, 0.25f, 0.5f}, {0, 0, -1, 0}};
+        Ok(device->SetVertexShaderConstantF(1, &mapVertex[0][0], 6), "SetVertexShaderConstantF(maps)");
+        inputs.shader = 0x4f; // lm_hsm_sun_r0c0d0n0s0
+        front::SetModernLitInputs(device, &inputs);
+        DrawQuad(0, 64, 32, 128, 0.5f, white);
+        device->SetTexture(0, colorHalf);
+        device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+        device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+        device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+        inputs.shader = 0x5f; // lm_hsm_sun_b0c0d0n0s0
+        front::SetModernLitInputs(device, &inputs);
+        DrawQuad(64, 64, 96, 128, 0.5f, white);
+        device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+        device->SetTexture(0, colorTested);
+        device->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+        device->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATEREQUAL);
+        device->SetRenderState(D3DRS_ALPHAREF, 128);
+        inputs.shader = 0x6f; // lm_hsm_sun_t0c0d0n0s0
+        front::SetModernLitInputs(device, &inputs);
+        DrawQuad(96, 64, 112, 128, 0.5f, white);
+        DrawQuad(112, 64, 128, 128, 0.5f, Argb(100, 255, 255, 255));
+        device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+        // The normal map alone, at s4 without the shadow map.
+        device->SetTexture(0, color);
+        device->SetTexture(4, normalTilted);
+        inputs.shader = 0x42; // lm_sun_r0c0n0
+        front::SetModernLitInputs(device, &inputs);
+        DrawQuad(32, 64, 64, 128, 0.5f, white);
+        front::SetModernLitInputs(device, nullptr);
+
+        front::ModernSceneView view{};
+        for (int i = 0; i < 4; ++i)
+            view.view[i][i] = view.projection[i][i] = 1.0f;
+        view.width = view.height = kSize;
+        view.cut = true;
+        if (front::ModernSceneLit(device, view) == front::ModernResult::Skipped)
+            front::ModernSceneDone(device, view);
+        device->SetDepthStencilSurface(nullptr);
+        for (DWORD sampler : {0u, 1u, 2u, 3u, 4u, 5u, 6u, 7u})
+            device->SetTexture(sampler, nullptr);
+        device->SetVertexShader(vsBasic);
+        device->SetPixelShader(psColor);
+        if (Read())
+        {
+            const std::string curve = ModernCurve();
+            const auto shown = [&](double r, double g, double b) {
+                const Rgb c = TonemapCurve(curve, {r, g, b});
+                return std::array<int, 3>{ShownByte(c[0]), ShownByte(c[1]), ShownByte(c[2])};
+            };
+            const auto expect = [&](const char *name, int x, int y, std::array<int, 3> rgb) {
+                Expect(name, x, y, on ? rgb[0] : 0, on ? rgb[1] : 0, on ? rgb[2] : 0);
+            };
+            const auto decode = [](double v) {
+                v = std::max(v, 0.0);
+                return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+            };
+            const auto slope = [](int byte, double scale, double offset) { return byte / 255.0 * scale - offset; };
+            const double b = slope(130, 4.06452, 2.06452); // the lightmap's direction (a is 0)
+            const double lengthD = 1.0 / std::sqrt(b * b + 1.0);
+            const double greyValue = 128 / 255.0;
+            // The diffuse light of a surface whose normal map's slope along
+            // the tangent is x (0 without a normal map; y is b's), in the
+            // shade or the sun: the lightmap's decoded, plus what the sun
+            // adds to it in the game's display-value sum. In display values
+            // too, for the specular's share.
+            struct Light
+            {
+                double linear, display;
+            };
+            // A colour of albedoDisplay under that light as ours draws it: the
+            // game's product decoded, shared out between the sky and the sun
+            // as their strengths scale them.
+            const auto colour = [&](double albedoDisplay, const Light &light) {
+                return decode(albedoDisplay * light.display) * light.linear / std::max(decode(light.display), 1e-12);
+            };
+            const auto diffuse = [&](double x, bool normalMap, bool sunlit, double yScale = 1.0) {
+                const double y = b * yScale;
+                const double lengthN = normalMap ? 1.0 / std::sqrt(x * x + y * y + 1.0) : 1.0;
+                const double facing = normalMap ? std::clamp((b * y + 1.0) * lengthN * lengthD, 0.0, 1.0)
+                                                : std::clamp(lengthD, 0.0, 1.0);
+                const double skyDisplay = 64 / 255.0 * lengthN + 64 / 255.0 * facing;
+                // The normal (x, y, 1) or (0, 0, 1) faces the sun by lengthN.
+                const double sunDisplay = sunlit ? (normalMap ? lengthN : 1.0) * greyValue : 0.0;
+                const double skyLight = decode(skyDisplay);
+                const double sunLight = decode(skyDisplay + sunDisplay) - skyLight;
+                return Light{skyLight * sky + sunLight * sun, skyDisplay + sunDisplay};
+            };
+            const double sunlit = colour(greyValue, diffuse(0.0, false, true));
+            const double shaded = colour(greyValue, diffuse(0.0, false, false));
+            expect("sunlit", 16, 32, shown(sunlit, sunlit, sunlit));
+            expect("shadow_lit", 48, 32, shown(sunlit, sunlit, sunlit));
+            expect("shadow_shaded", 80, 32, shown(shaded, shaded, shaded));
+            const double sunlitDisplay = greyValue * diffuse(0.0, false, true).display;
+            expect("half_fog", 112, 32,
+                   shown(ModernLitFogged(sunlit, sunlitDisplay, 1.0, 0.5), ModernLitFogged(sunlit, sunlitDisplay, 0.0, 0.5),
+                         ModernLitFogged(sunlit, sunlitDisplay, 0.0, 0.5)));
+
+            // The variants with maps, by the game's formulas. Looking straight
+            // down at a normal within 0.5 degrees of the sun: the highlight is
+            // whole, the Fresnel 1, the probe grey 64; the specular adds what
+            // it adds to the game's diffuse colour.
+            const double detailDisplay = greyValue + 160 / 255.0 - 0.5;
+            // A blended surface's normal-map slopes are scaled by its alpha.
+            const auto withMaps = [&](double alpha) {
+                const Light light = diffuse(0.0, true, true, alpha);
+                const double diffuseDisplay = alpha * detailDisplay * light.display;
+                const double specularDisplay = greyValue * (0.5 * greyValue * sun + 64 / 255.0);
+                return alpha * colour(detailDisplay, light) + decode(diffuseDisplay + specularDisplay)
+                    - decode(diffuseDisplay);
+            };
+            const double opaque = withMaps(1.0);
+            const double blended = withMaps(128 / 255.0);
+            const double tilted = colour(greyValue, diffuse(slope(192, 4.08, 2.08), true, true));
+            expect("maps_opaque", 16, 96, shown(opaque, opaque, opaque));
+            expect("maps_normal_tilted", 48, 96, shown(tilted, tilted, tilted));
+            expect("maps_blended", 80, 96, shown(blended, blended, blended));
+            expect("maps_alpha_kept", 104, 96, shown(opaque, opaque, opaque));
+            Expect("maps_alpha_dropped", 120, 96, 0, 0, 0);
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    }
+    SafeRelease(depth);
+    SafeRelease(shadowColorLevel);
+    SafeRelease(shadowColor);
+    SafeRelease(shadowLevel);
+    SafeRelease(shadow);
+    SafeRelease(probe);
+    SafeRelease(detailMap);
+    SafeRelease(specularMap);
+    SafeRelease(normalTilted);
+    SafeRelease(normalFlat);
+    SafeRelease(colorTested);
+    SafeRelease(colorHalf);
+    SafeRelease(secondary);
+    SafeRelease(primary);
+    SafeRelease(color);
+}
+
+
+// The model shaders of our own (lp_sun.frag): a stand-in for
+// lp_hsm_sun_<mode>c0d0n0s0 that reads what those read but shows black is
+// drawn as our shader instead. The lighting volume is 1x1x2: its first slice
+// black, its second grey 48 (doubled by the game to 96, 0.117 of light) with
+// the sun 200/255 visible. The models' coordinate is a quarter of the way
+// in, and lightingLookupScale half a volume along the normal (which is
+// straight up), so only the volume's lookup along the normal reaches the
+// grey slice. Under the grey 128 colour map and a grey 128 sun overhead:
+// lit = 0.2159 * (sky + (decode(96 + vis * 128) - sky) * sun strength), where
+// vis is the volume's alpha without the shadow map and the shadow map's taps
+// with it (lit at a reference of 0.25, shaded at 0.75). The top half draws
+// lp_sun_r0c0 (sunlit, then half fog towards red) and lp_hsm_sun_r0c0 (lit,
+// shaded); the bottom half the variants with maps as modern_lit_shader does
+// for the world (opaque, blended, alpha-tested kept and dropped), and
+// lp_sun_r0c0n0 with a normal map tilted along the tangent, whose lookup
+// still reaches the grey slice. Without our shaders the stand-in shows black.
+void Check::ModernLitModels()
+{
+    const bool on = EnvText("KISAK_VK_MODERN_LINEAR") != "0" && EnvText("KISAK_VK_MODERN_LIT") != "0"
+        && EnvText("KISAK_VK_MODERN_SHADERS") != "0" && EnvText("KISAK_VK_MODERN_MODEL_SHADERS") != "0";
+    const auto strength = [](const char *name, double fallback) {
+        const std::string text = EnvText(name);
+        const double value = text.empty() ? -1.0 : std::strtod(text.c_str(), nullptr);
+        return value >= 0.0 ? value : fallback;
+    };
+    const double sun = strength("KISAK_VK_MODERN_SUN_STRENGTH", 1.0);
+    const double sky = strength("KISAK_VK_MODERN_SKY_STRENGTH", 1.0);
+    IDirect3DTexture9 *color = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 128, 128, 128); });
+    IDirect3DTexture9 *colorHalf = FilledTexture(1, 1, [](UINT, UINT) { return Argb(128, 128, 128, 128); });
+    IDirect3DTexture9 *colorTested = FilledTexture(1, 1, [](UINT, UINT) { return Argb(200, 128, 128, 128); });
+    IDirect3DTexture9 *normalFlat = FilledTexture(1, 1, [](UINT, UINT) { return Argb(130, 0, 130, 0); });
+    IDirect3DTexture9 *normalTilted = FilledTexture(1, 1, [](UINT, UINT) { return Argb(192, 0, 130, 0); });
+    IDirect3DTexture9 *specularMap = FilledTexture(1, 1, [](UINT, UINT) { return Argb(0, 128, 128, 128); });
+    IDirect3DTexture9 *detailMap = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 160, 160, 160); });
+    IDirect3DCubeTexture9 *probe = nullptr;
+    if (Ok(device->CreateCubeTexture(1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &probe, nullptr),
+           "CreateCubeTexture(probe)"))
+    {
+        for (UINT face = 0; face < 6; ++face)
+        {
+            D3DLOCKED_RECT rect{};
+            if (Ok(probe->LockRect(static_cast<D3DCUBEMAP_FACES>(face), 0, &rect, nullptr, 0), "LockRect(probe)"))
+            {
+                *static_cast<uint32_t *>(rect.pBits) = Argb(255, 64, 64, 64);
+                probe->UnlockRect(static_cast<D3DCUBEMAP_FACES>(face), 0);
+            }
+        }
+    }
+    IDirect3DVolumeTexture9 *volume = nullptr;
+    if (Ok(device->CreateVolumeTexture(1, 1, 2, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &volume, nullptr),
+           "CreateVolumeTexture(lighting)"))
+    {
+        D3DLOCKED_BOX locked{};
+        if (Ok(volume->LockBox(0, &locked, nullptr, 0), "LockBox(lighting)"))
+        {
+            uint8_t *bytes = static_cast<uint8_t *>(locked.pBits);
+            *reinterpret_cast<uint32_t *>(bytes) = Argb(0, 0, 0, 0);
+            *reinterpret_cast<uint32_t *>(bytes + locked.SlicePitch) = Argb(200, 48, 48, 48);
+            volume->UnlockBox(0);
+        }
+    }
+    IDirect3DTexture9 *shadow = nullptr, *shadowColor = nullptr;
+    IDirect3DSurface9 *shadowLevel = nullptr, *shadowColorLevel = nullptr, *depth = nullptr;
+    const bool made = color && colorHalf && colorTested && normalFlat && normalTilted && specularMap && detailMap
+        && probe && volume
+        && Ok(device->CreateTexture(64, 64, 1, D3DUSAGE_DEPTHSTENCIL, D3DFMT_D24S8, D3DPOOL_DEFAULT, &shadow, nullptr),
+              "CreateTexture(D24S8 depth)")
+        && Ok(shadow->GetSurfaceLevel(0, &shadowLevel), "GetSurfaceLevel(depth)")
+        && Ok(device->CreateTexture(64, 64, 1, D3DUSAGE_RENDERTARGET, D3DFMT_R5G6B5, D3DPOOL_DEFAULT, &shadowColor,
+                                    nullptr),
+              "CreateTexture(R5G6B5 target)")
+        && Ok(shadowColor->GetSurfaceLevel(0, &shadowColorLevel), "GetSurfaceLevel(colour)")
+        && Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                                nullptr),
+              "CreateDepthStencilSurface");
+    if (made)
+    {
+        // The shadow pass: depth 0.5 everywhere.
+        Ok(device->SetRenderTarget(0, shadowColorLevel), "SetRenderTarget(shadow colour)");
+        Ok(device->SetDepthStencilSurface(shadowLevel), "SetDepthStencilSurface(shadow)");
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 0.5f, 0),
+           "Clear(shadow)");
+
+        Reset(Argb(255, 0, 0, 0));
+        front::ModernSceneBegin(device);
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0),
+           "Clear(scene)");
+        device->SetVertexShader(vsLpSunMaps);
+        device->SetPixelShader(psLpSunMapsStandIn);
+        device->SetTexture(0, color);
+        device->SetTexture(1, probe);
+        device->SetTexture(4, volume);
+        device->SetTexture(5, shadow);
+        device->SetTexture(6, normalFlat);
+        device->SetTexture(7, specularMap);
+        device->SetTexture(8, detailMap);
+        for (DWORD sampler : {1u, 4u, 5u, 6u, 7u, 8u})
+        {
+            device->SetSamplerState(sampler, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+            device->SetSamplerState(sampler, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+            device->SetSamplerState(sampler, D3DSAMP_ADDRESSW, D3DTADDRESS_CLAMP);
+        }
+        const float grey = 128.0f / 255.0f;
+        const float pixel[20][4] = {
+            {1, 0, 0, 0},          // c0 fog colour: red
+            {0, 0, 0, 0},          // c1: the stand-in's black
+            {0, 0, 0, 1},          // c2 shadow partition switch: far = near
+            {0, 0, 0, 0},          // c3
+            {0, 0, 0, 0},          // c4 shadow-map scale (no edge fade)
+            {0, 0, 0.5f, 0},       // c5 lightingLookupScale: half the volume's depth
+            {1, 1, 0, 0.5f},       // c6 envMapParms: Fresnel 1, sun highlight 0.5
+            {1, 1, 0, 0},          // c7 detailScale
+            {}, {}, {}, {}, {}, {}, {}, {}, {},
+            {0, 0, 1, 0},          // c17 sun direction: overhead
+            {grey, grey, grey, 0}, // c18 sun colour
+            {grey, grey, grey, 0}, // c19 the sun's specular colour
+        };
+        Ok(device->SetPixelShaderConstantF(0, &pixel[0][0], 20), "SetPixelShaderConstantF");
+        // Colour UV; the normal straight up and the fog factor; binormal along
+        // y and tangent along x; the shadow-map coordinate (near partition);
+        // looking straight down; the volume coordinate a quarter in.
+        const auto vertex = [&](float fog, float reference) {
+            const float values[7][4] = {{0.5f, 0.5f, 0, 0}, {0, 0, 1, fog},   {0, 1, 0, 0},
+                                        {1, 0, 0, 0},       {0.5f, 0.5f, reference, 0.5f},
+                                        {0, 0, -1, 0},      {0.5f, 0.5f, 0.25f, 0}};
+            Ok(device->SetVertexShaderConstantF(1, &values[0][0], 7), "SetVertexShaderConstantF");
+        };
+        const uint32_t white = Argb(255, 255, 255, 255);
+        front::ModernLitInputs inputs;
+        inputs.overWhite = true;
+        // The top half: the base shaders, without maps (the stand-in's map
+        // samplers read the flat normal map and the others, unused).
+        inputs.shader = 0x80; // lp_sun_r0c0
+        front::SetModernLitInputs(device, &inputs);
+        vertex(1.0f, 0.25f);
+        DrawQuad(0, 0, 32, 64, 0.5f, white);
+        vertex(0.5f, 0.25f);
+        DrawQuad(96, 0, 128, 64, 0.5f, white);
+        inputs.shader = 0x81; // lp_hsm_sun_r0c0
+        front::SetModernLitInputs(device, &inputs);
+        vertex(1.0f, 0.25f);
+        DrawQuad(32, 0, 64, 64, 0.5f, white);
+        vertex(1.0f, 0.75f);
+        DrawQuad(64, 0, 96, 64, 0.5f, white);
+
+        // The variants with maps, lit by the shadow map.
+        vertex(1.0f, 0.25f);
+        inputs.shader = 0x8f; // lp_hsm_sun_r0c0d0n0s0
+        front::SetModernLitInputs(device, &inputs);
+        DrawQuad(0, 64, 32, 128, 0.5f, white);
+        device->SetTexture(0, colorHalf);
+        device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+        device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+        device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+        inputs.shader = 0x9f; // lp_hsm_sun_b0c0d0n0s0
+        front::SetModernLitInputs(device, &inputs);
+        DrawQuad(64, 64, 96, 128, 0.5f, white);
+        device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+        device->SetTexture(0, colorTested);
+        device->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+        device->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATEREQUAL);
+        device->SetRenderState(D3DRS_ALPHAREF, 128);
+        inputs.shader = 0xaf; // lp_hsm_sun_t0c0d0n0s0
+        front::SetModernLitInputs(device, &inputs);
+        DrawQuad(96, 64, 112, 128, 0.5f, white);
+        DrawQuad(112, 64, 128, 128, 0.5f, Argb(100, 255, 255, 255));
+        device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+        // The normal map alone, at s5 without the shadow map.
+        device->SetTexture(0, color);
+        device->SetTexture(5, normalTilted);
+        inputs.shader = 0x82; // lp_sun_r0c0n0
+        front::SetModernLitInputs(device, &inputs);
+        DrawQuad(32, 64, 64, 128, 0.5f, white);
+        front::SetModernLitInputs(device, nullptr);
+
+        front::ModernSceneView view{};
+        for (int i = 0; i < 4; ++i)
+            view.view[i][i] = view.projection[i][i] = 1.0f;
+        view.width = view.height = kSize;
+        view.cut = true;
+        if (front::ModernSceneLit(device, view) == front::ModernResult::Skipped)
+            front::ModernSceneDone(device, view);
+        device->SetDepthStencilSurface(nullptr);
+        for (DWORD sampler : {0u, 1u, 4u, 5u, 6u, 7u, 8u})
+            device->SetTexture(sampler, nullptr);
+        device->SetVertexShader(vsBasic);
+        device->SetPixelShader(psColor);
+        if (Read())
+        {
+            const std::string curve = ModernCurve();
+            const auto shown = [&](double r, double g, double b) {
+                const Rgb c = TonemapCurve(curve, {r, g, b});
+                return std::array<int, 3>{ShownByte(c[0]), ShownByte(c[1]), ShownByte(c[2])};
+            };
+            const auto expect = [&](const char *name, int x, int y, std::array<int, 3> rgb) {
+                Expect(name, x, y, on ? rgb[0] : 0, on ? rgb[1] : 0, on ? rgb[2] : 0);
+            };
+            const auto decode = [](double v) {
+                v = std::max(v, 0.0);
+                return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+            };
+            const auto slope = [](int byte, double scale, double offset) { return byte / 255.0 * scale - offset; };
+            const double greyValue = 128 / 255.0;
+            const double skyDisplay = 2.0 * 48 / 255.0, skyLight = decode(skyDisplay);
+            const double volumeSun = 200 / 255.0;
+            // The diffuse light, linear and in display values, with the sun
+            // visible by vis and facing it by facing.
+            struct Light
+            {
+                double linear, display;
+            };
+            // A colour of albedoDisplay under that light as ours draws it: the
+            // game's product decoded, shared out between the sky and the sun
+            // as their strengths scale them.
+            const auto colour = [&](double albedoDisplay, const Light &light) {
+                return decode(albedoDisplay * light.display) * light.linear / std::max(decode(light.display), 1e-12);
+            };
+            const auto diffuse = [&](double vis, double facing) {
+                const double sunDisplay = vis * facing * greyValue;
+                return Light{skyLight * sky + (decode(skyDisplay + sunDisplay) - skyLight) * sun,
+                             skyDisplay + sunDisplay};
+            };
+            const double volumeLit = colour(greyValue, diffuse(volumeSun, 1.0));
+            const double shadowLit = colour(greyValue, diffuse(1.0, 1.0));
+            const double shaded = colour(greyValue, diffuse(0.0, 1.0));
+            expect("volume_sun", 16, 32, shown(volumeLit, volumeLit, volumeLit));
+            expect("shadow_lit", 48, 32, shown(shadowLit, shadowLit, shadowLit));
+            expect("shadow_shaded", 80, 32, shown(shaded, shaded, shaded));
+            const double volumeDisplay = greyValue * diffuse(volumeSun, 1.0).display;
+            expect("half_fog", 112, 32,
+                   shown(ModernLitFogged(volumeLit, volumeDisplay, 1.0, 0.5),
+                         ModernLitFogged(volumeLit, volumeDisplay, 0.0, 0.5),
+                         ModernLitFogged(volumeLit, volumeDisplay, 0.0, 0.5)));
+
+            // The variants with maps: the flat normal map's slopes are 0 and
+            // y (a blended surface's times its alpha), which face the sun by
+            // 1 / length; looking straight down the highlight is whole, the
+            // Fresnel 1, the probe grey 64.
+            const double y = slope(130, 4.06452, 2.06452);
+            const double detailDisplay = greyValue + 160 / 255.0 - 0.5;
+            const auto withMaps = [&](double alpha) {
+                const double yb = alpha < 1.0 ? y * alpha : y;
+                const Light light = diffuse(1.0, 1.0 / std::sqrt(yb * yb + 1.0));
+                const double diffuseDisplay = alpha * detailDisplay * light.display;
+                const double specularDisplay = greyValue * (0.5 * greyValue * sun + 64 / 255.0);
+                return alpha * colour(detailDisplay, light) + decode(diffuseDisplay + specularDisplay)
+                    - decode(diffuseDisplay);
+            };
+            const double opaque = withMaps(1.0);
+            const double blended = withMaps(128 / 255.0);
+            const double x = slope(192, 4.08, 2.08);
+            const double tilted = colour(greyValue, diffuse(volumeSun, 1.0 / std::sqrt(x * x + y * y + 1.0)));
+            expect("maps_opaque", 16, 96, shown(opaque, opaque, opaque));
+            expect("maps_normal_tilted", 48, 96, shown(tilted, tilted, tilted));
+            expect("maps_blended", 80, 96, shown(blended, blended, blended));
+            expect("maps_alpha_kept", 104, 96, shown(opaque, opaque, opaque));
+            Expect("maps_alpha_dropped", 120, 96, 0, 0, 0);
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    }
+    SafeRelease(depth);
+    SafeRelease(shadowColorLevel);
+    SafeRelease(shadowColor);
+    SafeRelease(shadowLevel);
+    SafeRelease(shadow);
+    SafeRelease(volume);
+    SafeRelease(probe);
+    SafeRelease(detailMap);
+    SafeRelease(specularMap);
+    SafeRelease(normalTilted);
+    SafeRelease(normalFlat);
+    SafeRelease(colorTested);
+    SafeRelease(colorHalf);
+    SafeRelease(color);
+}
+
+// The shaders of our own for surfaces without the sun (lm_<mode>c0... and
+// lp_[i_]<mode>c0..., interiors; lit shader facts 5): the sun stand-ins,
+// which read what those read and show black, are drawn as our shaders
+// without the sun. The sun's constants, the primary lightmap (white) and the
+// volume's alpha are all set, and must not light anything. The world's
+// light is the secondary lightmap's alone (its halves 64 each with flat
+// directions), a model's the lighting volume's (grey 48, doubled to 96) where
+// the normal points, as modern_lit_models sets it up. Top half, under the
+// grey 128 colour map: lm_r0c0 (no fog, then half fog towards red) and
+// lp_r0c0 (likewise). Bottom half: lm_r0c0d0n0s0 opaque, lm_r0c0n0 with a
+// normal map tilted along the tangent (it turns the lightmap's light only),
+// lm_b0c0d0n0s0 (colour alpha 128: its normal-map slopes and specular scaled
+// by it) and lp_r0c0d0n0s0; their specular is the probe's grey 64 alone (no
+// sun highlight), Fresnel 1. Without these shaders the stand-ins show black.
+void Check::ModernLitNoSun()
+{
+    const bool on = EnvText("KISAK_VK_MODERN_LINEAR") != "0" && EnvText("KISAK_VK_MODERN_LIT") != "0"
+        && EnvText("KISAK_VK_MODERN_SHADERS") != "0" && EnvText("KISAK_VK_MODERN_NO_SUN_SHADERS") != "0";
+    const bool modelsOn = on && EnvText("KISAK_VK_MODERN_MODEL_SHADERS") != "0";
+    const std::string skyText = EnvText("KISAK_VK_MODERN_SKY_STRENGTH");
+    const double skyValue = skyText.empty() ? -1.0 : std::strtod(skyText.c_str(), nullptr);
+    const double sky = skyValue >= 0.0 ? skyValue : 1.0;
+    IDirect3DTexture9 *color = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 128, 128, 128); });
+    IDirect3DTexture9 *colorHalf = FilledTexture(1, 1, [](UINT, UINT) { return Argb(128, 128, 128, 128); });
+    IDirect3DTexture9 *primary = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
+    IDirect3DTexture9 *secondary = FilledTexture(1, 2, [](UINT, UINT) { return Argb(130, 64, 64, 64); });
+    IDirect3DTexture9 *normalFlat = FilledTexture(1, 1, [](UINT, UINT) { return Argb(130, 0, 130, 0); });
+    IDirect3DTexture9 *normalTilted = FilledTexture(1, 1, [](UINT, UINT) { return Argb(192, 0, 130, 0); });
+    IDirect3DTexture9 *specularMap = FilledTexture(1, 1, [](UINT, UINT) { return Argb(0, 128, 128, 128); });
+    IDirect3DTexture9 *detailMap = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 160, 160, 160); });
+    IDirect3DCubeTexture9 *probe = nullptr;
+    if (Ok(device->CreateCubeTexture(1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &probe, nullptr),
+           "CreateCubeTexture(probe)"))
+    {
+        for (UINT face = 0; face < 6; ++face)
+        {
+            D3DLOCKED_RECT rect{};
+            if (Ok(probe->LockRect(static_cast<D3DCUBEMAP_FACES>(face), 0, &rect, nullptr, 0), "LockRect(probe)"))
+            {
+                *static_cast<uint32_t *>(rect.pBits) = Argb(255, 64, 64, 64);
+                probe->UnlockRect(static_cast<D3DCUBEMAP_FACES>(face), 0);
+            }
+        }
+    }
+    IDirect3DVolumeTexture9 *volume = nullptr;
+    if (Ok(device->CreateVolumeTexture(1, 1, 2, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &volume, nullptr),
+           "CreateVolumeTexture(lighting)"))
+    {
+        D3DLOCKED_BOX locked{};
+        if (Ok(volume->LockBox(0, &locked, nullptr, 0), "LockBox(lighting)"))
+        {
+            uint8_t *bytes = static_cast<uint8_t *>(locked.pBits);
+            *reinterpret_cast<uint32_t *>(bytes) = Argb(0, 0, 0, 0);
+            *reinterpret_cast<uint32_t *>(bytes + locked.SlicePitch) = Argb(200, 48, 48, 48);
+            volume->UnlockBox(0);
+        }
+    }
+    IDirect3DSurface9 *depth = nullptr;
+    const bool made = color && colorHalf && primary && secondary && normalFlat && normalTilted && specularMap
+        && detailMap && probe && volume
+        && Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                                nullptr),
+              "CreateDepthStencilSurface");
+    if (made)
+    {
+        Reset(Argb(255, 0, 0, 0));
+        front::ModernSceneBegin(device);
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0),
+           "Clear(scene)");
+        const float grey = 128.0f / 255.0f;
+        const uint32_t white = Argb(255, 255, 255, 255);
+        front::ModernLitInputs inputs;
+        inputs.overWhite = true;
+
+        // The world: colour s0, probe s1, primary lightmap s2 (unread),
+        // secondary s3, then normal s4, specular s5, detail s6; envMapParms
+        // c5 (Fresnel 1) and detailScale c6; the sun at c17-c19 (unread).
+        device->SetVertexShader(vsLmSunMaps);
+        device->SetPixelShader(psLmSunMapsStandIn);
+        device->SetTexture(0, color);
+        device->SetTexture(1, probe);
+        device->SetTexture(2, primary);
+        device->SetTexture(3, secondary);
+        device->SetTexture(4, normalFlat);
+        device->SetTexture(5, specularMap);
+        device->SetTexture(6, detailMap);
+        device->SetTexture(7, detailMap);
+        for (DWORD sampler : {1u, 2u, 3u, 4u, 5u, 6u, 7u})
+        {
+            device->SetSamplerState(sampler, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+            device->SetSamplerState(sampler, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+            device->SetSamplerState(sampler, D3DSAMP_ADDRESSW, D3DTADDRESS_CLAMP);
+        }
+        const float worldPixel[20][4] = {
+            {1, 0, 0, 0},          // c0 fog colour: red
+            {0, 0, 0, 0},          // c1: the stand-in's black
+            {}, {}, {},
+            {1, 1, 0, 0.5f},       // c5 envMapParms: Fresnel 1
+            {1, 1, 0, 0},          // c6 detailScale
+            {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+            {0, 0, 1, 0},          // c17 sun direction: overhead (unread)
+            {grey, grey, grey, 0}, // c18 sun colour (unread)
+            {grey, grey, grey, 0}, // c19 the sun's specular colour (unread)
+        };
+        Ok(device->SetPixelShaderConstantF(0, &worldPixel[0][0], 20), "SetPixelShaderConstantF(world)");
+        // Colour and lightmap UVs; the normal straight up and the fog factor;
+        // binormal along y and tangent along x; looking straight down.
+        const auto worldVertex = [&](float fog) {
+            const float values[6][4] = {{0.5f, 0.5f, 0.5f, 0.5f}, {0, 0, 1, fog}, {0, 1, 0, 0},
+                                        {1, 0, 0, 0},             {0, 0, 0, 0},   {0, 0, -1, 0}};
+            Ok(device->SetVertexShaderConstantF(1, &values[0][0], 6), "SetVertexShaderConstantF(world)");
+        };
+        inputs.shader = 0xc0; // lm_r0c0
+        front::SetModernLitInputs(device, &inputs);
+        worldVertex(1.0f);
+        DrawQuad(0, 0, 32, 64, 0.5f, white);
+        worldVertex(0.5f);
+        DrawQuad(32, 0, 64, 64, 0.5f, white);
+        worldVertex(1.0f);
+        inputs.shader = 0xce; // lm_r0c0d0n0s0
+        front::SetModernLitInputs(device, &inputs);
+        DrawQuad(0, 64, 32, 128, 0.5f, white);
+        device->SetTexture(4, normalTilted);
+        inputs.shader = 0xc2; // lm_r0c0n0
+        front::SetModernLitInputs(device, &inputs);
+        DrawQuad(32, 64, 64, 128, 0.5f, white);
+        device->SetTexture(4, normalFlat);
+        device->SetTexture(0, colorHalf);
+        device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+        device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+        device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+        inputs.shader = 0xde; // lm_b0c0d0n0s0
+        front::SetModernLitInputs(device, &inputs);
+        DrawQuad(64, 64, 96, 128, 0.5f, white);
+        device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+        device->SetTexture(0, color);
+
+        // Models: colour s0, probe s1, the volume s4, then normal s5,
+        // specular s6, detail s7; lightingLookupScale c5 (half the volume
+        // along the normal), envMapParms c6 and detailScale c7.
+        device->SetVertexShader(vsLpSunMaps);
+        device->SetPixelShader(psLpSunMapsStandIn);
+        device->SetTexture(2, nullptr);
+        device->SetTexture(3, nullptr);
+        device->SetTexture(4, volume);
+        device->SetTexture(5, normalFlat);
+        device->SetTexture(6, specularMap);
+        device->SetTexture(7, detailMap);
+        device->SetTexture(8, detailMap);
+        for (DWORD sampler : {8u})
+        {
+            device->SetSamplerState(sampler, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+            device->SetSamplerState(sampler, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+        }
+        const float modelPixel[20][4] = {
+            {1, 0, 0, 0},          // c0 fog colour: red
+            {0, 0, 0, 0},          // c1: the stand-in's black
+            {}, {}, {},
+            {0, 0, 0.5f, 0},       // c5 lightingLookupScale
+            {1, 1, 0, 0.5f},       // c6 envMapParms: Fresnel 1
+            {1, 1, 0, 0},          // c7 detailScale
+            {}, {}, {}, {}, {}, {}, {}, {}, {},
+            {0, 0, 1, 0},          // c17 sun direction (unread)
+            {grey, grey, grey, 0}, // c18 sun colour (unread)
+            {grey, grey, grey, 0}, // c19 (unread)
+        };
+        Ok(device->SetPixelShaderConstantF(0, &modelPixel[0][0], 20), "SetPixelShaderConstantF(models)");
+        // Colour UV; the normal straight up and the fog factor; binormal and
+        // tangent; no shadow coordinate; looking straight down; the volume
+        // coordinate a quarter in.
+        const auto modelVertex = [&](float fog) {
+            const float values[7][4] = {{0.5f, 0.5f, 0, 0}, {0, 0, 1, fog}, {0, 1, 0, 0}, {1, 0, 0, 0},
+                                        {0, 0, 0, 0},       {0, 0, -1, 0},  {0.5f, 0.5f, 0.25f, 0}};
+            Ok(device->SetVertexShaderConstantF(1, &values[0][0], 7), "SetVertexShaderConstantF(models)");
+        };
+        inputs.shader = 0xc1; // lp_r0c0
+        front::SetModernLitInputs(device, &inputs);
+        modelVertex(1.0f);
+        DrawQuad(64, 0, 96, 64, 0.5f, white);
+        modelVertex(0.5f);
+        DrawQuad(96, 0, 128, 64, 0.5f, white);
+        modelVertex(1.0f);
+        inputs.shader = 0xcf; // lp_r0c0d0n0s0
+        front::SetModernLitInputs(device, &inputs);
+        DrawQuad(96, 64, 128, 128, 0.5f, white);
+        front::SetModernLitInputs(device, nullptr);
+
+        front::ModernSceneView view{};
+        for (int i = 0; i < 4; ++i)
+            view.view[i][i] = view.projection[i][i] = 1.0f;
+        view.width = view.height = kSize;
+        view.cut = true;
+        if (front::ModernSceneLit(device, view) == front::ModernResult::Skipped)
+            front::ModernSceneDone(device, view);
+        device->SetDepthStencilSurface(nullptr);
+        for (DWORD sampler : {0u, 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u})
+            device->SetTexture(sampler, nullptr);
+        device->SetVertexShader(vsBasic);
+        device->SetPixelShader(psColor);
+        if (Read())
+        {
+            const std::string curve = ModernCurve();
+            const auto shown = [&](double r, double g, double b) {
+                const Rgb c = TonemapCurve(curve, {r, g, b});
+                return std::array<int, 3>{ShownByte(c[0]), ShownByte(c[1]), ShownByte(c[2])};
+            };
+            // value drawn as lit, its game colour valueDisplay, fog factor fog
+            // towards red.
+            const auto expect = [&](const char *name, bool ours, int x, int y, double value,
+                                    double valueDisplay = 0.0, double fog = 1.0) {
+                const std::array<int, 3> rgb = shown(ModernLitFogged(value, valueDisplay, 1.0, fog),
+                                                     ModernLitFogged(value, valueDisplay, 0.0, fog),
+                                                     ModernLitFogged(value, valueDisplay, 0.0, fog));
+                Expect(name, x, y, ours ? rgb[0] : 0, ours ? rgb[1] : 0, ours ? rgb[2] : 0);
+            };
+            const auto decode = [](double v) {
+                v = std::max(v, 0.0);
+                return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+            };
+            const auto slope = [](int byte, double scale, double offset) { return byte / 255.0 * scale - offset; };
+            const double greyValue = 128 / 255.0;
+            const double detailDisplay = greyValue + 160 / 255.0 - 0.5;
+            const double specularDisplay = greyValue * 64 / 255.0; // no sun highlight
+            // The world's light in display values: the lightmap's direction is
+            // (0, b), the normal map's slopes (x, y) or none.
+            const double b = slope(130, 4.06452, 2.06452);
+            const double lengthD = 1.0 / std::sqrt(b * b + 1.0);
+            const auto lightmap = [&](bool normalMap, double x, double y) {
+                if (!normalMap)
+                    return 64 / 255.0 + 64 / 255.0 * std::clamp(lengthD, 0.0, 1.0);
+                const double lengthN = 1.0 / std::sqrt(x * x + y * y + 1.0);
+                return 64 / 255.0 * lengthN + 64 / 255.0 * std::clamp((b * y + 1.0) * lengthN * lengthD, 0.0, 1.0);
+            };
+            // A surface with the detail, normal and specular maps under light
+            // of lightDisplay, premultiplied by alpha.
+            const auto withMaps = [&](double lightDisplay, double alpha) {
+                const double diffuseDisplay = alpha * detailDisplay * lightDisplay;
+                return alpha * decode(detailDisplay * lightDisplay) * sky
+                    + decode(diffuseDisplay + specularDisplay) - decode(diffuseDisplay);
+            };
+            const double flatY = slope(130, 4.06452, 2.06452);
+            const double worldDisplay = greyValue * lightmap(false, 0.0, 0.0);
+            const double world = decode(worldDisplay) * sky;
+            expect("world", on, 16, 32, world);
+            expect("world_half_fog", on, 48, 32, world, worldDisplay, 0.5);
+            const double modelDisplay = greyValue * 2.0 * 48 / 255.0;
+            const double model = decode(modelDisplay) * sky;
+            expect("model", modelsOn, 80, 32, model);
+            expect("model_half_fog", modelsOn, 112, 32, model, modelDisplay, 0.5);
+            expect("world_maps_opaque", on, 16, 96, withMaps(lightmap(true, 0.0, flatY), 1.0));
+            const double tilted = decode(greyValue * lightmap(true, slope(192, 4.08, 2.08), flatY)) * sky;
+            expect("world_normal_tilted", on, 48, 96, tilted);
+            const double alpha = 128 / 255.0;
+            expect("world_maps_blended", on, 80, 96, withMaps(lightmap(true, 0.0, flatY * alpha), alpha));
+            expect("model_maps_opaque", modelsOn, 112, 96, withMaps(2.0 * 48 / 255.0, 1.0));
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    }
+    SafeRelease(depth);
+    SafeRelease(volume);
+    SafeRelease(probe);
+    SafeRelease(detailMap);
+    SafeRelease(specularMap);
+    SafeRelease(normalTilted);
+    SafeRelease(normalFlat);
+    SafeRelease(secondary);
+    SafeRelease(primary);
+    SafeRelease(colorHalf);
+    SafeRelease(color);
+}
+
+// The tonemap's curve (KISAK_VK_MODERN_TONEMAP): grey 128 (0.216 of light),
+// white (1), and white added twice (2) and four times (4) in the linear-light
+// scene, as each curve shows them. Clamp shows 128, 255, 255, 255; the others
+// keep the brighter greys apart. A lit surface over white (front
+// ModernLitInputs::overWhite) that computes 1.5 is decode(1.5) = 2.54 of
+// light, where an ordinary draw clamps it to 1 first.
+void Check::ModernTonemap()
+{
+    const std::string curve = ModernCurve();
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    Reset(Argb(255, 0, 0, 0));
+    front::ModernSceneBegin(device);
+    device->SetDepthStencilSurface(depth);
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0), "Clear(scene)");
+    DrawQuad(0, 0, 64, 64, 0.5f, Argb(255, 128, 128, 128));
+    DrawQuad(64, 0, 128, 64, 0.5f, Argb(255, 255, 255, 255));
+    // White colour map times white plus 0.5 (psLit): 1.5, over white.
+    IDirect3DTexture9 *white = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
+    const bool overWhite = white != nullptr && EnvText("KISAK_VK_MODERN_LIT") != "0";
+    if (white)
+    {
+        device->SetTexture(0, white);
+        device->SetPixelShader(psLit);
+        const float half[4] = {0.5f, 0.5f, 0.5f, 0.0f};
+        device->SetPixelShaderConstantF(1, half, 1);
+        front::ModernLitInputs lit;
+        lit.overWhite = true;
+        front::SetModernLitInputs(device, &lit);
+        DrawQuad(40, 0, 64, 24, 0.5f, Argb(255, 255, 255, 255));
+        front::SetModernLitInputs(device, nullptr);
+        device->SetPixelShader(psColor);
+        device->SetTexture(0, nullptr);
+    }
+    device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+    device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+    device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+    for (int i = 0; i < 2; ++i)
+        DrawQuad(0, 64, 64, 128, 0.5f, Argb(255, 255, 255, 255));
+    for (int i = 0; i < 4; ++i)
+        DrawQuad(64, 64, 128, 128, 0.5f, Argb(255, 255, 255, 255));
+    device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    view.width = view.height = kSize;
+    view.cut = true;
+    if (front::ModernSceneLit(device, view) == front::ModernResult::Skipped)
+        front::ModernSceneDone(device, view);
+    device->SetDepthStencilSurface(nullptr);
+    if (Read())
+    {
+        const double grey = std::pow((128.0 / 255.0 + 0.055) / 1.055, 2.4);
+        const struct
+        {
+            const char *name;
+            UINT x, y;
+            double light;
+        } points[] = {{"grey", 32, 32, grey}, {"white", 96, 32, 1.0}, {"white_x2", 32, 96, 2.0},
+                      {"white_x4", 96, 96, 4.0},
+                      {"lit_over_white", 52, 12, overWhite ? std::pow((1.5 + 0.055) / 1.055, 2.4) : 1.0}};
+        for (const auto &point : points)
+        {
+            const Rgb shown = TonemapCurve(curve, {point.light, point.light, point.light});
+            Expect(point.name, point.x, point.y, ShownByte(shown[0]), ShownByte(shown[1]), ShownByte(shown[2]));
+        }
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    SafeRelease(white);
+    SafeRelease(depth);
+}
+
+// Auto exposure (vk_modern.h MeasureExposure), with the default key 0.115 and
+// range -1 to +1 EV: four scenes, each one grey all over. A cut takes the
+// exposure at once: grey 100 (0.127 of light) is brought to the key exactly
+// (0.115, shown 95); white (1) wants -3.1 EV and gets -1 (0.5, 188); grey 40
+// (0.021) wants +2.4 and gets +1. Then grey 40 without a cut after grey
+// 100 moves only part of the way from grey 100's exposure towards +1 (at
+// most a second's worth of the 2.5 s time constant). With
+// KISAK_VK_MODERN_EXPOSURE=0, or without linear light, every grey is shown
+// through the curve alone.
+void Check::ModernExposure()
+{
+    const std::string curve = ModernCurve();
+    const bool on = EnvText("KISAK_VK_MODERN_EXPOSURE") != "0" && EnvText("KISAK_VK_MODERN_LINEAR") != "0";
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    const auto decode = [](int v) {
+        const double x = v / 255.0;
+        return x <= 0.04045 ? x / 12.92 : std::pow((x + 0.055) / 1.055, 2.4);
+    };
+    const auto shown = [&](double light) { return ShownByte(TonemapCurve(curve, {light, light, light})[0]); };
+    const auto scene = [&](int grey, bool cut) {
+        Reset(Argb(255, 0, 0, 0));
+        front::ModernSceneBegin(device);
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, grey, grey, grey), 1.0f, 0),
+           "Clear(scene)");
+        front::ModernSceneView view{};
+        for (int i = 0; i < 4; ++i)
+            view.view[i][i] = view.projection[i][i] = 1.0f;
+        view.width = view.height = kSize;
+        view.cut = cut;
+        Equal("done", static_cast<int>(front::ModernSceneDone(device, view)),
+              static_cast<int>(front::ModernResult::Done));
+        device->SetDepthStencilSurface(nullptr);
+    };
+    const double key = 0.115;
+    const auto exposed = [&](int grey, double ev) { return shown(decode(grey) * (on ? std::exp2(ev) : 1.0)); };
+    const auto target = [&](int grey) { return std::clamp(std::log2(key / decode(grey)), -1.0, 1.0); };
+
+    scene(100, true);
+    // r_vkStats can come at any point of a frame. The first scene's exposure
+    // is copied for the statistics and not submitted yet; logging them inside
+    // a pass leaves that reading for later rather than wait for it (waiting
+    // there failed the device, PC run 23).
+    DrawQuad(0, 0, 8, 8, 0.5f, Argb(255, 0, 0, 255));
+    front::LogDeviceStats(false);
+    DrawQuad(8, 0, 16, 8, 0.5f, Argb(255, 0, 255, 0));
+    if (Read())
+    {
+        const int v = exposed(100, target(100));
+        Expect("grey100_to_key", 64, 64, v, v, v);
+        Expect("stats_in_pass", 12, 4, 0, 255, 0);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    scene(255, true);
+    if (Read())
+    {
+        const int v = exposed(255, target(255));
+        Expect("white_lowest", 64, 64, v, v, v);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    scene(40, true);
+    if (Read())
+    {
+        const int v = exposed(40, target(40));
+        Expect("grey40_highest", 64, 64, v, v, v);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    // Grey 100 again (a cut), then grey 40 without one: part of the way.
+    scene(100, true);
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    scene(40, false);
+    if (Read())
+    {
+        const uint8_t *p = &pixels[(64 * readSize + 64) * 4];
+        const int got = p[1];
+        const int from = exposed(40, target(100));
+        const int to = exposed(40, target(40));
+        // At most a second's worth of the 2.5 s time constant: under a third of the way.
+        const int most = exposed(40, target(100) + (target(40) - target(100)) / 3.0);
+        const bool ok = on ? got >= from - kTolerance && got <= most + kTolerance && got < to
+                           : std::abs(got - from) <= kTolerance;
+        Equal("grey40_adapting", ok, true);
+        if (!ok)
+            result->detail += " grey40_adapting_got=" + std::to_string(got) + " from=" + std::to_string(from) +
+                " most=" + std::to_string(most) + " to=" + std::to_string(to);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    SafeRelease(depth);
+}
+
 void Check::ResetDevice()
 {
     SafeRelease(backBuffer);
@@ -2932,6 +5425,22 @@ bool Check::CreateObjects(std::string &error)
         hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsShadow), &psShadow);
     if (SUCCEEDED(hr))
         hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsVolume), &psVolume);
+    if (SUCCEEDED(hr))
+        hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsLit), &psLit);
+    if (SUCCEEDED(hr))
+        hr = device->CreateVertexShader(reinterpret_cast<const DWORD *>(shaders::kVsLmSun), &vsLmSun);
+    if (SUCCEEDED(hr))
+        hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsLmSunStandIn), &psLmSunStandIn);
+    if (SUCCEEDED(hr))
+        hr = device->CreateVertexShader(reinterpret_cast<const DWORD *>(shaders::kVsLmSunMaps), &vsLmSunMaps);
+    if (SUCCEEDED(hr))
+        hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsLmSunMapsStandIn),
+                                       &psLmSunMapsStandIn);
+    if (SUCCEEDED(hr))
+        hr = device->CreateVertexShader(reinterpret_cast<const DWORD *>(shaders::kVsLpSunMaps), &vsLpSunMaps);
+    if (SUCCEEDED(hr))
+        hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsLpSunMapsStandIn),
+                                       &psLpSunMapsStandIn);
     const D3DVERTEXELEMENT9 elements[] = {
         {0, 0, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
         {0, 12, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
@@ -2973,6 +5482,13 @@ void Check::ReleaseObjects()
     }
     SafeRelease(vsBasic);
     SafeRelease(psColor);
+    SafeRelease(psLit);
+    SafeRelease(vsLmSun);
+    SafeRelease(psLmSunStandIn);
+    SafeRelease(vsLmSunMaps);
+    SafeRelease(psLmSunMapsStandIn);
+    SafeRelease(vsLpSunMaps);
+    SafeRelease(psLpSunMapsStandIn);
     SafeRelease(psTexture);
     SafeRelease(psShadow);
     SafeRelease(psVolume);
@@ -3007,6 +5523,7 @@ int Run(const Options &options)
     host.deviceIndex = options.device;
     host.coreDestroyed = HostCoreDestroyed;
     host.windowOrigin = HostWindowOrigin;
+    host.fullscreen = HostFullscreen;
     host.tuning = HostTuning;
 
     Check check;
@@ -3038,9 +5555,24 @@ int Run(const Options &options)
         {"slow_frames", &Check::SlowFrames, true},
         {"kept_state", &Check::KeptState, true},
         {"multisample", &Check::Multisample, true},
+        {"modern_taa", &Check::ModernTaa, true},
+        {"modern_linear", &Check::ModernLinear, true},
+        {"modern_bloom", &Check::ModernBloom, true},
+        {"modern_effects", &Check::ModernEffects, true},
+        {"modern_lit", &Check::ModernLit, true},
+        {"modern_lit_shader", &Check::ModernLitShader, true},
+        {"modern_lit_models", &Check::ModernLitModels, true},
+        {"modern_lit_no_sun", &Check::ModernLitNoSun, true},
+        {"modern_tonemap", &Check::ModernTonemap, true},
+        {"modern_exposure", &Check::ModernExposure, true},
+        {"modern_velocity", &Check::ModernVelocity, true},
+        {"modern_normals", &Check::ModernNormals, true},
+        {"modern_ao", &Check::ModernAo, true},
+        {"modern_reflections", &Check::ModernReflections, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},
+        {"fullscreen", &Check::Fullscreen, true},
         {"present", &Check::Present, true},
     };
     const char *failedStage = nullptr;

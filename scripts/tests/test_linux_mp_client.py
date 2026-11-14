@@ -174,10 +174,12 @@ def source_checks(checker):
                     "no remote script debugger is ever attached")
     checker.require("bool DL_InProgress()\n{\n    return false;" in unavailable,
                     "no HTTP download is ever in progress")
-    # The real downloader (src/qcommon/dl_main.cpp, libcurl) is opt-in. Its
+    # The real downloader (src/qcommon/dl_main.cpp, libcurl) is on by default
+    # wherever libcurl links for the target (AUTO), as on Windows. Its
     # stand-ins and it never link together.
-    checker.require(re.search(r'option\(KISAK_LINUX_HTTP_DOWNLOADS\s+"[^"]*"\s+OFF\)', module) is not None,
-                    "KISAK_LINUX_HTTP_DOWNLOADS is off by default")
+    checker.require(re.search(r'set\(KISAK_LINUX_HTTP_DOWNLOADS "AUTO" CACHE STRING\n', module) is not None
+                    and "check_cxx_source_compiles(" in module and "KISAK_CURL_LINKS_FOR_TARGET" in module,
+                    "KISAK_LINUX_HTTP_DOWNLOADS is AUTO by default and checks that libcurl links for the target")
     http_block = re.search(r"\nif\(KISAK_LINUX_HTTP_DOWNLOADS\)\n(.*?)\nendif\(\)", module, re.S)
     checker.require(module.count('"${mp_client_http_source}")') == 2
                     and 'list(REMOVE_ITEM mp_client_engine_sources "${mp_client_http_source}")' in module
@@ -260,6 +262,8 @@ def run_checks(checker, binary):
     env = dict(os.environ)
     env.setdefault("SDL_VIDEODRIVER", "dummy")
     env.setdefault("SDL_AUDIODRIVER", "dummy")
+    # A box (an error, a question) would wait for a click nobody makes.
+    env.setdefault("KISAK_NO_DIALOGS", "1")
 
     with tempfile.TemporaryDirectory(prefix="kisak-mp-client-") as workdir:
         work = Path(workdir)

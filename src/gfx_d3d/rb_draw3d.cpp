@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "rb_draw3d.h"
+#include "r_scene.h"
 #include "rhi/r_rhi.h"
 #include "rb_logfile.h"
 #include "r_dvars.h"
@@ -22,6 +23,7 @@
 #include "rb_spotshadow.h"
 #include "rb_shade.h"
 #include "r_meshdata.h"
+#include <gfx_gxm/gxm_engine_options.h>
 
 void R_HW_InsertFence(IDirect3DQuery9 **fence)
 {
@@ -73,6 +75,8 @@ void RB_Draw3DInternal(const GfxViewInfo *viewInfo)
 
     if (gfxDrawMethod.drawScene)
     {
+        // The Modern path's linear-light scene (r_visuals modern, Vulkan only).
+        R_ModernSceneBegin();
         if (gfxDrawMethod.drawScene == GFX_DRAW_SCENE_FULLBRIGHT)
         {
             RB_FullbrightDrawCommands(viewInfo);
@@ -129,6 +133,8 @@ void RB_FullbrightDrawCommands(const GfxViewInfo *viewInfo)
 
 void RB_EndSceneRendering(GfxCmdBufContext context, const GfxCmdBufInput *input, const GfxViewInfo *viewInfo)
 {
+    // The Modern path's passes over the scene (r_visuals modern, Vulkan only).
+    R_ModernSceneDone(viewInfo);
     R_HW_InsertFence((IDirect3DQuery9 **)&backEndData->endFence);
     R_InitCmdBufSourceState(context.source, input, 0);
     memcpy(context.state, &gfxCmdBufState, sizeof(GfxCmdBufState));
@@ -358,7 +364,12 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
             RB_SunShadowMaps(data, viewInfo);
         RB_SpotShadowMaps(data, viewInfo);
     }
-    needsDepthPrepass = r_depthPrepass->current.enabled;
+    // The Modern path (r_visuals modern, Vulkan) may want the view's depth
+    // before its lit surfaces, for its normals buffer.
+    const bool modernDepth = R_ModernWantsSceneDepth();
+    needsDepthPrepass = r_depthPrepass->current.enabled || KISAK_GXM_DEPTH_PREPASS() || modernDepth;
+    // Whether the scene's depth holds its opaque surfaces before R_DrawLit.
+    bool depthPrepassed = false;
     whichToClearForScene = 7;
     R_InitContext(data, &cmdBuf);
     iassert( !viewInfo->needsFloatZ || R_HaveFloatZ() );
@@ -389,6 +400,8 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
         {
             whichToClearForScene = 1;
             needsDepthPrepass = 0;
+            // The setup pass drew into the scene's own depth surface.
+            depthPrepassed = true;
         }
     }
     memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
@@ -403,7 +416,10 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     {
         R_InitContext(data, &cmdBuf);
         R_DepthPrepass(R_RENDERTARGET_SCENE, viewInfo, &cmdBuf);
+        depthPrepassed = true;
     }
+    if (modernDepth && depthPrepassed)
+        R_ModernSceneDepth(viewInfo);
     R_InitContext(data, &cmdBuf);
     R_DrawLit(viewInfo, &cmdBuf, 0);
     R_InitContext(data, &cmdBuf);
@@ -431,6 +447,9 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
         R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_SCENE);
         R_Resolve(gfxCmdBufContext, gfxRenderTargets[R_RENDERTARGET_RESOLVED_POST_SUN].image);
     }
+    // The Modern path may finish the scene here, so that effects blend on
+    // the tonemapped image as they were made to (r_visuals modern, Vulkan).
+    R_ModernSceneLit(viewInfo);
     R_InitContext(data, &cmdBuf);
     KISAK_NULLSUB();
     R_DrawEmissive(viewInfo, &cmdBuf);

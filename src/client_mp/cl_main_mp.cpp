@@ -1838,7 +1838,9 @@ void CL_startSingleplayer_f()
 {
     if (!Sys_IsMainThread())
         MyAssertHandler(".\\client_mp\\cl_main_mp.cpp", 4558, 0, "%s", "Sys_IsMainThread()");
-    Sys_QuitAndStartProcess("cod3sp.exe", 0);
+    // Retail started cod3sp.exe; this port's singleplayer program has its own
+    // name (win_local.h).
+    Sys_QuitAndStartProcess(KISAK_SP_PROGRAM, 0);
 }
 
 void CL_DrawLogo(int32_t localClientNum)
@@ -2929,6 +2931,14 @@ void CL_InitOnceForAllClients()
     cl_voice = Dvar_RegisterBool("cl_voice", true, DVAR_ARCHIVE | DVAR_USERINFO, "Use voice communications");
     cl_keyCodeOnly = Dvar_RegisterBool("cl_keyCodeOnly", false, DVAR_ARCHIVE,
         "Join remote servers with your CoD4 key code (codkey.txt in the home folder) even when Steam is running");
+    // KISAK: Steam_Init reads +set cl_steam from the command line before
+    // Com_Init (src/universal/steam_optin.h). Registered so "cl_steam" shows
+    // what the game started with. Not DVAR_INIT: the command line's own +set
+    // runs again after start-up and would print "cl_steam is write protected"
+    // for the very setting the player was told to use. A later change does
+    // nothing, as the description says.
+    Dvar_RegisterBool("cl_steam", false, DVAR_NOFLAG,
+        "Join remote servers with Steam. Read only at start-up: start the game with +set cl_steam 1");
     min.value.max = 3600.0;
     min.value.min = 0.0;
     cl_timeout = Dvar_RegisterFloat("cl_timeout", 40.0, min, DVAR_NOFLAG, "Seconds with no received packets until a timeout occurs");

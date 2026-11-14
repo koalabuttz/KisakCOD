@@ -21,7 +21,9 @@ the server-side warnings. The GUID is not the one retail CoD4 or PunkBuster
 derives from the same key, so it does not match retail ban lists.
 
 Servers that require Steam refuse the request with "This server requires Steam
-authentication; unverified retail GUIDs are not accepted."
+authentication; unverified retail GUIDs are not accepted." The server's console
+and log show the same reason with the player's address, as `rejected connection
+from <address>: <reason>`. It does not show the GUID.
 
 ## Setting it up
 
@@ -76,8 +78,12 @@ key is checked against Activision.
 
 On `connect` to a remote server:
 
-1. A build with Steam (32-bit Windows, or Linux with `KISAK_LINUX_STEAM`) uses
-   a Steam ticket when Steam is running.
+1. A build with Steam (32-bit Windows, or Linux with `KISAK_LINUX_STEAM`)
+   started with `+set cl_steam 1` uses a Steam ticket when Steam is running.
+   Steam is opt-in: without that setting the game never starts talking to
+   Steam (on Windows it writes no `steam_appid.txt` and does not call
+   `SteamAPI_Init`), and the console says
+   `[Kisak] Steam is off, so remote servers are joined with your key code.`
 2. Otherwise, or with `cl_keyCodeOnly 1`, it uses the key code. The default
    native Linux build and 64-bit Windows build have no Steam, so they always
    use the key code.
@@ -87,6 +93,11 @@ On `connect` to a remote server:
 On success the console prints
 `[Kisak] Joining with the key code from <file>, as GUID <guid>.` Joining your
 own listen server (`localhost`) never asks for either.
+
+`cl_steam` is read from the command line before the console starts
+(`src/universal/steam_optin.h`): `+set cl_steam 1` or `+seta cl_steam 1`, the
+last one winning. Setting it later, or in a config file, does nothing. A
+server cannot set it.
 
 `cl_keyCodeOnly 1` (saved in the config) is for a Steam user joining a server
 that accepts only GUIDs, such as a default native Linux dedicated server with

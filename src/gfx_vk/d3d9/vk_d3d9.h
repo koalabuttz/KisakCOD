@@ -58,6 +58,15 @@ struct Tuning
     bool keepDrawState = true;
 };
 
+// A display mode a fullscreen device asks for (Host::fullscreen). A 0 width or
+// height keeps the display's size; a 0 refresh rate takes any.
+struct FullscreenMode
+{
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t refreshRate = 0;
+};
+
 // What the front needs from the program around it: the window system, display
 // modes and the monitor. D3D9 answers these from the OS; the front asks.
 struct Host
@@ -79,6 +88,13 @@ struct Host
     // GetFrontBufferData into a display-sized surface (windowed screenshots).
     // Null: the monitor's top-left corner.
     bool (*windowOrigin)(void *user, D3D9Window window, int32_t &x, int32_t &y) = nullptr;
+    // Fullscreen as D3D9 does it for a device made or reset with Windowed
+    // false: the monitor switched to the mode and the window covering it.
+    // mode null: the desktop's mode back, when a fullscreen device is reset to
+    // windowed or released. Called under the front's lock. False: the mode
+    // could not be set (the host still covers the monitor with the window if
+    // it can). Null: a fullscreen device is a window where the program put it.
+    bool (*fullscreen)(void *user, D3D9Window window, const FullscreenMode *mode) = nullptr;
     // One line per call, no newline. Null: nowhere.
     void (*log)(void *user, const char *line) = nullptr;
 
@@ -154,4 +170,110 @@ uint32_t LogDeviceStats(bool reset);
 // surface must not outlive its window. The devices stay usable until they are
 // released, but present nothing. Returns how many devices used the window.
 uint32_t WindowDestroying(D3D9Window window);
+
+// ---- The Modern path (the engine's r_visuals modern; docs/vulkan-modern.md) ------------------
+//
+// The camera of the 3D scene the renderer has just drawn, in D3D9's convention
+// (row vectors: p_clip = p_world * view * projection).
+struct ModernSceneView
+{
+    float view[4][4];
+    // With the frame's sub-pixel jitter in [2][0] and [2][1], in NDC units.
+    float projection[4][4];
+    // The scene's viewport in render target 0, in pixels.
+    uint32_t x, y, width, height;
+    // A camera cut: no history from before it is used.
+    bool cut;
+    // The view's glow (its vision set's bloom), when the renderer would draw
+    // it: in linear light the back end draws bloom from it instead.
+    struct Glow
+    {
+        bool on = false;
+        float radius = 0.0f;       // the glow's Gaussian sigma, in pixels of the scene
+        float intensity = 0.0f;    // how much of the glow's light is added
+        float cutoff = 0.0f;       // display value (0 to 1) below which nothing glows
+        float desaturation = 0.0f; // 0 keeps the colour, 1 makes the glow grey
+    } glow;
+};
+enum class ModernResult
+{
+    Done,
+    // The frame is not drawn (a minimised window): nothing to do.
+    Skipped,
+    // Nothing changed: the device is not the front's, its back end has no
+    // Modern path (the PS Vita's), or the passes cannot run on this scene (a
+    // multisampled one, say). The reason is logged through the host the
+    // first time it comes up. The program should stop jittering the scene.
+    Refused,
+};
+// The renderer is about to draw a view's 3D scene into the back buffer. With
+// linear light (on with the Modern path unless KISAK_VK_MODERN_LINEAR=0) the
+// back end gives the scene a linear-light image of its own: until
+// ModernSceneDone, draws and clears aimed at the back buffer as render target
+// 0 go there, decoded from sRGB, and a StretchRect from the back buffer reads
+// it back as display values. Done when the scene has its image, Skipped when
+// nothing changed (linear light off, or no frame to draw), Refused when it
+// cannot run (logged once).
+ModernResult ModernSceneBegin(IDirect3DDevice9 *device);
+// Runs the Modern path's passes over the scene in the device's render target
+// 0 and depth surface (temporal anti-aliasing), between the renderer's draws.
+// After a ModernSceneBegin that was Done, the scene is the linear-light image:
+// the passes run on it, the tonemap writes it into the back buffer within the
+// viewport, and the back buffer is render target 0 again. With view.glow on,
+// the bloom is drawn from the linear-light image before the tonemap, and
+// *glowDrawn (when given) is set true: the renderer leaves out its own glow.
+ModernResult ModernSceneDone(IDirect3DDevice9 *device, const ModernSceneView &view, bool *glowDrawn = nullptr);
+// The scene's lit surfaces are drawn and its effects (the renderer's
+// emissive surfaces) come next. Unless KISAK_VK_MODERN_EFFECTS=linear, the
+// scene is finished here as ModernSceneDone would, so the effects blend on
+// the tonemapped back buffer the way they were made to: Done (also when the
+// frame is not drawn) or Refused as ModernSceneDone, and the program then
+// skips ModernSceneDone for this scene. Skipped only when the effects stay
+// in the scene, and ModernSceneDone finishes it.
+ModernResult ModernSceneLit(IDirect3DDevice9 *device, const ModernSceneView &view, bool *glowDrawn = nullptr);
+// Whether the Modern path wants the view's opaque depth before its lit
+// surfaces (ModernSceneDepth): the renderer then draws its depth prepass.
+// True when something reads the normals buffer (docs/vulkan-modern.md
+// "Normals buffer"); false on a back end without a Modern path.
+bool ModernWantsSceneDepth(IDirect3DDevice9 *device);
+// The renderer's depth prepass has drawn the view's opaque surfaces into the
+// depth surface, and its lit surfaces come next: the Modern path builds the
+// scene's normals buffer from that depth now, for the passes that read it
+// (ModernSceneLit or ModernSceneDone finishes the scene). Done, Skipped
+// (nothing wants it, or the frame is not drawn) or Refused (it cannot run:
+// no depth surface, say; logged once).
+ModernResult ModernSceneDepth(IDirect3DDevice9 *device, const ModernSceneView &view);
+// The last DrawIndexedPrimitive drew a surface that moves on its own into the
+// scene: the Modern path draws it again for its velocity when the scene is
+// finished, by ModernSceneLit or ModernSceneDone (docs/vulkan-modern.md).
+// clip and prevClip take the surface's vertices to this frame's and last
+// frame's clip space (row vectors, p_clip = p * M), each with its frame's
+// jitter. Ignored by a back
+// end without a Modern path, and when the draw was not a triangle list.
+void ModernSurfaceMoved(IDirect3DDevice9 *device, const float clip[4][4], const float prevClip[4][4]);
+// The same for a skinned surface, whose vertices change from frame to frame:
+// the Modern path keeps a copy of the vertices the draw read under `key`
+// when the scene is finished, and draws the surface's velocity from last
+// scene's copy when the key comes again. prevClip is null the first time.
+void ModernSkinnedSurfaceMoved(IDirect3DDevice9 *device, uint64_t key, const float clip[4][4],
+                               const float prevClip[4][4]);
+// The colours the pixel shaders of the draws that follow read, for lit
+// surfaces; null for draws that are not lit. With linear light (and unless
+// KISAK_VK_MODERN_LIT=0) a draw into the linear-light scene then takes these
+// from sRGB to linear light, computes in linear light and stores its colour
+// as it is, instead of decoding the colour it stores. Ignored elsewhere.
+struct ModernLitInputs
+{
+    uint64_t constants = 0; // float constants c0-c63, bit per register
+    uint16_t samplers = 0;  // pixel samplers s0-s15 whose results are colours
+    uint16_t doubled = 0;   // of those, the ones the shader doubles (2x overbright)
+    bool colorInput = false; // the colour 0 input (the vertex colour)
+    // Instead of the above: none decoded, and the stored colour decoded
+    // without its clamp to 1 (legacy SetLinearInputs' overWhite).
+    bool overWhite = false;
+    // With overWhite: a Modern lit shader of ours to draw the pixel shader as
+    // (legacy ModernLitShader; 0 for none), unless KISAK_VK_MODERN_SHADERS=0.
+    uint8_t shader = 0;
+};
+void SetModernLitInputs(IDirect3DDevice9 *device, const ModernLitInputs *inputs);
 } // namespace gfx_vk::d3d9

@@ -331,6 +331,7 @@ client src/ui/ui_input_core.cpp
 client src/ui/ui_item_text.cpp
 client src/ui/ui_localvars.cpp
 client src/ui/ui_paint.cpp
+client src/ui/ui_port_options.cpp
 client src/ui/ui_registration.cpp
 client src/ui/ui_script_core.cpp
 client src/ui/ui_script_parse.cpp

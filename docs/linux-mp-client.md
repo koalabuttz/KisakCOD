@@ -55,7 +55,7 @@ Running it again skips what is already built at the same revision, so after a
 | `--package <new folder>` | Also packs the client, SDL3 and DXVK into a [folder that runs on another PC](#a-folder-that-runs-on-another-pc), and `<new folder>.tar.gz`. That client is built without movies, because a movie build only starts where the build machine's own FFmpeg version is installed; `--movies` keeps them. |
 | `--sdk-only` | Builds SDL3 and DXVK and stops. |
 | `--build-type Debug` | The client's build type (default `RelWithDebInfo`). |
-| `--cmake-arg=-D...` | One more option for the client's configure, for example `--cmake-arg=-DKISAK_LINUX_HTTP_DOWNLOADS=ON`. |
+| `--cmake-arg=-D...` | One more option for the client's configure, for example `--cmake-arg=-DKISAK_LINUX_HTTP_DOWNLOADS=OFF`. |
 | `--openal-include <folder>` | Where `AL/al.h` is, when `libopenal-dev` is not installed (see below). |
 | `--dry-run` | Prints every command and runs nothing. |
 
@@ -252,6 +252,31 @@ hosted x86_64 client job). **No real controller has been tried in the game
 yet**, so the feel of the sticks, the menus and the default speeds are untested
 by hand.
 
+## Message boxes, web links and the other game
+
+Windows shows a box, opens a browser or starts the other game program in a few
+places. The game windows on Linux and macOS (`KisakCOD-mp` and `KisakCOD-sp`)
+do the same through SDL (`src/linux/sys_desktop.h`,
+`src/linux/client/mp_client_input.cpp`):
+
+| Windows | Linux and macOS |
+| --- | --- |
+| A fatal error shows "Error" in a box (`Sys_SetErrorText`) | The error is still printed, then shown in a box with an OK button. The game window is hidden first, so the box is not behind it. Out of memory and out of file handles go the same way. |
+| "Your computer has changed" and "configuration updated" ask Yes or No | The same question in a box. Yes resets the graphics settings to the recommended ones, as on Windows. The first start after the GPU name became real (it used to be fixed text) asks once. |
+| `Sys_OpenURL` hands a web address to `ShellExecute` | The desktop's browser opens it (`xdg-open` on Linux). Only a plain `http://` or `https://` address is opened, as on Windows (`src/qcommon/url_check.h`). |
+| `startSingleplayer` starts `KisakCOD-sp.exe` from the game folder | `startSingleplayer` (the multiplayer main menu) starts `KisakCOD-sp` from the folder `KisakCOD-mp` is in, and `startMultiplayer` (the singleplayer main menu) starts `KisakCOD-mp`. The new program is given the same `fs_basepath` and `fs_homepath`. When the program is not there (the singleplayer game is opt-in) the menu says so and nothing quits. |
+
+A box waits for a click, so scripted runs turn them off: set
+`KISAK_NO_DIALOGS=1`. Then the error is only printed and each question is
+answered No, as before. `perf_run.py`, `menu_check.py`, the sweeps and the
+checks set it themselves. No box is shown with SDL's `dummy` or `offscreen`
+video driver either, or from any thread but the main one.
+
+The dedicated server and the Vita have no desktop: they print the error, answer
+No, and refuse to open a link or start another program. On every platform the
+started program must be a game program beside the running one; the
+multiplayer auto-update, which would start a file a server sent, is refused.
+
 ## Where it writes
 
 Configs, logs and player profiles go to `fs_homepath`. The engine's default for
@@ -289,7 +314,7 @@ engine answers on Windows when that service is missing:
 | Service | Windows owner | Answer on Linux |
 | --- | --- | --- |
 | Remote script debugger | `win_net_debug.cpp` | None attached. `net_listen` says it is unavailable. |
-| HTTP downloads | `dl_main.cpp` (libcurl) | Off by default: a download cannot begin, so the client sends `wwwdl fail` and falls back to the UDP download. `-DKISAK_LINUX_HTTP_DOWNLOADS=ON` links the real downloader ([below](#http-downloads)). |
+| HTTP downloads | `dl_main.cpp` (libcurl) | On by default where libcurl links ([below](#http-downloads)). Without libcurl, or with `-DKISAK_LINUX_HTTP_DOWNLOADS=OFF`, a download cannot begin, so the client sends `wwwdl fail` and falls back to the UDP download. |
 | Voice chat | `win_voice.cpp` (DirectSound) | No voice device: nothing is captured, sent or played. |
 
 Functions that only raw-asset loading (`useFastFile 0`) or an attached remote
@@ -309,13 +334,21 @@ client instead ([linux-steam.md](linux-steam.md)).
 A server can point the client at a web address for its map and mod files
 (`sv_wwwDownload`), which is much faster than the engine's own UDP transfer.
 The engine's downloader, `src/qcommon/dl_main.cpp`, does that with libcurl; the
-Windows build links a pinned static libcurl. On Linux it is opt-in:
+Windows build links a pinned static libcurl. On Linux it is on by default
+(`KISAK_LINUX_HTTP_DOWNLOADS=AUTO`) wherever libcurl's development files are
+found and link for the client's architecture; configure prints
+`KisakCOD-mp HTTP downloads: on` or says why it is off. `ON` makes a missing
+libcurl an error, and `OFF` leaves the downloader out:
 
 ```sh
-cmake ... -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_LINUX_HTTP_DOWNLOADS=ON
+cmake ... -DKISAK_BUILD_LINUX_MP_CLIENT=ON -DKISAK_LINUX_HTTP_DOWNLOADS=OFF
 ```
 
-That compiles `dl_main.cpp` unmodified into `KisakCOD-mp`, leaves its stand-ins
+A build folder configured before AUTO existed keeps the `OFF` it stored; pass
+`-DKISAK_LINUX_HTTP_DOWNLOADS=AUTO` once to change it. On macOS AUTO stays off
+until it has been tried there.
+
+With the downloader on, the build compiles `dl_main.cpp` unmodified into `KisakCOD-mp`, leaves its stand-ins
 out of `mp_client_unavailable.cpp`, and links the system's libcurl, found with
 pkg-config (7.85 or newer; `libcurl4-openssl-dev` on Debian and Ubuntu). For an
 i386 client on an x86_64 host install the i386 package and point pkg-config at
@@ -331,7 +364,8 @@ the UDP download. `scripts/tests/test_http_downloads.py` runs that state
 machine against local HTTP and TLS servers ([notes](../scripts/tests/http_downloads.md)).
 
 Hosted CI builds the x86_64 client with the option on and checks that it links
-libcurl and still exports no names; the i386 client job keeps it off. No
+libcurl and still exports no names; the i386 client job turns it off so the
+stand-ins keep building. No
 download from a real game server has been made with the Linux client yet: that
 needs a server with `sv_wwwDownload` set and a file the client lacks.
 

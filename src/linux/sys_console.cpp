@@ -7,6 +7,7 @@
 #include <universal/assertive.h>
 
 #include "sys_console.h"
+#include "sys_desktop.h"
 #if defined(__vita__)
 #include <vita/vita_platform.h> // Vita_ConsoleWrite
 #endif
@@ -329,6 +330,20 @@ void Conbuf_AppendTextInMainThread(const char *msg)
     Conbuf_AppendText(msg);
 }
 
+// The game windows show message boxes through SDL
+// (src/linux/client/mp_client_input.cpp). Everything else built from this
+// folder, the dedicated server, the Vita and the asset-free checks that link
+// this file, has none.
+#if !(defined(KISAK_LINUX_MP_CLIENT) || defined(KISAK_LINUX_SP_GAME)) || defined(__vita__)
+SysDialogAnswer Sys_ShowDialog(SysDialogKind kind, const char *title, const char *text)
+{
+    (void)kind;
+    (void)title;
+    (void)text;
+    return SysDialogAnswer::NotShown;
+}
+#endif
+
 void Sys_SetErrorText(const char *buf)
 {
     I_strncpyz(s_errorString, buf ? buf : "", (int)sizeof(s_errorString));
@@ -338,4 +353,8 @@ void Sys_SetErrorText(const char *buf)
     ConsoleWrite(s_errorString, strlen(s_errorString));
     ConsoleWrite("\n", 1);
     fflush(stdout);
+
+    // win_syscon.cpp shows the error in a box too. The game windows do
+    // (src/linux/sys_desktop.h); the dedicated server and the Vita print only.
+    Sys_ShowDialog(SysDialogKind::Error, "Error", s_errorString);
 }

@@ -121,7 +121,9 @@ class PlannedCommandTests(unittest.TestCase):
         for name, flag in (("debugger", "--cxx"), ("fastfile", "--cxx"), ("net_deadline", "--cxx"),
                            ("huffman", "--cxx"), ("handshake_auth", "--cxx"),
                            ("remote_input", "--cxx"), ("master_server", "--cxx"),
-                           ("open_url", "--cxx"), ("steam_session", "--cxx"),
+                           ("open_url", "--cxx"), ("sys_desktop", "--cxx"),
+                           ("server_dvar_guard", "--cxx"),
+                           ("steam_session", "--cxx"),
                            ("random_range", "--cxx"), ("gameplay_lifecycle", "--cxx"),
                            ("server_test_clients", "--cxx")):
             argv = check_named(self.checks, name).commands[0].argv
@@ -140,6 +142,12 @@ class PlannedCommandTests(unittest.TestCase):
 
     def test_open_url_requires_32_bit_execution(self):
         self.assertIn("--m32", check_named(self.checks, "open_url").commands[0].argv)
+
+    def test_sys_desktop_requires_32_bit_execution(self):
+        self.assertIn("--m32", check_named(self.checks, "sys_desktop").commands[0].argv)
+
+    def test_server_dvar_guard_requires_32_bit_execution(self):
+        self.assertIn("--m32", check_named(self.checks, "server_dvar_guard").commands[0].argv)
 
     def test_steam_session_requires_32_bit_execution(self):
         self.assertIn("--m32", check_named(self.checks, "steam_session").commands[0].argv)
@@ -215,6 +223,8 @@ class PlannedCommandTests(unittest.TestCase):
             "remote_input",
             "master_server",
             "open_url",
+            "sys_desktop",
+            "server_dvar_guard",
             "steam_session",
             "debugger",
             "fastfile",

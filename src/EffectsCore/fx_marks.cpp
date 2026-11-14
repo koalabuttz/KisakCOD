@@ -1517,13 +1517,10 @@ void FX_BeginGeneratingMarkVertsForEntModels(int32_t localClientNum, uint32_t *i
             "fx_marks->current.enabled && fx_marks_ents->current.enabled");
     PROF_SCOPED("FX_GenMarkVertsEnt");
     R_BeginMarkMeshVerts();
-    if (InterlockedIncrement((LONG*) & g_markThread[localClientNum]) != 1)
-        MyAssertHandler(
-            ".\\EffectsCore\\fx_marks.cpp",
-            1638,
-            0,
-            "%s",
-            "Sys_InterlockedIncrement( &g_markThread[localClientNum] ) == 1");
+    // Inside iassert like the decrement in FX_EndGeneratingMarkVertsForEntModels:
+    // when this one ran in every build, a build without assertions dropped the
+    // decrement only, and the second call stopped here (laptop perf run 6).
+    iassert(Sys_InterlockedIncrement(&g_markThread[localClientNum]) == 1);
 
     FxMarksSystem *marksSystem = FX_GetMarksSystem(localClientNum);
     marksSystem->hasCarryIndex = 0;

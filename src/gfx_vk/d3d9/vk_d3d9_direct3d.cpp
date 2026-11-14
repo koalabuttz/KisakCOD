@@ -3,11 +3,15 @@
 
 #include "vk_d3d9_internal.h"
 
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <mutex>
 #include <vector>
 
 #if defined(_MSC_VER)
@@ -96,43 +100,89 @@ bool SpinDisabled()
     return text && std::strcmp(text, "0") == 0;
 #endif
 }
+
+// FrontLockSlept's counts.
+std::atomic<uint64_t> g_frontSleeps{0};
+std::atomic<uint64_t> g_frontSleepMicros{0};
+
+// What a waiter sleeps on. Made by the first waiter and never destroyed.
+struct FrontSleep
+{
+    std::mutex mutex;
+    std::condition_variable wake;
+};
+
+FrontSleep &Sleep()
+{
+    static FrontSleep *const sleep = new FrontSleep;
+    return *sleep;
+}
+
+uint32_t Spins()
+{
+    static const uint32_t spins = SpinDisabled() ? 0 : 2000;
+    return spins;
+}
 } // namespace
 
-FrontMutexType::FrontMutexType() : spins_(SpinDisabled() ? 0 : kSpins) {}
-
-void FrontMutexType::lock()
+void FrontMutexType::LockSlow()
 {
-    // Any address that is this thread's alone.
-    static thread_local const char t_token = 0;
-    const void *const self = &t_token;
-    if (owner_.load(std::memory_order_relaxed) == self)
-    {
-        ++depth_;
-        return;
-    }
-    bool held = mutex_.try_lock();
-    for (uint32_t spin = 0; !held && spin < spins_; ++spin)
+    const uint32_t spins = Spins();
+    for (uint32_t spin = 0; spin < spins; ++spin)
     {
         CpuRelax();
-        // Looks before it tries: a failed try still takes the mutex's cache
+        // Looks before it tries: a failed try still takes the lock's cache
         // line from the thread that will unlock it.
-        held = owner_.load(std::memory_order_relaxed) == nullptr && mutex_.try_lock();
+        uint32_t free = kFree;
+        if (state_.load(std::memory_order_relaxed) == kFree &&
+            state_.compare_exchange_weak(free, kHeld, std::memory_order_acquire, std::memory_order_relaxed))
+            return;
     }
-    if (!held)
-        mutex_.lock();
-    owner_.store(self, std::memory_order_relaxed);
-    depth_ = 1;
+    // Marks the lock as having sleepers, so its holder wakes one when it
+    // leaves; a waiter that takes it this way leaves the mark, which costs at
+    // most one wake nobody needed. The holder takes Sleep().mutex before it
+    // wakes anyone, so the mark and the wait cannot miss each other.
+    FrontSleep &sleep = Sleep();
+    const auto start = std::chrono::steady_clock::now();
+    uint64_t sleeps = 0;
+    {
+        std::unique_lock<std::mutex> guard(sleep.mutex);
+        while (state_.exchange(kSleepers, std::memory_order_acquire) != kFree)
+        {
+            ++sleeps;
+            sleep.wake.wait(guard);
+        }
+    }
+    if (sleeps)
+    {
+        const auto micros =
+            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
+        g_frontSleeps.fetch_add(sleeps, std::memory_order_relaxed);
+        g_frontSleepMicros.fetch_add(static_cast<uint64_t>(micros), std::memory_order_relaxed);
+    }
 }
 
-void FrontMutexType::unlock()
+FrontLockSleeps FrontLockSlept()
 {
-    if (--depth_ == 0)
-    {
-        owner_.store(nullptr, std::memory_order_relaxed);
-        mutex_.unlock();
-    }
+    FrontLockSleeps slept;
+    slept.sleeps = g_frontSleeps.load(std::memory_order_relaxed);
+    slept.micros = g_frontSleepMicros.load(std::memory_order_relaxed);
+    return slept;
 }
-#endif
+
+void FrontMutexType::WakeOne()
+{
+    FrontSleep &sleep = Sleep();
+    {
+        std::lock_guard<std::mutex> guard(sleep.mutex);
+    }
+    sleep.wake.notify_one();
+}
+#else
+FrontLockSleeps FrontLockSlept()
+{
+    return {}; // a plain recursive mutex here: its sleeps are not seen
+}
 
 FrontMutexType &FrontMutex()
 {
@@ -140,6 +190,7 @@ FrontMutexType &FrontMutex()
     static FrontMutexType *const mutex = new FrontMutexType;
     return *mutex;
 }
+#endif
 
 IDirect3D9 *CreateDirect3D9(const Host &host)
 {
@@ -196,6 +247,82 @@ bool Counters(IDirect3DDevice9 *device, DeviceCounters &out)
             return true;
         }
     return false;
+}
+
+ModernResult ModernSceneBegin(IDirect3DDevice9 *device)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernSceneBegin();
+    return ModernResult::Refused;
+}
+
+ModernResult ModernSceneLit(IDirect3DDevice9 *device, const ModernSceneView &view, bool *glowDrawn)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernSceneLit(view, glowDrawn);
+    return ModernResult::Refused;
+}
+
+bool ModernWantsSceneDepth(IDirect3DDevice9 *device)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernWantsSceneDepth();
+    return false;
+}
+
+ModernResult ModernSceneDepth(IDirect3DDevice9 *device, const ModernSceneView &view)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernSceneDepth(view);
+    return ModernResult::Refused;
+}
+
+void SetModernLitInputs(IDirect3DDevice9 *device, const ModernLitInputs *inputs)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->SetModernLitInputs(inputs);
+}
+
+ModernResult ModernSceneDone(IDirect3DDevice9 *device, const ModernSceneView &view, bool *glowDrawn)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernSceneDone(view, glowDrawn);
+    return ModernResult::Refused;
+}
+
+void ModernSurfaceMoved(IDirect3DDevice9 *device, const float clip[4][4], const float prevClip[4][4])
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+        {
+            live->ModernSurfaceMoved(clip, prevClip);
+            return;
+        }
+}
+
+void ModernSkinnedSurfaceMoved(IDirect3DDevice9 *device, uint64_t key, const float clip[4][4],
+                               const float prevClip[4][4])
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+        {
+            live->ModernSkinnedSurfaceMoved(key, clip, prevClip);
+            return;
+        }
 }
 
 // ---- IUnknown -------------------------------------------------------------------------------------

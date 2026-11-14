@@ -148,6 +148,8 @@ def run_checks(checker, binary):
     env = dict(os.environ)
     env.setdefault("SDL_VIDEODRIVER", "dummy")
     env.setdefault("SDL_AUDIODRIVER", "dummy")
+    # A box (an error, a question) would wait for a click nobody makes.
+    env.setdefault("KISAK_NO_DIALOGS", "1")
 
     with tempfile.TemporaryDirectory(prefix="kisak-sp-game-") as workdir:
         work = Path(workdir)

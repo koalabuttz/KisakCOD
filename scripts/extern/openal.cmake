@@ -56,12 +56,23 @@ if (MSVC)
     set(HAVE_SHGETKNOWNFOLDERPATH_NO_NTDDI 1 CACHE INTERNAL "")
 endif()
 
+# MSVC 14.52 (Visual Studio 2026) cannot compile one range adaptor in 1.25.2's
+# alc/alc.cpp (C3889); openal_msvc_ranges.cmake rewrites that line as upstream's
+# master later did. Only MSVC builds get the patch step.
+set(KISAK_OPENAL_PATCH "")
+if (MSVC)
+	set(KISAK_OPENAL_PATCH PATCH_COMMAND
+		${CMAKE_COMMAND} -DOPENAL_SRC=<SOURCE_DIR>
+		-P ${CMAKE_CURRENT_LIST_DIR}/openal_msvc_ranges.cmake)
+endif()
+
 FetchContent_Declare (
 	openal
 	GIT_REPOSITORY https://github.com/kcat/openal-soft.git
 	GIT_TAG 1.25.2
 	GIT_SHALLOW TRUE
 	GIT_PROGRESS TRUE
+	${KISAK_OPENAL_PATCH}
 )
 FetchContent_MakeAvailable ( openal )
 

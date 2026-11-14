@@ -372,6 +372,16 @@ char *Sys_Cwd();
 const char *Sys_DefaultCDPath();
 char *Sys_DefaultInstallPath();
 void Sys_QuitAndStartProcess(const char *exeName, const char *parameters);
+// The game programs startSingleplayer and startMultiplayer start: the names
+// the builds give them (scripts/mp, scripts/sp, scripts/platform/linux), in
+// the folder the running program is in.
+#ifdef _WIN32
+#define KISAK_MP_PROGRAM "KisakCOD-mp.exe"
+#define KISAK_SP_PROGRAM "KisakCOD-sp.exe"
+#else
+#define KISAK_MP_PROGRAM "KisakCOD-mp"
+#define KISAK_SP_PROGRAM "KisakCOD-sp"
+#endif
 
 
 // win_voice

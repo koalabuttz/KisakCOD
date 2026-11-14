@@ -12,6 +12,8 @@
 #include <qcommon/qcommon.h>
 
 #include <gfx_vk/d3d9/vk_d3d9.h>
+#include <gfx_vk/modern/vk_modern.h>
+#include <gfx_d3d/rhi/r_rhi_modern.h>
 #include <linux/client/window/sdl_api.h>
 #include <linux/client/window/win32_window_sdl3.h>
 
@@ -25,9 +27,11 @@
 #include <sys/stat.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cerrno>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -54,6 +58,13 @@ const dvar_s *r_vkGpuFeed;
 const dvar_s *r_vkGpuFeedDraws;
 const dvar_s *r_vkGpuFeedIdleDraws;
 const dvar_s *r_vkKeepDrawState;
+const char *s_visualsNames[] = {"legacy", "modern", nullptr};
+enum : int
+{
+    VISUALS_LEGACY = 0,
+    VISUALS_MODERN = 1,
+};
+const dvar_s *r_visuals;
 
 struct DisplayMode
 {
@@ -66,6 +77,9 @@ struct DisplayMode
 struct HostState
 {
     SDL_Window *window = nullptr; // the window CreateDevice was last given
+    // Set fullscreen by HostFullscreen, until it is set back or destroyed
+    // (WM_DESTROY may come from another thread than the front's calls).
+    std::atomic<SDL_Window *> fullscreenWindow{nullptr};
     std::vector<DisplayMode> modes;
     std::string shaderCachePath;   // what Host::shaderCachePath points at
     std::string pipelineCachePath; // what Host::pipelineCachePath points at
@@ -209,6 +223,48 @@ HMONITOR HostMonitor(void *)
     return reinterpret_cast<HMONITOR>(static_cast<std::uintptr_t>(Display()));
 }
 
+// ---- Fullscreen ------------------------------------------------------------------
+
+// The window fullscreen on the primary display at the closest mode SDL has, as
+// D3D9 (and DXVK's SDL window system) do for a fullscreen device. SDL gives the
+// desktop its mode back when the window goes back to windowed, when it is
+// destroyed and, by default, when it loses focus (it minimizes then).
+bool HostFullscreen(void *, front::D3D9Window handle, const front::FullscreenMode *mode)
+{
+    if (!mode)
+    {
+        SDL_Window *const window = s_host.fullscreenWindow.exchange(nullptr);
+        if (window && !SDL_SetWindowFullscreen(window, false))
+        {
+            Com_Printf(CON_CHANNEL_GFX, "Vulkan: SDL_SetWindowFullscreen(off) failed: %s\n", SDL_GetError());
+            return false;
+        }
+        return true;
+    }
+    SDL_Window *const window = reinterpret_cast<SDL_Window *>(handle);
+    const SDL_DisplayID display = Display();
+    if (!window || !SDL_GetWindowID(window) || !display)
+        return false;
+    const SDL_DisplayMode *const desktop = SDL_GetDesktopDisplayMode(display);
+    const int width = mode->width ? int(mode->width) : (desktop ? desktop->w : 0);
+    const int height = mode->height ? int(mode->height) : (desktop ? desktop->h : 0);
+    SDL_DisplayMode closest{};
+    // A refresh rate of 0 takes the desktop's.
+    const bool found = width > 0 && height > 0
+        && SDL_GetClosestFullscreenDisplayMode(display, width, height, float(mode->refreshRate), false, &closest);
+    if (!found)
+        Com_Printf(CON_CHANNEL_GFX, "Vulkan: no %dx%d display mode at %u Hz; fullscreen at the desktop's mode\n",
+                   width, height, mode->refreshRate);
+    s_host.fullscreenWindow.store(window);
+    // Null: fullscreen at the desktop's mode (borderless, the window covering it).
+    bool ok = SDL_SetWindowFullscreenMode(window, found ? &closest : nullptr);
+    ok = SDL_SetWindowFullscreen(window, true) && ok;
+    if (!ok)
+        Com_Printf(CON_CHANNEL_GFX, "Vulkan: fullscreen failed: %s\n", SDL_GetError());
+    (void)SDL_SyncWindow(window);
+    return ok && found;
+}
+
 // The window's client area on its display, for windowed screenshots.
 bool HostWindowOrigin(void *, front::D3D9Window handle, int32_t &x, int32_t &y)
 {
@@ -250,6 +306,8 @@ void HostCoreDestroyed(void *, const gfx_vk::CoreStats &stats)
 // releases the device).
 void HostWindowDestroying(void *hwnd)
 {
+    SDL_Window *destroyed = static_cast<SDL_Window *>(hwnd);
+    s_host.fullscreenWindow.compare_exchange_strong(destroyed, nullptr);
     front::WindowDestroying(reinterpret_cast<front::D3D9Window>(hwnd));
 }
 
@@ -309,6 +367,143 @@ gfx_vk::Validation ValidationSetting()
         return gfx_vk::Validation::Off;
     }
 }
+// ---- The Modern path (r_visuals modern; docs/vulkan-modern.md) ------------------------
+
+// Set when the front refused a scene (a multisampled back buffer, say): the
+// scenes are not jittered any more, since nothing would take the jitter out.
+// Read on the front end's thread, written on the render thread.
+std::atomic<bool> s_modernRefused{false};
+
+void ModernJitterPixels(void *, uint32_t frame, float *x, float *y)
+{
+    if (s_modernRefused.load(std::memory_order_relaxed))
+    {
+        *x = *y = 0.0f;
+        return;
+    }
+    gfx_vk::modern::JitterPixels(frame, *x, *y);
+}
+
+// The front's view of the engine's scene.
+front::ModernSceneView ModernViewOf(const GfxModernScene *scene)
+{
+    front::ModernSceneView view{};
+    std::memcpy(view.view, scene->view, sizeof(view.view));
+    std::memcpy(view.projection, scene->projection, sizeof(view.projection));
+    view.x = uint32_t(std::max(0, scene->x));
+    view.y = uint32_t(std::max(0, scene->y));
+    view.width = uint32_t(std::max(0, scene->width));
+    view.height = uint32_t(std::max(0, scene->height));
+    view.cut = scene->cut;
+    view.glow.on = scene->glow;
+    view.glow.radius = scene->glowRadius;
+    view.glow.intensity = scene->glowIntensity;
+    view.glow.cutoff = scene->glowCutoff;
+    view.glow.desaturation = scene->glowDesaturation;
+    return view;
+}
+
+// Whether the scene was finished before its effects (ModernSceneLit): its
+// sceneDone then has nothing to do. Render thread only.
+bool s_modernSceneFinished = false;
+
+void ModernFinish(GfxModernScene *scene, front::ModernResult result, bool glowDrawn)
+{
+    if (glowDrawn)
+        scene->glowDrawn = true;
+    if (result == front::ModernResult::Refused)
+        s_modernRefused.store(true, std::memory_order_relaxed);
+}
+
+// Effects on the display image (unless KISAK_VK_MODERN_EFFECTS=linear): the
+// front finishes the scene here.
+void ModernSceneLit(void *, IDirect3DDevice9 *device, GfxModernScene *scene)
+{
+    if (s_modernRefused.load(std::memory_order_relaxed))
+        return;
+    bool glowDrawn = false;
+    const front::ModernResult result = front::ModernSceneLit(device, ModernViewOf(scene), &glowDrawn);
+    if (result == front::ModernResult::Skipped)
+        return;
+    s_modernSceneFinished = true;
+    ModernFinish(scene, result, glowDrawn);
+}
+
+void ModernSceneDone(void *, IDirect3DDevice9 *device, GfxModernScene *scene)
+{
+    if (s_modernSceneFinished)
+    {
+        s_modernSceneFinished = false;
+        return;
+    }
+    if (s_modernRefused.load(std::memory_order_relaxed))
+        return;
+    bool glowDrawn = false;
+    const front::ModernResult result = front::ModernSceneDone(device, ModernViewOf(scene), &glowDrawn);
+    ModernFinish(scene, result, glowDrawn);
+}
+
+// Linear light (KISAK_VK_MODERN_LINEAR): a refusal here (logged once by the
+// front) leaves the scene in the back buffer, and the anti-aliasing runs on.
+void ModernSceneBegin(void *, IDirect3DDevice9 *device)
+{
+    s_modernSceneFinished = false;
+    if (!s_modernRefused.load(std::memory_order_relaxed))
+        front::ModernSceneBegin(device);
+}
+
+// A surface that moves on its own was just drawn (r_modern_motion.cpp): the
+// front keeps it for the scene's velocity pass.
+void ModernSurfaceMoved(void *, IDirect3DDevice9 *device, const float clip[4][4], const float prevClip[4][4])
+{
+    if (!s_modernRefused.load(std::memory_order_relaxed))
+        front::ModernSurfaceMoved(device, clip, prevClip);
+}
+
+// The same for a skinned surface: the front keeps its vertices for the next
+// scene's velocity, and draws its velocity from last scene's.
+void ModernSkinnedSurfaceMoved(void *, IDirect3DDevice9 *device, uint64_t key, const float clip[4][4],
+                               const float prevClip[4][4])
+{
+    if (!s_modernRefused.load(std::memory_order_relaxed))
+        front::ModernSkinnedSurfaceMoved(device, key, clip, prevClip);
+}
+
+// The colours a lit pass's pixel shader reads, for linear light.
+void ModernLitInputs(void *, IDirect3DDevice9 *device, const GfxModernLitInputs *inputs)
+{
+    if (!inputs)
+    {
+        front::SetModernLitInputs(device, nullptr);
+        return;
+    }
+    front::ModernLitInputs lit;
+    lit.constants = inputs->constants;
+    lit.samplers = inputs->samplers;
+    lit.doubled = inputs->doubled;
+    lit.colorInput = inputs->colorInput;
+    lit.overWhite = inputs->overWhite;
+    lit.shader = inputs->shader;
+    front::SetModernLitInputs(device, &lit);
+}
+
+// The normals buffer (docs/vulkan-modern.md): the front asks for the depth
+// prepass when something reads it, and builds it from the prepass's depth.
+bool ModernWantsSceneDepth(void *, IDirect3DDevice9 *device)
+{
+    return !s_modernRefused.load(std::memory_order_relaxed) && front::ModernWantsSceneDepth(device);
+}
+
+void ModernSceneDepth(void *, IDirect3DDevice9 *device, GfxModernScene *scene)
+{
+    if (!s_modernRefused.load(std::memory_order_relaxed))
+        front::ModernSceneDepth(device, ModernViewOf(scene));
+}
+
+const GfxModernHooks s_modernHooks = {nullptr,          ModernJitterPixels, ModernSceneDone,
+                                      ModernSceneBegin, ModernSceneLit,     ModernSurfaceMoved,
+                                      ModernSkinnedSurfaceMoved, ModernLitInputs, ModernWantsSceneDepth,
+                                      ModernSceneDepth};
 } // namespace
 
 void Kisak_VulkanRegisterDvars()
@@ -337,12 +532,19 @@ void Kisak_VulkanRegisterDvars()
     r_vkKeepDrawState = Dvar_RegisterBool("r_vkKeepDrawState", true, DVAR_NOFLAG,
                                           "Vulkan: a draw takes up the pipeline, constants and binds the draw "
                                           "before it left; off makes every draw set them all again");
+    r_visuals = Dvar_RegisterEnum("r_visuals", s_visualsNames, VISUALS_LEGACY, DVAR_ARCHIVE | DVAR_LATCH,
+                                  "Visuals with r_backend vulkan: legacy (the game as it was made) or modern "
+                                  "(experimental; so far temporal anti-aliasing)");
 }
 
 int Kisak_VulkanBackendSelected()
 {
     Kisak_VulkanRegisterDvars();
-    return r_backend->current.integer == BACKEND_VULKAN;
+    if (r_backend->current.integer == BACKEND_VULKAN)
+        return 1;
+    // The Modern path's hooks belong to the Vulkan back end.
+    R_SetModernHooks(nullptr);
+    return 0;
 }
 
 IDirect3D9 *Kisak_VulkanDirect3DCreate9()
@@ -366,6 +568,7 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
     host.currentMode = HostCurrentMode;
     host.monitor = HostMonitor;
     host.windowOrigin = HostWindowOrigin;
+    host.fullscreen = HostFullscreen;
     host.log = HostLog;
     host.validation = ValidationSetting();
     host.deviceIndex = r_vkDevice->current.integer;
@@ -376,9 +579,12 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
     s_host.pipelineCachePath = cacheDirectory.empty() ? std::string() : cacheDirectory + "/pipelines.bin";
     host.shaderCachePath = s_host.shaderCachePath.empty() ? nullptr : s_host.shaderCachePath.c_str();
     host.pipelineCachePath = s_host.pipelineCachePath.empty() ? nullptr : s_host.pipelineCachePath.c_str();
-    Com_Printf(CON_CHANNEL_GFX, "Graphics back end: Vulkan (validation %s, device %d, shader cache %s)\n",
+    Com_Printf(CON_CHANNEL_GFX, "Graphics back end: Vulkan (validation %s, device %d, shader cache %s, visuals %s)\n",
                s_validationNames[r_vkValidation->current.integer], r_vkDevice->current.integer,
-               s_host.shaderCachePath.empty() ? "off" : s_host.shaderCachePath.c_str());
+               s_host.shaderCachePath.empty() ? "off" : s_host.shaderCachePath.c_str(),
+               s_visualsNames[r_visuals->current.integer]);
+    s_modernRefused.store(false, std::memory_order_relaxed);
+    R_SetModernHooks(r_visuals->current.integer == VISUALS_MODERN ? &s_modernHooks : nullptr);
     return front::CreateDirect3D9(host);
 }
 

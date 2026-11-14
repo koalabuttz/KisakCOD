@@ -8,6 +8,7 @@
 #include "r_buffers.h"
 #include "r_utils.h"
 #include "r_water.h"
+#include "r_scene.h"
 #include "r_image.h"
 
 
@@ -473,6 +474,8 @@ void R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     }
     iassert( pass->pixelShader );
     R_SetPixelShader(context.state, pass->pixelShader);
+    // The Modern path's lit surfaces in linear light (r_visuals modern, Vulkan).
+    R_ModernPassInputs(material, pass);
     if (pass->stableArgCount)
         R_SetPassShaderStableArguments(
             context,

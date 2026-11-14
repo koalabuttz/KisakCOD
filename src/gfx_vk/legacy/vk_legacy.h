@@ -243,6 +243,11 @@ struct DeviceDesc
     // The PS Vita's GXM back end reads it as a folder, one compiled program
     // per file (src/gfx_gxm/gxm_program_cache.h).
     const char *shaderCachePath = nullptr;
+    // The pipeline list file (see "Pipelines built ahead" below): read when
+    // the device is created and written when it is destroyed. Null or empty:
+    // none, and every pipeline is built at its first draw. The GXM back end
+    // ignores it.
+    const char *pipelineListPath = nullptr;
     // Samples a pixel of the back buffer (see "Multisampled targets" below).
     // The GXM back end has one.
     uint32_t backBufferSamples = 1;
@@ -295,10 +300,34 @@ struct DeviceStats
     // the time that took, the rest of pipelineMicros being the driver's.
     uint32_t pixelModules;
     uint64_t pixelModuleMicros;
+    // Of the pixel modules kept (built ahead or not), those built as a Modern
+    // lit shader of ours (SetLinearInputs' shader), and those that wanted one
+    // but were built from the pixel shader as it is (it did not link).
+    uint32_t modernLitModules;
+    uint32_t modernLitRefused;
+    // Pipelines built ahead on worker threads (see "Pipelines built ahead"),
+    // not counted in pipelines or pipelineMicros: those built, the workers'
+    // time on them, those a draw then used, the draws that had to wait for
+    // one a worker was still building and how long they waited, and the
+    // entries the pipeline list file held when the device was created; then
+    // the time the creating thread spent queueing jobs as shaders and
+    // declarations were made (for shaders, inside shaderMicros).
+    uint32_t pipelinesAhead;
+    uint64_t aheadMicros;
+    uint32_t aheadUsed;
+    uint32_t aheadWaits;
+    uint64_t aheadWaitMicros;
+    uint32_t pipelinesListed;
+    uint64_t aheadQueueMicros;
+    // Of the pipelines built ahead, the pixel modules the workers built for
+    // them (as pixelModules) and the workers' time on those.
+    uint32_t aheadPixelModules;
+    uint64_t aheadPixelModuleMicros;
     uint64_t textureUploads;   // copy commands of UnlockRect and UpdateTexture, of one or more regions of a level
     uint64_t textureReadbacks; // levels read back to lock a texture again (once each)
     uint64_t uploadBytes;
     uint64_t uploadMicros;     // staging those uploads
+    uint64_t gammaPresents;    // frames Present showed through the gamma ramp (SetGammaRamp)
 };
 const DeviceStats &Stats(const Device *device);
 
@@ -337,6 +366,31 @@ void SetGpuFeed(Device *device, const GpuFeed &feed);
 // between two calls; the change is logged.
 bool GetKeepDrawState(const Device *device);
 void SetKeepDrawState(Device *device, bool keep);
+
+// Pipelines built ahead. A pipeline is built the first time a draw needs it,
+// which costs that frame from about a millisecond (the driver's cache has it)
+// to over a hundred (a cold driver compiling the shaders). The device keeps a
+// list of the pipelines draws used: each entry names its shaders and vertex
+// declaration by their contents and holds the rest of the pipeline's state.
+// A device created with DeviceDesc::pipelineListPath reads the list at the
+// start; whenever the last shader or declaration an entry needs is created
+// (the game creates them as it loads a map), the entry's pipeline is queued
+// to worker threads (OptionalFeatures::pipelinesAhead), so it is usually
+// built before the first draw that needs it. A draw that needs one a worker
+// is still building waits for it; one only queued is built by the draw. The
+// list is written when the device is destroyed: entries drawn this launch,
+// and those not drawn in fewer than kPipelineListAge launches that built
+// them. The file names the GPU: another GPU starts with an empty list.
+//
+// SavePipelineList and LoadPipelineList write and read the list now (message
+// says what they did); a load replaces the device's list and queues what it
+// can build. FinishPipelinesAhead waits until the workers have nothing left
+// and hands their pipelines to the device. For checks and tools.
+constexpr uint32_t kPipelineListAge = 8;
+bool SavePipelineList(Device *device, const char *path, std::string &message);
+bool LoadPipelineList(Device *device, const char *path, std::string &message);
+void FinishPipelinesAhead(Device *device);
+uint32_t PipelineListSize(const Device *device);
 #endif
 
 // The shader cache. Translated shaders are kept by their D3D9 bytecode for the
@@ -555,6 +609,188 @@ enum class PresentResult
     Failed,
 };
 PresentResult Present(Device *device);
+#if !defined(KISAK_GFX_GXM)
+// With `shown`, the window's image is also read back as Present leaves it
+// (ReadImage on the swapchain image, which needs CoreDesc::allowCapture), for
+// checks of what reaches the window; *shown stays null when it cannot be.
+PresentResult Present(Device *device, gfx_vk::Readback **shown);
+#endif
+
+#if !defined(KISAK_GFX_GXM)
+// D3D9's gamma ramp of a fullscreen swapchain (SetGammaRamp): Present maps
+// each channel of the shown image through it on the way to the window, with
+// one full-screen pass. Null, or a ramp that keeps every value (i * 257),
+// shows the image as drawn and costs nothing. The front passes it only for a
+// fullscreen device, since D3D9 ignores the ramp of a windowed one.
+struct GammaRamp
+{
+    uint16_t red[256];
+    uint16_t green[256];
+    uint16_t blue[256];
+};
+void SetGammaRamp(Device *device, const GammaRamp *ramp);
+#endif
+
+#if !defined(KISAK_GFX_GXM)
+// ---- Passes of another user of the core (the Modern path) --------------------------------
+//
+// Ends the pass being drawn and forgets what the device has bound, so that
+// the caller can record passes of its own on the core (vk_core.h) between
+// draws; the next draw begins a new pass and binds everything again. Opens
+// the frame if none is open. False, with nothing to record into, when the
+// frame is skipped (minimised window) or the device has failed.
+bool HandOverRecording(Device *device);
+// The core image a surface draws into: its texture's image when the surface
+// is level 0 of a 2D texture or a standalone surface, else null.
+gfx_vk::Image *SurfaceImage(const Surface *surface);
+// Marks a render target texture as holding linear light (the Modern path's
+// scene, docs/vulkan-modern.md): draws into it as render target 0 run their
+// pixel shaders with colour output 0 taken from sRGB to linear light
+// (legacy_shader::BuildSpirv's linearOutput), and clears of it take their
+// colour from sRGB to linear light too. Blending then happens in linear light.
+void SetLinearLight(Texture *texture, bool linear);
+// What the last DrawIndexedPrimitive of a triangle list drew from, as it is
+// still bound: stream 0's buffer, the index buffer and range, and the
+// viewport. The Modern path draws a surface that moves on its own again from
+// it (its velocity pass). False when the last indexed draw was not a
+// triangle list or stream 0 is not a vertex buffer.
+struct IndexedDraw
+{
+    VkBuffer vertices = VK_NULL_HANDLE;
+    VkDeviceSize vertexOffset = 0;
+    uint32_t stride = 0;
+    VkBuffer indices = VK_NULL_HANDLE;
+    VkIndexType indexType = VK_INDEX_TYPE_UINT16;
+    uint32_t firstIndex = 0, indexCount = 0;
+    int32_t vertexBase = 0;
+    // D3D9's MinVertexIndex and NumVertices: the draw reads vertices
+    // vertexBase + minIndex onwards, vertexCount of them.
+    uint32_t minIndex = 0, vertexCount = 0;
+    Viewport viewport{};
+};
+bool LastIndexedDraw(Device *device, IndexedDraw &out);
+// The colours the pixel shaders of the draws that follow read, for draws into
+// a linear-light render target 0 (SetLinearLight): the red, green and blue of
+// the float constants in constants (bit per register c0-c63), of what the
+// samplers in samplers return (bit per sampler; decode(2v) / 2 for those also
+// in doubled) and, with colorInput, of the colour 0 input are taken from sRGB
+// to linear light, and the colour output is stored as computed
+// (legacy_shader::BuildSpirv's linearInputs). With overWhite instead, no input
+// is decoded and the colour output is decoded without its clamp to 1, so a
+// colour computed over white stays over white (the masks are ignored). All
+// zero (and false): none, and the colour output is decoded as always.
+//
+// shader, with overWhite, names a Modern lit shader of ours to draw the pixel
+// shader as instead (ModernLitShader): it reads the same samplers, constant
+// registers and vertex shader outputs, and computes in linear light itself.
+// Where it cannot be linked to the vertex shader, the pixel shader is drawn
+// as with overWhite alone.
+enum ModernLitShader : uint8_t
+{
+    ModernLitNone = 0,
+    // lm_[hsm_]sun_<mode>c0[d0][n0][s0]: a world surface lit by its lightmaps
+    // and the sun. Always: colour map at s0, primary and secondary lightmaps
+    // at s2 and s3, fog colour at c0, sun direction and colour at c17 and
+    // c18; texcoord 0 (colour and lightmap UVs), texcoord 1 (normal, fog) and
+    // colour 0 in. The flags below add to that.
+    ModernLitLmSun = 0x40,
+    // lp_[hsm_][i_]sun_<mode>c0[d0][n0][s0]: a model lit by the lighting
+    // volume and the sun. Always: colour map at s0, the lighting volume (a 3D
+    // image) at s4, fog colour at c0, lightingLookupScale at c5, sun
+    // direction and colour at c17 and c18; texcoord 0 (colour UV), texcoord
+    // 1 (normal, fog), texcoord 6 (the volume coordinate) and colour 0 in.
+    // The flags below add to that one sampler and one constant further on
+    // than the world's: the shadow map at s5, the material's maps from s5
+    // (s6 with the shadow map), envMapParms at c6, detailScale at c6 (c7
+    // with s0).
+    ModernLitLpSun = 0x80,
+    // lm_<mode>c0[d0][n0][s0] and lp_[i_]<mode>c0[d0][n0][s0]: a surface
+    // without a primary light (interiors; lit shader facts 5), the sun
+    // family's shader with the sun taken out. The world's reads only the
+    // secondary lightmap (s3; no s2, c17 or c18); a model's only the
+    // lighting volume's light (its alpha, c17 and c18 unread). Neither has a
+    // shadow map, so the shadow bit says which: set for models
+    // (ModernLitNoSunModel). The maps sit where the sun family's do without
+    // the shadow map; s0 reads no sun specular colour (c19).
+    ModernLitNoSun = 0xc0,
+    ModernLitFamilyMask = 0xc0,
+    // hsm: the sun's shadow map at s4, its partition switch and scale at c2
+    // and c4, its coordinate in texcoord 4.
+    ModernLitShadow = 0x01,
+    ModernLitNoSunModel = 0x01,
+    // n0: a normal map at the next sampler (s4, or s5 with the shadow map);
+    // binormal and tangent in texcoords 2 and 3.
+    ModernLitNormal = 0x02,
+    // s0: the reflection probe (a cube) at s1, a specular map at the sampler
+    // after the normal map's (or in its place without one), envMapParms at
+    // c5, the sun's specular colour at c19; the eye-to-point vector in
+    // texcoord 5.
+    ModernLitSpecular = 0x04,
+    // d0: a detail map at the sampler after the others, its UV scale at the
+    // constant after c4 (c5, or c6 with s0).
+    ModernLitDetail = 0x08,
+    // The mode in bits 4-5: r0 opaque, b0 blended (premultiplied, the alpha
+    // is colour alpha times vertex alpha), t0 alpha-tested (kept at alpha
+    // 0.5 and over).
+    ModernLitModeShift = 4,
+    ModernLitModeMask = 0x30,
+    ModernLitOpaque = 0x00,
+    ModernLitBlended = 0x10,
+    ModernLitAlphaTested = 0x20,
+};
+// Whether shader names a Modern lit shader of ours.
+constexpr bool ModernLitShaderValid(uint8_t shader)
+{
+    return (shader & ModernLitFamilyMask) != 0 && (shader & ModernLitModeMask) != 0x30;
+}
+// Whether it lights a model (the lighting volume at s4) rather than the world.
+constexpr bool ModernLitModel(uint8_t shader)
+{
+    const uint8_t family = shader & ModernLitFamilyMask;
+    return family == ModernLitLpSun || (family == ModernLitNoSun && (shader & ModernLitNoSunModel));
+}
+// Whether it reads the sun (c17, c18; c19 with s0).
+constexpr bool ModernLitSun(uint8_t shader)
+{
+    const uint8_t family = shader & ModernLitFamilyMask;
+    return family == ModernLitLmSun || family == ModernLitLpSun;
+}
+// Whether it reads the sun's shadow map.
+constexpr bool ModernLitShadowed(uint8_t shader)
+{
+    return ModernLitSun(shader) && (shader & ModernLitShadow);
+}
+// How many pixel constants it reads: to c18 (c19 with s0) with the sun;
+// without, to envMapParms (s0) or detailScale (d0), at least c0 for the world
+// and c5 for models.
+constexpr uint32_t ModernLitConstantCount(uint8_t shader)
+{
+    if (ModernLitSun(shader))
+        return shader & ModernLitSpecular ? 20u : 19u;
+    const uint32_t first = ModernLitModel(shader) ? 6u : 5u; // envMapParms, or detailScale without s0
+    const uint32_t specular = shader & ModernLitSpecular ? 1u : 0u;
+    if (shader & ModernLitDetail)
+        return first + specular + 1u;
+    if (specular)
+        return first + 1u;
+    return ModernLitModel(shader) ? 6u : 1u;
+}
+void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint16_t doubled, bool colorInput,
+                     bool overWhite = false, uint8_t shader = ModernLitNone);
+// The Modern lit shaders' light strengths in linear light: the sun's colour
+// and the lightmap's light are multiplied by these (1 and 1 by default). Set
+// before the first draw that uses one: shaders already built keep theirs.
+void SetModernLitStrengths(Device *device, float sun, float sky);
+// The Modern path's ambient occlusion for the lit shaders of ours: a texture
+// the size of the scene's render targets whose red is the visibility, 1 open
+// (vk_modern.h BuildAmbientOcclusion). Every pipeline drawn as one of ours
+// (ModernLitShaderValid) reads it at pixel sampler kModernAoSampler, which
+// the game's lit shaders leave free, by pixel position; null reads as white
+// (no occlusion). Set while the scene that has it draws, null after. The
+// texture must be ready to sample (written before the pass that reads it).
+constexpr uint32_t kModernAoSampler = 15;
+void SetModernAmbientOcclusion(Device *device, Texture *texture);
+#endif
 
 // The device's window is about to be destroyed: an open pass and frame end
 // unshown, and the core lets go of its swapchain and surface (DetachWindow in

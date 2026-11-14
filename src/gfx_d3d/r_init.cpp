@@ -3547,6 +3547,11 @@ uint32_t R_ChooseAdapter()
     return foundAdapterIndex;
 }
 
+#ifndef KISAK_PURE
+static bool R_UseBorderlessFullscreen();
+static bool R_GetMonitorRect(tagRECT *rect);
+#endif
+
 char R_CreateWindow(GfxWindowParms *wndParms)
 {
     DWORD exStyle; // [esp+0h] [ebp-1Ch]
@@ -3578,7 +3583,7 @@ char R_CreateWindow(GfxWindowParms *wndParms)
             wndParms->y);
         exStyle = 0;
 #ifndef KISAK_PURE
-        if (r_noborder->current.enabled)
+        if (r_noborder->current.enabled || R_UseBorderlessFullscreen())
         {
             style = WS_VISIBLE | WS_POPUP;
         }
@@ -3810,6 +3815,13 @@ void R_StoreWindowSettings(const GfxWindowParms *wndParms)
         else
         {
             vidConfig.aspectRatioWindow = 1.7777778f;
+            // Port: retail snaps every screen wider than 16:10 to 16:9, so an
+            // ultrawide screen (21:9, 32:9) shows a 16:9 picture stretched
+            // sideways. Use the screen's own shape when it is clearly wider
+            // than 16:9; screens near 16:9 (1366x768) still snap.
+            const float screenAspect = (float)monitorWidth / (float)monitorHeight;
+            if (screenAspect > 1.7777778f * 1.05f)
+                vidConfig.aspectRatioWindow = screenAspect;
         }
         break;
     case GFX_ASPECT_RATIO_STANDARD:
@@ -4017,6 +4029,24 @@ void R_SetupAntiAliasing(const GfxWindowParms *wndParms)
     dx.multiSampleQuality = 0;
 }
 
+#ifndef KISAK_PURE
+static bool R_UseBorderlessFullscreen()
+{
+    return r_fullscreenMode && r_fullscreenMode->current.integer == 1 && Dvar_GetBool("r_fullscreen");
+}
+
+// The desktop rectangle of the monitor the game's adapter drives.
+static bool R_GetMonitorRect(tagRECT *rect)
+{
+    tagMONITORINFO mi;
+    mi.cbSize = sizeof(mi);
+    if (!GetMonitorInfoA(R_HW_GetAdapterMonitor(dx.d3d9, dx.adapterIndex), &mi))
+        return false;
+    *rect = mi.rcMonitor;
+    return rect->right > rect->left && rect->bottom > rect->top;
+}
+#endif
+
 bool R_GetMonitorDimensions(int *width, int *height)
 {
     tagMONITORINFO mi; // [esp+0h] [ebp-2Ch] BYREF
@@ -4189,6 +4219,26 @@ void R_SetWndParms(GfxWindowParms *wndParms)
     wndParms->y = Dvar_GetInt("vid_ypos");
     wndParms->hwnd = 0;
     wndParms->aaSamples = r_aaSamples->current.integer;
+#ifndef KISAK_PURE
+    // Port: borderless fullscreen. A window without a border that covers the
+    // chosen monitor at its desktop resolution, in place of a display mode
+    // change: switching away from the game is instant and the display never
+    // changes mode. r_mode and r_displayRefresh do not apply.
+    tagRECT monitor;
+    if (wndParms->fullscreen && R_UseBorderlessFullscreen() && R_GetMonitorRect(&monitor))
+    {
+        wndParms->fullscreen = false;
+        wndParms->x = monitor.left;
+        wndParms->y = monitor.top;
+        wndParms->displayWidth = monitor.right - monitor.left;
+        wndParms->displayHeight = monitor.bottom - monitor.top;
+        wndParms->sceneWidth = wndParms->displayWidth;
+        wndParms->sceneHeight = wndParms->displayHeight;
+        wndParms->hz = 60;
+        Com_Printf(CON_CHANNEL_GFX, "Borderless fullscreen: %i x %i at (%i, %i)\n", wndParms->displayWidth,
+                   wndParms->displayHeight, wndParms->x, wndParms->y);
+    }
+#endif
 }
 
 void R_Register()

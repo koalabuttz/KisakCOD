@@ -54,34 +54,77 @@ inline uint32_t SamplesOf(D3DMULTISAMPLE_TYPE type) { return type >= D3DMULTISAM
 // call to wake it at the end of its own call. The engine's main thread polls
 // a fence thousands of times a second while the render thread draws
 // (R_SyncGpu), so with a plain mutex the render thread paid that on a good
-// part of its calls. A waiter that is still out of luck after kSpins tries
+// part of its calls. A waiter that is still out of luck after 2000 tries
 // (tens of microseconds: the holder is waiting for the GPU, building a
-// pipeline or not running) sleeps on the mutex after all.
+// pipeline or not running) sleeps after all.
 // KISAK_VK_FRONT_SPIN=0 makes every waiter sleep at once, to compare.
+//
+// The lock itself is one word (free, held, or held with sleepers), so taking
+// and dropping it without a waiter is one atomic operation each, inline in
+// the call; the sleep goes through a mutex and condition variable only a
+// waiter touches. The object needs no constructor that runs, so a call from a
+// static constructor or destructor still finds it.
 //
 // The PS Vita build keeps the plain recursive mutex: thread_local is emulated
 // there (a library call on every use), and its calls come from one thread.
 #if defined(__vita__)
 using FrontMutexType = std::recursive_mutex;
+FrontMutexType &FrontMutex();
 #else
 class FrontMutexType
 {
 public:
-    FrontMutexType();
-    void lock();
-    void unlock();
+    constexpr FrontMutexType() = default;
+    void lock()
+    {
+        const void *const self = Self();
+        if (owner_.load(std::memory_order_relaxed) == self)
+        {
+            ++depth_;
+            return;
+        }
+        uint32_t free = kFree;
+        if (!state_.compare_exchange_strong(free, kHeld, std::memory_order_acquire, std::memory_order_relaxed))
+            LockSlow();
+        owner_.store(self, std::memory_order_relaxed);
+        depth_ = 1;
+    }
+    void unlock()
+    {
+        if (--depth_ != 0)
+            return;
+        owner_.store(nullptr, std::memory_order_relaxed);
+        if (state_.exchange(kFree, std::memory_order_release) == kSleepers)
+            WakeOne();
+    }
 
 private:
-    static constexpr uint32_t kSpins = 2000;
-    std::mutex mutex_;
-    // The thread inside (a token of its own, see lock()), null when free.
-    // Only that thread stores its token, so a thread that reads its own is in.
+    static constexpr uint32_t kFree = 0, kHeld = 1, kSleepers = 2;
+    // Any address that is this thread's alone.
+    static const void *Self()
+    {
+        static thread_local const char t_token = 0;
+        return &t_token;
+    }
+    void LockSlow();
+    void WakeOne();
+    std::atomic<uint32_t> state_{kFree};
+    // The thread inside (its Self()), null when free. Only that thread stores
+    // its token, so a thread that reads its own is in.
     std::atomic<const void *> owner_{nullptr};
     uint32_t depth_ = 0; // the owner's
-    uint32_t spins_ = kSpins;
 };
+inline constinit FrontMutexType g_frontMutex;
+inline FrontMutexType &FrontMutex() { return g_frontMutex; }
 #endif
-FrontMutexType &FrontMutex();
+// Waits for the front lock that ended in a sleep (spinning did not get it),
+// over all threads since start: the slow frame lines print a frame's share.
+struct FrontLockSleeps
+{
+    uint64_t sleeps = 0; // waits on the condition variable
+    uint64_t micros = 0; // from the end of spinning to holding the lock
+};
+FrontLockSleeps FrontLockSlept();
 class FrontLock
 {
 public:
@@ -496,6 +539,24 @@ public:
     void DetachWindow();
     // Under FrontLock (LogDeviceStats).
     void LogStats(bool reset);
+    // Under FrontLock (vk_d3d9.h ModernSceneBegin and ModernSceneDone): the
+    // scene is render target 0 and the depth surface as they are set now, or
+    // the linear-light image standing in for the back buffer.
+    ModernResult ModernSceneBegin();
+    ModernResult ModernSceneDone(const ModernSceneView &view, bool *glowDrawn);
+    ModernResult ModernSceneLit(const ModernSceneView &view, bool *glowDrawn);
+    bool ModernWantsSceneDepth() { return BackendModernWantsSceneDepth(backend_); }
+    // The depth surface as it is set now.
+    ModernResult ModernSceneDepth(const ModernSceneView &view);
+    void ModernSurfaceMoved(const float clip[4][4], const float prevClip[4][4])
+    {
+        BackendModernSurfaceMoved(backend_, legacy_, clip, prevClip);
+    }
+    void ModernSkinnedSurfaceMoved(uint64_t key, const float clip[4][4], const float prevClip[4][4])
+    {
+        BackendModernSkinnedSurfaceMoved(backend_, legacy_, key, clip, prevClip);
+    }
+    void SetModernLitInputs(const ModernLitInputs *inputs);
     const Host &host() const { return parent_->host(); }
     HRESULT Unsupported(const char *method);
     DeviceCounters counters() const;
@@ -530,6 +591,12 @@ public:
     HRESULT STDMETHODCALLTYPE SetDialogBoxMode(BOOL enable) override;
     void STDMETHODCALLTYPE SetGammaRamp(UINT swapChain, DWORD flags, const D3DGAMMARAMP *ramp) override;
     void STDMETHODCALLTYPE GetGammaRamp(UINT swapChain, D3DGAMMARAMP *ramp) override;
+    // Hands gamma_ to the adapter for a fullscreen device, nothing for a windowed one.
+    void ApplyGamma();
+    // Asks the host for params_'s display mode (Host::fullscreen) when the
+    // device is fullscreen, and for the desktop's back when it no longer is.
+    void ApplyDisplayMode();
+    void LeaveFullscreen();
     HRESULT STDMETHODCALLTYPE CreateTexture(UINT width, UINT height, UINT levels, DWORD usage, D3DFORMAT format,
                                             D3DPOOL pool, IDirect3DTexture9 **texture, HANDLE *shared) override;
     HRESULT STDMETHODCALLTYPE CreateVolumeTexture(UINT width, UINT height, UINT depth, UINT levels, DWORD usage,
@@ -664,6 +731,12 @@ private:
     template <class T>
     static void Rebind(T *&slot, T *object);
     void UnbindAll();
+    // What the adapter draws into for a render target the program set: the
+    // linear-light scene for the back buffer while a scene is drawn there.
+    lg::Surface *DrawTarget(DWORD index, Surface *target) const;
+    // Sets render target 0 in the adapter again (it resets the viewport and
+    // scissor there), with the program's viewport and scissor after it.
+    void RebindTarget0();
     // The state D3D9 has after CreateDevice and Reset: the back buffer as
     // render target 0, no depth surface, everything else at its default.
     void DefaultState();
@@ -681,8 +754,14 @@ private:
     Backend *backend_ = nullptr; // the GPU (vk_d3d9_backend.h)
     lg::Device *legacy_ = nullptr; // the back end's Legacy device
     std::unique_ptr<Surface> backBuffer_;
+    // While a 3D scene is drawn in linear light (ModernSceneBegin until
+    // ModernSceneDone): the back end's image that stands in for the back
+    // buffer as render target 0. The program still sees the back buffer.
+    lg::Surface *linearScene_ = nullptr;
+    bool linearSceneUnfinished_ = false; // logged once (Present)
     std::unique_ptr<SwapChain> swapChain_;
     D3DGAMMARAMP gamma_{};
+    bool fullscreen_ = false; // the host was asked for a display mode (ApplyDisplayMode)
     ULONG refs_ = 1;
     uint32_t objects_ = 0;
     bool releasing_ = false; // Release is unbinding: objects going must not delete the device

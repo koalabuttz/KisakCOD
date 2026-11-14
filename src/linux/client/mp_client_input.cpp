@@ -18,6 +18,12 @@
 // Joysticks, MIDI and raw DirectInput are not ported; the Windows build does not
 // use them either (IN_StartupMouse never starts DirectInput).
 //
+// Also here, as on Windows: a keypad digit typed into the console or a menu is
+// text only (win_wndproc.cpp's AdustKeyForNumericKeypad), the clipboard
+// (win_main.cpp's Sys_GetClipboardData and Sys_SetClipboardData), message boxes
+// (MessageBoxA) and web links (ShellExecuteA), through SDL. See
+// src/linux/sys_desktop.h for the boxes and links.
+//
 // With KISAK_LINUX_GAMEPAD, KisakCOD-mp also takes a game controller
 // (mp_client_gamepad.cpp): its buttons arrive as keys when the window is
 // pumped, and its sticks join the mouse where the window hands the mouse to
@@ -50,6 +56,8 @@
 #include <win32/win_local.h>
 
 #include <linux/client/window/sdl_api.h>
+#include <linux/sys_desktop.h>
+#include <qcommon/threads.h>
 
 #include <cstdlib>
 #include <cstring>
@@ -80,6 +88,13 @@ void CloseWindow()
 {
     Key_RemoveCatcher(0, ~KEYCATCH_SCRIPT);
     Cbuf_AddText(0, "quit\n");
+}
+
+// win_wndproc.cpp's AdustKeyForNumericKeypad: while the console or a menu has
+// the keyboard, a keypad digit is the character it types, not a key.
+bool TypingText()
+{
+    return Key_IsCatcherActive(0, KEYCATCH_CONSOLE | KEYCATCH_UI);
 }
 
 // WM_CREATE and WM_DESTROY.
@@ -126,6 +141,7 @@ void Sys_InstallClientWindow()
     engine.activate = AppActivate;
     engine.close = CloseWindow;
     engine.windowChanged = WindowChanged;
+    engine.typingText = TypingText;
     kisak::mp_client::InstallWindowProcedure(engine);
 }
 
@@ -229,4 +245,160 @@ void IN_SetForegroundWindow()
 {
     if (kisak::mp_client::ClientWindow *const window = Window())
         window->Raise();
+}
+
+// win_main.cpp reads the clipboard as CF_TEXT: bytes in the system's code page,
+// cut at the first line break, in a Z_Malloc block the caller frees with
+// Com_FreeEvent (Field_Paste, the script watch). SDL hands over UTF-8; the
+// engine's text is one byte a character, so Latin-1 characters are kept and
+// any other character becomes '?', as a Windows conversion to the ANSI code
+// page does.
+char *Sys_GetClipboardData()
+{
+    char *const utf8 = SDL_GetClipboardText();
+    if (!utf8)
+        return nullptr;
+    const unsigned char *in = reinterpret_cast<const unsigned char *>(utf8);
+    // Windows: strtok(data, "\n\r\b") ends the text at its first break after
+    // any leading ones.
+    while (*in == '\n' || *in == '\r' || *in == '\b')
+        ++in;
+    const size_t length = strlen(reinterpret_cast<const char *>(in));
+    char *const data = reinterpret_cast<char *>(Com_AllocEvent(static_cast<int>(length) + 1));
+    size_t out = 0;
+    while (*in && *in != '\n' && *in != '\r' && *in != '\b')
+    {
+        const unsigned char lead = *in;
+        size_t size = 1;
+        if (lead >= 0xC0 && lead <= 0xDF)
+            size = 2;
+        else if (lead >= 0xE0 && lead <= 0xEF)
+            size = 3;
+        else if (lead >= 0xF0 && lead <= 0xF7)
+            size = 4;
+        bool whole = true;
+        for (size_t n = 1; n < size; ++n)
+        {
+            if ((in[n] & 0xC0) != 0x80)
+            {
+                whole = false;
+                size = n;
+                break;
+            }
+        }
+        if (size == 1 && lead < 0x80)
+            data[out++] = static_cast<char>(lead);
+        else if (whole && size == 2 && lead <= 0xC3)
+            data[out++] = static_cast<char>(((lead & 0x1F) << 6) | (in[1] & 0x3F));
+        else
+            data[out++] = '?';
+        in += size;
+    }
+    data[out] = '\0';
+    SDL_free(utf8);
+    return data;
+}
+
+namespace {
+
+// The engine's bytes are Latin-1; SDL takes UTF-8.
+std::string Utf8FromLatin1(const char *text)
+{
+    std::string utf8;
+    if (!text)
+        return utf8;
+    utf8.reserve(strlen(text) * 2);
+    for (const unsigned char *in = reinterpret_cast<const unsigned char *>(text); *in; ++in)
+    {
+        if (*in < 0x80)
+        {
+            utf8 += static_cast<char>(*in);
+        }
+        else
+        {
+            utf8 += static_cast<char>(0xC0 | (*in >> 6));
+            utf8 += static_cast<char>(0x80 | (*in & 0x3F));
+        }
+    }
+    return utf8;
+}
+
+} // namespace
+
+int Sys_SetClipboardData(const char *text)
+{
+    if (!text)
+        return 0;
+    // 1 when the clipboard took it, as win_main.cpp. SDL2 reports success as 0.
+    return kisak::sdl::Ok(SDL_SetClipboardText(Utf8FromLatin1(text).c_str())) ? 1 : 0;
+}
+
+// MessageBoxA. A box over a full-screen game window can open behind it, and a
+// captured mouse cannot reach it, so the mouse is released first; an error box
+// also hides the game window, which is about to close anyway.
+SysDialogAnswer Sys_ShowDialog(SysDialogKind kind, const char *title, const char *text)
+{
+    const char *videoDriver = SDL_GetCurrentVideoDriver();
+    if (!videoDriver)
+        videoDriver = getenv("SDL_VIDEODRIVER");
+    if (Sys_DialogRefusal(getenv(SYS_NO_DIALOGS_VARIABLE), videoDriver, Sys_IsMainThread()))
+        return SysDialogAnswer::NotShown;
+
+    SDL_Window *parent = nullptr;
+    if (kisak::mp_client::ClientWindow *const window = Window())
+    {
+        window->Release();
+        if (kind == SysDialogKind::Error)
+            SDL_HideWindow(window->Handle());
+        else
+            parent = window->Handle();
+    }
+
+    const std::string utf8Title = Utf8FromLatin1(title ? title : "");
+    const std::string utf8Text = Utf8FromLatin1(text ? text : "");
+    enum { kOk = 1, kYes = 2, kNo = 3 };
+    // Windows' order: the default button first.
+    const SDL_MessageBoxButtonData okButtons[] = {
+        { SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT | SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, kOk, "OK" },
+    };
+    const SDL_MessageBoxButtonData yesNoButtons[] = {
+        { SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, kYes, "Yes" },
+        { SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, kNo, "No" },
+    };
+    const bool question = kind == SysDialogKind::Question;
+    SDL_MessageBoxData data = {};
+    data.flags = question ? SDL_MESSAGEBOX_INFORMATION : SDL_MESSAGEBOX_ERROR;
+    data.window = parent;
+    data.title = utf8Title.c_str();
+    data.message = utf8Text.c_str();
+    data.numbuttons = question ? 2 : 1;
+    data.buttons = question ? yesNoButtons : okButtons;
+
+    int pressed = -1;
+    if (!kisak::sdl::Ok(SDL_ShowMessageBox(&data, &pressed)))
+    {
+        // Printed, not Com_Printf: an error box comes from Sys_Error.
+        fprintf(stderr, "message box could not be shown: %s\n", SDL_GetError());
+        return SysDialogAnswer::NotShown;
+    }
+    if (pressed == kOk)
+        return SysDialogAnswer::Ok;
+    if (pressed == kYes)
+        return SysDialogAnswer::Yes;
+    // No, or the box closed without a button: MessageBoxA's IDNO or a refusal.
+    return question ? SysDialogAnswer::No : SysDialogAnswer::Ok;
+}
+
+// ShellExecuteA "open" for a web address: the desktop's browser (xdg-open on
+// Linux, the default browser on macOS).
+bool Sys_OpenWebUrl(const char *url)
+{
+    if (!url)
+        return false;
+    if (!kisak::sdl::Ok(SDL_OpenURL(url)))
+    {
+        Com_PrintError(CON_CHANNEL_SYSTEM, "Sys_OpenURL: the desktop did not take the address: %s\n", SDL_GetError());
+        return false;
+    }
+    return true;
 }

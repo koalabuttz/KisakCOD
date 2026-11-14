@@ -363,6 +363,250 @@ uint32_t FixAlphaTest(ir::Builder &builder, uint32_t compareOp)
                             [compareOp](uint32_t) { return compareOp; });
 }
 
+// The sRGB curve (IEC 61966-2-1) from display value t to linear light,
+// inserted before ref, without a clamp: values over 1 keep growing, and those
+// under the curve's knee stay on its straight part.
+ir::SsaDef DecodeSrgbBefore(ir::Builder &builder, ir::SsaDef ref, ir::SsaDef t)
+{
+    const ir::Type f32 = ir::Type(ir::BasicType(ir::ScalarType::eF32));
+    const ir::Type boolean = ir::Type(ir::BasicType(ir::ScalarType::eBool));
+    const ir::SsaDef low = builder.addBefore(ref, ir::Op::FMul(f32, t, builder.makeConstant(1.0f / 12.92f)));
+    const ir::SsaDef shifted = builder.addBefore(ref, ir::Op::FAdd(f32, t, builder.makeConstant(0.055f)));
+    const ir::SsaDef scaled = builder.addBefore(ref, ir::Op::FMul(f32, shifted, builder.makeConstant(1.0f / 1.055f)));
+    const ir::SsaDef high = builder.addBefore(ref, ir::Op::FPow(f32, scaled, builder.makeConstant(2.4f)));
+    const ir::SsaDef isLow = builder.addBefore(ref, ir::Op::FLe(boolean, t, builder.makeConstant(0.04045f)));
+    return builder.addBefore(ref, ir::Op::Select(f32, isLow, low, high));
+}
+
+// Colour output 0's red, green and blue as stores write them: one f32 a
+// store, at a constant index 0-2 (how dxbc-spirv writes a shader model 2 or 3
+// colour output). Calls change(store, value) for each and has the store
+// write what it returns. Returns the number of stores changed.
+template <typename Change>
+uint32_t ChangeColorOutput(ir::Builder &builder, Change change)
+{
+    ir::SsaDef color = {};
+    auto [begin, end] = builder.getDeclarations();
+    for (auto it = begin; it != end; ++it)
+    {
+        if (it->getOpCode() == ir::OpCode::eDclOutput && uint32_t(it->getOperand(1u)) == 0u)
+            color = it->getDef();
+    }
+    if (!color)
+        return 0;
+    std::vector<ir::SsaDef> stores;
+    builder.getUses(color, stores);
+    const ir::Type f32 = ir::Type(ir::BasicType(ir::ScalarType::eF32));
+    uint32_t changed = 0;
+    for (ir::SsaDef store : stores)
+    {
+        const ir::Op &op = builder.getOp(store);
+        if (op.getOpCode() != ir::OpCode::eOutputStore)
+            continue;
+        const ir::SsaDef addressDef = ir::SsaDef(op.getOperand(1u));
+        if (!addressDef)
+            continue;
+        const ir::Op &address = builder.getOp(addressDef);
+        if (!address.isConstant() || address.getOperandCount() != 1u || uint32_t(address.getOperand(0u)) > 2u)
+            continue;
+        const ir::SsaDef value = ir::SsaDef(op.getOperand(2u));
+        if (builder.getOp(value).getType() != f32)
+            continue;
+        const ir::SsaDef changedValue = change(store, value);
+        ir::Op rewritten = builder.getOp(store);
+        rewritten.setOperand(2u, changedValue);
+        builder.rewriteOp(store, std::move(rewritten));
+        ++changed;
+    }
+    return changed;
+}
+
+// Colour output 0's red, green and blue, as stored, taken from sRGB to
+// linear light: clamped to [0, 1] first, as an 8-bit render target would
+// have kept them, then decoded with the sRGB curve (IEC 61966-2-1). Alpha is
+// left as it is. Returns the number of stores changed. For a pixel shader
+// drawing into the Modern path's linear-light scene (docs/vulkan-modern.md):
+// the game's shaders work in gamma space, and blending then happens in linear
+// light.
+// With overWhite the colour is only kept from going negative: values over 1
+// follow the curve on (LinearInputs kLinearOverWhite).
+uint32_t DecodeColorOutput(ir::Builder &builder, bool overWhite = false)
+{
+    const ir::Type f32 = ir::Type(ir::BasicType(ir::ScalarType::eF32));
+    return ChangeColorOutput(builder, [&](ir::SsaDef store, ir::SsaDef value) {
+        const ir::SsaDef t = overWhite
+            ? builder.addBefore(store, ir::Op::FMax(f32, value, builder.makeConstant(0.0f)))
+            : builder.addBefore(store, ir::Op::FClamp(f32, value, builder.makeConstant(0.0f),
+                                                      builder.makeConstant(1.0f)));
+        return DecodeSrgbBefore(builder, store, t);
+    });
+}
+
+// Colour output 0's red, green and blue kept from going negative, for a
+// shader that computes in linear light (LinearInputs): values over 1 stay.
+uint32_t KeepColorOutputPositive(ir::Builder &builder)
+{
+    const ir::Type f32 = ir::Type(ir::BasicType(ir::ScalarType::eF32));
+    return ChangeColorOutput(builder, [&](ir::SsaDef store, ir::SsaDef value) {
+        return builder.addBefore(store, ir::Op::FMax(f32, value, builder.makeConstant(0.0f)));
+    });
+}
+
+// Replaces def (a load or sample of f32 or a vector of them) with its value
+// with the components in wanted (bit per component) decoded from sRGB, or
+// decode(2v) / 2 with doubled. The op is moved to a new def, the decode
+// follows it, and every use of def reads the decoded value.
+void DecodeComponents(ir::Builder &builder, ir::SsaDef def, uint32_t wanted, bool doubled)
+{
+    const ir::Type f32 = ir::Type(ir::BasicType(ir::ScalarType::eF32));
+    const ir::Op op = builder.getOp(def);
+    const ir::Type type = op.getType();
+    if (!type.isBasicType())
+        return;
+    const ir::BasicType basic = type.getBaseType(0u);
+    if (basic.getBaseType() != ir::ScalarType::eF32)
+        return;
+    const uint32_t count = basic.getVectorSize();
+    wanted &= (1u << count) - 1u;
+    if (!wanted)
+        return;
+    const ir::SsaDef raw = builder.addBefore(def, op);
+    const auto decode = [&](ir::SsaDef v) {
+        if (doubled)
+            v = builder.addBefore(def, ir::Op::FMul(f32, v, builder.makeConstant(2.0f)));
+        v = DecodeSrgbBefore(builder, def, v);
+        if (doubled)
+            v = builder.addBefore(def, ir::Op::FMul(f32, v, builder.makeConstant(0.5f)));
+        return v;
+    };
+    ir::SsaDef value = {};
+    if (count == 1u)
+        value = decode(raw);
+    else
+    {
+        ir::Op construct(ir::OpCode::eCompositeConstruct, type);
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            ir::SsaDef part =
+                builder.addBefore(def, ir::Op::CompositeExtract(f32, raw, builder.makeConstant(i)));
+            if (wanted & (1u << i))
+                part = decode(part);
+            construct.addOperand(part);
+        }
+        value = builder.addBefore(def, std::move(construct));
+    }
+    builder.rewriteDef(def, value);
+}
+
+// The register (and first component) a load from a constant address reads:
+// (register) for a whole register, (register, component) for part of one.
+bool ConstantAddress(const ir::Builder &builder, ir::SsaDef addressDef, uint32_t &reg, uint32_t &component)
+{
+    if (!addressDef)
+        return false;
+    const ir::Op &address = builder.getOp(addressDef);
+    if (!address.isConstant() || address.getOperandCount() < 1u || address.getOperandCount() > 2u)
+        return false;
+    reg = uint32_t(address.getOperand(0u));
+    component = address.getOperandCount() == 2u ? uint32_t(address.getOperand(1u)) : 0u;
+    return true;
+}
+
+// The red, green and blue of a component range starting at first.
+uint32_t ColorComponents(uint32_t first)
+{
+    return first < 3u ? (0x7u >> first) : 0u;
+}
+
+// Takes the colours a pixel shader reads to linear light (LinearInputs).
+// Returns the number of loads and samples changed.
+uint32_t DecodeLinearInputs(ir::Builder &builder, const LinearInputs &inputs)
+{
+    std::vector<std::pair<ir::SsaDef, std::pair<uint32_t, bool>>> changes; // def, (components, doubled)
+    ir::SsaDef floats = {};
+    ir::SsaDef colorInput = {};
+    std::vector<ir::SsaDef> semantics;
+    auto [begin, end] = builder.getDeclarations();
+    for (auto it = begin; it != end; ++it)
+    {
+        if (it->getOpCode() == ir::OpCode::eDclCbv && uint32_t(it->getOperand(1u)) == kUniformRegSpace &&
+            uint32_t(it->getOperand(2u)) == static_cast<uint32_t>(Uniform::FloatConstants))
+            floats = it->getDef();
+        if (it->getOpCode() == ir::OpCode::eSemantic && uint32_t(it->getOperand(1u)) == 0u &&
+            it->getLiteralString(2u) == "color" &&
+            builder.getOp(ir::SsaDef(it->getOperand(0u))).getOpCode() == ir::OpCode::eDclInput)
+            colorInput = ir::SsaDef(it->getOperand(0u));
+    }
+
+    // Float constants, by register.
+    if (floats && inputs.constants)
+    {
+        std::vector<ir::SsaDef> descriptors;
+        builder.getUses(floats, descriptors);
+        for (ir::SsaDef descriptor : descriptors)
+        {
+            if (builder.getOp(descriptor).getOpCode() != ir::OpCode::eDescriptorLoad)
+                continue;
+            std::vector<ir::SsaDef> uses;
+            builder.getUses(descriptor, uses);
+            for (ir::SsaDef use : uses)
+            {
+                const ir::Op &load = builder.getOp(use);
+                uint32_t reg = 0, component = 0;
+                if (load.getOpCode() != ir::OpCode::eBufferLoad || ir::SsaDef(load.getOperand(0u)) != descriptor ||
+                    !ConstantAddress(builder, ir::SsaDef(load.getOperand(1u)), reg, component) || reg >= 64u ||
+                    !((inputs.constants >> reg) & 1u))
+                    continue;
+                changes.push_back({use, {ColorComponents(component), false}});
+            }
+        }
+    }
+
+    // Samples through the marked samplers.
+    if (inputs.samplers)
+    {
+        auto [codeBegin, codeEnd] = builder.getCode();
+        for (auto it = codeBegin; it != codeEnd; ++it)
+        {
+            if (it->getOpCode() != ir::OpCode::eImageSample)
+                continue;
+            const ir::Op &descriptor = builder.getOpForOperand(*it, 0u);
+            if (descriptor.getOpCode() != ir::OpCode::eDescriptorLoad)
+                continue;
+            const ir::Op &srv = builder.getOpForOperand(descriptor, 0u);
+            if (srv.getOpCode() != ir::OpCode::eDclSrv)
+                continue;
+            const uint32_t sampler = uint32_t(srv.getOperand(2u));
+            // A depth compare's result is one f32, and not a colour.
+            if (sampler >= kSamplerCount || !((inputs.samplers >> sampler) & 1u) ||
+                !it->getType().isVectorType() || it->getType().getBaseType(0u).getVectorSize() != 4u)
+                continue;
+            changes.push_back({it->getDef(), {0x7u, ((inputs.doubled >> sampler) & 1u) != 0}});
+        }
+    }
+
+    // The colour 0 input, by component.
+    if (colorInput && (inputs.flags & kLinearColorInput))
+    {
+        std::vector<ir::SsaDef> loads;
+        builder.getUses(colorInput, loads);
+        for (ir::SsaDef load : loads)
+        {
+            const ir::Op &op = builder.getOp(load);
+            uint32_t component = 0, unused = 0;
+            if (op.getOpCode() != ir::OpCode::eInputLoad)
+                continue;
+            const ir::SsaDef address = ir::SsaDef(op.getOperand(1u));
+            if (address && !ConstantAddress(builder, address, component, unused))
+                continue;
+            changes.push_back({load, {ColorComponents(address ? component : 0u), false}});
+        }
+    }
+
+    for (const auto &[def, how] : changes)
+        DecodeComponents(builder, def, how.first, how.second);
+    return static_cast<uint32_t>(changes.size());
+}
 
 uint32_t Fnv1a(const void *data, size_t bytes)
 {
@@ -701,7 +945,8 @@ bool StagesLinkDirectly(const Shader &vertexShader, const Shader &pixelShader)
 }
 
 bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<uint32_t> &spirv, std::string &error,
-                const uint32_t *fixedDepthCompare, const uint32_t *fixedAlphaCompare)
+                const uint32_t *fixedDepthCompare, const uint32_t *fixedAlphaCompare, bool linearOutput,
+                const LinearInputs *linearInputs)
 {
     spirv.clear();
     error.clear();
@@ -727,6 +972,15 @@ bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<ui
         FixDepthCompare(builder, *fixedDepthCompare);
     if (fixedAlphaCompare)
         FixAlphaTest(builder, *fixedAlphaCompare);
+    if (linearInputs && shader.reflection.stage == Stage::Pixel && (linearInputs->flags & kLinearOverWhite))
+        DecodeColorOutput(builder, true);
+    else if (linearInputs && shader.reflection.stage == Stage::Pixel)
+    {
+        DecodeLinearInputs(builder, *linearInputs);
+        KeepColorOutputPositive(builder);
+    }
+    else if (linearOutput && shader.reflection.stage == Stage::Pixel)
+        DecodeColorOutput(builder);
 
     spirv::SpirvBuilder::Options options = {};
     options.includeDebugNames = true;

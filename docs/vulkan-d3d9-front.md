@@ -59,6 +59,13 @@ instead (`vk_d3d9.h`), which the program fills once:
   windowed screenshot asks `GetFrontBufferData` for a surface the size of the
   display, as D3D9 does; the front puts the last frame shown there at that
   place.
+* `fullscreen(window, mode)`: D3D9 switches the monitor to a fullscreen
+  device's mode and covers it with the device window. For a device made or
+  reset with `Windowed` false the front asks the host for the back buffer's
+  size at `FullScreen_RefreshRateInHz` (`vulkan d3d9: fullscreen at WxH, R
+  Hz`), and for the desktop's mode back (a null mode) when the device is reset
+  to windowed or released. Null: a fullscreen device stays a window where the
+  program put it.
 * `log`: one line per call.
 * `validation`, `deviceIndex`, `pipelineCachePath`: how the core is created.
   Vsync follows `PresentationInterval` at `CreateDevice`.
@@ -100,13 +107,20 @@ since the device was made or since the last call that started them again.
   counters say happened in it: draws, passes, submissions, buffer renames and
   swapchains built; the pipelines built (how many of them the pipeline
   cache held, and how many pixel shaders were built for them with their own
-  milliseconds: the rest of the pipelines' time is the driver's), the shaders
-  made, the texture levels uploaded and the memory
+  milliseconds: the rest of the pipelines' time is the driver's), the
+  pipelines a draw waited for a worker to finish building ahead (see
+  "Pipelines built ahead" in
+  [vulkan-legacy-adapter.md](vulkan-legacy-adapter.md)), the shaders made,
+  the texture levels uploaded and the memory
   blocks allocated, each with its milliseconds; and the milliseconds the
   calling thread waited for a swapchain image, for the frames in flight (with
   two frames in flight, a `Present` waits for the frame before the one it
   shows), for the GPU otherwise (a texture read back, a flush that waits) and
-  for the record thread. The parts are measured where they happen and can
+  for the record thread. Then the front lock's sleeps in the frame, on any
+  thread: waits that spinning did not end, with the milliseconds from the end
+  of the spin to holding the lock (none on the PS Vita, whose lock is a plain
+  mutex). A thread that waits there long is held up by another thread inside
+  the front. The parts are measured where they happen and can
   overlap (an upload that needed a memory block counts in both). What they
   leave of the frame's time is the engine's own work and the driver's inside
   ordinary calls. The line ends with the GPU's times for that frame (its
@@ -123,6 +137,13 @@ since the device was made or since the last call that started them again.
   sun's place on screen in the open the results are that sprite's samples,
   and with it behind a wall every result has no sample: `r_vkStats` twice, a
   few seconds apart, tells the two apart without a picture.
+* `vulkan d3d9: modern:` appears once the Modern path has run
+  (`r_visuals modern`, [vulkan-modern.md](vulkan-modern.md)): the scenes it
+  anti-aliased in the stretch, how many of them had no history to use (the
+  first, a camera cut, a new size), and the GPU time of its pass.
+* `vulkan d3d9: gamma:` appears when frames of the stretch went to the window
+  through the fullscreen gamma ramp (`r_gamma` with `r_fullscreen 1`): how
+  many, and the GPU time of that pass.
 
 ## Reference counts
 
@@ -166,6 +187,12 @@ frame. Two things keep that from costing the render thread:
   system call to wake it, and then often finds the lock taken again.
   `KISAK_VK_FRONT_SPIN=0` makes every waiter sleep at once, to compare. The PS
   Vita build keeps the plain recursive mutex.
+* The lock is one word (free, held, held with sleepers) and its owner, both
+  atomics: taking and dropping it without a waiter is one atomic operation
+  each, inline in the method, with no call into the C library. Only a waiter
+  that runs out of tries touches a mutex and condition variable to sleep on.
+  The object needs no constructor that runs, so a call from a static
+  constructor or destructor still finds it.
 * `IDirect3DQuery9::GetData` asks the GPU how far it has got before it takes
   the lock (`BackendPollProgress`, the core's `RefreshProgress`,
   [vulkan-core.md](vulkan-core.md)), which is the part that takes a system
@@ -214,8 +241,11 @@ Everything in `r_rhi.h`, and the getters D3D9 pairs with each setter:
   `GetFrontBufferData` (the last frame shown, kept apart from the back buffer),
   event and occlusion
   queries, the implicit swap chain, `Reset` (new back buffer size, every state
-  back to its default), `Present`, gamma ramps (kept, not applied: DXVK applies
-  them only to fullscreen swapchains), `GetAvailableTextureMem` (device-local
+  back to its default), `Present`, gamma ramps (applied as D3D9 and DXVK
+  apply them: for a fullscreen device only, `Windowed` false at `CreateDevice`
+  or `Reset`, by the adapter's `SetGammaRamp` as `Present` draws the window's
+  image; a windowed device keeps the ramp for `GetGammaRamp` and shows the
+  frame as drawn), `GetAvailableTextureMem` (device-local
   memory, below 4 GB).
 * Defaults: the depth test is off after `CreateDevice` and `Reset`, because the
   front never makes an automatic depth-stencil surface (the renderer creates its
@@ -310,9 +340,12 @@ a usage error.
 | `slow_frames` | The statistics' `slow frame` lines. Eight frames, of which the second makes the only blended draws of the check (so a pipeline is built) and then stands still for 400 ms, and the third uploads a texture and stands still for 250 ms. A report after the first frame has one line, for frame 1 with its 10 draws. The report after the eighth has three, the longest first, and names frames 2 and 3 with their times, their draws, the pipeline and the upload, and with the GPU's times where the device has timestamps. A report that starts the statistics again is followed by one with no such line. The two frames are found by number and not by rank, so a machine busy enough to hold another frame up for longer still passes. |
 | `kept_state` | The switch for what a draw takes up from the draw before it (`Tuning::keepDrawState`, the game's `r_vkKeepDrawState`). The same frame of 600 draws, in runs of eight that share a texture and with a vertex shader constant set to another value for every draw, is drawn with the state kept, not kept and kept again. Each change is taken up by the `Present` after it and logged once, the first frame logs none, and the statistics count 600 draws in each. The three pictures are the same to the pixel and every one of the 600 cells has its run's texture (a draw that took the constant of the one before would land in another cell). The frame drawn without the kept state writes close to twice the constants of the other two or more, which write the same as each other, and writes descriptor sets, where the third, kept again, writes none: the sets the first frame wrote last across frames. |
 | `multisample` | Multisampled targets. A one-sample triangle is drawn first as the yardstick: no pixel of its edge is between the two colours. A render target of 64x64 at 4 samples is drawn with a 4-sample depth surface of 128x128 (larger, as D3D9 allows) and the triangle in front of a far green quad; `GetDesc` reports 4 samples, an 8-sample target is made with 8 or 4 (`edge_pixels`, `eight_samples_made_with` are printed), and 3 samples are refused. An occlusion query of an 8x8 quad counts 256 samples, four a pixel. A draw with a one-sample depth surface is skipped. `StretchRect` resolves the target into a texture level: inside red, behind green, at least 32 pixels of the edge between the two, and a read of the target gives the same picture as the resolve. A scaled `StretchRect` into a corner of the back buffer. `Reset` to a 4-sample back buffer, a draw with a soft edge in the read back, `Present`, and `GetFrontBufferData` equal to the drawn picture; `Reset` back to one sample. |
+| `modern_taa` | The Modern path's temporal anti-aliasing (`ModernSceneDone`, [vulkan-modern.md](vulkan-modern.md)). First the camera reprojection on the CPU: a camera tens of thousands of units from the origin that moves and turns between two frames maps four points (30 to 6000 units away, and a direction for the sky) from this frame to the last within 1e-9 NDC in double and a quarter of a 1920-wide pixel as the float matrix the shader gets; the jitter sequence's first and ninth values. Then frames into the back buffer with a D24S8 depth surface: four that stand still come back exactly as drawn; sixteen with the engine's jitter, whose white quad ends 0.4 pixels past a pixel, leave that pixel between black and white (without the pass it is one or the other) while the pixels inside and outside stay as they were; a scene with no depth surface is refused and left alone. The statistics line at teardown counts 20 scenes, 2 of them without history. |
+| `modern_velocity` | The Modern path's velocity for what moves on its own (`ModernSurfaceMoved`, [vulkan-modern.md](vulkan-modern.md#velocity-of-what-moves-on-its-own)). A band of 2-pixel white and black stripes, drawn indexed from 32-byte vertices, moves 2 pixels right each frame behind a static striped quad, for 8 frames three times. Not reported, its stripes go grey under the anti-aliasing (the history comes from the same pixel, which held the other colour); reported with this frame's and last frame's matrices, they stay exactly white and black, and the static quad in front stays exactly as drawn (the band's motion is not written where it is hidden). The third time the band moves in its vertices, as a skinned surface does (`ModernSkinnedSurfaceMoved`): a dynamic buffer locked with DISCARD each frame, the same matrix both frames, drawn from base vertex 2 and minimum index 2. Its stripes stay exact only because the velocity comes from last frame's vertices, which the Modern path kept (drawn from this frame's for both, they go grey). The statistics lines at teardown count 14 scenes with 14 surfaces that move on their own, and 8 scenes that kept the skinned band's 4 KB, 7 of them drawn from in the scene after. With `KISAK_VK_MODERN_DEBUG=velocity` (a second run in the front test) the reported band comes back cyan at half brightness from the velocity debug view, while the background and the static quad stay as drawn. |
 | `bench` | Only when named (`--scene bench`), never in a full run: 120 frames of 768 draws of four D3D9 calls each, ended as `frame_loop`'s are, while another thread polls the sync fence every 20 microseconds. Prints the time the drawing thread spent on its draw calls per frame and the polls made meanwhile; passes when its frames were presented. |
 | `bench_runs` | Only when named, as `bench`: 100 frames of 768 draws in runs of eight that share a texture, an alpha reference and a pixel shader constant, as the engine's draws sorted by material do; each draw sets one vertex shader constant and draws its own quad from one static vertex and index buffer. It measures what the adapter does for a draw like the one before ([adapter](vulkan-legacy-adapter.md)). The last frame is read back and ten of its cells checked. Prints what `bench` prints. |
 | `reset` | `Reset` to 96x96 and back: the new size, default state, nothing bound, drawing at the new size. |
+| `fullscreen` | `Reset` with `Windowed` false at 96x96 and 60 Hz asks `Host::fullscreen` once for exactly that mode and presents; back to windowed asks once for the desktop's mode (null); windowed again asks nothing. The check's host only records the asks. |
 | `present` | `Present` through the device and the swap chain, then `GetFrontBufferData` halfway through the next frame: it must give the frame last shown. |
 
 `scripts/tests/test_vulkan_d3d9_front.py --binary <check>` runs it the way the
@@ -451,7 +484,7 @@ on the laptop and quits cleanly, with no unsupported call reported
 and all 21 levels do the same on llvmpipe in WSL
 ([linux-sp-levels.md](linux-sp-levels.md#vulkan-sweep-all-21-levels-pc-linux-in-wsl-x86_64-2026-11-11)). The
 programs still link the system's D3D9 (DXVK Native) and use it by default.
-`src/linux/client/vulkan/vulkan_backend.cpp` registers four dvars that are
+`src/linux/client/vulkan/vulkan_backend.cpp` registers five dvars that are
 archived and latched (a change applies at the next `vid_restart`):
 
 * `r_backend`: `d3d9` (default: DXVK on Linux) or `vulkan`.
@@ -461,8 +494,16 @@ archived and latched (a change applies at the next `vid_restart`):
 * `r_vkShaderCache`: 1 (default) keeps two caches in `<fs_homepath>/vulkan`
   between runs: the translated shaders in `shaders.bin` (the Legacy adapter's
   shader cache), and the Vulkan pipeline cache in `pipelines.bin` (the core's,
-  ignored when another device or driver wrote it). 0 translates every shader
-  and builds every pipeline from scratch at every start.
+  ignored when another device or driver wrote it), and beside them the list
+  of pipelines the last launches drew, `pipelines.list`, whose pipelines are
+  built on worker threads as the map loads (docs/vulkan-legacy-adapter.md,
+  "Pipelines built ahead"). 0 translates every shader and builds every
+  pipeline from scratch, at its first draw, at every start.
+* `r_visuals`: `legacy` (default: the game as it was made) or `modern`, the
+  Modern path, experimental: so far temporal anti-aliasing over the scene
+  ([vulkan-modern.md](vulkan-modern.md)). It needs a one-sample back buffer
+  (`r_aaSamples 1`); with more the scene is drawn as with `legacy` and the
+  reason is logged once.
 
 Four more are for measuring. They are not saved and take effect in the next
 frame (the front's `Tuning`), so one launch can compare settings, by hand, in
@@ -512,13 +553,20 @@ is SDL3, as for DXVK's SDL3 WSI: the `HWND` the Win32 window layer makes is the
 `SDL_Window`, the `HMONITOR` is the primary display's `SDL_DisplayID`, the
 display modes are SDL's fullscreen modes (or the desktop mode where SDL lists
 none, as with its offscreen driver), and the front's log lines go to the
-console as `Vulkan: ...`. When the device goes, the front logs where the CPU
+console as `Vulkan: ...`. A fullscreen device makes the window fullscreen on
+the primary display at SDL's closest mode (`SDL_GetClosestFullscreenDisplayMode`,
+`SDL_SetWindowFullscreenMode`), as DXVK's SDL3 window system does; SDL gives
+the desktop its mode back when the window goes windowed, is destroyed or loses
+focus. When the device goes, the front logs where the CPU
 time went, for comparing loads and first frames with DXVK. The
 `vulkan d3d9: device stats: ...` line gives the shaders created and how many
 of them were translated (the rest came from the shader cache) with the time
 it took, the pipelines built with their time (and of it, the pixel shaders
-built for them, each with the pipeline's fixed state folded in), and the texture uploads with
-their size and time. The core logs `pipeline cache: N bytes from ...` when it
+built for them, each with the pipeline's fixed state folded in), the
+pipelines built ahead on worker threads (their time there, the pixel shaders
+the workers built for them, how many a draw used, how many a draw waited for
+and how long, how many entries the pipeline list holds, and the time spent
+queueing them), and the texture uploads with their size and time. The core logs `pipeline cache: N bytes from ...` when it
 starts from the pipeline cache file, and `pipeline cache: N bytes to ...`
 when it writes the file back at teardown.
 
@@ -568,10 +616,27 @@ same dvars and the `r_vkStats` command:
 * `WM_DESTROY` (`src/win32/win_wndproc.cpp`) calls
   `Kisak_VulkanWindowDestroying`, which detaches the device's surface from the
   window as on Linux. `vulkan-1.dll` is never unloaded.
+* A fullscreen device switches the primary display to its mode
+  (`ChangeDisplaySettingsExW` with `CDS_FULLSCREEN`, left alone when the
+  display is there already) and moves the window over the whole display. The
+  registry's mode comes back when the device goes windowed or is released.
+  `WM_ACTIVATEAPP` calls `Kisak_VulkanAppActivated`: switching away minimises
+  the window and then gives the desktop its mode back, coming back sets the
+  mode again, as D3D9 does. In the other order (PC run 18, 2026-11-12) Windows
+  resized the window to the desktop's full size as the mode changed back, and
+  it stayed topmost and drawing instead of minimised. Coming back, Windows
+  restored the window at the desktop's full size on the game's smaller mode
+  (runs 18b and 18c), because the restore activates the window while it is
+  still minimised. So the host sets the restore size on activation, and
+  `WM_SIZE` calls `Kisak_VulkanWindowSized`, which moves a fullscreen window
+  of the wrong size back over the display while the display is at the game's
+  mode (`Vulkan: fullscreen window sized WxH on a WxH display: moved back over
+  it`).
 
-The front never changes the display mode. In fullscreen the window covers the
-mode's size at the desktop's resolution, so use windowed mode or the desktop's
-own resolution for now. The Windows workflow builds it for Win32 Debug and for
+Before this (PC run 17, 2026-11-11), `r_fullscreen 1` with `r_mode 1280x720`
+left a 2560x1080 display at its mode and 75 Hz and showed the game as a
+1280x720 window at `vid_xpos`, `vid_ypos`; Direct3D 9 switched the display to
+1280x720 at 60 Hz. The Windows workflow builds it for Win32 Debug and for
 x64 (whose artifact is the PC's), checks the configure log says `Vulkan back
 end: linked into KisakCOD-mp`, and checks the Win32 executable does not import
 `vulkan-1.dll`. The Win32 Release player build leaves it out, except in a

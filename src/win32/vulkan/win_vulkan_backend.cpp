@@ -26,16 +26,24 @@
 #include <windows.h>
 
 #include <gfx_vk/d3d9/vk_d3d9.h>
+#include <gfx_vk/modern/vk_modern.h>
+// After d3d9.h (above), so IDirect3DDevice9 is the SDK's.
+#include <gfx_d3d/rhi/r_rhi_modern.h>
 #include <vulkan/vulkan_win32.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
+#include <cstring>
+#include <mutex>
 #include <string>
 #include <vector>
 
 IDirect3D9 *Kisak_VulkanDirect3DCreate9();
 int Kisak_VulkanBackendSelected();
 void Kisak_VulkanWindowDestroying(HWND window);
+void Kisak_VulkanAppActivated(HWND window, bool active);
+void Kisak_VulkanWindowSized(HWND window);
 unsigned int Kisak_VulkanLogStats(bool reset);
 
 namespace
@@ -60,6 +68,13 @@ const dvar_s *r_vkGpuFeed;
 const dvar_s *r_vkGpuFeedDraws;
 const dvar_s *r_vkGpuFeedIdleDraws;
 const dvar_s *r_vkKeepDrawState;
+const char *s_visualsNames[] = {"legacy", "modern", nullptr};
+enum : int
+{
+    VISUALS_LEGACY = 0,
+    VISUALS_MODERN = 1,
+};
+const dvar_s *r_visuals;
 
 const char *const s_instanceExtensions[] = {
     VK_KHR_SURFACE_EXTENSION_NAME,
@@ -80,6 +95,15 @@ struct HostState
     std::vector<DisplayMode> modes;
     std::string shaderCachePath;   // what Host::shaderCachePath points at
     std::string pipelineCachePath; // what Host::pipelineCachePath points at
+    // Fullscreen (HostFullscreen): the device window, the mode it asked for,
+    // and whether the primary display is now at a mode of ours rather than
+    // the desktop's. The front calls under its lock, WM_ACTIVATEAPP comes on
+    // the window's thread: both take this one (recursive, as moving the
+    // window on its own thread runs its window procedure).
+    std::recursive_mutex fullscreenLock;
+    HWND fullscreenWindow = nullptr;
+    front::FullscreenMode fullscreenMode{};
+    bool displayChanged = false;
 };
 // Not s_host: winsock.h defines that name as a macro.
 HostState s_vkHost;
@@ -238,6 +262,103 @@ HMONITOR HostMonitor(void *)
     return MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
 }
 
+// ---- Fullscreen ------------------------------------------------------------------
+
+// The primary display at the mode, unless it is there already. False when
+// Windows refuses it.
+bool SetDisplayMode(const front::FullscreenMode &mode)
+{
+    DEVMODEW current{};
+    current.dmSize = sizeof(current);
+    const bool known = EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &current) != 0;
+    const DWORD width = mode.width ? DWORD(mode.width) : current.dmPelsWidth;
+    const DWORD height = mode.height ? DWORD(mode.height) : current.dmPelsHeight;
+    if (known && current.dmPelsWidth == width && current.dmPelsHeight == height
+        && (!mode.refreshRate || RefreshRate(current) == mode.refreshRate))
+        return true;
+    DEVMODEW wanted{};
+    wanted.dmSize = sizeof(wanted);
+    wanted.dmPelsWidth = width;
+    wanted.dmPelsHeight = height;
+    wanted.dmBitsPerPel = 32;
+    wanted.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_BITSPERPEL;
+    if (mode.refreshRate)
+    {
+        wanted.dmDisplayFrequency = mode.refreshRate;
+        wanted.dmFields |= DM_DISPLAYFREQUENCY;
+    }
+    const LONG result = ChangeDisplaySettingsExW(nullptr, &wanted, nullptr, CDS_FULLSCREEN, nullptr);
+    if (result != DISP_CHANGE_SUCCESSFUL)
+    {
+        Com_Printf(CON_CHANNEL_GFX, "Vulkan: the display refused %lux%lu at %u Hz (%ld)\n",
+                   static_cast<unsigned long>(width), static_cast<unsigned long>(height), mode.refreshRate, result);
+        return false;
+    }
+    s_vkHost.displayChanged = true;
+    return true;
+}
+
+void RestoreDisplayMode()
+{
+    if (!s_vkHost.displayChanged)
+        return;
+    s_vkHost.displayChanged = false;
+    // Null: the mode saved in the registry, the desktop's.
+    const LONG result = ChangeDisplaySettingsExW(nullptr, nullptr, nullptr, 0, nullptr);
+    if (result != DISP_CHANGE_SUCCESSFUL)
+        Com_Printf(CON_CHANNEL_GFX, "Vulkan: the desktop's display mode did not come back (%ld)\n", result);
+}
+
+// The window over the whole primary display, as D3D9 places a fullscreen
+// device's window. From another thread than the window's, without waiting
+// for it (that thread may be waiting for this one).
+void CoverMonitor(HWND window)
+{
+    MONITORINFO info{};
+    info.cbSize = sizeof(info);
+    if (!IsWindow(window) || !GetMonitorInfoW(MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY), &info))
+        return;
+    const RECT &rect = info.rcMonitor;
+    if (IsIconic(window))
+    {
+        // Minimised (the player is coming back to it): the size it comes
+        // back at. Windows set that to the desktop's whole display when the
+        // desktop's mode came back (PC run 18b), which on our smaller mode
+        // showed a corner of the picture. The placement is in workspace
+        // coordinates, which start at the work area rather than the display.
+        WINDOWPLACEMENT placement{};
+        placement.length = sizeof(placement);
+        if (GetWindowPlacement(window, &placement))
+        {
+            const LONG x = rect.left - (info.rcWork.left - info.rcMonitor.left);
+            const LONG y = rect.top - (info.rcWork.top - info.rcMonitor.top);
+            placement.rcNormalPosition = RECT{x, y, x + (rect.right - rect.left), y + (rect.bottom - rect.top)};
+            SetWindowPlacement(window, &placement);
+        }
+        return;
+    }
+    UINT flags = SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER;
+    if (GetWindowThreadProcessId(window, nullptr) != GetCurrentThreadId())
+        flags |= SWP_ASYNCWINDOWPOS;
+    SetWindowPos(window, nullptr, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, flags);
+}
+
+bool HostFullscreen(void *, front::D3D9Window window, const front::FullscreenMode *mode)
+{
+    const std::lock_guard<std::recursive_mutex> lock(s_vkHost.fullscreenLock);
+    if (!mode)
+    {
+        s_vkHost.fullscreenWindow = nullptr;
+        RestoreDisplayMode();
+        return true;
+    }
+    s_vkHost.fullscreenWindow = window;
+    s_vkHost.fullscreenMode = *mode;
+    const bool set = SetDisplayMode(*mode);
+    CoverMonitor(window);
+    return set;
+}
+
 // The window's client area on its monitor, for windowed screenshots (the
 // renderer measures it the same way, with MonitorFromWindow).
 bool HostWindowOrigin(void *, front::D3D9Window window, int32_t &x, int32_t &y)
@@ -337,13 +458,158 @@ void RegisterDvars()
     r_vkKeepDrawState = Dvar_RegisterBool("r_vkKeepDrawState", true, DVAR_NOFLAG,
                                           "Vulkan: a draw takes up the pipeline, constants and binds the draw "
                                           "before it left; off makes every draw set them all again");
+    r_visuals = Dvar_RegisterEnum("r_visuals", s_visualsNames, VISUALS_LEGACY, DVAR_ARCHIVE | DVAR_LATCH,
+                                  "Visuals with r_backend vulkan: legacy (the game as it was made) or modern "
+                                  "(experimental; so far temporal anti-aliasing)");
 }
+
+// ---- The Modern path (r_visuals modern; docs/vulkan-modern.md) ------------------------
+
+// Set when the front refused a scene (a multisampled back buffer, say): the
+// scenes are not jittered any more, since nothing would take the jitter out.
+// Read on the front end's thread, written on the render thread.
+std::atomic<bool> s_modernRefused{false};
+
+void ModernJitterPixels(void *, uint32_t frame, float *x, float *y)
+{
+    if (s_modernRefused.load(std::memory_order_relaxed))
+    {
+        *x = *y = 0.0f;
+        return;
+    }
+    gfx_vk::modern::JitterPixels(frame, *x, *y);
+}
+
+// The front's view of the engine's scene.
+front::ModernSceneView ModernViewOf(const GfxModernScene *scene)
+{
+    front::ModernSceneView view{};
+    std::memcpy(view.view, scene->view, sizeof(view.view));
+    std::memcpy(view.projection, scene->projection, sizeof(view.projection));
+    view.x = uint32_t((std::max)(0, scene->x));
+    view.y = uint32_t((std::max)(0, scene->y));
+    view.width = uint32_t((std::max)(0, scene->width));
+    view.height = uint32_t((std::max)(0, scene->height));
+    view.cut = scene->cut;
+    view.glow.on = scene->glow;
+    view.glow.radius = scene->glowRadius;
+    view.glow.intensity = scene->glowIntensity;
+    view.glow.cutoff = scene->glowCutoff;
+    view.glow.desaturation = scene->glowDesaturation;
+    return view;
+}
+
+// Whether the scene was finished before its effects (ModernSceneLit): its
+// sceneDone then has nothing to do. Render thread only.
+bool s_modernSceneFinished = false;
+
+void ModernFinish(GfxModernScene *scene, front::ModernResult result, bool glowDrawn)
+{
+    if (glowDrawn)
+        scene->glowDrawn = true;
+    if (result == front::ModernResult::Refused)
+        s_modernRefused.store(true, std::memory_order_relaxed);
+}
+
+// Effects on the display image (unless KISAK_VK_MODERN_EFFECTS=linear): the
+// front finishes the scene here.
+void ModernSceneLit(void *, IDirect3DDevice9 *device, GfxModernScene *scene)
+{
+    if (s_modernRefused.load(std::memory_order_relaxed))
+        return;
+    bool glowDrawn = false;
+    const front::ModernResult result = front::ModernSceneLit(device, ModernViewOf(scene), &glowDrawn);
+    if (result == front::ModernResult::Skipped)
+        return;
+    s_modernSceneFinished = true;
+    ModernFinish(scene, result, glowDrawn);
+}
+
+void ModernSceneDone(void *, IDirect3DDevice9 *device, GfxModernScene *scene)
+{
+    if (s_modernSceneFinished)
+    {
+        s_modernSceneFinished = false;
+        return;
+    }
+    if (s_modernRefused.load(std::memory_order_relaxed))
+        return;
+    bool glowDrawn = false;
+    const front::ModernResult result = front::ModernSceneDone(device, ModernViewOf(scene), &glowDrawn);
+    ModernFinish(scene, result, glowDrawn);
+}
+
+// Linear light (KISAK_VK_MODERN_LINEAR): a refusal here (logged once by the
+// front) leaves the scene in the back buffer, and the anti-aliasing runs on.
+void ModernSceneBegin(void *, IDirect3DDevice9 *device)
+{
+    s_modernSceneFinished = false;
+    if (!s_modernRefused.load(std::memory_order_relaxed))
+        front::ModernSceneBegin(device);
+}
+
+// A surface that moves on its own was just drawn (r_modern_motion.cpp): the
+// front keeps it for the scene's velocity pass.
+void ModernSurfaceMoved(void *, IDirect3DDevice9 *device, const float clip[4][4], const float prevClip[4][4])
+{
+    if (!s_modernRefused.load(std::memory_order_relaxed))
+        front::ModernSurfaceMoved(device, clip, prevClip);
+}
+
+// The same for a skinned surface: the front keeps its vertices for the next
+// scene's velocity, and draws its velocity from last scene's.
+void ModernSkinnedSurfaceMoved(void *, IDirect3DDevice9 *device, uint64_t key, const float clip[4][4],
+                               const float prevClip[4][4])
+{
+    if (!s_modernRefused.load(std::memory_order_relaxed))
+        front::ModernSkinnedSurfaceMoved(device, key, clip, prevClip);
+}
+
+// The colours a lit pass's pixel shader reads, for linear light.
+void ModernLitInputs(void *, IDirect3DDevice9 *device, const GfxModernLitInputs *inputs)
+{
+    if (!inputs)
+    {
+        front::SetModernLitInputs(device, nullptr);
+        return;
+    }
+    front::ModernLitInputs lit;
+    lit.constants = inputs->constants;
+    lit.samplers = inputs->samplers;
+    lit.doubled = inputs->doubled;
+    lit.colorInput = inputs->colorInput;
+    lit.overWhite = inputs->overWhite;
+    lit.shader = inputs->shader;
+    front::SetModernLitInputs(device, &lit);
+}
+
+// The normals buffer (docs/vulkan-modern.md): the front asks for the depth
+// prepass when something reads it, and builds it from the prepass's depth.
+bool ModernWantsSceneDepth(void *, IDirect3DDevice9 *device)
+{
+    return !s_modernRefused.load(std::memory_order_relaxed) && front::ModernWantsSceneDepth(device);
+}
+
+void ModernSceneDepth(void *, IDirect3DDevice9 *device, GfxModernScene *scene)
+{
+    if (!s_modernRefused.load(std::memory_order_relaxed))
+        front::ModernSceneDepth(device, ModernViewOf(scene));
+}
+
+const GfxModernHooks s_modernHooks = {nullptr,          ModernJitterPixels, ModernSceneDone,
+                                      ModernSceneBegin, ModernSceneLit,     ModernSurfaceMoved,
+                                      ModernSkinnedSurfaceMoved, ModernLitInputs, ModernWantsSceneDepth,
+                                      ModernSceneDepth};
 } // namespace
 
 int Kisak_VulkanBackendSelected()
 {
     RegisterDvars();
-    return r_backend->current.integer == BACKEND_VULKAN;
+    if (r_backend->current.integer == BACKEND_VULKAN)
+        return 1;
+    // The Modern path's hooks belong to the Vulkan back end.
+    R_SetModernHooks(nullptr);
+    return 0;
 }
 
 IDirect3D9 *Kisak_VulkanDirect3DCreate9()
@@ -361,6 +627,7 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
     host.currentMode = HostCurrentMode;
     host.monitor = HostMonitor;
     host.windowOrigin = HostWindowOrigin;
+    host.fullscreen = HostFullscreen;
     host.log = HostLog;
     host.validation = ValidationSetting();
     host.deviceIndex = r_vkDevice->current.integer;
@@ -371,9 +638,12 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
     s_vkHost.pipelineCachePath = cacheDirectory.empty() ? std::string() : cacheDirectory + "\\pipelines.bin";
     host.shaderCachePath = s_vkHost.shaderCachePath.empty() ? nullptr : s_vkHost.shaderCachePath.c_str();
     host.pipelineCachePath = s_vkHost.pipelineCachePath.empty() ? nullptr : s_vkHost.pipelineCachePath.c_str();
-    Com_Printf(CON_CHANNEL_GFX, "Graphics back end: Vulkan (validation %s, device %d, shader cache %s)\n",
+    Com_Printf(CON_CHANNEL_GFX, "Graphics back end: Vulkan (validation %s, device %d, shader cache %s, visuals %s)\n",
                s_validationNames[r_vkValidation->current.integer], r_vkDevice->current.integer,
-               s_vkHost.shaderCachePath.empty() ? "off" : s_vkHost.shaderCachePath.c_str());
+               s_vkHost.shaderCachePath.empty() ? "off" : s_vkHost.shaderCachePath.c_str(),
+               s_visualsNames[r_visuals->current.integer]);
+    s_modernRefused.store(false, std::memory_order_relaxed);
+    R_SetModernHooks(r_visuals->current.integer == VISUALS_MODERN ? &s_modernHooks : nullptr);
     return front::CreateDirect3D9(host);
 }
 
@@ -383,6 +653,64 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
 void Kisak_VulkanWindowDestroying(HWND window)
 {
     front::WindowDestroying(window);
+}
+
+// WM_ACTIVATEAPP: D3D9 gives a fullscreen device's display mode back to the
+// desktop and minimizes the window when the player switches away, and sets
+// it again on the way back. The front's devices are fullscreen through
+// HostFullscreen, so this does the same.
+void Kisak_VulkanAppActivated(HWND window, bool active)
+{
+    const std::lock_guard<std::recursive_mutex> lock(s_vkHost.fullscreenLock);
+    if (!s_vkHost.fullscreenWindow || window != s_vkHost.fullscreenWindow)
+        return;
+    if (active)
+    {
+        SetDisplayMode(s_vkHost.fullscreenMode);
+        CoverMonitor(window);
+        RECT rect{};
+        GetWindowRect(window, &rect);
+        Com_Printf(CON_CHANNEL_GFX, "Vulkan: fullscreen game active again: window (%ld, %ld, %ld, %ld)%s\n",
+                   rect.left, rect.top, rect.right, rect.bottom, IsIconic(window) ? ", minimised" : "");
+        return;
+    }
+    if (s_vkHost.displayChanged)
+    {
+        // Minimised first, then the desktop's mode, as DXVK does. The other
+        // way round (PC run 18) left the window at the desktop's full size,
+        // topmost and drawing: Windows resizes a window that covered the
+        // display when the mode changes back. Posted again if it still shows.
+        if (IsWindowVisible(window))
+            ShowWindow(window, SW_MINIMIZE);
+        RestoreDisplayMode();
+        if (IsWindowVisible(window) && !IsIconic(window))
+            ShowWindowAsync(window, SW_MINIMIZE);
+    }
+}
+
+// WM_SIZE of the game's window: a fullscreen window that is resized to
+// anything but the display's size while the display is at our mode is moved
+// back over the display. PC runs 18b and 18c: restoring the minimised window
+// activates it while it is still minimised, so the restore size the host
+// sets then comes too late, and the window came back at the desktop's full
+// size (2560x1080) on the game's 1280x720 mode.
+void Kisak_VulkanWindowSized(HWND window)
+{
+    std::unique_lock<std::recursive_mutex> lock(s_vkHost.fullscreenLock, std::try_to_lock);
+    if (!lock.owns_lock() || window != s_vkHost.fullscreenWindow || !s_vkHost.displayChanged || IsIconic(window))
+        return;
+    RECT client{};
+    DEVMODEW current{};
+    current.dmSize = sizeof(current);
+    if (!GetClientRect(window, &client) || !EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &current))
+        return;
+    const LONG width = client.right - client.left, height = client.bottom - client.top;
+    if (width == LONG(current.dmPelsWidth) && height == LONG(current.dmPelsHeight))
+        return;
+    Com_Printf(CON_CHANNEL_GFX, "Vulkan: fullscreen window sized %ldx%ld on a %lux%lu display: moved back over it\n",
+               width, height, static_cast<unsigned long>(current.dmPelsWidth),
+               static_cast<unsigned long>(current.dmPelsHeight));
+    CoverMonitor(window);
 }
 
 // For the renderer's r_vkStats command (src/gfx_d3d/r_cmds.cpp): logs the

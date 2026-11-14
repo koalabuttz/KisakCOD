@@ -6,6 +6,7 @@
 
 #include "r_init.h"
 #include "r_rendercmds.h"
+#include "rhi/r_rhi_modern.h"
 
 #define GFX_MAX_CLIENT_VIEWS 4
 #define MTL_SORT_ENVMAP_BITS 8
@@ -278,6 +279,28 @@ void R_SetLodOrigin(const refdef_s *refdef);
 void R_UpdateFrameFog();
 uint8_t LerpByte(uint8_t from, uint8_t to, float frac);
 void R_SetViewParmsForScene(const refdef_s *refdef, GfxViewParms *viewParms);
+
+// The Modern path (rhi/r_rhi_modern.h): nothing happens without its hooks.
+// Moves the projection of a scene about to be drawn by this frame's jitter.
+void R_ModernJitterScene(const refdef_s *refdef, GfxViewParms *viewParms);
+// RB_Draw3DInternal's call, before a view's 3D scene is drawn.
+void R_ModernSceneBegin();
+// RB_EndSceneRendering's call.
+// The view's lit scene is drawn, before its emissive surfaces (effects and
+// other blended surfaces, R_DrawEmissive).
+// Whether the Modern path wants the view's depth before its lit surfaces:
+// RB_StandardDrawCommands then draws the depth prepass.
+bool R_ModernWantsSceneDepth();
+// The view's depth prepass is drawn and its lit surfaces come next.
+void R_ModernSceneDepth(const GfxViewInfo *viewInfo);
+void R_ModernSceneLit(const GfxViewInfo *viewInfo);
+void R_ModernSceneDone(const GfxViewInfo *viewInfo);
+// R_SetupPass's call: tells the back end which colours a lit pass's pixel
+// shader reads (GfxModernHooks::litInputs), from sceneBegin to sceneLit.
+void R_ModernPassInputs(const Material *material, const MaterialPass *pass);
+// True when the Modern path drew this view's glow as bloom at its last
+// R_ModernSceneDone: the post effects leave the glow out.
+bool R_ModernDrewGlow(const GfxViewInfo *viewInfo);
 void R_SetupProjection(float tanHalfFovX, float tanHalfFovY, GfxViewParms *viewParms);
 bool R_UpdateFrameSun();
 void R_LerpDir(

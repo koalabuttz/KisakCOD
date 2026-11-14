@@ -37,6 +37,9 @@ extern const dvar_t *r_specular;
 extern const dvar_t *r_glow_allowed;
 extern const dvar_t *sc_offscreenCasterLodBias;
 extern const dvar_t *r_fullscreen;
+#ifndef KISAK_PURE
+extern const dvar_t *r_fullscreenMode; // Port: 0 exclusive, 1 borderless window.
+#endif
 extern const dvar_t *sm_spotShadowFadeTime;
 extern const dvar_t *r_showCollisionGroups;
 extern const dvar_t *r_dof_farStart;

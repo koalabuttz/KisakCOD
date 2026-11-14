@@ -713,6 +713,8 @@ bool CreateDevice(Core &core)
     core.optional.gpuFeed =
         core.optional.gpuFeedAlways || EnvEquals("KISAK_VK_GPU_FEED", "1") || (!tiled && !EnvEquals("KISAK_VK_GPU_FEED", "0"));
     core.optional.gpuFeedDraws = EnvCount("KISAK_VK_GPU_FEED_DRAWS", 128);
+    core.optional.pipelinesAhead = !EnvEquals("KISAK_VK_PIPELINES_AHEAD", "0");
+    core.optional.pipelineWorkers = std::min(EnvCount("KISAK_VK_PIPELINE_WORKERS", 0), 8u);
     core.optional.occlusionCounts = supported.occlusionQueryPrecise && supported12.hostQueryReset
         && !EnvEquals("KISAK_VK_OCCLUSION_QUERIES", "0");
 

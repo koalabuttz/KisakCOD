@@ -169,7 +169,9 @@ class Display:
         if not number:
             raise RuntimeError("Xvfb did not start a display (see xvfb.log)")
         self.name = f":{number}"
+        # A box (an error, a question) would wait for a click nobody makes.
         self.env = dict(os.environ, DISPLAY=self.name)
+        self.env.setdefault("KISAK_NO_DIALOGS", "1")
         self.window = None
         self.pid = None
         self.origin = (0, 0)

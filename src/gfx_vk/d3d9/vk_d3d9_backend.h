@@ -72,4 +72,49 @@ void BackendCounters(const Backend *backend, DeviceCounters &out);
 // other thread's D3D9 calls need while it is in the kernel. The back end
 // outlives the call (the query keeps its device alive). Null is ignored.
 void BackendPollProgress(Backend *backend);
+// The Modern path's passes over the scene drawn into these surfaces
+// (vk_d3d9.h ModernSceneDone). Refused when the back end has none or they
+// cannot run; the back end logs why, once per reason. With display, color is
+// the linear-light scene (BackendModernSceneTarget): after the passes the
+// tonemap writes it into display within the view's viewport, and that is
+// done even when the passes are refused. With display and view.glow on, the
+// bloom is drawn before the tonemap and *glowDrawn set true.
+ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surface *depth,
+                                const ModernSceneView &view, lg::Surface *display = nullptr,
+                                bool *glowDrawn = nullptr);
+// The linear-light image a 3D scene is drawn into instead of this back buffer
+// (vk_d3d9.h ModernSceneBegin), made or made again at its size; null when
+// linear light is off or cannot run (logged once). Refused tells the two
+// apart; Skipped means the frame is not drawn.
+lg::Surface *BackendModernSceneTarget(Backend *backend, lg::Surface *backBuffer, ModernResult &result);
+// Whether the Modern path finishes a scene before its effects, so they blend
+// on the display image (vk_d3d9.h ModernSceneLit); false with
+// KISAK_VK_MODERN_EFFECTS=linear and on a back end without a Modern path.
+bool BackendModernEffectsOnDisplay(Backend *backend);
+// Whether the Modern path wants the scene's opaque depth before its lit
+// surfaces (vk_d3d9.h ModernWantsSceneDepth); false on a back end without one.
+bool BackendModernWantsSceneDepth(Backend *backend);
+// The depth prepass drew the scene's opaque surfaces into `depth` (vk_d3d9.h
+// ModernSceneDepth): the Modern path builds the scene's normals buffer from
+// it, for the passes of the scene's BackendModernScene. Skipped when it is
+// not wanted or the frame is not drawn; Refused (logged once) when it cannot.
+ModernResult BackendModernSceneDepth(Backend *backend, lg::Surface *depth, const ModernSceneView &view);
+// The colours lit draws read (vk_d3d9.h SetModernLitInputs), null for none.
+// A back end without linear light ignores them.
+void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs);
+// A StretchRect from the back buffer while the scene is drawn into scene: the
+// tonemap writes the rectangle into dst as display values. False when it
+// cannot (the caller copies the scene as it is).
+bool BackendModernCopyScene(Backend *backend, lg::Surface *scene, const lg::Rect *from, lg::Surface *dst,
+                            const lg::Rect *to, bool linear);
+// The legacy device's last indexed draw was a surface that moves on its own
+// (vk_d3d9.h ModernSurfaceMoved): kept for the velocity pass of the next
+// BackendModernScene.
+void BackendModernSurfaceMoved(Backend *backend, lg::Device *legacy, const float clip[4][4],
+                               const float prevClip[4][4]);
+// The same for a skinned surface (vk_d3d9.h ModernSkinnedSurfaceMoved):
+// its vertices are kept under `key` at the next BackendModernScene, and its
+// velocity drawn there when the last one kept them. prevClip may be null.
+void BackendModernSkinnedSurfaceMoved(Backend *backend, lg::Device *legacy, uint64_t key, const float clip[4][4],
+                                      const float prevClip[4][4]);
 } // namespace gfx_vk::d3d9

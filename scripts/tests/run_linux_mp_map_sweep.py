@@ -39,6 +39,9 @@ Steps in each map
    it).
 6. *held*: the rest of ``--hold`` seconds.
 7. *console answers*: ``mapname`` is the map and the client is still in state 9.
+   A long ``--hold`` can outlast the round: when the server has rotated to
+   another map (its ``Server: <map>`` line was the last one) the step passes
+   and names the map it rotated to.
 8. *frame drawn* (``--screenshot``): the game's own ``screenshot`` command
    writes a TGA under the work directory; the step fails when the file is
    missing or nearly all one colour. The report describes each image in
@@ -181,6 +184,7 @@ class ClientProcess(sp.GameProcess):
         self.script_errors = 0
         self.sound = None  # [starts, cuts, underruns, OpenAL errors, longest gap ms]
         self.capture = None
+        self.last_server_map = None
         super().__init__(*args)
 
     def _note(self, line):
@@ -189,6 +193,9 @@ class ClientProcess(sp.GameProcess):
             self.capture.append(line)
         if SCRIPT_ERROR.search(line):
             self.script_errors += 1
+        started = sp.SERVER_START.match(line)
+        if started and started.group(1) != "localhost":  # clientinfo prints "Server: localhost"
+            self.last_server_map = started.group(1)
         summary = SOUND_SUMMARY.search(line)
         if summary:
             values = [int(group) for group in summary.groups()]
@@ -365,11 +372,17 @@ class Sweep:
             return False
         match = game.ask(MAP_DVAR, sp.dvar_answer(MAP_DVAR), options.probe_timeout)
         state = game.client_state(options.probe_timeout) if match else None
+        rotated = (bool(match) and match.group(1) != result.level and match.group(1) == game.last_server_map
+                   and state == CA_ACTIVE)
         if not match:
             detail = f"no answer in {options.probe_timeout} s"
+        elif rotated:
+            result.rotated_to = match.group(1)
+            detail = f"the server rotated to {match.group(1)} during the hold"
         else:
             detail = f"{MAP_DVAR} is '{match.group(1)}', client state {state}"
-        if not result.step("console answers", bool(match) and match.group(1) == result.level and state == CA_ACTIVE,
+        if not result.step("console answers",
+                           bool(match) and (match.group(1) == result.level or rotated) and state == CA_ACTIVE,
                            detail):
             return False
         if (options.screenshot and not sp.take_screenshot(game, result, self.home, options, f"sweep_{result.level}")
@@ -512,6 +525,10 @@ def write_report(path, options, results, missing):
     menus = list(dict.fromkeys(result.menus for result in results if result.menus))
     if menus:
         lines += ["", "Menus answered (name and position): " + "; ".join(menus) + "."]
+    rotations = [f"{result.level} to {result.rotated_to}" for result in results if getattr(result, "rotated_to", None)]
+    if rotations:
+        lines += ["", "The server rotated during the hold, so the steps after it ran on the new map: "
+                  + ", ".join(rotations) + "."]
     for result in results:
         if result.ok() and not result.assertions and not result.errors and not result.script_errors:
             continue

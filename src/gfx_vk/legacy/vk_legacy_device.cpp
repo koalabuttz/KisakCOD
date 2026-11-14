@@ -87,6 +87,21 @@ bool CreateNullTextures(Device &device)
             std::memcpy(data, black, sizeof(black));
         }
     }
+    // White, for the Modern lit shaders' ambient occlusion where a scene has none.
+    TextureDesc desc;
+    desc.levels = 1;
+    desc.format = d3d::FMT_A8R8G8B8;
+    desc.pool = d3d::POOL_MANAGED;
+    desc.name = "white texture";
+    device.whiteTexture = CreateTextureInternal(device, desc, 0);
+    if (!device.whiteTexture)
+        return Fail(device, "cannot create the white texture");
+    ImageRegion region;
+    region.width = region.height = region.depth = 1;
+    void *data = StageImageWrite(device.core, device.whiteTexture->image, region, nullptr, nullptr);
+    if (!data)
+        return Fail(device, "cannot fill the white texture: %s", LastError(device.core));
+    std::memset(data, 0xff, 4);
     return true;
 }
 
@@ -217,6 +232,10 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
             Log(*device, "shader cache %s: %s", desc.shaderCachePath, message.c_str());
         }
     }
+    // Pipelines built ahead: before any shader is created, so each one
+    // created queues what the list has for it.
+    StartAhead(*device, desc.pipelineListPath);
+    device->desc.pipelineListPath = nullptr;
     device->depthFormat = DepthStencilFormat(core);
     // D3DRS_DEPTHBIAS is in units of the depth range; Vulkan's constant factor
     // is in units of the format's smallest step.
@@ -300,15 +319,20 @@ void DestroyDevice(Device *device)
         gfx_vk::Present(core); // the core needs its frame closed; nothing new is shown
     device->frameOpen = false;
     gfx_vk::WaitIdle(core);
+    StopAhead(*device);
     DestroyPipelineObjects(*device);
     for (Texture *&texture : device->nullTexture)
     {
         DestroyTextureNow(*device, texture);
         texture = nullptr;
     }
+    DestroyTextureNow(*device, device->whiteTexture);
+    device->whiteTexture = nullptr;
+    device->modernAo = nullptr;
     DestroyBackBuffer(*device);
     DestroyBuffer(core, device->zeroVertices);
     gfx_vk::WaitIdle(core);
+    DestroyGamma(*device);
     if (!device->shaderCachePath.empty())
     {
         std::string message;
