@@ -36,6 +36,9 @@ decoder, a human second player, or proof of multi-player synchronization.
 - `SV_UpdateBots` / `SV_BotUserMove` in `src/server_mp/sv_main_mp.cpp` generate
   randomized commands. `sv_botsPressAttackBtn` controls the attack bit; these
   clients have no pathfinding, aiming or objectives.
+- With `bot_brain 1`, `SV_UpdateBots` asks KisakCOD's bot brain
+  (`Bot_UserMove`, src/bots/bot_brain.cpp) for each active bot's command
+  instead; see [bots](bots.md).
 
 ## Snapshots for test clients (`sv_botSnapshots`)
 
