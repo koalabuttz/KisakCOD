@@ -774,9 +774,16 @@ What the GXM back end does so far (step 2d):
   view at scale 0.7 a frame took 40.3 ms with it and 33.3 without, facing
   the other way 17.7 with it and 23.8 without. So the back end now times
   the two ways while the game runs (src/gfx_gxm/gxm_prepass_governor.h):
-  it times 30 frames the way it is, tries the other way for 30 frames
-  whenever that way's time is more than 8 seconds old, and keeps a change
-  only when it is at least 5% faster. The picture is the same both ways.
+  it takes the median of 30 frames the way it is, tries the other way for
+  30 frames when that way's time is old, and keeps a change only when it
+  is at least 5% faster. The picture is the same both ways. The wait
+  before a try starts at 8 seconds and doubles with each try that loses,
+  up to 64; a time that moves by more than 15% (the view changed) brings
+  it back to 8. Console run AO (2026-11-14, PR 327's first version, with
+  window means and a try every 8 seconds) found its choices right but the
+  tries cost 1 to 3 ms a frame on average (scale 0.7: 35.5 ms against
+  32.7 with the pass held off), and one hitch dropped the pass on the
+  light view for 9 seconds.
   Each change is logged (`diag: depth pass governor: off from frame ...`).
   An empty file `no-prepass-governor` keeps the pass on in every frame, as
   before.

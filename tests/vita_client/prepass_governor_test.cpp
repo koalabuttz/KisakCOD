@@ -91,6 +91,38 @@ int main()
         CHECK(run.probes >= 3);
         CHECK(run.changes == 2 * run.probes); // each try goes and comes back
     }
+    // Held for five minutes the tries back off, so the slower way's share
+    // of the frames is small (run AO: tries every 8 s cost 1 to 3 ms).
+    {
+        Run run;
+        run.governor.Reset(true);
+        const double share = run.For(300.0, [](bool pass) { return pass ? 40.3 : 33.3; });
+        CHECK(share < 0.03);
+        CHECK(run.probes <= 8);
+    }
+    {
+        Run run;
+        run.governor.Reset(true);
+        const double share = run.For(300.0, [](bool pass) { return pass ? 17.7 : 23.8; });
+        CHECK(share > 0.97);
+    }
+    // One hitch in a window does not move the governor (run AO: a 36.8 ms
+    // window mean dropped the pass on the light view).
+    {
+        Run run;
+        run.governor.Reset(true);
+        int frame = 0;
+        const auto hitchy = [&frame](bool pass) {
+            ++frame;
+            return frame == 2000 ? 600.0 : pass ? 17.7 : 23.8;
+        };
+        const double share = run.For(60.0, hitchy);
+        CHECK(frame > 2000);
+        run.FinishTry(hitchy);
+        CHECK(run.governor.Pass());
+        CHECK(run.changes == 2 * run.probes);
+        CHECK(share > 0.9);
+    }
     // The view changes: the governor follows within a few seconds.
     {
         Run run;
