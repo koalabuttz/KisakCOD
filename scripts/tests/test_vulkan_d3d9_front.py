@@ -143,11 +143,12 @@ involved. The checks:
   planar         --scene modern_planar passes as it is and with
                  KISAK_VK_MODERN_PLANAR=0 beside the debug view or
                  KISAK_VK_MODERN_LINEAR=0 beside it, where no planar view is
-                 taken, and with KISAK_VK_MODERN_PLANAR=1 or
-                 KISAK_VK_MODERN_DEBUG=planar, where its two planar views are
-                 drawn into their own image (logged), never onto the screen,
-                 and the debug view shows the first over the second frame's
-                 scene, and a third frame's floor, drawn by our lit shader on
+                 taken, and with KISAK_VK_MODERN_PLANAR=1,
+                 KISAK_VK_MODERN_DEBUG=planar or
+                 KISAK_VK_MODERN_DEBUG=planar-read, where its two planar
+                 views are drawn into their own image (logged), never onto
+                 the screen, and the debug view shows the first over the
+                 second frame's scene, and a third frame's floor, drawn by our lit shader on
                  the plane, reads the second (logged; its left half shows
                  the planar image's blue and its right half its green, and
                  both stay black with KISAK_VK_MODERN_SHADERS=0); the full
@@ -544,6 +545,7 @@ def main():
                             ({'KISAK_VK_MODERN_PLANAR': '1'}, 2),
                             ({'KISAK_VK_MODERN_PLANAR': '1', 'KISAK_VK_MODERN_SHADERS': '0'}, 2),
                             ({'KISAK_VK_MODERN_DEBUG': 'planar'}, 2),
+                            ({'KISAK_VK_MODERN_DEBUG': 'planar-read'}, 2),
                             ({'KISAK_VK_MODERN_DEBUG': 'planar', 'KISAK_VK_MODERN_PLANAR': '0'}, 0),
                             ({'KISAK_VK_MODERN_DEBUG': 'planar', 'KISAK_VK_MODERN_LINEAR': '0'}, 0)):
         chosen = dict(env)

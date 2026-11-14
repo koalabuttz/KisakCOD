@@ -887,7 +887,7 @@ struct ModernPlanarParams
     // The plane's normal and its distance at the eye: n . (p - eye) +
     // plane[3] is a point's height above it.
     float plane[4];
-    float on;        // 1 reads the image, 0 not
+    float on;        // 1 reads the image, 0 not; 2 shows only what it read (debug)
     float reach;     // how far from the plane (units) a surface still reads it
     float facing;    // the cosine of the angle from the plane's normal a surface's normal must reach
     float ripple;    // how far (units) the normal map's tilt moves the point read

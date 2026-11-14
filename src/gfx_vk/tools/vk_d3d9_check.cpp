@@ -2972,8 +2972,11 @@ void Check::ModernPlanar()
 #endif
     };
     const bool debug = envIs("KISAK_VK_MODERN_DEBUG", "planar");
+    // KISAK_VK_MODERN_DEBUG=planar-read shows the floor's read alone, the
+    // same colours at full strength.
     const bool wanted = !envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_PLANAR", "0")
-                        && (envIs("KISAK_VK_MODERN_PLANAR", "1") || debug);
+                        && (envIs("KISAK_VK_MODERN_PLANAR", "1") || debug
+                            || envIs("KISAK_VK_MODERN_DEBUG", "planar-read"));
     // Our lit shaders draw the floor of the third frame (and read the image).
     const bool ours = !envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
                       && !envIs("KISAK_VK_MODERN_SHADERS", "0");

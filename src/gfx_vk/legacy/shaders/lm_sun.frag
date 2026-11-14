@@ -246,7 +246,7 @@ layout(push_constant) uniform ModernPlanar
     // The plane's normal, and its distance at the eye: dot(n, point) + w is
     // a point's height above it.
     vec4 plane;
-    float on;     // 1 reads the image
+    float on;     // 1 reads the image; 2 shows only what it read (debug)
     float reach;  // how far from the plane a surface still reads it (units)
     float facing; // the cosine from the plane's normal a surface's must reach
     float ripple; // how far the normal map's tilt moves the point read (units)
@@ -510,6 +510,9 @@ void main()
         clamp(pow(abs(viewFacing) + ao, exp2(-16.0 * (1.0 - gloss) - 1.0)) - 1.0 + ao, 0.0, 1.0);
     vec3 reflection = probe.rgb * probe.a * specularOcclusion;
 #if LM_SUN_LIGHT == 1
+    // KISAK_VK_MODERN_DEBUG=planar-read: what the planar image gave, in
+    // linear light, unweighted (negative: nothing read here).
+    vec3 planarRead = vec3(-1.0);
     // On the plane of the Modern path's planar reflection, its mirror image
     // takes the probe's place (and screen-space reflections, below, take
     // its place where they find something: they are this frame's). Opaque,
@@ -539,6 +542,8 @@ void main()
                 seen += textureLod(sampler2D(planarImage, planarSampler), at + vec2(spread.x, -spread.y), 0.0).rgb;
                 seen += textureLod(sampler2D(planarImage, planarSampler), at + vec2(-spread.x, -spread.y), 0.0).rgb;
                 seen /= 6.0;
+                if (edge > 0.0)
+                    planarRead = max(seen, vec3(0.0));
                 const float weight = edge * smoothstep(kReflectionsGlossNone, kReflectionsGlossFull, gloss);
                 if (edge > 0.0)
                     reflection = mix(reflection, Encode(max(seen, vec3(0.0))), weight);
@@ -601,6 +606,10 @@ void main()
     const vec3 fogShare = mix(vec3(1.0 - texcoord1.w), clamp((gameFogged - game) / span, 0.0, 1.0),
         greaterThan(abs(span), vec3(1e-5)));
     vec3 shown = mix(lit, fogColor, fogShare);
+#if LM_SUN_SPECULAR && LM_SUN_LIGHT == 1
+    if (planar.on > 1.5)
+        shown = planarRead.r >= 0.0 ? planarRead : shown * 0.25;
+#endif
     if ((kMode == 1 && alpha == 0.0) || !kept)
         shown = vec3(0.0);
     const float outAlpha = kMode == 1 ? alpha : (kept ? 1.0 : 0.0);

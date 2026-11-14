@@ -92,8 +92,8 @@ GPU, once). Linear light (`KISAK_VK_MODERN_LINEAR`), lit inputs
 normals buffer's own switch (`KISAK_VK_MODERN_NORMALS`), the reflection
 probes' filter (`KISAK_VK_MODERN_PROBES`, applied as their textures load), the
 exposure range, the reflections' steps and levels, and planar reflections
-(`KISAK_VK_MODERN_PLANAR` and `KISAK_VK_MODERN_DEBUG=planar`, which
-`r_modernDebug` does not list) stay start-up only, and `r_visuals` itself is
+(`KISAK_VK_MODERN_PLANAR` and `KISAK_VK_MODERN_DEBUG=planar` or
+`planar-read`, which `r_modernDebug` does not list) stay start-up only, and `r_visuals` itself is
 latched (above).
 
 ## How a frame goes
@@ -1406,7 +1406,7 @@ frame where the scene moves; on a camera cut it is not read.
 | Setting | Default | Switch |
 | --- | --- | --- |
 | Planar view | off | `KISAK_VK_MODERN_PLANAR=1` draws it (with linear light only) |
-| Debug view | off | `KISAK_VK_MODERN_DEBUG=planar` draws it too, and puts the last planar image, as it is (upside down, no exposure), over the top left of the finished scene; `KISAK_VK_MODERN_PLANAR=0` turns both off |
+| Debug view | off | `KISAK_VK_MODERN_DEBUG=planar` draws it too, and puts the last planar image, as it is (upside down, no exposure), over the top left of the finished scene; `KISAK_VK_MODERN_DEBUG=planar-read` draws it and shows, on every surface that reads it, only what it read there (in linear light, unweighted by gloss and Fresnel; the rest of the scene at a quarter), to check that a reflection lines up with what it mirrors; `KISAK_VK_MODERN_PLANAR=0` turns them off |
 | Reach | 4 | `KISAK_VK_MODERN_PLANAR_REACH=N`: how far from the plane (units) a surface still reads the image |
 | Ripple | 4 | `KISAK_VK_MODERN_PLANAR_RIPPLE=N`: how far (units) the normal map's tilt moves the point read; 0 reads a flat mirror |
 
@@ -1434,7 +1434,8 @@ mirrored each fails, and the floor stays black where the image is not read
 `test_vulkan_d3d9_front.py` runs it with no switch, with
 `KISAK_VK_MODERN_PLANAR=1` (beside `KISAK_VK_MODERN_SHADERS=0` or not), with
 `KISAK_VK_MODERN_DEBUG=planar` (beside `KISAK_VK_MODERN_PLANAR=0` and
-`KISAK_VK_MODERN_LINEAR=0` or not), checks the two lines, and that a full
+`KISAK_VK_MODERN_LINEAR=0` or not), with `KISAK_VK_MODERN_DEBUG=planar-read`
+(the floor's halves show the same colours, unweighted), checks the two lines, and that a full
 run draws and reads no planar view unless asked.
 
 **Next.** Water (`mp_bog`, whose water has its own shader), and planes found

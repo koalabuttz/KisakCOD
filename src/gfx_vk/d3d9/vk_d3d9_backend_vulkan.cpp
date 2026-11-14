@@ -257,8 +257,8 @@ struct Backend
     // finished scene that has them (on the display image).
     bool debugReflections = false;
     // Planar reflections (docs/vulkan-modern.md "Planar reflections"): wanted
-    // with KISAK_VK_MODERN_PLANAR=1 or KISAK_VK_MODERN_DEBUG=planar, in linear
-    // light only. The renderer draws the planar view into planarColor (linear
+    // with KISAK_VK_MODERN_PLANAR=1 or KISAK_VK_MODERN_DEBUG=planar or
+    // planar-read, in linear light only. The renderer draws the planar view into planarColor (linear
     // light) with its own depth after each main view; planarReady once one
     // was drawn, planarView the last. KISAK_VK_MODERN_DEBUG=planar draws the
     // planar image (as it is, upside down) over the top left of
@@ -266,6 +266,7 @@ struct Backend
     bool planarWanted = false;
     bool planarFailed = false;
     bool debugPlanar = false;
+    bool debugPlanarRead = false; // KISAK_VK_MODERN_DEBUG=planar-read
     lg::Texture *planarColor = nullptr;
     lg::Surface *planarColorSurface = nullptr;
     lg::Surface *planarDepth = nullptr;
@@ -687,8 +688,10 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         && (EnvIs("KISAK_VK_MODERN_PROBES", "1") || backend->linearWanted);
     // The planar view and its debug view are start-up only, as the probes.
     backend->debugPlanar = EnvIs("KISAK_VK_MODERN_DEBUG", "planar");
+    backend->debugPlanarRead = EnvIs("KISAK_VK_MODERN_DEBUG", "planar-read");
     backend->planarWanted = backend->linearWanted && !EnvIsZero("KISAK_VK_MODERN_PLANAR")
-                            && (EnvIs("KISAK_VK_MODERN_PLANAR", "1") || backend->debugPlanar);
+                            && (EnvIs("KISAK_VK_MODERN_PLANAR", "1") || backend->debugPlanar
+                                || backend->debugPlanarRead);
     start.reflections = onOff("KISAK_VK_MODERN_SSR");
     {
         modern::ReflectionParams &p = start.reflectionParams;
@@ -1850,7 +1853,7 @@ void SetScenePlanar(Backend *backend, const ModernSceneView &view)
     params.plane[1] = planar.plane[1];
     params.plane[2] = planar.plane[2];
     params.plane[3] = planar.plane[0] * eye[0] + planar.plane[1] * eye[1] + planar.plane[2] * eye[2] + planar.plane[3];
-    params.on = 1.0f;
+    params.on = backend->debugPlanarRead ? 2.0f : 1.0f;
     params.reach = backend->planarReach;
     params.facing = 0.95f;
     params.ripple = backend->planarRipple;
