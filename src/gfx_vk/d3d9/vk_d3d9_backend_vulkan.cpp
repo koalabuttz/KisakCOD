@@ -226,9 +226,13 @@ struct Backend
     modern::ReflectionStats reflectionsBase{};
     // KISAK_VK_MODERN_DEBUG=velocity: the velocity debug view over each
     // anti-aliased scene (docs/vulkan-modern.md), made at its first use.
+    // velocity-all: the same, with every surface that moves on its own drawn
+    // wherever it lands, hidden or not (the velocity pass skips its depth
+    // test), to find them on the screen.
     // KISAK_VK_MODERN_DEBUG=normals: the normals debug view over each
     // finished scene (on the display image, after the tonemap).
     bool debugVelocity = false;
+    bool debugVelocityAll = false;
     bool debugNormals = false;
     // KISAK_VK_MODERN_DEBUG=ao: the ambient occlusion as grey over each
     // finished scene.
@@ -439,7 +443,8 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         if (!curve.empty() && !modern::CurveFromName(curve.c_str(), backend->tonemapCurve))
             backend->tonemapCurveUnknown = true;
     }
-    backend->debugVelocity = EnvIs("KISAK_VK_MODERN_DEBUG", "velocity");
+    backend->debugVelocityAll = EnvIs("KISAK_VK_MODERN_DEBUG", "velocity-all");
+    backend->debugVelocity = backend->debugVelocityAll || EnvIs("KISAK_VK_MODERN_DEBUG", "velocity");
     backend->debugNormals = EnvIs("KISAK_VK_MODERN_DEBUG", "normals");
     backend->debugAo = EnvIs("KISAK_VK_MODERN_DEBUG", "ao");
     backend->aoWanted = !EnvIsZero("KISAK_VK_MODERN_AO")
@@ -745,10 +750,11 @@ void BackendLogStats(Backend *backend, bool reset)
     {
         const modern::VelocityStats velocity = modern::Stats(backend->velocity);
         const PassTimings pass = PassTimingsFor(backend->core, "modern velocity");
-        HostLog(h, "vulkan d3d9: modern: %llu scenes with surfaces that move on their own (%llu surfaces), "
-                   "%.3f ms GPU each for their velocity",
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with surfaces that move on their own (%llu surfaces, %llu "
+                   "of them brush models), %.3f ms GPU each for their velocity",
                 static_cast<unsigned long long>(velocity.passes - backend->velocityBase.passes),
                 static_cast<unsigned long long>(velocity.surfaces - backend->velocityBase.surfaces),
+                static_cast<unsigned long long>(velocity.world - backend->velocityBase.world),
                 pass.supported ? average(pass) : 0.0);
         const modern::KeptStats kept = modern::Stats(backend->kept);
         const uint64_t keptScenes = kept.scenes - backend->keptBase.scenes;
@@ -1234,6 +1240,10 @@ bool MovedFromLastDraw(lg::Device *legacy, const float clip[4][4], const float p
     lg::IndexedDraw draw;
     if (!lg::LastIndexedDraw(legacy, draw))
         return false;
+    // The velocity pass reads these buffers at the scene's end; a dynamic
+    // one must not be written again before then (BackendModernScene ends the
+    // hold once the pass is recorded).
+    lg::HoldLastIndexedBuffers(legacy);
     surface.vertices = draw.vertices;
     surface.vertexOffset = draw.vertexOffset;
     surface.stride = draw.stride;
@@ -1301,7 +1311,7 @@ Image *SceneVelocity(Backend *backend, Image *depth, const modern::SceneView &sc
     if (!backend->velocity)
     {
         std::string error;
-        backend->velocity = modern::CreateVelocity(backend->core, error);
+        backend->velocity = modern::CreateVelocity(backend->core, error, !backend->debugVelocityAll);
         if (!backend->velocity)
         {
             backend->velocityFailed = true;
@@ -1637,6 +1647,14 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
                 modern::ForgetKept(kept);
         }
     } keptGuard{backend->kept};
+    // The buffers the scene's moved surfaces were drawn from are held until
+    // the velocity pass and the copy of skinned vertices are recorded, and
+    // so to the end of this scene whatever it does.
+    struct ReleaseHeld
+    {
+        lg::Device *legacy;
+        ~ReleaseHeld() { lg::ReleaseHeldBuffers(legacy); }
+    } heldGuard{backend->legacy};
     // In linear light the scene must reach the back buffer whatever the
     // anti-aliasing does.
     const auto tonemap = [&](ModernResult passes) {

@@ -18,8 +18,13 @@ layout(push_constant) uniform Params
 
 layout(location = 0) in vec4 currentClip;
 layout(location = 1) in vec4 previousClip;
+layout(location = 2) in float depthSlack;
 
 layout(location = 0) out vec2 motion;
+
+// False only for the debug view that shows every surface the pass draws,
+// hidden or not (KISAK_VK_MODERN_DEBUG=velocity-all).
+layout(constant_id = 0) const bool kDepthTest = true;
 
 // Motion that sends the history lookup off the screen: the surface was
 // behind last frame's camera, so there is nothing to take.
@@ -28,9 +33,10 @@ const vec2 kNoHistory = vec2(64.0, 64.0);
 void main()
 {
     // The same surface drawn the same way lands within rounding of the
-    // scene's depth; anything clearly behind it is hidden by something else.
+    // scene's depth (velocity.vert works out how much for its vertices);
+    // anything clearly behind it is hidden by something else.
     const float scene = texelFetch(sceneDepth, ivec2(gl_FragCoord.xy), 0).r;
-    if (gl_FragCoord.z > scene + 2.0e-6 + 2.0e-6 * scene)
+    if (kDepthTest && gl_FragCoord.z > scene + 2.0e-6 + 2.0e-6 * scene + depthSlack)
         discard;
     if (previousClip.w <= 0.0 || currentClip.w <= 0.0)
     {

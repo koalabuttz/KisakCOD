@@ -40,11 +40,11 @@ involved. The checks:
                  setting (what each setting did to its frame, and that the
                  statistics count from where they were last started, are the
                  scene's own points); and the Modern path's statistics lines
-                 count the 66 anti-aliased scenes of modern_taa,
+                 count the 74 anti-aliased scenes of modern_taa,
                  modern_linear, modern_bloom, modern_effects, modern_lit,
                  modern_lit_shader, modern_lit_models, modern_lit_no_sun,
                  modern_tonemap, modern_exposure, modern_velocity,
-                 modern_normals, modern_ao and modern_reflections, 23 of them
+                 modern_normals, modern_ao and modern_reflections, 24 of them
                  without history, the 22 scenes of modern_linear,
                  modern_bloom, modern_effects, modern_lit, modern_lit_shader,
                  modern_lit_models, modern_lit_no_sun, modern_tonemap,
@@ -71,8 +71,9 @@ involved. The checks:
                  sun with KISAK_VK_MODERN_NO_SUN_SHADERS=0; none
                  with KISAK_VK_MODERN_LINEAR=0 or KISAK_VK_MODERN_LIT=0, and
                  no lit shaders of our own with KISAK_VK_MODERN_SHADERS=0),
-                 modern_velocity's 14 scenes with a surface that moves on its
-                 own (14 surfaces), and its 8 scenes that kept a skinned
+                 modern_velocity's 21 scenes with a surface that moves on its
+                 own (21 surfaces, 7 of them from brush model vertices), and
+                 its 8 scenes that kept a skinned
                  surface's vertices, 7 of them drawn from in the scene after
   linear-off     --scene modern_linear passes with KISAK_VK_MODERN_LINEAR=0
                  too, where the scene is drawn as always (the scene's own
@@ -533,7 +534,7 @@ def main():
     # modern_effects scene's one, the modern_lit, modern_lit_shader,
     # modern_lit_models, modern_lit_no_sun and modern_tonemap scenes' one each
     # (all cuts), the modern_exposure scene's
-    # five (four cuts), and the modern_velocity scene's (three runs of 8, each
+    # five (four cuts), and the modern_velocity scene's (four runs of 8, each
     # starting with a cut); those fifteen before modern_velocity were drawn
     # in linear light, with one copy read from
     # them, two of modern_bloom's with bloom and modern_lit's,
@@ -544,21 +545,24 @@ def main():
     # ten with KISAK_VK_MODERN_MODEL_SHADERS=0, the twelve with the sun with
     # KISAK_VK_MODERN_NO_SUN_SHADERS=0), unless KISAK_VK_MODERN_LINEAR=0 (or
     # KISAK_VK_MODERN_BLOOM=0 for the bloom, KISAK_VK_MODERN_LIT=0 for the lit
-    # surfaces); in the second and third modern_velocity runs the 7 scenes
-    # after the cut each had one surface that moves on its own, in the third
-    # a skinned one, whose 128 vertices every scene of that run kept. Last,
+    # surfaces); in the second, third and fourth modern_velocity runs the 7
+    # scenes after the cut each had one surface that moves on its own, in the
+    # third a skinned one, whose 128 vertices every scene of that run kept,
+    # in the fourth a brush model's (44-byte vertices). Last,
     # the modern_normals scene's one (a cut), the modern_ao scene's one, the
     # same, and the modern_reflections scene's five (the first and the third
     # cuts), in linear light unless KISAK_VK_MODERN_LINEAR=0.
     modern = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes anti-aliased \((\d+) without history\)',
                        stdout)
-    checks.expect('the Modern path anti-aliased 66 scenes, 23 without history',
-                  modern is not None and modern.group(1) == '66' and modern.group(2) == '23',
+    checks.expect('the Modern path anti-aliased 74 scenes, 24 without history',
+                  modern is not None and modern.group(1) == '74' and modern.group(2) == '24',
                   modern.group(0) if modern else 'missing')
     velocity = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with surfaces that move on their own '
-                         r'\((\d+) surfaces\), ([0-9.]+) ms GPU each for their velocity$', stdout)
-    checks.expect('the Modern path drew the velocity of 14 surfaces in 14 scenes',
-                  velocity is not None and velocity.group(1) == '14' and velocity.group(2) == '14',
+                         r'\((\d+) surfaces, (\d+) of them brush models\), ([0-9.]+) ms GPU each for their velocity$',
+                         stdout)
+    checks.expect('the Modern path drew the velocity of 21 surfaces in 21 scenes, 7 of them brush models',
+                  velocity is not None and velocity.group(1) == '21' and velocity.group(2) == '21'
+                  and velocity.group(3) == '7',
                   velocity.group(0) if velocity else 'missing')
     kept = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes kept skinned vertices \((\d+) surfaces, '
                      r'([0-9.]+) KB each scene\), (\d+) skinned surfaces drawn from last scene\'s$', stdout)

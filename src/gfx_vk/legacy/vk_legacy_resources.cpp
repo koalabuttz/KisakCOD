@@ -173,6 +173,9 @@ T *CreateGpuBuffer(Device &device, uint32_t bytes, uint32_t usage, d3d::Pool poo
 
 void DestroyGpuBuffer(Device &device, GpuBuffer *buffer)
 {
+    auto &held = device.heldBackings;
+    held.erase(std::remove_if(held.begin(), held.end(), [buffer](const auto &h) { return h.first == buffer; }),
+               held.end());
     for (Backing &backing : buffer->backings)
         DestroyBuffer(device.core, backing.buffer);
     DestroyBuffer(device.core, buffer->device);
@@ -180,7 +183,7 @@ void DestroyGpuBuffer(Device &device, GpuBuffer *buffer)
 
 bool Busy(Device &device, const Backing &backing)
 {
-    return backing.lastUse && !SerialFinished(device.core, backing.lastUse);
+    return backing.held || (backing.lastUse && !SerialFinished(device.core, backing.lastUse));
 }
 
 void *LockGpuBuffer(Device &device, GpuBuffer *buffer, uint32_t offset, uint32_t bytes, uint32_t flags)

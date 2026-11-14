@@ -1478,6 +1478,18 @@ void R_SetVertexDeclTypeWorld(GfxCmdBufState *state)
         R_SetVertexDeclTypeNormal(state, VERTDECL_WORLD);
 }
 
+// The Modern path (r_modern_motion.h): a surface of a brush model was just
+// drawn into the scene; report it with the matrix its placement gave it.
+static void R_ModernMotionBModelSurf(GfxCmdBufContext context, const BModelSurface *bmodelSurf)
+{
+    const GfxRenderTargetId target = context.state->renderTargetId;
+    if (target != R_RENDERTARGET_SCENE && target != R_RENDERTARGET_FRAME_BUFFER)
+        return;
+    float clip[4][4];
+    memcpy(clip, R_GetCodeMatrix(context.source, CONST_SRC_CODE_WORLD_VIEW_PROJECTION_MATRIX, 0), sizeof(clip));
+    R_ModernMotionSurface(context.state->prim.device, R_MODERN_OWNER_BRUSH, 0, bmodelSurf->surf, clip);
+}
+
 uint32_t R_TessBModel(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
 {
     GfxDepthRangeType v3; // [esp+34h] [ebp-88h]
@@ -1572,6 +1584,8 @@ uint32_t R_TessBModel(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prep
                 (uint8_t *)&rgp.world->indices[tris->baseIndex],
                 args.triCount);
             R_DrawIndexedPrimitive(&context.state->prim, &args);
+            if (R_ModernMotionWanted())
+                R_ModernMotionBModelSurf(context, bmodelSurf);
             if (prepassContext.state)
             {
                 R_SetStreamsForBspSurface(&prepassContext.state->prim, tris);
