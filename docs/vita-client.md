@@ -768,7 +768,18 @@ What the GXM back end does so far (step 2d):
   two passes' programs wrote depths a hair apart there and parts of the gun
   showed black. An empty file
   `no-depth-prepass` in the folder of the compiled programs turns the
-  forced pass off.
+  forced pass off. With the GPU at 222 MHz the pass costs the CPU about
+  8 ms a frame (it draws every opaque surface twice), and console run AM
+  (2026-11-14, mp_crash) found neither way wins everywhere: at the busy
+  view at scale 0.7 a frame took 40.3 ms with it and 33.3 without, facing
+  the other way 17.7 with it and 23.8 without. So the back end now times
+  the two ways while the game runs (src/gfx_gxm/gxm_prepass_governor.h):
+  it times 30 frames the way it is, tries the other way for 30 frames
+  whenever that way's time is more than 8 seconds old, and keeps a change
+  only when it is at least 5% faster. The picture is the same both ways.
+  Each change is logged (`diag: depth pass governor: off from frame ...`).
+  An empty file `no-prepass-governor` keeps the pass on in every frame, as
+  before.
 - **No distortion copy in frames that do not need it.** The Vita's GPU
   works a scene at a time: every change of render target ends one, stores
   its whole colour and depth targets and loads them again when the frame

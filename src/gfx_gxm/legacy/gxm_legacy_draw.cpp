@@ -39,6 +39,7 @@
 
 #include <gfx_gxm/gxm_engine_options.h>
 #include <gfx_gxm/gxm_live_switch.h>
+#include <gfx_gxm/gxm_prepass_governor.h>
 #include <gfx_gxm/gxm_program_cache.h>
 #include <vita/vita_gpu_clock.h>
 
@@ -345,6 +346,11 @@ struct DrawState
     volatile uint32_t *notifications = nullptr;
     bool overlap = true, notifyScene = false;
     uint32_t paceTimeouts = 0;
+    // Whether the scene's depth is drawn first is measured while the game
+    // runs (gxm_prepass_governor.h), unless no-depth-prepass turns the pass
+    // off or no-prepass-governor keeps it on.
+    gfx_gxm::PrepassGovernor prepassGovernor;
+    bool prepassOff = false, governorOff = false;
     uint64_t paceWaits = 0, paceMicros = 0;
     // Renames that found no room and waited for the GPU, renames a wait since
     // the buffer's last draw made needless, and the bytes of renamed buffers'
@@ -1729,10 +1735,15 @@ bool InitDraw(Device &device, std::string &error)
         d.census = true;
         Log(device, "diag: diag-state-census is there: each new draw state is logged once (census lines)");
     }
-    gfx_gxm::g_depthPrepass = !gxm::ProgramCacheMarker("no-depth-prepass");
-    if (!gfx_gxm::g_depthPrepass)
+    d.prepassOff = gxm::ProgramCacheMarker("no-depth-prepass");
+    gfx_gxm::g_depthPrepass = !d.prepassOff;
+    d.prepassGovernor.Reset(gfx_gxm::g_depthPrepass);
+    if (d.prepassOff)
         Log(device, "diag: no-depth-prepass is there: the scene's depth is drawn first only when r_depthPrepass, "
                     "depth of field or soft particles ask for it");
+    d.governorOff = gxm::ProgramCacheMarker("no-prepass-governor");
+    if (d.governorOff && !d.prepassOff)
+        Log(device, "diag: no-prepass-governor is there: the scene's depth is always drawn first");
     gfx_gxm::g_resolveWhenUsed = !gxm::ProgramCacheMarker("no-resolve-skip");
     if (!gfx_gxm::g_resolveWhenUsed)
         Log(device, "diag: no-resolve-skip is there: the picture is copied for distortion in every frame, drawn or "
@@ -2316,8 +2327,9 @@ void LogWaitCauses(Device &device)
 
 // The switches "vita_gxm <marker> <0|1>" may turn while the game runs
 // (gxm_live_switch.h). The others size or make things at start-up.
-const char *const kLiveSwitches[] = {"no-depth-prepass", "no-frame-overlap", "no-vsync", "no-draw-reuse",
-                                     "no-filter-stretch", "no-gpu-boost"};
+const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "no-vsync",
+                                     "no-draw-reuse",     "no-filter-stretch", "no-gpu-boost",
+                                     "no-prepass-governor"};
 struct LiveSwitch
 {
     const char *name;
@@ -2338,8 +2350,13 @@ void ApplyLiveSwitches(Device &device)
     for (const LiveSwitch &s : asked)
     {
         const std::string name = s.name;
-        if (name == "no-depth-prepass")
-            gfx_gxm::g_depthPrepass = !s.on;
+        if (name == "no-depth-prepass" || name == "no-prepass-governor")
+        {
+            // Either one starts the governor afresh, from the pass on.
+            (name == "no-depth-prepass" ? d.prepassOff : d.governorOff) = s.on;
+            gfx_gxm::g_depthPrepass = !d.prepassOff;
+            d.prepassGovernor.Reset(gfx_gxm::g_depthPrepass);
+        }
         else if (name == "no-frame-overlap")
         {
             // Everything drawn so far is done before the way of waiting
@@ -2370,6 +2387,18 @@ void FrameDone(Device &device)
     DrawState &d = *device.draw;
     ++d.frame;
     ApplyLiveSwitches(device);
+    if (!d.prepassOff && !d.governorOff)
+    {
+        const gfx_gxm::PrepassGovernor::Change change = d.prepassGovernor.FrameEnded(Micros());
+        if (change.changed)
+        {
+            gfx_gxm::g_depthPrepass = change.pass;
+            Log(device, "diag: depth pass governor: %s from frame %llu (%s; last %.1f ms a frame with the pass, "
+                        "%.1f without)",
+                change.pass ? "on" : "off", (unsigned long long)d.frame,
+                change.probe ? "a try" : "timed", change.passMs, change.noPassMs);
+        }
+    }
     d.ringUsed = 0;
     uint64_t into = 0;
     const int mode = d.diagTests ? DiagModeFor(d.frame, &into) : 0;

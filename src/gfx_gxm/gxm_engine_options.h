@@ -4,8 +4,12 @@
 // r_depthPrepass says. The Vita's GPU then skips hidden pixels of the lit
 // pass early: console run T (2026-11-11, mp_crash) measured the GPU's time a
 // frame at 80 ms with it against 108 without at the busy view, and 27 against
-// 50 facing the other way. An empty file `no-depth-prepass` in the folder of
-// the compiled programs turns it off, for a run that compares.
+// 50 facing the other way. With the GPU at 222 MHz the pass costs the CPU
+// more than it saves the GPU in some views (console run AM), so the back end
+// times both ways while the game runs and sets this to the faster
+// (gxm_prepass_governor.h). An empty file `no-depth-prepass` in the folder of
+// the compiled programs turns it off, for a run that compares, and
+// `no-prepass-governor` keeps it on in every frame.
 //
 // g_resolveWhenUsed: with r_distortion on, the engine copies the picture
 // for the surfaces that bend it (heat haze, glass) before the emissive pass
