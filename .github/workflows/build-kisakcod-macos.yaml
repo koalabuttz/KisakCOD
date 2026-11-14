@@ -852,31 +852,6 @@ jobs:
             --binary "$OUT_DIR/KisakCOD-vulkan-d3d9-check" \
             --video-driver cocoa --validation auto
 
-      - name: DIAGNOSTIC brush band on MoltenVK (temporary, not for merge)
-        if: ${{ always() }}
-        timeout-minutes: 10
-        shell: bash
-        run: |
-          set +e -u
-          export SDL_VULKAN_LIBRARY="$(brew --prefix vulkan-loader)/lib/libvulkan.1.dylib"
-          export DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix)/lib:/usr/local/lib:/usr/lib"
-          export SDL_VIDEODRIVER=cocoa
-          if [[ "${{ matrix.arch }}" == x86_64 ]]; then
-            export MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0
-          fi
-          bin="$OUT_DIR/KisakCOD-vulkan-d3d9-check"
-          for diag in "" static-ib keep near; do
-            for extra in "" "MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0"; do
-              echo "=== KISAK_CHECK_BRUSH=$diag $extra"
-              env KISAK_CHECK_BRUSH="$diag" KISAK_VK_MODERN_EXPOSURE=0 $extra "$bin" --scene modern_velocity --validation auto 2>&1 \
-                | grep -aE 'scene=modern_velocity|vertex stride|error|VUID|mvk-error|mvk-warn' | cut -c1-600
-            done
-          done
-          echo "=== Metal API validation, default"
-          env MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 MVK_CONFIG_LOG_LEVEL=2 KISAK_VK_MODERN_EXPOSURE=0 "$bin" --scene modern_velocity --validation auto 2>&1 \
-            | grep -avE '^d3d9_check\.log=legacy: (pipeline|shader)' | tail -n 80 | cut -c1-600
-          exit 0
-
       - name: Show where the probe stopped
         if: ${{ failure() }}
         timeout-minutes: 10
