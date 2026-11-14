@@ -624,6 +624,11 @@ struct Device
     // modernReflectionsSampler) and in their push constants.
     Image *modernPlanar = nullptr;
     ModernPlanarParams modernPlanarParams{};
+    // Bumped whenever SetModernPlanar changes the parameters; the parameters
+    // were last pushed for pushedPlanarGeneration in the bound layout (0:
+    // not since the layout or the command buffer changed).
+    uint64_t modernPlanarGeneration = 1;
+    uint64_t pushedPlanarGeneration = 0;
     bool dynamicStale = true;
     // Checks every shortcut a draw takes (these two, and uniform blocks kept
     // from an earlier draw) against the full work, and fails the device when

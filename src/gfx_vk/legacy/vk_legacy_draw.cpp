@@ -1962,6 +1962,7 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
         device.boundLayout = layout.pipeline;
         device.boundUniforms.set = VK_NULL_HANDLE;
         device.boundTextureSet = VK_NULL_HANDLE;
+        device.pushedPlanarGeneration = 0;
     }
     if (device.keepDrawState)
         CheckLastingSets(device);
@@ -2009,9 +2010,11 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
         }
     }
     // A Modern lit shader of ours: the planar reflection's parameters, pushed
-    // with every draw (96 bytes; they change once a scene).
-    if (layout.key.modernPush)
+    // when they change (about once a scene) or a layout was bound since (a
+    // layout without the range disturbs them).
+    if (layout.key.modernPush && device.pushedPlanarGeneration != device.modernPlanarGeneration)
     {
+        device.pushedPlanarGeneration = device.modernPlanarGeneration;
         const VkPipelineLayout pipelineLayout = layout.pipeline;
         const ModernPlanarParams params = device.modernPlanarParams;
         Record(device.core, [pipelineLayout, params](VkCommandBuffer cmd, const Dispatch &vk) {
@@ -2193,6 +2196,7 @@ void ForgetRecordingState(Device &device)
     device.boundUniforms.set = VK_NULL_HANDLE;
     device.boundLayout = VK_NULL_HANDLE;
     device.boundTextureSet = VK_NULL_HANDLE;
+    device.pushedPlanarGeneration = 0;
 }
 
 void EndPassIfOpen(Device &device)
@@ -3072,8 +3076,13 @@ void SetModernPlanar(Device *device, Image *image, const ModernPlanarParams *par
 {
     if (!device)
         return;
-    device->modernPlanar = params && params->on != 0.0f ? image : nullptr;
-    device->modernPlanarParams = device->modernPlanar ? *params : ModernPlanarParams{};
+    const ModernPlanarParams next = image && params && params->on != 0.0f ? *params : ModernPlanarParams{};
+    device->modernPlanar = next.on != 0.0f ? image : nullptr;
+    if (std::memcmp(&next, &device->modernPlanarParams, sizeof(next)) != 0)
+    {
+        device->modernPlanarParams = next;
+        ++device->modernPlanarGeneration;
+    }
 }
 
 void SetModernLitStrengths(Device *device, float sun, float sky)
