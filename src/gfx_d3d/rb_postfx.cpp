@@ -8,6 +8,7 @@
 #include "rb_imagefilter.h"
 #include <devgui/devgui.h>
 #include <universal/profile.h>
+#include <gfx_gxm/gxm_engine_options.h>
 
 
 bool R_UsingGlow(const GfxViewInfo *viewInfo)
@@ -53,6 +54,18 @@ void RB_ApplyColorManipulationFullscreen(const GfxViewInfo *viewInfo)
 {
     iassert( RB_UsingColorManipulation( viewInfo ) );
     iassert( viewInfo->isRenderingFullScreen );
+#ifdef KISAK_GFX_GXM
+    // A scaled 3D picture that RB_StretchScaledScene left in the corner of
+    // the copy: the filter's quad stretches it over the screen.
+    if (gfx_gxm::g_filterReadS < 1.0f || gfx_gxm::g_filterReadT < 1.0f)
+    {
+        RB_DrawFullScreenColoredQuad(rgp.postFxColorMaterial, 0.0f, 0.0f, gfx_gxm::g_filterReadS,
+                                     gfx_gxm::g_filterReadT, 0xFFFFFFFF);
+        gfx_gxm::g_filterReadS = 1.0f;
+        gfx_gxm::g_filterReadT = 1.0f;
+        return;
+    }
+#endif
     RB_FullScreenFilter(rgp.postFxColorMaterial);
 }
 
