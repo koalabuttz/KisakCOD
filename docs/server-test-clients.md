@@ -51,9 +51,18 @@ PC server frame run 1 (`perf_sample` on the dedicated server in WSL, mp_crash,
 with 12 bots and 2.6 ms with 24, and snapshots at about 0.5 and 1.3 ms of that:
 the largest part, and the one that grows fastest with the number of bots.
 
-`sv_botSnapshots 0` skips building, writing and sending snapshots for test
-clients; a drop that was put off until the next send still happens. `1`, the
-default, sends them as retail did, until a run has compared the two.
+`sv_botSnapshots 0`, the default, skips building, writing and sending
+snapshots for test clients; a drop that was put off until the next send still
+happens. `1` sends them as retail did.
+
+PC bot snapshots run 1 (`perf_ab "set sv_botSnapshots 1" "set sv_botSnapshots
+0"` on the same WSL dedicated server, mp_crash, 24 bots, two launches) measured
+0 against 1: `server: snapshots` 0.027-0.031 down to 0.004-0.006 ms a frame,
+the server frame 0.057-0.060 down to 0.032-0.034 ms a frame, the frames that
+hold a server frame 3.63-3.77 down to 2.56-2.62 ms on average, and +2.3 to
++2.4 % fps with windows that differ by 0.3 % at most. Bot moves and triggers
+did not change, all 24 bots were still in the game after 60 s at 0, and no bot
+was dropped or kicked.
 
 The loopback authentication test mode deliberately rejects pseudo-addresses.
 Do not enable `sv_loopbackTestAuth` for this bot probe. Leave both authentication
