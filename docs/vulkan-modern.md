@@ -45,6 +45,54 @@ is refused, the reason is logged once (`vulkan d3d9: modern: the scene is not
 anti-aliased: the scene is multisampled`), and the jitter stops, so the game
 looks as it does with `legacy`.
 
+## Live switches
+
+Most of the Modern path's switches can be changed while the game runs, from
+the console, in a match: the engine's `r_modern*` dvars. The host reads them at
+every Present (`src/gfx_d3d/rhi/r_rhi_modern_dvars.h`) and hands them to the
+back end as `front::Tuning::modern` (`ModernTuning`, `vk_d3d9.h`), which takes
+them up from the next frame, so each scene is drawn with one set throughout
+(`ApplyModernTuning`, `vk_d3d9_backend_vulkan.cpp`). Each change is logged once:
+`vulkan d3d9: modern: switches now: bloom on, exposure on (key 0.115), ...,
+tonemap neutral, debug view none`. They are not saved, and a server may not set
+them (`src/qcommon/server_dvar_guard.h`).
+
+Every dvar's default keeps what the device started with: the
+`KISAK_VK_MODERN_*` environment variable of the same switch, read once as the
+device opens, or the built-in default. So the variables keep working for older
+recipes, and setting a dvar back to `default` (or `-1` for the numbers) goes
+back to them.
+
+| Dvar | Values | Variable it overrides |
+| --- | --- | --- |
+| `r_modernBloom` | default, off, on | `KISAK_VK_MODERN_BLOOM` |
+| `r_modernExposure` | default, off, on | `KISAK_VK_MODERN_EXPOSURE` |
+| `r_modernExposureKey` | -1, or above 0 to 4 | `KISAK_VK_MODERN_EXPOSURE_KEY` |
+| `r_modernVelocity` | default, off, on | `KISAK_VK_MODERN_VELOCITY` |
+| `r_modernShaders` | default, off, on | `KISAK_VK_MODERN_SHADERS` |
+| `r_modernModelShaders` | default, off, on | `KISAK_VK_MODERN_MODEL_SHADERS` |
+| `r_modernNoSunShaders` | default, off, on | `KISAK_VK_MODERN_NO_SUN_SHADERS` |
+| `r_modernSunStrength`, `r_modernSkyStrength` | -1, or 0 to 16 | `KISAK_VK_MODERN_SUN_STRENGTH`, `_SKY_STRENGTH` |
+| `r_modernAo` | default, off, on | `KISAK_VK_MODERN_AO` |
+| `r_modernAoRadius`, `r_modernAoPower`, `r_modernAoThickness`, `r_modernAoFloor`, `r_modernAoEdge` | -1, or the variable's range | `KISAK_VK_MODERN_AO_RADIUS`, `_POWER`, `_THICKNESS`, `_FLOOR`, `_EDGE` |
+| `r_modernSsr` | default, off, on | `KISAK_VK_MODERN_SSR` |
+| `r_modernSsrDistance`, `r_modernSsrThickness` | -1, or above 0 | `KISAK_VK_MODERN_SSR_DISTANCE`, `_THICKNESS` |
+| `r_modernTonemap` | default, clamp, neutral, agx, aces | `KISAK_VK_MODERN_TONEMAP` |
+| `r_modernDebug` | default, none, velocity, velocity-all, normals, ao, reflections | `KISAK_VK_MODERN_DEBUG` |
+
+As with the variables, `r_modernAo` and `r_modernSsr` at `default` turn the
+pass on for what reads it (our lit shaders, or its debug view), so
+`r_modernShaders off` turns them off too unless they are set `on`. A pass
+switched off keeps what it made and carries on when switched on again; what it
+drew stops being read at once. Changing `r_modernDebug` to or from
+`velocity-all` makes the velocity pass again at its next scene (a wait for the
+GPU, once). Linear light (`KISAK_VK_MODERN_LINEAR`), lit inputs
+(`KISAK_VK_MODERN_LIT`), where effects blend (`KISAK_VK_MODERN_EFFECTS`), the
+normals buffer's own switch (`KISAK_VK_MODERN_NORMALS`), the reflection
+probes' filter (`KISAK_VK_MODERN_PROBES`, applied as their textures load), the
+exposure range and the reflections' steps and levels stay start-up only, and `r_visuals` itself is
+latched (above).
+
 ## How a frame goes
 
 1. **Jitter (front end).** `R_RenderScene` sets up the scene's view
@@ -271,6 +319,13 @@ the scene ends, so the band stays sharp only if the pass still reads the
 draw's. That band's vertices are also far from the origin and drawn with the
 world shaders' two matrices, while it is reported with their product, so it
 stays sharp only if the pass allows for the depth's rounding.
+
+The `modern_live` scene changes the switches while the device exists: the
+tonemap scene through the clamp curve and then ACES, the ambient occlusion
+scene with ambient occlusion off, and the velocity debug view without its
+depth test (in the full run, after `modern_velocity`, that makes the velocity
+pass again, and its statistics keep the counts from before), each change
+logged once.
 
 `scripts/tests/test_vulkan_d3d9_front.py` checks the scenes in the full run and
 the `modern:` statistics lines. `scripts/tools/vulkan/gen_spirv_header.py
