@@ -301,6 +301,22 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass);
 // True when the Modern path drew this view's glow as bloom at its last
 // R_ModernSceneDone: the post effects leave the glow out.
 bool R_ModernDrewGlow(const GfxViewInfo *viewInfo);
+// Planar reflections (GfxModernHooks::planarWanted): after the main view's
+// R_RenderScene, its caller calls R_ModernPlanarScene with the same refdef,
+// which adds the mirrored view when the map has a reflecting plane and the
+// back end wants it.
+void R_ModernPlanarScene(const refdef_s *refdef);
+// True inside the planar view's R_RenderScene (its scene entities leave the
+// view model out).
+bool R_ModernPlanarViewActive();
+// Whether a view is a planar reflection view (r_rendercmds.cpp keeps it).
+bool R_IsModernPlanarView(const GfxViewInfo *viewInfo);
+void R_SetModernPlanarView(const GfxViewInfo *viewInfo, bool planar);
+// RB_ModernPlanarDrawCommands's calls around the planar view's lit and decal
+// surfaces (after the main view's 3D scene): false when the back end does not
+// take the view (nothing is drawn then).
+bool R_ModernPlanarBegin(const GfxViewInfo *viewInfo, GfxModernPlanar *planar);
+void R_ModernPlanarDone(const GfxModernPlanar *planar);
 void R_SetupProjection(float tanHalfFovX, float tanHalfFovY, GfxViewParms *viewParms);
 bool R_UpdateFrameSun();
 void R_LerpDir(

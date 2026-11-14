@@ -1280,6 +1280,77 @@ marks are kept. `test_vulkan_d3d9_front.py` runs it as it is, with
 `KISAK_VK_MODERN_PROBES=0` and with `KISAK_VK_MODERN_LINEAR=0`, and checks
 that a full run filters 2 (none without linear light).
 
+## Planar reflections
+
+A first piece, for checking only: the mirrored view is drawn, but nothing
+reads it yet. Screen-space reflections cannot show what the screen does not
+(the underside of a car over a wet street, what is behind the camera), and
+the probes are a few fixed points; a flat floor or street can instead see
+the scene drawn again from the camera mirrored in it.
+
+**The plane.** One flat plane a map, from a list in `src/gfx_d3d/r_scene.cpp`
+(`s_modernPlanarMaps`: a map name and a point above the floor). At the first
+frame of the map the point is traced 512 units down through the world; the
+height met makes the plane `z = height`, logged once as `modern: planar
+reflections on mp_strike at height H`. Only `mp_strike`'s main street is
+listed now (picked from the reflections' PC run 4).
+
+**The view.** After each main view (`R_RenderScene` from the game), while
+the camera is above the plane, `R_ModernPlanarScene` draws the scene again:
+
+* from the camera mirrored in the plane, its left axis negated so the view
+  stays right-handed (the image shows the scene as a puddle on the plane
+  would: upside down; a reader finds a point of the plane in it through the
+  view's own matrices);
+* at half the main view's size, with no jitter;
+* with an oblique near plane (Lengyel 2005) one unit above the reflecting
+  plane, scaled so the far plane stays outside the view, so nothing below
+  the plane is drawn;
+* with what is visible found from the real camera's position (the mirrored
+  one is often under the floor, inside no cell) through the mirrored
+  frustum;
+* with the main view's sun and spot shadows, taken over rather than drawn
+  again;
+* without the view model, effects, post effects, sound, physics or marks
+  updated, and without 2D.
+
+Both views are drawn by the back end after the front end has made them, so
+the planar view keeps what the main view left for it: its world surfaces'
+indices go after the main view's in the frame's pre-tessellated index buffer
+(`R_BeginPreTess`, no discard), not over them.
+
+The back end draws its lit and decal passes into an image of its own
+(RGBA16F, linear light) with its own depth, made at the first planar view
+and again when the size changes. The game's pass for the view is
+`RB_ModernPlanarDrawCommands` in `src/gfx_d3d/rb_draw3d.cpp`; the
+`planarWanted`, `planarBegin` and `planarDone` hooks (`r_rhi_modern.h`) move
+the draws there and back.
+
+| Setting | Default | Switch |
+| --- | --- | --- |
+| Planar view | off | `KISAK_VK_MODERN_PLANAR=1` draws it (with linear light only) |
+| Debug view | off | `KISAK_VK_MODERN_DEBUG=planar` draws it too, and puts the last planar image, as it is (upside down, no exposure), over the top left of the finished scene; `KISAK_VK_MODERN_PLANAR=0` turns both off |
+
+The statistics line: `vulkan d3d9: modern: N planar reflection views (WxH)`.
+
+**Cost.** Not measured yet: the view draws the world's and the models' lit
+surfaces a second time at a quarter of the pixels, and the visibility walk
+runs again on the CPU.
+
+**Checks:** the D3D9 check's `modern_planar` scene draws a grey scene in
+linear light, then a 64x64 planar view in which it sets the back buffer and
+its depth as the targets (as the game does) and draws a red quad. The back
+buffer must stay grey (the draw went to the planar image), and with
+`KISAK_VK_MODERN_DEBUG=planar` the top left shows the red. With
+`KISAK_VK_MODERN_LINEAR=0` or without either switch nothing is drawn.
+`test_vulkan_d3d9_front.py` runs it with no switch, with
+`KISAK_VK_MODERN_PLANAR=1`, with `KISAK_VK_MODERN_DEBUG=planar` (beside
+`KISAK_VK_MODERN_PLANAR=0` and `KISAK_VK_MODERN_LINEAR=0` or not), and checks
+that a full run draws no planar view unless asked.
+
+**Next.** The lit shaders reading the planar image on the plane (a second
+piece), then water (`mp_bog`, whose water has its own shader).
+
 ## Next
 
 What this guide still lists as missing is in [What it does not do

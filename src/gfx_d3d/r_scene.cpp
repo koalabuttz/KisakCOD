@@ -29,6 +29,7 @@
 #include "rb_postfx.h"
 #include "r_meshdata.h"
 #include "r_modern_motion.h"
+#include <qcommon/qcommon.h>
 #include <qcommon/com_bsp.h>
 #include "r_cinematic.h"
 #include <win32/win_net.h>
@@ -783,6 +784,10 @@ void R_AddDObjSurfacesCamera(
 
     modelSurf = (char *)sceneEnt->cull.skinnedSurfs.firstSurf;
     if (!modelSurf)
+        return;
+    // A planar reflection view leaves the view model (depth hack) out.
+    if (R_ModernPlanarViewActive() && sceneEnt->gfxEntIndex
+        && (frontEndDataOut->gfxEnts[sceneEnt->gfxEntIndex].renderFxFlags & 2) != 0)
         return;
     totalTriCount = 0;
     totalVertCount = 0;
@@ -1973,6 +1978,207 @@ bool R_ModernDrewGlow(const GfxViewInfo *viewInfo)
     return viewInfo && s_modernGlowView == viewInfo && R_ModernHooks();
 }
 
+// ---- Planar reflections (the Modern path, GfxModernHooks::planarWanted) ----------------
+
+namespace
+{
+// A point a little above each map's reflecting plane: the plane is the
+// horizontal one through the first solid surface a trace straight down from
+// it meets.
+struct ModernPlanarMap
+{
+    const char *name; // the map's BSP name, "maps/mp/<name>.d3dbsp"
+    float point[3];
+};
+const ModernPlanarMap s_modernPlanarMaps[] = {
+    // The main street, from PC reflections run 4's view.
+    {"mp_strike", {2926.0f, -450.0f, 76.0f}},
+};
+} // namespace
+
+// Inside the planar view's R_RenderScene.
+static bool s_modernPlanarActive;
+// The real camera's origin: the planar view's cells are found from it.
+static float s_modernPlanarDpvsOrigin[3];
+// The world the plane below was found for, and the plane (n.p + d >= 0 is
+// above it); no plane when s_modernPlanarHavePlane is false.
+static const GfxWorld *s_modernPlanarWorld;
+static bool s_modernPlanarHavePlane;
+static float s_modernPlanarPlane[4];
+// The main view the planar one follows, and whether it drew sun shadows.
+static int s_modernPlanarMainIndex;
+static bool s_modernPlanarMainSunShadow;
+// The mirrored refdef (it is 16 KB).
+static refdef_s s_modernPlanarRefdef;
+// Geometry within this many units above the plane is cut too, so the
+// reflecting surface itself is not in its own reflection.
+static const float kModernPlanarCut = 1.0f;
+
+bool R_ModernPlanarViewActive() { return s_modernPlanarActive; }
+
+static void R_ModernPlanarFindPlane()
+{
+    s_modernPlanarWorld = rgp.world;
+    s_modernPlanarHavePlane = false;
+    if (!rgp.world || !rgp.world->name)
+        return;
+    const char *slash = strrchr(rgp.world->name, '/');
+    const char *name = slash ? slash + 1 : rgp.world->name;
+    for (const ModernPlanarMap &map : s_modernPlanarMaps)
+    {
+        const size_t length = strlen(map.name);
+        if (strncmp(name, map.name, length) != 0 || (name[length] != '.' && name[length] != 0))
+            continue;
+        float end[3] = {map.point[0], map.point[1], map.point[2] - 512.0f};
+        trace_t results;
+        memset(&results, 0, sizeof(results));
+        results.fraction = 1.0f;
+        CM_BoxTrace(&results, map.point, end, vec3_origin, vec3_origin, 0, 8193);
+        if (results.fraction >= 1.0f)
+        {
+            Com_Printf(CON_CHANNEL_GFX, "modern: no planar reflections on %s: nothing under its point\n", map.name);
+            return;
+        }
+        s_modernPlanarPlane[0] = 0.0f;
+        s_modernPlanarPlane[1] = 0.0f;
+        s_modernPlanarPlane[2] = 1.0f;
+        s_modernPlanarPlane[3] = -(map.point[2] + (end[2] - map.point[2]) * results.fraction);
+        s_modernPlanarHavePlane = true;
+        Com_Printf(CON_CHANNEL_GFX, "modern: planar reflections on %s at height %.1f\n", map.name,
+                   -s_modernPlanarPlane[3]);
+        return;
+    }
+}
+
+// The projection's near plane becomes the reflection plane (raised by
+// kModernPlanarCut), so nothing under it is drawn (Lengyel's oblique near
+// plane, scaled so that its far plane stays outside the frustum).
+static void R_ModernPlanarClip(GfxViewParms *viewParms)
+{
+    const float *n = s_modernPlanarPlane;
+    const float d = s_modernPlanarPlane[3] - kModernPlanarCut;
+    // View space: x is -left, y is up, z is forward (MatrixForViewer).
+    const float c[4] = {
+        -(n[0] * viewParms->axis[1][0] + n[1] * viewParms->axis[1][1] + n[2] * viewParms->axis[1][2]),
+        n[0] * viewParms->axis[2][0] + n[1] * viewParms->axis[2][1] + n[2] * viewParms->axis[2][2],
+        n[0] * viewParms->axis[0][0] + n[1] * viewParms->axis[0][1] + n[2] * viewParms->axis[0][2],
+        n[0] * viewParms->origin[0] + n[1] * viewParms->origin[1] + n[2] * viewParms->origin[2] + d,
+    };
+    float (*m)[4] = viewParms->projectionMatrix.m;
+    // Within the frustum |x| <= tanX z and |y| <= tanY z, so with this scale
+    // the new depth s (c . p) stays at most z (c[3] < 0 below the plane).
+    const float tanX = MAX_11BIT_FLT / m[0][0];
+    const float tanY = MAX_11BIT_FLT / m[1][1];
+    const float scale = 1.0f / (fabsf(c[0]) * tanX + fabsf(c[1]) * tanY + fabsf(c[2]) + 1e-6f);
+    m[0][2] = c[0] * scale;
+    m[1][2] = c[1] * scale;
+    m[2][2] = c[2] * scale;
+    m[3][2] = c[3] * scale;
+    R_SetupViewProjectionMatrices(viewParms);
+}
+
+// The planar view draws with the main view's shadow maps (drawn before it).
+static void R_ModernPlanarTakeShadows(GfxViewInfo *viewInfo)
+{
+    const GfxViewInfo *main = &frontEndDataOut->viewInfo[s_modernPlanarMainIndex];
+    memcpy(&viewInfo->sunShadow, &main->sunShadow, sizeof(viewInfo->sunShadow));
+    viewInfo->spotShadowCount = main->spotShadowCount;
+    memcpy(viewInfo->spotShadows, main->spotShadows, sizeof(viewInfo->spotShadows));
+    if (s_modernPlanarMainSunShadow)
+        R_SetSunShadowConstants(&viewInfo->input, &viewInfo->sunShadow.sunProj);
+}
+
+void R_ModernPlanarScene(const refdef_s *refdef)
+{
+    const GfxModernHooks *hooks = R_ModernHooks();
+    if (!hooks || !hooks->planarWanted || !hooks->planarBegin || !rgp.world || !rg.registered
+        || r_norefresh->current.enabled || r_lockPvs->current.enabled
+        || gfxDrawMethod.drawScene != GFX_DRAW_SCENE_STANDARD || !frontEndDataOut->viewInfoCount
+        || rg.viewInfoCount >= GFX_MAX_CLIENT_VIEWS)
+        return;
+    if (!hooks->planarWanted(hooks->user, dx.device))
+        return;
+    if (s_modernPlanarWorld != rgp.world)
+        R_ModernPlanarFindPlane();
+    if (!s_modernPlanarHavePlane)
+        return;
+    const float *n = s_modernPlanarPlane;
+    const float *o = refdef->vieworg;
+    const float above = n[0] * o[0] + n[1] * o[1] + n[2] * o[2] + n[3];
+    if (above <= kModernPlanarCut)
+        return;
+
+    refdef_s &mirror = s_modernPlanarRefdef;
+    memcpy(&mirror, refdef, sizeof(mirror));
+    mirror.x = 0;
+    mirror.y = 0;
+    mirror.width = refdef->width / 2 > 0 ? refdef->width / 2 : 1;
+    mirror.height = refdef->height / 2 > 0 ? refdef->height / 2 : 1;
+    mirror.useScissorViewport = false;
+    mirror.blurRadius = 0.0f;
+    for (int i = 0; i < 3; ++i)
+        mirror.vieworg[i] = o[i] - 2.0f * above * n[i];
+    for (int axis = 0; axis < 3; ++axis)
+    {
+        const float *a = refdef->viewaxis[axis];
+        const float along = n[0] * a[0] + n[1] * a[1] + n[2] * a[2];
+        // The left axis is negated too, so the basis stays right-handed (no
+        // change of winding). A reader finds a point on the plane in the
+        // image through this view's own matrices (GfxModernPlanar).
+        const float sign = axis == 1 ? -1.0f : 1.0f;
+        for (int i = 0; i < 3; ++i)
+            mirror.viewaxis[axis][i] = sign * (a[i] - 2.0f * along * n[i]);
+    }
+
+    s_modernPlanarMainIndex = frontEndDataOut->viewInfoIndex;
+    s_modernPlanarMainSunShadow = rg.drawSunShadow;
+    s_modernPlanarDpvsOrigin[0] = o[0];
+    s_modernPlanarDpvsOrigin[1] = o[1];
+    s_modernPlanarDpvsOrigin[2] = o[2];
+    const float viewOrg[3] = {rg.viewOrg[0], rg.viewOrg[1], rg.viewOrg[2]};
+    const float viewDir[3] = {rg.viewDir[0], rg.viewDir[1], rg.viewDir[2]};
+    s_modernPlanarActive = true;
+    R_RenderScene(&mirror);
+    s_modernPlanarActive = false;
+    // The main view stays the one drawn (RB_Draw3D) and the frame's camera.
+    frontEndDataOut->viewInfoIndex = s_modernPlanarMainIndex;
+    rg.drawSunShadow = s_modernPlanarMainSunShadow;
+    for (int i = 0; i < 3; ++i)
+    {
+        rg.viewOrg[i] = viewOrg[i];
+        rg.viewDir[i] = viewDir[i];
+    }
+}
+
+bool R_ModernPlanarBegin(const GfxViewInfo *viewInfo, GfxModernPlanar *planar)
+{
+    const GfxModernHooks *hooks = R_ModernHooks();
+    if (!hooks || !hooks->planarBegin || !hooks->planarDone)
+        return false;
+    *planar = GfxModernPlanar{};
+    const GfxViewParms &parms = viewInfo->viewParms;
+    memcpy(planar->view, parms.viewMatrix.m, sizeof(planar->view));
+    memcpy(planar->projection, parms.projectionMatrix.m, sizeof(planar->projection));
+    planar->width = viewInfo->sceneViewport.width;
+    planar->height = viewInfo->sceneViewport.height;
+    memcpy(planar->plane, s_modernPlanarPlane, sizeof(planar->plane));
+    // Its lit passes tell the back end their colours as the main scene's do.
+    R_ModernEndLitPasses();
+    s_modernLitPasses = hooks->litInputs != nullptr;
+    if (hooks->planarBegin(hooks->user, dx.device, planar))
+        return true;
+    R_ModernEndLitPasses();
+    return false;
+}
+
+void R_ModernPlanarDone(const GfxModernPlanar *planar)
+{
+    R_ModernEndLitPasses();
+    const GfxModernHooks *hooks = R_ModernHooks();
+    if (hooks && hooks->planarDone)
+        hooks->planarDone(hooks->user, dx.device, planar);
+}
+
 void R_SetupProjection(float tanHalfFovX, float tanHalfFovY, GfxViewParms *viewParms)
 {
     InfinitePerspectiveMatrix(viewParms->projectionMatrix.m, tanHalfFovX, tanHalfFovY, viewParms->zNear);
@@ -2139,13 +2345,27 @@ void R_RenderScene(const refdef_s *refdef)
         rg.viewDir[2] = refdef->viewaxis[0][2];
         viewParmsDraw = R_AllocViewParms();
         R_SetViewParmsForScene(refdef, viewParmsDraw);
-        R_ModernJitterScene(refdef, viewParmsDraw);
+        if (s_modernPlanarActive)
+            R_ModernPlanarClip(viewParmsDraw);
+        else
+            R_ModernJitterScene(refdef, viewParmsDraw);
         R_SetSceneParms(refdef, &sceneParms);
         R_CorrectLodScale(refdef);
         iassert( scene.def.time == refdef->time );
         iassert( rg.lodParms.valid );
         if (r_lockPvs->current.enabled)
             dpvs = &lockPvsViewParms;
+        else if (s_modernPlanarActive)
+        {
+            // The mirrored camera is under the floor: its cells and portals
+            // are found from the real camera's place, with its own frustum.
+            static GfxViewParms planarDpvs;
+            memcpy(&planarDpvs, viewParmsDraw, sizeof(planarDpvs));
+            planarDpvs.origin[0] = s_modernPlanarDpvsOrigin[0];
+            planarDpvs.origin[1] = s_modernPlanarDpvsOrigin[1];
+            planarDpvs.origin[2] = s_modernPlanarDpvsOrigin[2];
+            dpvs = &planarDpvs;
+        }
         else
             dpvs = viewParmsDraw;
         R_GenerateSortedDrawSurfs(&sceneParms, dpvs, viewParmsDraw);
@@ -2214,6 +2434,12 @@ void R_GenerateSortedDrawSurfs(
     bcassert(viewInfoIndex, GFX_MAX_CLIENT_VIEWS);
     frontEndDataOut->viewInfoIndex = viewInfoIndex;
     viewInfo = &frontEndDataOut->viewInfo[viewInfoIndex];
+    // A planar reflection view (R_ModernPlanarScene) reuses the main view's
+    // shadows and draws no 2D.
+    const bool planar = s_modernPlanarActive;
+    R_SetModernPlanarView(viewInfo, planar);
+    if (planar)
+        viewInfo->cmds = nullptr;
     dynamicShadowType = R_DynamicShadowType();
     rg.sunShadowFull = r_rendererInUse->current.integer == 1;
     if (rg.sunShadowFull)
@@ -2267,6 +2493,9 @@ void R_GenerateSortedDrawSurfs(
     viewInfo->needsFloatZ = 0;
     Com_Memcpy((char *)viewInfo->shadowableLights, (char *)sceneParms->primaryLights, rgp.world->primaryLightCount * sizeof(GfxLight));
     viewInfo->shadowableLightCount = rgp.world->primaryLightCount;
+    uint32_t keptShadowableLightIsUsed[8];
+    if (planar)
+        memcpy(keptShadowableLightIsUsed, scene.shadowableLightIsUsed, sizeof(keptShadowableLightIsUsed));
     scene.shadowableLightIsUsed[0] = 0;
     scene.shadowableLightIsUsed[1] = 0;
     scene.shadowableLightIsUsed[2] = 0;
@@ -2309,13 +2538,21 @@ void R_GenerateSortedDrawSurfs(
         if (gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD)
         {
             R_AddAllBspDrawSurfacesCamera();
+            if (planar)
+            {
+                // The main view's shadow maps, drawn before this view.
+                R_ModernPlanarTakeShadows(viewInfo);
+            }
+            else
+            {
             if (!sm_sunEnable->current.enabled && rgp.world->sunPrimaryLightIndex)
                 Com_BitClearAssert(scene.shadowableLightIsUsed, rgp.world->sunPrimaryLightIndex, 128);
             Com_Memset(frontEndDataOut->shadowableLightHasShadowMap, 0, 32);
             if (R_GetAllowShadowMaps())
                 R_ChooseShadowedLights(viewInfo);
             R_UpdateDrawMethod(frontEndDataOut, viewInfo);
-            if (dynamicShadowType == SHADOW_MAP && Com_BitCheckAssert(frontEndDataOut->shadowableLightHasShadowMap, rgp.world->sunPrimaryLightIndex, 32))
+            }
+            if (!planar && dynamicShadowType == SHADOW_MAP && Com_BitCheckAssert(frontEndDataOut->shadowableLightHasShadowMap, rgp.world->sunPrimaryLightIndex, 32))
             {
                 rg.drawSunShadow = 1;
                 R_SetupSunShadowMaps(viewParmsDpvs, &viewInfo->sunShadow);
@@ -2348,7 +2585,7 @@ void R_GenerateSortedDrawSurfs(
         R_DrawAllDynEnt(viewInfo);
     }
     
-    if (gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD
+    if (!planar && gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD
         && dynamicShadowType == SHADOW_MAP
         && Com_BitCheckAssert(frontEndDataOut->shadowableLightHasShadowMap, rgp.world->sunPrimaryLightIndex, 32))
     {
@@ -2384,7 +2621,7 @@ void R_GenerateSortedDrawSurfs(
     R_GetLightSurfs(visibleLightCount, visibleLights);
     R_GetPointLightShadowSurfs(viewInfo, scene.visLightShadow, visibleLights);
     viewInfo->shadowCookieList.cookieCount = 0;
-    if (gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD)
+    if (!planar && gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD)
     {
         if (dynamicShadowType == SHADOW_MAP)
         {
@@ -2435,12 +2672,16 @@ void R_GenerateSortedDrawSurfs(
         pointLightCount = R_EmitPointLightPartitionSurfs(viewInfo, visibleLights, visibleLightCount, viewParmsDpvs->origin);
     }
     viewInfo->pointLightCount = pointLightCount;
-    if (!viewInfo->localClientNum)
-        CL_UpdateSound();
-    FX_RunPhysics(viewInfo->localClientNum);
-    DynEntCl_ProcessEntities(viewInfo->localClientNum);
+    // Once a frame: the main view did these.
+    if (!planar)
+    {
+        if (!viewInfo->localClientNum)
+            CL_UpdateSound();
+        FX_RunPhysics(viewInfo->localClientNum);
+        DynEntCl_ProcessEntities(viewInfo->localClientNum);
+    }
     R_WaitWorkerCmdsOfType(WRKCMD_GENERATE_MARK_VERTS);
-    if (!dx.deviceLost && fx_marks->current.enabled)
+    if (!planar && !dx.deviceLost && fx_marks->current.enabled)
     {
         if (fx_marks_smodels->current.enabled)
             FX_GenerateMarkVertsForStaticModels(
@@ -2492,6 +2733,8 @@ void R_GenerateSortedDrawSurfs(
         DoesDrawSurfListInfoNeedFloatz = R_DoesDrawSurfListInfoNeedFloatz(emissiveInfo);
         viewInfo->needsFloatZ = DoesDrawSurfListInfoNeedFloatz;
     }
+    if (planar)
+        memcpy(scene.shadowableLightIsUsed, keptShadowableLightIsUsed, sizeof(keptShadowableLightIsUsed));
     R_ShowCull();
 }
 

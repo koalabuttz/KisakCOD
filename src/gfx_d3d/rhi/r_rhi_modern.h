@@ -33,6 +33,18 @@ struct GfxModernScene
     bool glowDrawn;
 };
 
+// A planar reflection view (r_modern_planar): the scene seen in a mirror
+// laid on one plane of the world, drawn after the main view into an image of
+// its own that the next frame's lit surfaces on that plane read.
+struct GfxModernPlanar
+{
+    float view[4][4];       // the mirrored camera's (its left axis negated, so
+                            // its basis stays right-handed)
+    float projection[4][4]; // its near plane is the reflection plane
+    int width, height;      // the view's size; it is drawn at 0, 0
+    float plane[4];         // the world plane: n.p + d >= 0 is kept
+};
+
 // The colours a lit surface's pixel shader reads (world surfaces lit by
 // lightmaps, models lit by the lighting volume, dynamic lights). With linear
 // light the back end takes them from display values to linear light, so the
@@ -138,6 +150,16 @@ struct GfxModernHooks
     // time it is): the back end may make the cube's levels below the first
     // again from level 0 (the same levels each time). May be null.
     void (*reflectionProbe)(void *user, IDirect3DDevice9 *device, IDirect3DCubeTexture9 *probe);
+    // Whether the back end wants a planar reflection view this frame (asked
+    // once a frame by the renderer, before it builds the view). May be null
+    // (no).
+    bool (*planarWanted)(void *user, IDirect3DDevice9 *device);
+    // The planar view's lit and decal surfaces come next, after the main
+    // view's scene is done: render target 0 and the depth surface go to the
+    // view's own image (cleared) until planarDone. Returns false to refuse
+    // (the renderer then draws nothing for the view).
+    bool (*planarBegin)(void *user, IDirect3DDevice9 *device, const GfxModernPlanar *planar);
+    void (*planarDone)(void *user, IDirect3DDevice9 *device, const GfxModernPlanar *planar);
 };
 
 // Null removes them. Called while no frame is being built (as the renderer

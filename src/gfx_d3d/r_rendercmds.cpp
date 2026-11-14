@@ -43,6 +43,22 @@ struct GfxDebugFrameGlob // sizeof=0x11E880
 
 GfxBackEndData s_backEndData[2];
 GfxViewInfo g_viewInfo[2][4];
+// Which of them are planar reflection views (R_ModernPlanarScene), set as
+// each view is made.
+static bool g_viewInfoModernPlanar[2][4];
+
+bool R_IsModernPlanarView(const GfxViewInfo *viewInfo)
+{
+    const ptrdiff_t index = viewInfo - &g_viewInfo[0][0];
+    return index >= 0 && index < 8 && g_viewInfoModernPlanar[index / 4][index % 4];
+}
+
+void R_SetModernPlanarView(const GfxViewInfo *viewInfo, bool planar)
+{
+    const ptrdiff_t index = viewInfo - &g_viewInfo[0][0];
+    if (index >= 0 && index < 8)
+        g_viewInfoModernPlanar[index / 4][index % 4] = planar;
+}
 GfxCmdArray g_frontEndCmds[2];
 GfxDebugFrameGlob s_debugFrameGlob;
 GfxCmdArray g_debugFrontEndCmds;

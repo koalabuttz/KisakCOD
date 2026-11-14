@@ -110,6 +110,28 @@ void RB_Draw3DInternal(const GfxViewInfo *viewInfo)
     }
 }
 
+// A planar reflection view (R_ModernPlanarScene): its lit and decal surfaces
+// only, into the Modern path's planar image, with the main view's shadow maps
+// (drawn just before). No sun, lights, effects, post effects or 2D.
+void RB_ModernPlanarDrawCommands(const GfxViewInfo *viewInfo)
+{
+    GfxModernPlanar planar;
+    if (!R_ModernPlanarBegin(viewInfo, &planar))
+        return;
+    const GfxBackEndData *data = backEndData;
+    GfxCmdBuf cmdBuf;
+    R_InitCmdBufSourceState(&gfxCmdBufSourceState, &viewInfo->input, 0);
+    memset(gfxCmdBufState.vertexShaderConstState, 0, sizeof(gfxCmdBufState.vertexShaderConstState));
+    memset(gfxCmdBufState.pixelShaderConstState, 0, sizeof(gfxCmdBufState.pixelShaderConstState));
+    R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_SCENE);
+    R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_SCENE);
+    R_InitContext(data, &cmdBuf);
+    R_DrawLit(viewInfo, &cmdBuf, 0);
+    R_InitContext(data, &cmdBuf);
+    R_DrawDecal(viewInfo, &cmdBuf, 0);
+    R_ModernPlanarDone(&planar);
+}
+
 void RB_FullbrightDrawCommands(const GfxViewInfo *viewInfo)
 {
     const GfxBackEndData *data; // [esp+10h] [ebp-8h]
@@ -753,6 +775,8 @@ void RB_DebugShaderDrawCommandsCommon()
     for (viewInfoIndex = 0; viewInfoIndex < data->viewInfoCount; ++viewInfoIndex)
     {
         viewInfo = &data->viewInfo[viewInfoIndex];
+        if (R_IsModernPlanarView(viewInfo))
+            continue;
         viewInfo->input.data = data;
         R_InitCmdBufSourceState(gfxCmdBufContext.source, &gfxCmdBufInput, 0);
         gfxCmdBufContext.source->input.data = data;
@@ -782,6 +806,9 @@ void RB_StandardDrawCommandsCommon()
         for (viewInfoIndex = 0; viewInfoIndex < data->viewInfoCount; ++viewInfoIndex)
         {
             viewInfo = &data->viewInfo[viewInfoIndex];
+            // A planar reflection view was drawn into its own image (RB_Draw3D).
+            if (R_IsModernPlanarView(viewInfo))
+                continue;
             viewInfo->input.data = data;
             R_InitCmdBufSourceState(&gfxCmdBufSourceState, &viewInfo->input, 0);
             memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));

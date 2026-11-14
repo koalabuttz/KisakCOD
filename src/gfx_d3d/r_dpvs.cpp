@@ -16,6 +16,7 @@
 #include <cgame/cg_local.h>
 #include "rb_light.h"
 #include "r_sunshadow.h" // SCENE_VIEW_CAMERA
+#include "r_scene.h"
 #include <universal/profile.h>
 
 #ifdef KISAK_MP
@@ -273,6 +274,9 @@ void R_AddAllSceneEntSurfacesCamera(const GfxViewInfo *viewInfo)
                         gfxEnt = &frontEndDataOut->gfxEnts[gfxEntIndex];
                         isShadowReceiver = sc_enable->current.enabled && (gfxEnt->renderFxFlags & 0x100) != 0;
                         depthHack = (gfxEnt->renderFxFlags & 2) != 0;
+                        // A planar reflection view leaves the view model out.
+                        if (depthHack && R_ModernPlanarViewActive())
+                            continue;
                     }
                     else
                     {

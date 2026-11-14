@@ -512,6 +512,8 @@ void CL_RenderScene(const refdef_s *fd)
     cls.debugRenderPos[1] = fd->vieworg[1];
     cls.debugRenderPos[2] = fd->vieworg[2];
     R_RenderScene(fd);
+    // The Modern path's planar reflection view, when it wants one.
+    R_ModernPlanarScene(fd);
 }
 
 

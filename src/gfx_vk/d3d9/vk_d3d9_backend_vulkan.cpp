@@ -253,6 +253,22 @@ struct Backend
     // KISAK_VK_MODERN_DEBUG=reflections: the reflections debug view over each
     // finished scene that has them (on the display image).
     bool debugReflections = false;
+    // Planar reflections (docs/vulkan-modern.md "Planar reflections"): wanted
+    // with KISAK_VK_MODERN_PLANAR=1 or KISAK_VK_MODERN_DEBUG=planar, in linear
+    // light only. The renderer draws the planar view into planarColor (linear
+    // light) with its own depth after each main view; planarReady once one
+    // was drawn, planarView the last. KISAK_VK_MODERN_DEBUG=planar draws the
+    // planar image (as it is, upside down) over the top left of
+    // each finished scene.
+    bool planarWanted = false;
+    bool planarFailed = false;
+    bool debugPlanar = false;
+    lg::Texture *planarColor = nullptr;
+    lg::Surface *planarColorSurface = nullptr;
+    lg::Surface *planarDepth = nullptr;
+    bool planarReady = false;
+    ModernPlanarView planarView{};
+    uint64_t planarViews = 0, planarViewsBase = 0;
     bool debugFailed = false;
     modern::DebugView *debug = nullptr;
 };
@@ -493,6 +509,9 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     backend->probesWanted = !EnvIsZero("KISAK_VK_MODERN_PROBES")
         && (EnvIs("KISAK_VK_MODERN_PROBES", "1") || backend->linearWanted);
     backend->debugReflections = EnvIs("KISAK_VK_MODERN_DEBUG", "reflections");
+    backend->debugPlanar = EnvIs("KISAK_VK_MODERN_DEBUG", "planar");
+    backend->planarWanted = backend->linearWanted && !EnvIsZero("KISAK_VK_MODERN_PLANAR")
+                            && (EnvIs("KISAK_VK_MODERN_PLANAR", "1") || backend->debugPlanar);
     backend->reflectionsWanted = !EnvIsZero("KISAK_VK_MODERN_SSR")
         && (EnvIs("KISAK_VK_MODERN_SSR", "1") || backend->debugReflections
             || (backend->linearWanted && backend->litWanted && backend->shadersWanted));
@@ -817,6 +836,11 @@ void BackendLogStats(Backend *backend, bool reset)
                    "are), %.1f ms each",
                 backend->probesFiltered, backend->probesLeft,
                 backend->probesFiltered ? backend->probesMs / double(backend->probesFiltered) : 0.0);
+    // Planar reflections: the views drawn into the planar image, and its size.
+    if (backend->planarViews > backend->planarViewsBase)
+        HostLog(h, "vulkan d3d9: modern: %llu planar reflection views (%ux%u)",
+                static_cast<unsigned long long>(backend->planarViews - backend->planarViewsBase),
+                backend->planarView.width, backend->planarView.height);
     // Bloom: the scenes it ran for in place of the glow, the passes of each,
     // and their GPU time per scene.
     if (backend->bloom)
@@ -844,6 +868,7 @@ void BackendLogStats(Backend *backend, bool reset)
         backend->reflectionsBase = modern::Stats(backend->reflections);
         backend->keptBase = modern::Stats(backend->kept);
         backend->linearScenesBase = backend->linearScenes;
+        backend->planarViewsBase = backend->planarViews;
         modern::ResetStats(backend->exposure);
         if (backend->exposure)
             backend->exposureMsBase = PassTimingsFor(backend->core, "modern exposure").totalMs;
@@ -927,6 +952,13 @@ void CloseBackend(Backend *backend)
         modern::DestroyTonemap(backend->core, backend->tonemap);
         backend->tonemap = nullptr;
     }
+    if (backend->legacy && backend->planarColor)
+        lg::DestroyTexture(backend->legacy, backend->planarColor);
+    if (backend->legacy && backend->planarDepth)
+        lg::DestroySurface(backend->legacy, backend->planarDepth);
+    backend->planarColor = nullptr;
+    backend->planarColorSurface = nullptr;
+    backend->planarDepth = nullptr;
     if (backend->legacy && backend->linearScene)
     {
         lg::DestroyTexture(backend->legacy, backend->linearScene);
@@ -1657,6 +1689,74 @@ bool BackendModernReflectionProbe(Backend *backend, lg::Device *legacy, lg::Text
     return true;
 }
 
+bool BackendModernPlanarWanted(Backend *backend)
+{
+    return backend && backend->legacy && backend->planarWanted && !backend->planarFailed && !backend->linearFailed;
+}
+
+bool BackendModernPlanarBegin(Backend *backend, const ModernPlanarView &view, lg::Surface *&color, lg::Surface *&depth)
+{
+    color = nullptr;
+    depth = nullptr;
+    if (!BackendModernPlanarWanted(backend) || !view.width || !view.height)
+        return false;
+    if (backend->planarColor)
+    {
+        const lg::TextureDesc &have = lg::Describe(backend->planarColor);
+        if (have.width != view.width || have.height != view.height)
+        {
+            lg::DestroyTexture(backend->legacy, backend->planarColor);
+            lg::DestroySurface(backend->legacy, backend->planarDepth);
+            backend->planarColor = nullptr;
+            backend->planarColorSurface = nullptr;
+            backend->planarDepth = nullptr;
+            backend->planarReady = false;
+        }
+    }
+    if (!backend->planarColor)
+    {
+        lg::TextureDesc desc;
+        desc.width = view.width;
+        desc.height = view.height;
+        desc.levels = 1;
+        desc.usage = lg::d3d::USAGE_RENDERTARGET;
+        desc.format = lg::d3d::FMT_A16B16G16R16F;
+        desc.pool = lg::d3d::POOL_DEFAULT;
+        desc.name = "modern planar reflection";
+        backend->planarColor = lg::CreateTexture(backend->legacy, desc);
+        backend->planarColorSurface =
+            backend->planarColor ? lg::GetSurfaceLevel(backend->legacy, backend->planarColor, 0, 0) : nullptr;
+        backend->planarDepth = backend->planarColorSurface
+                                   ? lg::CreateDepthStencil(backend->legacy, view.width, view.height,
+                                                            lg::d3d::FMT_D24S8, "modern planar reflection depth")
+                                   : nullptr;
+        if (!backend->planarDepth)
+        {
+            if (backend->planarColor)
+                lg::DestroyTexture(backend->legacy, backend->planarColor);
+            backend->planarColor = nullptr;
+            backend->planarColorSurface = nullptr;
+            backend->planarFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no planar reflections: cannot make the %ux%u images",
+                    view.width, view.height);
+            return false;
+        }
+        lg::SetLinearLight(backend->planarColor, true);
+    }
+    ++backend->planarViews;
+    color = backend->planarColorSurface;
+    depth = backend->planarDepth;
+    return true;
+}
+
+void BackendModernPlanarDone(Backend *backend, const ModernPlanarView &view)
+{
+    if (!backend || !backend->planarColor)
+        return;
+    backend->planarView = view;
+    backend->planarReady = true;
+}
+
 bool BackendModernWantsSceneDepth(Backend *backend)
 {
     return backend && backend->legacy && backend->core && backend->normalsWanted && !backend->normalsFailed;
@@ -1773,6 +1873,15 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
             DrawAoDebug(backend, ao, lg::SurfaceImage(display), area);
         if (backend->debugReflections)
             DrawReflectionsDebug(backend, reflections, lg::SurfaceImage(display), area);
+        if (backend->debugPlanar && backend->planarReady && backend->planarColorSurface)
+        {
+            // Last frame's planar view, as it is, over the scene's top left.
+            const VkRect2D planarArea = {area.offset,
+                                         {std::min(area.extent.width, backend->planarView.width),
+                                          std::min(area.extent.height, backend->planarView.height)}};
+            DrawReflectionsDebug(backend, lg::SurfaceImage(backend->planarColorSurface), lg::SurfaceImage(display),
+                                 planarArea);
+        }
         return passes;
     };
     if (backend->taaFailed)

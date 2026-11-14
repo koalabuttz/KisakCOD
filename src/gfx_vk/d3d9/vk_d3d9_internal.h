@@ -558,6 +558,10 @@ public:
     }
     void SetModernLitInputs(const ModernLitInputs *inputs);
     bool ModernReflectionProbe(lg::Texture *probe) { return BackendModernReflectionProbe(backend_, legacy_, probe); }
+    // Under FrontLock (vk_d3d9.h ModernPlanarBegin and ModernPlanarDone).
+    bool ModernPlanarWanted() { return BackendModernPlanarWanted(backend_); }
+    bool ModernPlanarBegin(const ModernPlanarView &view);
+    void ModernPlanarDone(const ModernPlanarView &view);
     const Host &host() const { return parent_->host(); }
     HRESULT Unsupported(const char *method);
     DeviceCounters counters() const;
@@ -759,6 +763,11 @@ private:
     // ModernSceneDone): the back end's image that stands in for the back
     // buffer as render target 0. The program still sees the back buffer.
     lg::Surface *linearScene_ = nullptr;
+    // While a planar reflection view is drawn (ModernPlanarBegin until
+    // ModernPlanarDone): the back end's planar image and depth, which stand
+    // in for whatever render target 0 and depth surface the program sets.
+    lg::Surface *planarScene_ = nullptr;
+    lg::Surface *planarDepth_ = nullptr;
     bool linearSceneUnfinished_ = false; // logged once (Present)
     std::unique_ptr<SwapChain> swapChain_;
     D3DGAMMARAMP gamma_{};
