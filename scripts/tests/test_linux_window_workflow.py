@@ -1561,5 +1561,31 @@ class CiCacheTests(unittest.TestCase):
         self.assertIn('--jobs "$(nproc)"', text)
 
 
+class DiagnosticUploadTests(unittest.TestCase):
+    """A hosted artifact outage (2026-11-11: "Failed to CreateArtifact ... Unexpected
+    token '<'") failed jobs whose checks had all passed. Uploads that run on
+    ``always()`` or ``failure()`` carry logs and build outputs a person fetches
+    later, so they must not fail the job. The .vpk and the macOS bundle uploads
+    stay strict: a later job or a machine run needs them."""
+
+    WORKFLOWS = ('build-kisakcod-linux.yaml', 'build-kisarcod-win.yaml', 'build-kisakcod-macos.yaml')
+
+    def test_uploads_that_run_after_failure_do_not_fail_the_job(self):
+        checked = 0
+        for name in self.WORKFLOWS:
+            workflow = yaml.load((ROOT / '.github/workflows' / name).read_text(encoding='utf-8'),
+                                 Loader=yaml.BaseLoader)
+            for job_name, job in workflow['jobs'].items():
+                for step in job.get('steps', []):
+                    if not step.get('uses', '').startswith('actions/upload-artifact@'):
+                        continue
+                    if step.get('if') not in ('always()', '${{ failure() }}'):
+                        continue
+                    checked += 1
+                    with self.subTest(workflow=name, job=job_name, step=step.get('name', step['with']['name'])):
+                        self.assertEqual(step.get('continue-on-error'), 'true')
+        self.assertGreater(checked, 12)
+
+
 if __name__ == '__main__':
     unittest.main()
