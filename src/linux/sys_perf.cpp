@@ -229,6 +229,14 @@ namespace
                 const uint32_t lock = (uint32_t)(probe - SYS_PERF_PROBE_LOCK);
                 return NumberedName("lock", LockName((int)lock), lock);
             }
+            if (probe >= SYS_PERF_PROBE_RENDER_TESS && probe < SYS_PERF_PROBE_RENDER_TESS + SYS_PERF_TESS_SLOTS)
+            {
+                static const char *const kTess[SYS_PERF_TESS_SLOTS] = {
+                    "triangles", "pretessellated triangles", "static models", "pretessellated static models",
+                    "cached static models", "skinned static models", "brush models", "rigid models",
+                    "rigid skinned models", "skinned models", "code meshes", "marks", "particle clouds"};
+                return std::string("render: tess ") + kTess[probe - SYS_PERF_PROBE_RENDER_TESS];
+            }
             if (probe >= SYS_PERF_PROBE_WAIT_WORKER_TYPE)
             {
                 const uint32_t type = (uint32_t)(probe - SYS_PERF_PROBE_WAIT_WORKER_TYPE);
@@ -264,6 +272,7 @@ namespace
             case SYS_PERF_PROBE_RENDER_SWAP_WAIT: return "render: wait before present";
             case SYS_PERF_PROBE_RENDER_PRESENT: return "render: present";
             case SYS_PERF_PROBE_RENDER_IDLE: return "render: waiting for a frame";
+            case SYS_PERF_PROBE_RENDER_MATERIAL: return "render: material setup";
             case SYS_PERF_PROBE_WAIT_RENDERER: return "wait for the render thread";
             case SYS_PERF_PROBE_WAIT_WORKERS_ALL: return "wait for workers: all";
             default: return "wait for workers: other";

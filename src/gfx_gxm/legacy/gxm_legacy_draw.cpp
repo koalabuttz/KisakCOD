@@ -3083,6 +3083,11 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             : GetFragmentProgram(device, *pixel, passThrough ? *standIn : *vertex, blended ? &blend : nullptr);
     if (!fragmentProgram)
         return;
+    gxm::FrameTime &frameTime = device.frameTime;
+    const auto part = [&frameTime](gxm::FrameTime::DrawPart done) {
+        if (frameTime.parting)
+            frameTime.Part(done, Micros());
+    };
     if (plain)
     {
         pipeline->key = pipelineKey;
@@ -3094,6 +3099,8 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         pipeline->output = uint32_t(d.color.output);
         pipeline->blended = blended;
     }
+
+    part(gxm::FrameTime::PartSetup);
 
     // Vertex data.
     const void *streamData[kMaxStreams];
@@ -3134,6 +3141,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         return;
     }
     ApplyFixedState(device, state);
+    part(gxm::FrameTime::PartState);
 
     // Run-diagnostic tests: a stand-in vertex program fed the game's
     // position stream.
@@ -3270,6 +3278,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         if ((reserved < 0 || set < 0) && d.uniformFailures++ < 5)
             Log(device, "diag: mimic constants not set: reserve 0x%08x, set 0x%08x", unsigned(reserved), unsigned(set));
     }
+    part(gxm::FrameTime::PartVertexConstants);
     void *pixelUniforms = nullptr;
     // Not kept for a program that takes a texture's depth as a uniform
     // (BindTextures writes those).
@@ -3294,6 +3303,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         d.fragmentUniformsVersion = device.psConstantsVersion;
         d.fragmentAlphaRef = alphaRef;
     }
+    part(gxm::FrameTime::PartFragmentConstants);
     if (d.census)
         LogCensus(device, *vs, *ps, *vertex, *pixel, blended, blend);
     Texture *const target = SceneTexture(d);
@@ -3304,6 +3314,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             target->unfilled = true;
         return;
     }
+    part(gxm::FrameTime::PartTextures);
     for (uint8_t i = 0; i < drawStreams; ++i)
         sceGxmSetVertexStream(context, i, streamData[i]);
     if (d.diagnosedDraws)
@@ -3323,6 +3334,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     ++d.drawn;
     if (target)
         target->unfilled = false;
+    part(gxm::FrameTime::PartSubmit);
 }
 
 void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const Rect *dstRect, bool linear)

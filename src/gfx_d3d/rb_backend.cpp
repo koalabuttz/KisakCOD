@@ -894,6 +894,8 @@ uint32_t R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArgs, GfxCm
     drawSurfCount = listArgs->info->drawSurfCount - listArgs->firstDrawSurfIndex;
     drawSurfList = &listArgs->info->drawSurfs[listArgs->firstDrawSurfIndex];
     drawSurf.packed = drawSurfList->packed;
+    const bool timed = Sys_PerfProbesOn();
+    uint64_t mark = timed ? Sys_PerfNowNs() : 0;
     if (!R_SetupMaterial(listArgs->context, &prepassContext, listArgs->info, drawSurf))
         return R_SkipDrawSurfListMaterial(drawSurfList, drawSurfCount);
     isPixelCostEnabled = pixelCostMode != GFX_PIXEL_COST_MODE_OFF;
@@ -922,7 +924,21 @@ uint32_t R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArgs, GfxCm
             passPrepassContext.state = prepassContext.state;
         }
         iassert(drawSurf.fields.surfType < ARRAY_COUNT(rb_tessTable));
+        if (timed)
+        {
+            // The material's and the pass's setup, then the surfaces' own.
+            const uint64_t now = Sys_PerfNowNs();
+            Sys_PerfProbeAdd(SYS_PERF_PROBE_RENDER_MATERIAL, now - mark);
+            mark = now;
+        }
         subListCount = rb_tessTable[drawSurf.fields.surfType](listArgs, passPrepassContext);
+        if (timed)
+        {
+            const uint64_t now = Sys_PerfNowNs();
+            if (drawSurf.fields.surfType < SYS_PERF_TESS_SLOTS)
+                Sys_PerfProbeAdd(SYS_PERF_PROBE_RENDER_TESS + drawSurf.fields.surfType, now - mark);
+            mark = now;
+        }
     }
     if (isPixelCostEnabled)
         R_PixelCost_EndSurface(listArgs->context);

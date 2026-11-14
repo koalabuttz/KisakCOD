@@ -105,6 +105,14 @@ perf: done
     one (worker commands run in it too). The 3D parts time the engine's
     own work and the back end's draws together; on the Vita the GXM back
     end's stats line gives its draws' share.
+  - `render: material setup` and `render: tess <surface type>`: inside the
+    3D parts, each run of surfaces of one material: the material's and its
+    pass's setup (`R_SetupMaterial`, `R_SetupPass`: state, textures,
+    constants), then the surface type's function from `rb_tessTable`
+    (static models, brush models, skinned models, triangles and so on) with
+    the draws it makes. The calls a frame count the runs. These take two
+    clock readings a run, which on the Vita (about 0.7 us each) adds about
+    a millisecond to a busy frame while a run is active.
   - `lock <name>`: any thread getting into that critical section. The time is
     the wait for the lock plus two readings of the clock (about 50 ns).
   Outside a run each of these costs one load and one branch.

@@ -219,6 +219,62 @@ void Restart()
 }
 } // namespace
 
+// Draws timed in parts: each part's time lands under its name, a draw that
+// skips a part or holds scene work is dropped, the line takes a clock read
+// off each part, and about one draw in kPartedDrawEvery is picked.
+void Parts()
+{
+    FrameTime time;
+    time.Restart(1000);
+        // A whole draw: 10, 20, ..., 60 us.
+    for (int draw = 0; draw < 2; ++draw)
+    {
+        uint64_t now = 5000;
+        time.BeginParts(now);
+        for (uint32_t p = 0; p < FrameTime::PartCount; ++p)
+            time.Part(FrameTime::DrawPart(p), now += 10 * (p + 1));
+        time.EndParts();
+    }
+    EXPECT(time.partedDraws == 2);
+    EXPECT(time.partMicros[FrameTime::PartSetup] == 20);
+    EXPECT(time.partMicros[FrameTime::PartSubmit] == 120);
+    EXPECT(!time.parting);
+    // One that returned after its textures: not counted.
+    time.BeginParts(9000);
+    time.Part(FrameTime::PartSetup, 9010);
+    time.Part(FrameTime::PartState, 9020);
+    time.Part(FrameTime::PartTextures, 9030); // out of order: ignored
+    time.EndParts();
+    EXPECT(time.partedDraws == 2);
+    // One whose scene started inside it: not counted.
+    {
+        uint64_t now = 10000;
+        time.BeginParts(now);
+        time.SceneStart(400);
+        for (uint32_t p = 0; p < FrameTime::PartCount; ++p)
+            time.Part(FrameTime::DrawPart(p), now += 5);
+        time.EndParts();
+    }
+    EXPECT(time.partedDraws == 2);
+    // A Part outside a parted draw changes nothing.
+    time.Part(FrameTime::PartSetup, 20000);
+    EXPECT(time.partMicros[FrameTime::PartSetup] == 20);
+    time.Shown(100);
+    const std::string line = time.Describe(3000000, 0.5);
+    EXPECT(line.find("A draw's parts, us (2 draws, a clock read taken off each): setup 9.50, fixed state 19.50, "
+                     "programs and vertex constants 29.50, fragment constants 39.50, textures 49.50, submit 59.50") !=
+           std::string::npos);
+    // The pick: about one in kPartedDrawEvery, kept over a restart.
+    FrameTime picks;
+    uint32_t picked = 0;
+    for (int i = 0; i < 32000; ++i)
+        picked += picks.PickPartedDraw() ? 1 : 0;
+    EXPECT(picked > 32000 / FrameTime::kPartedDrawEvery / 2 && picked < 32000 / FrameTime::kPartedDrawEvery * 2);
+    const uint32_t before = picks.partPick;
+    picks.Restart(1);
+    EXPECT(picks.partPick == before && picks.partedDraws == 0);
+}
+
 int main()
 {
     Empty();
@@ -227,6 +283,7 @@ int main()
     SlowDraws();
     Picks();
     Restart();
+    Parts();
     if (g_failures)
     {
         std::printf("%d failure(s)\n", g_failures);
