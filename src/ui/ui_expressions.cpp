@@ -7,6 +7,7 @@
 
 #include <win32/win_storage.h>
 #include <universal/profile.h>
+#include <linux/sys_perf.h>
 
 #ifdef KISAK_MP
 #include <cgame_mp/cg_local_mp.h>
@@ -16,6 +17,56 @@
 #include "ui.h"
 #include <game/g_local.h>
 #endif
+
+// ui_fastExpressions (registered with uiscript_debug; null in programs that do
+// not register it): the same results with less work per expression. It skips
+// clearing the 5 KB operand stack and reads bool, int and string dvars
+// directly instead of formatting them as text and parsing the text back.
+const dvar_t *ui_fastExpressions;
+
+static bool UI_FastExpressions()
+{
+    return ui_fastExpressions && ui_fastExpressions->current.enabled;
+}
+
+// dvarInt / dvarBool / dvarFloat read a dvar's text and parse it with atoi or
+// atof. For these types the value is known without the text: a bool's text is
+// "1" or "0", an int's is "%i" and a string's is its own text. Float, vector,
+// colour and enum dvars keep the text path, where "%g" rounding or an enum's
+// name decides the result.
+static bool UI_ReadDvarDirect(const char *dvarName, int *intValue, float *floatValue)
+{
+    const dvar_s *dvar = Dvar_FindVar(dvarName);
+    if (!dvar)
+    {
+        // Dvar_GetVariantString gives "" for a missing dvar.
+        *intValue = 0;
+        *floatValue = 0.0f;
+        return true;
+    }
+    switch (dvar->type)
+    {
+    case DVAR_TYPE_BOOL:
+        *intValue = dvar->current.enabled ? 1 : 0;
+        *floatValue = dvar->current.enabled ? 1.0f : 0.0f;
+        return true;
+    case DVAR_TYPE_INT:
+        *intValue = dvar->current.integer;
+        // atof of "%i" is the int exactly as a double, then rounded to float.
+        *floatValue = (float)(double)dvar->current.integer;
+        return true;
+    case DVAR_TYPE_STRING:
+        // The text path copies it with va(), which stops the game (ERR_DROP)
+        // at 1024 characters or more; leave such a string to that path.
+        if (!dvar->current.string || strlen(dvar->current.string) >= 1024)
+            return false;
+        *intValue = atoi(dvar->current.string);
+        *floatValue = (float)atof(dvar->current.string);
+        return true;
+    default:
+        return false;
+    }
+}
 
 int s_operatorPrecedence[81] =
 {
@@ -1049,6 +1100,8 @@ void GetDvarStringValue(Operand *source, Operand *result)
         {
             if (dvar->type == DVAR_TYPE_STRING)
                 VariantString = CopyDvarString(dvar->current.string);
+            else if (UI_FastExpressions())
+                VariantString = (char *)Dvar_ValueToString(dvar, dvar->current); // what Dvar_GetVariantString finds again
             else
                 VariantString = (char *)Dvar_GetVariantString(source->internals.string);
             result->internals.string = VariantString;
@@ -1095,8 +1148,17 @@ void GetDvarBoolValue(Operand *source, Operand *result)
     if (source->dataType == VAL_STRING)
     {
         result->dataType = VAL_INT;
-        VariantString = Dvar_GetVariantString(source->internals.string);
-        result->internals.intVal = atoi(VariantString);
+        int intValue;
+        float floatValue;
+        if (UI_FastExpressions() && UI_ReadDvarDirect(source->internals.string, &intValue, &floatValue))
+        {
+            result->internals.intVal = intValue;
+        }
+        else
+        {
+            VariantString = Dvar_GetVariantString(source->internals.string);
+            result->internals.intVal = atoi(VariantString);
+        }
         if (uiscript_debug->current.integer)
             Com_Printf(CON_CHANNEL_UI, "dvarbool( %s ) = %i\n", source->internals.string, result->internals.intVal);
     }
@@ -1117,8 +1179,17 @@ void GetDvarIntValue(Operand *source, Operand *result)
     if (source->dataType == VAL_STRING)
     {
         result->dataType = VAL_INT;
-        VariantString = Dvar_GetVariantString(source->internals.string);
-        result->internals.intVal = atoi(VariantString);
+        int intValue;
+        float floatValue;
+        if (UI_FastExpressions() && UI_ReadDvarDirect(source->internals.string, &intValue, &floatValue))
+        {
+            result->internals.intVal = intValue;
+        }
+        else
+        {
+            VariantString = Dvar_GetVariantString(source->internals.string);
+            result->internals.intVal = atoi(VariantString);
+        }
         if (uiscript_debug->current.integer)
             Com_Printf(CON_CHANNEL_UI, "dvarint( %s ) = %i\n", source->internals.string, result->internals.intVal);
     }
@@ -1139,8 +1210,17 @@ void GetDvarFloatValue(Operand *source, Operand *result)
     if (source->dataType == VAL_STRING)
     {
         result->dataType = VAL_FLOAT;
-        VariantString = Dvar_GetVariantString(source->internals.string);
-        result->internals.floatVal = atof(VariantString);
+        int intValue;
+        float floatValue;
+        if (UI_FastExpressions() && UI_ReadDvarDirect(source->internals.string, &intValue, &floatValue))
+        {
+            result->internals.floatVal = floatValue;
+        }
+        else
+        {
+            VariantString = Dvar_GetVariantString(source->internals.string);
+            result->internals.floatVal = atof(VariantString);
+        }
         if (uiscript_debug->current.integer)
             Com_Printf(CON_CHANNEL_UI, "dvarfloat( %s ) = %f\n", source->internals.string, result->internals.floatVal);
     }
@@ -2562,8 +2642,23 @@ Operand *EvaluateExpression(int localClientNum, const statement_s *statement, Op
     OperandStack dst; // [esp+FCh] [ebp-13C0h] BYREF
     int i; // [esp+14B8h] [ebp-4h]
 
+    SysPerfScope perfScope(SYS_PERF_PROBE_UI_EXPRESSIONS);
+
     g_releaseBuildStatement = statement;
-    memset((uint8_t *)&dst, 0, sizeof(dst));
+    if (UI_FastExpressions())
+    {
+        // Every list is written before it is read. The one exception is the
+        // error path of GetOperand and GetOperandList, which takes stack[0]
+        // as it is; give it what the memset would have left there.
+        dst.numOperandLists = 0;
+        dst.stack[0].operandCount = 0;
+        dst.stack[0].operands[0].dataType = VAL_INT;
+        dst.stack[0].operands[0].internals.intVal = 0;
+    }
+    else
+    {
+        memset((uint8_t *)&dst, 0, sizeof(dst));
+    }
     opStack.numOperators = 0;
     for (i = 0; i < statement->numEntries; ++i)
     {

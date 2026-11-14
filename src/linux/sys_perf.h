@@ -81,6 +81,13 @@ enum SysPerfProbe : uint32_t
     SYS_PERF_PROBE_SERVER_ENTITIES,    // G_RunFrame: G_RunFrameForEntity for every entity
     SYS_PERF_PROBE_SERVER_CLIENT_END,  // G_RunFrame: ClientEndFrame for every player
     SYS_PERF_PROBE_SERVER_SEND,        // SV_SendClientMessages: snapshots to the clients
+    // Parts of the HUD (cgame_mp), inside SYS_PERF_PROBE_HUD.
+    SYS_PERF_PROBE_HUD_MENUS,          // Menu_PaintAll: the HUD's menus
+    SYS_PERF_PROBE_HUD_ELEMS,          // CG_Draw2dHudElems: script hud elements
+    SYS_PERF_PROBE_HUD_NAMES,          // CG_ScanForCrosshairEntity and CG_UpdatePlayerNames
+    SYS_PERF_PROBE_HUD_COMPASS,        // CG_CompassUpdateActors
+    SYS_PERF_PROBE_HUD_SCOREBOARD,     // CG_DrawScoreboard
+    SYS_PERF_PROBE_UI_EXPRESSIONS,     // EvaluateExpression: every menu expression, in the HUD or not
     SYS_PERF_PROBE_WAIT_RENDERER,      // main thread asleep until the render thread takes the frame
     SYS_PERF_PROBE_WAIT_WORKERS_ALL,   // ... until every front-end worker command is done
     SYS_PERF_PROBE_WAIT_WORKERS_OTHER, // ... in any other wait that runs worker commands

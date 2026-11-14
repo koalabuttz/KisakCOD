@@ -783,6 +783,24 @@ What the GXM back end does so far (step 2d):
   off. (Drawing the forced depth pass inside the scene's own targets, the
   other half of that work, made the GPU slower on the console: 90.8 against
   79.4 ms in the same run, so it was left out.)
+- **The 3D picture at a lower resolution, the HUD at full.** The GPU's
+  time grows with the pixels it shades (console run V: 95 ms a frame at the
+  busy view, 77.7 with r_scaleViewport 0.7, 58.8 with 0.5). `vita_sceneScale`
+  (0.5 to 1, 1 by default) draws the standard full-screen 3D view at that
+  fraction of the width and height, in the top left of the screen, then
+  copies it out and stretches it over the whole screen with linear
+  filtering before the post effects and the HUD, which keep 960x544. The
+  copy and the stretch are two short scenes (src/gfx_d3d/rb_draw3d.cpp,
+  RB_StretchScaledScene; src/gfx_gxm/gxm_engine_options.h). Fullbright,
+  the debug shaders and split views keep the full size. A game server
+  cannot set it (server_dvar_guard.h). Console run AH (2026-11-14,
+  mp_crash, busy view, David's settings): 63.1 ms a frame at 1, 57.8 at
+  0.85, 49.8 at 0.7, 47.3 at 0.6 and 43.9 at 0.5, where the CPU's 40 ms
+  becomes the limit. When the map's film colour filter is the view's only
+  post effect, the filter's full-screen quad reads just the drawn corner of
+  the copy it makes anyway, so the stretch costs no scene of its own; an
+  empty file `no-filter-stretch` in the folder of the compiled programs, or
+  `vita_gxm no-filter-stretch 1`, keeps the two scenes.
 - **The CPU a frame ahead of the GPU.** The CPU fills frame N while the GPU
   still draws frame N - 1, so a frame costs the longer of the two times and
   not their sum. Console run U (2026-11-11, mp_crash) had shown them taking
