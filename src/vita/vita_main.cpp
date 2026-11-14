@@ -1,6 +1,7 @@
 // PS Vita start-up, console log, quit buttons and float mode for the dedicated
 // server. See vita_platform.h and docs/vita.md.
 
+#include "vita_gpu_clock.h"
 #include "vita_platform.h"
 #include "vita_run_list.h"
 
@@ -593,6 +594,12 @@ bool Vita_Startup(int *argc, char ***argv)
     // 444 MHz is the fastest the CPU runs for applications (333 by default).
     scePowerSetArmClockFrequency(444);
     scePowerSetBusClockFrequency(222);
+#if defined(KISAK_VITA_MP_CLIENT)
+    // The GPU too (vita_gpu_clock.h); the clocks found are kept for the
+    // live switch that puts them back.
+    vita::BootGpuClocks() = vita::CurrentGpuClocks();
+    vita::SetGpuBoost(true);
+#endif
 
     s_startTime = sceKernelGetProcessTimeWide();
     mkdir("ux0:data", 0777);
@@ -609,6 +616,14 @@ bool Vita_Startup(int *argc, char ***argv)
 
     std::set_terminate(OnTerminate);
     LogFormat("Vita: KisakCOD %s starting, CPU at %d MHz\n", kProgramKind, scePowerGetArmClockFrequency());
+#if defined(KISAK_VITA_MP_CLIENT)
+    {
+        const vita::GpuClocks now = vita::CurrentGpuClocks();
+        const vita::GpuClocks &boot = vita::BootGpuClocks();
+        LogFormat("Vita: bus at %d MHz, GPU at %d MHz (was %d), GPU crossbar at %d MHz (was %d)\n",
+                  scePowerGetBusClockFrequency(), now.gpu, boot.gpu, now.xbar, boot.xbar);
+    }
+#endif
     if (Vita_BenchNote()[0])
         LogText(Vita_BenchNote());
     if (s_listNote[0])
