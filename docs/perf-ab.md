@@ -254,6 +254,28 @@ from 2.88 to 2.21 ms a frame. Neither changed the frame rate beyond the spread
 (the PC's HUD is small, and the Vita waits for its render thread), so 1 is the
 default because it does less work for the same results.
 
+## `ui_exprStats`
+
+`ui_exprStats [seconds]` (10 s if left out, 1 to 600) times every operator of
+every menu expression for that long, then prints:
+
+```
+exprstats: 10.0 s, 601 frames, 124.0 expressions a frame, 6.31 entries each, 2.203 ms a frame in all, one clock reading 0.412 us
+exprstats:   dvarbool: 96.00 a frame, 0.4100 ms a frame, 4.27 us each
+exprstats:   ...
+exprstats:   outside the operators: 0.5210 ms a frame
+exprstats: done
+```
+
+Operators are listed by time, most first, by the name they have in a menu
+file (`dvarint`, `tablelookup`, `&&` ...). A `)` runs the operators it closes
+and is not listed itself. The clock is read twice around each operator, so an
+operator's time holds about one reading of the clock and `outside the
+operators` holds two for each operator; `one clock reading` says what to take
+off. It prints numbers only, never an expression's text. Outside a match
+there is no frame count and the figures are per second. While it is off it
+costs one load and a branch per operator.
+
 ## Checks
 
 `scripts/tests/test_linux_perf_ab.py` (the `perf_ab` check of

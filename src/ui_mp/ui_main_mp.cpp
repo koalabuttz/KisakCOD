@@ -4684,6 +4684,7 @@ void UI_Init(int localClientNum)
         (DvarLimits)0x200000000LL,
         DVAR_NOFLAG,
         "spam debug info for the ui script");
+    UI_ExprStats_Init();
     ui_fastExpressions = Dvar_RegisterBool(
         "ui_fastExpressions",
         1,
