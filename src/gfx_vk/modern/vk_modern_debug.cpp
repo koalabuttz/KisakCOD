@@ -1,6 +1,6 @@
 // The Modern path's debug views: see vk_modern.h and docs/vulkan-modern.md.
 // The shaders are src/gfx_vk/modern/shaders/debug_velocity.frag,
-// debug_normals.frag and debug_reflections.frag.
+// debug_normals.frag, debug_ao.frag and debug_reflections.frag.
 
 #include "vk_modern.h"
 #include "vk_modern_internal.h"
@@ -26,8 +26,9 @@ enum Kind : uint32_t
 {
     kVelocityView = 0,
     kNormalsView = 1,
-    kReflectionsView = 2,
-    kKinds = 3,
+    kAoView = 2,
+    kReflectionsView = 3,
+    kKinds = 4,
 };
 } // namespace
 
@@ -77,10 +78,11 @@ DebugView *CreateDebugView(Core *core, std::string &error)
         CreateShaderModule(core, shaders::kDebugVelocityFrag, sizeof(shaders::kDebugVelocityFrag));
     debug->fragment[kNormalsView] =
         CreateShaderModule(core, shaders::kDebugNormalsFrag, sizeof(shaders::kDebugNormalsFrag));
+    debug->fragment[kAoView] = CreateShaderModule(core, shaders::kDebugAoFrag, sizeof(shaders::kDebugAoFrag));
     debug->fragment[kReflectionsView] =
         CreateShaderModule(core, shaders::kDebugReflectionsFrag, sizeof(shaders::kDebugReflectionsFrag));
     if (!debug->vertex || !debug->fragment[kVelocityView] || !debug->fragment[kNormalsView]
-        || !debug->fragment[kReflectionsView])
+        || !debug->fragment[kAoView] || !debug->fragment[kReflectionsView])
         return fail(LastError(core));
     VkSamplerCreateInfo sampler{};
     sampler.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -215,6 +217,11 @@ bool DrawNormalsDebug(Core *core, DebugView *debug, Image *normals, Image *targe
                       std::string &error)
 {
     return DrawDebug(core, debug, kNormalsView, "modern debug normals", normals, target, area, error);
+}
+
+bool DrawAoDebug(Core *core, DebugView *debug, Image *ao, Image *target, const VkRect2D &area, std::string &error)
+{
+    return DrawDebug(core, debug, kAoView, "modern debug ao", ao, target, area, error);
 }
 
 bool DrawReflectionsDebug(Core *core, DebugView *debug, Image *reflections, Image *target, const VkRect2D &area,
