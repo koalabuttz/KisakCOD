@@ -49,6 +49,15 @@ struct VitaThreadTime
 void Vita_NoteThread(const char *name);
 int Vita_ThreadTimes(VitaThreadTime *times, int count);
 
+// Makes the calling thread's pthread waits real waits. VitaSDK's pthreads
+// wake a thread that waits on a condition or a semaphore every 500
+// microseconds to look for a cancel request, unless the thread has turned
+// cancellation off: a thread with nothing to do then still runs 3.6% of the
+// time (console run AZ: three idle threads, 1.4 ms of a 38 ms frame each).
+// Nothing in the port cancels a thread. Each thread the port starts calls
+// this once.
+void Vita_QuietWaits();
+
 // Load and memory figures for the first runs (src/vita/vita_stats.cpp), so
 // console.log answers how many players the Vita can serve.
 //

@@ -47,6 +47,15 @@ void Vita_NoteThread(const char *name)
     pthread_mutex_unlock(&s_lock);
 }
 
+void Vita_QuietWaits()
+{
+    // pte_cancellable_wait (libpthread.a) takes sceKernelWaitSema with the
+    // caller's own timeout when cancellation is off, and a loop of 500 us
+    // waits and event flag polls when it is on.
+    int before;
+    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &before);
+}
+
 int Vita_ThreadTimes(VitaThreadTime *times, int count)
 {
     int filled = 0;
