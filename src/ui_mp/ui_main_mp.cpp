@@ -4686,7 +4686,7 @@ void UI_Init(int localClientNum)
         "spam debug info for the ui script");
     ui_fastExpressions = Dvar_RegisterBool(
         "ui_fastExpressions",
-        0,
+        1,
         DVAR_NOFLAG,
         "1 = menu expressions read bool, int and string dvars directly and skip clearing their 5 KB stack; the same results with less work");
 }
