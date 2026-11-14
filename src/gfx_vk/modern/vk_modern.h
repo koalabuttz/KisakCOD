@@ -249,6 +249,12 @@ struct AoParams
     // further behind stays lit (a thin sign or arch edge in front of a wall
     // no longer darkens the wall beside it as a solid block would).
     float thickness = 8.0f;
+    // |N.V| from which the effect is whole on walls; on walls seen at a
+    // shallower angle it fades out from here to 0.02. Floors and ceilings
+    // keep 0.08, so ground seen from far off keeps its contact shadows. PC
+    // AO run 4: at 0.08 a corner on a wall seen nearly side-on (the crash-in
+    // arch edge) read as a dark line; David chose to soften that alone.
+    float grazing = 0.2f;
     uint32_t frame = 0;    // moves the noise
 };
 

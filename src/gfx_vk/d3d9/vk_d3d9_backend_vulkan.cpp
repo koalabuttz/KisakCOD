@@ -196,7 +196,7 @@ struct Backend
     // and our shaders on; KISAK_VK_MODERN_AO=1 or the ambient occlusion debug
     // view), which makes the normals buffer wanted too; KISAK_VK_MODERN_AO=0
     // keeps it off whatever asks. Its parameters (KISAK_VK_MODERN_AO_RADIUS,
-    // _THICKNESS, _POWER); the scene-sized image it writes, a Legacy texture the lit
+    // _THICKNESS, _POWER, _GRAZING); the scene-sized image it writes, a Legacy texture the lit
     // shaders read (lg::SetModernAmbientOcclusion) until the scene is lit;
     // whether this scene has it; the scenes counted at the last reset.
     bool aoWanted = false;
@@ -457,6 +457,10 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         const float depth = thickness.empty() ? 0.0f : std::strtof(thickness.c_str(), nullptr);
         if (depth > 0.0f)
             backend->aoParams.thickness = depth;
+        const std::string grazing = EnvText("KISAK_VK_MODERN_AO_GRAZING");
+        const float angle = grazing.empty() ? 0.0f : std::strtof(grazing.c_str(), nullptr);
+        if (angle > 0.0f && angle <= 1.0f)
+            backend->aoParams.grazing = angle;
     }
     backend->debugReflections = EnvIs("KISAK_VK_MODERN_DEBUG", "reflections");
     backend->reflectionsWanted =

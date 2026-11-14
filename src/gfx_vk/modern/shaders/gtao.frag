@@ -27,7 +27,12 @@
 // 1 unoccluded; pixels with no surface get 1, and so do pixels whose normal
 // is a guess (normals.frag: alpha 2/3), where a wrong hemisphere would draw
 // a dark line. The effect fades out on surfaces seen nearly edge on, where
-// the depth buffer says little about what is around them. It is left unclamped: one slice
+// the depth buffer says little about what is around them: on floors and
+// ceilings from |N.V| 0.08 down, and on walls (normals across world up) from
+// `grazing` down. On a wall seen side-on a corner's shading is squeezed into
+// a few pixels and reads as a dark line (the crash-in arch edge, PC AO run
+// 4); ground seen from far off is always at a shallow angle and keeps its
+// contact shadows. It is left unclamped: one slice
 // of an open surface seen at an angle gives more than 1 or less, and only the
 // average over slice angles is 1, so clamping each pixel would darken open
 // surfaces seen at an angle. The blur averages it and then clamps it.
@@ -46,6 +51,8 @@ layout(push_constant) uniform Params
     float power;     // the visibility is raised to it (strength), in the blur
     uint frame;      // moves the noise from frame to frame
     float thickness; // world units a sample's surface is taken to reach behind it
+    float grazing;   // |N.V| from which the effect is whole on walls; below it, it fades out
+    vec4 up;         // xyz: world up in view space
 } params;
 
 layout(location = 0) out vec4 outVisibility;
@@ -176,7 +183,10 @@ void main()
         }
         visibility += projectedLength * total * (1.0 - float(bitCount(hidden)) / 32.0);
     }
-    // Edge on (the normal across the view), fade to unoccluded.
-    const float facing = smoothstep(0.02, 0.08, abs(dot(normal, toEye)));
+    // Seen nearly edge on (the normal across the view), fade to unoccluded:
+    // from `grazing` on walls, from 0.08 on floors and ceilings.
+    const float upright = abs(dot(normal, params.up.xyz));
+    const float whole = mix(max(params.grazing, 0.03), 0.08, upright * upright);
+    const float facing = smoothstep(0.02, whole, abs(dot(normal, toEye)));
     outVisibility = vec4(mix(1.0, clamp(visibility / float(kSlices), 0.0, 4.0), facing));
 }
