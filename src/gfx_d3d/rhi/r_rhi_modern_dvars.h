@@ -37,6 +37,7 @@ inline const dvar_s *exposureKey;
 inline const dvar_s *aoRadius;
 inline const dvar_s *aoPower;
 inline const dvar_s *aoThickness;
+inline const dvar_s *aoGrazing;
 inline const dvar_s *aoFloor;
 inline const dvar_s *aoEdge;
 inline const dvar_s *ssrDistance;
@@ -93,6 +94,10 @@ inline void Register()
     aoThickness = Dvar_RegisterFloat("r_modernAoThickness", -1.0f, -1.0f, 1024.0f, DVAR_NOFLAG,
                                      "Modern visuals: how far behind a surface ambient occlusion takes it to reach, "
                                      "in world units; -1 the default (KISAK_VK_MODERN_AO_THICKNESS or 8)");
+    aoGrazing = Dvar_RegisterFloat("r_modernAoGrazing", -1.0f, -1.0f, 1.0f, DVAR_NOFLAG,
+                                   "Modern visuals: how squarely a wall must face the eye (|N.V|, 0 to 1) for "
+                                   "ambient occlusion to be whole on it, fading out below; -1 the default "
+                                   "(KISAK_VK_MODERN_AO_GRAZING or 0.2)");
     aoFloor = Dvar_RegisterFloat("r_modernAoFloor", -1.0f, -1.0f, 0.99f, DVAR_NOFLAG,
                                  "Modern visuals: the least light ambient occlusion leaves (0 to 0.99); -1 the "
                                  "default (KISAK_VK_MODERN_AO_FLOOR or 0.35)");
@@ -130,6 +135,7 @@ inline void Read(gfx_vk::d3d9::ModernTuning &out)
     out.aoRadius = aoRadius->current.value;
     out.aoPower = aoPower->current.value;
     out.aoThickness = aoThickness->current.value;
+    out.aoGrazing = aoGrazing->current.value;
     out.aoFloor = aoFloor->current.value;
     out.aoEdge = aoEdge->current.value;
     out.ssrDistance = ssrDistance->current.value;
