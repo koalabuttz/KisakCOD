@@ -469,13 +469,18 @@ Layout *GetLayout(Device &device, const LayoutKey &key)
     return result;
 }
 
-LayoutKey LayoutFor(const Shader &vs, const Shader &ps)
+// A pipeline drawn as a Modern lit shader of ours (linearShader) also has the
+// ambient occlusion at kModernAoSampler, which the game's shader leaves free
+// (else ours is not built, and the game's does not read it).
+LayoutKey LayoutFor(const Shader &vs, const Shader &ps, uint8_t linearShader)
 {
     const ls::Reflection &vr = vs.translated.reflection;
     const ls::Reflection &pr = ps.translated.reflection;
     LayoutKey key;
     key.uniforms = (vr.uniforms & 0xffffu) | (pr.uniforms & 0xffffu) << 16;
     key.samplers = (pr.samplers & 0xffffu) | (vr.samplers & ((1u << kVertexSamplers) - 1)) << 16;
+    if (ModernLitShaderValid(linearShader))
+        key.samplers |= 1u << kModernAoSampler;
     return key;
 }
 
@@ -548,7 +553,8 @@ bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Sh
         const uint32_t cubes = shader & ModernLitSpecular ? 1u << 1 : 0u;
         const uint32_t uniforms = 1u << static_cast<uint32_t>(ls::Uniform::FloatConstants)
             | 1u << static_cast<uint32_t>(ls::Uniform::AlphaTest);
-        bool fits = pr.floatConstants >= (shader & ModernLitSpecular ? 20u : 19u)
+        bool fits = !(pr.samplers & (1u << kModernAoSampler))
+            && pr.floatConstants >= (shader & ModernLitSpecular ? 20u : 19u)
             && (pr.uniforms & uniforms) == uniforms && (pr.samplers & (images | cubes)) == (images | cubes)
             && (!(shader & ModernLitShadow) || !recipe.fixDepth || (recipe.depthCompare & (1u << 4)));
         for (uint32_t sampler = 0; sampler < ls::kSamplerCount && fits; ++sampler)
@@ -674,7 +680,7 @@ void ListUniformBlocks(Pipeline &pipeline, const Layout &layout, const Shader &v
 Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shader &ps, const VertexDecl &decl)
 {
     const TimeInto timer(device.stats.pipelineMicros);
-    Layout *layout = GetLayout(device, LayoutFor(vs, ps));
+    Layout *layout = GetLayout(device, LayoutFor(vs, ps, key.linearShader));
     const VkShaderModule fragment =
         layout ? PixelModule(device, ps, vs, key.depthSamplers, key.alphaCompare, key) : VK_NULL_HANDLE;
     if (!fragment)
@@ -1052,6 +1058,9 @@ uint32_t TextureTypeValue(const Texture *texture, ls::TextureType declared)
 struct DrawTextures
 {
     uint32_t mask = 0;              // LayoutKey::samplers bits
+    // The pipeline is a Modern lit shader of ours: kModernAoSampler's bit in
+    // the mask is the ambient occlusion (Device::modernAo), not a D3D9 sampler.
+    bool modernAo = false;
     Texture *bound[kSamplerSlots] = {}; // null: nothing usable bound
     // Four bits for each sampler with a texture: bit 3 set, bit 2 for a depth
     // format, and TextureTypeValue. With the shader they are everything a
@@ -1119,6 +1128,14 @@ bool BindTextures(Device &device, const Shader &vs, const Shader &ps, DrawTextur
         Texture *sampled = texture ? texture : NullTexture(device, DeclaredType(vs, ps, bit));
         if (!ImageReadyToSample(sampled->image))
             settle[settleCount++] = sampled->image;
+    }
+    // A Modern lit shader of ours may be drawn: its ambient occlusion must be
+    // ready before the pass too (the pipeline, chosen later, says whether).
+    if (device.linearInputsOn && ModernLitShaderValid(device.linearInputs.shader))
+    {
+        Texture *ao = device.modernAo ? device.modernAo : device.whiteTexture;
+        if (ao && ao->image && !ImageReadyToSample(ao->image))
+            settle[settleCount++] = ao->image;
     }
     if (settleCount)
     {
@@ -1488,6 +1505,13 @@ void TextureSetContents(Device &device, const Shader &vs, const Shader &ps, cons
     {
         const uint32_t bit = LowestBit(left);
         const uint32_t slot = SlotForBit(bit);
+        if (textures.modernAo && bit == kModernAoSampler)
+        {
+            const Texture *ao = device.modernAo ? device.modernAo : device.whiteTexture;
+            out.views[bit] = ImageSampleView(ao->image);
+            out.samplers[bit] = SamplerFor(device, slot, nullptr); // read with texelFetch: any sampler
+            continue;
+        }
         const Texture *bound = textures.bound[slot];
         const Texture *texture = bound ? bound : NullTexture(device, DeclaredType(vs, ps, bit));
         out.views[bit] = ImageSampleView(texture->image);
@@ -1840,6 +1864,12 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
     }
 
     const Layout &layout = *pipeline->layout;
+    // A Modern lit shader of ours also reads the ambient occlusion.
+    if (layout.key.samplers & ~textures.mask & (1u << kModernAoSampler))
+    {
+        textures.mask |= 1u << kModernAoSampler;
+        textures.modernAo = true;
+    }
     if (device.boundLayout != layout.pipeline)
     {
         // Sets bound with another pipeline layout may not carry over.
@@ -2087,6 +2117,8 @@ void ForgetTexture(Device &device, Texture *texture)
     // A view handle can be handed out again once the texture is gone, so a
     // cached set must not be matched by it.
     device.lastTextureSet = Device::TextureSetCache{};
+    if (device.modernAo == texture)
+        device.modernAo = nullptr;
     for (uint32_t slot = 0; slot < kSamplerSlots; ++slot)
     {
         if (device.textures[slot] == texture)
@@ -2926,6 +2958,12 @@ void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint
     device->linearInputs = inputs;
     device->linearInputsOn = on;
     device->keyStale = true;
+}
+
+void SetModernAmbientOcclusion(Device *device, Texture *texture)
+{
+    if (device)
+        device->modernAo = texture;
 }
 
 void SetModernLitStrengths(Device *device, float sun, float sky)

@@ -185,6 +185,24 @@ struct Backend
     modern::Normals *normals = nullptr;
     Image *sceneNormals = nullptr;
     modern::NormalsStats normalsBase{};
+    // Ambient occlusion (vk_modern.h BuildAmbientOcclusion) from the depth and
+    // the normals, recorded with them before the lit surfaces: wanted when
+    // something reads it (our lit shaders, so with linear light, lit inputs
+    // and our shaders on; KISAK_VK_MODERN_AO=1 or the ambient occlusion debug
+    // view), which makes the normals buffer wanted too; KISAK_VK_MODERN_AO=0
+    // keeps it off whatever asks. Its parameters (KISAK_VK_MODERN_AO_RADIUS,
+    // _THICKNESS, _POWER); the scene-sized image it writes, a Legacy texture the lit
+    // shaders read (lg::SetModernAmbientOcclusion) until the scene is lit;
+    // whether this scene has it; the scenes counted at the last reset.
+    bool aoWanted = false;
+    bool aoFailed = false;
+    modern::AmbientOcclusion *ao = nullptr;
+    modern::AoParams aoParams{};
+    lg::Texture *aoTexture = nullptr;
+    lg::Surface *aoSurface = nullptr;
+    bool sceneAo = false;
+    uint32_t aoFrame = 0;
+    modern::AoStats aoBase{};
     // Screen-space reflections (vk_modern.h TraceReflections), traced right
     // after the normals buffer from the prepass depth and last scene's
     // anti-aliased linear-light colour: wanted when something reads it (for
@@ -210,6 +228,9 @@ struct Backend
     bool debugVelocity = false;
     bool debugVelocityAll = false;
     bool debugNormals = false;
+    // KISAK_VK_MODERN_DEBUG=ao: the ambient occlusion as grey over each
+    // finished scene.
+    bool debugAo = false;
     // KISAK_VK_MODERN_DEBUG=reflections: the reflections debug view over each
     // finished scene that has them (on the display image).
     bool debugReflections = false;
@@ -417,6 +438,24 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     backend->debugVelocityAll = EnvIs("KISAK_VK_MODERN_DEBUG", "velocity-all");
     backend->debugVelocity = backend->debugVelocityAll || EnvIs("KISAK_VK_MODERN_DEBUG", "velocity");
     backend->debugNormals = EnvIs("KISAK_VK_MODERN_DEBUG", "normals");
+    backend->debugAo = EnvIs("KISAK_VK_MODERN_DEBUG", "ao");
+    backend->aoWanted = !EnvIsZero("KISAK_VK_MODERN_AO")
+        && (EnvIs("KISAK_VK_MODERN_AO", "1") || backend->debugAo
+            || (backend->linearWanted && backend->litWanted && backend->shadersWanted));
+    {
+        const std::string radius = EnvText("KISAK_VK_MODERN_AO_RADIUS");
+        const float value = radius.empty() ? 0.0f : std::strtof(radius.c_str(), nullptr);
+        if (value > 0.0f)
+            backend->aoParams.radius = value;
+        const std::string power = EnvText("KISAK_VK_MODERN_AO_POWER");
+        const float strength = power.empty() ? -1.0f : std::strtof(power.c_str(), nullptr);
+        if (strength >= 0.0f)
+            backend->aoParams.power = strength;
+        const std::string thickness = EnvText("KISAK_VK_MODERN_AO_THICKNESS");
+        const float depth = thickness.empty() ? 0.0f : std::strtof(thickness.c_str(), nullptr);
+        if (depth > 0.0f)
+            backend->aoParams.thickness = depth;
+    }
     backend->debugReflections = EnvIs("KISAK_VK_MODERN_DEBUG", "reflections");
     backend->reflectionsWanted =
         !EnvIsZero("KISAK_VK_MODERN_SSR") && (EnvIs("KISAK_VK_MODERN_SSR", "1") || backend->debugReflections);
@@ -436,9 +475,11 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         p.steps = static_cast<uint32_t>(std::min(steps, 256.0f));
         p.levels = static_cast<uint32_t>(std::min(levels, static_cast<float>(modern::kMaxReflectionLevels)));
     }
+    // The normals buffer is built for what reads it; KISAK_VK_MODERN_NORMALS=0
+    // keeps it (and so ambient occlusion and reflections) off whatever asks.
     backend->normalsWanted = !EnvIsZero("KISAK_VK_MODERN_NORMALS")
                              && (EnvIs("KISAK_VK_MODERN_NORMALS", "1") || backend->debugNormals
-                                 || backend->reflectionsWanted);
+                                 || backend->aoWanted || backend->reflectionsWanted);
     if (!h.windowSystem || !h.windowSystem(h.user, desc.window, backend->windowSystem))
     {
         error = "the host has no Vulkan window system for this window";
@@ -712,6 +753,17 @@ void BackendLogStats(Backend *backend, bool reset)
                 static_cast<unsigned long long>(modern::Stats(backend->normals).builds - backend->normalsBase.builds),
                 pass.supported ? average(pass) : 0.0);
     }
+    // Ambient occlusion: the scenes it was built for and its two passes' GPU time.
+    if (backend->ao)
+    {
+        const PassTimings pass = PassTimingsFor(backend->core, "modern ao");
+        const uint64_t scenes = modern::Stats(backend->ao).builds - backend->aoBase.builds;
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with ambient occlusion (radius %.1f, thickness %.1f, "
+                   "power %.2f), %.3f ms GPU each",
+                static_cast<unsigned long long>(scenes), backend->aoParams.radius, backend->aoParams.thickness,
+                backend->aoParams.power,
+                pass.supported ? 2.0 * average(pass) : 0.0);
+    }
     // Screen-space reflections: the scenes traced, the levels of the last,
     // the trace pass's GPU time (the levels are blits, not timed).
     if (backend->reflections)
@@ -745,6 +797,7 @@ void BackendLogStats(Backend *backend, bool reset)
         if (backend->velocity)
             backend->velocityBase = modern::Stats(backend->velocity);
         backend->normalsBase = modern::Stats(backend->normals);
+        backend->aoBase = modern::Stats(backend->ao);
         backend->reflectionsBase = modern::Stats(backend->reflections);
         backend->keptBase = modern::Stats(backend->kept);
         backend->linearScenesBase = backend->linearScenes;
@@ -785,6 +838,17 @@ void CloseBackend(Backend *backend)
     {
         modern::DestroyKeptVertices(backend->core, backend->kept);
         backend->kept = nullptr;
+    }
+    if (backend->ao)
+    {
+        modern::DestroyAmbientOcclusion(backend->core, backend->ao);
+        backend->ao = nullptr;
+    }
+    if (backend->legacy && backend->aoTexture)
+    {
+        lg::DestroyTexture(backend->legacy, backend->aoTexture);
+        backend->aoTexture = nullptr;
+        backend->aoSurface = nullptr;
     }
     if (backend->normals)
     {
@@ -1317,6 +1381,26 @@ void DrawNormalsDebug(Backend *backend, Image *normals, Image *target, const VkR
         LogModernOnce(backend, "the normals debug view is not drawn", error);
 }
 
+// The ambient occlusion debug view over a finished scene (KISAK_VK_MODERN_DEBUG=ao).
+void DrawAoDebug(Backend *backend, Image *ao, Image *target, const VkRect2D &area)
+{
+    if (backend->debugFailed || !ao || !target)
+        return;
+    std::string error;
+    if (!backend->debug)
+    {
+        backend->debug = modern::CreateDebugView(backend->core, error);
+        if (!backend->debug)
+        {
+            backend->debugFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no ambient occlusion debug view: %s", error.c_str());
+            return;
+        }
+    }
+    if (!modern::DrawAoDebug(backend->core, backend->debug, ao, target, area, error))
+        LogModernOnce(backend, "the ambient occlusion debug view is not drawn", error);
+}
+
 // The reflections debug view over a finished scene
 // (KISAK_VK_MODERN_DEBUG=reflections).
 void DrawReflectionsDebug(Backend *backend, Image *reflections, Image *target, const VkRect2D &area)
@@ -1351,6 +1435,70 @@ modern::SceneView SceneViewOf(const ModernSceneView &view)
 
 namespace
 {
+// The scene's ambient occlusion into the back end's texture (made, or made
+// again, at the depth's size), right after its normals; sceneAo tells
+// whether it is there. Off or failing, the reason is logged once.
+void SceneAmbientOcclusion(Backend *backend, Image *depth, const modern::SceneView &scene)
+{
+    if (!backend->aoWanted || backend->aoFailed)
+        return;
+    std::string error;
+    if (!backend->ao)
+    {
+        backend->ao = modern::CreateAmbientOcclusion(backend->core, error);
+        if (!backend->ao)
+        {
+            backend->aoFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no ambient occlusion: %s", error.c_str());
+            return;
+        }
+    }
+    const ImageDesc &depthInfo = ImageInfo(depth);
+    if (backend->aoTexture)
+    {
+        const lg::TextureDesc &have = lg::Describe(backend->aoTexture);
+        if (have.width != depthInfo.width || have.height != depthInfo.height)
+        {
+            lg::DestroyTexture(backend->legacy, backend->aoTexture);
+            backend->aoTexture = nullptr;
+            backend->aoSurface = nullptr;
+        }
+    }
+    if (!backend->aoTexture)
+    {
+        lg::TextureDesc desc;
+        desc.width = depthInfo.width;
+        desc.height = depthInfo.height;
+        desc.levels = 1;
+        desc.usage = lg::d3d::USAGE_RENDERTARGET;
+        desc.format = lg::d3d::FMT_A8R8G8B8;
+        desc.pool = lg::d3d::POOL_DEFAULT;
+        desc.name = "modern ambient occlusion";
+        backend->aoTexture = lg::CreateTexture(backend->legacy, desc);
+        backend->aoSurface =
+            backend->aoTexture ? lg::GetSurfaceLevel(backend->legacy, backend->aoTexture, 0, 0) : nullptr;
+        if (!backend->aoSurface || !lg::SurfaceImage(backend->aoSurface))
+        {
+            if (backend->aoTexture)
+                lg::DestroyTexture(backend->legacy, backend->aoTexture);
+            backend->aoTexture = nullptr;
+            backend->aoSurface = nullptr;
+            backend->aoFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no ambient occlusion: cannot make the %ux%u image",
+                    depthInfo.width, depthInfo.height);
+            return;
+        }
+    }
+    modern::AoParams params = backend->aoParams;
+    params.frame = backend->aoFrame++;
+    backend->sceneAo = modern::BuildAmbientOcclusion(backend->core, backend->ao, depth, backend->sceneNormals,
+                                                     scene, params, lg::SurfaceImage(backend->aoSurface), error);
+    if (!backend->sceneAo)
+        LogModernOnce(backend, "no ambient occlusion", error);
+    // The lit shaders of ours read it until the scene is lit (BackendModernScene).
+    lg::SetModernAmbientOcclusion(backend->legacy, backend->sceneAo ? backend->aoTexture : nullptr);
+}
+
 // The scene's screen-space reflections, after its normals buffer. They read
 // last scene's anti-aliased colour, so they need that scene in linear light
 // and kept by the anti-aliasing (none on a cut or the first scene; the
@@ -1399,6 +1547,8 @@ ModernResult BackendModernSceneDepth(Backend *backend, lg::Surface *depth, const
     if (!BackendModernWantsSceneDepth(backend))
         return ModernResult::Skipped;
     backend->sceneNormals = nullptr;
+    backend->sceneAo = false;
+    lg::SetModernAmbientOcclusion(backend->legacy, nullptr);
     Image *depthImage = depth ? lg::SurfaceImage(depth) : nullptr;
     if (!depthImage)
     {
@@ -1421,13 +1571,15 @@ ModernResult BackendModernSceneDepth(Backend *backend, lg::Surface *depth, const
     if (!lg::HandOverRecording(backend->legacy))
         return ModernResult::Skipped;
     std::string error;
-    backend->sceneNormals = modern::BuildNormals(backend->core, backend->normals, depthImage, SceneViewOf(view), error);
+    const modern::SceneView scene = SceneViewOf(view);
+    backend->sceneNormals = modern::BuildNormals(backend->core, backend->normals, depthImage, scene, error);
     if (!backend->sceneNormals)
     {
         LogModernOnce(backend, "no normals buffer", error);
         return ModernResult::Refused;
     }
-    TraceSceneReflections(backend, depthImage, SceneViewOf(view));
+    SceneAmbientOcclusion(backend, depthImage, scene);
+    TraceSceneReflections(backend, depthImage, scene);
     return ModernResult::Done;
 }
 
@@ -1440,6 +1592,9 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
     // scene builds its own.
     Image *normals = backend->sceneNormals;
     backend->sceneNormals = nullptr;
+    Image *ao = backend->sceneAo ? lg::SurfaceImage(backend->aoSurface) : nullptr;
+    backend->sceneAo = false;
+    lg::SetModernAmbientOcclusion(backend->legacy, nullptr);
     Image *reflections = backend->sceneReflections;
     backend->sceneReflections = nullptr;
     // The surfaces that moved in this scene; the next scene starts a new list.
@@ -1492,6 +1647,8 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
             *glowDrawn = true;
         if (backend->debugNormals)
             DrawNormalsDebug(backend, normals, lg::SurfaceImage(display), area);
+        if (backend->debugAo)
+            DrawAoDebug(backend, ao, lg::SurfaceImage(display), area);
         if (backend->debugReflections)
             DrawReflectionsDebug(backend, reflections, lg::SurfaceImage(display), area);
         return passes;
@@ -1543,6 +1700,8 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
     // Without linear light the scene is finished here.
     if (backend->debugNormals && !display)
         DrawNormalsDebug(backend, normals, colorImage, scene.area);
+    if (backend->debugAo && !display)
+        DrawAoDebug(backend, ao, colorImage, scene.area);
     return tonemap(ModernResult::Done);
 }
 

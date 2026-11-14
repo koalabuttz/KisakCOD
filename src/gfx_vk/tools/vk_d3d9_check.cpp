@@ -525,6 +525,7 @@ public:
     void ModernExposure();
     void ModernVelocity();
     void ModernNormals();
+    void ModernAo();
     void ModernReflections();
     void Bench();
     void BenchRuns();
@@ -3044,7 +3045,9 @@ void Check::ModernTaa()
 // normal instead (A (128, 128, 0), B (128, 175, 9), C (184, 128, 13)), also
 // in the pixels at the edges between them, where a normal taken across the
 // edge would mix the two, and D stays as drawn. The normals buffer is wanted
-// with that view or KISAK_VK_MODERN_NORMALS=1, never with
+// for ambient occlusion (our lit shaders, KISAK_VK_MODERN_AO=1 or its debug
+// view; not with KISAK_VK_MODERN_AO=0), that view or
+// KISAK_VK_MODERN_NORMALS=1 (and for screen-space reflections), never with
 // KISAK_VK_MODERN_NORMALS=0.
 void Check::ModernNormals()
 {
@@ -3062,7 +3065,14 @@ void Check::ModernNormals()
     };
     const bool linearOff = envIs("KISAK_VK_MODERN_LINEAR", "0");
     const bool debugView = envIs("KISAK_VK_MODERN_DEBUG", "normals");
-    const bool wanted = !envIs("KISAK_VK_MODERN_NORMALS", "0") && (debugView || envIs("KISAK_VK_MODERN_NORMALS", "1"));
+    const bool wanted = !envIs("KISAK_VK_MODERN_NORMALS", "0")
+        && (debugView || envIs("KISAK_VK_MODERN_NORMALS", "1")
+            || (!envIs("KISAK_VK_MODERN_AO", "0")
+                && (envIs("KISAK_VK_MODERN_AO", "1") || envIs("KISAK_VK_MODERN_DEBUG", "ao")
+                    || (!envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
+                        && !envIs("KISAK_VK_MODERN_SHADERS", "0"))))
+            || (!envIs("KISAK_VK_MODERN_SSR", "0")
+                && (envIs("KISAK_VK_MODERN_SSR", "1") || envIs("KISAK_VK_MODERN_DEBUG", "reflections"))));
     const bool shown = wanted && debugView;
     Equal("wants_scene_depth", front::ModernWantsSceneDepth(device), wanted);
 
@@ -3152,6 +3162,209 @@ void Check::ModernNormals()
     SafeRelease(depth);
 }
 
+// The Modern path's ambient occlusion (docs/vulkan-modern.md "Ambient
+// occlusion"), from the depth prepass and the normals buffer as the engine
+// draws them. The camera looks along +z with a 90-degree perspective (the
+// engine's infinite projection, near plane 4); the basic vertex shader takes
+// positions already divided by w, which for flat quads gives the same depth
+// at every pixel as drawing them in perspective. A floor 120 units below the
+// camera runs from 60 to 400 units ahead, and a wall faces the camera 200
+// units ahead over the right half, rising from the floor: the floor in front
+// of the wall's foot and the wall above it are in a corner. With
+// KISAK_VK_MODERN_DEBUG=ao the view shows the visibility: open floor and the
+// wall's top stay about white, the floor 12 units from the wall and the wall
+// 10 units above the floor are darker by a clear margin (and not black), and
+// the sky is white. A thin plate facing the camera hovers 16 units above the
+// open floor on the left, 160 units ahead, as a sign hangs off a wall on
+// brackets: the floor seen just past its lower edge lies behind it (172 units
+// ahead). Each sample is taken to reach only a few units behind its surface,
+// so that floor stays light (at least 150); with
+// KISAK_VK_MODERN_AO_THICKNESS=1000 the plate hides everything behind it as a
+// solid block would, and the floor there goes dark (at most 120, the dark
+// band of PC AO run 2). Without the view the floor is drawn as lm_sun_r0c0 (the
+// Modern lit shaders' stand-in) lit by its lightmap alone: white colour map,
+// the secondary lightmap's halves 96 each (0.53 of light), no sun. Our
+// shader multiplies that light by the ambient occlusion, so the floor in the
+// corner is darker than open floor by a clear margin; without ambient
+// occlusion the two are the same, and without our shaders the floor is black.
+// The wall is drawn in its colour. Ambient occlusion is built for our lit
+// shaders (linear light, lit inputs and our shaders on), with
+// KISAK_VK_MODERN_AO=1 or its debug view, never with KISAK_VK_MODERN_AO=0 or
+// KISAK_VK_MODERN_NORMALS=0.
+void Check::ModernAo()
+{
+    const auto envIs = [](const char *name, const char *value) {
+#if defined(_MSC_VER)
+        char *env = nullptr;
+        size_t envLength = 0;
+        const bool is = _dupenv_s(&env, &envLength, name) == 0 && env && !std::strcmp(env, value);
+        std::free(env);
+        return is;
+#else
+        const char *env = std::getenv(name);
+        return env && !std::strcmp(env, value);
+#endif
+    };
+    // Our lit shaders draw (and read ambient occlusion).
+    const bool ours = !envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
+                      && !envIs("KISAK_VK_MODERN_SHADERS", "0");
+    const bool built = !envIs("KISAK_VK_MODERN_AO", "0") && !envIs("KISAK_VK_MODERN_NORMALS", "0")
+                       && (ours || envIs("KISAK_VK_MODERN_AO", "1") || envIs("KISAK_VK_MODERN_DEBUG", "ao"));
+    // The scene's depth is taken whenever the normals buffer is wanted.
+    const bool depthTaken = built || (!envIs("KISAK_VK_MODERN_NORMALS", "0")
+                                      && (envIs("KISAK_VK_MODERN_NORMALS", "1")
+                                          || envIs("KISAK_VK_MODERN_DEBUG", "normals")));
+    const bool shown = built && envIs("KISAK_VK_MODERN_DEBUG", "ao");
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    // The engine's InfinitePerspectiveMatrix with tan(fov / 2) = 1 both ways.
+    constexpr float k = 0.99951172f, nearPlane = 4.0f;
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = 1.0f;
+    view.projection[0][0] = k;
+    view.projection[1][1] = k;
+    view.projection[2][2] = k;
+    view.projection[2][3] = 1.0f;
+    view.projection[3][2] = -nearPlane * k;
+    view.width = view.height = kSize;
+    view.cut = true;
+    const auto project = [&](float x, float y, float z, uint32_t color) {
+        return Vertex{k * x / z, k * y / z, k - nearPlane * k / z, 0.0f, 0.0f, color};
+    };
+    const uint32_t floorColor = Argb(255, 255, 255, 255), wallColor = Argb(255, 90, 110, 150);
+    const Vertex floorCorners[4] = {project(-200, -120, 60, floorColor), project(200, -120, 60, floorColor),
+                                    project(200, -120, 400, floorColor), project(-200, -120, 400, floorColor)};
+    const Vertex wallCorners[4] = {project(0, -120, 200, wallColor), project(200, -120, 200, wallColor),
+                                   project(200, 300, 200, wallColor), project(0, 300, 200, wallColor)};
+    const Vertex plateCorners[4] = {project(-40, -104, 160, wallColor), project(-5, -104, 160, wallColor),
+                                    project(-5, -40, 160, wallColor), project(-40, -40, 160, wallColor)};
+    Vertex surfaces[18];
+    const int order[6] = {0, 1, 2, 0, 2, 3};
+    for (int i = 0; i < 6; ++i)
+    {
+        surfaces[i] = floorCorners[order[i]];
+        surfaces[6 + i] = wallCorners[order[i]];
+        surfaces[12 + i] = plateCorners[order[i]];
+    }
+
+    Reset(Argb(255, 0, 0, 0));
+    front::ModernSceneBegin(device);
+    device->SetDepthStencilSurface(depth);
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0), "Clear(scene)");
+    device->SetRenderState(D3DRS_ZENABLE, TRUE);
+    device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+    device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+    Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 6, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(prepass)");
+    device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xf);
+    Equal("scene_depth", static_cast<int>(front::ModernSceneDepth(device, view)),
+          static_cast<int>(depthTaken ? front::ModernResult::Done : front::ModernResult::Skipped));
+    device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+    // The floor as lm_sun_r0c0: colour map and lightmap UVs, the normal up and
+    // no fog, the shadow-map coordinate (unread); no sun.
+    IDirect3DTexture9 *colorMap = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
+    IDirect3DTexture9 *primary = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
+    IDirect3DTexture9 *secondary = FilledTexture(1, 2, [](UINT, UINT) { return Argb(130, 96, 96, 96); });
+    if (colorMap && primary && secondary)
+    {
+        device->SetVertexShader(vsLmSun);
+        device->SetPixelShader(psLmSunStandIn);
+        device->SetTexture(0, colorMap);
+        device->SetTexture(2, primary);
+        device->SetTexture(3, secondary);
+        const float pixel[19][4] = {{}, {}, {0, 0, 0, 1}, {}, {}, {}, {}, {}, {}, {},
+                                    {}, {}, {}, {}, {}, {}, {}, {0, 0, 1, 0}, {}};
+        Ok(device->SetPixelShaderConstantF(0, &pixel[0][0], 19), "SetPixelShaderConstantF");
+        const float vertex[4][4] = {{0, 0, 0, 0}, {0.5f, 0.5f, 0.5f, 0.5f}, {0, 0, 1, 1}, {0.5f, 0.5f, 0.25f, 0.5f}};
+        Ok(device->SetVertexShaderConstantF(0, &vertex[0][0], 4), "SetVertexShaderConstantF");
+        front::ModernLitInputs inputs;
+        inputs.overWhite = true;
+        inputs.shader = 0x40; // lm_sun_r0c0
+        front::SetModernLitInputs(device, &inputs);
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(floor)");
+        front::SetModernLitInputs(device, nullptr);
+        for (DWORD sampler : {0u, 2u, 3u})
+            device->SetTexture(sampler, nullptr);
+        device->SetVertexShader(vsBasic);
+        device->SetPixelShader(psColor);
+    }
+    Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces + 6, sizeof(Vertex)), "DrawPrimitiveUP(wall)");
+    Equal("scene_done", front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
+    SafeRelease(colorMap);
+    SafeRelease(primary);
+    SafeRelease(secondary);
+    // Pixels of view points: x and y / z, NDC to pixels.
+    const auto pixelOf = [&](float x, float y, float z, UINT &px, UINT &py) {
+        px = static_cast<UINT>((k * x / z + 1.0f) * 0.5f * kSize);
+        py = static_cast<UINT>((1.0f - k * y / z) * 0.5f * kSize);
+    };
+    UINT openX, openY, cornerX, cornerY, footX, footY, wallX, wallY, besideX, besideY;
+    pixelOf(-22, -120, 172, besideX, besideY);
+    pixelOf(-100, -120, 160, openX, openY);
+    pixelOf(100, -120, 188, cornerX, cornerY);
+    pixelOf(100, -110, 200, footX, footY);
+    pixelOf(100, 150, 200, wallX, wallY);
+    if (Read())
+    {
+        const auto at = [&](UINT x, UINT y) { return static_cast<int>(pixels[(y * readSize + x) * 4 + 1]); };
+        if (shown)
+        {
+            const int open = at(openX, openY), corner = at(cornerX, cornerY), foot = at(footX, footY),
+                      wall = at(wallX, wallY), beside = at(besideX, besideY);
+            // One frame's noise (two slices a pixel) leaves open surfaces a
+            // few levels under white; the anti-aliasing averages it.
+            Equal("open_floor_unoccluded", open >= 230, true);
+            Equal("wall_top_unoccluded", wall >= 230, true);
+            Equal("corner_darker", corner + 25 <= open, true);
+            Equal("corner_not_black", corner >= 64, true);
+            Equal("wall_foot_darker", foot + 25 <= wall, true);
+            Equal("wall_foot_not_black", foot >= 64, true);
+            if (envIs("KISAK_VK_MODERN_AO_THICKNESS", "1000"))
+                Equal("floor_behind_plate_dark_as_behind_a_block", beside <= 120, true);
+            else
+                Equal("floor_behind_plate_light", beside >= 150, true);
+            Expect("sky_white", 20, 10, 255, 255, 255);
+            char line[160];
+            std::snprintf(line, sizeof(line), " ao_open=%d ao_corner=%d ao_foot=%d ao_wall=%d ao_beside_plate=%d",
+                          open, corner, foot, wall, beside);
+            result->detail += line;
+        }
+        else if (ours)
+        {
+            const int open = at(openX, openY), corner = at(cornerX, cornerY);
+            Equal("open_floor_lit", open >= 100, true);
+            if (built)
+            {
+                Equal("corner_floor_darker", corner + 10 <= open, true);
+                Equal("corner_floor_not_black", corner >= open / 2, true);
+            }
+            else
+            {
+                Equal("corner_floor_as_open", std::abs(corner - open) <= 1, true);
+            }
+            Expect("wall_foot", footX, footY, 90, 110, 150);
+            Expect("wall", wallX, wallY, 90, 110, 150);
+            Expect("sky", 20, 10, 0, 0, 0);
+            char line[96];
+            std::snprintf(line, sizeof(line), " lit_open=%d lit_corner=%d", open, corner);
+            result->detail += line;
+        }
+        else
+        {
+            Expect("open_floor", openX, openY, 0, 0, 0);
+            Expect("corner_floor", cornerX, cornerY, 0, 0, 0);
+            Expect("wall_foot", footX, footY, 90, 110, 150);
+            Expect("wall", wallX, wallY, 90, 110, 150);
+            Expect("sky", 20, 10, 0, 0, 0);
+        }
+    }
+    device->SetDepthStencilSurface(nullptr);
+    SafeRelease(depth);
+}
+
 // The Modern path's screen-space reflections (docs/vulkan-modern.md
 // "Screen-space reflections"), traced from the depth prepass and the normals
 // buffer as the engine draws them, with the light of last scene's
@@ -3188,9 +3401,17 @@ void Check::ModernReflections()
     const bool normalsOff = envIs("KISAK_VK_MODERN_NORMALS", "0");
     const bool wanted = !envIs("KISAK_VK_MODERN_SSR", "0") && !normalsOff
                         && (envIs("KISAK_VK_MODERN_SSR", "1") || envIs("KISAK_VK_MODERN_DEBUG", "reflections"));
-    // The scene's depth is taken whenever the normals buffer is wanted.
-    const bool depthTaken =
-        wanted || (!normalsOff && (envIs("KISAK_VK_MODERN_NORMALS", "1") || envIs("KISAK_VK_MODERN_DEBUG", "normals")));
+    // The scene's depth is taken whenever the normals buffer is wanted: for
+    // the reflections, its own debug view or KISAK_VK_MODERN_NORMALS=1, or
+    // for ambient occlusion (our lit shaders read it; this scene's surfaces
+    // are not drawn with them, so it changes nothing here).
+    const bool aoWanted = !envIs("KISAK_VK_MODERN_AO", "0")
+                          && (envIs("KISAK_VK_MODERN_AO", "1") || envIs("KISAK_VK_MODERN_DEBUG", "ao")
+                              || (!envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
+                                  && !envIs("KISAK_VK_MODERN_SHADERS", "0")));
+    const bool depthTaken = wanted
+                            || (!normalsOff && (envIs("KISAK_VK_MODERN_NORMALS", "1")
+                                                || envIs("KISAK_VK_MODERN_DEBUG", "normals") || aoWanted));
     const bool traced = wanted && !envIs("KISAK_VK_MODERN_LINEAR", "0");
     const bool shown = traced && envIs("KISAK_VK_MODERN_DEBUG", "reflections");
     Equal("wants_scene_depth", front::ModernWantsSceneDepth(device), depthTaken);
@@ -4902,6 +5123,7 @@ int Run(const Options &options)
         {"modern_exposure", &Check::ModernExposure, true},
         {"modern_velocity", &Check::ModernVelocity, true},
         {"modern_normals", &Check::ModernNormals, true},
+        {"modern_ao", &Check::ModernAo, true},
         {"modern_reflections", &Check::ModernReflections, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
