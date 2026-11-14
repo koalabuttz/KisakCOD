@@ -99,3 +99,9 @@ health, team, class and clean-quit checks, logs every bot's view once a second
 and requires that each bot looked around, never turned faster than 120 degrees
 a second (with a margin for a server frame) and kept its pitch within the
 player's limits.
+
+A stock team holds at most half the server's slots, so the probe puts more than
+four bots on both teams (odd entity numbers on axis) and keeps them from firing.
+It takes up to 18 bots, 9 against 9; `sv_maxclients` is the larger of 8 and the
+bot count. PC bot brain run 1 sent 6 and 8 bots all to allies before this, and
+every bot past the fourth stayed a spectator.

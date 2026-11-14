@@ -4,7 +4,8 @@ import unittest
 from test_linux_bots import (FIXTURE_GSC, transition_fixture, transition_plan,
                              final_cohort_log, refill_fixture, validate_refills,
                              validate_kick_window, validate_hold, validate_transitions,
-                             validate_brain_view)
+                             validate_brain_view, balanced_teams, uses_both_teams,
+                             TEAM_CAPACITY, MAX_BOTS)
 
 
 def healthy_log():
@@ -238,6 +239,33 @@ class RefillEvidenceTests(unittest.TestCase):
         self.assertIn('getdvarint("botTest_refill") < round', fixture)
         self.assertNotIn('setdvar("sv_zombietime"', fixture)
         self.assertEqual(fixture.count('addtestclient()'), 1)
+
+
+class TeamCapacityTests(unittest.TestCase):
+    # A stock team holds half of sv_maxclients (8), so PC bot brain run 1's
+    # 6 and 8 bots all sent to allies left 2 and 4 of them spectators.
+    def test_more_bots_than_a_team_holds_use_both_teams(self):
+        self.assertFalse(uses_both_teams(TEAM_CAPACITY, 0))
+        self.assertTrue(uses_both_teams(TEAM_CAPACITY + 1, 0))
+        self.assertTrue(uses_both_teams(1, 1))
+        self.assertGreaterEqual(MAX_BOTS, 18)
+
+    def test_both_teams_split_by_entity_number(self):
+        for fixture in (FIXTURE_GSC, transition_fixture()):
+            split = balanced_teams(fixture)
+            self.assertNotIn('"{team}"', split)
+            self.assertIn('team = "axis";', split)
+            self.assertIn('getentitynumber() % 2) == 1', split)
+        self.assertIn('team = "axis";', refill_fixture())
+
+    def test_split_teams_are_what_the_hold_expects(self):
+        log = ''.join(f'0:01 BOTFEATURE spawned entity={i}\n' for i in range(6))
+        for i in range(6):
+            team = 'axis' if i % 2 else 'allies'
+            log += (f'0:05 BOTFEATURE held entity={i} sample=0 state=playing '
+                    f'health=100 team={team} class=CLASS_ASSAULT weapon=m16_mp\n')
+        self.assertTrue(all(ok for ok, _ in validate_hold(log, 6, 0, True)))
+        self.assertFalse(all(ok for ok, _ in validate_hold(log, 6, 0, False)))
 
 
 if __name__ == '__main__':

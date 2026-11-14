@@ -45,6 +45,11 @@ admits a new cohort. Both teams are used through normal menus to respect team
 capacity; sv_botsPressAttackBtn=0 keeps combat out of these lifecycle checks.
 Map cycles, if requested, retain the final refill cohort.
 
+A stock team holds at most half the server's slots (sv_maxclients), so with
+more than TEAM_CAPACITY bots every mode splits them over both teams by entity
+number (odd numbers to axis) and sets sv_botsPressAttackBtn=0 as above. With up
+to MAX_BOTS bots sv_maxclients is the larger of 8 and the bot count.
+
 NOT implemented or claimed: combat kills, client-originated disconnect packets,
 client-side/snapshot decoding, retail/Steam compatibility, and AI.
 
@@ -253,18 +258,36 @@ def validate_transitions(log_text: str, bots: int, hold_seconds: int,
     return checks
 
 
+# Bots a stock team takes when sv_maxclients is 8: a team holds half the slots.
+TEAM_CAPACITY = 4
+# 9 against 9, the largest match the bots are meant for (docs/bots.md).
+MAX_BOTS = 18
+TEAM_RESPONSE = '        level.botTestBots[i] notify("menuresponse", game["menu_team"], "{team}");'
+BALANCED_TEAM_RESPONSE = '''    {
+        team = "allies";
+        if ((level.botTestBots[i] getentitynumber() % 2) == 1)
+            team = "axis";
+        level.botTestBots[i] notify("menuresponse", game["menu_team"], team);
+    }'''
+
+
+def balanced_teams(fixture: str) -> str:
+    """Send odd entity numbers to axis and even ones to allies."""
+    assert TEAM_RESPONSE in fixture
+    return fixture.replace(TEAM_RESPONSE, BALANCED_TEAM_RESPONSE)
+
+
+def uses_both_teams(bots: int, refill_cycles: int) -> bool:
+    return bool(refill_cycles) or bots > TEAM_CAPACITY
+
+
 def refill_fixture() -> str:
     """Drop only the tracked cohort, await normal expiry, and refill its slots."""
     fixture = transition_fixture()
     start = fixture.index('    botTest_Log("BOTFEATURE auth_loopback=')
     end = fixture.index('\n}\n\nbotTest_RestoreConnecting()', start)
     body = fixture[start:end]
-    body = body.replace('        level.botTestBots[i] notify("menuresponse", game["menu_team"], "{team}");', '''    {
-        team = "allies";
-        if ((level.botTestBots[i] getentitynumber() % 2) == 1)
-            team = "axis";
-        level.botTestBots[i] notify("menuresponse", game["menu_team"], team);
-    }''')
+    body = balanced_teams(body)
     prefix = '''    rounds = 0;
     if (stage == 0)
         rounds = {refill_cycles};
@@ -488,8 +511,9 @@ def main() -> int:
         parser.error("--refill-cycles must be nonnegative")
     if not re.fullmatch(r"mp_[a-z0-9_]+", args.map_name):
         parser.error("--map must be a stock-style mp_ map name")
-    if not 1 <= args.bots <= 8:
-        parser.error("--bots must be between 1 and 8")
+    if not 1 <= args.bots <= MAX_BOTS:
+        parser.error(f"--bots must be between 1 and {MAX_BOTS}")
+    both_teams = uses_both_teams(args.bots, args.refill_cycles)
     game = args.game_dir.expanduser().resolve()
     binary = args.binary.expanduser().resolve()
     for name in ("main", "zone", "localization.txt"):
@@ -511,7 +535,9 @@ def main() -> int:
         scripts = mod / "maps" / "mp" / "gametypes"
         scripts.mkdir(parents=True)
         (scripts / "dm.gsc").write_text(
-            (refill_fixture() if args.refill_cycles else transition_fixture() if args.cycles else FIXTURE_GSC)
+            (refill_fixture() if args.refill_cycles else
+             balanced_teams(transition_fixture() if args.cycles else FIXTURE_GSC) if both_teams else
+             transition_fixture() if args.cycles else FIXTURE_GSC)
             .replace("{bots}", str(args.bots)).replace("{team}", "allies")
             .replace("{hold_seconds}", str(args.hold_seconds))
             .replace("{refill_cycles}", str(args.refill_cycles))
@@ -526,7 +552,7 @@ def main() -> int:
             "+set", "dedicated", "1",
             "+set", "net_ip", "127.0.0.1",
             "+set", "net_port", str(port),
-            "+set", "sv_maxclients", str(args.bots) if args.refill_cycles else "8",
+            "+set", "sv_maxclients", str(args.bots) if args.refill_cycles else str(max(8, args.bots)),
             "+set", "g_gametype", "dm",
             # Write and flush the game log so the marker barrier can read it.
             "+set", "g_log", "games_mp.log",
@@ -537,9 +563,10 @@ def main() -> int:
         if args.cycles or args.refill_cycles:
             command[-2:-2] = ["+set", "botTest_stage", "0", "+set", "sv_mapRotation",
                               f"gametype dm map {args.map_name}", "+set", "botTest_refill", "0"]
-        if args.refill_cycles:
-            # Full capacity needs both teams. Isolate lifecycle from combat;
-            # this gameplay setting does not alter authentication.
+        if both_teams:
+            # A team holds half the slots, so these bots use both. Isolate
+            # lifecycle from combat; this gameplay setting does not alter
+            # authentication.
             command[-2:-2] = ["+set", "sv_botsPressAttackBtn", "0"]
         print(f"+ {binary}")
         print(f"+ 127.0.0.1:{port} map={args.map_name} gametype=dm(fixture) bots={args.bots} bot_brain={args.brain}")
@@ -607,7 +634,7 @@ def main() -> int:
                     stage_log = (refill_segments(log)[-1][1] if args.refill_cycles and stage == 0
                                  else log[segments[-1].end():])
                     stage_log = stage_log.replace("BOTFEATURE retained entity=", "BOTFEATURE spawned entity=")
-                    if not all(ok for ok, _ in validate_hold(stage_log, args.bots, args.hold_seconds, bool(args.refill_cycles))):
+                    if not all(ok for ok, _ in validate_hold(stage_log, args.bots, args.hold_seconds, both_teams)):
                         stage_failure = f"stage {stage}: invalid hold evidence"
                         break
                     print(f"PASS: live stage {stage} map={expected_map} hold reached", flush=True)
@@ -681,8 +708,8 @@ def main() -> int:
             (len(set(spawned)) == args.bots, "admissions used exactly the expected slots"),
             *(validate_refills(log_text, args.bots, args.hold_seconds, args.refill_cycles) if args.refill_cycles else []),
             *(validate_transitions(final_cohort_log(log_text) if args.refill_cycles else log_text,
-                                   args.bots, args.hold_seconds, args.map_name, args.cycles, bool(args.refill_cycles))
-              if args.cycles or args.refill_cycles else validate_hold(log_text, args.bots, args.hold_seconds)),
+                                   args.bots, args.hold_seconds, args.map_name, args.cycles, both_teams)
+              if args.cycles or args.refill_cycles else validate_hold(log_text, args.bots, args.hold_seconds, both_teams)),
             *kick_checks,
             *(validate_brain_view(log_text, args.bots, args.hold_seconds) if args.brain else []),
             (len(spawned) == expected_admissions and (combined.count("Gamestate has") >= len(spawned) or
