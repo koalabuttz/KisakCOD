@@ -53,6 +53,7 @@ struct ModernTuning
     int shaders = -1;       // our own lit shaders (KISAK_VK_MODERN_SHADERS)
     int modelShaders = -1;  // of those, models' (KISAK_VK_MODERN_MODEL_SHADERS)
     int noSunShaders = -1;  // of those, surfaces without the sun (KISAK_VK_MODERN_NO_SUN_SHADERS)
+    int lightShaders = -1;  // of those, spot and omni lights' (KISAK_VK_MODERN_LIGHT_SHADERS)
     int ao = -1;
     int reflections = -1;
     int tonemap = -1;       // modern::TonemapCurve
@@ -316,7 +317,7 @@ struct ModernLitInputs
     bool overWhite = false;
     // With overWhite: a Modern lit shader of ours to draw the pixel shader as
     // (legacy ModernLitShader; 0 for none), unless KISAK_VK_MODERN_SHADERS=0.
-    uint8_t shader = 0;
+    uint16_t shader = 0;
 };
 void SetModernLitInputs(IDirect3DDevice9 *device, const ModernLitInputs *inputs);
 // One of the game's reflection probes, a cube texture of this device, as the

@@ -26,6 +26,7 @@ inline const dvar_s *velocity;
 inline const dvar_s *shaders;
 inline const dvar_s *modelShaders;
 inline const dvar_s *noSunShaders;
+inline const dvar_s *lightShaders;
 inline const dvar_s *ao;
 inline const dvar_s *ssr;
 inline const dvar_s *tonemap;
@@ -60,6 +61,9 @@ inline void Register()
     noSunShaders = Dvar_RegisterEnum("r_modernNoSunShaders", kOnOffNames, 0, DVAR_NOFLAG,
                                      "Modern visuals: our own lit shaders for surfaces without the sun (default: on "
                                      "unless KISAK_VK_MODERN_NO_SUN_SHADERS=0)");
+    lightShaders = Dvar_RegisterEnum("r_modernLightShaders", kOnOffNames, 0, DVAR_NOFLAG,
+                                     "Modern visuals: our own lit shaders for spot and omni lights (default: on "
+                                     "unless KISAK_VK_MODERN_LIGHT_SHADERS=0)");
     ao = Dvar_RegisterEnum("r_modernAo", kOnOffNames, 0, DVAR_NOFLAG,
                            "Modern visuals: ambient occlusion (default: with our lit shaders, unless "
                            "KISAK_VK_MODERN_AO says otherwise)");
@@ -115,6 +119,7 @@ inline void Read(gfx_vk::d3d9::ModernTuning &out)
     out.shaders = shaders->current.integer - 1;
     out.modelShaders = modelShaders->current.integer - 1;
     out.noSunShaders = noSunShaders->current.integer - 1;
+    out.lightShaders = lightShaders->current.integer - 1;
     out.ao = ao->current.integer - 1;
     out.reflections = ssr->current.integer - 1;
     out.tonemap = tonemap->current.integer - 1;  // clamp, neutral, agx, aces: modern::TonemapCurve 0 to 3

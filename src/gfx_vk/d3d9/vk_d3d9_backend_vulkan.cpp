@@ -126,9 +126,11 @@ struct Backend
     bool shadersWanted = true;
     // Models' (lp_) shaders of ours, unless KISAK_VK_MODERN_MODEL_SHADERS=0;
     // those for surfaces without the sun (interiors), unless
-    // KISAK_VK_MODERN_NO_SUN_SHADERS=0.
+    // KISAK_VK_MODERN_NO_SUN_SHADERS=0; those for surfaces lit by a spot or
+    // omni light, unless KISAK_VK_MODERN_LIGHT_SHADERS=0.
     bool modelShadersWanted = true;
     bool noSunShadersWanted = true;
+    bool lightShadersWanted = true;
     float sunStrength = 1.0f;
     float skyStrength = 1.0f;
     uint64_t litShaderChanges = 0, litShaderChangesBase = 0;
@@ -264,7 +266,7 @@ struct Backend
     struct ModernStart
     {
         bool bloom = true, exposure = true, velocity = true;
-        bool shaders = true, modelShaders = true, noSunShaders = true;
+        bool shaders = true, modelShaders = true, noSunShaders = true, lightShaders = true;
         int ao = -1, reflections = -1, normals = -1;
         ModernDebugView debug = ModernDebugNone;
         modern::TonemapCurve curve = modern::TonemapCurve::Neutral;
@@ -463,6 +465,7 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
     backend->shadersWanted = pick(tuning.shaders, start.shaders);
     backend->modelShadersWanted = pick(tuning.modelShaders, start.modelShaders);
     backend->noSunShadersWanted = pick(tuning.noSunShaders, start.noSunShaders);
+    backend->lightShadersWanted = pick(tuning.lightShaders, start.lightShaders);
 
     const ModernDebugView view = tuning.debug >= ModernDebugNone && tuning.debug <= ModernDebugReflections
                                      ? static_cast<ModernDebugView>(tuning.debug)
@@ -553,12 +556,12 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
     const auto onOff = [](bool on) { return on ? "on" : "off"; };
     HostLog(*backend->host,
             "vulkan d3d9: modern: switches now: bloom %s, exposure %s (key %.3f), velocity %s, our shaders %s "
-            "(models %s, without the sun %s; sun %.2f, sky %.2f), ambient occlusion %s (radius %.1f, power %.2f, "
+            "(models %s, without the sun %s, lights %s; sun %.2f, sky %.2f), ambient occlusion %s (radius %.1f, power %.2f, "
             "thickness %.1f, floor %.2f, edge %.3f), reflections %s (distance %.0f, thickness %.1f), normals %s, "
             "tonemap %s, debug view %s",
             onOff(backend->bloomWanted), onOff(backend->exposureWanted), backend->exposureParams.key,
             onOff(backend->velocityWanted), onOff(backend->shadersWanted), onOff(backend->modelShadersWanted),
-            onOff(backend->noSunShadersWanted), backend->sunStrength, backend->skyStrength, onOff(backend->aoWanted),
+            onOff(backend->noSunShadersWanted), onOff(backend->lightShadersWanted), backend->sunStrength, backend->skyStrength, onOff(backend->aoWanted),
             aoParams.radius, aoParams.power, aoParams.thickness, aoParams.floor, aoParams.edge,
             onOff(backend->reflectionsWanted), reflectionParams.maxDistance, reflectionParams.thickness,
             onOff(backend->normalsWanted), modern::CurveName(backend->tonemapCurve), DebugViewName(view));
@@ -587,6 +590,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     start.shaders = !EnvIsZero("KISAK_VK_MODERN_SHADERS");
     start.modelShaders = !EnvIsZero("KISAK_VK_MODERN_MODEL_SHADERS");
     start.noSunShaders = !EnvIsZero("KISAK_VK_MODERN_NO_SUN_SHADERS");
+    start.lightShaders = !EnvIsZero("KISAK_VK_MODERN_LIGHT_SHADERS");
     {
         const std::string sun = EnvText("KISAK_VK_MODERN_SUN_STRENGTH");
         const float sunValue = sun.empty() ? -1.0f : std::strtof(sun.c_str(), nullptr);
@@ -1365,9 +1369,10 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
 {
     if (!backend || !backend->legacy || !backend->litWanted)
         return;
-    uint8_t shader = inputs && backend->shadersWanted ? inputs->shader : uint8_t(lg::ModernLitNone);
+    uint16_t shader = inputs && backend->shadersWanted ? inputs->shader : uint16_t(lg::ModernLitNone);
     if ((lg::ModernLitModel(shader) && !backend->modelShadersWanted)
-        || (shader && !lg::ModernLitSun(shader) && !backend->noSunShadersWanted))
+        || ((shader & lg::ModernLitFamilyMask) == lg::ModernLitNoSun && !backend->noSunShadersWanted)
+        || (lg::ModernLitPointLight(shader) && !backend->lightShadersWanted))
         shader = lg::ModernLitNone;
     if (inputs && backend->linearScene && !backend->linearFailed)
     {
