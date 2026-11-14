@@ -19,9 +19,7 @@
 #include <server/sv_game.h>
 #include <server/sv_world.h>
 
-#if !defined(_WIN32)
 #include <linux/sys_perf.h>
-#endif
 
 #include <script/scr_const.h>
 #include <script/scr_main.h>
@@ -1193,9 +1191,7 @@ void G_RunFrame(int32_t levelTime)
     bgs = &level_bgs;
     iassert(level.frametime >= 0);
     {
-#if !defined(_WIN32)
         SysPerfScope perfScope(SYS_PERF_PROBE_SERVER_TRIGGERS);
-#endif
         ent = g_entities;
         i = 0;
         while (i < level.maxclients)
@@ -1213,9 +1209,7 @@ void G_RunFrame(int32_t levelTime)
 
     {
         PROF_SCOPED("G_XAnimUpdate");
-#if !defined(_WIN32)
         SysPerfScope perfScope(SYS_PERF_PROBE_SERVER_ANIM);
-#endif
         ent = g_entities;
         i = 0;
         while (i < level.num_entities)
@@ -1234,9 +1228,7 @@ void G_RunFrame(int32_t levelTime)
     index = 0;
     {
         PROF_SCOPED("G_TriggerChecks");
-#if !defined(_WIN32)
         SysPerfScope perfScope(SYS_PERF_PROBE_SERVER_TRIGGERS);
-#endif
         iassert(level.currentTriggerListSize == 0);
 
         Com_Memcpy((char *)level.currentTriggerList, (char *)level.pendingTriggerList, 12 * level.pendingTriggerListSize);
@@ -1298,9 +1290,7 @@ void G_RunFrame(int32_t levelTime)
 
     {
         PROF_SCOPED("G_XAnimUpdate");
-#if !defined(_WIN32)
         SysPerfScope perfScope(SYS_PERF_PROBE_SERVER_ANIM);
-#endif
         ent = g_entities;
         i = 0;
         while (i < level.num_entities)
@@ -1312,17 +1302,13 @@ void G_RunFrame(int32_t levelTime)
     }
 
     {
-#if !defined(_WIN32)
         SysPerfScope perfScope(SYS_PERF_PROBE_SERVER_SCRIPTS);
-#endif
         Scr_IncTime();
     }
     SV_ResetSkeletonCache();
     {
         PROF_SCOPED("G_RunFrameForEntity");
-#if !defined(_WIN32)
         SysPerfScope perfScope(SYS_PERF_PROBE_SERVER_ENTITIES);
-#endif
         if (level.currentEntityThink != -1)
             MyAssertHandler(".\\game_mp\\g_main_mp.cpp", 1984, 0, "%s", "level.currentEntityThink == -1");
         ent = g_entities;
@@ -1346,9 +1332,7 @@ void G_RunFrame(int32_t levelTime)
     }
     {
         PROF_SCOPED("ClientEndFrame");
-#if !defined(_WIN32)
         SysPerfScope perfScope(SYS_PERF_PROBE_SERVER_CLIENT_END);
-#endif
         ent = g_entities;
         i = 0;
         while (i < level.maxclients)

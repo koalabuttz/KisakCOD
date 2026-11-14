@@ -6,10 +6,18 @@
 // The counters and the sleep live in this header, not in sys_perf.cpp, so the
 // renderer can use them in every program it is linked into (the probes and
 // test programs list their platform files one by one).
+//
+// The Windows build includes it too (src/win32 lists sys_perf.cpp): there the
+// clock is std::chrono::steady_clock (QueryPerformanceCounter) and there is no
+// sleep, since r_gpuSyncSleep is not in the Windows build.
 
 #include <atomic>
 #include <cstdint>
+#if defined(_WIN32)
+#include <chrono>
+#else
 #include <time.h>
+#endif
 
 #if defined(__linux__)
 #include <sys/prctl.h>
@@ -33,6 +41,7 @@ inline void Sys_PerfAddMicroseconds(SysPerfCounter counter, uint32_t microsecond
 // Sleeps the calling thread for about this long. On Linux the thread's timer
 // slack is lowered first: with the default 50 us slack a 50 us sleep can take
 // 100 us or more.
+#if !defined(_WIN32)
 inline void Sys_PerfSleepMicroseconds(uint32_t microseconds)
 {
 #if defined(__linux__)
@@ -49,6 +58,7 @@ inline void Sys_PerfSleepMicroseconds(uint32_t microseconds)
     // An interrupted sleep is not resumed: every caller polls again anyway.
     nanosleep(&request, nullptr);
 }
+#endif
 
 // ---------------------------------------------------------------------------
 // Probes: pieces of the game that are timed while a perf_ab or perf_sample run
@@ -71,6 +81,13 @@ enum SysPerfProbe : uint32_t
     SYS_PERF_PROBE_SERVER_ENTITIES,    // G_RunFrame: G_RunFrameForEntity for every entity
     SYS_PERF_PROBE_SERVER_CLIENT_END,  // G_RunFrame: ClientEndFrame for every player
     SYS_PERF_PROBE_SERVER_SEND,        // SV_SendClientMessages: snapshots to the clients
+    // Parts of the HUD (cgame_mp), inside SYS_PERF_PROBE_HUD.
+    SYS_PERF_PROBE_HUD_MENUS,          // Menu_PaintAll: the HUD's menus
+    SYS_PERF_PROBE_HUD_ELEMS,          // CG_Draw2dHudElems: script hud elements
+    SYS_PERF_PROBE_HUD_NAMES,          // CG_ScanForCrosshairEntity and CG_UpdatePlayerNames
+    SYS_PERF_PROBE_HUD_COMPASS,        // CG_CompassUpdateActors
+    SYS_PERF_PROBE_HUD_SCOREBOARD,     // CG_DrawScoreboard
+    SYS_PERF_PROBE_UI_EXPRESSIONS,     // EvaluateExpression: every menu expression, in the HUD or not
     SYS_PERF_PROBE_WAIT_RENDERER,      // main thread asleep until the render thread takes the frame
     SYS_PERF_PROBE_WAIT_WORKERS_ALL,   // ... until every front-end worker command is done
     SYS_PERF_PROBE_WAIT_WORKERS_OTHER, // ... in any other wait that runs worker commands
@@ -97,9 +114,16 @@ inline bool Sys_PerfProbesOn()
 
 inline uint64_t Sys_PerfNowNs()
 {
+#if defined(_WIN32)
+    // Never 0 in practice (the counter starts at boot), which SysPerfScope
+    // takes as "not timing".
+    return (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+#else
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+#endif
 }
 
 inline void Sys_PerfProbeAdd(uint32_t probe, uint64_t ns)
