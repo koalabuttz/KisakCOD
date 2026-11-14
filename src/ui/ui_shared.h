@@ -2055,5 +2055,7 @@ extern const dvar_t *ui_showMenuOnly;
 extern const dvar_t *ui_cinematicsTimestamp;
 extern const dvar_t *uiscript_debug;
 extern const dvar_t *ui_fastExpressions; // ui_expressions.cpp
+void UI_ExprStats_Init();  // the ui_exprStats command (ui_expressions.cpp)
+void UI_ExprStatsFrame(); // once a frame, so ui_exprStats can print per frame
 extern const dvar_t *ui_borderLowLightScale;
 
