@@ -42,7 +42,7 @@ extern float g_sceneScale;
 // A size of the screen as the scaled picture has it.
 inline int SceneScaled(int size, float scale)
 {
-    return std::max(1, int(float(size) * scale));
+    return (std::max)(1, int(float(size) * scale));
 }
 } // namespace gfx_gxm
 
