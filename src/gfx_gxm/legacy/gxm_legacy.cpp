@@ -1134,6 +1134,11 @@ void LogShaderSummary(Device &device, const char *when)
         when, (unsigned long long)p.requested, unsigned(gxm::ProgramsWaiting()), p.mostWaiting,
         (unsigned long long)p.hurried, (unsigned long long)p.dropped, p.slowestCompileMicros / 1000.0,
         p.slowestReadMicros / 1000.0, (unsigned long long)c.drawsWaited, (unsigned long long)c.framesWaited);
+    if (p.packRefused)
+        Log(device, "program pack %s: programs.pack is there but is not a pack this reads; not used", when);
+    else if (p.packPrograms)
+        Log(device, "program pack %s: programs.pack holds %u programs; %u of the %u read from the card came out of it",
+            when, p.packPrograms, p.fromPack, p.fromFiles);
     size_t held = 0, peak = 0;
     uint32_t refused = 0;
     gxm::ShaderCompilerMemory(held, peak, refused);
