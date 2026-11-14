@@ -40,6 +40,7 @@
 #include <gfx_gxm/gxm_engine_options.h>
 #include <gfx_gxm/gxm_live_switch.h>
 #include <gfx_gxm/gxm_program_cache.h>
+#include <vita/vita_gpu_clock.h>
 
 #include <psp2/kernel/threadmgr.h>
 
@@ -2307,7 +2308,8 @@ void LogWaitCauses(Device &device)
 
 // The switches "vita_gxm <marker> <0|1>" may turn while the game runs
 // (gxm_live_switch.h). The others size or make things at start-up.
-const char *const kLiveSwitches[] = {"no-depth-prepass", "no-frame-overlap", "no-vsync", "no-draw-reuse"};
+const char *const kLiveSwitches[] = {"no-depth-prepass", "no-frame-overlap", "no-vsync", "no-draw-reuse",
+                                     "no-gpu-boost"};
 struct LiveSwitch
 {
     const char *name;
@@ -2342,6 +2344,12 @@ void ApplyLiveSwitches(Device &device)
             gxm::SetDisplayVsync(!s.on);
         else if (name == "no-draw-reuse")
             d.reuse = !s.on;
+        else if (name == "no-gpu-boost")
+        {
+            vita::SetGpuBoost(!s.on);
+            const vita::GpuClocks now = vita::CurrentGpuClocks();
+            Log(device, "diag: GPU at %d MHz, GPU crossbar at %d MHz", now.gpu, now.xbar);
+        }
         Log(device, "diag: switch %s is %s from frame %llu on (vita_gxm)", s.name, s.on ? "on" : "off",
             (unsigned long long)d.frame);
     }
