@@ -4,8 +4,6 @@
 #include "vk_legacy_internal.h"
 
 #include <algorithm>
-#include <cstring>
-#include <cstdlib>
 
 namespace gfx_vk::legacy
 {
@@ -133,26 +131,6 @@ VkFormat ChooseVkFormat(const Device &device, const FormatInfo &format, uint32_t
     return FormatSupports(device.core, packed, needed) ? packed : VK_FORMAT_UNDEFINED;
 }
 
-// DIAGNOSTIC ONLY (macOS arm64 dynamic index buffers): not for merge.
-// KISAK_VK_DIAG_IB=usage gives dynamic index backings the vertex buffers'
-// usage too; =device keeps dynamic index buffers in device memory (staged).
-static bool DiagIb(const char *mode)
-{
-#if !defined(_MSC_VER)
-    const char *value = std::getenv("KISAK_VK_DIAG_IB");
-    return value && std::strcmp(value, mode) == 0;
-#else
-    (void)mode;
-    return false;
-#endif
-}
-static VkBufferUsageFlags DiagIndexUsage()
-{
-    return DiagIb("usage") ? VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-                                 | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT
-                           : VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-}
-
 template <typename T>
 T *CreateGpuBuffer(Device &device, uint32_t bytes, uint32_t usage, d3d::Pool pool, bool index, d3d::Format format,
                    const char *name)
@@ -172,13 +150,11 @@ T *CreateGpuBuffer(Device &device, uint32_t bytes, uint32_t usage, d3d::Pool poo
     buffer->indexType = format == d3d::FMT_INDEX32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
     buffer->name = name ? name : (index ? "legacy indices" : "legacy vertices");
     buffer->dynamic = (usage & d3d::USAGE_DYNAMIC) || pool == d3d::POOL_SYSTEMMEM;
-    if (index && DiagIb("device"))
-        buffer->dynamic = false;
     BufferDesc desc;
     desc.size = bytes;
     // Vertices can be copied from: the Modern path keeps skinned vertices
     // for the next frame's velocity (modern::KeepVertices).
-    desc.usage = index ? DiagIndexUsage()
+    desc.usage = index ? VK_BUFFER_USAGE_INDEX_BUFFER_BIT
                        : VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     desc.memory = buffer->dynamic ? MemoryKind::Upload : MemoryKind::Device;
     desc.name = buffer->name.c_str();
@@ -257,7 +233,7 @@ void *LockGpuBuffer(Device &device, GpuBuffer *buffer, uint32_t offset, uint32_t
         {
             BufferDesc desc;
             desc.size = buffer->size;
-            desc.usage = buffer->index ? DiagIndexUsage()
+            desc.usage = buffer->index ? VK_BUFFER_USAGE_INDEX_BUFFER_BIT
                                        : VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
             desc.memory = MemoryKind::Upload;
             desc.name = buffer->name.c_str();

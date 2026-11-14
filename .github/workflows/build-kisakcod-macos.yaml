@@ -865,16 +865,16 @@ jobs:
             export MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0
           fi
           bin="$OUT_DIR/KisakCOD-vulkan-d3d9-check"
-          for ib in "" usage big device; do
-            brush=""
-            [[ "$ib" == device ]] && brush=keep
-            echo "=== KISAK_VK_DIAG_IB=$ib KISAK_CHECK_BRUSH=$brush"
-            env KISAK_VK_DIAG_IB="$ib" KISAK_CHECK_BRUSH="$brush" KISAK_VK_MODERN_EXPOSURE=0 "$bin" --scene modern_velocity --validation auto 2>&1 \
-              | grep -aE 'scene=modern_velocity|diag ib|error|VUID|mvk-error' | cut -c1-600
+          for diag in "" static-ib keep near; do
+            for extra in "" "MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0"; do
+              echo "=== KISAK_CHECK_BRUSH=$diag $extra"
+              env KISAK_CHECK_BRUSH="$diag" KISAK_VK_MODERN_EXPOSURE=0 $extra "$bin" --scene modern_velocity --validation auto 2>&1 \
+                | grep -aE 'scene=modern_velocity|vertex stride|error|VUID|mvk-error|mvk-warn' | cut -c1-600
+            done
           done
-          echo "=== KISAK_VK_DIAG_IB=log with the static index buffer"
-          env KISAK_VK_DIAG_IB=log KISAK_CHECK_BRUSH=static-ib KISAK_VK_MODERN_EXPOSURE=0 "$bin" --scene modern_velocity --validation auto 2>&1 \
-            | grep -aE 'scene=modern_velocity|diag ib' | cut -c1-600
+          echo "=== Metal API validation, default"
+          env MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 MVK_CONFIG_LOG_LEVEL=2 KISAK_VK_MODERN_EXPOSURE=0 "$bin" --scene modern_velocity --validation auto 2>&1 \
+            | grep -avE '^d3d9_check\.log=legacy: (pipeline|shader)' | tail -n 80 | cut -c1-600
           exit 0
 
       - name: Show where the probe stopped
