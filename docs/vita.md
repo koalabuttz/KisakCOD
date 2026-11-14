@@ -89,6 +89,10 @@ Each line starts with the seconds since launch, so the gap between
 `Loading fastfile mp_crash` and the first frames is the map load time. Lines
 starting `Vita` come from the Vita layer:
 
+- `a 5 ms timed wait took N us`: one wait on an event nothing sets, timed at
+  start-up. About 5000 is right. Under 1000 means the port's timed waits do
+  not wait (the "Threads" row below has the story), and threads that should
+  sleep will spin.
 - `free memory at start-up`: what the system had left after loading the
   program and newlib's heap, before the engine's reservations.
 - `Vita memory ...` (after start-up, then once a minute, before a timed
@@ -571,7 +575,7 @@ the challenge random number (`sceKernelGetRandomNumber`).
 | Paths | `fs_basepath` defaults to `ux0:data/KisakCOD`. Paths with a device (`ux0:`) count as absolute. Directory entries carry their `SceIoStat` instead of `d_type`; the tree removal walks by path (no symbolic links on the Vita). |
 | Files | newlib's `off_t` is 32-bit: positional reads and writes past 2 GiB fail instead of wrapping. The stock fastfiles and IWDs are far smaller. |
 | Network | BSD sockets through newlib. No `getifaddrs`: the local addresses are loopback and the Wi-Fi address from `sceNetCtlInetGetInfo`. No `MSG_TRUNC`: a datagram that fills the receive buffer is dropped as oversize. |
-| Threads | newlib pthreads. Worker threads get a 1 MB stack (the Windows default); they cannot be renamed. Three cores are reported to the engine (applications run on three of the four). Every thread turns pthread cancellation off when it starts (`Vita_QuietWaits`): with it on, VitaSDK's pthreads wake a waiting thread every 500 microseconds to look for a cancel request, and an idle thread ran 3.6% of the time (console run AZ). Nothing in the port cancels a thread. |
+| Threads | newlib pthreads. Worker threads get a 1 MB stack (the Windows default); they cannot be renamed. Three cores are reported to the engine (applications run on three of the four). Every thread turns pthread cancellation off when it starts (`Vita_QuietWaits`): with it on, VitaSDK's pthreads wake a waiting thread every 500 microseconds to look for a cancel request, and an idle thread ran 3.6% of the time (console run AZ). Nothing in the port cancels a thread. Timed waits: VitaSDK's `pthread_cond_timedwait` reads its deadline against `CLOCK_REALTIME` whatever clock the condition variable was given, and the port's deadlines are `CLOCK_MONOTONIC`, which on the Vita counts from the start of the process. So no timed wait ever waited: it came back after one 500 microsecond poll with cancellation on, and at once with it off, which left a worker thread spinning on a whole core (console run BC). `Posix_CondTimedWaitMonotonic` (`src/linux/sys_posix.cpp`) hands the time left over as a wall clock deadline on the Vita, and the start-up log has a line `Vita: a 5 ms timed wait took N us`. |
 | Time | `__rdtsc` reads `sceKernelGetProcessTimeWide` (microseconds). |
 | Console | No terminal and no stdin: output goes to `console.log`, commands come from `cmdline.txt` and rcon. |
 | Quit | No signals: START + SELECT queues `quit`. The server also keeps the console from auto-suspending. Quit and fatal errors end the process with `sceKernelExitProcess`: newlib's `exit` frees the heap before the kernel stops the other threads, and a worker running in that gap faults (Vita3K showed it). |

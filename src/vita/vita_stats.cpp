@@ -316,6 +316,7 @@ namespace
 void Vita_StatsInit()
 {
     Cmd_AddCommandInternal("vitastats", Stats_f, &s_statsCommand);
+    Com_Printf(CON_CHANNEL_SYSTEM, "Vita: a 5 ms timed wait took %u us\n", (unsigned int)Vita_TimedWaitMicroseconds(5));
     vita_quitAfter = Dvar_RegisterInt("vita_quitAfter", 0, 0, 86400, DVAR_NOFLAG,
         "Quit this many seconds after start-up, for runs nobody watches (0: never)");
     vita_quitAfterMenu = Dvar_RegisterInt("vita_quitAfterMenu", 0, 0, 86400, DVAR_NOFLAG,

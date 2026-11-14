@@ -57,6 +57,11 @@ int Vita_ThreadTimes(VitaThreadTime *times, int count);
 // Nothing in the port cancels a thread. Each thread the port starts calls
 // this once.
 void Vita_QuietWaits();
+// How long a wait of `msec` on an event nothing sets takes, in microseconds.
+// The start-up log prints one: VitaSDK's pthreads read every deadline against
+// the wall clock, and until the port's waits allowed for that
+// (linux/sys_posix.cpp) no timed wait waited.
+uint32_t Vita_TimedWaitMicroseconds(uint32_t msec);
 
 // Load and memory figures for the first runs (src/vita/vita_stats.cpp), so
 // console.log answers how many players the Vita can serve.
