@@ -261,6 +261,15 @@ struct AoParams
     // face that went near black (0.13) and ended in a hard edge; the ground's
     // contact shadows stay far above it (about 0.85).
     float floor = 0.35f;
+    // The blur's depth tolerance: a tap whose view depth is this share of
+    // the pixel's away counts half. PC AO run 8: at 0.02 the blur stops dead
+    // at the crash-in arch slot's edge (the pillar's side face against the
+    // arch's inside face a little behind it), a hard step from 91 to 253
+    // that reads as a line. PC AO run 9: at 0.08 it ramps over 4 pixels
+    // (94, 120, 175, 225), with no halos round outlines and the ground
+    // within 2 levels; 0.25 and 0.6 soften it no further but lighten the
+    // ceiling beams' edges more.
+    float edge = 0.08f;
     uint32_t frame = 0;    // moves the noise
 };
 

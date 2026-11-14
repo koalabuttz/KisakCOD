@@ -8,6 +8,7 @@
 #include "vk_modern_shaders.h"
 
 #include <cmath>
+#include <cstring>
 #include <utility>
 #include <vector>
 
@@ -15,8 +16,7 @@ namespace gfx_vk::modern
 {
 namespace
 {
-// The push constants both shaders share (gtao.frag; ao_blur.frag reads the
-// members up to the power, and up[3], the floor).
+// gtao.frag's push constants.
 struct Push
 {
     float clipToView[4][4];
@@ -32,6 +32,18 @@ struct Push
     float up[4];
 };
 static_assert(sizeof(Push) == 128, "gtao.frag's push constant block fits 128 bytes, the least a device offers");
+
+// ao_blur.frag's push constants.
+struct BlurPush
+{
+    float clipToView[4][4];
+    float area[4];
+    float sky;
+    float edge;
+    float power;
+    float lowest;
+};
+static_assert(sizeof(BlurPush) <= sizeof(Push), "the blur's push constants fit the layout's range");
 
 constexpr VkFormat kRawFormat = VK_FORMAT_R16_SFLOAT;
 } // namespace
@@ -142,7 +154,7 @@ namespace
 // One full-screen pass of `pipeline` over view.area into `target`, reading
 // `first` and `second` at bindings 0 and 1.
 bool Pass(Core *core, AmbientOcclusion *ao, VkPipeline pipeline, const char *name, Image *first, Image *second,
-          Image *target, const VkRect2D &area, const Push &push, std::string &error)
+          Image *target, const VkRect2D &area, const void *push, uint32_t pushSize, std::string &error)
 {
     const VkDescriptorSet set = AllocateDescriptorSet(core, ao->setLayout);
     if (!set)
@@ -179,6 +191,8 @@ bool Pass(Core *core, AmbientOcclusion *ao, VkPipeline pipeline, const char *nam
         return false;
     }
     const VkPipelineLayout layout = ao->layout;
+    Push words{};
+    std::memcpy(&words, push, pushSize);
     Record(core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
         const VkViewport viewport{static_cast<float>(area.offset.x),
                                   static_cast<float>(area.offset.y),
@@ -188,7 +202,7 @@ bool Pass(Core *core, AmbientOcclusion *ao, VkPipeline pipeline, const char *nam
                                   1.0f};
         vk.vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
         vk.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1, &set, 0, nullptr);
-        vk.vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
+        vk.vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, pushSize, &words);
         vk.vkCmdSetViewport(cmd, 0, 1, &viewport);
         vk.vkCmdSetScissor(cmd, 0, 1, &area);
         vk.vkCmdDraw(cmd, 3, 1, 0, 0);
@@ -248,7 +262,6 @@ bool BuildAmbientOcclusion(Core *core, AmbientOcclusion *ao, Image *depth, Image
     push.frame = params.frame;
     push.thickness = params.thickness;
     push.grazing = params.grazing;
-    push.up[3] = params.floor;
     // World up (the engine's +z) in view space: p_view = p_world * view.
     {
         const float x = view.view[2][0], y = view.view[2][1], z = view.view[2][2];
@@ -296,9 +309,16 @@ bool BuildAmbientOcclusion(Core *core, AmbientOcclusion *ao, Image *depth, Image
             return false;
         ao->blurPipelines.emplace_back(targetInfo.format, blur);
     }
-    if (!Pass(core, ao, ao->gtaoPipeline, "modern ao", depth, normals, ao->raw, view.area, push, error))
+    BlurPush blurPush{};
+    std::memcpy(blurPush.clipToView, push.clipToView, sizeof(blurPush.clipToView));
+    std::memcpy(blurPush.area, push.area, sizeof(blurPush.area));
+    blurPush.sky = push.sky;
+    blurPush.edge = params.edge;
+    blurPush.power = params.power;
+    blurPush.lowest = params.floor;
+    if (!Pass(core, ao, ao->gtaoPipeline, "modern ao", depth, normals, ao->raw, view.area, &push, sizeof(push), error))
         return false;
-    if (!Pass(core, ao, blur, "modern ao", depth, ao->raw, target, view.area, push, error))
+    if (!Pass(core, ao, blur, "modern ao", depth, ao->raw, target, view.area, &blurPush, sizeof(blurPush), error))
         return false;
     UseImage(core, target, ImageUse::Sampled);
     ++ao->stats.builds;
