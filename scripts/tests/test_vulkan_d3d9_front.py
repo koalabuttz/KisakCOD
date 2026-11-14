@@ -146,9 +146,10 @@ involved. The checks:
                  drawn into their own image (logged), never onto the screen,
                  and the debug view shows the first over the second frame's
                  scene, and a third frame's floor, drawn by our lit shader on
-                 the plane, reads the second (logged; its floor shows the
-                 planar image's red, and stays black with
-                 KISAK_VK_MODERN_SHADERS=0); the full run takes none
+                 the plane, reads the second (logged; its left half shows
+                 the planar image's blue and its right half its green, and
+                 both stay black with KISAK_VK_MODERN_SHADERS=0); the full
+                 run takes none
   ao             --scene modern_ao passes as it is, where our lit shader
                  darkens the floor in the corner by the ambient occlusion
                  (the scene's own points), with KISAK_VK_MODERN_DEBUG=ao (and

@@ -2948,10 +2948,12 @@ void Check::Multisample()
 // Planar reflections (vk_d3d9.h ModernPlanarBegin): two frames, each a scene
 // in linear light (a grey clear) and then a planar view of half its size, in
 // which the renderer sets the back buffer and the scene's depth as its targets
-// and draws red. The red must land in the planar image, never on the screen;
-// with KISAK_VK_MODERN_DEBUG=planar the second frame shows the first frame's
-// planar image over the scene's top left. Without KISAK_VK_MODERN_PLANAR=1 or
-// the debug view, or with KISAK_VK_MODERN_LINEAR=0, no view is taken.
+// and draws four quadrants (red top left, green top right, blue bottom left,
+// yellow bottom right). They must land in the planar image, never on the
+// screen; with KISAK_VK_MODERN_DEBUG=planar the second frame shows the first
+// frame's planar image over the scene's top left. Without
+// KISAK_VK_MODERN_PLANAR=1 or the debug view, or with KISAK_VK_MODERN_LINEAR=0,
+// no view is taken.
 void Check::ModernPlanar()
 {
     const auto envIs = [](const char *name, const char *value) {
@@ -2997,7 +2999,12 @@ void Check::ModernPlanar()
         front::ModernPlanarView planar{};
         for (int i = 0; i < 4; ++i)
             planar.view[i][i] = 1.0f;
-        // Every point to the middle of the image (clip (0, 0, 0, 1)).
+        // Clip (x, x + y, 0, 1) for the world point (x, y, z): not symmetric,
+        // so the third frame's reads tell a transposed matrix from the right
+        // one.
+        planar.projection[0][0] = 1.0f;
+        planar.projection[0][1] = 1.0f;
+        planar.projection[1][1] = 1.0f;
         planar.projection[3][3] = 1.0f;
         planar.width = kHalf;
         planar.height = kHalf;
@@ -3017,7 +3024,11 @@ void Check::ModernPlanar()
             device->SetViewport(&viewport);
             device->SetRenderState(D3DRS_ZENABLE, TRUE);
             device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-            DrawQuad(0, 0, kHalf, kHalf, 0.5f, Argb(255, 250, 20, 20), kHalf);
+            constexpr float q = kHalf / 2.0f;
+            DrawQuad(0, 0, q, q, 0.5f, Argb(255, 250, 20, 20), kHalf);
+            DrawQuad(q, 0, kHalf, q, 0.5f, Argb(255, 20, 250, 20), kHalf);
+            DrawQuad(0, q, q, kHalf, 0.5f, Argb(255, 20, 20, 250), kHalf);
+            DrawQuad(q, q, kHalf, kHalf, 0.5f, Argb(255, 250, 250, 20), kHalf);
             front::ModernPlanarDone(device, planar);
             IDirect3DSurface9 *target = nullptr;
             if (Ok(device->GetRenderTarget(0, &target), "GetRenderTarget"))
@@ -3040,11 +3051,16 @@ void Check::ModernPlanar()
 
     // A third frame: a floor on the plane drawn by our lit shader
     // (lm_sun_r0c0s0 with a black colour map, lightmaps and probe, a white
-    // specular map of gloss 1 and Fresnel 1, the point one unit below the eye,
-    // as ModernReflections draws its floor) reads last frame's planar image.
-    // Its planar view's projection takes every point to the image's middle,
-    // which is red, so the floor shows red where it reads it and black
-    // where it does not.
+    // specular map of gloss 1 and Fresnel 1) reads last frame's planar image.
+    // The camera stands at x = 0.4, and the floor is drawn in two halves,
+    // each with one point relative to the eye one unit below it (the vertex
+    // shader passes texcoord 5 through): the left half's world point
+    // (-0.6, 0.3, -1) projects to clip (-0.6, -0.3), the image's bottom left
+    // (blue), and the right half's (0.6, -0.3, -1) to clip (0.6, 0.3), its
+    // top right (green). A transposed matrix reads red and blue, an eye taken
+    // with the wrong sign off the image (black) and blue, an image read
+    // upside down red and yellow, and one read mirrored yellow and red.
+    // Without the read the floor stays black.
     IDirect3DTexture9 *black = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 0, 0, 0); });
     IDirect3DTexture9 *blackLight = FilledTexture(1, 2, [](UINT, UINT) { return Argb(130, 0, 0, 0); });
     IDirect3DTexture9 *glossy = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
@@ -3069,18 +3085,26 @@ void Check::ModernPlanar()
         const auto project = [&](float x, float y, float z) {
             return Vertex{k * x / z, k * y / z, k - nearPlane * k / z, 0.0f, 0.0f, Argb(255, 128, 128, 128)};
         };
-        const Vertex corners[4] = {project(-300, -120, 60), project(300, -120, 60), project(300, -120, 300),
-                                   project(-300, -120, 300)};
-        Vertex floor[6];
+        // The floor in two halves, drawn the same way in the prepass and lit
+        // (so the lit draws' depth matches the prepass's).
         const int order[6] = {0, 1, 2, 0, 2, 3};
-        for (int i = 0; i < 6; ++i)
-            floor[i] = corners[order[i]];
-        // A pixel of the floor in the bottom right, clear of the debug view.
-        const UINT floorX = static_cast<UINT>((k * 100.0f / 200.0f + 1.0f) * 0.5f * kSize);
+        const Vertex halfCorners[2][4] = {
+            {project(-300, -120, 60), project(0, -120, 60), project(0, -120, 300), project(-300, -120, 300)},
+            {project(0, -120, 60), project(300, -120, 60), project(300, -120, 300), project(0, -120, 300)}};
+        Vertex halves[2][6];
+        for (int h = 0; h < 2; ++h)
+            for (int i = 0; i < 6; ++i)
+                halves[h][i] = halfCorners[h][order[i]];
+        // A pixel of each half in the bottom of the screen, clear of the
+        // debug view.
+        const UINT floorX[2] = {static_cast<UINT>((k * -100.0f / 200.0f + 1.0f) * 0.5f * kSize),
+                                static_cast<UINT>((k * 100.0f / 200.0f + 1.0f) * 0.5f * kSize)};
         const UINT floorY = static_cast<UINT>((1.0f + k * 120.0f / 200.0f) * 0.5f * kSize);
         front::ModernSceneView view{};
         for (int i = 0; i < 4; ++i)
             view.view[i][i] = 1.0f;
+        // The eye at (0.4, 0, 0).
+        view.view[3][0] = -0.4f;
         view.projection[0][0] = k;
         view.projection[1][1] = k;
         view.projection[2][2] = k;
@@ -3095,7 +3119,7 @@ void Check::ModernPlanar()
         device->SetRenderState(D3DRS_ZENABLE, TRUE);
         device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
         device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
-        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, floor, sizeof(Vertex)), "DrawPrimitiveUP(prepass)");
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, halves, sizeof(Vertex)), "DrawPrimitiveUP(prepass)");
         device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xf);
         if (front::ModernWantsSceneDepth(device))
             Equal("planar_lit_scene_depth", static_cast<int>(front::ModernSceneDepth(device, view)),
@@ -3112,14 +3136,21 @@ void Check::ModernPlanar()
         pixel[5][0] = pixel[5][1] = 1.0f;
         pixel[17][2] = 1.0f;
         Ok(device->SetPixelShaderConstantF(0, &pixel[0][0], 20), "SetPixelShaderConstantF(planar floor)");
-        const float vertex[7][4] = {{0, 0, 0, 0}, {0.5f, 0.5f, 0.5f, 0.5f}, {0, 0, 1, 1}, {0, 1, 0, 0},
-                                    {1, 0, 0, 0}, {0.5f, 0.5f, 0.25f, 0.5f}, {0, 0, -1, 0}};
-        Ok(device->SetVertexShaderConstantF(0, &vertex[0][0], 7), "SetVertexShaderConstantF(planar floor)");
+        float vertex[7][4] = {{0, 0, 0, 0}, {0.5f, 0.5f, 0.5f, 0.5f}, {0, 0, 1, 1}, {0, 1, 0, 0},
+                              {1, 0, 0, 0}, {0.5f, 0.5f, 0.25f, 0.5f}, {0, 0, -1, 0}};
         front::ModernLitInputs inputs;
         inputs.overWhite = true;
         inputs.shader = 0x44; // lm_sun_r0c0s0
         front::SetModernLitInputs(device, &inputs);
-        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, floor, sizeof(Vertex)), "DrawPrimitiveUP(planar floor)");
+        const float points[2][2] = {{-1.0f, 0.3f}, {0.2f, -0.3f}};
+        for (int h = 0; h < 2; ++h)
+        {
+            vertex[6][0] = points[h][0];
+            vertex[6][1] = points[h][1];
+            Ok(device->SetVertexShaderConstantF(0, &vertex[0][0], 7), "SetVertexShaderConstantF(planar floor)");
+            Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, halves[h], sizeof(Vertex)),
+               "DrawPrimitiveUP(planar floor)");
+        }
         front::SetModernLitInputs(device, nullptr);
         for (DWORD sampler : {0u, 1u, 2u, 3u, 4u})
             device->SetTexture(sampler, nullptr);
@@ -3128,12 +3159,25 @@ void Check::ModernPlanar()
         Equal("planar_lit_scene_done", front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
         if (Read())
         {
-            const uint8_t *at = &pixels[(floorY * readSize + floorX) * 4];
-            const int red = at[2], green = at[1], blue = at[0]; // B, G, R, A
-            if (ours && wanted)
-                Equal("planar_floor_shows_red", red >= 60 && red >= green + 40 && red >= blue + 40, true);
-            else
-                Expect("planar_floor_black", floorX, floorY, 0, 0, 0);
+            const char *names[2] = {"planar_floor_left_shows_blue", "planar_floor_right_shows_green"};
+            const int channels[2] = {0, 1}; // B, G, R, A
+            for (int h = 0; h < 2; ++h)
+            {
+                const uint8_t *at = &pixels[(floorY * readSize + floorX[h]) * 4];
+                if (ours && wanted)
+                {
+                    const int c = at[channels[h]];
+                    bool dominant = c >= 60;
+                    for (int other = 0; other < 3; ++other)
+                        if (other != channels[h])
+                            dominant = dominant && c >= at[other] + 40;
+                    if (!dominant)
+                        std::printf("  planar floor %s: rgb %d %d %d\n", h ? "right" : "left", at[2], at[1], at[0]);
+                    Equal(names[h], dominant, true);
+                }
+                else
+                    Expect(h ? "planar_floor_right_black" : "planar_floor_left_black", floorX[h], floorY, 0, 0, 0);
+            }
         }
         Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
     }

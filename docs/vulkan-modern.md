@@ -1361,13 +1361,17 @@ runs again on the CPU.
 
 **Checks:** the D3D9 check's `modern_planar` scene draws a grey scene in
 linear light, then a 64x64 planar view in which it sets the back buffer and
-its depth as the targets (as the game does) and draws a red quad. The back
-buffer must stay grey (the draw went to the planar image), and with
-`KISAK_VK_MODERN_DEBUG=planar` the top left shows the red. A third frame
-draws a floor on the plane with our lit shader (a black probe, a white
-specular map of gloss 1), whose planar view's projection takes every point
-to the image's red middle: the floor must show red, and stay black where
-the image is not read (no switch, or `KISAK_VK_MODERN_SHADERS=0`). With
+its depth as the targets (as the game does) and draws four quadrants (red top
+left, green top right, blue bottom left, yellow bottom right). The back
+buffer must stay grey (the draws went to the planar image), and with
+`KISAK_VK_MODERN_DEBUG=planar` the top left shows the red. A third frame,
+its camera moved off the origin, draws a floor on the plane in two halves
+with our lit shader (a black probe, a white specular map of gloss 1), each
+half at one point, through a planar projection that is not symmetric: the
+left half must show the image's blue and the right half its green, so a
+transposed matrix, an eye of the wrong sign, or an image read upside down or
+mirrored each fails, and the floor stays black where the image is not read
+(no switch, or `KISAK_VK_MODERN_SHADERS=0`). With
 `KISAK_VK_MODERN_LINEAR=0` or without either switch nothing is drawn.
 `test_vulkan_d3d9_front.py` runs it with no switch, with
 `KISAK_VK_MODERN_PLANAR=1` (beside `KISAK_VK_MODERN_SHADERS=0` or not), with
