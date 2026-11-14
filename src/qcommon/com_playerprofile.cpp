@@ -2,6 +2,8 @@
 #include "com_playerprofile.h"
 #include <universal/assertive.h>
 #include <cstdarg>
+#include <cstdlib>
+#include <cstring>
 #include "qcommon.h"
 #include <universal/q_parse.h>
 #include <universal/com_files.h>
@@ -586,6 +588,21 @@ static bool Sys_ConfirmChangePrompt(const char *titleRef, const char *bodyRef)
         body);
     return false;
 #else
+    // KISAK: a scripted run on Windows (scripts/runs/pc_run.py) sets
+    // KISAK_NO_DIALOGS as the other ports' runs do. The CPU speed this
+    // question compares is measured at every start, so a busy machine asks it
+    // on some starts and not others, and a box nobody answers holds the run
+    // until its time limit.
+    const char *noDialogs = getenv("KISAK_NO_DIALOGS");
+    if (noDialogs && noDialogs[0] && strcmp(noDialogs, "0") != 0)
+    {
+        Com_PrintWarning(
+            CON_CHANNEL_SYSTEM,
+            "WARNING: %s: %s\nWARNING: KISAK_NO_DIALOGS is set; leaving the player profile unchanged\n",
+            title,
+            body);
+        return false;
+    }
     HWND ActiveWindow; // eax
 
     ActiveWindow = GetActiveWindow();
