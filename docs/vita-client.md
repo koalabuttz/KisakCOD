@@ -899,6 +899,22 @@ What the GXM back end does so far (step 2d):
   may not hold every map), and `big-gxm-rings` twice the default rings
   (3 MB more of main memory).
   Not run on a console or in Vita3K yet.
+- **What the CPU pays for GPU memory.** The main pool is memory the CPU
+  does not cache (`SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE`), as Sony's
+  samples have it, and CDRAM is not cached either. The engine skins
+  vertices into the pool and reads some of them back, writes a frame's
+  indices there and fills the uniform buffers there, on three threads. At
+  start-up the back end measures what that memory costs and logs one line:
+  `gpu memory speed, 256 KB at a time: the heap: copy in N MB/s, copy out
+  N MB/s, a word written N ns, read N ns; main: ...; cdram: ...` (the
+  shortest of four passes each; "copy out" and "read" are the CPU reading
+  the pool). An empty file `cached-main-memory` in the folder of the
+  compiled programs gives the main pool as ordinary cached memory
+  (`diag: cached-main-memory is there ...`; the two memory lines then say
+  `main (cached)`), so that one console sitting can say what the uncached
+  kind costs a frame. It is for measuring: whether the GPU always sees what
+  the CPU wrote last from cached memory is not known, so the picture may
+  be wrong with it.
 - **Textures** are linear: rows of whole multiples of 8 texels, and the
   levels of a mipmapped texture sized from the power of two above the base,
   which is how sceGxm reads them and also a layout LockRect can hand out.
