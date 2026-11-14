@@ -236,14 +236,16 @@ static void checkMenus(std::mt19937& rng) {
 
     // Random lists in both contexts.
     std::vector<std::string> names;
-    for (int i = 0; i < 60; ++i) names.push_back("menu_" + std::to_string(i));
+    for (int i = 0; i < 12; ++i) names.push_back("menu_" + std::to_string(i));
     std::deque<std::string> menuNames;
     std::deque<menuDef_t> menus;
     for (int i = 0; i < 900; ++i) {
         menuNames.push_back(anyCase(rng, names[rng() % names.size()]));  // names repeat
         menus.push_back(menuDef_t{{menuNames.back().c_str()}});
     }
-    std::vector<std::vector<char>> pointers(80, std::vector<char>(32));
+    // Far more name pointers than the memory has places: every place is shared
+    // by several pointers and by both contexts, wherever the addresses fall.
+    std::vector<std::vector<char>> pointers(1500, std::vector<char>(32));
     auto refill = [&](std::vector<char>& p) {
         const std::string text = rng() % 10 ? anyCase(rng, names[rng() % names.size()]) : "no_such_menu";
         strcpy(p.data(), text.c_str());
@@ -269,6 +271,38 @@ static void checkMenus(std::mt19937& rng) {
     int remembered = 0;
     for (auto& slot : s_menuFoundByPointer) remembered += slot.load() != 0;
     check(remembered > 40, "the menu memory is hardly used; audit the check");
+
+    // A fifth context has no number and is always walked; the two above and
+    // the two below took four.
+    static UiContext more[3];
+    for (UiContext& context : more) {
+        UI_SetupMenuContext(&context, nullptr);
+        for (int i = 0; i < 20; ++i) UI_AppendMenuReference(&context, &menus[rng() % menus.size()]);
+    }
+    check(Menus_ContextNumber(&more[0]) == 2 && Menus_ContextNumber(&more[1]) == 3
+          && Menus_ContextNumber(&more[2]) == -1 && Menus_ContextNumber(&contexts[1]) == 1,
+          "the contexts did not get the numbers 0 to 3 and then none");
+    for (int step = 0; step < 20000; ++step)
+        findMenu(&more[rng() % 3], pointers[rng() % pointers.size()].data());
+
+    // Past 2^20 changes the count no longer fits an entry: nothing is
+    // remembered or used from then on.
+    g_uiMenuListChanges.store((1u << 20) - 2);
+    for (int step = 0; step < 4000; ++step) {
+        dc = &contexts[rng() % 2];
+        if (step % 1000 == 999) {
+            UI_SetupMenuContext(dc, nullptr);  // crosses 2^20 on the second time
+            for (int i = 0; i < 30; ++i) UI_AppendMenuReference(dc, &menus[rng() % menus.size()]);
+        }
+        findMenu(dc, pointers[rng() % pointers.size()].data());
+    }
+    check(g_uiMenuListChanges.load() > (1u << 20), "the change count did not pass 2^20");
+    uint32_t before[256];
+    for (int i = 0; i < 256; ++i) before[i] = s_menuFoundByPointer[i].load();
+    for (int step = 0; step < 4000; ++step)
+        findMenu(&contexts[rng() % 2], pointers[rng() % pointers.size()].data());
+    for (int i = 0; i < 256; ++i)
+        check(s_menuFoundByPointer[i].load() == before[i], "a place was remembered past 2^20 changes");
 }
 
 // ---- timing (--bench) ----
@@ -294,6 +328,11 @@ static void bench() {
     static UiContext dc;
     static std::deque<std::string> names;
     static std::deque<menuDef_t> menus;
+    // Start the menu memory afresh: the check above used up the four context
+    // numbers and took the change count past its limit.
+    for (auto& context : s_menuContexts) context.store(nullptr);
+    for (auto& slot : s_menuFoundByPointer) slot.store(0);
+    g_uiMenuListChanges.store(0);
     UI_SetupMenuContext(&dc, nullptr);
     for (int i = 0; i < 300; ++i) {
         names.push_back("menu_number_" + std::to_string(i));
@@ -351,10 +390,28 @@ def main() -> int:
     if not re.search(r"Dvar_ForgetFoundByPointer\(\);\s*Sys_UnlockWrite\(&g_dvarCritSect\);", shutdown):
         raise SystemExit("Dvar_Shutdown no longer forgets the remembered dvars before it unlocks")
 
+    # Menus_FindByName trusts that a menu list only changes through
+    # ui_registration.cpp (which counts each change) or by clearing a whole
+    # context. Any other write in the engine must be looked at.
+    write = re.compile(r"(?:->|\.)Menus\[[^\]]*\]\s*=[^=]|(?:->|\.)menuCount\s*(?:=[^=]|\+\+|--|\+=|-=)|(?:\+\+|--)\s*[\w.>-]*(?:->|\.)menuCount\b")
+    known = {
+        # Not a menu list: the decompiler's name for a field after uiDC.
+        ("src/ui_mp/ui_main_mp.cpp", "dc[1].Menus[56] = (menuDef_t *)(dc[1].Menus[56] == 0);"),
+        # The text menu loader's own MenuList, not a context.
+        ("src/ui/ui_shared_obj.cpp", "g_load_0.menuList.menus[g_load_0.menuList.menuCount++] = menu;"),
+    }
+    for path in sorted((root / "src").rglob("*.cpp")) + sorted((root / "src").rglob("*.h")):
+        relative = path.relative_to(root).as_posix()
+        if relative == "src/ui/ui_registration.cpp":
+            continue
+        for line in path.read_text(errors="replace").splitlines():
+            if write.search(line) and (relative, line.strip()) not in known:
+                raise SystemExit(f"{relative} changes a menu list outside ui_registration.cpp: {line.strip()}")
+
     start = dvar_cpp.index("static std::atomic<dvar_s *> s_dvarFoundByPointer")
     end = dvar_cpp.index("const dvar_s *Dvar_FindVar(const char *dvarName)", start)
     start_h = registration_h.index("inline std::atomic<uint32_t> g_uiMenuListChanges;")
-    start_menu = input_core.index("static std::atomic<uint32_t> s_menuFoundByPointer")
+    start_menu = input_core.index("static std::atomic<const UiContext *> s_menuContexts")
     end_menu = input_core.index("void Menus_CloseByName(", start_menu)
     production = [
         "bool I_isupper(int c);\nint I_strnicmp(const char* s0, const char* s1, int n);",
