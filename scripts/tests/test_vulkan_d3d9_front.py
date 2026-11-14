@@ -45,7 +45,7 @@ involved. The checks:
                  modern_lit_shader, modern_lit_models, modern_lit_no_sun,
                  modern_lit_lights, modern_tonemap, modern_exposure,
                  modern_velocity, modern_normals, modern_ao,
-                 modern_reflections and modern_planar, 25 of them without
+                 modern_reflections and modern_planar, 26 of them without
                  history, the 25 scenes of modern_linear, modern_bloom,
                  modern_effects, modern_lit, modern_lit_shader,
                  modern_lit_models, modern_lit_no_sun, modern_lit_lights,
@@ -643,8 +643,8 @@ def main():
     # light unless KISAK_VK_MODERN_LINEAR=0.
     modern = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes anti-aliased \((\d+) without history\)',
                        stdout)
-    checks.expect('the Modern path anti-aliased 77 scenes, 25 without history',
-                  modern is not None and modern.group(1) == '77' and modern.group(2) == '25',
+    checks.expect('the Modern path anti-aliased 77 scenes, 26 without history',
+                  modern is not None and modern.group(1) == '77' and modern.group(2) == '26',
                   modern.group(0) if modern else 'missing')
     velocity = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with surfaces that move on their own '
                          r'\((\d+) surfaces, (\d+) of them brush models\), ([0-9.]+) ms GPU each for their velocity$',
