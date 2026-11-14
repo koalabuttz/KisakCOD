@@ -394,6 +394,7 @@ void SetDefaultState(Device &device)
     device.viewport = Viewport{0, 0, device.width, device.height, 0.0f, 1.0f};
     device.scissor = Rect{0, 0, int32_t(device.width), int32_t(device.height)};
     ++device.stateSerial;
+    ++device.textureSerial;
 }
 
 // The GPU memory to reserve: nearly all of CDRAM for textures and targets,
@@ -709,6 +710,7 @@ bool EnsureTargetMemory(Device &device, Texture &texture)
 {
     if (!texture.deferredBytes)
         return texture.memory.data != nullptr;
+    ++device.textureSerial;
     // A target that found no memory tries again, but not at every draw.
     if (texture.deferFailed && Micros() < texture.deferRetryAt)
         return false;
@@ -791,6 +793,7 @@ void DestroyTexture(Device *device, Texture *texture)
 {
     if (!texture)
         return;
+    ++device->textureSerial;
     // A scene may be drawing into it.
     if (texture->desc.usage & (d3d::USAGE_RENDERTARGET | d3d::USAGE_DEPTHSTENCIL))
         EndScene(*device);
@@ -839,6 +842,7 @@ bool LockRect(Device *device, Texture *texture, uint32_t face, uint32_t level, c
         Log(*device, "LockRect: %s level %u is already locked", texture->name.c_str(), level);
         return false;
     }
+    ++device->textureSerial;
     // What the GPU draws into must be done before the CPU looks.
     if (texture->memory.gpu && (texture->desc.usage & (d3d::USAGE_RENDERTARGET | d3d::USAGE_DEPTHSTENCIL)))
         FinishGpu(*device, WaitCause::ReadTarget);
@@ -885,6 +889,7 @@ void UnlockRect(Device *device, Texture *texture, uint32_t face, uint32_t level)
     if (!lock.locked)
         return;
     lock.locked = false;
+    ++device->textureSerial;
     if (texture->swizzledLayout)
     {
         if (!lock.readOnly)
@@ -1322,15 +1327,21 @@ int SamplerSlot(uint32_t sampler)
 void SetSamplerState(Device *device, uint32_t sampler, d3d::SamplerState state, uint32_t value)
 {
     const int slot = SamplerSlot(sampler);
-    if (device && slot >= 0 && state < d3d::SAMP_COUNT)
+    if (device && slot >= 0 && state < d3d::SAMP_COUNT && device->samplerStates[slot][state] != value)
+    {
         device->samplerStates[slot][state] = value;
+        ++device->textureSerial;
+    }
 }
 
 void SetTexture(Device *device, uint32_t sampler, Texture *texture)
 {
     const int slot = SamplerSlot(sampler);
-    if (device && slot >= 0)
+    if (device && slot >= 0 && device->textures[slot] != texture)
+    {
         device->textures[slot] = texture;
+        ++device->textureSerial;
+    }
 }
 
 void SetVertexShader(Device *device, Shader *shader)
@@ -1545,6 +1556,7 @@ bool GetRenderTargetData(Device *device, Surface *renderTarget, Surface *dst)
     Target source, destination;
     if (!device)
         return false;
+    ++device->textureSerial;
     for (Surface *surface : {renderTarget, dst})
         if (surface && surface->kind == SurfaceKind::TextureLevel && surface->texture)
             EnsureTargetMemory(*device, *surface->texture);
@@ -1582,6 +1594,7 @@ void UpdateTexture(Device *device, Texture *src, Texture *dst)
 {
     if (!device || !src || !dst || src->desc.format != dst->desc.format || src->faces != dst->faces)
         return;
+    ++device->textureSerial;
     // The game does this to the model lighting volume every frame, while the
     // GPU still samples last frame's.
     if (src->memory.data && src->desc.levels >= dst->desc.levels && dst->desc.width == src->desc.width)

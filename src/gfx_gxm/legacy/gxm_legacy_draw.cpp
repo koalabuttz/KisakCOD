@@ -323,6 +323,18 @@ struct DrawState
     uint32_t lastDrawType = 0, lastDrawUpStride = 0;
     uint64_t lastDrawSerial = 0, lastDrawScene = 0;
     uint64_t sameStateDraws = 0;
+    // The same for the texture units: what the last draw's binds came from.
+    // A draw with the same fragment program that finds the device's texture
+    // serial, the scene, the frame and the count of waits for the GPU as
+    // that draw left them sets no texture and stamps none (the stamps its
+    // textures got then still say this frame). Never for a program that
+    // takes a texture's depth as a uniform. The marker and switch
+    // no-same-textures turn it off.
+    bool sameTextures = true;
+    bool texturesValid = false;
+    const Variant *texturesPixel = nullptr;
+    uint64_t texturesSerial = 0, texturesScene = 0, texturesFrame = 0, texturesWaits = 0;
+    uint64_t sameTextureDraws = 0;
 
     // Clears.
     Variant clearVertex, clearFragment;
@@ -1780,6 +1792,11 @@ bool InitDraw(Device &device, std::string &error)
         d.overlap = false;
         Log(device, "sceGxm gave no notification region: the CPU waits for the whole GPU at every Present");
     }
+    if (gxm::ProgramCacheMarker("no-same-textures"))
+    {
+        d.sameTextures = false;
+        Log(device, "diag: no-same-textures is there: every draw sets its textures anew");
+    }
     if (gxm::ProgramCacheMarker("no-same-state"))
     {
         d.sameState = false;
@@ -2100,6 +2117,7 @@ void ReadSwizzled(const Texture &texture, uint32_t face, uint32_t level, uint8_t
 
 void SetUpTexture(Device &device, Texture &texture)
 {
+    ++device.textureSerial;
     texture.sampleable = false;
     const TextureDesc &desc = texture.desc;
     if (texture.swizzledLayout)
@@ -2350,7 +2368,7 @@ void LogWaitCauses(Device &device)
 // (gxm_live_switch.h). The others size or make things at start-up.
 const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "no-vsync",
                                      "no-draw-reuse",     "no-filter-stretch", "no-gpu-boost",
-                                     "no-prepass-governor", "no-same-state"};
+                                     "no-prepass-governor", "no-same-state",     "no-same-textures"};
 struct LiveSwitch
 {
     const char *name;
@@ -2389,7 +2407,15 @@ void ApplyLiveSwitches(Device &device)
         else if (name == "no-vsync")
             gxm::SetDisplayVsync(!s.on);
         else if (name == "no-draw-reuse")
+        {
             d.reuse = !s.on;
+            d.texturesValid = false;
+        }
+        else if (name == "no-same-textures")
+        {
+            d.sameTextures = !s.on;
+            d.texturesValid = false;
+        }
         else if (name == "no-same-state")
         {
             d.sameState = !s.on;
@@ -2596,6 +2622,7 @@ void RetireCopies(Device &device, Texture &texture)
 
 void MakeWritable(Device &device, Texture &texture)
 {
+    ++device.textureSerial;
     DrawState *d = device.draw;
     if (!d || !texture.memory.gpu || texture.swizzledLayout || !texture.sampleable || texture.levels.size() != 1 ||
         (texture.desc.usage & (d3d::USAGE_RENDERTARGET | d3d::USAGE_DEPTHSTENCIL)))
@@ -3373,12 +3400,29 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     if (d.census)
         LogCensus(device, *vs, *ps, *vertex, *pixel, blended, blend);
     Texture *const target = SceneTexture(d);
-    if (!BindTextures(device, *pixel, pixelUniforms))
+    if (plain && d.sameTextures && d.texturesValid && d.texturesPixel == pixel && !pixel->depthUniforms &&
+        d.texturesSerial == device.textureSerial && d.texturesScene == d.scenes && d.texturesFrame == d.frame &&
+        d.texturesWaits == d.gpuWaits)
+        ++d.sameTextureDraws;
+    else
     {
-        CountSkip(device, SkipUnfilledSource);
-        if (target)
-            target->unfilled = true;
-        return;
+        d.texturesValid = false;
+        if (!BindTextures(device, *pixel, pixelUniforms))
+        {
+            CountSkip(device, SkipUnfilledSource);
+            if (target)
+                target->unfilled = true;
+            return;
+        }
+        if (plain && d.sameTextures)
+        {
+            d.texturesPixel = pixel;
+            d.texturesSerial = device.textureSerial;
+            d.texturesScene = d.scenes;
+            d.texturesFrame = d.frame;
+            d.texturesWaits = d.gpuWaits;
+            d.texturesValid = true;
+        }
     }
     part(gxm::FrameTime::PartTextures);
     for (uint8_t i = 0; i < drawStreams; ++i)
@@ -3405,6 +3449,8 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
 
 void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const Rect *dstRect, bool linear)
 {
+    // It sets a texture unit itself and may mark a target unfilled.
+    ++device.textureSerial;
     DrawState &d = *device.draw;
     if (!src || !dst || src == dst)
         return;
@@ -3620,10 +3666,10 @@ void LogDrawSummary(Device &device)
     // buffers in Draw).
     Log(device,
         "draw work left out: %llu draws kept the last draw's programs and fixed state; %llu of %llu others found "
-        "their programs in the table; of %llu texture binds %llu were set already and %llu set their filters anew; of "
-        "%llu uniform buffers %llu were the last draw's",
+        "their programs in the table; %llu draws kept the last draw's textures; of %llu texture binds %llu were set "
+        "already and %llu set their filters anew; of %llu uniform buffers %llu were the last draw's",
         (unsigned long long)d->sameStateDraws, (unsigned long long)d->pipelineHits,
-        (unsigned long long)d->pipelineLookups,
+        (unsigned long long)d->pipelineLookups, (unsigned long long)d->sameTextureDraws,
         (unsigned long long)d->textureBinds, (unsigned long long)d->textureBindsLeftOut,
         (unsigned long long)d->textureViewsMade, (unsigned long long)d->uniformWrites,
         (unsigned long long)d->uniformWritesLeftOut);
