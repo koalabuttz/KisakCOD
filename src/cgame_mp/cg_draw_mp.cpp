@@ -19,9 +19,7 @@
 #include <stringed/stringed_hooks.h>
 #include <universal/profile.h>
 
-#if !defined(_WIN32)
 #include <linux/sys_perf.h>
-#endif
 
 extern const dvar_t *ui_showEndOfGame;
 
@@ -129,9 +127,7 @@ void CG_Draw2D(int32_t localClientNum)
 
     const cg_s *cgameGlob;
 
-#if !defined(_WIN32)
     SysPerfScope perfScope(SYS_PERF_PROBE_HUD);
-#endif
 
     cgameGlob = CG_GetLocalClientGlobals(0);
 

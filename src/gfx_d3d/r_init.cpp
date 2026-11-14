@@ -344,9 +344,7 @@ void R_SyncGpu(int(*WorkCallback)(uint64_t))
             }
         }
         R_ReleaseGpuFenceLock();
-#if !defined(_WIN32)
         R_GpuSyncMainDone();
-#endif
     }
 }
 
