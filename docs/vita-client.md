@@ -677,7 +677,7 @@ Builds with `KISAK_GFX_GXM` leave the Vulkan parts of `vk_d3d9.h` and
 
 What the GXM back end does so far (step 2d):
 - The device owns the screen and reserves the GPU memory pools: nearly all of
-  CDRAM, 20 MB of main memory, and an 8 MB parameter buffer.
+  CDRAM, 20 MB of main memory, and a 12 MB parameter buffer.
 - Textures, surfaces and buffers live in those pools with D3D9's lock rules.
   Textures go to CDRAM first, dynamic buffers to main memory first.
 - Shaders are translated to Cg and compiled on the Vita (below).
@@ -840,11 +840,15 @@ What the GXM back end does so far (step 2d):
   from the start, so that one console sitting can compare the two. An empty
   file `no-vsync` there shows each frame without waiting for the display's
   refresh (it tears): for measuring what that wait costs. With two frames
-  on their way, sceGxm's parameter buffer (8 MB here) and the context's
-  ring buffers hold the geometry, draw calls and uniform buffers of both at
-  times; `big-parameter-buffer` (12 MB) and `big-gxm-rings` (twice the
-  defaults, 3 MB more of main memory) are there for a console run to say
-  whether either is too small for that.
+  on their way, sceGxm's parameter buffer and the context's ring buffers
+  hold the geometry, draw calls and uniform buffers of both at times. The
+  parameter buffer is 12 MB: console run AD found 8 MB too small (the GPU
+  was 10 to 19 ms a frame slower at the same view, 14 to 18%, in every
+  phase; with David's settings 86-91 against 68 ms a frame), at the cost of
+  4 MB of CDRAM. For comparing, `small-parameter-buffer` gives the old
+  8 MB, `big-parameter-buffer` 16 MB (4 MB less for the CDRAM pool, which
+  may not hold every map), and `big-gxm-rings` twice the default rings
+  (3 MB more of main memory).
   Not run on a console or in Vita3K yet.
 - **Fewer scenes a frame.** The Vita's GPU works a scene at a time: every
   change of render target ends one, stores its whole colour and depth

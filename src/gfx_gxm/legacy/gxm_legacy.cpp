@@ -578,19 +578,29 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     gxm::DisplayDesc display;
     display.memory = PoolSizes(*device);
     // A frame's geometry beyond this is binned in partial renders: slower,
-    // not wrong. The default 16 MB is a quarter of what the engine has left.
-    display.parameterBufferBytes = 8u << 20;
-    // With the CPU a frame ahead, the parameter buffer and the context's ring
-    // buffers hold the geometry, draw calls and uniform buffers of two frames
-    // at times. Whether they do so without the GPU splitting a scene or a
-    // draw waiting for room is for a console to say: an empty file named
-    // big-parameter-buffer beside the compiled programs gives 12 MB, and one
-    // named big-gxm-rings doubles the rings (3 MB more of main memory), so
-    // that one sitting can compare.
-    if (gxm::ProgramCacheMarker("big-parameter-buffer"))
+    // not wrong. sceGxm's default 16 MB is a quarter of what the engine has
+    // left. With the CPU a frame ahead, the parameter buffer and the
+    // context's ring buffers hold the geometry, draw calls and uniform
+    // buffers of two frames at times, and 8 MB was too little for that:
+    // console run AD measured 12 MB against 8 at the same view and found the
+    // GPU 10 to 19 ms a frame faster in every phase (14 to 18%; David's
+    // settings 86-91 to 68 ms a frame), the CPU unchanged, and peak CDRAM
+    // use the same with 5.7 MB of the pool to spare. For comparing on a
+    // console, an empty file named small-parameter-buffer beside the
+    // compiled programs gives the old 8 MB and one named
+    // big-parameter-buffer 16 MB (4 MB less for the pool, which may not
+    // hold every map); big-gxm-rings doubles the rings (3 MB more of main
+    // memory).
+    display.parameterBufferBytes = 12u << 20;
+    if (gxm::ProgramCacheMarker("small-parameter-buffer"))
     {
-        display.parameterBufferBytes = 12u << 20;
-        Log(*device, "diag: big-parameter-buffer is there: the parameter buffer is 12 MB");
+        display.parameterBufferBytes = 8u << 20;
+        Log(*device, "diag: small-parameter-buffer is there: the parameter buffer is 8 MB");
+    }
+    else if (gxm::ProgramCacheMarker("big-parameter-buffer"))
+    {
+        display.parameterBufferBytes = 16u << 20;
+        Log(*device, "diag: big-parameter-buffer is there: the parameter buffer is 16 MB");
     }
     if (gxm::ProgramCacheMarker("big-gxm-rings"))
     {
