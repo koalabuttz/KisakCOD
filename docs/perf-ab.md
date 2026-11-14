@@ -93,6 +93,19 @@ perf: done
   - `menu expressions`: `EvaluateExpression`, every menu expression
     (`visible when`, `exp text` and the like), in the HUD or in any other
     menu.
+  - `menus: <part>`: parts of painting a menu, in the HUD or in any other
+    menu, so the time outside the expressions can be split: `windows`
+    (`Window_Paint`, a menu's or an item's background and border),
+    `text items` (`Item_Text_Paint`, with its translation and its text
+    expression), `ownerdraw items` (`Item_OwnerDraw_Paint`, what the game
+    draws itself: ammo, compass and the like), `other items` (every other
+    item type), `translate` (`UI_SafeTranslateString`, a `@NAME` text looked
+    up), `materials by name` (a background material found by its name each
+    frame) and `show by dvar` (`Item_EnableShowViaDvar`, an item shown or
+    hidden by a dvar's value). The parts overlap: `translate` and the text
+    expressions sit inside `text items`. On a slow machine each timed call
+    adds two clock readings, so compare the parts with each other, not with
+    a run without them.
   - `client: <part>`: the main thread's client frame (multiplayer client).
     `frame` is `CL_Frame` (packets in and out). `screen` is
     `SCR_UpdateScreen` and holds the others and `hud`: `snapshots`
