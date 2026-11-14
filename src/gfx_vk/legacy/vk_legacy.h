@@ -694,9 +694,30 @@ enum ModernLitShader : uint8_t
     // c18; texcoord 0 (colour and lightmap UVs), texcoord 1 (normal, fog) and
     // colour 0 in. The flags below add to that.
     ModernLitLmSun = 0x40,
+    // lp_[hsm_][i_]sun_<mode>c0[d0][n0][s0]: a model lit by the lighting
+    // volume and the sun. Always: colour map at s0, the lighting volume (a 3D
+    // image) at s4, fog colour at c0, lightingLookupScale at c5, sun
+    // direction and colour at c17 and c18; texcoord 0 (colour UV), texcoord
+    // 1 (normal, fog), texcoord 6 (the volume coordinate) and colour 0 in.
+    // The flags below add to that one sampler and one constant further on
+    // than the world's: the shadow map at s5, the material's maps from s5
+    // (s6 with the shadow map), envMapParms at c6, detailScale at c6 (c7
+    // with s0).
+    ModernLitLpSun = 0x80,
+    // lm_<mode>c0[d0][n0][s0] and lp_[i_]<mode>c0[d0][n0][s0]: a surface
+    // without a primary light (interiors; lit shader facts 5), the sun
+    // family's shader with the sun taken out. The world's reads only the
+    // secondary lightmap (s3; no s2, c17 or c18); a model's only the
+    // lighting volume's light (its alpha, c17 and c18 unread). Neither has a
+    // shadow map, so the shadow bit says which: set for models
+    // (ModernLitNoSunModel). The maps sit where the sun family's do without
+    // the shadow map; s0 reads no sun specular colour (c19).
+    ModernLitNoSun = 0xc0,
+    ModernLitFamilyMask = 0xc0,
     // hsm: the sun's shadow map at s4, its partition switch and scale at c2
     // and c4, its coordinate in texcoord 4.
     ModernLitShadow = 0x01,
+    ModernLitNoSunModel = 0x01,
     // n0: a normal map at the next sampler (s4, or s5 with the shadow map);
     // binormal and tangent in texcoords 2 and 3.
     ModernLitNormal = 0x02,
@@ -720,7 +741,39 @@ enum ModernLitShader : uint8_t
 // Whether shader names a Modern lit shader of ours.
 constexpr bool ModernLitShaderValid(uint8_t shader)
 {
-    return (shader & 0xc0) == ModernLitLmSun && (shader & ModernLitModeMask) != 0x30;
+    return (shader & ModernLitFamilyMask) != 0 && (shader & ModernLitModeMask) != 0x30;
+}
+// Whether it lights a model (the lighting volume at s4) rather than the world.
+constexpr bool ModernLitModel(uint8_t shader)
+{
+    const uint8_t family = shader & ModernLitFamilyMask;
+    return family == ModernLitLpSun || (family == ModernLitNoSun && (shader & ModernLitNoSunModel));
+}
+// Whether it reads the sun (c17, c18; c19 with s0).
+constexpr bool ModernLitSun(uint8_t shader)
+{
+    const uint8_t family = shader & ModernLitFamilyMask;
+    return family == ModernLitLmSun || family == ModernLitLpSun;
+}
+// Whether it reads the sun's shadow map.
+constexpr bool ModernLitShadowed(uint8_t shader)
+{
+    return ModernLitSun(shader) && (shader & ModernLitShadow);
+}
+// How many pixel constants it reads: to c18 (c19 with s0) with the sun;
+// without, to envMapParms (s0) or detailScale (d0), at least c0 for the world
+// and c5 for models.
+constexpr uint32_t ModernLitConstantCount(uint8_t shader)
+{
+    if (ModernLitSun(shader))
+        return shader & ModernLitSpecular ? 20u : 19u;
+    const uint32_t first = ModernLitModel(shader) ? 6u : 5u; // envMapParms, or detailScale without s0
+    const uint32_t specular = shader & ModernLitSpecular ? 1u : 0u;
+    if (shader & ModernLitDetail)
+        return first + specular + 1u;
+    if (specular)
+        return first + 1u;
+    return ModernLitModel(shader) ? 6u : 1u;
 }
 void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint16_t doubled, bool colorInput,
                      bool overWhite = false, uint8_t shader = ModernLitNone);

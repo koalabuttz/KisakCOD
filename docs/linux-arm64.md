@@ -169,6 +169,14 @@ rule as `-ffp-contract=off` on Linux), and runs the start-up check the 32-bit an
 x64 jobs run. Windows x64 binaries also run on Windows on Arm through
 emulation, so the native build is about speed, not reach.
 
+OpenAL Soft 1.25.2 does not compile with MSVC 14.52 (Visual Studio 2026 on the
+`windows-11-arm` image from 2026-11-13): `alc/alc.cpp` builds a range adaptor
+from `unique_ptr`'s `operator*` and gets C3889. There is no newer tag, so
+`scripts/extern/openal.cmake` runs `scripts/extern/openal_msvc_ranges.cmake` as
+the fetch's patch step on MSVC builds; it rewrites that one line the way
+OpenAL Soft's master did (`test_openal_msvc_ranges.py`). Drop the patch when the
+pin moves to a release that has the fix.
+
 ## Census: Linux client (step 3)
 
 From a trial compile of the client sources and a look at the dependencies:

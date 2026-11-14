@@ -1,5 +1,5 @@
 // The Modern lit shaders of our own (vk_legacy.h ModernLitShader): GLSL
-// shaders compiled at build time (shaders/lm_sun.frag) that a lit pass's
+// shaders compiled at build time (shaders/lm_sun.frag, lp_sun.frag) that a lit pass's
 // pixel shader is drawn as in the linear-light scene. Each reads what the
 // game's shader it stands in for reads, from the same samplers and constant
 // registers, so the pipeline layout and descriptors stay that shader's. Only
@@ -64,39 +64,72 @@ int OutputLocation(const ls::Shader &vs, uint8_t usage, uint32_t index, uint8_t 
     return found->location;
 }
 
-// The lm_sun.frag build for each set of maps (gen_spirv_header.py), by
-// ModernLitShader flags (shadow 1, normal 2, specular 4, detail 8).
-struct LmSunBuild
+// The lm_sun.frag and lp_sun.frag builds for each set of maps
+// (gen_spirv_header.py), by family and ModernLitShader flags (shadow 1,
+// normal 2, specular 4, detail 8); without the sun (ModernLitNoSun) the same
+// sources without it, by the maps alone.
+struct LitBuild
 {
     const uint32_t *words;
     size_t count;
 };
-#define LM_SUN_BUILD(name) LmSunBuild{shaders::name, sizeof(shaders::name) / sizeof(uint32_t)}
-LmSunBuild LmSunBuildFor(uint8_t maps)
-{
-    switch (maps)
-    {
-    case 0: return LM_SUN_BUILD(kLmSunFrag);
-    case ModernLitNormal: return LM_SUN_BUILD(kLmSunNFrag);
-    case ModernLitSpecular: return LM_SUN_BUILD(kLmSunSFrag);
-    case ModernLitNormal | ModernLitSpecular: return LM_SUN_BUILD(kLmSunNSFrag);
-    case ModernLitDetail: return LM_SUN_BUILD(kLmSunDFrag);
-    case ModernLitDetail | ModernLitNormal: return LM_SUN_BUILD(kLmSunDNFrag);
-    case ModernLitDetail | ModernLitSpecular: return LM_SUN_BUILD(kLmSunDSFrag);
-    case ModernLitDetail | ModernLitNormal | ModernLitSpecular: return LM_SUN_BUILD(kLmSunDNSFrag);
-    case ModernLitShadow: return LM_SUN_BUILD(kLmSunShadowFrag);
-    case ModernLitShadow | ModernLitNormal: return LM_SUN_BUILD(kLmSunShadowNFrag);
-    case ModernLitShadow | ModernLitSpecular: return LM_SUN_BUILD(kLmSunShadowSFrag);
-    case ModernLitShadow | ModernLitNormal | ModernLitSpecular: return LM_SUN_BUILD(kLmSunShadowNSFrag);
-    case ModernLitShadow | ModernLitDetail: return LM_SUN_BUILD(kLmSunShadowDFrag);
-    case ModernLitShadow | ModernLitDetail | ModernLitNormal: return LM_SUN_BUILD(kLmSunShadowDNFrag);
-    case ModernLitShadow | ModernLitDetail | ModernLitSpecular: return LM_SUN_BUILD(kLmSunShadowDSFrag);
-    case ModernLitShadow | ModernLitDetail | ModernLitNormal | ModernLitSpecular:
-        return LM_SUN_BUILD(kLmSunShadowDNSFrag);
-    default: return LmSunBuild{nullptr, 0};
+#define LIT_BUILD(name) LitBuild{shaders::name, sizeof(shaders::name) / sizeof(uint32_t)}
+#define LIT_FAMILY(prefix)                                                                                         \
+    switch (maps)                                                                                                  \
+    {                                                                                                              \
+    case 0: return LIT_BUILD(k##prefix##Frag);                                                                     \
+    case ModernLitNormal: return LIT_BUILD(k##prefix##NFrag);                                                      \
+    case ModernLitSpecular: return LIT_BUILD(k##prefix##SFrag);                                                    \
+    case ModernLitNormal | ModernLitSpecular: return LIT_BUILD(k##prefix##NSFrag);                                 \
+    case ModernLitDetail: return LIT_BUILD(k##prefix##DFrag);                                                      \
+    case ModernLitDetail | ModernLitNormal: return LIT_BUILD(k##prefix##DNFrag);                                   \
+    case ModernLitDetail | ModernLitSpecular: return LIT_BUILD(k##prefix##DSFrag);                                 \
+    case ModernLitDetail | ModernLitNormal | ModernLitSpecular: return LIT_BUILD(k##prefix##DNSFrag);              \
+    case ModernLitShadow: return LIT_BUILD(k##prefix##ShadowFrag);                                                 \
+    case ModernLitShadow | ModernLitNormal: return LIT_BUILD(k##prefix##ShadowNFrag);                              \
+    case ModernLitShadow | ModernLitSpecular: return LIT_BUILD(k##prefix##ShadowSFrag);                            \
+    case ModernLitShadow | ModernLitNormal | ModernLitSpecular: return LIT_BUILD(k##prefix##ShadowNSFrag);         \
+    case ModernLitShadow | ModernLitDetail: return LIT_BUILD(k##prefix##ShadowDFrag);                              \
+    case ModernLitShadow | ModernLitDetail | ModernLitNormal: return LIT_BUILD(k##prefix##ShadowDNFrag);           \
+    case ModernLitShadow | ModernLitDetail | ModernLitSpecular: return LIT_BUILD(k##prefix##ShadowDSFrag);         \
+    case ModernLitShadow | ModernLitDetail | ModernLitNormal | ModernLitSpecular:                                   \
+        return LIT_BUILD(k##prefix##ShadowDNSFrag);                                                                \
+    default: return LitBuild{nullptr, 0};                                                                          \
     }
+#define LIT_NO_SUN(prefix)                                                                                         \
+    switch (maps)                                                                                                  \
+    {                                                                                                              \
+    case 0: return LIT_BUILD(k##prefix##Frag);                                                                     \
+    case ModernLitNormal: return LIT_BUILD(k##prefix##NFrag);                                                      \
+    case ModernLitSpecular: return LIT_BUILD(k##prefix##SFrag);                                                    \
+    case ModernLitNormal | ModernLitSpecular: return LIT_BUILD(k##prefix##NSFrag);                                 \
+    case ModernLitDetail: return LIT_BUILD(k##prefix##DFrag);                                                      \
+    case ModernLitDetail | ModernLitNormal: return LIT_BUILD(k##prefix##DNFrag);                                   \
+    case ModernLitDetail | ModernLitSpecular: return LIT_BUILD(k##prefix##DSFrag);                                 \
+    case ModernLitDetail | ModernLitNormal | ModernLitSpecular: return LIT_BUILD(k##prefix##DNSFrag);              \
+    default: return LitBuild{nullptr, 0};                                                                          \
+    }
+LitBuild LitBuildFor(uint8_t shader)
+{
+    if (!ModernLitSun(shader))
+    {
+        const uint8_t maps = shader & (ModernLitNormal | ModernLitSpecular | ModernLitDetail);
+        if (ModernLitModel(shader))
+        {
+            LIT_NO_SUN(LpNoSun)
+        }
+        LIT_NO_SUN(LmNoSun)
+    }
+    const uint8_t maps = shader & (ModernLitShadow | ModernLitNormal | ModernLitSpecular | ModernLitDetail);
+    if (ModernLitModel(shader))
+    {
+        LIT_FAMILY(LpSun)
+    }
+    LIT_FAMILY(LmSun)
 }
-#undef LM_SUN_BUILD
+#undef LIT_FAMILY
+#undef LIT_NO_SUN
+#undef LIT_BUILD
 } // namespace
 
 bool BuildModernLitSpirv(uint8_t shader, const ls::Shader &vs, float sunStrength, float skyStrength,
@@ -104,8 +137,7 @@ bool BuildModernLitSpirv(uint8_t shader, const ls::Shader &vs, float sunStrength
 {
     if (!ModernLitShaderValid(shader))
         return false;
-    const LmSunBuild build = LmSunBuildFor(shader & (ModernLitShadow | ModernLitNormal | ModernLitSpecular
-                                                     | ModernLitDetail));
+    const LitBuild build = LitBuildFor(shader);
     if (!build.words)
         return false;
     const uint32_t *words = build.words;
@@ -115,15 +147,23 @@ bool BuildModernLitSpirv(uint8_t shader, const ls::Shader &vs, float sunStrength
         {1, kUsageTexcoord, 1, 4},
         {10, kUsageColor, 0, 4},
     };
-    if (shader & ModernLitNormal)
+    // The world's normal-mapped surfaces without the sun need the normal (and
+    // so the binormal and tangent) only for the specular: their normal map
+    // turns only the lightmap's light (lit shader facts 5), and the game's
+    // vertex shader for them writes no tangent frame.
+    const bool tangentFrame = (shader & ModernLitNormal)
+        && (ModernLitSun(shader) || ModernLitModel(shader) || (shader & ModernLitSpecular));
+    if (tangentFrame)
     {
         placeholders.push_back({2, kUsageTexcoord, 2, 4});
         placeholders.push_back({3, kUsageTexcoord, 3, 4});
     }
-    if (shader & ModernLitShadow)
+    if (ModernLitShadowed(shader))
         placeholders.push_back({4, kUsageTexcoord, 4, 4});
     if (shader & ModernLitSpecular)
         placeholders.push_back({5, kUsageTexcoord, 5, 4});
+    if (ModernLitModel(shader))
+        placeholders.push_back({6, kUsageTexcoord, 6, 4}); // the lighting-volume coordinate
     const uint32_t mode = (shader & ModernLitModeMask) >> ModernLitModeShift;
     // Where each placeholder goes.
     std::vector<int> moved(placeholders.size());
