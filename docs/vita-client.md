@@ -88,6 +88,10 @@ timed console commands, for example to pick a team and a class, and
 `vita_assertExit 1` keeps an emulator from hanging on a failed assertion. See
 [Runs nobody watches](vita.md#runs-nobody-watches).
 
+A Vita release build leaves the engine's assertions out, as retail and the
+Windows release builds do: console run AS found them 5 to 8% of the frame at
+the busy view. Configure with `-DKISAK_VITA_RELEASE_ASSERTS=ON` to keep them.
+
 To see what a translated shader looks like, put an empty file named
 `dump-cg` in `ux0:data/KisakCOD/gxp`: every program asked for then also
 leaves its Cg source there as `<same 16 hex digits>.cg`. Those sources come
