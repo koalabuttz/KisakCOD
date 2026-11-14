@@ -370,12 +370,13 @@ commands:
             "8 setviewpos 30 -10 200 140"],
  "variants": [{"name": "B", "set": {"r_modernAo": "off"}},
               {"name": "A", "set": {"r_modernAo": "on"}}],
- "variant_timing": {"start": 20, "settle": 3, "framelog": 8, "compare": true}}
+ "variant_timing": {"start": 20, "framelog": 8, "compare": true}}
 ```
 
 From `start` seconds after the map is up (default 20 s, or 2 s after the last
-`at_map` command if that is later), each variant sets its dvars, waits `settle` seconds (TAA history and
-auto exposure catch up after a change), takes the screenshot
+`at_map` command if that is later), each variant sets its dvars, waits `settle`
+seconds (default 1; the first variant also waits `warmup`, default 30 s when
+frame logs are taken), takes the screenshot
 `<launch>-<variant>` the first time round and, with `framelog`, a frame log
 `<launch>-<variant>-<pass>`. With a frame log the variants run twice in
 mirrored order (A B B A), so steady drift (heat, other load) cancels in the
@@ -403,8 +404,16 @@ fit with two passes and 9 with one.
   on) holds them still: in proof 1 the same variant shot twice differed by
   0.29 levels (arch 0.33), while AO on against off made 19.5 in the arch.
   Use it for picture launches; leave it out where frame logs are read.
-- A pass spread over 5% is flagged in the report: the launch drifted, or a
-  pass ran during a change of scene.
+- AO is fully in on the first frame after a switch: in variants proof 2 every
+  shot from 0.1 s to 4 s after `r_modernAo on` matched the 8 s shot within the
+  0.9-level noise of two unfrozen pictures. Hence the 1 s settle.
+- A launch's first half minute in play is slower: the first frame log of a
+  variant ran 6% (proof 1) and 11% (proof 2) below the same variant's second,
+  while the other variant's two passes agreed within 1%. Hence the 30 s
+  warm-up on the first variant before any frame log. A pass spread over 5%
+  is flagged in the report.
+- Frozen AO looked lighter than in play (arch 17.3 against 22.1 levels, same
+  radius and view, proof 2): compare frozen shots only with frozen shots.
 
 ## Menus without a person: `menu_check.py`
 

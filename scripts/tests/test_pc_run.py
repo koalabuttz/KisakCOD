@@ -164,7 +164,7 @@ def test_variants(work):
     launch = {"name": "live", "at_map": ["3 setviewpos 1 2 3 4"],
               "variants": [{"name": "B", "set": {"r_fakeCost": "0", "r_fakeSquare": "100"}},
                            {"name": "A", "set": {"r_fakeCost": "2.5", "r_fakeSquare": "180"}}],
-              "variant_timing": {"start": 5, "settle": 2, "framelog": 4, "compare": True}}
+              "variant_timing": {"start": 5, "settle": 2, "framelog": 4, "warmup": 0, "compare": True}}
     path = recipe(work, [launch], pictures={"regions": {"square": [100, 60, 164, 124]}})
     commands = pc_run.launch_commands(pc_run.load_recipe(path)["launches"][0], "at_map")
     check(commands == ["3 setviewpos 1 2 3 4",
@@ -175,6 +175,11 @@ def test_variants(work):
           f"variants become timed commands, A B B A, one screenshot each ({commands})")
     plain = pc_run.launch_commands({"name": "p", "at_map": ["3 echo x"], "variants": [{"name": "v", "set": {"r_a": "1"}}]}, "at_map")
     check(plain[1] == "20 r_a 1", f"variants start after the pre-match countdown by default ({plain})")
+    timed = pc_run.launch_commands({"name": "p", "at_map": ["3 echo x"], "variant_timing": {"framelog": 5},
+                                    "variants": [{"name": "v", "set": {"r_a": "1"}}, {"name": "w", "set": {"r_a": "2"}}]},
+                                   "at_map")
+    check(timed[1:5] == ["20 r_a 1", "51 screenshot p-v", "52 framelog 5 p-v-1", "58 r_a 2"],
+          f"settle 1 s, and 30 s of warm-up before the first frame log ({timed})")
     late = pc_run.launch_commands({"name": "p", "at_map": ["25 echo x"], "variants": [{"name": "v", "set": {"r_a": "1"}}]}, "at_map")
     check(late[1] == "27 r_a 1", f"or 2 s after a later at_map command ({late})")
     out = work / "out-variants"

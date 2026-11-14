@@ -90,12 +90,14 @@ the timed commands::
                 "8 setviewpos 30 -10 200 140"],
      "variants": [{"name": "B", "set": {"r_modernAo": "off"}},
                   {"name": "A", "set": {"r_modernAo": "on"}}],
-     "variant_timing": {"start": 20, "settle": 3, "framelog": 8}}
+     "variant_timing": {"start": 20, "framelog": 8}}
 
 From ``start`` seconds after the map is up (default: 20 s, after the
 pre-match countdown, whose grey picture and missing HUD would swamp any
 difference; or 2 s after the last ``at_map`` command if that is later) each variant in turn sets its dvars, waits ``settle``
-seconds (TAA and auto exposure catch up), takes the screenshot
+seconds (default 1: AO was fully in 0.1 s after a switch; the first
+variant also waits ``warmup`` seconds, default 30 when frame logs are taken,
+because a launch's first half minute in play ran 6-11% slower), takes the screenshot
 ``<launch>-<variant>`` the first time round and, when ``framelog`` is given,
 a frame log ``<launch>-<variant>-<pass>`` of that many seconds; then the
 launch quits. With a frame log the variants run twice, in mirrored order
@@ -108,6 +110,8 @@ the passes does not matter. Moving things (smoke, the helicopter) move
 between the screenshots; ``"18 timescale 0.001"`` in ``at_map`` (devmap,
 cheats on) holds them still (variants proof 1: the same variant twice differed
 by 0.29 levels), so use it for picture launches but not for frame logs.
+AO looked lighter frozen than in play (arch 17.3 against 22.1 levels at the
+same radius and view, proof 2), so compare frozen shots with frozen shots.
 
 The game splits its command line at every ``+`` (Com_ParseCommandLine) and
 keeps 31 parts, so a timed command or a variant value with a ``+`` in it
@@ -140,7 +144,13 @@ SAFETY_AFTER_LAST = 30
 # Variants start after the pre-match countdown (about 16-17 s on mp_crash under
 # devmap: a grey vision set and no HUD, pc_run variants proof 1).
 DEFAULT_VARIANT_START = 20
-SPREAD_WARNING_PCT = 5  # seconds after the last timed command before the safety quit
+SPREAD_WARNING_PCT = 5
+# Variants proof 2: AO was fully in 0.1 s after the switch, so 1 s settles.
+DEFAULT_SETTLE = 1
+# Both proofs: the first frame log of a launch ran 6-11% slower than the same
+# variant 40 s later, while later passes agreed within 1%; a launch with frame
+# logs waits this long on its first variant before it starts measuring.
+DEFAULT_WARMUP = 30  # seconds after the last timed command before the safety quit
 FRAME_LOG = re.compile(r"^frame log (\S+): .*$")
 FRAME_LOG_FPS = re.compile(r"^frame log (\S+): (\d+) frames in ([\d.]+) s: ([\d.]+) fps; ms mean ([\d.]+), "
                            r"median ([\d.]+), p95 ([\d.]+), p99 ([\d.]+)")
@@ -242,11 +252,11 @@ def check_variants(launch):
                                   "one value without spaces, ';', '|', '+' or quotes")
     timing = launch.get("variant_timing") or {}
     for key in timing:
-        if key not in ("start", "settle", "framelog", "passes", "compare"):
+        if key not in ("start", "settle", "framelog", "passes", "compare", "warmup"):
             raise RecipeError(f"{name}: variant_timing has an unknown key {key!r}")
     if timing.get("passes", 1) not in (1, 2):
         raise RecipeError(f"{name}: variant_timing passes is 1 or 2")
-    for key in ("start", "settle", "framelog"):
+    for key in ("start", "settle", "framelog", "warmup"):
         if key in timing and not (isinstance(timing[key], (int, float)) and timing[key] >= 0):
             raise RecipeError(f"{name}: variant_timing {key} is a number of seconds")
     last = max([float(TIMED.match(c).group(1)) for c in launch.get("at_map") or [] if TIMED.match(c)] or [0])
@@ -264,8 +274,9 @@ def variant_plan(launch):
     if not variants:
         return [], []
     timing = launch.get("variant_timing") or {}
-    settle = float(timing.get("settle", 3))
+    settle = float(timing.get("settle", DEFAULT_SETTLE))
     framelog = float(timing.get("framelog", 0))
+    warmup = float(timing.get("warmup", DEFAULT_WARMUP if framelog else 0))
     passes = int(timing.get("passes", 2 if framelog else 1))
     last = max([float(TIMED.match(c).group(1)) for c in launch.get("at_map") or [] if TIMED.match(c)] or [0])
     t = float(timing.get("start", max(DEFAULT_VARIANT_START, last + 2)))
@@ -275,7 +286,7 @@ def variant_plan(launch):
         number_of_pass = 1 if index < len(variants) else 2
         sets = "; ".join(f"{dvar} {value}" for dvar, value in variant["set"].items())
         commands.append(f"{number(t)} {sets}")
-        t += settle
+        t += settle + (warmup if index == 0 else 0)
         if number_of_pass == 1:
             shot = f"{launch['name']}-{variant['name']}"
             commands.append(f"{number(t)} screenshot {shot}")
