@@ -740,7 +740,7 @@ void ResetState(Device &device);
 // ahead. LayoutFor and GetLayout run on the device's thread.
 // linearShader: PipelineKey::linearShader (a Modern lit shader of ours also
 // reads the ambient occlusion, kModernAoSampler).
-LayoutKey LayoutFor(const Shader &vs, const Shader &ps, uint8_t linearShader = 0);
+LayoutKey LayoutFor(const Shader &vs, const Shader &ps, uint16_t linearShader = 0);
 Layout *GetLayout(Device &device, const LayoutKey &key);
 // The pixel module a pipeline of this key needs: the one the shader keeps, or
 // null with how to build it in recipe.
