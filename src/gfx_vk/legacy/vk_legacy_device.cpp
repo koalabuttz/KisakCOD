@@ -87,6 +87,21 @@ bool CreateNullTextures(Device &device)
             std::memcpy(data, black, sizeof(black));
         }
     }
+    // White, for the Modern lit shaders' ambient occlusion where a scene has none.
+    TextureDesc desc;
+    desc.levels = 1;
+    desc.format = d3d::FMT_A8R8G8B8;
+    desc.pool = d3d::POOL_MANAGED;
+    desc.name = "white texture";
+    device.whiteTexture = CreateTextureInternal(device, desc, 0);
+    if (!device.whiteTexture)
+        return Fail(device, "cannot create the white texture");
+    ImageRegion region;
+    region.width = region.height = region.depth = 1;
+    void *data = StageImageWrite(device.core, device.whiteTexture->image, region, nullptr, nullptr);
+    if (!data)
+        return Fail(device, "cannot fill the white texture: %s", LastError(device.core));
+    std::memset(data, 0xff, 4);
     return true;
 }
 
@@ -311,6 +326,9 @@ void DestroyDevice(Device *device)
         DestroyTextureNow(*device, texture);
         texture = nullptr;
     }
+    DestroyTextureNow(*device, device->whiteTexture);
+    device->whiteTexture = nullptr;
+    device->modernAo = nullptr;
     DestroyBackBuffer(*device);
     DestroyBuffer(core, device->zeroVertices);
     gfx_vk::WaitIdle(core);

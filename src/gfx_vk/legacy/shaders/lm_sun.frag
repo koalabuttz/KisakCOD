@@ -24,8 +24,12 @@
 //   spec   = likewise what the game's specular (specular colour * Fresnel *
 //            (shadow * the sun's highlight * its colour + the reflection
 //            probe)) adds to the game's diffuse colour, decoded;
-//   colour = albedo * (sky * sky strength + sun * sun strength) + spec, then
-//            fog blended in linear light.
+//   ao     = the Modern path's ambient occlusion at this pixel (s15, white
+//            where the scene has none), which darkens only the light from
+//            all around: the sky term, and the probe through a specular
+//            occlusion; the sun keeps its own shadow;
+//   colour = albedo * (sky * sky strength * ao + sun * sun strength) + spec,
+//            then fog blended in linear light.
 // The game's shader adds its terms in display values, so in linear light a
 // term's share depends on what it is added to; taking each share from the
 // game's sum keeps every surface as bright as the game's (strengths 1),
@@ -117,6 +121,12 @@ layout(set = 1, binding = SAMPLER_DETAIL) uniform texture2D detailMap;
 layout(set = 1, binding = SAMPLER_DETAIL + 16) uniform sampler detailMapSampler;
 #endif
 
+// The Modern path's ambient occlusion (vk_legacy.h kModernAoSampler): a
+// texture the size of the render target, the visibility in red; the Legacy
+// adapter binds a 1x1 white one where the scene has none.
+layout(set = 1, binding = 15) uniform texture2D ambientOcclusion;
+layout(set = 1, binding = 31) uniform sampler ambientOcclusionSampler;
+
 layout(constant_id = 0) const float kSunStrength = 1.0;
 layout(constant_id = 1) const float kSkyStrength = 1.0;
 // The depth reference is clamped to [0, 1] (a D32 image standing in for D24,
@@ -135,6 +145,14 @@ vec3 Decode(vec3 value)
 {
     const vec3 v = max(value, vec3(0.0));
     return mix(pow((v + 0.055) / 1.055, vec3(2.4)), v / 12.92, lessThanEqual(v, vec3(0.04045)));
+}
+
+// The visibility of the light from all around at this pixel, 1 open.
+float AmbientOcclusion()
+{
+    const ivec2 size = textureSize(sampler2D(ambientOcclusion, ambientOcclusionSampler), 0);
+    const ivec2 at = min(ivec2(gl_FragCoord.xy), size - 1);
+    return texelFetch(sampler2D(ambientOcclusion, ambientOcclusionSampler), at, 0).r;
 }
 
 // D3D9's alpha test on the output alpha, in 8 bits.
@@ -253,7 +271,10 @@ void main()
         albedo *= alpha;
         albedoDisplay *= alpha;
     }
-    vec3 lit = albedo * (sky * kSkyStrength + sun * kSunStrength);
+    // Ambient occlusion darkens the sky's light, not the sun's share: that is
+    // taken from the undarkened sky above, as the game's sum gives it.
+    const float ao = AmbientOcclusion();
+    vec3 lit = albedo * (sky * kSkyStrength * ao + sun * kSunStrength);
 #if LM_SUN_SPECULAR
     const vec4 specularSample = texture(sampler2D(specularMap, specularMapSampler), uv);
     const float gloss = specularSample.a;
@@ -269,7 +290,13 @@ void main()
     const vec3 sunHighlight = shadow * highlight * envMap.w * pc.c[19].rgb * kSunStrength;
     // Likewise what the specular adds on top of the game's diffuse colour.
     const vec3 diffuseDisplay = albedoDisplay * (skyDisplay + sunDisplay);
-    const vec3 specularDisplay = specularSample.rgb * fresnel * (sunHighlight + probe.rgb * probe.a);
+    // The probe is light from around too: darkened by the specular occlusion
+    // that ambient occlusion gives for this view and gloss (Lagarde and de
+    // Rousiers 2014, roughness 1 - gloss).
+    const float specularOcclusion =
+        clamp(pow(abs(viewFacing) + ao, exp2(-16.0 * (1.0 - gloss) - 1.0)) - 1.0 + ao, 0.0, 1.0);
+    const vec3 specularDisplay =
+        specularSample.rgb * fresnel * (sunHighlight + probe.rgb * probe.a * specularOcclusion);
     lit += max(Decode(diffuseDisplay + specularDisplay) - Decode(diffuseDisplay), vec3(0.0));
 #endif
 
