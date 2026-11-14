@@ -19,9 +19,7 @@
 #include "r_setstate_d3d.h"
 #include "r_model_pose.h"
 
-#if !defined(_WIN32)
 #include <linux/sys_perf.h>
-#endif
 
 #include <setjmp.h>
 
@@ -137,7 +135,6 @@ int R_ProcessWorkerCmdsWithTimeoutInternal(int(*timeout)())
 
 LONG g_workerCmdWaitCount;
 
-#if !defined(_WIN32)
 static_assert((uint32_t)WRKCMD_COUNT <= SYS_PERF_WORKER_TYPE_SLOTS, "more worker command types than perf probe slots");
 
 // Which perf probe (docs/perf-ab.md) a sleep of the main thread in the loop
@@ -155,16 +152,13 @@ static uint32_t R_WorkerWaitProbe(int(*timeout)())
         return SYS_PERF_PROBE_WAIT_RENDERER;
     return SYS_PERF_PROBE_WAIT_WORKERS_OTHER;
 }
-#endif
 
 void R_ProcessWorkerCmdsWithTimeout(int(*timeout)(), int forever)
 {
     while (!timeout() && !R_ProcessWorkerCmdsWithTimeoutInternal(timeout) && forever)
     {
         PROF_SCOPED("WaitForWorkerCmd");
-#if !defined(_WIN32)
         SysPerfScope perfScope(R_WorkerWaitProbe(timeout));
-#endif
         InterlockedIncrement(&g_workerCmdWaitCount);
         Sys_WaitForWorkerCmd();
         if (timeout())

@@ -36,6 +36,7 @@
 
 #include <gfx_d3d/r_init.h>
 #include <universal/profile.h>
+#include <linux/sys_perf.h>
 
 //#include "../qcommon/stringed_ingame.h"
 
@@ -577,6 +578,8 @@ void Sys_Init()
 	Cmd_AddCommandInternal("net_restart", Sys_Net_Restart_f, &Sys_Net_Restart_f_VAR);
 	Cmd_AddCommandInternal("net_listen", Sys_Listen_f, &Sys_Listen_f_VAR);
 #endif
+	// perf_ab, perf_sample and perf_stop (docs/perf-ab.md).
+	Sys_PerfInit();
 
 	// REM
 	// osversion.dwOSVersionInfoSize = 148;
@@ -868,6 +871,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 				// run the game
 				Com_Frame();
+				// Records the frame when a perf_ab or perf_sample run is on.
+				Sys_PerfFrame();
 
 				// LWSS: Punkbuster stuff
 				//if (!com_dedicated || !com_dedicated->integer) {

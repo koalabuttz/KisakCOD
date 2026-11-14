@@ -639,10 +639,11 @@ void R_InsertGpuFence();
 bool R_GpuFenceTimeout();
 #if !defined(_WIN32)
 // The main thread's wait for the GPU in R_SyncGpu: sleeps between checks when
-// r_gpuSyncSleep asks for it, and counts the wait for perf_ab.
+// r_gpuSyncSleep asks for it.
 void R_GpuSyncMainIdle();
-void R_GpuSyncMainDone();
 #endif
+// Counts R_SyncGpu's wait for perf_ab ("gpu wait main").
+void R_GpuSyncMainDone();
 void R_FinishGpuFence();
 void R_AcquireGpuFenceLock();
 void R_ReleaseGpuFenceLock();
