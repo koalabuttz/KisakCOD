@@ -196,7 +196,7 @@ struct Backend
     // and our shaders on; KISAK_VK_MODERN_AO=1 or the ambient occlusion debug
     // view), which makes the normals buffer wanted too; KISAK_VK_MODERN_AO=0
     // keeps it off whatever asks. Its parameters (KISAK_VK_MODERN_AO_RADIUS,
-    // _THICKNESS, _POWER, _GRAZING, _FLOOR); the scene-sized image it writes, a Legacy texture the lit
+    // _THICKNESS, _POWER, _GRAZING, _FLOOR, _EDGE); the scene-sized image it writes, a Legacy texture the lit
     // shaders read (lg::SetModernAmbientOcclusion) until the scene is lit;
     // whether this scene has it; the scenes counted at the last reset.
     bool aoWanted = false;
@@ -466,6 +466,10 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         const float floorValue = floorText.empty() ? -1.0f : std::strtof(floorText.c_str(), nullptr);
         if (floorValue >= 0.0f && floorValue < 1.0f)
             backend->aoParams.floor = floorValue;
+        const std::string edgeText = EnvText("KISAK_VK_MODERN_AO_EDGE");
+        const float edge = edgeText.empty() ? 0.0f : std::strtof(edgeText.c_str(), nullptr);
+        if (edge > 0.0f && edge <= 10.0f)
+            backend->aoParams.edge = edge;
     }
     backend->debugReflections = EnvIs("KISAK_VK_MODERN_DEBUG", "reflections");
     backend->reflectionsWanted = !EnvIsZero("KISAK_VK_MODERN_SSR")
@@ -770,9 +774,9 @@ void BackendLogStats(Backend *backend, bool reset)
         const PassTimings pass = PassTimingsFor(backend->core, "modern ao");
         const uint64_t scenes = modern::Stats(backend->ao).builds - backend->aoBase.builds;
         HostLog(h, "vulkan d3d9: modern: %llu scenes with ambient occlusion (radius %.1f, thickness %.1f, "
-                   "power %.2f, floor %.2f), %.3f ms GPU each",
+                   "power %.2f, floor %.2f, edge %.2f), %.3f ms GPU each",
                 static_cast<unsigned long long>(scenes), backend->aoParams.radius, backend->aoParams.thickness,
-                backend->aoParams.power, backend->aoParams.floor,
+                backend->aoParams.power, backend->aoParams.floor, backend->aoParams.edge,
                 pass.supported ? 2.0 * average(pass) : 0.0);
     }
     // Screen-space reflections: the scenes traced, the levels of the last,

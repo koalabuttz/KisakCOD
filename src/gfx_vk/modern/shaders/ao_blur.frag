@@ -1,9 +1,9 @@
 #version 450
 
 // The Modern path's ambient occlusion, second pass (vk_modern_ao.cpp): a 5x5
-// blur of gtao.frag's noisy result that keeps to the pixel's own surface,
-// each tap weighted down as its view depth parts from this pixel's (2% of
-// the depth halves the weight), and the sky left out. The average is clamped
+// blur of gtao.frag's noisy result that keeps mostly to the pixel's own
+// surface, each tap weighted down as its view depth parts from this pixel's
+// (`edge`, a share of the depth, halves the weight), and the sky left out. The average is clamped
 // to 1, raised to the strength's power and kept above the floor through a
 // soft knee, so a narrow slot (the crash-in arch edge, PC AO run 7) does not
 // go near black while lighter shading stays as it was.
@@ -16,14 +16,9 @@ layout(push_constant) uniform Params
     mat4 clipToView;
     vec4 area;
     float sky;
-    float radius;
-    float pixelsPerUnit;
-    float falloff;
+    float edge;   // the share of the view depth at which a tap's weight halves
     float power;
-    uint frame;      // gtao.frag's
-    float thickness; // gtao.frag's
-    float grazing;   // gtao.frag's
-    vec4 up;         // w: the darkest the visibility may go (0: no floor)
+    float lowest; // the darkest the visibility may go (0: no floor)
 } params;
 
 layout(location = 0) out vec4 outVisibility;
@@ -71,11 +66,11 @@ void main()
             const float sampleDepth = texelFetch(sceneDepth, at, 0).r;
             if (sampleDepth >= params.sky)
                 continue;
-            const float apart = abs(ViewDepth(at, sampleDepth) - z) / max(abs(z) * 0.02, 1e-4);
+            const float apart = abs(ViewDepth(at, sampleDepth) - z) / max(abs(z) * params.edge, 1e-4);
             const float weight = exp2(-apart * apart);
             sum += texelFetch(raw, at, 0).r * weight;
             weights += weight;
         }
     const float visibility = weights > 0.0 ? clamp(sum / weights, 0.0, 1.0) : 1.0;
-    outVisibility = vec4(Floored(pow(visibility, params.power), params.up.w));
+    outVisibility = vec4(Floored(pow(visibility, params.power), params.lowest));
 }
