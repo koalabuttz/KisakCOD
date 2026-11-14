@@ -267,6 +267,31 @@ says so (`diag: switch no-depth-prepass is on from frame 1840 on
 at least 20 seconds and drop its first 10 second line, which holds the
 frames of both ways.
 
+### A pack of programs
+
+The client compiles each shader program once and keeps it in a file of its
+own in `ux0:data/KisakCOD/gxp`. Two things about that cost a console run
+time: a build whose translator changed compiles everything again, a second
+or so a program and over a thousand of them, and every start opens each
+program's file on the card. With `programs.pack` in the program folder the
+client looks in it first: one open for all of them, and the pack can come
+from another machine. Vita3K runs the Vita's own compiler, so the folder a
+PC run of the same build leaves holds the programs the console would
+compile:
+
+    python3 scripts/platform/vita/vita_pack_programs.py pack --out programs.pack <Vita3K's ux0>/data/KisakCOD/gxp
+
+Copy `programs.pack` into the console's `gxp` folder. A program is found
+in the pack by the same key as its file, a hash of its source, so a pack
+from another translator is not used and does no harm; a program the pack
+lacks is read from its own file or compiled as before, and what is
+compiled still goes to a file. Folders and packs can be packed together, the later source winning.
+The quit lines say `program pack ...: programs.pack holds N programs; M of
+the K read from the card came out of it`. The programs come from the game's
+shaders, so a pack stays on the owner's machines like the game's files.
+The reading is `src/gfx_gxm/gxm_program_pack.h`, checked on the host by
+`scripts/tests/test_vita_program_pack.py`.
+
 ## Testing in Vita3K
 
 Vita3K boots the `.vpk` far enough to check start-up, files, threads and,
