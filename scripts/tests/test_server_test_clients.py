@@ -192,6 +192,10 @@ typedef unsigned long long _QWORD;
 #endif
 #define ARRAYSIZE(a) (sizeof(a) / sizeof((a)[0]))
 #define PROF_SCOPED(name)
+// The perf_ab timing probe (src/linux/sys_perf.h) times SV_UpdateBots only
+// while a run is active; it has no effect on what the function does.
+enum SysPerfProbe { SYS_PERF_PROBE_SERVER_BOTS };
+struct SysPerfScope { explicit SysPerfScope(SysPerfProbe) {} };
 #define iassert(e) ((void)0)
 
 // Same enumerator order as src/qcommon/net_chan_mp.h; NA_BOT is the zero value.

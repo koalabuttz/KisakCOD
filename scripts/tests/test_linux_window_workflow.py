@@ -886,8 +886,11 @@ class CiTriggerTests(unittest.TestCase):
         'scripts/runs/recipes/vulkan-ab-mp-crash.json',
         'scripts/runs/vita3k/vita-run.ps1',
         'scripts/runs/vita3k/wsl/03-build.sh',
+        'scripts/runs/pc_run.py',
         'tests/runs/fake_game.cpp',
+        'tests/runs/fake_pc_game.py',
         'scripts/tests/test_perf_run.py',
+        'scripts/tests/test_pc_run.py',
         'scripts/tests/test_vita3k_runner.py',
     )
 
@@ -910,7 +913,8 @@ class CiTriggerTests(unittest.TestCase):
         # whenever a wider change starts it.
         commands = '\n'.join(step.get('run', '') for job in scripts['jobs'].values() for step in job['steps'])
         native = '\n'.join(step.get('run', '') for step in self.linux['jobs']['native']['steps'])
-        for test in ('scripts/tests/test_perf_run.py', 'scripts/tests/test_vita3k_runner.py'):
+        for test in ('scripts/tests/test_perf_run.py', 'scripts/tests/test_pc_run.py',
+                     'scripts/tests/test_vita3k_runner.py'):
             with self.subTest(test=test):
                 self.assertIn(f'python3 {test}', commands)
                 self.assertIn(f'python3 {test}', native)
@@ -1559,6 +1563,32 @@ class CiCacheTests(unittest.TestCase):
         self.assertNotIn('--parallel 2', text)
         self.assertNotIn('--jobs 2', text)
         self.assertIn('--jobs "$(nproc)"', text)
+
+
+class DiagnosticUploadTests(unittest.TestCase):
+    """A hosted artifact outage (2026-11-11: "Failed to CreateArtifact ... Unexpected
+    token '<'") failed jobs whose checks had all passed. Uploads that run on
+    ``always()`` or ``failure()`` carry logs and build outputs a person fetches
+    later, so they must not fail the job. The .vpk and the macOS bundle uploads
+    stay strict: a later job or a machine run needs them."""
+
+    WORKFLOWS = ('build-kisakcod-linux.yaml', 'build-kisarcod-win.yaml', 'build-kisakcod-macos.yaml')
+
+    def test_uploads_that_run_after_failure_do_not_fail_the_job(self):
+        checked = 0
+        for name in self.WORKFLOWS:
+            workflow = yaml.load((ROOT / '.github/workflows' / name).read_text(encoding='utf-8'),
+                                 Loader=yaml.BaseLoader)
+            for job_name, job in workflow['jobs'].items():
+                for step in job.get('steps', []):
+                    if not step.get('uses', '').startswith('actions/upload-artifact@'):
+                        continue
+                    if step.get('if') not in ('always()', '${{ failure() }}'):
+                        continue
+                    checked += 1
+                    with self.subTest(workflow=name, job=job_name, step=step.get('name', step['with']['name'])):
+                        self.assertEqual(step.get('continue-on-error'), 'true')
+        self.assertGreater(checked, 12)
 
 
 if __name__ == '__main__':

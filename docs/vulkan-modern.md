@@ -7,18 +7,25 @@ shared core ([core](vulkan-core.md)), into the frame the Legacy path draws and
 on the same images. It is the renderer plan's "Modern visuals" (the plan is in
 the project files, `renderer/modern-renderer-plan.md`, sections 3, 6 and 7).
 
-**State: experimental.** So far the path has the first piece of the plan's
-early experiment (E1), temporal anti-aliasing (TAA) over the scene the Legacy
-path drew, and the first piece of linear light (the plan's MD1): the scene is
-drawn into a linear-light HDR image and tonemapped back
-([Linear light](#linear-light)), with lit surfaces keeping what they
-compute over white ([Lit surfaces](#lit-surfaces)), bloom from that image in
-place of the vision set's glow ([Bloom](#bloom)) and auto exposure before the
-tonemap ([Auto exposure](#auto-exposure)). Velocity comes from the
-camera, and for entities' models (rigid and skinned surfaces, the view model's
-included) from a velocity pass of their own
-([Velocity](#velocity-of-what-moves-on-its-own)); effects do not have their own
-yet. No material is drawn by shaders of the Modern path's own yet.
+**State: experimental.** The path has temporal anti-aliasing (TAA) over the
+scene the Legacy path drew (the plan's early experiment, E1) and linear light
+(the plan's MD1): the scene is drawn into a linear-light HDR image and
+tonemapped back ([Linear light](#linear-light)), with bloom from that image
+in place of the vision set's glow ([Bloom](#bloom)), auto exposure before the
+tonemap ([Auto exposure](#auto-exposure)) and a choice of tonemap curves
+([Tonemap curves](#tonemap-curves)). Velocity comes from the camera, and for
+entities' models (rigid and skinned surfaces, the view model's included) from
+a velocity pass of their own
+([Velocity](#velocity-of-what-moves-on-its-own)); effects do not have their
+own yet. On top of that it draws part of the scene with its own shaders
+([Lit shaders of our own](#lit-shaders-of-our-own): the world's and the
+models' sunlit surfaces, and the surfaces without the sun, interiors), and
+adds a [normals buffer](#normals-buffer), [ambient
+occlusion](#ambient-occlusion) and [screen-space
+reflections](#screen-space-reflections), which those shaders use. What has
+not been moved to our own shaders keeps the game's, over white ([Lit
+surfaces](#lit-surfaces)). It has been measured on one PC only (see the
+[status page](status.md)).
 
 ## Turning it on
 
@@ -109,8 +116,9 @@ For each pixel, `taa.frag`:
 ## Velocity of what moves on its own
 
 Camera reprojection is exact for the world and static models, which do not
-move. Entities' models do, and the view model moves with the camera, so the
-Modern path draws their surfaces a second time with their own motion.
+move. Entities' models and brush models (doors, elevators, other map pieces
+that move) do, and the view model moves with the camera, so the Modern path
+draws their surfaces a second time with their own motion.
 
 * **The renderer** (`src/gfx_d3d/r_modern_motion.cpp`). When it skins a scene
   entity, each surface records its entity (`GfxModelSurfaceInfo::modernOwner`,
@@ -126,11 +134,20 @@ Modern path draws their surfaces a second time with their own motion.
   with the jitter, and for the view model its own depth-hack projection) is
   kept by entity, model and surface. From the second scene it is seen in, it
   is reported through the `surfaceMoved` hook with last scene's matrix, once
-  per scene however many passes draw it.
+  per scene however many passes draw it. Brush models are reported the same
+  way from `R_TessBModel` (`rb_tess.cpp`), with the matrix their placement
+  gave them; a brush model belongs to one entity, so its surface (a
+  `GfxSurface` of the world) is its key, under the owner
+  `R_MODERN_OWNER_BRUSH`.
 * **The front** (`gfx_vk::d3d9::ModernSurfaceMoved`) takes the Legacy
   adapter's last indexed draw as it is still bound (`lg::LastIndexedDraw`:
   stream 0, the index buffer and range, the viewport) and keeps it with both
-  matrices until the scene is finished: at `ModernSceneLit` when effects
+  matrices until the scene is finished. Dynamic buffers it read from (brush
+  models' indices, skinned vertices) are held (`lg::HoldLastIndexedBuffers`)
+  until the velocity pass is recorded: a later lock, even with DISCARD, moves
+  to another backing, though the GPU may have run the draw already (the GPU
+  feed submits during a frame) and would otherwise let the engine write over
+  what the pass reads. The scene is finished at `ModernSceneLit` when effects
   blend on the display image (the default), else at `ModernSceneDone`. The
   renderer closes its scene's motion at either, so surfaces drawn after
   `R_ModernSceneLit` (effects) report none.
@@ -140,8 +157,19 @@ Modern path draws their surfaces a second time with their own motion.
   scene depth (so the surface is what the scene shows there) writes where the
   surface was last frame relative to where it is now, in NDC without either
   frame's jitter. Hidden fragments write nothing, so what hides a moving
-  surface keeps the camera's motion. The pipeline reads 32-byte vertices with
-  the position first, as the engine's models are.
+  surface keeps the camera's motion. It has a pipeline for 32-byte vertices
+  (models') and one for 44-byte vertices (the world's, which brush models
+  are drawn from), both with the position first.
+* **Matching the scene's depth.** The pass takes a surface to clip space with
+  one matrix, the renderer's world-view-projection. The world's shaders, which
+  draw brush models, go through the eye-relative world matrix first and the
+  view-projection after. A brush model's vertices are in the map's units, far
+  from its origin, so with the single matrix its depth is a small difference
+  of large terms and rounds differently, by more than a fixed tolerance allows
+  near the camera; every fragment of the surface was then dropped as hidden.
+  `velocity.vert` works out a bound on that rounding for each vertex (the size
+  of the terms behind the clip z and w, times a few units in the last place,
+  over w; at most 0.001) and the fragment test allows that much more.
 * **Skinned surfaces** (characters' bodies, the view model's arms) have
   vertices the renderer writes again each frame, on the CPU, into a buffer it
   locks with DISCARD (its skinned cache, or the dynamic vertex buffer when
@@ -156,8 +184,8 @@ Modern path draws their surfaces a second time with their own motion.
   motion is the skinning's as well as the entity's. A camera cut, or a scene
   that keeps nothing, forgets what was kept.
 
-What it does not cover yet: brush models and effects (whether drawn on the display image or, with
-`KISAK_VK_MODERN_EFFECTS=linear`, in the scene). `KISAK_VK_MODERN_VELOCITY=0`
+What it does not cover yet: effects (whether drawn on the display image or,
+with `KISAK_VK_MODERN_EFFECTS=linear`, in the scene). `KISAK_VK_MODERN_VELOCITY=0`
 turns the pass off, for comparisons.
 
 **Debug view.** `KISAK_VK_MODERN_DEBUG=velocity` draws the velocity image over
@@ -170,6 +198,9 @@ grows with the distance, from a quarter at none to full at 6 pixels or more,
 so a reported surface that did not move shows dim grey. TAA's history is kept
 apart from the image the view draws on, so the view never feeds back into it.
 It is drawn only in scenes that have a velocity image.
+`KISAK_VK_MODERN_DEBUG=velocity-all` is the same view with the velocity pass's
+depth test off: every reported surface is coloured wherever it lands, hidden
+or not, which finds a surface that is reported but never shows.
 
 There is no history on the first scene, after a cut, or when the scene's size
 changes. Those scenes are drawn as they came. Pixel positions follow D3D9's,
@@ -181,17 +212,20 @@ as the Legacy path draws: pixel (i, j) holds the scene at NDC
 * **Effects have no motion of their own:** they are reprojected as if they
   stood still in the world. Clipping the history to this frame's colours keeps
   them from leaving trails, at the cost of some softness on them while they
-  move. Entities' models and the view model have their own
-  ([Velocity](#velocity-of-what-moves-on-its-own)); effects get a reactive
-  mask next.
+  move. Entities' models, brush models and the view model have their own
+  ([Velocity](#velocity-of-what-moves-on-its-own)); effects would get a
+  reactive mask together with an upgrade of their own, since they are drawn
+  after the anti-aliasing by default ([Effects](#effects)).
 * **No sharpening.** TAA softens the picture somewhat. A sharpening pass would
   come with the plan's temporal upscaler (MD3).
 * **One history for all views.** Splitscreen would share it; the PC
   multiplayer game has one view.
-* **Light from Legacy shaders only.** In linear light the scene is the
-  Legacy path's colour decoded as it is drawn (below), so nothing in it is
-  brighter than white yet; the HDR range comes with the world drawn by the
-  Modern path's own shaders.
+* **Some light still comes from Legacy shaders.** Surfaces whose shaders are
+  not yet replaced ([Lit shaders of our own](#lit-shaders-of-our-own): spot
+  and omni lights, ambient-only models, the skinned and flag models) are the
+  Legacy path's colour decoded as it is drawn (below), so nothing on them is
+  brighter than white. The sunlit and interior surfaces drawn by our own
+  shaders can be.
 * **Legacy shaders that read the scene** (the distortion resolve after the
   sun, `R_RENDERTARGET_RESOLVED_POST_SUN`) read it before the pass, jittered.
 
@@ -203,7 +237,8 @@ each`. The last number is the pass's own GPU time from the core's pass
 timestamps (`KISAK_VK_PASS_TIMESTAMPS`). It leaves out the blit back, which
 the frame's GPU time includes. When surfaces that move on their own were
 drawn, it also prints `vulkan d3d9: modern: N scenes with surfaces that move
-on their own (M surfaces), X ms GPU each for their velocity`, and
+on their own (M surfaces, B of them brush models), X ms GPU each for their
+velocity` (B counts the surfaces drawn from the world's 44-byte vertices), and
 `vulkan d3d9: modern: N scenes kept skinned vertices (M surfaces, K KB each
 scene), S skinned surfaces drawn from last scene's`: the copies at the end of
 each scene, and how many skinned surfaces had last scene's vertices to be
@@ -227,7 +262,15 @@ are, behind a static striped quad. Reported to the velocity pass
 (`front::ModernSurfaceMoved`), the band's stripes stay exactly as drawn; not
 reported, they go grey (the scene checks that too, so it would notice a pass
 that does nothing); and the static quad in front stays as drawn, so the band's
-motion is not written where it is hidden.
+motion is not written where it is hidden. It draws the band again from
+skinned vertices (a dynamic buffer locked with DISCARD) and once more from
+44-byte vertices with indices written into a dynamic index buffer for each
+draw, as brush models are; in that run the GPU finishes each draw (an event
+query polled with FLUSH) and the indices are written over with DISCARD before
+the scene ends, so the band stays sharp only if the pass still reads the
+draw's. That band's vertices are also far from the origin and drawn with the
+world shaders' two matrices, while it is reported with their product, so it
+stays sharp only if the pass allows for the depth's rounding.
 
 `scripts/tests/test_vulkan_d3d9_front.py` checks the scenes in the full run and
 the `modern:` statistics lines. `scripts/tools/vulkan/gen_spirv_header.py
@@ -607,7 +650,10 @@ to 3 in the project files, 2026-11-13):
   game's diffuse colour, decoded: the specular map times the Fresnel
   (envMapParms) times (shadow times the sun's highlight, exponent from the
   gloss, times envMapParms.w, the sun's specular colour and the sun
-  strength, plus the reflection probe at LOD 6 - 8 gloss times its alpha);
+  strength, plus the reflection probe at LOD 6 - 8 gloss times its alpha,
+  which on opaque surfaces of gloss over 0.3 gives way to the
+  [screen-space reflections](#screen-space-reflections) where they found
+  something);
 * **colour** = decode(albedo times the game's light, sky plus sun in
   display values), shared out between the sky and the sun as their decoded
   light is (sky / (sky + sun) of it to the sky), each share times its
@@ -921,7 +967,7 @@ pass of 9 depth reads per pixel.
 
 | Setting | Default | Switch |
 | --- | --- | --- |
-| Normals buffer | built only when something reads it: ambient occlusion (on with our lit shaders), screen-space reflections, or the debug view below | `KISAK_VK_MODERN_NORMALS=1` builds it (and turns the prepass on) with nothing reading it, to measure the cost; `KISAK_VK_MODERN_NORMALS=0` never builds it |
+| Normals buffer | built only when something reads it: ambient occlusion (on with our lit shaders), screen-space reflections (also on with our lit shaders), or the debug view below | `KISAK_VK_MODERN_NORMALS=1` builds it (and turns the prepass on) with nothing reading it, to measure the cost; `KISAK_VK_MODERN_NORMALS=0` never builds it |
 | Debug view | off | `KISAK_VK_MODERN_DEBUG=normals` draws the buffer over the finished scene (after the tonemap): red faces right, green up, blue away; a wall seen head on is (128, 128, 0); the sky is left as it is |
 
 The statistics line: `vulkan d3d9: modern: N scenes with a normals buffer
@@ -977,7 +1023,13 @@ timed as "modern ao"):
    pixels whose normal is a guess (the normals buffer marks a strip a pixel
    or two wide, whose neighbours are all on other surfaces), and surfaces
    seen nearly edge on (the effect fades out as the normal turns across the
-   view, from 5 to 1 degrees of the surface to the view ray). It writes an
+   view: on walls from about 12 degrees of the surface to the view ray, on
+   floors and ceilings from 5, down to 1). On a wall seen side-on a corner's
+   shading is squeezed into a few pixels and reads as a dark line: PC AO
+   run 4 found one down the crash-in arch edge with the fade at 5 degrees.
+   Ground seen from far off is always at a shallow angle, so floors keep the
+   5 degrees and their contact shadows. World up comes from the view
+   matrix. It writes an
    `R16_SFLOAT` image. The
    value is left unclamped: a single slice of an open surface seen at an angle
    gives more than 1 or less, and only the average over the slices is 1.
@@ -1014,11 +1066,15 @@ for yet) are not darkened.
 | Ambient occlusion | on with our lit shaders (linear light, lit inputs and our shaders on); it turns the normals buffer and the prepass on | `KISAK_VK_MODERN_AO=0` turns it off (our shaders read white); `KISAK_VK_MODERN_AO=1` builds it even with nothing reading it, to measure the cost |
 | Radius | 48 world units (a little over a metre; a player is 70 tall) | `KISAK_VK_MODERN_AO_RADIUS=<units>` |
 | Thickness | 8 world units: how far behind a sample's surface it is taken to reach | `KISAK_VK_MODERN_AO_THICKNESS=<units>`: less keeps thin things from darkening what is behind them but weakens contact shadows; 1000 behaves as plain GTAO (everything below the horizon hidden) |
+| Walls seen side-on | on walls the effect is whole from \|N.V\| 0.2 (about 12 degrees of the surface to the view ray) and fades out below it, to none at 0.02; floors and ceilings fade from 0.08, sloped faces in between | `KISAK_VK_MODERN_AO_GRAZING=<0 to 1>` sets the walls' figure: 0.08 treats walls as floors (as before PC AO run 4, with its dark line down the crash-in arch edge) |
 | Strength | power 2 (PC AO run 1: 1 read slightly weak, 2 about right in the shade; with the thickness, PC AO run 3 found 1.5 as weak as run 1's 1) | `KISAK_VK_MODERN_AO_POWER=<p>`: the visibility is raised to p (2 darkens, 1 lightens, 0 turns it off) |
+| Floor | 0.35: after the power the visibility is kept above it, through a soft knee from 0.45 down (lighter shading is unchanged). PC AO run 7: the crash-in arch line is a narrow slot between the pillar's side and the arch's inside face that went near black (0.13) and ended in a hard edge; ground contact shadows sit near 0.85 | `KISAK_VK_MODERN_AO_FLOOR=<0 to 1>`: 0 turns it off |
+| Blur edge | 0.08: the blur counts a tap half when its view depth is 8% of the pixel's away, so it keeps to each surface but runs across small depth steps. PC AO run 9: at 0.02 the crash-in arch slot ended in a one-pixel step; at 0.08 it ramps over four, with no halos and the ground unchanged | `KISAK_VK_MODERN_AO_EDGE=<share>`: 0.02 is the old, stricter blur; more lightens depth edges such as ceiling beams' |
 | Debug view | off | `KISAK_VK_MODERN_DEBUG=ao` draws the visibility as grey over the finished scene (after the tonemap): white open, darker in corners |
 
 The statistics line: `vulkan d3d9: modern: N scenes with ambient occlusion
-(radius R, thickness T, power P), X ms GPU each` (both passes).
+(radius R, thickness T, power P, floor F, edge E), X ms GPU each` (both
+passes).
 
 **Checks:** the D3D9 check's `modern_ao` scene draws a floor 120 units below
 a camera with the engine's 90-degree perspective, and a wall rising from it
@@ -1051,9 +1107,8 @@ our shaders read white.
 The reflection probe CoD4's lit shaders add is one baked cube map per area:
 it does not show what is really next to a surface. Screen-space reflections
 (SSR) find what each pixel's surface would mirror among what the screen
-shows, so that our own lit shaders can use that in place of the probe where
-it is found. This first piece traces them and shows them in a debug view;
-nothing in the lighting reads them yet.
+shows, and our own lit shaders use that in place of the probe where it is
+found.
 
 **How a scene goes with it:**
 
@@ -1096,15 +1151,28 @@ ray met nothing on the screen, met the sky, or met a surface from behind,
 where the normal is only a guess, and on a cut or the first scene (no last
 scene to read light from: no image at all then).
 
-**How the lighting will use it (agreed with the lit shaders' owners,
-2026-11-13):** a pipeline drawn by one of our lit shaders gets the image at
-pixel sampler 14 (a black, alpha 0 texture where the scene has none), and
-the shader mixes it into the reflection probe's light only, in the game's
-display values: `probe = mix(probe * specular occlusion, encode(ssr.rgb /
-ssr.a), ssr.a)`, at the level its gloss picks (`(6 - 8 gloss) / 6` of the
-way to the blurriest, as the game picks the probe's). The sun, its highlight
-and the lightmap are untouched. That step comes with the lit shaders' own
-pull requests.
+**How the lighting uses it (agreed with the lit shaders' owners,
+2026-11-13):** the back end hands the scene's image to the Legacy adapter
+(`lg::SetModernReflections`) from the depth hand-over until the scene is
+lit, null after. A pipeline drawn by one of our lit shaders
+(`PipelineKey::linearShader`) gets it at pixel sampler 14
+(`kModernReflectionsSampler`, in `LayoutFor`; ours is not built where the
+game's shader reads s14), read with a trilinear sampler clamped to the
+edge, and a 1x1 (0, 0, 0, 0) texture where the scene has none. `lm_sun.frag`
+with a specular map (`s0`) mixes it into the reflection probe's light only,
+in the game's display values: `probe = mix(probe * specular occlusion,
+encode(ssr.rgb / ssr.a), ssr.a)` (encode unclamped), at the level its gloss
+picks (`(6 - 8 gloss) / 6` of the way to the blurriest, as the game picks
+the probe's), on opaque surfaces only (a blended one is not in the prepass,
+so the reflections there belong to what is behind it). Rough surfaces keep
+the probe: the mix fades out below gloss 0.5 and is gone at 0.3. The
+reflections' blurriest level is only a few pixels wide, not the half of the
+world around the surface that the probe's blurriest level averages, so on a
+matte wall seen at a grazing angle they showed the one bright wall they hit
+at full strength (PC reflections run 3: a bright band on the Crash arcade's
+plaster pillar). The sun, its
+highlight and the lightmap are untouched, and so is the Fresnel and the
+specular map that scale the result.
 
 **Limits.** Only what the screen shows can be reflected: things off screen,
 behind the camera or hidden behind something else are not (the probe stays
@@ -1123,7 +1191,7 @@ chain).
 
 | Setting | Default | Switch |
 | --- | --- | --- |
-| Reflections | traced only when something reads them: the debug view below for now; our lit shaders next. They need linear light (with `KISAK_VK_MODERN_LINEAR=0` they are not traced, logged once) and the normals buffer (`KISAK_VK_MODERN_NORMALS=0` turns them off too) | `KISAK_VK_MODERN_SSR=1` traces them (and turns the prepass and normals on) with nothing reading them, to measure the cost; `KISAK_VK_MODERN_SSR=0` never traces them |
+| Reflections | traced when something reads them: our lit shaders (on with linear light, lit inputs and our shaders), or the debug view below. They need linear light (with `KISAK_VK_MODERN_LINEAR=0` they are not traced, logged once) and the normals buffer (`KISAK_VK_MODERN_NORMALS=0` turns them off too) | `KISAK_VK_MODERN_SSR=1` traces them (and turns the prepass and normals on) with nothing reading them, to measure the cost; `KISAK_VK_MODERN_SSR=0` never traces them |
 | Longest ray | 2000 units | `KISAK_VK_MODERN_SSR_DISTANCE` |
 | Thickness | 16 units | `KISAK_VK_MODERN_SSR_THICKNESS` |
 | Steps | 32 | `KISAK_VK_MODERN_SSR_STEPS` (at most 256) |
@@ -1139,22 +1207,88 @@ and a red wall over the right half facing the camera, through the prepass
 as the engine does, twice (the first a cut). The first has no reflections;
 in the second, with `KISAK_VK_MODERN_DEBUG=reflections`, the floor in front
 of the wall shows the wall's red, the floor on the left (whose rays meet
-only the sky) and the wall (whose rays come back at the camera) show black.
-`test_vulkan_d3d9_front.py` runs it with the debug view, with
-`KISAK_VK_MODERN_SSR=1`, and with the debug view beside
+only the sky) and the wall (whose rays come back at the camera) show black. Without the debug
+view it draws the scene three times more with the floor as `lm_sun_r0c0s0` (the
+`modern_lit_shader` stand-in): black colour map, lightmaps, probe and sun,
+and a white specular map of gloss 1 with Fresnel 1, seen from straight
+above. In the second, our shader shows the wall's red (199, 40, 40) where
+the reflections found it and black elsewhere; black everywhere with
+`KISAK_VK_MODERN_SSR=0`, and the stand-in's black without our shaders. The
+third (not a cut) has a specular map of gloss 0: that floor keeps its black
+probe, near black (the anti-aliasing keeps a trace of the red before it).
+`test_vulkan_d3d9_front.py` runs it as it is, with the debug view, with
+`KISAK_VK_MODERN_SSR=1` (also beside `KISAK_VK_MODERN_SHADERS=0`), with
+`KISAK_VK_MODERN_SSR=0`, `KISAK_VK_MODERN_LIT=0` and
+`KISAK_VK_MODERN_SHADERS=0`, and with the debug view beside
 `KISAK_VK_MODERN_LINEAR=0`, `KISAK_VK_MODERN_SSR=0` and
-`KISAK_VK_MODERN_NORMALS=0`, and checks that a full run traces none.
+`KISAK_VK_MODERN_NORMALS=0`, and checks that a full run traces 3 scenes
+(none with our lit shaders off).
+
+## Reflection probes
+
+The game's reflection probes are 64-texel cubes of 7 levels, made when the
+map was compiled: level 0 is the view from the probe, and each level below
+it the one above halved, in display values (sRGB), as box filters do. Lit
+surfaces read level 6 - 8 x gloss: the rough ones the bottom levels, which
+are blocky (a face of 1 or 2 texels) and darker than the light they stand
+for (averaging display values darkens the bright).
+
+With linear light, the Modern path makes levels 1 to 6 again from level 0
+as each map is set up (`R_LoadWorld` calls the `reflectionProbe` hook for
+each of the map's probes, not the default one), in
+`src/gfx_vk/modern/vk_modern_probes.cpp`:
+
+* level 0 is read in linear light (the game's encoding, rgb over the
+  largest channel and alpha that channel over 4, then the sRGB curve
+  undone);
+* each texel of level L is the mean of the light around its direction,
+  weighted by a cosine lobe of power (2^(9.37752 g) + 7) / 4 with
+  g = (6 - L) / 8: the power `lm_sun.frag` gives the sun's highlight at
+  that gloss, about the reflected ray (a quarter of the half-vector's).
+  That is 16.3 at level 1 to 2 at level 6. Each texel's light counts by the
+  solid angle it covers, and directions where the lobe is under a
+  thousandth are left out;
+* the lobes read a box-filtered copy of level 0 one level finer than they
+  write, at least 16 texels a face (level 2) and at most 4 (level 4);
+* each texel is stored back in the game's encoding (the alpha rounded up,
+  the colour making up for it).
+
+The bottom level is then a smooth sky-and-ground light, every direction
+with its own colour, instead of six flat faces; glossy surfaces keep their
+sharp level 0. Filtering again gives the same levels (level 0 is never
+written). Screen-space reflections replace this term where they find
+something, so the probe shows where they do not.
+
+**Cost.** About 17 ms a probe on one core at `-O2` (80 ms in a debug
+build), at map load only: a map with 40 probes loads about 0.7 s slower.
+Nothing is done per frame.
+
+| Setting | Default | Switch |
+| --- | --- | --- |
+| Probe filter | on with linear light | `KISAK_VK_MODERN_PROBES=0` keeps the game's levels; `KISAK_VK_MODERN_PROBES=1` filters them also without linear light |
+
+The statistics line: `vulkan d3d9: modern: N reflection probes filtered by
+gloss in linear light (M left as they are), X ms each` (M counts the cubes
+whose size or format the filter does not take).
+
+**Checks:** the D3D9 check's `modern_probes` scene makes a 64-texel cube of
+7 levels whose level 0 is black with a white top face, and marks its
+lower levels. Filtered, the middle of the top face's level 6 stays bright,
+a side face's level 6 picks up some of the top's light (more than at
+level 3, less than the top), and filtering a second time leaves the same
+levels. With `KISAK_VK_MODERN_PROBES=0` or `KISAK_VK_MODERN_LINEAR=0` the
+marks are kept. `test_vulkan_d3d9_front.py` runs it as it is, with
+`KISAK_VK_MODERN_PROBES=1` (beside `KISAK_VK_MODERN_LINEAR=0` or not), with
+`KISAK_VK_MODERN_PROBES=0` and with `KISAK_VK_MODERN_LINEAR=0`, and checks
+that a full run filters 2 (none without linear light).
 
 ## Next
 
-From the plan's E1, in order:
-
-* a reactive mask for effects;
-* then the rest of linear light: a tonemap with a shoulder and the vision
-  sets' film settings in it ([Linear light](#linear-light) has the image,
-  the tonemap and bloom; [Lit surfaces](#lit-surfaces) keeps the lit
-  families' colours over white).
-
-The first laptop run of this piece should compare `r_visuals legacy` and
-`modern` in the standing mp_crash scene: frame rate, the pass's GPU time,
-and numbers for how much the edges change.
+What this guide still lists as missing is in [What it does not do
+yet](#what-it-does-not-do-yet): a reactive mask for effects, sharpening, one
+history per view and the rest of the lit shaders. The plan's later stages
+(volumetric fog and light shafts, screen-space global illumination, and a
+ray-tracing tier for GPUs that have it) are in the project files'
+`renderer/modern-renderer-plan.md`, section 6.5; the Modern switches becoming
+dvars that change mid-match is section 6.6. Which pieces are in review is on
+the [status page](status.md#open-pull-requests).

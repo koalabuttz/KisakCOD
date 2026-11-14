@@ -83,8 +83,8 @@ TaaStats Stats(const Taa *taa);
 
 // ---- Velocity of what moves on its own (E1, docs/vulkan-modern.md) ----
 //
-// A surface the scene drew that moves on its own (an entity, the view model)
-// is drawn again into an R16G16_SFLOAT image, with this frame's and last
+// A surface the scene drew that moves on its own (an entity, the view model,
+// a brush model such as a door) is drawn again into an R16G16_SFLOAT image, with this frame's and last
 // frame's object-to-clip matrices. Where it is what the scene shows (its depth
 // matches the scene depth), the image holds where it was last frame relative
 // to where it is now, in NDC without either frame's jitter; everywhere else
@@ -97,7 +97,8 @@ constexpr float kNoOwnMotion = 65504.0f;
 // One indexed draw of the scene, by what the Legacy draw bound.
 struct MovedSurface
 {
-    // Positions are three floats at the start of each vertex.
+    // Positions are three floats at the start of each vertex; strides of 32
+    // (models' vertices) and 44 (brush models') are drawn, others skipped.
     VkBuffer vertices = VK_NULL_HANDLE;
     VkDeviceSize vertexOffset = 0;
     uint32_t stride = 0;
@@ -127,7 +128,9 @@ struct MovedSurface
 
 struct Velocity;
 
-Velocity *CreateVelocity(Core *core, std::string &error);
+// depthTest false draws every surface wherever it lands, hidden or not: only
+// for the debug view that finds them (KISAK_VK_MODERN_DEBUG=velocity-all).
+Velocity *CreateVelocity(Core *core, std::string &error, bool depthTest = true);
 // Waits for the GPU to finish what was recorded.
 void DestroyVelocity(Core *core, Velocity *velocity);
 
@@ -144,6 +147,7 @@ struct VelocityStats
     uint64_t passes;   // DrawVelocity calls that recorded
     uint64_t surfaces; // surfaces they drew
     uint64_t skinned;  // of those, skinned surfaces drawn from last scene's vertices
+    uint64_t world;    // of those, surfaces drawn from the world's 44-byte vertices (brush models)
 };
 VelocityStats Stats(const Velocity *velocity);
 
@@ -249,6 +253,27 @@ struct AoParams
     // further behind stays lit (a thin sign or arch edge in front of a wall
     // no longer darkens the wall beside it as a solid block would).
     float thickness = 8.0f;
+    // |N.V| from which the effect is whole on walls; on walls seen at a
+    // shallower angle it fades out from here to 0.02. Floors and ceilings
+    // keep 0.08, so ground seen from far off keeps its contact shadows. PC
+    // AO run 4: at 0.08 a corner on a wall seen nearly side-on (the crash-in
+    // arch edge) read as a dark line; David chose to soften that alone.
+    float grazing = 0.2f;
+    // The darkest the visibility may go after the power, reached through a
+    // soft knee 0.1 wide (0 turns it off). PC AO run 7: the crash-in arch
+    // line is a narrow slot between the pillar's side and the arch's inside
+    // face that went near black (0.13) and ended in a hard edge; the ground's
+    // contact shadows stay far above it (about 0.85).
+    float floor = 0.35f;
+    // The blur's depth tolerance: a tap whose view depth is this share of
+    // the pixel's away counts half. PC AO run 8: at 0.02 the blur stops dead
+    // at the crash-in arch slot's edge (the pillar's side face against the
+    // arch's inside face a little behind it), a hard step from 91 to 253
+    // that reads as a line. PC AO run 9: at 0.08 it ramps over 4 pixels
+    // (94, 120, 175, 225), with no halos round outlines and the ground
+    // within 2 levels; 0.25 and 0.6 soften it no further but lighten the
+    // ceiling beams' edges more.
+    float edge = 0.08f;
     uint32_t frame = 0;    // moves the noise
 };
 
@@ -272,6 +297,7 @@ struct AoStats
     uint64_t builds; // BuildAmbientOcclusion calls that recorded
 };
 AoStats Stats(const AmbientOcclusion *ao);
+
 // ---- Screen-space reflections (docs/vulkan-modern.md "Screen-space reflections") ----
 //
 // What each pixel's surface would mirror, found on the screen: the view ray
@@ -319,6 +345,32 @@ struct ReflectionStats
     uint32_t levels; // the last image's mip levels
 };
 ReflectionStats Stats(const Reflections *reflections);
+
+// ---- Reflection probes (docs/vulkan-modern.md "Reflection probes") ----
+//
+// The game's reflection probes are cube maps baked when the map was made:
+// level 0 the scene around the probe, the levels below it box-filtered, and
+// the lit shaders pick level 6 - 8 gloss, so a rough surface reads a face's
+// average (six flat colours at level 6) mixed in display values, which dims
+// what is bright. FilterReflectionProbe makes those levels again for the
+// Modern path from level 0 alone, in linear light.
+
+// The power of the cosine lobe about the reflected ray that level `level` of
+// a filtered probe sums: the gloss that picks the level (6 - level) / 8,
+// whose Blinn-Phong power 2^(9.37752 gloss) + 7 (the sun's highlight in
+// lm_sun.frag) is about four times the power about the reflected ray.
+float ReflectionProbeLobePower(uint32_t level);
+// A probe cube `edge` texels wide with `levels` levels (edge >> level each),
+// texels of 4 bytes B, G, R, A as D3DFMT_A8R8G8B8 holds them, in the game's
+// encoding (R_ColorCorrectBGRAPixel: the display value is rgb * a * 4).
+// bits[face * levels + level] is that face's level (D3D9's face order),
+// pitches[...] its bytes per row. Writes levels 1 on of every face: each
+// texel the light of ReflectionProbeLobePower(level) about its direction,
+// summed in linear light from level 0, stored in the same encoding. Level 0
+// is left as it is, so filtering a probe again gives the same levels. False,
+// and nothing written, when there is nothing to filter (edge or levels
+// under 2) or bits are missing.
+bool FilterReflectionProbe(uint32_t edge, uint32_t levels, uint8_t *const *bits, const uint32_t *pitches);
 
 // ---- Debug views (KISAK_VK_MODERN_DEBUG; docs/vulkan-modern.md) ----
 //
@@ -472,7 +524,7 @@ struct ExposureParams
     // mp_crash's and mp_backlot's outdoor views (PC exposure run 1).
     float key = 0.115f;
     float minEv = -1.0f;   // the range the exposure stays in
-    float maxEv = 1.0f; // David 2026-11-13: +1, so dark interiors keep more of their mood
+    float maxEv = 1.5f;
     // Time constants, in seconds: towards a lower exposure (the scene got
     // brighter) and towards a higher one (it got darker).
     float brighterSeconds = 1.0f;

@@ -148,7 +148,7 @@ struct PerfConfig
     int rounds = 1;                    // windows = rounds * variants.size()
     double gaugeSeconds = 0.25;        // time between gauge samples
     size_t threadRows = 8;             // busiest threads listed per window
-    size_t probeRows = 12;             // probes with the most time listed per window
+    size_t probeRows = 16;             // probes with the most time listed per window
     // Frames in which this probe ran are also reported apart from the others
     // (the server's 20 Hz frame on a listen server). -1 for none.
     int tickProbe = -1;

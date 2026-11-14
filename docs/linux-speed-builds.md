@@ -4,7 +4,8 @@ Three build options trade something for speed. None is on by default, and the
 default build is unchanged. They exist so a speed-up can be measured on a real
 machine before anything becomes a default.
 
-None has been measured yet. See "What is verified" below.
+They have been measured once, on a PC, and showed no gain (2026-11-14; see
+"What was measured" below). They stay opt-in.
 
 ## The options
 
@@ -68,6 +69,31 @@ thread and `all` for the whole game. Set `r_gpuSyncSleep 100` in both, so a
 thread that waits for the GPU does not count as work. Take each build twice,
 in the order A B B A.
 
+## What was measured
+
+On the PC (Ryzen 5 2600, RTX 2080 Super; local results, not CI), 2026-11-14,
+alone on the machine, in the project files' `perf/pc-speed-build-run-*.md`.
+The question was whether the idea (a newer CPU level and whole-program
+optimisation) saves CPU time, so these are not the Linux builds:
+
+- **Direct3D 9 client, Win32 Release** (run 3): MSVC `/arch:AVX2` with whole-program
+  optimisation against the plain build, mp_crash with 12 bots, 1024x768,
+  windowed, 90 s a row, order P S S P. The PC was CPU-limited (the GPU about
+  25 to 30% busy). Plain 461.3 frames a second, the speed build 457.8: -0.8%,
+  inside the speed build's own spread of 4.9%. No measurable gain. The
+  speed build's executable is 5.4% larger.
+- **Dedicated server in WSL, no renderer** (run 2): `-march=x86-64-v3`
+  against the plain build, 12 bots, rows P S S P P S. A server tick took about
+  1.26 ms plain and 1.33 ms with the option (1.23 ms without the first
+  speed row, which was 20% slower throughout and is not explained). Out of a 50 ms budget this scene
+  does not load the CPU enough to separate the builds.
+- A first attempt in WSL under software rendering (run 1) ran at 2.8 frames
+  a second and says nothing about CPU time.
+
+The options stay opt-in and nothing changes by default. The server run's
+report suggests a heavier server scene (more bots or a faster `sv_fps`) as
+the next try.
+
 ## What is verified
 
 In a cloud container, without game data and without a GPU:
@@ -94,6 +120,7 @@ In a cloud container, without game data and without a GPU:
 
 Not verified:
 
-- Speed. No build with any of the options has run a map anywhere.
+- Speed of the exact Linux build. The PC measured the idea with other builds
+  (next section); no Linux build with any of the options has run a map.
 - Play between a speed build and a baseline build. The flags say the floats
   match; no game has checked it.

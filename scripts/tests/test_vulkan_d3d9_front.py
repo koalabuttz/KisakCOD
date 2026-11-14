@@ -40,12 +40,12 @@ involved. The checks:
                  setting (what each setting did to its frame, and that the
                  statistics count from where they were last started, are the
                  scene's own points); and the Modern path's statistics lines
-                 count the 64 anti-aliased scenes of modern_taa,
+                 count the 75 anti-aliased scenes of modern_taa,
                  modern_linear, modern_bloom, modern_effects, modern_lit,
                  modern_lit_shader, modern_lit_models, modern_lit_no_sun,
                  modern_lit_lights, modern_tonemap, modern_exposure,
                  modern_velocity, modern_normals, modern_ao and
-                 modern_reflections, 23 of them without history, the 20
+                 modern_reflections, 25 of them without history, the 23
                  scenes of modern_linear, modern_bloom, modern_effects,
                  modern_lit, modern_lit_shader, modern_lit_models,
                  modern_lit_no_sun, modern_lit_lights, modern_tonemap,
@@ -55,26 +55,30 @@ involved. The checks:
                  scenes with bloom (none with KISAK_VK_MODERN_LINEAR=0 or
                  KISAK_VK_MODERN_BLOOM=0), modern_lit's, modern_lit_shader's,
                  modern_lit_models', modern_lit_no_sun's, modern_lit_lights',
-                 modern_tonemap's and modern_ao's scenes with lit surfaces
-                 kept over white, inputs changed 4.3 times in each (twice in
-                 modern_lit, modern_tonemap and modern_ao, five times in
-                 modern_lit_lights, six in modern_lit_shader and
-                 modern_lit_models, seven in modern_lit_no_sun; 4.1 with
-                 KISAK_VK_MODERN_MODEL_SHADERS=0, where modern_ao's wall is
-                 not ours), and the twenty-six pixel modules
+                 modern_tonemap's, modern_ao's and modern_reflections' three
+                 lit-floor scenes with lit surfaces kept over white, inputs
+                 changed 3.3 times in each (twice in modern_lit, modern_tonemap
+                 and modern_ao, five times in modern_lit_lights, six in
+                 modern_lit_shader and modern_lit_models, seven in
+                 modern_lit_no_sun, once in each of modern_reflections'; 3.2
+                 with KISAK_VK_MODERN_MODEL_SHADERS=0 or
+                 KISAK_VK_MODERN_SHADERS=0, where modern_ao's wall is not
+                 ours), and the twenty-seven pixel modules
                  modern_lit_shader's, modern_lit_models', modern_lit_no_sun's
-                 and modern_lit_lights' twenty-four and modern_ao's two (its
+                 and modern_lit_lights' twenty-four, modern_ao's two (its
                  floor and wall are depth-tested against the prepass, a depth
-                 compare of their own; twenty-four in all with
+                 compare of their own; twenty-five in all with
                  KISAK_VK_DEPTH_COMPARE=dynamic, where the compare is not
-                 built in) built as our own lit shaders (the world's
-                 fourteen with KISAK_VK_MODERN_MODEL_SHADERS=0; those with
-                 the sun or a spot or omni light and lp_amb with
+                 built in) and modern_reflections' one built as our own lit
+                 shaders (the world's fifteen with
+                 KISAK_VK_MODERN_MODEL_SHADERS=0; those with the sun or a spot
+                 or omni light and lp_amb with
                  KISAK_VK_MODERN_NO_SUN_SHADERS=0; none
                  with KISAK_VK_MODERN_LINEAR=0 or KISAK_VK_MODERN_LIT=0, and
                  no lit shaders of our own with KISAK_VK_MODERN_SHADERS=0),
-                 modern_velocity's 14 scenes with a surface that moves on its
-                 own (14 surfaces), and its 8 scenes that kept a skinned
+                 modern_velocity's 21 scenes with a surface that moves on its
+                 own (21 surfaces, 7 of them from brush model vertices), and
+                 its 8 scenes that kept a skinned
                  surface's vertices, 7 of them drawn from in the scene after
   linear-off     --scene modern_linear passes with KISAK_VK_MODERN_LINEAR=0
                  too, where the scene is drawn as always (the scene's own
@@ -121,9 +125,18 @@ involved. The checks:
                  KISAK_VK_MODERN_NORMALS=1, where it is built and not shown,
                  or KISAK_VK_MODERN_AO=1, where it is built for ambient
                  occlusion, and with KISAK_VK_MODERN_NORMALS=0 beside the
-                 debug view or KISAK_VK_MODERN_AO=0, where it is not built;
-                 the full run builds it for ambient occlusion (4 scenes)
+                 debug view or KISAK_VK_MODERN_AO=0 beside
+                 KISAK_VK_MODERN_SSR=0, where it is not built (with
+                 KISAK_VK_MODERN_AO=0 alone the reflections still read it);
+                 the full run builds it for ambient occlusion (6 scenes)
                  unless linear light, lit inputs or our lit shaders are off
+  probes         --scene modern_probes passes as it is, with
+                 KISAK_VK_MODERN_PROBES=1 (beside KISAK_VK_MODERN_LINEAR=0 or
+                 not), where the reflection probe's levels below the top are
+                 filtered again from it (logged), and with
+                 KISAK_VK_MODERN_PROBES=0 or KISAK_VK_MODERN_LINEAR=0, where
+                 they are kept as the game made them; the full run filters
+                 its 2 unless either is off
   ao             --scene modern_ao passes as it is, where our lit shader
                  darkens the floor in the corner by the ambient occlusion
                  (the scene's own points), with KISAK_VK_MODERN_DEBUG=ao (and
@@ -135,16 +148,24 @@ involved. The checks:
                  KISAK_VK_MODERN_AO=0, KISAK_VK_MODERN_NORMALS=0 (beside the
                  debug view or not), KISAK_VK_MODERN_LINEAR=0 or
                  KISAK_VK_MODERN_SHADERS=0, where none is built; the full
-                 run builds it for modern_normals and modern_ao
+                 run builds it for modern_normals, modern_ao and
+                 modern_reflections (for the ambient occlusion, 7 scenes)
   reflections    --scene modern_reflections passes with
                  KISAK_VK_MODERN_DEBUG=reflections, where the reflections
                  debug view shows the screen-space reflections traced in its
                  second scene (the scene's own points), with
                  KISAK_VK_MODERN_SSR=1, where they are traced and not shown,
-                 and with the debug view beside KISAK_VK_MODERN_LINEAR=0
-                 (logged, not traced), KISAK_VK_MODERN_SSR=0 and
-                 KISAK_VK_MODERN_NORMALS=0, where they are not; the full run
-                 traces none
+                 as it is, where they are traced for our lit shader and its
+                 floor shows the wall's red where they found it (and with
+                 KISAK_VK_MODERN_SHADERS=0 beside KISAK_VK_MODERN_SSR=1,
+                 traced but the floor black; a matte floor stays near black
+                 either way), and with
+                 KISAK_VK_MODERN_SSR=0, KISAK_VK_MODERN_LIT=0,
+                 KISAK_VK_MODERN_SHADERS=0, and the debug view beside
+                 KISAK_VK_MODERN_LINEAR=0 (logged, not traced),
+                 KISAK_VK_MODERN_SSR=0 and KISAK_VK_MODERN_NORMALS=0, where
+                 they are not; the full run traces them for 3 scenes
+                 unless linear light, lit inputs or our lit shaders are off
 
 Usage:
   test_vulkan_d3d9_front.py --binary build/bin/KisakCOD-vulkan-d3d9-check
@@ -162,8 +183,8 @@ SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'model_lig
           'references', 'threads', 'queries', 'occlusion', 'frame_loop', 'gpu_feed', 'tuning', 'slow_frames',
           'kept_state', 'multisample', 'modern_taa', 'modern_linear', 'modern_bloom', 'modern_effects',
           'modern_lit', 'modern_lit_shader', 'modern_lit_models', 'modern_lit_no_sun', 'modern_lit_lights',
-          'modern_tonemap',
-          'modern_exposure', 'modern_velocity', 'modern_normals', 'modern_ao', 'modern_reflections', 'reset',
+          'modern_tonemap', 'modern_exposure', 'modern_velocity', 'modern_normals', 'modern_ao',
+          'modern_reflections', 'modern_probes', 'reset',
           'fullscreen', 'present')
 
 
@@ -380,11 +401,14 @@ def main():
                             ({'KISAK_VK_MODERN_NORMALS': '1'}, True),
                             ({'KISAK_VK_MODERN_AO': '1'}, True),
                             ({}, lit_shaders_on),
-                            ({'KISAK_VK_MODERN_AO': '0'}, False),
+                            # The reflections read it too, for our lit shaders.
+                            ({'KISAK_VK_MODERN_AO': '0'}, lit_shaders_on),
+                            ({'KISAK_VK_MODERN_AO': '0', 'KISAK_VK_MODERN_SSR': '0'}, False),
                             ({'KISAK_VK_MODERN_DEBUG': 'normals', 'KISAK_VK_MODERN_NORMALS': '0'}, False)):
         chosen = dict(env)
         chosen.pop('KISAK_VK_MODERN_NORMALS', None)
         chosen.pop('KISAK_VK_MODERN_AO', None)
+        chosen.pop('KISAK_VK_MODERN_SSR', None)
         chosen.update(settings)
         code, stdout, _ = run(binary, ['--scene', 'modern_normals', '--validation', args.validation], chosen)
         found, scenes = parse(stdout)
@@ -398,10 +422,13 @@ def main():
 
     # ao
     ao_line = re.compile(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with ambient occlusion \(radius '
-                         r'48\.0, thickness ([0-9.]+), power 2\.00\), ([0-9.]+) ms GPU each$', re.M)
+                         r'48\.0, thickness ([0-9.]+), power 2\.00, floor ([0-9.]+), edge ([0-9.]+)\), ([0-9.]+) ms GPU each$', re.M)
     for settings, built in (({}, True),
                             ({'KISAK_VK_MODERN_DEBUG': 'ao'}, True),
                             ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_AO_THICKNESS': '1000'}, True),
+                            ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_AO_THICKNESS': '1000',
+                              'KISAK_VK_MODERN_AO_FLOOR': '0.6'}, True),
+                            ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_AO_EDGE': '0.25'}, True),
                             ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_LINEAR': '0'}, True),
                             ({'KISAK_VK_MODERN_AO': '1'}, True),
                             ({'KISAK_VK_MODERN_AO': '0'}, False),
@@ -412,7 +439,8 @@ def main():
                             ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_NORMALS': '0'}, False)):
         chosen = dict(env)
         for name in ('KISAK_VK_MODERN_NORMALS', 'KISAK_VK_MODERN_AO', 'KISAK_VK_MODERN_AO_RADIUS',
-                     'KISAK_VK_MODERN_AO_POWER', 'KISAK_VK_MODERN_AO_THICKNESS', 'KISAK_VK_MODERN_LINEAR', 'KISAK_VK_MODERN_LIT',
+                     'KISAK_VK_MODERN_AO_POWER', 'KISAK_VK_MODERN_AO_THICKNESS', 'KISAK_VK_MODERN_AO_GRAZING',
+                     'KISAK_VK_MODERN_AO_FLOOR', 'KISAK_VK_MODERN_AO_EDGE', 'KISAK_VK_MODERN_LINEAR', 'KISAK_VK_MODERN_LIT',
                      'KISAK_VK_MODERN_SHADERS', 'KISAK_VK_MODERN_DEBUG'):
             chosen.pop(name, None)
         chosen.update(settings)
@@ -420,10 +448,13 @@ def main():
         found, scenes = parse(stdout)
         line = ao_line.search(stdout)
         thickness = '1000.0' if settings.get('KISAK_VK_MODERN_AO_THICKNESS') == '1000' else '8.0'
+        floor = '0.60' if settings.get('KISAK_VK_MODERN_AO_FLOOR') == '0.6' else '0.35'
+        edge = '0.25' if settings.get('KISAK_VK_MODERN_AO_EDGE') == '0.25' else '0.08'
         named = ' '.join(f'{k}={v}' for k, v in settings.items()) or 'the defaults'
         checks.expect(f'modern_ao passes with {named}',
                       code == 0 and found.get('d3d9_check') == 'passed' and [s[0] for s in scenes] == ['modern_ao']
                       and (line is not None and line.group(1) == '1' and line.group(2) == thickness
+                           and line.group(3) == floor and line.group(4) == edge
                            if built else line is None)
                       and 'no ambient occlusion' not in stdout,
                       f'status {code}\n{stdout}')
@@ -431,30 +462,63 @@ def main():
     # reflections
     reflections_line = re.compile(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with screen-space '
                                   r'reflections \((\d+) levels\), ([0-9.]+) ms GPU each$', re.M)
-    for settings, traced in (({'KISAK_VK_MODERN_DEBUG': 'reflections'}, True),
-                             ({'KISAK_VK_MODERN_SSR': '1'}, True),
-                             ({'KISAK_VK_MODERN_DEBUG': 'reflections', 'KISAK_VK_MODERN_LINEAR': '0'}, False),
-                             ({'KISAK_VK_MODERN_DEBUG': 'reflections', 'KISAK_VK_MODERN_SSR': '0'}, False),
-                             ({'KISAK_VK_MODERN_DEBUG': 'reflections', 'KISAK_VK_MODERN_NORMALS': '0'}, False)):
+    # The scenes traced: modern_reflections' second, and with our lit shaders
+    # drawing (not under the debug view) its lit floor's second and its matte
+    # floor too.
+    for settings, traced in (({}, 3),
+                             ({'KISAK_VK_MODERN_DEBUG': 'reflections'}, 1),
+                             ({'KISAK_VK_MODERN_SSR': '1'}, 3),
+                             ({'KISAK_VK_MODERN_SSR': '1', 'KISAK_VK_MODERN_SHADERS': '0'}, 3),
+                             ({'KISAK_VK_MODERN_SSR': '0'}, 0),
+                             ({'KISAK_VK_MODERN_LIT': '0'}, 0),
+                             ({'KISAK_VK_MODERN_SHADERS': '0'}, 0),
+                             ({'KISAK_VK_MODERN_DEBUG': 'reflections', 'KISAK_VK_MODERN_LINEAR': '0'}, 0),
+                             ({'KISAK_VK_MODERN_DEBUG': 'reflections', 'KISAK_VK_MODERN_SSR': '0'}, 0),
+                             ({'KISAK_VK_MODERN_DEBUG': 'reflections', 'KISAK_VK_MODERN_NORMALS': '0'}, 0)):
         chosen = dict(env)
-        for name in ('KISAK_VK_MODERN_NORMALS', 'KISAK_VK_MODERN_SSR', 'KISAK_VK_MODERN_LINEAR'):
+        for name in ('KISAK_VK_MODERN_NORMALS', 'KISAK_VK_MODERN_SSR', 'KISAK_VK_MODERN_LINEAR',
+                     'KISAK_VK_MODERN_LIT', 'KISAK_VK_MODERN_SHADERS', 'KISAK_VK_MODERN_DEBUG'):
             chosen.pop(name, None)
         chosen.update(settings)
         code, stdout, _ = run(binary, ['--scene', 'modern_reflections', '--validation', args.validation], chosen)
         found, scenes = parse(stdout)
         line = reflections_line.search(stdout)
-        named = ' '.join(f'{k}={v}' for k, v in settings.items())
+        named = ' '.join(f'{k}={v}' for k, v in settings.items()) or 'the defaults'
         # Only linear light off is a reason to log; the others never try.
         logged = 'no screen-space reflections: the scene is not drawn in linear light' in stdout
         checks.expect(f'modern_reflections passes with {named}',
                       code == 0 and found.get('d3d9_check') == 'passed'
                       and [s[0] for s in scenes] == ['modern_reflections']
-                      and (line is not None and line.group(1) == '1' and line.group(2) == '5' if traced
+                      and (line is not None and line.group(1) == str(traced) and line.group(2) == '5' if traced
                            else line is None)
                       and logged == (settings.get('KISAK_VK_MODERN_LINEAR') == '0'
                                      and settings.get('KISAK_VK_MODERN_SSR') != '0')
                       and 'reflections debug view is not drawn' not in stdout
                       and 'no reflections debug view' not in stdout,
+                      f'status {code}\n{stdout}')
+
+    # probes
+    probes_line = re.compile(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) reflection probes filtered by gloss in '
+                             r'linear light \((\d+) left as they are\), ([0-9.]+) ms each$', re.M)
+    # The scene filters its probe, then the same again to show it settles.
+    for settings, filtered in (({}, 2),
+                               ({'KISAK_VK_MODERN_PROBES': '1'}, 2),
+                               ({'KISAK_VK_MODERN_PROBES': '1', 'KISAK_VK_MODERN_LINEAR': '0'}, 2),
+                               ({'KISAK_VK_MODERN_PROBES': '0'}, 0),
+                               ({'KISAK_VK_MODERN_LINEAR': '0'}, 0)):
+        chosen = dict(env)
+        for name in ('KISAK_VK_MODERN_PROBES', 'KISAK_VK_MODERN_LINEAR'):
+            chosen.pop(name, None)
+        chosen.update(settings)
+        code, stdout, _ = run(binary, ['--scene', 'modern_probes', '--validation', args.validation], chosen)
+        found, scenes = parse(stdout)
+        line = probes_line.search(stdout)
+        named = ' '.join(f'{k}={v}' for k, v in settings.items()) or 'the defaults'
+        checks.expect(f'modern_probes passes with {named}',
+                      code == 0 and found.get('d3d9_check') == 'passed'
+                      and [s[0] for s in scenes] == ['modern_probes']
+                      and (line is not None and line.group(1) == str(filtered) and line.group(2) == '0'
+                           if filtered else line is None),
                       f'status {code}\n{stdout}')
 
     # present-mode
@@ -526,7 +590,7 @@ def main():
     # modern_effects scene's one, the modern_lit, modern_lit_shader,
     # modern_lit_models, modern_lit_no_sun, modern_lit_lights and
     # modern_tonemap scenes' one each (all cuts), the modern_exposure scene's
-    # five (four cuts), and the modern_velocity scene's (three runs of 8, each
+    # five (four cuts), and the modern_velocity scene's (four runs of 8, each
     # starting with a cut); those sixteen before modern_velocity were drawn
     # in linear light, with one copy read from
     # them, two of modern_bloom's with bloom and modern_lit's,
@@ -539,21 +603,24 @@ def main():
     # light with KISAK_VK_MODERN_NO_SUN_SHADERS=0), unless
     # KISAK_VK_MODERN_LINEAR=0 (or
     # KISAK_VK_MODERN_BLOOM=0 for the bloom, KISAK_VK_MODERN_LIT=0 for the lit
-    # surfaces); in the second and third modern_velocity runs the 7 scenes
-    # after the cut each had one surface that moves on its own, in the third
-    # a skinned one, whose 128 vertices every scene of that run kept. Last,
-    # the modern_normals scene's one (a cut), the modern_ao scene's one (a
-    # cut) and the modern_reflections scene's two (the first a cut), in
-    # linear light unless KISAK_VK_MODERN_LINEAR=0.
+    # surfaces); in the second, third and fourth modern_velocity runs the 7
+    # scenes after the cut each had one surface that moves on its own, in the
+    # third a skinned one, whose 128 vertices every scene of that run kept,
+    # in the fourth a brush model's (44-byte vertices). Last,
+    # the modern_normals scene's one (a cut), the modern_ao scene's one, the
+    # same, and the modern_reflections scene's five (the first and the third
+    # cuts), in linear light unless KISAK_VK_MODERN_LINEAR=0.
     modern = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes anti-aliased \((\d+) without history\)',
                        stdout)
-    checks.expect('the Modern path anti-aliased 64 scenes, 23 without history',
-                  modern is not None and modern.group(1) == '64' and modern.group(2) == '23',
+    checks.expect('the Modern path anti-aliased 75 scenes, 25 without history',
+                  modern is not None and modern.group(1) == '75' and modern.group(2) == '25',
                   modern.group(0) if modern else 'missing')
     velocity = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with surfaces that move on their own '
-                         r'\((\d+) surfaces\), ([0-9.]+) ms GPU each for their velocity$', stdout)
-    checks.expect('the Modern path drew the velocity of 14 surfaces in 14 scenes',
-                  velocity is not None and velocity.group(1) == '14' and velocity.group(2) == '14',
+                         r'\((\d+) surfaces, (\d+) of them brush models\), ([0-9.]+) ms GPU each for their velocity$',
+                         stdout)
+    checks.expect('the Modern path drew the velocity of 21 surfaces in 21 scenes, 7 of them brush models',
+                  velocity is not None and velocity.group(1) == '21' and velocity.group(2) == '21'
+                  and velocity.group(3) == '7',
                   velocity.group(0) if velocity else 'missing')
     kept = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes kept skinned vertices \((\d+) surfaces, '
                      r'([0-9.]+) KB each scene\), (\d+) skinned surfaces drawn from last scene\'s$', stdout)
@@ -563,9 +630,9 @@ def main():
                   kept.group(0) if kept else 'missing')
     if env.get('KISAK_VK_MODERN_EXPOSURE') == '0':
         checks.expect('no auto exposure with KISAK_VK_MODERN_EXPOSURE=0', 'scenes with auto exposure' not in stdout)
-    # Ambient occlusion, and the normals buffer for it, in the four scenes
+    # Ambient occlusion, and the normals buffer for it, in the seven scenes
     # that draw a depth prepass (modern_normals, modern_ao and
-    # modern_reflections' two), when our lit shaders read it.
+    # modern_reflections' five), when our lit shaders read it.
     if 'KISAK_VK_MODERN_NORMALS' not in env and 'KISAK_VK_MODERN_DEBUG' not in env:
         read = env.get('KISAK_VK_MODERN_AO') != '0' and (
             env.get('KISAK_VK_MODERN_AO') == '1'
@@ -575,25 +642,44 @@ def main():
         occlusion = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with ambient occlusion \(radius ',
                               stdout)
         if read:
-            checks.expect('a normals buffer and ambient occlusion for the 4 scenes with a depth prepass',
-                          normals is not None and normals.group(1) == '4' and occlusion is not None
-                          and occlusion.group(1) == '4',
+            checks.expect('a normals buffer and ambient occlusion for the 7 scenes with a depth prepass',
+                          normals is not None and normals.group(1) == '7' and occlusion is not None
+                          and occlusion.group(1) == '7',
                           f'{normals.group(0) if normals else "no normals line"}; '
                           f'{occlusion.group(0) if occlusion else "no ambient occlusion line"}')
         else:
             checks.expect('no normals buffer when nothing reads it', normals is None)
             checks.expect('no ambient occlusion when nothing reads it', occlusion is None)
+    # Screen-space reflections, for our lit shaders: modern_reflections' three
+    # scenes with a last scene (the others with a depth prepass are cuts).
     if 'KISAK_VK_MODERN_SSR' not in env and 'KISAK_VK_MODERN_DEBUG' not in env:
-        checks.expect('no screen-space reflections when nothing reads them',
-                      'scenes with screen-space reflections' not in stdout)
+        read = env.get('KISAK_VK_MODERN_NORMALS') != '0' and all(
+            env.get(name) != '0' for name in ('KISAK_VK_MODERN_LINEAR', 'KISAK_VK_MODERN_LIT', 'KISAK_VK_MODERN_SHADERS'))
+        reflections = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with screen-space reflections',
+                                stdout)
+        if read:
+            checks.expect('screen-space reflections for the 3 scenes with a depth prepass and a last scene',
+                          reflections is not None and reflections.group(1) == '3',
+                          reflections.group(0) if reflections else 'no reflections line')
+        else:
+            checks.expect('no screen-space reflections when nothing reads them', reflections is None)
+    # Reflection probes, filtered again at load: modern_probes' one, twice.
+    if 'KISAK_VK_MODERN_PROBES' not in env:
+        probes = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) reflection probes filtered', stdout)
+        if env.get('KISAK_VK_MODERN_LINEAR') != '0':
+            checks.expect('2 reflection probes filtered by gloss in linear light',
+                          probes is not None and probes.group(1) == '2',
+                          probes.group(0) if probes else 'no reflection probes line')
+        else:
+            checks.expect('no reflection probe filtered outside linear light', probes is None)
     linear = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes in linear light \((\d+) copies read '
                        r'from them\), ([0-9.]+) ms GPU each for the tonemap$', stdout)
     if env.get('KISAK_VK_MODERN_LINEAR') == '0':
         checks.expect('no scene in linear light with KISAK_VK_MODERN_LINEAR=0', linear is None,
                       linear.group(0) if linear else '')
     else:
-        checks.expect('the Modern path drew 20 scenes in linear light and read 1 copy from them',
-                      linear is not None and linear.group(1) == '20' and linear.group(2) == '1',
+        checks.expect('the Modern path drew 23 scenes in linear light and read 1 copy from them',
+                      linear is not None and linear.group(1) == '23' and linear.group(2) == '1',
                       linear.group(0) if linear else 'missing')
     bloom = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with bloom in place of the glow '
                       r'\(([0-9.]+) passes each\), ([0-9.]+) ms GPU each$', stdout)
@@ -611,10 +697,12 @@ def main():
                       lit.group(0) if lit else '')
     else:
         # modern_ao changes them twice, its floor's and its wall's, with our
-        # model shaders (30 in 7 scenes); once without them (29).
-        changes = '4.1' if env.get('KISAK_VK_MODERN_MODEL_SHADERS') == '0' else '4.3'
-        checks.expect(f'the Modern path drew lit surfaces in linear light in 7 scenes, inputs changed {changes} times each',
-                      lit is not None and lit.group(1) == '7' and lit.group(2) == changes,
+        # model shaders (33 in 10 scenes); once without them or without any
+        # lit shaders of our own (32).
+        ours_wall = env.get('KISAK_VK_MODERN_MODEL_SHADERS') != '0' and env.get('KISAK_VK_MODERN_SHADERS') != '0'
+        changes = '3.3' if ours_wall else '3.2'
+        checks.expect(f'the Modern path drew lit surfaces in linear light in 10 scenes, inputs changed {changes} times each',
+                      lit is not None and lit.group(1) == '10' and lit.group(2) == changes,
                       lit.group(0) if lit else 'missing')
     shaders = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: lit shaders of our own: ([0-9.]+) changes to one '
                         r'each scene, (\d+) pixel modules built as one \((\d+) could not be\)', stdout)
@@ -627,7 +715,7 @@ def main():
         # compare of their own, built into their modules unless chosen at run
         # time (then the wall's is modern_lit_models' lp_sun_r0c0).
         dynamic = env.get('KISAK_VK_DEPTH_COMPARE') == 'dynamic'
-        modules = 26 if not dynamic else 24
+        modules = 27 if not dynamic else 25
         if env.get('KISAK_VK_MODERN_MODEL_SHADERS') == '0':
             # the models' with the sun (6), without (2), lp_amb and with a spot
             # or omni light (2), and modern_ao's wall unless the compare is dynamic

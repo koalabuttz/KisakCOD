@@ -669,6 +669,16 @@ struct IndexedDraw
     Viewport viewport{};
 };
 bool LastIndexedDraw(Device *device, IndexedDraw &out);
+// Keeps the dynamic buffers LastIndexedDraw reports (stream 0's and the index
+// buffer, when dynamic) from being written again until ReleaseHeldBuffers:
+// a lock, even with DISCARD, moves to another backing although the GPU has
+// finished the draw. The Modern path draws the surface again later in the
+// scene, and by then the GPU may have run the draw (a mid-frame submission).
+void HoldLastIndexedBuffers(Device *device);
+// Ends every hold: the held backings count as read by what is being recorded
+// now (the velocity pass), and are written again once that has run. Present
+// ends them too, for a scene that never reached its velocity pass.
+void ReleaseHeldBuffers(Device *device);
 // The colours the pixel shaders of the draws that follow read, for draws into
 // a linear-light render target 0 (SetLinearLight): the red, green and blue of
 // the float constants in constants (bit per register c0-c63), of what the
@@ -847,6 +857,18 @@ void SetModernLitStrengths(Device *device, float sun, float sky);
 // texture must be ready to sample (written before the pass that reads it).
 constexpr uint32_t kModernAoSampler = 15;
 void SetModernAmbientOcclusion(Device *device, Texture *texture);
+// The Modern path's screen-space reflections for the lit shaders of ours: an
+// image the size of the scene's render targets, with mip levels, holding
+// the reflected light (linear light, before exposure) times its confidence
+// in rgb and the confidence in alpha (vk_modern.h TraceReflections). Every
+// pipeline drawn as one of ours reads it at pixel sampler
+// kModernReflectionsSampler, which the game's lit shaders leave free, with
+// a trilinear sampler clamped to the edge; null reads as a 1x1 image of
+// (0, 0, 0, 0) (no reflection). Set while the scene that has it draws, null
+// after. The image must be ready to sample (written before the pass that
+// reads it) and outlive the scene's draws.
+constexpr uint32_t kModernReflectionsSampler = 14;
+void SetModernReflections(Device *device, Image *image);
 #endif
 
 // The device's window is about to be destroyed: an open pass and frame end

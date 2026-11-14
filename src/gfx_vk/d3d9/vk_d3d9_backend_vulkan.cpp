@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 namespace gfx_vk::d3d9
 {
@@ -198,7 +199,7 @@ struct Backend
     // and our shaders on; KISAK_VK_MODERN_AO=1 or the ambient occlusion debug
     // view), which makes the normals buffer wanted too; KISAK_VK_MODERN_AO=0
     // keeps it off whatever asks. Its parameters (KISAK_VK_MODERN_AO_RADIUS,
-    // _THICKNESS, _POWER); the scene-sized image it writes, a Legacy texture the lit
+    // _THICKNESS, _POWER, _GRAZING, _FLOOR, _EDGE); the scene-sized image it writes, a Legacy texture the lit
     // shaders read (lg::SetModernAmbientOcclusion) until the scene is lit;
     // whether this scene has it; the scenes counted at the last reset.
     bool aoWanted = false;
@@ -212,24 +213,39 @@ struct Backend
     modern::AoStats aoBase{};
     // Screen-space reflections (vk_modern.h TraceReflections), traced right
     // after the normals buffer from the prepass depth and last scene's
-    // anti-aliased linear-light colour: wanted when something reads it (for
-    // now KISAK_VK_MODERN_SSR=1 or the reflections debug view; the lit
-    // shaders next), which wants the normals buffer too;
-    // KISAK_VK_MODERN_SSR=0 keeps it off. Its settings
+    // anti-aliased linear-light colour: wanted when something reads it (our
+    // lit shaders, so with linear light, lit inputs and our shaders on;
+    // KISAK_VK_MODERN_SSR=1 or the reflections debug view), which wants the
+    // normals buffer too; KISAK_VK_MODERN_SSR=0 keeps it off. Its settings
     // (KISAK_VK_MODERN_SSR_DISTANCE, _THICKNESS, _STEPS, _LEVELS); the pass,
     // made at its first scene; sceneReflections is the scene's own until it
-    // is finished; the counts at the last reset.
+    // is finished, which the lit shaders read (lg::SetModernReflections)
+    // until the scene is lit; the counts at the last reset.
     bool reflectionsWanted = false;
     bool reflectionsFailed = false;
     modern::ReflectionParams reflectionParams{};
     modern::Reflections *reflections = nullptr;
     Image *sceneReflections = nullptr;
     modern::ReflectionStats reflectionsBase{};
+    // The game's reflection probes, filtered again in linear light as the
+    // world loads (modern::FilterReflectionProbe): wanted with linear light
+    // or KISAK_VK_MODERN_PROBES=1, never with KISAK_VK_MODERN_PROBES=0. The
+    // counts since the device was made (a world loads before statistics are
+    // started): filtered, left as they are (not 8-bit colour, too small),
+    // and the time taken.
+    bool probesWanted = false;
+    uint32_t probesFiltered = 0;
+    uint32_t probesLeft = 0;
+    double probesMs = 0.0;
     // KISAK_VK_MODERN_DEBUG=velocity: the velocity debug view over each
     // anti-aliased scene (docs/vulkan-modern.md), made at its first use.
+    // velocity-all: the same, with every surface that moves on its own drawn
+    // wherever it lands, hidden or not (the velocity pass skips its depth
+    // test), to find them on the screen.
     // KISAK_VK_MODERN_DEBUG=normals: the normals debug view over each
     // finished scene (on the display image, after the tonemap).
     bool debugVelocity = false;
+    bool debugVelocityAll = false;
     bool debugNormals = false;
     // KISAK_VK_MODERN_DEBUG=ao: the ambient occlusion as grey over each
     // finished scene.
@@ -441,7 +457,8 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         if (!curve.empty() && !modern::CurveFromName(curve.c_str(), backend->tonemapCurve))
             backend->tonemapCurveUnknown = true;
     }
-    backend->debugVelocity = EnvIs("KISAK_VK_MODERN_DEBUG", "velocity");
+    backend->debugVelocityAll = EnvIs("KISAK_VK_MODERN_DEBUG", "velocity-all");
+    backend->debugVelocity = backend->debugVelocityAll || EnvIs("KISAK_VK_MODERN_DEBUG", "velocity");
     backend->debugNormals = EnvIs("KISAK_VK_MODERN_DEBUG", "normals");
     backend->debugAo = EnvIs("KISAK_VK_MODERN_DEBUG", "ao");
     backend->aoWanted = !EnvIsZero("KISAK_VK_MODERN_AO")
@@ -460,10 +477,25 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         const float depth = thickness.empty() ? 0.0f : std::strtof(thickness.c_str(), nullptr);
         if (depth > 0.0f)
             backend->aoParams.thickness = depth;
+        const std::string grazing = EnvText("KISAK_VK_MODERN_AO_GRAZING");
+        const float angle = grazing.empty() ? 0.0f : std::strtof(grazing.c_str(), nullptr);
+        if (angle > 0.0f && angle <= 1.0f)
+            backend->aoParams.grazing = angle;
+        const std::string floorText = EnvText("KISAK_VK_MODERN_AO_FLOOR");
+        const float floorValue = floorText.empty() ? -1.0f : std::strtof(floorText.c_str(), nullptr);
+        if (floorValue >= 0.0f && floorValue < 1.0f)
+            backend->aoParams.floor = floorValue;
+        const std::string edgeText = EnvText("KISAK_VK_MODERN_AO_EDGE");
+        const float edge = edgeText.empty() ? 0.0f : std::strtof(edgeText.c_str(), nullptr);
+        if (edge > 0.0f && edge <= 10.0f)
+            backend->aoParams.edge = edge;
     }
+    backend->probesWanted = !EnvIsZero("KISAK_VK_MODERN_PROBES")
+        && (EnvIs("KISAK_VK_MODERN_PROBES", "1") || backend->linearWanted);
     backend->debugReflections = EnvIs("KISAK_VK_MODERN_DEBUG", "reflections");
-    backend->reflectionsWanted =
-        !EnvIsZero("KISAK_VK_MODERN_SSR") && (EnvIs("KISAK_VK_MODERN_SSR", "1") || backend->debugReflections);
+    backend->reflectionsWanted = !EnvIsZero("KISAK_VK_MODERN_SSR")
+        && (EnvIs("KISAK_VK_MODERN_SSR", "1") || backend->debugReflections
+            || (backend->linearWanted && backend->litWanted && backend->shadersWanted));
     {
         modern::ReflectionParams &p = backend->reflectionParams;
         const auto number = [](const char *name, float &out) {
@@ -734,10 +766,11 @@ void BackendLogStats(Backend *backend, bool reset)
     {
         const modern::VelocityStats velocity = modern::Stats(backend->velocity);
         const PassTimings pass = PassTimingsFor(backend->core, "modern velocity");
-        HostLog(h, "vulkan d3d9: modern: %llu scenes with surfaces that move on their own (%llu surfaces), "
-                   "%.3f ms GPU each for their velocity",
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with surfaces that move on their own (%llu surfaces, %llu "
+                   "of them brush models), %.3f ms GPU each for their velocity",
                 static_cast<unsigned long long>(velocity.passes - backend->velocityBase.passes),
                 static_cast<unsigned long long>(velocity.surfaces - backend->velocityBase.surfaces),
+                static_cast<unsigned long long>(velocity.world - backend->velocityBase.world),
                 pass.supported ? average(pass) : 0.0);
         const modern::KeptStats kept = modern::Stats(backend->kept);
         const uint64_t keptScenes = kept.scenes - backend->keptBase.scenes;
@@ -763,9 +796,9 @@ void BackendLogStats(Backend *backend, bool reset)
         const PassTimings pass = PassTimingsFor(backend->core, "modern ao");
         const uint64_t scenes = modern::Stats(backend->ao).builds - backend->aoBase.builds;
         HostLog(h, "vulkan d3d9: modern: %llu scenes with ambient occlusion (radius %.1f, thickness %.1f, "
-                   "power %.2f), %.3f ms GPU each",
+                   "power %.2f, floor %.2f, edge %.2f), %.3f ms GPU each",
                 static_cast<unsigned long long>(scenes), backend->aoParams.radius, backend->aoParams.thickness,
-                backend->aoParams.power,
+                backend->aoParams.power, backend->aoParams.floor, backend->aoParams.edge,
                 pass.supported ? 2.0 * average(pass) : 0.0);
     }
     // Screen-space reflections: the scenes traced, the levels of the last,
@@ -778,6 +811,12 @@ void BackendLogStats(Backend *backend, bool reset)
                 static_cast<unsigned long long>(reflections.traces - backend->reflectionsBase.traces),
                 reflections.levels, pass.supported ? average(pass) : 0.0);
     }
+    // Reflection probes: filtered as the world loaded, since the device was made.
+    if (backend->probesFiltered || backend->probesLeft)
+        HostLog(h, "vulkan d3d9: modern: %u reflection probes filtered by gloss in linear light (%u left as they "
+                   "are), %.1f ms each",
+                backend->probesFiltered, backend->probesLeft,
+                backend->probesFiltered ? backend->probesMs / double(backend->probesFiltered) : 0.0);
     // Bloom: the scenes it ran for in place of the glow, the passes of each,
     // and their GPU time per scene.
     if (backend->bloom)
@@ -860,6 +899,8 @@ void CloseBackend(Backend *backend)
         backend->normals = nullptr;
         backend->sceneNormals = nullptr;
     }
+    if (backend->legacy)
+        lg::SetModernReflections(backend->legacy, nullptr);
     if (backend->reflections)
     {
         modern::DestroyReflections(backend->core, backend->reflections);
@@ -1222,6 +1263,10 @@ bool MovedFromLastDraw(lg::Device *legacy, const float clip[4][4], const float p
     lg::IndexedDraw draw;
     if (!lg::LastIndexedDraw(legacy, draw))
         return false;
+    // The velocity pass reads these buffers at the scene's end; a dynamic
+    // one must not be written again before then (BackendModernScene ends the
+    // hold once the pass is recorded).
+    lg::HoldLastIndexedBuffers(legacy);
     surface.vertices = draw.vertices;
     surface.vertexOffset = draw.vertexOffset;
     surface.stride = draw.stride;
@@ -1289,7 +1334,7 @@ Image *SceneVelocity(Backend *backend, Image *depth, const modern::SceneView &sc
     if (!backend->velocity)
     {
         std::string error;
-        backend->velocity = modern::CreateVelocity(backend->core, error);
+        backend->velocity = modern::CreateVelocity(backend->core, error, !backend->debugVelocityAll);
         if (!backend->velocity)
         {
             backend->velocityFailed = true;
@@ -1539,8 +1584,78 @@ void TraceSceneReflections(Backend *backend, Image *depth, const modern::SceneVi
                                                          backend->reflectionParams, error);
     if (!backend->sceneReflections)
         LogModernOnce(backend, "no screen-space reflections", error);
+    // The lit shaders of ours read them until the scene is lit (BackendModernScene).
+    lg::SetModernReflections(backend->legacy, backend->sceneReflections);
 }
 } // namespace
+
+bool BackendModernReflectionProbe(Backend *backend, lg::Device *legacy, lg::Texture *probe)
+{
+    if (!backend || !backend->probesWanted || !legacy || !probe)
+        return false;
+    const lg::TextureDesc &desc = lg::Describe(probe);
+    const uint32_t levels = desc.levels;
+    if (desc.kind != lg::TextureKind::Cube || desc.width < 2 || levels < 2 || levels > 16
+        || (desc.format != lg::d3d::FMT_A8R8G8B8 && desc.format != lg::d3d::FMT_X8R8G8B8))
+    {
+        ++backend->probesLeft;
+        return false;
+    }
+    const auto started = std::chrono::steady_clock::now();
+    // Every level read back (level 0 is what the filter reads; the others
+    // are written whole), filtered, and the levels below 0 written back.
+    std::vector<std::vector<uint8_t>> copies(6 * levels);
+    std::vector<uint8_t *> bits(6 * levels);
+    std::vector<uint32_t> pitches(6 * levels);
+    for (uint32_t face = 0; face < 6; ++face)
+        for (uint32_t level = 0; level < levels; ++level)
+        {
+            const uint32_t size = std::max(desc.width >> level, 1u);
+            std::vector<uint8_t> &copy = copies[face * levels + level];
+            copy.assign(static_cast<size_t>(size) * size * 4, 0);
+            if (level == 0)
+            {
+                lg::LockedRect locked;
+                if (!lg::LockRect(legacy, probe, face, 0, nullptr, lg::d3d::LOCK_READONLY, locked))
+                {
+                    ++backend->probesLeft;
+                    return false;
+                }
+                for (uint32_t y = 0; y < size; ++y)
+                    std::memcpy(copy.data() + static_cast<size_t>(y) * size * 4,
+                                static_cast<const uint8_t *>(locked.bits) + static_cast<size_t>(y) * locked.pitch,
+                                static_cast<size_t>(size) * 4);
+                lg::UnlockRect(legacy, probe, face, 0);
+                if (desc.format == lg::d3d::FMT_X8R8G8B8)
+                    for (size_t i = 3; i < copy.size(); i += 4)
+                        copy[i] = 255;
+            }
+            bits[face * levels + level] = copy.data();
+            pitches[face * levels + level] = size * 4;
+        }
+    if (!modern::FilterReflectionProbe(desc.width, levels, bits.data(), pitches.data()))
+    {
+        ++backend->probesLeft;
+        return false;
+    }
+    for (uint32_t face = 0; face < 6; ++face)
+        for (uint32_t level = 1; level < levels; ++level)
+        {
+            const uint32_t size = std::max(desc.width >> level, 1u);
+            lg::LockedRect locked;
+            if (!lg::LockRect(legacy, probe, face, level, nullptr, lg::d3d::LOCK_DISCARD, locked))
+                continue;
+            const std::vector<uint8_t> &copy = copies[face * levels + level];
+            for (uint32_t y = 0; y < size; ++y)
+                std::memcpy(static_cast<uint8_t *>(locked.bits) + static_cast<size_t>(y) * locked.pitch,
+                            copy.data() + static_cast<size_t>(y) * size * 4, static_cast<size_t>(size) * 4);
+            lg::UnlockRect(legacy, probe, face, level);
+        }
+    ++backend->probesFiltered;
+    backend->probesMs +=
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+    return true;
+}
 
 bool BackendModernWantsSceneDepth(Backend *backend)
 {
@@ -1554,6 +1669,7 @@ ModernResult BackendModernSceneDepth(Backend *backend, lg::Surface *depth, const
     backend->sceneNormals = nullptr;
     backend->sceneAo = false;
     lg::SetModernAmbientOcclusion(backend->legacy, nullptr);
+    lg::SetModernReflections(backend->legacy, nullptr);
     Image *depthImage = depth ? lg::SurfaceImage(depth) : nullptr;
     if (!depthImage)
     {
@@ -1602,6 +1718,7 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
     lg::SetModernAmbientOcclusion(backend->legacy, nullptr);
     Image *reflections = backend->sceneReflections;
     backend->sceneReflections = nullptr;
+    lg::SetModernReflections(backend->legacy, nullptr);
     // The surfaces that moved in this scene; the next scene starts a new list.
     std::vector<modern::MovedSurface> moved;
     moved.swap(backend->moved);
@@ -1621,6 +1738,14 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
                 modern::ForgetKept(kept);
         }
     } keptGuard{backend->kept};
+    // The buffers the scene's moved surfaces were drawn from are held until
+    // the velocity pass and the copy of skinned vertices are recorded, and
+    // so to the end of this scene whatever it does.
+    struct ReleaseHeld
+    {
+        lg::Device *legacy;
+        ~ReleaseHeld() { lg::ReleaseHeldBuffers(legacy); }
+    } heldGuard{backend->legacy};
     // In linear light the scene must reach the back buffer whatever the
     // anti-aliasing does.
     const auto tonemap = [&](ModernResult passes) {

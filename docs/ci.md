@@ -31,7 +31,8 @@ of them.
   Windows workflow skips documentation, the Linux, macOS and PS Vita ports' own
   sources and tests, and the test machines' run scripts; the macOS workflow
   skips the PS Vita port's sources. The test machines' run scripts
-  (`scripts/runs`, `tests/runs`, `test_perf_run.py`, `test_vita3k_runner.py`)
+  (`scripts/runs`, `tests/runs`, `test_perf_run.py`, `test_pc_run.py`,
+  `test_vita3k_runner.py`)
   start only the one-job **Machine run scripts** workflow (`run-scripts.yaml`);
   on 2026-11-10 a PowerShell-only change had started 26 Linux and PS Vita
   jobs. The filters look at the whole pull request, not the last push.
@@ -102,6 +103,16 @@ of them.
   the `macos-26` jobs (the Intel pool lost one in twenty; `macos-15` for arm64 was no better in a trial,
   PR 221, closed), so every macOS job saved is one fewer to wait for. A cancelled macOS arm64 job that has no
   log never ran: it is no result, not a failure.
+- **Artifact uploads.** On 2026-11-11 (from about 20:25Z) GitHub's artifact
+  service answered uploads with an HTML error page (`Failed to CreateArtifact`
+  or `FinalizeArtifact ... Unexpected token '<'`), after five retries of
+  several minutes each, and jobs whose checks had all passed went red. Uploads
+  of logs and build outputs that run on `always()` or `failure()` now carry
+  `continue-on-error: true`, so an outage shows as a red upload step in a
+  green job (`DiagnosticUploadTests` pins it). A green run with no artifact
+  means the upload failed: re-run that job. The `.vpk` uploads and the macOS
+  app bundle uploads stay strict, because a later job or a machine run needs
+  them.
 - **Before you push.** Run `python3 scripts/tests/run_pre_push_checks.py`: it runs, four at a time, the
   Linux bootstrap test, the runner self-tests, the workflow contract test and the CI script tests, plus
   `run_linux_checks.py` when `build-linux/` and `bin/KisakCOD-dedi` exist (about two minutes in all, mostly

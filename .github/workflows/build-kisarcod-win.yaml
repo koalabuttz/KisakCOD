@@ -307,6 +307,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         with:
           name: KisakCOD-${{ matrix.config }}${{ inputs.tracy && '-Tracy' || '' }}${{ inputs.vulkan && matrix.config == 'Release' && '-Vulkan' || '' }}
           path: ${{ github.workspace }}/bin
@@ -459,6 +461,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         with:
           # MSBuild logs and the report; no binaries.
           name: KisakCOD-msvc-x64-census
@@ -581,6 +585,8 @@ jobs:
       # Arm machine (the game files are not part of it).
       - uses: actions/upload-artifact@v4
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         with:
           name: KisakCOD-arm64-Release
           path: ${{ github.workspace }}/bin
@@ -705,6 +711,8 @@ jobs:
       # The probe with SDL3.dll, for a run on a Windows PC with a Vulkan driver.
       - uses: actions/upload-artifact@v4
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         with:
           name: KisakCOD-vulkan-probe-x64
           path: artifacts/vulkan-probe

@@ -677,7 +677,7 @@ Builds with `KISAK_GFX_GXM` leave the Vulkan parts of `vk_d3d9.h` and
 
 What the GXM back end does so far (step 2d):
 - The device owns the screen and reserves the GPU memory pools: nearly all of
-  CDRAM, 20 MB of main memory, and an 8 MB parameter buffer.
+  CDRAM, 20 MB of main memory, and a 12 MB parameter buffer.
 - Textures, surfaces and buffers live in those pools with D3D9's lock rules.
   Textures go to CDRAM first, dynamic buffers to main memory first.
 - Shaders are translated to Cg and compiled on the Vita (below).
@@ -812,11 +812,15 @@ What the GXM back end does so far (step 2d):
   from the start, so that one console sitting can compare the two. An empty
   file `no-vsync` there shows each frame without waiting for the display's
   refresh (it tears): for measuring what that wait costs. With two frames
-  on their way, sceGxm's parameter buffer (8 MB here) and the context's
-  ring buffers hold the geometry, draw calls and uniform buffers of both at
-  times; `big-parameter-buffer` (12 MB) and `big-gxm-rings` (twice the
-  defaults, 3 MB more of main memory) are there for a console run to say
-  whether either is too small for that.
+  on their way, sceGxm's parameter buffer and the context's ring buffers
+  hold the geometry, draw calls and uniform buffers of both at times. The
+  parameter buffer is 12 MB: console run AD found 8 MB too small (the GPU
+  was 10 to 19 ms a frame slower at the same view, 14 to 18%, in every
+  phase; with David's settings 86-91 against 68 ms a frame), at the cost of
+  4 MB of CDRAM. For comparing, `small-parameter-buffer` gives the old
+  8 MB, `big-parameter-buffer` 16 MB (4 MB less for the CDRAM pool, which
+  may not hold every map), and `big-gxm-rings` twice the default rings
+  (3 MB more of main memory).
   Not run on a console or in Vita3K yet.
 - **Textures** are linear: rows of whole multiples of 8 texels, and the
   levels of a mipmapped texture sized from the power of two above the base,
@@ -849,11 +853,15 @@ What the GXM back end does so far (step 2d):
 ### Shaders (step 2c)
 
 `src/gfx_gxm/shader/gxm_cg_translate.cpp` turns D3D9 shader bytecode
-(vs_1_1 to vs_3_0, ps_2_0 to ps_3_0) into Cg: a float4 local per register and
+(vs_1_1 to vs_3_0, ps_1_1 to ps_3_0) into Cg: a float4 local per register and
 one statement per instruction. Loops, calls, predicates, `if` on boolean
-constants, `vPos`, `vFace`, more than one colour output and ps 1.x are
+constants, `vPos`, `vFace`, more than one colour output and ps_1_4 are
 refused with a reason; the game's shaders use none of them (the renderer
-plan's corpus scan). GXM has no volume textures, so a volume is stored as its
+plan's corpus scan). ps_1_1 to ps_1_3, which the game's shader model 2 set
+(`r_rendererPreference 0`) draws its depth pass with, are rewritten as
+ps_2_0 when parsed: `tex t0` reads sampler 0 at coordinate 0, the colour is
+what r0 holds at the end; their samplers are taken to be 2D, and the
+instructions that address one texture through another are refused. GXM has no volume textures, so a volume is stored as its
 slices one under the other in a 2D texture and sampled by blending the two
 nearest slices (`kisak_tex3D`, slice count in `kisak_depth_s<n>`). The Cg
 program meets the back end through:

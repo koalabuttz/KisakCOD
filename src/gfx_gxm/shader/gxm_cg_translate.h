@@ -4,12 +4,19 @@
 //
 // GXM runs programs that the Vita's own compiler (libshacccg, see
 // gxm_shader_compiler.h) builds from Cg source, so each of the game's D3D9
-// shaders (vs_1_1 to vs_3_0, ps_2_0 to ps_3_0) becomes a small Cg program:
+// shaders (vs_1_1 to vs_3_0, ps_1_1 to ps_3_0) becomes a small Cg program:
 // one float4 local per register, one statement per instruction, in the order
 // the bytecode gives them. The shaders the game ships use no loops, calls or
-// predicates; those, ps 1.x and a few rare registers are refused with a
+// predicates; those, ps_1_4 and a few rare registers are refused with a
 // reason. Volume textures, which GXM lacks, are sampled from their slices
 // laid out in a 2D texture.
+//
+// ps_1_1 to ps_1_3 (the game's shader model 2 set draws its depth pass with
+// them) are rewritten as ps_2_0 when parsed: "tex t0" becomes a read of
+// sampler 0 at texture coordinate 0 into a temporary that stands for t0 from
+// then on, the colour left in r0 is written to oC0. Their samplers are taken
+// to be 2D, their registers are not clamped to -1..1, and the instructions
+// that address one texture by another's value are refused.
 //
 // Two steps:
 //   Parse  bytecode -> Shader (instructions + Reflection). Once per shader.
@@ -165,6 +172,7 @@ struct Instruction
 {
     uint16_t opcode = 0;
     uint8_t control = 0; // bits 16-23: comparison or texld variant
+    bool coissue = false; // ps 1.x: runs beside the instruction before it
     bool hasDestination = false;
     Operand destination;
     uint8_t sourceCount = 0;

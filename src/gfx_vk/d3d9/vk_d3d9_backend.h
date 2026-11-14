@@ -91,6 +91,12 @@ lg::Surface *BackendModernSceneTarget(Backend *backend, lg::Surface *backBuffer,
 // on the display image (vk_d3d9.h ModernSceneLit); false with
 // KISAK_VK_MODERN_EFFECTS=linear and on a back end without a Modern path.
 bool BackendModernEffectsOnDisplay(Backend *backend);
+// One of the game's reflection probes (vk_d3d9.h ModernReflectionProbe):
+// with linear light (or KISAK_VK_MODERN_PROBES=1, never with =0) its levels
+// below the first are made again from level 0 (modern::FilterReflectionProbe).
+// True when it was; false when it is not wanted, not an 8-bit colour cube
+// with levels, or on a back end without a Modern path.
+bool BackendModernReflectionProbe(Backend *backend, lg::Device *legacy, lg::Texture *probe);
 // Whether the Modern path wants the scene's opaque depth before its lit
 // surfaces (vk_d3d9.h ModernWantsSceneDepth); false on a back end without one.
 bool BackendModernWantsSceneDepth(Backend *backend);
