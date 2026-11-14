@@ -12,6 +12,9 @@
                                named without a folder, beside the running one
                                (``startSingleplayer``, ``startMultiplayer``),
                                never the auto-update file a server sent.
+  ``SysStartFolders``          the game and home folders it passes on are the
+                               ones the program started with, kept once, and
+                               never read from dvars a game server can set.
   ``Sys_SplitParameters``      its parameters become arguments as the engine
                                reads a command line: spaces split, double
                                quotes group.
@@ -25,7 +28,8 @@ Checked with no game data, no display and no network:
    sanitizers when available. It starts a stand-in program and reads back
    what that program was given.
 2. The production code uses the rules: ``Sys_QuitAndStartProcess`` refuses a
-   name with a folder before anything else, ``Sys_ShowDialog`` asks
+   name with a folder before anything else and reads no dvar, ``main``
+   remembers the start folders right after ``Com_Init``, ``Sys_ShowDialog`` asks
    ``Sys_DialogRefusal`` before ``SDL_ShowMessageBox``, and the scripts that
    start the game for a run set ``KISAK_NO_DIALOGS``.
 
@@ -89,6 +93,20 @@ static std::string Read(const char *path)
     return text;
 }
 
+// A copy in a block of exactly its size, so a read past its end is seen.
+struct Exact
+{
+    explicit Exact(const std::string &text) : block(static_cast<char *>(std::malloc(text.size() + 1)))
+    {
+        std::memcpy(block, text.c_str(), text.size() + 1);
+    }
+    ~Exact() { std::free(block); }
+    Exact(const Exact &) = delete;
+    Exact &operator=(const Exact &) = delete;
+    const char *c_str() const { return block; }
+    char *block;
+};
+
 // Splits `parameters`; the arguments joined by '|', or "<-1>" when refused.
 static std::string Split(const char *parameters, size_t storageSize = 256, int maxArguments = 16)
 {
@@ -142,6 +160,50 @@ int main(int argc, char **argv)
     Expect(!Sys_IsSiblingProgramName(""), "an empty name is started");
     Expect(!Sys_IsSiblingProgramName(nullptr), "no name is started");
     Expect(!Sys_IsSiblingProgramName("a\nb"), "a name with a line break is started");
+
+    // Which folders can be passed on whole.
+    Expect(Sys_FolderCanBePassed("/home/player/.local/share/cod4"), "a plain folder is refused");
+    Expect(Sys_FolderCanBePassed("/a b/c d"), "a folder with spaces is refused");
+    Expect(!Sys_FolderCanBePassed(nullptr), "no folder is passed");
+    Expect(!Sys_FolderCanBePassed(""), "an empty folder is passed");
+    Expect(!Sys_FolderCanBePassed("/a+b"), "a folder with '+' is passed");
+    Expect(!Sys_FolderCanBePassed("/a\"b"), "a folder with a quote is passed");
+    Expect(!Sys_FolderCanBePassed("/a\nb"), "a folder with a line break is passed");
+    Expect(!Sys_FolderCanBePassed("/a\rb"), "a folder with a carriage return is passed");
+
+    // The start folders are kept once: what a server sets later is never passed.
+    {
+        SysStartFolders *folders = new SysStartFolders();
+        Expect(!folders->Remembered() && !folders->BasePath() && !folders->HomePath(),
+               "folders are passed before any were remembered");
+        folders->Remember(Exact("/games/cod4").c_str(), Exact("/home/player/.cod4").c_str());
+        Expect(folders->Remembered(), "remembering is not recorded");
+        Expect(folders->BasePath() && std::string(folders->BasePath()) == "/games/cod4", "the game folder is not kept");
+        Expect(folders->HomePath() && std::string(folders->HomePath()) == "/home/player/.cod4",
+               "the home folder is not kept");
+        folders->Remember("/home/player/.cod4/mods/evil", "/tmp/evil");
+        Expect(std::string(folders->BasePath()) == "/games/cod4", "a later game folder replaced the first");
+        Expect(std::string(folders->HomePath()) == "/home/player/.cod4", "a later home folder replaced the first");
+        delete folders;
+
+        folders = new SysStartFolders();
+        folders->Remember("/a+set x", nullptr);
+        Expect(!folders->BasePath() && !folders->HomePath(), "a folder that cannot be passed whole is kept");
+        folders->Remember("/games/cod4", "/home/player/.cod4");
+        Expect(!folders->BasePath() && !folders->HomePath(), "folders are taken after the first time");
+        delete folders;
+
+        // 447 bytes fit, 448 do not; both must fit one 1024-byte command line.
+        folders = new SysStartFolders();
+        const std::string longest = "/" + std::string(446, 'a');
+        const std::string tooLong = "/" + std::string(447, 'a');
+        folders->Remember(Exact(longest).c_str(), Exact(tooLong).c_str());
+        Expect(folders->BasePath() && std::string(folders->BasePath()) == longest, "the longest folder is not kept");
+        Expect(!folders->HomePath(), "a folder that is too long is kept");
+        delete folders;
+        Expect(2 * longest.size() + sizeof("+set fs_basepath \"\" +set fs_homepath \"\" ") < 1024,
+               "two of the longest folders do not fit the command line");
+    }
 
     // Parameters into arguments.
     Expect(Split(nullptr) == "", "no parameters are not no arguments");
@@ -288,12 +350,52 @@ def check_order(path: Path, signature: str, first: str, then: str, what: str) ->
     return True
 
 
+def check_start_folders(posix_main: Path = POSIX_MAIN) -> bool:
+    """The folders the other program is given are the start-up copies, never a dvar read later."""
+    text = strip_comments(posix_main.read_text(encoding="utf-8", errors="replace"))
+    ok = True
+    for signature in ("void Sys_QuitAndStartProcess(const char *exeName, const char *parameters)",
+                      "void Sys_SpawnQuitProcess()"):
+        name = signature.split("(")[0].split()[-1]
+        body = function_body(text, signature)
+        if body is None:
+            print(f"FAIL: {posix_main.name} no longer defines {name} the way this check reads it")
+            ok = False
+            continue
+        read = re.search(r"\bDvar_\w+\s*\(|->current\b|->latched\b|->reset\b", body)
+        if read:
+            print(f"FAIL: {name} reads a dvar ({read.group(0).strip()}): a game server can set a client's dvars, "
+                  "so what the other game program is given must come from SysStartFolders (sys_desktop.h)")
+            ok = False
+    start = function_body(text, "void Sys_QuitAndStartProcess(const char *exeName, const char *parameters)") or ""
+    if "s_startFolders.BasePath()" not in start or "s_startFolders.HomePath()" not in start:
+        print("FAIL: Sys_QuitAndStartProcess does not pass the folders SysStartFolders kept")
+        ok = False
+    main_body = function_body(text, "int main(int argc, char **argv)")
+    if main_body is None:
+        print(f"FAIL: {posix_main.name} no longer defines main the way this check reads it")
+        return False
+    init = main_body.find("Com_Init(")
+    remember = main_body.find("s_startFolders.Remember(")
+    frame = main_body.find("Com_Frame(")
+    if init < 0 or remember < init or frame < 0 or remember > frame:
+        print("FAIL: main does not remember the start folders after Com_Init and before the first Com_Frame")
+        ok = False
+    if len(re.findall(r"\bs_startFolders\s*\.\s*Remember\s*\(", text)) != 1:
+        print("FAIL: the start folders are remembered in more than one place")
+        ok = False
+    if ok:
+        print("PASS: the other game program is given the folders this one started with, kept right after Com_Init")
+    return ok
+
+
 def check_sources() -> bool:
     ok = check_order(POSIX_MAIN, "void Sys_QuitAndStartProcess(const char *exeName, const char *parameters)",
                      "Sys_IsSiblingProgramName(exeName)", "access(",
                      "Sys_QuitAndStartProcess does not refuse a name with a folder before it looks for the program")
     ok = check_order(POSIX_MAIN, "void Sys_SpawnQuitProcess()", "Sys_SplitParameters(", "Sys_StartProgram(",
                      "Sys_SpawnQuitProcess does not start the program through Sys_StartProgram") and ok
+    ok = check_start_folders() and ok
     ok = check_order(CLIENT_INPUT, "SysDialogAnswer Sys_ShowDialog(SysDialogKind kind, const char *title, const char *text)",
                      "Sys_DialogRefusal(", "SDL_ShowMessageBox(",
                      "Sys_ShowDialog does not ask Sys_DialogRefusal before SDL_ShowMessageBox") and ok
