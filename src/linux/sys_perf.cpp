@@ -23,6 +23,10 @@
 #include "sys_perf_readings.h"
 #endif
 
+#if defined(__vita__)
+#include <vita/vita_platform.h> // Vita_ThreadTimes
+#endif
+
 // ---------------------------------------------------------------------------
 // The game's side of the A/B measuring in sys_perf_core.h: the commands, the
 // clock, and where the counters and readings come from on this machine.
@@ -200,7 +204,27 @@ namespace
             counters->mainCpuNs = ThreadCpuNs(GetCurrentThread());
             counters->processCpuNs = ProcessCpuNs();
             ReadThreads(&counters->threads);
-#elif defined(CLOCK_THREAD_CPUTIME_ID) && defined(CLOCK_PROCESS_CPUTIME_ID) && !defined(__vita__)
+#elif defined(__vita__)
+            // Called on the main thread. newlib has no CPU time clocks; the
+            // kernel counts each thread's run time, and "all" is the sum over
+            // the threads the port started (vita_threads.cpp), not the
+            // system's own threads in this process.
+            {
+                VitaThreadTime times[24];
+                const int count = Vita_ThreadTimes(times, 24);
+                for (int i = 0; i < count; ++i)
+                {
+                    PerfThreadTime time;
+                    time.tid = times[i].id;
+                    time.name = times[i].name;
+                    time.runNs = times[i].runMicroseconds * 1000ull;
+                    counters->threads.push_back(time);
+                    counters->processCpuNs += time.runNs;
+                    if (times[i].self)
+                        counters->mainCpuNs = time.runNs;
+                }
+            }
+#elif defined(CLOCK_THREAD_CPUTIME_ID) && defined(CLOCK_PROCESS_CPUTIME_ID)
             counters->mainCpuNs = ClockNs(CLOCK_THREAD_CPUTIME_ID);
             counters->processCpuNs = ClockNs(CLOCK_PROCESS_CPUTIME_ID);
 #endif

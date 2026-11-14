@@ -183,6 +183,22 @@ The Windows PC is a desktop with a GPU much faster than its CPU, so there a
 frame's time is mostly the CPU's and what the CPU saves shows as frames per
 second, which a laptop that waits for its GPU does not show.
 
+## On the PS Vita
+
+- **cpu ms/frame** is the time the kernel counted each thread as running
+  (`sceKernelGetThreadInfo`, `runClocks`). A thread that waits for a lock, a
+  file or another thread does not run, so `main` against the frame's length
+  says how much of a frame the main thread worked and how much it waited.
+- **threads** lists the threads the port starts, by the engine's names
+  (`MAIN`, `BACKEND`, `WORKER0`, ...) plus `sound output` and `gxm programs`:
+  an application cannot list its threads, so each says its name once when it
+  starts (`Vita_NoteThread`, `src/vita/vita_threads.cpp`). The system's own
+  threads in the process (sceGxm's display queue, the audio ports) are not in
+  the list, and `all` is the sum of the list.
+- The Vita gives an application three cores: a table that adds up to less
+  than two frames' worth of time leaves a core free.
+- No machine readings.
+
 ## `r_gpuSyncSleep`
 
 With `r_gpuSync 1` (the default) the engine waits for the GPU in two places:

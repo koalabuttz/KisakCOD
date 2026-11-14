@@ -104,6 +104,7 @@ bool IsBgmRate(int rate)
 
 void *OutputThread(void *)
 {
+    Vita_NoteThread("sound output");
     // One step ahead of the engine's threads, as a sound thread wants: it
     // runs for a fraction of a millisecond, 43 times a second.
     const SceUID self = sceKernelGetThreadId();

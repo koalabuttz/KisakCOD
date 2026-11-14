@@ -34,6 +34,21 @@ void Vita_ConsoleWrite(const char *text, size_t length);
 // NaN), as on x86 and on Linux armv7. Returns the FPSCR value found.
 unsigned int Vita_SetIeeeFloatMode();
 
+// The CPU time of the port's threads (src/vita/vita_threads.cpp). The Vita
+// has no list of a process's threads, so each thread the port starts calls
+// Vita_NoteThread once with its name (at most 23 characters are kept).
+// Vita_ThreadTimes fills the time each of them has run since it started and
+// returns how many it filled; threads that have ended are left out.
+struct VitaThreadTime
+{
+    int id;
+    char name[24];
+    uint64_t runMicroseconds;
+    bool self; // the calling thread
+};
+void Vita_NoteThread(const char *name);
+int Vita_ThreadTimes(VitaThreadTime *times, int count);
+
 // Load and memory figures for the first runs (src/vita/vita_stats.cpp), so
 // console.log answers how many players the Vita can serve.
 //
