@@ -26,8 +26,9 @@
 //            probe)) adds to the game's diffuse colour, decoded; on an
 //            opaque surface the probe gives way, by the reflections'
 //            confidence, to what the Modern path's screen-space reflections
-//            found (s14, a blurrier level for a rougher surface; none where
-//            the scene has none);
+//            found (s14, a blurrier level for a rougher surface, faded out
+//            below gloss 0.5 and gone at 0.3; none where the scene has
+//            none);
 //   ao     = the Modern path's ambient occlusion at this pixel (s15, white
 //            where the scene has none), which darkens only the light from
 //            all around: the sky term, and the probe through a specular
@@ -139,6 +140,10 @@ layout(set = 1, binding = 31) uniform sampler ambientOcclusionSampler;
 // binds a 1x1 (0, 0, 0, 0) one where the scene has none.
 layout(set = 1, binding = 14) uniform texture2D reflections;
 layout(set = 1, binding = 30) uniform sampler reflectionsSampler;
+// The gloss below which a surface keeps its probe, and from which the
+// reflections take its place in full.
+const float kReflectionsGlossNone = 0.3;
+const float kReflectionsGlossFull = 0.5;
 #endif
 
 layout(constant_id = 0) const float kSunStrength = 1.0;
@@ -323,15 +328,22 @@ void main()
     // the probe's (LOD 6 - 8 gloss of its 6), the light averaged with its
     // confidence, put in display values as the probe is. Opaque surfaces
     // only: the reflections are traced from the depth prepass, which a
-    // blended surface is not in.
-    if (kMode == 0)
+    // blended surface is not in. Rough surfaces keep the probe: below gloss
+    // 0.5 the reflections fade out, gone at 0.3. Their blurriest level is a
+    // few pixels wide, not the half of the world around a rough surface the
+    // probe's blurriest level averages, so on a matte wall at a grazing view
+    // they showed the one bright wall they hit at full strength (PC
+    // reflections run 3, the Crash arcade pillar).
+    if (kMode == 0 && gloss > kReflectionsGlossNone)
     {
         const vec2 size = vec2(textureSize(sampler2D(reflections, reflectionsSampler), 0));
         const float levels = float(textureQueryLevels(sampler2D(reflections, reflectionsSampler)));
         const float level = clamp((6.0 - 8.0 * gloss) / 6.0, 0.0, 1.0) * (levels - 1.0);
         const vec4 found = textureLod(sampler2D(reflections, reflectionsSampler), gl_FragCoord.xy / size, level);
+        const float weight =
+            clamp(found.a, 0.0, 1.0) * smoothstep(kReflectionsGlossNone, kReflectionsGlossFull, gloss);
         if (found.a > 1e-4)
-            probeDisplay = mix(probeDisplay, Encode(found.rgb / found.a), clamp(found.a, 0.0, 1.0));
+            probeDisplay = mix(probeDisplay, Encode(found.rgb / found.a), weight);
     }
     const vec3 specularDisplay = specularSample.rgb * fresnel * (sunHighlight + probeDisplay);
     lit += max(Decode(diffuseDisplay + specularDisplay) - Decode(diffuseDisplay), vec3(0.0));

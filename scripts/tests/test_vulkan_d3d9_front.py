@@ -40,12 +40,12 @@ involved. The checks:
                  setting (what each setting did to its frame, and that the
                  statistics count from where they were last started, are the
                  scene's own points); and the Modern path's statistics lines
-                 count the 63 anti-aliased scenes of modern_taa,
+                 count the 64 anti-aliased scenes of modern_taa,
                  modern_linear, modern_bloom, modern_effects, modern_lit,
                  modern_lit_shader, modern_tonemap, modern_exposure,
                  modern_velocity, modern_normals, modern_ao and
                  modern_reflections, 21 of them without history, the
-                 19 scenes of modern_linear, modern_bloom,
+                 20 scenes of modern_linear, modern_bloom,
                  modern_effects, modern_lit, modern_lit_shader,
                  modern_tonemap, modern_exposure, modern_normals, modern_ao
                  and modern_reflections in
@@ -53,9 +53,9 @@ involved. The checks:
                  KISAK_VK_MODERN_LINEAR=0), modern_bloom's 2 scenes with
                  bloom (none with KISAK_VK_MODERN_LINEAR=0 or
                  KISAK_VK_MODERN_BLOOM=0), modern_lit's, modern_lit_shader's,
-                 modern_tonemap's, modern_ao's and modern_reflections' two
+                 modern_tonemap's, modern_ao's and modern_reflections' three
                  lit-floor scenes with lit surfaces kept over white, inputs
-                 changed 2.2 times in each (twice in modern_lit and
+                 changed 2.0 times in each (twice in modern_lit and
                  modern_tonemap, six times in modern_lit_shader, once in
                  modern_ao and in each of modern_reflections'), and the
                  eight pixel modules modern_lit_shader (six), modern_ao
@@ -120,7 +120,7 @@ involved. The checks:
                  debug view or not), KISAK_VK_MODERN_LINEAR=0 or
                  KISAK_VK_MODERN_SHADERS=0, where none is built; the full
                  run builds it for modern_normals, modern_ao and
-                 modern_reflections (for the ambient occlusion)
+                 modern_reflections (for the ambient occlusion, 7 scenes)
   reflections    --scene modern_reflections passes with
                  KISAK_VK_MODERN_DEBUG=reflections, where the reflections
                  debug view shows the screen-space reflections traced in its
@@ -129,12 +129,13 @@ involved. The checks:
                  as it is, where they are traced for our lit shader and its
                  floor shows the wall's red where they found it (and with
                  KISAK_VK_MODERN_SHADERS=0 beside KISAK_VK_MODERN_SSR=1,
-                 traced but the floor black), and with
+                 traced but the floor black; a matte floor stays near black
+                 either way), and with
                  KISAK_VK_MODERN_SSR=0, KISAK_VK_MODERN_LIT=0,
                  KISAK_VK_MODERN_SHADERS=0, and the debug view beside
                  KISAK_VK_MODERN_LINEAR=0 (logged, not traced),
                  KISAK_VK_MODERN_SSR=0 and KISAK_VK_MODERN_NORMALS=0, where
-                 they are not; the full run traces them for 2 scenes
+                 they are not; the full run traces them for 3 scenes
                  unless linear light, lit inputs or our lit shaders are off
 
 Usage:
@@ -388,11 +389,12 @@ def main():
     reflections_line = re.compile(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with screen-space '
                                   r'reflections \((\d+) levels\), ([0-9.]+) ms GPU each$', re.M)
     # The scenes traced: modern_reflections' second, and with our lit shaders
-    # drawing (not under the debug view) its lit floor's second too.
-    for settings, traced in (({}, 2),
+    # drawing (not under the debug view) its lit floor's second and its matte
+    # floor too.
+    for settings, traced in (({}, 3),
                              ({'KISAK_VK_MODERN_DEBUG': 'reflections'}, 1),
-                             ({'KISAK_VK_MODERN_SSR': '1'}, 2),
-                             ({'KISAK_VK_MODERN_SSR': '1', 'KISAK_VK_MODERN_SHADERS': '0'}, 2),
+                             ({'KISAK_VK_MODERN_SSR': '1'}, 3),
+                             ({'KISAK_VK_MODERN_SSR': '1', 'KISAK_VK_MODERN_SHADERS': '0'}, 3),
                              ({'KISAK_VK_MODERN_SSR': '0'}, 0),
                              ({'KISAK_VK_MODERN_LIT': '0'}, 0),
                              ({'KISAK_VK_MODERN_SHADERS': '0'}, 0),
@@ -501,12 +503,12 @@ def main():
     # after the cut each had one surface that moves on its own, in the third
     # a skinned one, whose 128 vertices every scene of that run kept. Last,
     # the modern_normals scene's one (a cut), the modern_ao scene's one, the
-    # same, and the modern_reflections scene's two (the first a cut), in
-    # linear light unless KISAK_VK_MODERN_LINEAR=0.
+    # same, and the modern_reflections scene's five (the first and the third
+    # cuts), in linear light unless KISAK_VK_MODERN_LINEAR=0.
     modern = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes anti-aliased \((\d+) without history\)',
                        stdout)
-    checks.expect('the Modern path anti-aliased 63 scenes, 21 without history',
-                  modern is not None and modern.group(1) == '63' and modern.group(2) == '21',
+    checks.expect('the Modern path anti-aliased 64 scenes, 21 without history',
+                  modern is not None and modern.group(1) == '64' and modern.group(2) == '21',
                   modern.group(0) if modern else 'missing')
     velocity = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with surfaces that move on their own '
                          r'\((\d+) surfaces\), ([0-9.]+) ms GPU each for their velocity$', stdout)
@@ -521,9 +523,9 @@ def main():
                   kept.group(0) if kept else 'missing')
     if env.get('KISAK_VK_MODERN_EXPOSURE') == '0':
         checks.expect('no auto exposure with KISAK_VK_MODERN_EXPOSURE=0', 'scenes with auto exposure' not in stdout)
-    # Ambient occlusion, and the normals buffer for it, in the six scenes
+    # Ambient occlusion, and the normals buffer for it, in the seven scenes
     # that draw a depth prepass (modern_normals, modern_ao and
-    # modern_reflections' four), when our lit shaders read it.
+    # modern_reflections' five), when our lit shaders read it.
     if 'KISAK_VK_MODERN_NORMALS' not in env and 'KISAK_VK_MODERN_DEBUG' not in env:
         read = env.get('KISAK_VK_MODERN_AO') != '0' and (
             env.get('KISAK_VK_MODERN_AO') == '1'
@@ -533,15 +535,15 @@ def main():
         occlusion = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with ambient occlusion \(radius ',
                               stdout)
         if read:
-            checks.expect('a normals buffer and ambient occlusion for the 6 scenes with a depth prepass',
-                          normals is not None and normals.group(1) == '6' and occlusion is not None
-                          and occlusion.group(1) == '6',
+            checks.expect('a normals buffer and ambient occlusion for the 7 scenes with a depth prepass',
+                          normals is not None and normals.group(1) == '7' and occlusion is not None
+                          and occlusion.group(1) == '7',
                           f'{normals.group(0) if normals else "no normals line"}; '
                           f'{occlusion.group(0) if occlusion else "no ambient occlusion line"}')
         else:
             checks.expect('no normals buffer when nothing reads it', normals is None)
             checks.expect('no ambient occlusion when nothing reads it', occlusion is None)
-    # Screen-space reflections, for our lit shaders: modern_reflections' two
+    # Screen-space reflections, for our lit shaders: modern_reflections' three
     # scenes with a last scene (the others with a depth prepass are cuts).
     if 'KISAK_VK_MODERN_SSR' not in env and 'KISAK_VK_MODERN_DEBUG' not in env:
         read = env.get('KISAK_VK_MODERN_NORMALS') != '0' and all(
@@ -549,8 +551,8 @@ def main():
         reflections = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with screen-space reflections',
                                 stdout)
         if read:
-            checks.expect('screen-space reflections for the 2 scenes with a depth prepass and a last scene',
-                          reflections is not None and reflections.group(1) == '2',
+            checks.expect('screen-space reflections for the 3 scenes with a depth prepass and a last scene',
+                          reflections is not None and reflections.group(1) == '3',
                           reflections.group(0) if reflections else 'no reflections line')
         else:
             checks.expect('no screen-space reflections when nothing reads them', reflections is None)
@@ -560,8 +562,8 @@ def main():
         checks.expect('no scene in linear light with KISAK_VK_MODERN_LINEAR=0', linear is None,
                       linear.group(0) if linear else '')
     else:
-        checks.expect('the Modern path drew 19 scenes in linear light and read 1 copy from them',
-                      linear is not None and linear.group(1) == '19' and linear.group(2) == '1',
+        checks.expect('the Modern path drew 20 scenes in linear light and read 1 copy from them',
+                      linear is not None and linear.group(1) == '20' and linear.group(2) == '1',
                       linear.group(0) if linear else 'missing')
     bloom = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with bloom in place of the glow '
                       r'\(([0-9.]+) passes each\), ([0-9.]+) ms GPU each$', stdout)
@@ -578,8 +580,8 @@ def main():
         checks.expect('no scene with lit surfaces in linear light with linear light or lit inputs off', lit is None,
                       lit.group(0) if lit else '')
     else:
-        checks.expect('the Modern path drew lit surfaces in linear light in 6 scenes, inputs changed 2.2 times each',
-                      lit is not None and lit.group(1) == '6' and lit.group(2) == '2.2',
+        checks.expect('the Modern path drew lit surfaces in linear light in 7 scenes, inputs changed 2.0 times each',
+                      lit is not None and lit.group(1) == '7' and lit.group(2) == '2.0',
                       lit.group(0) if lit else 'missing')
     shaders = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: lit shaders of our own: ([0-9.]+) changes to one '
                         r'each scene, (\d+) pixel modules built as one \((\d+) could not be\)', stdout)

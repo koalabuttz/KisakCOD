@@ -924,7 +924,13 @@ in the game's display values: `probe = mix(probe * specular occlusion,
 encode(ssr.rgb / ssr.a), ssr.a)` (encode unclamped), at the level its gloss
 picks (`(6 - 8 gloss) / 6` of the way to the blurriest, as the game picks
 the probe's), on opaque surfaces only (a blended one is not in the prepass,
-so the reflections there belong to what is behind it). The sun, its
+so the reflections there belong to what is behind it). Rough surfaces keep
+the probe: the mix fades out below gloss 0.5 and is gone at 0.3. The
+reflections' blurriest level is only a few pixels wide, not the half of the
+world around the surface that the probe's blurriest level averages, so on a
+matte wall seen at a grazing angle they showed the one bright wall they hit
+at full strength (PC reflections run 3: a bright band on the Crash arcade's
+plaster pillar). The sun, its
 highlight and the lightmap are untouched, and so is the Fresnel and the
 specular map that scale the result.
 
@@ -962,18 +968,20 @@ as the engine does, twice (the first a cut). The first has no reflections;
 in the second, with `KISAK_VK_MODERN_DEBUG=reflections`, the floor in front
 of the wall shows the wall's red, the floor on the left (whose rays meet
 only the sky) and the wall (whose rays come back at the camera) show black. Without the debug
-view it draws the scene twice more with the floor as `lm_sun_r0c0s0` (the
+view it draws the scene three times more with the floor as `lm_sun_r0c0s0` (the
 `modern_lit_shader` stand-in): black colour map, lightmaps, probe and sun,
 and a white specular map of gloss 1 with Fresnel 1, seen from straight
 above. In the second, our shader shows the wall's red (199, 40, 40) where
 the reflections found it and black elsewhere; black everywhere with
-`KISAK_VK_MODERN_SSR=0`, and the stand-in's black without our shaders.
+`KISAK_VK_MODERN_SSR=0`, and the stand-in's black without our shaders. The
+third (not a cut) has a specular map of gloss 0: that floor keeps its black
+probe, near black (the anti-aliasing keeps a trace of the red before it).
 `test_vulkan_d3d9_front.py` runs it as it is, with the debug view, with
 `KISAK_VK_MODERN_SSR=1` (also beside `KISAK_VK_MODERN_SHADERS=0`), with
 `KISAK_VK_MODERN_SSR=0`, `KISAK_VK_MODERN_LIT=0` and
 `KISAK_VK_MODERN_SHADERS=0`, and with the debug view beside
 `KISAK_VK_MODERN_LINEAR=0`, `KISAK_VK_MODERN_SSR=0` and
-`KISAK_VK_MODERN_NORMALS=0`, and checks that a full run traces 2 scenes
+`KISAK_VK_MODERN_NORMALS=0`, and checks that a full run traces 3 scenes
 (none with our lit shaders off).
 
 ## Next
