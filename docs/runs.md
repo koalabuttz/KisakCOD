@@ -348,6 +348,48 @@ errors; a CPU burn made one start ask "Set Optimal Settings?" and the game
 answered it "No" (`KISAK_NO_DIALOGS is set; leaving the player profile
 unchanged`); both screenshots show the map, not a menu, at one sample.
 
+### Several settings in one launch: `variants`
+
+The Modern switches are live dvars since PR 305 (`r_modernAo`, `r_modernSsr`,
+`r_modernTonemap`, the `r_modernAo*` and `r_modernSsr*` numbers, ...;
+`src/gfx_d3d/rhi/r_rhi_modern_dvars.h`), so a comparison no longer needs one
+launch per value. A launch lists its variants and pc_run.py writes the timed
+commands:
+
+```json
+{"name": "crash-in", "args": ["+devmap", "mp_crash"],
+ "at_map": ["3 cmd mr {serverid} 8 autoassign", "5 cmd mr {serverid} 15 assault_mp,0",
+            "8 setviewpos 30 -10 200 140"],
+ "variants": [{"name": "B", "set": {"r_modernAo": "off"}},
+              {"name": "A", "set": {"r_modernAo": "on"}}],
+ "variant_timing": {"start": 10, "settle": 3, "framelog": 8, "compare": true}}
+```
+
+From `start` seconds after the map is up (default: 2 s after the last `at_map`
+command), each variant sets its dvars, waits `settle` seconds (TAA history and
+auto exposure catch up after a change), takes the screenshot
+`<launch>-<variant>` the first time round and, with `framelog`, a frame log
+`<launch>-<variant>-<pass>`. With a frame log the variants run twice in
+mirrored order (A B B A), so steady drift (heat, other load) cancels in the
+mean; `"passes": 1` or `2` overrides. Then the launch quits. `"compare": true`
+compares the first variant's screenshot with each other one. results.json
+gets per launch `variants` (fps per pass, mean fps, the change against the
+first variant in % and in ms, the spread between passes) and report.md a
+table. The client takes 32 timed commands per launch: n variants use 5n + 1
+with two passes of frame logs (3n + 1 with one pass, 2n + 1 for screenshots
+only), so beside the usual three menu and camera commands up to 5 variants
+fit with two passes and 9 with one.
+
+- Give every variant every dvar any variant changes, so the order of passes
+  does not matter, and remember that `default` keeps the start value
+  (`KISAK_VK_MODERN_*` or built in).
+- Start-up only, still one launch per value: `KISAK_VK_MODERN_LINEAR`, `_LIT`,
+  `_EFFECTS`, `_NORMALS`, `_EXPOSURE_RANGE`, `_SSR_STEPS`/`_LEVELS`, and
+  `r_visuals`.
+- Things that move (smoke, the helicopter) move between the screenshots of
+  one launch. `timescale 0.001` in `at_map` (devmap has cheats on) may hold
+  them still; not yet tried on the PC.
+
 ## Menus without a person: `menu_check.py`
 
 `scripts/runs/menu_check.py` clicks through the multiplayer menus of the native

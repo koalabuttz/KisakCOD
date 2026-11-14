@@ -158,6 +158,53 @@ def test_full_run(work):
     check((out / "base" / "console_mp.log").stat().st_mtime == stamp, "resume leaves their files")
 
 
+def test_variants(work):
+    launch = {"name": "live", "at_map": ["3 setviewpos 1 2 3 4"],
+              "variants": [{"name": "B", "set": {"r_fakeCost": "0", "r_fakeSquare": "100"}},
+                           {"name": "A", "set": {"r_fakeCost": "2.5", "r_fakeSquare": "180"}}],
+              "variant_timing": {"settle": 2, "framelog": 4, "compare": True}}
+    path = recipe(work, [launch], pictures={"regions": {"square": [100, 60, 164, 124]}})
+    commands = pc_run.launch_commands(pc_run.load_recipe(path)["launches"][0], "at_map")
+    check(commands == ["3 setviewpos 1 2 3 4",
+                       "5 r_fakeCost 0; r_fakeSquare 100", "7 screenshot live-B", "8 framelog 4 live-B-1",
+                       "13 r_fakeCost 2.5; r_fakeSquare 180", "15 screenshot live-A", "16 framelog 4 live-A-1",
+                       "21 r_fakeCost 2.5; r_fakeSquare 180", "23 framelog 4 live-A-2",
+                       "28 r_fakeCost 0; r_fakeSquare 100", "30 framelog 4 live-B-2", "35 quit"],
+          f"variants become timed commands, A B B A, one screenshot each ({commands})")
+    out = work / "out-variants"
+    result = run(path, out)
+    check(result.returncode == 0, f"variant run exits 0 ({result.stdout} {result.stderr})")
+    results = json.loads((out / "results.json").read_text())
+    live = results["launches"][0]
+    check(sorted(live["shots"]) == ["live-A", "live-B"] and not live["missing_shots"], "one screenshot per variant")
+    base, lit = live["variants"]
+    check([p["label"] for p in base["passes"]] == ["live-B-1", "live-B-2"], "B's frame logs, both passes")
+    check(base["mean_fps"] == 100.0 and lit["mean_fps"] == 80.0, f"mean fps per variant ({base}, {lit})")
+    check(lit["fps_vs_first_pct"] == -20.0 and lit["ms_vs_first"] == 2.5, "A against B: -20%, +2.5 ms")
+    check(base.get("pass_spread_pct") == 0.0, "pass spread")
+    pair = results["pictures"]["compare"][0]
+    check(pair["a"] == "live-B" and pair["b"] == "live-A" and pair["label"] == "live: B vs A", "compare made itself")
+    check(pair["square"]["mean_abs"] == 80.0, "the square changed with the variant")
+    report = (out / "report.md").read_text()
+    check("| A | r_fakeCost 2.5, r_fakeSquare 180 | 80.0, 80.0 | 80.0 | -20.00% | +2.500 | 0.0% |" in report,
+          "variant table in the report")
+
+    bad = [
+        ({"variants": []}, "variants is a list"),
+        ({"variants": [{"name": "x", "set": {}}]}, "sets nothing"),
+        ({"variants": [{"name": "x", "set": {"r_a": "1; quit"}}]}, "one value without spaces"),
+        ({"variants": [{"name": "x", "set": {"r_a": "1"}}, {"name": "x", "set": {"r_a": "2"}}]}, "given twice"),
+        ({"variants": [{"name": "x", "set": {"r_a": "1"}}], "variant_timing": {"start": 3}}, "not after the last"),
+        ({"variants": [{"name": "x", "set": {"r_a": "1"}}], "variant_timing": {"passes": 3}}, "passes is 1 or 2"),
+        ({"variants": [{"name": "x", "set": {"r_a": "1"}}], "variant_timing": {"pass": 1}}, "unknown key"),
+        ({"variants": [{"name": f"v{i}", "set": {"r_a": str(i)}} for i in range(10)],
+          "variant_timing": {"framelog": 2}}, "the client takes 32"),
+    ]
+    for extra, message in bad:
+        result = run(recipe(work, [{"name": "a", "at_map": ["3 echo x"], **extra}]), work / "out-bad")
+        check(result.returncode == 2 and message in result.stderr, f"variants refused: {message} ({result.stderr.strip()})")
+
+
 def test_failures(work):
     launches = [
         {"name": "fails", "env": {"FAKE_EXIT": "3"}, "at_map": ["1 screenshot f-1", "2 quit"]},
@@ -179,6 +226,7 @@ def main():
         test_recipe_checks(work)
         test_command_line(work)
         test_full_run(work)
+        test_variants(work)
         test_failures(work)
     if FAILURES:
         print(f"FAIL: {len(FAILURES)} pc_run check(s)")
