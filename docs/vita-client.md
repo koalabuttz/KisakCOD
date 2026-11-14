@@ -806,6 +806,14 @@ What the GXM back end does so far (step 2d):
   Each change is logged (`diag: depth pass governor: off from frame ...`).
   An empty file `no-prepass-governor` keeps the pass on in every frame, as
   before.
+  The forced pass draws the map's own surfaces and leaves the models out:
+  walls and ground hide most of what a view hides, and console run AR found
+  static models the largest part of the render thread's draws. The lit pass
+  tests and writes depth itself, so the picture is the same. A pass that
+  `r_depthPrepass 1` asks for, and the one that fills the depth copy for
+  soft particles and depth of field, still draw everything. An empty file
+  `no-world-only-prepass`, or `vita_gxm no-world-only-prepass 1`, puts the
+  models back in the pass.
 - **No distortion copy in frames that do not need it.** The Vita's GPU
   works a scene at a time: every change of render target ends one, stores
   its whole colour and depth targets and loads them again when the frame

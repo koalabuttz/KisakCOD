@@ -19,6 +19,7 @@
 #include <stringed/stringed_hooks.h>
 #include <client/client.h>
 #include <universal/profile.h>
+#include <bots/bot_brain.h>
 
 
 //Line 53332:  0006 : 00cf4d5c       int sv_serverId_value    834a4d5c     sv_init_mp.obj
@@ -840,6 +841,7 @@ void SV_Init()
         0,
         DVAR_NOFLAG,
         "Build and send snapshots to test clients, which drop them; 0 skips that work");
+    Bot_RegisterDvars();
     sv_debugMessageKey = Dvar_RegisterBool("sv_debugMessageKey", 0, DVAR_NOFLAG, "net message key generation debugging");
     sv_debugPacketContents = Dvar_RegisterBool(
         "sv_debugPacketContents",

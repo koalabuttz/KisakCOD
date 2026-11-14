@@ -36,6 +36,9 @@ decoder, a human second player, or proof of multi-player synchronization.
 - `SV_UpdateBots` / `SV_BotUserMove` in `src/server_mp/sv_main_mp.cpp` generate
   randomized commands. `sv_botsPressAttackBtn` controls the attack bit; these
   clients have no pathfinding, aiming or objectives.
+- With `bot_brain 1`, `SV_UpdateBots` asks KisakCOD's bot brain
+  (`Bot_UserMove`, src/bots/bot_brain.cpp) for each active bot's command
+  instead; see [bots](bots.md).
 
 ## Snapshots for test clients (`sv_botSnapshots`)
 
@@ -143,8 +146,9 @@ overrides registered `dm.gsc` and delegates initialization to stock `war::main`;
 it is not a stock DM round. Only the fixture is distributed, not stock scripts.
 
 The fixture identifies each `addtestclient()` result with the stock script field
-`pers["isBot"]`, then sends `menuresponse` events for the allies team and the
-`assault_mp,0` class choice. Stock callbacks set session state, select spawn
+`pers["isBot"]`, then sends `menuresponse` events for the allies team (both
+teams by entity parity, with bot firing off, for more than four bots, since a
+stock team holds half of `sv_maxclients`) and the `assault_mp,0` class choice. Stock callbacks set session state, select spawn
 points and equip the class. The fixture never writes session state, spawns the
 player directly, manufactures class stats, or changes authentication settings.
 
