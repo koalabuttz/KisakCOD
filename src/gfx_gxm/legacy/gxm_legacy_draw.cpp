@@ -53,6 +53,7 @@
 namespace gfx_gxm
 {
 bool g_depthPrepass = true;
+bool g_resolveWhenUsed = true;
 } // namespace gfx_gxm
 
 namespace gfx_vk::legacy
@@ -1727,6 +1728,10 @@ bool InitDraw(Device &device, std::string &error)
     if (!gfx_gxm::g_depthPrepass)
         Log(device, "diag: no-depth-prepass is there: the scene's depth is drawn first only when r_depthPrepass, "
                     "depth of field or soft particles ask for it");
+    gfx_gxm::g_resolveWhenUsed = !gxm::ProgramCacheMarker("no-resolve-skip");
+    if (!gfx_gxm::g_resolveWhenUsed)
+        Log(device, "diag: no-resolve-skip is there: the picture is copied for distortion in every frame, drawn or "
+                    "not");
     d.notifications = sceGxmGetNotificationRegion();
     if (gxm::ProgramCacheMarker("no-frame-overlap"))
     {
