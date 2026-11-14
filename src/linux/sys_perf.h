@@ -62,6 +62,15 @@ enum SysPerfProbe : uint32_t
 {
     SYS_PERF_PROBE_SERVER_FRAME,       // one 20 Hz frame of a listen server, with its sends
     SYS_PERF_PROBE_HUD,                // CG_Draw2D
+    // Parts of a server frame (game_mp, server_mp), so the server frame's own
+    // time can be split. They sit inside SYS_PERF_PROBE_SERVER_FRAME.
+    SYS_PERF_PROBE_SERVER_BOTS,        // SV_UpdateBots: the bots' moves (their ClientThink)
+    SYS_PERF_PROBE_SERVER_TRIGGERS,    // G_RunFrame: players touching triggers, trigger notifies and their scripts
+    SYS_PERF_PROBE_SERVER_ANIM,        // G_RunFrame: the two animation passes over every entity
+    SYS_PERF_PROBE_SERVER_SCRIPTS,     // G_RunFrame: Scr_IncTime, the script threads whose wait ended
+    SYS_PERF_PROBE_SERVER_ENTITIES,    // G_RunFrame: G_RunFrameForEntity for every entity
+    SYS_PERF_PROBE_SERVER_CLIENT_END,  // G_RunFrame: ClientEndFrame for every player
+    SYS_PERF_PROBE_SERVER_SEND,        // SV_SendClientMessages: snapshots to the clients
     SYS_PERF_PROBE_WAIT_RENDERER,      // main thread asleep until the render thread takes the frame
     SYS_PERF_PROBE_WAIT_WORKERS_ALL,   // ... until every front-end worker command is done
     SYS_PERF_PROBE_WAIT_WORKERS_OTHER, // ... in any other wait that runs worker commands

@@ -148,6 +148,13 @@ namespace
             {
             case SYS_PERF_PROBE_SERVER_FRAME: return "server frame";
             case SYS_PERF_PROBE_HUD: return "hud";
+            case SYS_PERF_PROBE_SERVER_BOTS: return "server: bot moves";
+            case SYS_PERF_PROBE_SERVER_TRIGGERS: return "server: triggers";
+            case SYS_PERF_PROBE_SERVER_ANIM: return "server: animation";
+            case SYS_PERF_PROBE_SERVER_SCRIPTS: return "server: scripts";
+            case SYS_PERF_PROBE_SERVER_ENTITIES: return "server: entities";
+            case SYS_PERF_PROBE_SERVER_CLIENT_END: return "server: player end frame";
+            case SYS_PERF_PROBE_SERVER_SEND: return "server: snapshots";
             case SYS_PERF_PROBE_WAIT_RENDERER: return "wait for the render thread";
             case SYS_PERF_PROBE_WAIT_WORKERS_ALL: return "wait for workers: all";
             default: return "wait for workers: other";
