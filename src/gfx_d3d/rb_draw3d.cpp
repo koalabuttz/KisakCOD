@@ -520,7 +520,11 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     {
         SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_DEPTH);
         R_InitContext(data, &cmdBuf);
+        // The pass the GXM back end alone asks for may leave the models out
+        // (gxm_engine_options.h, g_prepassWorldOnly).
+        KISAK_GXM_SET_PREPASS_SKIP_MODELS(!r_depthPrepass->current.enabled && !modernDepth);
         R_DepthPrepass(R_RENDERTARGET_SCENE, viewInfo, &cmdBuf);
+        KISAK_GXM_SET_PREPASS_SKIP_MODELS(false);
         depthPrepassed = true;
     }
     if (modernDepth && depthPrepassed)

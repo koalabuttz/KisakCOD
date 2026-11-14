@@ -29,6 +29,7 @@
 #include <win32/win_net.h>
 #include <qcommon/threads.h>
 #include "r_workercmds.h"
+#include <gfx_gxm/gxm_engine_options.h>
 #include "rb_tess.h"
 #include "r_cinematic.h"
 #include "r_model_lighting.h"
@@ -896,6 +897,15 @@ uint32_t R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArgs, GfxCm
     drawSurfCount = listArgs->info->drawSurfCount - listArgs->firstDrawSurfIndex;
     drawSurfList = &listArgs->info->drawSurfs[listArgs->firstDrawSurfIndex];
     drawSurf.packed = drawSurfList->packed;
+    if (KISAK_GXM_PREPASS_SKIP_MODELS() && drawSurf.fields.surfType > SF_TRIANGLES_PRETESS)
+    {
+        // The Vita's forced depth pass draws the map's surfaces only: pass
+        // by this run of models (gxm_engine_options.h).
+        uint32_t passed = 1;
+        while (passed < drawSurfCount && drawSurfList[passed].fields.surfType > SF_TRIANGLES_PRETESS)
+            ++passed;
+        return passed;
+    }
     const bool timed = Sys_PerfProbesOn();
     uint64_t mark = timed ? Sys_PerfNowNs() : 0;
     if (!R_SetupMaterial(listArgs->context, &prepassContext, listArgs->info, drawSurf))
