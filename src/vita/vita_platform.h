@@ -86,8 +86,16 @@ unsigned int Vita_StatsGeneration();
 bool Vita_AssertExits();
 void Vita_SetAssertExits(bool exits);
 
-// Has the system write console.log's bytes out.
+// Writes out what console.log still holds in memory and has the system write
+// the file's bytes out. The error paths call it before the process ends.
 void Vita_ConsoleSync();
+
+// From here on console.log's lines go to the memory card from a thread of
+// their own (vita_log_writer.h), so a slow write does not hold the thread that
+// printed. False if that thread could not be made; lines then go straight to
+// the card as before. vita_logDirect 1 on the command line keeps the old way,
+// for hunting a crash that takes the last lines with it.
+bool Vita_ConsoleUseThread();
 
 // Logs memory use straight to console.log and to standard output, for
 // Sys_Error: an out-of-memory error then shows which pool ran out.
