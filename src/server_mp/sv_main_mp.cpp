@@ -22,6 +22,7 @@
 #include <universal/profile.h>
 
 #include <linux/sys_perf.h>
+#include <bots/bot_brain.h>
 
 #include <ctime>
 
@@ -1169,7 +1170,9 @@ void SV_UpdateBots()
                 if (clients->header.state == CS_CLIENTLOADING)
                     SV_ClientEnterWorld(clients, &nullcmd);
             }
-            if (clients->header.state == CS_ACTIVE)
+            // KisakCOD's bots (bot_brain 1, docs/bots.md) build their own
+            // command; otherwise the retail random inputs.
+            if (clients->header.state == CS_ACTIVE && !Bot_UserMove(clients))
                 SV_BotUserMove(clients);
         }
         ++i;
