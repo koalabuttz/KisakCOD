@@ -88,6 +88,20 @@ enum SysPerfProbe : uint32_t
     SYS_PERF_PROBE_HUD_COMPASS,        // CG_CompassUpdateActors
     SYS_PERF_PROBE_HUD_SCOREBOARD,     // CG_DrawScoreboard
     SYS_PERF_PROBE_UI_EXPRESSIONS,     // EvaluateExpression: every menu expression, in the HUD or not
+    // The render thread (gfx_d3d), so its frame can be split as the main
+    // thread's is. The 3D parts sit inside SYS_PERF_PROBE_RENDER_3D.
+    SYS_PERF_PROBE_RENDER_3D,          // RB_Draw3D: the 3D views of a frame
+    SYS_PERF_PROBE_RENDER_DEPTH,       // R_DepthPrepass: the scene's depth drawn first
+    SYS_PERF_PROBE_RENDER_LIT,         // R_DrawLit: opaque lit surfaces
+    SYS_PERF_PROBE_RENDER_DECAL,       // R_DrawDecal
+    SYS_PERF_PROBE_RENDER_SUN,         // RB_DrawSun
+    SYS_PERF_PROBE_RENDER_LIGHTS,      // R_DrawLights: surfaces lit by point lights
+    SYS_PERF_PROBE_RENDER_EMISSIVE,    // R_DrawEmissive: effects, blended surfaces
+    SYS_PERF_PROBE_RENDER_POSTFX,      // RB_EndSceneRendering: post effects of a view
+    SYS_PERF_PROBE_RENDER_2D,          // RB_CallExecuteRenderCommands: the HUD, menus, 2D
+    SYS_PERF_PROBE_RENDER_SWAP_WAIT,   // the render thread's wait before Present
+    SYS_PERF_PROBE_RENDER_PRESENT,     // RB_EndFrame: Present
+    SYS_PERF_PROBE_RENDER_IDLE,        // the render thread asleep until the main thread hands it a frame
     SYS_PERF_PROBE_WAIT_RENDERER,      // main thread asleep until the render thread takes the frame
     SYS_PERF_PROBE_WAIT_WORKERS_ALL,   // ... until every front-end worker command is done
     SYS_PERF_PROBE_WAIT_WORKERS_OTHER, // ... in any other wait that runs worker commands

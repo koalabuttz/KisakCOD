@@ -94,6 +94,17 @@ perf: done
     front-end command before the frame is handed over, `other` any other.
   - `wait for the render thread`: the main thread asleep until the render
     thread takes the frame.
+  - `render: <part>`: the render thread's frame. `3d` is `RB_Draw3D`, the
+    3D views, and holds `depth pass` (`R_DepthPrepass`), `lit`
+    (`R_DrawLit`), `decals`, `sun`, `point lights`, `emissive` (effects and
+    blended surfaces) and `post effects` (`RB_EndSceneRendering`). `2d` is
+    the HUD, menus and other 2D commands; `wait before present` the wait for
+    the swap fence (worker commands run in it); `present` is `RB_EndFrame`,
+    which on the Vita holds the wait for the frame before last; `waiting
+    for a frame` is the render thread asleep until the main thread hands it
+    one (worker commands run in it too). The 3D parts time the engine's
+    own work and the back end's draws together; on the Vita the GXM back
+    end's stats line gives its draws' share.
   - `lock <name>`: any thread getting into that critical section. The time is
     the wait for the lock plus two readings of the clock (about 50 ns).
   Outside a run each of these costs one load and one branch.
