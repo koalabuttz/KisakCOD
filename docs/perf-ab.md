@@ -194,6 +194,27 @@ the first eight that differ. The setting stays at 0 until a run on real
 animations has shown 0 differed; `perf_ab "set xanim_blendOnce 0" "set
 xanim_blendOnce 1"` measures what it saves.
 
+## `ui_fastExpressions`
+
+Menu expressions (`visible when`, `exp text`, `exp rect` and the like) run
+every frame for every HUD item, and `menu expressions` in the timed line
+shows what they cost. Two pieces of that work give nothing:
+`EvaluateExpression` clears its whole 5 KB operand stack before each
+expression, and `dvarInt`, `dvarBool` and `dvarFloat` format the dvar's value
+as text and parse the text back.
+
+`ui_fastExpressions` (default 0 = unchanged) set to 1 clears only what can be
+read before it is written, reads bool, int and string dvars directly (float,
+vector, colour and enum dvars keep the text, whose `%g` rounding or enum name
+decides the result), and lets `dvarString` use the dvar it already found
+instead of looking it up again. Every result is the same as with 0:
+`scripts/tests/test_ui_fast_expressions.py` compares the two dvar reads bit
+for bit, and every operand list is written before it is read except
+`stack[0]` in the error path of a malformed expression, which the fast path
+clears as the memset did.
+`perf_ab "set ui_fastExpressions 0" "set ui_fastExpressions 1"` measures what
+it saves.
+
 ## Checks
 
 `scripts/tests/test_linux_perf_ab.py` (the `perf_ab` check of

@@ -2054,5 +2054,6 @@ extern const dvar_t *ui_extraBigFont;
 extern const dvar_t *ui_showMenuOnly;
 extern const dvar_t *ui_cinematicsTimestamp;
 extern const dvar_t *uiscript_debug;
+extern const dvar_t *ui_fastExpressions; // ui_expressions.cpp
 extern const dvar_t *ui_borderLowLightScale;
 
