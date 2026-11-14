@@ -150,7 +150,10 @@ set(KISAK_VITA_MP_DEFINITIONS
     KISAK_LINUX_MP_CLIENT KISAK_VITA_MP_CLIENT KISAK_GFX_GXM
     ENABLE_VITASDK_BUILD_ASSERT
     $<$<CONFIG:Debug>:_DEBUG>)
+# EXPERIMENT (this branch only): -O3 in place of RelWithDebInfo's -O2 for
+# the client's code, measured by a console run.
 set(KISAK_VITA_MP_OPTIONS
+    $<$<CONFIG:RelWithDebInfo>:-O3>
     $<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>
     -fno-strict-aliasing -ffunction-sections -fdata-sections
     -Wno-c++11-narrowing -Wno-invalid-token-paste
