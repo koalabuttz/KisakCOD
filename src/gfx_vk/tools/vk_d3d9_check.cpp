@@ -3771,6 +3771,14 @@ void Check::ModernVelocity()
     const char *env = std::getenv("KISAK_VK_MODERN_DEBUG");
     const bool debugView = env && !std::strcmp(env, "velocity");
 #endif
+#if defined(_MSC_VER)
+    const std::string brushDiag;
+#else
+    // DIAGNOSTIC ONLY (macOS arm64 brush band): KISAK_CHECK_BRUSH=static-ib,
+    // keep or near.
+    const char *brushDiagText = std::getenv("KISAK_CHECK_BRUSH");
+    const std::string brushDiag = brushDiagText ? brushDiagText : "";
+#endif
     struct Vertex32
     {
         Vertex v;
@@ -3805,7 +3813,8 @@ void Check::ModernVelocity()
     // the two matrices multiplied (R_GetCodeMatrix's world-view-projection),
     // whose depth rounds differently: the velocity pass must still match it.
     static constexpr float kBrushScale = 3.0f;
-    static constexpr float kBrushFar[3] = {2417.3f, -1531.9f, 3071.2f};
+    const bool brushNear = brushDiag == "near";
+    const float kBrushFar[3] = {brushNear ? 0.0f : 2417.3f, brushNear ? 0.0f : -1531.9f, brushNear ? 0.0f : 3071.2f};
     IDirect3DVertexShader9 *vsWorld = nullptr;
     if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
                                               nullptr),
@@ -3917,7 +3926,7 @@ void Check::ModernVelocity()
     // The brush band's in frame f, as R_GetCodeMatrix makes it: the world
     // matrix (identity, less kBrushFar) times the view-projection (a scale
     // by 1 / kBrushScale, and the band's move).
-    const auto brushClip = [](int f, float out[4][4]) {
+    const auto brushClip = [&](int f, float out[4][4]) {
         float world[4][4] = {}, viewProjection[4][4] = {};
         for (int i = 0; i < 4; ++i)
             world[i][i] = viewProjection[i][i] = 1.0f;
@@ -4031,9 +4040,10 @@ void Check::ModernVelocity()
             columns[3][3] = columns[7][3] = 1.0f;
             device->SetVertexShaderConstantF(0, &columns[0][0], 8);
             device->SetVertexShader(vsWorld);
-            writeBrushIndices(false);
+            if (brushDiag != "static-ib")
+                writeBrushIndices(false);
             Ok(device->SetStreamSource(0, brushVb, 0, sizeof(Vertex44)), "SetStreamSource(brush)");
-            Ok(device->SetIndices(brushIb), "SetIndices(brush)");
+            Ok(device->SetIndices(brushDiag == "static-ib" ? ib : brushIb), "SetIndices(brush)");
             Ok(device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, kStripes * 4, 0, kStripes * 2),
                "DrawIndexedPrimitive(brush)");
             device->SetVertexShader(vsBasic);
@@ -4042,7 +4052,8 @@ void Check::ModernVelocity()
             // indices are written again (the dynamic buffer wrapped): the
             // velocity pass must still draw the band from this draw's.
             finishGpu();
-            writeBrushIndices(true);
+            if (brushDiag.empty() || brushDiag == "near")
+                writeBrushIndices(true);
         }
         else
         {
