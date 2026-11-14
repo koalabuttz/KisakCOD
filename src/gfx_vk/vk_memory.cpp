@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 namespace gfx_vk
 {
@@ -440,6 +442,13 @@ Buffer *CreateBuffer(Core *core, const BufferDesc &desc)
     ++core->stats.buffersAlive;
     VkMemoryRequirements requirements{};
     core->vk.vkGetBufferMemoryRequirements(core->dev, buffer->buffer, &requirements);
+#if !defined(_MSC_VER)
+    // DIAGNOSTIC ONLY (macOS arm64 dynamic index buffers): not for merge.
+    const char *diagIb = std::getenv("KISAK_VK_DIAG_IB");
+    if (diagIb && (info.usage & VK_BUFFER_USAGE_INDEX_BUFFER_BIT) && desc.memory == MemoryKind::Upload
+        && std::strcmp(diagIb, "big") == 0)
+        requirements.size = std::max<VkDeviceSize>(requirements.size, kHostBlockSize / 2 + 1);
+#endif
     if (!Allocate(*core, requirements, desc.memory, false, buffer->allocation)
         || !Check(*core,
                   core->vk.vkBindBufferMemory(core->dev, buffer->buffer, buffer->allocation.memory,
@@ -449,6 +458,29 @@ Buffer *CreateBuffer(Core *core, const BufferDesc &desc)
         DestroyBufferNow(*core, buffer);
         return nullptr;
     }
+#if !defined(_MSC_VER)
+    if (diagIb && (info.usage & VK_BUFFER_USAGE_INDEX_BUFFER_BIT))
+    {
+        const uint32_t type = FindMemoryType(*core, requirements.memoryTypeBits, desc.memory);
+        std::fprintf(stderr,
+                     "diag ib: %s mode=%s kind=%d bytes=%llu req size=%llu align=%llu typeBits=%08x type=%u "
+                     "flags=%08x offset=%llu coherent=%d mapped=%d usage=%08x\n",
+                     buffer->name.c_str(), diagIb, static_cast<int>(desc.memory),
+                     static_cast<unsigned long long>(desc.size), static_cast<unsigned long long>(requirements.size),
+                     static_cast<unsigned long long>(requirements.alignment), requirements.memoryTypeBits, type,
+                     type == UINT32_MAX ? 0u : core->memory.memoryTypes[type].propertyFlags,
+                     static_cast<unsigned long long>(buffer->allocation.offset), buffer->allocation.coherent ? 1 : 0,
+                     buffer->allocation.mapped ? 1 : 0, info.usage);
+        static bool typesShown = false;
+        if (!typesShown)
+        {
+            typesShown = true;
+            for (uint32_t i = 0; i < core->memory.memoryTypeCount; ++i)
+                std::fprintf(stderr, "diag ib: memory type %u flags %08x heap %u\n", i,
+                             core->memory.memoryTypes[i].propertyFlags, core->memory.memoryTypes[i].heapIndex);
+        }
+    }
+#endif
     return buffer;
 }
 
