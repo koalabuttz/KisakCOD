@@ -13,10 +13,22 @@ namespace gfx_vk::modern
 {
 namespace
 {
-// The vertices the engine draws moving surfaces from (GfxPackedVertex) are
-// 32 bytes; the stride is baked into the pipeline, since dynamic strides are
-// not everywhere (OptionalFeatures::dynamicVertexStride).
-constexpr uint32_t kStride = 32;
+// The vertices the engine draws moving surfaces from: models'
+// (GfxPackedVertex) are 32 bytes, brush models' (GfxWorldVertex) 44. The
+// stride is baked into a pipeline for each, since dynamic strides are not
+// everywhere (OptionalFeatures::dynamicVertexStride).
+constexpr uint32_t kStrides[] = {32, 44};
+constexpr uint32_t kStrideCount = sizeof(kStrides) / sizeof(kStrides[0]);
+// Skinned surfaces are models': their kept vertices are 32 bytes each.
+constexpr uint32_t kSkinnedStride = 32;
+// The pipeline for a stride; kStrideCount when there is none.
+uint32_t StrideSlot(uint32_t stride)
+{
+    for (uint32_t i = 0; i < kStrideCount; ++i)
+        if (kStrides[i] == stride)
+            return i;
+    return kStrideCount;
+}
 
 // The shaders' push constants (velocity.vert and .frag, std430).
 struct Push
@@ -32,7 +44,7 @@ struct Velocity
 {
     VkDescriptorSetLayout setLayout = VK_NULL_HANDLE;
     VkPipelineLayout layout = VK_NULL_HANDLE;
-    VkPipeline pipeline = VK_NULL_HANDLE;
+    VkPipeline pipelines[kStrideCount] = {}; // by StrideSlot
     VkSampler nearest = VK_NULL_HANDLE;
     Image *image = nullptr;
     VelocityStats stats{};
@@ -40,7 +52,7 @@ struct Velocity
 
 namespace
 {
-bool CreatePipeline(Core *core, Velocity &velocity, std::string &error)
+bool CreatePipeline(Core *core, Velocity &velocity, bool depthTest, std::string &error)
 {
     const Dispatch &vk = Functions(core);
     const VkDevice device = DeviceHandle(core);
@@ -90,10 +102,19 @@ bool CreatePipeline(Core *core, Velocity &velocity, std::string &error)
     stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
     stages[1].module = fragment;
     stages[1].pName = "main";
+    // velocity.frag's kDepthTest (constant 0), a 32-bit boolean.
+    const VkBool32 depthTestValue = depthTest ? VK_TRUE : VK_FALSE;
+    const VkSpecializationMapEntry depthTestEntry{0, 0, sizeof(VkBool32)};
+    VkSpecializationInfo specialization{};
+    specialization.mapEntryCount = 1;
+    specialization.pMapEntries = &depthTestEntry;
+    specialization.dataSize = sizeof(depthTestValue);
+    specialization.pData = &depthTestValue;
+    stages[1].pSpecializationInfo = &specialization;
     // This frame's vertices, and last frame's (the same vertices again for
     // all but skinned surfaces).
-    const VkVertexInputBindingDescription vertexBindings[2] = {{0, kStride, VK_VERTEX_INPUT_RATE_VERTEX},
-                                                               {1, kStride, VK_VERTEX_INPUT_RATE_VERTEX}};
+    VkVertexInputBindingDescription vertexBindings[2] = {{0, 0, VK_VERTEX_INPUT_RATE_VERTEX},
+                                                         {1, 0, VK_VERTEX_INPUT_RATE_VERTEX}};
     const VkVertexInputAttributeDescription positions[2] = {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0},
                                                             {1, 1, VK_FORMAT_R32G32B32_SFLOAT, 0}};
     VkPipelineVertexInputStateCreateInfo vertexInput{};
@@ -152,10 +173,16 @@ bool CreatePipeline(Core *core, Velocity &velocity, std::string &error)
     info.pColorBlendState = &blend;
     info.pDynamicState = &dynamic;
     info.layout = velocity.layout;
-    velocity.pipeline = CreateGraphicsPipeline(core, info);
+    bool made = true;
+    for (uint32_t i = 0; i < kStrideCount && made; ++i)
+    {
+        vertexBindings[0].stride = vertexBindings[1].stride = kStrides[i];
+        velocity.pipelines[i] = CreateGraphicsPipeline(core, info);
+        made = velocity.pipelines[i] != VK_NULL_HANDLE;
+    }
     DestroyShaderModule(core, vertex);
     DestroyShaderModule(core, fragment);
-    if (!velocity.pipeline)
+    if (!made)
     {
         error = LastError(core);
         return false;
@@ -201,7 +228,7 @@ bool EnsureImage(Core *core, Velocity &velocity, uint32_t width, uint32_t height
 }
 } // namespace
 
-Velocity *CreateVelocity(Core *core, std::string &error)
+Velocity *CreateVelocity(Core *core, std::string &error, bool depthTest)
 {
     if (!FormatSupports(core, kVelocityFormat, VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT))
     {
@@ -214,7 +241,7 @@ Velocity *CreateVelocity(Core *core, std::string &error)
         return nullptr;
     }
     Velocity *velocity = new Velocity();
-    if (!CreatePipeline(core, *velocity, error))
+    if (!CreatePipeline(core, *velocity, depthTest, error))
     {
         DestroyVelocity(core, velocity);
         return nullptr;
@@ -226,7 +253,8 @@ void DestroyVelocity(Core *core, Velocity *velocity)
 {
     if (!velocity)
         return;
-    DestroyPipeline(core, velocity->pipeline);
+    for (const VkPipeline pipeline : velocity->pipelines)
+        DestroyPipeline(core, pipeline);
     DestroyImage(core, velocity->image);
     // The layouts are not tracked by the core: wait until no recorded work uses them.
     WaitIdle(core);
@@ -252,7 +280,8 @@ Image *DrawVelocity(Core *core, Velocity *velocity, Image *depth, const SceneVie
     }
     uint32_t usable = 0;
     for (uint32_t i = 0; i < count; ++i)
-        if (surfaces[i].stride == kStride && surfaces[i].indexCount && surfaces[i].vertices && surfaces[i].indices)
+        if (StrideSlot(surfaces[i].stride) < kStrideCount && surfaces[i].indexCount && surfaces[i].vertices
+            && surfaces[i].indices)
             ++usable;
     if (!usable)
         return nullptr;
@@ -308,20 +337,20 @@ Image *DrawVelocity(Core *core, Velocity *velocity, Image *depth, const SceneVie
         error = LastError(core);
         return nullptr;
     }
-    const VkPipeline pipeline = velocity->pipeline;
     const VkPipelineLayout layout = velocity->layout;
     Record(core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
-        vk.vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
         vk.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1, &set, 0, nullptr);
         vk.vkCmdSetScissor(cmd, 0, 1, &area);
     });
+    uint32_t boundSlot = kStrideCount;
     const float jitters[4] = {view.projection[2][0], view.projection[2][1], previous.projection[2][0],
                               previous.projection[2][1]};
-    uint32_t drawn = 0, skinned = 0;
+    uint32_t drawn = 0, skinned = 0, world = 0;
     for (uint32_t i = 0; i < count; ++i)
     {
         const MovedSurface &s = surfaces[i];
-        if (s.stride != kStride || !s.indexCount || !s.vertices || !s.indices)
+        const uint32_t slot = StrideSlot(s.stride);
+        if (slot == kStrideCount || !s.indexCount || !s.vertices || !s.indices)
             continue;
         // A skinned surface reads last frame's vertices from the kept copy,
         // which starts at the first vertex the draw uses: both bindings start
@@ -335,7 +364,7 @@ Image *DrawVelocity(Core *core, Velocity *velocity, Image *depth, const SceneVie
             if (first < 0 || !s.vertexCount)
                 continue;
             buffers[1] = s.previous;
-            offsets[0] = s.vertexOffset + static_cast<VkDeviceSize>(first) * kStride;
+            offsets[0] = s.vertexOffset + static_cast<VkDeviceSize>(first) * s.stride;
             offsets[1] = s.previousOffset;
             drawBase = -static_cast<int32_t>(s.minIndex);
             ++skinned;
@@ -357,6 +386,14 @@ Image *DrawVelocity(Core *core, Velocity *velocity, Image *depth, const SceneVie
         const VkIndexType indexType = s.indexType;
         const uint32_t indexCount = s.indexCount;
         const uint32_t firstIndex = s.firstIndex;
+        if (slot != boundSlot)
+        {
+            const VkPipeline pipeline = velocity->pipelines[slot];
+            Record(core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
+                vk.vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+            });
+            boundSlot = slot;
+        }
         Record(core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
             vk.vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
                                   sizeof(push), &push);
@@ -366,12 +403,14 @@ Image *DrawVelocity(Core *core, Velocity *velocity, Image *depth, const SceneVie
             vk.vkCmdDrawIndexed(cmd, indexCount, 1, firstIndex, drawBase, 0);
         });
         ++drawn;
+        world += s.stride == 44 ? 1 : 0;
     }
     EndPass(core);
     UseImage(core, velocity->image, ImageUse::Sampled);
     ++velocity->stats.passes;
     velocity->stats.surfaces += drawn;
     velocity->stats.skinned += skinned;
+    velocity->stats.world += world;
     return velocity->image;
 }
 
@@ -475,7 +514,7 @@ bool KeepVertices(Core *core, KeptVertices *kept, const KeepRequest *requests, u
     for (uint32_t i = 0; i < count; ++i)
     {
         const KeepRequest &r = requests[i];
-        const VkDeviceSize bytes = VkDeviceSize(r.vertexCount) * kStride;
+        const VkDeviceSize bytes = VkDeviceSize(r.vertexCount) * kSkinnedStride;
         if (!r.vertices || !bytes || used + bytes > kHalfBytes || kept->next.count(r.key))
             continue;
         if (r.vertices != source && !flush())

@@ -302,6 +302,28 @@ ModernResult ModernSceneDone(IDirect3DDevice9 *device, const ModernSceneView &vi
     return ModernResult::Refused;
 }
 
+bool ModernReflectionProbe(IDirect3DDevice9 *device, IDirect3DCubeTexture9 *probe)
+{
+    const FrontLock lock;
+    if (!probe)
+        return false;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+        {
+            // A cube texture is this device's only when it says so.
+            IDirect3DDevice9 *owner = nullptr;
+            if (FAILED(probe->GetDevice(&owner)) || owner != device)
+            {
+                if (owner)
+                    owner->Release();
+                return false;
+            }
+            owner->Release();
+            return live->ModernReflectionProbe(static_cast<CubeTexture *>(probe)->state_.texture);
+        }
+    return false;
+}
+
 void ModernSurfaceMoved(IDirect3DDevice9 *device, const float clip[4][4], const float prevClip[4][4])
 {
     const FrontLock lock;

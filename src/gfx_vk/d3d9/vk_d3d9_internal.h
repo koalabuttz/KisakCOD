@@ -557,6 +557,7 @@ public:
         BackendModernSkinnedSurfaceMoved(backend_, legacy_, key, clip, prevClip);
     }
     void SetModernLitInputs(const ModernLitInputs *inputs);
+    bool ModernReflectionProbe(lg::Texture *probe) { return BackendModernReflectionProbe(backend_, legacy_, probe); }
     const Host &host() const { return parent_->host(); }
     HRESULT Unsupported(const char *method);
     DeviceCounters counters() const;

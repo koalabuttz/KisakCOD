@@ -532,6 +532,7 @@ public:
     void ModernNormals();
     void ModernAo();
     void ModernReflections();
+    void ModernProbes();
     void Bench();
     void BenchRuns();
     void BenchFrames(bool runs);
@@ -2440,6 +2441,96 @@ void Check::KeptState()
 // is the last draw's, which is the usual case in the game and the one the
 // adapter can do least for in `bench`, where every draw changes everything.
 // Its last frame is read back: every cell must hold its run's texture.
+// The Modern path's reflection probes (docs/vulkan-modern.md "Reflection
+// probes"): a 64-texel cube with all its levels in the game's encoding, level
+// 0 black but for a white +Y face, the levels below holding a marker. With
+// linear light (unless KISAK_VK_MODERN_PROBES=0, or with =1)
+// front::ModernReflectionProbe makes those levels again: the +Y face's
+// blurriest level stays near white, the +X face's takes light from +Y
+// across the edge (a box filter in display values leaves it black), and
+// filtering again gives the same levels. Otherwise the marker stays.
+void Check::ModernProbes()
+{
+    const auto envIs = [](const char *name, const char *value) {
+#if defined(_MSC_VER)
+        char *env = nullptr;
+        size_t envLength = 0;
+        const bool is = _dupenv_s(&env, &envLength, name) == 0 && env && !std::strcmp(env, value);
+        std::free(env);
+        return is;
+#else
+        const char *env = std::getenv(name);
+        return env && !std::strcmp(env, value);
+#endif
+    };
+    const bool wanted = !envIs("KISAK_VK_MODERN_PROBES", "0")
+                        && (envIs("KISAK_VK_MODERN_PROBES", "1") || !envIs("KISAK_VK_MODERN_LINEAR", "0"));
+    constexpr UINT kEdge = 64;
+    IDirect3DCubeTexture9 *probe = nullptr;
+    if (!Ok(device->CreateCubeTexture(kEdge, 0, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &probe, nullptr),
+            "CreateCubeTexture(probe)"))
+        return;
+    const UINT levels = probe->GetLevelCount();
+    Equal("probe_levels", static_cast<int>(levels), 7);
+    for (UINT face = 0; face < 6 && levels == 7; ++face)
+        for (UINT level = 0; level < levels; ++level)
+        {
+            D3DLOCKED_RECT rect{};
+            if (!Ok(probe->LockRect(static_cast<D3DCUBEMAP_FACES>(face), level, &rect, nullptr, 0), "LockRect(probe)"))
+                continue;
+            const UINT size = std::max(kEdge >> level, 1u);
+            for (UINT y = 0; y < size; ++y)
+            {
+                uint32_t *row = reinterpret_cast<uint32_t *>(static_cast<uint8_t *>(rect.pBits) + y * rect.Pitch);
+                for (UINT x = 0; x < size; ++x)
+                    // Display value rgb * a * 4: white at alpha 64 is 1.
+                    row[x] = level ? Argb(4, 3, 2, 1)
+                                   : (face == D3DCUBEMAP_FACE_POSITIVE_Y ? Argb(64, 255, 255, 255) : Argb(64, 0, 0, 0));
+            }
+            probe->UnlockRect(static_cast<D3DCUBEMAP_FACES>(face), level);
+        }
+    const bool filtered = front::ModernReflectionProbe(device, probe);
+    Equal("probe_filtered", filtered, wanted);
+    // The centre texel of a face's level, read back.
+    const auto texel = [&](D3DCUBEMAP_FACES face, UINT level) {
+        uint32_t value = 0;
+        D3DLOCKED_RECT rect{};
+        if (Ok(probe->LockRect(face, level, &rect, nullptr, D3DLOCK_READONLY), "LockRect(probe read)"))
+        {
+            const UINT size = std::max(kEdge >> level, 1u);
+            value = *reinterpret_cast<const uint32_t *>(static_cast<const uint8_t *>(rect.pBits)
+                                                        + (size / 2) * rect.Pitch + (size / 2) * 4);
+            probe->UnlockRect(face, level);
+        }
+        return value;
+    };
+    // A texel's display value (its red), in 255ths.
+    const auto display = [](uint32_t argb) {
+        return static_cast<int>(((argb >> 16) & 0xff) * (argb >> 24) * 4 / 255);
+    };
+    const uint32_t up6 = texel(D3DCUBEMAP_FACE_POSITIVE_Y, 6);
+    const uint32_t side6 = texel(D3DCUBEMAP_FACE_POSITIVE_X, 6);
+    const uint32_t side3 = texel(D3DCUBEMAP_FACE_POSITIVE_X, 3);
+    if (wanted)
+    {
+        Equal("probe_up_blurriest_bright", display(up6) >= 160, true);
+        Equal("probe_side_blurriest_lit_from_up",
+              display(side6) >= 40 && display(side6) < display(up6) && display(side3) < display(side6), true);
+        front::ModernReflectionProbe(device, probe);
+        Equal("probe_filtered_again_same", texel(D3DCUBEMAP_FACE_POSITIVE_X, 3) == side3
+                  && texel(D3DCUBEMAP_FACE_POSITIVE_X, 6) == side6, true);
+    }
+    else
+    {
+        Equal("probe_levels_kept", up6 == Argb(4, 3, 2, 1) && side6 == Argb(4, 3, 2, 1), true);
+    }
+    char line[96];
+    std::snprintf(line, sizeof(line), " probe_up6=%d probe_side6=%d probe_side3=%d", display(up6), display(side6),
+                  display(side3));
+    result->detail += line;
+    SafeRelease(probe);
+}
+
 void Check::Bench() { BenchFrames(false); }
 void Check::BenchRuns() { BenchFrames(true); }
 
@@ -3051,9 +3142,10 @@ void Check::ModernTaa()
 // in the pixels at the edges between them, where a normal taken across the
 // edge would mix the two, and D stays as drawn. The normals buffer is wanted
 // for ambient occlusion (our lit shaders, KISAK_VK_MODERN_AO=1 or its debug
-// view; not with KISAK_VK_MODERN_AO=0), that view or
-// KISAK_VK_MODERN_NORMALS=1 (and for screen-space reflections), never with
-// KISAK_VK_MODERN_NORMALS=0.
+// view; not with KISAK_VK_MODERN_AO=0), for screen-space reflections (our
+// lit shaders, KISAK_VK_MODERN_SSR=1 or their debug view; not with
+// KISAK_VK_MODERN_SSR=0),
+// that view or KISAK_VK_MODERN_NORMALS=1, never with KISAK_VK_MODERN_NORMALS=0.
 void Check::ModernNormals()
 {
     const auto envIs = [](const char *name, const char *value) {
@@ -3072,12 +3164,14 @@ void Check::ModernNormals()
     const bool debugView = envIs("KISAK_VK_MODERN_DEBUG", "normals");
     const bool wanted = !envIs("KISAK_VK_MODERN_NORMALS", "0")
         && (debugView || envIs("KISAK_VK_MODERN_NORMALS", "1")
+            || (!envIs("KISAK_VK_MODERN_SSR", "0")
+                && (envIs("KISAK_VK_MODERN_SSR", "1")
+                    || (!envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
+                        && !envIs("KISAK_VK_MODERN_SHADERS", "0"))))
             || (!envIs("KISAK_VK_MODERN_AO", "0")
                 && (envIs("KISAK_VK_MODERN_AO", "1") || envIs("KISAK_VK_MODERN_DEBUG", "ao")
                     || (!envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
-                        && !envIs("KISAK_VK_MODERN_SHADERS", "0"))))
-            || (!envIs("KISAK_VK_MODERN_SSR", "0")
-                && (envIs("KISAK_VK_MODERN_SSR", "1") || envIs("KISAK_VK_MODERN_DEBUG", "reflections"))));
+                        && !envIs("KISAK_VK_MODERN_SHADERS", "0")))));
     const bool shown = wanted && debugView;
     Equal("wants_scene_depth", front::ModernWantsSceneDepth(device), wanted);
 
@@ -3218,7 +3312,10 @@ void Check::ModernAo()
     // The scene's depth is taken whenever the normals buffer is wanted.
     const bool depthTaken = built || (!envIs("KISAK_VK_MODERN_NORMALS", "0")
                                       && (envIs("KISAK_VK_MODERN_NORMALS", "1")
-                                          || envIs("KISAK_VK_MODERN_DEBUG", "normals")));
+                                          || envIs("KISAK_VK_MODERN_DEBUG", "normals")
+                                          || (!envIs("KISAK_VK_MODERN_SSR", "0")
+                                              && (ours || envIs("KISAK_VK_MODERN_SSR", "1")
+                                                  || envIs("KISAK_VK_MODERN_DEBUG", "reflections")))));
     const bool shown = built && envIs("KISAK_VK_MODERN_DEBUG", "ao");
     IDirect3DSurface9 *depth = nullptr;
     if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
@@ -3323,14 +3420,24 @@ void Check::ModernAo()
             // few levels under white; the anti-aliasing averages it.
             Equal("open_floor_unoccluded", open >= 230, true);
             Equal("wall_top_unoccluded", wall >= 230, true);
-            Equal("corner_darker", corner + 25 <= open, true);
-            Equal("corner_not_black", corner >= 64, true);
-            Equal("wall_foot_darker", foot + 25 <= wall, true);
-            Equal("wall_foot_not_black", foot >= 64, true);
-            if (envIs("KISAK_VK_MODERN_AO_THICKNESS", "1000"))
-                Equal("floor_behind_plate_dark_as_behind_a_block", beside <= 120, true);
+            if (envIs("KISAK_VK_MODERN_AO_FLOOR", "0.6"))
+            {
+                // Nothing goes under the floor (0.6 of 255, less a level).
+                Equal("corner_at_or_over_floor", corner >= 152, true);
+                Equal("wall_foot_at_or_over_floor", foot >= 152, true);
+                Equal("floor_behind_plate_at_or_over_floor", beside >= 152, true);
+            }
             else
-                Equal("floor_behind_plate_light", beside >= 150, true);
+            {
+                Equal("corner_darker", corner + 25 <= open, true);
+                Equal("corner_not_black", corner >= 64, true);
+                Equal("wall_foot_darker", foot + 25 <= wall, true);
+                Equal("wall_foot_not_black", foot >= 64, true);
+                if (envIs("KISAK_VK_MODERN_AO_THICKNESS", "1000"))
+                    Equal("floor_behind_plate_dark_as_behind_a_block", beside <= 120, true);
+                else
+                    Equal("floor_behind_plate_light", beside >= 150, true);
+            }
             Expect("sky_white", 20, 10, 255, 255, 255);
             char line[160];
             std::snprintf(line, sizeof(line), " ao_open=%d ao_corner=%d ao_foot=%d ao_wall=%d ao_beside_plate=%d",
@@ -3387,8 +3494,14 @@ void Check::ModernAo()
 // nothing (black); the wall itself mirrors back towards the camera, which
 // the screen cannot show (black). Without the view (or with linear light
 // off, where nothing is traced) the scene comes back as drawn. Reflections
-// are traced with KISAK_VK_MODERN_SSR=1 or their debug view, never with
-// KISAK_VK_MODERN_SSR=0 or KISAK_VK_MODERN_NORMALS=0.
+// are traced for our lit shaders (linear light, lit inputs and our shaders
+// on), with KISAK_VK_MODERN_SSR=1 or their debug view, never with
+// KISAK_VK_MODERN_SSR=0 or KISAK_VK_MODERN_NORMALS=0. Without the debug view
+// the scene is then drawn three times more with the floor as lm_sun_r0c0s0,
+// all black but a mirror-like specular: in the second, our shader shows the
+// wall's red where the reflections found it and black elsewhere (black
+// everywhere with no reflections, and the stand-in's black without ours); in
+// the third the specular map has gloss 0, and the floor keeps its black probe.
 void Check::ModernReflections()
 {
     const auto envIs = [](const char *name, const char *value) {
@@ -3404,19 +3517,22 @@ void Check::ModernReflections()
 #endif
     };
     const bool normalsOff = envIs("KISAK_VK_MODERN_NORMALS", "0");
+    // Our lit shaders draw (and read the reflections).
+    const bool ours = !envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
+                      && !envIs("KISAK_VK_MODERN_SHADERS", "0");
     const bool wanted = !envIs("KISAK_VK_MODERN_SSR", "0") && !normalsOff
-                        && (envIs("KISAK_VK_MODERN_SSR", "1") || envIs("KISAK_VK_MODERN_DEBUG", "reflections"));
-    // The scene's depth is taken whenever the normals buffer is wanted: for
-    // the reflections, its own debug view or KISAK_VK_MODERN_NORMALS=1, or
-    // for ambient occlusion (our lit shaders read it; this scene's surfaces
-    // are not drawn with them, so it changes nothing here).
-    const bool aoWanted = !envIs("KISAK_VK_MODERN_AO", "0")
-                          && (envIs("KISAK_VK_MODERN_AO", "1") || envIs("KISAK_VK_MODERN_DEBUG", "ao")
-                              || (!envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
-                                  && !envIs("KISAK_VK_MODERN_SHADERS", "0")));
-    const bool depthTaken = wanted
-                            || (!normalsOff && (envIs("KISAK_VK_MODERN_NORMALS", "1")
-                                                || envIs("KISAK_VK_MODERN_DEBUG", "normals") || aoWanted));
+                        && (ours || envIs("KISAK_VK_MODERN_SSR", "1")
+                            || envIs("KISAK_VK_MODERN_DEBUG", "reflections"));
+    // The scene's depth is taken whenever the normals buffer is wanted: also
+    // for ambient occlusion (on with our lit shaders).
+    const bool aoBuilt = !envIs("KISAK_VK_MODERN_AO", "0")
+                         && (envIs("KISAK_VK_MODERN_AO", "1") || envIs("KISAK_VK_MODERN_DEBUG", "ao")
+                             || (!envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
+                                 && !envIs("KISAK_VK_MODERN_SHADERS", "0")));
+    const bool depthTaken =
+        wanted
+        || (!normalsOff
+            && (aoBuilt || envIs("KISAK_VK_MODERN_NORMALS", "1") || envIs("KISAK_VK_MODERN_DEBUG", "normals")));
     const bool traced = wanted && !envIs("KISAK_VK_MODERN_LINEAR", "0");
     const bool shown = traced && envIs("KISAK_VK_MODERN_DEBUG", "reflections");
     Equal("wants_scene_depth", front::ModernWantsSceneDepth(device), depthTaken);
@@ -3460,7 +3576,62 @@ void Check::ModernReflections()
     pixelOf(100, -120, 200, mirrorX, mirrorY);
     pixelOf(-100, -120, 200, openX, openY);
     pixelOf(150, 150, 300, wallX, wallY);
-    const auto scene = [&](const char *name, bool cut) {
+    // For the scenes whose floor our lit shader draws: lm_sun_r0c0s0 with a
+    // black colour map, lightmaps, probe and sun, and a white specular map of
+    // gloss 1 with Fresnel 1, seen from straight above, so all it shows is
+    // what the reflections found, at their sharpest level.
+    IDirect3DTexture9 *black = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 0, 0, 0); });
+    IDirect3DTexture9 *blackLight = FilledTexture(1, 2, [](UINT, UINT) { return Argb(130, 0, 0, 0); });
+    IDirect3DTexture9 *glossy = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
+    // The same specular colour at gloss 0, a matte surface: it keeps its probe.
+    IDirect3DTexture9 *matte = FilledTexture(1, 1, [](UINT, UINT) { return Argb(0, 255, 255, 255); });
+    IDirect3DCubeTexture9 *probe = nullptr;
+    if (Ok(device->CreateCubeTexture(1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &probe, nullptr),
+           "CreateCubeTexture(probe)"))
+    {
+        for (UINT face = 0; face < 6; ++face)
+        {
+            D3DLOCKED_RECT rect{};
+            if (Ok(probe->LockRect(static_cast<D3DCUBEMAP_FACES>(face), 0, &rect, nullptr, 0), "LockRect(probe)"))
+            {
+                *static_cast<uint32_t *>(rect.pBits) = Argb(255, 0, 0, 0);
+                probe->UnlockRect(static_cast<D3DCUBEMAP_FACES>(face), 0);
+            }
+        }
+    }
+    const bool litMade = black && blackLight && glossy && matte && probe;
+    const auto drawLitFloor = [&](IDirect3DTexture9 *specular) {
+        device->SetVertexShader(vsLmSunMaps);
+        device->SetPixelShader(psLmSunMapsStandIn);
+        device->SetTexture(0, black);
+        device->SetTexture(1, probe);
+        device->SetTexture(2, black);
+        device->SetTexture(3, blackLight);
+        device->SetTexture(4, specular);
+        // c0 fog colour, c1 the stand-in's black, c5 envMapParms (Fresnel 1,
+        // no sun highlight), c17 the sun overhead, c18 and c19 its colours: 0.
+        float pixel[20][4] = {};
+        pixel[5][0] = pixel[5][1] = 1.0f;
+        pixel[17][2] = 1.0f;
+        Ok(device->SetPixelShaderConstantF(0, &pixel[0][0], 20), "SetPixelShaderConstantF(lit floor)");
+        // Positions as given; UVs; the normal up and no fog; binormal,
+        // tangent, shadow-map coordinate (unread); looking straight down.
+        const float vertex[7][4] = {{0, 0, 0, 0}, {0.5f, 0.5f, 0.5f, 0.5f}, {0, 0, 1, 1}, {0, 1, 0, 0},
+                                    {1, 0, 0, 0}, {0.5f, 0.5f, 0.25f, 0.5f}, {0, 0, -1, 0}};
+        Ok(device->SetVertexShaderConstantF(0, &vertex[0][0], 7), "SetVertexShaderConstantF(lit floor)");
+        front::ModernLitInputs inputs;
+        inputs.overWhite = true;
+        inputs.shader = 0x44; // lm_sun_r0c0s0
+        front::SetModernLitInputs(device, &inputs);
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(lit floor)");
+        front::SetModernLitInputs(device, nullptr);
+        for (DWORD sampler : {0u, 1u, 2u, 3u, 4u})
+            device->SetTexture(sampler, nullptr);
+        device->SetVertexShader(vsBasic);
+        device->SetPixelShader(psColor);
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, surfaces + 6, sizeof(Vertex)), "DrawPrimitiveUP(wall)");
+    };
+    const auto scene = [&](const char *name, bool cut, IDirect3DTexture9 *litFloor = nullptr) {
         Reset(Argb(255, 0, 0, 0));
         front::ModernSceneBegin(device);
         device->SetDepthStencilSurface(depth);
@@ -3475,7 +3646,10 @@ void Check::ModernReflections()
         Equal((std::string(name) + "_scene_depth").c_str(), static_cast<int>(front::ModernSceneDepth(device, view)),
               static_cast<int>(depthTaken ? front::ModernResult::Done : front::ModernResult::Skipped));
         device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(lit)");
+        if (litFloor)
+            drawLitFloor(litFloor);
+        else
+            Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(lit)");
         Equal((std::string(name) + "_scene_done").c_str(),
               front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
     };
@@ -3506,6 +3680,62 @@ void Check::ModernReflections()
         else
             expectDrawn("second");
     }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+
+    // Our lit shader on the floor (docs/vulkan-modern.md "Screen-space
+    // reflections"): where the reflections found the wall, the specular
+    // shows it in place of the black probe; elsewhere, and with no
+    // reflections, it is black. With the debug view on, that is drawn over.
+    if (litMade && !shown)
+    {
+        scene("lit_first", true, glossy);
+        if (Read())
+        {
+            Expect("lit_first_mirror_floor", mirrorX, mirrorY, 0, 0, 0);
+            Expect("lit_first_wall", wallX, wallY, 200, 40, 40);
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        scene("lit_second", false, glossy);
+        if (Read())
+        {
+            const uint8_t *mirror = &pixels[(mirrorY * readSize + mirrorX) * 4];
+            const int red = mirror[2], green = mirror[1], blue = mirror[0]; // B, G, R, A
+            if (ours && traced)
+            {
+                Equal("lit_mirror_floor_shows_wall_red", red >= 60 && red >= green + 40 && red >= blue + 40, true);
+                Expect("lit_open_floor_black", openX, openY, 0, 0, 0);
+            }
+            else
+            {
+                Expect("lit_mirror_floor_black", mirrorX, mirrorY, 0, 0, 0);
+            }
+            Expect("lit_second_wall", wallX, wallY, 200, 40, 40);
+            char line[80];
+            std::snprintf(line, sizeof(line), " lit_mirror=%d,%d,%d", red, green, blue);
+            result->detail += line;
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        // A matte floor keeps its (black) probe though the reflections found
+        // the wall: they fade out below gloss 0.5, gone at 0.3. Near black:
+        // the anti-aliasing keeps a trace of the last scene's red.
+        scene("lit_matte", false, matte);
+        if (Read())
+        {
+            const uint8_t *mirror = &pixels[(mirrorY * readSize + mirrorX) * 4];
+            const int red = mirror[2], green = mirror[1], blue = mirror[0]; // B, G, R, A
+            Equal("lit_matte_mirror_floor_near_black", red <= 16 && green <= 16 && blue <= 16, true);
+            Expect("lit_matte_wall", wallX, wallY, 200, 40, 40);
+            char line[80];
+            std::snprintf(line, sizeof(line), " lit_matte=%d,%d,%d", red, green, blue);
+            result->detail += line;
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    }
+    SafeRelease(probe);
+    SafeRelease(matte);
+    SafeRelease(glossy);
+    SafeRelease(blackLight);
+    SafeRelease(black);
     device->SetDepthStencilSurface(nullptr);
     SafeRelease(depth);
 }
@@ -3523,7 +3753,10 @@ void Check::ModernReflections()
 // ModernSkinnedSurfaceMoved): a dynamic buffer written again with DISCARD each
 // frame, the same matrix both frames, and a draw that starts at a base vertex
 // and a minimum index. The stripes stay as drawn only if the velocity comes
-// from last frame's vertices, which the Modern path kept. With
+// from last frame's vertices, which the Modern path kept. A fourth draws it
+// as a brush model: 44-byte vertices far from the origin, placed by the
+// world shaders' two matrices but reported with their product, and indices
+// in a dynamic buffer overwritten before the scene ends. With
 // KISAK_VK_MODERN_DEBUG=velocity the velocity debug view is drawn over the
 // reported runs instead: the band's pixels come back cyan at half brightness
 // (2 pixels a frame, from the left), and everything else as without it.
@@ -3545,15 +3778,36 @@ void Check::ModernVelocity()
         uint32_t pad[2];
     };
     static_assert(sizeof(Vertex32) == 32, "the engine's vertices are 32 bytes");
+    // Brush models' (GfxWorldVertex).
+    struct Vertex44
+    {
+        Vertex v;
+        uint32_t pad[5];
+    };
+    static_assert(sizeof(Vertex44) == 44, "the world's vertices are 44 bytes");
     constexpr int kStripes = 32;
     IDirect3DSurface9 *depth = nullptr;
     IDirect3DVertexBuffer9 *vb = nullptr;
     IDirect3DIndexBuffer9 *ib = nullptr;
     IDirect3DVertexBuffer9 *skinnedVb = nullptr;
     IDirect3DIndexBuffer9 *skinnedIb = nullptr;
+    // The brush band: 44-byte vertices, and indices written into a dynamic
+    // buffer for each draw, as R_SetIndexData does.
+    IDirect3DVertexBuffer9 *brushVb = nullptr;
+    IDirect3DIndexBuffer9 *brushIb = nullptr;
+    IDirect3DQuery9 *event = nullptr;
     // The skinned band: 4 vertices before it, drawn with base vertex 2 and
     // indices from 2.
     constexpr int kSkinnedLead = 4, kSkinnedBase = 2;
+    // The brush band's vertices are in world units, far from the origin, and
+    // drawn as the engine's world shaders draw them (shaders::kVsWorld): the
+    // eye-relative world matrix takes the eye's position off, then the
+    // view-projection scales them to clip space. The surface is reported with
+    // the two matrices multiplied (R_GetCodeMatrix's world-view-projection),
+    // whose depth rounds differently: the velocity pass must still match it.
+    static constexpr float kBrushScale = 3.0f;
+    static constexpr float kBrushFar[3] = {2417.3f, -1531.9f, 3071.2f};
+    IDirect3DVertexShader9 *vsWorld = nullptr;
     if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
                                               nullptr),
             "CreateDepthStencilSurface")
@@ -3569,12 +3823,25 @@ void Check::ModernVelocity()
                "CreateVertexBuffer")
         || !Ok(device->CreateIndexBuffer(kStripes * 6 * sizeof(uint16_t), D3DUSAGE_WRITEONLY, D3DFMT_INDEX16,
                                          D3DPOOL_DEFAULT, &ib, nullptr),
-               "CreateIndexBuffer"))
+               "CreateIndexBuffer")
+        || !Ok(device->CreateVertexBuffer(kStripes * 4 * sizeof(Vertex44), D3DUSAGE_WRITEONLY, 0, D3DPOOL_DEFAULT,
+                                          &brushVb, nullptr),
+               "CreateVertexBuffer(brush)")
+        || !Ok(device->CreateIndexBuffer(kStripes * 6 * sizeof(uint16_t), D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY,
+                                         D3DFMT_INDEX16, D3DPOOL_DEFAULT, &brushIb, nullptr),
+               "CreateIndexBuffer(brush)")
+        || !Ok(device->CreateQuery(D3DQUERYTYPE_EVENT, &event), "CreateQuery(event)")
+        || !Ok(device->CreateVertexShader(reinterpret_cast<const DWORD *>(shaders::kVsWorld), &vsWorld),
+               "CreateVertexShader(world)"))
     {
         SafeRelease(depth);
         SafeRelease(vb);
+        SafeRelease(ib);
         SafeRelease(skinnedVb);
         SafeRelease(skinnedIb);
+        SafeRelease(brushVb);
+        SafeRelease(brushIb);
+        SafeRelease(event);
         return;
     }
     // The band at rest covers pixels 8..71 by 32..95; stripe k is white when k is even.
@@ -3591,6 +3858,25 @@ void Check::ModernVelocity()
                 out[k * 4 + c] = Vertex32{corners[c], {0, 0}};
         }
         vb->Unlock();
+    }
+    if (Ok(brushVb->Lock(0, 0, &data, 0), "Lock(brush vertex buffer)"))
+    {
+        Vertex44 *out = static_cast<Vertex44 *>(data);
+        for (int k = 0; k < kStripes; ++k)
+        {
+            Vertex corners[4];
+            const uint32_t color = k % 2 ? Argb(255, 0, 0, 0) : Argb(255, 255, 255, 255);
+            QuadCorners(corners, 8.0f + 2.0f * k, 32.0f, 10.0f + 2.0f * k, 96.0f, 0.5f, color);
+            for (int c = 0; c < 4; ++c)
+            {
+                // In the world's units, far from its origin, as a map's are.
+                corners[c].x = corners[c].x * kBrushScale + kBrushFar[0];
+                corners[c].y = corners[c].y * kBrushScale + kBrushFar[1];
+                corners[c].z = corners[c].z * kBrushScale + kBrushFar[2];
+                out[k * 4 + c] = Vertex44{corners[c], {0, 0, 0, 0, 0}};
+            }
+        }
+        brushVb->Unlock();
     }
     if (Ok(ib->Lock(0, 0, &data, 0), "Lock(index buffer)"))
     {
@@ -3629,6 +3915,28 @@ void Check::ModernVelocity()
             out[i][i] = 1.0f;
         out[3][0] = 2.0f * (2.0f * f) / kSize;
     };
+    // The brush band's in frame f, as R_GetCodeMatrix makes it: the world
+    // matrix (identity, less kBrushFar) times the view-projection (a scale
+    // by 1 / kBrushScale, and the band's move).
+    const auto brushClip = [](int f, float out[4][4]) {
+        float world[4][4] = {}, viewProjection[4][4] = {};
+        for (int i = 0; i < 4; ++i)
+            world[i][i] = viewProjection[i][i] = 1.0f;
+        for (int i = 0; i < 3; ++i)
+        {
+            world[3][i] = -kBrushFar[i];
+            viewProjection[i][i] = 1.0f / kBrushScale;
+        }
+        viewProjection[3][0] = 2.0f * (2.0f * f) / kSize;
+        for (int r = 0; r < 4; ++r)
+            for (int c = 0; c < 4; ++c)
+            {
+                float sum = 0.0f;
+                for (int k = 0; k < 4; ++k)
+                    sum += world[r][k] * viewProjection[k][c];
+                out[r][c] = sum;
+            }
+    };
     // The skinned band's vertices in frame f: moved 2 f pixels right.
     const auto writeSkinned = [&](int f) {
         void *mapped = nullptr;
@@ -3649,11 +3957,42 @@ void Check::ModernVelocity()
         }
         skinnedVb->Unlock();
     };
+    // The brush band's indices for this draw, as R_SetIndexData writes them;
+    // zero writes all zeros (no triangles).
+    const auto writeBrushIndices = [&](bool zero) {
+        void *mapped = nullptr;
+        if (!Ok(brushIb->Lock(0, 0, &mapped, D3DLOCK_DISCARD), "Lock(brush indices, DISCARD)"))
+            return;
+        uint16_t *out = static_cast<uint16_t *>(mapped);
+        for (int k = 0; k < kStripes; ++k)
+        {
+            const uint16_t base = static_cast<uint16_t>(k * 4);
+            const uint16_t quad[6] = {base, uint16_t(base + 1), uint16_t(base + 2), base, uint16_t(base + 2),
+                                      uint16_t(base + 3)};
+            if (zero)
+                std::memset(out + k * 6, 0, sizeof(quad));
+            else
+                std::memcpy(out + k * 6, quad, sizeof(quad));
+        }
+        brushIb->Unlock();
+    };
+    // Hands what is recorded to the GPU and waits for it, as the GPU feed
+    // and the swap fence's flush do in the middle of a frame.
+    const auto finishGpu = [&]() {
+        Ok(event->Issue(D3DISSUE_END), "Issue(event)");
+        BOOL done = FALSE;
+        HRESULT hr = S_FALSE;
+        for (int polls = 0; (hr = event->GetData(&done, sizeof(done), D3DGETDATA_FLUSH)) == S_FALSE && polls < 5000;
+             ++polls)
+            SDL_Delay(1);
+        Equal("brush_gpu_finished", hr == S_OK && done == TRUE, true);
+    };
     enum class Report
     {
         None,
         Rigid,
         Skinned,
+        Brush,
     };
     const auto frame = [&](int f, Report report) {
         Reset(Argb(255, 0, 0, 255));
@@ -3675,6 +4014,36 @@ void Check::ModernVelocity()
                                             kStripes * 4, 0, kStripes * 2),
                "DrawIndexedPrimitive(skinned)");
             front::ModernSkinnedSurfaceMoved(device, 1, clip, f == 0 ? nullptr : prevClip);
+        }
+        else if (report == Report::Brush)
+        {
+            brushClip(f, clip);
+            brushClip(f - 1, prevClip);
+            // c0-c3: the view-projection's columns; c4-c7: the world matrix's.
+            float columns[8][4] = {};
+            const float move = 2.0f * (2.0f * f) / kSize;
+            for (int i = 0; i < 3; ++i)
+            {
+                columns[i][i] = 1.0f / kBrushScale;
+                columns[4 + i][i] = 1.0f;
+                columns[4 + i][3] = -kBrushFar[i];
+            }
+            columns[0][3] = move;
+            columns[3][3] = columns[7][3] = 1.0f;
+            device->SetVertexShaderConstantF(0, &columns[0][0], 8);
+            device->SetVertexShader(vsWorld);
+            writeBrushIndices(false);
+            Ok(device->SetStreamSource(0, brushVb, 0, sizeof(Vertex44)), "SetStreamSource(brush)");
+            Ok(device->SetIndices(brushIb), "SetIndices(brush)");
+            Ok(device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, kStripes * 4, 0, kStripes * 2),
+               "DrawIndexedPrimitive(brush)");
+            device->SetVertexShader(vsBasic);
+            front::ModernSurfaceMoved(device, clip, prevClip);
+            // The GPU finishes the draw before the scene ends, and the
+            // indices are written again (the dynamic buffer wrapped): the
+            // velocity pass must still draw the band from this draw's.
+            finishGpu();
+            writeBrushIndices(true);
         }
         else
         {
@@ -3720,9 +4089,11 @@ void Check::ModernVelocity()
     }
     present();
 
-    for (const Report report : {Report::Rigid, Report::Skinned})
+    for (const Report report : {Report::Rigid, Report::Skinned, Report::Brush})
     {
-        const std::string name = report == Report::Rigid ? "velocity" : "skinned";
+        const std::string name = report == Report::Rigid     ? "velocity"
+                                 : report == Report::Skinned ? "skinned"
+                                                             : "brush";
         Equal((name + "_resolved").c_str(), run(report), true);
         if (Read())
         {
@@ -3756,6 +4127,10 @@ void Check::ModernVelocity()
     SafeRelease(vb);
     SafeRelease(skinnedIb);
     SafeRelease(skinnedVb);
+    SafeRelease(brushIb);
+    SafeRelease(brushVb);
+    SafeRelease(event);
+    SafeRelease(vsWorld);
     SafeRelease(depth);
 }
 
@@ -5469,11 +5844,11 @@ void Check::ModernTonemap()
 }
 
 // Auto exposure (vk_modern.h MeasureExposure), with the default key 0.115 and
-// range -1 to +1 EV: four scenes, each one grey all over. A cut takes the
+// range -1 to +1.5 EV: four scenes, each one grey all over. A cut takes the
 // exposure at once: grey 100 (0.127 of light) is brought to the key exactly
 // (0.115, shown 95); white (1) wants -3.1 EV and gets -1 (0.5, 188); grey 40
-// (0.021) wants +2.4 and gets +1. Then grey 40 without a cut after grey
-// 100 moves only part of the way from grey 100's exposure towards +1 (at
+// (0.021) wants +2.4 and gets +1.5. Then grey 40 without a cut after grey
+// 100 moves only part of the way from grey 100's exposure towards +1.5 (at
 // most a second's worth of the 2.5 s time constant). With
 // KISAK_VK_MODERN_EXPOSURE=0, or without linear light, every grey is shown
 // through the curve alone.
@@ -5508,21 +5883,13 @@ void Check::ModernExposure()
     };
     const double key = 0.115;
     const auto exposed = [&](int grey, double ev) { return shown(decode(grey) * (on ? std::exp2(ev) : 1.0)); };
-    const auto target = [&](int grey) { return std::clamp(std::log2(key / decode(grey)), -1.0, 1.0); };
+    const auto target = [&](int grey) { return std::clamp(std::log2(key / decode(grey)), -1.0, 1.5); };
 
     scene(100, true);
-    // r_vkStats can come at any point of a frame. The first scene's exposure
-    // is copied for the statistics and not submitted yet; logging them inside
-    // a pass leaves that reading for later rather than wait for it (waiting
-    // there failed the device, PC run 23).
-    DrawQuad(0, 0, 8, 8, 0.5f, Argb(255, 0, 0, 255));
-    front::LogDeviceStats(false);
-    DrawQuad(8, 0, 16, 8, 0.5f, Argb(255, 0, 255, 0));
     if (Read())
     {
         const int v = exposed(100, target(100));
         Expect("grey100_to_key", 64, 64, v, v, v);
-        Expect("stats_in_pass", 12, 4, 0, 255, 0);
     }
     Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
     scene(255, true);
@@ -5836,6 +6203,7 @@ int Run(const Options &options)
         {"modern_normals", &Check::ModernNormals, true},
         {"modern_ao", &Check::ModernAo, true},
         {"modern_reflections", &Check::ModernReflections, true},
+        {"modern_probes", &Check::ModernProbes, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},

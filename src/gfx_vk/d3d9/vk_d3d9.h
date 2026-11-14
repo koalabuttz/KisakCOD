@@ -276,4 +276,12 @@ struct ModernLitInputs
     uint16_t shader = 0;
 };
 void SetModernLitInputs(IDirect3DDevice9 *device, const ModernLitInputs *inputs);
+// One of the game's reflection probes, a cube texture of this device, as the
+// world loads: with linear light (unless KISAK_VK_MODERN_PROBES=0) the
+// Modern path makes its levels below the first again from level 0, blurred
+// by the gloss that picks each level, in linear light (docs/vulkan-modern.md
+// "Reflection probes"). True when it did; false when it is not wanted, the
+// texture is not an 8-bit colour cube with levels, or on a back end without
+// a Modern path. Filtering a probe again gives the same levels.
+bool ModernReflectionProbe(IDirect3DDevice9 *device, IDirect3DCubeTexture9 *probe);
 } // namespace gfx_vk::d3d9

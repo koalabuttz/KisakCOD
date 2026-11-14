@@ -111,7 +111,8 @@ the zone arena by zone.
 A start in an emulator, or on a console with nobody at the buttons, should
 end by itself as soon as it has its numbers. These dvars go in the command
 line file (`cmdline.txt`, `cmdline-mp.txt` for the client). The logic is
-`src/vita/vita_run_plan.h`, checked on the host by
+`src/vita/vita_run_plan.h` (the shared `src/qcommon/run_plan.h` under the
+Vita's names; the other clients use it as `run_*`, docs/runs.md), checked on the host by
 `scripts/tests/test_vita_run_plan.py`.
 
 The Vita's C library does not know the `%zu`, `%jd` and `%td` printf

@@ -41,6 +41,7 @@ on:
       # The test machines' run scripts and their tests: run-scripts.yaml.
       - '!scripts/runs/**'
       - '!scripts/tests/test_perf_run.py'
+      - '!scripts/tests/test_pc_run.py'
       - '!scripts/tests/test_vita3k_runner.py'
       - deps/**
       - tests/linux_net/**
@@ -85,6 +86,7 @@ on:
       # The test machines' run scripts and their tests: run-scripts.yaml.
       - '!scripts/runs/**'
       - '!scripts/tests/test_perf_run.py'
+      - '!scripts/tests/test_pc_run.py'
       - '!scripts/tests/test_vita3k_runner.py'
       - deps/**
       - tests/linux_net/**
@@ -231,6 +233,8 @@ jobs:
           COMMANDS
       - name: Upload window check log
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: KisakCOD-window-sdl${{ matrix.sdl }}
@@ -352,9 +356,11 @@ jobs:
           python3 scripts/tests/test_summarize_alignment_report.py
           python3 scripts/tests/test_frame_log.py
           python3 scripts/tests/test_perf_run.py
+          python3 scripts/tests/test_pc_run.py
           python3 scripts/tests/test_menu_check.py
           python3 scripts/tests/test_vita3k_runner.py
           python3 scripts/tests/test_changed_units.py
+          python3 scripts/tests/test_openal_msvc_ranges.py
           python3 scripts/tests/test_float_int_rounding.py
           python3 scripts/tests/test_retail_float_int_scan.py
           python3 scripts/tests/test_openal_sound_formats.py
@@ -391,6 +397,8 @@ jobs:
 
       - name: Upload executable and check logs
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: KisakCOD-linux-${{ matrix.config }}
@@ -484,6 +492,8 @@ jobs:
 
       - name: Upload client census logs
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           # Compiler diagnostics for failing sources only; no binaries.
@@ -541,6 +551,8 @@ jobs:
 
       - name: Upload singleplayer census logs
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           # Compiler diagnostics for failing sources only; no binaries.
@@ -613,6 +625,8 @@ jobs:
 
       - name: Upload x64 census report
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           # Report and compiler diagnostics for failing units only; no binaries.
@@ -1624,6 +1638,8 @@ jobs:
 
       - name: Upload world front-end logs
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           # Compiler, link and test output only; the runner builds in a
@@ -1705,6 +1721,8 @@ jobs:
 
       - name: Upload world surface check logs
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           # Text logs only: the compiled test binaries live in a temporary
@@ -1894,6 +1912,8 @@ jobs:
 
       - name: Upload native D3D9 boundary logs
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           # Text logs only: the runner's binaries live in a temporary directory it
@@ -2361,6 +2381,8 @@ jobs:
 
       - name: Upload device probe logs
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           # Text logs only; no binary and no build directory is uploaded.
@@ -2450,6 +2472,8 @@ jobs:
 
       - name: Upload free camera check logs
         if: always()
+        # A hosted artifact outage must not fail a run whose checks passed.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           # Text logs only; the runner removes its temporary binaries.
