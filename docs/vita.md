@@ -198,6 +198,55 @@ name, and what these two hold is run as console commands, so a value that
 arrives later, from a server or from the console, sends nothing. The same
 goes for the client's `vita_keyboardAnswer`.
 
+### A list of starts
+
+A console run compares several starts of one build, each with its own
+command line and its own marker files in the program folder. Done by hand
+every start costs a person an FTP round trip. With a list on the card one
+tap on the bubble runs them all: `ux0:data/KisakCOD/runlist-mp.txt` for the
+client (`runlist.txt` for the server), one start a line:
+
+    # name | markers, or - for none | command line
+    W1 | - | +devmap mp_crash +set vita_quitAfterMap 185 +set vita_atMap "@run-w.txt"
+    W2 | no-frame-overlap | +devmap mp_crash +set vita_quitAfterMap 185 +set vita_atMap "@run-w.txt"
+    W3 | no-vsync | +devmap mp_crash +set vita_quitAfterMap 185 +set vita_atMap "@run-w.txt"
+
+At start-up the program takes the next line and, before anything else:
+
+- writes the number of the start after it to `runlist-mp.at`, so a start
+  that faults is not run again by the next tap; with the last start the list
+  is renamed `runlist-mp.done.txt` and the next tap is an ordinary start;
+- leaves the program folder (`gxp`) with this start's markers and no other:
+  every empty file there without a dot in its name is removed, then the
+  line's markers are made;
+- writes its log to `console-mp-<name>.log` (the server: `console-<name>.log`);
+- takes the line's command line. An empty one means the command line file,
+  as in an ordinary start.
+
+When the start ends, by its quit timer or by an error that exits
+(`vita_assertExit 1`), the program starts itself again for the next line
+(`Vita: run list: starting again for start 2 of 3` is the log's last line).
+After the restart call the program waits up to 3 seconds to be taken away
+before it ends: Vita3K carries the restart out only when the program does
+not end itself straight after asking (PC run Z25).
+START + SELECT ends the start and the chain: the next line waits for the
+next tap. A fault ends the chain too. So give every line a quit timer and
+`vita_quitAfter` as the safety net.
+
+A start after which the list goes no further (its last start, or one ended
+by hand) removes every marker as it ends, so a list leaves the program
+folder without markers and the next ordinary start is the plain build
+(`Vita: run list: that was its last start; 1 markers removed`). Markers
+that were there before the list are gone with it: make them again by hand.
+A last start that faults cannot do this and leaves its markers.
+
+The log's second line says which start it is and what was done to the
+markers. A name is letters, digits, `.`, `_` and `-`; a marker lower-case
+letters, digits and `-`; up to 32 starts and 8 markers a start. A list with
+a line that cannot be read is left alone, the reason is logged and the start
+is an ordinary one. The reading is `src/vita/vita_run_list.h`, checked on
+the host by `scripts/tests/test_vita_run_list.py`.
+
 ## Testing in Vita3K
 
 Vita3K boots the `.vpk` far enough to check start-up, files, threads and,
