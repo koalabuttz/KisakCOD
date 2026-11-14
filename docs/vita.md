@@ -128,6 +128,7 @@ types. Cast and use `%u` or `%llu`; the same test reads `src/vita` and
 | `vita_statsEvery <s>` | The period of the load, memory, GPU memory and sound lines (60 by default). The lines also come the moment the menu or the map is up, and the period counts from there. |
 | `vita_atMenu "<s> <command> \| <s> <command>"` | Console commands to send that many seconds after the menu first showed. Read at start-up only. |
 | `vita_atMap "..."` | The same after the map was first in play. `{serverid}` in a command stands for the server id. Read at start-up only. |
+| `vita_atMenu "@<file>"`, `vita_atMap "@<file>"` | The same steps from a file in the data folder (`ux0:data/KisakCOD/<file>`), one `<s> <command>` a line, up to 32; blank lines and lines starting with `#` are left out, and a line may not hold a `\|`. The name is letters, digits, `.`, `_` and `-` only. The log says `Vita: vita_atMap from ux0:data/KisakCOD/<file>: N steps`. Read at start-up only. |
 | `vita_assertExit 1` | A failed assertion or an exception nothing caught ends the process with exit code 1 where it would stop for a core dump. Vita3K hangs on that stop and loses the log's tail. Off by default: a console's dump is worth keeping. |
 
 Every quit timer first prints all figures (`Vita: vita_quitAfterMenu 15
@@ -143,7 +144,8 @@ happened: `Vita: the menu is up`, `Vita: the map is up`, and with the map
 server named. After start-up it says what the start was asked to do, since it
 does not hold the command line (`Vita: run switches: vita_quitAfter 600,
 vita_quitAfterMenu 0, vita_quitAfterMap 30, vita_statsEvery 10,
-vita_assertExit 1`, then `Vita: vita_atMap "..."` when one is set).
+vita_assertExit 1`, then `Vita: vita_atMap "..."` when one is set, or the
+step file's name and step count).
 
 An exception nothing caught (a `std::bad_alloc` when the heap is spent) logs
 `Vita: ERROR: uncaught exception (std::bad_alloc); the process ends` and the
@@ -178,11 +180,92 @@ engine's note of the largest snapshot so far. A timed-command list that cannot b
 vita_atMap: part 2 ... does not start with a time in seconds`) and none of
 its commands is sent.
 
+A sweep that needs more than the command line holds goes in a step file:
+one start can try every switch at both views. `+set vita_atMap "@sweep.txt"`
+with `ux0:data/KisakCOD/sweep.txt`:
+
+    # team and class
+    3 cmd mr {serverid} 8 autoassign
+    8 cmd mr {serverid} 15 assault_mp,0
+    # facing the busy way, then without the world
+    30 setviewpos 1264 -1896 124 90 0
+    60 r_drawWorld 0
+    80 r_drawWorld 1
+
 `vita_atMenu` and `vita_atMap` are taken from the command line (`+set`) when
 the game starts and not read again. A game server sets a client's dvars by
 name, and what these two hold is run as console commands, so a value that
 arrives later, from a server or from the console, sends nothing. The same
 goes for the client's `vita_keyboardAnswer`.
+
+### A list of starts
+
+A console run compares several starts of one build, each with its own
+command line and its own marker files in the program folder. Done by hand
+every start costs a person an FTP round trip. With a list on the card one
+tap on the bubble runs them all: `ux0:data/KisakCOD/runlist-mp.txt` for the
+client (`runlist.txt` for the server), one start a line:
+
+    # name | markers, or - for none | command line
+    W1 | - | +devmap mp_crash +set vita_quitAfterMap 185 +set vita_atMap "@run-w.txt"
+    W2 | no-frame-overlap | +devmap mp_crash +set vita_quitAfterMap 185 +set vita_atMap "@run-w.txt"
+    W3 | no-vsync | +devmap mp_crash +set vita_quitAfterMap 185 +set vita_atMap "@run-w.txt"
+
+At start-up the program takes the next line and, before anything else:
+
+- writes the number of the start after it to `runlist-mp.at`, so a start
+  that faults is not run again by the next tap; with the last start the list
+  is renamed `runlist-mp.done.txt` and the next tap is an ordinary start;
+- leaves the program folder (`gxp`) with this start's markers and no other:
+  every empty file there without a dot in its name is removed, then the
+  line's markers are made;
+- writes its log to `console-mp-<name>.log` (the server: `console-<name>.log`);
+- takes the line's command line. An empty one means the command line file,
+  as in an ordinary start.
+
+When the start ends, by its quit timer or by an error that exits
+(`vita_assertExit 1`), the program starts itself again for the next line
+(`Vita: run list: starting again for start 2 of 3` is the log's last line).
+After the restart call the program waits up to 3 seconds to be taken away
+before it ends: Vita3K carries the restart out only when the program does
+not end itself straight after asking (PC run Z25).
+START + SELECT ends the start and the chain: the next line waits for the
+next tap. A fault ends the chain too. So give every line a quit timer and
+`vita_quitAfter` as the safety net.
+
+A start after which the list goes no further (its last start, or one ended
+by hand) removes every marker as it ends, so a list leaves the program
+folder without markers and the next ordinary start is the plain build
+(`Vita: run list: that was its last start; 1 markers removed`). Markers
+that were there before the list are gone with it: make them again by hand.
+A last start that faults cannot do this and leaves its markers.
+
+The log's second line says which start it is and what was done to the
+markers. A name is letters, digits, `.`, `_` and `-`; a marker lower-case
+letters, digits and `-`; up to 32 starts and 8 markers a start. A list with
+a line that cannot be read is left alone, the reason is logged and the start
+is an ordinary one. The reading is `src/vita/vita_run_list.h`, checked on
+the host by `scripts/tests/test_vita_run_list.py`.
+
+### Two ways in one start
+
+Some of the client's marker files can also be turned while the game runs,
+by the console command `vita_gxm <marker> <0|1>`, where 1 is "as if the
+marker were there". A step file can then measure the old way and the new
+way minutes apart in one start, at the same temperature and battery state,
+where two starts were needed:
+
+    30 setviewpos 1264 -1896 124 90 0
+    60 vita_gxm no-depth-prepass 1
+    90 vita_gxm no-depth-prepass 0
+
+The switches that can be turned: `no-depth-prepass`, `no-frame-overlap`,
+`no-vsync` and `no-draw-reuse`. The others size or make things at start-up
+and are refused by name. A switch is turned between two frames and the log
+says so (`diag: switch no-depth-prepass is on from frame 1840 on
+(vita_gxm)`). The marker files themselves are not touched. Leave a window
+at least 20 seconds and drop its first 10 second line, which holds the
+frames of both ways.
 
 ## Testing in Vita3K
 

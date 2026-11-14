@@ -38,6 +38,7 @@
 #include "gxm_legacy_internal.h"
 
 #include <gfx_gxm/gxm_engine_options.h>
+#include <gfx_gxm/gxm_live_switch.h>
 #include <gfx_gxm/gxm_program_cache.h>
 
 #include <psp2/kernel/threadmgr.h>
@@ -46,11 +47,13 @@
 #include <cstring>
 #include <functional>
 #include <map>
+#include <mutex>
 #include <set>
 
 namespace gfx_gxm
 {
 bool g_depthPrepass = true;
+bool g_resolveWhenUsed = true;
 float g_sceneScale = 1.0f;
 } // namespace gfx_gxm
 
@@ -1726,6 +1729,10 @@ bool InitDraw(Device &device, std::string &error)
     if (!gfx_gxm::g_depthPrepass)
         Log(device, "diag: no-depth-prepass is there: the scene's depth is drawn first only when r_depthPrepass, "
                     "depth of field or soft particles ask for it");
+    gfx_gxm::g_resolveWhenUsed = !gxm::ProgramCacheMarker("no-resolve-skip");
+    if (!gfx_gxm::g_resolveWhenUsed)
+        Log(device, "diag: no-resolve-skip is there: the picture is copied for distortion in every frame, drawn or "
+                    "not");
     d.notifications = sceGxmGetNotificationRegion();
     if (gxm::ProgramCacheMarker("no-frame-overlap"))
     {
@@ -2299,10 +2306,53 @@ void LogWaitCauses(Device &device)
         Log(device, "waits for the whole GPU since the last such line: %s", line.c_str());
 }
 
+// The switches "vita_gxm <marker> <0|1>" may turn while the game runs
+// (gxm_live_switch.h). The others size or make things at start-up.
+const char *const kLiveSwitches[] = {"no-depth-prepass", "no-frame-overlap", "no-vsync", "no-draw-reuse"};
+struct LiveSwitch
+{
+    const char *name;
+    bool on;
+};
+std::mutex g_liveSwitchLock;
+std::vector<LiveSwitch> g_liveSwitches;
+
+// Between two frames, on the thread that draws.
+void ApplyLiveSwitches(Device &device)
+{
+    std::vector<LiveSwitch> asked;
+    {
+        const std::lock_guard<std::mutex> lock(g_liveSwitchLock);
+        asked.swap(g_liveSwitches);
+    }
+    DrawState &d = *device.draw;
+    for (const LiveSwitch &s : asked)
+    {
+        const std::string name = s.name;
+        if (name == "no-depth-prepass")
+            gfx_gxm::g_depthPrepass = !s.on;
+        else if (name == "no-frame-overlap")
+        {
+            // Everything drawn so far is done before the way of waiting
+            // changes, so neither way sees the other's frames in flight.
+            FinishGpu(device, WaitCause::Other);
+            d.overlap = !s.on && d.notifications;
+            d.paceTimeouts = 0;
+        }
+        else if (name == "no-vsync")
+            gxm::SetDisplayVsync(!s.on);
+        else if (name == "no-draw-reuse")
+            d.reuse = !s.on;
+        Log(device, "diag: switch %s is %s from frame %llu on (vita_gxm)", s.name, s.on ? "on" : "off",
+            (unsigned long long)d.frame);
+    }
+}
+
 void FrameDone(Device &device)
 {
     DrawState &d = *device.draw;
     ++d.frame;
+    ApplyLiveSwitches(device);
     d.ringUsed = 0;
     uint64_t into = 0;
     const int mode = d.diagTests ? DiagModeFor(d.frame, &into) : 0;
@@ -3468,3 +3518,15 @@ void LogDrawSummary(Device &device)
         d->paceWaits ? d->paceMicros / 1000.0 / double(d->paceWaits) : 0.0, d->paceTimeouts);
 }
 } // namespace gfx_vk::legacy
+
+bool gfx_gxm::RequestLiveSwitch(const char *name, bool on)
+{
+    for (const char *known : gfx_vk::legacy::kLiveSwitches)
+        if (!std::strcmp(known, name))
+        {
+            const std::lock_guard<std::mutex> lock(gfx_vk::legacy::g_liveSwitchLock);
+            gfx_vk::legacy::g_liveSwitches.push_back({known, on});
+            return true;
+        }
+    return false;
+}

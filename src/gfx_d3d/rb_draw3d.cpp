@@ -23,6 +23,7 @@
 #include "rb_spotshadow.h"
 #include "rb_shade.h"
 #include "r_meshdata.h"
+#include "r_drawsurf.h"
 #include <gfx_gxm/gxm_engine_options.h>
 
 void R_HW_InsertFence(IDirect3DQuery9 **fence)
@@ -382,6 +383,21 @@ void R_DrawDebugShaderDecalCallback(const void *data, GfxCmdBufContext context, 
     R_DrawSurfs(context, 0, &((const GfxViewInfo*)data)->decalInfo);
 }
 
+// Whether a surface of the list is drawn with a technique that reads the
+// copy of the picture made after the sun (distortion). The Vita asks before
+// it makes the copy (gxm_engine_options.h).
+static bool RB_ListReadsResolvedPostSun(const GfxDrawSurfListInfo *info)
+{
+    for (uint32_t surfIndex = 0; surfIndex < info->drawSurfCount; ++surfIndex)
+    {
+        const MaterialTechnique *technique = Material_GetTechnique(
+            rgp.sortedMaterials[info->drawSurfs[surfIndex].fields.materialSortedIndex], info->baseTechType);
+        if (technique && (technique->flags & MTL_TECHFLAG_NEEDS_RESOLVED_POST_SUN) != 0)
+            return true;
+    }
+    return false;
+}
+
 void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
 {
     GfxRenderTargetId setupRenderTargetId; // [esp+44h] [ebp-2Ch]
@@ -479,7 +495,7 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     R_InitContext(data, &cmdBuf);
     KISAK_NULLSUB();
     R_DrawLights(viewInfo, &cmdBuf);
-    if (rg.distortion)
+    if (rg.distortion && (!KISAK_GXM_RESOLVE_WHEN_USED() || RB_ListReadsResolvedPostSun(&viewInfo->emissiveInfo)))
     {
         PROF_SCOPED("RB_ApplyPostEffects");
         R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_SCENE);
