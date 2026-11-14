@@ -38,7 +38,7 @@ The recipe (JSON)::
       "game": {
         "exe": "C:/kisak/builds/b204c3a-vk/KisakCOD-mp.exe",
         "cwd": "C:/kisak/builds/b204c3a-vk",
-        "args": ["+set", "r_fullscreen", "1", "+set", "r_mode", "1280x720",
+        "args": ["+set", "r_fullscreen", "1", "+set", "r_mode", "1280x720", "+set", "r_aaSamples", "1",
                  "+set", "snd_volume", "0", "+set", "logfile", "2"],
         "env": {"KISAK_VK_MODERN_EXPOSURE": "0"},
         "clear_env": ["KISAK_VK_*"],
@@ -51,7 +51,8 @@ The recipe (JSON)::
          "args": ["+set", "r_backend", "vulkan", "+set", "r_visuals", "modern", "+devmap", "mp_crash"],
          "env": {"KISAK_VK_MODERN_DEBUG": "ao"},
          "at_menu": [],
-         "at_map": ["3 cmd mr {serverid} 8 autoassign", "5 setviewpos 30 -10 200 140",
+         "at_map": ["3 cmd mr {serverid} 8 autoassign", "5 cmd mr {serverid} 15 assault_mp,0",
+                    "8 setviewpos 30 -10 200 140",
                     "10 framelog 10 crash-in", "21 screenshot crash-in-D", "23 quit"]}
       ],
       "lines": ["modern:", "device destroyed after", "refused", "unsupported", "could not", "failed"],
@@ -68,6 +69,11 @@ same home folder and its screenshots and log are its own. Without it the
 runner looks for new screenshots under ``game.cwd``. ``at_map`` gets a safety
 ``run_quitAfterMap`` (the last command's time plus 30 s) unless the launch
 gives its own; ``timeout`` (seconds, whole launch) ends a launch that hangs.
+Every launch gets ``KISAK_NO_DIALOGS=1`` unless the recipe sets it, so the
+game answers its own questions ("Set Optimal Settings?") "No" instead of
+waiting. Pin the settings a run depends on in ``game.args`` (``r_aaSamples 1``
+for anything Modern: a multisampled back buffer turns the Modern path off),
+since the home template's profile holds the player's own.
 ``forbid_processes`` are checked before and after every launch (Windows:
 tasklist); a launch never starts while one runs, nor while another copy of
 the game does.
@@ -190,6 +196,9 @@ def launch_env(recipe, launch):
         for key in list(env):
             if fnmatch.fnmatchcase(key, pattern):
                 del env[key]
+    # No box waits for a click nobody will make: the game answers its
+    # questions "No" and prints them (KISAK_NO_DIALOGS, as perf_run.py sets).
+    env["KISAK_NO_DIALOGS"] = "1"
     env.update({k: str(v) for k, v in (recipe["game"].get("env") or {}).items()})
     env.update({k: str(v) for k, v in (launch.get("env") or {}).items()})
     return env

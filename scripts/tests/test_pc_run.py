@@ -128,6 +128,7 @@ def test_full_run(work):
     check((out / "base" / "console_mp.log").exists(), "console log copied")
     log = (out / "base" / "console_mp.log").read_text()
     check("KISAK_VK_MODERN_AO=0" in log, "launch environment reaches the game")
+    check("KISAK_NO_DIALOGS=1" in log, "every launch answers the game's questions itself (KISAK_NO_DIALOGS)")
     check("KISAK_VK_MODERN_AO=-" in (out / "lit" / "console_mp.log").read_text(), "clear_env removes old switches")
 
     pictures = results["pictures"]
