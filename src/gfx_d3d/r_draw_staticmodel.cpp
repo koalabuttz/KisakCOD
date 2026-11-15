@@ -10,6 +10,7 @@
 #include "r_staticmodelcache.h"
 #include "rb_tess.h"
 #include "r_xsurface.h"
+#include <linux/sys_perf.h>
 
 
 void R_SetupStaticModelPrim(XSurface *xsurf, GfxDrawPrimArgs *args, GfxCmdBufPrimState *primState)
@@ -153,6 +154,7 @@ void R_DrawStaticModelDrawSurfPlacement(
     const GfxStaticModelDrawInst *smodelDrawInst,
     GfxCmdBufSourceState *source)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_PLACEMENT);
     GfxCmdBufSourceState *matrix; // [esp+5Ch] [ebp-38h]
     float origin[3]; // [esp+60h] [ebp-34h] BYREF
     float scale; // [esp+6Ch] [ebp-28h]

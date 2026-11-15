@@ -1771,6 +1771,7 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
             if (ins.opcode == kDef)
                 defined.insert(ins.destination.number);
         int highestFromApi = -1;
+        std::set<uint16_t> fromApi;
         for (const Instruction &ins : shader.instructions)
             for (int i = 0; i < ins.sourceCount; ++i)
             {
@@ -1782,9 +1783,13 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
                                      : 1;
                 for (int row = 0; row < rows; ++row)
                     if (!defined.count(uint16_t(src.number + row)))
+                    {
                         highestFromApi = std::max(highestFromApi, src.number + row);
+                        fromApi.insert(uint16_t(src.number + row));
+                    }
             }
         r.floatConstants = uint16_t(highestFromApi + 1);
+        r.apiConstants.assign(fromApi.begin(), fromApi.end());
     }
 
     // The varyings, for linking checks.

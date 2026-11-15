@@ -154,6 +154,15 @@ option(KISAK_WIN64_CINEMATICS "64-bit Windows: play Bink movies through the FFmp
 # for its game clients and dedicated server.
 option(KISAK_WIN_TRACY "Windows: build the games with the Tracy profiler (idle until a profiler connects, localhost only). For profiling runs" OFF)
 
+# Opt-in, every platform: compile in the render thread's phase marks, which
+# the console command perf_phases counts (docs/perf-ab.md). A mark is a byte
+# written and a count added many thousands of times a frame, so player builds
+# leave it off; Debug builds have it without this option.
+option(KISAK_PERF_PHASES "Compile in the render thread's phase marks for the perf_phases command. For measuring runs" OFF)
+if (KISAK_PERF_PHASES)
+    add_compile_definitions(KISAK_PERF_PHASES=1)
+endif()
+
 # Set to ON to build the sound system against OpenAL instead of Miles/MSS.
 # When OFF (default), the original Miles Sound System (MSS/AIL) backend is used.
 option(KISAK_OPENAL "Build the sound system against OpenAL instead of Miles/MSS" OFF)

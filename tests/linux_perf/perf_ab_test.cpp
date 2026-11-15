@@ -2,6 +2,8 @@
 // and the probe slots of src/linux/sys_perf.h with real threads.
 // Built and run by scripts/tests/test_linux_perf_ab.py. No engine, no game data.
 
+// The render thread's phase marks are compiled in here whatever the build.
+#define KISAK_PERF_PHASES 1
 #include <linux/sys_perf.h>
 #include <linux/sys_perf_core.h>
 #if defined(__linux__)
@@ -638,6 +640,79 @@ namespace
         Check(threads.empty(), "a missing task directory lists nothing");
     }
 #endif
+
+    // The render thread's phase marks and the lines of a count (perf_phases).
+    void TestPhases()
+    {
+        auto phaseNow = [] { return (unsigned)g_sysPerfPhase.load(std::memory_order_relaxed); };
+        auto entries = [](uint32_t phase) { return g_sysPerfPhaseEntries[phase].load(std::memory_order_relaxed); };
+
+        Check(phaseNow() == SYS_PERF_PHASE_NONE, "no mark outside a scope");
+        {
+            SysPerfPhaseScope list(SYS_PERF_PHASE_LIST);
+            Check(phaseNow() == SYS_PERF_PHASE_LIST, "a scope marks its phase");
+            for (int draw = 0; draw < 3; ++draw)
+            {
+                SysPerfPhaseScope tess(SYS_PERF_PHASE_TESS + 7);
+                Check(phaseNow() == SYS_PERF_PHASE_TESS + 7u, "the innermost scope is the one that stands");
+                {
+                    SysPerfPhaseScope device(SYS_PERF_PHASE_DEVICE_DRAW);
+                    Check(phaseNow() == SYS_PERF_PHASE_DEVICE_DRAW, "a scope inside a scope inside a scope");
+                }
+                Check(phaseNow() == SYS_PERF_PHASE_TESS + 7u, "a scope's end gives the mark back to the one around it");
+            }
+            Check(phaseNow() == SYS_PERF_PHASE_LIST, "and the outer one after the loop");
+        }
+        Check(phaseNow() == SYS_PERF_PHASE_NONE, "no mark after the last scope");
+        Check(entries(SYS_PERF_PHASE_LIST) == 1 && entries(SYS_PERF_PHASE_TESS + 7) == 3 &&
+                  entries(SYS_PERF_PHASE_DEVICE_DRAW) == 3 && entries(SYS_PERF_PHASE_2D) == 0,
+              "each entry of a phase is counted once");
+
+        // Every phase prints under a name of its own.
+        std::vector<std::string> names;
+        for (uint32_t phase = 0; phase < SYS_PERF_PHASE_COUNT; ++phase)
+        {
+            char text[64];
+            names.emplace_back(Sys_PerfPhaseName(phase, text, sizeof(text)));
+            Check(names.back() != "?" && !names.back().empty(), "every phase has a name");
+        }
+        std::sort(names.begin(), names.end());
+        Check(std::adjacent_find(names.begin(), names.end()) == names.end(), "no two phases share a name");
+        char text[64];
+        Check(std::string(Sys_PerfPhaseName(SYS_PERF_PHASE_TESS + 7, text, sizeof(text))) == "tess rigid models",
+              "a surface type's phase is named after it");
+        Check(std::string(Sys_PerfPhaseName(SYS_PERF_PHASE_COUNT, text, sizeof(text))) == "?", "a number past the last is no phase");
+
+        // A count: 16000 looks over 20 s and 800 frames.
+        std::vector<PerfPhaseRow> rows;
+        rows.push_back({"2d", 1120, 800});
+        rows.push_back({"never seen, never entered", 0, 0});
+        rows.push_back({"device: draw", 8960, 1280000});
+        rows.push_back({"unmarked", 5920, 0});
+        rows.push_back({"entered, never seen", 0, 1600});
+        std::vector<std::string> lines = Perf_PhaseLines(rows, 20.0, 800);
+        Check(lines.size() == 5, "one line for the count and one for each phase seen or entered");
+        if (lines.size() == 5)
+        {
+            Check(lines[0] == "render thread phases, 16000 looks in 20.00 s (one each 1250 us), 800 frames (25.00 ms a frame)",
+                  "the count's line");
+            Check(lines[1] == "phase device: draw: 56.00 %, 14.000 ms a frame, 1600.0 calls a frame, 8.75 us a call",
+                  "the largest share first, with its time in a frame and of one call");
+            Check(lines[2] == "phase unmarked: 37.00 %, 9.250 ms a frame", "a phase with no entries has no calls");
+            Check(lines[3] == "phase 2d: 7.00 %, 1.750 ms a frame, 1.0 calls a frame, 1750.00 us a call", "once a frame");
+            Check(lines[4] == "phase entered, never seen: 0.00 %, 0.000 ms a frame, 2.0 calls a frame, 0.00 us a call",
+                  "a phase entered but never seen is listed");
+        }
+
+        // No frame counted (a count started and ended inside one frame), and nothing at all.
+        lines = Perf_PhaseLines(rows, 20.0, 0);
+        Check(lines.size() == 5 && lines[0] == "render thread phases, 16000 looks in 20.00 s (one each 1250 us)" &&
+                  lines[1] == "phase device: draw: 56.00 %, 8.75 us a call" && lines[2] == "phase unmarked: 37.00 %",
+              "without frames the lines leave the per-frame figures out");
+        lines = Perf_PhaseLines({}, 0.0, 0);
+        Check(lines.size() == 1 && lines[0] == "render thread phases, 0 looks in 0.00 s (one each 0 us)",
+              "an empty count prints its line and divides by nothing");
+    }
 }
 
 int main(int argc, char **argv)
@@ -656,6 +731,7 @@ int main(int argc, char **argv)
     TestAbRun();
     TestProbes();
     TestProbeSlots();
+    TestPhases();
     TestSampleRunAndStop();
     TestLongFirstFrame();
     if (s_failures)

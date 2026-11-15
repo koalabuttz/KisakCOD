@@ -409,10 +409,28 @@ front::ModernSceneView ModernViewOf(const GfxModernScene *scene)
     view.fog.start = fog.start;
     std::memcpy(view.fog.origin, fog.origin, sizeof(view.fog.origin));
     std::memcpy(view.fog.sunDirection, fog.sunDirection, sizeof(view.fog.sunDirection));
+    view.fog.sunShadowed = fog.sunShadowed;
     view.fog.shadowMap = fog.shadowMap;
     std::memcpy(view.fog.shadowLookup, fog.shadowLookup, sizeof(view.fog.shadowLookup));
     std::memcpy(view.fog.switchPartition, fog.switchPartition, sizeof(view.fog.switchPartition));
     std::memcpy(view.fog.shadowmapScale, fog.shadowmapScale, sizeof(view.fog.shadowmapScale));
+    view.fog.spotShadowMap = fog.spotShadowMap;
+    view.fog.spotCount = fog.spotCount < 0 ? 0 : (fog.spotCount > 4 ? 4 : fog.spotCount);
+    for (int i = 0; i < view.fog.spotCount; ++i)
+    {
+        const GfxModernFogSpot &from = fog.spots[i];
+        front::ModernSceneView::Fog::Spot &to = view.fog.spots[i];
+        std::memcpy(to.origin, from.origin, sizeof(to.origin));
+        to.radius = from.radius;
+        std::memcpy(to.dir, from.dir, sizeof(to.dir));
+        to.exponent = from.exponent;
+        to.cosHalfFovOuter = from.cosHalfFovOuter;
+        to.cosHalfFovInner = from.cosHalfFovInner;
+        to.fade = from.fade;
+        std::memcpy(to.color, from.color, sizeof(to.color));
+        std::memcpy(to.shadowLookup, from.shadowLookup, sizeof(to.shadowLookup));
+        to.inSunMap = from.inSunMap;
+    }
     return view;
 }
 

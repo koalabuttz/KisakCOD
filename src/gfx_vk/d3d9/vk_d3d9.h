@@ -73,6 +73,8 @@ struct ModernTuning
     int fog = -1;              // volumetric fog (KISAK_VK_MODERN_FOG)
     float fogSun = -1.0f;      // the sun's share of the fog's light, 0 to 1 (KISAK_VK_MODERN_FOG_SUN)
     float fogScatter = -1.0f;  // forward scattering, 0 to below 0.95 (KISAK_VK_MODERN_FOG_SCATTER)
+    float fogSpots = -1.0f;    // how brightly spot lights light the fog, 0 to 4 (KISAK_VK_MODERN_FOG_SPOTS)
+    int fogFroxels = -1;       // the fog from a froxel volume, not a march (KISAK_VK_MODERN_FOG_FROXELS)
 };
 
 // The debug view over each Modern scene (ModernTuning::debug,
@@ -262,12 +264,32 @@ struct ModernSceneView
         float start = 0.0f;            // world units
         float origin[3] = {};          // the camera, world units
         float sunDirection[3] = {};    // towards the sun, world space
-        // The sun's shadow map the view's lit surfaces read (one of this
-        // device's textures, depth), or null; then the rest is not set.
+        // The sun's shadow is drawn: the lookup below is set.
+        bool sunShadowed = false;
+        // The sun's shadow map (one of this device's textures, depth): when
+        // the sun's shadow is in it or a spot light's tile is, else null.
         IDirect3DTexture9 *shadowMap = nullptr;
         float shadowLookup[4][4] = {}; // world (p * M) to near xy, depth z (lit at most stored), partition w
         float switchPartition[4] = {}; // far xy = near xy * w + xy
         float shadowmapScale[2] = {};  // the far partition's edge fade
+        // The spot lights' shadow map, when a spot light's tile is in it.
+        IDirect3DTexture9 *spotShadowMap = nullptr;
+        // The view's shadowed spot lights, as the lit shaders read them.
+        struct Spot
+        {
+            float origin[3] = {};
+            float radius = 0.0f;
+            float dir[3] = {};             // from a lit point towards the light, the cone's axis
+            float exponent = 0.0f;         // the cone's falloff power, 0 none
+            float cosHalfFovOuter = 0.0f;
+            float cosHalfFovInner = 0.0f;
+            float fade = 0.0f;             // how far the shadow map counts, the rest lit
+            float color[3] = {};           // diffuse colour, display values
+            float shadowLookup[4][4] = {}; // world (p * M) to the tile, projective: xy / w, depth z / w
+            bool inSunMap = false;         // the tile is in shadowMap, else in spotShadowMap
+        };
+        int spotCount = 0;
+        Spot spots[4];
     } fog;
 };
 enum class ModernResult
