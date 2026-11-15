@@ -39,7 +39,11 @@ What is new for armv7:
   (`-mfpu=neon` for that one file in `scripts/platform/vita/mp_client.cmake`):
   it only makes vertices to draw, includes nothing of the engine, and the
   Vita workflow's check lets NEON float instructions pass in its two
-  functions and nowhere else.
+  functions and nowhere else. The second is the static culling walk,
+  `src/gfx_d3d/r_dpvs_static_vec.cpp` (`r_staticCullVec`, [what it
+  does](perf-ab.md#r_staticcullvec)), under the same rules: what it marks is
+  drawn and nothing else reads it. The check has one line for each such
+  namespace.
 - The VFP `vmla`/`vmls` instructions Clang still emits are *chained*, not fused:
   they round the product before adding, so they give the same result as a
   separate multiply and add.

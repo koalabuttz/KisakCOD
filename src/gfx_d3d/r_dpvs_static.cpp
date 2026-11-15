@@ -4,6 +4,40 @@
 #include <cgame/cg_local.h>
 
 #include "r_dpvs_stats.h"
+#include "r_dpvs_static_vec.h"
+
+#include <cstddef>
+
+#if KISAK_DPVS_VEC
+// r_dpvs_static_vec.h includes nothing of the engine and names the engine's
+// structures over again. They have to be the same.
+static_assert(sizeof(dpvs_vec::Plane) == sizeof(DpvsPlane), "dpvs_vec::Plane is DpvsPlane");
+static_assert(offsetof(dpvs_vec::Plane, coeffs) == offsetof(DpvsPlane, coeffs), "DpvsPlane::coeffs");
+static_assert(offsetof(dpvs_vec::Plane, side) == offsetof(DpvsPlane, side), "DpvsPlane::side");
+static_assert(sizeof(dpvs_vec::Tree) == sizeof(GfxAabbTree), "dpvs_vec::Tree is GfxAabbTree");
+static_assert(offsetof(dpvs_vec::Tree, mins) == offsetof(GfxAabbTree, mins), "GfxAabbTree::mins");
+static_assert(offsetof(dpvs_vec::Tree, maxs) == offsetof(GfxAabbTree, maxs), "GfxAabbTree::maxs");
+static_assert(offsetof(dpvs_vec::Tree, childCount) == offsetof(GfxAabbTree, childCount), "GfxAabbTree::childCount");
+static_assert(offsetof(dpvs_vec::Tree, surfaceCount) == offsetof(GfxAabbTree, surfaceCount),
+              "GfxAabbTree::surfaceCount");
+static_assert(offsetof(dpvs_vec::Tree, startSurfIndex) == offsetof(GfxAabbTree, startSurfIndex),
+              "GfxAabbTree::startSurfIndex");
+static_assert(offsetof(dpvs_vec::Tree, surfaceCountNoDecal) == offsetof(GfxAabbTree, surfaceCountNoDecal),
+              "GfxAabbTree::surfaceCountNoDecal");
+static_assert(offsetof(dpvs_vec::Tree, startSurfIndexNoDecal) == offsetof(GfxAabbTree, startSurfIndexNoDecal),
+              "GfxAabbTree::startSurfIndexNoDecal");
+static_assert(offsetof(dpvs_vec::Tree, smodelIndexCount) == offsetof(GfxAabbTree, smodelIndexCount),
+              "GfxAabbTree::smodelIndexCount");
+static_assert(offsetof(dpvs_vec::Tree, smodelIndexes) == offsetof(GfxAabbTree, smodelIndexes),
+              "GfxAabbTree::smodelIndexes");
+static_assert(offsetof(dpvs_vec::Tree, childrenOffset) == offsetof(GfxAabbTree, childrenOffset),
+              "GfxAabbTree::childrenOffset");
+// A box is its mins and then its maxs, six floats in a row.
+static_assert(offsetof(GfxStaticModelInst, maxs) == offsetof(GfxStaticModelInst, mins) + 3 * sizeof(float),
+              "GfxStaticModelInst's mins and maxs");
+static_assert(sizeof(GfxSurface::bounds) == 6 * sizeof(float), "GfxSurface::bounds");
+static_assert(dpvs_vec::MAX_PLANES == 10 + 4 + 2, "the most planes a cell is held against");
+#endif
 
 void R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const DpvsClipPlaneSet *clipSet)
 {
@@ -270,6 +304,29 @@ void R_AddCellStaticSurfacesInFrustum(DpvsStaticCellCmd *dpvsCell)
         iassert( planes.count <= (10 + 4 + 2) );
         iassert( planes.count );
         planes.planes = dpvsCell->planes;
+#if KISAK_DPVS_VEC
+        // Four planes at a time (r_dpvs_static_vec.h): the same marks. The
+        // debug boxes are drawn, and r_dpvs_stats counts, in the walk below
+        // alone.
+        if (r_staticCullVec->current.enabled && !r_showAabbTrees->current.integer
+            && !s_dpvsCounting.load(std::memory_order_relaxed))
+        {
+            const GfxWorldDpvsStatic &dpvs = rgp.world->dpvs;
+            dpvs_vec::World world;
+            // a map with no static models has no array, and no tree names one
+            world.modelBounds = dpvs.smodelInsts ? dpvs.smodelInsts->mins : nullptr;
+            world.surfaceBounds = dpvs.surfaces ? dpvs.surfaces->bounds[0] : nullptr;
+            world.modelStride = sizeof(GfxStaticModelInst);
+            world.surfaceStride = sizeof(GfxSurface);
+            world.sortedSurfIndex = dpvs.sortedSurfIndex;
+            world.modelVis = rg.drawSModels ? g_smodelVisData : nullptr;
+            world.surfaceVis = rg.drawWorld ? g_surfaceVisData : nullptr;
+            world.decals = r_drawDecals->current.enabled;
+            if (dpvs_vec::AddTree(reinterpret_cast<const dpvs_vec::Tree *>(tree),
+                                  reinterpret_cast<const dpvs_vec::Plane *>(planes.planes), planes.count, world))
+                return;
+        }
+#endif
         for (planeIndex = 0; planeIndex < planes.count; ++planeIndex)
         {
             R_CopyClipPlane(&planes.planes[planeIndex], &clipPlanePool[planeIndex]);

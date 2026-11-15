@@ -258,6 +258,7 @@
  const dvar_t *r_glow_allowed_script_forced;
  const dvar_t *r_outdoor;
  const dvar_t *r_sse_skinning;
+ const dvar_t *r_staticCullVec;
  const dvar_t *r_monitor;
  const dvar_t *r_rendererPreference;
  const dvar_t *r_rendererInUse;
@@ -1552,6 +1553,13 @@
      sv_cheats = Dvar_RegisterBool("sv_cheats", 1, DVAR_SYSTEMINFO | DVAR_ROM, "Allow server side cheats");
      com_statmon = Dvar_RegisterBool("com_statmon", false, DVAR_NOFLAG, "Draw stats monitor");
      r_sse_skinning = Dvar_RegisterBool("r_sse_skinning", true, DVAR_NOFLAG, "Use Streaming SIMD Extensions for skinning");
+     // The same models and surfaces come out either way (r_dpvs_static_vec.h);
+     // the setting is there to time the two against each other.
+     r_staticCullVec = Dvar_RegisterBool(
+         "r_staticCullVec",
+         true,
+         DVAR_NOFLAG,
+         "Hold a cell's static models and surfaces against four clip planes at a time (builds with GCC or Clang)");
      r_monitor = Dvar_RegisterInt(
          "r_monitor",
          0,

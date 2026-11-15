@@ -39,7 +39,8 @@
 // -- and material B over {5, 6}. The decal stage holds C over {8} and the
 // emissive range D over {9}. Further views check a far plane, the walk from
 // cell 1 back through the portal, the "no camera cell" path that tests every cell
-// against the frustum alone, and the r_skipPvs and r_drawDecals switches.
+// against the frustum alone, and the r_skipPvs and r_drawDecals switches. Each
+// view runs under both settings of r_staticCullVec.
 //
 // What this does NOT claim: no device, texture, shader or pixel is involved. The
 // pre-tessellated path (r_pretess) needs GPU index buffers and is switched off
@@ -542,6 +543,13 @@ int main()
               "R_SetViewParmsForScene takes the near planes from r_znear and r_znear_depthhack");
     }
 
+    // Every view twice: with the tree walk that holds a box against four clip
+    // planes at a time (r_dpvs_static_vec.h, where the build has it), then with
+    // the scalar walk. Both have to give what the geometry says.
+    for (int vec = 1; vec >= 0; --vec)
+    {
+    SetBool(r_staticCullVec, vec != 0);
+
     // ---- view 1: inside cell 0 looking through the portal --------------------
     {
         Check(R_CellForPoint(&sw->world, eye0) == 0, "R_CellForPoint puts the eye at x=64 in cell 0");
@@ -641,6 +649,7 @@ int main()
               "r_drawDecals 0 drops the decal surface through the AABB tree's no-decal range");
         Check(SameBatches(frame.lit, {{5, {0, 1, 3, 4}}, {9, {5, 6}}}), "lit batches unchanged without decals");
     }
+    } // both walks
 
     std::printf("%d checks, %d failures\n", g_checks, g_failures);
     if (g_failures == 0)

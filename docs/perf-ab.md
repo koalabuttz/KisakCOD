@@ -329,6 +329,35 @@ The walk is `R_AddAabbTreeSurfacesInFrustum_r` (`src/gfx_d3d/r_dpvs_static.cpp`)
 the counts are for deciding what a faster box test is worth there. While it is
 off it costs a load and a branch per node.
 
+## `r_staticCullVec`
+
+For every cell in view the renderer walks the cell's tree of boxes and holds
+each box against the cell's clip planes (the view's sides and the portals the
+cell is seen through), then each static model and surface of the leaves the
+planes cut. The engine's code does that one plane at a time
+(`R_AddAabbTreeSurfacesInFrustum_r`). `r_staticCullVec 1` (the default, in
+builds with GCC or Clang) walks the same tree with four planes to a sum:
+SSE on x86, NEON on 64-bit Arm and on the PS Vita
+(`src/gfx_d3d/r_dpvs_static_vec.cpp`). The sums are made in the scalar code's
+order, so the same models and surfaces come out;
+`scripts/tests/test_static_cull_vec.py` holds the two against each other on
+made-up trees, and the world front-end test runs every view both ways.
+`r_showAabbTrees` goes back to the scalar walk, which draws its boxes, and so
+does `r_dpvs_stats` while it counts: its figures are the scalar walk's.
+
+On the console the counts of run BM (`r_dpvs_stats`, busy view of mp_crash)
+were, for one view: 49 cells with 6.4 planes each, 7264 tree nodes with 27075
+plane tests, 7119 static models and surfaces with 15499; most leaves that are
+cut are cut by three planes or more. `dpvs cell static` took 12.4 ms of CPU a
+frame there, half of it on the main thread.
+
+```
+perf_ab "set r_staticCullVec 0" "set r_staticCullVec 1"
+```
+
+compares the two; `main thread runs: dpvs cell static` and `other threads
+run: dpvs cell static` are its timers. No machine has run it yet.
+
 ## Checks
 
 `scripts/tests/test_linux_perf_ab.py` (the `perf_ab` check of
