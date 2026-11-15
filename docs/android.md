@@ -152,6 +152,17 @@ device is x86, and the emulator draws through the PC's own GPU driver, so it
 finds no Adreno-only fault; it is for runs nobody has to watch
 (`scripts/runs/android_run.py`).
 
+### The first screen
+
+The app opens on a screen of big buttons (`LauncherActivity.java`) that the
+controller works: the d-pad or left stick moves, A presses, L1 and R1 change
+the number of bots. It lists every map in the game folder (`zone/*/mp_*.ff`
+and `usermaps`); a map starts a match against KisakCOD's bots
+(`+set bot_brain 1 +set scr_testclients <n> +set g_gametype war|dm +map <map>`),
+and "Main menu" starts the game's own menu. The game runs in a process of its
+own (`:game`), which ends with the game: the engine never starts twice in one
+process, and the first screen comes back when the game quits.
+
 ### Installing and starting the app
 
 Install, start once (the first start makes the app's folder), copy the game
@@ -169,7 +180,9 @@ adb logcat -s KisakCOD SDL
 
 Extra engine arguments for a run go in the `args` extra, split at spaces:
 `adb shell am start -n org.kisakcod.game/.KisakActivity --es args "+set developer 1"`.
-The activity always starts the game full screen (`+set r_fullscreen 1`, so
+The activity starts the game without shadow maps (`+set sm_enable 0`): on
+the Adreno 740 the sun's shadows flickered from frame to frame (2026-11-15,
+cause not found yet). The activity always starts the game full screen (`+set r_fullscreen 1`, so
 SDL hides Android's system bars; run 3 had a 1920x970 window under the
 navigation bar). The game's console goes to logcat under the tag KisakCOD: Android drops an
 app's stdout and stderr, so `src/linux/main.cpp` copies them there.
@@ -183,10 +196,11 @@ asks for no rotation (`ChoosePreTransform` in `src/gfx_vk/vk_core.cpp`), the
 compositor turns the picture, and the `VK_SUBOPTIMAL_KHR` that Android
 reports for that alone does not rebuild the swapchain. Drawing the picture
 turned (Android's pre-rotation) would save the compositor that work; it is
-left for the speed stage. Android reports a change of size (the window going
-full screen) by that same result alone, so every 32nd one still compares the
-surface's size with the swapchain's and rebuilds it when they differ (run 4
-kept a 1920x970 swapchain on the 1920x1080 screen).
+left for the speed stage. Android tells such a swapchain nothing when the
+window changes size (it goes full screen just after the game starts) and
+scales the old picture, so every 32nd frame compares the surface's size with
+the swapchain's and rebuilds it when they differ (runs 4 and 5 kept a
+1920x970 swapchain on the 1920x1080 screen).
 
 What run 4 (mp_crash on the Pocket 6) showed, and the fixes:
 
