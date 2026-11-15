@@ -415,6 +415,11 @@ fit with two passes and 9 with one.
 - Frozen AO looked lighter than in play (arch 17.3 against 22.1 levels, same
   radius and view, proof 2): compare frozen shots only with frozen shots.
 
+- The game keeps 1023 bytes of its command line (`sys_cmdline`; Windows cuts
+  the rest, Linux and Android do not start). A long variant list is the usual
+  way past it, so the recipe check refuses a launch whose command line would
+  be longer: split the variants over two launches.
+
 ## Menus without a person: `menu_check.py`
 
 `scripts/runs/menu_check.py` clicks through the multiplayer menus of the native

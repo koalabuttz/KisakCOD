@@ -118,6 +118,10 @@ keeps 31 parts, so a timed command or a variant value with a ``+`` in it
 (``45 +left``) would break the whole list: the recipe check refuses it. Put
 such commands in a cfg in the home template and send ``exec <cfg>``. A launch
 whose timed list the game refused anyway ends with status ``run_error``.
+The game also keeps only 1023 bytes of its command line (``sys_cmdline``):
+on Windows it cuts the rest, timed list and all, so the recipe check refuses
+a launch whose command line would be longer (a long variant list is the
+usual cause; split it over two launches).
 
 Exit status: 0 when every launch exited 0, ran its timed commands and wrote
 every screenshot it named, 1 otherwise (the report says which), 2 on a bad
@@ -139,6 +143,9 @@ import zlib
 from pathlib import Path
 
 FORMAT = "kisak-pc-run/1"
+# Windows copies its command line into sys_cmdline[1024] and cuts the rest
+# (src/win32/win_main.cpp); Linux and Android refuse to start (src/linux/main.cpp).
+COMMAND_LINE_BYTES = 1023
 MAX_CONSOLE_LINES = 31  # Com_ParseCommandLine keeps 32 lines, the first is what comes before the first '+'
 SAFETY_AFTER_LAST = 30
 # Variants start after the pre-match countdown (about 16-17 s on mp_crash under
@@ -200,6 +207,11 @@ def load_recipe(path):
                                       "in a cfg and send 'exec <cfg>'")
                 if len(command.split(None, 1)[1]) >= 160:
                     raise RecipeError(f"{name}: {key} entry {command!r} is longer than the client takes")
+        length = command_line_length(recipe, launch)
+        if length > COMMAND_LINE_BYTES:
+            raise RecipeError(f"{name}: the command line would be {length} bytes; the game keeps "
+                              f"{COMMAND_LINE_BYTES} (sys_cmdline) and cuts the rest, timed list and all. "
+                              "Fewer or shorter timed commands, or fewer variants per launch")
         lines = command_line_parts(recipe, launch)
         if lines > MAX_CONSOLE_LINES:
             raise RecipeError(f"{name}: the command line has {lines} '+' parts; the game reads the first "
@@ -225,6 +237,16 @@ def command_line_parts(recipe, launch):
     exe = recipe["game"]["exe"]
     skip = len(exe) if isinstance(exe, list) else 1
     return " ".join(launch_argv(recipe, launch, Path("home"))[skip:]).count("+")
+
+
+def command_line_length(recipe, launch):
+    """The length of the command line the game copies into sys_cmdline: the
+    arguments after the program, as Windows joins them (Linux joins them the
+    same way, src/linux/main.cpp), with a home folder of a typical length."""
+    exe = recipe["game"]["exe"]
+    skip = len(exe) if isinstance(exe, list) else 1
+    home = Path("C:/kisak/runs/run-folder-of-typical-length") / launch["name"] / "home"
+    return len(subprocess.list2cmdline(launch_argv(recipe, launch, home)[skip:]))
 
 
 def check_variants(launch):

@@ -81,6 +81,8 @@ def test_recipe_checks(work):
         ([{"name": "a", "at_map": ["1 screenshot s"]}, {"name": "b", "at_map": ["1 screenshot s"]}], "named twice"),
         ([{"name": "a", "at_map": ["45 +left", "50 -left"]}], "has a '+'"),
         ([{"name": "a", "args": ["+set", "x", "1"] * 30, "at_map": ["1 quit"]}], "'+' parts"),
+        ([{"name": "a", "at_map": [f"{i} setviewpos {i}00 {i}00 {i}00 {i}0 0 0 0 0 0 0 0 0" for i in range(1, 24)]}],
+         "1023"),
     ]
     for launches, message in bad:
         result = run(recipe(work, launches), work / "out-bad")
