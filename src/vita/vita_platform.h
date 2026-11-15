@@ -49,6 +49,20 @@ struct VitaThreadTime
 void Vita_NoteThread(const char *name);
 int Vita_ThreadTimes(VitaThreadTime *times, int count);
 
+// Makes the calling thread's pthread waits real waits. VitaSDK's pthreads
+// wake a thread that waits on a condition or a semaphore every 500
+// microseconds to look for a cancel request, unless the thread has turned
+// cancellation off: a thread with nothing to do then still runs 3.6% of the
+// time (console run AZ: three idle threads, 1.4 ms of a 38 ms frame each).
+// Nothing in the port cancels a thread. Each thread the port starts calls
+// this once.
+void Vita_QuietWaits();
+// How long a wait of `msec` on an event nothing sets takes, in microseconds.
+// The start-up log prints one: VitaSDK's pthreads read every deadline against
+// the wall clock, and until the port's waits allowed for that
+// (linux/sys_posix.cpp) no timed wait waited.
+uint32_t Vita_TimedWaitMicroseconds(uint32_t msec);
+
 // Load and memory figures for the first runs (src/vita/vita_stats.cpp), so
 // console.log answers how many players the Vita can serve.
 //
@@ -86,8 +100,16 @@ unsigned int Vita_StatsGeneration();
 bool Vita_AssertExits();
 void Vita_SetAssertExits(bool exits);
 
-// Has the system write console.log's bytes out.
+// Writes out what console.log still holds in memory and has the system write
+// the file's bytes out. The error paths call it before the process ends.
 void Vita_ConsoleSync();
+
+// From here on console.log's lines go to the memory card from a thread of
+// their own (vita_log_writer.h), so a slow write does not hold the thread that
+// printed. False if that thread could not be made; lines then go straight to
+// the card as before. vita_logDirect 1 on the command line keeps the old way,
+// for hunting a crash that takes the last lines with it.
+bool Vita_ConsoleUseThread();
 
 // Logs memory use straight to console.log and to standard output, for
 // Sys_Error: an out-of-memory error then shows which pool ran out.

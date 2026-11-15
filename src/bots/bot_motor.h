@@ -175,6 +175,36 @@ inline void StepView(ViewMotorState &state,
     }
 }
 
+// The movement keys that walk from `from` toward `to` (x, y) for a player
+// looking along `viewYaw` (degrees; yaw 0 looks along +x, 90 along +y), at
+// full stick: forward is along the view, right is to its right. A player can
+// walk any way while looking another, so this does not wait for the turn.
+struct MoveKeys
+{
+    int forward = 0; // -127..127
+    int right = 0;   // -127..127
+};
+
+inline MoveKeys MoveToward(float viewYaw, const float *from, const float *to)
+{
+    MoveKeys keys;
+    const float dx = to[0] - from[0];
+    const float dy = to[1] - from[1];
+    if (dx * dx + dy * dy < 1.0f)
+        return keys;
+    const float want = std::atan2(dy, dx) * (180.0f / 3.14159265358979f);
+    const float error = AngleDelta(want, viewYaw) * (3.14159265358979f / 180.0f);
+    keys.forward = static_cast<int>(std::lround(std::cos(error) * 127.0f));
+    keys.right = static_cast<int>(std::lround(-std::sin(error) * 127.0f));
+    return keys;
+}
+
+// The yaw that looks from `from` toward `to`.
+inline float YawToward(const float *from, const float *to)
+{
+    return std::atan2(to[1] - from[1], to[0] - from[0]) * (180.0f / 3.14159265358979f);
+}
+
 // Where an idle bot looks next: a new heading off to one side, near level, and
 // how long it holds it. Used until the bot has something to look at.
 struct IdleLook

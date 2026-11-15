@@ -4,8 +4,8 @@ import unittest
 from test_linux_bots import (FIXTURE_GSC, transition_fixture, transition_plan,
                              final_cohort_log, refill_fixture, validate_refills,
                              validate_kick_window, validate_hold, validate_transitions,
-                             validate_brain_view, balanced_teams, uses_both_teams,
-                             TEAM_CAPACITY, MAX_BOTS)
+                             validate_brain_view, validate_brain_walk, balanced_teams,
+                             uses_both_teams, TEAM_CAPACITY, MAX_BOTS)
 
 
 def healthy_log():
@@ -19,40 +19,76 @@ def healthy_log():
 
 def view_log(yaws, pitch=0.0, bots=3):
     log = ''
-    for sample, yaw in enumerate(yaws):
+    for tick, yaw in enumerate(yaws):
         for i in range(bots):
-            log += f'0:05 BOTFEATURE view entity={i} sample={sample} angles=({pitch}, {yaw + i}, 0)\n'
+            log += f'0:05 BOTFEATURE view entity={i} tick={tick} angles=({pitch}, {yaw + i}, 0)\n'
     return log
 
 
 class BrainViewTests(unittest.TestCase):
-    def passed(self, log, hold=4):
+    # Views are four a second: a one-second hold has five.
+    def passed(self, log, hold=1):
         return all(ok for ok, _ in validate_brain_view(log, 3, hold))
 
     def test_a_bot_that_looks_around_passes(self):
-        self.assertTrue(self.passed(view_log([0, 60, 100, 100, 40])))
+        self.assertTrue(self.passed(view_log([0, 40, 80, 80, 30])))
 
     def test_turning_through_the_back_takes_the_short_way(self):
-        self.assertTrue(self.passed(view_log([170, -170, -120, -120, -170])))
+        self.assertTrue(self.passed(view_log([170, -170, -130, -130, -170])))
 
     def test_a_bot_that_never_turns_fails(self):
         self.assertFalse(self.passed(view_log([30, 30, 30, 31, 30])))
 
     def test_a_snap_faster_than_the_motor_fails(self):
-        self.assertFalse(self.passed(view_log([0, 160, 160, 160, 160])))
+        # 120 and 70 degrees in a quarter second: past the 200 deg/s top speed.
+        self.assertFalse(self.passed(view_log([0, 120, 120, 120, 120])))
+        self.assertFalse(self.passed(view_log([0, 0, 0, -70, -70])))
+        # A turn the short way round past 180 a second ago is still caught.
+        self.assertFalse(self.passed(view_log([0, 90, 180, -90, -90])))
 
     def test_pitch_past_the_limit_fails(self):
-        self.assertFalse(self.passed(view_log([0, 60, 100, 100, 40], pitch=-89.0)))
+        self.assertFalse(self.passed(view_log([0, 40, 80, 80, 30], pitch=-89.0)))
 
     def test_missing_or_extra_samples_fail(self):
-        log = view_log([0, 60, 100, 100, 40])
+        log = view_log([0, 40, 80, 80, 30])
         self.assertFalse(self.passed(log.replace(log.splitlines(keepends=True)[4], '', 1)))
         self.assertFalse(self.passed(log + log.splitlines(keepends=True)[0]))
         self.assertFalse(self.passed(''))
 
     def test_fixture_logs_the_view(self):
         self.assertIn('BOTFEATURE view entity=', FIXTURE_GSC)
+        self.assertIn('botTest_LogViews(sample * 4 + quarter);', FIXTURE_GSC)
         self.assertIn('getplayerangles', FIXTURE_GSC)
+
+
+def place_log(xs, bots=3):
+    log = ''
+    for sample, x in enumerate(xs):
+        for i in range(bots):
+            log += f'0:05 BOTFEATURE place entity={i} sample={sample} origin=({x}, {100 * i}, 16.125)\n'
+    return log
+
+
+class BrainWalkTests(unittest.TestCase):
+    def passed(self, log, hold=4):
+        return all(ok for ok, _ in validate_brain_walk(log, 3, hold))
+
+    def test_a_bot_that_walks_passes(self):
+        self.assertTrue(self.passed(place_log([0, 150, 300, 300, 420])))
+
+    def test_a_bot_that_stands_still_fails(self):
+        self.assertFalse(self.passed(place_log([0, 20, 40, 60, 80])))
+
+    def test_a_bot_faster_than_a_player_fails(self):
+        self.assertFalse(self.passed(place_log([0, 500, 500, 500, 500])))
+
+    def test_missing_samples_fail(self):
+        log = place_log([0, 150, 300, 300, 420])
+        self.assertFalse(self.passed(log.replace(log.splitlines(keepends=True)[3], '', 1)))
+        self.assertFalse(self.passed(''))
+
+    def test_fixture_logs_the_place(self):
+        self.assertIn('BOTFEATURE place entity=', FIXTURE_GSC)
 
 
 class HoldEvidenceTests(unittest.TestCase):

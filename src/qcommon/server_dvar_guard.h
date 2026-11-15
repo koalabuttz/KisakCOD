@@ -113,6 +113,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "vita_keyboard",
     "vita_keyboardAnswer",
     "vita_layout",
+    "vita_logDirect",
     "vita_lookCurve",
     "vita_lookPitchRatio",
     "vita_lookSpeed",
