@@ -9,6 +9,7 @@ on:
       - src/ui/ui_expressions.cpp
       - src/ui/ui_shared.h
       - src/universal/dvar.cpp
+      - src/universal/name_miss_memory.h
       - src/universal/q_shared.h
       - src/universal/q_shared.cpp
       - src/ui/ui_input_core.cpp
@@ -25,6 +26,7 @@ on:
       - src/ui/ui_expressions.cpp
       - src/ui/ui_shared.h
       - src/universal/dvar.cpp
+      - src/universal/name_miss_memory.h
       - src/universal/q_shared.h
       - src/universal/q_shared.cpp
       - src/ui/ui_input_core.cpp

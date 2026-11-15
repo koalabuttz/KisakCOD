@@ -1,4 +1,5 @@
 #include <ui/ui_time.h>
+#include <linux/sys_perf.h>
 #include <ui/ui_cursor.h>
 #include <ui/ui_font_selection.h>
 #ifndef KISAK_MP
@@ -5731,6 +5732,8 @@ char errorString[1024];
 char *UI_SafeTranslateString(const char *reference)
 {
     const char *translation; // [esp+10h] [ebp-4h]
+
+    SysPerfScope perfScope(SYS_PERF_PROBE_UI_TRANSLATE);
 
     if (*reference == 21)
     {

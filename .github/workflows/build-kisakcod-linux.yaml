@@ -61,9 +61,8 @@ on:
       - tests/linux_perf/**
       - tests/skinning/**
       - .github/workflows/build-kisakcod-linux.yaml
-      # For the workflow contract tests of the native job, which read it.
-      - .github/workflows/build-kisakcod-vita.yaml
-      - .github/workflows/build-kisarcod-win.yaml
+      # Edits to the other workflows start workflow-contracts.yaml, which runs
+      # the contract test that reads them; they build nothing here.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [ "master" ]
@@ -106,9 +105,8 @@ on:
       - tests/linux_perf/**
       - tests/skinning/**
       - .github/workflows/build-kisakcod-linux.yaml
-      # For the workflow contract tests of the native job, which read it.
-      - .github/workflows/build-kisakcod-vita.yaml
-      - .github/workflows/build-kisarcod-win.yaml
+      # Edits to the other workflows start workflow-contracts.yaml, which runs
+      # the contract test that reads them; they build nothing here.
 
 permissions:
   contents: read

@@ -93,6 +93,19 @@ perf: done
   - `menu expressions`: `EvaluateExpression`, every menu expression
     (`visible when`, `exp text` and the like), in the HUD or in any other
     menu.
+  - `menus: <part>`: parts of painting a menu, in the HUD or in any other
+    menu, so the time outside the expressions can be split: `windows`
+    (`Window_Paint`, a menu's or an item's background and border),
+    `text items` (`Item_Text_Paint`, with its translation and its text
+    expression), `ownerdraw items` (`Item_OwnerDraw_Paint`, what the game
+    draws itself: ammo, compass and the like), `other items` (every other
+    item type), `translate` (`UI_SafeTranslateString`, a `@NAME` text looked
+    up), `materials by name` (a background material found by its name each
+    frame) and `show by dvar` (`Item_EnableShowViaDvar`, an item shown or
+    hidden by a dvar's value). The parts overlap: `translate` and the text
+    expressions sit inside `text items`. On a slow machine each timed call
+    adds two clock readings, so compare the parts with each other, not with
+    a run without them.
   - `client: <part>`: the main thread's client frame (multiplayer client).
     `frame` is `CL_Frame` (packets in and out). `screen` is
     `SCR_UpdateScreen` and holds the others and `hud`: `snapshots`
@@ -306,6 +319,28 @@ operators` holds two for each operator; `one clock reading` says what to take
 off. It prints numbers only, never an expression's text. Outside a match
 there is no frame count and the figures are per second. While it is off it
 costs one load and a branch per operator.
+
+## `r_dpvs_stats`
+
+A perf window times the culling of a cell's models and surfaces (`main thread
+runs: dpvs cell static` and `other threads run: dpvs cell static`) but cannot
+say what the time goes on. `r_dpvs_stats` counts it: the first call starts
+counting and the second prints four lines, all per view walked:
+
+- cells culled and the planes each started with; the nodes of the cells' box
+  trees that were visited, the plane tests made on them (each tests two
+  corners of the box), and how many nodes were outside, wholly inside (their
+  models and surfaces are marked with no further test) or leaves cut by a
+  plane;
+- those cut leaves by the number of planes left at them;
+- for static models and for surfaces: how many were marked with their leaf,
+  had been seen before through another cell, or were tested, with how many
+  plane tests and how many of the tested were culled; and the cull groups
+  tested.
+
+The walk is `R_AddAabbTreeSurfacesInFrustum_r` (`src/gfx_d3d/r_dpvs_static.cpp`);
+the counts are for deciding what a faster box test is worth there. While it is
+off it costs a load and a branch per node.
 
 ## Checks
 

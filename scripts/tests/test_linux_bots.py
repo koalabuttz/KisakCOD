@@ -530,6 +530,34 @@ def validate_brain_walk(log_text: str, bots: int, hold_seconds: int) -> list:
             (bool(walked), f"bot brain: every bot walked (at least {BRAIN_MIN_WALKED:g} units over the hold)")]
 
 
+NOTICE_ROW = re.compile(r"^bots: (\d+) noticed (\d+) after (\d+) ms in view, (\d+) units, "
+                        r"(\d+) degrees off centre, (\d+)% showing\s*$", re.M)
+# docs/bots.md: nobody is noticed in less than 0.2 s in view, or off the
+# screen (40 degrees across, 24 up and down, either way).
+BRAIN_MIN_NOTICE_MS = 200
+BRAIN_MAX_NOTICE_OFF = 40.5
+
+
+def notices(output: str) -> list:
+    return [tuple(int(v) for v in row) for row in NOTICE_ROW.findall(output)]
+
+
+def validate_brain_notices(output: str, both_teams: bool) -> list:
+    """The fairness audit: every player a bot noticed (bot_log 1) was an
+    opponent, on its screen, partly in view and in view for at least the
+    human floor. The probe's bots are clients 0 to N-1 and, on both teams,
+    odd numbers are axis; on one team nobody is an opponent."""
+    rows = notices(output)
+    opponents = all(both_teams and bot % 2 != target % 2 and bot != target
+                    for bot, target, *_ in rows)
+    floor = all(after >= BRAIN_MIN_NOTICE_MS for _, _, after, *_ in rows)
+    on_screen = all(off <= BRAIN_MAX_NOTICE_OFF and 0 < showing <= 100
+                    for _, _, _, _, off, showing in rows)
+    return [(opponents, "bot brain: every player a bot noticed was an opponent"),
+            (floor, f"bot brain: every notice came after at least {BRAIN_MIN_NOTICE_MS} ms in view"),
+            (on_screen, "bot brain: every notice was on the bot's screen and partly in view")]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -613,6 +641,8 @@ def main() -> int:
             "+set", "g_log", "games_mp.log",
             "+set", "g_logSync", "1",
             "+set", "bot_brain", str(args.brain),
+            # Each player a brain bot notices, for the fairness audit.
+            "+set", "bot_log", "1" if args.brain else "0",
             "+map", args.map_name,
         ]
         if args.cycles or args.refill_cycles:
@@ -770,6 +800,7 @@ def main() -> int:
             *(validate_brain_walk(log_text, args.bots, args.hold_seconds) if args.brain else []),
             *([(bool(re.search(r"bots: navigation mesh for \S+ (built|loaded)", output)),
                 "bot brain: the map's navigation mesh was built or loaded")] if args.brain else []),
+            *(validate_brain_notices(output, both_teams) if args.brain else []),
             (len(spawned) == expected_admissions and (combined.count("Gamestate has") >= len(spawned) or
              combined.count("Going from CS_FREE to CS_CONNECTED for bot") >= len(spawned)),
              "the server sent gamestates / connected each bot"),
@@ -790,6 +821,11 @@ def main() -> int:
             print(f"{'PASS' if ok else 'FAIL'}: {message}")
         if stage_failure:
             print(f"FAIL: {stage_failure}")
+        if args.brain:
+            rows = notices(output)
+            print(f"INFO: bots noticed opponents {len(rows)} times" +
+                  (f" (after {min(r[2] for r in rows)} to {max(r[2] for r in rows)} ms in view, "
+                   f"{min(r[3] for r in rows)} to {max(r[3] for r in rows)} units)" if rows else ""))
         print(f"\ncompleted in {elapsed:.1f}s on isolated port {port}")
         print("NOT verified: combat kills, client-originated disconnect packets, " +
               ("drop/refill, " if not args.refill_cycles else "") +
