@@ -1,4 +1,5 @@
 #include <ui/ui_time.h>
+#include <linux/sys_perf.h>
 #include "ui_cursor.h"
 #include <ui/ui_font_selection.h>
 #ifndef KISAK_SP 
@@ -1192,6 +1193,12 @@ void UI_Init()
     Menus_CloseAll(&uiInfo.uiDC);
     Dvar_RegisterBool("ui_multiplayer", 0, 0x40u, "True if the game is multiplayer");
     uiscript_debug = Dvar_RegisterInt("uiscript_debug", 0, 0, 2, 0, "spam debug info for the ui script");
+    UI_ExprStats_Init();
+    ui_fastExpressions = Dvar_RegisterBool(
+        "ui_fastExpressions",
+        1,
+        DVAR_NOFLAG,
+        "1 = menu expressions read bool, int and string dvars directly and skip clearing their 5 KB stack; the same results with less work");
 }
 
 void UI_KeyEvent(int localClientNum, int key, int down)
@@ -1283,6 +1290,8 @@ char *UI_SafeTranslateString(const char *reference)
     int v5; // ctr
     char *v6; // r11
     int v7; // r10
+
+    SysPerfScope perfScope(SYS_PERF_PROBE_UI_TRANSLATE);
 
     v1 = reference;
     if (*reference == 21)

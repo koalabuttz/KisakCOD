@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "r_dpvs.h"
+#include "r_dpvs_stats.h"
 #include <qcommon/mem_track.h>
 #include "r_model_lighting.h"
 #include "r_dvars.h"
@@ -16,6 +17,7 @@
 #include <cgame/cg_local.h>
 #include "rb_light.h"
 #include "r_sunshadow.h" // SCENE_VIEW_CAMERA
+#include "r_scene.h"
 #include <universal/profile.h>
 
 #ifdef KISAK_MP
@@ -273,6 +275,9 @@ void R_AddAllSceneEntSurfacesCamera(const GfxViewInfo *viewInfo)
                         gfxEnt = &frontEndDataOut->gfxEnts[gfxEntIndex];
                         isShadowReceiver = sc_enable->current.enabled && (gfxEnt->renderFxFlags & 0x100) != 0;
                         depthHack = (gfxEnt->renderFxFlags & 2) != 0;
+                        // A planar reflection view leaves the view model out.
+                        if (depthHack && R_ModernPlanarViewActive())
+                            continue;
                     }
                     else
                     {
@@ -2803,6 +2808,7 @@ void R_AddWorldSurfacesDpvs(const GfxViewParms *viewParms, int cameraCellIndex)
     iassert( rgp.world );
     iassert( viewParms );
     rg.debugViewParms = viewParms;
+    R_DpvsStatsCountView();
     R_AddWorldSurfacesPortalWalk(cameraCellIndex);
     dpvsView = dpvsGlob.views[scene.dpvs.localClientNum];
     if (dpvsGlob.farPlane)

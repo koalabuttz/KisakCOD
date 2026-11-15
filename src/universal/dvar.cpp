@@ -18,8 +18,10 @@
 #include <devgui/devgui.h>
 #include "com_math.h"
 #include "memfile.h"        // Dvar_Save/LoadDvars
+#include "name_miss_memory.h"
 
 #include <algorithm>
+#include <atomic>
 
 #ifdef KISAK_MP
 #include <client_mp/client_mp.h>
@@ -801,6 +803,37 @@ int Dvar_ValuesEqual(uint8_t type, DvarValue val0, DvarValue val1)
     return result;
 }
 
+// The dvar found last time through each name pointer. Callers mostly pass the
+// same pointer for the same name every time (a string literal, a menu
+// expression's operand, a script string), so the hash of the name and the walk
+// along one of only 256 chains can be skipped: the remembered dvar is right
+// exactly when its name still compares equal, because names are unique. A
+// pointer that now holds another name, or one never seen, takes the full
+// lookup. A missing dvar is never remembered. Dvars are only ever removed all
+// at once (Dvar_Shutdown), which forgets everything under the write lock.
+static std::atomic<dvar_s *> s_dvarFoundByPointer[1024];
+
+// A name that is not a dvar walks its whole chain every time it is asked for,
+// and menu expressions ask for such names every frame. A miss is remembered
+// with the count of registrations so far: no dvar can have appeared while
+// that count is the same, because a dvar only enters the table in
+// Dvar_RegisterNew, under the write lock. (Dvar_Shutdown only takes dvars
+// away, so a remembered miss stays true through it.)
+static std::atomic<uint32_t> s_dvarRegistrations;
+static NameMissMemory<8> s_dvarMisses;
+
+static std::atomic<dvar_s *> &Dvar_FoundByPointerSlot(const char *dvarName)
+{
+    const uint32_t bits = (uint32_t)(uintptr_t)dvarName;
+    return s_dvarFoundByPointer[(bits * 2654435761u) >> 22];
+}
+
+static void Dvar_ForgetFoundByPointer()
+{
+    for (std::atomic<dvar_s *> &slot : s_dvarFoundByPointer)
+        slot.store(nullptr, std::memory_order_relaxed);
+}
+
 static dvar_s *Dvar_FindMalleableVar(const char *dvarName)
 {
     dvar_s *var; // [esp+8h] [ebp-8h]
@@ -810,10 +843,26 @@ static dvar_s *Dvar_FindMalleableVar(const char *dvarName)
     while (g_dvarCritSect.writeCount)
         NET_Sleep(0);
 
+    if (dvarName)
+    {
+        var = Dvar_FoundByPointerSlot(dvarName).load(std::memory_order_relaxed);
+        if (var && !I_stricmp(dvarName, var->name))
+        {
+            InterlockedDecrement(&g_dvarCritSect.readCount);
+            return var;
+        }
+        if (s_dvarMisses.Has(dvarName, s_dvarRegistrations.load(std::memory_order_relaxed)))
+        {
+            InterlockedDecrement(&g_dvarCritSect.readCount);
+            return 0;
+        }
+    }
+
     for (var = dvarHashTable[generateHashValue(dvarName)]; var; var = var->hashNext)
     {
         if (!I_stricmp(dvarName, var->name))
         {
+            Dvar_FoundByPointerSlot(dvarName).store(var, std::memory_order_relaxed);
             if (g_dvarCritSect.readCount <= 0)
                 MyAssertHandler(
                     "c:\\trees\\cod3\\src\\universal\\../qcommon/threads_interlock.h",
@@ -825,6 +874,7 @@ static dvar_s *Dvar_FindMalleableVar(const char *dvarName)
             return var;
         }
     }
+    s_dvarMisses.Remember(dvarName, s_dvarRegistrations.load(std::memory_order_relaxed));
     if (g_dvarCritSect.readCount <= 0)
         MyAssertHandler(
             "c:\\trees\\cod3\\src\\universal\\../qcommon/threads_interlock.h",
@@ -1197,6 +1247,7 @@ void Dvar_Shutdown()
     dvar_modifiedFlags = 0;
     isDvarSystemActive = 0;
     memset((uint8_t *)dvarHashTable, 0, sizeof(dvarHashTable));
+    Dvar_ForgetFoundByPointer();
     Sys_UnlockWrite(&g_dvarCritSect);
 }
 
@@ -1651,6 +1702,7 @@ const dvar_s *Dvar_RegisterNew(
     areDvarsSorted = 0;
     ++dvarCount;
     HashValue = generateHashValue(dvarName);
+    s_dvarRegistrations.fetch_add(1, std::memory_order_relaxed);
     dvar->hashNext = dvarHashTable[HashValue];
     dvarHashTable[HashValue] = dvar;
     Sys_UnlockWrite(&g_dvarCritSect);

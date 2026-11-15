@@ -17,6 +17,9 @@
 #if defined(_MSC_VER)
 #include <intrin.h>
 #endif
+#if defined(__vita__)
+#include <psp2/kernel/threadmgr.h>
+#endif
 
 namespace gfx_vk::d3d9
 {
@@ -70,7 +73,6 @@ void HostLog(const Host &host, const char *format, ...)
     host.log(host.user, line);
 }
 
-#if !defined(__vita__)
 namespace
 {
 // Tells the processor the loop is a wait (and lets a sibling hyperthread run).
@@ -178,22 +180,60 @@ void FrontMutexType::WakeOne()
     }
     sleep.wake.notify_one();
 }
-#else
-FrontLockSleeps FrontLockSlept()
+
+bool FrontLockKnowsItsThread()
 {
-    return {}; // a plain recursive mutex here: its sleeps are not seen
+#if defined(__vita__)
+    // The register must hold an address, and the one the kernel's own call
+    // starts from: that call answers with a place inside the thread's block.
+    const char *const self = static_cast<const char *>(FrontMutexType::Self());
+    const char *const slot = static_cast<const char *>(sceKernelGetTLSAddr(0));
+    return self && slot && slot <= self && self - slot <= 0x1000;
+#else
+    return true;
+#endif
 }
 
-FrontMutexType &FrontMutex()
+#if defined(__vita__)
+namespace
 {
-    // Never destroyed: a device released from a static destructor still locks it.
-    static FrontMutexType *const mutex = new FrontMutexType;
-    return *mutex;
+// What a call into the front pays for its lock, for the start-up log: the
+// lock as it is, and the recursive mutex it was until 2026-11-15.
+void LogFrontLockCost(const Host &host)
+{
+    const int kTimes = 20000;
+    const auto nanoseconds = [](std::chrono::steady_clock::time_point from) {
+        return static_cast<long long>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - from).count());
+    };
+    auto start = std::chrono::steady_clock::now();
+    for (int i = 0; i < kTimes; ++i)
+    {
+        const FrontLock lock;
+    }
+    const long long word = nanoseconds(start);
+    static std::recursive_mutex *const mutex = new std::recursive_mutex;
+    start = std::chrono::steady_clock::now();
+    for (int i = 0; i < kTimes; ++i)
+    {
+        mutex->lock();
+        mutex->unlock();
+    }
+    const long long recursive = nanoseconds(start);
+    HostLog(host, "front lock: taken and dropped in %d ns (a std::recursive_mutex: %d ns)",
+        static_cast<int>(word / kTimes), static_cast<int>(recursive / kTimes));
 }
+} // namespace
 #endif
 
 IDirect3D9 *CreateDirect3D9(const Host &host)
 {
+#if defined(__vita__)
+    if (!FrontLockKnowsItsThread())
+        HostLog(host, "ERROR: front lock: the thread register does not hold this thread's storage; "
+                      "the lock cannot tell threads apart");
+    LogFrontLockCost(host);
+#endif
     return new Direct3D(host);
 }
 
@@ -322,6 +362,32 @@ bool ModernReflectionProbe(IDirect3DDevice9 *device, IDirect3DCubeTexture9 *prob
             return live->ModernReflectionProbe(static_cast<CubeTexture *>(probe)->state_.texture);
         }
     return false;
+}
+
+bool ModernPlanarWanted(IDirect3DDevice9 *device)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernPlanarWanted();
+    return false;
+}
+
+bool ModernPlanarBegin(IDirect3DDevice9 *device, const ModernPlanarView &view)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernPlanarBegin(view);
+    return false;
+}
+
+void ModernPlanarDone(IDirect3DDevice9 *device, const ModernPlanarView &view)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernPlanarDone(view);
 }
 
 void ModernSurfaceMoved(IDirect3DDevice9 *device, const float clip[4][4], const float prevClip[4][4])

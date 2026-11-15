@@ -61,9 +61,8 @@ on:
       - tests/linux_perf/**
       - tests/skinning/**
       - .github/workflows/build-kisakcod-linux.yaml
-      # For the workflow contract tests of the native job, which read it.
-      - .github/workflows/build-kisakcod-vita.yaml
-      - .github/workflows/build-kisarcod-win.yaml
+      # Edits to the other workflows start workflow-contracts.yaml, which runs
+      # the contract test that reads them; they build nothing here.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [ "master" ]
@@ -106,9 +105,8 @@ on:
       - tests/linux_perf/**
       - tests/skinning/**
       - .github/workflows/build-kisakcod-linux.yaml
-      # For the workflow contract tests of the native job, which read it.
-      - .github/workflows/build-kisakcod-vita.yaml
-      - .github/workflows/build-kisarcod-win.yaml
+      # Edits to the other workflows start workflow-contracts.yaml, which runs
+      # the contract test that reads them; they build nothing here.
 
 permissions:
   contents: read
@@ -476,6 +474,7 @@ jobs:
           set -euo pipefail
           python3 scripts/tests/test_openal_channel_stop.py
           python3 scripts/tests/test_openal_packed_sounds.py
+          python3 scripts/tests/test_openal_stream_lengths.py
 
       - name: Run client compile census
         timeout-minutes: 20
@@ -2724,9 +2723,11 @@ jobs:
           # The paths the adapter takes on MoltenVK (docs/vulkan-legacy-adapter.md):
           # strides baked into pipelines, depth compare fixed per pipeline and
           # 16-bit packed render targets made as B8G8R8A8, here with the
-          # validation layer required. Also plain uniform buffers, the path a
-          # layout takes past the device's dynamic uniform buffer limit.
+          # validation layer required, and index buffers in mapped memory each
+          # in a memory allocation of its own. Also plain uniform buffers, the
+          # path a layout takes past the device's dynamic uniform buffer limit.
           KISAK_VK_VERTEX_STRIDE: static
+          KISAK_VK_INDEX_MEMORY: own
           KISAK_VK_DEPTH_COMPARE: fixed
           KISAK_VK_RENDER_TARGETS: wide
           KISAK_VK_UNIFORMS: static

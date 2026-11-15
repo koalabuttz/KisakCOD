@@ -168,6 +168,9 @@ struct Backend
     modern::Velocity *velocity = nullptr;
     std::vector<modern::MovedSurface> moved;
     modern::VelocityStats velocityBase{};
+    // The pass was destroyed to be made again (ApplyModernTuning): its
+    // counts stay in the statistics until the next is made.
+    bool velocityRemade = false;
     // Skinned surfaces (vk_d3d9.h ModernSkinnedSurfaceMoved): those of the
     // scene being drawn, each with its key and whether it has a last matrix;
     // their vertices kept from one scene to the next; the counts at the last
@@ -253,8 +256,50 @@ struct Backend
     // KISAK_VK_MODERN_DEBUG=reflections: the reflections debug view over each
     // finished scene that has them (on the display image).
     bool debugReflections = false;
+    // Planar reflections (docs/vulkan-modern.md "Planar reflections"): wanted
+    // with KISAK_VK_MODERN_PLANAR=1 or KISAK_VK_MODERN_DEBUG=planar or
+    // planar-read, in linear light only. The renderer draws the planar view into planarColor (linear
+    // light) with its own depth after each main view; planarReady once one
+    // was drawn, planarView the last. KISAK_VK_MODERN_DEBUG=planar draws the
+    // planar image (as it is, upside down) over the top left of
+    // each finished scene.
+    bool planarWanted = false;
+    bool planarFailed = false;
+    bool debugPlanar = false;
+    bool debugPlanarRead = false; // KISAK_VK_MODERN_DEBUG=planar-read
+    lg::Texture *planarColor = nullptr;
+    lg::Surface *planarColorSurface = nullptr;
+    lg::Surface *planarDepth = nullptr;
+    bool planarReady = false;
+    ModernPlanarView planarView{};
+    uint64_t planarViews = 0, planarViewsBase = 0;
+    // How far from the plane (units) a lit surface still reads the planar
+    // image, and how far its normal map's tilt moves the point it reads
+    // (KISAK_VK_MODERN_PLANAR_REACH, _RIPPLE).
+    float planarReach = 4.0f;
+    float planarRipple = 4.0f;
+    // Scenes whose lit shaders read the planar image (SetScenePlanar).
+    uint64_t planarReads = 0, planarReadsBase = 0;
     bool debugFailed = false;
     modern::DebugView *debug = nullptr;
+    // The Modern switches the device started with (the KISAK_VK_MODERN_*
+    // variables, or the built-in defaults), which a ModernTuning field of -1
+    // keeps (ApplyModernTuning), and the Modern tuning last taken up. The
+    // variables that turn a pass on or off whatever asks are kept as -1
+    // (unset: on when something reads it), 0 or 1.
+    struct ModernStart
+    {
+        bool bloom = true, exposure = true, velocity = true;
+        bool shaders = true, modelShaders = true, noSunShaders = true, lightShaders = true;
+        int ao = -1, reflections = -1, normals = -1;
+        ModernDebugView debug = ModernDebugNone;
+        modern::TonemapCurve curve = modern::TonemapCurve::Neutral;
+        float sunStrength = 1.0f, skyStrength = 1.0f;
+        modern::ExposureParams exposureParams{};
+        modern::AoParams aoParams{};
+        modern::ReflectionParams reflectionParams{};
+    } modernStart;
+    ModernTuning modernTuning{};
 };
 
 namespace
@@ -407,6 +452,145 @@ std::string EnvText(const char *name)
     return text ? text : "";
 #endif
 }
+
+const char *DebugViewName(ModernDebugView view)
+{
+    switch (view)
+    {
+    case ModernDebugVelocity:
+        return "velocity";
+    case ModernDebugVelocityAll:
+        return "velocity-all";
+    case ModernDebugNormals:
+        return "normals";
+    case ModernDebugAo:
+        return "ao";
+    case ModernDebugReflections:
+        return "reflections";
+    default:
+        return "none";
+    }
+}
+
+// Takes up the Modern switches: each field of `tuning` that is not negative
+// (or, for the numbers, not outside what the variable of the same name
+// takes) in place of what the device started with. Called as the device
+// opens and then at a Present whose tuning changed (BackendFrame), so a scene
+// is drawn with one set of switches throughout. A pass turned off is not
+// destroyed (turned on again, it carries on); its image stops being read at
+// once. With `log`, says what the switches are now.
+void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = false)
+{
+    const Backend::ModernStart &start = backend->modernStart;
+    const auto pick = [](int value, bool startValue) { return value >= 0 ? value != 0 : startValue; };
+    backend->bloomWanted = pick(tuning.bloom, start.bloom);
+    backend->exposureWanted = pick(tuning.exposure, start.exposure);
+    backend->velocityWanted = pick(tuning.velocity, start.velocity);
+    backend->shadersWanted = pick(tuning.shaders, start.shaders);
+    backend->modelShadersWanted = pick(tuning.modelShaders, start.modelShaders);
+    backend->noSunShadersWanted = pick(tuning.noSunShaders, start.noSunShaders);
+    backend->lightShadersWanted = pick(tuning.lightShaders, start.lightShaders);
+
+    const ModernDebugView view = tuning.debug >= ModernDebugNone && tuning.debug <= ModernDebugReflections
+                                     ? static_cast<ModernDebugView>(tuning.debug)
+                                     : start.debug;
+    const bool velocityAllBefore = backend->debugVelocityAll;
+    backend->debugVelocityAll = view == ModernDebugVelocityAll;
+    backend->debugVelocity = view == ModernDebugVelocity || view == ModernDebugVelocityAll;
+    backend->debugNormals = view == ModernDebugNormals;
+    backend->debugAo = view == ModernDebugAo;
+    backend->debugReflections = view == ModernDebugReflections;
+    // The velocity pass takes its depth test when it is made: made again at
+    // its next scene (a wait for the GPU, once; only the debug view asks).
+    if (velocityAllBefore != backend->debugVelocityAll && backend->velocity)
+    {
+        // Its counts carry over to the next (unsigned: the base wraps back
+        // when the new pass counts up again).
+        const modern::VelocityStats was = modern::Stats(backend->velocity);
+        backend->velocityBase.passes -= was.passes;
+        backend->velocityBase.surfaces -= was.surfaces;
+        backend->velocityBase.skinned -= was.skinned;
+        backend->velocityBase.world -= was.world;
+        backend->velocityRemade = true;
+        modern::DestroyVelocity(backend->core, backend->velocity);
+        backend->velocity = nullptr;
+    }
+
+    // Ambient occlusion and reflections are wanted for what reads them unless
+    // switched on or off outright; the normals buffer for those.
+    const bool ours = backend->linearWanted && backend->litWanted && backend->shadersWanted;
+    const int ao = tuning.ao >= 0 ? tuning.ao : start.ao;
+    backend->aoWanted = ao == 1 || (ao < 0 && (backend->debugAo || ours));
+    const int reflections = tuning.reflections >= 0 ? tuning.reflections : start.reflections;
+    backend->reflectionsWanted = reflections == 1 || (reflections < 0 && (backend->debugReflections || ours));
+    backend->normalsWanted = start.normals != 0 && (start.normals == 1 || backend->debugNormals || backend->aoWanted
+                                                    || backend->reflectionsWanted || backend->planarWanted);
+    if (backend->legacy)
+    {
+        if (!backend->aoWanted || !backend->normalsWanted)
+        {
+            backend->sceneAo = false;
+            lg::SetModernAmbientOcclusion(backend->legacy, nullptr);
+        }
+        if (!backend->reflectionsWanted || !backend->normalsWanted)
+        {
+            backend->sceneReflections = nullptr;
+            lg::SetModernReflections(backend->legacy, nullptr);
+        }
+    }
+    if (!backend->normalsWanted)
+        backend->sceneNormals = nullptr;
+
+    const auto number = [](float value, float startValue, float low, float high, bool lowIn) {
+        return (lowIn ? value >= low : value > low) && value <= high ? value : startValue;
+    };
+    constexpr float kAny = 1.0e9f;
+    const float sun = number(tuning.sunStrength, start.sunStrength, 0.0f, kAny, true);
+    const float sky = number(tuning.skyStrength, start.skyStrength, 0.0f, kAny, true);
+    if (sun != backend->sunStrength || sky != backend->skyStrength)
+    {
+        backend->sunStrength = sun;
+        backend->skyStrength = sky;
+        if (backend->legacy)
+            lg::SetModernLitStrengths(backend->legacy, sun, sky);
+    }
+    backend->exposureParams.key = number(tuning.exposureKey, start.exposureParams.key, 0.0f, kAny, false);
+    backend->exposureParams.minEv = start.exposureParams.minEv;
+    backend->exposureParams.maxEv = start.exposureParams.maxEv;
+    modern::AoParams &aoParams = backend->aoParams;
+    aoParams = start.aoParams;
+    aoParams.radius = number(tuning.aoRadius, start.aoParams.radius, 0.0f, kAny, false);
+    aoParams.power = number(tuning.aoPower, start.aoParams.power, 0.0f, kAny, true);
+    aoParams.thickness = number(tuning.aoThickness, start.aoParams.thickness, 0.0f, kAny, false);
+    aoParams.grazing = number(tuning.aoGrazing, start.aoParams.grazing, 0.0f, 1.0f, false);
+    aoParams.floor = tuning.aoFloor >= 0.0f && tuning.aoFloor < 1.0f ? tuning.aoFloor : start.aoParams.floor;
+    aoParams.edge = number(tuning.aoEdge, start.aoParams.edge, 0.0f, 10.0f, false);
+    modern::ReflectionParams &reflectionParams = backend->reflectionParams;
+    reflectionParams = start.reflectionParams;
+    reflectionParams.maxDistance = number(tuning.ssrDistance, start.reflectionParams.maxDistance, 0.0f, kAny, false);
+    reflectionParams.thickness = number(tuning.ssrThickness, start.reflectionParams.thickness, 0.0f, kAny, false);
+
+    backend->tonemapCurve = tuning.tonemap >= static_cast<int>(modern::TonemapCurve::Clamp)
+                                    && tuning.tonemap <= static_cast<int>(modern::TonemapCurve::Aces)
+                                ? static_cast<modern::TonemapCurve>(tuning.tonemap)
+                                : start.curve;
+    modern::SetCurve(backend->tonemap, backend->tonemapCurve);
+
+    if (!log)
+        return;
+    const auto onOff = [](bool on) { return on ? "on" : "off"; };
+    HostLog(*backend->host,
+            "vulkan d3d9: modern: switches now: bloom %s, exposure %s (key %.3f), velocity %s, our shaders %s "
+            "(models %s, without the sun %s, lights %s; sun %.2f, sky %.2f), ambient occlusion %s (radius %.1f, power %.2f, "
+            "thickness %.1f, grazing %.2f, floor %.2f, edge %.3f), reflections %s (distance %.0f, thickness %.1f), normals %s, "
+            "tonemap %s, debug view %s",
+            onOff(backend->bloomWanted), onOff(backend->exposureWanted), backend->exposureParams.key,
+            onOff(backend->velocityWanted), onOff(backend->shadersWanted), onOff(backend->modelShadersWanted),
+            onOff(backend->noSunShadersWanted), onOff(backend->lightShadersWanted), backend->sunStrength, backend->skyStrength, onOff(backend->aoWanted),
+            aoParams.radius, aoParams.power, aoParams.thickness, aoParams.grazing, aoParams.floor, aoParams.edge,
+            onOff(backend->reflectionsWanted), reflectionParams.maxDistance, reflectionParams.thickness,
+            onOff(backend->normalsWanted), modern::CurveName(backend->tonemapCurve), DebugViewName(view));
+}
 } // namespace
 
 Backend *OpenBackend(const BackendDesc &desc, std::string &error)
@@ -416,88 +600,102 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     backend->host = desc.host;
     // The Modern path draws its scenes in linear light unless this says not to
     // (docs/vulkan-modern.md); without r_visuals modern nothing asks for it.
+    // Linear light, lit inputs and where effects blend are kept for the
+    // device's life; the rest are where the device starts, and the engine's
+    // r_modern* dvars may change them from one frame to the next
+    // (ApplyModernTuning).
     backend->linearWanted = !EnvIsZero("KISAK_VK_MODERN_LINEAR");
-    backend->bloomWanted = !EnvIsZero("KISAK_VK_MODERN_BLOOM");
-    // And gives what moves on its own a velocity of its own unless this says not to.
-    backend->velocityWanted = !EnvIsZero("KISAK_VK_MODERN_VELOCITY");
     backend->effectsInLinear = EnvIs("KISAK_VK_MODERN_EFFECTS", "linear");
     backend->litWanted = !EnvIsZero("KISAK_VK_MODERN_LIT");
-    backend->exposureWanted = !EnvIsZero("KISAK_VK_MODERN_EXPOSURE");
-    backend->shadersWanted = !EnvIsZero("KISAK_VK_MODERN_SHADERS");
-    backend->modelShadersWanted = !EnvIsZero("KISAK_VK_MODERN_MODEL_SHADERS");
-    backend->noSunShadersWanted = !EnvIsZero("KISAK_VK_MODERN_NO_SUN_SHADERS");
-    backend->lightShadersWanted = !EnvIsZero("KISAK_VK_MODERN_LIGHT_SHADERS");
+    Backend::ModernStart &start = backend->modernStart;
+    start.bloom = !EnvIsZero("KISAK_VK_MODERN_BLOOM");
+    // And gives what moves on its own a velocity of its own unless this says not to.
+    start.velocity = !EnvIsZero("KISAK_VK_MODERN_VELOCITY");
+    start.exposure = !EnvIsZero("KISAK_VK_MODERN_EXPOSURE");
+    start.shaders = !EnvIsZero("KISAK_VK_MODERN_SHADERS");
+    start.modelShaders = !EnvIsZero("KISAK_VK_MODERN_MODEL_SHADERS");
+    start.noSunShaders = !EnvIsZero("KISAK_VK_MODERN_NO_SUN_SHADERS");
+    start.lightShaders = !EnvIsZero("KISAK_VK_MODERN_LIGHT_SHADERS");
     {
         const std::string sun = EnvText("KISAK_VK_MODERN_SUN_STRENGTH");
         const float sunValue = sun.empty() ? -1.0f : std::strtof(sun.c_str(), nullptr);
         if (sunValue >= 0.0f)
-            backend->sunStrength = sunValue;
+            start.sunStrength = sunValue;
         const std::string sky = EnvText("KISAK_VK_MODERN_SKY_STRENGTH");
         const float skyValue = sky.empty() ? -1.0f : std::strtof(sky.c_str(), nullptr);
         if (skyValue >= 0.0f)
-            backend->skyStrength = skyValue;
+            start.skyStrength = skyValue;
     }
     {
         const std::string key = EnvText("KISAK_VK_MODERN_EXPOSURE_KEY");
         const float value = key.empty() ? 0.0f : std::strtof(key.c_str(), nullptr);
         if (value > 0.0f)
-            backend->exposureParams.key = value;
+            start.exposureParams.key = value;
         const std::string range = EnvText("KISAK_VK_MODERN_EXPOSURE_RANGE");
         char *end = nullptr;
         const float low = range.empty() ? 0.0f : std::strtof(range.c_str(), &end);
         const float high = end && *end == ',' ? std::strtof(end + 1, nullptr) : low - 1.0f;
         if (!range.empty() && low <= high)
         {
-            backend->exposureParams.minEv = low;
-            backend->exposureParams.maxEv = high;
+            start.exposureParams.minEv = low;
+            start.exposureParams.maxEv = high;
         }
     }
     {
         const std::string curve = EnvText("KISAK_VK_MODERN_TONEMAP");
-        if (!curve.empty() && !modern::CurveFromName(curve.c_str(), backend->tonemapCurve))
+        if (!curve.empty() && !modern::CurveFromName(curve.c_str(), start.curve))
             backend->tonemapCurveUnknown = true;
     }
-    backend->debugVelocityAll = EnvIs("KISAK_VK_MODERN_DEBUG", "velocity-all");
-    backend->debugVelocity = backend->debugVelocityAll || EnvIs("KISAK_VK_MODERN_DEBUG", "velocity");
-    backend->debugNormals = EnvIs("KISAK_VK_MODERN_DEBUG", "normals");
-    backend->debugAo = EnvIs("KISAK_VK_MODERN_DEBUG", "ao");
-    backend->aoWanted = !EnvIsZero("KISAK_VK_MODERN_AO")
-        && (EnvIs("KISAK_VK_MODERN_AO", "1") || backend->debugAo
-            || (backend->linearWanted && backend->litWanted && backend->shadersWanted));
+    {
+        const std::string debug = EnvText("KISAK_VK_MODERN_DEBUG");
+        start.debug = debug == "velocity"       ? ModernDebugVelocity
+                      : debug == "velocity-all" ? ModernDebugVelocityAll
+                      : debug == "normals"      ? ModernDebugNormals
+                      : debug == "ao"           ? ModernDebugAo
+                      : debug == "reflections"  ? ModernDebugReflections
+                                                : ModernDebugNone;
+    }
+    const auto onOff = [](const char *name) { return EnvIs(name, "0") ? 0 : EnvIs(name, "1") ? 1 : -1; };
+    start.ao = onOff("KISAK_VK_MODERN_AO");
     {
         const std::string radius = EnvText("KISAK_VK_MODERN_AO_RADIUS");
         const float value = radius.empty() ? 0.0f : std::strtof(radius.c_str(), nullptr);
         if (value > 0.0f)
-            backend->aoParams.radius = value;
+            start.aoParams.radius = value;
         const std::string power = EnvText("KISAK_VK_MODERN_AO_POWER");
         const float strength = power.empty() ? -1.0f : std::strtof(power.c_str(), nullptr);
         if (strength >= 0.0f)
-            backend->aoParams.power = strength;
+            start.aoParams.power = strength;
         const std::string thickness = EnvText("KISAK_VK_MODERN_AO_THICKNESS");
         const float depth = thickness.empty() ? 0.0f : std::strtof(thickness.c_str(), nullptr);
         if (depth > 0.0f)
-            backend->aoParams.thickness = depth;
+            start.aoParams.thickness = depth;
         const std::string grazing = EnvText("KISAK_VK_MODERN_AO_GRAZING");
         const float angle = grazing.empty() ? 0.0f : std::strtof(grazing.c_str(), nullptr);
         if (angle > 0.0f && angle <= 1.0f)
-            backend->aoParams.grazing = angle;
+            start.aoParams.grazing = angle;
         const std::string floorText = EnvText("KISAK_VK_MODERN_AO_FLOOR");
         const float floorValue = floorText.empty() ? -1.0f : std::strtof(floorText.c_str(), nullptr);
         if (floorValue >= 0.0f && floorValue < 1.0f)
-            backend->aoParams.floor = floorValue;
+            start.aoParams.floor = floorValue;
         const std::string edgeText = EnvText("KISAK_VK_MODERN_AO_EDGE");
         const float edge = edgeText.empty() ? 0.0f : std::strtof(edgeText.c_str(), nullptr);
         if (edge > 0.0f && edge <= 10.0f)
-            backend->aoParams.edge = edge;
+            start.aoParams.edge = edge;
     }
+    // Reflection probes are filtered as their textures load, so this one
+    // stays start-up only.
     backend->probesWanted = !EnvIsZero("KISAK_VK_MODERN_PROBES")
         && (EnvIs("KISAK_VK_MODERN_PROBES", "1") || backend->linearWanted);
-    backend->debugReflections = EnvIs("KISAK_VK_MODERN_DEBUG", "reflections");
-    backend->reflectionsWanted = !EnvIsZero("KISAK_VK_MODERN_SSR")
-        && (EnvIs("KISAK_VK_MODERN_SSR", "1") || backend->debugReflections
-            || (backend->linearWanted && backend->litWanted && backend->shadersWanted));
+    // The planar view and its debug view are start-up only, as the probes.
+    backend->debugPlanar = EnvIs("KISAK_VK_MODERN_DEBUG", "planar");
+    backend->debugPlanarRead = EnvIs("KISAK_VK_MODERN_DEBUG", "planar-read");
+    backend->planarWanted = backend->linearWanted && !EnvIsZero("KISAK_VK_MODERN_PLANAR")
+                            && (EnvIs("KISAK_VK_MODERN_PLANAR", "1") || backend->debugPlanar
+                                || backend->debugPlanarRead);
+    start.reflections = onOff("KISAK_VK_MODERN_SSR");
     {
-        modern::ReflectionParams &p = backend->reflectionParams;
+        modern::ReflectionParams &p = start.reflectionParams;
         const auto number = [](const char *name, float &out) {
             const std::string text = EnvText(name);
             const float value = text.empty() ? 0.0f : std::strtof(text.c_str(), nullptr);
@@ -511,12 +709,15 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         number("KISAK_VK_MODERN_SSR_LEVELS", levels);
         p.steps = static_cast<uint32_t>(std::min(steps, 256.0f));
         p.levels = static_cast<uint32_t>(std::min(levels, static_cast<float>(modern::kMaxReflectionLevels)));
+        number("KISAK_VK_MODERN_PLANAR_REACH", backend->planarReach);
+        const std::string ripple = EnvText("KISAK_VK_MODERN_PLANAR_RIPPLE");
+        if (!ripple.empty())
+            backend->planarRipple = std::max(0.0f, std::strtof(ripple.c_str(), nullptr));
     }
     // The normals buffer is built for what reads it; KISAK_VK_MODERN_NORMALS=0
     // keeps it (and so ambient occlusion and reflections) off whatever asks.
-    backend->normalsWanted = !EnvIsZero("KISAK_VK_MODERN_NORMALS")
-                             && (EnvIs("KISAK_VK_MODERN_NORMALS", "1") || backend->debugNormals
-                                 || backend->aoWanted || backend->reflectionsWanted);
+    start.normals = onOff("KISAK_VK_MODERN_NORMALS");
+    ApplyModernTuning(backend, backend->modernTuning);
     if (!h.windowSystem || !h.windowSystem(h.user, desc.window, backend->windowSystem))
     {
         error = "the host has no Vulkan window system for this window";
@@ -584,6 +785,11 @@ void BackendFrame(Backend *backend)
         return;
     Tuning tuning;
     backend->host->tuning(backend->host->user, tuning);
+    if (std::memcmp(&tuning.modern, &backend->modernTuning, sizeof(ModernTuning)) != 0)
+    {
+        backend->modernTuning = tuning.modern;
+        ApplyModernTuning(backend, tuning.modern, true);
+    }
     Tuning &old = backend->tuning;
     if (tuning.keepDrawState != old.keepDrawState)
     {
@@ -762,7 +968,7 @@ void BackendLogStats(Backend *backend, bool reset)
     }
     // Velocity: the surfaces drawn again with their own motion, and the
     // GPU time of that pass.
-    if (backend->velocity)
+    if (backend->velocity || backend->velocityRemade)
     {
         const modern::VelocityStats velocity = modern::Stats(backend->velocity);
         const PassTimings pass = PassTimingsFor(backend->core, "modern velocity");
@@ -817,6 +1023,14 @@ void BackendLogStats(Backend *backend, bool reset)
                    "are), %.1f ms each",
                 backend->probesFiltered, backend->probesLeft,
                 backend->probesFiltered ? backend->probesMs / double(backend->probesFiltered) : 0.0);
+    // Planar reflections: the views drawn into the planar image, and its size.
+    if (backend->planarViews > backend->planarViewsBase)
+        HostLog(h, "vulkan d3d9: modern: %llu planar reflection views (%ux%u)",
+                static_cast<unsigned long long>(backend->planarViews - backend->planarViewsBase),
+                backend->planarView.width, backend->planarView.height);
+    if (backend->planarReads > backend->planarReadsBase)
+        HostLog(h, "vulkan d3d9: modern: %llu scenes read the planar reflection",
+                static_cast<unsigned long long>(backend->planarReads - backend->planarReadsBase));
     // Bloom: the scenes it ran for in place of the glow, the passes of each,
     // and their GPU time per scene.
     if (backend->bloom)
@@ -837,13 +1051,14 @@ void BackendLogStats(Backend *backend, bool reset)
         backend->bloomPassesBase = modern::Stats(backend->bloom).passes;
         if (backend->bloom)
             backend->bloomMsBase = PassTimingsFor(backend->core, "modern bloom").totalMs;
-        if (backend->velocity)
-            backend->velocityBase = modern::Stats(backend->velocity);
+        backend->velocityBase = modern::Stats(backend->velocity);
         backend->normalsBase = modern::Stats(backend->normals);
         backend->aoBase = modern::Stats(backend->ao);
         backend->reflectionsBase = modern::Stats(backend->reflections);
         backend->keptBase = modern::Stats(backend->kept);
         backend->linearScenesBase = backend->linearScenes;
+        backend->planarViewsBase = backend->planarViews;
+        backend->planarReadsBase = backend->planarReads;
         modern::ResetStats(backend->exposure);
         if (backend->exposure)
             backend->exposureMsBase = PassTimingsFor(backend->core, "modern exposure").totalMs;
@@ -900,7 +1115,10 @@ void CloseBackend(Backend *backend)
         backend->sceneNormals = nullptr;
     }
     if (backend->legacy)
+    {
         lg::SetModernReflections(backend->legacy, nullptr);
+        lg::SetModernPlanar(backend->legacy, nullptr, nullptr);
+    }
     if (backend->reflections)
     {
         modern::DestroyReflections(backend->core, backend->reflections);
@@ -927,6 +1145,13 @@ void CloseBackend(Backend *backend)
         modern::DestroyTonemap(backend->core, backend->tonemap);
         backend->tonemap = nullptr;
     }
+    if (backend->legacy && backend->planarColor)
+        lg::DestroyTexture(backend->legacy, backend->planarColor);
+    if (backend->legacy && backend->planarDepth)
+        lg::DestroySurface(backend->legacy, backend->planarDepth);
+    backend->planarColor = nullptr;
+    backend->planarColorSurface = nullptr;
+    backend->planarDepth = nullptr;
     if (backend->legacy && backend->linearScene)
     {
         lg::DestroyTexture(backend->legacy, backend->linearScene);
@@ -1587,6 +1812,77 @@ void TraceSceneReflections(Backend *backend, Image *depth, const modern::SceneVi
     // The lit shaders of ours read them until the scene is lit (BackendModernScene).
     lg::SetModernReflections(backend->legacy, backend->sceneReflections);
 }
+
+// The planar reflection the scene's lit shaders read: last frame's planar
+// image (drawn after last frame's main view), with where this frame's points
+// are in it. None on a cut (last frame's camera was elsewhere) or before the
+// first planar view.
+void SetScenePlanar(Backend *backend, const ModernSceneView &view)
+{
+    lg::SetModernPlanar(backend->legacy, nullptr, nullptr);
+    if (!BackendModernPlanarWanted(backend) || !backend->planarReady || !backend->planarColorSurface || view.cut)
+        return;
+    Image *image = lg::SurfaceImage(backend->planarColorSurface);
+    if (!image)
+        return;
+    // The eye: the view matrix takes it to the origin (row vectors,
+    // p_view = p * R + t, so eye = -t * R^T).
+    const float (*v)[4] = view.view;
+    float eye[3];
+    for (int i = 0; i < 3; ++i)
+        eye[i] = -(v[3][0] * v[i][0] + v[3][1] * v[i][1] + v[3][2] * v[i][2]);
+    // [p - eye, 1] * T(eye) * view * projection, T(eye) the translation by eye.
+    const ModernPlanarView &planar = backend->planarView;
+    float viewProjection[4][4];
+    for (int r = 0; r < 4; ++r)
+        for (int c = 0; c < 4; ++c)
+        {
+            float sum = 0.0f;
+            for (int k = 0; k < 4; ++k)
+                sum += planar.view[r][k] * planar.projection[k][c];
+            viewProjection[r][c] = sum;
+        }
+    lg::ModernPlanarParams params{};
+    for (int c = 0; c < 4; ++c)
+    {
+        for (int r = 0; r < 3; ++r)
+            params.clip[r][c] = viewProjection[r][c];
+        params.clip[3][c] = viewProjection[3][c] + eye[0] * viewProjection[0][c] + eye[1] * viewProjection[1][c]
+                            + eye[2] * viewProjection[2][c];
+    }
+    params.plane[0] = planar.plane[0];
+    params.plane[1] = planar.plane[1];
+    params.plane[2] = planar.plane[2];
+    params.plane[3] = planar.plane[0] * eye[0] + planar.plane[1] * eye[1] + planar.plane[2] * eye[2] + planar.plane[3];
+    params.on = backend->debugPlanarRead ? 2.0f : 1.0f;
+    params.reach = backend->planarReach;
+    params.facing = 0.95f;
+    params.ripple = backend->planarRipple;
+    lg::SetModernPlanar(backend->legacy, image, &params);
+    // With the read's debug view, the matrices behind it now and then, to
+    // check a reflection's place against the scene's own geometry.
+    if (backend->debugPlanarRead && backend->planarReads % 600 == 0)
+    {
+        const float (*pv)[4] = planar.view;
+        const float (*pp)[4] = planar.projection;
+        float mirrorEye[3];
+        for (int i = 0; i < 3; ++i)
+            mirrorEye[i] = -(pv[3][0] * pv[i][0] + pv[3][1] * pv[i][1] + pv[3][2] * pv[i][2]);
+        HostLog(*backend->host,
+                "vulkan d3d9: modern: planar read: eye %.2f %.2f %.2f, mirror eye %.2f %.2f %.2f, plane %.3f %.3f "
+                "%.3f %.2f",
+                eye[0], eye[1], eye[2], mirrorEye[0], mirrorEye[1], mirrorEye[2], planar.plane[0], planar.plane[1],
+                planar.plane[2], planar.plane[3]);
+        for (int r = 0; r < 4; ++r)
+            HostLog(*backend->host,
+                    "vulkan d3d9: modern: planar read: row %d: view %.4f %.4f %.4f %.4f, projection %.4f %.4f %.4f "
+                    "%.4f, main view %.4f %.4f %.4f %.4f, main projection %.4f %.4f %.4f %.4f",
+                    r, pv[r][0], pv[r][1], pv[r][2], pv[r][3], pp[r][0], pp[r][1], pp[r][2], pp[r][3], v[r][0],
+                    v[r][1], v[r][2], v[r][3], view.projection[r][0], view.projection[r][1], view.projection[r][2],
+                    view.projection[r][3]);
+    }
+    ++backend->planarReads;
+}
 } // namespace
 
 bool BackendModernReflectionProbe(Backend *backend, lg::Device *legacy, lg::Texture *probe)
@@ -1657,6 +1953,76 @@ bool BackendModernReflectionProbe(Backend *backend, lg::Device *legacy, lg::Text
     return true;
 }
 
+bool BackendModernPlanarWanted(Backend *backend)
+{
+    return backend && backend->legacy && backend->planarWanted && !backend->planarFailed && !backend->linearFailed;
+}
+
+bool BackendModernPlanarBegin(Backend *backend, const ModernPlanarView &view, lg::Surface *&color, lg::Surface *&depth)
+{
+    color = nullptr;
+    depth = nullptr;
+    if (!BackendModernPlanarWanted(backend) || !view.width || !view.height)
+        return false;
+    if (backend->planarColor)
+    {
+        const lg::TextureDesc &have = lg::Describe(backend->planarColor);
+        if (have.width != view.width || have.height != view.height)
+        {
+            lg::DestroyTexture(backend->legacy, backend->planarColor);
+            lg::DestroySurface(backend->legacy, backend->planarDepth);
+            backend->planarColor = nullptr;
+            backend->planarColorSurface = nullptr;
+            backend->planarDepth = nullptr;
+            backend->planarReady = false;
+        }
+    }
+    if (!backend->planarColor)
+    {
+        lg::TextureDesc desc;
+        desc.width = view.width;
+        desc.height = view.height;
+        desc.levels = 1;
+        desc.usage = lg::d3d::USAGE_RENDERTARGET;
+        desc.format = lg::d3d::FMT_A16B16G16R16F;
+        desc.pool = lg::d3d::POOL_DEFAULT;
+        desc.name = "modern planar reflection";
+        backend->planarColor = lg::CreateTexture(backend->legacy, desc);
+        backend->planarColorSurface =
+            backend->planarColor ? lg::GetSurfaceLevel(backend->legacy, backend->planarColor, 0, 0) : nullptr;
+        backend->planarDepth = backend->planarColorSurface
+                                   ? lg::CreateDepthStencil(backend->legacy, view.width, view.height,
+                                                            lg::d3d::FMT_D24S8, "modern planar reflection depth")
+                                   : nullptr;
+        if (!backend->planarDepth)
+        {
+            if (backend->planarColor)
+                lg::DestroyTexture(backend->legacy, backend->planarColor);
+            backend->planarColor = nullptr;
+            backend->planarColorSurface = nullptr;
+            backend->planarFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no planar reflections: cannot make the %ux%u images",
+                    view.width, view.height);
+            return false;
+        }
+        lg::SetLinearLight(backend->planarColor, true);
+    }
+    // The planar view's own lit shaders do not read the image they draw into.
+    lg::SetModernPlanar(backend->legacy, nullptr, nullptr);
+    ++backend->planarViews;
+    color = backend->planarColorSurface;
+    depth = backend->planarDepth;
+    return true;
+}
+
+void BackendModernPlanarDone(Backend *backend, const ModernPlanarView &view)
+{
+    if (!backend || !backend->planarColor)
+        return;
+    backend->planarView = view;
+    backend->planarReady = true;
+}
+
 bool BackendModernWantsSceneDepth(Backend *backend)
 {
     return backend && backend->legacy && backend->core && backend->normalsWanted && !backend->normalsFailed;
@@ -1701,6 +2067,7 @@ ModernResult BackendModernSceneDepth(Backend *backend, lg::Surface *depth, const
     }
     SceneAmbientOcclusion(backend, depthImage, scene);
     TraceSceneReflections(backend, depthImage, scene);
+    SetScenePlanar(backend, view);
     return ModernResult::Done;
 }
 
@@ -1719,6 +2086,7 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
     Image *reflections = backend->sceneReflections;
     backend->sceneReflections = nullptr;
     lg::SetModernReflections(backend->legacy, nullptr);
+    lg::SetModernPlanar(backend->legacy, nullptr, nullptr);
     // The surfaces that moved in this scene; the next scene starts a new list.
     std::vector<modern::MovedSurface> moved;
     moved.swap(backend->moved);
@@ -1773,6 +2141,15 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
             DrawAoDebug(backend, ao, lg::SurfaceImage(display), area);
         if (backend->debugReflections)
             DrawReflectionsDebug(backend, reflections, lg::SurfaceImage(display), area);
+        if (backend->debugPlanar && backend->planarReady && backend->planarColorSurface)
+        {
+            // Last frame's planar view, as it is, over the scene's top left.
+            const VkRect2D planarArea = {area.offset,
+                                         {std::min(area.extent.width, backend->planarView.width),
+                                          std::min(area.extent.height, backend->planarView.height)}};
+            DrawReflectionsDebug(backend, lg::SurfaceImage(backend->planarColorSurface), lg::SurfaceImage(display),
+                                 planarArea);
+        }
         return passes;
     };
     if (backend->taaFailed)

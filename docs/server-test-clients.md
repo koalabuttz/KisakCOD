@@ -36,6 +36,36 @@ decoder, a human second player, or proof of multi-player synchronization.
 - `SV_UpdateBots` / `SV_BotUserMove` in `src/server_mp/sv_main_mp.cpp` generate
   randomized commands. `sv_botsPressAttackBtn` controls the attack bit; these
   clients have no pathfinding, aiming or objectives.
+- With `bot_brain 1`, `SV_UpdateBots` asks KisakCOD's bot brain
+  (`Bot_UserMove`, src/bots/bot_brain.cpp) for each active bot's command
+  instead; see [bots](bots.md).
+
+## Snapshots for test clients (`sv_botSnapshots`)
+
+Every server frame (20 a second) the server builds a snapshot for each client
+whose turn it is: the entities it can see, its player state, the message
+delta-compressed and Huffman-coded, then sent. A test client's address is
+`NA_BOT`, where a sent packet goes nowhere, and nothing reads its snapshots:
+its moves come from `SV_BotUserMove`, it never acknowledges one (its ping is
+999 either way) and `SV_AddServerCommand` gives it no server commands.
+
+PC server frame run 1 (`perf_sample` on the dedicated server in WSL, mp_crash,
+`server: <part>` probes, docs/perf-ab.md) timed a server frame at about 1.2 ms
+with 12 bots and 2.6 ms with 24, and snapshots at about 0.5 and 1.3 ms of that:
+the largest part, and the one that grows fastest with the number of bots.
+
+`sv_botSnapshots 0`, the default, skips building, writing and sending
+snapshots for test clients; a drop that was put off until the next send still
+happens. `1` sends them as retail did.
+
+PC bot snapshots run 1 (`perf_ab "set sv_botSnapshots 1" "set sv_botSnapshots
+0"` on the same WSL dedicated server, mp_crash, 24 bots, two launches) measured
+0 against 1: `server: snapshots` 0.027-0.031 down to 0.004-0.006 ms a frame,
+the server frame 0.057-0.060 down to 0.032-0.034 ms a frame, the frames that
+hold a server frame 3.63-3.77 down to 2.56-2.62 ms on average, and +2.3 to
++2.4 % fps with windows that differ by 0.3 % at most. Bot moves and triggers
+did not change, all 24 bots were still in the game after 60 s at 0, and no bot
+was dropped or kicked.
 
 The loopback authentication test mode deliberately rejects pseudo-addresses.
 Do not enable `sv_loopbackTestAuth` for this bot probe. Leave both authentication
@@ -116,8 +146,9 @@ overrides registered `dm.gsc` and delegates initialization to stock `war::main`;
 it is not a stock DM round. Only the fixture is distributed, not stock scripts.
 
 The fixture identifies each `addtestclient()` result with the stock script field
-`pers["isBot"]`, then sends `menuresponse` events for the allies team and the
-`assault_mp,0` class choice. Stock callbacks set session state, select spawn
+`pers["isBot"]`, then sends `menuresponse` events for the allies team (both
+teams by entity parity, with bot firing off, for more than four bots, since a
+stock team holds half of `sv_maxclients`) and the `assault_mp,0` class choice. Stock callbacks set session state, select spawn
 points and equip the class. The fixture never writes session state, spawns the
 player directly, manufactures class stats, or changes authentication settings.
 

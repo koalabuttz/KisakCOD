@@ -199,6 +199,9 @@ extern const dvar_t *ui_mousePitch;
 extern const dvar_t *ui_extraBigFont;
 extern const dvar_t *ui_nextMission;
 extern const dvar_t *uiscript_debug;
+extern const dvar_t *ui_fastExpressions; // ui_expressions.cpp
+void UI_ExprStats_Init();  // the ui_exprStats command (ui_expressions.cpp)
+void UI_ExprStatsFrame(); // once a frame, so ui_exprStats can print per frame
 extern const dvar_t *ui_autoContinue;
 extern const dvar_t *ui_smallFont;
 extern const dvar_t *ui_hideMap;

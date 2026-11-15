@@ -45,6 +45,57 @@ is refused, the reason is logged once (`vulkan d3d9: modern: the scene is not
 anti-aliased: the scene is multisampled`), and the jitter stops, so the game
 looks as it does with `legacy`.
 
+## Live switches
+
+Most of the Modern path's switches can be changed while the game runs, from
+the console, in a match: the engine's `r_modern*` dvars. The host reads them at
+every Present (`src/gfx_d3d/rhi/r_rhi_modern_dvars.h`) and hands them to the
+back end as `front::Tuning::modern` (`ModernTuning`, `vk_d3d9.h`), which takes
+them up from the next frame, so each scene is drawn with one set throughout
+(`ApplyModernTuning`, `vk_d3d9_backend_vulkan.cpp`). Each change is logged once:
+`vulkan d3d9: modern: switches now: bloom on, exposure on (key 0.115), ...,
+tonemap neutral, debug view none`. They are not saved, and a server may not set
+them (`src/qcommon/server_dvar_guard.h`).
+
+Every dvar's default keeps what the device started with: the
+`KISAK_VK_MODERN_*` environment variable of the same switch, read once as the
+device opens, or the built-in default. So the variables keep working for older
+recipes, and setting a dvar back to `default` (or `-1` for the numbers) goes
+back to them.
+
+| Dvar | Values | Variable it overrides |
+| --- | --- | --- |
+| `r_modernBloom` | default, off, on | `KISAK_VK_MODERN_BLOOM` |
+| `r_modernExposure` | default, off, on | `KISAK_VK_MODERN_EXPOSURE` |
+| `r_modernExposureKey` | -1, or above 0 to 4 | `KISAK_VK_MODERN_EXPOSURE_KEY` |
+| `r_modernVelocity` | default, off, on | `KISAK_VK_MODERN_VELOCITY` |
+| `r_modernShaders` | default, off, on | `KISAK_VK_MODERN_SHADERS` |
+| `r_modernModelShaders` | default, off, on | `KISAK_VK_MODERN_MODEL_SHADERS` |
+| `r_modernNoSunShaders` | default, off, on | `KISAK_VK_MODERN_NO_SUN_SHADERS` |
+| `r_modernLightShaders` | default, off, on | `KISAK_VK_MODERN_LIGHT_SHADERS` |
+| `r_modernSunStrength`, `r_modernSkyStrength` | -1, or 0 to 16 | `KISAK_VK_MODERN_SUN_STRENGTH`, `_SKY_STRENGTH` |
+| `r_modernAo` | default, off, on | `KISAK_VK_MODERN_AO` |
+| `r_modernAoRadius`, `r_modernAoPower`, `r_modernAoThickness`, `r_modernAoGrazing`, `r_modernAoFloor`, `r_modernAoEdge` | -1, or the variable's range | `KISAK_VK_MODERN_AO_RADIUS`, `_POWER`, `_THICKNESS`, `_GRAZING`, `_FLOOR`, `_EDGE` |
+| `r_modernSsr` | default, off, on | `KISAK_VK_MODERN_SSR` |
+| `r_modernSsrDistance`, `r_modernSsrThickness` | -1, or above 0 | `KISAK_VK_MODERN_SSR_DISTANCE`, `_THICKNESS` |
+| `r_modernTonemap` | default, clamp, neutral, agx, aces | `KISAK_VK_MODERN_TONEMAP` |
+| `r_modernDebug` | default, none, velocity, velocity-all, normals, ao, reflections | `KISAK_VK_MODERN_DEBUG` |
+
+As with the variables, `r_modernAo` and `r_modernSsr` at `default` turn the
+pass on for what reads it (our lit shaders, or its debug view), so
+`r_modernShaders off` turns them off too unless they are set `on`. A pass
+switched off keeps what it made and carries on when switched on again; what it
+drew stops being read at once. Changing `r_modernDebug` to or from
+`velocity-all` makes the velocity pass again at its next scene (a wait for the
+GPU, once). Linear light (`KISAK_VK_MODERN_LINEAR`), lit inputs
+(`KISAK_VK_MODERN_LIT`), where effects blend (`KISAK_VK_MODERN_EFFECTS`), the
+normals buffer's own switch (`KISAK_VK_MODERN_NORMALS`), the reflection
+probes' filter (`KISAK_VK_MODERN_PROBES`, applied as their textures load), the
+exposure range, the reflections' steps and levels, and planar reflections
+(`KISAK_VK_MODERN_PLANAR` and `KISAK_VK_MODERN_DEBUG=planar` or
+`planar-read`, which `r_modernDebug` does not list) stay start-up only, and `r_visuals` itself is
+latched (above).
+
 ## How a frame goes
 
 1. **Jitter (front end).** `R_RenderScene` sets up the scene's view
@@ -271,6 +322,13 @@ the scene ends, so the band stays sharp only if the pass still reads the
 draw's. That band's vertices are also far from the origin and drawn with the
 world shaders' two matrices, while it is reported with their product, so it
 stays sharp only if the pass allows for the depth's rounding.
+
+The `modern_live` scene changes the switches while the device exists: the
+tonemap scene through the clamp curve and then ACES, the ambient occlusion
+scene with ambient occlusion off, and the velocity debug view without its
+depth test (in the full run, after `modern_velocity`, that makes the velocity
+pass again, and its statistics keep the counts from before), each change
+logged once.
 
 `scripts/tests/test_vulkan_d3d9_front.py` checks the scenes in the full run and
 the `modern:` statistics lines. `scripts/tools/vulkan/gen_spirv_header.py
@@ -1281,6 +1339,112 @@ marks are kept. `test_vulkan_d3d9_front.py` runs it as it is, with
 `KISAK_VK_MODERN_PROBES=1` (beside `KISAK_VK_MODERN_LINEAR=0` or not), with
 `KISAK_VK_MODERN_PROBES=0` and with `KISAK_VK_MODERN_LINEAR=0`, and checks
 that a full run filters 2 (none without linear light).
+
+## Planar reflections
+
+Off by default while it is measured. Screen-space reflections cannot show
+what the screen does not (the underside of a car over a wet street, what is
+behind the camera), and
+the probes are a few fixed points; a flat floor or street can instead see
+the scene drawn again from the camera mirrored in it.
+
+**The plane.** One flat plane a map, from a list in `src/gfx_d3d/r_scene.cpp`
+(`s_modernPlanarMaps`: a map name and a point above the floor). At the first
+frame of the map the point is traced 512 units down through the world; the
+height met makes the plane `z = height`, logged once as `modern: planar
+reflections on mp_strike at height H`. Only `mp_strike`'s main street is
+listed now (picked from the reflections' PC run 4).
+
+**The view.** After each main view (`R_RenderScene` from the game), while
+the camera is above the plane, `R_ModernPlanarScene` draws the scene again:
+
+* from the camera mirrored in the plane, its left axis negated so the view
+  stays right-handed (the image shows the scene as a puddle on the plane
+  would: upside down; a reader finds a point of the plane in it through the
+  view's own matrices);
+* at half the main view's size, with no jitter;
+* with an oblique near plane (Lengyel 2005) one unit above the reflecting
+  plane, scaled so the far plane stays outside the view, so nothing below
+  the plane is drawn;
+* with what is visible found from the real camera's position (the mirrored
+  one is often under the floor, inside no cell) through the mirrored
+  frustum;
+* with the main view's sun and spot shadows, taken over rather than drawn
+  again;
+* without the view model, effects, post effects, sound, physics or marks
+  updated, and without 2D.
+
+Both views are drawn by the back end after the front end has made them, so
+the planar view keeps what the main view left for it: its world surfaces'
+indices go after the main view's in the frame's pre-tessellated index buffer
+(`R_BeginPreTess`, no discard), not over them.
+
+The back end draws its lit and decal passes into an image of its own
+(RGBA16F, linear light) with its own depth, made at the first planar view
+and again when the size changes. The game's pass for the view is
+`RB_ModernPlanarDrawCommands` in `src/gfx_d3d/rb_draw3d.cpp`; the
+`planarWanted`, `planarBegin` and `planarDone` hooks (`r_rhi_modern.h`) move
+the draws there and back.
+
+**The read.** The next frame's main view reads the image in our sun-lit world
+shader (`lm_sun.frag`, the `lm_[hsm_]sun` family with a specular map, opaque
+surfaces only; agreed with the lit shaders' owner): at the scene's depth
+prepass the back end hands the Legacy adapter last frame's image at pixel
+sampler 13 (`kModernPlanarSampler`, a bilinear sampler clamped to the edge;
+ours is not built where the game's shader reads s13, and a 1x1 (0, 0, 0, 0)
+texture stands in where there is no image) and, as push constants
+(`ModernPlanarParams`), where a point of this frame is in it (the planar
+view's view and projection, moved to the eye, since the shader knows its
+point only relative to the eye) and the plane. A pixel reads it when its
+point is within 4 units of the plane and its surface faces up (within about
+18 degrees). The point read is moved by the normal map's tilt (4 units at
+most), as a ripple moves a reflection, and a rougher surface reads a wider
+spread of five taps. The image then takes the probe's place, faded out over
+the image's outer 5% and below gloss 0.8 (gone at 0.6): only surfaces whose
+probe was already near its sharpest read it. With the screen-space
+reflections' fade (from 0.3) Strike's fairly rough street mirrored the sky
+sharply and looked wet (PC planar run 2); it keeps the probe's soft sheen
+now. Screen-space reflections, being this frame's, still take the image's
+place where they find something. Being last frame's, the image lags the camera by a
+frame where the scene moves; on a camera cut it is not read.
+
+| Setting | Default | Switch |
+| --- | --- | --- |
+| Planar view | off | `KISAK_VK_MODERN_PLANAR=1` draws it (with linear light only) |
+| Debug view | off | `KISAK_VK_MODERN_DEBUG=planar` draws it too, and puts the last planar image, as it is (upside down, no exposure), over the top left of the finished scene; `KISAK_VK_MODERN_DEBUG=planar-read` draws it and shows, on every surface that reads it, only what it read there (in linear light, unweighted by gloss and Fresnel; the rest of the scene at a quarter), to check that a reflection lines up with what it mirrors; `KISAK_VK_MODERN_PLANAR=0` turns them off |
+| Reach | 4 | `KISAK_VK_MODERN_PLANAR_REACH=N`: how far from the plane (units) a surface still reads the image |
+| Ripple | 4 | `KISAK_VK_MODERN_PLANAR_RIPPLE=N`: how far (units) the normal map's tilt moves the point read; 0 reads a flat mirror |
+
+The statistics lines: `vulkan d3d9: modern: N planar reflection views (WxH)`
+and `vulkan d3d9: modern: N scenes read the planar reflection`.
+
+**Cost.** Not measured yet: the view draws the world's and the models' lit
+surfaces a second time at a quarter of the pixels, and the visibility walk
+runs again on the CPU.
+
+**Checks:** the D3D9 check's `modern_planar` scene draws a grey scene in
+linear light, then a 64x64 planar view in which it sets the back buffer and
+its depth as the targets (as the game does) and draws four quadrants (red top
+left, green top right, blue bottom left, yellow bottom right). The back
+buffer must stay grey (the draws went to the planar image), and with
+`KISAK_VK_MODERN_DEBUG=planar` the top left shows the red. A third frame,
+its camera moved off the origin, draws a floor on the plane in two halves
+with our lit shader (a black probe, a white specular map of gloss 1), each
+half at one point, through a planar projection that is not symmetric: the
+left half must show the image's blue and the right half its green, so a
+transposed matrix, an eye of the wrong sign, or an image read upside down or
+mirrored each fails, and the floor stays black where the image is not read
+(no switch, or `KISAK_VK_MODERN_SHADERS=0`). With
+`KISAK_VK_MODERN_LINEAR=0` or without either switch nothing is drawn.
+`test_vulkan_d3d9_front.py` runs it with no switch, with
+`KISAK_VK_MODERN_PLANAR=1` (beside `KISAK_VK_MODERN_SHADERS=0` or not), with
+`KISAK_VK_MODERN_DEBUG=planar` (beside `KISAK_VK_MODERN_PLANAR=0` and
+`KISAK_VK_MODERN_LINEAR=0` or not), with `KISAK_VK_MODERN_DEBUG=planar-read`
+(the floor's halves show the same colours, unweighted), checks the two lines, and that a full
+run draws and reads no planar view unless asked.
+
+**Next.** Water (`mp_bog`, whose water has its own shader), and planes found
+on their own.
 
 ## Next
 

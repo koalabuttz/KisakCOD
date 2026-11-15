@@ -3,9 +3,12 @@
 #include "gxm_heap.h"
 
 #include <psp2/gxm.h>
+#include <psp2/kernel/processmgr.h>
 #include <psp2/kernel/sysmem.h>
 
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <mutex>
 
 namespace gfx_gxm
@@ -23,6 +26,7 @@ struct Pool
 
 std::mutex g_mutex;
 Pool g_pools[static_cast<int>(MemoryKind::Count)];
+bool g_mainCached = false;
 
 Pool &PoolFor(MemoryKind kind)
 {
@@ -34,14 +38,15 @@ uint32_t RoundUp(uint32_t value, uint32_t granule)
     return (value + granule - 1) & ~(granule - 1);
 }
 
-bool Reserve(MemoryKind kind, uint32_t bytes, std::string &error)
+bool Reserve(MemoryKind kind, uint32_t bytes, bool cached, std::string &error)
 {
     if (!bytes)
         return true;
     const bool cdram = kind == MemoryKind::Cdram;
     uint32_t size = RoundUp(bytes, cdram ? 256 * 1024 : 4096);
-    const SceKernelMemBlockType type =
-        cdram ? SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW : SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE;
+    const SceKernelMemBlockType type = cdram    ? SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW
+                                       : cached ? SCE_KERNEL_MEMBLOCK_TYPE_USER_RW
+                                                : SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE;
     char name[32];
     std::snprintf(name, sizeof(name), "kisak_gxm_%s", MemoryKindName(kind));
     SceUID block = sceKernelAllocMemBlock(name, type, size, nullptr);
@@ -143,13 +148,15 @@ bool InitMemory(const MemorySizes &sizes, std::string &error)
     const uint32_t bytes[] = {sizes.cdram, sizes.main, sizes.vertexUsse, sizes.fragmentUsse};
     for (int i = 0; i < static_cast<int>(MemoryKind::Count); ++i)
     {
-        if (!Reserve(static_cast<MemoryKind>(i), bytes[i], error))
+        const bool cached = static_cast<MemoryKind>(i) == MemoryKind::Main && sizes.mainCached;
+        if (!Reserve(static_cast<MemoryKind>(i), bytes[i], cached, error))
         {
             for (int j = 0; j < i; ++j)
                 Release(static_cast<MemoryKind>(j));
             return false;
         }
     }
+    g_mainCached = sizes.mainCached && sizes.main;
     return true;
 }
 
@@ -207,13 +214,116 @@ std::string DescribeMemory()
             continue;
         char part[128];
         if (stats.size >= (4u << 20))
-            std::snprintf(part, sizeof(part), " %s %.1f of %.1f MB (%u blocks, peak %.1f)", MemoryKindName(kind),
-                          stats.used / 1048576.0, stats.size / 1048576.0, stats.allocations, stats.peak / 1048576.0);
+            std::snprintf(part, sizeof(part), " %s%s %.1f of %.1f MB (%u blocks, peak %.1f)", MemoryKindName(kind),
+                          kind == MemoryKind::Main && g_mainCached ? " (cached)" : "", stats.used / 1048576.0,
+                          stats.size / 1048576.0, stats.allocations, stats.peak / 1048576.0);
         else
             std::snprintf(part, sizeof(part), " %s %u of %u KB (%u blocks)", MemoryKindName(kind), stats.used >> 10,
                           stats.size >> 10, stats.allocations);
         out += part;
     }
+    return out;
+}
+
+namespace
+{
+const uint32_t kSpeedBytes = 256u << 10;
+const int kSpeedPasses = 4;
+
+// The shortest of a few passes, in microseconds: a pass an interrupt or
+// another thread broke into says nothing about the memory.
+template <typename Pass> uint32_t ShortestPass(Pass pass)
+{
+    uint32_t best = ~0u;
+    for (int i = 0; i < kSpeedPasses; ++i)
+    {
+        const SceUInt64 start = sceKernelGetProcessTimeWide();
+        pass();
+        const uint32_t took = static_cast<uint32_t>(sceKernelGetProcessTimeWide() - start);
+        if (took < best)
+            best = took;
+    }
+    return best ? best : 1;
+}
+
+uint32_t CopyMicros(void *to, const void *from)
+{
+    return ShortestPass([to, from] { std::memcpy(to, from, kSpeedBytes); });
+}
+
+uint32_t WordWriteMicros(void *memory)
+{
+    return ShortestPass([memory] {
+        volatile uint32_t *words = static_cast<volatile uint32_t *>(memory);
+        for (uint32_t i = 0; i < kSpeedBytes / 4; ++i)
+            words[i] = i;
+    });
+}
+
+uint32_t WordReadMicros(const void *memory, uint32_t *sum)
+{
+    return ShortestPass([memory, sum] {
+        const volatile uint32_t *words = static_cast<const volatile uint32_t *>(memory);
+        uint32_t total = 0;
+        for (uint32_t i = 0; i < kSpeedBytes / 4; ++i)
+            total += words[i];
+        *sum += total;
+    });
+}
+
+double MegabytesASecond(uint32_t micros)
+{
+    return kSpeedBytes / 1048576.0 * 1e6 / micros;
+}
+
+double NanosAWord(uint32_t micros)
+{
+    return micros * 1000.0 / (kSpeedBytes / 4);
+}
+
+void DescribeSpeedOf(const char *name, void *memory, void *heap, std::string &out)
+{
+    uint32_t sum = 0;
+    const uint32_t in = CopyMicros(memory, heap);
+    const uint32_t back = CopyMicros(heap, memory);
+    const uint32_t write = WordWriteMicros(memory);
+    const uint32_t read = WordReadMicros(memory, &sum);
+    char part[192];
+    std::snprintf(part, sizeof(part), "%s %s: copy in %.0f MB/s, copy out %.0f MB/s, a word written %.1f ns, read %.1f ns",
+                  out.back() == ':' ? "" : ";", name, MegabytesASecond(in), MegabytesASecond(back),
+                  NanosAWord(write), NanosAWord(read));
+    out += part;
+}
+} // namespace
+
+std::string DescribeMemorySpeed()
+{
+    char *heapA = static_cast<char *>(std::malloc(kSpeedBytes));
+    char *heapB = static_cast<char *>(std::malloc(kSpeedBytes));
+    if (!heapA || !heapB)
+    {
+        std::free(heapA);
+        std::free(heapB);
+        return "gpu memory speed: no heap for the measurement";
+    }
+    std::memset(heapA, 0x5a, kSpeedBytes);
+    std::memset(heapB, 0, kSpeedBytes);
+    char head[64];
+    std::snprintf(head, sizeof(head), "gpu memory speed, %u KB at a time:", kSpeedBytes >> 10);
+    std::string out = head;
+    DescribeSpeedOf("the heap", heapB, heapA, out);
+    for (const MemoryKind kind : {MemoryKind::Main, MemoryKind::Cdram})
+    {
+        void *memory = Allocate(kind, kSpeedBytes, 64);
+        if (!memory)
+            continue;
+        const std::string name =
+            std::string(MemoryKindName(kind)) + (kind == MemoryKind::Main && g_mainCached ? " (cached)" : "");
+        DescribeSpeedOf(name.c_str(), memory, heapA, out);
+        Free(kind, memory);
+    }
+    std::free(heapA);
+    std::free(heapB);
     return out;
 }
 } // namespace gfx_gxm

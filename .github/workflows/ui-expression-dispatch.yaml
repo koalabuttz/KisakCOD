@@ -8,14 +8,34 @@ on:
     paths:
       - src/ui/ui_expressions.cpp
       - src/ui/ui_shared.h
+      - src/universal/dvar.cpp
+      - src/universal/name_miss_memory.h
+      - src/universal/q_shared.h
+      - src/universal/q_shared.cpp
+      - src/ui/ui_input_core.cpp
+      - src/ui/ui_registration.cpp
+      - src/ui/ui_registration.h
       - scripts/tests/test_ui_expression_dispatch.py
+      - scripts/tests/test_ui_fast_expressions.py
+      - scripts/tests/test_ui_expr_stats.py
+      - scripts/tests/test_name_pointer_lookups.py
       - .github/workflows/ui-expression-dispatch.yaml
   push:
     branches: [master]
     paths:
       - src/ui/ui_expressions.cpp
       - src/ui/ui_shared.h
+      - src/universal/dvar.cpp
+      - src/universal/name_miss_memory.h
+      - src/universal/q_shared.h
+      - src/universal/q_shared.cpp
+      - src/ui/ui_input_core.cpp
+      - src/ui/ui_registration.cpp
+      - src/ui/ui_registration.h
       - scripts/tests/test_ui_expression_dispatch.py
+      - scripts/tests/test_ui_fast_expressions.py
+      - scripts/tests/test_ui_expr_stats.py
+      - scripts/tests/test_name_pointer_lookups.py
       - .github/workflows/ui-expression-dispatch.yaml
 
 # Read-only token: these jobs only check out, build and upload artifacts.
@@ -30,3 +50,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 scripts/tests/test_ui_expression_dispatch.py --sanitize
+      # ui_fastExpressions reads dvars exactly as the text path does.
+      - run: python3 scripts/tests/test_ui_fast_expressions.py --sanitize
+      # The ui_exprStats command's bookkeeping and printed lines.
+      - run: python3 scripts/tests/test_ui_expr_stats.py --sanitize
+      # Dvar_FindVar and Menus_FindByName remember by name pointer and still
+      # give the full lookup's answer.
+      - run: python3 scripts/tests/test_name_pointer_lookups.py --sanitize

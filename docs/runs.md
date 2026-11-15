@@ -282,8 +282,9 @@ script):
   "game": {
     "exe": "C:/kisak/builds/b204c3a-vk/KisakCOD-mp.exe",
     "cwd": "C:/kisak/builds/b204c3a-vk",
-    "args": ["+set", "r_fullscreen", "1", "+set", "r_mode", "1280x720", "+set", "snd_volume", "0",
-             "+set", "logfile", "2", "+set", "r_backend", "vulkan", "+set", "r_visuals", "modern"],
+    "args": ["+set", "r_fullscreen", "1", "+set", "r_mode", "1280x720", "+set", "r_aaSamples", "1",
+             "+set", "com_maxfps", "0", "+set", "snd_volume", "0", "+set", "logfile", "2",
+             "+set", "net_ip", "127.0.0.1", "+set", "r_backend", "vulkan", "+set", "r_visuals", "modern"],
     "env": {"KISAK_VK_MODERN_EXPOSURE": "0"},
     "clear_env": ["KISAK_VK_*"],
     "home_template": "C:/kisak/homes/template",
@@ -292,9 +293,11 @@ script):
   },
   "launches": [
     {"name": "crash-in-B", "env": {"KISAK_VK_MODERN_AO": "0"}, "args": ["+devmap", "mp_crash"],
-     "at_map": ["5 setviewpos 30 -10 200 140", "10 framelog 10 crash-in-B", "21 screenshot crash-in-B", "23 quit"]},
+     "at_map": ["3 cmd mr {serverid} 8 autoassign", "5 cmd mr {serverid} 15 assault_mp,0",
+                "8 setviewpos 30 -10 200 140", "10 framelog 10 crash-in-B", "21 screenshot crash-in-B", "23 quit"]},
     {"name": "crash-in-A", "args": ["+devmap", "mp_crash"],
-     "at_map": ["5 setviewpos 30 -10 200 140", "10 framelog 10 crash-in-A", "21 screenshot crash-in-A", "23 quit"]}
+     "at_map": ["3 cmd mr {serverid} 8 autoassign", "5 cmd mr {serverid} 15 assault_mp,0",
+                "8 setviewpos 30 -10 200 140", "10 framelog 10 crash-in-A", "21 screenshot crash-in-A", "23 quit"]}
   ],
   "lines": ["modern:", "device destroyed after", "refused", "unsupported", "could not", "failed"],
   "pictures": {"regions": {"arch": [455, 300, 505, 400]}, "levels": [2, 16],
@@ -302,6 +305,29 @@ script):
 }
 ```
 
+- Every launch gets `KISAK_NO_DIALOGS=1` unless the recipe sets it: the game
+  then answers its own questions "No" and prints them, as on the other ports.
+  On Windows that is the "Set Optimal Settings?" box, which a start asks
+  whenever its CPU speed measurement differs by more than a tenth from the
+  stored one, so on a busy machine some starts ask and others do not
+  (pc_run proof 1 lost a launch to it).
+- Pin in `game.args` every setting the run depends on: the home template's
+  profile holds the player's own. `r_aaSamples 1` matters for anything Modern,
+  because a multisampled back buffer turns the Modern path off ("not drawn in
+  linear light: back buffer is multisampled"). The team and class menus are
+  answered by number (`cmd mr {serverid} 8 autoassign`, then `15
+  assault_mp,0`; the log lists the numbers when the map comes up on the Vita).
+  Give `com_maxfps 0` to any launch whose frame log is read for speed: proof 2
+  left it out and both frame logs read about 91 fps where the same view reads
+  about 430 without a cap.
+- No `+` inside a timed command or a value: the game splits its whole command
+  line at every `+` (and keeps 31 parts), so `"45 +left"` turns into a part
+  `45` with no command and the client refuses the entire `run_atMap` list
+  (`none of its commands will be sent`), after which the launch only idles to
+  its safety quit. The recipe check refuses such entries; put `+left` and the
+  like in a cfg in the home template and send `exec <cfg>` (`-left` is
+  harmless). A launch whose list was refused anyway is reported `run_error`,
+  not `ok` (found by the perf_ab Windows proof, attempt 1).
 - `home_template` is copied for every launch and given as `fs_homepath`, so
   each launch starts from the same home and its log and screenshots are its
   own (they are found under that home afterwards).
@@ -319,9 +345,75 @@ script):
 (`tests/runs/fake_pc_game.py`) that writes plain and RLE TGAs, bottom row first:
 the command line, the recipe checks, the collected lines and screenshots, the
 picture numbers against values worked out by hand, the PNGs, the checksum, a
-failing and a hanging launch, and `--resume`. Not yet run against the real
-game; whether `screenshot` works under `r_backend vulkan` on Windows is the
-first thing its first run shows.
+failing and a hanging launch, and `--resume`. pc_run proof 1 (Windows PC,
+2026-11-14, master 058d5eb, local Vulkan build) ran it against the real game:
+the timed commands, a named screenshot under `r_backend vulkan`, the quit by
+itself, the frame log and the report all worked; it found the three traps above
+(the question box, the profile's multisampling, the team menu). pc_run proof 2
+(PR 315's head 7ed84e5, local Vulkan build) ran the recipe above with nobody at
+the PC: two launches in 91 s, both ending by themselves with 0 validation
+errors; a CPU burn made one start ask "Set Optimal Settings?" and the game
+answered it "No" (`KISAK_NO_DIALOGS is set; leaving the player profile
+unchanged`); both screenshots show the map, not a menu, at one sample.
+
+### Several settings in one launch: `variants`
+
+The Modern switches are live dvars since PR 305 (`r_modernAo`, `r_modernSsr`,
+`r_modernTonemap`, the `r_modernAo*` and `r_modernSsr*` numbers, ...;
+`src/gfx_d3d/rhi/r_rhi_modern_dvars.h`), so a comparison no longer needs one
+launch per value. A launch lists its variants and pc_run.py writes the timed
+commands:
+
+```json
+{"name": "crash-in", "args": ["+devmap", "mp_crash"],
+ "at_map": ["3 cmd mr {serverid} 8 autoassign", "5 cmd mr {serverid} 15 assault_mp,0",
+            "8 setviewpos 30 -10 200 140"],
+ "variants": [{"name": "B", "set": {"r_modernAo": "off"}},
+              {"name": "A", "set": {"r_modernAo": "on"}}],
+ "variant_timing": {"start": 20, "framelog": 8, "compare": true}}
+```
+
+From `start` seconds after the map is up (default 20 s, or 2 s after the last
+`at_map` command if that is later), each variant sets its dvars, waits `settle`
+seconds (default 1; the first variant also waits `warmup`, default 30 s when
+frame logs are taken), takes the screenshot
+`<launch>-<variant>` the first time round and, with `framelog`, a frame log
+`<launch>-<variant>-<pass>`. With a frame log the variants run twice in
+mirrored order (A B B A), so steady drift (heat, other load) cancels in the
+mean; `"passes": 1` or `2` overrides. Then the launch quits. `"compare": true`
+compares the first variant's screenshot with each other one. results.json
+gets per launch `variants` (fps per pass, mean fps, the change against the
+first variant in % and in ms, the spread between passes) and report.md a
+table. The client takes 32 timed commands per launch: n variants use 5n + 1
+with two passes of frame logs (3n + 1 with one pass, 2n + 1 for screenshots
+only), so beside the usual three menu and camera commands up to 5 variants
+fit with two passes and 9 with one.
+
+- Give every variant every dvar any variant changes, so the order of passes
+  does not matter, and remember that `default` keeps the start value
+  (`KISAK_VK_MODERN_*` or built in).
+- Start-up only, still one launch per value: `KISAK_VK_MODERN_LINEAR`, `_LIT`,
+  `_EFFECTS`, `_NORMALS`, `_EXPOSURE_RANGE`, `_SSR_STEPS`/`_LEVELS`, and
+  `r_visuals`.
+- Start after the pre-match countdown (about 16-17 s on mp_crash under
+  devmap). The countdown draws a grey picture with no HUD, so in variants
+  proof 1 (start 10) two shots with AO off but either side of it differed by
+  47 levels, more than AO itself.
+- Things that move (smoke, the helicopter, the countdown) move between the
+  screenshots of one launch. `timescale 0.001` in `at_map` (devmap has cheats
+  on) holds them still: in proof 1 the same variant shot twice differed by
+  0.29 levels (arch 0.33), while AO on against off made 19.5 in the arch.
+  Use it for picture launches; leave it out where frame logs are read.
+- AO is fully in on the first frame after a switch: in variants proof 2 every
+  shot from 0.1 s to 4 s after `r_modernAo on` matched the 8 s shot within the
+  0.9-level noise of two unfrozen pictures. Hence the 1 s settle.
+- A launch's first half minute in play is slower: the first frame log of a
+  variant ran 6% (proof 1) and 11% (proof 2) below the same variant's second,
+  while the other variant's two passes agreed within 1%. Hence the 30 s
+  warm-up on the first variant before any frame log. A pass spread over 5%
+  is flagged in the report.
+- Frozen AO looked lighter than in play (arch 17.3 against 22.1 levels, same
+  radius and view, proof 2): compare frozen shots only with frozen shots.
 
 ## Menus without a person: `menu_check.py`
 

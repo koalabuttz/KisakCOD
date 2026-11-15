@@ -824,6 +824,7 @@ class CiTriggerTests(unittest.TestCase):
         cls.windows = load('build-kisarcod-win.yaml')
         cls.macos = load('build-kisakcod-macos.yaml')
         cls.vita = load('build-kisakcod-vita.yaml')
+        cls.contracts = load('workflow-contracts.yaml')
         cls.windows_paths = cls.windows['on']['pull_request']['paths']
 
     def test_a_newer_push_cancels_only_the_same_pull_requests_older_run(self):
@@ -851,6 +852,15 @@ class CiTriggerTests(unittest.TestCase):
         'src/gfx_gxm/legacy/gxm_legacy.cpp',
         'scripts/platform/vita/mp_client.cmake',
         'scripts/tests/test_vita_run_plan.py',
+        'scripts/tests/test_vita_run_list.py',
+        'scripts/tests/test_vita_bench.py',
+        'scripts/platform/vita/vita_bench_server.py',
+        'scripts/platform/vita/vita_pack_programs.py',
+        'scripts/tests/test_vita_program_pack.py',
+        'src/gfx_gxm/gxm_program_pack.h',
+        'tests/vita_gxm/program_pack_test.cpp',
+        'src/vita/vita_bench_client.h',
+        'tests/vita_client/bench_test.cpp',
         'scripts/ci/install-vitasdk.sh',
         'tests/vita_client/run_plan_test.cpp',
         'tests/vita_gxm/heap_test.cpp',
@@ -970,19 +980,33 @@ class CiTriggerTests(unittest.TestCase):
         self.assertEqual(uploads['vita_dedicated']['with']['path'], 'out/vita-RelWithDebInfo/KisakCOD-dedi.vpk')
         self.assertEqual(uploads['vita_mp_client']['with']['name'], 'KisakCOD-mp-vita-RelWithDebInfo')
         for name in ('out/vita-mp-RelWithDebInfo/KisakCOD-mp.vpk', 'out/vita-mp-RelWithDebInfo/KisakCOD-mp.elf',
+                     'out/vita-mp-RelWithDebInfo/KisakCOD-mp-test.vpk',
                      'out/vita-mp-RelWithDebInfo/KisakCOD-gxm-probe.vpk'):
             self.assertIn(name, uploads['vita_mp_client']['with']['path'])
         for upload in uploads.values():
             self.assertNotIn('if', upload)
             self.assertEqual(upload['with']['if-no-files-found'], 'error')
 
-    def test_the_linux_workflow_runs_when_the_vita_workflow_changes(self):
-        # This file checks the Vita workflow, and the Linux native job runs it.
+    def test_workflow_edits_start_the_contract_check_not_the_linux_build(self):
+        # This file checks every workflow. workflow-contracts.yaml runs it on
+        # any workflow edit; the Linux workflow (17 jobs) runs only for its own
+        # file, so a Vita-only pull request that adds a check to the Vita
+        # workflow no longer starts the Linux build (2026-11-15: jobs waited
+        # 30-57 min for a runner).
+        contracts = self.contracts
         for event in ('push', 'pull_request'):
             with self.subTest(event=event):
-                self.assertIn('.github/workflows/build-kisakcod-vita.yaml', self.linux['on'][event]['paths'])
+                for name in ('build-kisakcod-vita.yaml', 'build-kisarcod-win.yaml', 'build-kisakcod-macos.yaml',
+                             'build-kisakcod-linux.yaml', 'run-scripts.yaml', 'workflow-contracts.yaml'):
+                    self.assertTrue(_selected(f'.github/workflows/{name}', contracts['on'][event]['paths']), name)
+                self.assertTrue(_selected('scripts/tests/test_linux_window_workflow.py',
+                                          contracts['on'][event]['paths']))
+                for name in ('build-kisakcod-vita.yaml', 'build-kisarcod-win.yaml'):
+                    self.assertFalse(_selected(f'.github/workflows/{name}', self.linux['on'][event]['paths']), name)
                 self.assertFalse(_selected('.github/workflows/build-kisakcod-vita.yaml',
                                            self.windows['on'][event]['paths']))
+        steps = [step.get('run', '') for step in contracts['jobs']['contracts']['steps']]
+        self.assertIn('python3 scripts/tests/test_linux_window_workflow.py', steps)
 
     def test_window_jobs_run_sdl3_on_pull_requests_and_both_after_a_merge(self):
         sdl = self.linux['jobs']['window']['strategy']['matrix']['sdl']
@@ -1113,13 +1137,6 @@ class CiTriggerTests(unittest.TestCase):
                    if not path.startswith(('src/linux/', 'src/vita/', 'src/gfx_gxm/')) and not path.endswith('.md')
                    and not _selected(path, self.windows_paths)]
         self.assertEqual(skipped, [])
-
-    def test_the_linux_workflow_runs_when_the_windows_triggers_change(self):
-        # This file checks the Windows workflow's triggers, so editing them runs it.
-        for event in ('push', 'pull_request'):
-            with self.subTest(event=event):
-                self.assertIn('.github/workflows/build-kisarcod-win.yaml',
-                              self.linux['on'][event]['paths'])
 
     def test_windows_builds_the_three_games_in_one_parallel_call(self):
         build = next(step for step in self.windows['jobs']['build']['steps']

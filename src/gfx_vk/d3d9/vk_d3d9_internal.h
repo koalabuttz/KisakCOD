@@ -65,12 +65,11 @@ inline uint32_t SamplesOf(D3DMULTISAMPLE_TYPE type) { return type >= D3DMULTISAM
 // waiter touches. The object needs no constructor that runs, so a call from a
 // static constructor or destructor still finds it.
 //
-// The PS Vita build keeps the plain recursive mutex: thread_local is emulated
-// there (a library call on every use), and its calls come from one thread.
-#if defined(__vita__)
-using FrontMutexType = std::recursive_mutex;
-FrontMutexType &FrontMutex();
-#else
+// The PS Vita build had a plain recursive mutex here until 2026-11-15,
+// because thread_local is emulated there (a library call on every use). That
+// was four library calls for every call into the front, 5000 and more times a
+// frame on the render thread. It tells its threads apart by the register that
+// holds the thread's own block of kernel-kept memory instead (Self).
 class FrontMutexType
 {
 public:
@@ -103,9 +102,19 @@ private:
     // Any address that is this thread's alone.
     static const void *Self()
     {
+#if defined(__vita__)
+        // TPIDRURO: the kernel keeps the address of the running thread's
+        // local storage in it, which is where sceKernelGetTLSAddr starts
+        // from. CreateDirect3D9 checks the two agree.
+        const void *block;
+        __asm__ __volatile__("mrc p15, 0, %0, c13, c0, 3" : "=r"(block));
+        return block;
+#else
         static thread_local const char t_token = 0;
         return &t_token;
+#endif
     }
+    friend bool FrontLockKnowsItsThread();
     void LockSlow();
     void WakeOne();
     std::atomic<uint32_t> state_{kFree};
@@ -116,7 +125,9 @@ private:
 };
 inline constinit FrontMutexType g_frontMutex;
 inline FrontMutexType &FrontMutex() { return g_frontMutex; }
-#endif
+// Whether the lock's way of telling threads apart holds on this machine.
+// Always true off the PS Vita.
+bool FrontLockKnowsItsThread();
 // Waits for the front lock that ended in a sleep (spinning did not get it),
 // over all threads since start: the slow frame lines print a frame's share.
 struct FrontLockSleeps
@@ -558,6 +569,10 @@ public:
     }
     void SetModernLitInputs(const ModernLitInputs *inputs);
     bool ModernReflectionProbe(lg::Texture *probe) { return BackendModernReflectionProbe(backend_, legacy_, probe); }
+    // Under FrontLock (vk_d3d9.h ModernPlanarBegin and ModernPlanarDone).
+    bool ModernPlanarWanted() { return BackendModernPlanarWanted(backend_); }
+    bool ModernPlanarBegin(const ModernPlanarView &view);
+    void ModernPlanarDone(const ModernPlanarView &view);
     const Host &host() const { return parent_->host(); }
     HRESULT Unsupported(const char *method);
     DeviceCounters counters() const;
@@ -759,6 +774,11 @@ private:
     // ModernSceneDone): the back end's image that stands in for the back
     // buffer as render target 0. The program still sees the back buffer.
     lg::Surface *linearScene_ = nullptr;
+    // While a planar reflection view is drawn (ModernPlanarBegin until
+    // ModernPlanarDone): the back end's planar image and depth, which stand
+    // in for whatever render target 0 and depth surface the program sets.
+    lg::Surface *planarScene_ = nullptr;
+    lg::Surface *planarDepth_ = nullptr;
     bool linearSceneUnfinished_ = false; // logged once (Present)
     std::unique_ptr<SwapChain> swapChain_;
     D3DGAMMARAMP gamma_{};

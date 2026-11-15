@@ -7,8 +7,10 @@
 // MSVC has no MMX intrinsics for x64, so x64 Windows builds use SSE2 registers
 // for those halves instead (KISAK_SKIN_SSE2), and there is no MMX state to clear.
 // Defining KISAK_SKIN_SSE2 elsewhere selects the SSE2 form too.
-// Arm (aarch64 Linux, Windows ARM64) has neither: it always skins with the
-// scalar code (sys_SSE is off there) and r_model_skin_sse.cpp builds empty.
+// Arm has neither and r_model_skin_sse.cpp builds empty there (sys_SSE is
+// off). With GCC or Clang it skins with the compiler's vector types instead
+// (r_model_skin_vec.h; NEON on Arm) while r_sse_skinning is on, and with the
+// scalar code otherwise. Windows ARM64 (MSVC) always takes the scalar code.
 #if defined(_M_X64) && !defined(KISAK_SKIN_SSE2)
 #define KISAK_SKIN_SSE2 1
 #endif
@@ -59,6 +61,13 @@ void R_SkinXSurfaceRigid(
     const DObjSkelMat *boneMatrix,
     GfxPackedVertex *vertices);
 
+
+// r_model_skin_vec: the same bytes as R_SkinXSurfaceSkinned, four floats at a
+// time. Only where r_model_skin_vec.h has KISAK_SKIN_VEC.
+void R_SkinXSurfaceSkinnedVec(
+    const XSurface *xsurf,
+    const DObjSkelMat *boneMatrix,
+    GfxPackedVertex *skinVerticesOut);
 
 // r_model_skin_sse
 void R_SkinXSurfaceSkinnedSse(

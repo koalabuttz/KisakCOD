@@ -97,6 +97,14 @@ bool BackendModernEffectsOnDisplay(Backend *backend);
 // True when it was; false when it is not wanted, not an 8-bit colour cube
 // with levels, or on a back end without a Modern path.
 bool BackendModernReflectionProbe(Backend *backend, lg::Device *legacy, lg::Texture *probe);
+// Planar reflections (vk_d3d9.h ModernPlanarBegin): whether a planar view is
+// wanted this frame; the planar image (linear light) and depth surface of the
+// view's size to draw it into, made or remade as needed (false when there is
+// none); and the view drawn, which the planar image now holds.
+bool BackendModernPlanarWanted(Backend *backend);
+bool BackendModernPlanarBegin(Backend *backend, const ModernPlanarView &view, lg::Surface *&color,
+                              lg::Surface *&depth);
+void BackendModernPlanarDone(Backend *backend, const ModernPlanarView &view);
 // Whether the Modern path wants the scene's opaque depth before its lit
 // surfaces (vk_d3d9.h ModernWantsSceneDepth); false on a back end without one.
 bool BackendModernWantsSceneDepth(Backend *backend);

@@ -139,8 +139,14 @@ set(vita_mp_input_sound_sources
     "${SRC_DIR}/vita/client/sound/vita_al.cpp"
     "${SRC_DIR}/vita/client/sound/vita_al_output.cpp")
 
+# The engine's iassert checks in a release build. Retail and the Windows
+# release builds leave them out, and so does the Vita's: console run AS
+# (2026-11-14, mp_crash) found them 5 to 8% of the frame at the busy view.
+# -DKISAK_VITA_RELEASE_ASSERTS=ON keeps them, as for a hunt for a bug.
+option(KISAK_VITA_RELEASE_ASSERTS "Keep the engine's assertions in a Vita release build" OFF)
 set(KISAK_VITA_MP_DEFINITIONS
-    KISAK_MP USE_SEPARATE_BLIT_TEXTURE KISAK_OPENAL RELEASE_ASSERTS
+    KISAK_MP USE_SEPARATE_BLIT_TEXTURE KISAK_OPENAL
+    $<$<BOOL:${KISAK_VITA_RELEASE_ASSERTS}>:RELEASE_ASSERTS>
     KISAK_LINUX_MP_CLIENT KISAK_VITA_MP_CLIENT KISAK_GFX_GXM
     ENABLE_VITASDK_BUILD_ASSERT
     $<$<CONFIG:Debug>:_DEBUG>)
@@ -153,6 +159,12 @@ set(KISAK_VITA_MP_OPTIONS
 add_library(KisakCOD-mp-vita-native OBJECT ${vita_mp_native_sources} ${vita_mp_client_sources})
 add_library(KisakCOD-mp-vita-standin OBJECT ${vita_mp_standin_sources} ${vita_mp_posix_sources} ${KISAK_VITA_SOURCES})
 add_library(KisakCOD-mp-vita-own OBJECT ${vita_mp_own_sources})
+# The vector skinning path is the client's one file built for NEON, which the
+# Vita's Cortex-A9 has; the toolchain file's -mfpu=vfpv3 keeps everything else
+# on scalar VFP. The file includes nothing of the engine
+# (src/gfx_d3d/r_model_skin_vec.h says why).
+set_source_files_properties("${SRC_DIR}/gfx_d3d/r_model_skin_vec.cpp" TARGET_DIRECTORY KisakCOD-mp-vita-standin
+    PROPERTIES COMPILE_OPTIONS "-mfpu=neon")
 # newlib's heap (src/vita/vita_main.cpp). More than 64 is for measuring in an
 # emulator what the game would take; a console has no memory for it.
 set(KISAK_VITA_HEAP_MB "64" CACHE STRING "Size of the Vita client's heap in MB (64 on a console; more only for emulator measurements)")
@@ -239,13 +251,24 @@ target_include_directories(KisakCOD-mp PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
 target_link_options(KisakCOD-mp PRIVATE ${KISAK_VITA_LINK_OPTIONS})
 # The shader compiler is the user's own libshacccg.suprx, loaded at run time
 # (gxm_shader_compiler.h): weak imports, so the client starts without it.
+# The bench loads the system's installer at run time (vita_bench.cpp): weak
+# imports too.
 target_link_libraries(KisakCOD-mp PRIVATE ${KISAK_VITA_LINK_LIBRARIES} SceCtrl_stub SceTouch_stub
-    SceAudio_stub SceGxm_stub SceDisplay_stub SceIme_stub SceCommonDialog_stub SceShaccCg_stub_weak)
+    SceAudio_stub SceGxm_stub SceDisplay_stub SceIme_stub SceCommonDialog_stub SceShaccCg_stub_weak
+    ScePromoterUtil_stub_weak)
 add_dependencies(KisakCOD-mp update_build_number)
 
 set(KISAK_VITA_MP_TITLE_ID "KSKD00002" CACHE STRING "PS Vita title ID of the multiplayer client .vpk (9 characters)")
+set(KISAK_VITA_TEST_TITLE_ID "KSKD00004" CACHE STRING
+    "PS Vita title ID of KisakCOD Test, the bench's second application (9 characters)")
+target_compile_definitions(KisakCOD-mp PRIVATE KISAK_VITA_MP_TITLE_ID="${KISAK_VITA_MP_TITLE_ID}"
+    KISAK_VITA_TEST_TITLE_ID="${KISAK_VITA_TEST_TITLE_ID}")
 # Unsafe: the shader compiler lives in ur0:data, which safe homebrew can't read.
 kisak_vita_pack_vpk(KisakCOD-mp "${KISAK_VITA_MP_TITLE_ID}" "KisakCOD Multiplayer" UNSAFE)
+# The same program as a second application, which the bench writes each
+# job's build into and starts (src/vita/vita_bench.h): it is installed once,
+# by hand or by the bench itself.
+kisak_vita_pack_vpk(KisakCOD-mp "${KISAK_VITA_TEST_TITLE_ID}" "KisakCOD Test" UNSAFE NAME KisakCOD-mp-test)
 
 # The graphics layer on its own (stage 2).
 include(${CMAKE_CURRENT_LIST_DIR}/gxm_probe.cmake)

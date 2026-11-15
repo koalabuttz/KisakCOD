@@ -45,7 +45,8 @@ cmake --build build-vita-mp --target KisakCOD-mp-vpk
 Hosted CI: the **PS Vita multiplayer client** job of the PS Vita workflow
 (`.github/workflows/build-kisakcod-vita.yaml`) builds Debug
 and RelWithDebInfo. It runs the server's float checks (no fused multiply-add, no
-NEON float) and link checks (weak pthread references, the main stack size), and
+NEON float outside the vector skinning path, which has to be there and be
+NEON) and link checks (weak pthread references, the main stack size), and
 uploads the RelWithDebInfo `.vpk`. It also runs the controls' and the sound's
 host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`), the run
 plan's, the GPU heap's, the frame time figures', the GPU progress bookkeeping's
@@ -87,6 +88,10 @@ the map was first in play; each prints every figure first. `vita_atMap` sends
 timed console commands, for example to pick a team and a class, and
 `vita_assertExit 1` keeps an emulator from hanging on a failed assertion. See
 [Runs nobody watches](vita.md#runs-nobody-watches).
+
+A Vita release build leaves the engine's assertions out, as retail and the
+Windows release builds do: console run AS found them 5 to 8% of the frame at
+the busy view. Configure with `-DKISAK_VITA_RELEASE_ASSERTS=ON` to keep them.
 
 To see what a translated shader looks like, put an empty file named
 `dump-cg` in `ux0:data/KisakCOD/gxp`: every program asked for then also
@@ -528,6 +533,63 @@ Gains are Q15 and move toward their targets every 64 frames, so a volume or
 position change does not click. One lock guards all of it; the mixer holds it
 for one update.
 
+**Streamed sounds' lengths.** The engine wants a stream's length when it
+starts, and an MP3 without a Xing or Info tag does not say: the decoder reads
+the whole file to count its frames, on the main thread. The game's streams
+have no tag. Console run AY (2026-11-14, `Vita: long frame's calls`) caught
+it: a 3.5 MB stream in `iw_11.iwd` started every minute or two of a match on
+Crash, and each start held the main thread for about 0.75 s (0.42 s in 72
+file reads, the rest counting), which is a frozen picture. The OpenAL driver
+now keeps each file's count after its first play (`g_streamLengths` in
+`src/sound/snd_driver_openal.cpp`, on every platform; host test
+`scripts/tests/test_openal_stream_lengths.py`), so a stream is read through
+once in a start of the game. `snd_alDebug 1` prints a line each time a file
+is read through.
+
+Console run BB showed that was a third of it: the repeat stalls went from
+0.75 s to 0.48 s. The streams sit deflated in the `.iwd` files, where a seek
+reaches a place by inflating up to it, and the MP3 decoder, given a way to ask
+where it is in the file, looks for an ID3v1 or APE tag at the file's end when
+it opens it: the seek to the end read the whole file and the step back to the
+tag read it again. AY's 3.5 MB was one 1.2 MB file read three times. The
+driver now opens a stream without that callback, so the open reads the file's
+head only; a tag at the end of a file reaches the decoder as bytes that are no
+frame, which it skips (and with them the last frame before the tag, 26 ms,
+which the decoder cannot confirm against what follows). The same host test
+opens a made-up MP3 both ways and counts the bytes.
+
+That left the first play of each file, one read for the length: a quarter of
+a second for a 1.2 MB file. The game's music is constant bit rate (128 kbit/s,
+44.1 kHz), where every frame has the same length, so the file's size says how
+many frames it holds. A file has to show that it is one, twice over. The
+driver reads the first 32 KB of a file it has no length for: past an ID3v2
+tag, every frame there has to be a layer 3 frame of one bit rate and sample
+rate, each starting where the one before ends, and at least 16 of them. And
+the file has to be a whole number of such frames long to the byte, alone or
+with an ID3v1 tag's 128 bytes behind the last frame. Then the length comes
+from the size, and nothing more is read. Any other file (variable bit rate,
+as the ambient streams are; a tag longer than the head) is read through once
+as before.
+
+The head alone is not enough. A survey of the game's 119 MP3 streams on the
+owner's PC (2026-11-14, `test_openal_stream_lengths.py --survey <folder>`)
+found the 60 music files constant bit rate, each with an ID3v1 tag, and six of
+the 59 variable bit rate ambient streams with one bit rate all through their
+first 32 KB: their sizes gave lengths up to 40 s wrong. The second proof
+turns five of the six away. The sixth is a whole number of frames long by
+chance (about one file in seventy of another kind is) and gets a length 78 ms
+out, for a stream that loops and so never uses it.
+
+So a length from a size is put right at the first full play. When the decoder
+reaches the end of a file it began at the first frame, the frames it gave
+replace the size's answer (`AL_CountStreamLength`). For the music that takes
+one frame off, 26 ms: the frame before the tag that the decoder does not
+play. `snd_alDebug 1` prints which way each file went and each length put
+right (`played through: F frames, not the G its size gave`), and level 2 also
+reads a constant bit rate file through at its start and prints both counts.
+The host test holds the size's answer against the decoder's own count on
+made-up files, and `--survey` does the same for real ones.
+
 **Loaded sounds in memory** (`snd_adpcm`). The OpenAL driver keeps every
 loaded sound as 16-bit PCM, and that is also how the fastfiles hold the sounds
 counted so far: all 702 the menu loads and the nine Crash adds came as 16-bit
@@ -751,13 +813,28 @@ What the GXM back end does so far (step 2d):
   drops both when either program changes and at every scene's start, and
   always writes for a pixel shader that takes a volume texture's depth).
   Draws a run diagnostic looks at or changes take the old path. The quit
-  summary says how often each applied: `draw work left out: N of N draws
-  found their programs in the table; of N texture binds N were set already
-  and N set their filters anew; of N uniform buffers N were the last
-  draw's`. A file named `no-draw-reuse` in the folder of the compiled
-  programs turns all three off (the log says so at start-up), so that a
-  console run can tell a fault of theirs without another build. What they
-  save in a frame's time is not measured yet, in Vita3K or on a console.
+  summary says how often each applied: `draw work left out: N draws kept
+  the last draw's programs and fixed state; N of N others found their
+  programs in the table; of N texture binds N were set already and N set
+  their filters anew; of N uniform buffers N were the last draw's`. A file
+  named `no-draw-reuse` in the folder of the compiled programs turns all of
+  them off (the log says so at start-up), so that a console run can tell a
+  fault of theirs without another build. Console run AR (2026-11-14) put a
+  draw at about 10.5 us of the render thread's time, of which working out
+  its programs and its fixed state (viewport, clip, cull, depth, stencil,
+  bias) took about 4.
+- **The last draw's state kept.** The D3D9 front counts every call that
+  changes what a draw's programs and fixed state come from (a render
+  state, a shader, the vertex declaration, a stream's stride, the
+  viewport, the scissor rect, a target). A draw that finds that count, the
+  open scene, its primitive type, its index width and its vertex stride as
+  the last draw left them takes the last draw's programs and leaves the
+  fixed state as it is, without the table lookup, the blend and the fixed
+  state worked out again. Clears, copies and dropped programs end it. Most
+  draws of one material (a run of static models or of world surfaces)
+  change only their buffers and constants. An empty file `no-same-state`
+  in the folder of the compiled programs, or `vita_gxm no-same-state 1`,
+  turns it off.
 - **Depth first.** The scene's depth is always drawn before its lit pass
   on the Vita (src/gfx_gxm/gxm_engine_options.h), whatever r_depthPrepass
   says, so that the GPU skips hidden pixels of the lit pass early. Console
@@ -768,7 +845,65 @@ What the GXM back end does so far (step 2d):
   two passes' programs wrote depths a hair apart there and parts of the gun
   showed black. An empty file
   `no-depth-prepass` in the folder of the compiled programs turns the
-  forced pass off.
+  forced pass off. With the GPU at 222 MHz the pass costs the CPU about
+  8 ms a frame (it draws every opaque surface twice), and console run AM
+  (2026-11-14, mp_crash) found neither way wins everywhere: at the busy
+  view at scale 0.7 a frame took 40.3 ms with it and 33.3 without, facing
+  the other way 17.7 with it and 23.8 without. So the back end now times
+  the two ways while the game runs (src/gfx_gxm/gxm_prepass_governor.h):
+  it takes the median of 30 frames the way it is, tries the other way for
+  30 frames when that way's time is old, and keeps a change only when it
+  is at least 5% faster. The picture is the same both ways. The wait
+  before a try starts at 8 seconds and doubles with each try that loses,
+  up to 64; a time that moves by more than 15% (the view changed) brings
+  it back to 8. Console run AO (2026-11-14, PR 327's first version, with
+  window means and a try every 8 seconds) found its choices right but the
+  tries cost 1 to 3 ms a frame on average (scale 0.7: 35.5 ms against
+  32.7 with the pass held off), and one hitch dropped the pass on the
+  light view for 9 seconds.
+  Each change is logged (`diag: depth pass governor: off from frame ...`).
+  An empty file `no-prepass-governor` keeps the pass on in every frame, as
+  before.
+  The forced pass draws the map's own surfaces and leaves the models out:
+  walls and ground hide most of what a view hides, and console run AR found
+  static models the largest part of the render thread's draws. The lit pass
+  tests and writes depth itself, so the picture is the same. A pass that
+  `r_depthPrepass 1` asks for, and the one that fills the depth copy for
+  soft particles and depth of field, still draw everything. An empty file
+  `no-world-only-prepass`, or `vita_gxm no-world-only-prepass 1`, puts the
+  models back in the pass.
+- **No distortion copy in frames that do not need it.** The Vita's GPU
+  works a scene at a time: every change of render target ends one, stores
+  its whole colour and depth targets and loads them again when the frame
+  comes back. With r_distortion on the engine copied the picture for the
+  surfaces that bend it (heat haze, glass) before the emissive pass of
+  every frame, which split the back buffer's scene. The copy is now made
+  only in frames whose emissive list holds a technique that reads it
+  (src/gfx_gxm/gxm_engine_options.h). Console run AD (2026-11-14, mp_crash,
+  busy view, 12 MB parameter buffer): the GPU took 79.4 ms a frame without
+  the copy against 82.6 with it, 5 scenes a frame instead of 7. An empty
+  file `no-resolve-skip` in the folder of the compiled programs turns it
+  off. (Drawing the forced depth pass inside the scene's own targets, the
+  other half of that work, made the GPU slower on the console: 90.8 against
+  79.4 ms in the same run, so it was left out.)
+- **The 3D picture at a lower resolution, the HUD at full.** The GPU's
+  time grows with the pixels it shades (console run V: 95 ms a frame at the
+  busy view, 77.7 with r_scaleViewport 0.7, 58.8 with 0.5). `vita_sceneScale`
+  (0.5 to 1, 1 by default) draws the standard full-screen 3D view at that
+  fraction of the width and height, in the top left of the screen, then
+  copies it out and stretches it over the whole screen with linear
+  filtering before the post effects and the HUD, which keep 960x544. The
+  copy and the stretch are two short scenes (src/gfx_d3d/rb_draw3d.cpp,
+  RB_StretchScaledScene; src/gfx_gxm/gxm_engine_options.h). Fullbright,
+  the debug shaders and split views keep the full size. A game server
+  cannot set it (server_dvar_guard.h). Console run AH (2026-11-14,
+  mp_crash, busy view, David's settings): 63.1 ms a frame at 1, 57.8 at
+  0.85, 49.8 at 0.7, 47.3 at 0.6 and 43.9 at 0.5, where the CPU's 40 ms
+  becomes the limit. When the map's film colour filter is the view's only
+  post effect, the filter's full-screen quad reads just the drawn corner of
+  the copy it makes anyway, so the stretch costs no scene of its own; an
+  empty file `no-filter-stretch` in the folder of the compiled programs, or
+  `vita_gxm no-filter-stretch 1`, keeps the two scenes.
 - **The CPU a frame ahead of the GPU.** The CPU fills frame N while the GPU
   still draws frame N - 1, so a frame costs the longer of the two times and
   not their sum. Console run U (2026-11-11, mp_crash) had shown them taking
@@ -822,6 +957,22 @@ What the GXM back end does so far (step 2d):
   may not hold every map), and `big-gxm-rings` twice the default rings
   (3 MB more of main memory).
   Not run on a console or in Vita3K yet.
+- **What the CPU pays for GPU memory.** The main pool is memory the CPU
+  does not cache (`SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE`), as Sony's
+  samples have it, and CDRAM is not cached either. The engine skins
+  vertices into the pool and reads some of them back, writes a frame's
+  indices there and fills the uniform buffers there, on three threads. At
+  start-up the back end measures what that memory costs and logs one line:
+  `gpu memory speed, 256 KB at a time: the heap: copy in N MB/s, copy out
+  N MB/s, a word written N ns, read N ns; main: ...; cdram: ...` (the
+  shortest of four passes each; "copy out" and "read" are the CPU reading
+  the pool). An empty file `cached-main-memory` in the folder of the
+  compiled programs gives the main pool as ordinary cached memory
+  (`diag: cached-main-memory is there ...`; the two memory lines then say
+  `main (cached)`), so that one console sitting can say what the uncached
+  kind costs a frame. It is for measuring: whether the GPU always sees what
+  the CPU wrote last from cached memory is not known, so the picture may
+  be wrong with it.
 - **Textures** are linear: rows of whole multiples of 8 texels, and the
   levels of a mipmapped texture sized from the power of two above the base,
   which is how sceGxm reads them and also a layout LockRect can hand out.
@@ -849,6 +1000,18 @@ What the GXM back end does so far (step 2d):
   map's before a frame is shown (run Z8's long warm-ups ran out of CDRAM
   going from mp_crash to mp_backlot). DrawPrimitiveUP and the clear quads
   copy their vertices into a 512 KB per-frame ring.
+- **Skinning.** Animated models (the hands and weapon, players) are skinned
+  on a worker thread into the skinned cache. Console run BD measured 6 ms a
+  frame for the 3227 vertices of the hands and weapon alone, 1.9 us a
+  vertex, with the engine's scalar code: it writes a vertex field by field
+  into memory the CPU does not cache and reads a weighted vertex's position
+  back from it, on a CPU whose NEON the build did not use. The client now
+  skins with the vector path (`src/gfx_d3d/r_model_skin_vec.cpp`, the one
+  file built for NEON; [the rule](linux-armv7.md)): the same bytes, a vertex
+  put together in registers and written once. `r_sse_skinning 0` goes back
+  to the scalar code, so `perf_ab "set r_sse_skinning 0" "set r_sse_skinning 1"`
+  holds the two against each other (`other threads run: skin xmodel` is its timer).
+  Not run on a console or in Vita3K yet.
 
 ### Shaders (step 2c)
 
@@ -1052,6 +1215,14 @@ textures. ...`. How to read it:
   2 ms (a program made on the spot) counts its excess once; the line says how
   many there were. Scene work and waits inside a draw, a clear or a copy are
   counted under their own names only.
+- **A draw's parts** end the line once some draws were timed step by step:
+  about one in 32 of the draws not timed whole reads the clock after each
+  step (setup and finding the programs, the fixed state, setting the
+  programs and the vertex constants, the fragment constants, binding the
+  textures, the streams and `sceGxmDraw`), and the line gives each step's
+  mean in microseconds with one clock read taken off. Those draws are left
+  out of the draws' sum, and one with scene work or a wait inside, or one
+  that ended early, is dropped.
 - **The rest** is everything outside those calls. The system's `Vita load`
   line beside it says how busy the processor was.
 

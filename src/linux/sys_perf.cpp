@@ -7,21 +7,32 @@
 
 #include "sys_perf.h"
 #include "sys_perf_core.h"
-#include "sys_posix.h"
 
 #include <stdlib.h>
+
+#if defined(_WIN32)
+#include <qcommon/threads.h>
+#include <windows.h>
+#include <tlhelp32.h>
+#else
+#include "sys_posix.h"
 #include <time.h>
+#endif
 
 #if defined(__linux__)
 #include "sys_perf_readings.h"
+#endif
+
+#if defined(__vita__)
+#include <vita/vita_platform.h> // Vita_ThreadTimes
 #endif
 
 // ---------------------------------------------------------------------------
 // The game's side of the A/B measuring in sys_perf_core.h: the commands, the
 // clock, and where the counters and readings come from on this machine.
 //
-//   perf_ab "<commands A>" "<commands B>" [seconds] [rounds] [settle seconds]
-//   perf_sample [seconds] [windows] [settle seconds]
+//   perf_ab "<commands A>" "<commands B>" [seconds] [rounds] [settle seconds] [timed rows]
+//   perf_sample [seconds] [windows] [settle seconds] [timed rows]
 //   perf_stop
 //
 // Everything is read from the main thread between frames: CPU time from the
@@ -29,6 +40,12 @@
 // battery power, GPU and CPU frequency, package temperature and package energy
 // from sysfs where this machine and this user can read them. A reading that is
 // not there is left out of the lines; nothing is guessed.
+//
+// On Windows the CPU times come from GetThreadTimes and GetProcessTimes, which
+// count in whole scheduler ticks (about 15.6 ms), so use windows of 10 s or
+// more; the threads are listed with a Toolhelp snapshot and named by the
+// engine's thread table ("other" for threads the engine did not start, such
+// as the driver's). There are no machine readings.
 // ---------------------------------------------------------------------------
 
 namespace
@@ -37,6 +54,78 @@ namespace
     cmd_function_s s_perfSampleCmd;
     cmd_function_s s_perfStopCmd;
 
+#if defined(_WIN32)
+    uint64_t NowNs()
+    {
+        return Sys_PerfNowNs();
+    }
+
+    uint64_t FileTimeNs(const FILETIME &time)
+    {
+        return ((uint64_t)time.dwHighDateTime << 32 | time.dwLowDateTime) * 100ull;
+    }
+
+    // Kernel plus user time of a thread, or 0 when it cannot be read.
+    uint64_t ThreadCpuNs(HANDLE thread)
+    {
+        FILETIME created, exited, kernel, user;
+        if (!GetThreadTimes(thread, &created, &exited, &kernel, &user))
+            return 0;
+        return FileTimeNs(kernel) + FileTimeNs(user);
+    }
+
+    uint64_t ProcessCpuNs()
+    {
+        FILETIME created, exited, kernel, user;
+        if (!GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user))
+            return 0;
+        return FileTimeNs(kernel) + FileTimeNs(user);
+    }
+
+    const char *EngineThreadName(DWORD id)
+    {
+        for (int context = 0; context < THREAD_CONTEXT_COUNT; ++context)
+        {
+            if (threadId[context] == id)
+                return Sys_GetThreadContextName(context);
+        }
+        return nullptr;
+    }
+
+    // Every thread of this process with its CPU time, as Perf_ReadThreads
+    // does from /proc on Linux.
+    void ReadThreads(std::vector<PerfThreadTime> *threads)
+    {
+        threads->clear();
+        HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+        if (snapshot == INVALID_HANDLE_VALUE)
+            return;
+        const DWORD process = GetCurrentProcessId();
+        THREADENTRY32 entry;
+        entry.dwSize = sizeof(entry);
+        for (BOOL more = Thread32First(snapshot, &entry); more; more = Thread32Next(snapshot, &entry))
+        {
+            if (entry.th32OwnerProcessID != process)
+                continue;
+            HANDLE thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, entry.th32ThreadID);
+            if (!thread)
+                continue;
+            PerfThreadTime time;
+            time.tid = (int)entry.th32ThreadID;
+            time.runNs = ThreadCpuNs(thread);
+            CloseHandle(thread);
+            const char *name = EngineThreadName(entry.th32ThreadID);
+            time.name = name ? name : "other";
+            threads->push_back(time);
+        }
+        CloseHandle(snapshot);
+    }
+#else
+    uint64_t NowNs()
+    {
+        return Posix_MonotonicNanoseconds();
+    }
+
     [[maybe_unused]] uint64_t ClockNs(clockid_t clock)
     {
         struct timespec ts;
@@ -44,6 +133,7 @@ namespace
             return 0;
         return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
     }
+#endif
 
 #if defined(__linux__)
     PerfReadingPaths s_paths;
@@ -109,7 +199,32 @@ namespace
         void ReadCounters(PerfCounters *counters) override
         {
             *counters = PerfCounters();
-#if defined(CLOCK_THREAD_CPUTIME_ID) && defined(CLOCK_PROCESS_CPUTIME_ID) && !defined(__vita__)
+#if defined(_WIN32)
+            // Called on the main thread.
+            counters->mainCpuNs = ThreadCpuNs(GetCurrentThread());
+            counters->processCpuNs = ProcessCpuNs();
+            ReadThreads(&counters->threads);
+#elif defined(__vita__)
+            // Called on the main thread. newlib has no CPU time clocks; the
+            // kernel counts each thread's run time, and "all" is the sum over
+            // the threads the port started (vita_threads.cpp), not the
+            // system's own threads in this process.
+            {
+                VitaThreadTime times[24];
+                const int count = Vita_ThreadTimes(times, 24);
+                for (int i = 0; i < count; ++i)
+                {
+                    PerfThreadTime time;
+                    time.tid = times[i].id;
+                    time.name = times[i].name;
+                    time.runNs = times[i].runMicroseconds * 1000ull;
+                    counters->threads.push_back(time);
+                    counters->processCpuNs += time.runNs;
+                    if (times[i].self)
+                        counters->mainCpuNs = time.runNs;
+                }
+            }
+#elif defined(CLOCK_THREAD_CPUTIME_ID) && defined(CLOCK_PROCESS_CPUTIME_ID)
             counters->mainCpuNs = ClockNs(CLOCK_THREAD_CPUTIME_ID);
             counters->processCpuNs = ClockNs(CLOCK_PROCESS_CPUTIME_ID);
 #endif
@@ -138,6 +253,25 @@ namespace
                 const uint32_t lock = (uint32_t)(probe - SYS_PERF_PROBE_LOCK);
                 return NumberedName("lock", LockName((int)lock), lock);
             }
+            if (probe >= SYS_PERF_PROBE_RENDER_TESS && probe < SYS_PERF_PROBE_RENDER_TESS + SYS_PERF_TESS_SLOTS)
+            {
+                static const char *const kTess[SYS_PERF_TESS_SLOTS] = {
+                    "triangles", "pretessellated triangles", "static models", "pretessellated static models",
+                    "cached static models", "skinned static models", "brush models", "rigid models",
+                    "rigid skinned models", "skinned models", "code meshes", "marks", "particle clouds"};
+                return std::string("render: tess ") + kTess[probe - SYS_PERF_PROBE_RENDER_TESS];
+            }
+            if (probe >= SYS_PERF_PROBE_WORK_MAIN)
+            {
+                const bool main = probe < SYS_PERF_PROBE_WORK_OTHER;
+                const uint32_t type =
+                    (uint32_t)(probe - (main ? SYS_PERF_PROBE_WORK_MAIN : SYS_PERF_PROBE_WORK_OTHER));
+                const size_t named = sizeof(s_workerTypeNames) / sizeof(s_workerTypeNames[0]);
+                return NumberedName(main ? "main thread runs:" : "other threads run:",
+                                    type < named ? s_workerTypeNames[type] : nullptr, type);
+            }
+            if (probe == SYS_PERF_PROBE_WORKERS_AWAKE)
+                return "workers: awake";
             if (probe >= SYS_PERF_PROBE_WAIT_WORKER_TYPE)
             {
                 const uint32_t type = (uint32_t)(probe - SYS_PERF_PROBE_WAIT_WORKER_TYPE);
@@ -155,6 +289,47 @@ namespace
             case SYS_PERF_PROBE_SERVER_ENTITIES: return "server: entities";
             case SYS_PERF_PROBE_SERVER_CLIENT_END: return "server: player end frame";
             case SYS_PERF_PROBE_SERVER_SEND: return "server: snapshots";
+            case SYS_PERF_PROBE_HUD_MENUS: return "hud: menus";
+            case SYS_PERF_PROBE_HUD_ELEMS: return "hud: script elements";
+            case SYS_PERF_PROBE_HUD_NAMES: return "hud: crosshair and names";
+            case SYS_PERF_PROBE_HUD_COMPASS: return "hud: compass";
+            case SYS_PERF_PROBE_HUD_SCOREBOARD: return "hud: scoreboard";
+            case SYS_PERF_PROBE_UI_EXPRESSIONS: return "menu expressions";
+            case SYS_PERF_PROBE_UI_WINDOWS: return "menus: windows";
+            case SYS_PERF_PROBE_UI_TEXT_ITEMS: return "menus: text items";
+            case SYS_PERF_PROBE_UI_OWNERDRAW_ITEMS: return "menus: ownerdraw items";
+            case SYS_PERF_PROBE_UI_OTHER_ITEMS: return "menus: other items";
+            case SYS_PERF_PROBE_UI_TRANSLATE: return "menus: translate";
+            case SYS_PERF_PROBE_UI_MATERIAL_NAMES: return "menus: materials by name";
+            case SYS_PERF_PROBE_UI_SHOW_BY_DVAR: return "menus: show by dvar";
+            case SYS_PERF_PROBE_CLIENT_FRAME: return "client: frame";
+            case SYS_PERF_PROBE_CLIENT_SCREEN: return "client: screen";
+            case SYS_PERF_PROBE_CLIENT_SNAPSHOTS: return "client: snapshots";
+            case SYS_PERF_PROBE_CLIENT_ENTITIES: return "client: entities";
+            case SYS_PERF_PROBE_CLIENT_PREDICT: return "client: input and prediction";
+            case SYS_PERF_PROBE_CLIENT_VIEW: return "client: view and weapon";
+            case SYS_PERF_PROBE_CLIENT_SCENE: return "client: scene";
+            case SYS_PERF_PROBE_CLIENT_SOUND: return "client: sound";
+            case SYS_PERF_PROBE_CLIENT_2D: return "client: 2d";
+            case SYS_PERF_PROBE_CLIENT_HAND_OVER: return "client: hand over the frame";
+            case SYS_PERF_PROBE_SCENE_CELLS: return "scene: cells";
+            case SYS_PERF_PROBE_SCENE_WORLD: return "scene: world surfaces";
+            case SYS_PERF_PROBE_SCENE_STATIC_MODELS: return "scene: static models";
+            case SYS_PERF_PROBE_SCENE_ENTITIES: return "scene: entities";
+            case SYS_PERF_PROBE_SCENE_MERGE: return "scene: sorted lists";
+            case SYS_PERF_PROBE_RENDER_3D: return "render: 3d";
+            case SYS_PERF_PROBE_RENDER_DEPTH: return "render: depth pass";
+            case SYS_PERF_PROBE_RENDER_LIT: return "render: lit";
+            case SYS_PERF_PROBE_RENDER_DECAL: return "render: decals";
+            case SYS_PERF_PROBE_RENDER_SUN: return "render: sun";
+            case SYS_PERF_PROBE_RENDER_LIGHTS: return "render: point lights";
+            case SYS_PERF_PROBE_RENDER_EMISSIVE: return "render: emissive";
+            case SYS_PERF_PROBE_RENDER_POSTFX: return "render: post effects";
+            case SYS_PERF_PROBE_RENDER_2D: return "render: 2d";
+            case SYS_PERF_PROBE_RENDER_SWAP_WAIT: return "render: wait before present";
+            case SYS_PERF_PROBE_RENDER_PRESENT: return "render: present";
+            case SYS_PERF_PROBE_RENDER_IDLE: return "render: waiting for a frame";
+            case SYS_PERF_PROBE_RENDER_MATERIAL: return "render: material setup";
             case SYS_PERF_PROBE_WAIT_RENDERER: return "wait for the render thread";
             case SYS_PERF_PROBE_WAIT_WORKERS_ALL: return "wait for workers: all";
             default: return "wait for workers: other";
@@ -177,8 +352,8 @@ namespace
         }
     };
 
-    GameHost s_host;
-    PerfRunner s_runner(&s_host);
+    GameHost s_gameHost;
+    PerfRunner s_runner(&s_gameHost);
 
     double ArgSeconds(int index, double fallback)
     {
@@ -208,7 +383,7 @@ namespace
 #endif
         PerfConfig withTick = config;
         withTick.tickProbe = SYS_PERF_PROBE_SERVER_FRAME;
-        s_runner.Start(withTick, Posix_MonotonicNanoseconds());
+        s_runner.Start(withTick, NowNs());
     }
 
     void PerfAb_f()
@@ -216,7 +391,8 @@ namespace
         if (Cmd_Argc() < 3)
         {
             Com_Printf(CON_CHANNEL_SYSTEM,
-                "usage: perf_ab \"<commands A>\" \"<commands B>\" [seconds 10] [rounds 4] [settle seconds 2]\n"
+                "usage: perf_ab \"<commands A>\" \"<commands B>\" [seconds 10] [rounds 4] [settle seconds 2]"
+                " [timed rows 16]\n"
                 "Measures frame time, CPU time and power in windows that alternate A B B A.\n");
             return;
         }
@@ -226,6 +402,7 @@ namespace
         config.sampleSeconds = ArgSeconds(3, 10.0);
         config.rounds = ArgCount(4, 4);
         config.settleSeconds = ArgSeconds(5, 2.0);
+        config.probeRows = (size_t)ArgCount(6, (int)config.probeRows);
         StartRun(config);
     }
 
@@ -236,6 +413,7 @@ namespace
         config.sampleSeconds = ArgSeconds(1, 10.0);
         config.rounds = ArgCount(2, 1);
         config.settleSeconds = ArgSeconds(3, 1.0);
+        config.probeRows = (size_t)ArgCount(4, (int)config.probeRows);
         StartRun(config);
     }
 
@@ -255,5 +433,5 @@ void Sys_PerfInit()
 void Sys_PerfFrame()
 {
     if (s_runner.Active())
-        s_runner.Frame(Posix_MonotonicNanoseconds());
+        s_runner.Frame(NowNs());
 }

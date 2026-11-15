@@ -393,6 +393,7 @@ void SetDefaultState(Device &device)
     device.depthStencil = nullptr;
     device.viewport = Viewport{0, 0, device.width, device.height, 0.0f, 1.0f};
     device.scissor = Rect{0, 0, int32_t(device.width), int32_t(device.height)};
+    ++device.stateSerial;
 }
 
 // The GPU memory to reserve: nearly all of CDRAM for textures and targets,
@@ -607,6 +608,19 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
         display.ringScale = 2;
         Log(*device, "diag: big-gxm-rings is there: sceGxm's ring buffers are twice their default size");
     }
+    // The main pool is memory the CPU does not cache, as Sony's samples have
+    // it: the GPU then reads what the CPU wrote with nothing to flush. But
+    // the CPU reads it back slowly and writes it a word at a time slowly,
+    // and the engine skins vertices, writes indices and fills constants
+    // there on three threads. A file named cached-main-memory gives the pool
+    // as ordinary cached memory, so that a console run can say what the
+    // uncached kind costs. Whether the picture stays right with it is not
+    // known: it is for measuring.
+    if (gxm::ProgramCacheMarker("cached-main-memory"))
+    {
+        display.memory.mainCached = true;
+        Log(*device, "diag: cached-main-memory is there: the main GPU pool is cached memory");
+    }
     // A frame is shown at the display's next refresh. A file named no-vsync
     // beside the compiled programs shows it at once (it tears): a console run
     // can then tell what waiting for the refresh costs.
@@ -625,6 +639,7 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     }
     InitTargetReserve(*device);
     Log(*device, "%s", gxm::DescribeMemory().c_str());
+    Log(*device, "%s", gxm::DescribeMemorySpeed().c_str());
     SetDefaultState(*device);
     device->frameTime.since = Micros();
     return device.release();
@@ -806,6 +821,7 @@ void DestroyTexture(Device *device, Texture *texture)
         if (device->depthStencil == surface.get())
             device->depthStencil = nullptr;
     }
+    ++device->stateSerial;
     if (texture->reserved)
     {
         // Targets go at a renderer restart or at shutdown: waiting for the GPU
@@ -1134,6 +1150,11 @@ void LogShaderSummary(Device &device, const char *when)
         when, (unsigned long long)p.requested, unsigned(gxm::ProgramsWaiting()), p.mostWaiting,
         (unsigned long long)p.hurried, (unsigned long long)p.dropped, p.slowestCompileMicros / 1000.0,
         p.slowestReadMicros / 1000.0, (unsigned long long)c.drawsWaited, (unsigned long long)c.framesWaited);
+    if (p.packRefused)
+        Log(device, "program pack %s: programs.pack is there but is not a pack this reads; not used", when);
+    else if (p.packPrograms)
+        Log(device, "program pack %s: programs.pack holds %u programs; %u of the %u read from the card came out of it",
+            when, p.packPrograms, p.fromPack, p.fromFiles);
     size_t held = 0, peak = 0;
     uint32_t refused = 0;
     gxm::ShaderCompilerMemory(held, peak, refused);
@@ -1288,8 +1309,11 @@ void DestroyVertexDecl(Device *device, VertexDecl *decl)
 
 void SetRenderState(Device *device, d3d::RenderState state, uint32_t value)
 {
-    if (device && state < d3d::RS_COUNT)
+    if (device && state < d3d::RS_COUNT && device->renderStates[state] != value)
+    {
         device->renderStates[state] = value;
+        ++device->stateSerial;
+    }
 }
 
 uint32_t GetRenderState(const Device *device, d3d::RenderState state)
@@ -1325,14 +1349,20 @@ void SetTexture(Device *device, uint32_t sampler, Texture *texture)
 
 void SetVertexShader(Device *device, Shader *shader)
 {
-    if (device)
+    if (device && device->vertexShader != shader)
+    {
         device->vertexShader = shader;
+        ++device->stateSerial;
+    }
 }
 
 void SetPixelShader(Device *device, Shader *shader)
 {
-    if (device)
+    if (device && device->pixelShader != shader)
+    {
         device->pixelShader = shader;
+        ++device->stateSerial;
+    }
 }
 
 namespace
@@ -1374,14 +1404,22 @@ void SetPixelShaderConstantF(Device *device, uint32_t start, const float *data, 
 
 void SetVertexDecl(Device *device, VertexDecl *decl)
 {
-    if (device)
+    if (device && device->decl != decl)
+    {
         device->decl = decl;
+        ++device->stateSerial;
+    }
 }
 
 void SetStreamSource(Device *device, uint32_t stream, VertexBuffer *buffer, uint32_t offset, uint32_t stride)
 {
     if (device && stream < kMaxStreams)
+    {
+        // The buffer and the offset are read by every draw; the stride
+        // picks the vertex program.
+        device->stateSerial += device->streams[stream].stride != stride;
         device->streams[stream] = Device::Stream{buffer, offset, stride};
+    }
 }
 
 void SetIndices(Device *device, IndexBuffer *buffer)
@@ -1392,14 +1430,20 @@ void SetIndices(Device *device, IndexBuffer *buffer)
 
 void SetViewport(Device *device, const Viewport &viewport)
 {
-    if (device)
+    if (device && std::memcmp(&device->viewport, &viewport, sizeof(viewport)) != 0)
+    {
         device->viewport = viewport;
+        ++device->stateSerial;
+    }
 }
 
 void SetScissorRect(Device *device, const Rect &rect)
 {
-    if (device)
+    if (device && std::memcmp(&device->scissor, &rect, sizeof(rect)) != 0)
+    {
         device->scissor = rect;
+        ++device->stateSerial;
+    }
 }
 
 void SetRenderTarget(Device *device, uint32_t index, Surface *surface)
@@ -1407,6 +1451,7 @@ void SetRenderTarget(Device *device, uint32_t index, Surface *surface)
     if (!device || index >= kMaxRenderTargets)
         return;
     device->renderTargets[index] = surface;
+    ++device->stateSerial;
     if (index == 0 && surface)
     {
         uint32_t width = 0, height = 0;
@@ -1420,7 +1465,10 @@ void SetRenderTarget(Device *device, uint32_t index, Surface *surface)
 void SetDepthStencilSurface(Device *device, Surface *surface)
 {
     if (device)
+    {
         device->depthStencil = surface;
+        ++device->stateSerial;
+    }
 }
 
 // ---- Drawing --------------------------------------------------------------------------------
@@ -1433,7 +1481,14 @@ template <typename Call> void TimedDraw(Device &device, Call &&call)
     gxm::FrameTime &time = device.frameTime;
     if (!time.PickDraw())
     {
+        if (!time.PickPartedDraw())
+        {
+            call();
+            return;
+        }
+        time.BeginParts(Micros());
         call();
+        time.EndParts();
         return;
     }
     const uint64_t inner = time.Inner();
@@ -1487,6 +1542,7 @@ void DrawPrimitiveUP(Device *device, d3d::PrimitiveType type, uint32_t primitive
     ++device->stats.draws;
     if (!device->detached && vertices)
         TimedDraw(*device, [&] { Draw(*device, type, 0, 0, primitiveCount, false, vertices, stride); });
+    device->stateSerial += device->streams[0].stride != 0;
     device->streams[0] = Device::Stream{};
 }
 

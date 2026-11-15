@@ -304,12 +304,17 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/tests/test_vita_run_plan.py
+          python3 scripts/tests/test_vita_run_list.py
+          python3 scripts/tests/test_vita_log_writer.py
+          python3 scripts/tests/test_vita_bench.py
           python3 scripts/tests/test_vita_input.py
           python3 scripts/tests/test_vita_sound.py --al-include "$RUNNER_TEMP/al-include"
           python3 scripts/tests/test_vita_program_queue.py
+          python3 scripts/tests/test_vita_program_pack.py
           python3 scripts/tests/test_vita_gxm_heap.py
           python3 scripts/tests/test_vita_frame_time.py
           python3 scripts/tests/test_vita_gpu_progress.py
+          python3 scripts/tests/test_vita_prepass_governor.py
           python3 scripts/tests/test_vita_cg_translate.py --require-glslang
           # The static model cache's size arithmetic, at every size: the
           # Vita build runs a smaller cache than the retail game.
@@ -345,8 +350,9 @@ jobs:
           scripts/ci/each-config.sh <<'COMMANDS'
           export BUILD_DIR="build-vita-mp/$config"
           export BINARY="out/vita-mp-$config/KisakCOD-mp"
-          cmake --build "$BUILD_DIR" --target KisakCOD-mp-vpk KisakCOD-gxm-probe-vpk --parallel "$(nproc)"
-          ls -l "$BINARY" "$BINARY.vpk" "$(dirname "$BINARY")/KisakCOD-gxm-probe.vpk"
+          cmake --build "$BUILD_DIR" --target KisakCOD-mp-vpk KisakCOD-mp-test-vpk KisakCOD-gxm-probe-vpk \
+            --parallel "$(nproc)"
+          ls -l "$BINARY" "$BINARY.vpk" "$BINARY-test.vpk" "$(dirname "$BINARY")/KisakCOD-gxm-probe.vpk"
           "$VITASDK/bin/arm-vita-eabi-size" -A "$BINARY" | grep -E '^\.(text|rodata|data|bss) '
           # Float results have to match x86 (docs/vita.md): client prediction
           # replays the server's movement math.
@@ -355,8 +361,21 @@ jobs:
             echo "the client contains fused multiply-add instructions" >&2
             exit 1
           fi
-          if grep -Eq $'\tv[a-z0-9]+\.f(32|64)\tq|\tv[a-z0-9]+\.f32\td' "$RUNNER_TEMP/vita-mp.dis"; then
-            echo "the client contains NEON float instructions" >&2
+          # NEON float math has one place: the vector skinning path
+          # (src/gfx_d3d/r_model_skin_vec.cpp, namespace skin_vec), which
+          # only makes vertices to draw and is built for NEON on purpose.
+          neon_outside="$(awk '/^[0-9a-f]+ <.*>:$/ { fn = $2 }
+            /\tv[a-z0-9]+\.f(32|64)\tq|\tv[a-z0-9]+\.f32\td/ { if (fn !~ /^<_ZN8skin_vec/) print fn }' \
+            "$RUNNER_TEMP/vita-mp.dis" | sort -u)"
+          if [ -n "$neon_outside" ]; then
+            printf '%s\n' "$neon_outside" | head -20 >&2
+            echo "the client contains NEON float instructions outside the vector skinning path" >&2
+            exit 1
+          fi
+          if ! grep -Eq $'^[0-9a-f]+ <_ZN8skin_vec8Weighted' "$RUNNER_TEMP/vita-mp.dis" ||
+             ! awk '/^[0-9a-f]+ <.*>:$/ { fn = $2 } /\tvmul\.f32\tq/ && fn ~ /^<_ZN8skin_vec/ { found = 1 } END { exit !found }' \
+               "$RUNNER_TEMP/vita-mp.dis"; then
+            echo "the client's vector skinning path is not there or not built for NEON" >&2
             exit 1
           fi
           "$VITASDK/bin/arm-vita-eabi-nm" "$BINARY" > "$RUNNER_TEMP/vita-mp.sym"
@@ -375,7 +394,7 @@ jobs:
           # so a crash dump's addresses can be named with arm-vita-eabi-addr2line
           # on whatever machine fetched the artifact.
           cp "$BINARY" "$BINARY.elf"
-          sha256sum "$BINARY.vpk" "$BINARY.elf"
+          sha256sum "$BINARY.vpk" "$BINARY-test.vpk" "$BINARY.elf"
           COMMANDS
 
       # RelWithDebInfo is the build the machines install; the artifact keeps its name.
@@ -385,6 +404,7 @@ jobs:
           name: KisakCOD-mp-vita-RelWithDebInfo
           path: |
             out/vita-mp-RelWithDebInfo/KisakCOD-mp.vpk
+            out/vita-mp-RelWithDebInfo/KisakCOD-mp-test.vpk
             out/vita-mp-RelWithDebInfo/KisakCOD-mp.elf
             ${{ github.workspace }}/out/vita-mp-RelWithDebInfo/KisakCOD-gxm-probe.vpk
           if-no-files-found: error

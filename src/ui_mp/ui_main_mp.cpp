@@ -1,4 +1,5 @@
 #include <ui/ui_time.h>
+#include <linux/sys_perf.h>
 #include <ui/ui_cursor.h>
 #include <ui/ui_font_selection.h>
 #ifndef KISAK_MP
@@ -4684,6 +4685,12 @@ void UI_Init(int localClientNum)
         (DvarLimits)0x200000000LL,
         DVAR_NOFLAG,
         "spam debug info for the ui script");
+    UI_ExprStats_Init();
+    ui_fastExpressions = Dvar_RegisterBool(
+        "ui_fastExpressions",
+        1,
+        DVAR_NOFLAG,
+        "1 = menu expressions read bool, int and string dvars directly and skip clearing their 5 KB stack; the same results with less work");
 }
 
 void UI_RegisterDvars()
@@ -5725,6 +5732,8 @@ char errorString[1024];
 char *UI_SafeTranslateString(const char *reference)
 {
     const char *translation; // [esp+10h] [ebp-4h]
+
+    SysPerfScope perfScope(SYS_PERF_PROBE_UI_TRANSLATE);
 
     if (*reference == 21)
     {

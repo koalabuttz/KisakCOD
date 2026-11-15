@@ -121,7 +121,17 @@ mixes at. For sound problems, `+set snd_alDebug 1` adds OpenAL errors, stream
 underruns and a summary every 5 seconds (sounds started, sounds cut while still
 playing, sources playing, longest gap between sound updates); `snd_alDebug 2`
 also prints every sound start. It is off by default and changes nothing that is
-played.
+played. At level 1 it also prints `snd_al: read all of stream '<file>' (N KB)
+to find its length: M ms` the first time an MP3 stream without a length tag
+plays: the decoder has to read such a file through to know how long it is,
+and the driver keeps the answer for the next start of that file. A constant
+bit rate file is not read through: its size says its length, and the line is
+`snd_al: stream '<file>' (N KB) is R bit/s all through its head: F frames by
+its size` (level 2 adds `read through: F frames`, the decoder's own count, to
+compare). The size has to fit a whole number of frames as well, or the file is
+read through. A length from a size gives way to the decoder's count the first
+time the file plays from its start to its end: `snd_al: stream '<file>' played
+through: F frames, not the G its size gave`.
 
 The OpenAL headers (`AL/al.h`) are needed too, whichever library is linked,
 because the sound headers include them. Without `libopenal-dev` installed, unpack
@@ -264,7 +274,7 @@ do the same through SDL (`src/linux/sys_desktop.h`,
 | A fatal error shows "Error" in a box (`Sys_SetErrorText`) | The error is still printed, then shown in a box with an OK button. The game window is hidden first, so the box is not behind it. Out of memory and out of file handles go the same way. |
 | "Your computer has changed" and "configuration updated" ask Yes or No | The same question in a box. Yes resets the graphics settings to the recommended ones, as on Windows. The first start after the GPU name became real (it used to be fixed text) asks once. |
 | `Sys_OpenURL` hands a web address to `ShellExecute` | The desktop's browser opens it (`xdg-open` on Linux). Only a plain `http://` or `https://` address is opened, as on Windows (`src/qcommon/url_check.h`). |
-| `startSingleplayer` starts `KisakCOD-sp.exe` from the game folder | `startSingleplayer` (the multiplayer main menu) starts `KisakCOD-sp` from the folder `KisakCOD-mp` is in, and `startMultiplayer` (the singleplayer main menu) starts `KisakCOD-mp`. The new program is given the same `fs_basepath` and `fs_homepath`. When the program is not there (the singleplayer game is opt-in) the menu says so and nothing quits. |
+| `startSingleplayer` starts `KisakCOD-sp.exe` from the game folder | `startSingleplayer` (the multiplayer main menu) starts `KisakCOD-sp` from the folder `KisakCOD-mp` is in, and `startMultiplayer` (the singleplayer main menu) starts `KisakCOD-mp`. The new program is given the `fs_basepath` and `fs_homepath` this one started with (kept right after start-up: a game server can set both on a client, see [server-set-dvars.md](server-set-dvars.md), and a folder a server chose is never passed on). When the program is not there (the singleplayer game is opt-in) the menu says so and nothing quits. |
 
 A box waits for a click, so scripted runs turn them off: set
 `KISAK_NO_DIALOGS=1`. Then the error is only printed and each question is

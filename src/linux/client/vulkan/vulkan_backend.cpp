@@ -14,6 +14,7 @@
 #include <gfx_vk/d3d9/vk_d3d9.h>
 #include <gfx_vk/modern/vk_modern.h>
 #include <gfx_d3d/rhi/r_rhi_modern.h>
+#include <gfx_d3d/rhi/r_rhi_modern_dvars.h>
 #include <linux/client/window/sdl_api.h>
 #include <linux/client/window/win32_window_sdl3.h>
 
@@ -350,6 +351,7 @@ std::string CacheDirectory()
 void HostTuning(void *, front::Tuning &out)
 {
     out.keepDrawState = r_vkKeepDrawState->current.enabled;
+    modern_dvars::Read(out.modern);
     out.gpuFeed = r_vkGpuFeed->current.integer - 1;
     out.gpuFeedDraws = uint32_t(std::max(0, r_vkGpuFeedDraws->current.integer));
     out.gpuFeedIdleDraws = uint32_t(std::max(0, r_vkGpuFeedIdleDraws->current.integer));
@@ -506,10 +508,39 @@ void ModernReflectionProbe(void *, IDirect3DDevice9 *device, IDirect3DCubeTextur
         front::ModernReflectionProbe(device, probe);
 }
 
+front::ModernPlanarView ModernPlanarViewOf(const GfxModernPlanar *planar)
+{
+    front::ModernPlanarView view{};
+    std::memcpy(view.view, planar->view, sizeof(view.view));
+    std::memcpy(view.projection, planar->projection, sizeof(view.projection));
+    view.width = planar->width > 0 ? static_cast<uint32_t>(planar->width) : 0u;
+    view.height = planar->height > 0 ? static_cast<uint32_t>(planar->height) : 0u;
+    std::memcpy(view.plane, planar->plane, sizeof(view.plane));
+    return view;
+}
+
+bool ModernPlanarWanted(void *, IDirect3DDevice9 *device)
+{
+    return !s_modernRefused.load(std::memory_order_relaxed) && front::ModernPlanarWanted(device);
+}
+
+bool ModernPlanarBegin(void *, IDirect3DDevice9 *device, const GfxModernPlanar *planar)
+{
+    return !s_modernRefused.load(std::memory_order_relaxed) && planar
+           && front::ModernPlanarBegin(device, ModernPlanarViewOf(planar));
+}
+
+void ModernPlanarDone(void *, IDirect3DDevice9 *device, const GfxModernPlanar *planar)
+{
+    if (planar)
+        front::ModernPlanarDone(device, ModernPlanarViewOf(planar));
+}
+
 const GfxModernHooks s_modernHooks = {nullptr,          ModernJitterPixels, ModernSceneDone,
                                       ModernSceneBegin, ModernSceneLit,     ModernSurfaceMoved,
                                       ModernSkinnedSurfaceMoved, ModernLitInputs, ModernWantsSceneDepth,
-                                      ModernSceneDepth, ModernReflectionProbe};
+                                      ModernSceneDepth, ModernReflectionProbe, ModernPlanarWanted,
+                                      ModernPlanarBegin, ModernPlanarDone};
 } // namespace
 
 void Kisak_VulkanRegisterDvars()
@@ -541,6 +572,8 @@ void Kisak_VulkanRegisterDvars()
     r_visuals = Dvar_RegisterEnum("r_visuals", s_visualsNames, VISUALS_LEGACY, DVAR_ARCHIVE | DVAR_LATCH,
                                   "Visuals with r_backend vulkan: legacy (the game as it was made) or modern "
                                   "(experimental; so far temporal anti-aliasing)");
+    // The Modern path's switches, in effect from the next frame (docs/vulkan-modern.md).
+    modern_dvars::Register();
 }
 
 int Kisak_VulkanBackendSelected()

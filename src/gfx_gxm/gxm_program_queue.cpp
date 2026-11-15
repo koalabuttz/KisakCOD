@@ -3,6 +3,10 @@
 #include <algorithm>
 #include <utility>
 
+#if defined(__vita__)
+#include <vita/vita_platform.h> // Vita_NoteThread
+#endif
+
 namespace gfx_gxm
 {
 namespace
@@ -161,6 +165,10 @@ bool ProgramQueue::HasWorker()
 
 void *ProgramQueue::ThreadEntry(void *self)
 {
+#if defined(__vita__)
+    Vita_NoteThread("gxm programs");
+    Vita_QuietWaits();
+#endif
     static_cast<ProgramQueue *>(self)->Work();
     return nullptr;
 }

@@ -527,12 +527,16 @@ public:
     void ModernLitNoSun();
     void ModernLitLights();
     void ModernTonemap();
+    void ModernTonemapAs(const std::string &curve);
     void ModernExposure();
     void ModernVelocity();
     void ModernNormals();
     void ModernAo();
+    void ModernAoAs(bool liveOff);
+    void ModernLive();
     void ModernReflections();
     void ModernProbes();
+    void ModernPlanar();
     void Bench();
     void BenchRuns();
     void BenchFrames(bool runs);
@@ -2944,6 +2948,253 @@ void Check::Multisample()
 // engine applies, a pixel the jitter covers in some frames and not in others
 // ends between the two colours, where without the pass it would be one or the
 // other; a scene with no depth surface is refused.
+// Planar reflections (vk_d3d9.h ModernPlanarBegin): two frames, each a scene
+// in linear light (a grey clear) and then a planar view of half its size, in
+// which the renderer sets the back buffer and the scene's depth as its targets
+// and draws four quadrants (red top left, green top right, blue bottom left,
+// yellow bottom right). They must land in the planar image, never on the
+// screen; with KISAK_VK_MODERN_DEBUG=planar the second frame shows the first
+// frame's planar image over the scene's top left. Without
+// KISAK_VK_MODERN_PLANAR=1 or the debug view, or with KISAK_VK_MODERN_LINEAR=0,
+// no view is taken.
+void Check::ModernPlanar()
+{
+    const auto envIs = [](const char *name, const char *value) {
+#if defined(_MSC_VER)
+        char *env = nullptr;
+        size_t envLength = 0;
+        const bool is = _dupenv_s(&env, &envLength, name) == 0 && env && !std::strcmp(env, value);
+        std::free(env);
+        return is;
+#else
+        const char *env = std::getenv(name);
+        return env && !std::strcmp(env, value);
+#endif
+    };
+    const bool debug = envIs("KISAK_VK_MODERN_DEBUG", "planar");
+    // KISAK_VK_MODERN_DEBUG=planar-read shows the floor's read alone, the
+    // same colours at full strength.
+    const bool wanted = !envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_PLANAR", "0")
+                        && (envIs("KISAK_VK_MODERN_PLANAR", "1") || debug
+                            || envIs("KISAK_VK_MODERN_DEBUG", "planar-read"));
+    // Our lit shaders draw the floor of the third frame (and read the image).
+    const bool ours = !envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
+                      && !envIs("KISAK_VK_MODERN_SHADERS", "0");
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    Equal("planar_wanted", front::ModernPlanarWanted(device), wanted);
+    constexpr UINT kHalf = kSize / 2;
+    for (int frame = 0; frame < 2; ++frame)
+    {
+        Reset(Argb(255, 90, 90, 90));
+        front::ModernSceneBegin(device);
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 60, 60, 60), 1.0f, 0),
+           "Clear(scene)");
+        front::ModernSceneView view{};
+        for (int i = 0; i < 4; ++i)
+            view.view[i][i] = view.projection[i][i] = 1.0f;
+        view.width = kSize;
+        view.height = kSize;
+        view.cut = frame == 0;
+        front::ModernSceneDone(device, view);
+
+        front::ModernPlanarView planar{};
+        for (int i = 0; i < 4; ++i)
+            planar.view[i][i] = 1.0f;
+        // Clip (x, x + y, 0, 1) for the world point (x, y, z): not symmetric,
+        // so the third frame's reads tell a transposed matrix from the right
+        // one.
+        planar.projection[0][0] = 1.0f;
+        planar.projection[0][1] = 1.0f;
+        planar.projection[1][1] = 1.0f;
+        planar.projection[3][3] = 1.0f;
+        planar.width = kHalf;
+        planar.height = kHalf;
+        // z = -1 (n.p + d with d = 1): the third frame's floor, one unit
+        // below the eye.
+        planar.plane[2] = 1.0f;
+        planar.plane[3] = 1.0f;
+        const bool began = front::ModernPlanarBegin(device, planar);
+        Equal("planar_began", began, wanted);
+        if (began)
+        {
+            // As the renderer does: its scene target and depth, which stay
+            // the planar image's until the view is done.
+            Ok(device->SetRenderTarget(0, backBuffer), "SetRenderTarget(planar)");
+            device->SetDepthStencilSurface(depth);
+            const D3DVIEWPORT9 viewport{0, 0, kHalf, kHalf, 0.0f, 1.0f};
+            device->SetViewport(&viewport);
+            device->SetRenderState(D3DRS_ZENABLE, TRUE);
+            device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+            constexpr float q = kHalf / 2.0f;
+            DrawQuad(0, 0, q, q, 0.5f, Argb(255, 250, 20, 20), kHalf);
+            DrawQuad(q, 0, kHalf, q, 0.5f, Argb(255, 20, 250, 20), kHalf);
+            DrawQuad(0, q, q, kHalf, 0.5f, Argb(255, 20, 20, 250), kHalf);
+            DrawQuad(q, q, kHalf, kHalf, 0.5f, Argb(255, 250, 250, 20), kHalf);
+            front::ModernPlanarDone(device, planar);
+            IDirect3DSurface9 *target = nullptr;
+            if (Ok(device->GetRenderTarget(0, &target), "GetRenderTarget"))
+            {
+                Equal("planar_target_is_back_buffer", target == backBuffer, true);
+                SafeRelease(target);
+            }
+        }
+        if (frame == 1 && Read())
+        {
+            // The scene's grey wherever the planar image is not shown.
+            Expect("planar_scene_kept", 100, 100, 60, 60, 60);
+            if (debug && wanted)
+                Expect("planar_debug_red", 16, 16, 250, 20, 20);
+            else
+                Expect("planar_not_on_screen", 16, 16, 60, 60, 60);
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    }
+
+    // A third frame: a floor on the plane drawn by our lit shader
+    // (lm_sun_r0c0s0 with a black colour map, lightmaps and probe, a white
+    // specular map of gloss 1 and Fresnel 1) reads last frame's planar image.
+    // The camera stands at x = 0.4, and the floor is drawn in two halves,
+    // each with one point relative to the eye one unit below it (the vertex
+    // shader passes texcoord 5 through): the left half's world point
+    // (-0.6, 0.3, -1) projects to clip (-0.6, -0.3), the image's bottom left
+    // (blue), and the right half's (0.6, -0.3, -1) to clip (0.6, 0.3), its
+    // top right (green). A transposed matrix reads red and blue, an eye taken
+    // with the wrong sign off the image (black) and blue, an image read
+    // upside down red and yellow, and one read mirrored yellow and red.
+    // Without the read the floor stays black.
+    IDirect3DTexture9 *black = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 0, 0, 0); });
+    IDirect3DTexture9 *blackLight = FilledTexture(1, 2, [](UINT, UINT) { return Argb(130, 0, 0, 0); });
+    IDirect3DTexture9 *glossy = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
+    IDirect3DCubeTexture9 *probe = nullptr;
+    if (Ok(device->CreateCubeTexture(1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &probe, nullptr),
+           "CreateCubeTexture(probe)"))
+    {
+        for (UINT face = 0; face < 6; ++face)
+        {
+            D3DLOCKED_RECT rect{};
+            if (Ok(probe->LockRect(static_cast<D3DCUBEMAP_FACES>(face), 0, &rect, nullptr, 0), "LockRect(probe)"))
+            {
+                *static_cast<uint32_t *>(rect.pBits) = Argb(255, 0, 0, 0);
+                probe->UnlockRect(static_cast<D3DCUBEMAP_FACES>(face), 0);
+            }
+        }
+    }
+    if (black && blackLight && glossy && probe)
+    {
+        // The engine's InfinitePerspectiveMatrix with tan(fov / 2) = 1 both ways.
+        constexpr float k = 0.99951172f, nearPlane = 4.0f;
+        const auto project = [&](float x, float y, float z) {
+            return Vertex{k * x / z, k * y / z, k - nearPlane * k / z, 0.0f, 0.0f, Argb(255, 128, 128, 128)};
+        };
+        // The floor in two halves, drawn the same way in the prepass and lit
+        // (so the lit draws' depth matches the prepass's).
+        const int order[6] = {0, 1, 2, 0, 2, 3};
+        const Vertex halfCorners[2][4] = {
+            {project(-300, -120, 60), project(0, -120, 60), project(0, -120, 300), project(-300, -120, 300)},
+            {project(0, -120, 60), project(300, -120, 60), project(300, -120, 300), project(0, -120, 300)}};
+        Vertex halves[2][6];
+        for (int h = 0; h < 2; ++h)
+            for (int i = 0; i < 6; ++i)
+                halves[h][i] = halfCorners[h][order[i]];
+        // A pixel of each half in the bottom of the screen, clear of the
+        // debug view.
+        const UINT floorX[2] = {static_cast<UINT>((k * -100.0f / 200.0f + 1.0f) * 0.5f * kSize),
+                                static_cast<UINT>((k * 100.0f / 200.0f + 1.0f) * 0.5f * kSize)};
+        const UINT floorY = static_cast<UINT>((1.0f + k * 120.0f / 200.0f) * 0.5f * kSize);
+        front::ModernSceneView view{};
+        for (int i = 0; i < 4; ++i)
+            view.view[i][i] = 1.0f;
+        // The eye at (0.4, 0, 0).
+        view.view[3][0] = -0.4f;
+        view.projection[0][0] = k;
+        view.projection[1][1] = k;
+        view.projection[2][2] = k;
+        view.projection[2][3] = 1.0f;
+        view.projection[3][2] = -nearPlane * k;
+        view.width = view.height = kSize;
+        Reset(Argb(255, 0, 0, 0));
+        front::ModernSceneBegin(device);
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0),
+           "Clear(lit scene)");
+        device->SetRenderState(D3DRS_ZENABLE, TRUE);
+        device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+        device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, halves, sizeof(Vertex)), "DrawPrimitiveUP(prepass)");
+        device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xf);
+        if (front::ModernWantsSceneDepth(device))
+            Equal("planar_lit_scene_depth", static_cast<int>(front::ModernSceneDepth(device, view)),
+                  static_cast<int>(front::ModernResult::Done));
+        device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+        device->SetVertexShader(vsLmSunMaps);
+        device->SetPixelShader(psLmSunMapsStandIn);
+        device->SetTexture(0, black);
+        device->SetTexture(1, probe);
+        device->SetTexture(2, black);
+        device->SetTexture(3, blackLight);
+        device->SetTexture(4, glossy);
+        float pixel[20][4] = {};
+        pixel[5][0] = pixel[5][1] = 1.0f;
+        pixel[17][2] = 1.0f;
+        Ok(device->SetPixelShaderConstantF(0, &pixel[0][0], 20), "SetPixelShaderConstantF(planar floor)");
+        float vertex[7][4] = {{0, 0, 0, 0}, {0.5f, 0.5f, 0.5f, 0.5f}, {0, 0, 1, 1}, {0, 1, 0, 0},
+                              {1, 0, 0, 0}, {0.5f, 0.5f, 0.25f, 0.5f}, {0, 0, -1, 0}};
+        front::ModernLitInputs inputs;
+        inputs.overWhite = true;
+        inputs.shader = 0x44; // lm_sun_r0c0s0
+        front::SetModernLitInputs(device, &inputs);
+        const float points[2][2] = {{-1.0f, 0.3f}, {0.2f, -0.3f}};
+        for (int h = 0; h < 2; ++h)
+        {
+            vertex[6][0] = points[h][0];
+            vertex[6][1] = points[h][1];
+            Ok(device->SetVertexShaderConstantF(0, &vertex[0][0], 7), "SetVertexShaderConstantF(planar floor)");
+            Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, halves[h], sizeof(Vertex)),
+               "DrawPrimitiveUP(planar floor)");
+        }
+        front::SetModernLitInputs(device, nullptr);
+        for (DWORD sampler : {0u, 1u, 2u, 3u, 4u})
+            device->SetTexture(sampler, nullptr);
+        device->SetVertexShader(vsBasic);
+        device->SetPixelShader(psColor);
+        Equal("planar_lit_scene_done", front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
+        if (Read())
+        {
+            const char *names[2] = {"planar_floor_left_shows_blue", "planar_floor_right_shows_green"};
+            const int channels[2] = {0, 1}; // B, G, R, A
+            for (int h = 0; h < 2; ++h)
+            {
+                const uint8_t *at = &pixels[(floorY * readSize + floorX[h]) * 4];
+                if (ours && wanted)
+                {
+                    const int c = at[channels[h]];
+                    bool dominant = c >= 60;
+                    for (int other = 0; other < 3; ++other)
+                        if (other != channels[h])
+                            dominant = dominant && c >= at[other] + 40;
+                    if (!dominant)
+                        std::printf("  planar floor %s: rgb %d %d %d\n", h ? "right" : "left", at[2], at[1], at[0]);
+                    Equal(names[h], dominant, true);
+                }
+                else
+                    Expect(h ? "planar_floor_right_black" : "planar_floor_left_black", floorX[h], floorY, 0, 0, 0);
+            }
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    }
+    SafeRelease(black);
+    SafeRelease(blackLight);
+    SafeRelease(glossy);
+    SafeRelease(probe);
+    device->SetDepthStencilSurface(nullptr);
+    SafeRelease(depth);
+}
+
 void Check::ModernTaa()
 {
     // ---- Reprojection, in double and as the float matrix the shader gets ----
@@ -3293,7 +3544,11 @@ void Check::ModernNormals()
 // shaders (linear light, lit inputs and our shaders on), with
 // KISAK_VK_MODERN_AO=1 or its debug view, never with KISAK_VK_MODERN_AO=0 or
 // KISAK_VK_MODERN_NORMALS=0.
-void Check::ModernAo()
+void Check::ModernAo() { ModernAoAs(false); }
+
+// The same, with ambient occlusion switched off while the device exists
+// (front::ModernTuning::ao 0) when `liveOff` is set.
+void Check::ModernAoAs(bool liveOff)
 {
     const auto envIs = [](const char *name, const char *value) {
 #if defined(_MSC_VER)
@@ -3310,7 +3565,7 @@ void Check::ModernAo()
     // Our lit shaders draw (and read ambient occlusion).
     const bool ours = !envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
                       && !envIs("KISAK_VK_MODERN_SHADERS", "0");
-    const bool built = !envIs("KISAK_VK_MODERN_AO", "0") && !envIs("KISAK_VK_MODERN_NORMALS", "0")
+    const bool built = !liveOff && !envIs("KISAK_VK_MODERN_AO", "0") && !envIs("KISAK_VK_MODERN_NORMALS", "0")
                        && (ours || envIs("KISAK_VK_MODERN_AO", "1") || envIs("KISAK_VK_MODERN_DEBUG", "ao"));
     // The scene's depth is taken whenever the normals buffer is wanted.
     const bool depthTaken = built || (!envIs("KISAK_VK_MODERN_NORMALS", "0")
@@ -5840,9 +6095,11 @@ void Check::ModernLitLights()
 // keep the brighter greys apart. A lit surface over white (front
 // ModernLitInputs::overWhite) that computes 1.5 is decode(1.5) = 2.54 of
 // light, where an ordinary draw clamps it to 1 first.
-void Check::ModernTonemap()
+void Check::ModernTonemap() { ModernTonemapAs(ModernCurve()); }
+
+// The same, shown through `curve` ("clamp", "neutral", "agx" or "aces").
+void Check::ModernTonemapAs(const std::string &curve)
 {
-    const std::string curve = ModernCurve();
     IDirect3DSurface9 *depth = nullptr;
     if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
                                               nullptr),
@@ -5908,6 +6165,67 @@ void Check::ModernTonemap()
     Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
     SafeRelease(white);
     SafeRelease(depth);
+}
+
+// The Modern switches changed while the device exists (front::Tuning::modern,
+// the engine's r_modern* dvars; docs/vulkan-modern.md "Live switches"): each
+// change is taken up at the next Present and logged once. The tonemap scene
+// is drawn through the clamp curve, then through ACES (both the clamp's
+// without linear light, which has no tonemap), then the ambient occlusion
+// scene with ambient occlusion switched off, which leaves the floor's corner
+// as light as the open floor; then the velocity debug view without its depth
+// test, which makes the velocity pass again if there is one; then every
+// switch goes back to what the device started with.
+void Check::ModernLive()
+{
+    std::vector<std::string> lines;
+    const auto keep = [&](std::vector<std::string> *kept) {
+        const std::lock_guard<std::mutex> lock(host->mutex);
+        host->logKept = kept;
+    };
+    const auto take = [&](const front::ModernTuning &modern) {
+        {
+            const std::lock_guard<std::mutex> lock(host->mutex);
+            host->tuning = front::Tuning{};
+            host->tuning.modern = modern;
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    };
+    const bool linear = EnvText("KISAK_VK_MODERN_LINEAR") != "0";
+    keep(&lines);
+    front::ModernTuning modern;
+    modern.tonemap = 0; // clamp
+    take(modern);
+    ModernTonemapAs("clamp");
+    modern.tonemap = 3; // aces
+    take(modern);
+    // Taken up once: the Present at the end of the scene before changes nothing.
+    ModernTonemapAs(linear ? "aces" : "clamp");
+    modern = front::ModernTuning{};
+    modern.ao = 0;
+    take(modern);
+    ModernAoAs(true);
+    // The velocity debug view without its depth test: the velocity pass, if
+    // made (the full run's modern_velocity), is made again (its counts kept).
+    modern = front::ModernTuning{};
+    modern.debug = 2; // velocity-all
+    take(modern);
+    take(front::ModernTuning{});
+    keep(nullptr);
+    // The changes in order: clamp, ACES, ambient occlusion off (the curve
+    // back to the device's own), velocity-all, everything back.
+    std::vector<std::string> changes;
+    for (const std::string &line : lines)
+        if (line.find("modern: switches now: ") != std::string::npos)
+            changes.push_back(line);
+    Equal("logged_changes", changes.size(), size_t(5));
+    if (changes.size() == 5)
+    {
+        Equal("logged_clamp", changes[0].find("tonemap clamp,") != std::string::npos, true);
+        Equal("logged_aces", changes[1].find("tonemap aces,") != std::string::npos, true);
+        Equal("logged_ao_off", changes[2].find("ambient occlusion off") != std::string::npos, true);
+        Equal("logged_velocity_all", changes[3].find("debug view velocity-all") != std::string::npos, true);
+    }
 }
 
 // Auto exposure (vk_modern.h MeasureExposure), with the default key 0.115 and
@@ -6271,6 +6589,12 @@ int Run(const Options &options)
         {"modern_ao", &Check::ModernAo, true},
         {"modern_reflections", &Check::ModernReflections, true},
         {"modern_probes", &Check::ModernProbes, true},
+        {"modern_planar", &Check::ModernPlanar, true},
+        {"modern_live", &Check::ModernLive, true},
+        // A scene that starts with a cut after modern_live's switch changes
+        // (the velocity pass made again waits for the GPU): its barriers must
+        // still hold for the validation layer.
+        {"modern_live_cut", &Check::ModernTaa, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},

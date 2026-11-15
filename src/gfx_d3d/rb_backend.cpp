@@ -22,11 +22,14 @@
 #include "rb_drawprofile.h"
 #include <stringed/stringed_hooks.h>
 #include "rb_draw3d.h"
+#include "r_scene.h"
+#include "r_draw_method.h"
 #include "r_dvars.h"
 #include "r_pixelcost_load_obj.h"
 #include <win32/win_net.h>
 #include <qcommon/threads.h>
 #include "r_workercmds.h"
+#include <gfx_gxm/gxm_engine_options.h>
 #include "rb_tess.h"
 #include "r_cinematic.h"
 #include "r_model_lighting.h"
@@ -86,8 +89,9 @@ void TRACK_rb_backend()
     track_static_alloc_internal(&gfxCmdBufInput, 1072, "gfxCmdBufInput", 18);
 }
 
-#if !defined(_WIN32)
 #include <linux/sys_perf.h> // the sleep and the wait counters perf_ab reads
+
+#if !defined(_WIN32)
 
 // R_SyncGpu calls R_GpuFenceTimeout in a tight loop, and between worker
 // commands, until the previous frame's GPU fence passes or the adaptive delay
@@ -181,13 +185,6 @@ void R_GpuSyncMainIdle()
     }
 }
 
-void R_GpuSyncMainDone()
-{
-    Sys_PerfAddMicroseconds(
-        SYS_PERF_GPU_WAIT_MAIN,
-        (uint32_t)((double)(__rdtsc() - dx.gpuSyncStart) * msecPerRawTimerTick * 1000.0));
-}
-
 static void R_GpuSyncBackendIdle()
 {
     const int sleepUsec = r_gpuSyncSleep->current.integer;
@@ -195,6 +192,14 @@ static void R_GpuSyncBackendIdle()
         Sys_PerfSleepMicroseconds((uint32_t)sleepUsec);
 }
 #endif
+
+// How long R_SyncGpu waited, for perf_ab's "gpu wait" (every build).
+void R_GpuSyncMainDone()
+{
+    Sys_PerfAddMicroseconds(
+        SYS_PERF_GPU_WAIT_MAIN,
+        (uint32_t)((double)(__rdtsc() - dx.gpuSyncStart) * msecPerRawTimerTick * 1000.0));
+}
 
 bool R_GpuFenceTimeout()
 {
@@ -892,6 +897,17 @@ uint32_t R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArgs, GfxCm
     drawSurfCount = listArgs->info->drawSurfCount - listArgs->firstDrawSurfIndex;
     drawSurfList = &listArgs->info->drawSurfs[listArgs->firstDrawSurfIndex];
     drawSurf.packed = drawSurfList->packed;
+    if (KISAK_GXM_PREPASS_SKIP_MODELS() && drawSurf.fields.surfType > SF_TRIANGLES_PRETESS)
+    {
+        // The Vita's forced depth pass draws the map's surfaces only: pass
+        // by this run of models (gxm_engine_options.h).
+        uint32_t passed = 1;
+        while (passed < drawSurfCount && drawSurfList[passed].fields.surfType > SF_TRIANGLES_PRETESS)
+            ++passed;
+        return passed;
+    }
+    const bool timed = Sys_PerfProbesOn();
+    uint64_t mark = timed ? Sys_PerfNowNs() : 0;
     if (!R_SetupMaterial(listArgs->context, &prepassContext, listArgs->info, drawSurf))
         return R_SkipDrawSurfListMaterial(drawSurfList, drawSurfCount);
     isPixelCostEnabled = pixelCostMode != GFX_PIXEL_COST_MODE_OFF;
@@ -920,7 +936,21 @@ uint32_t R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArgs, GfxCm
             passPrepassContext.state = prepassContext.state;
         }
         iassert(drawSurf.fields.surfType < ARRAY_COUNT(rb_tessTable));
+        if (timed)
+        {
+            // The material's and the pass's setup, then the surfaces' own.
+            const uint64_t now = Sys_PerfNowNs();
+            Sys_PerfProbeAdd(SYS_PERF_PROBE_RENDER_MATERIAL, now - mark);
+            mark = now;
+        }
         subListCount = rb_tessTable[drawSurf.fields.surfType](listArgs, passPrepassContext);
+        if (timed)
+        {
+            const uint64_t now = Sys_PerfNowNs();
+            if (drawSurf.fields.surfType < SYS_PERF_TESS_SLOTS)
+                Sys_PerfProbeAdd(SYS_PERF_PROBE_RENDER_TESS + drawSurf.fields.surfType, now - mark);
+            mark = now;
+        }
     }
     if (isPixelCostEnabled)
         R_PixelCost_EndSurface(listArgs->context);
@@ -2887,7 +2917,14 @@ void RB_Draw3D()
     if (backEndData->viewInfoCount)
     {
         PROF_SCOPED("ExecuteRenderCmds");
+        SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_3D);
         RB_Draw3DInternal(&data->viewInfo[data->viewInfoIndex]);
+        // Then the Modern path's planar reflection view, which reuses the
+        // main view's shadow maps (R_ModernPlanarScene).
+        if (gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD)
+            for (uint32_t viewInfoIndex = 0; viewInfoIndex < data->viewInfoCount; ++viewInfoIndex)
+                if (viewInfoIndex != data->viewInfoIndex && R_IsModernPlanarView(&data->viewInfo[viewInfoIndex]))
+                    RB_ModernPlanarDrawCommands(&data->viewInfo[viewInfoIndex]);
     }
 }
 
@@ -2926,12 +2963,10 @@ int RB_AdaptiveGpuSyncFinal()
         }
         LODWORD(v0) = __rdtsc() - startTime;
         waitedTime = v0;
-#if !defined(_WIN32)
         if (waitedTime > 0)
             Sys_PerfAddMicroseconds(
                 SYS_PERF_GPU_WAIT_BACKEND,
                 (uint32_t)((double)waitedTime * msecPerRawTimerTick * 1000.0));
-#endif
         if ((v0 & 0x80000000) == 0LL)
         {
             LODWORD(v0) = LODWORD(dx.gpuSyncDelay) + v0 / 16;
@@ -2947,6 +2982,7 @@ void RB_CallExecuteRenderCommands()
     int hr; // [esp+40h] [ebp-4h]
     
     PROF_SCOPED("ExecuteRenderCmds");
+    SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_2D);
     if ((backEndData->drawType & 2) != 0)
     {
         if (g_primStats)
@@ -3094,6 +3130,7 @@ void RB_RenderThread(uint32_t threadContext)
         {
             {
                 PROF_SCOPED("WaitBackendEvent");
+                SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_IDLE);
                 KISAK_NULLSUB();
                 R_ProcessWorkerCmdsWithTimeout(Sys_WaitBackendEvent, 1);
             }
@@ -3191,11 +3228,13 @@ void RB_RenderCommandFrame(const GfxBackEndData *data)
     Sys_RenderCompleted();
     {
         PROF_SCOPED("WaitRenderSwap");
+        SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_SWAP_WAIT);
         R_ProcessWorkerCmdsWithTimeout(RB_BackendTimeout, 1);
     }
     if (allowRendering)
     {
         KISAK_NULLSUB();
+        SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_PRESENT);
         RB_EndFrame(drawType);
     }
     //Profile_Begin(172);

@@ -23,7 +23,9 @@
 #include "rb_spotshadow.h"
 #include "rb_shade.h"
 #include "r_meshdata.h"
+#include "r_drawsurf.h"
 #include <gfx_gxm/gxm_engine_options.h>
+#include <linux/sys_perf.h>
 
 void R_HW_InsertFence(IDirect3DQuery9 **fence)
 {
@@ -67,11 +69,76 @@ void R_ShowTris(GfxCmdBufContext context, const GfxDrawSurfListInfo *info)
     }
 }
 
+#ifdef KISAK_GFX_GXM
+// The Vita's scaled 3D picture (gxm_engine_options.h, g_sceneScale): the 3D
+// passes drew it in the top left part of the scene's viewport. It is copied
+// out, since a picture cannot be read while it is drawn into, and stretched
+// back over the whole viewport with linear filtering. The post effects and
+// the HUD that follow then see a full-size picture and draw at full size.
+// True when the view's only post effect is the film colour filter, drawn
+// over the whole screen from a copy of the picture (RB_ProcessPostEffects:
+// no depth of field, glow, blur or debug view).
+static bool RB_FilmFilterOnly(const GfxViewInfo *viewInfo)
+{
+    return viewInfo->isRenderingFullScreen && RB_UsingColorManipulation(viewInfo) &&
+           !R_UsingDepthOfField(viewInfo) && !(R_UsingGlow(viewInfo) && !R_ModernDrewGlow(viewInfo)) &&
+           !RB_UsingBlur(viewInfo->blurRadius) && !r_showFbColorDebug->current.integer &&
+           !r_showFloatZDebug->current.enabled && !sc_showDebug->current.enabled;
+}
+
+static void RB_StretchScaledScene(const GfxViewInfo *viewInfo)
+{
+    const float scale = KISAK_GXM_SCENE_SCALE();
+    gfx_gxm::g_sceneScale = 1.0f;
+    gfx_gxm::g_filterReadS = 1.0f;
+    gfx_gxm::g_filterReadT = 1.0f;
+    if (scale >= 1.0f)
+        return;
+    if (tess.indexCount)
+        RB_EndTessSurface();
+    const GfxViewport &view = viewInfo->sceneViewport;
+    const int width = gfxCmdBufSourceState.renderTargetWidth;
+    const int height = gfxCmdBufSourceState.renderTargetHeight;
+    if (KISAK_GXM_STRETCH_IN_FILTER() && RB_FilmFilterOnly(viewInfo) && view.x == 0 && view.y == 0 &&
+        view.width == width && view.height == height)
+    {
+        // The film filter's full-screen quad reads only the drawn corner of
+        // the copy (RB_ApplyColorManipulationFullscreen). Half a texel is
+        // kept off the far edges so the linear filter never mixes in the
+        // part of the copy that was not drawn this frame.
+        gfx_gxm::g_filterReadS = (float(gfx_gxm::SceneScaled(view.width, scale)) - 0.5f) / float(width);
+        gfx_gxm::g_filterReadT = (float(gfx_gxm::SceneScaled(view.height, scale)) - 0.5f) / float(height);
+        return;
+    }
+    const RECT whole = {view.x, view.y, view.x + view.width, view.y + view.height};
+    const RECT drawn = {view.x, view.y, view.x + gfx_gxm::SceneScaled(view.width, scale),
+                        view.y + gfx_gxm::SceneScaled(view.height, scale)};
+    IDirect3DSurface9 *scene = gfxRenderTargets[R_RENDERTARGET_SCENE].surface.color;
+    IDirect3DSurface9 *copy = Image_GetSurface(gfxRenderTargets[R_RENDERTARGET_RESOLVED_SCENE].image);
+    if (!scene || !copy)
+        return;
+    R_HW_StretchRect(gfxCmdBufState.prim.device, scene, &drawn, copy, &drawn, D3DTEXF_POINT);
+    R_HW_StretchRect(gfxCmdBufState.prim.device, copy, &drawn, scene, &whole, D3DTEXF_LINEAR);
+    R_HW_Release(copy);
+}
+#endif
+
 void RB_Draw3DInternal(const GfxViewInfo *viewInfo)
 {
     PROF_SCOPED("RB_Draw3D");
 
     iassert(rgp.world);
+
+#ifdef KISAK_GFX_GXM
+    // Every 3D pass of this view draws the smaller picture until
+    // RB_StretchScaledScene. Only the standard full-screen scene: a view
+    // that is not the whole screen, fullbright and the debug shaders keep
+    // the full size.
+    gfx_gxm::g_sceneScale = gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD && viewInfo->isRenderingFullScreen &&
+                                    vita_sceneScale
+                                ? std::clamp(vita_sceneScale->current.value, 0.5f, 1.0f)
+                                : 1.0f;
+#endif
 
     if (gfxDrawMethod.drawScene)
     {
@@ -107,6 +174,28 @@ void RB_Draw3DInternal(const GfxViewInfo *viewInfo)
         R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_FRAME_BUFFER);
         memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
     }
+}
+
+// A planar reflection view (R_ModernPlanarScene): its lit and decal surfaces
+// only, into the Modern path's planar image, with the main view's shadow maps
+// (drawn just before). No sun, lights, effects, post effects or 2D.
+void RB_ModernPlanarDrawCommands(const GfxViewInfo *viewInfo)
+{
+    GfxModernPlanar planar;
+    if (!R_ModernPlanarBegin(viewInfo, &planar))
+        return;
+    const GfxBackEndData *data = backEndData;
+    GfxCmdBuf cmdBuf;
+    R_InitCmdBufSourceState(&gfxCmdBufSourceState, &viewInfo->input, 0);
+    memset(gfxCmdBufState.vertexShaderConstState, 0, sizeof(gfxCmdBufState.vertexShaderConstState));
+    memset(gfxCmdBufState.pixelShaderConstState, 0, sizeof(gfxCmdBufState.pixelShaderConstState));
+    R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_SCENE);
+    R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_SCENE);
+    R_InitContext(data, &cmdBuf);
+    R_DrawLit(viewInfo, &cmdBuf, 0);
+    R_InitContext(data, &cmdBuf);
+    R_DrawDecal(viewInfo, &cmdBuf, 0);
+    R_ModernPlanarDone(&planar);
 }
 
 void RB_FullbrightDrawCommands(const GfxViewInfo *viewInfo)
@@ -343,6 +432,21 @@ void R_DrawDebugShaderDecalCallback(const void *data, GfxCmdBufContext context, 
     R_DrawSurfs(context, 0, &((const GfxViewInfo*)data)->decalInfo);
 }
 
+// Whether a surface of the list is drawn with a technique that reads the
+// copy of the picture made after the sun (distortion). The Vita asks before
+// it makes the copy (gxm_engine_options.h).
+static bool RB_ListReadsResolvedPostSun(const GfxDrawSurfListInfo *info)
+{
+    for (uint32_t surfIndex = 0; surfIndex < info->drawSurfCount; ++surfIndex)
+    {
+        const MaterialTechnique *technique = Material_GetTechnique(
+            rgp.sortedMaterials[info->drawSurfs[surfIndex].fields.materialSortedIndex], info->baseTechType);
+        if (technique && (technique->flags & MTL_TECHFLAG_NEEDS_RESOLVED_POST_SUN) != 0)
+            return true;
+    }
+    return false;
+}
+
 void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
 {
     GfxRenderTargetId setupRenderTargetId; // [esp+44h] [ebp-2Ch]
@@ -414,16 +518,27 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
     if (needsDepthPrepass)
     {
+        SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_DEPTH);
         R_InitContext(data, &cmdBuf);
+        // The pass the GXM back end alone asks for may leave the models out
+        // (gxm_engine_options.h, g_prepassWorldOnly).
+        KISAK_GXM_SET_PREPASS_SKIP_MODELS(!r_depthPrepass->current.enabled && !modernDepth);
         R_DepthPrepass(R_RENDERTARGET_SCENE, viewInfo, &cmdBuf);
+        KISAK_GXM_SET_PREPASS_SKIP_MODELS(false);
         depthPrepassed = true;
     }
     if (modernDepth && depthPrepassed)
         R_ModernSceneDepth(viewInfo);
-    R_InitContext(data, &cmdBuf);
-    R_DrawLit(viewInfo, &cmdBuf, 0);
-    R_InitContext(data, &cmdBuf);
-    R_DrawDecal(viewInfo, &cmdBuf, 0);
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_LIT);
+        R_InitContext(data, &cmdBuf);
+        R_DrawLit(viewInfo, &cmdBuf, 0);
+    }
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_DECAL);
+        R_InitContext(data, &cmdBuf);
+        R_DrawDecal(viewInfo, &cmdBuf, 0);
+    }
     KISAK_NULLSUB();
     KISAK_NULLSUB();
     iassert(viewInfo->isRenderingFullScreen == isRenderingFullScreen);
@@ -435,12 +550,18 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_SCENE);
     R_BeginView(&gfxCmdBufSourceState, &viewInfo->sceneDef, &viewInfo->viewParms);
     R_SetViewportStruct(&gfxCmdBufSourceState, &viewInfo->sceneViewport);
-    RB_DrawSun(viewInfo->localClientNum);
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_SUN);
+        RB_DrawSun(viewInfo->localClientNum);
+    }
     memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
     R_InitContext(data, &cmdBuf);
     KISAK_NULLSUB();
-    R_DrawLights(viewInfo, &cmdBuf);
-    if (rg.distortion)
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_LIGHTS);
+        R_DrawLights(viewInfo, &cmdBuf);
+    }
+    if (rg.distortion && (!KISAK_GXM_RESOLVE_WHEN_USED() || RB_ListReadsResolvedPostSun(&viewInfo->emissiveInfo)))
     {
         PROF_SCOPED("RB_ApplyPostEffects");
         R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_SCENE);
@@ -450,9 +571,13 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     // The Modern path may finish the scene here, so that effects blend on
     // the tonemapped image as they were made to (r_visuals modern, Vulkan).
     R_ModernSceneLit(viewInfo);
-    R_InitContext(data, &cmdBuf);
-    KISAK_NULLSUB();
-    R_DrawEmissive(viewInfo, &cmdBuf);
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_EMISSIVE);
+        R_InitContext(data, &cmdBuf);
+        KISAK_NULLSUB();
+        R_DrawEmissive(viewInfo, &cmdBuf);
+    }
+    SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_POSTFX);
     RB_EndSceneRendering(gfxCmdBufContext, &viewInfo->input, viewInfo);
 }
 
@@ -737,6 +862,8 @@ void RB_DebugShaderDrawCommandsCommon()
     for (viewInfoIndex = 0; viewInfoIndex < data->viewInfoCount; ++viewInfoIndex)
     {
         viewInfo = &data->viewInfo[viewInfoIndex];
+        if (R_IsModernPlanarView(viewInfo))
+            continue;
         viewInfo->input.data = data;
         R_InitCmdBufSourceState(gfxCmdBufContext.source, &gfxCmdBufInput, 0);
         gfxCmdBufContext.source->input.data = data;
@@ -766,6 +893,9 @@ void RB_StandardDrawCommandsCommon()
         for (viewInfoIndex = 0; viewInfoIndex < data->viewInfoCount; ++viewInfoIndex)
         {
             viewInfo = &data->viewInfo[viewInfoIndex];
+            // A planar reflection view was drawn into its own image (RB_Draw3D).
+            if (R_IsModernPlanarView(viewInfo))
+                continue;
             viewInfo->input.data = data;
             R_InitCmdBufSourceState(&gfxCmdBufSourceState, &viewInfo->input, 0);
             memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
@@ -774,9 +904,16 @@ void RB_StandardDrawCommandsCommon()
             R_SetResolvedScene(gfxCmdBufContext);
             R_BeginView(&gfxCmdBufSourceState, &viewInfo->sceneDef, &viewInfo->viewParms);
             R_SetViewportStruct(&gfxCmdBufSourceState, &viewInfo->displayViewport);
+#ifdef KISAK_GFX_GXM
+            RB_StretchScaledScene(viewInfo);
+#endif
             if (viewInfo->isRenderingFullScreen)
             {
                 RB_ApplyLatePostEffects(viewInfo);
+#ifdef KISAK_GFX_GXM
+                gfx_gxm::g_filterReadS = 1.0f;
+                gfx_gxm::g_filterReadT = 1.0f;
+#endif
             }
             else
             {

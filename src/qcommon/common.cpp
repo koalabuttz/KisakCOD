@@ -37,6 +37,7 @@
 #include <devgui/devgui.h>
 #include <server/sv_game.h>
 #include <gfx_d3d/r_workercmds.h>
+#include <linux/sys_perf.h>
 #include <universal/com_convexhull.h>
 #include <gfx_d3d/r_dvars.h>
 #include "mem_track.h"
@@ -2107,6 +2108,7 @@ void Com_Frame_Try_Block_Function()
 
         {
             PROF_SCOPED("CL_Frame");
+            SysPerfScope perfScope(SYS_PERF_PROBE_CLIENT_FRAME);
 #ifdef KISAK_MP
             for (int localClientNum = 0; localClientNum < 1; ++localClientNum)
                 CL_Frame(localClientNum);
@@ -2119,7 +2121,10 @@ void Com_Frame_Try_Block_Function()
         dvar_modifiedFlags &= ~2u;
         Com_UpdateMenu();
 #endif
-        SCR_UpdateScreen();
+        {
+            SysPerfScope perfScope(SYS_PERF_PROBE_CLIENT_SCREEN);
+            SCR_UpdateScreen();
+        }
         Ragdoll_Update(msec);
         iassert(Sys_IsMainThread());
 #ifdef KISAK_SP

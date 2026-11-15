@@ -3,7 +3,9 @@
 import unittest
 from test_linux_bots import (FIXTURE_GSC, transition_fixture, transition_plan,
                              final_cohort_log, refill_fixture, validate_refills,
-                             validate_kick_window, validate_hold, validate_transitions)
+                             validate_kick_window, validate_hold, validate_transitions,
+                             validate_brain_view, validate_brain_walk, balanced_teams,
+                             uses_both_teams, TEAM_CAPACITY, MAX_BOTS, validate_brain_notices)
 
 
 def healthy_log():
@@ -13,6 +15,80 @@ def healthy_log():
             log += (f'0:05 BOTFEATURE held entity={i} sample={sample} state=playing '
                     'health=100 team=allies class=CLASS_ASSAULT weapon=m16_mp\n')
     return log
+
+
+def view_log(yaws, pitch=0.0, bots=3):
+    log = ''
+    for tick, yaw in enumerate(yaws):
+        for i in range(bots):
+            log += f'0:05 BOTFEATURE view entity={i} tick={tick} angles=({pitch}, {yaw + i}, 0)\n'
+    return log
+
+
+class BrainViewTests(unittest.TestCase):
+    # Views are four a second: a one-second hold has five.
+    def passed(self, log, hold=1):
+        return all(ok for ok, _ in validate_brain_view(log, 3, hold))
+
+    def test_a_bot_that_looks_around_passes(self):
+        self.assertTrue(self.passed(view_log([0, 40, 80, 80, 30])))
+
+    def test_turning_through_the_back_takes_the_short_way(self):
+        self.assertTrue(self.passed(view_log([170, -170, -130, -130, -170])))
+
+    def test_a_bot_that_never_turns_fails(self):
+        self.assertFalse(self.passed(view_log([30, 30, 30, 31, 30])))
+
+    def test_a_snap_faster_than_the_motor_fails(self):
+        # 120 and 70 degrees in a quarter second: past the 200 deg/s top speed.
+        self.assertFalse(self.passed(view_log([0, 120, 120, 120, 120])))
+        self.assertFalse(self.passed(view_log([0, 0, 0, -70, -70])))
+        # A turn the short way round past 180 a second ago is still caught.
+        self.assertFalse(self.passed(view_log([0, 90, 180, -90, -90])))
+
+    def test_pitch_past_the_limit_fails(self):
+        self.assertFalse(self.passed(view_log([0, 40, 80, 80, 30], pitch=-89.0)))
+
+    def test_missing_or_extra_samples_fail(self):
+        log = view_log([0, 40, 80, 80, 30])
+        self.assertFalse(self.passed(log.replace(log.splitlines(keepends=True)[4], '', 1)))
+        self.assertFalse(self.passed(log + log.splitlines(keepends=True)[0]))
+        self.assertFalse(self.passed(''))
+
+    def test_fixture_logs_the_view(self):
+        self.assertIn('BOTFEATURE view entity=', FIXTURE_GSC)
+        self.assertIn('botTest_LogViews(sample * 4 + quarter);', FIXTURE_GSC)
+        self.assertIn('getplayerangles', FIXTURE_GSC)
+
+
+def place_log(xs, bots=3):
+    log = ''
+    for sample, x in enumerate(xs):
+        for i in range(bots):
+            log += f'0:05 BOTFEATURE place entity={i} sample={sample} origin=({x}, {100 * i}, 16.125)\n'
+    return log
+
+
+class BrainWalkTests(unittest.TestCase):
+    def passed(self, log, hold=4):
+        return all(ok for ok, _ in validate_brain_walk(log, 3, hold))
+
+    def test_a_bot_that_walks_passes(self):
+        self.assertTrue(self.passed(place_log([0, 150, 300, 300, 420])))
+
+    def test_a_bot_that_stands_still_fails(self):
+        self.assertFalse(self.passed(place_log([0, 20, 40, 60, 80])))
+
+    def test_a_bot_faster_than_a_player_fails(self):
+        self.assertFalse(self.passed(place_log([0, 500, 500, 500, 500])))
+
+    def test_missing_samples_fail(self):
+        log = place_log([0, 150, 300, 300, 420])
+        self.assertFalse(self.passed(log.replace(log.splitlines(keepends=True)[3], '', 1)))
+        self.assertFalse(self.passed(''))
+
+    def test_fixture_logs_the_place(self):
+        self.assertIn('BOTFEATURE place entity=', FIXTURE_GSC)
 
 
 class HoldEvidenceTests(unittest.TestCase):
@@ -199,6 +275,61 @@ class RefillEvidenceTests(unittest.TestCase):
         self.assertIn('getdvarint("botTest_refill") < round', fixture)
         self.assertNotIn('setdvar("sv_zombietime"', fixture)
         self.assertEqual(fixture.count('addtestclient()'), 1)
+
+
+def notice(bot, target, after=300, units=900, off=12, showing=67):
+    return (f"bots: {bot} noticed {target} after {after} ms in view, {units} units, "
+            f"{off} degrees off centre, {showing}% showing\n")
+
+
+class BrainNoticeTests(unittest.TestCase):
+    def passed(self, output, both_teams=True):
+        return all(ok for ok, _ in validate_brain_notices(output, both_teams))
+
+    def test_fair_notices_pass(self):
+        self.assertTrue(self.passed(notice(0, 1) + notice(3, 4, after=200, off=40)))
+        self.assertTrue(self.passed(''))
+        self.assertTrue(self.passed('', both_teams=False))
+
+    def test_a_teammate_or_itself_fails(self):
+        self.assertFalse(self.passed(notice(0, 2)))
+        self.assertFalse(self.passed(notice(1, 1)))
+        # With every bot on one team nobody is an opponent.
+        self.assertFalse(self.passed(notice(0, 1), both_teams=False))
+
+    def test_faster_than_the_floor_fails(self):
+        self.assertFalse(self.passed(notice(0, 1, after=100)))
+
+    def test_off_screen_or_hidden_fails(self):
+        self.assertFalse(self.passed(notice(0, 1, off=60)))
+        self.assertFalse(self.passed(notice(0, 1, showing=0)))
+
+
+class TeamCapacityTests(unittest.TestCase):
+    # A stock team holds half of sv_maxclients (8), so PC bot brain run 1's
+    # 6 and 8 bots all sent to allies left 2 and 4 of them spectators.
+    def test_more_bots_than_a_team_holds_use_both_teams(self):
+        self.assertFalse(uses_both_teams(TEAM_CAPACITY, 0))
+        self.assertTrue(uses_both_teams(TEAM_CAPACITY + 1, 0))
+        self.assertTrue(uses_both_teams(1, 1))
+        self.assertGreaterEqual(MAX_BOTS, 18)
+
+    def test_both_teams_split_by_entity_number(self):
+        for fixture in (FIXTURE_GSC, transition_fixture()):
+            split = balanced_teams(fixture)
+            self.assertNotIn('"{team}"', split)
+            self.assertIn('team = "axis";', split)
+            self.assertIn('getentitynumber() % 2) == 1', split)
+        self.assertIn('team = "axis";', refill_fixture())
+
+    def test_split_teams_are_what_the_hold_expects(self):
+        log = ''.join(f'0:01 BOTFEATURE spawned entity={i}\n' for i in range(6))
+        for i in range(6):
+            team = 'axis' if i % 2 else 'allies'
+            log += (f'0:05 BOTFEATURE held entity={i} sample=0 state=playing '
+                    f'health=100 team={team} class=CLASS_ASSAULT weapon=m16_mp\n')
+        self.assertTrue(all(ok for ok, _ in validate_hold(log, 6, 0, True)))
+        self.assertFalse(all(ok for ok, _ in validate_hold(log, 6, 0, False)))
 
 
 if __name__ == '__main__':

@@ -55,3 +55,4 @@ void RB_ShowFbColorDebug_Screen();
 void RB_ShowFbColorDebug_Feedback();
 void RB_ShowFloatZDebug();
 void RB_ShowShadowsDebug();
+void RB_ModernPlanarDrawCommands(const struct GfxViewInfo *viewInfo);

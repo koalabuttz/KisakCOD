@@ -40,10 +40,53 @@ using D3D9Window = KisakDxvkHWND;
 using D3D9Point = KisakDxvkPOINT;
 #endif
 
+// The Modern path's switches the program may change while a device exists
+// (the engine's r_modern* dvars; docs/vulkan-modern.md, "Live switches").
+// A negative value keeps what the device started with: the built-in default,
+// or the KISAK_VK_MODERN_* environment variable of the same switch. Switches
+// are 0 off and 1 on.
+struct ModernTuning
+{
+    int bloom = -1;
+    int exposure = -1;
+    int velocity = -1;
+    int shaders = -1;       // our own lit shaders (KISAK_VK_MODERN_SHADERS)
+    int modelShaders = -1;  // of those, models' (KISAK_VK_MODERN_MODEL_SHADERS)
+    int noSunShaders = -1;  // of those, surfaces without the sun (KISAK_VK_MODERN_NO_SUN_SHADERS)
+    int lightShaders = -1;  // of those, spot and omni lights' (KISAK_VK_MODERN_LIGHT_SHADERS)
+    int ao = -1;
+    int reflections = -1;
+    int tonemap = -1;       // modern::TonemapCurve
+    int debug = -1;         // ModernDebugView
+    float sunStrength = -1.0f;
+    float skyStrength = -1.0f;
+    float exposureKey = -1.0f;
+    float aoRadius = -1.0f;
+    float aoPower = -1.0f;
+    float aoThickness = -1.0f;
+    float aoGrazing = -1.0f;
+    float aoFloor = -1.0f;
+    float aoEdge = -1.0f;
+    float ssrDistance = -1.0f;
+    float ssrThickness = -1.0f;
+};
+
+// The debug view over each Modern scene (ModernTuning::debug,
+// KISAK_VK_MODERN_DEBUG).
+enum ModernDebugView : int
+{
+    ModernDebugNone = 0,
+    ModernDebugVelocity = 1,
+    ModernDebugVelocityAll = 2, // the velocity pass draws without its depth test
+    ModernDebugNormals = 3,
+    ModernDebugAo = 4,
+    ModernDebugReflections = 5,
+};
+
 // Settings the program may change while a device exists, so that one run can
 // compare them (the engine's r_vkGpuFeed dvars and r_vkKeepDrawState; perf_ab
-// flips those). The front asks for them at every Present. The PS Vita's GXM
-// back end has none.
+// flips those; and the Modern path's switches). The front asks for them at
+// every Present. The PS Vita's GXM back end has none.
 struct Tuning
 {
     // The GPU feed (lg::GpuFeed): -1 the device's own choice (its kind of
@@ -56,6 +99,8 @@ struct Tuning
     // A draw takes up the pipeline, constants and binds the draw before it
     // left (lg::SetKeepDrawState). False makes every draw set them all again.
     bool keepDrawState = true;
+    // The Modern path's switches, taken up from the next scene on.
+    ModernTuning modern;
 };
 
 // A display mode a fullscreen device asks for (Host::fullscreen). A 0 width or
@@ -284,4 +329,23 @@ void SetModernLitInputs(IDirect3DDevice9 *device, const ModernLitInputs *inputs)
 // texture is not an 8-bit colour cube with levels, or on a back end without
 // a Modern path. Filtering a probe again gives the same levels.
 bool ModernReflectionProbe(IDirect3DDevice9 *device, IDirect3DCubeTexture9 *probe);
+// A planar reflection view (docs/vulkan-modern.md "Planar reflections"): the
+// scene seen in a mirror laid on one plane, which the renderer draws after
+// the main view.
+struct ModernPlanarView
+{
+    float view[4][4];       // the mirrored camera (row vectors, as ModernSceneView)
+    float projection[4][4]; // its near plane is the reflection plane
+    uint32_t width, height; // the view's size; it is drawn at 0, 0
+    float plane[4];         // the world plane: n.p + d >= 0 is kept
+};
+// Whether the Modern path wants a planar view this frame (false on a back end
+// without one).
+bool ModernPlanarWanted(IDirect3DDevice9 *device);
+// The planar view's draws come next: render target 0 and the depth surface
+// go to the Modern path's planar image and its own depth (cleared), whatever
+// the program sets, until ModernPlanarDone. False when it does not take the
+// view (the program then draws nothing for it).
+bool ModernPlanarBegin(IDirect3DDevice9 *device, const ModernPlanarView &view);
+void ModernPlanarDone(IDirect3DDevice9 *device, const ModernPlanarView &view);
 } // namespace gfx_vk::d3d9

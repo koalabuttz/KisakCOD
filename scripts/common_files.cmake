@@ -274,6 +274,8 @@ set(GFX_D3D
     "${SRC_DIR}/gfx_d3d/r_model_skin.cpp"
     "${SRC_DIR}/gfx_d3d/r_model_skin.h"
     "${SRC_DIR}/gfx_d3d/r_model_skin_sse.cpp"
+    "${SRC_DIR}/gfx_d3d/r_model_skin_vec.cpp"
+    "${SRC_DIR}/gfx_d3d/r_model_skin_vec.h"
     "${SRC_DIR}/gfx_d3d/r_outdoor.cpp"
     "${SRC_DIR}/gfx_d3d/r_outdoor.h"
     "${SRC_DIR}/gfx_d3d/r_pixelcost_load_obj.cpp"
@@ -616,6 +618,12 @@ set(WIN32_SRC
     "${SRC_DIR}/win32/win_syscon.cpp"
     "${SRC_DIR}/win32/win_voice.cpp"
     "${SRC_DIR}/win32/win_wndproc.cpp"
+
+    # perf_ab, perf_sample and perf_stop (docs/perf-ab.md), shared with the
+    # native builds.
+    "${SRC_DIR}/linux/sys_perf.cpp"
+    "${SRC_DIR}/linux/sys_perf.h"
+    "${SRC_DIR}/linux/sys_perf_core.h"
 
     "${SRC_DIR}/win32/win_steam.cpp"
     "${SRC_DIR}/win32/win_steam.h"

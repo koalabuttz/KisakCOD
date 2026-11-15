@@ -38,7 +38,10 @@
 #include "gxm_legacy_internal.h"
 
 #include <gfx_gxm/gxm_engine_options.h>
+#include <gfx_gxm/gxm_live_switch.h>
+#include <gfx_gxm/gxm_prepass_governor.h>
 #include <gfx_gxm/gxm_program_cache.h>
+#include <vita/vita_gpu_clock.h>
 
 #include <psp2/kernel/threadmgr.h>
 
@@ -46,11 +49,19 @@
 #include <cstring>
 #include <functional>
 #include <map>
+#include <mutex>
 #include <set>
 
 namespace gfx_gxm
 {
 bool g_depthPrepass = true;
+bool g_prepassWorldOnly = true;
+bool g_prepassSkipModels = false;
+bool g_resolveWhenUsed = true;
+float g_sceneScale = 1.0f;
+bool g_stretchInFilter = true;
+float g_filterReadS = 1.0f;
+float g_filterReadT = 1.0f;
 } // namespace gfx_gxm
 
 namespace gfx_vk::legacy
@@ -301,6 +312,19 @@ struct DrawState
     uint64_t uniformWrites = 0, uniformWritesLeftOut = 0;
     FixedState fixed{};
     bool fixedValid = false;
+    // The last draw's programs and fixed state, and what they came from: a
+    // draw that finds the device's state serial, the scene, its primitive
+    // type, its index width and its vertex stride as the last draw left them
+    // takes them without working them out again (Draw). Any other setter of
+    // the fixed state (clears, copies) or of the table ends it. The marker
+    // and switch no-same-state turn it off.
+    Pipeline lastDraw{};
+    bool lastDrawValid = false;
+    bool sameState = true;
+    bool lastDrawIndex32 = false;
+    uint32_t lastDrawType = 0, lastDrawUpStride = 0;
+    uint64_t lastDrawSerial = 0, lastDrawScene = 0;
+    uint64_t sameStateDraws = 0;
 
     // Clears.
     Variant clearVertex, clearFragment;
@@ -337,6 +361,11 @@ struct DrawState
     volatile uint32_t *notifications = nullptr;
     bool overlap = true, notifyScene = false;
     uint32_t paceTimeouts = 0;
+    // Whether the scene's depth is drawn first is measured while the game
+    // runs (gxm_prepass_governor.h), unless no-depth-prepass turns the pass
+    // off or no-prepass-governor keeps it on.
+    gfx_gxm::PrepassGovernor prepassGovernor;
+    bool prepassOff = false, governorOff = false;
     uint64_t paceWaits = 0, paceMicros = 0;
     // Renames that found no room and waited for the GPU, renames a wait since
     // the buffer's last draw made needless, and the bytes of renamed buffers'
@@ -900,6 +929,7 @@ Pipeline &PipelineSlot(DrawState &d, const PipelineKey &key)
 void ForgetPipelines(DrawState &d)
 {
     std::memset(static_cast<void *>(d.pipelines), 0, sizeof(d.pipelines));
+    d.lastDrawValid = false;
 }
 
 const VertexProgramEntry *GetVertexProgram(Device &device, const Variant &variant, const VertexDecl &decl,
@@ -1199,6 +1229,8 @@ bool OpenScene(Device &device)
 void ApplyFixedState(Device &device, const FixedState &state)
 {
     DrawState &d = *device.draw;
+    // Draw says again that the state is its own once it has set it.
+    d.lastDrawValid = false;
     if (d.fixedValid && d.fixed == state)
         return;
     SceGxmContext *context = Gxm();
@@ -1721,10 +1753,26 @@ bool InitDraw(Device &device, std::string &error)
         d.census = true;
         Log(device, "diag: diag-state-census is there: each new draw state is logged once (census lines)");
     }
-    gfx_gxm::g_depthPrepass = !gxm::ProgramCacheMarker("no-depth-prepass");
-    if (!gfx_gxm::g_depthPrepass)
+    d.prepassOff = gxm::ProgramCacheMarker("no-depth-prepass");
+    gfx_gxm::g_depthPrepass = !d.prepassOff;
+    d.prepassGovernor.Reset(gfx_gxm::g_depthPrepass);
+    if (d.prepassOff)
         Log(device, "diag: no-depth-prepass is there: the scene's depth is drawn first only when r_depthPrepass, "
                     "depth of field or soft particles ask for it");
+    d.governorOff = gxm::ProgramCacheMarker("no-prepass-governor");
+    if (d.governorOff && !d.prepassOff)
+        Log(device, "diag: no-prepass-governor is there: the scene's depth is always drawn first");
+    gfx_gxm::g_resolveWhenUsed = !gxm::ProgramCacheMarker("no-resolve-skip");
+    if (!gfx_gxm::g_resolveWhenUsed)
+        Log(device, "diag: no-resolve-skip is there: the picture is copied for distortion in every frame, drawn or "
+                    "not");
+    gfx_gxm::g_prepassWorldOnly = !gxm::ProgramCacheMarker("no-world-only-prepass");
+    if (!gfx_gxm::g_prepassWorldOnly)
+        Log(device, "diag: no-world-only-prepass is there: the forced depth pass draws the models too");
+    gfx_gxm::g_stretchInFilter = !gxm::ProgramCacheMarker("no-filter-stretch");
+    if (!gfx_gxm::g_stretchInFilter)
+        Log(device, "diag: no-filter-stretch is there: a scaled picture is always copied and stretched in two "
+                    "scenes of its own");
     d.notifications = sceGxmGetNotificationRegion();
     if (gxm::ProgramCacheMarker("no-frame-overlap"))
     {
@@ -1736,6 +1784,11 @@ bool InitDraw(Device &device, std::string &error)
     {
         d.overlap = false;
         Log(device, "sceGxm gave no notification region: the CPU waits for the whole GPU at every Present");
+    }
+    if (gxm::ProgramCacheMarker("no-same-state"))
+    {
+        d.sameState = false;
+        Log(device, "diag: no-same-state is there: every draw works out its programs and fixed state anew");
     }
     if (gxm::ProgramCacheMarker("no-draw-reuse"))
     {
@@ -2298,10 +2351,91 @@ void LogWaitCauses(Device &device)
         Log(device, "waits for the whole GPU since the last such line: %s", line.c_str());
 }
 
+// The switches "vita_gxm <marker> <0|1>" may turn while the game runs
+// (gxm_live_switch.h). The others size or make things at start-up.
+const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "no-vsync",
+                                     "no-draw-reuse",     "no-filter-stretch", "no-gpu-boost",
+                                     "no-prepass-governor", "no-same-state",     "no-world-only-prepass"};
+struct LiveSwitch
+{
+    const char *name;
+    bool on;
+};
+std::mutex g_liveSwitchLock;
+std::vector<LiveSwitch> g_liveSwitches;
+
+// Between two frames, on the thread that draws.
+void ApplyLiveSwitches(Device &device)
+{
+    std::vector<LiveSwitch> asked;
+    {
+        const std::lock_guard<std::mutex> lock(g_liveSwitchLock);
+        asked.swap(g_liveSwitches);
+    }
+    DrawState &d = *device.draw;
+    for (const LiveSwitch &s : asked)
+    {
+        const std::string name = s.name;
+        if (name == "no-depth-prepass" || name == "no-prepass-governor")
+        {
+            // Either one starts the governor afresh, from the pass on.
+            (name == "no-depth-prepass" ? d.prepassOff : d.governorOff) = s.on;
+            gfx_gxm::g_depthPrepass = !d.prepassOff;
+            d.prepassGovernor.Reset(gfx_gxm::g_depthPrepass);
+        }
+        else if (name == "no-frame-overlap")
+        {
+            // Everything drawn so far is done before the way of waiting
+            // changes, so neither way sees the other's frames in flight.
+            FinishGpu(device, WaitCause::Other);
+            d.overlap = !s.on && d.notifications;
+            d.paceTimeouts = 0;
+        }
+        else if (name == "no-vsync")
+            gxm::SetDisplayVsync(!s.on);
+        else if (name == "no-draw-reuse")
+            d.reuse = !s.on;
+        else if (name == "no-world-only-prepass")
+        {
+            // The pass costs another time now: the governor times it anew.
+            gfx_gxm::g_prepassWorldOnly = !s.on;
+            d.prepassGovernor.Reset(gfx_gxm::g_depthPrepass);
+        }
+        else if (name == "no-same-state")
+        {
+            d.sameState = !s.on;
+            d.lastDrawValid = false;
+        }
+        else if (name == "no-filter-stretch")
+            gfx_gxm::g_stretchInFilter = !s.on;
+        else if (name == "no-gpu-boost")
+        {
+            vita::SetGpuBoost(!s.on);
+            const vita::GpuClocks now = vita::CurrentGpuClocks();
+            Log(device, "diag: GPU at %d MHz, GPU crossbar at %d MHz", now.gpu, now.xbar);
+        }
+        Log(device, "diag: switch %s is %s from frame %llu on (vita_gxm)", s.name, s.on ? "on" : "off",
+            (unsigned long long)d.frame);
+    }
+}
+
 void FrameDone(Device &device)
 {
     DrawState &d = *device.draw;
     ++d.frame;
+    ApplyLiveSwitches(device);
+    if (!d.prepassOff && !d.governorOff)
+    {
+        const gfx_gxm::PrepassGovernor::Change change = d.prepassGovernor.FrameEnded(Micros());
+        if (change.changed)
+        {
+            gfx_gxm::g_depthPrepass = change.pass;
+            Log(device, "diag: depth pass governor: %s from frame %llu (%s; last %.1f ms a frame with the pass, "
+                        "%.1f without)",
+                change.pass ? "on" : "off", (unsigned long long)d.frame,
+                change.probe ? "a try" : "timed", change.passMs, change.noPassMs);
+        }
+    }
     d.ringUsed = 0;
     uint64_t into = 0;
     const int mode = d.diagTests ? DiagModeFor(d.frame, &into) : 0;
@@ -2863,140 +2997,171 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         strides[s] = device.streams[s].stride;
     if (upVertices)
         strides[0] = upStride;
-    gxm::cg::Options pixelOptions;
-    if (device.renderStates[d3d::RS_ALPHATESTENABLE])
-    {
-        const uint32_t func = device.renderStates[d3d::RS_ALPHAFUNC];
-        if (func >= d3d::CMP_NEVER && func < d3d::CMP_ALWAYS)
-            pixelOptions.alphaFunc = gxm::cg::AlphaFunc(func);
-    }
-    // The programs this combination last drew with (Pipeline), unless a
-    // run diagnostic wants to see or change how they are found.
+    const uint32_t upStrideUsed = upVertices ? upStride : 0u;
     const bool plain = d.reuse && !test && !d.diagnosedDraws;
-    PipelineKey pipelineKey;
-    Pipeline *pipeline = nullptr;
-    bool known = false;
-    if (plain)
-    {
-        std::memset(&pipelineKey, 0, sizeof(pipelineKey));
-        pipelineKey.vs = vs;
-        pipelineKey.ps = ps;
-        pipelineKey.decl = device.decl;
-        std::memcpy(pipelineKey.strides, strides, sizeof(strides));
-        pipelineKey.alphaFunc = uint8_t(pixelOptions.alphaFunc);
-        pipelineKey.index32 = index32;
-        pipeline = &PipelineSlot(d, pipelineKey);
-        known = std::memcmp(&pipeline->key, &pipelineKey, sizeof(pipelineKey)) == 0;
-        ++d.pipelineLookups;
-        d.pipelineHits += known;
-    }
+    gxm::FrameTime &frameTime = device.frameTime;
+    const auto part = [&frameTime](gxm::FrameTime::DrawPart done) {
+        if (frameTime.parting)
+            frameTime.Part(done, Micros());
+    };
     InputPlan plan;
-    if (!known)
-        PlanInputs(device, *vs, *device.decl, plan);
     // The shader whose program this draw runs: the game's, or in some tests
     // one written here for draws with the menu's vertex shader.
     Shader *vsUsed = vs;
-    Variant *vertex = known ? pipeline->vertex : nullptr;
-    if (test)
-    {
-        plan.options.diagPosition = test->option;
-        if (test->synthetic && MenuShaped(*vs, plan))
-        {
-            if (test->synthetic == 2)
-                vertex = d.diagPlain.failed ? nullptr : &d.diagPlain;
-            else if (test->synthetic == 5)
-                vertex = test->edit < 0 || d.diagEdited[test->edit].failed ? nullptr : &d.diagEdited[test->edit];
-            else if (Shader &synthetic = d.diagSynthetic[test->synthetic == 1 ? 0 : test->synthetic - 2];
-                     synthetic.translated)
-                vsUsed = &synthetic;
-        }
-    }
-    // Both programs are asked for before either is waited on.
-    bool waiting = false;
-    if (!vertex)
-        vertex = GetVariant(device, *vsUsed, plan.options, waiting);
-    Variant *pixel = known ? pipeline->pixel : GetVariant(device, *ps, pixelOptions, waiting);
-    if (!vertex || !pixel)
-    {
-        if (waiting)
-        {
-            // Not a failure: the draw comes back once its program is made.
-            ++device.shaderCounts.drawsWaited;
-            device.shaderCounts.waitedThisFrame = true;
-        }
-        else
-            CountSkip(device, SkipNoProgram);
-        return;
-    }
+    Variant *vertex = nullptr, *pixel = nullptr;
     bool diagPixel = false;
-    if (test)
-    {
-        bool texcoord = false;
-        for (const gxm::cg::Varying &varying : vsUsed->parsed.reflection.varyings)
-            texcoord |= varying.semantic == gxm::cg::Semantic::Texcoord && varying.index == 0;
-        if (test->probe && texcoord && !d.diagProbe.failed)
-            pixel = &d.diagProbe;
-        else if (!d.diagGreen.failed)
-            pixel = &d.diagGreen;
-        diagPixel = pixel == &d.diagProbe || pixel == &d.diagGreen;
-    }
-    // A stand-in vertex program for this draw.
+    // A stand-in vertex program for this draw (run diagnostics).
     Variant *standIn = nullptr;
     const SceGxmProgramParameter *standInPosition = nullptr;
     std::map<uint32_t, SceGxmVertexProgram *> *standInPrograms = nullptr;
-    if (test && test->standIn == 1 && !d.diagPass.failed)
-    {
-        standIn = &d.diagPass;
-        standInPosition = d.diagPassPosition;
-        standInPrograms = &d.diagPassPrograms;
-    }
-    else if (test && test->standIn == 2 && !d.diagMimic.failed)
-    {
-        standIn = &d.diagMimic;
-        standInPosition = d.diagMimicPosition;
-        standInPrograms = &d.diagMimicPrograms;
-    }
-    const bool passThrough = standIn != nullptr;
-    if (!OpenScene(device))
-    {
-        CountSkip(device, SkipNoScene);
-        return;
-    }
-    if (!d.hasColor)
-    {
-        if (const Texture *wanted = SceneTexture(d); wanted && wanted->deferredBytes)
-            CountSkip(device, SkipNoTargetMemory);
-        else
-            NotYet(device, "drawing with no colour target (depth only; skipped)");
-        return;
-    }
-    const VertexProgramEntry *vertexProgram =
-        known ? pipeline->vertexProgram : GetVertexProgram(device, *vertex, *device.decl, plan, index32, strides);
-    if (!vertexProgram)
-        return;
+    bool passThrough = false;
+    const VertexProgramEntry *vertexProgram = nullptr;
+    const FragmentProgramEntry *fragmentProgram = nullptr;
     SceGxmBlendInfo blend{};
-    const bool blended = !diagPixel && MakeBlend(device, d.color.noAlpha, blend);
-    uint32_t blendBits = 0;
-    if (blended)
-        std::memcpy(&blendBits, &blend, sizeof(blendBits));
-    const FragmentProgramEntry *fragmentProgram =
-        known && pipeline->blended == blended && pipeline->blendBits == blendBits &&
-                pipeline->output == uint32_t(d.color.output)
-            ? pipeline->fragmentProgram
-            : GetFragmentProgram(device, *pixel, passThrough ? *standIn : *vertex, blended ? &blend : nullptr);
-    if (!fragmentProgram)
-        return;
-    if (plain)
+    bool blended = false;
+    // Nothing the last draw's programs and fixed state came from has changed
+    // (DrawState::lastDraw): take them, and leave the fixed state as it is.
+    const bool same = plain && d.sameState && d.lastDrawValid && !d.census && d.sceneOpen && d.hasColor &&
+                      d.fixedValid && device.stateSerial == d.lastDrawSerial && d.scenes == d.lastDrawScene &&
+                      uint32_t(type) == d.lastDrawType && index32 == d.lastDrawIndex32 &&
+                      upStrideUsed == d.lastDrawUpStride;
+    if (same)
     {
-        pipeline->key = pipelineKey;
-        pipeline->vertex = vertex;
-        pipeline->pixel = pixel;
-        pipeline->vertexProgram = vertexProgram;
-        pipeline->fragmentProgram = fragmentProgram;
-        pipeline->blendBits = blendBits;
-        pipeline->output = uint32_t(d.color.output);
-        pipeline->blended = blended;
+        vertex = d.lastDraw.vertex;
+        pixel = d.lastDraw.pixel;
+        vertexProgram = d.lastDraw.vertexProgram;
+        fragmentProgram = d.lastDraw.fragmentProgram;
+        ++d.sameStateDraws;
     }
+    else
+    {
+        gxm::cg::Options pixelOptions;
+        if (device.renderStates[d3d::RS_ALPHATESTENABLE])
+        {
+            const uint32_t func = device.renderStates[d3d::RS_ALPHAFUNC];
+            if (func >= d3d::CMP_NEVER && func < d3d::CMP_ALWAYS)
+                pixelOptions.alphaFunc = gxm::cg::AlphaFunc(func);
+        }
+        // The programs this combination last drew with (Pipeline), unless a
+        // run diagnostic wants to see or change how they are found.
+        PipelineKey pipelineKey;
+        Pipeline *pipeline = nullptr;
+        bool known = false;
+        if (plain)
+        {
+            std::memset(&pipelineKey, 0, sizeof(pipelineKey));
+            pipelineKey.vs = vs;
+            pipelineKey.ps = ps;
+            pipelineKey.decl = device.decl;
+            std::memcpy(pipelineKey.strides, strides, sizeof(strides));
+            pipelineKey.alphaFunc = uint8_t(pixelOptions.alphaFunc);
+            pipelineKey.index32 = index32;
+            pipeline = &PipelineSlot(d, pipelineKey);
+            known = std::memcmp(&pipeline->key, &pipelineKey, sizeof(pipelineKey)) == 0;
+            ++d.pipelineLookups;
+            d.pipelineHits += known;
+        }
+        if (!known)
+            PlanInputs(device, *vs, *device.decl, plan);
+        vertex = known ? pipeline->vertex : nullptr;
+        if (test)
+        {
+            plan.options.diagPosition = test->option;
+            if (test->synthetic && MenuShaped(*vs, plan))
+            {
+                if (test->synthetic == 2)
+                    vertex = d.diagPlain.failed ? nullptr : &d.diagPlain;
+                else if (test->synthetic == 5)
+                    vertex = test->edit < 0 || d.diagEdited[test->edit].failed ? nullptr : &d.diagEdited[test->edit];
+                else if (Shader &synthetic = d.diagSynthetic[test->synthetic == 1 ? 0 : test->synthetic - 2];
+                         synthetic.translated)
+                    vsUsed = &synthetic;
+            }
+        }
+        // Both programs are asked for before either is waited on.
+        bool waiting = false;
+        if (!vertex)
+            vertex = GetVariant(device, *vsUsed, plan.options, waiting);
+        pixel = known ? pipeline->pixel : GetVariant(device, *ps, pixelOptions, waiting);
+        if (!vertex || !pixel)
+        {
+            if (waiting)
+            {
+                // Not a failure: the draw comes back once its program is made.
+                ++device.shaderCounts.drawsWaited;
+                device.shaderCounts.waitedThisFrame = true;
+            }
+            else
+                CountSkip(device, SkipNoProgram);
+            return;
+        }
+        if (test)
+        {
+            bool texcoord = false;
+            for (const gxm::cg::Varying &varying : vsUsed->parsed.reflection.varyings)
+                texcoord |= varying.semantic == gxm::cg::Semantic::Texcoord && varying.index == 0;
+            if (test->probe && texcoord && !d.diagProbe.failed)
+                pixel = &d.diagProbe;
+            else if (!d.diagGreen.failed)
+                pixel = &d.diagGreen;
+            diagPixel = pixel == &d.diagProbe || pixel == &d.diagGreen;
+        }
+        // A stand-in vertex program for this draw.
+        if (test && test->standIn == 1 && !d.diagPass.failed)
+        {
+            standIn = &d.diagPass;
+            standInPosition = d.diagPassPosition;
+            standInPrograms = &d.diagPassPrograms;
+        }
+        else if (test && test->standIn == 2 && !d.diagMimic.failed)
+        {
+            standIn = &d.diagMimic;
+            standInPosition = d.diagMimicPosition;
+            standInPrograms = &d.diagMimicPrograms;
+        }
+        passThrough = standIn != nullptr;
+        if (!OpenScene(device))
+        {
+            CountSkip(device, SkipNoScene);
+            return;
+        }
+        if (!d.hasColor)
+        {
+            if (const Texture *wanted = SceneTexture(d); wanted && wanted->deferredBytes)
+                CountSkip(device, SkipNoTargetMemory);
+            else
+                NotYet(device, "drawing with no colour target (depth only; skipped)");
+            return;
+        }
+        vertexProgram =
+            known ? pipeline->vertexProgram : GetVertexProgram(device, *vertex, *device.decl, plan, index32, strides);
+        if (!vertexProgram)
+            return;
+        blended = !diagPixel && MakeBlend(device, d.color.noAlpha, blend);
+        uint32_t blendBits = 0;
+        if (blended)
+            std::memcpy(&blendBits, &blend, sizeof(blendBits));
+        fragmentProgram =
+            known && pipeline->blended == blended && pipeline->blendBits == blendBits &&
+                    pipeline->output == uint32_t(d.color.output)
+                ? pipeline->fragmentProgram
+                : GetFragmentProgram(device, *pixel, passThrough ? *standIn : *vertex, blended ? &blend : nullptr);
+        if (!fragmentProgram)
+            return;
+        if (plain)
+        {
+            pipeline->key = pipelineKey;
+            pipeline->vertex = vertex;
+            pipeline->pixel = pixel;
+            pipeline->vertexProgram = vertexProgram;
+            pipeline->fragmentProgram = fragmentProgram;
+            pipeline->blendBits = blendBits;
+            pipeline->output = uint32_t(d.color.output);
+            pipeline->blended = blended;
+        }
+    }
+
+    part(gxm::FrameTime::PartSetup);
 
     // Vertex data.
     const void *streamData[kMaxStreams];
@@ -3029,14 +3194,31 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         streamData[i] = vb->memory.data + int64_t(device.streams[s].offset) + int64_t(baseVertex) * strides[s];
     }
 
-    FixedState state;
-    MakeFixedState(device, type, state);
-    if (!DrawArea(device, state.clip))
+    FixedState state{};
+    if (!same)
     {
-        CountSkip(device, SkipEmptyClip);
-        return;
+        MakeFixedState(device, type, state);
+        if (!DrawArea(device, state.clip))
+        {
+            CountSkip(device, SkipEmptyClip);
+            return;
+        }
+        ApplyFixedState(device, state);
+        if (plain && d.sameState && !passThrough)
+        {
+            d.lastDraw.vertex = vertex;
+            d.lastDraw.pixel = pixel;
+            d.lastDraw.vertexProgram = vertexProgram;
+            d.lastDraw.fragmentProgram = fragmentProgram;
+            d.lastDrawSerial = device.stateSerial;
+            d.lastDrawScene = d.scenes;
+            d.lastDrawType = uint32_t(type);
+            d.lastDrawIndex32 = index32;
+            d.lastDrawUpStride = upStrideUsed;
+            d.lastDrawValid = true;
+        }
     }
-    ApplyFixedState(device, state);
+    part(gxm::FrameTime::PartState);
 
     // Run-diagnostic tests: a stand-in vertex program fed the game's
     // position stream.
@@ -3173,6 +3355,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         if ((reserved < 0 || set < 0) && d.uniformFailures++ < 5)
             Log(device, "diag: mimic constants not set: reserve 0x%08x, set 0x%08x", unsigned(reserved), unsigned(set));
     }
+    part(gxm::FrameTime::PartVertexConstants);
     void *pixelUniforms = nullptr;
     // Not kept for a program that takes a texture's depth as a uniform
     // (BindTextures writes those).
@@ -3197,6 +3380,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         d.fragmentUniformsVersion = device.psConstantsVersion;
         d.fragmentAlphaRef = alphaRef;
     }
+    part(gxm::FrameTime::PartFragmentConstants);
     if (d.census)
         LogCensus(device, *vs, *ps, *vertex, *pixel, blended, blend);
     Texture *const target = SceneTexture(d);
@@ -3207,6 +3391,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             target->unfilled = true;
         return;
     }
+    part(gxm::FrameTime::PartTextures);
     for (uint8_t i = 0; i < drawStreams; ++i)
         sceGxmSetVertexStream(context, i, streamData[i]);
     if (d.diagnosedDraws)
@@ -3226,6 +3411,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     ++d.drawn;
     if (target)
         target->unfilled = false;
+    part(gxm::FrameTime::PartSubmit);
 }
 
 void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const Rect *dstRect, bool linear)
@@ -3444,9 +3630,11 @@ void LogDrawSummary(Device &device)
     // What the draws did not do again (Pipeline, BindTextures, the uniform
     // buffers in Draw).
     Log(device,
-        "draw work left out: %llu of %llu draws found their programs in the table; of %llu texture binds %llu were "
-        "set already and %llu set their filters anew; of %llu uniform buffers %llu were the last draw's",
-        (unsigned long long)d->pipelineHits, (unsigned long long)d->pipelineLookups,
+        "draw work left out: %llu draws kept the last draw's programs and fixed state; %llu of %llu others found "
+        "their programs in the table; of %llu texture binds %llu were set already and %llu set their filters anew; of "
+        "%llu uniform buffers %llu were the last draw's",
+        (unsigned long long)d->sameStateDraws, (unsigned long long)d->pipelineHits,
+        (unsigned long long)d->pipelineLookups,
         (unsigned long long)d->textureBinds, (unsigned long long)d->textureBindsLeftOut,
         (unsigned long long)d->textureViewsMade, (unsigned long long)d->uniformWrites,
         (unsigned long long)d->uniformWritesLeftOut);
@@ -3467,3 +3655,15 @@ void LogDrawSummary(Device &device)
         d->paceWaits ? d->paceMicros / 1000.0 / double(d->paceWaits) : 0.0, d->paceTimeouts);
 }
 } // namespace gfx_vk::legacy
+
+bool gfx_gxm::RequestLiveSwitch(const char *name, bool on)
+{
+    for (const char *known : gfx_vk::legacy::kLiveSwitches)
+        if (!std::strcmp(known, name))
+        {
+            const std::lock_guard<std::mutex> lock(gfx_vk::legacy::g_liveSwitchLock);
+            gfx_vk::legacy::g_liveSwitches.push_back({known, on});
+            return true;
+        }
+    return false;
+}
