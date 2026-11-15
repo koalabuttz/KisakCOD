@@ -3,3 +3,6 @@
 /build/
 /app/build/
 /local.properties
+# The top-level .gitignore drops every res/ folder (Visual Studio
+# resources); the app's Android resources are sources.
+!/app/src/main/res/
