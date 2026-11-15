@@ -61,6 +61,12 @@ constexpr uint32_t kSlowFrames = 3;
 // added in display values (David, 2026-11-15: "the physical light with the
 // flash made brighter").
 constexpr float kLightPassStrength = 2.0f;
+// How many times over the game's additive layers (blend ONE, ONE: light pools
+// on floors, glows) add their colour in linear light. They were made for
+// colours added in display values, where they add more; the same strength as
+// the extra light passes' (night surfaces bisect 1, 2026-11-15: a lamp-lit
+// shop floor on mp_carentan at about half of Legacy's light).
+constexpr float kAdditiveStrength = 2.0f;
 } // namespace
 
 struct Backend
@@ -144,6 +150,9 @@ struct Backend
     // (KISAK_VK_MODERN_LIGHT_PASS_STRENGTH; at start-up only).
     bool lightPassWanted = true;
     float lightPassStrength = kLightPassStrength;
+    // Additive layers' strength in linear light
+    // (KISAK_VK_MODERN_ADDITIVE_STRENGTH; 1 adds them as they are).
+    float additiveStrength = kAdditiveStrength;
     float sunStrength = 1.0f;
     float skyStrength = 1.0f;
     uint64_t litShaderChanges = 0, litShaderChangesBase = 0;
@@ -808,6 +817,11 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         const float value = strength.empty() ? -1.0f : std::strtof(strength.c_str(), nullptr);
         backend->lightPassStrength = value >= 0.0f ? value : kLightPassStrength;
     }
+    {
+        const std::string strength = EnvText("KISAK_VK_MODERN_ADDITIVE_STRENGTH");
+        const float value = strength.empty() ? -1.0f : std::strtof(strength.c_str(), nullptr);
+        backend->additiveStrength = value >= 0.0f ? value : kAdditiveStrength;
+    }
     backend->planarWanted = backend->linearWanted && !EnvIsZero("KISAK_VK_MODERN_PLANAR")
                             && (EnvIs("KISAK_VK_MODERN_PLANAR", "1") || backend->debugPlanar
                                 || backend->debugPlanarRead);
@@ -900,6 +914,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     backend->ownFeed = lg::GetGpuFeed(backend->legacy);
     lg::SetModernLitStrengths(backend->legacy, backend->sunStrength, backend->skyStrength);
     lg::SetModernLightPass(backend->legacy, backend->lightPassStrength);
+    lg::SetModernAdditive(backend->legacy, backend->linearWanted ? backend->additiveStrength : 1.0f);
     return backend;
 }
 
@@ -1090,11 +1105,12 @@ void BackendLogStats(Backend *backend, bool reset)
         // modules built as them (and that could not be).
         if (backend->shadersWanted)
             HostLog(h, "vulkan d3d9: modern: lit shaders of our own: %.1f changes to one each scene, %u pixel modules "
-                       "built as one (%u could not be), sun strength %.2f, sky strength %.2f, light pass %s at %.2f",
+                       "built as one (%u could not be), sun strength %.2f, sky strength %.2f, light pass %s at %.2f, "
+                       "additive layers at %.2f",
                     double(backend->litShaderChanges - backend->litShaderChangesBase) / double(scenes),
                     stats.modernLitModules - was.modernLitModules, stats.modernLitRefused - was.modernLitRefused,
                     backend->sunStrength, backend->skyStrength, backend->lightPassWanted ? "on" : "off",
-                    backend->lightPassStrength);
+                    backend->lightPassStrength, backend->additiveStrength);
     }
     // Velocity: the surfaces drawn again with their own motion, and the
     // GPU time of that pass.

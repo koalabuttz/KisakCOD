@@ -1053,6 +1053,36 @@ The `lit shaders of our own` stats line ends with the light pass's state
 and strength. **Check:** `modern_light_pass` adds an omni light with the
 game's blend over grey 128, over black, and normal-mapped over the grey.
 
+### Additive layers
+
+Some layers are added with the blend ONE, ONE (ADD): the world's
+`lm_a0c0_sm3` and `lm_hsm_sun_a0c0_sm3` passes (state `0x19288922`) and the
+additive glows of unlit materials such as night Crash's pink gift box. The
+game adds their colour to the scene's display value. Decoded and added in
+linear light it adds much less: a grey 64 over grey 128 shows 192 in
+Legacy and 141 in linear light. Night surfaces bisect 1 found that this, not
+any lit shader, made Chinatown's lamp-lit shop floor about half as bright
+as Legacy, and took the green and blue out of the gift box.
+
+As with the extra light passes, the Legacy adapter adds such a layer at a
+strength in the linear-light scene: when the target is a linear-light
+surface and the blend is ONE, ONE, ADD, the pipeline's source factor is the
+blend constant (`VK_BLEND_FACTOR_CONSTANT_COLOR`) and the dynamic blend
+constant is the strength (`lg::SetModernAdditive`). The target holds floats,
+so nothing clamps. Other blends (SRCALPHA, ONE; INVDESTALPHA, ONE for the
+light passes) and additive draws on the display after the scene are left
+as they are.
+
+| Switch | Default |
+| --- | --- |
+| `KISAK_VK_MODERN_ADDITIVE_STRENGTH` | 2: additive layers add their colour twice (1 adds it as it is) |
+
+The `lit shaders of our own` stats line ends with the strength.
+**Check:** `modern_additive` adds grey 64 over grey 128 and over black,
+beside a SRCALPHA, ONE add that is not changed and an add on the display
+after the scene; `modern_tonemap`'s white added two and four times, and
+`modern_effects` with `KISAK_VK_MODERN_EFFECTS=linear`, add at the strength.
+
 ## Normals buffer
 
 Ambient occlusion and screen-space reflections need the normal of the surface

@@ -49,10 +49,10 @@ involved. The checks:
                  modern_reflections, modern_planar, modern_fog, modern_live
                  and modern_live_cut (a second modern_taa run), 45 of them
                  without history (modern_light_pass's scene has no depth to
-                 anti-alias with), the 45 scenes of modern_linear,
+                 anti-alias with), the 46 scenes of modern_linear,
                  modern_bloom, modern_effects, modern_lit, modern_lit_shader,
                  modern_soft_shadow, modern_lit_models, modern_lit_skin, modern_lit_no_sun,
-                 modern_lit_lights, modern_light_pass,
+                 modern_lit_lights, modern_light_pass, modern_additive,
                  modern_tonemap, modern_exposure, modern_normals, modern_ao,
                  modern_reflections, modern_planar, modern_fog and
                  modern_live in linear light with one copy read from them
@@ -240,7 +240,7 @@ SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'model_lig
           'references', 'threads', 'queries', 'occlusion', 'frame_loop', 'gpu_feed', 'tuning', 'slow_frames',
           'kept_state', 'multisample', 'modern_taa', 'modern_linear', 'modern_bloom', 'modern_effects',
           'modern_lit', 'modern_lit_shader', 'modern_soft_shadow', 'modern_lit_models', 'modern_lit_skin', 'modern_lit_no_sun',
-          'modern_lit_lights', 'modern_light_pass', 'modern_tonemap', 'modern_exposure', 'modern_velocity', 'modern_normals', 'modern_ao',
+          'modern_lit_lights', 'modern_light_pass', 'modern_additive', 'modern_tonemap', 'modern_exposure', 'modern_velocity', 'modern_normals', 'modern_ao',
           'modern_reflections', 'modern_probes', 'modern_planar', 'modern_probe_capture', 'modern_fog', 'modern_live',
           'modern_live_cut', 'reset',
           'fullscreen', 'present')
@@ -860,8 +860,8 @@ def main():
         checks.expect('no scene in linear light with KISAK_VK_MODERN_LINEAR=0', linear is None,
                       linear.group(0) if linear else '')
     else:
-        checks.expect('the Modern path drew 45 scenes in linear light and read 1 copy from them',
-                      linear is not None and linear.group(1) == '45' and linear.group(2) == '1',
+        checks.expect('the Modern path drew 46 scenes in linear light and read 1 copy from them',
+                      linear is not None and linear.group(1) == '46' and linear.group(2) == '1',
                       linear.group(0) if linear else 'missing')
     # Volumetric fog: modern_fog's eleven scenes with the fog switched on,
     # the last three from froxels; five through the sun's shadow map (the
@@ -931,6 +931,13 @@ def main():
         checks.expect(f'the Modern path built {modules} pixel modules as our own lit shaders, none refused',
                       shaders is not None and shaders.group(2) == modules and shaders.group(3) == '0',
                       shaders.group(0) if shaders else 'missing')
+        # Additive (ONE, ONE) layers in the linear-light scene add their
+        # colour this many times over (KISAK_VK_MODERN_ADDITIVE_STRENGTH).
+        additive = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: lit shaders of our own: .*, additive layers at '
+                             r'([0-9.]+)$', stdout)
+        want_additive = f"{float(env.get('KISAK_VK_MODERN_ADDITIVE_STRENGTH', '2')):.2f}"
+        checks.expect(f'additive layers at {want_additive}', additive is not None and additive.group(1) == want_additive,
+                      additive.group(0) if additive else 'missing')
     checks.expect('no object outlived its release', found.get('d3d9_check.live_objects_at_teardown') == '0',
                   found.get('d3d9_check.live_objects_at_teardown', 'missing'))
     checks.expect('device destroyed at its last release',

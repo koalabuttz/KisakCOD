@@ -533,6 +533,7 @@ public:
     void ModernLitNoSun();
     void ModernLitLights();
     void ModernLightPass();
+    void ModernAdditive();
     void ModernTonemap();
     void ModernTonemapAs(const std::string &curve);
     void ModernExposure();
@@ -4714,6 +4715,17 @@ std::string EnvText(const char *name)
     return text ? text : "";
 #endif
 }
+// How many times over an additive (ONE, ONE) layer in the linear-light scene
+// adds its colour (legacy SetModernAdditive): KISAK_VK_MODERN_ADDITIVE_STRENGTH,
+// 2 by default, and 1 without linear light.
+double ModernAdditiveStrength()
+{
+    if (EnvText("KISAK_VK_MODERN_LINEAR") == "0")
+        return 1.0;
+    const std::string text = EnvText("KISAK_VK_MODERN_ADDITIVE_STRENGTH");
+    const double value = text.empty() ? -1.0 : std::strtod(text.c_str(), nullptr);
+    return value >= 0.0 ? value : 2.0;
+}
 int ShownByte(double light)
 {
     light = std::clamp(light, 0.0, 1.0);
@@ -5105,7 +5117,11 @@ void Check::ModernEffects()
               static_cast<int>(front::ModernResult::Done));
     device->SetDepthStencilSurface(nullptr);
 
-    const int added = effectsInLinear && !linearOff ? 90 : 128;
+    // In linear light the two adds are decoded and each added at the
+    // additive strength: encode(2 x strength x decode(64)), 90 at strength 1.
+    const double light = 2.0 * ModernAdditiveStrength() * std::pow((64.0 / 255.0 + 0.055) / 1.055, 2.4);
+    const int added = effectsInLinear && !linearOff ? ShownByte(TonemapCurve(ModernCurve(), {light, light, light})[0])
+                                                    : 128;
     if (Read())
     {
         Expect("effects_added", 64, 64, added, added, added);
@@ -6797,6 +6813,86 @@ void Check::ModernLightPass()
     SafeRelease(color);
 }
 
+// Additive layers in linear light (legacy SetModernAdditive): grey 64 added
+// with the game's additive blend (ONE, ONE) over grey 128, and over black,
+// in the linear-light scene. Each adds its decoded colour times the strength
+// (KISAK_VK_MODERN_ADDITIVE_STRENGTH, 2 by default). A blend of the source's
+// alpha (SRCALPHA, ONE) beside them is not changed, and an additive draw
+// after the scene, on the display, is not either. Without linear light
+// every add is in display values.
+void Check::ModernAdditive()
+{
+    const bool linear = EnvText("KISAK_VK_MODERN_LINEAR") != "0";
+    Reset(Argb(255, 0, 0, 0));
+    front::ModernSceneBegin(device);
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET, Argb(255, 0, 0, 0), 1.0f, 0), "Clear(scene)");
+    device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+    device->SetVertexShader(vsBasic);
+    device->SetPixelShader(psColor);
+    front::SetModernLitInputs(device, nullptr);
+    // Grey 128 on the left half; black on the right.
+    DrawQuad(0, 0, 64, 128, 0.5f, Argb(255, 128, 128, 128));
+    device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+    device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+    device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+    device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+    // Additive over the grey (x 0-32) and over black (x 64-96), top half.
+    DrawQuad(0, 0, 32, 64, 0.5f, Argb(255, 64, 64, 64));
+    DrawQuad(64, 0, 96, 64, 0.5f, Argb(255, 64, 64, 64));
+    // The source's alpha (half) times its colour, added: not boosted.
+    device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+    DrawQuad(32, 0, 64, 64, 0.5f, Argb(128, 64, 64, 64));
+    device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+    device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+    device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ZERO);
+
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    view.width = view.height = kSize;
+    view.cut = true;
+    if (front::ModernSceneLit(device, view) == front::ModernResult::Skipped)
+        front::ModernSceneDone(device, view);
+    // On the display after the scene: additive grey 64 over the black's
+    // lower half, in display values (x 96-128, bottom half).
+    device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+    device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+    device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+    DrawQuad(96, 64, 128, 128, 0.5f, Argb(255, 64, 64, 64));
+    device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+    device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+    device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ZERO);
+    device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+    if (Read())
+    {
+        const std::string curve = ModernCurve();
+        const auto decode = [](double v) {
+            v = std::clamp(v, 0.0, 1.0);
+            return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+        };
+        const double strength = ModernAdditiveStrength();
+        const auto expectLight = [&](const char *name, int x, int y, double value) {
+            const int byte = ShownByte(TonemapCurve(curve, {value, value, value})[0]);
+            Expect(name, x, y, byte, byte, byte);
+        };
+        const auto expectByte = [&](const char *name, int x, int y, int byte) { Expect(name, x, y, byte, byte, byte); };
+        if (linear)
+        {
+            expectLight("additive_over_grey", 16, 32, decode(128 / 255.0) + strength * decode(64 / 255.0));
+            expectLight("additive_over_black", 80, 32, strength * decode(64 / 255.0));
+            expectLight("alpha_add_over_grey", 48, 32, decode(128 / 255.0) + 128 / 255.0 * decode(64 / 255.0));
+            expectLight("grey_alone", 16, 96, decode(128 / 255.0));
+        }
+        else
+        {
+            expectByte("additive_over_grey", 16, 32, 192);
+            expectByte("additive_over_black", 80, 32, 64);
+        }
+        expectByte("display_add", 112, 96, 64);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+}
+
 // The tonemap's curve (KISAK_VK_MODERN_TONEMAP): grey 128 (0.216 of light),
 // white (1), and white added twice (2) and four times (4) in the linear-light
 // scene, as each curve shows them. Clamp shows 128, 255, 255, 255; the others
@@ -6856,13 +6952,15 @@ void Check::ModernTonemapAs(const std::string &curve)
     if (Read())
     {
         const double grey = std::pow((128.0 / 255.0 + 0.055) / 1.055, 2.4);
+        // White added twice and four times, each add at the additive strength.
+        const double added = ModernAdditiveStrength();
         const struct
         {
             const char *name;
             UINT x, y;
             double light;
-        } points[] = {{"grey", 32, 32, grey}, {"white", 96, 32, 1.0}, {"white_x2", 32, 96, 2.0},
-                      {"white_x4", 96, 96, 4.0},
+        } points[] = {{"grey", 32, 32, grey}, {"white", 96, 32, 1.0}, {"white_x2", 32, 96, 2.0 * added},
+                      {"white_x4", 96, 96, 4.0 * added},
                       {"lit_over_white", 52, 12, overWhite ? std::pow((1.5 + 0.055) / 1.055, 2.4) : 1.0}};
         for (const auto &point : points)
         {
@@ -7466,6 +7564,7 @@ int Run(const Options &options)
         {"modern_lit_no_sun", &Check::ModernLitNoSun, true},
         {"modern_lit_lights", &Check::ModernLitLights, true},
         {"modern_light_pass", &Check::ModernLightPass, true},
+        {"modern_additive", &Check::ModernAdditive, true},
         {"modern_tonemap", &Check::ModernTonemap, true},
         {"modern_exposure", &Check::ModernExposure, true},
         {"modern_velocity", &Check::ModernVelocity, true},
