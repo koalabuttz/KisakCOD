@@ -132,6 +132,11 @@ struct Options
     // Pixel shaders: D3DRS_ALPHATESTENABLE's test, done in the program
     // since GXM has none. Always is no test.
     AlphaFunc alphaFunc = AlphaFunc::Always;
+    // Pixel shaders: a pixel that fails the alpha test is written as
+    // (0, 0, 0, 0) and not discarded. For draws whose blend leaves the
+    // target as it was for such a source (gxm_idle_alpha_test.h): the
+    // picture is the same and the program has no discard.
+    bool alphaZero = false;
     // Vertex shaders: keep the position's z just inside the far plane
     // (z <= w * 0.99999). D3D9 draws z == w; a run-diagnostic option while
     // finding out whether GXM clips it.

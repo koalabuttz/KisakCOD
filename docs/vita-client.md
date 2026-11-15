@@ -50,9 +50,10 @@ have to be there and be NEON) and link checks (weak pthread references, the main
 uploads the RelWithDebInfo `.vpk`. It also runs the controls' and the sound's
 host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`), the run
 plan's, the GPU heap's, the frame time figures', the GPU progress bookkeeping's,
-the GPU watch's and the shader translator's (`test_vita_run_plan.py`,
-`test_vita_gxm_heap.py`, `test_vita_frame_time.py`,
-`test_vita_gpu_progress.py`, `test_vita_gpu_watch.py`,
+the GPU watch's, the idle alpha test's and the shader translator's
+(`test_vita_run_plan.py`, `test_vita_gxm_heap.py`,
+`test_vita_frame_time.py`, `test_vita_gpu_progress.py`,
+`test_vita_gpu_watch.py`, `test_vita_idle_alpha_test.py`,
 `test_vita_cg_translate.py`), and the static model cache's size arithmetic
 (`test_static_model_cache_sizes.py`).
 
@@ -896,6 +897,41 @@ What the GXM back end does so far (step 2d):
   change only their buffers and constants. An empty file `no-same-state`
   in the folder of the compiled programs, or `vita_gxm no-same-state 1`,
   turns it off.
+- **No discard where the alpha test changes nothing.** The game's blended
+  materials (decals, smoke, most effects) ask for the alpha test "greater
+  than 0" beside their blend, which on a PC spares the blend of pixels
+  that add nothing. The back end makes an alpha test a `discard` in the
+  fragment program, and a tile GPU has to run such a program before it
+  knows which pixels the primitive covers, which PowerVR's own advice is
+  to avoid. Console run CD (2026-11-15) found
+  the decals of one view of `mp_crash`, 122 draws of 1570, at 16.7 ms of
+  the frame's 45.8 ms of fragment work. When the test rejects only alpha
+  0, the blend adds nothing for alpha 0 and the draw writes neither depth
+  nor stencil, the picture is the same without the test, so the draw
+  takes the program without the discard
+  (src/gfx_gxm/gxm_idle_alpha_test.h; `test_vita_idle_alpha_test.py`
+  draws every such state both ways). The quit summary counts the draws
+  (`alpha tests: ...`). An empty file `no-alpha-test-drop` in the folder
+  of the compiled programs, or `vita_gxm no-alpha-test-drop 1`, turns it
+  off. Console run CH (2026-11-15) measured 0.7 to 0.8 ms a frame at two
+  views of `mp_crash` (34.54 against 35.36 ms, and 16.73 against
+  17.45 ms).
+- **Zero instead of a discard for the other blended draws.** A census of
+  the same view on a PC (2026-11-15) found that most of the map's decals
+  do not blend with the source alpha: 34 of their 50 materials carry
+  premultiplied colour (blend One, InvSrcAlpha) with the alpha test
+  "greater than 0", so a pixel of alpha 0 may still add colour and the
+  rule above leaves their discard in. For a draw that blends, writes
+  neither depth nor stencil and has a blend whose result for a source of
+  (0, 0, 0, 0) is the picture as it was (destination factor One,
+  InvSrcAlpha or InvSrcColor, operation add or reverse subtract), the
+  fragment program writes (0, 0, 0, 0) for a pixel the test rejects
+  where it would discard it (`alphaZero` in the translator's options,
+  `AlphaTestCanZero` in gxm_idle_alpha_test.h). The picture is the same
+  for any test and reference value, and the program has no discard. The
+  quit summary counts these draws apart. An empty file
+  `no-alpha-test-zero`, or `vita_gxm no-alpha-test-zero 1`, turns it
+  off. What it saves on the console is not measured yet.
 - **Depth first.** The scene's depth is always drawn before its lit pass
   on the Vita (src/gfx_gxm/gxm_engine_options.h), whatever r_depthPrepass
   says, so that the GPU skips hidden pixels of the lit pass early. Console

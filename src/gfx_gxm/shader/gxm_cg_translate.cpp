@@ -1292,7 +1292,8 @@ bool Emitter::Run(std::string &cg, std::string &error)
             // compares it, as the render target would store it.
             epilogue += "    float a = floor(saturate(oC0.w) * 255.0 + 0.5);\n";
             epilogue += "    float ref = floor(kisak_alpha_ref * 255.0 + 0.5);\n";
-            epilogue += std::string("    if (!(") + tests[func] + ")) discard;\n";
+            epilogue += std::string("    if (!(") + tests[func] + ")) " +
+                        (options_.alphaZero ? "oC0 = float4(0.0, 0.0, 0.0, 0.0);\n" : "discard;\n");
         }
         epilogue += "    return oC0;\n";
         if (!local("oC0"))
