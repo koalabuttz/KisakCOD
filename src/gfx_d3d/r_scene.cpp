@@ -1773,8 +1773,216 @@ static uint16_t R_ModernLitShader(const char *name, const Material *material, co
 // fog and shadow parameters) are not colours. A detail map is added to the
 // colour map around grey (colour + detail - 0.5), so it stays as it is: the
 // offset is not a colour of its own.
+// The material's water map (the FFT water simulation), or null.
+static const MaterialTextureDef *R_ModernWaterMap(const Material *material)
+{
+    for (uint32_t t = 0; t < material->textureCount; ++t)
+    {
+        if (material->textureTable[t].semantic == TS_WATER_MAP)
+            return &material->textureTable[t];
+    }
+    return nullptr;
+}
+
+// KISAK_VK_MODERN_WATER_LOG=1 names how water is drawn, for planar
+// reflections on water (piece 3): once per world, every world surface whose
+// material has a water map, by material, with the union of their bounds; and
+// once per pass of a water material that is drawn, the technique, shaders,
+// arguments, blend state, the material's constants and the simulation's
+// settings. At most 32 passes.
+static void R_ModernLogWaterPass(const Material *material, const MaterialPass *pass)
+{
+    static const bool on = [] {
+        const char *text = getenv("KISAK_VK_MODERN_WATER_LOG");
+        return text && *text && *text != '0';
+    }();
+    if (!on || !material || !pass)
+        return;
+    const MaterialTextureDef *water = R_ModernWaterMap(material);
+    if (!water)
+        return;
+
+    static const GfxWorld *loggedWorld;
+    if (rgp.world && loggedWorld != rgp.world)
+    {
+        loggedWorld = rgp.world;
+        const Material *done[16];
+        int doneCount = 0;
+        const GfxWorldDpvsStatic &dpvs = rgp.world->dpvs;
+        for (uint32_t s = 0; s < dpvs.staticSurfaceCount && doneCount < 16; ++s)
+        {
+            const Material *surfaceMaterial = dpvs.surfaces[s].material;
+            if (!surfaceMaterial || !R_ModernWaterMap(surfaceMaterial))
+                continue;
+            bool seen = false;
+            for (int i = 0; i < doneCount; ++i)
+                seen = seen || done[i] == surfaceMaterial;
+            if (seen)
+                continue;
+            done[doneCount++] = surfaceMaterial;
+            float mins[3] = {FLT_MAX, FLT_MAX, FLT_MAX};
+            float maxs[3] = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
+            uint32_t count = 0;
+            uint32_t tris = 0;
+            for (uint32_t o = s; o < dpvs.staticSurfaceCount; ++o)
+            {
+                const GfxSurface &surface = dpvs.surfaces[o];
+                if (surface.material != surfaceMaterial)
+                    continue;
+                ++count;
+                tris += surface.tris.triCount;
+                for (int i = 0; i < 3; ++i)
+                {
+                    mins[i] = surface.bounds[0][i] < mins[i] ? surface.bounds[0][i] : mins[i];
+                    maxs[i] = surface.bounds[1][i] > maxs[i] ? surface.bounds[1][i] : maxs[i];
+                }
+            }
+            Com_Printf(CON_CHANNEL_GFX,
+                       "modern water: world %s: material %s (technique set %s): %u surfaces, %u triangles, "
+                       "bounds (%.1f %.1f %.1f) to (%.1f %.1f %.1f)\n",
+                       rgp.world->name ? rgp.world->name : "?", surfaceMaterial->info.name,
+                       surfaceMaterial->techniqueSet ? surfaceMaterial->techniqueSet->name : "?", count, tris,
+                       mins[0], mins[1], mins[2], maxs[0], maxs[1], maxs[2]);
+        }
+        if (!doneCount)
+            Com_Printf(CON_CHANNEL_GFX, "modern water: world %s: no world surface has a water map\n",
+                       rgp.world->name ? rgp.world->name : "?");
+    }
+
+    static const MaterialPass *logged[32];
+    static int loggedCount;
+    if (loggedCount >= 32)
+        return;
+    for (int i = 0; i < loggedCount; ++i)
+    {
+        if (logged[i] == pass)
+            return;
+    }
+    logged[loggedCount++] = pass;
+
+    // Which technique and pass of the material's set this is.
+    int techType = -1;
+    int passIndex = -1;
+    const char *techName = "?";
+    if (material->techniqueSet)
+    {
+        for (int t = 0; t < TECHNIQUE_COUNT && techType < 0; ++t)
+        {
+            const MaterialTechnique *technique = material->techniqueSet->techniques[t];
+            if (!technique)
+                continue;
+            for (int p = 0; p < technique->passCount; ++p)
+            {
+                if (&technique->passArray[p] == pass)
+                {
+                    techType = t;
+                    passIndex = p;
+                    techName = technique->name ? technique->name : "?";
+                }
+            }
+        }
+    }
+    uint32_t loadBits[2] = {0, 0};
+    if (techType >= 0 && material->stateBitsTable
+        && material->stateBitsEntry[techType] + passIndex < material->stateBitsCount)
+    {
+        const GfxStateBits &bits = material->stateBitsTable[material->stateBitsEntry[techType] + passIndex];
+        loadBits[0] = bits.loadBits[0];
+        loadBits[1] = bits.loadBits[1];
+    }
+    Com_Printf(CON_CHANNEL_GFX,
+               "modern water: material %s, technique %d (%s) pass %d: vertex shader %s, pixel shader %s, "
+               "state bits 0x%08x 0x%08x\n",
+               material->info.name, techType, techName, passIndex,
+               pass->vertexShader ? pass->vertexShader->name : "?", pass->pixelShader ? pass->pixelShader->name : "?",
+               loadBits[0], loadBits[1]);
+
+    char args[768];
+    size_t used = 0;
+    args[0] = 0;
+    const uint32_t argCount = pass->perPrimArgCount + pass->perObjArgCount + pass->stableArgCount;
+    for (uint32_t i = 0; i < argCount && used < sizeof(args) - 40; ++i)
+    {
+        const MaterialShaderArgument &arg = pass->args[i];
+        int wrote = 0;
+        switch (arg.type)
+        {
+        case MTL_ARG_MATERIAL_PIXEL_SAMPLER:
+        {
+            int semantic = -1;
+            char first = '?';
+            char last = '?';
+            for (uint32_t t = 0; t < material->textureCount; ++t)
+            {
+                const MaterialTextureDef &def = material->textureTable[t];
+                if (def.nameHash == arg.u.nameHash)
+                {
+                    semantic = def.semantic;
+                    first = def.nameStart;
+                    last = def.nameEnd;
+                }
+            }
+            wrote = snprintf(args + used, sizeof(args) - used, " ps s%u=mat(sem %d, %c..%c)", arg.dest, semantic,
+                             first, last);
+            break;
+        }
+        case MTL_ARG_CODE_PIXEL_SAMPLER:
+            wrote = snprintf(args + used, sizeof(args) - used, " ps s%u=code %u", arg.dest, arg.u.codeSampler);
+            break;
+        case MTL_ARG_CODE_PIXEL_CONST:
+            wrote = snprintf(args + used, sizeof(args) - used, " ps c%u=code 0x%x(%u rows)", arg.dest,
+                             arg.u.codeConst.index, arg.u.codeConst.rowCount);
+            break;
+        case MTL_ARG_CODE_VERTEX_CONST:
+            wrote = snprintf(args + used, sizeof(args) - used, " vs c%u=code 0x%x(%u rows)", arg.dest,
+                             arg.u.codeConst.index, arg.u.codeConst.rowCount);
+            break;
+        case MTL_ARG_MATERIAL_PIXEL_CONST:
+        case MTL_ARG_MATERIAL_VERTEX_CONST:
+        {
+            const char *constName = "?";
+            for (uint32_t c = 0; c < material->constantCount; ++c)
+            {
+                if (material->constantTable[c].nameHash == arg.u.nameHash)
+                    constName = material->constantTable[c].name;
+            }
+            wrote = snprintf(args + used, sizeof(args) - used, " %s c%u=mat(%.12s)",
+                             arg.type == MTL_ARG_MATERIAL_PIXEL_CONST ? "ps" : "vs", arg.dest, constName);
+            break;
+        }
+        case MTL_ARG_LITERAL_PIXEL_CONST:
+        case MTL_ARG_LITERAL_VERTEX_CONST:
+            wrote = snprintf(args + used, sizeof(args) - used, " %s c%u=lit(%g %g %g %g)",
+                             arg.type == MTL_ARG_LITERAL_PIXEL_CONST ? "ps" : "vs", arg.dest, arg.u.literalConst[0],
+                             arg.u.literalConst[1], arg.u.literalConst[2], arg.u.literalConst[3]);
+            break;
+        default:
+            break;
+        }
+        if (wrote > 0)
+            used += (size_t)wrote < sizeof(args) - used ? (size_t)wrote : sizeof(args) - used - 1;
+    }
+    Com_Printf(CON_CHANNEL_GFX, "modern water:   arguments:%s\n", args);
+    for (uint32_t c = 0; c < material->constantCount; ++c)
+    {
+        const MaterialConstantDef &def = material->constantTable[c];
+        Com_Printf(CON_CHANNEL_GFX, "modern water:   constant %.12s = (%g %g %g %g)\n", def.name, def.literal[0],
+                   def.literal[1], def.literal[2], def.literal[3]);
+    }
+    if (const water_t *map = water->u.water)
+    {
+        Com_Printf(CON_CHANNEL_GFX,
+                   "modern water:   simulation: %dx%d, size %g x %g, gravity %g, wind %g toward (%g %g), "
+                   "amplitude %g, code constant (%g %g %g %g), image %dx%d\n",
+                   map->M, map->N, map->Lx, map->Lz, map->gravity, map->windvel, map->winddir[0], map->winddir[1],
+                   map->amplitude, map->codeConstant[0], map->codeConstant[1], map->codeConstant[2],
+                   map->codeConstant[3], map->image ? map->image->width : 0, map->image ? map->image->height : 0);
+    }
+}
+
 void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
 {
+    R_ModernLogWaterPass(material, pass);
     if (!s_modernLitPasses || !pass || !material)
         return;
     if (pass == s_modernInputsPass && material == s_modernInputsMaterial)

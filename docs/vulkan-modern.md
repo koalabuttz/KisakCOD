@@ -1442,7 +1442,12 @@ mirrored each fails, and the floor stays black where the image is not read
 run draws and reads no planar view unless asked.
 
 **Next.** Water (`mp_bog`, whose water has its own shader), and planes found
-on their own.
+on their own. `KISAK_VK_MODERN_WATER_LOG=1` names how water is drawn, for
+that work: once per map, every world surface whose material has a water map,
+by material, with their bounds (the water's height); and once per pass of a
+water material that draws, its technique, shaders, arguments, blend state,
+the material's constants and the water simulation's settings. It prints at
+most 32 passes and works on any path.
 
 ## Next
 
