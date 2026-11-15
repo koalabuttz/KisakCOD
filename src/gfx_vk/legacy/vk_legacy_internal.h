@@ -647,6 +647,9 @@ struct Device
     uint8_t modernEmissive = 4;
     // SetModernShadow: pushed after modernPlanarParams.
     ModernShadowParams modernShadowParams{};
+    // SetModernAdditive: how many times over additive draws (ONE, ONE) add
+    // their colour into a linear-light target (AdditiveBoosted).
+    float modernAdditive = 1.0f;
     // Bumped whenever SetModernPlanar or SetModernShadow changes the
     // parameters; the parameters
     // were last pushed for pushedPlanarGeneration in the bound layout (0:

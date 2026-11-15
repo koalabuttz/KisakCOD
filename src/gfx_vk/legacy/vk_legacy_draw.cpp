@@ -250,6 +250,18 @@ uint32_t ColorCount(Surface *const targets[kMaxRenderTargets])
     return count;
 }
 
+// An additive draw (blend ONE, ONE, add) into a linear-light target while
+// SetModernAdditive's strength is not 1: its colour is added that many times
+// over, the source factor being the blend constant (MakePipelineKey) and the
+// constant the strength (MakeDynamicState).
+bool AdditiveBoosted(const Device &device)
+{
+    const uint32_t *rs = device.renderStates;
+    return device.modernAdditive != 1.0f && device.passTargets[0] && device.passTargets[0]->texture->linearLight
+        && rs[d3d::RS_ALPHABLENDENABLE] && rs[d3d::RS_SRCBLEND] == d3d::BLEND_ONE
+        && rs[d3d::RS_DESTBLEND] == d3d::BLEND_ONE && BlendOperation(rs[d3d::RS_BLENDOP]) == VK_BLEND_OP_ADD;
+}
+
 bool UsesTexture(const Surface *surface, const Texture *texture) { return surface && surface->texture == texture; }
 
 // The texture is one of the targets the next pass draws to.
@@ -1080,6 +1092,8 @@ PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, co
     {
         key.blendEnable = 0;
     }
+    if (key.blendEnable && AdditiveBoosted(device))
+        key.srcColor = static_cast<uint8_t>(VK_BLEND_FACTOR_CONSTANT_COLOR);
     static const d3d::RenderState kWriteMasks[kMaxRenderTargets] = {
         d3d::RS_COLORWRITEENABLE, d3d::RS_COLORWRITEENABLE1, d3d::RS_COLORWRITEENABLE2, d3d::RS_COLORWRITEENABLE3};
     const bool independent = Features(device.core).independentBlend;
@@ -1871,6 +1885,12 @@ DynamicState MakeDynamicState(const Device &device, d3d::PrimitiveType type)
     state.stencilMask = rs[d3d::RS_STENCILMASK] & 0xff;
     state.stencilWriteMask = rs[d3d::RS_STENCILWRITEMASK] & 0xff;
     UnpackColor(rs[d3d::RS_BLENDFACTOR], state.blendConstants);
+    if (AdditiveBoosted(device))
+    {
+        for (int i = 0; i < 3; ++i)
+            state.blendConstants[i] = device.modernAdditive;
+        state.blendConstants[3] = 1.0f;
+    }
     return state;
 }
 
@@ -3244,6 +3264,16 @@ void SetModernShadow(Device *device, const ModernShadowParams *params)
     {
         device->modernShadowParams = next;
         ++device->modernPlanarGeneration;
+    }
+}
+
+void SetModernAdditive(Device *device, float strength)
+{
+    if (device)
+    {
+        device->modernAdditive = strength >= 0.0f ? strength : 1.0f;
+        device->keyStale = true;
+        device->dynamicStale = true;
     }
 }
 
