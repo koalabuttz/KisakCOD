@@ -293,6 +293,7 @@ draw works out its programs and fixed state anew),
 program, also the ones that cannot change the picture),
 `no-alpha-test-zero` (a blended draw's alpha test discards a rejected
 pixel instead of writing zero for it),
+`no-narrow-varyings` (every TEXCOORD and COLOR varying a float4 again),
 `no-frag-keep-depth` and `no-frag-keep-same` (a model draw writes its
 fragment constants anew though nothing it reads changed),
 `frag-direct-write` (the constants are copied into the uniform buffer

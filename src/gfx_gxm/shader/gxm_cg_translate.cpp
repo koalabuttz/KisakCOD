@@ -399,6 +399,16 @@ class Emitter
         body_ += std::string(indent_ * 4, ' ') + text + "\n";
     }
     std::string Constant(uint16_t number) const;
+    // How wide a varying is declared: 4, or with Options::narrowVaryings
+    // what a model 3 TEXCOORD or COLOR declaration reaches.
+    uint8_t NarrowWidth(Semantic semantic, uint8_t mask) const
+    {
+        if (!options_.narrowVaryings || r_.major < 3 ||
+            (semantic != Semantic::Texcoord && semantic != Semantic::Color))
+            return 4;
+        const uint8_t width = VaryingWidth(mask);
+        return width ? width : 4;
+    }
 
     const Shader &shader_;
     const Options &options_;
@@ -1177,6 +1187,24 @@ bool Emitter::Run(std::string &cg, std::string &error)
             for (const std::string &p : parameters)
                 if (p.find(" " + name + " ") != std::string::npos)
                     first = false;
+            const uint8_t width = NarrowWidth(semantic, mask);
+            if (width < 4)
+            {
+                // Options::narrowVaryings: only the components declared.
+                const std::string type = width == 1 ? "float" : "float" + std::to_string(width);
+                if (first)
+                    parameters.push_back("out " + type + " " + name + " : " + text);
+                if (mask == (1u << width) - 1)
+                    epilogue += "    " + name + " = " + reg + "." + MaskSuffix(mask) + ";\n";
+                else
+                {
+                    if (first)
+                        epilogue += "    " + name + " = " + type + "(0.0" +
+                                    std::string(width == 1 ? "" : width == 2 ? ", 0.0" : ", 0.0, 0.0") + ");\n";
+                    epilogue += "    " + name + "." + MaskSuffix(mask) + " = " + reg + "." + MaskSuffix(mask) + ";\n";
+                }
+                return;
+            }
             if (first)
                 parameters.push_back("out " + VaryingType(semantic) + " " + name + " : " + text);
             if (VaryingType(semantic) == "float")
@@ -1260,9 +1288,11 @@ bool Emitter::Run(std::string &cg, std::string &error)
     else
     {
         // Inputs by semantic.
-        auto input = [&](Semantic semantic, uint8_t index) {
+        auto input = [&](Semantic semantic, uint8_t index, uint8_t mask = 0xf) {
             const std::string name = VaryingName("in_", semantic, index);
-            const std::string type = VaryingType(semantic);
+            const uint8_t width = NarrowWidth(semantic, mask);
+            const std::string type = width < 4 ? (width == 1 ? std::string("float") : "float" + std::to_string(width))
+                                               : VaryingType(semantic);
             for (const std::string &p : parameters)
                 if (p.find(" " + name + " ") != std::string::npos)
                     return std::string(type == "float" ? "kisak_splat(" + name + ")" : name);
@@ -1279,8 +1309,8 @@ bool Emitter::Run(std::string &cg, std::string &error)
                     continue;
                 if (filled.insert(reg).second)
                     prologue += "    float4 " + name + " = float4(0.0, 0.0, 0.0, 0.0);\n";
-                const std::string from = input(dcl.semantic, dcl.index);
                 const uint8_t mask = dcl.mask ? dcl.mask : 0xf;
+                const std::string from = input(dcl.semantic, dcl.index, mask);
                 prologue += "    " + name + "." + MaskSuffix(mask) + " = " + from + "." + MaskSuffix(mask) + ";\n";
             }
             for (uint16_t reg : filled)
@@ -1792,13 +1822,57 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
         r.apiConstants.assign(fromApi.begin(), fromApi.end());
     }
 
-    // The varyings, for linking checks.
+    // The varyings, for linking checks, with the components used.
     std::vector<Varying> &varyings = r.varyings;
-    auto add = [&](Semantic semantic, uint8_t index) {
-        for (const Varying &v : varyings)
+    auto add = [&](Semantic semantic, uint8_t index, uint8_t mask) {
+        for (Varying &v : varyings)
             if (v.semantic == semantic && v.index == index)
+            {
+                v.mask |= mask;
                 return;
-        varyings.push_back(Varying{semantic, index});
+            }
+        varyings.push_back(Varying{semantic, index, mask});
+    };
+    // The components of source i that the instruction can read.
+    auto lanesRead = [&](const Instruction &ins, int i) {
+        const Operand &src = ins.sources[i];
+        const auto lane = [&](int c) { return uint8_t(1u << ((src.swizzle >> (2 * c)) & 3)); };
+        if (src.modifier == kSmDz || src.modifier == kSmDw)
+            return uint8_t(0xf);
+        switch (ins.opcode)
+        {
+        case kMov:
+        case kAdd:
+        case kSub:
+        case kMad:
+        case kMul:
+        case kMin:
+        case kMax:
+        case kLrp:
+        case kCmp:
+        case kAbs:
+        case kFrc:
+        {
+            uint8_t lanes = 0;
+            for (int c = 0; c < 4; ++c)
+                if (ins.destination.mask & (1u << c))
+                    lanes |= lane(c);
+            return lanes;
+        }
+        case kDp3:
+            return uint8_t(lane(0) | lane(1) | lane(2));
+        case kTex:
+            // A plain read takes two components for a 2D sampler and
+            // three for a cube or a volume; the projected and the biased
+            // kinds take the fourth as well.
+            if (r.major >= 2 && i == 0 && ins.control == 0 && ins.sourceCount == 2 && ins.sources[1].number < 16)
+                return r.samplers[ins.sources[1].number] == SamplerType::Tex2D
+                           ? uint8_t(lane(0) | lane(1))
+                           : uint8_t(lane(0) | lane(1) | lane(2));
+            return uint8_t(0xf);
+        default:
+            return uint8_t(lane(0) | lane(1) | lane(2) | lane(3));
+        }
     };
     for (const Instruction &ins : shader.instructions)
     {
@@ -1814,7 +1888,7 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
                 if (!VaryingFromUsage(usage, index, semantic, error))
                     return false;
                 if (semantic != Semantic::Position)
-                    add(semantic, index);
+                    add(semantic, index, dst.mask ? dst.mask : uint8_t(0xf));
             }
             continue;
         }
@@ -1824,13 +1898,13 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
                 continue;
             const Operand &dst = ins.destination;
             if (dst.type == kAttrOut)
-                add(Semantic::Color, uint8_t(dst.number));
+                add(Semantic::Color, uint8_t(dst.number), dst.mask);
             else if (dst.type == kOutput)
-                add(Semantic::Texcoord, uint8_t(dst.number));
+                add(Semantic::Texcoord, uint8_t(dst.number), dst.mask);
             else if (dst.type == kRastOut && dst.number == 1)
-                add(Semantic::Fog, 0);
+                add(Semantic::Fog, 0, 1);
             else if (dst.type == kRastOut && dst.number == 2)
-                add(Semantic::PointSize, 0);
+                add(Semantic::PointSize, 0, 1);
         }
         else
         {
@@ -1838,17 +1912,39 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
             {
                 const Operand &src = ins.sources[i];
                 if (src.type == kInput)
-                    add(Semantic::Color, uint8_t(src.number));
+                    add(Semantic::Color, uint8_t(src.number), lanesRead(ins, i));
                 else if (src.type == kTexture)
-                    add(Semantic::Texcoord, uint8_t(src.number));
+                    add(Semantic::Texcoord, uint8_t(src.number), lanesRead(ins, i));
             }
             if (ins.opcode == kTexKill && ins.destination.type == kTexture)
-                add(Semantic::Texcoord, uint8_t(ins.destination.number));
+                add(Semantic::Texcoord, uint8_t(ins.destination.number), 0x7);
         }
     }
     std::sort(varyings.begin(), varyings.end(), [](const Varying &a, const Varying &b) {
         return a.semantic != b.semantic ? a.semantic < b.semantic : a.index < b.index;
     });
+    return true;
+}
+
+bool VaryingWidthsAgree(const Shader &vertex, const Shader &pixel)
+{
+    const Reflection &v = vertex.reflection, &p = pixel.reflection;
+    if (v.major < 3 || p.major < 3 || v.stage != Stage::Vertex || p.stage == Stage::Vertex)
+        return false;
+    for (const Varying &read : p.varyings)
+    {
+        if (read.semantic != Semantic::Texcoord && read.semantic != Semantic::Color)
+            continue;
+        bool found = false;
+        for (const Varying &written : v.varyings)
+            if (written.semantic == read.semantic && written.index == read.index)
+            {
+                found = VaryingWidth(written.mask) == VaryingWidth(read.mask);
+                break;
+            }
+        if (!found)
+            return false;
+    }
     return true;
 }
 

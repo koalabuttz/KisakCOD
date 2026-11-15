@@ -235,6 +235,7 @@ struct Variant
     std::vector<uint8_t> gxp; // never resized once registered
     SceGxmShaderPatcherId id = nullptr;
     bool failed = false; // did not compile or register; draws with it skip
+    bool narrow = false; // made with cg::Options::narrowVaryings
     // What the draws write, found once by name.
     const SceGxmProgramParameter *constants = nullptr; // "c"
     const SceGxmProgramParameter *alphaRef = nullptr;  // "kisak_alpha_ref"
@@ -271,6 +272,12 @@ struct Shader
     // that it is usually ready before the first draw. Null when the shader
     // was not translated.
     gfx_gxm::ProgramRequestRef request;
+    // A model 3 shader with a TEXCOORD or COLOR varying narrower than a
+    // float4 (cg::Options::narrowVaryings changes its program). When draws
+    // narrow by default, its program with only that option is asked for
+    // here in place of the plain one, which waits for a draw that wants it.
+    bool narrowable = false;
+    gfx_gxm::ProgramRequestRef narrowRequest;
     std::vector<std::unique_ptr<Variant>> variants;
     // Pixel shaders: the float constants the program reads from the API, as
     // runs (first, count) in ascending order (cg::Reflection::apiConstants).
@@ -416,6 +423,9 @@ bool Describe(const Surface *surface, Target &out);
 
 bool InitDraw(Device &device, std::string &error);
 void ShutdownDraw(Device &device); // after the GPU is idle
+// Whether draws use cg::Options::narrowVaryings now (marker and switch
+// no-narrow-varyings), for asking for a shader's program when it is created.
+bool NarrowVaryingsOn(const Device &device);
 // Lays out a new texture's levels as sceGxm samples them and returns the
 // bytes it needs; SetUpTexture then makes its sampled view or depth surface
 // once the memory is there.

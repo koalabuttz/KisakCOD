@@ -84,6 +84,11 @@ struct Varying
 {
     Semantic semantic;
     uint8_t index;
+    // The components (bit 0 = x) a vertex shader writes or a pixel shader
+    // reads: the declarations' masks from shader model 3 on; before that
+    // the write masks of a vertex shader's instructions, and for a pixel
+    // shader what its instructions can read (never fewer than they do).
+    uint8_t mask = 0;
 };
 
 struct Reflection
@@ -165,7 +170,19 @@ struct Options
     //   7: constants: c[4].x / 2, c[5].y / 2, c[6].z / 2
     //   8: the computed position: z / 4 + 0.5, w / 4 + 0.5, 0.25
     uint8_t diagPosition = 0;
+    // Shader model 3: each TEXCOORD and COLOR varying is as wide as its
+    // declaration reaches (dcl_texcoord0 o1.xy is a float2), not a float4.
+    // The GPU's vertex job then writes and the parameter buffer holds only
+    // those floats. Both programs of a pair must agree on every width, so
+    // a draw asks for it on both or on neither (VaryingWidthsAgree).
+    bool narrowVaryings = false;
 };
+
+// The number of components a varying's mask reaches: 0 to 4.
+inline uint8_t VaryingWidth(uint8_t mask)
+{
+    return mask & 8 ? 4 : mask & 4 ? 3 : mask & 2 ? 2 : mask & 1 ? 1 : 0;
+}
 
 // ---- Parsed form ---------------------------------------------------------------------------
 
@@ -207,6 +224,11 @@ struct Shader
 bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &error);
 
 bool Emit(const Shader &shader, const Options &options, std::string &cg, std::string &error);
+
+// Options::narrowVaryings for this pair: both shaders are model 3 or later
+// and every TEXCOORD and COLOR the pixel shader reads is written by the
+// vertex shader with the same width. When false, both stay float4.
+bool VaryingWidthsAgree(const Shader &vertex, const Shader &pixel);
 
 // A stable 64-bit hash (FNV-1a) for cache keys.
 uint64_t Hash(const void *data, size_t bytes, uint64_t seed = 0xcbf29ce484222325ull);

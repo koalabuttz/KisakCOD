@@ -1240,8 +1240,25 @@ void RequestDefaultVariant(Device &device, Shader &shader, uint64_t hash)
     char label[64];
     std::snprintf(label, sizeof(label), "shader %016llx (%s_%u_%u)", (unsigned long long)hash,
                   shader.pixel ? "ps" : "vs", r.major, r.minor);
-    shader.request = gxm::RequestProgram(std::move(cg),
-                                         shader.pixel ? gxm::ShaderStage::Fragment : gxm::ShaderStage::Vertex, label);
+    const gxm::ShaderStage stage = shader.pixel ? gxm::ShaderStage::Fragment : gxm::ShaderStage::Vertex;
+    if (r.major >= 3)
+        for (const gxm::cg::Varying &v : r.varyings)
+            if ((v.semantic == gxm::cg::Semantic::Texcoord || v.semantic == gxm::cg::Semantic::Color) &&
+                gxm::cg::VaryingWidth(v.mask) && gxm::cg::VaryingWidth(v.mask) < 4)
+                shader.narrowable = true;
+    if (shader.narrowable && NarrowVaryingsOn(device))
+    {
+        gxm::cg::Options narrow;
+        narrow.narrowVaryings = true;
+        std::string narrowCg;
+        if (gxm::cg::Emit(shader.parsed, narrow, narrowCg, reason))
+        {
+            std::strncat(label, " narrow", sizeof(label) - std::strlen(label) - 1);
+            shader.narrowRequest = gxm::RequestProgram(std::move(narrowCg), stage, label);
+            return;
+        }
+    }
+    shader.request = gxm::RequestProgram(std::move(cg), stage, label);
 }
 
 // Once a frame: the programs the cache's thread could not make since the

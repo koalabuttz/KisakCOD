@@ -100,6 +100,18 @@ VITA_CASES = {
     "ps1_vita_coissue_other_lanes": "ps_1_1\ntex t0\nmov r0, t0\nmul r0.rgb, r0, v0\n+mul r0.a, r0.a, v0.a",
     "ps1_vita_bump": "ps_1_1\ntex t0\ntexbem t1, t0\nmov r0, t1",
     "ps1_vita_model_4": "ps_1_4\ntexld r0, t0",
+    # Varyings declared narrower than a float4, for Options::narrowVaryings:
+    # texcoord2 sits in the upper lanes, so it stays four wide.
+    "vs3_vita_narrow": "vs_3_0\ndcl_position v0\ndcl_texcoord v1\ndcl_position o0\ndcl_texcoord0 o1.xy\n"
+                       "dcl_texcoord1 o2.xyz\ndcl_color0 o3\ndcl_texcoord2 o4.zw\ndcl_texcoord3 o5.x\n"
+                       "mov o0, v0\nmov o1.xy, v1\nmov o2.xyz, v1\nmov o3, v1\nmov o4.zw, v1\nmov o5.x, v1.w",
+    "ps3_vita_narrow": "ps_3_0\ndcl_texcoord0 v0.xy\ndcl_texcoord1 v1.xyz\ndcl_color0 v2\ndcl_texcoord2 v3.zw\n"
+                       "dcl_texcoord3 v4.x\ndcl_2d s0\ntexld r0, v0, s0\nmul r0.xyz, r0, v1\nmul r0, r0, v2\n"
+                       "add r0.xy, r0, v3.zwzw\nmad r0.w, r0.w, v4.x, c0.x\nmov oC0, r0",
+    # The same reads, but texcoord0 declared four wide: no pair with the
+    # vertex shader above may be narrowed.
+    "ps3_vita_narrow_wide": "ps_3_0\ndcl_texcoord0 v0\ndcl_texcoord1 v1.xyz\ndcl_2d s0\ntexld r0, v0, s0\n"
+                            "mul r0.xyz, r0, v1\nmov oC0, r0",
 }
 
 # (case, extra tool arguments, text the program must contain, text the
@@ -139,9 +151,9 @@ CHECKS = [
     ("vs3_skinning_256", [], "c[a0.y + 16]", "constants=256 relative=1"),
     ("vs3_m4x3_m3x4_m3x2", [], "dot((v1).xyz, (c[13]).xyz)", "constants=14"),
     ("vs3_m4x3_m3x4_m3x2", [], "dot((v1).xyz, (c[13]).xyz)", " api="),
-    ("ps1_vita_modulate", [], "(1.0 - c[1].wwww)", " api=1\n"),
-    ("ps3_def_const", [], "const float4 k20", " api=\n"),
-    ("vs3_skinning_256", [], "c[a0.y + 16]", " api=\n"),
+    ("ps1_vita_modulate", [], "(1.0 - c[1].wwww)", " api=1 widths="),
+    ("ps3_def_const", [], "const float4 k20", " api= widths="),
+    ("vs3_skinning_256", [], "c[a0.y + 16]", " api= widths="),
     ("ps2_texldp_color", [], "tex2D(s0, (t0).xy / (t0).w)", "varyings=TEXCOORD0,COLOR0"),
     ("ps3_texld_cube", [], "texCUBE(s0, (v0).xyz)", "samplers=0:cube"),
     ("ps3_texld_volume", [], "kisak_tex3D(s0, (v0).xyz, kisak_depth_s0)", "samplers=0:volume"),
@@ -168,6 +180,31 @@ CHECKS = [
      "    out_POSITION = float4(v0.x / 480.0 - 1.0, 1.0 - v0.y / 272.0, 0.5, 1.0);", "constants=6"),
     ("vs2_oT_oD_fog", ["--diag-position", "8"],
      "out_TEXCOORD0 = float4(out_POSITION.z * 0.25 + 0.5, out_POSITION.w * 0.25 + 0.5, 0.25, 1.0);", "constants=6"),
+    # Narrow varyings: as wide as each declaration reaches, on both sides.
+    ("vs3_vita_narrow", [], "out float4 out_TEXCOORD0 : TEXCOORD0",
+     "widths=TEXCOORD0:2,TEXCOORD1:3,TEXCOORD2:4,TEXCOORD3:1,COLOR0:4"),
+    ("vs3_vita_narrow", ["--narrow"], "out float2 out_TEXCOORD0 : TEXCOORD0", "varyings="),
+    ("vs3_vita_narrow", ["--narrow"], "    out_TEXCOORD0 = o1.xy;\n", "varyings="),
+    ("vs3_vita_narrow", ["--narrow"], "out float3 out_TEXCOORD1 : TEXCOORD1", "varyings="),
+    ("vs3_vita_narrow", ["--narrow"], "    out_TEXCOORD1 = o2.xyz;\n", "varyings="),
+    ("vs3_vita_narrow", ["--narrow"], "    out_TEXCOORD2 = float4(0.0, 0.0, 0.0, 1.0);\n    out_TEXCOORD2.zw = o4.zw;\n",
+     "varyings="),
+    ("vs3_vita_narrow", ["--narrow"], "out float out_TEXCOORD3 : TEXCOORD3", "varyings="),
+    ("vs3_vita_narrow", ["--narrow"], "    out_TEXCOORD3 = o5.x;\n", "varyings="),
+    ("vs3_vita_narrow", ["--narrow"], "out float4 out_COLOR0 : COLOR0", "varyings="),
+    ("ps3_vita_narrow", [], "float4 in_TEXCOORD0 : TEXCOORD0", "widths=TEXCOORD0:2,TEXCOORD1:3,TEXCOORD2:4,"
+     "TEXCOORD3:1,COLOR0:4"),
+    ("ps3_vita_narrow", ["--narrow"], "float2 in_TEXCOORD0 : TEXCOORD0", "varyings="),
+    ("ps3_vita_narrow", ["--narrow"], "    v0.xy = in_TEXCOORD0.xy;\n", "varyings="),
+    ("ps3_vita_narrow", ["--narrow"], "float3 in_TEXCOORD1 : TEXCOORD1", "varyings="),
+    ("ps3_vita_narrow", ["--narrow"], "float4 in_TEXCOORD2 : TEXCOORD2", "varyings="),
+    ("ps3_vita_narrow", ["--narrow"], "float in_TEXCOORD3 : TEXCOORD3", "varyings="),
+    ("ps3_vita_narrow", ["--narrow"], "    v4.x = kisak_splat(in_TEXCOORD3).x;\n", "varyings="),
+    ("vs3_vita_narrow", ["--agree", "@ps3_vita_narrow"], "out_TEXCOORD0", " agree=1"),
+    ("ps3_vita_narrow", ["--agree", "@vs3_vita_narrow"], "in_TEXCOORD0", " agree=1"),
+    ("vs3_vita_narrow", ["--agree", "@ps3_vita_narrow_wide"], "out_TEXCOORD0", " agree=0"),
+    ("vs2_oT_oD_fog", ["--agree", "@ps3_vita_narrow"], "out_TEXCOORD0", " agree=0"),
+    ("vs2_oT_oD_fog", ["--narrow"], "out float4 out_TEXCOORD0 : TEXCOORD0", "varyings="),
 ]
 
 
@@ -242,6 +279,8 @@ def main() -> int:
                     failures.append(f"{name}: glslang rejects the program:\n{log.strip()}")
 
         for name, extra, text, reflection in CHECKS:
+            # "@case" stands for that case's bytecode file.
+            extra = [str(binaries[a[1:]]) if a.startswith("@") else a for a in extra]
             result = run_tool(tool, binaries[name], extra)
             if result.returncode:
                 failures.append(f"{name} {extra}: not translated: {result.stderr.strip()}")

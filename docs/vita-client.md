@@ -952,6 +952,27 @@ What the GXM back end does so far (step 2d):
   quit summary counts these draws apart. An empty file
   `no-alpha-test-zero`, or `vita_gxm no-alpha-test-zero 1`, turns it
   off. What it saves on the console is not measured yet.
+- **Varyings only as wide as declared.** The translator wrote every
+  TEXCOORD and COLOR a vertex program hands to its fragment program as a
+  float4. A model 3 shader declares how many components each one has
+  (`dcl_texcoord0 o1.xy`), and the GPU's vertex job writes every float of
+  a varying into the parameter buffer, which the fragment job reads back.
+  A census in Vita3K (run Z68, 2026-11-15, mp_crash's heaviest view) found
+  the draws outside the depth pass writing 5.54 million texture coordinate
+  floats a frame where their declarations come to 4.32 million, about 15
+  floats a vertex against 11.5. With `narrowVaryings` in the translator's
+  options each varying is as wide as its declaration reaches (a varying in
+  the upper components, `o4.zw`, stays four wide). A vertex and a fragment
+  program must agree on every width, so a draw narrows both programs or
+  neither (`VaryingWidthsAgree`: both shaders model 3, and every TEXCOORD
+  and COLOR the pixel shader reads written by the vertex shader at the
+  same width); a shader whose varyings are all four wide keeps its one
+  program. A shader with a narrower varying asks for its narrow program
+  when it is created, in place of the plain one. The picture should not
+  change: a fragment program reads only the components it declares. The
+  quit summary counts the draws and the combinations narrowed and left
+  four wide. An empty file `no-narrow-varyings`, or
+  `vita_gxm no-narrow-varyings 1`, turns it off.
 - **Depth first.** The scene's depth is always drawn before its lit pass
   on the Vita (src/gfx_gxm/gxm_engine_options.h), whatever r_depthPrepass
   says, so that the GPU skips hidden pixels of the lit pass early. Console

@@ -222,6 +222,7 @@ struct PipelineKey
     uint8_t alphaFunc; // the pixel shader variant's alpha test
     uint8_t index32;
     uint16_t sharp; // and the samplers it reads through the sharpening filter
+    uint8_t narrow; // DrawState::narrowVaryings when it was looked up
 };
 struct Pipeline
 {
@@ -383,6 +384,13 @@ struct DrawState
     // that was left out, 3: one that writes zero.
     uint8_t lastDrawAlphaTest = 0;
     uint64_t alphaTestDraws = 0, idleAlphaTestDraws = 0, zeroAlphaTestDraws = 0;
+    // A pair of model 3 shaders that agree on every varying's width draws
+    // with programs whose TEXCOORD and COLOR varyings are only that wide
+    // (cg::Options::narrowVaryings): less for the GPU's vertex job to write
+    // and for the parameter buffer to hold. The marker and switch
+    // no-narrow-varyings turn it off.
+    bool narrowVaryings = true;
+    uint64_t narrowDraws = 0, narrowPairs = 0, widePairs = 0;
     bool lastDrawIndex32 = false;
     uint32_t lastDrawType = 0, lastDrawUpStride = 0;
     uint64_t lastDrawSerial = 0, lastDrawScene = 0;
@@ -838,7 +846,8 @@ uint64_t VariantKey(const gxm::cg::Options &options)
            (options.alphaFunc == gxm::cg::AlphaFunc::Always ? 0 : uint64_t(options.alphaFunc)) ^
            (uint64_t(options.sharpSamplers) * 0xff51afd7ed558ccdull) ^
            (options.alphaZero ? 0x00a5000000000000ull : 0) ^
-           (options.farPlaneInside ? 0x5a5a000000000000ull : 0) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
+           (options.farPlaneInside ? 0x5a5a000000000000ull : 0) ^
+           (options.narrowVaryings ? 0xc2b2ae3d27d4eb4full : 0) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
 }
 
 // The shader's program for these options. It is asked for on first use and
@@ -863,8 +872,16 @@ Variant *GetVariant(Device &device, Shader &shader, const gxm::cg::Options &opti
     {
         std::unique_ptr<Variant> variant(new Variant);
         variant->key = key;
-        if (key == 0)
+        variant->narrow = options.narrowVaryings;
+        static const uint64_t narrowKey = [] {
+            gxm::cg::Options narrow;
+            narrow.narrowVaryings = true;
+            return VariantKey(narrow);
+        }();
+        if (key == 0 && shader.request)
             variant->request = shader.request;
+        else if (key == narrowKey && shader.narrowRequest)
+            variant->request = shader.narrowRequest;
         else
         {
             const gxm::ShaderStage stage = shader.pixel ? gxm::ShaderStage::Fragment : gxm::ShaderStage::Vertex;
@@ -2121,6 +2138,11 @@ bool InitDraw(Device &device, std::string &error)
         d.fragDirect = true;
         Log(device, "diag: frag-direct-write is there: pixel constants are copied into the uniform buffer directly");
     }
+    if (gxm::ProgramCacheMarker("no-narrow-varyings"))
+    {
+        d.narrowVaryings = false;
+        Log(device, "diag: no-narrow-varyings is there: every varying is a float4");
+    }
     if (gxm::ProgramCacheMarker("no-alpha-test-zero"))
     {
         d.zeroAlphaTest = false;
@@ -2864,7 +2886,7 @@ const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "n
                                      "no-mip-bias",         "no-filter-sharpen",
                                      "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
                                      "gpu-watch",           "no-prepass-clear",  "no-depth-only-scene",
-                                     "no-scene-in-copy",    "no-alpha-test-drop", "no-alpha-test-zero",
+                                     "no-scene-in-copy",    "no-alpha-test-drop", "no-alpha-test-zero", "no-narrow-varyings",
                                      "no-frag-keep-depth",  "no-frag-keep-same",  "frag-direct-write"};
 struct LiveSwitch
 {
@@ -2939,6 +2961,16 @@ void ApplyLiveSwitches(Device &device)
                 "zero",
                 (unsigned long long)d.alphaTestDraws, (unsigned long long)d.idleAlphaTestDraws,
                 (unsigned long long)d.zeroAlphaTestDraws);
+        }
+        else if (name == "no-narrow-varyings")
+        {
+            // The table of combinations keys on it; the last draw's
+            // programs do not.
+            d.narrowVaryings = !s.on;
+            d.lastDrawValid = false;
+            Log(device, "diag: narrow varyings so far: %llu draws; %llu combinations narrowed, %llu left four wide",
+                (unsigned long long)d.narrowDraws, (unsigned long long)d.narrowPairs,
+                (unsigned long long)d.widePairs);
         }
         else if (name == "no-filter-stretch")
             gfx_gxm::g_stretchInFilter = !s.on;
@@ -3476,6 +3508,11 @@ void LogCensus(Device &device, const Shader &vs, const Shader &ps, const Variant
     Log(device, "census %u textures:%s", n, textures.empty() ? " none" : textures.c_str());
 }
 
+bool NarrowVaryingsOn(const Device &device)
+{
+    return device.draw && device.draw->narrowVaryings;
+}
+
 void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t startIndex, uint32_t primitiveCount,
           bool indexed, const void *upVertices, uint32_t upStride)
 {
@@ -3639,13 +3676,26 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             pipelineKey.alphaFunc = uint8_t(uint8_t(pixelOptions.alphaFunc) | (pixelOptions.alphaZero ? 0x80 : 0));
             pipelineKey.sharp = sharpSamplers;
             pipelineKey.index32 = index32;
+            pipelineKey.narrow = d.narrowVaryings;
             pipeline = &PipelineSlot(d, pipelineKey);
             known = std::memcmp(&pipeline->key, &pipelineKey, sizeof(pipelineKey)) == 0;
             ++d.pipelineLookups;
             d.pipelineHits += known;
         }
         if (!known)
+        {
             PlanInputs(device, *vs, *device.decl, plan);
+            // Both programs narrow, or neither (their widths must match).
+            if (d.narrowVaryings && !test)
+            {
+                // A shader with every varying four wide has one program
+                // either way: it keeps the plain one.
+                const bool agree = gxm::cg::VaryingWidthsAgree(vs->parsed, ps->parsed);
+                plan.options.narrowVaryings = agree && vs->narrowable;
+                pixelOptions.narrowVaryings = agree && ps->narrowable;
+                ++(agree ? d.narrowPairs : d.widePairs);
+            }
+        }
         vertex = known ? pipeline->vertex : nullptr;
         if (test)
         {
@@ -4085,6 +4135,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     }
     ++d.drawn;
     d.alphaTestDraws += d.lastDrawAlphaTest == 1;
+    d.narrowDraws += pixel->narrow;
     d.idleAlphaTestDraws += d.lastDrawAlphaTest == 2;
     d.zeroAlphaTestDraws += d.lastDrawAlphaTest == 3;
     if (target)
@@ -4329,6 +4380,11 @@ void LogDrawSummary(Device &device)
         (unsigned long long)d->alphaTestDraws, (unsigned long long)d->idleAlphaTestDraws,
         d->dropIdleAlphaTest ? "" : " (no-alpha-test-drop)", (unsigned long long)d->zeroAlphaTestDraws,
         d->zeroAlphaTest ? "" : " (no-alpha-test-zero)");
+    Log(device,
+        "narrow varyings: %llu draws with programs whose varyings are only as wide as declared%s; %llu combinations "
+        "narrowed, %llu left four wide",
+        (unsigned long long)d->narrowDraws, d->narrowVaryings ? "" : " (no-narrow-varyings)",
+        (unsigned long long)d->narrowPairs, (unsigned long long)d->widePairs);
     {
         const DrawState::FragmentCounts &c = d->fragmentCounts, &t = d->fragmentTotals;
         const uint64_t timed = c.timed + t.timed;

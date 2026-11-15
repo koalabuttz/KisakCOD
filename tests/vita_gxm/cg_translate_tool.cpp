@@ -2,7 +2,7 @@
 // (src/gfx_gxm/shader/gxm_cg_translate.h), used by
 // scripts/tests/test_vita_cg_translate.py.
 //
-//   cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--sharp MASK] [--far-plane-inside] [--diag-position N] shader.bin
+//   cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--sharp MASK] [--far-plane-inside] [--diag-position N] [--narrow] [--agree other.bin] shader.bin
 //
 // Writes the Cg program to stdout and one line of reflection to stderr, or
 // "refused: <reason>" to stderr and exits 2.
@@ -21,7 +21,7 @@ int main(int argc, char **argv)
 {
     using namespace gfx_gxm::cg;
     Options options;
-    const char *path = nullptr;
+    const char *path = nullptr, *other = nullptr;
     for (int i = 1; i < argc; ++i)
     {
         if (!std::strcmp(argv[i], "--bgra") && i + 1 < argc)
@@ -53,12 +53,16 @@ int main(int argc, char **argv)
             options.farPlaneInside = true;
         else if (!std::strcmp(argv[i], "--diag-position") && i + 1 < argc)
             options.diagPosition = uint8_t(std::strtoul(argv[++i], nullptr, 0));
+        else if (!std::strcmp(argv[i], "--narrow"))
+            options.narrowVaryings = true;
+        else if (!std::strcmp(argv[i], "--agree") && i + 1 < argc)
+            other = argv[++i];
         else
             path = argv[i];
     }
     if (!path)
     {
-        std::fprintf(stderr, "usage: cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--sharp MASK] [--far-plane-inside] [--diag-position N] shader.bin\n");
+        std::fprintf(stderr, "usage: cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--sharp MASK] [--far-plane-inside] [--diag-position N] [--narrow] [--agree other.bin] shader.bin\n");
         return 1;
     }
     std::ifstream file(path, std::ios::binary);
@@ -78,8 +82,28 @@ int main(int argc, char **argv)
                         (r.samplers[i] == SamplerType::Cube     ? "cube"
                          : r.samplers[i] == SamplerType::Volume ? "volume"
                                                                 : "2d");
+    std::string widths;
     for (const Varying &v : r.varyings)
+    {
         varyings += (varyings.empty() ? "" : ",") + std::string(SemanticName(v.semantic)) + std::to_string(v.index);
+        widths += (widths.empty() ? "" : ",") + std::string(SemanticName(v.semantic)) + std::to_string(v.index) +
+                  ":" + std::to_string(VaryingWidth(v.mask));
+    }
+    // --agree: whether this shader and the other one, as a vertex and pixel
+    // pair in either order, may both be narrowed.
+    std::string agree;
+    if (other)
+    {
+        std::ifstream otherFile(other, std::ios::binary);
+        const std::vector<char> otherBytes((std::istreambuf_iterator<char>(otherFile)), std::istreambuf_iterator<char>());
+        Shader second;
+        std::string otherError;
+        if (!Parse(otherBytes.data(), otherBytes.size(), second, otherError))
+            agree = " agree=refused";
+        else
+            agree = r.stage == Stage::Vertex ? (VaryingWidthsAgree(shader, second) ? " agree=1" : " agree=0")
+                                             : (VaryingWidthsAgree(second, shader) ? " agree=1" : " agree=0");
+    }
     for (const VertexInput &v : r.inputs)
         inputs += (inputs.empty() ? "" : ",") + std::to_string(v.reg) + ":" + std::to_string(v.usage) + "." +
                   std::to_string(v.usageIndex);
@@ -87,9 +111,10 @@ int main(int argc, char **argv)
     for (const uint16_t number : r.apiConstants)
         fromApi += (fromApi.empty() ? "" : ",") + std::to_string(number);
     std::fprintf(stderr,
-                 "constants=%u relative=%d samplers=%s varyings=%s inputs=%s kills=%d instructions=%u api=%s\n",
+                 "constants=%u relative=%d samplers=%s varyings=%s inputs=%s kills=%d instructions=%u api=%s "
+                 "widths=%s%s\n",
                  r.floatConstants, r.relativeConstants ? 1 : 0, samplers.c_str(), varyings.c_str(), inputs.c_str(),
-                 r.kills ? 1 : 0, r.instructions, fromApi.c_str());
+                 r.kills ? 1 : 0, r.instructions, fromApi.c_str(), widths.c_str(), agree.c_str());
     std::fwrite(cg.data(), 1, cg.size(), stdout);
     return 0;
 }
