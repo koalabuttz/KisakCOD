@@ -134,6 +134,7 @@ types. Cast and use `%u` or `%llu`; the same test reads `src/vita` and
 | `vita_atMap "..."` | The same after the map was first in play. `{serverid}` in a command stands for the server id. Read at start-up only. |
 | `vita_atMenu "@<file>"`, `vita_atMap "@<file>"` | The same steps from a file in the data folder (`ux0:data/KisakCOD/<file>`), one `<s> <command>` a line, up to 32; blank lines and lines starting with `#` are left out, and a line may not hold a `\|`. The name is letters, digits, `.`, `_` and `-` only. The log says `Vita: vita_atMap from ux0:data/KisakCOD/<file>: N steps`. Read at start-up only. |
 | `vita_assertExit 1` | A failed assertion or an exception nothing caught ends the process with exit code 1 where it would stop for a core dump. Vita3K hangs on that stop and loses the log's tail. Off by default: a console's dump is worth keeping. |
+| `vita_logDirect 1` | Every `console.log` line is written to the memory card by the thread that prints it, as the port did at first, and not by the log's own thread. Slower (a line is two writes of a millisecond or more), but a fault cannot take the last lines with it. Read at start-up only. |
 
 Every quit timer first prints all figures (`Vita: vita_quitAfterMenu 15
 reached, last figures:`, then the load and memory lines, the sound's line and
@@ -148,8 +149,8 @@ happened: `Vita: the menu is up`, `Vita: the map is up`, and with the map
 server named. After start-up it says what the start was asked to do, since it
 does not hold the command line (`Vita: run switches: vita_quitAfter 600,
 vita_quitAfterMenu 0, vita_quitAfterMap 30, vita_statsEvery 10,
-vita_assertExit 1`, then `Vita: vita_atMap "..."` when one is set, or the
-step file's name and step count).
+vita_assertExit 1, vita_logDirect 0`, then `Vita: vita_atMap "..."` when one is
+set, or the step file's name and step count).
 
 An exception nothing caught (a `std::bad_alloc` when the heap is spent) logs
 `Vita: ERROR: uncaught exception (std::bad_alloc); the process ends` and the
@@ -161,6 +162,25 @@ other than 0 Vita3K's own process stays and has to be killed, so a runner
 ends a start when Vita3K logs `The app exited with code N`. What neither
 switch can end is a fault or a plain `abort()`: a runner still needs its own
 time limit and a kill.
+
+The log's lines reach the memory card from a thread of their own
+(`src/vita/vita_log_writer.h`, the "log writer" in the thread times). A write
+to the card takes a millisecond or two when all is well and tens of
+milliseconds when it is not, and every printed line was two writes on the
+thread that printed it: console run AY (2026-11-14) had single writes of 40 ms
+and three frames of 330 to 410 ms right after a map came up, each with 4.3 KB
+of lines from the main thread. Now a print copies its text into 32 KB of
+memory and returns, and the thread writes what has gathered in one piece. The
+thread starts once the settings are read, so the first lines of a start go
+straight to the card as before. If more than 32 KB wait, the thread that
+prints writes them out itself, and the exit line `Vita: console.log: N times a
+print waited for the card` counts that. Every exit the port makes, a failed
+assertion and an uncaught exception write the waiting text out first. A fault
+does not: the thread runs one step ahead of the engine's threads so that a
+line is on its way as soon as it is printed, but the last lines before a fault
+can still be missing. `+set vita_logDirect 1` writes every line from the
+thread that prints it again, for hunting such a fault. The writer is checked
+on the host by `scripts/tests/test_vita_log_writer.py`.
 
 A menu start that is done 15 seconds after the menu shows:
 
@@ -577,7 +597,7 @@ the challenge random number (`sceKernelGetRandomNumber`).
 | Network | BSD sockets through newlib. No `getifaddrs`: the local addresses are loopback and the Wi-Fi address from `sceNetCtlInetGetInfo`. No `MSG_TRUNC`: a datagram that fills the receive buffer is dropped as oversize. |
 | Threads | newlib pthreads. Worker threads get a 1 MB stack (the Windows default); they cannot be renamed. Three cores are reported to the engine (applications run on three of the four). Every thread turns pthread cancellation off when it starts (`Vita_QuietWaits`): with it on, VitaSDK's pthreads wake a waiting thread every 500 microseconds to look for a cancel request, and an idle thread ran 3.6% of the time (console run AZ). Nothing in the port cancels a thread. Timed waits: VitaSDK's `pthread_cond_timedwait` reads its deadline against `CLOCK_REALTIME` whatever clock the condition variable was given, and the port's deadlines are `CLOCK_MONOTONIC`, which on the Vita counts from the start of the process. So no timed wait ever waited: it came back after one 500 microsecond poll with cancellation on, and at once with it off, which left a worker thread spinning on a whole core (console run BC). `Posix_CondTimedWaitMonotonic` (`src/linux/sys_posix.cpp`) hands the time left over as a wall clock deadline on the Vita, and the start-up log has a line `Vita: a 5 ms timed wait took N us`. |
 | Time | `__rdtsc` reads `sceKernelGetProcessTimeWide` (microseconds). |
-| Console | No terminal and no stdin: output goes to `console.log`, commands come from `cmdline.txt` and rcon. |
+| Console | No terminal and no stdin: output goes to `console.log` (written by a thread of its own, see "Reading console.log"), commands come from `cmdline.txt` and rcon. |
 | Quit | No signals: START + SELECT queues `quit`. The server also keeps the console from auto-suspending. Quit and fatal errors end the process with `sceKernelExitProcess`: newlib's `exit` frees the heap before the kernel stops the other threads, and a worker running in that gap faults (Vita3K showed it). |
 | Steam | Off. Admission is unchanged (retail rules; see the Linux guide). |
 
