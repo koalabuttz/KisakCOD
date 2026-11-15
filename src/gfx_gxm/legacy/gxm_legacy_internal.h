@@ -235,6 +235,10 @@ struct Variant
     std::vector<uint8_t> gxp; // never resized once registered
     SceGxmShaderPatcherId id = nullptr;
     bool failed = false; // did not compile or register; draws with it skip
+    // Made with the pixel shader's hoist plan (cg::PlanHoist): a vertex
+    // program that works texture coordinates out, or a fragment program
+    // that reads at them. The two only run together.
+    bool hoisted = false;
     // What the draws write, found once by name.
     const SceGxmProgramParameter *constants = nullptr; // "c"
     const SceGxmProgramParameter *alphaRef = nullptr;  // "kisak_alpha_ref"
@@ -260,6 +264,9 @@ struct Shader
     // was not translated.
     gfx_gxm::ProgramRequestRef request;
     std::vector<std::unique_ptr<Variant>> variants;
+    // Pixel shaders: the texture reads whose coordinates a vertex program
+    // can work out (cg::PlanHoist), found when the shader is created.
+    gfx_gxm::cg::HoistPlan hoist;
 };
 
 struct VertexDecl
@@ -317,6 +324,8 @@ struct Device
     struct ShaderCounts
     {
         uint32_t created = 0, refused = 0;
+        // Pixel shaders with a hoist plan, and the reads in those plans.
+        uint32_t hoistable = 0, hoistableReads = 0;
         uint32_t loggedFailures = 0;
         // Draws left out of a frame because a program of theirs was still
         // being made, and the frames that had such a draw.

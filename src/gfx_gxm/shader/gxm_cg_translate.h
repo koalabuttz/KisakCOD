@@ -35,7 +35,9 @@
 //   - varyings: GXM semantics, TEXCOORD0-9, COLOR0-1, FOG, PSIZE, from the
 //     D3D9 usage (texcoord n -> TEXCOORDn, color n -> COLORn);
 //   - alpha test: the uniform "kisak_alpha_ref" (0 to 1) when
-//     Options::alphaFunc tests anything.
+//     Options::alphaFunc tests anything;
+//   - texture coordinates a pixel shader works out the same way at every
+//     pixel can be worked out by the vertex program (PlanHoist below).
 //
 // Nothing here knows sceGxm or the engine, so it builds and is tested on the
 // host (scripts/tests/test_vita_cg_translate.py). Thread-safe per Shader.
@@ -155,6 +157,10 @@ struct Options
     //   7: constants: c[4].x / 2, c[5].y / 2, c[6].z / 2
     //   8: the computed position: z / 4 + 0.5, w / 4 + 0.5, 0.25
     uint8_t diagPosition = 0;
+    // Both stages: the pixel shader's texture reads whose coordinates the
+    // vertex program hands over (PlanHoist). Null for none. Only read
+    // during Emit.
+    const struct HoistPlan *hoist = nullptr;
 };
 
 // ---- Parsed form ---------------------------------------------------------------------------
@@ -197,6 +203,53 @@ struct Shader
 bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &error);
 
 bool Emit(const Shader &shader, const Options &options, std::string &cg, std::string &error);
+
+// ---- Texture coordinates worked out by the vertex program ---------------------------------
+//
+// The Vita's GPU fetches a texture before the fragment program runs when the
+// coordinate is the first two components of an interpolated input. A read at
+// any other coordinate, another pair of components or one the program works
+// out, is fetched while it runs, which costs far more (console run CN). Many
+// of the game's lit shaders read their lightmaps at the last two components
+// of texture coordinate 0, scaled and moved by literal constants. Such a
+// coordinate is the same function of that input at every pixel, and a sum of
+// its components times constants, so interpolating the result gives what
+// working it out at each pixel gives. The vertex program can write it to a
+// texture coordinate of its own, and the fragment program reads at that.
+//
+// PlanHoist finds those reads in a pixel shader: plain texld of a 2D sampler
+// whose coordinate is made from one TEXCOORD input by mov, add, sub and mul
+// or mad by literal constants. Each distinct coordinate takes a TEXCOORD
+// the pixel shader does not read, from 9 down. CanHoist says whether a vertex
+// shader can feed a plan: it writes each coordinate's input and none of the
+// plan's own slots. Options::hoist then goes to both programs' Emit.
+struct HoistCoord
+{
+    uint8_t root = 0; // made from TEXCOORD<root>
+    uint8_t slot = 0; // handed over in TEXCOORD<slot>, as a float2
+    // x = root.x * x[0] + root.y * x[1] + root.z * x[2] + root.w * x[3] + x[4]
+    float x[5] = {}, y[5] = {};
+};
+
+struct HoistRead
+{
+    uint32_t instruction; // index in Shader::instructions
+    uint8_t coord;        // index in HoistPlan::coords
+};
+
+struct HoistPlan
+{
+    std::vector<HoistCoord> coords;
+    std::vector<HoistRead> reads; // sorted by instruction
+    uint64_t hash = 0; // of the coordinates; never 0 for a plan with any
+    bool Empty() const
+    {
+        return coords.empty();
+    }
+};
+
+HoistPlan PlanHoist(const Shader &pixel);
+bool CanHoist(const Shader &vertex, const HoistPlan &plan);
 
 // A stable 64-bit hash (FNV-1a) for cache keys.
 uint64_t Hash(const void *data, size_t bytes, uint64_t seed = 0xcbf29ce484222325ull);

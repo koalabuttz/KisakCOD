@@ -1214,6 +1214,12 @@ void RequestDefaultVariant(Device &device, Shader &shader, uint64_t hash)
         return;
     }
     shader.translated = true;
+    if (shader.pixel)
+    {
+        shader.hoist = gxm::cg::PlanHoist(shader.parsed);
+        counts.hoistable += !shader.hoist.Empty();
+        counts.hoistableReads += uint32_t(shader.hoist.reads.size());
+    }
     char label[64];
     std::snprintf(label, sizeof(label), "shader %016llx (%s_%u_%u)", (unsigned long long)hash,
                   shader.pixel ? "ps" : "vs", r.major, r.minor);

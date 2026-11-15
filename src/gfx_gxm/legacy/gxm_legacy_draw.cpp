@@ -210,7 +210,8 @@ struct PipelineKey
     uint32_t strides[kMaxStreams];
     uint8_t alphaFunc; // the pixel shader variant's alpha test
     uint8_t index32;
-    uint8_t pad[2];
+    uint8_t hoist; // DrawState::readHoist when the draw came by
+    uint8_t pad;
 };
 struct Pipeline
 {
@@ -346,6 +347,14 @@ struct DrawState
     // zero for a rejected pixel in place of the discard. The marker and
     // switch no-alpha-test-zero turn it off.
     bool zeroAlphaTest = true;
+    // Texture coordinates a pixel shader works out the same way at every
+    // pixel are worked out by the vertex program, so that the GPU fetches
+    // those textures ahead of the fragment program (cg::PlanHoist). The
+    // marker and switch no-read-hoist turn it off. Counted: draws whose
+    // programs do it, and combinations whose vertex shader could not feed
+    // the pixel shader's plan.
+    bool readHoist = true;
+    uint64_t hoistedDraws = 0, hoistUnfed = 0;
     // 0: the last draw had no alpha test, 1: one with a discard, 2: one
     // that was left out, 3: one that writes zero.
     uint8_t lastDrawAlphaTest = 0;
@@ -778,7 +787,7 @@ uint64_t VariantKey(const gxm::cg::Options &options)
         components |= uint64_t(options.inputComponents[i] & 3) << (2 * i);
     return (uint64_t(options.bgraInputs) | uint64_t(options.absentInputs) << 16) ^ (components << 32) ^
            (options.alphaFunc == gxm::cg::AlphaFunc::Always ? 0 : uint64_t(options.alphaFunc)) ^
-           (options.alphaZero ? 0x00a5000000000000ull : 0) ^
+           (options.alphaZero ? 0x00a5000000000000ull : 0) ^ (options.hoist ? options.hoist->hash : 0) ^
            (options.farPlaneInside ? 0x5a5a000000000000ull : 0) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
 }
 
@@ -804,6 +813,7 @@ Variant *GetVariant(Device &device, Shader &shader, const gxm::cg::Options &opti
     {
         std::unique_ptr<Variant> variant(new Variant);
         variant->key = key;
+        variant->hoisted = options.hoist != nullptr;
         if (key == 0)
             variant->request = shader.request;
         else
@@ -1908,6 +1918,12 @@ bool InitDraw(Device &device, std::string &error)
         Log(device, "diag: no-alpha-test-zero is there: an alpha test on a blended draw is a discard, not a pixel "
                     "of zero");
     }
+    if (gxm::ProgramCacheMarker("no-read-hoist"))
+    {
+        d.readHoist = false;
+        Log(device, "diag: no-read-hoist is there: fragment programs work out every texture coordinate the pixel "
+                    "shader works out");
+    }
     if (gxm::ProgramCacheMarker("no-draw-reuse"))
     {
         d.reuse = false;
@@ -2579,7 +2595,8 @@ const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "n
                                      "no-draw-reuse",     "no-filter-stretch", "no-gpu-boost",
                                      "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
                                      "gpu-watch",           "no-prepass-clear",  "no-depth-only-scene",
-                                     "no-scene-in-copy",    "no-alpha-test-drop", "no-alpha-test-zero"};
+                                     "no-scene-in-copy",    "no-alpha-test-drop", "no-alpha-test-zero",
+                                     "no-read-hoist"};
 struct LiveSwitch
 {
     const char *name;
@@ -2642,6 +2659,15 @@ void ApplyLiveSwitches(Device &device)
                 "zero",
                 (unsigned long long)d.alphaTestDraws, (unsigned long long)d.idleAlphaTestDraws,
                 (unsigned long long)d.zeroAlphaTestDraws);
+        }
+        else if (name == "no-read-hoist")
+        {
+            // The table of combinations keys on it; the last draw's
+            // programs do not.
+            d.readHoist = !s.on;
+            d.lastDrawValid = false;
+            Log(device, "diag: read hoist so far: %llu draws with texture coordinates from the vertex program",
+                (unsigned long long)d.hoistedDraws);
         }
         else if (name == "no-filter-stretch")
             gfx_gxm::g_stretchInFilter = !s.on;
@@ -3321,6 +3347,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             std::memcpy(pipelineKey.strides, strides, sizeof(strides));
             pipelineKey.alphaFunc = uint8_t(uint8_t(pixelOptions.alphaFunc) | (pixelOptions.alphaZero ? 0x80 : 0));
             pipelineKey.index32 = index32;
+            pipelineKey.hoist = d.readHoist;
             pipeline = &PipelineSlot(d, pipelineKey);
             known = std::memcmp(&pipeline->key, &pipelineKey, sizeof(pipelineKey)) == 0;
             ++d.pipelineLookups;
@@ -3343,11 +3370,38 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
                     vsUsed = &synthetic;
             }
         }
+        // The pixel shader's texture coordinates that this vertex shader
+        // can work out for it: both programs are then the hoisted ones.
+        // While either is being made the draw runs with the plain pair,
+        // which is not kept in the table; it keeps the plain pair when one
+        // of them cannot be had.
+        bool settled = true;
+        if (!known && d.readHoist && !test && !ps->hoist.Empty())
+        {
+            if (gxm::cg::CanHoist(vs->parsed, ps->hoist))
+            {
+                gxm::cg::Options vertexOptions = plan.options, hoistedOptions = pixelOptions;
+                vertexOptions.hoist = hoistedOptions.hoist = &ps->hoist;
+                bool making = false;
+                Variant *const hoistedVertex = GetVariant(device, *vs, vertexOptions, making);
+                Variant *const hoistedPixel = GetVariant(device, *ps, hoistedOptions, making);
+                if (hoistedVertex && hoistedPixel)
+                {
+                    vertex = hoistedVertex;
+                    pixel = hoistedPixel;
+                }
+                else
+                    settled = !making;
+            }
+            else
+                ++d.hoistUnfed;
+        }
         // Both programs are asked for before either is waited on.
         bool waiting = false;
         if (!vertex)
             vertex = GetVariant(device, *vsUsed, plan.options, waiting);
-        pixel = known ? pipeline->pixel : GetVariant(device, *ps, pixelOptions, waiting);
+        if (!pixel)
+            pixel = known ? pipeline->pixel : GetVariant(device, *ps, pixelOptions, waiting);
         if (!vertex || !pixel)
         {
             if (waiting)
@@ -3413,7 +3467,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
                 : GetFragmentProgram(device, *pixel, passThrough ? *standIn : *vertex, blended ? &blend : nullptr);
         if (!fragmentProgram)
             return;
-        if (plain)
+        if (plain && settled)
         {
             pipeline->key = pipelineKey;
             pipeline->vertex = vertex;
@@ -3677,6 +3731,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     d.alphaTestDraws += d.lastDrawAlphaTest == 1;
     d.idleAlphaTestDraws += d.lastDrawAlphaTest == 2;
     d.zeroAlphaTestDraws += d.lastDrawAlphaTest == 3;
+    d.hoistedDraws += pixel->hoisted;
     if (target)
         target->unfilled = false;
     part(gxm::FrameTime::PartSubmit);
@@ -3901,6 +3956,11 @@ void LogDrawSummary(Device &device)
         (unsigned long long)d->alphaTestDraws, (unsigned long long)d->idleAlphaTestDraws,
         d->dropIdleAlphaTest ? "" : " (no-alpha-test-drop)", (unsigned long long)d->zeroAlphaTestDraws,
         d->zeroAlphaTest ? "" : " (no-alpha-test-zero)");
+    Log(device,
+        "read hoist: %u pixel shaders with %u texture reads whose coordinates a vertex program can work out; %llu "
+        "draws with programs that do%s, %llu looked-up combinations whose vertex shader could not",
+        device.shaderCounts.hoistable, device.shaderCounts.hoistableReads, (unsigned long long)d->hoistedDraws,
+        d->readHoist ? "" : " (no-read-hoist)", (unsigned long long)d->hoistUnfed);
     // What the draws did not do again (Pipeline, BindTextures, the uniform
     // buffers in Draw).
     Log(device,

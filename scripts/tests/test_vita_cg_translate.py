@@ -100,6 +100,29 @@ VITA_CASES = {
     "ps1_vita_coissue_other_lanes": "ps_1_1\ntex t0\nmov r0, t0\nmul r0.rgb, r0, v0\n+mul r0.a, r0.a, v0.a",
     "ps1_vita_bump": "ps_1_1\ntex t0\ntexbem t1, t0\nmov r0, t1",
     "ps1_vita_model_4": "ps_1_4\ntexld r0, t0",
+    # Texture reads whose coordinates the vertex program can work out
+    # (PlanHoist): the last two components of an input, alone, times a
+    # literal constant, and scaled and moved through a temporary. The reads
+    # of s1 are not: one at the input's own first two components, one that
+    # depends on another read, one scaled by a constant the game sets.
+    "ps3_vita_hoist": "ps_3_0\ndef c2, 0.5, 0.25, 0.125, 2\ndcl_texcoord0 v0\ndcl_texcoord1 v1.xy\n"
+                      "dcl_2d s0\ndcl_2d s1\ndcl_2d s2\ntexld r0, v0, s1\ntexld r1, v0.zwzw, s2\n"
+                      "mul r2.xy, v0.zwzw, c2\ntexld r2, r2, s0\nmad r3, v0, c2.xyxy, c2.xyzy\n"
+                      "mov r3.xy, r3.zwzw\ntexld r3, r3, s0\nmul r4.xy, v0.zwzw, c2\ntexld r4, r4, s0\n"
+                      "add r5.xy, r0, v1\ntexld r5, r5, s1\nmul r6.xy, v1, c5\ntexld r6, r6, s1\n"
+                      "add r0, r0, r1\nadd r0, r0, r2\nadd r0, r0, r3\nadd r0, r0, r4\nadd r0, r0, r5\n"
+                      "add r0, r0, r6\nmov oC0, r0",
+    "vs3_vita_hoist": "vs_3_0\ndcl_position v0\ndcl_texcoord v1\ndcl_position o0\ndcl_texcoord0 o1\n"
+                      "dcl_texcoord1 o2.xy\nmov o0, v0\nmov o1, v1\nmov o2.xy, v1",
+    # A vertex shader that writes TEXCOORD9 itself, and one that never
+    # writes TEXCOORD0: neither can feed the plan.
+    "vs3_vita_hoist_taken": "vs_3_0\ndcl_position v0\ndcl_texcoord v1\ndcl_position o0\ndcl_texcoord0 o1\n"
+                            "dcl_texcoord9 o2\nmov o0, v0\nmov o1, v1\nmov o2, v1",
+    "vs3_vita_hoist_unfed": "vs_3_0\ndcl_position v0\ndcl_texcoord v1\ndcl_position o0\ndcl_texcoord0 o1\n"
+                            "dcl_texcoord1 o2\nmov o0, v0\nmov o2, v1",
+    "ps2_vita_hoist": "ps_2_0\ndef c0, 2, 3, 0, 0\ndcl t0\ndcl t1\ndcl_2d s0\nmov r0.xy, t0.wzyx\n"
+                      "texld r0, r0, s0\nadd r1, t1, -c0.xyxy\ntexld r1, r1, s0\nadd r0, r0, r1\nmov oC0, r0",
+    "vs2_vita_hoist": "vs_2_0\ndcl_position v0\ndcl_texcoord v1\nmov oPos, v0\nmov oT0, v1\nmov oT1, v1",
 }
 
 # (case, extra tool arguments, text the program must contain, text the
@@ -158,6 +181,31 @@ CHECKS = [
      "    out_POSITION = float4(v0.x / 480.0 - 1.0, 1.0 - v0.y / 272.0, 0.5, 1.0);", "constants=6"),
     ("vs2_oT_oD_fog", ["--diag-position", "8"],
      "out_TEXCOORD0 = float4(out_POSITION.z * 0.25 + 0.5, out_POSITION.w * 0.25 + 0.5, 0.25, 1.0);", "constants=6"),
+    # Hoisted reads. Three coordinates for four reads (two are the same);
+    # the reads of s1 stay as they were.
+    ("ps3_vita_hoist", [], "r2 = tex2D(s0, (r2).xy);", "instructions="),
+    ("ps3_vita_hoist", ["--hoist"], "r1 = tex2D(s2, in_TEXCOORD9);", "hoist=3/4"),
+    ("ps3_vita_hoist", ["--hoist"], "r2 = tex2D(s0, in_TEXCOORD8);", "hoist=3/4"),
+    ("ps3_vita_hoist", ["--hoist"], "r3 = tex2D(s0, in_TEXCOORD7);", "hoist=3/4"),
+    ("ps3_vita_hoist", ["--hoist"], "r4 = tex2D(s0, in_TEXCOORD8);", "hoist=3/4"),
+    ("ps3_vita_hoist", ["--hoist"], "r0 = tex2D(s1, (v0).xy);", "hoist=3/4"),
+    ("ps3_vita_hoist", ["--hoist"], "r5 = tex2D(s1, (r5).xy);", "hoist=3/4"),
+    ("ps3_vita_hoist", ["--hoist"], "r6 = tex2D(s1, (r6).xy);", "hoist=3/4"),
+    ("ps3_vita_hoist", ["--hoist"], "float2 in_TEXCOORD7 : TEXCOORD7", "hoist=3/4"),
+    ("vs3_vita_hoist", ["--hoist-from", "@ps3_vita_hoist"],
+     "    out_TEXCOORD9 = float2(out_TEXCOORD0.z, out_TEXCOORD0.w);\n"
+     "    out_TEXCOORD8 = float2(out_TEXCOORD0.z * 0.5, out_TEXCOORD0.w * 0.25);\n"
+     "    out_TEXCOORD7 = float2(out_TEXCOORD0.z * 0.5 + 0.125, out_TEXCOORD0.w * 0.25 + 0.25);\n", "hoist=3/4"),
+    ("vs3_vita_hoist", ["--hoist-from", "@ps3_vita_hoist"], "out float2 out_TEXCOORD8 : TEXCOORD8", "hoist=3/4"),
+    ("vs3_vita_hoist_taken", ["--hoist-from", "@ps3_vita_hoist"], "out_TEXCOORD9 = o2;", "hoist=no"),
+    ("vs3_vita_hoist_unfed", ["--hoist-from", "@ps3_vita_hoist"], "out_TEXCOORD1 = o2;", "hoist=no"),
+    ("vs3_vita_hoist", ["--hoist-from", "@ps3_texkill"], "out_TEXCOORD0 = o1;", "hoist=no"),
+    ("ps3_texkill", ["--hoist"], "return oC0;", "hoist=no"),
+    ("ps2_vita_hoist", ["--hoist"], "r0 = tex2D(s0, in_TEXCOORD9);", "hoist=2/2"),
+    ("ps2_vita_hoist", ["--hoist"], "r1 = tex2D(s0, in_TEXCOORD8);", "hoist=2/2"),
+    ("vs2_vita_hoist", ["--hoist-from", "@ps2_vita_hoist"],
+     "    out_TEXCOORD9 = float2(out_TEXCOORD0.w, out_TEXCOORD0.z);\n"
+     "    out_TEXCOORD8 = float2(out_TEXCOORD1.x + -2.0, out_TEXCOORD1.y + -3.0);\n", "hoist=2/2"),
 ]
 
 
@@ -232,6 +280,8 @@ def main() -> int:
                     failures.append(f"{name}: glslang rejects the program:\n{log.strip()}")
 
         for name, extra, text, reflection in CHECKS:
+            # "@case" stands for that case's bytecode file.
+            extra = [str(binaries[word[1:]]) if word.startswith("@") else word for word in extra]
             result = run_tool(tool, binaries[name], extra)
             if result.returncode:
                 failures.append(f"{name} {extra}: not translated: {result.stderr.strip()}")
@@ -262,7 +312,8 @@ def main() -> int:
                         blob[at] ^= 1 << rng.randrange(8)
                 path = work / "damaged.bin"
                 path.write_bytes(bytes(blob))
-                result = run_tool(tool, path)
+                # Half of them with the read hoist's plan made from them.
+                result = run_tool(tool, path, ["--hoist"] if trial % 2 else [])
                 damaged += 1
                 if result.returncode not in (0, 2):
                     failures.append(f"{name} damaged #{trial}: exit {result.returncode}: "

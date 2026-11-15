@@ -932,6 +932,32 @@ What the GXM back end does so far (step 2d):
   quit summary counts these draws apart. An empty file
   `no-alpha-test-zero`, or `vita_gxm no-alpha-test-zero 1`, turns it
   off. What it saves on the console is not measured yet.
+- **Texture coordinates from the vertex program.** The Vita's GPU
+  fetches a texture before the fragment program runs when the read's
+  coordinate is the first two components of an interpolated input. Any
+  other read, at another pair of components or at a coordinate the
+  program works out, is fetched while the program runs and costs far
+  more. The game's lit world shaders read their lightmap twice at the
+  last two components of texture coordinate 0, scaled and moved by
+  literal constants, and some read another map there too (a census in
+  Vita3K, 2026-11-15: 0.9 such reads a lit draw at a heavy view of
+  `mp_crash`). Console run CN (2026-11-15) drew those reads at an
+  input's first two components as a trial and the GPU's fragment work
+  fell from 39.6 to 35.1 ms a frame there. The translator now finds
+  such reads in a pixel shader (`PlanHoist` in gxm_cg_translate.h: a
+  plain read of a 2D sampler whose coordinate is made from one texture
+  coordinate by mov, add, sub and mul or mad with literal constants),
+  and when the draw's vertex shader writes that texture coordinate
+  (`CanHoist`), the vertex program works each such coordinate out and
+  hands it over in a texture coordinate of its own (9 downward, the
+  ones the pixel shader does not read), where the fragment program
+  reads it. The result is the same sum at every pixel, so the picture
+  should not change. Model lighting is not covered: its coordinate
+  depends on the normal map. The programs are made at a combination's
+  first draw; until both are ready the draw runs with the plain pair.
+  The quit summary counts the draws (`read hoist:`). An empty file
+  `no-read-hoist`, or `vita_gxm no-read-hoist 1`, turns it off. What it
+  saves on the console is not measured yet.
 - **Depth first.** The scene's depth is always drawn before its lit pass
   on the Vita (src/gfx_gxm/gxm_engine_options.h), whatever r_depthPrepass
   says, so that the GPU skips hidden pixels of the lit pass early. Console

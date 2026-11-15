@@ -424,6 +424,18 @@ class Emitter
         uint8_t mask;
     };
     std::vector<std::pair<uint16_t, Dcl>> outputDcls_, inputDcls_;
+    // The instruction being written, and the coordinate the vertex program
+    // hands over for it when it is a hoisted read (Options::hoist).
+    uint32_t current_ = 0;
+    const HoistCoord *Hoisted() const
+    {
+        if (!options_.hoist || vertex_)
+            return nullptr;
+        for (const HoistRead &read : options_.hoist->reads)
+            if (read.instruction == current_ && read.coord < options_.hoist->coords.size())
+                return &options_.hoist->coords[read.coord];
+        return nullptr;
+    }
 };
 
 std::string Emitter::Constant(uint16_t number) const
@@ -704,6 +716,13 @@ bool Emitter::Texture(const Instruction &ins, std::string &value)
     }
     if (type == SamplerType::None)
         return Fail("samples " + s + " without declaring it");
+    if (const HoistCoord *hoisted = Hoisted(); hoisted && ins.opcode == kTex && ins.control == 0 && !cube)
+    {
+        // The vertex program worked this coordinate out.
+        value = "tex2D(" + s + ", in_TEXCOORD" + std::to_string(hoisted->slot) + ")" +
+                SwizzleSuffix(ins.sources[1].swizzle);
+        return true;
+    }
     switch (ins.opcode)
     {
     case kTex:
@@ -1076,11 +1095,14 @@ bool Emitter::Run(std::string &cg, std::string &error)
     }
 
     for (const Instruction &ins : shader_.instructions)
+    {
+        current_ = uint32_t(&ins - shader_.instructions.data());
         if (!Statement(ins))
         {
             error = error_;
             return false;
         }
+    }
     if (indent_ != 1)
     {
         error = "if without endif";
@@ -1191,6 +1213,38 @@ bool Emitter::Run(std::string &cg, std::string &error)
             if (local("oPts"))
                 result(Semantic::PointSize, 0, "oPts", 0xf);
         }
+        // Texture coordinates worked out here for the fragment program
+        // (PlanHoist), from what this program wrote to their input.
+        if (options_.hoist)
+            for (const HoistCoord &coord : options_.hoist->coords)
+            {
+                const std::string root = "out_TEXCOORD" + std::to_string(coord.root);
+                const std::string name = "out_TEXCOORD" + std::to_string(coord.slot);
+                bool haveRoot = false, haveSlot = false;
+                for (const std::string &p : parameters)
+                {
+                    haveRoot |= p.find(" " + root + " ") != std::string::npos;
+                    haveSlot |= p.find(" " + name + " ") != std::string::npos;
+                }
+                if (!haveRoot || haveSlot)
+                {
+                    error = haveSlot ? "hoist: the vertex shader writes TEXCOORD" + std::to_string(coord.slot) + " itself"
+                                     : "hoist: the vertex shader does not write TEXCOORD" + std::to_string(coord.root);
+                    return false;
+                }
+                const auto sum = [&root](const float *k) {
+                    std::string text;
+                    for (int i = 0; i < 4; ++i)
+                        if (k[i] != 0.0f)
+                            text += (text.empty() ? "" : " + ") + root + "." + kComponents[i] +
+                                    (k[i] == 1.0f ? "" : " * " + Float(k[i]));
+                    if (k[4] != 0.0f || text.empty())
+                        text += (text.empty() ? "" : " + ") + Float(k[4]);
+                    return text;
+                };
+                parameters.push_back("out float2 " + name + " : TEXCOORD" + std::to_string(coord.slot));
+                epilogue += "    " + name + " = float2(" + sum(coord.x) + ", " + sum(coord.y) + ");\n";
+            }
         bool position = false;
         for (const std::string &p : parameters)
             if (p.find(": POSITION") != std::string::npos)
@@ -1283,6 +1337,18 @@ bool Emitter::Run(std::string &cg, std::string &error)
                 }
             }
         }
+        if (options_.hoist)
+            for (const HoistCoord &coord : options_.hoist->coords)
+            {
+                const std::string name = "in_TEXCOORD" + std::to_string(coord.slot);
+                for (const std::string &p : parameters)
+                    if (p.find(" " + name + " ") != std::string::npos)
+                    {
+                        error = "hoist: the pixel shader reads TEXCOORD" + std::to_string(coord.slot) + " itself";
+                        return false;
+                    }
+                parameters.push_back("float2 " + name + " : TEXCOORD" + std::to_string(coord.slot));
+            }
         if (alphaTest)
         {
             static const char *const tests[] = {nullptr,       "false", "a < ref",  "a == ref",
@@ -1827,5 +1893,302 @@ bool Emit(const Shader &shader, const Options &options, std::string &cg, std::st
 {
     Emitter emitter(shader, options);
     return emitter.Run(cg, error);
+}
+
+// ---- Texture coordinates worked out by the vertex program ---------------------------------
+
+namespace
+{
+// One component of a register while PlanHoist walks a pixel shader: a sum
+// of one TEXCOORD input's components times constants, plus a constant.
+struct Lane
+{
+    bool known = false;
+    int8_t root = -1; // the TEXCOORD it is made from; -1: of constants alone
+    float k[4] = {};
+    float b = 0;
+};
+using Lanes = std::array<Lane, 4>;
+
+bool Finite(const Lane &lane)
+{
+    return std::isfinite(lane.b) && std::isfinite(lane.k[0]) && std::isfinite(lane.k[1]) &&
+           std::isfinite(lane.k[2]) && std::isfinite(lane.k[3]);
+}
+
+// a + sign * b.
+Lane Sum(const Lane &a, const Lane &b, float sign)
+{
+    Lane out;
+    if (!a.known || !b.known || (a.root >= 0 && b.root >= 0 && a.root != b.root))
+        return out;
+    out.known = true;
+    out.root = a.root >= 0 ? a.root : b.root;
+    for (int i = 0; i < 4; ++i)
+        out.k[i] = a.k[i] + sign * b.k[i];
+    out.b = a.b + sign * b.b;
+    out.known = Finite(out);
+    return out;
+}
+
+// a * b, when one side is a constant.
+Lane Product(const Lane &a, const Lane &b)
+{
+    Lane out;
+    if (!a.known || !b.known || (a.root >= 0 && b.root >= 0))
+        return out;
+    const Lane &form = a.root >= 0 ? a : b;
+    const float factor = (a.root >= 0 ? b : a).b;
+    out.known = true;
+    out.root = form.root;
+    for (int i = 0; i < 4; ++i)
+        out.k[i] = form.k[i] * factor;
+    out.b = form.b * factor;
+    out.known = Finite(out);
+    return out;
+}
+
+bool IsFlowControl(uint16_t opcode)
+{
+    switch (opcode)
+    {
+    case kCall: case kCallNz: case kLoopOp: case kRet: case kEndLoop: case kLabelOp: case kRep: case kEndRep:
+    case kIf: case kIfc: case kElse: case kEndIf: case kBreak: case kBreakc: case kBreakp: case kSetp:
+        return true;
+    default:
+        return false;
+    }
+}
+} // namespace
+
+HoistPlan PlanHoist(const Shader &pixel)
+{
+    HoistPlan plan;
+    const Reflection &r = pixel.reflection;
+    if (r.stage != Stage::Pixel)
+        return plan;
+    // Shaders with branches are left alone, and ps 1.x ones, whose reads
+    // are at texture coordinates already.
+    for (const Instruction &ins : pixel.instructions)
+        if (IsFlowControl(ins.opcode) || ins.coissue)
+            return plan;
+
+    // TEXCOORDs the pixel shader does not read, from 9 down.
+    std::vector<uint8_t> slots;
+    for (int index = 9; index >= 0; --index)
+    {
+        bool read = false;
+        for (const Varying &v : r.varyings)
+            read |= v.semantic == Semantic::Texcoord && v.index == index;
+        if (!read)
+            slots.push_back(uint8_t(index));
+    }
+
+    std::map<uint16_t, std::array<float, 4>> defs;
+    std::map<uint16_t, Lanes> inputs, temps;
+    std::set<uint16_t> declaredInputs;
+    for (const Instruction &ins : pixel.instructions)
+    {
+        if (ins.opcode == kDef)
+        {
+            std::array<float, 4> values;
+            std::memcpy(values.data(), ins.literal, sizeof(float) * 4);
+            defs[ins.destination.number] = values;
+        }
+        if (ins.opcode != kDcl || r.major < 3 || ins.destination.type != kInput)
+            continue;
+        // ps_3_0: v<n> holds the components its declaration names, and 0
+        // in the others (as Emit fills it). A register declared in parts
+        // is not followed.
+        const uint16_t reg = ins.destination.number;
+        Lanes lanes;
+        const uint8_t usage = ins.declaration & 0x1f, index = (ins.declaration >> 16) & 0xf;
+        if (declaredInputs.insert(reg).second && usage == kUsageTexcoord && index < 10)
+        {
+            const uint8_t mask = ins.destination.mask ? ins.destination.mask : 0xf;
+            for (int i = 0; i < 4; ++i)
+            {
+                lanes[i].known = true;
+                if (mask & (1 << i))
+                {
+                    lanes[i].root = int8_t(index);
+                    lanes[i].k[i] = 1.0f;
+                }
+            }
+        }
+        inputs[reg] = lanes;
+    }
+
+    const auto read = [&](const Operand &op) {
+        Lanes base, out;
+        if (op.relative)
+            return out;
+        if (op.type == kTemp)
+        {
+            if (const auto found = temps.find(op.number); found != temps.end())
+                base = found->second;
+        }
+        else if (op.type == kConst)
+        {
+            if (const auto found = defs.find(op.number); found != defs.end())
+                for (int i = 0; i < 4; ++i)
+                {
+                    base[i].known = std::isfinite(found->second[i]);
+                    base[i].b = found->second[i];
+                }
+        }
+        else if (op.type == kInput && r.major >= 3)
+        {
+            if (const auto found = inputs.find(op.number); found != inputs.end())
+                base = found->second;
+        }
+        else if (op.type == kTexture && r.major < 3 && op.number < 10)
+        {
+            for (int i = 0; i < 4; ++i)
+            {
+                base[i].known = true;
+                base[i].root = int8_t(op.number);
+                base[i].k[i] = 1.0f;
+            }
+        }
+        if (op.modifier != kSmNone && op.modifier != kSmNeg)
+            return out;
+        for (int i = 0; i < 4; ++i)
+        {
+            out[i] = base[(op.swizzle >> (2 * i)) & 3];
+            if (op.modifier == kSmNeg && out[i].known)
+            {
+                for (float &k : out[i].k)
+                    k = -k;
+                out[i].b = -out[i].b;
+            }
+        }
+        return out;
+    };
+
+    for (size_t at = 0; at < pixel.instructions.size(); ++at)
+    {
+        const Instruction &ins = pixel.instructions[at];
+        if (ins.opcode == kDcl || ins.opcode == kDef || ins.opcode == kDefI || ins.opcode == kDefB)
+            continue;
+        if (ins.opcode == kTex && ins.control == 0 && ins.sourceCount >= 2 && ins.sources[1].type == kSampler &&
+            ins.sources[1].number < 16 && r.samplers[ins.sources[1].number] == SamplerType::Tex2D)
+        {
+            const Lanes coord = read(ins.sources[0]);
+            const Lane &x = coord[0], &y = coord[1];
+            const int root = x.root >= 0 ? x.root : y.root;
+            const bool one = x.known && y.known && root >= 0 && (x.root < 0 || y.root < 0 || x.root == y.root);
+            // The input's own first two components: fetched ahead as it is.
+            const bool direct = one && x.b == 0.0f && y.b == 0.0f && x.k[0] == 1.0f && x.k[1] == 0.0f &&
+                                x.k[2] == 0.0f && x.k[3] == 0.0f && y.k[0] == 0.0f && y.k[1] == 1.0f &&
+                                y.k[2] == 0.0f && y.k[3] == 0.0f;
+            if (one && !direct)
+            {
+                HoistCoord made;
+                made.root = uint8_t(root);
+                for (int i = 0; i < 4; ++i)
+                {
+                    made.x[i] = x.k[i] + 0.0f; // -0 becomes 0
+                    made.y[i] = y.k[i] + 0.0f;
+                }
+                made.x[4] = x.b + 0.0f;
+                made.y[4] = y.b + 0.0f;
+                size_t index = 0;
+                for (; index < plan.coords.size(); ++index)
+                    if (plan.coords[index].root == made.root &&
+                        !std::memcmp(plan.coords[index].x, made.x, sizeof(made.x)) &&
+                        !std::memcmp(plan.coords[index].y, made.y, sizeof(made.y)))
+                        break;
+                if (index == plan.coords.size() && index < slots.size())
+                {
+                    made.slot = slots[index];
+                    plan.coords.push_back(made);
+                }
+                if (index < plan.coords.size())
+                    plan.reads.push_back(HoistRead{uint32_t(at), uint8_t(index)});
+            }
+        }
+        if (!ins.hasDestination || ins.destination.type != kTemp)
+            continue;
+        const Operand &dst = ins.destination;
+        Lanes value;
+        if (!dst.shift && !(dst.modifier & kDmSaturate) && !dst.relative)
+        {
+            if (ins.opcode == kMov && ins.sourceCount >= 1)
+                value = read(ins.sources[0]);
+            else if ((ins.opcode == kAdd || ins.opcode == kSub) && ins.sourceCount >= 2)
+            {
+                const Lanes a = read(ins.sources[0]), b = read(ins.sources[1]);
+                for (int i = 0; i < 4; ++i)
+                    value[i] = Sum(a[i], b[i], ins.opcode == kAdd ? 1.0f : -1.0f);
+            }
+            else if (ins.opcode == kMul && ins.sourceCount >= 2)
+            {
+                const Lanes a = read(ins.sources[0]), b = read(ins.sources[1]);
+                for (int i = 0; i < 4; ++i)
+                    value[i] = Product(a[i], b[i]);
+            }
+            else if (ins.opcode == kMad && ins.sourceCount >= 3)
+            {
+                const Lanes a = read(ins.sources[0]), b = read(ins.sources[1]), c = read(ins.sources[2]);
+                for (int i = 0; i < 4; ++i)
+                    value[i] = Sum(Product(a[i], b[i]), c[i], 1.0f);
+            }
+        }
+        Lanes &lanes = temps[dst.number];
+        for (int i = 0; i < 4; ++i)
+            if (dst.mask & (1 << i))
+                lanes[i] = value[i];
+    }
+
+    if (!plan.coords.empty())
+    {
+        uint64_t hash = Hash("hoist", 5);
+        for (const HoistCoord &coord : plan.coords)
+        {
+            hash = Hash(&coord.root, 1, hash);
+            hash = Hash(&coord.slot, 1, hash);
+            hash = Hash(coord.x, sizeof(coord.x), hash);
+            hash = Hash(coord.y, sizeof(coord.y), hash);
+        }
+        plan.hash = hash ? hash : 1;
+    }
+    return plan;
+}
+
+bool CanHoist(const Shader &vertex, const HoistPlan &plan)
+{
+    const Reflection &r = vertex.reflection;
+    if (r.stage != Stage::Vertex || plan.Empty())
+        return false;
+    // The TEXCOORDs the program will have results for: the ones the shader
+    // writes (Emit leaves out a vs_3_0 output that is declared and never
+    // written).
+    uint16_t written = 0;
+    std::map<uint16_t, uint8_t> texcoordOf; // vs_3_0: o<n> -> TEXCOORD index
+    for (const Instruction &ins : vertex.instructions)
+        if (ins.opcode == kDcl && r.major >= 3 && ins.destination.type == kOutput &&
+            (ins.declaration & 0x1f) == kUsageTexcoord && ((ins.declaration >> 16) & 0xf) < 10)
+            texcoordOf[ins.destination.number] = uint8_t((ins.declaration >> 16) & 0xf);
+    for (const Instruction &ins : vertex.instructions)
+    {
+        if (!ins.hasDestination || ins.opcode == kDcl || ins.opcode == kDef || ins.destination.type != kOutput)
+            continue;
+        if (r.major >= 3)
+        {
+            if (const auto found = texcoordOf.find(ins.destination.number); found != texcoordOf.end())
+                written |= uint16_t(1u << found->second);
+        }
+        else if (ins.destination.number < 10)
+            written |= uint16_t(1u << ins.destination.number);
+    }
+    uint16_t declared = written;
+    for (const Varying &v : r.varyings)
+        if (v.semantic == Semantic::Texcoord && v.index < 10)
+            declared |= uint16_t(1u << v.index);
+    for (const HoistCoord &coord : plan.coords)
+        if (coord.root >= 10 || coord.slot >= 10 || !(written & (1u << coord.root)) || (declared & (1u << coord.slot)))
+            return false;
+    return true;
 }
 } // namespace gfx_gxm::cg
