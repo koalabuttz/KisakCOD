@@ -298,7 +298,7 @@ void Walk(const Tree *nodes, uint32_t nodeCount, const Planes &planes, uint32_t 
         if (world.fetchAhead && node + 2 < nodeCount)
         {
             __builtin_prefetch(tree + 2);
-            __builtin_prefetch(reinterpret_cast<const char *>(tree + 3) - 1);
+            __builtin_prefetch(&tree[2].childrenOffset); // its last field
         }
         const uint32_t cut = HoldNode(planes, active, tree->mins);
         if (cut == OUTSIDE)
