@@ -506,10 +506,15 @@ bool DrawNormalsDebug(Core *core, DebugView *debug, Image *normals, Image *targe
 // of `target`. Outside a pass, inside a frame.
 bool DrawAoDebug(Core *core, DebugView *debug, Image *ao, Image *target, const VkRect2D &area, std::string &error);
 // Draws the sharpest level of `reflections` (TraceReflections' image, the
-// same size) over `area` of `target`: the stored light over black, through
-// the sRGB curve. Outside a pass, inside a frame.
+// same size) over `area` of `target`: the stored light (its compression
+// undone) over black, through the sRGB curve. Outside a pass, inside a frame.
 bool DrawReflectionsDebug(Core *core, DebugView *debug, Image *reflections, Image *target, const VkRect2D &area,
                           std::string &error);
+// Draws the first level of `image` as it is over `area` of `target`, through
+// the sRGB curve (the planar reflection's debug view). Outside a pass,
+// inside a frame.
+bool DrawImageDebug(Core *core, DebugView *debug, Image *image, Image *target, const VkRect2D &area,
+                    std::string &error);
 
 // ---- Compute passes (docs/vulkan-modern.md "Compute passes") ----
 //

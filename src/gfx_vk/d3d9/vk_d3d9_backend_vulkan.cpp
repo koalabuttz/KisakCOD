@@ -1876,8 +1876,10 @@ void DrawAoDebug(Backend *backend, Image *ao, Image *target, const VkRect2D &are
 }
 
 // The reflections debug view over a finished scene
-// (KISAK_VK_MODERN_DEBUG=reflections).
-void DrawReflectionsDebug(Backend *backend, Image *reflections, Image *target, const VkRect2D &area)
+// (KISAK_VK_MODERN_DEBUG=reflections); with `plain`, an image shown as it is
+// (the planar view's, KISAK_VK_MODERN_DEBUG=planar).
+void DrawReflectionsDebug(Backend *backend, Image *reflections, Image *target, const VkRect2D &area,
+                          bool plain = false)
 {
     if (backend->debugFailed || !reflections || !target)
         return;
@@ -1892,7 +1894,10 @@ void DrawReflectionsDebug(Backend *backend, Image *reflections, Image *target, c
             return;
         }
     }
-    if (!modern::DrawReflectionsDebug(backend->core, backend->debug, reflections, target, area, error))
+    const bool drawn = plain ? modern::DrawImageDebug(backend->core, backend->debug, reflections, target, area, error)
+                             : modern::DrawReflectionsDebug(backend->core, backend->debug, reflections, target, area,
+                                                            error);
+    if (!drawn)
         LogModernOnce(backend, "the reflections debug view is not drawn", error);
 }
 
@@ -2549,7 +2554,7 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
                                          {std::min(area.extent.width, backend->planarView.width),
                                           std::min(area.extent.height, backend->planarView.height)}};
             DrawReflectionsDebug(backend, lg::SurfaceImage(backend->planarColorSurface), lg::SurfaceImage(display),
-                                 planarArea);
+                                 planarArea, true);
         }
         FinishedScenePasses(backend, lg::SurfaceImage(display), area);
         return passes;
