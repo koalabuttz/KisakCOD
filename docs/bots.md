@@ -30,6 +30,11 @@ The bots are always compiled in. `bot_brain` chooses them:
 | `0` (default) | the retail random inputs (`SV_BotUserMove`), as before |
 | `1` | KisakCOD's bot brain |
 
+With the brain, a bot shows a ping of 0 on the scoreboard (it runs in the
+server, with no network in between) rather than the retail 999 a test client
+gets for acknowledging no packets. The ping is only shown; nothing in the
+game uses it.
+
 Set it when the game or server starts, for example on a dedicated server:
 
 ```
@@ -147,7 +152,10 @@ hunt goes to where it last saw or heard them.
   nearest the team first, so a team takes the flags on its side of the map
   before it contests the others. A roaming bot prefers places its teammates
   are not at or going to, so a team spreads out rather than moving as a
-  pack. A lead (a sound, an enemy lost from sight) is chased by one or two
+  pack. A lead whose way ends above or below it (a sound on a floor the
+  way does not reach) is left alone for 10 s rather than stood under, and a
+  bot looks no more than 35 degrees up or down toward a sound or an enemy
+  it lost from sight. A lead (a sound, an enemy lost from sight) is chased by one or two
   bots: one more goes only for an enemy it saw itself, and the rest look
   and keep on. Fights, cover and hunts come first: a part is what a bot does
   between them.
