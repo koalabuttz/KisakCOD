@@ -262,6 +262,7 @@ set(RADIANT_GFX_D3D
     "${SRC_DIR}/gfx_d3d/r_reflection_probe_load_obj.cpp"
     "${SRC_DIR}/gfx_d3d/r_rendercmds.cpp"
     "${SRC_DIR}/gfx_d3d/r_rendercmds.h"
+    "${SRC_DIR}/gfx_d3d/r_ui_triangles.h"
     "${SRC_DIR}/gfx_d3d/r_rendertarget.cpp"
     "${SRC_DIR}/gfx_d3d/r_rendertarget.h"
     "${SRC_DIR}/gfx_d3d/r_scene.cpp"
