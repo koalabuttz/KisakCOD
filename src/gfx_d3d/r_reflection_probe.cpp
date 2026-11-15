@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "r_reflection_probe.h"
+#include <algorithm>
 #include "r_dvars.h"
 #include <qcommon/com_bsp.h>
 #include "r_bsp.h"
@@ -719,13 +720,6 @@ struct ModernCapturedProbe
     float afterUp;
 };
 
-// Each new probe is scaled to its stock probe's mean light (David's choice
-// 2026-11-15, PC probes run 2: drawn as they are they came out about half as
-// bright, and mp_bog's water lost its glints). One number for the whole map
-// was not enough: mp_bog's probes over its water came out at a third of
-// their stock light and stayed dim (PC probes run 3). Within these bounds.
-static const float kModernProbeScaleLeast = 0.25f;
-static const float kModernProbeScaleMost = 8.0f;
 
 static bool R_ModernDrawProbe(const GfxModernHooks *hooks, const GfxReflectionProbe &probe, int edge, float *rgb[6],
                               float *light, void (*overlay)())
@@ -921,6 +915,83 @@ static bool R_ModernWriteProbe(IDirect3DCubeTexture9 *cube, uint32_t index, int 
     return true;
 }
 
+// Each new probe takes its stock probe's spread of light (David's choice
+// 2026-11-15: on, at the old brightness, so mp_bog's water keeps its glints).
+// Drawn as they are the new probes came out about half as bright (PC probes
+// run 2); scaled to the stock mean (runs 3 and 4) their dark parts rose and
+// their highlights stayed low. The stock probes went through each probe's
+// colour correction when the map was built, which likely steepens them, and a
+// fast file does not keep it (run 5's dumps: the stock probes' brightest 0.1% at a
+// quarter light 121 to 250 of 255, the new ones 31 to 205). So each texel's
+// light, the channels' mean, is moved to the stock probe's light at the same
+// place in the order of all its texels (texels of equal light alike), and its
+// channels follow it: what the probe shows and its colours are the Modern
+// path's, how bright and how steep it is the stock probe's.
+static bool R_ModernMatchProbe(IDirect3DCubeTexture9 *cube, int edge, float *light, float *mean, float *meanUp)
+{
+    const int count = 6 * edge * edge;
+    float *stock = (float *)Z_Malloc(sizeof(float) * count, "R_ModernMatchProbe", 0);
+    float *drawn = (float *)Z_Malloc(sizeof(float) * count, "R_ModernMatchProbe", 0);
+    float *order = (float *)Z_Malloc(sizeof(float) * count, "R_ModernMatchProbe", 0);
+    bool read = true;
+    for (int face = 0; face < 6 && read; ++face)
+    {
+        D3DLOCKED_RECT locked;
+        if (FAILED(cube->LockRect((D3DCUBEMAP_FACES)face, 0, &locked, nullptr, 0)))
+        {
+            read = false;
+            break;
+        }
+        for (int y = 0; y < edge; ++y)
+        {
+            const uint8_t *row = (const uint8_t *)locked.pBits + y * locked.Pitch;
+            for (int x = 0; x < edge; ++x)
+                stock[(face * edge + y) * edge + x] = R_ModernProbeTexelLight(&row[4 * x]);
+        }
+        cube->UnlockRect((D3DCUBEMAP_FACES)face, 0);
+    }
+    if (read)
+    {
+        for (int i = 0; i < count; ++i)
+        {
+            const float *in = &light[3 * i];
+            drawn[i] = (in[0] + in[1] + in[2]) / 3.0f;
+            order[i] = drawn[i];
+        }
+        std::sort(stock, stock + count);
+        std::sort(order, order + count);
+        float sum = 0.0f, sumUp = 0.0f;
+        for (int i = 0; i < count; ++i)
+        {
+            // Its place among the drawn texels, the middle of those as bright.
+            const int first = (int)(std::lower_bound(order, order + count, drawn[i]) - order);
+            const int last = (int)(std::upper_bound(order, order + count, drawn[i]) - order) - 1;
+            const float at = 0.5f * (float)(first + last);
+            const int below = (int)at;
+            const int above = below + 1 < count ? below + 1 : below;
+            const float t = at - (float)below;
+            const float target = stock[below] + (stock[above] - stock[below]) * t;
+            float *out = &light[3 * i];
+            if (drawn[i] > 1.0e-5f)
+            {
+                const float factor = target / drawn[i];
+                for (int c = 0; c < 3; ++c)
+                    out[c] *= factor;
+            }
+            else
+                out[0] = out[1] = out[2] = target;
+            sum += target;
+            sumUp += i / (edge * edge) == 4 ? target : 0.0f;
+        }
+        *mean = sum / (float)count;
+        *meanUp = sumUp / (float)(edge * edge);
+    }
+    Z_Free(order, 0);
+    Z_Free(drawn, 0);
+    Z_Free(stock, 0);
+    return read;
+}
+
 void R_ModernCaptureProbes(void (*overlay)())
 {
     if (!s_modernProbesPending || !rgp.world || !rg.registered || r_norefresh->current.enabled)
@@ -1000,32 +1071,28 @@ void R_ModernCaptureProbes(void (*overlay)())
             Z_Free(rgb[face], 0);
     }
 
-    // Then each is scaled to its stock probe's mean light, written over its
-    // first level, and its blurrier levels made again.
+    // Then each is matched to its stock probe's light, written over its first
+    // level, and its blurrier levels made again.
     int written = 0;
-    float scaled = 0.0f, scaleLeast = 0.0f, scaleMost = 0.0f;
+    float matched = 0.0f;
     for (uint32_t i = 0; i < captured; ++i)
     {
-        const ModernCapturedProbe &kept = probes[i];
-        float scale = kept.after > 0.0f ? kept.before / kept.after : 1.0f;
-        scale = scale < kModernProbeScaleLeast ? kModernProbeScaleLeast
-                : scale > kModernProbeScaleMost ? kModernProbeScaleMost
-                                                 : scale;
+        ModernCapturedProbe &kept = probes[i];
         const GfxReflectionProbe &probe = rgp.world->reflectionProbes[kept.index];
         IDirect3DCubeTexture9 *cube = probe.reflectionImage->texture.cubemap;
-        if (R_ModernWriteProbe(cube, kept.index, kept.edge, kept.light, scale))
+        float matchedMean = 0.0f, matchedUp = 0.0f;
+        if (R_ModernMatchProbe(cube, kept.edge, kept.light, &matchedMean, &matchedUp)
+            && R_ModernWriteProbe(cube, kept.index, kept.edge, kept.light, 1.0f))
         {
             hooks->reflectionProbe(hooks->user, dx.device, cube);
             ++written;
-            scaled += kept.after * scale;
-            scaleLeast = written == 1 || scale < scaleLeast ? scale : scaleLeast;
-            scaleMost = written == 1 || scale > scaleMost ? scale : scaleMost;
+            matched += matchedMean;
             if (written <= 64)
                 Com_Printf(CON_CHANNEL_GFX,
                            "modern: probe %u at (%.0f %.0f %.0f): mean light %.3f as stored, %.3f drawn, %.3f "
-                           "scaled; looking up %.3f as stored, %.3f scaled\n",
+                           "matched; looking up %.3f as stored, %.3f drawn, %.3f matched\n",
                            kept.index, probe.origin[0], probe.origin[1], probe.origin[2], kept.before, kept.after,
-                           kept.after * scale, kept.beforeUp, kept.afterUp * scale);
+                           matchedMean, kept.beforeUp, kept.afterUp, matchedUp);
         }
         else
             ++skipped;
@@ -1035,8 +1102,7 @@ void R_ModernCaptureProbes(void (*overlay)())
     const int took = Sys_Milliseconds() - started;
     Com_Printf(CON_CHANNEL_GFX,
                "modern: %d reflection probes drawn again with the Modern path (%d left as they were) in %d ms; "
-               "mean light %.3f as stored, %.3f drawn, %.3f scaled (each to its stored light, by %.2f to %.2f)\n",
+               "mean light %.3f as stored, %.3f drawn, %.3f matched (each to its stored light's spread)\n",
                written, skipped, took, captured ? before / (float)captured : 0.0f,
-               captured ? after / (float)captured : 0.0f, written ? scaled / (float)written : 0.0f, scaleLeast,
-               scaleMost);
+               captured ? after / (float)captured : 0.0f, written ? matched / (float)written : 0.0f);
 }

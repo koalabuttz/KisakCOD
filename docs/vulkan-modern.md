@@ -1327,7 +1327,7 @@ Nothing is done per frame.
 | Setting | Default | Switch |
 | --- | --- | --- |
 | Probe filter | on with linear light | `KISAK_VK_MODERN_PROBES=0` keeps the game's levels; `KISAK_VK_MODERN_PROBES=1` filters them also without linear light |
-| Probes drawn again | off | `KISAK_VK_MODERN_PROBES_CAPTURE=1` draws every probe again with the Modern path behind the map's loading screen, each scaled to its stock probe's mean light (start-up only; needs linear light and the filter) |
+| Probes drawn again | off | `KISAK_VK_MODERN_PROBES_CAPTURE=1` draws every probe again with the Modern path behind the map's loading screen, each matched to its stock probe's spread of light (start-up only; needs linear light and the filter) |
 
 The statistics line: `vulkan d3d9: modern: N reflection probes filtered by
 gloss in linear light (M left as they are), X ms each` (M counts the cubes
@@ -1372,23 +1372,29 @@ Every probe of the map is drawn again from its origin, in
   values, as the game's encoding stores it);
 * each texel of level 0 is the light along its direction in the view of its
   face, the mean of the two by two pixels around where it lands;
-* once every probe is drawn, each is scaled to its stock probe's mean light
-  (its stored mean over its new one, within 0.25 to 8), stored in the
-  game's encoding, and the `reflectionProbe` hook then makes levels 1 to 6
-  again from it, as above. Drawn as they are, the new probes came out about
-  half as bright as the stock ones (PC probes run 2: mp_crash 0.294 against
-  0.134, mp_bog 0.160 against 0.080), and mp_bog's water lost its glints.
-  One number for the whole map was not enough: mp_bog's probes over its
-  water stayed at a third of their stock light (PC probes run 3). Scaled
-  each to its own, every probe keeps its old brightness, with the Modern
-  path's light in what it shows.
+* once every probe is drawn, each takes its stock probe's spread of light:
+  each texel's light (the channels' mean) moves to the stock probe's light
+  at the same place in the order of all its texels (texels of equal light
+  alike), and its channels follow, so what the probe shows and its colours
+  are the Modern path's, and how bright and how steep it is are the stock
+  probe's. It is then stored in the game's encoding, and the
+  `reflectionProbe` hook makes levels 1 to 6 again from it, as above.
+  Drawn as they are, the new probes came out about half as bright as the
+  stock ones (PC probes run 2: mp_crash 0.294 against 0.134, mp_bog 0.160
+  against 0.080), and mp_bog's water lost its glints. Scaled to the stock
+  mean, one number per map (run 3) or per probe (run 4), their dark parts
+  rose and their highlights stayed low, so the water stayed flat: run 5's
+  dumps showed the stock probes' brightest 0.1% at a quarter light at 121 to
+  250 of 255, the new ones at 31 to 205. The stock probes went through each
+  probe's colour correction when the map was built, which a fast file does
+  not keep.
 
 It logs a line per probe (`modern: probe N at (x y z): mean light A as
-stored, B drawn, C scaled; looking up D as stored, E scaled`, the last two
-over the face looking up, where the sky is; at most 64) and one for the map (`modern: N
+stored, B drawn, C matched; looking up D as stored, E drawn, F matched`,
+the last three over the face looking up, where the sky is; at most 64) and one for the map (`modern: N
 reflection probes drawn again with the Modern path (M left as they were) in
-T ms; mean light A as stored, B drawn, C scaled (each to its stored
-light, by S to S')`); the statistics line `vulkan d3d9: modern: N
+T ms; mean light A as stored, B drawn, C matched (each to its stored
+light's spread)`); the statistics line `vulkan d3d9: modern: N
 scenes read back in linear light to capture reflection probes (M faces
 taken)`. The game's colour correction of each probe (a file named in the
 map's probe lump, which a fast file does not keep) is not applied.
