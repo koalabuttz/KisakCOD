@@ -1843,7 +1843,7 @@ DynamicState MakeDynamicState(const Device &device, d3d::PrimitiveType type)
                       std::clamp(std::max(vp.maxZ, vp.minZ + zBias), 0.0f, 1.0f)};
     state.scissor = DrawArea(device);
     state.depthBias = AsFloat(rs[d3d::RS_DEPTHBIAS]) * device.depthBiasScale;
-    state.depthSlope = AsFloat(rs[d3d::RS_SLOPESCALEDEPTHBIAS]);
+    state.depthSlope = AsFloat(rs[d3d::RS_SLOPESCALEDEPTHBIAS]) * device.depthSlopeScale;
     state.depthBiasEnable = state.depthBias != 0.0f || state.depthSlope != 0.0f;
     // D3D9's front faces are clockwise on screen; the flipped viewport keeps
     // the winding, so CULL_CW culls front faces and CULL_CCW back faces.
