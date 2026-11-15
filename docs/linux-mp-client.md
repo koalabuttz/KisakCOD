@@ -133,6 +133,12 @@ read through. A length from a size gives way to the decoder's count the first
 time the file plays from its start to its end: `snd_al: stream '<file>' played
 through: F frames, not the G its size gave`.
 
+`+set snd_streamThread 1` decodes streamed sounds (music, ambience) ahead on
+a thread of their own instead of in the sound update. It is off by default
+here and on by default on the PS Vita, where the decoding is long enough to
+show in a frame (docs/vita-client.md, "Streamed sounds on a thread"). The
+`snd_alDebug 1` line counts the chunks each side decoded.
+
 The OpenAL headers (`AL/al.h`) are needed too, whichever library is linked,
 because the sound headers include them. Without `libopenal-dev` installed, unpack
 the package somewhere (`apt-get download libopenal-dev`, then `dpkg-deb -x`) and

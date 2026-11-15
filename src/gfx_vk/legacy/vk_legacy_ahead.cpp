@@ -94,6 +94,10 @@ struct Job
     // built from recipe (shared with other jobs through Ahead::modules).
     VkShaderModule fragment = VK_NULL_HANDLE;
     PixelModuleRecipe recipe;
+    // The vertex module (VertexModule, made when the job was queued) and
+    // Device::byteStandIn.
+    VkShaderModule vertex = VK_NULL_HANDLE;
+    bool byteStandIn = false;
     // Under Ahead::lock from here on.
     JobState state = JobState::Queued;
     // Results, written by the worker before it sets Done.
@@ -284,7 +288,8 @@ void BuildJob(Ahead &ahead, Job &job)
     if (fragment)
     {
         PipelineInfo info;
-        MakePipelineInfo(info, job.key, *job.vs, fragment, *job.decl, *job.layout, job.dynamicStride);
+        MakePipelineInfo(info, job.key, *job.vs, job.vertex, fragment, *job.decl, *job.layout, job.dynamicStride,
+                         job.byteStandIn);
         OffThreadPipeline result;
         job.bindings = info.bindingMask;
         job.pipeline = CreateGraphicsPipelineOffThread(ahead.core, info.info, result);
@@ -461,7 +466,12 @@ void TryQueue(Device &device, uint32_t at)
     Layout *layout = GetLayout(device, LayoutFor(vertex, pixel, key.linearShader));
     if (!layout)
         return;
+    const VkShaderModule vertexModule = VertexModule(device, vertex, decl);
+    if (!vertexModule)
+        return;
     std::unique_ptr<Job> job(new Job());
+    job->vertex = vertexModule;
+    job->byteStandIn = device.byteStandIn;
     job->key = key;
     job->vs = &vertex;
     job->ps = &pixel;

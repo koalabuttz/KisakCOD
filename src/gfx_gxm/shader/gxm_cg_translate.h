@@ -94,6 +94,9 @@ struct Reflection
     // from the API.
     uint16_t floatConstants = 0;
     bool relativeConstants = false;
+    // The float constants the shader reads from the API (not the ones it
+    // defines itself), ascending. Empty when it indexes them with a0.
+    std::vector<uint16_t> apiConstants;
     SamplerType samplers[16] = {};
     std::vector<VertexInput> inputs; // vertex shaders
     // What a vertex shader writes, or what a pixel shader reads, sorted by
@@ -132,6 +135,18 @@ struct Options
     // Pixel shaders: D3DRS_ALPHATESTENABLE's test, done in the program
     // since GXM has none. Always is no test.
     AlphaFunc alphaFunc = AlphaFunc::Always;
+    // Pixel shaders: the 2D samplers s<n> whose plain reads (texld) go
+    // through a sharpening filter: the texel and its four neighbours, a
+    // step of `kisak_sharp.xy` apart and no further than `kisak_sharp_max`,
+    // as an unsharp mask of strength `kisak_sharp.z` kept between the
+    // least and the most of the five. The Vita's scaled 3D picture is read
+    // this way by the pass that stretches it (gxm_engine_options.h).
+    uint16_t sharpSamplers = 0;
+    // Pixel shaders: a pixel that fails the alpha test is written as
+    // (0, 0, 0, 0) and not discarded. For draws whose blend leaves the
+    // target as it was for such a source (gxm_idle_alpha_test.h): the
+    // picture is the same and the program has no discard.
+    bool alphaZero = false;
     // Vertex shaders: keep the position's z just inside the far plane
     // (z <= w * 0.99999). D3D9 draws z == w; a run-diagnostic option while
     // finding out whether GXM clips it.

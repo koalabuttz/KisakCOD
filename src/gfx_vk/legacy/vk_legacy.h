@@ -768,12 +768,69 @@ enum ModernLitShader : uint16_t
     ModernLitOmni = 0x200,
     ModernLitAmbient = 0x300,
     ModernLitLightMask = 0x300,
+    // water_l_sun, alone (no family, map, mode or light bit): CoD4's water
+    // (water shader facts, PC water run 1). The reflection probe (a cube) at
+    // s1, the water map at s4; fog colour at c0, envMapParms at c5,
+    // waterColor at c6, sun direction and colour at c17 and c18; texcoord 0
+    // (the water map's UV), texcoord 2 (the point relative to the eye, fog)
+    // and colour 0 (alpha) in. It reads the planar reflection where the
+    // water lies on its plane.
+    ModernLitWater = 0x400,
+    // Variations of the lp_ shaders, beside the bits above (skin and flag
+    // shader facts): the reflection probe's light scaled by 0.3, as
+    // character skin's specular surfaces (lp_..skin_..s0) have it; and the
+    // sun lighting both faces, |N.L| in place of the clamp, as flag_
+    // surfaces with the sun have it.
+    ModernLitSkinProbe = 0x800,
+    ModernLitTwoSidedSun = 0x1000,
+    ModernLitVariationMask = 0x1800,
+    // With no family, ModernLitSpot or ModernLitOmni: the extra per-light
+    // pass l_<spot|omni>[_flag|_skin][_hsm]_<mode>c0[d0][n0] that effects'
+    // lights (muzzle flashes, explosions) add over the lit scene (light pass
+    // facts 1): the light's term alone, drawn additively (INVDESTALPHA, ONE).
+    // The colour map at s0; the light's shadow map at s4 (hsm, spots only,
+    // not with a detail map), then the normal map (n0), the attenuation and
+    // the detail map (d0), each at the next sampler; fog colour at c0,
+    // lightPosition and lightDiffuse at c5 and c6, spotDir and spotFactors at
+    // c7 and c8 (a spot), spotShadowmapPixelAdjust at c9 (hsm), detailScale
+    // after those (d0); texcoords 0, 1 and 5, 2 and 3 (n0), 4 (hsm) and colour
+    // 0 in. ModernLitTwoSidedSun with it is flag_'s light on both faces. Ours
+    // adds the light as physical light (SetModernLightPass).
 };
+// Whether it is an extra per-light pass (l_).
+constexpr bool ModernLitLightPass(uint16_t shader)
+{
+    const uint16_t light = shader & ModernLitLightMask;
+    return !(shader & ModernLitFamilyMask) && (light == ModernLitSpot || light == ModernLitOmni);
+}
 // Whether shader names a Modern lit shader of ours.
 constexpr bool ModernLitShaderValid(uint16_t shader)
 {
+    if (shader == ModernLitWater)
+        return true;
+    if (ModernLitLightPass(shader))
+    {
+        // No specular map, no variation but the two-sided light, and the
+        // shadow map on spots alone and not with a detail map.
+        const bool spot = (shader & ModernLitLightMask) == ModernLitSpot;
+        return !(shader & (ModernLitSpecular | ModernLitSkinProbe | ModernLitWater))
+            && (shader & ModernLitModeMask) != 0x30 && shader <= 0x1fff
+            && (!(shader & ModernLitShadow) || (spot && !(shader & ModernLitDetail)));
+    }
     const uint16_t family = shader & ModernLitFamilyMask;
     const uint16_t light = shader & ModernLitLightMask;
+    if (shader & ModernLitVariationMask)
+    {
+        // Models only: the probe's scale with s0, the two-sided sun with it.
+        const bool model = family == ModernLitLpSun || (family == ModernLitNoSun && (shader & ModernLitNoSunModel));
+        if (!model || light == ModernLitAmbient)
+            return false;
+        if ((shader & ModernLitSkinProbe) && !(shader & ModernLitSpecular))
+            return false;
+        if ((shader & ModernLitTwoSidedSun) && (family != ModernLitLpSun || light != 0))
+            return false;
+        shader &= ~ModernLitVariationMask;
+    }
     if (!family || (shader & ModernLitModeMask) == 0x30 || shader > 0x3ff)
         return false;
     if (light == ModernLitAmbient)
@@ -814,9 +871,18 @@ constexpr bool ModernLitShadowed(uint16_t shader)
 }
 // How many pixel constants it reads: to c18 (c19 with s0) with the sun;
 // without, to envMapParms (s0) or detailScale (d0), at least c0 for the world
-// and c5 for models; lp_amb to c18.
+// and c5 for models; lp_amb and water to c18.
 constexpr uint32_t ModernLitConstantCount(uint16_t shader)
 {
+    if (shader == ModernLitWater)
+        return 19u;
+    if (ModernLitLightPass(shader))
+    {
+        // c5 lightPosition, c6 lightDiffuse; c7 spotDir and c8 spotFactors
+        // (a spot); c9 spotShadowmapPixelAdjust (hsm); then detailScale.
+        const bool spot = (shader & ModernLitLightMask) == ModernLitSpot;
+        return 7u + (spot ? 2u : 0u) + (shader & ModernLitShadow ? 1u : 0u) + (shader & ModernLitDetail ? 1u : 0u);
+    }
     if (ModernLitAmbientOnly(shader))
         return 19u;
     if (ModernLitPointLight(shader))
@@ -894,6 +960,12 @@ struct ModernPlanarParams
 };
 static_assert(sizeof(ModernPlanarParams) == 96, "the lit shaders' push constant block");
 void SetModernPlanar(Device *device, Image *image, const ModernPlanarParams *params);
+// The strength of the extra light passes of ours (ModernLitLightPass): they
+// add their light as physical light, the decoded colour times the decoded
+// light colour times the attenuation, cone, shadow and N.L, in linear light,
+// times this (1 by default). Set before the first draw that uses one:
+// shaders already built keep theirs.
+void SetModernLightPass(Device *device, float strength);
 // Soft sun shadows (docs/vulkan-modern.md "Soft sun shadows"): how the
 // Modern lit shaders with the sun's shadow map filter it, pushed after
 // ModernPlanarParams (fragment stage, offset 96) to every pipeline drawn as

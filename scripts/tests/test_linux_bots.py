@@ -50,8 +50,16 @@ more than TEAM_CAPACITY bots every mode splits them over both teams by entity
 number (odd numbers to axis) and sets sv_botsPressAttackBtn=0 as above. With up
 to MAX_BOTS bots sv_maxclients is the larger of 8 and the bot count.
 
-NOT implemented or claimed: combat kills, client-originated disconnect packets,
-client-side/snapshot decoding, retail/Steam compatibility, and AI.
+With --brain 1, KisakCOD's bots (docs/bots.md) drive the test clients with
+bot_combat 0: they walk, look and notice, and each notice is audited. With
+--combat as well, they fight (bot_combat 1): they may die and respawn, so only
+the first hold sample must be healthy, turns use the aiming hand's top speed
+and skip deaths and spawns, and each fight's first shot is audited against the
+human floor.
+
+NOT implemented or claimed (without --combat): combat kills; and always:
+client-originated disconnect packets, client-side/snapshot decoding,
+retail/Steam compatibility.
 
 Usage:
     python3 scripts/tests/test_linux_bots.py "/path/to/Call of Duty 4" \
@@ -87,7 +95,8 @@ botTest_Log(msg)
 }
 
 // Where every bot looks (pitch, yaw, roll), four times a second: KisakCOD's
-// bot brain (--brain 1) turns it at a human pace.
+// bot brain (--brain 1) turns it at a human pace. The session state tells a
+// spawn's jump (--combat) from a turn.
 botTest_LogViews(tick)
 {
     for (i = 0; i < level.botTestBots.size; i++)
@@ -95,7 +104,7 @@ botTest_LogViews(tick)
         b = level.botTestBots[i];
         if (isdefined(b))
             botTest_Log("BOTFEATURE view entity=" + b getentitynumber()
-                        + " tick=" + tick + " angles=" + b getplayerangles());
+                        + " tick=" + tick + " state=" + b.sessionstate + " angles=" + b getplayerangles());
     }
 }
 
@@ -433,8 +442,11 @@ def read_text(path: Path) -> str:
         return ""
 
 
-def validate_hold(log_text: str, bots: int, hold_seconds: int, balanced: bool = False) -> list:
-    """Require an exact client set in every sample; duplicates cannot mask loss."""
+def validate_hold(log_text: str, bots: int, hold_seconds: int, balanced: bool = False,
+                  combat: bool = False) -> list:
+    """Require an exact client set in every sample; duplicates cannot mask loss.
+    With combat (--combat) bots die and respawn during the hold, so health and
+    loadout are required of the first sample only."""
     spawned = re.findall(r"BOTFEATURE spawned entity=(\d+)\s*$", log_text, re.M)
     rows = re.findall(r"BOTFEATURE held entity=(\d+) sample=(\d+) state=(\w+) "
                       r"health=(-?\d+) team=(\w+) class=(\w+) weapon=(\S+)\s*$",
@@ -445,16 +457,19 @@ def validate_hold(log_text: str, bots: int, hold_seconds: int, balanced: bool = 
     for sample in range(hold_seconds + 1):
         ids = [row[0] for row in rows if int(row[1]) == sample]
         complete = complete and len(ids) == bots and set(ids) == expected
-    healthy = complete and all(row[2] == "playing" and int(row[3]) > 0 for row in rows)
+    judged = [row for row in rows if int(row[1]) == 0] if combat else rows
+    healthy = complete and all(row[2] == "playing" and int(row[3]) > 0 for row in judged)
     loadout = complete and all(row[4] == ("axis" if balanced and int(row[0]) % 2 else "allies") and row[5] == "CLASS_ASSAULT"
-                              and row[6] not in ("none", "undefined") for row in rows)
+                              and row[6] not in ("none", "undefined") for row in judged)
     return [(bool(complete), "the same distinct clients occur once in every hold sample"),
-            (bool(healthy), "every hold sample reports playing clients with positive health"),
+            (bool(healthy), "the first hold sample reports playing clients with positive health" if combat else
+             "every hold sample reports playing clients with positive health"),
             (bool(loadout), "stock team/class flow equipped every client")]
 
 
-VIEW_ROW = re.compile(r"BOTFEATURE view entity=(\d+) tick=(\d+) "
+VIEW_ROW = re.compile(r"BOTFEATURE view entity=(\d+) tick=(\d+) (?:state=(\w+) )?"
                       r"angles=\((-?[\d.e+-]+), (-?[\d.e+-]+), (-?[\d.e+-]+)\)\s*$", re.M)
+HELD_STATE_ROW = re.compile(r"BOTFEATURE held entity=(\d+) sample=(\d+) state=(\w+) ", re.M)
 PLACE_ROW = re.compile(r"BOTFEATURE place entity=(\d+) sample=(\d+) "
                        r"origin=\((-?[\d.e+-]+), (-?[\d.e+-]+), (-?[\d.e+-]+)\)\s*$", re.M)
 # docs/bots.md: a bot turns at most 200 degrees a second while it walks (120
@@ -465,6 +480,9 @@ PLACE_ROW = re.compile(r"BOTFEATURE place entity=(\d+) sample=(\d+) "
 # second any turn would fit, since the short way round is never past 180.
 VIEW_TICKS_PER_SECOND = 4
 BRAIN_MAX_TURN_PER_TICK = 200.0 / VIEW_TICKS_PER_SECOND * 1.1 + 5.0
+# Fighting (--combat), the hand turns at most 450 degrees a second; the
+# weapon's kick (at most 10 degrees) and the sight's view error ride on top.
+BRAIN_COMBAT_MAX_TURN_PER_TICK = 450.0 / VIEW_TICKS_PER_SECOND * 1.1 + 20.0
 BRAIN_MAX_PITCH = 85.0 + 0.5
 BRAIN_MIN_TOTAL_TURN = 10.0
 
@@ -473,26 +491,32 @@ def angle_delta(to: float, frm: float) -> float:
     return (to - frm + 180.0) % 360.0 - 180.0
 
 
-def validate_brain_view(log_text: str, bots: int, hold_seconds: int) -> list:
+def validate_brain_view(log_text: str, bots: int, hold_seconds: int, combat: bool = False) -> list:
     """With bot_brain 1, every bot looks around: it turns, never faster than the
-    view motor's top speed allows, and keeps its pitch within the limits."""
-    rows = [(int(e), int(t), float(p), float(y)) for e, t, p, y, _ in VIEW_ROW.findall(log_text)]
+    view motor's top speed allows (the aiming hand's while it fights), and
+    keeps its pitch within the limits. A step to or from a quarter second the
+    bot was not playing (dead, a killcam, a spawn) is no turn."""
+    rows = [(int(e), int(t), state or "playing", float(p), float(y))
+            for e, t, state, p, y, _ in VIEW_ROW.findall(log_text)]
     ticks = hold_seconds * VIEW_TICKS_PER_SECOND + 1
+    limit = BRAIN_COMBAT_MAX_TURN_PER_TICK if combat else BRAIN_MAX_TURN_PER_TICK
     by_bot = {}
-    for entity, tick, pitch, yaw in rows:
-        by_bot.setdefault(entity, {})[tick] = (pitch, yaw)
+    for entity, tick, state, pitch, yaw in rows:
+        by_bot.setdefault(entity, {})[tick] = (pitch, yaw, state)
     complete = (len(rows) == bots * ticks and len(by_bot) == bots
                 and all(sorted(views) == list(range(ticks)) for views in by_bot.values()))
-    pitch_ok = complete and all(abs(p) <= BRAIN_MAX_PITCH for _, _, p, _ in rows)
+    pitch_ok = complete and all(abs(p) <= BRAIN_MAX_PITCH for _, _, _, p, _ in rows)
     paced = complete
     turned = complete
     for views in by_bot.values() if complete else ():
         total = 0.0
         for tick in range(1, ticks):
+            if views[tick][2] != "playing" or views[tick - 1][2] != "playing":
+                continue
             step = abs(angle_delta(views[tick][1], views[tick - 1][1]))
             step = max(step, abs(views[tick][0] - views[tick - 1][0]))
             total += step
-            paced = paced and step <= BRAIN_MAX_TURN_PER_TICK
+            paced = paced and step <= limit
         turned = turned and total >= BRAIN_MIN_TOTAL_TURN
     return [(bool(complete), "bot brain: every bot's view is in every quarter second of the hold"),
             (bool(pitch_ok), "bot brain: every pitch is within the player's limits"),
@@ -500,15 +524,23 @@ def validate_brain_view(log_text: str, bots: int, hold_seconds: int) -> list:
             (bool(turned), f"bot brain: every bot looked around (at least {BRAIN_MIN_TOTAL_TURN:g} degrees)")]
 
 
-# A player runs about 190 units a second; a bot walks the mesh (with a jump
-# when stuck), so a second between samples never covers more than a sprint.
-BRAIN_MAX_MOVE_PER_SAMPLE = 300.0
+# A player runs about 190 units a second and sprints about 285; a bot walks
+# the mesh (with a jump when stuck) and never sprints. Around a round's start
+# the engine moves a few freshly spawned bots in one long server frame (PC
+# runs 16 to 18: 304 to 346 units in that second, 44 to 100 units in one
+# 150 ms frame while their velocity read 0: the engine placing them, not
+# their running), so the limit leaves room for that, and is still far below
+# what a bot moving faster than a player could do every second.
+BRAIN_MAX_MOVE_PER_SAMPLE = 360.0
 BRAIN_MIN_WALKED = 300.0
 
 
 def validate_brain_walk(log_text: str, bots: int, hold_seconds: int) -> list:
     """With bot_brain 1 on a map with a navigation mesh, every bot walks: it
-    covers ground over the hold, never faster than a player can move."""
+    covers ground over the hold, never faster than a player can move. A
+    second to or from a sample the bot was not playing (--combat: dead, then
+    a spawn) is no walk."""
+    states = {(int(e), int(s)): state for e, s, state in HELD_STATE_ROW.findall(log_text)}
     rows = [(int(e), int(s), float(x), float(y), float(z)) for e, s, x, y, z in PLACE_ROW.findall(log_text)]
     by_bot = {}
     for entity, sample, x, y, z in rows:
@@ -517,9 +549,12 @@ def validate_brain_walk(log_text: str, bots: int, hold_seconds: int) -> list:
                 and all(sorted(samples) == list(range(hold_seconds + 1)) for samples in by_bot.values()))
     paced = complete
     walked = complete
-    for samples in by_bot.values() if complete else ():
+    for entity, samples in by_bot.items() if complete else ():
         total = 0.0
         for sample in range(1, hold_seconds + 1):
+            if (states.get((entity, sample), "playing") != "playing"
+                    or states.get((entity, sample - 1), "playing") != "playing"):
+                continue
             (ax, ay, _), (bx, by, _) = samples[sample - 1], samples[sample]
             step = ((bx - ax) ** 2 + (by - ay) ** 2) ** 0.5
             total += step
@@ -558,6 +593,113 @@ def validate_brain_notices(output: str, both_teams: bool) -> list:
             (on_screen, "bot brain: every notice was on the bot's screen and partly in view")]
 
 
+FIRE_ROW = re.compile(r"^bots: (\d+) fired at (\d+), (\d+) ms after noticing, (\d+) ms after it came into view, "
+                      r"(\d+) units\s*$", re.M)
+# docs/bots.md: a bot fires only at an opponent it noticed (0.2 s in view at
+# the least), and its hand starts no sooner than 60 ms after the notice.
+BRAIN_MIN_FIRE_AFTER_NOTICE_MS = 60
+BRAIN_MIN_FIRE_IN_VIEW_MS = BRAIN_MIN_NOTICE_MS + BRAIN_MIN_FIRE_AFTER_NOTICE_MS
+# The stock gametype scripts log each damage and kill (logPrint "D;", "K;").
+DAMAGE_LOG_ROW = re.compile(r"^\s*\d+:\d+\s*D;", re.M)
+KILL_LOG_ROW = re.compile(r"^\s*\d+:\d+\s*K;", re.M)
+
+
+# bot_log 1 also prints each choice to take cover or hunt (bot_mind.h).
+COVER_ROW = re.compile(r"^bots: \d+ takes cover \d+ units away \((reloading|hurt|outnumbered)\)\s*$", re.M)
+HUNT_ROW = re.compile(r"^bots: \d+ hunts \((seen|heard|hit)\)\s*$", re.M)
+# And their team play (bot_team.h): the part the commander gives a bot, its
+# callouts, where its part sends it, and the map's spots once worked out.
+ROLE_ROW = re.compile(r"^bots: \d+ plays (roam|push|anchor|attack|defend)\s*$", re.M)
+CALLOUT_ROW = re.compile(r"^bots: \d+ calls out \d+\s*$", re.M)
+PUSH_ROW = re.compile(r"^bots: \d+ pushes to a callout \d+ units away\s*$", re.M)
+ANCHOR_ROW = re.compile(r"^bots: \d+ anchors \d+ units from a callout\s*$", re.M)
+OBJECTIVE_ROW = re.compile(r"^bots: \d+ (attacks an objective \d+ units away|defends an objective from \d+ units)\s*$",
+                           re.M)
+SHOTS_ROW = re.compile(r"^bots: (\d+) shots fired so far\s*$", re.M)
+GRENADE_ROW = re.compile(r"^bots: \d+ throws a grenade \d+ units\s*$", re.M)
+KNIFE_ROW = re.compile(r"^bots: \d+ knifes \d+, \d+ units\s*$", re.M)
+TEAM_OBJECTIVES_ROW = re.compile(r"^bots: team (\d+) objectives: take (\d+), hold (\d+)\s*$", re.M)
+SPOTS_ROW = re.compile(r"^bots: map spots ready: (\d+) spots, (\d+) lines, in ([\d.]+) s\s*$", re.M)
+
+
+def objective_fixture(fixture: str) -> str:
+    """--objectives: the fixture starts the stock Domination game type instead
+    of team deathmatch, so the compass shows flags to take and hold."""
+    war = '    maps\\mp\\gametypes\\war::main();'
+    assert war in fixture
+    return fixture.replace(war, '    maps\\mp\\gametypes\\dom::main();')
+
+
+def validate_objectives(output: str) -> list:
+    """With --objectives: each team's compass showed objectives, and bots went
+    for them."""
+    shown = {}
+    for team, take, hold in TEAM_OBJECTIVES_ROW.findall(output):
+        shown[team] = max(shown.get(team, 0), int(take) + int(hold))
+    attacks = len(re.findall(r"^bots: \d+ attacks an objective", output, re.M))
+    held = sum(1 for _, _, hold in TEAM_OBJECTIVES_ROW.findall(output) if int(hold) > 0)
+    arrivals = re.findall(r"^bots: \d+ is on an objective(?:, (\w+))?\s*$", output, re.M)
+    arrived = len(arrivals)
+    prone = sum(1 for stance in arrivals if stance == "prone")
+    print(f"INFO: bots got onto an objective {arrived} times ({prone} of them lying prone)")
+    stays = [(float(seconds), why) for seconds, why in
+             re.findall(r"^bots: \d+ left an objective after ([\d.]+) s \(([^,)]+)", output, re.M)]
+    if stays:
+        longest = max(seconds for seconds, _ in stays)
+        reasons = {}
+        for _, why in stays:
+            reasons[why] = reasons.get(why, 0) + 1
+        print(f"INFO: attackers left an objective {len(stays)} times, after {longest:.1f} s at most ("
+              + ", ".join(f"{why} {count}" for why, count in sorted(reasons.items())) + ")")
+    stuck = len(re.findall(r"^bots: \d+ (is stuck on its way|finds no way) to an objective", output, re.M))
+    short = len(re.findall(r"^bots: \d+ stopped \d+ units from an objective", output, re.M))
+    print(f"INFO: bots got stuck or found no way to an objective {stuck} times and stopped short of one "
+          f"{short} times")
+    print(f"INFO: a team's compass showed a flag of its own to hold {held} times "
+          "(a capture turns a flag to take into one to hold)")
+    return [
+        (len(shown) == 2 and all(count > 0 for count in shown.values()),
+         f"both teams' bots read objectives off their compass (teams {sorted(shown)})"),
+        (attacks > 0, f"bots went to take objectives ({attacks} times)"),
+    ]
+
+
+def team_play(output: str) -> dict:
+    """Counts of the team play lines bot_log 1 prints."""
+    roles = {}
+    for role in ROLE_ROW.findall(output):
+        roles[role] = roles.get(role, 0) + 1
+    spots = SPOTS_ROW.findall(output)
+    return {
+        "roles": roles,
+        "callouts": len(CALLOUT_ROW.findall(output)),
+        "pushes": len(PUSH_ROW.findall(output)),
+        "anchors": len(ANCHOR_ROW.findall(output)),
+        "objectives": len(OBJECTIVE_ROW.findall(output)),
+        "spots": tuple(spots[-1]) if spots else None,
+    }
+
+
+def fire_rows(output: str) -> list:
+    return [tuple(int(v) for v in row) for row in FIRE_ROW.findall(output)]
+
+
+def validate_brain_fights(output: str, both_teams: bool) -> list:
+    """The combat audit (--combat): every first shot of a fight (bot_log 1) was
+    at an opponent, after the reaction onset and the human noticing floor; on
+    both teams, the bots did fight."""
+    rows = fire_rows(output)
+    opponents = all(both_teams and bot % 2 != target % 2 and bot != target for bot, target, *_ in rows)
+    onset = all(after >= BRAIN_MIN_FIRE_AFTER_NOTICE_MS for _, _, after, _, _ in rows)
+    in_view = all(view >= BRAIN_MIN_FIRE_IN_VIEW_MS for _, _, _, view, _ in rows)
+    checks = [(opponents, "bot brain: every player a bot fired at was an opponent"),
+              (onset, f"bot brain: every first shot came at least {BRAIN_MIN_FIRE_AFTER_NOTICE_MS} ms after noticing"),
+              (in_view, f"bot brain: every first shot came at least {BRAIN_MIN_FIRE_IN_VIEW_MS} ms after the target came into view")]
+    if both_teams:
+        checks.append((bool(rows), "bot brain: the bots fought (at least one fired at an opponent)"))
+    return checks
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -576,9 +718,18 @@ def main() -> int:
     parser.add_argument("--keep", action="store_true", help="keep the temporary tree")
     parser.add_argument("--brain", type=int, choices=(0, 1), default=0,
                         help="bot_brain: 0 the retail random inputs, 1 KisakCOD's bots (docs/bots.md)")
+    parser.add_argument("--combat", action="store_true",
+                        help="with --brain 1: the bots fight (bot_combat 1), may die, and their shots are audited")
+    parser.add_argument("--objectives", action="store_true",
+                        help="with --brain 1 and more than 4 bots: play Domination; the bots must read the flags "
+                             "off their compass and go for them")
     args = parser.parse_args()
     if args.brain and (args.cycles or args.refill_cycles):
         parser.error("--brain 1 holds one map: use it without --cycles and --refill-cycles")
+    if args.combat and not args.brain:
+        parser.error("--combat needs --brain 1")
+    if args.objectives and (not args.brain or not uses_both_teams(args.bots, args.refill_cycles)):
+        parser.error("--objectives needs --brain 1 and both teams (more than 4 bots)")
 
     if args.hold_seconds < 1:
         parser.error("--hold-seconds must be positive")
@@ -617,10 +768,13 @@ def main() -> int:
         mod = home / "mods" / "bottest"
         scripts = mod / "maps" / "mp" / "gametypes"
         scripts.mkdir(parents=True)
+        fixture = (refill_fixture() if args.refill_cycles else
+                   balanced_teams(transition_fixture() if args.cycles else FIXTURE_GSC) if both_teams else
+                   transition_fixture() if args.cycles else FIXTURE_GSC)
+        if args.objectives:
+            fixture = objective_fixture(fixture)
         (scripts / "dm.gsc").write_text(
-            (refill_fixture() if args.refill_cycles else
-             balanced_teams(transition_fixture() if args.cycles else FIXTURE_GSC) if both_teams else
-             transition_fixture() if args.cycles else FIXTURE_GSC)
+            fixture
             .replace("{bots}", str(args.bots)).replace("{team}", "allies")
             .replace("{hold_seconds}", str(args.hold_seconds))
             .replace("{refill_cycles}", str(args.refill_cycles))
@@ -643,6 +797,9 @@ def main() -> int:
             "+set", "bot_brain", str(args.brain),
             # Each player a brain bot notices, for the fairness audit.
             "+set", "bot_log", "1" if args.brain else "0",
+            # Brain bots fight only with --combat, so the other checks keep
+            # every bot alive through the hold.
+            "+set", "bot_combat", "1" if args.combat else "0",
             "+map", args.map_name,
         ]
         if args.cycles or args.refill_cycles:
@@ -794,13 +951,16 @@ def main() -> int:
             *(validate_refills(log_text, args.bots, args.hold_seconds, args.refill_cycles) if args.refill_cycles else []),
             *(validate_transitions(final_cohort_log(log_text) if args.refill_cycles else log_text,
                                    args.bots, args.hold_seconds, args.map_name, args.cycles, both_teams)
-              if args.cycles or args.refill_cycles else validate_hold(log_text, args.bots, args.hold_seconds, both_teams)),
+              if args.cycles or args.refill_cycles else
+              validate_hold(log_text, args.bots, args.hold_seconds, both_teams, args.combat)),
             *kick_checks,
-            *(validate_brain_view(log_text, args.bots, args.hold_seconds) if args.brain else []),
+            *(validate_brain_view(log_text, args.bots, args.hold_seconds, args.combat) if args.brain else []),
             *(validate_brain_walk(log_text, args.bots, args.hold_seconds) if args.brain else []),
             *([(bool(re.search(r"bots: navigation mesh for \S+ (built|loaded)", output)),
                 "bot brain: the map's navigation mesh was built or loaded")] if args.brain else []),
             *(validate_brain_notices(output, both_teams) if args.brain else []),
+            *(validate_brain_fights(output, both_teams) if args.combat else []),
+            *(validate_objectives(output) if args.objectives else []),
             (len(spawned) == expected_admissions and (combined.count("Gamestate has") >= len(spawned) or
              combined.count("Going from CS_FREE to CS_CONNECTED for bot") >= len(spawned)),
              "the server sent gamestates / connected each bot"),
@@ -826,8 +986,37 @@ def main() -> int:
             print(f"INFO: bots noticed opponents {len(rows)} times" +
                   (f" (after {min(r[2] for r in rows)} to {max(r[2] for r in rows)} ms in view, "
                    f"{min(r[3] for r in rows)} to {max(r[3] for r in rows)} units)" if rows else ""))
+            cover = len(COVER_ROW.findall(output))
+            hunts = len(HUNT_ROW.findall(output))
+            noWay = len(re.findall(r"^bots: \d+ finds no way to a lead", output, re.M))
+            print(f"INFO: bots took cover {cover} times and went hunting {hunts} times "
+                  f"(and found no way to a lead on another floor {noWay} times)")
+            drops = re.search(r"^bots: navigation mesh for (\S+) (?:built|loaded).*?(\d+) drop-downs", output, re.M)
+            if drops:
+                print(f"INFO: the navigation mesh for {drops.group(1)} has {drops.group(2)} drop-downs")
+            team = team_play(output)
+            print("INFO: the commander gave parts: " +
+                  (", ".join(f"{role} {count}" for role, count in sorted(team["roles"].items())) or "none") +
+                  f"; {team['callouts']} callouts, {team['pushes']} pushes, {team['anchors']} anchors, "
+                  f"{team['objectives']} objective moves")
+            print("INFO: " + (f"map spots ready: {team['spots'][0]} spots, {team['spots'][1]} lines, "
+                              f"in {team['spots'][2]} s" if team["spots"] else "map spots not ready yet"))
+        if args.combat:
+            print(f"INFO: bots threw {len(GRENADE_ROW.findall(output))} grenades and knifed "
+                  f"{len(KNIFE_ROW.findall(output))} times")
+            fights = fire_rows(output)
+            print(f"INFO: bots opened fire {len(fights)} times" +
+                  (f" ({min(r[2] for r in fights)} to {max(r[2] for r in fights)} ms after noticing, "
+                   f"{min(r[3] for r in fights)} to {max(r[3] for r in fights)} ms after coming into view, "
+                   f"{min(r[4] for r in fights)} to {max(r[4] for r in fights)} units)" if fights else ""))
+            hits = len(DAMAGE_LOG_ROW.findall(log_text))
+            print(f"INFO: the game logged {hits} hits and {len(KILL_LOG_ROW.findall(log_text))} kills")
+            fired = SHOTS_ROW.findall(output)
+            if fired:
+                print(f"INFO: {fired[-1]} shots fired by the last count, "
+                      f"{hits / max(int(fired[-1]), 1):.2f} hits a shot")
         print(f"\ncompleted in {elapsed:.1f}s on isolated port {port}")
-        print("NOT verified: combat kills, client-originated disconnect packets, " +
+        print("NOT verified: " + ("" if args.combat else "combat kills, ") + "client-originated disconnect packets, " +
               ("drop/refill, " if not args.refill_cycles else "") +
               ("map_restart, map change under bots, " if not args.cycles else "") +
               "client-side decode, retail/Steam compatibility, AI.")

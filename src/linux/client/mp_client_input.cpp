@@ -64,6 +64,8 @@
 #include <exception>
 #include <string>
 
+extern int g_editingField; // ui/ui_input_core.cpp
+
 namespace {
 
 const dvar_t *in_mouse;
@@ -95,6 +97,13 @@ void CloseWindow()
 bool TypingText()
 {
     return Key_IsCatcherActive(0, KEYCATCH_CONSOLE | KEYCATCH_UI);
+}
+
+// What brings an on-screen keyboard up (Android): the console, the chat line,
+// or a menu text field such as the profile name being edited.
+bool WantsText()
+{
+    return Key_IsCatcherActive(0, KEYCATCH_CONSOLE | KEYCATCH_MESSAGE) || g_editingField;
 }
 
 // WM_CREATE and WM_DESTROY.
@@ -142,6 +151,7 @@ void Sys_InstallClientWindow()
     engine.close = CloseWindow;
     engine.windowChanged = WindowChanged;
     engine.typingText = TypingText;
+    engine.wantsText = WantsText;
     kisak::mp_client::InstallWindowProcedure(engine);
 }
 

@@ -52,6 +52,8 @@
 // taken (no primary lightmap to skip it) and fading to the volume's alpha,
 // the material's samplers and constants one register further on, and a
 // blended surface's normal-map slopes and specular scaled by its alpha.
+// Character skin (skin_) and cloth (flag_) draw with it too: the probe's
+// light scaled (kProbeScale) and the sun lighting both faces (kTwoSidedSun).
 //
 // The inputs' locations here are placeholders (texcoord N at N, colour 0 at
 // 10): the Legacy adapter moves them to where the vertex shader writes those
@@ -243,6 +245,12 @@ layout(constant_id = 2) const int kClampDepthReference = 0;
 layout(constant_id = 3) const int kMode = 0;
 // The alpha test may be on (AlphaTestBlock decides), or is known to be off.
 layout(constant_id = 4) const int kAlphaTest = 1;
+// What the reflection probe's light is scaled by: 0.3 for character skin's
+// specular surfaces (lp_..skin_..s0, skin and flag shader facts), else 1.
+layout(constant_id = 5) const float kProbeScale = 1.0;
+// 1 for flag_ surfaces with the sun: the sun lights both faces, |N.L| in
+// place of the clamp (skin and flag shader facts), with the normal unflipped.
+layout(constant_id = 6) const int kTwoSidedSun = 0;
 
 // The sRGB curve (IEC 61966-2-1), unclamped above 1 as the Legacy adapter's
 // decode is, and kept from going negative.
@@ -527,7 +535,8 @@ void main()
     const float facingSun = 1.0;
 #else
     const vec3 sunDirection = pc.c[17].xyz;
-    const float facingSun = clamp(dot(sunDirection, normal), 0.0, 1.0);
+    const float facingSun = kTwoSidedSun != 0 ? abs(dot(sunDirection, normal))
+                                              : clamp(dot(sunDirection, normal), 0.0, 1.0);
 #endif
     const vec3 sunDisplay = shadow * facingSun * pc.c[18].rgb;
     // What the sun adds to the volume's light in the game's display-value
@@ -572,7 +581,7 @@ void main()
     // that ambient occlusion gives for this view and gloss (lm_sun.frag).
     const float specularOcclusion =
         clamp(pow(abs(viewFacing) + ao, exp2(-16.0 * (1.0 - gloss) - 1.0)) - 1.0 + ao, 0.0, 1.0);
-    vec3 reflection = probe.rgb * probe.a * specularOcclusion;
+    vec3 reflection = probe.rgb * probe.a * specularOcclusion * kProbeScale;
 #if POINT_LIGHT
     const float exponent = exp2(gloss * 9.37752) + 7.0;
     const float highlight = clamp(exp((dot(reflected, lightDirection) - 0.99925) * exponent), 0.0, 1.0);

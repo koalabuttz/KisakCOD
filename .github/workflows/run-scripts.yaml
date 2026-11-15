@@ -1,10 +1,11 @@
 name: Machine run scripts
 
 # The scripts the test machines run (scripts/runs: the frame-rate driver
-# perf_run.py, run_report.py, the Windows runner pc_run.py, the Vita3K runner) and their host tests. They are
+# perf_run.py, run_report.py, the Windows runner pc_run.py, the Android runner
+# android_run.py, the Vita3K runner) and their host tests. They are
 # Python and PowerShell that no build compiles or reads, so a change to them
 # alone starts this one job, not the Linux workflow's 17 or the PS Vita
-# workflow's 4 (docs/ci.md). The Linux workflow's native job runs the same two
+# workflow's 4 (docs/ci.md). The Linux workflow's native job runs the same
 # tests whenever it runs anyway.
 
 on:
@@ -16,6 +17,7 @@ on:
       - tests/runs/**
       - scripts/tests/test_perf_run.py
       - scripts/tests/test_pc_run.py
+      - scripts/tests/test_android_run.py
       - scripts/tests/test_vita3k_runner.py
       - .github/workflows/run-scripts.yaml
   pull_request:
@@ -26,6 +28,7 @@ on:
       - tests/runs/**
       - scripts/tests/test_perf_run.py
       - scripts/tests/test_pc_run.py
+      - scripts/tests/test_android_run.py
       - scripts/tests/test_vita3k_runner.py
       - .github/workflows/run-scripts.yaml
 
@@ -50,7 +53,8 @@ jobs:
 
       # The frame-rate driver against a stand-in game it compiles with the
       # runner's own C++ compiler, the Windows runner against a Python
-      # stand-in, and the Vita3K runner's sealing script,
+      # stand-in, the Android runner against a stand-in adb, device and
+      # emulator, and the Vita3K runner's sealing script,
       # shell scripts and README examples. No game, no GPU, no Vita3K.
       - name: Check the run driver and the Vita3K runner
         timeout-minutes: 10
@@ -59,4 +63,5 @@ jobs:
           set -euo pipefail
           python3 scripts/tests/test_perf_run.py
           python3 scripts/tests/test_pc_run.py
+          python3 scripts/tests/test_android_run.py
           python3 scripts/tests/test_vita3k_runner.py

@@ -1,0 +1,31 @@
+#version 450
+
+// The Modern path's compute check, pass two of two: one invocation per
+// column of the volume walks it front to back (along z), as a froxel fog's
+// integration does, and writes at each slice the weighted mean of the slices
+// so far: with pass one's values that is the texel's x and y, the mean of
+// the slice centres up to it (linear in z, so a linear filter between slices
+// is exact) and alpha 0.5 x 2 = 1.
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform readonly image3D source;
+layout(set = 0, binding = 1, rgba16f) uniform writeonly image3D target;
+layout(set = 0, binding = 2, std430) readonly buffer Slices
+{
+    vec4 weight[];
+} slices;
+
+void main()
+{
+    const ivec3 size = imageSize(target);
+    const ivec2 column = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(column, size.xy)))
+        return;
+    vec4 sum = vec4(0.0);
+    for (int z = 0; z < size.z; ++z)
+    {
+        sum += imageLoad(source, ivec3(column, z)) * slices.weight[z];
+        imageStore(target, ivec3(column, z), sum / float(z + 1));
+    }
+}

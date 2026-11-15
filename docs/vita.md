@@ -96,7 +96,7 @@ starting `Vita` come from the Vita layer:
 - `free memory at start-up`: what the system had left after loading the
   program and newlib's heap, before the engine's reservations.
 - `Vita memory ...` (after start-up, then once a minute, before a timed
-  quit, and at a fatal error): game memory free in the zone arena, heap use out of its block, the
+  quit, and at a fatal error): game memory free in the zone arena, heap use out of its block (and the most malloc had taken out of that block when a line was written), the
   engine's reservations and what the system still has free. An out-of-memory
   error prints it last, which shows the pool that ran out.
 - `Vita load, last 60 s: busy 12.3%, slowest frame 18.2 ms, 0 frames over
@@ -288,9 +288,22 @@ The switches that can be turned: `no-depth-prepass`, `no-frame-overlap`,
 GPU back at its default clocks), `no-prepass-governor` (the depth pass
 on in every frame instead of timed both ways), `no-same-state` (every
 draw works out its programs and fixed state anew),
-`no-world-only-prepass` (the forced depth pass draws the models too) and
+`no-world-only-prepass` (the forced depth pass draws the models too),
+`no-alpha-test-drop` (every alpha test is a discard in its fragment
+program, also the ones that cannot change the picture),
+`no-alpha-test-zero` (a blended draw's alpha test discards a rejected
+pixel instead of writing zero for it),
+`no-frag-keep-depth` and `no-frag-keep-same` (a model draw writes its
+fragment constants anew though nothing it reads changed),
+`frag-direct-write` (the constants are copied into the uniform buffer
+directly),
+`no-texture-keep` (every draw goes through its textures, also when they
+are the last draw's),
 `gpu-watch` (the log gets a `gpu watch` line that says how long the GPU
-works on a frame, [vita-client.md](vita-client.md)). Turning `no-depth-prepass`
+works on a frame, [vita-client.md](vita-client.md)) and the three that
+give a frame its scenes back, `no-prepass-clear`, `no-depth-only-scene`
+and `no-scene-in-copy` ([vita-client.md](vita-client.md), "Three scenes a
+frame instead of five"). Turning `no-depth-prepass`
 or `no-prepass-governor` starts the governor afresh. The others size or make things at
 start-up and are refused by name. A switch is turned between two frames
 and the log says so (`diag: switch no-depth-prepass is on from frame 1840 on
@@ -529,9 +542,10 @@ linker script and stub libraries). `-Wl,-q` keeps the relocations that
   fused multiply-add (`-ffp-contract=off`), signed `char`: the armv7 rules,
   so the server's movement and collision maths give the same results as on a
   PC. The whole binary, VitaSDK's libraries included, has no NEON float
-  instruction (CI checks), but for the client's vector skinning path, which
-  only makes vertices to draw (`src/gfx_d3d/r_model_skin_vec.cpp`,
-  [the rule](linux-armv7.md)). At start-up each thread clears the FPSCR
+  instruction (CI checks), but for the client's vector skinning path and its
+  static culling walk, which only make what is drawn
+  (`src/gfx_d3d/r_model_skin_vec.cpp`, `src/gfx_d3d/r_dpvs_static_vec.cpp`),
+  and its MP3 decoder, which only makes sound ([the rule](linux-armv7.md)). At start-up each thread clears the FPSCR
   flush-to-zero and default-NaN bits (`Vita_SetIeeeFloatMode`); the log
   records what the system had set.
 - **Thread-local storage.** VitaSDK's GCC is built without native TLS, and the

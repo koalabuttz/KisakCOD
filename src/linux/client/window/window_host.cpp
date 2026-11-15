@@ -152,7 +152,11 @@ void WindowHost::Open(const Config &config, SDL_Window *adopted)
         // window's, not a process-wide flag. A refused start is a real failure:
         // the engine would silently receive no text, so fail the construction
         // and let the handler below release the window and subsystems.
-        startedText_ = !sdl::TextInputActive(window_);
+        // Where typing needs an on-screen keyboard, text input waits until the
+        // owner asks for it (SetTextWanted): started here it would cover the
+        // game with a keyboard and, on Android, take the controller's sticks.
+        screenKeyboard_ = sdl::ScreenKeyboard();
+        startedText_ = !screenKeyboard_ && !sdl::TextInputActive(window_);
         if (startedText_ && !sdl::StartTextInput(window_)) throw Error("SDL text input start");
     } catch (...) {
         if(startedText_)sdl::StopTextInput(window_);
@@ -189,6 +193,25 @@ WindowHost::~WindowHost() noexcept
     if (!adopted_) SDL_DestroyWindow(window_);
     SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
     hostActive.clear();
+}
+bool WindowHost::SetTextWanted(bool wanted)
+{
+    CheckThread();
+    if (!screenKeyboard_ || wanted == startedText_)
+        return true;
+    if (wanted)
+    {
+        if (sdl::TextInputActive(window_))
+            return true;
+        if (!sdl::StartTextInput(window_))
+            return false;
+    }
+    else
+    {
+        sdl::StopTextInput(window_);
+    }
+    startedText_ = wanted;
+    return true;
 }
 void WindowHost::CheckThread() const
 {

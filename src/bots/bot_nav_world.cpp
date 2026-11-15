@@ -33,6 +33,8 @@ kb::NavMesh s_nav;
 char s_navMap[64];
 uint32_t s_navChecksum;
 bool s_navTried;
+// Counts the meshes loaded, so what is worked out from one knows when it is stale.
+int s_navGeneration;
 
 // CM_ShowSingleBrushCollision hands each face of a brush to a callback with
 // no context; this collects them for one brush at a time.
@@ -216,8 +218,8 @@ void LoadOrBuild(const char *mapName, uint32_t checksum)
     if (ReadCache(path, blob) && kb::NavBlobChecksum(blob.data(), blob.size(), &cached) && cached == checksum
         && s_nav.Load(blob.data(), blob.size()))
     {
-        Com_Printf(CON_CHANNEL_SERVER, "bots: navigation mesh for %s loaded from %s (%d polygons, %d KB)\n", mapName,
-                   path, s_nav.PolygonCount(), static_cast<int>(blob.size() / 1024));
+        Com_Printf(CON_CHANNEL_SERVER, "bots: navigation mesh for %s loaded from %s (%d polygons, %d drop-downs, %d KB)\n",
+                   mapName, path, s_nav.PolygonCount(), s_nav.DropLinkCount(), static_cast<int>(blob.size() / 1024));
         return;
     }
 
@@ -251,9 +253,10 @@ void LoadOrBuild(const char *mapName, uint32_t checksum)
     const bool saved = WriteCache(path, blob);
     Com_Printf(CON_CHANNEL_SERVER,
                "bots: navigation mesh for %s built in %.1f s (geometry %.1f s: %d brushes, %d triangles; "
-               "%d x %d tiles, %d built, %d polygons, %d KB)%s%s\n",
+               "%d x %d tiles, %d built, %d polygons, %d drop-downs, %d KB)%s%s\n",
                mapName, (built - started) * 0.001f, (gathered - started) * 0.001f, brushes, stats.inputTriangles,
-               stats.tilesX, stats.tilesY, stats.tilesBuilt, stats.polygons, static_cast<int>(stats.bytes / 1024),
+               stats.tilesX, stats.tilesY, stats.tilesBuilt, stats.polygons, stats.dropLinks,
+               static_cast<int>(stats.bytes / 1024),
                saved ? ", saved to " : ", not saved", saved ? path : "");
 }
 
@@ -272,6 +275,12 @@ const kisak::bots::NavMesh *Bot_Nav()
     s_navTried = true;
     s_navChecksum = cm.checksum;
     I_strncpyz(s_navMap, mapName, sizeof(s_navMap));
+    ++s_navGeneration;
     LoadOrBuild(mapName, cm.checksum);
     return s_nav.Loaded() ? &s_nav : nullptr;
+}
+
+int Bot_NavGeneration()
+{
+    return s_navGeneration;
 }

@@ -238,11 +238,24 @@ struct Variant
     // What the draws write, found once by name.
     const SceGxmProgramParameter *constants = nullptr; // "c"
     const SceGxmProgramParameter *alphaRef = nullptr;  // "kisak_alpha_ref"
+    // "kisak_sharp" and "kisak_sharp_max": a variant that reads a scaled
+    // picture through the sharpening filter (cg::Options::sharpSamplers).
+    const SceGxmProgramParameter *sharp = nullptr, *sharpMax = nullptr;
     const SceGxmProgramParameter *depth[16] = {};      // "kisak_depth_s<n>"
     const SceGxmProgramParameter *inputs[16] = {};     // "in_v<n>"
     int8_t textureUnit[16];                            // sampler s<n>'s unit, -1 none
+    uint16_t samplers = 0;      // the samplers with a unit
     bool uniforms = false; // has a default uniform buffer
     bool depthUniforms = false; // any of depth[] is there: its uniforms follow the textures
+    uint16_t depthMask = 0;     // the samplers whose depth[] is there
+    // The default uniform buffer's size, and where "c" starts in it in
+    // floats when it is an array of float4 that can be copied in place
+    // (-1 otherwise).
+    uint32_t uniformBytes = 0;
+    int32_t constantsAt = -1;
+    // 0: a direct copy of "c" has not been compared with sceGxm's own write
+    // yet, 1: it matched, 2: it did not (the draws keep sceGxm's write).
+    uint8_t directChecked = 0;
 
     const SceGxmProgram *program() const { return reinterpret_cast<const SceGxmProgram *>(gxp.data()); }
 };
@@ -260,6 +273,11 @@ struct Shader
     // was not translated.
     gfx_gxm::ProgramRequestRef request;
     std::vector<std::unique_ptr<Variant>> variants;
+    // Pixel shaders: the float constants the program reads from the API, as
+    // runs (first, count) in ascending order (cg::Reflection::apiConstants).
+    // A draw whose constants differ from the last draw's only outside these
+    // keeps the last draw's uniform buffer.
+    std::vector<std::pair<uint16_t, uint16_t>> constantRuns;
 };
 
 struct VertexDecl
@@ -309,6 +327,11 @@ struct Device
     // finds it as the last draw left it takes that draw's programs and state
     // (Draw, gxm_legacy_draw.cpp).
     uint64_t stateSerial = 0;
+    // Counts the changes to what BindTextures reads: a sampler's texture or
+    // state, a texture made anew, moved to other memory, left unfilled or
+    // destroyed. A draw that finds it as the last draw of the same pixel
+    // program left it binds nothing again.
+    uint64_t textureSerial = 0;
 
     // Things the back end does not do yet, each logged once.
     std::vector<const char *> notYet;
@@ -438,6 +461,12 @@ void FrameDone(Device &device);
 // After FrameDone: waits until the GPU has drawn the frame before last, so
 // that the CPU runs one frame ahead of it and no further.
 void PaceFrame(Device &device);
+// After PaceFrame: picks the size of the next frame's 3D picture from this
+// frame's time and its waits for the GPU (gxm_scale_governor.h).
+void ScaleFrame(Device &device);
+// The sizes picked since the last such line; nothing while the engine allows
+// one size only.
+void LogSceneScale(Device &device);
 // The waits for the whole GPU since the last such line, by cause.
 void LogWaitCauses(Device &device);
 // With the marker or live switch gpu-watch: how long the GPU worked on a

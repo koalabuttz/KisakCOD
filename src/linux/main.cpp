@@ -41,6 +41,16 @@
 #if defined(__vita__)
 #include <vita/vita_platform.h> // Vita_Startup, Vita_QuitRequested, Vita_Frame*
 #endif
+
+#if defined(__ANDROID__) && defined(KISAK_LINUX_GAME_CLIENT)
+// On Android the game is the native library of SDL3's Java activity, which
+// calls SDL_main once the app's window exists, as SDL3's SDL_main.h would
+// arrange: main below is renamed SDL_main, with C linkage, and exported
+// (scripts/platform/android/main_exports.map; docs/android.md). This unit
+// does not see SDL's headers, so the declaration is spelled out here.
+#define main SDL_main
+extern "C" __attribute__((visibility("default"))) int SDL_main(int argc, char **argv);
+#endif
 #include <errno.h>
 #include <limits.h>
 #include <sched.h>
@@ -819,6 +829,15 @@ void Sys_Quit()
 #if defined(__vita__)
     Vita_Exit(0);
 #endif
+#if defined(__ANDROID__)
+    // KISAK: exit() runs the process's exit handlers and static destructors,
+    // Android's UI libraries' among them, while the activity's render thread
+    // is still running: every quit ended in SIGABRT in an hwui thread (PC
+    // emulator campaign run 1b). The game has its own process (":game"),
+    // which simply ends here; the launcher's process is untouched, and the
+    // config and the console are already written.
+    _exit(0);
+#endif
     exit(0);
 }
 
@@ -972,8 +991,72 @@ namespace
     }
 }
 
+#if defined(__ANDROID__) && defined(KISAK_LINUX_GAME_CLIENT)
+#include <android/log.h>
+#include <pthread.h>
+#include <stdint.h>
+#include <string.h>
+#include <unistd.h>
+namespace
+{
+// An app's stdout and stderr go nowhere on Android, and the client prints its
+// console to stderr, so both are sent through a pipe whose lines a thread
+// copies to logcat under the tag KisakCOD (adb logcat -s KisakCOD).
+void *CopyConsoleToLogcat(void *arg)
+{
+    const int fd = static_cast<int>(reinterpret_cast<intptr_t>(arg));
+    char buffer[1024];
+    size_t used = 0;
+    for (;;)
+    {
+        const ssize_t got = read(fd, buffer + used, sizeof(buffer) - 1 - used);
+        if (got < 0 && errno == EINTR)
+            continue;
+        if (got <= 0)
+            break;
+        used += static_cast<size_t>(got);
+        char *start = buffer;
+        while (char *newline = static_cast<char *>(memchr(start, '\n', buffer + used - start)))
+        {
+            *newline = 0;
+            __android_log_write(ANDROID_LOG_INFO, "KisakCOD", start);
+            start = newline + 1;
+        }
+        used -= static_cast<size_t>(start - buffer);
+        memmove(buffer, start, used);
+        if (used == sizeof(buffer) - 1)
+        {
+            // A line longer than the buffer goes out in pieces.
+            buffer[used] = 0;
+            __android_log_write(ANDROID_LOG_INFO, "KisakCOD", buffer);
+            used = 0;
+        }
+    }
+    return nullptr;
+}
+
+void SendConsoleToLogcat()
+{
+    int fds[2];
+    if (pipe(fds) != 0)
+        return;
+    setvbuf(stdout, nullptr, _IOLBF, 0);
+    setvbuf(stderr, nullptr, _IOLBF, 0);
+    dup2(fds[1], STDOUT_FILENO);
+    dup2(fds[1], STDERR_FILENO);
+    close(fds[1]);
+    pthread_t thread;
+    if (pthread_create(&thread, nullptr, CopyConsoleToLogcat, reinterpret_cast<void *>(static_cast<intptr_t>(fds[0])))
+        == 0)
+        pthread_detach(thread);
+}
+} // namespace
+#endif
 int main(int argc, char **argv)
 {
+#if defined(__ANDROID__) && defined(KISAK_LINUX_GAME_CLIENT)
+    SendConsoleToLogcat();
+#endif
 #if defined(__vita__)
     // Network, data folder, console log and the command line from
     // cmdline.txt, before anything else runs (src/vita/vita_main.cpp).

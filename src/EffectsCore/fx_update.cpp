@@ -20,6 +20,7 @@
 #include <aim_assist/aim_assist.h>
 
 #include <universal/profile.h>
+#include <gfx_d3d/r_reflection_probe.h>
 
 void FX_SpawnlAlFutureLooping(
     FxSystem *system,
@@ -2317,6 +2318,12 @@ void FX_UpdateRemaining(FxCmd *cmd)
 {
     if (fx_enable->current.enabled)
         FX_Update(cmd->system, cmd->localClientNum, 0);
+    // A reflection probe drawn again by the Modern path holds the world only,
+    // and it is drawn behind the loading screen, before the game has a
+    // snapshot to find its players or 3D hud elements in (PC probes run 3:
+    // CG_AddAllPlayerSpriteDrawSurfs read a null nextSnap).
+    if (R_ModernProbeCaptureActive())
+        return;
     CG_AddSceneTracerBeams(cmd->localClientNum);
     CG_GenerateSceneVerts(cmd->localClientNum);
 }

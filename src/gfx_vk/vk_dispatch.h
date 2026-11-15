@@ -115,6 +115,7 @@
     X(vkDestroyPipelineCache) \
     X(vkGetPipelineCacheData) \
     X(vkCreateGraphicsPipelines) \
+    X(vkCreateComputePipelines) \
     X(vkDestroyPipeline) \
     X(vkCreatePipelineLayout) \
     X(vkDestroyPipelineLayout) \
@@ -149,6 +150,9 @@
     X(vkCmdSetBlendConstants) \
     X(vkCmdDraw) \
     X(vkCmdDrawIndexed) \
+    X(vkCmdDispatch) \
+    X(vkCmdDispatchIndirect) \
+    X(vkCmdFillBuffer) \
     X(vkCmdClearAttachments)
 
 namespace gfx_vk

@@ -4,6 +4,7 @@
 #include <qcommon/mem_track.h>
 #include "r_init.h"
 #include "r_debug.h"
+#include "r_reflection_probe.h"
 #include "r_dvars.h"
 #include <qcommon/threads.h>
 #include <xanim/dobj_utils.h>
@@ -1113,6 +1114,62 @@ void R_InitScene()
     scene.maxDrawSurfCount[33] = 512;
 }
 
+// KISAK_TEST_LIGHT adds one fixed light to every frame's scene, the way an
+// effect adds a muzzle flash's, so that the extra light passes (l_) can be
+// compared between builds and visuals modes on a still view:
+// "omni x y z radius r g b" or "spot x y z dx dy dz radius r g b" (world
+// units, colour 0-1 or brighter). Once per frame, on the first scene drawn.
+static bool s_testLightAdded;
+
+static void R_AddTestLight()
+{
+    struct TestLight
+    {
+        int type; // 0 none, 1 omni, 2 spot
+        float origin[3], dir[3], radius, color[3];
+    };
+    static const TestLight light = [] {
+        TestLight parsed{};
+        const char *text = getenv("KISAK_TEST_LIGHT");
+        if (!text)
+            return parsed;
+        char kind[8] = {};
+        float v[10] = {};
+        const int count = sscanf(text, "%7s %f %f %f %f %f %f %f %f %f %f", kind, &v[0], &v[1], &v[2], &v[3], &v[4],
+                                 &v[5], &v[6], &v[7], &v[8], &v[9]);
+        if (!strcmp(kind, "omni") && count >= 8)
+        {
+            parsed.type = 1;
+            Vec3Copy(v, parsed.origin);
+            parsed.radius = v[3];
+            Vec3Copy(v + 4, parsed.color);
+        }
+        else if (!strcmp(kind, "spot") && count >= 11)
+        {
+            parsed.type = 2;
+            Vec3Copy(v, parsed.origin);
+            Vec3Copy(v + 3, parsed.dir);
+            Vec3Normalize(parsed.dir);
+            parsed.radius = v[6];
+            Vec3Copy(v + 7, parsed.color);
+        }
+        if (parsed.type)
+            Com_Printf(CON_CHANNEL_GFX, "KISAK_TEST_LIGHT: %s at (%g %g %g), radius %g, colour (%g %g %g)\n",
+                       kind, parsed.origin[0], parsed.origin[1], parsed.origin[2], parsed.radius, parsed.color[0],
+                       parsed.color[1], parsed.color[2]);
+        else
+            Com_Printf(CON_CHANNEL_GFX, "KISAK_TEST_LIGHT: could not read \"%s\"\n", text);
+        return parsed;
+    }();
+    if (!light.type || s_testLightAdded)
+        return;
+    s_testLightAdded = true;
+    if (light.type == 1)
+        R_AddOmniLightToScene(light.origin, light.radius, light.color[0], light.color[1], light.color[2]);
+    else
+        R_AddSpotLightToScene(light.origin, light.dir, light.radius, light.color[0], light.color[1], light.color[2]);
+}
+
 void R_ClearScene(uint32_t localClientNum)
 {
     uint32_t viewIndex; // [esp+0h] [ebp-4h]
@@ -1124,6 +1181,7 @@ void R_ClearScene(uint32_t localClientNum)
     Com_Memset(scene.sceneModel, 0, sizeof(GfxSceneModel) * scene.sceneModelCount);
     Com_Memset(scene.sceneBrush, 0, sizeof(GfxSceneBrush) * scene.sceneBrushCount);
     scene.addedLightCount = 0;
+    s_testLightAdded = false;
     memset((uint8_t *)scene.drawSurfCount, 0, sizeof(scene.drawSurfCount));
     for (viewIndex = 0; viewIndex < 7; ++viewIndex)
         Com_Memset((uint32_t *)scene.sceneModelVisData[viewIndex], 1, scene.sceneModelCount);
@@ -1262,7 +1320,7 @@ static const GfxViewInfo *s_modernSceneView;
 void R_ModernJitterScene(const refdef_s *refdef, GfxViewParms *viewParms)
 {
     const GfxModernHooks *hooks = R_ModernHooks();
-    if (!hooks || !hooks->jitterPixels || refdef->width <= 0 || refdef->height <= 0)
+    if (!hooks || !hooks->jitterPixels || refdef->width <= 0 || refdef->height <= 0 || R_ModernProbeCaptureActive())
         return;
     float x = 0.0f, y = 0.0f;
     hooks->jitterPixels(hooks->user, s_modernSceneCount++, &x, &y);
@@ -1383,9 +1441,10 @@ static uint32_t R_ModernLitParts()
 
 // KISAK_VK_MODERN_LIT_LOG=1 prints what each lit pixel shader reads, what is
 // decoded and which Modern lit shader of ours it is drawn as (0 for none),
-// once per shader name (at most 96 names).
+// once per shader name (at most 96 names): with the pass's first state word
+// (blend factors and op, alpha test) and the values of its literal constants.
 static void R_ModernLogPassInputs(const char *name, const MaterialPass *pass, const Material *material,
-                                  const GfxModernLitInputs &inputs)
+                                  const GfxModernLitInputs &inputs, uint32_t stateBits0)
 {
     static const bool on = [] {
         const char *text = getenv("KISAK_VK_MODERN_LIT_LOG");
@@ -1401,7 +1460,7 @@ static void R_ModernLogPassInputs(const char *name, const MaterialPass *pass, co
             return;
     }
     logged[loggedCount++] = name;
-    char args[512];
+    char args[768];
     size_t used = 0;
     args[0] = 0;
     const uint32_t argCount = pass->perPrimArgCount + pass->perObjArgCount + pass->stableArgCount;
@@ -1433,7 +1492,12 @@ static void R_ModernLogPassInputs(const char *name, const MaterialPass *pass, co
             wrote = snprintf(args + used, sizeof(args) - used, " c%u=mat", arg.dest);
             break;
         case MTL_ARG_LITERAL_PIXEL_CONST:
-            wrote = snprintf(args + used, sizeof(args) - used, " c%u=lit", arg.dest);
+            if (arg.u.literalConst)
+                wrote = snprintf(args + used, sizeof(args) - used, " c%u=lit(%g %g %g %g)", arg.dest,
+                                 arg.u.literalConst[0], arg.u.literalConst[1], arg.u.literalConst[2],
+                                 arg.u.literalConst[3]);
+            else
+                wrote = snprintf(args + used, sizeof(args) - used, " c%u=lit", arg.dest);
             break;
         default:
             break;
@@ -1443,9 +1507,9 @@ static void R_ModernLogPassInputs(const char *name, const MaterialPass *pass, co
     }
     Com_Printf(CON_CHANNEL_GFX,
                "Modern lit inputs: %s: decode samplers 0x%04x (doubled 0x%04x), constants 0x%08x%08x, vertex %d; "
-               "custom samplers 0x%x; our shader 0x%03x;%s\n",
+               "custom samplers 0x%x; our shader 0x%03x; state 0x%08x;%s\n",
                name, inputs.samplers, inputs.doubled, (uint32_t)(inputs.constants >> 32), (uint32_t)inputs.constants,
-               inputs.colorInput ? 1 : 0, pass->customSamplerFlags, inputs.shader, args);
+               inputs.colorInput ? 1 : 0, pass->customSamplerFlags, inputs.shader, stateBits0, args);
 }
 
 // Takes word off the front of *name (of *length characters) if it is there.
@@ -1463,12 +1527,13 @@ static bool R_ModernTakeWord(const char **name, size_t *length, const char *word
 // can be drawn as, before its arguments are checked:
 // lm_[hsm_]sun_<r0|b0|t0>c0[d0][n0][s0]_sm3, or lm_[hsm_]sun_r0c0_sm2; and for
 // models lp_[hsm_][i_]sun_<r0|b0|t0>c0[d0][n0][s0]_sm3 (i_, instanced, shares
-// the pixel shader; skin_ and flag_ have shaders of their own that model-lit
-// shader facts did not read, sm_ compares in the shader). Without the sun
+// the pixel shader; sm_ compares in the shader). Character skin (bare hands and
+// forearms) is lp_[hsm_][i_]skin_sun_<r0c0|r0c0n0|r0c0s0|r0c0n0s0> and cloth
+// (flags, banners) lp_[hsm_]flag_[sun_]<t0c0>[n0][s0] (skin and flag shader
+// facts, and the materials facts). Without the sun
 // (interiors, lit shader facts 5): lm_<r0|b0|t0>c0[d0][n0][s0]_sm3 and
 // lp_[i_]<r0|b0|t0>c0[d0][n0][s0]_sm3 (their shader model 2 builds read the
-// lightmap's UV elsewhere; lp_skin_ s0 has a shader of its own, and flag_,
-// the same shader as lp_t0, is left with skin_ for now). A spot or omni light
+// lightmap's UV elsewhere). A spot or omni light
 // as the primary light (lit shader facts 6 and 7): lm_[hsm_]<spot|omni>_...
 // and lp_[hsm_][i_]<spot|omni>_..., shader model 3 only, and with the light's
 // shadow map not with a detail map (facts 7 did not read those).
@@ -1487,6 +1552,7 @@ static uint16_t R_ModernLitShaderFromName(const char *name)
     if (length > 5 && !strcmp(name + length - 5, ".hlsl"))
         length -= 5;
     uint16_t shader;
+    bool skin = false, flag = false;
     if (R_ModernTakeWord(&name, &length, "lm_"))
     {
         const bool shadow = R_ModernTakeWord(&name, &length, "hsm_");
@@ -1503,8 +1569,15 @@ static uint16_t R_ModernLitShaderFromName(const char *name)
     else if (R_ModernTakeWord(&name, &length, "lp_"))
     {
         const bool shadow = R_ModernTakeWord(&name, &length, "hsm_");
-        R_ModernTakeWord(&name, &length, "i_");
-        if (!shadow && R_ModernTakeWord(&name, &length, "amb_"))
+        // flag_ (cloth) never with i_; skin_ (character skin) after it.
+        // Both are checked against the surface below.
+        flag = R_ModernTakeWord(&name, &length, "flag_");
+        if (!flag)
+        {
+            R_ModernTakeWord(&name, &length, "i_");
+            skin = R_ModernTakeWord(&name, &length, "skin_");
+        }
+        if (!shadow && !skin && !flag && R_ModernTakeWord(&name, &length, "amb_"))
         {
             // lp_[i_]amb[_sun|_spot|_omni]_t0c0: one program whatever the
             // light (lit shader facts 6).
@@ -1542,6 +1615,29 @@ static uint16_t R_ModernLitShaderFromName(const char *name)
     const bool pointLight = (shader & GFX_MODERN_LIT_SHADER_LIGHT) != 0;
     if (pointLight && (shader & GFX_MODERN_LIT_SHADER_SHADOW) && (shader & GFX_MODERN_LIT_SHADER_DETAIL))
         return GFX_MODERN_LIT_SHADER_NONE;
+    // Skin and flag shader facts: skin_ is the plain model's shader for the
+    // sun's r0c0 and r0c0n0, and with s0 the plain one with the reflection
+    // probe's light times 0.3; it has no other surfaces, and without the sun
+    // or with a spot or omni light it was not read. flag_ is the plain t0
+    // shader with the sun lighting both faces, and without a light the plain
+    // one itself; with a spot or omni light it was not read.
+    const uint16_t family = shader & GFX_MODERN_LIT_SHADER_FAMILY;
+    if (skin)
+    {
+        if (family != GFX_MODERN_LIT_SHADER_LP_SUN || pointLight
+            || (shader & (GFX_MODERN_LIT_SHADER_DETAIL | GFX_MODERN_LIT_SHADER_BLENDED
+                          | GFX_MODERN_LIT_SHADER_ALPHA_TESTED)))
+            return GFX_MODERN_LIT_SHADER_NONE;
+        if (shader & GFX_MODERN_LIT_SHADER_SPECULAR)
+            shader |= GFX_MODERN_LIT_SHADER_SKIN_PROBE;
+    }
+    if (flag)
+    {
+        if (pointLight || (shader & GFX_MODERN_LIT_SHADER_DETAIL) || !(shader & GFX_MODERN_LIT_SHADER_ALPHA_TESTED))
+            return GFX_MODERN_LIT_SHADER_NONE;
+        if (family == GFX_MODERN_LIT_SHADER_LP_SUN)
+            shader |= GFX_MODERN_LIT_SHADER_TWO_SIDED_SUN;
+    }
     // The shader model 2 builds are known only without maps or a mode (world-lit
     // shader facts 1 and 2); facts 3 read the shader model 3 ones.
     const uint16_t sm3Only = GFX_MODERN_LIT_SHADER_NORMAL | GFX_MODERN_LIT_SHADER_SPECULAR
@@ -1588,8 +1684,155 @@ static bool R_ModernMaterialConstIs(const Material *material, uint32_t nameHash,
 // and, in place of the sun's constants, its own from c5 (models c6) as
 // ModernLitSpot in vk_legacy.h lists them. Anything else keeps the game's
 // shader.
+// The extra per-light pass l_<spot|omni>[_flag|_skin][_hsm]_<mode>c0[d0][n0]
+// that effects' lights (muzzle flashes, explosions) add over the lit scene
+// (lit shader facts 6, light pass facts 1), as our light pass shader draws
+// it: the colour map at s0, from s4 the spot light's shadow map (hsm), the
+// normal map (n0), the attenuation (code sampler 15) and the detail map
+// (d0); the fog colour, a literal, at c0; lightPosition and lightDiffuse at
+// c5 and c6, a spot's spotDir and spotFactors at c7 and c8, the shadow map's
+// spotShadowmapPixelAdjust at c9, then detailScale. Each once and nothing
+// else; skin_ is the plain shader and flag_ (alpha-tested only) lights both
+// faces. sm_ (compared in the shader), the shadow map with a detail map and
+// anything else keep the game's shader.
+static uint16_t R_ModernLightPassShader(const char *name, const Material *material, const MaterialPass *pass)
+{
+    size_t length = strlen(name);
+    if (length > 5 && !strcmp(name + length - 5, ".hlsl"))
+        length -= 5;
+    if (!R_ModernTakeWord(&name, &length, "l_"))
+        return GFX_MODERN_LIT_SHADER_NONE;
+    uint16_t shader;
+    if (R_ModernTakeWord(&name, &length, "spot"))
+        shader = GFX_MODERN_LIT_SHADER_SPOT;
+    else if (R_ModernTakeWord(&name, &length, "omni"))
+        shader = GFX_MODERN_LIT_SHADER_OMNI;
+    else
+        return GFX_MODERN_LIT_SHADER_NONE;
+    const bool spot = shader == GFX_MODERN_LIT_SHADER_SPOT;
+    const bool flag = R_ModernTakeWord(&name, &length, "_flag");
+    if (!flag)
+        R_ModernTakeWord(&name, &length, "_skin");
+    if (R_ModernTakeWord(&name, &length, "_hsm"))
+        shader |= GFX_MODERN_LIT_SHADER_SHADOW;
+    if (!R_ModernTakeWord(&name, &length, "_"))
+        return GFX_MODERN_LIT_SHADER_NONE;
+    if (R_ModernTakeWord(&name, &length, "b0"))
+        shader |= GFX_MODERN_LIT_SHADER_BLENDED;
+    else if (R_ModernTakeWord(&name, &length, "t0"))
+        shader |= GFX_MODERN_LIT_SHADER_ALPHA_TESTED;
+    else if (!R_ModernTakeWord(&name, &length, "r0"))
+        return GFX_MODERN_LIT_SHADER_NONE;
+    if (!R_ModernTakeWord(&name, &length, "c0"))
+        return GFX_MODERN_LIT_SHADER_NONE;
+    if (R_ModernTakeWord(&name, &length, "d0"))
+        shader |= GFX_MODERN_LIT_SHADER_DETAIL;
+    if (R_ModernTakeWord(&name, &length, "n0"))
+        shader |= GFX_MODERN_LIT_SHADER_NORMAL;
+    if (length != 0)
+        return GFX_MODERN_LIT_SHADER_NONE;
+    const bool shadow = (shader & GFX_MODERN_LIT_SHADER_SHADOW) != 0;
+    const bool normal = (shader & GFX_MODERN_LIT_SHADER_NORMAL) != 0;
+    const bool detail = (shader & GFX_MODERN_LIT_SHADER_DETAIL) != 0;
+    if ((shadow && (!spot || detail)) || pass->customSamplerFlags)
+        return GFX_MODERN_LIT_SHADER_NONE;
+    if (flag)
+    {
+        if (!(shader & GFX_MODERN_LIT_SHADER_ALPHA_TESTED))
+            return GFX_MODERN_LIT_SHADER_NONE;
+        shader |= GFX_MODERN_LIT_SHADER_TWO_SIDED_SUN;
+    }
+    const uint32_t normalDest = 4u + (shadow ? 1u : 0u);
+    const uint32_t attenuationDest = normalDest + (normal ? 1u : 0u);
+    const uint32_t detailDest = attenuationDest + 1u;
+    const uint32_t detailScaleDest = 7u + (spot ? 2u : 0u) + (shadow ? 1u : 0u);
+    enum : uint32_t
+    {
+        COLOR_MAP = 1u << 0,
+        FOG_COLOR = 1u << 1,
+        SHADOW_MAP = 1u << 2,
+        NORMAL_MAP = 1u << 3,
+        ATTENUATION = 1u << 4,
+        DETAIL_MAP = 1u << 5,
+        LIGHT_POSITION = 1u << 6,
+        LIGHT_DIFFUSE = 1u << 7,
+        SPOT_DIR = 1u << 8,
+        SPOT_FACTORS = 1u << 9,
+        PIXEL_ADJUST = 1u << 10,
+        DETAIL_SCALE = 1u << 11,
+    };
+    const uint32_t wanted = COLOR_MAP | FOG_COLOR | ATTENUATION | LIGHT_POSITION | LIGHT_DIFFUSE
+        | (shadow ? SHADOW_MAP | PIXEL_ADJUST : 0u) | (normal ? NORMAL_MAP : 0u)
+        | (detail ? DETAIL_MAP | DETAIL_SCALE : 0u) | (spot ? SPOT_DIR | SPOT_FACTORS : 0u);
+    static const uint32_t detailMapHash = R_HashString("detailMap");
+    uint32_t found = 0;
+    const uint32_t argCount = pass->perPrimArgCount + pass->perObjArgCount + pass->stableArgCount;
+    for (uint32_t i = 0; i < argCount; ++i)
+    {
+        const MaterialShaderArgument &arg = pass->args[i];
+        uint32_t what = 0;
+        switch (arg.type)
+        {
+        case MTL_ARG_MATERIAL_PIXEL_SAMPLER:
+            for (uint32_t t = 0; t < material->textureCount; ++t)
+            {
+                const MaterialTextureDef &def = material->textureTable[t];
+                if (def.nameHash != arg.u.nameHash)
+                    continue;
+                if (def.semantic == TS_COLOR_MAP && arg.dest == 0)
+                    what = COLOR_MAP;
+                else if (def.semantic == TS_NORMAL_MAP && arg.dest == normalDest)
+                    what = NORMAL_MAP;
+                else if (def.nameHash == detailMapHash && arg.dest == detailDest)
+                    what = DETAIL_MAP;
+                break;
+            }
+            break;
+        case MTL_ARG_CODE_PIXEL_SAMPLER:
+            if (arg.u.codeSampler == TEXTURE_SRC_CODE_SHADOWMAP_SPOT && arg.dest == 4)
+                what = SHADOW_MAP;
+            else if (arg.u.codeSampler == TEXTURE_SRC_CODE_LIGHT_ATTENUATION && arg.dest == attenuationDest)
+                what = ATTENUATION;
+            break;
+        case MTL_ARG_CODE_PIXEL_CONST:
+            if (arg.u.codeConst.rowCount != 1)
+                break;
+            if (arg.u.codeConst.index == CONST_SRC_CODE_FOG_COLOR && arg.dest == 0)
+                what = FOG_COLOR;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_LIGHT_POSITION && arg.dest == 5)
+                what = LIGHT_POSITION;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_LIGHT_DIFFUSE && arg.dest == 6)
+                what = LIGHT_DIFFUSE;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_LIGHT_SPOTDIR && arg.dest == 7)
+                what = SPOT_DIR;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_LIGHT_SPOTFACTORS && arg.dest == 8)
+                what = SPOT_FACTORS;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_SPOT_SHADOWMAP_PIXEL_ADJUST && arg.dest == 9)
+                what = PIXEL_ADJUST;
+            break;
+        case MTL_ARG_MATERIAL_PIXEL_CONST:
+            if (arg.dest == detailScaleDest && R_ModernMaterialConstIs(material, arg.u.nameHash, "detailScale"))
+                what = DETAIL_SCALE;
+            break;
+        case MTL_ARG_LITERAL_PIXEL_CONST:
+            // The game's l_ materials bind the fog colour (black) as a literal.
+            if (arg.dest == 0)
+                what = FOG_COLOR;
+            break;
+        default:
+            continue; // vertex arguments
+        }
+        if (!what || (found & what) || !(wanted & what))
+            return GFX_MODERN_LIT_SHADER_NONE;
+        found |= what;
+    }
+    return found == wanted ? shader : GFX_MODERN_LIT_SHADER_NONE;
+}
+
 static uint16_t R_ModernLitShader(const char *name, const Material *material, const MaterialPass *pass)
 {
+    if (!strncmp(name, "l_", 2))
+        return R_ModernLightPassShader(name, material, pass);
     const uint16_t shader = R_ModernLitShaderFromName(name);
     if (shader == GFX_MODERN_LIT_SHADER_NONE)
         return GFX_MODERN_LIT_SHADER_NONE;
@@ -1766,6 +2009,76 @@ static uint16_t R_ModernLitShader(const char *name, const Material *material, co
     return found == wanted ? shader : GFX_MODERN_LIT_SHADER_NONE;
 }
 
+// Whether a pass's pixel shader is CoD4's water (water_l_sun) as water
+// shader facts read it (PC water run 1, mp_bog): the reflection probe (a
+// custom sampler, s1), the material's water map at s4, fog colour at c0,
+// envMapParms at c5, waterColor at c6, the sun's direction and colour at
+// c17 and c18, each once and nothing else. Our water shader then draws it.
+static bool R_ModernWaterShader(const char *name, const Material *material, const MaterialPass *pass)
+{
+    size_t length = strlen(name);
+    if (length > 5 && !strcmp(name + length - 5, ".hlsl"))
+        length -= 5;
+    if (length != 11 || strncmp(name, "water_l_sun", 11))
+        return false;
+    if (!(pass->customSamplerFlags & 1u))
+        return false;
+    enum : uint32_t
+    {
+        WATER_MAP = 1u << 0,
+        FOG_COLOR = 1u << 1,
+        ENV_MAP_PARMS = 1u << 2,
+        WATER_COLOR = 1u << 3,
+        SUN_POSITION = 1u << 4,
+        SUN_DIFFUSE = 1u << 5,
+        ALL = (1u << 6) - 1,
+    };
+    uint32_t found = 0;
+    const uint32_t argCount = pass->perPrimArgCount + pass->perObjArgCount + pass->stableArgCount;
+    for (uint32_t i = 0; i < argCount; ++i)
+    {
+        const MaterialShaderArgument &arg = pass->args[i];
+        uint32_t what = 0;
+        switch (arg.type)
+        {
+        case MTL_ARG_MATERIAL_PIXEL_SAMPLER:
+            for (uint32_t t = 0; t < material->textureCount; ++t)
+            {
+                const MaterialTextureDef &def = material->textureTable[t];
+                if (def.nameHash == arg.u.nameHash && def.semantic == TS_WATER_MAP && arg.dest == 4)
+                    what = WATER_MAP;
+            }
+            break;
+        case MTL_ARG_CODE_PIXEL_SAMPLER:
+            return false;
+        case MTL_ARG_CODE_PIXEL_CONST:
+            if (arg.u.codeConst.rowCount != 1)
+                break;
+            if (arg.u.codeConst.index == CONST_SRC_CODE_FOG_COLOR && arg.dest == 0)
+                what = FOG_COLOR;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_SUN_POSITION && arg.dest == 17)
+                what = SUN_POSITION;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_SUN_DIFFUSE && arg.dest == 18)
+                what = SUN_DIFFUSE;
+            break;
+        case MTL_ARG_MATERIAL_PIXEL_CONST:
+            if (arg.dest == 5 && R_ModernMaterialConstIs(material, arg.u.nameHash, "envMapParms"))
+                what = ENV_MAP_PARMS;
+            else if (arg.dest == 6 && R_ModernMaterialConstIs(material, arg.u.nameHash, "waterColor"))
+                what = WATER_COLOR;
+            break;
+        case MTL_ARG_LITERAL_PIXEL_CONST:
+            return false;
+        default:
+            continue; // vertex arguments
+        }
+        if (!what || (found & what))
+            return false;
+        found |= what;
+    }
+    return found == ALL;
+}
+
 // Which colours a lit pass's pixel shader reads, by its kind (the pixel
 // shader's name: lm_ world surfaces lit by lightmaps, lp_ models lit by the
 // lighting volume, l_ dynamic lights) and what its arguments bind. The rest
@@ -1773,8 +2086,238 @@ static uint16_t R_ModernLitShader(const char *name, const Material *material, co
 // fog and shadow parameters) are not colours. A detail map is added to the
 // colour map around grey (colour + detail - 0.5), so it stays as it is: the
 // offset is not a colour of its own.
-void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
+static bool R_ModernWaterShader(const char *name, const Material *material, const MaterialPass *pass);
+
+// The material's water map (the FFT water simulation), or null.
+static const MaterialTextureDef *R_ModernWaterMap(const Material *material)
 {
+    for (uint32_t t = 0; t < material->textureCount; ++t)
+    {
+        if (material->textureTable[t].semantic == TS_WATER_MAP)
+            return &material->textureTable[t];
+    }
+    return nullptr;
+}
+
+static bool R_ModernWaterLogOn();
+
+// KISAK_VK_MODERN_WATER_LOG=1 names how water is drawn, for planar
+// reflections on water (piece 3): once per world, every world surface whose
+// material has a water map, by material, with the union of their bounds, then
+// each surface's bounds (at most 96); and once per material and pass of water
+// that is drawn, the technique, shaders, arguments, blend state, the
+// material's constants and the simulation's settings (at most 32).
+static void R_ModernLogWaterPass(const Material *material, const MaterialPass *pass)
+{
+    if (!R_ModernWaterLogOn() || !material || !pass)
+        return;
+    const MaterialTextureDef *water = R_ModernWaterMap(material);
+    if (!water)
+        return;
+
+    static const GfxWorld *loggedWorld;
+    if (rgp.world && loggedWorld != rgp.world)
+    {
+        loggedWorld = rgp.world;
+        const Material *done[16];
+        int doneCount = 0;
+        const GfxWorldDpvsStatic &dpvs = rgp.world->dpvs;
+        for (uint32_t s = 0; s < dpvs.staticSurfaceCount && doneCount < 16; ++s)
+        {
+            const Material *surfaceMaterial = dpvs.surfaces[s].material;
+            if (!surfaceMaterial || !R_ModernWaterMap(surfaceMaterial))
+                continue;
+            bool seen = false;
+            for (int i = 0; i < doneCount; ++i)
+                seen = seen || done[i] == surfaceMaterial;
+            if (seen)
+                continue;
+            done[doneCount++] = surfaceMaterial;
+            float mins[3] = {FLT_MAX, FLT_MAX, FLT_MAX};
+            float maxs[3] = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
+            uint32_t count = 0;
+            uint32_t tris = 0;
+            for (uint32_t o = s; o < dpvs.staticSurfaceCount; ++o)
+            {
+                const GfxSurface &surface = dpvs.surfaces[o];
+                if (surface.material != surfaceMaterial)
+                    continue;
+                ++count;
+                tris += surface.tris.triCount;
+                for (int i = 0; i < 3; ++i)
+                {
+                    mins[i] = surface.bounds[0][i] < mins[i] ? surface.bounds[0][i] : mins[i];
+                    maxs[i] = surface.bounds[1][i] > maxs[i] ? surface.bounds[1][i] : maxs[i];
+                }
+            }
+            Com_Printf(CON_CHANNEL_GFX,
+                       "modern water: world %s: material %s (technique set %s): %u surfaces, %u triangles, "
+                       "bounds (%.1f %.1f %.1f) to (%.1f %.1f %.1f)\n",
+                       rgp.world->name ? rgp.world->name : "?", surfaceMaterial->info.name,
+                       surfaceMaterial->techniqueSet ? surfaceMaterial->techniqueSet->name : "?", count, tris,
+                       mins[0], mins[1], mins[2], maxs[0], maxs[1], maxs[2]);
+        }
+        if (!doneCount)
+            Com_Printf(CON_CHANNEL_GFX, "modern water: world %s: no world surface has a water map\n",
+                       rgp.world->name ? rgp.world->name : "?");
+        // Each surface on its own (at most 96), to see which are flat and at
+        // what height.
+        int surfaceLines = 0;
+        for (uint32_t s = 0; s < dpvs.staticSurfaceCount && surfaceLines < 96; ++s)
+        {
+            const GfxSurface &surface = dpvs.surfaces[s];
+            if (!surface.material || !R_ModernWaterMap(surface.material))
+                continue;
+            ++surfaceLines;
+            Com_Printf(CON_CHANNEL_GFX,
+                       "modern water:   surface %u (%s): %u triangles, x %.1f to %.1f, y %.1f to %.1f, z %.1f to %.1f\n",
+                       s, surface.material->info.name, (uint32_t)surface.tris.triCount, surface.bounds[0][0],
+                       surface.bounds[1][0], surface.bounds[0][1], surface.bounds[1][1], surface.bounds[0][2],
+                       surface.bounds[1][2]);
+        }
+    }
+
+    // By material and pass: materials of one technique set share its passes.
+    static const MaterialPass *logged[32];
+    static const Material *loggedMaterials[32];
+    static int loggedCount;
+    if (loggedCount >= 32)
+        return;
+    for (int i = 0; i < loggedCount; ++i)
+    {
+        if (logged[i] == pass && loggedMaterials[i] == material)
+            return;
+    }
+    loggedMaterials[loggedCount] = material;
+    logged[loggedCount++] = pass;
+
+    // Which technique and pass of the material's set this is.
+    int techType = -1;
+    int passIndex = -1;
+    const char *techName = "?";
+    if (material->techniqueSet)
+    {
+        for (int t = 0; t < TECHNIQUE_COUNT && techType < 0; ++t)
+        {
+            const MaterialTechnique *technique = material->techniqueSet->techniques[t];
+            if (!technique)
+                continue;
+            for (int p = 0; p < technique->passCount; ++p)
+            {
+                if (&technique->passArray[p] == pass)
+                {
+                    techType = t;
+                    passIndex = p;
+                    techName = technique->name ? technique->name : "?";
+                }
+            }
+        }
+    }
+    uint32_t loadBits[2] = {0, 0};
+    if (techType >= 0 && material->stateBitsTable
+        && material->stateBitsEntry[techType] + passIndex < material->stateBitsCount)
+    {
+        const GfxStateBits &bits = material->stateBitsTable[material->stateBitsEntry[techType] + passIndex];
+        loadBits[0] = bits.loadBits[0];
+        loadBits[1] = bits.loadBits[1];
+    }
+    Com_Printf(CON_CHANNEL_GFX,
+               "modern water: material %s, technique %d (%s) pass %d: vertex shader %s, pixel shader %s, "
+               "state bits 0x%08x 0x%08x, custom samplers 0x%x, %s, %s\n",
+               material->info.name, techType, techName, passIndex,
+               pass->vertexShader ? pass->vertexShader->name : "?", pass->pixelShader ? pass->pixelShader->name : "?",
+               loadBits[0], loadBits[1], pass->customSamplerFlags,
+               s_modernLitPasses ? "among the lit passes" : "outside the lit passes",
+               pass->pixelShader && R_ModernWaterShader(pass->pixelShader->name, material, pass)
+                   ? "our water shader can draw it"
+                   : "not ours");
+
+    char args[768];
+    size_t used = 0;
+    args[0] = 0;
+    const uint32_t argCount = pass->perPrimArgCount + pass->perObjArgCount + pass->stableArgCount;
+    for (uint32_t i = 0; i < argCount && used < sizeof(args) - 40; ++i)
+    {
+        const MaterialShaderArgument &arg = pass->args[i];
+        int wrote = 0;
+        switch (arg.type)
+        {
+        case MTL_ARG_MATERIAL_PIXEL_SAMPLER:
+        {
+            int semantic = -1;
+            char first = '?';
+            char last = '?';
+            for (uint32_t t = 0; t < material->textureCount; ++t)
+            {
+                const MaterialTextureDef &def = material->textureTable[t];
+                if (def.nameHash == arg.u.nameHash)
+                {
+                    semantic = def.semantic;
+                    first = def.nameStart;
+                    last = def.nameEnd;
+                }
+            }
+            wrote = snprintf(args + used, sizeof(args) - used, " ps s%u=mat(sem %d, %c..%c)", arg.dest, semantic,
+                             first, last);
+            break;
+        }
+        case MTL_ARG_CODE_PIXEL_SAMPLER:
+            wrote = snprintf(args + used, sizeof(args) - used, " ps s%u=code %u", arg.dest, arg.u.codeSampler);
+            break;
+        case MTL_ARG_CODE_PIXEL_CONST:
+            wrote = snprintf(args + used, sizeof(args) - used, " ps c%u=code 0x%x(%u rows)", arg.dest,
+                             arg.u.codeConst.index, arg.u.codeConst.rowCount);
+            break;
+        case MTL_ARG_CODE_VERTEX_CONST:
+            wrote = snprintf(args + used, sizeof(args) - used, " vs c%u=code 0x%x(%u rows)", arg.dest,
+                             arg.u.codeConst.index, arg.u.codeConst.rowCount);
+            break;
+        case MTL_ARG_MATERIAL_PIXEL_CONST:
+        case MTL_ARG_MATERIAL_VERTEX_CONST:
+        {
+            const char *constName = "?";
+            for (uint32_t c = 0; c < material->constantCount; ++c)
+            {
+                if (material->constantTable[c].nameHash == arg.u.nameHash)
+                    constName = material->constantTable[c].name;
+            }
+            wrote = snprintf(args + used, sizeof(args) - used, " %s c%u=mat(%.12s)",
+                             arg.type == MTL_ARG_MATERIAL_PIXEL_CONST ? "ps" : "vs", arg.dest, constName);
+            break;
+        }
+        case MTL_ARG_LITERAL_PIXEL_CONST:
+        case MTL_ARG_LITERAL_VERTEX_CONST:
+            wrote = snprintf(args + used, sizeof(args) - used, " %s c%u=lit(%g %g %g %g)",
+                             arg.type == MTL_ARG_LITERAL_PIXEL_CONST ? "ps" : "vs", arg.dest, arg.u.literalConst[0],
+                             arg.u.literalConst[1], arg.u.literalConst[2], arg.u.literalConst[3]);
+            break;
+        default:
+            break;
+        }
+        if (wrote > 0)
+            used += (size_t)wrote < sizeof(args) - used ? (size_t)wrote : sizeof(args) - used - 1;
+    }
+    Com_Printf(CON_CHANNEL_GFX, "modern water:   arguments:%s\n", args);
+    for (uint32_t c = 0; c < material->constantCount; ++c)
+    {
+        const MaterialConstantDef &def = material->constantTable[c];
+        Com_Printf(CON_CHANNEL_GFX, "modern water:   constant %.12s = (%g %g %g %g)\n", def.name, def.literal[0],
+                   def.literal[1], def.literal[2], def.literal[3]);
+    }
+    if (const water_t *map = water->u.water)
+    {
+        Com_Printf(CON_CHANNEL_GFX,
+                   "modern water:   simulation: %dx%d, size %g x %g, gravity %g, wind %g toward (%g %g), "
+                   "amplitude %g, code constant (%g %g %g %g), image %dx%d\n",
+                   map->M, map->N, map->Lx, map->Lz, map->gravity, map->windvel, map->winddir[0], map->winddir[1],
+                   map->amplitude, map->codeConstant[0], map->codeConstant[1], map->codeConstant[2],
+                   map->codeConstant[3], map->image ? map->image->width : 0, map->image ? map->image->height : 0);
+    }
+}
+
+void R_ModernPassInputs(const Material *material, const MaterialPass *pass, uint32_t stateBits0)
+{
+    R_ModernLogWaterPass(material, pass);
     if (!s_modernLitPasses || !pass || !material)
         return;
     if (pass == s_modernInputsPass && material == s_modernInputsMaterial)
@@ -1782,6 +2325,16 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
     s_modernInputsPass = pass;
     s_modernInputsMaterial = material;
     const char *name = pass->pixelShader ? pass->pixelShader->name : nullptr;
+    // Water: our water shader, which takes its colour to linear light itself.
+    if (name && !strncmp(name, "water_", 6) && R_ModernWaterShader(name, material, pass))
+    {
+        GfxModernLitInputs inputs{};
+        inputs.overWhite = true;
+        inputs.shader = GFX_MODERN_LIT_SHADER_WATER;
+        R_ModernLogPassInputs(name, pass, material, inputs, stateBits0);
+        R_ModernSendInputs(&inputs);
+        return;
+    }
     const bool lit = name && (!strncmp(name, "lm_", 3) || !strncmp(name, "lp_", 3) || !strncmp(name, "l_", 2));
     if (!lit)
     {
@@ -1804,7 +2357,7 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
         GfxModernLitInputs inputs{};
         inputs.overWhite = true;
         inputs.shader = R_ModernLitShader(name, material, pass);
-        R_ModernLogPassInputs(name, pass, material, inputs);
+        R_ModernLogPassInputs(name, pass, material, inputs, stateBits0);
         R_ModernSendInputs(&inputs);
         return;
     }
@@ -1890,8 +2443,83 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
         inputs.samplers |= (uint16_t)(1u << 3);
     if ((pass->customSamplerFlags & 1) && (parts & MODERN_LIT_PROBE))
         inputs.samplers |= (uint16_t)(1u << 1);
-    R_ModernLogPassInputs(name, pass, material, inputs);
+    R_ModernLogPassInputs(name, pass, material, inputs, stateBits0);
     R_ModernSendInputs(&inputs);
+}
+
+// The view's fog and the sun's shadow map (GfxModernFog), as the game's
+// shaders get them: the fog from R_SetFrameFog's settings, the shadow map
+// when RB_StandardDrawCommands draws it for the view.
+static void R_ModernSceneFog(const GfxViewInfo *viewInfo, GfxModernFog &fog)
+{
+    const GfxBackEndData *data = backEndData;
+    if (!data || !r_fog->current.enabled || data->fogSettings.density <= 0.0f)
+        return;
+    fog.on = true;
+    float color[4];
+    Byte4UnpackBgra((const uint8_t *)&data->fogSettings.color, color);
+    fog.color[0] = color[0];
+    fog.color[1] = color[1];
+    fog.color[2] = color[2];
+    fog.density = data->fogSettings.density;
+    fog.start = data->fogSettings.fogStart;
+    const GfxViewParms &parms = viewInfo->viewParms;
+    fog.origin[0] = parms.origin[0];
+    fog.origin[1] = parms.origin[1];
+    fog.origin[2] = parms.origin[2];
+    fog.sunDirection[0] = data->sunLight.dir[0];
+    fog.sunDirection[1] = data->sunLight.dir[1];
+    fog.sunDirection[2] = data->sunLight.dir[2];
+    const GfxImage *sunImage = gfxRenderTargets[R_RENDERTARGET_SHADOWMAP_SUN].image;
+    const GfxImage *spotImage = gfxRenderTargets[R_RENDERTARGET_SHADOWMAP_SPOT].image;
+    if (viewInfo->dynamicShadowType == SHADOW_MAP && rgp.world && sunImage && sunImage->texture.map
+        && Com_BitCheckAssert(data->shadowableLightHasShadowMap, rgp.world->sunPrimaryLightIndex, 32))
+    {
+        fog.sunShadowed = true;
+        fog.shadowMap = sunImage->texture.map;
+        memcpy(fog.shadowLookup, viewInfo->sunShadow.lookupMatrix.m, sizeof(fog.shadowLookup));
+        memcpy(fog.switchPartition, viewInfo->sunShadow.sunProj.switchPartition, sizeof(fog.switchPartition));
+        fog.shadowmapScale[0] = viewInfo->sunShadow.sunProj.shadowmapScale[0];
+        fog.shadowmapScale[1] = viewInfo->sunShadow.sunProj.shadowmapScale[1];
+    }
+    // The shadowed spot lights, as R_SetDrawSurfsShadowableLight lights
+    // surfaces with them: those whose shadow map is drawn this frame.
+    if (viewInfo->dynamicShadowType != SHADOW_MAP)
+        return;
+    const uint32_t spotShadowCount = viewInfo->spotShadowCount < 4 ? viewInfo->spotShadowCount : 4;
+    for (uint32_t i = 0; i < spotShadowCount; ++i)
+    {
+        const GfxSpotShadow &spotShadow = viewInfo->spotShadows[i];
+        const GfxLight *light = spotShadow.light;
+        if (!light || light->radius <= 0.0f || light->cosHalfFovInner <= light->cosHalfFovOuter
+            || light->cosHalfFovOuter <= 0.0f
+            || !Com_BitCheckAssert(data->shadowableLightHasShadowMap, spotShadow.shadowableLightIndex, 32))
+            continue;
+        const GfxImage *image = spotShadow.image;
+        if (!image || !image->texture.map || (image != sunImage && image != spotImage))
+            continue;
+        GfxModernFogSpot &spot = fog.spots[fog.spotCount++];
+        spot.origin[0] = light->origin[0];
+        spot.origin[1] = light->origin[1];
+        spot.origin[2] = light->origin[2];
+        spot.radius = light->radius;
+        spot.dir[0] = light->dir[0];
+        spot.dir[1] = light->dir[1];
+        spot.dir[2] = light->dir[2];
+        spot.exponent = static_cast<float>(light->exponent);
+        spot.cosHalfFovOuter = light->cosHalfFovOuter;
+        spot.cosHalfFovInner = light->cosHalfFovInner;
+        spot.fade = spotShadow.fade;
+        spot.color[0] = light->color[0] * r_diffuseColorScale->current.value;
+        spot.color[1] = light->color[1] * r_diffuseColorScale->current.value;
+        spot.color[2] = light->color[2] * r_diffuseColorScale->current.value;
+        memcpy(spot.shadowLookup, spotShadow.lookupMatrix.m, sizeof(spot.shadowLookup));
+        spot.inSunMap = image == sunImage;
+        if (spot.inSunMap)
+            fog.shadowMap = image->texture.map;
+        else
+            fog.spotShadowMap = image->texture.map;
+    }
 }
 
 static GfxModernScene &R_ModernScene(const GfxViewInfo *viewInfo)
@@ -1919,6 +2547,13 @@ static GfxModernScene &R_ModernScene(const GfxViewInfo *viewInfo)
     s_modernLastOrigin[1] = parms.origin[1];
     s_modernLastOrigin[2] = parms.origin[2];
     s_modernHaveOrigin = true;
+    // A reflection probe's face (R_ModernCaptureProbes) looks elsewhere than
+    // the last scene, and the first scene of play after the probes is cut too.
+    if (R_ModernProbeCaptureActive())
+    {
+        modern.cut = true;
+        s_modernHaveOrigin = false;
+    }
     // The glow, as RB_ApplyGlowFilter sizes it: the radius is in 480-line
     // units, quartered twice on its way to the quarter-size glow image's
     // pixels; four of those make one of the scene's.
@@ -1930,6 +2565,7 @@ static GfxModernScene &R_ModernScene(const GfxViewInfo *viewInfo)
         modern.glowCutoff = viewInfo->glow.bloomCutoff;
         modern.glowDesaturation = viewInfo->glow.bloomDesaturation;
     }
+    R_ModernSceneFog(viewInfo, modern.fog);
     return modern;
 }
 
@@ -2029,6 +2665,9 @@ static float s_modernPlanarDpvsOrigin[3];
 // The world the plane below was found for, and the plane (n.p + d >= 0 is
 // above it); no plane when s_modernPlanarHavePlane is false.
 static const GfxWorld *s_modernPlanarWorld;
+// Its name too: a devmap can load the next map's world at the same address,
+// and the old map's planes stayed (PC water run 5).
+static char s_modernPlanarWorldName[64];
 static bool s_modernPlanarHavePlane;
 static float s_modernPlanarPlane[4];
 // The main view the planar one follows, and whether it drew sun shadows.
@@ -2039,13 +2678,335 @@ static refdef_s s_modernPlanarRefdef;
 // Geometry within this many units above the plane is cut too, so the
 // reflecting surface itself is not in its own reflection.
 static const float kModernPlanarCut = 1.0f;
+// The planar view's field of view against the main view's (tangents).
+static const float kModernPlanarWiden = 1.1f;
 
 bool R_ModernPlanarViewActive() { return s_modernPlanarActive; }
+
+// A map not in the table reflects in its water, if it has any. Its flat water
+// (world surfaces whose material has a water map and whose bounds are flat)
+// is grouped by height, within half a unit; each height with at least
+// kModernPlanarWaterTriangles triangles, or kModernPlanarWaterArea square
+// units of triangles, is a plane the view may take. Most triangles first.
+// The area lets mp_cargoship's sea in: 48 large triangles (PC water run 4).
+static const uint32_t kModernPlanarWaterTriangles = 64;
+static const float kModernPlanarWaterArea = 1024.0f * 1024.0f;
+namespace
+{
+struct ModernPlanarWater
+{
+    float height;
+    uint32_t triangles;
+    float area;
+    // Its surfaces, in s_modernPlanarWaterSurfaces.
+    uint32_t firstSurface;
+    uint32_t surfaceCount;
+};
+} // namespace
+constexpr int kModernPlanarWaterPlanes = 8;
+static ModernPlanarWater s_modernPlanarWater[kModernPlanarWaterPlanes];
+// None for a map from the table (its one plane is always taken).
+static int s_modernPlanarWaterCount;
+static uint32_t s_modernPlanarWaterSurfaces[2048];
+// The plane the last planar view took (an index above), or -1.
+static int s_modernPlanarWaterTaken = -1;
+// How much of each plane the main view has shown lately: rays that reached
+// its water this frame, plus kModernPlanarWaterKeep of the last frame's.
+static float s_modernPlanarWaterSeen[kModernPlanarWaterPlanes];
+// The same rays, each by how close its water is (1 / (1 + (d / 512)^2)): which
+// plane is taken. Counted plainly, a far sheet could outweigh the water at the
+// camera's feet: mp_bog's view of its swamp at -20 settled on the -26 sheet
+// beyond it (PC water run 5).
+static float s_modernPlanarWaterNear[kModernPlanarWaterPlanes];
+static const float kModernPlanarWaterNearDistance = 512.0f;
+static uint32_t s_modernPlanarWaterRayFrame;
+// Rays cast through the main view each frame, on a grid that moves by half a
+// cell from frame to frame (four frames cover twice the grid both ways).
+constexpr int kModernPlanarWaterRaysX = 6;
+constexpr int kModernPlanarWaterRaysY = 4;
+static const float kModernPlanarWaterKeep = 0.8f;
+// A plane is taken once its count reaches kModernPlanarWaterEnter (about 2%
+// of the screen held for a few frames) and kept down to kModernPlanarWaterStay.
+static const float kModernPlanarWaterEnter = 2.0f;
+static const float kModernPlanarWaterStay = 0.5f;
+
+static bool R_ModernWaterLogOn()
+{
+    static const bool on = [] {
+        const char *text = getenv("KISAK_VK_MODERN_WATER_LOG");
+        return text && *text && *text != '0';
+    }();
+    return on;
+}
+
+// KISAK_VK_MODERN_WATER_LOG=1, as the world's water is looked at for planar
+// reflections: each material with a water map, how many world surfaces use
+// it, and the lit pass's pixel shader with whether our water shader can draw
+// it (so a run over many maps tells which water reflects without looking at
+// it), with the bounds of its surfaces.
+static void R_ModernLogWaterMaterials(const char *name)
+{
+    const GfxWorldDpvsStatic &dpvs = rgp.world->dpvs;
+    const Material *done[32];
+    int doneCount = 0;
+    for (uint32_t s = 0; s < dpvs.staticSurfaceCount && doneCount < 32; ++s)
+    {
+        const Material *material = dpvs.surfaces[s].material;
+        if (!material || !R_ModernWaterMap(material))
+            continue;
+        bool seen = false;
+        for (int i = 0; i < doneCount; ++i)
+            seen = seen || done[i] == material;
+        if (seen)
+            continue;
+        done[doneCount++] = material;
+        uint32_t surfaces = 0, triangles = 0, flat = 0;
+        float mins[3] = {FLT_MAX, FLT_MAX, FLT_MAX};
+        float maxs[3] = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
+        for (uint32_t o = s; o < dpvs.staticSurfaceCount; ++o)
+        {
+            const GfxSurface &surface = dpvs.surfaces[o];
+            if (surface.material != material)
+                continue;
+            ++surfaces;
+            triangles += surface.tris.triCount;
+            if (surface.bounds[1][2] - surface.bounds[0][2] <= 0.5f)
+                flat += surface.tris.triCount;
+            for (int i = 0; i < 3; ++i)
+            {
+                mins[i] = surface.bounds[0][i] < mins[i] ? surface.bounds[0][i] : mins[i];
+                maxs[i] = surface.bounds[1][i] > maxs[i] ? surface.bounds[1][i] : maxs[i];
+            }
+        }
+        const MaterialTechnique *lit =
+            material->techniqueSet ? material->techniqueSet->techniques[TECHNIQUE_LIT] : nullptr;
+        const MaterialPass *pass = lit && lit->passCount ? &lit->passArray[0] : nullptr;
+        const char *shader = pass && pass->pixelShader ? pass->pixelShader->name : nullptr;
+        Com_Printf(CON_CHANNEL_GFX,
+                   "modern water: map %s: material %s: %u surfaces, %u triangles (%u flat), x %.0f to %.0f, "
+                   "y %.0f to %.0f, z %.1f to %.1f, lit pixel shader %s, %s\n",
+                   name, material->info.name, surfaces, triangles, flat, mins[0], maxs[0], mins[1], maxs[1], mins[2],
+                   maxs[2], shader ? shader : "none",
+                   shader && R_ModernWaterShader(shader, material, pass) ? "our water shader can draw it"
+                                                                         : "not ours");
+    }
+    if (!doneCount)
+        Com_Printf(CON_CHANNEL_GFX, "modern water: map %s: no world surface has a water map\n", name);
+}
+
+static const float *R_ModernSurfaceCorner(const GfxSurface &surface, uint32_t triangle, int corner)
+{
+    const uint16_t index = rgp.world->indices[surface.tris.baseIndex + triangle * 3 + corner];
+    return rgp.world->vd.vertices[surface.tris.firstVertex + index].xyz;
+}
+
+// The area of a surface's triangles seen from above.
+static float R_ModernSurfaceArea(const GfxSurface &surface)
+{
+    float area = 0.0f;
+    for (uint32_t t = 0; t < surface.tris.triCount; ++t)
+    {
+        const float *a = R_ModernSurfaceCorner(surface, t, 0);
+        const float *b = R_ModernSurfaceCorner(surface, t, 1);
+        const float *c = R_ModernSurfaceCorner(surface, t, 2);
+        area += 0.5f * fabsf((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+    }
+    return area;
+}
+
+// Whether (x, y) lies on one of a plane's water triangles, seen from above.
+static bool R_ModernPlanarOnWater(const ModernPlanarWater &water, float x, float y)
+{
+    for (uint32_t i = 0; i < water.surfaceCount; ++i)
+    {
+        const GfxSurface &surface = rgp.world->dpvs.surfaces[s_modernPlanarWaterSurfaces[water.firstSurface + i]];
+        if (x < surface.bounds[0][0] || x > surface.bounds[1][0] || y < surface.bounds[0][1]
+            || y > surface.bounds[1][1])
+            continue;
+        for (uint32_t t = 0; t < surface.tris.triCount; ++t)
+        {
+            const float *a = R_ModernSurfaceCorner(surface, t, 0);
+            const float *b = R_ModernSurfaceCorner(surface, t, 1);
+            const float *c = R_ModernSurfaceCorner(surface, t, 2);
+            const float ab = (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]);
+            const float bc = (c[0] - b[0]) * (y - b[1]) - (c[1] - b[1]) * (x - b[0]);
+            const float ca = (a[0] - c[0]) * (y - c[1]) - (a[1] - c[1]) * (x - c[0]);
+            if ((ab >= 0.0f && bc >= 0.0f && ca >= 0.0f) || (ab <= 0.0f && bc <= 0.0f && ca <= 0.0f))
+                return true;
+        }
+    }
+    return false;
+}
+
+static void R_ModernPlanarFindWater(const char *name)
+{
+    if (R_ModernWaterLogOn())
+        R_ModernLogWaterMaterials(name);
+    constexpr int kHeights = 16;
+    float heights[kHeights];
+    uint32_t triangles[kHeights];
+    float areas[kHeights];
+    int heightCount = 0;
+    const GfxWorldDpvsStatic &dpvs = rgp.world->dpvs;
+    for (uint32_t s = 0; s < dpvs.staticSurfaceCount; ++s)
+    {
+        const GfxSurface &surface = dpvs.surfaces[s];
+        if (!surface.material || !R_ModernWaterMap(surface.material))
+            continue;
+        const float z = surface.bounds[1][2];
+        if (z - surface.bounds[0][2] > 0.5f)
+            continue;
+        int h = 0;
+        while (h < heightCount && fabsf(heights[h] - z) > 0.5f)
+            ++h;
+        if (h == heightCount)
+        {
+            if (heightCount == kHeights)
+                continue;
+            heights[heightCount] = z;
+            areas[heightCount] = 0.0f;
+            triangles[heightCount++] = 0;
+        }
+        triangles[h] += surface.tris.triCount;
+        areas[h] += R_ModernSurfaceArea(surface);
+    }
+    // The heights with enough water, most triangles first.
+    bool taken[kHeights] = {};
+    uint32_t used = 0;
+    while (s_modernPlanarWaterCount < kModernPlanarWaterPlanes)
+    {
+        int best = -1;
+        for (int h = 0; h < heightCount; ++h)
+        {
+            if (!taken[h]
+                && (triangles[h] >= kModernPlanarWaterTriangles || areas[h] >= kModernPlanarWaterArea)
+                && (best < 0 || triangles[h] > triangles[best]))
+                best = h;
+        }
+        if (best < 0)
+            break;
+        taken[best] = true;
+        ModernPlanarWater &water = s_modernPlanarWater[s_modernPlanarWaterCount++];
+        water.height = heights[best];
+        water.triangles = triangles[best];
+        water.area = areas[best];
+        water.firstSurface = used;
+        water.surfaceCount = 0;
+        for (uint32_t s = 0; s < dpvs.staticSurfaceCount; ++s)
+        {
+            const GfxSurface &surface = dpvs.surfaces[s];
+            if (!surface.material || !R_ModernWaterMap(surface.material)
+                || surface.bounds[1][2] - surface.bounds[0][2] > 0.5f
+                || fabsf(surface.bounds[1][2] - water.height) > 0.5f)
+                continue;
+            if (used == sizeof(s_modernPlanarWaterSurfaces) / sizeof(s_modernPlanarWaterSurfaces[0]))
+                break;
+            s_modernPlanarWaterSurfaces[used++] = s;
+            ++water.surfaceCount;
+        }
+        Com_Printf(CON_CHANNEL_GFX, "modern: planar reflections on %s %s height %.1f (water, %u triangles, %.0f square units)\n",
+                   name, s_modernPlanarWaterCount == 1 ? "at" : "also at", water.height, water.triangles,
+                   water.area);
+    }
+    if (!s_modernPlanarWaterCount)
+        return;
+    s_modernPlanarPlane[0] = 0.0f;
+    s_modernPlanarPlane[1] = 0.0f;
+    s_modernPlanarPlane[2] = 1.0f;
+    s_modernPlanarPlane[3] = -s_modernPlanarWater[0].height;
+    s_modernPlanarHavePlane = true;
+}
+
+// Which water plane the planar view takes this frame: the one the main view
+// shows most of. A grid of rays through the main view goes down to each plane
+// the eye is above, highest first; a ray that lands on a plane's water
+// triangles counts for that plane if nothing solid stands between the eye and
+// the point (a sight trace through the collision world), and stops there.
+// The cells and frustum the main view drew are not enough: mp_bog's sheet of
+// water under the whole map and mp_creek's water under its ground passed
+// that test from everywhere, so the view was never skipped (PC water run 4).
+// The plane taken is the one whose rays weigh most by closeness
+// (s_modernPlanarWaterNear); the plane last taken stays while it weighs at
+// least half the best. -1 when
+// no water shows: the view is not drawn (it cost Bog 1.9 ms a frame, PC water
+// run 3).
+static int R_ModernPlanarChooseWater(const refdef_s *refdef)
+{
+    const float *eye = refdef->vieworg;
+    int order[kModernPlanarWaterPlanes];
+    int orderCount = 0;
+    for (int p = 0; p < s_modernPlanarWaterCount; ++p)
+    {
+        if (eye[2] - s_modernPlanarWater[p].height <= kModernPlanarCut)
+            continue;
+        int at = orderCount++;
+        while (at > 0 && s_modernPlanarWater[order[at - 1]].height < s_modernPlanarWater[p].height)
+        {
+            order[at] = order[at - 1];
+            --at;
+        }
+        order[at] = p;
+    }
+    float hits[kModernPlanarWaterPlanes] = {};
+    float nearHits[kModernPlanarWaterPlanes] = {};
+    const uint32_t frame = s_modernPlanarWaterRayFrame++;
+    const float shiftX = (frame & 1) ? 0.75f : 0.25f;
+    const float shiftY = (frame & 2) ? 0.75f : 0.25f;
+    for (int ry = 0; ry < kModernPlanarWaterRaysY && orderCount; ++ry)
+    {
+        const float sy = (2.0f * (ry + shiftY) / kModernPlanarWaterRaysY - 1.0f) * refdef->tanHalfFovY;
+        for (int rx = 0; rx < kModernPlanarWaterRaysX; ++rx)
+        {
+            const float sx = (2.0f * (rx + shiftX) / kModernPlanarWaterRaysX - 1.0f) * refdef->tanHalfFovX;
+            float d[3];
+            for (int k = 0; k < 3; ++k)
+                d[k] = refdef->viewaxis[0][k] + sx * refdef->viewaxis[1][k] + sy * refdef->viewaxis[2][k];
+            if (d[2] > -1.0e-4f)
+                continue;
+            for (int i = 0; i < orderCount; ++i)
+            {
+                const ModernPlanarWater &water = s_modernPlanarWater[order[i]];
+                const float t = (water.height - eye[2]) / d[2];
+                const float point[3] = {eye[0] + t * d[0], eye[1] + t * d[1], water.height + kModernPlanarCut};
+                if (!R_ModernPlanarOnWater(water, point[0], point[1]))
+                    continue;
+                if (!CM_BoxSightTrace(0, eye, point, vec3_origin, vec3_origin, 0, CONTENTS_SOLID))
+                {
+                    const float distanceSq = t * t * (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+                    hits[order[i]] += 1.0f;
+                    nearHits[order[i]] += 1.0f / (1.0f + distanceSq / (kModernPlanarWaterNearDistance
+                                                                         * kModernPlanarWaterNearDistance));
+                }
+                break;
+            }
+        }
+    }
+    int best = -1;
+    for (int p = 0; p < s_modernPlanarWaterCount; ++p)
+    {
+        s_modernPlanarWaterSeen[p] = s_modernPlanarWaterSeen[p] * kModernPlanarWaterKeep + hits[p];
+        s_modernPlanarWaterNear[p] = s_modernPlanarWaterNear[p] * kModernPlanarWaterKeep + nearHits[p];
+        if (s_modernPlanarWaterSeen[p] >= kModernPlanarWaterEnter
+            && (best < 0 || s_modernPlanarWaterNear[p] > s_modernPlanarWaterNear[best]))
+            best = p;
+    }
+    const int last = s_modernPlanarWaterTaken;
+    if (last >= 0 && s_modernPlanarWaterSeen[last] >= kModernPlanarWaterStay
+        && (best < 0 || 2.0f * s_modernPlanarWaterNear[last] >= s_modernPlanarWaterNear[best]))
+        best = last;
+    return best;
+}
 
 static void R_ModernPlanarFindPlane()
 {
     s_modernPlanarWorld = rgp.world;
+    I_strncpyz(s_modernPlanarWorldName, rgp.world && rgp.world->name ? rgp.world->name : "",
+               sizeof(s_modernPlanarWorldName));
     s_modernPlanarHavePlane = false;
+    s_modernPlanarWaterCount = 0;
+    s_modernPlanarWaterTaken = -1;
+    memset(s_modernPlanarWaterSeen, 0, sizeof(s_modernPlanarWaterSeen));
+    memset(s_modernPlanarWaterNear, 0, sizeof(s_modernPlanarWaterNear));
     if (!rgp.world || !rgp.world->name)
         return;
     const char *slash = strrchr(rgp.world->name, '/');
@@ -2074,6 +3035,7 @@ static void R_ModernPlanarFindPlane()
                    -s_modernPlanarPlane[3]);
         return;
     }
+    R_ModernPlanarFindWater(name);
 }
 
 // The projection's near plane becomes the reflection plane (raised by
@@ -2124,12 +3086,35 @@ void R_ModernPlanarScene(const refdef_s *refdef)
         return;
     if (!hooks->planarWanted(hooks->user, dx.device))
         return;
-    if (s_modernPlanarWorld != rgp.world)
+    if (s_modernPlanarWorld != rgp.world || !rgp.world->name
+        || strcmp(s_modernPlanarWorldName, rgp.world->name) != 0)
         R_ModernPlanarFindPlane();
     if (!s_modernPlanarHavePlane)
         return;
-    const float *n = s_modernPlanarPlane;
     const float *o = refdef->vieworg;
+    if (s_modernPlanarWaterCount)
+    {
+        const int water = R_ModernPlanarChooseWater(refdef);
+        if (water != s_modernPlanarWaterTaken && R_ModernWaterLogOn())
+        {
+            static int changes;
+            if (changes++ < 64)
+            {
+                if (water < 0)
+                    Com_Printf(CON_CHANNEL_GFX, "modern water: no water in view: no planar view\n");
+                else
+                    Com_Printf(CON_CHANNEL_GFX,
+                               "modern water: planar view on the water at height %.1f (seen %.1f, near %.2f)\n",
+                               s_modernPlanarWater[water].height, s_modernPlanarWaterSeen[water],
+                               s_modernPlanarWaterNear[water]);
+            }
+        }
+        s_modernPlanarWaterTaken = water;
+        if (water < 0)
+            return;
+        s_modernPlanarPlane[3] = -s_modernPlanarWater[water].height;
+    }
+    const float *n = s_modernPlanarPlane;
     const float above = n[0] * o[0] + n[1] * o[1] + n[2] * o[2] + n[3];
     if (above <= kModernPlanarCut)
         return;
@@ -2142,6 +3127,11 @@ void R_ModernPlanarScene(const refdef_s *refdef)
     mirror.height = refdef->height / 2 > 0 ? refdef->height / 2 : 1;
     mirror.useScissorViewport = false;
     mirror.blurRadius = 0.0f;
+    // A little wider than the main view, so a reflection near the screen's
+    // sides, moved by a ripple or a slope, still finds itself in the image
+    // (PC water run 2: the outer 3% of each side read nothing).
+    mirror.tanHalfFovX = refdef->tanHalfFovX * kModernPlanarWiden;
+    mirror.tanHalfFovY = refdef->tanHalfFovY * kModernPlanarWiden;
     for (int i = 0; i < 3; ++i)
         mirror.vieworg[i] = o[i] - 2.0f * above * n[i];
     for (int axis = 0; axis < 3; ++axis)
@@ -2369,6 +3359,7 @@ void R_RenderScene(const refdef_s *refdef)
         rg.viewDir[0] = refdef->viewaxis[0][0];
         rg.viewDir[1] = refdef->viewaxis[0][1];
         rg.viewDir[2] = refdef->viewaxis[0][2];
+        R_AddTestLight();
         viewParmsDraw = R_AllocViewParms();
         R_SetViewParmsForScene(refdef, viewParmsDraw);
         if (s_modernPlanarActive)
@@ -2566,6 +3557,7 @@ void R_GenerateSortedDrawSurfs(
         if (gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD)
         {
             R_AddAllBspDrawSurfacesCamera();
+            SysPerfScope lightsScope(SYS_PERF_PROBE_WORLD_LIGHTS);
             if (planar)
             {
                 // The main view's shadow maps, drawn before this view.

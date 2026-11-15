@@ -10,6 +10,12 @@
 
 #include <stdlib.h>
 
+#include <utility>
+#if KISAK_PERF_PHASES
+#include <chrono>
+#include <thread>
+#endif
+
 #if defined(_WIN32)
 #include <qcommon/threads.h>
 #include <windows.h>
@@ -25,6 +31,7 @@
 
 #if defined(__vita__)
 #include <vita/vita_platform.h> // Vita_ThreadTimes
+#include <psp2/kernel/threadmgr.h>
 #endif
 
 // ---------------------------------------------------------------------------
@@ -319,6 +326,14 @@ namespace
             case SYS_PERF_PROBE_SCENE_STATIC_MODELS: return "scene: static models";
             case SYS_PERF_PROBE_SCENE_ENTITIES: return "scene: entities";
             case SYS_PERF_PROBE_SCENE_MERGE: return "scene: sorted lists";
+            case SYS_PERF_PROBE_CELLS_HAND_OVER: return "cells: a cell handed to the workers";
+            case SYS_PERF_PROBE_WORLD_LIT: return "world: lit surfaces";
+            case SYS_PERF_PROBE_WORLD_DECAL: return "world: decals";
+            case SYS_PERF_PROBE_WORLD_EMISSIVE: return "world: emissive surfaces";
+            case SYS_PERF_PROBE_WORLD_LIGHTS: return "world: lights and shadow maps";
+            case SYS_PERF_PROBE_WORLD_PRETESS: return "world: a batch's indices copied";
+            case SYS_PERF_PROBE_SMODEL_HAND_ON: return "static models: a model's draw surfaces";
+            case SYS_PERF_PROBE_SMODEL_PRETESS: return "static models: cached indices copied";
             case SYS_PERF_PROBE_RENDER_3D: return "render: 3d";
             case SYS_PERF_PROBE_RENDER_DEPTH: return "render: depth pass";
             case SYS_PERF_PROBE_RENDER_LIT: return "render: lit";
@@ -423,12 +438,101 @@ namespace
     {
         s_runner.Stop();
     }
+
+    // perf_phases [0|1]: what the render thread is in (SysPerfPhaseScope,
+    // sys_perf.h), counted by a thread that looks a few thousand times a
+    // second. 1 starts a count, 0 ends it and prints each phase's share, its
+    // time in a frame, how often a frame enters it and the time of one entry.
+    cmd_function_s s_perfPhasesCmd;
+#if KISAK_PERF_PHASES
+    std::atomic<uint32_t> s_phaseSamples[SYS_PERF_PHASE_COUNT];
+    std::atomic<bool> s_phaseSampling;
+    bool s_phaseThreadStarted;
+    uint64_t s_phaseStartNs;
+    uint64_t s_phaseFrames;
+    uint32_t s_phaseEntriesAtStart[SYS_PERF_PHASE_COUNT];
+
+    void PhaseThread()
+    {
+#if defined(__vita__)
+        // Above the game's threads, so that a look happens when its time
+        // comes and not when a core comes free; a look is a load and an add.
+        Vita_NoteThread("perf phases");
+        Vita_QuietWaits();
+        SceKernelThreadInfo info{};
+        info.size = sizeof(info);
+        const SceUID self = sceKernelGetThreadId();
+        if (sceKernelGetThreadInfo(self, &info) >= 0)
+            sceKernelChangeThreadPriority(self, info.currentPriority - 8);
+#endif
+        for (;;)
+        {
+            if (!s_phaseSampling.load(std::memory_order_relaxed))
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                continue;
+            }
+            // Not a round number, so that the looks do not keep step with
+            // anything the game does on a timer.
+#if defined(__vita__)
+            sceKernelDelayThread(397);
+#else
+            std::this_thread::sleep_for(std::chrono::microseconds(397));
+#endif
+            const uint8_t phase = g_sysPerfPhase.load(std::memory_order_relaxed);
+            if (phase < SYS_PERF_PHASE_COUNT)
+                s_phaseSamples[phase].fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+
+    void PerfPhases_f()
+    {
+        const bool on = Cmd_Argc() > 1 ? atoi(Cmd_Argv(1)) != 0 : !s_phaseSampling.load(std::memory_order_relaxed);
+        if (on)
+        {
+            for (uint32_t i = 0; i < SYS_PERF_PHASE_COUNT; ++i)
+            {
+                s_phaseSamples[i].store(0, std::memory_order_relaxed);
+                s_phaseEntriesAtStart[i] = g_sysPerfPhaseEntries[i].load(std::memory_order_relaxed);
+            }
+            s_phaseStartNs = NowNs();
+            s_phaseFrames = 0;
+            if (!s_phaseThreadStarted)
+            {
+                s_phaseThreadStarted = true;
+                std::thread(PhaseThread).detach();
+            }
+            s_phaseSampling.store(true, std::memory_order_relaxed);
+            return;
+        }
+        if (!s_phaseSampling.exchange(false, std::memory_order_relaxed))
+            return;
+        const double seconds = (double)(NowNs() - s_phaseStartNs) / 1e9;
+        std::vector<PerfPhaseRow> rows(SYS_PERF_PHASE_COUNT);
+        for (uint32_t i = 0; i < SYS_PERF_PHASE_COUNT; ++i)
+        {
+            char name[64];
+            rows[i].name = Sys_PerfPhaseName(i, name, sizeof(name));
+            rows[i].looks = s_phaseSamples[i].load(std::memory_order_relaxed);
+            rows[i].entries = (uint32_t)(g_sysPerfPhaseEntries[i].load(std::memory_order_relaxed) - s_phaseEntriesAtStart[i]);
+        }
+        for (const std::string &line : Perf_PhaseLines(std::move(rows), seconds, s_phaseFrames))
+            Com_Printf(CON_CHANNEL_SYSTEM, "perf: %s\n", line.c_str());
+    }
+#else
+    void PerfPhases_f()
+    {
+        Com_Printf(CON_CHANNEL_SYSTEM,
+                   "perf: this build has no render thread phases; configure it with -DKISAK_PERF_PHASES=ON\n");
+    }
+#endif
 }
 
 void Sys_PerfInit()
 {
     Cmd_AddCommandInternal("perf_ab", PerfAb_f, &s_perfAbCmd);
     Cmd_AddCommandInternal("perf_sample", PerfSample_f, &s_perfSampleCmd);
+    Cmd_AddCommandInternal("perf_phases", PerfPhases_f, &s_perfPhasesCmd);
     Cmd_AddCommandInternal("perf_stop", PerfStop_f, &s_perfStopCmd);
 }
 
@@ -436,4 +540,8 @@ void Sys_PerfFrame()
 {
     if (s_runner.Active())
         s_runner.Frame(NowNs());
+#if KISAK_PERF_PHASES
+    if (s_phaseSampling.load(std::memory_order_relaxed))
+        ++s_phaseFrames;
+#endif
 }

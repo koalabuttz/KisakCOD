@@ -527,6 +527,16 @@ with the window's image read back (`Present(device, &readback)`, which needs
 a core made with `allowCapture`), and checks that image and the untouched
 front buffer, then checks that the identity ramp and no ramp show the frame
 as drawn by a blit.
+The `map_reload` scene checks the core's memory across map loads. It first
+checks `MemoryTypeOrder` on a made-up discrete GPU without resizable BAR
+(staging in system memory, Upload memory in the 256 MB window only up to half
+of it, Device memory off it, and the window again with resizable BAR). Then
+it loads three "maps" of 200 1 MB textures through staging, draws with a
+dynamic buffer, destroys them and draws 80 more frames, and checks that the
+images went, that device memory after each unload is back within one spare
+block and does not grow, that emptied blocks were given back, that staging
+shrank, and that mapped memory does not grow. It prints the figures as
+`legacy_check.map_reload=`.
 
 The hosted CI job `vulkan_window` (Linux) builds the check for x86_64 in Debug
 and RelWithDebInfo, runs `gen_legacy_check_shaders.py --check`, and runs that

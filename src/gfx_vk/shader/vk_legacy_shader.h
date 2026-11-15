@@ -292,10 +292,16 @@ bool Translate(const void *bytecode, size_t bytes, Shader &shader, std::string &
 // the colour 0 input (LinearInputs). Colour output 0 is then stored as
 // computed, only kept from going negative, and linearOutput is ignored. The
 // Modern path draws lit surfaces this way.
+//
+// byteInputs, for a vertex shader, marks attribute locations (bit per
+// location) that are fed as R8G8B8A8_UNORM standing in for a UBYTE4 element
+// (R8G8B8A8_USCALED, which not every device reads as vertex data): what the
+// shader loads from them is multiplied by 255 and rounded, giving back the
+// bytes D3D9 hands it.
 bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<uint32_t> &spirv,
                 std::string &error, const uint32_t *fixedDepthCompare = nullptr,
                 const uint32_t *fixedAlphaCompare = nullptr, bool linearOutput = false,
-                const LinearInputs *linearInputs = nullptr);
+                const LinearInputs *linearInputs = nullptr, uint32_t byteInputs = 0);
 
 // True when the pixel shader's inputs read the vertex shader's outputs as they
 // stand (BuildSpirv then needs no linking).

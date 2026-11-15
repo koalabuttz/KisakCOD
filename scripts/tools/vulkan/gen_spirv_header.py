@@ -85,6 +85,23 @@ LIGHT_VARIANTS = [
     if not (shadow and "D" in maps)
 ]
 
+# The extra per-light pass l_<spot|omni>[_flag|_skin][_hsm]_<mode>c0[d0][n0]
+# (l_light.frag, light pass facts 1): spot or omni, the spot's shadow map
+# (hsm, not with a detail map), times the maps (D detail, N normal).
+LIGHT_PASS_VARIANTS = [
+    ("l_light.frag", f"kLLight{light}{'Shadow' if shadow else ''}{maps}Frag",
+     (f"L_LIGHT_SPOT={int(light == 'Spot')}", f"L_LIGHT_SHADOW={shadow}", f"L_LIGHT_DETAIL={int('D' in maps)}",
+      f"L_LIGHT_NORMAL={int('N' in maps)}"))
+    for light in ("Spot", "Omni")
+    for shadow in (0, 1)
+    for maps in ("", "N", "D", "DN")
+    if not (shadow and (light == "Omni" or "D" in maps))
+]
+
+# water_l_sun (water.frag): by how many components the vertex shader writes
+# the water map's UV in (a fragment input must match its output).
+WATER_VARIANTS = [("water.frag", f"kWater{n}Frag", (f"WATER_UV_COMPONENTS={n}",)) for n in (2, 3, 4)]
+
 
 SETS = [
     ShaderSet(
@@ -119,6 +136,15 @@ SETS = [
             ("debug_ao.frag", "kDebugAoFrag"),
             ("reflections.frag", "kReflectionsFrag"),
             ("debug_reflections.frag", "kDebugReflectionsFrag"),
+            ("debug_reflections.frag", "kDebugImageFrag", ("DEBUG_PLAIN=1",)),
+            ("fog_march.frag", "kFogMarchFrag"),
+            ("fog_apply.frag", "kFogApplyFrag"),
+            ("fog_apply.frag", "kFogApplyFroxelsFrag", ("FOG_FROXELS=1",)),
+            ("fog_froxel_inject.comp", "kFogFroxelInjectComp"),
+            ("fog_froxel_integrate.comp", "kFogFroxelIntegrateComp"),
+            ("compute_check_fill.comp", "kComputeCheckFillComp"),
+            ("compute_check_integrate.comp", "kComputeCheckIntegrateComp"),
+            ("compute_check_draw.frag", "kComputeCheckDrawFrag"),
         ],
     ),
     ShaderSet(
@@ -128,7 +154,7 @@ SETS = [
         [
             ("fullscreen.vert", "kFullscreenVert"),
             ("gamma.frag", "kGammaFrag"),
-        ] + LM_SUN_VARIANTS + LP_SUN_VARIANTS + NO_SUN_VARIANTS + AMBIENT_VARIANTS + LIGHT_VARIANTS,
+        ] + LM_SUN_VARIANTS + LP_SUN_VARIANTS + NO_SUN_VARIANTS + AMBIENT_VARIANTS + LIGHT_VARIANTS + LIGHT_PASS_VARIANTS + WATER_VARIANTS,
     ),
 ]
 
