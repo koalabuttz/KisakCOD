@@ -2,10 +2,10 @@
 
 // The Modern path's reflections debug view (src/gfx_vk/modern/
 // vk_modern_debug.cpp, KISAK_VK_MODERN_DEBUG=reflections): drawn over the
-// finished scene, it shows the screen-space reflections' sharpest level as
-// it is stored, the reflected light times its confidence, over black,
-// through the sRGB curve (clamped to 1, no exposure, no tonemap). Black is
-// "no reflection here".
+// finished scene, it shows the screen-space reflections' sharpest level:
+// the reflected light (its compression undone) times its confidence, over
+// black, through the sRGB curve (clamped to 1, no exposure, no tonemap).
+// Black is "no reflection here".
 
 layout(set = 0, binding = 0) uniform sampler2D reflections;
 
@@ -20,5 +20,8 @@ vec3 Encode(vec3 light)
 void main()
 {
     const vec4 reflection = texelFetch(reflections, ivec2(gl_FragCoord.xy), 0);
-    outColor = vec4(Encode(reflection.rgb), 1.0);
+    // Stored as L / (1 + luma L) times the confidence (reflections.frag).
+    const vec3 stored = reflection.a > 1e-4 ? reflection.rgb / reflection.a : vec3(0.0);
+    const float luma = dot(stored, vec3(0.2126, 0.7152, 0.0722));
+    outColor = vec4(Encode(stored / max(1.0 - luma, 0.2) * clamp(reflection.a, 0.0, 1.0)), 1.0);
 }

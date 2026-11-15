@@ -1290,9 +1290,15 @@ found.
 
 **What a texel holds:** the reflected light times a confidence in rgb and
 the confidence (0 to 1) in alpha, so a blurred level averages light with its
-weight. The confidence fades out where the mirrored ray points back at the
-camera (the screen holds nothing of what it would meet), over the outer 8%
-of the view, and over the last quarter of the ray's reach. It is 0 where the
+weight. The light is held to a luma of at most 4 and stored compressed, as
+`L / (1 + luma L)` (Karis 2014), so one bright pixel (a lamp) does not light
+a whole blurred level as a bright square; every reader undoes it with
+`c / (1 - luma c)` on `rgb / a`. The confidence fades out where the mirrored
+ray points back at the camera (the screen holds nothing of what it would
+meet), smoothly over the outer 15% of the view, over the last quarter of the
+ray's reach, where the ray ended more than half the thickness behind what it
+met (it may have passed behind a post or a wire and drawn it as a streak),
+and where it met a surface nearly edge-on. It is 0 where the
 ray met nothing on the screen, met the sky, or met a surface from behind,
 where the normal is only a guess, and on a cut or the first scene (no last
 scene to read light from: no image at all then).
@@ -1307,9 +1313,15 @@ game's shader reads s14), read with a trilinear sampler clamped to the
 edge, and a 1x1 (0, 0, 0, 0) texture where the scene has none. `lm_sun.frag`
 with a specular map (`s0`) mixes it into the reflection probe's light only,
 in the game's display values: `probe = mix(probe * specular occlusion,
-encode(ssr.rgb / ssr.a), ssr.a)` (encode unclamped), at the level its gloss
-picks (`(6 - 8 gloss) / 6` of the way to the blurriest, as the game picks
-the probe's), on opaque surfaces only (a blended one is not in the prepass,
+encode(ssr), ssr.a)` (encode unclamped, the compression undone), at the
+level as wide as the cone the surface mirrors: its sun highlight's lobe
+(exponent `n = 2^(9.38 gloss) + 7`, half angle about `sqrt(2 / (n + 2))`)
+times `kReflectionsSpread` (1/16), in pixels of the view at that point
+(from the view ray's screen derivatives), so the blur is the same at any
+resolution and no gloss is a perfect mirror: about level 1.5 at gloss 1,
+2.6 at 0.75 and 3.7 at 0.5 at 720p (before 2026-11-15 it was `(6 - 8 gloss)
+/ 6` of the way to the blurriest, a sharp mirror from gloss 0.75 up, which
+David found too mirror-like on Chinatown), on opaque surfaces only (a blended one is not in the prepass,
 so the reflections there belong to what is behind it). Rough surfaces keep
 the probe: the mix fades out below gloss 0.5 and is gone at 0.3. The
 reflections' blurriest level is only a few pixels wide, not the half of the

@@ -229,6 +229,16 @@ layout(set = 1, binding = 30) uniform sampler reflectionsSampler;
 // reflections take its place in full.
 const float kReflectionsGlossNone = 0.3;
 const float kReflectionsGlossFull = 0.5;
+// How wide the reflections' blur is: the cone a surface of gloss g mirrors
+// is taken as its sun highlight's lobe (exponent n = 2^(9.38 g) + 7, half
+// angle about sqrt(2 / (n + 2)) radians), times this share of it (the
+// hit is taken halfway between the eye and what is mirrored, and the lobe
+// narrowed to a sharp core), in pixels of this view at this point. Gloss 1
+// reads about level 1.5 at 720p, gloss 0.75 level 2.6, gloss 0.5 level 3.7:
+// the level no longer depends on the image's size, and no gloss is a perfect
+// mirror (David on the Retroid, 2026-11-15: Chinatown's reflections were
+// too mirror-like).
+const float kReflectionsSpread = 0.0625;
 #endif
 #if LM_SUN_SPECULAR && LM_SUN_LIGHT == 1
 // The planar reflection's own fade: only glossy surfaces, whose probe level
@@ -504,6 +514,9 @@ void main()
     const float mask = kMode == 1 ? clamp(dot(specularSample.rgb, vec3(10.0)), 0.0, 1.0) * color0.a : 1.0;
     const float gloss = specularSample.a * mask;
     const vec3 view = normalize(texcoord5.xyz);
+    // The angle one pixel spans here (radians), for the reflections' blur;
+    // taken out here, where every pixel of a quad runs it.
+    const float pixelAngle = max(length(dFdx(view)), length(dFdy(view)));
     const float viewFacing = dot(view, normal);
     const vec3 reflected = view - 2.0 * viewFacing * normal;
     // x at normal incidence, y grazing, z exponent, w sun highlight scale.
@@ -560,9 +573,10 @@ void main()
     }
 #endif
     // Where the screen-space reflections found what this pixel mirrors, that
-    // takes the probe's place by their confidence: the level as blurry as
-    // the probe's (LOD 6 - 8 gloss of its 6), the light averaged with its
-    // confidence, put in display values as the probe is. Opaque surfaces
+    // takes the probe's place by their confidence: the level as wide as the
+    // surface's reflected cone (kReflectionsSpread), the light averaged with
+    // its confidence and its compression undone (reflections.frag stores
+    // L / (1 + luma L)), put in display values as the probe is. Opaque surfaces
     // only: the reflections are traced from the depth prepass, which a
     // blended surface is not in. Rough surfaces keep the probe: below gloss
     // 0.5 the reflections fade out, gone at 0.3. Their blurriest level is a
@@ -574,12 +588,18 @@ void main()
     {
         const vec2 size = vec2(textureSize(sampler2D(reflections, reflectionsSampler), 0));
         const float levels = float(textureQueryLevels(sampler2D(reflections, reflectionsSampler)));
-        const float level = clamp((6.0 - 8.0 * gloss) / 6.0, 0.0, 1.0) * (levels - 1.0);
+        const float lobe = sqrt(2.0 / (exp2(gloss * 9.37752) + 9.0));
+        const float footprint = kReflectionsSpread * lobe / max(pixelAngle, 1e-6);
+        const float level = clamp(log2(max(footprint, 1.0)), 0.0, levels - 1.0);
         const vec4 found = textureLod(sampler2D(reflections, reflectionsSampler), gl_FragCoord.xy / size, level);
         const float weight =
             clamp(found.a, 0.0, 1.0) * smoothstep(kReflectionsGlossNone, kReflectionsGlossFull, gloss);
         if (found.a > 1e-4)
-            reflection = mix(reflection, Encode(found.rgb / found.a), weight);
+        {
+            const vec3 stored = found.rgb / found.a;
+            const float luma = dot(stored, vec3(0.2126, 0.7152, 0.0722));
+            reflection = mix(reflection, Encode(stored / max(1.0 - luma, 0.2)), weight);
+        }
     }
 #if POINT_LIGHT
     const float exponent = exp2(gloss * 9.37752) + 7.0;
