@@ -13,9 +13,14 @@
 //     before it, "^1" switching to the stock red;
 //   - a fill uses the white material and its colour;
 //   - R_SplitUiTriangles (r_ui_triangles.h) cuts a large mesh into runs that
-//     fit one command and keep every triangle, in order.
+//     fit one command and keep every triangle, in order;
+//   - the built-in graphics screen (rml_screens.cpp, screens/graphics.rml)
+//     loads, hides rows for dvars a build lacks, and the controller's keys,
+//     taps and the mouse change the dvars it binds as they should.
 
 #include <ui_rml/rml_internal.h>
+#include <ui_rml/rml_screens.h>
+#include <ui/keycodes.h>
 
 #include <universal/q_shared.h>
 #include <qcommon/qcommon.h>
@@ -100,7 +105,8 @@ const Glyph *R_GetCharacterGlyph(Font_s *font, uint32_t letter)
 
 Font_s *R_RegisterFont(const char *name, int)
 {
-    return strcmp(name, testFont.fontName) == 0 ? &testFont : nullptr;
+    // The screens name the game's fonts (fonts/normalFont, fonts/boldFont).
+    return strcmp(name, testFont.fontName) == 0 || strncmp(name, "fonts/", 6) == 0 ? &testFont : nullptr;
 }
 
 uint8_t ColorIndex(uint8_t c)
@@ -257,12 +263,269 @@ public:
     }
 };
 
+namespace
+{
+// --- screens ----------------------------------------------------------------
+
+// The built-in screen files, as the game's file interface serves them when
+// the game folders have none (rml_system.cpp).
+class EmbeddedFiles final : public Rml::FileInterface
+{
+public:
+    struct Open
+    {
+        const char *data;
+        size_t size;
+        size_t at;
+    };
+    Rml::FileHandle Open(const Rml::String &path) override
+    {
+        const char *data = nullptr;
+        size_t size = 0;
+        if (!kisak_rml::EmbeddedFile(path.c_str(), &data, &size))
+            return 0;
+        return reinterpret_cast<Rml::FileHandle>(new struct Open{data, size, 0});
+    }
+    void Close(Rml::FileHandle file) override { delete reinterpret_cast<struct Open *>(file); }
+    size_t Read(void *buffer, size_t size, Rml::FileHandle handle) override
+    {
+        auto *file = reinterpret_cast<struct Open *>(handle);
+        const size_t count = std::min(size, file->size - file->at);
+        memcpy(buffer, file->data + file->at, count);
+        file->at += count;
+        return count;
+    }
+    bool Seek(Rml::FileHandle handle, long offset, int origin) override
+    {
+        auto *file = reinterpret_cast<struct Open *>(handle);
+        const long base = origin == SEEK_CUR ? (long)file->at : origin == SEEK_END ? (long)file->size : 0;
+        if (base + offset < 0 || base + offset > (long)file->size)
+            return false;
+        file->at = (size_t)(base + offset);
+        return true;
+    }
+    size_t Tell(Rml::FileHandle handle) override { return reinterpret_cast<struct Open *>(handle)->at; }
+};
+
+// Dvars as the screens see them: a value, a latched value for the dvars a
+// restart applies, and whether a change is saved.
+class TestSettings final : public kisak_rml::SettingsStore
+{
+public:
+    struct Dvar
+    {
+        std::string current;
+        std::string latched;
+        bool latch;
+        bool saved;
+    };
+    std::map<std::string, Dvar> dvars;
+    std::vector<std::string> commands;
+
+    void Add(const std::string &name, const std::string &value, bool latch = false)
+    {
+        dvars[name] = Dvar{value, value, latch, false};
+    }
+    bool Has(const std::string &name) override { return dvars.count(name) != 0; }
+    std::string Value(const std::string &name) override
+    {
+        const Dvar &dvar = dvars.at(name);
+        return dvar.latch ? dvar.latched : dvar.current;
+    }
+    bool Pending(const std::string &name) override
+    {
+        const Dvar &dvar = dvars.at(name);
+        return dvar.latch && dvar.latched != dvar.current;
+    }
+    void Set(const std::string &name, const std::string &value, bool save) override
+    {
+        Dvar &dvar = dvars.at(name);
+        dvar.latched = value;
+        if (!dvar.latch)
+            dvar.current = value;
+        dvar.saved = dvar.saved || save;
+    }
+    void Command(const std::string &text) override { commands.push_back(text); }
+};
+
+bool Shown(Rml::Element *element)
+{
+    for (; element; element = element->GetParentNode())
+    {
+        if (element->GetComputedValues().display() == Rml::Style::Display::None)
+            return false;
+    }
+    return true;
+}
+
+Rml::Element *RowFor(Rml::ElementDocument *document, const char *dvar)
+{
+    Rml::ElementList rows;
+    document->GetElementsByTagName(rows, "row");
+    for (Rml::Element *row : rows)
+    {
+        if (row->GetAttribute<Rml::String>("dvar", "") == dvar)
+            return row;
+    }
+    return nullptr;
+}
+
+std::string ShownValue(Rml::Element *row)
+{
+    Rml::ElementList texts;
+    row->GetElementsByClassName(texts, "text");
+    if (texts.empty() || !texts[0]->GetFirstChild())
+        return std::string();
+    auto *text = rmlui_dynamic_cast<Rml::ElementText *>(texts[0]->GetFirstChild());
+    return text ? std::string(text->GetText()) : std::string();
+}
+
+void Frame(Rml::Context *context, kisak_rml::Screens &screens)
+{
+    screens.Refresh();
+    context->Update();
+    context->Render();
+}
+
+void Press(Rml::Context *context, kisak_rml::Screens &screens, int key)
+{
+    screens.KeyEvent(key, true);
+    screens.KeyEvent(key, false);
+    Frame(context, screens);
+}
+
+// A tap: the mouse moves to the middle of an element and clicks.
+void Tap(Rml::Context *context, kisak_rml::Screens &screens, Rml::Element *element, float across = 0.5f)
+{
+    const Rml::Vector2f at = element->GetAbsoluteOffset(Rml::BoxArea::Border);
+    const Rml::Vector2f size = element->GetBox().GetSize(Rml::BoxArea::Border);
+    screens.MouseMove((int)(at.x + size.x * across), (int)(at.y + size.y * 0.5f));
+    screens.KeyEvent(K_MOUSE1, true);
+    screens.KeyEvent(K_MOUSE1, false);
+    Frame(context, screens);
+}
+
+void CheckScreens(Rml::Context *context)
+{
+    context->SetDimensions(Rml::Vector2i(1280, 720));
+    TestSettings settings;
+    // A build with the stock and Modern dvars but none of the Vita's.
+    settings.Add("r_visuals", "legacy", true);
+    settings.Add("r_aaSamples", "1", true);
+    settings.Add("r_vsync", "1", true);
+    settings.Add("com_maxfps", "85");
+    settings.Add("cg_fov", "65");
+    settings.Add("r_gamma", "0.8");
+    settings.Add("r_picmip_manual", "0");
+    settings.Add("r_picmip", "0");
+    settings.Add("r_texFilterAnisoMax", "16");
+    settings.Add("sm_enable", "0");
+    settings.Add("r_dof_enable", "1");
+    settings.Add("fx_marks", "1");
+    settings.Add("r_modernSunStrength", "-1");
+    settings.Add("r_modernAo", "default");
+
+    kisak_rml::Screens screens(settings);
+    Check(screens.Open(context, "graphics"), "screen: graphics.rml loads from the built-in files");
+    if (!screens.IsOpen())
+        return;
+    Rml::ElementDocument *document = screens.Document();
+    Frame(context, screens);
+
+    Rml::ElementList tabs;
+    document->GetElementsByTagName(tabs, "tab");
+    Check(tabs.size() == 6, "screen: a tab per page");
+    Check(!Shown(RowFor(document, "vita_sceneScaleMin")), "screen: a row for a dvar this build lacks is hidden");
+    Check(!Shown(tabs[4]) && !Shown(tabs[5]), "screen: Modern and Advanced tabs hidden with Legacy visuals");
+    Rml::Element *focus = context->GetFocusElement();
+    Check(focus && focus->HasAttribute("cmd") && focus->IsClassSet("preset"), "screen: opens with the first preset focused");
+
+    // The right bumper: the Display page, its first row focused.
+    Press(context, screens, K_AUX14);
+    Rml::Element *visuals = RowFor(document, "r_visuals");
+    Check(context->GetFocusElement() == visuals, "screen: bumper to the next page focuses its first row");
+    Check(ShownValue(visuals) == "Legacy", "screen: a choice shows its label");
+
+    // Right: Modern, saved, waiting for a restart; anti-aliasing hides.
+    Press(context, screens, K_RIGHTARROW);
+    Check(settings.dvars["r_visuals"].latched == "modern" && settings.dvars["r_visuals"].saved,
+          "screen: Right steps a choice, and a save row is saved");
+    Check(visuals->IsClassSet("pending") && document->IsClassSet("pending"), "screen: a latched change is pending");
+    Check(!Shown(RowFor(document, "r_aaSamples")), "screen: show-if hides anti-aliasing with Modern");
+    Check(Shown(tabs[4]), "screen: the Modern tab shows once Modern is picked");
+
+    // Down skips the hidden row: V-Sync. Enter toggles it.
+    Press(context, screens, K_DOWNARROW);
+    Rml::Element *vsync = RowFor(document, "r_vsync");
+    Check(context->GetFocusElement() == vsync, "screen: Down moves to the next row shown");
+    Press(context, screens, K_ENTER);
+    Check(settings.dvars["r_vsync"].latched == "0", "screen: Enter toggles");
+
+    // A slider: Right steps, a tap on its bar sets the value there.
+    Rml::Element *fov = RowFor(document, "cg_fov");
+    fov->Focus(true);
+    Press(context, screens, K_RIGHTARROW);
+    Check(settings.dvars["cg_fov"].current == "66", "screen: Right steps a slider");
+    Check(ShownValue(fov) == "66" || (Frame(context, screens), ShownValue(fov) == "66"), "screen: the slider shows its value");
+    Rml::ElementList bars;
+    fov->GetElementsByClassName(bars, "bar");
+    Tap(context, screens, bars[0], 1.0f);
+    Check(settings.dvars["cg_fov"].current == "120", "screen: a tap at the bar's end sets the maximum");
+
+    // A tap on a choice's left arrow steps it back: 85 -> 60.
+    Rml::Element *fps = RowFor(document, "com_maxfps");
+    Rml::ElementList arrows;
+    fps->GetElementsByClassName(arrows, "left");
+    Tap(context, screens, arrows[0]);
+    Check(settings.dvars["com_maxfps"].current == "60", "screen: a tap on the left arrow steps back");
+
+    // Textures: manual texture quality shows the size rows; a change waits
+    // for a restart even though the dvar has no latch.
+    Press(context, screens, K_AUX14);
+    Check(!Shown(RowFor(document, "r_picmip")), "screen: texture sizes hidden while automatic");
+    Press(context, screens, K_ENTER);
+    Check(settings.dvars["r_picmip_manual"].current == "1", "screen: Enter steps the focused choice");
+    Check(Shown(RowFor(document, "r_picmip")), "screen: texture sizes show when manual");
+    Check(RowFor(document, "r_picmip_manual")->IsClassSet("pending"), "screen: restart=1 marks a changed row pending");
+
+    // The Advanced page: Auto below a slider's minimum.
+    Press(context, screens, K_AUX14); // Effects
+    Press(context, screens, K_AUX14); // Modern
+    Press(context, screens, K_AUX14); // Advanced
+    Rml::Element *sun = RowFor(document, "r_modernSunStrength");
+    Check(Shown(sun) && ShownValue(sun) == "Auto", "screen: an auto slider shows Auto");
+    sun->Focus(true);
+    Press(context, screens, K_RIGHTARROW);
+    Check(settings.dvars["r_modernSunStrength"].current == "0", "screen: Right from Auto goes to the minimum");
+    Press(context, screens, K_LEFTARROW);
+    Check(settings.dvars["r_modernSunStrength"].current == "-1", "screen: Left from the minimum goes back to Auto");
+
+    // A preset, by Enter on the Quality page.
+    Press(context, screens, K_AUX14); // back round to Quality
+    Check(context->GetFocusElement() && context->GetFocusElement()->IsClassSet("preset"), "screen: the bumper wraps to the first page");
+    Press(context, screens, K_ENTER);
+    Check(settings.dvars["r_picmip"].current == "2" && settings.dvars["sm_enable"].current == "0"
+              && settings.dvars["r_visuals"].latched == "legacy",
+          "screen: the Low preset sets its dvars");
+
+    // Apply restarts the renderer; Escape closes.
+    Tap(context, screens, document->GetElementById("apply"));
+    Check(!settings.commands.empty() && settings.commands.back() == "vid_restart", "screen: Apply runs vid_restart");
+    Press(context, screens, K_ESCAPE);
+    Check(!screens.IsOpen(), "screen: Escape closes it");
+    Frame(context, screens);
+}
+
+} // namespace
+
 int main()
 {
     CheckSplit();
 
     static LogSystem logSystem;
+    static EmbeddedFiles files;
     Rml::SetSystemInterface(&logSystem);
+    Rml::SetFileInterface(&files);
     MakeFont();
     Rml::SetRenderInterface(kisak_rml::RenderInterface());
     Rml::SetFontEngineInterface(kisak_rml::FontEngine());
@@ -389,6 +652,9 @@ int main()
     context->Update();
     context->Render();
     Check(drawCalls.size() == firstFrame * 2, "second frame: same draws");
+
+    context->UnloadAllDocuments();
+    CheckScreens(context);
 
     Rml::Shutdown();
     printf("%s (%d failed)\n", failures ? "FAILED" : "PASSED", failures);

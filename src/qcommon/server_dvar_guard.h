@@ -97,6 +97,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     // Menus.
     "ui_fastExpressions",
     "ui_rml",
+    "ui_rmlGraphics",
     // How the player's own server admits players.
     "sv_advertisedProtocol",
     "sv_allowProtocol6",

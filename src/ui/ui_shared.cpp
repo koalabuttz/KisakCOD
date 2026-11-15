@@ -1706,10 +1706,16 @@ void Item_TextField_BeginEdit(int localClientNum, itemDef_s *item)
     }
 }
 
+// Port: a front-end that shows some menus its own way (the RmlUi screens,
+// src/ui_rml/rml_frontend.h) takes their opening; null in other builds.
+bool (*UI_MenuOpenHook)(UiContext *dc, const char *name);
+
 int Menus_OpenByName(UiContext *dc, const char *p)
 {
     menuDef_t *pMenu; // [esp+0h] [ebp-4h]
 
+    if (UI_MenuOpenHook && UI_MenuOpenHook(dc, p))
+        return 1;
     pMenu = Menus_FindByName(dc, p);
     if (pMenu)
     {

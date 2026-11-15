@@ -1,0 +1,110 @@
+<rml>
+<head>
+    <title>Graphics</title>
+    <link type="text/rcss" href="kisak.rcss"/>
+</head>
+<!-- The graphics settings (ui_rmlOpen graphics). Rows are bound to dvars by
+     their attributes (src/ui_rml/rml_screens.cpp); a row for a dvar this
+     build lacks is hidden. "save" rows are written to the config. -->
+<body>
+<div id="panel">
+    <div id="title">GRAPHICS</div>
+    <div id="subtitle">Arrows change  /  Bumpers switch page  /  Back to leave</div>
+    <tabs/>
+
+    <page id="quality" title="Quality">
+        <div class="presets">
+            <div class="preset" cmd="seta r_visuals legacy; set r_aaSamples 1; set sm_enable 0; set r_dof_enable 0; set r_distortion 0; set r_glow_allowed 0; set r_zFeather 0; set fx_marks 0; set cg_brass 0; set r_drawWater 0; set r_specular 1; set r_picmip_manual 1; set r_picmip 2; set r_picmip_bump 2; set r_picmip_spec 2; set r_texFilterAnisoMax 1">Low<span>Fastest. Legacy look, no shadows</span></div>
+            <div class="preset" cmd="seta r_visuals legacy; set r_aaSamples 1; set sm_enable 0; set r_dof_enable 0; set r_distortion 1; set r_glow_allowed 1; set r_zFeather 1; set fx_marks 1; set cg_brass 1; set r_drawWater 1; set r_specular 1; set r_picmip_manual 1; set r_picmip 1; set r_picmip_bump 1; set r_picmip_spec 1; set r_texFilterAnisoMax 4">Medium<span>Legacy look, every effect</span></div>
+            <div class="preset" cmd="seta r_visuals legacy; set r_aaSamples 2; set sm_enable 1; set r_dof_enable 1; set r_distortion 1; set r_glow_allowed 1; set r_zFeather 1; set fx_marks 1; set cg_brass 1; set r_drawWater 1; set r_specular 1; set r_picmip_manual 1; set r_picmip 0; set r_picmip_bump 1; set r_picmip_spec 1; set r_texFilterAnisoMax 8">High<span>Legacy look, shadows, sharp textures</span></div>
+            <div class="preset" cmd="seta r_visuals modern; set r_aaSamples 1; set sm_enable 1; set r_dof_enable 1; set r_distortion 1; set r_glow_allowed 1; set r_zFeather 1; set fx_marks 1; set cg_brass 1; set r_drawWater 1; set r_specular 1; set r_picmip_manual 1; set r_picmip 0; set r_picmip_bump 0; set r_picmip_spec 0; set r_texFilterAnisoMax 16; seta r_modernShaders on; seta r_modernModelShaders on; seta r_modernAo on; seta r_modernSsr on; seta r_modernBloom on; seta r_modernExposure on; seta r_modernFog on">Ultra<span>Modern look, everything on</span></div>
+        </div>
+        <p>A preset sets every page below; change any row afterwards to make your own mix. Settings marked Restart apply with the Apply button.</p>
+    </page>
+
+    <page id="display" title="Display">
+        <row dvar="r_visuals" type="choice" label="Visuals" options="Legacy=legacy|Modern=modern" save="1"
+             hint="Legacy is the game as it shipped. Modern adds new lighting, reflections and effects (Vulkan)."/>
+        <row dvar="r_aaSamples" type="choice" label="Anti-aliasing" options="Off=1|2x=2|4x=4|8x=8|16x=16" show-if="r_visuals!=modern"
+             hint="Smooths jagged edges. Modern visuals use their own anti-aliasing."/>
+        <row dvar="r_vsync" type="toggle" label="V-Sync" hint="Waits for the screen between frames: no tearing, a little more delay."/>
+        <row dvar="com_maxfps" type="choice" label="Max Frame Rate" options="Unlimited=0|30=30|60=60|85=85|100=100|120=120|125=125|144=144|165=165|200=200|240=240|250=250|333=333"
+             hint="125, 250 and 333 are the rates players pick for their effect on movement."/>
+        <row dvar="cg_fov" type="slider" label="Field of View" min="65" max="120" step="1" hint="How wide you see."/>
+        <row dvar="r_gamma" type="slider" label="Brightness" min="0.5" max="3" step="0.05" decimals="2" hint="Gamma."/>
+        <row dvar="vita_sceneScaleMin" type="choice" label="Dynamic Resolution" options="Off=1|Down to 85%=0.85|Down to 70%=0.7|Down to 50%=0.5"
+             hint="How far the 3D picture may shrink where the GPU needs it."/>
+        <row dvar="vita_sceneSharpen" type="toggle" label="Sharpen Scaled Picture"/>
+    </page>
+
+    <page id="textures" title="Textures">
+        <row dvar="r_picmip_manual" type="choice" label="Texture Quality" options="Automatic=0|Manual=1" restart="1"
+             hint="Automatic picks texture sizes from the graphics memory."/>
+        <row dvar="r_picmip" type="choice" label="Colour Textures" options="Extra=0|High=1|Normal=2|Low=3" show-if="r_picmip_manual=1" restart="1"/>
+        <row dvar="r_picmip_bump" type="choice" label="Normal Maps" options="Extra=0|High=1|Normal=2|Low=3" show-if="r_picmip_manual=1" restart="1"/>
+        <row dvar="r_picmip_spec" type="choice" label="Specular Maps" options="Extra=0|High=1|Normal=2|Low=3" show-if="r_picmip_manual=1" restart="1"/>
+        <row dvar="r_texFilterAnisoMax" type="choice" label="Anisotropic Filtering" options="Off=1|2x=2|4x=4|8x=8|16x=16"
+             hint="Keeps textures sharp at grazing angles."/>
+    </page>
+
+    <page id="effects" title="Effects">
+        <row dvar="sm_enable" type="toggle" label="Shadows" hint="Sun and spot light shadows."/>
+        <row dvar="r_specular" type="toggle" label="Specular Lighting" hint="Shine on wet and metal surfaces."/>
+        <row dvar="r_dof_enable" type="toggle" label="Depth of Field" hint="Blurs what is out of focus, as when aiming down sights."/>
+        <row dvar="r_glow_allowed" type="toggle" label="Glow"/>
+        <row dvar="r_distortion" type="toggle" label="Distortion" hint="Heat haze and explosion ripples."/>
+        <row dvar="r_zFeather" type="toggle" label="Soft Particles" hint="Smoke and dust blend where they meet walls."/>
+        <row dvar="r_drawDecals" type="toggle" label="Decals"/>
+        <row dvar="fx_marks" type="toggle" label="Bullet Marks"/>
+        <row dvar="cg_brass" type="toggle" label="Ejected Brass"/>
+        <row dvar="r_drawWater" type="toggle" label="Water Animation"/>
+        <row dvar="r_drawSun" type="toggle" label="Sun Effects"/>
+        <row dvar="cg_blood" type="toggle" label="Blood"/>
+    </page>
+
+    <page id="modern" title="Modern" show-if="r_visuals=modern">
+        <h2>LIGHT</h2>
+        <row dvar="r_modernShaders" type="choice" label="Modern Lighting" options="Auto=default|Off=off|On=on" save="1"
+             hint="Our own lit shaders for the world."/>
+        <row dvar="r_modernModelShaders" type="choice" label="Modern Model Lighting" options="Auto=default|Off=off|On=on" save="1"/>
+        <row dvar="r_modernNoSunShaders" type="choice" label="Indoor Lighting" options="Auto=default|Off=off|On=on" save="1"
+             hint="Modern lighting on surfaces the sun does not reach."/>
+        <row dvar="r_modernLightShaders" type="choice" label="Lamp Lighting" options="Auto=default|Off=off|On=on" save="1"
+             hint="Modern lighting for spot and omni lights."/>
+        <row dvar="r_modernAo" type="choice" label="Ambient Occlusion" options="Auto=default|Off=off|On=on" save="1"
+             hint="Soft contact shadows in corners and under objects."/>
+        <row dvar="r_modernAoHalf" type="choice" label="Ambient Occlusion Quality" options="Auto=default|Full=off|Half (faster)=on" save="1"/>
+        <h2>CAMERA</h2>
+        <row dvar="r_modernExposure" type="choice" label="Auto Exposure" options="Auto=default|Off=off|On=on" save="1"/>
+        <row dvar="r_modernBloom" type="choice" label="Bloom" options="Auto=default|Off=off|On=on" save="1"/>
+        <row dvar="r_modernTonemap" type="choice" label="Tone Curve" options="Auto=default|Neutral=neutral|AgX=agx|ACES=aces|Clamp=clamp" save="1"/>
+        <row dvar="r_modernVelocity" type="choice" label="Motion Vectors" options="Auto=default|Off=off|On=on" save="1"
+             hint="Lets the anti-aliasing follow what moves on its own."/>
+        <h2>REFLECTIONS AND AIR</h2>
+        <row dvar="r_modernSsr" type="choice" label="Screen-Space Reflections" options="Auto=default|Off=off|On=on" save="1"/>
+        <row dvar="r_modernFog" type="choice" label="Volumetric Fog" options="Auto=default|Off=off|On=on" save="1"
+             hint="The map's fog lit by the sun: darker in shadow, brighter towards the sun."/>
+        <row dvar="r_modernFogFroxels" type="choice" label="Fog Quality" options="Auto=default|Ray march=off|Froxels=on" save="1"/>
+    </page>
+
+    <page id="advanced" title="Advanced" show-if="r_visuals=modern">
+        <p>Fine tuning for Modern visuals. Auto keeps the built-in value.</p>
+        <row dvar="r_modernSunStrength" type="slider" label="Sun Strength" min="0" max="4" step="0.1" decimals="1" auto="-1" save="1"/>
+        <row dvar="r_modernSkyStrength" type="slider" label="Sky Light Strength" min="0" max="4" step="0.1" decimals="1" auto="-1" save="1"/>
+        <row dvar="r_modernExposureKey" type="slider" label="Exposure Target" min="0.02" max="0.5" step="0.01" decimals="2" auto="-1" save="1"/>
+        <row dvar="r_modernAoRadius" type="slider" label="Occlusion Reach" min="8" max="256" step="8" auto="-1" save="1"/>
+        <row dvar="r_modernAoPower" type="slider" label="Occlusion Strength" min="0.5" max="8" step="0.25" decimals="2" auto="-1" save="1"/>
+        <row dvar="r_modernSsrDistance" type="slider" label="Reflection Distance" min="250" max="8000" step="250" auto="-1" save="1"/>
+        <row dvar="r_modernFogSun" type="slider" label="Fog Sunlight" min="0" max="1" step="0.05" scale="100" suffix="%" auto="-1" save="1"/>
+        <row dvar="r_modernFogScatter" type="slider" label="Fog Glow Towards Sun" min="0" max="0.9" step="0.05" scale="100" suffix="%" auto="-1" save="1"/>
+        <row dvar="r_modernFogSpots" type="slider" label="Fog Lamp Light" min="0" max="4" step="0.1" decimals="1" auto="-1" save="1"/>
+    </page>
+
+    <div id="footer">
+        <div id="hint"></div>
+        <div id="apply" class="button" cmd="apply">APPLY</div>
+        <div id="back" class="button" cmd="close">BACK</div>
+    </div>
+</div>
+</body>
+</rml>
