@@ -65,8 +65,8 @@ static void Callouts()
         count += board.Calls()[i].active ? 1 : 0;
     Check(count == 1 && board.Freshest(3000)->heardAtMs == 3000, "the same enemy close by updates the callout");
 
-    const float far[3] = {-2000.0f, 900.0f, 0.0f};
-    board.Report(7, far, 3500);
+    const float farAway[3] = {-2000.0f, 900.0f, 0.0f};
+    board.Report(7, farAway, 3500);
     Check(board.Freshest(4000)->enemy == 7, "the freshest is the latest heard");
     const float here[3] = {900.0f, -200.0f, 0.0f};
     Check(board.Nearest(here, 4000)->enemy == 5, "and the nearest is the nearest");
@@ -218,9 +218,9 @@ static void Spots()
 
     // Watching a place on the right from the left: only through the door.
     const float target[3] = {250.0f, -100.0f, 0.0f};
-    const float near[3] = {-500.0f, 0.0f, 0.0f};
+    const float around[3] = {-500.0f, 0.0f, 0.0f};
     int watch[4];
-    const int watchers = table.Overwatch(target, near, 1500.0f, watch, 4);
+    const int watchers = table.Overwatch(target, around, 1500.0f, watch, 4);
     bool sees = watchers > 0;
     const int watched = table.Nearest(target);
     for (int i = 0; i < watchers; ++i)

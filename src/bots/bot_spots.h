@@ -145,10 +145,10 @@ public:
         return found;
     }
 
-    // Spots within `radius` of `near` (feet) that see the spot nearest
+    // Spots within `radius` of `around` (feet) that see the spot nearest
     // `target` (feet), the least seen first (the most sheltered places to watch
     // from), those on top of the target last. Returns how many.
-    int Overwatch(const float *target, const float *near, float radius, int *out, int max) const
+    int Overwatch(const float *target, const float *around, float radius, int *out, int max) const
     {
         if (!Ready())
             return 0;
@@ -161,7 +161,7 @@ public:
         {
             if (i == watched || !Sees(i, watched))
                 continue;
-            const float distance = Distance2(m_places[i], near);
+            const float distance = Distance2(m_places[i], around);
             if (distance > radius)
                 continue;
             // Few lines on it, and not on top of the target.

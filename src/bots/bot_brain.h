@@ -90,9 +90,9 @@ bool Bot_HiddenFrom(const float *place, const float *threat);
 void Bot_StepSpots(const kisak::bots::NavMesh &nav, const float *seed);
 const kisak::bots::SpotTable *Bot_Spots();
 
-// A spot within `radius` of `near` from which a standing player sees
+// A spot within `radius` of `around` from which a standing player sees
 // `target` (an eye or a place at chest height), reachable from `origin`; one
 // of the most sheltered few, by `rng`. False without the spot table or such a
 // spot.
-bool Bot_FindOverwatch(const float *origin, const float *target, const float *near, float radius,
+bool Bot_FindOverwatch(const float *origin, const float *target, const float *around, float radius,
                        const kisak::bots::NavMesh &nav, kisak::bots::Rng &rng, float *out);

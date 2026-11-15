@@ -182,14 +182,14 @@ const kb::SpotTable *Bot_Spots()
     return s_spots.Ready() ? &s_spots : nullptr;
 }
 
-bool Bot_FindOverwatch(const float *origin, const float *target, const float *near, float radius,
+bool Bot_FindOverwatch(const float *origin, const float *target, const float *around, float radius,
                        const kb::NavMesh &nav, kb::Rng &rng, float *out)
 {
     if (!s_spots.Ready())
         return false;
     const float targetFeet[3] = {target[0], target[1], target[2] - kb::SpotTable::kEye};
     int spots[6];
-    const int count = s_spots.Overwatch(targetFeet, near, radius, spots, 6);
+    const int count = s_spots.Overwatch(targetFeet, around, radius, spots, 6);
     if (count <= 0)
         return false;
     // One of the best few, so a team's anchors do not all pick the same.
