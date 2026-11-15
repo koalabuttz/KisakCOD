@@ -476,6 +476,7 @@ jobs:
           set -euo pipefail
           python3 scripts/tests/test_openal_channel_stop.py
           python3 scripts/tests/test_openal_packed_sounds.py
+          python3 scripts/tests/test_openal_stream_lengths.py
 
       - name: Run client compile census
         timeout-minutes: 20

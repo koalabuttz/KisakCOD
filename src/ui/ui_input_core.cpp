@@ -1,8 +1,10 @@
 #include <universal/q_shared.h>
 #include "ui_input_core.h"
+#include "ui_registration.h"
 #include <client/client.h>
 #include <qcommon/cmd.h>
 #include <universal/profile.h>
+#include <atomic>
 #ifdef KISAK_MP
 #include <client_mp/client_mp.h>
 #elif defined(KISAK_SP)
@@ -1076,14 +1078,70 @@ int Menus_MenuIsInStack(UiContext *dc, menuDef_t *menu)
     return 0;
 }
 
+// Where the menu found last time through each name pointer sits in its list.
+// Callers mostly pass the same pointer for the same name every time (a string
+// literal, or a menu expression's operand for menuisopen), and the walk below
+// touches every menu before it finds one. A remembered place is used only when
+// it was found in this same context, no menu list has changed since
+// (UI_MenuListChanged), it is still inside the list and the menu there still
+// has the name: that is then the first menu with the name, which is what the
+// walk returns. A name that is not found is never remembered. One word holds
+// the place (10 bits, a list has at most 640 menus), the context's number
+// (2 bits) and the change count, so a reader on another thread sees a whole
+// entry. The game has two contexts (the menus' and the HUD's); a fifth and
+// later context is not remembered at all, and nothing is once the change count
+// no longer fits its 20 bits (a few thousand map loads).
+static std::atomic<const UiContext *> s_menuContexts[4];
+static std::atomic<uint32_t> s_menuFoundByPointer[256];
+
+static int Menus_ContextNumber(const UiContext *dc)
+{
+    for (int number = 0; number < 4; ++number)
+    {
+        const UiContext *known = s_menuContexts[number].load(std::memory_order_relaxed);
+        if (known == dc)
+            return number;
+        if (!known)
+        {
+            if (s_menuContexts[number].compare_exchange_strong(known, dc, std::memory_order_relaxed) || known == dc)
+                return number;
+        }
+    }
+    return -1;
+}
+
 menuDef_t *Menus_FindByName(const UiContext *dc, const char *p)
 {
     int i; // [esp+0h] [ebp-4h]
 
+    const int context = Menus_ContextNumber(dc);
+    const uint32_t changes = g_uiMenuListChanges.load(std::memory_order_relaxed);
+    if (context < 0 || changes >= (1u << 20))
+    {
+        for (i = 0; i < dc->menuCount; ++i)
+        {
+            if (!I_stricmp(dc->Menus[i]->window.name, p))
+                return dc->Menus[i];
+        }
+        return 0;
+    }
+
+    const uint32_t bits = (uint32_t)(uintptr_t)p + (uint32_t)context;
+    std::atomic<uint32_t> &slot = s_menuFoundByPointer[(bits * 2654435761u) >> 24];
+    const uint32_t tag = (changes << 12) | ((uint32_t)context << 10);
+    const uint32_t found = slot.load(std::memory_order_relaxed);
+    i = (int)(found & 0x3ff);
+    if ((found & ~0x3ffu) == tag && i < dc->menuCount && !I_stricmp(dc->Menus[i]->window.name, p))
+        return dc->Menus[i];
+
     for (i = 0; i < dc->menuCount; ++i)
     {
         if (!I_stricmp(dc->Menus[i]->window.name, p))
+        {
+            if (i <= 0x3ff)
+                slot.store(tag | (uint32_t)i, std::memory_order_relaxed);
             return dc->Menus[i];
+        }
     }
     return 0;
 }

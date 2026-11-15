@@ -31,6 +31,16 @@ uint64_t Posix_MonotonicNanoseconds()
 // pthread_condattr_setclock, so there each wait converts the monotonic
 // deadline into the relative timeout pthread_cond_timedwait_relative_np takes;
 // a spurious early return just goes round the caller's predicate loop again.
+//
+// VitaSDK's pthreads take pthread_condattr_setclock and then ignore it:
+// pthread_cond_timedwait always reads its deadline against CLOCK_REALTIME, in
+// whole milliseconds (sem_timedwait, pte_relmillisecs). CLOCK_MONOTONIC on the
+// Vita counts from the start of the process, so every monotonic deadline was
+// long past by the wall clock and no timed wait ever waited: "up to 1 ms"
+// came back after one 500 us poll while pthread cancellation was on, and at
+// once with it off, which left a waiting worker thread spinning on a whole
+// core (console run BC, 2026-11-14). There each wait hands over the time left
+// as a wall clock deadline instead.
 // ---------------------------------------------------------------------------
 
 static void Posix_InitMonotonicCond(pthread_cond_t *cond)
@@ -79,6 +89,26 @@ static int Posix_CondTimedWaitMonotonic(pthread_cond_t *cond, pthread_mutex_t *m
     if (remaining.tv_sec < 0 || (remaining.tv_sec == 0 && remaining.tv_nsec == 0))
         return ETIMEDOUT;
     return pthread_cond_timedwait_relative_np(cond, mutex, &remaining);
+#elif defined(__vita__)
+    const int64_t deadlineNs = (int64_t)deadline->tv_sec * 1000000000ll + deadline->tv_nsec;
+    const int64_t remainingNs = deadlineNs - (int64_t)Posix_MonotonicNanoseconds();
+    if (remainingNs <= 0)
+        return ETIMEDOUT;
+    // The library counts the wait as (deadline, rounded to a millisecond)
+    // minus (now, cut to a millisecond), so a deadline on a whole millisecond
+    // gives the count asked for, less the part of a millisecond already gone.
+    struct timespec wall;
+    clock_gettime(CLOCK_REALTIME, &wall);
+    const int64_t wallMs = (int64_t)wall.tv_sec * 1000 + wall.tv_nsec / 1000000 + (remainingNs + 999999) / 1000000;
+    struct timespec wallDeadline;
+    wallDeadline.tv_sec = (time_t)(wallMs / 1000);
+    wallDeadline.tv_nsec = (long)(wallMs % 1000) * 1000000L;
+    const int status = pthread_cond_timedwait(cond, mutex, &wallDeadline);
+    // Up to a millisecond early: not a timeout yet. The caller's loop waits
+    // for the rest.
+    if (status == ETIMEDOUT && (int64_t)Posix_MonotonicNanoseconds() < deadlineNs)
+        return 0;
+    return status;
 #else
     return pthread_cond_timedwait(cond, mutex, deadline);
 #endif

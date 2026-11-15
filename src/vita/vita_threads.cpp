@@ -8,6 +8,8 @@
 
 #include "vita_platform.h"
 
+#include <linux/sys_posix.h>
+
 #include <pthread.h>
 #include <string.h>
 
@@ -45,6 +47,25 @@ void Vita_NoteThread(const char *name)
         noted->name[sizeof(noted->name) - 1] = 0;
     }
     pthread_mutex_unlock(&s_lock);
+}
+
+void Vita_QuietWaits()
+{
+    // pte_cancellable_wait (libpthread.a) takes sceKernelWaitSema with the
+    // caller's own timeout when cancellation is off, and a loop of 500 us
+    // waits and event flag polls when it is on.
+    int before;
+    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &before);
+}
+
+uint32_t Vita_TimedWaitMicroseconds(uint32_t msec)
+{
+    PosixEvent *event = Posix_CreateEvent(true, false);
+    const uint64_t start = Posix_MonotonicNanoseconds();
+    Posix_WaitEvent(event, msec);
+    const uint64_t took = Posix_MonotonicNanoseconds() - start;
+    Posix_DestroyEvent(event);
+    return (uint32_t)(took / 1000u);
 }
 
 int Vita_ThreadTimes(VitaThreadTime *times, int count)

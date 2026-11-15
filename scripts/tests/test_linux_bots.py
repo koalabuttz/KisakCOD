@@ -86,6 +86,19 @@ botTest_Log(msg)
     logprint(msg + "\\n");
 }
 
+// Where every bot looks (pitch, yaw, roll), four times a second: KisakCOD's
+// bot brain (--brain 1) turns it at a human pace.
+botTest_LogViews(tick)
+{
+    for (i = 0; i < level.botTestBots.size; i++)
+    {
+        b = level.botTestBots[i];
+        if (isdefined(b))
+            botTest_Log("BOTFEATURE view entity=" + b getentitynumber()
+                        + " tick=" + tick + " angles=" + b getplayerangles());
+    }
+}
+
 botTest_Watch()
 {
     wait 1;
@@ -127,18 +140,24 @@ botTest_Watch()
                             + " health=" + b.health + " team=" + b.sessionteam
                             + " class=" + b.pers["class"]
                             + " weapon=" + b getcurrentweapon());
-                // Where the bot looks (pitch, yaw, roll): KisakCOD's bot brain
-                // (--brain 1) turns it at a human pace.
-                botTest_Log("BOTFEATURE view entity=" + b getentitynumber()
-                            + " sample=" + sample + " angles=" + b getplayerangles());
+                botTest_Log("BOTFEATURE place entity=" + b getentitynumber()
+                            + " sample=" + sample + " origin=" + b.origin);
             }
             else
             {
                 botTest_Log("BOTFEATURE held missing=" + i + " sample=" + sample);
             }
         }
+        botTest_LogViews(sample * 4);
         if (sample < {hold_seconds})
-            wait 1;
+        {
+            for (quarter = 1; quarter < 4; quarter++)
+            {
+                wait 0.25;
+                botTest_LogViews(sample * 4 + quarter);
+            }
+            wait 0.25;
+        }
     }
     botTest_Log("BOTFEATURE hold=done");
 }
@@ -434,13 +453,18 @@ def validate_hold(log_text: str, bots: int, hold_seconds: int, balanced: bool = 
             (bool(loadout), "stock team/class flow equipped every client")]
 
 
-VIEW_ROW = re.compile(r"BOTFEATURE view entity=(\d+) sample=(\d+) "
+VIEW_ROW = re.compile(r"BOTFEATURE view entity=(\d+) tick=(\d+) "
                       r"angles=\((-?[\d.e+-]+), (-?[\d.e+-]+), (-?[\d.e+-]+)\)\s*$", re.M)
-# docs/bots.md: a looking-around bot turns at most 120 degrees a second, keeps
-# its pitch within the player's limits and picks a new direction every 1.5 to
-# 4 seconds. Samples are a second apart on the server's clock, give or take a
-# server frame.
-BRAIN_MAX_TURN_PER_SAMPLE = 120.0 * 1.1 + 5.0
+PLACE_ROW = re.compile(r"BOTFEATURE place entity=(\d+) sample=(\d+) "
+                       r"origin=\((-?[\d.e+-]+), (-?[\d.e+-]+), (-?[\d.e+-]+)\)\s*$", re.M)
+# docs/bots.md: a bot turns at most 200 degrees a second while it walks (120
+# while it looks around), keeps its pitch within the player's limits and picks
+# a new direction every 1.5 to 4 seconds. Views are logged four times a second
+# on the server's clock (a whole number of 50 ms server frames), so a snap the
+# motor cannot make shows as more than a tick's worth of turn: at one sample a
+# second any turn would fit, since the short way round is never past 180.
+VIEW_TICKS_PER_SECOND = 4
+BRAIN_MAX_TURN_PER_TICK = 200.0 / VIEW_TICKS_PER_SECOND * 1.1 + 5.0
 BRAIN_MAX_PITCH = 85.0 + 0.5
 BRAIN_MIN_TOTAL_TURN = 10.0
 
@@ -452,27 +476,58 @@ def angle_delta(to: float, frm: float) -> float:
 def validate_brain_view(log_text: str, bots: int, hold_seconds: int) -> list:
     """With bot_brain 1, every bot looks around: it turns, never faster than the
     view motor's top speed allows, and keeps its pitch within the limits."""
-    rows = [(int(e), int(s), float(p), float(y)) for e, s, p, y, _ in VIEW_ROW.findall(log_text)]
+    rows = [(int(e), int(t), float(p), float(y)) for e, t, p, y, _ in VIEW_ROW.findall(log_text)]
+    ticks = hold_seconds * VIEW_TICKS_PER_SECOND + 1
     by_bot = {}
-    for entity, sample, pitch, yaw in rows:
-        by_bot.setdefault(entity, {})[sample] = (pitch, yaw)
-    complete = (len(rows) == bots * (hold_seconds + 1) and len(by_bot) == bots
-                and all(sorted(samples) == list(range(hold_seconds + 1)) for samples in by_bot.values()))
+    for entity, tick, pitch, yaw in rows:
+        by_bot.setdefault(entity, {})[tick] = (pitch, yaw)
+    complete = (len(rows) == bots * ticks and len(by_bot) == bots
+                and all(sorted(views) == list(range(ticks)) for views in by_bot.values()))
     pitch_ok = complete and all(abs(p) <= BRAIN_MAX_PITCH for _, _, p, _ in rows)
     paced = complete
     turned = complete
-    for samples in by_bot.values() if complete else ():
+    for views in by_bot.values() if complete else ():
         total = 0.0
-        for sample in range(1, hold_seconds + 1):
-            step = abs(angle_delta(samples[sample][1], samples[sample - 1][1]))
-            step = max(step, abs(samples[sample][0] - samples[sample - 1][0]))
+        for tick in range(1, ticks):
+            step = abs(angle_delta(views[tick][1], views[tick - 1][1]))
+            step = max(step, abs(views[tick][0] - views[tick - 1][0]))
             total += step
-            paced = paced and step <= BRAIN_MAX_TURN_PER_SAMPLE
+            paced = paced and step <= BRAIN_MAX_TURN_PER_TICK
         turned = turned and total >= BRAIN_MIN_TOTAL_TURN
-    return [(bool(complete), "bot brain: every bot's view is in every hold sample"),
+    return [(bool(complete), "bot brain: every bot's view is in every quarter second of the hold"),
             (bool(pitch_ok), "bot brain: every pitch is within the player's limits"),
             (bool(paced), "bot brain: no bot turned faster than the view motor's top speed"),
             (bool(turned), f"bot brain: every bot looked around (at least {BRAIN_MIN_TOTAL_TURN:g} degrees)")]
+
+
+# A player runs about 190 units a second; a bot walks the mesh (with a jump
+# when stuck), so a second between samples never covers more than a sprint.
+BRAIN_MAX_MOVE_PER_SAMPLE = 300.0
+BRAIN_MIN_WALKED = 300.0
+
+
+def validate_brain_walk(log_text: str, bots: int, hold_seconds: int) -> list:
+    """With bot_brain 1 on a map with a navigation mesh, every bot walks: it
+    covers ground over the hold, never faster than a player can move."""
+    rows = [(int(e), int(s), float(x), float(y), float(z)) for e, s, x, y, z in PLACE_ROW.findall(log_text)]
+    by_bot = {}
+    for entity, sample, x, y, z in rows:
+        by_bot.setdefault(entity, {})[sample] = (x, y, z)
+    complete = (len(rows) == bots * (hold_seconds + 1) and len(by_bot) == bots
+                and all(sorted(samples) == list(range(hold_seconds + 1)) for samples in by_bot.values()))
+    paced = complete
+    walked = complete
+    for samples in by_bot.values() if complete else ():
+        total = 0.0
+        for sample in range(1, hold_seconds + 1):
+            (ax, ay, _), (bx, by, _) = samples[sample - 1], samples[sample]
+            step = ((bx - ax) ** 2 + (by - ay) ** 2) ** 0.5
+            total += step
+            paced = paced and step <= BRAIN_MAX_MOVE_PER_SAMPLE
+        walked = walked and total >= BRAIN_MIN_WALKED
+    return [(bool(complete), "bot brain: every bot's place is in every hold sample"),
+            (bool(paced), "bot brain: no bot moved faster than a player can"),
+            (bool(walked), f"bot brain: every bot walked (at least {BRAIN_MIN_WALKED:g} units over the hold)")]
 
 
 def main() -> int:
@@ -712,6 +767,9 @@ def main() -> int:
               if args.cycles or args.refill_cycles else validate_hold(log_text, args.bots, args.hold_seconds, both_teams)),
             *kick_checks,
             *(validate_brain_view(log_text, args.bots, args.hold_seconds) if args.brain else []),
+            *(validate_brain_walk(log_text, args.bots, args.hold_seconds) if args.brain else []),
+            *([(bool(re.search(r"bots: navigation mesh for \S+ (built|loaded)", output)),
+                "bot brain: the map's navigation mesh was built or loaded")] if args.brain else []),
             (len(spawned) == expected_admissions and (combined.count("Gamestate has") >= len(spawned) or
              combined.count("Going from CS_FREE to CS_CONNECTED for bot") >= len(spawned)),
              "the server sent gamestates / connected each bot"),
