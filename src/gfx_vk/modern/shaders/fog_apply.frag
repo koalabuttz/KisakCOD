@@ -27,11 +27,24 @@
 // half-resolution pixel's ray is the one of the full-resolution pixel it
 // marched this frame, its length found again from the scene depth.
 //
+// With FOG_FROXELS 1 the sums come from fog_froxel_integrate.comp's volume
+// instead: read with linear filtering at the pixel's place across the view
+// and its distance's place along the slices (slice z holds the sums to its
+// far end; before the first slice's end they grow from 0 at the camera).
+//
 // With the debug view (color.a 1) the pass writes the added light alone, over
 // mid grey, instead of adding it.
 
+#ifndef FOG_FROXELS
+#define FOG_FROXELS 0
+#endif
+
 layout(set = 0, binding = 0) uniform sampler2D sceneDepth;  // nearest, depth aspect
+#if FOG_FROXELS
+layout(set = 0, binding = 5) uniform sampler3D froxels;     // linear, fog_froxel_integrate.comp's
+#else
 layout(set = 0, binding = 2) uniform sampler2D marched;     // nearest, fog_march.frag's
+#endif
 layout(set = 0, binding = 3, std140) uniform Params
 {
     mat4 clipToWorld;
@@ -77,6 +90,17 @@ void main()
 
     float shadowed;
     vec3 spotLight;
+#if FOG_FROXELS
+    {
+        const float slices = params.shape.x;
+        const float march = params.fog.z;
+        const float slice = slices * sqrt(min(distance, march) / march);
+        const vec2 uv = (vec2(pixel) + 0.5 - params.area.xy) / params.area.zw;
+        const vec4 value = texture(froxels, vec3(uv, (slice - 0.5) / slices)) * min(slice, 1.0);
+        shadowed = value.r;
+        spotLight = value.gba;
+    }
+#else
     if (params.shape.z > 0.0)
     {
         // The half-resolution pixels around this one's centre, weighted
@@ -113,6 +137,7 @@ void main()
         shadowed = value.r;
         spotLight = value.gba;
     }
+#endif
 
     const float g = params.sun.w;
     const float cosine = dot(direction, params.sun.xyz);

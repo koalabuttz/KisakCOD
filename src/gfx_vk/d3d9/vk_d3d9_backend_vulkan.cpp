@@ -221,8 +221,9 @@ struct Backend
     // the shadowed spot lights, drawn over the linear-light scene before its
     // anti-aliasing, where the view has fog. Off unless switched on
     // (r_modernFog, KISAK_VK_MODERN_FOG=1) or its debug view is; its
-    // parameters (KISAK_VK_MODERN_FOG_SUN, _SCATTER, _SPOTS live; _STEPS,
-    // _MARCH, _HALF start-up only); the scenes counted at the last reset.
+    // parameters (KISAK_VK_MODERN_FOG_SUN, _SCATTER, _SPOTS, _FROXELS live;
+    // _STEPS, _MARCH, _HALF start-up only); the scenes counted at the last
+    // reset.
     bool fogWanted = false;
     bool fogFailed = false;
     modern::Fog *fog = nullptr;
@@ -608,6 +609,7 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
     fogParams.scatter = tuning.fogScatter >= 0.0f && tuning.fogScatter < 0.95f ? tuning.fogScatter
                                                                                  : start.fogParams.scatter;
     fogParams.spotShare = number(tuning.fogSpots, start.fogParams.spotShare, 0.0f, 4.0f, true);
+    fogParams.froxels = tuning.fogFroxels >= 0 ? tuning.fogFroxels == 1 : start.fogParams.froxels;
 
     backend->tonemapCurve = tuning.tonemap >= static_cast<int>(modern::TonemapCurve::Clamp)
                                     && tuning.tonemap <= static_cast<int>(modern::TonemapCurve::Aces)
@@ -622,15 +624,15 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
             "vulkan d3d9: modern: switches now: bloom %s, exposure %s (key %.3f), velocity %s, our shaders %s "
             "(models %s, without the sun %s, lights %s; sun %.2f, sky %.2f), ambient occlusion %s (radius %.1f, power %.2f, "
             "thickness %.1f, grazing %.2f, floor %.2f, edge %.3f%s), reflections %s (distance %.0f, thickness %.1f), normals %s, "
-            "volumetric fog %s (sun %.2f, scatter %.2f, spot lights %.2f), tonemap %s, debug view %s",
+            "volumetric fog %s (%s, sun %.2f, scatter %.2f, spot lights %.2f), tonemap %s, debug view %s",
             onOff(backend->bloomWanted), onOff(backend->exposureWanted), backend->exposureParams.key,
             onOff(backend->velocityWanted), onOff(backend->shadersWanted), onOff(backend->modelShadersWanted),
             onOff(backend->noSunShadersWanted), onOff(backend->lightShadersWanted), backend->sunStrength, backend->skyStrength, onOff(backend->aoWanted),
             aoParams.radius, aoParams.power, aoParams.thickness, aoParams.grazing, aoParams.floor, aoParams.edge,
             aoParams.half ? ", half resolution" : "",
             onOff(backend->reflectionsWanted), reflectionParams.maxDistance, reflectionParams.thickness,
-            onOff(backend->normalsWanted), onOff(backend->fogWanted), fogParams.sunShare, fogParams.scatter,
-            fogParams.spotShare, modern::CurveName(backend->tonemapCurve), DebugViewName(view));
+            onOff(backend->normalsWanted), onOff(backend->fogWanted), fogParams.froxels ? "froxels" : "march",
+            fogParams.sunShare, fogParams.scatter, fogParams.spotShare, modern::CurveName(backend->tonemapCurve), DebugViewName(view));
 }
 } // namespace
 
@@ -741,6 +743,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         const float spotShare = spots.empty() ? -1.0f : std::strtof(spots.c_str(), nullptr);
         if (spotShare >= 0.0f && spotShare <= 4.0f)
             fog.spotShare = spotShare;
+        fog.froxels = EnvIs("KISAK_VK_MODERN_FOG_FROXELS", "1");
         const std::string steps = EnvText("KISAK_VK_MODERN_FOG_STEPS");
         const long count = steps.empty() ? 0 : std::strtol(steps.c_str(), nullptr, 10);
         if (count >= 4 && count <= 128)
@@ -1089,23 +1092,32 @@ void BackendLogStats(Backend *backend, bool reset)
                 static_cast<unsigned long long>(reflections.traces - backend->reflectionsBase.traces),
                 reflections.levels, pass.supported ? average(pass) : 0.0);
     }
-    // Volumetric fog: the scenes it was drawn over (those that marched the
-    // sun's shadow map, those with spot lights in the air and how many) and
-    // its two passes' GPU time.
+    // Volumetric fog: the scenes it was drawn over (those from a froxel
+    // volume, those that marched the sun's shadow map, those with spot
+    // lights in the air and how many) and its GPU time per scene: two
+    // full-screen passes for a march, one and two compute passes for
+    // froxels.
     if (backend->fog)
     {
         const modern::FogStats fog = modern::Stats(backend->fog);
         const PassTimings pass = PassTimingsFor(backend->core, "modern fog");
-        HostLog(h, "vulkan d3d9: modern: %llu scenes with volumetric fog (%llu through the sun's shadow map, %llu with "
-                   "%llu spot lights; sun %.2f, scatter %.2f, spot lights %.2f, %u steps over %.0f units%s), %.3f ms GPU "
-                   "each",
-                static_cast<unsigned long long>(fog.scenes - backend->fogBase.scenes),
+        const PassTimings froxelPass = PassTimingsFor(backend->core, "modern fog froxels");
+        const uint64_t scenes = fog.scenes - backend->fogBase.scenes;
+        const uint64_t froxelScenes = fog.froxels - backend->fogBase.froxels;
+        const double each = scenes ? (average(pass) * double(2 * (scenes - froxelScenes) + froxelScenes)
+                                      + average(froxelPass) * double(2 * froxelScenes))
+                                         / double(scenes)
+                                   : 0.0;
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with volumetric fog (%llu from froxels, %llu through the sun's "
+                   "shadow map, %llu with %llu spot lights; sun %.2f, scatter %.2f, spot lights %.2f, %u steps over "
+                   "%.0f units%s), %.3f ms GPU each",
+                static_cast<unsigned long long>(scenes), static_cast<unsigned long long>(froxelScenes),
                 static_cast<unsigned long long>(fog.shadowed - backend->fogBase.shadowed),
                 static_cast<unsigned long long>(fog.spotScenes - backend->fogBase.spotScenes),
                 static_cast<unsigned long long>(fog.spots - backend->fogBase.spots), backend->fogParams.sunShare,
                 backend->fogParams.scatter, backend->fogParams.spotShare, backend->fogParams.steps,
                 backend->fogParams.march, backend->fogParams.half ? ", half resolution" : "",
-                pass.supported ? 2.0 * average(pass) : 0.0);
+                pass.supported ? each : 0.0);
     }
     // Reflection probes: filtered as the world loaded, since the device was made.
     if (backend->probesFiltered || backend->probesLeft)

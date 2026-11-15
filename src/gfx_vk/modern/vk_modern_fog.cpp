@@ -1,6 +1,7 @@
 // The Modern path's volumetric fog: see vk_modern.h and docs/vulkan-modern.md
 // ("Volumetric fog"). The shaders are src/gfx_vk/modern/shaders/fog_march.frag
-// and fog_apply.frag.
+// and fog_apply.frag, and for the froxel volume fog_froxel_inject.comp and
+// fog_froxel_integrate.comp.
 
 #include "vk_modern.h"
 #include "vk_modern_internal.h"
@@ -9,6 +10,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <iterator>
 #include <utility>
 #include <vector>
 
@@ -46,10 +48,52 @@ struct Params
 };
 static_assert(sizeof(Params) == 256 + 16 + 128 * kFogSpots, "the fog's uniform block");
 
-// r the sun's shadowed share, gba the spot lights' light.
+// r the sun's shadowed share, gba the spot lights' light; the froxel
+// volumes' too.
 constexpr VkFormat kMarchFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
-constexpr uint32_t kBindings = 5;
+// The full-screen passes' bindings: 0 scene depth, 1 the sun's shadow map
+// (compared), 2 the march's result, 3 the parameters, 4 the spot lights'
+// shadow map (compared), 5 the froxel volume (the froxel apply pass only).
+constexpr uint32_t kBindings = 6;
 constexpr uint32_t kUniformBinding = 3;
+constexpr uint32_t kVolumeBinding = 5;
+// The froxel shaders' work groups (fog_froxel_inject.comp 4x4x4,
+// fog_froxel_integrate.comp 8x8 columns).
+constexpr uint32_t kInjectGroup = 4;
+constexpr uint32_t kIntegrateGroup = 8;
+
+VkDescriptorSetLayout CreateSetLayout(Core *core, const VkDescriptorType *types, uint32_t count,
+                                      VkShaderStageFlags stages)
+{
+    VkDescriptorSetLayoutBinding bindings[kBindings]{};
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        bindings[i].binding = i;
+        bindings[i].descriptorType = types[i];
+        bindings[i].descriptorCount = 1;
+        bindings[i].stageFlags = stages;
+    }
+    VkDescriptorSetLayoutCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    info.bindingCount = count;
+    info.pBindings = bindings;
+    VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+    if (Functions(core).vkCreateDescriptorSetLayout(DeviceHandle(core), &info, nullptr, &layout) != VK_SUCCESS)
+        return VK_NULL_HANDLE;
+    return layout;
+}
+
+VkPipelineLayout CreateLayout(Core *core, VkDescriptorSetLayout set)
+{
+    VkPipelineLayoutCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    info.setLayoutCount = 1;
+    info.pSetLayouts = &set;
+    VkPipelineLayout layout = VK_NULL_HANDLE;
+    if (Functions(core).vkCreatePipelineLayout(DeviceHandle(core), &info, nullptr, &layout) != VK_SUCCESS)
+        return VK_NULL_HANDLE;
+    return layout;
+}
 
 bool Invert(const double m[4][4], double out[4][4])
 {
@@ -122,18 +166,35 @@ struct Fog
     VkShaderModule march = VK_NULL_HANDLE;
     VkShaderModule apply = VK_NULL_HANDLE;
     VkPipeline marchPipeline = VK_NULL_HANDLE;
-    // The apply pass's, one per target format and blend (added, or the
-    // debug view written), made at their first use.
+    // The apply pass's, one per target format, blend (added, or the debug
+    // view written) and source (march or froxels), made at their first use.
     struct ApplyPipeline
     {
         VkFormat format;
         bool additive;
+        bool froxels;
         VkPipeline pipeline;
     };
     std::vector<ApplyPipeline> applyPipelines;
     VkSampler nearest = VK_NULL_HANDLE;
     VkSampler compare = VK_NULL_HANDLE;
     Image *marched = nullptr;
+    // The froxel volume's, made at its first use (froxelsFailed when they
+    // cannot be).
+    bool froxelsReady = false;
+    bool froxelsFailed = false;
+    VkDescriptorSetLayout injectSet = VK_NULL_HANDLE;
+    VkDescriptorSetLayout integrateSet = VK_NULL_HANDLE;
+    VkPipelineLayout injectLayout = VK_NULL_HANDLE;
+    VkPipelineLayout integrateLayout = VK_NULL_HANDLE;
+    VkShaderModule inject = VK_NULL_HANDLE;
+    VkShaderModule integrate = VK_NULL_HANDLE;
+    VkShaderModule applyFroxels = VK_NULL_HANDLE;
+    VkPipeline injectPipeline = VK_NULL_HANDLE;
+    VkPipeline integratePipeline = VK_NULL_HANDLE;
+    VkSampler linear = VK_NULL_HANDLE;
+    Image *injected = nullptr;
+    Image *integrated = nullptr;
     FogStats stats;
 };
 
@@ -144,36 +205,20 @@ Fog *CreateFog(Core *core, std::string &error)
         error = "the device cannot draw into R16G16B16A16_SFLOAT";
         return nullptr;
     }
-    const Dispatch &vk = Functions(core);
-    const VkDevice device = DeviceHandle(core);
     Fog *fog = new Fog();
     const auto fail = [&](const std::string &reason) {
         error = reason;
         DestroyFog(core, fog);
         return nullptr;
     };
-    // 0 scene depth, 1 the sun's shadow map (compared), 2 the march's
-    // result, 3 the parameters, 4 the spot lights' shadow map (compared).
-    VkDescriptorSetLayoutBinding bindings[kBindings]{};
+    VkDescriptorType types[kBindings];
     for (uint32_t i = 0; i < kBindings; ++i)
-    {
-        bindings[i].binding = i;
-        bindings[i].descriptorType =
-            i == kUniformBinding ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        bindings[i].descriptorCount = 1;
-        bindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    }
-    VkDescriptorSetLayoutCreateInfo setInfo{};
-    setInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    setInfo.bindingCount = kBindings;
-    setInfo.pBindings = bindings;
-    if (vk.vkCreateDescriptorSetLayout(device, &setInfo, nullptr, &fog->setLayout) != VK_SUCCESS)
+        types[i] = i == kUniformBinding ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    fog->setLayout = CreateSetLayout(core, types, kBindings, VK_SHADER_STAGE_FRAGMENT_BIT);
+    if (!fog->setLayout)
         return fail("vkCreateDescriptorSetLayout failed");
-    VkPipelineLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutInfo.setLayoutCount = 1;
-    layoutInfo.pSetLayouts = &fog->setLayout;
-    if (vk.vkCreatePipelineLayout(device, &layoutInfo, nullptr, &fog->layout) != VK_SUCCESS)
+    fog->layout = CreateLayout(core, fog->setLayout);
+    if (!fog->layout)
         return fail("vkCreatePipelineLayout failed");
     fog->vertex = CreateShaderModule(core, shaders::kFullscreenVert, sizeof(shaders::kFullscreenVert));
     fog->march = CreateShaderModule(core, shaders::kFogMarchFrag, sizeof(shaders::kFogMarchFrag));
@@ -210,18 +255,27 @@ void DestroyFog(Core *core, Fog *fog)
     DestroyPipeline(core, fog->marchPipeline);
     for (const Fog::ApplyPipeline &made : fog->applyPipelines)
         DestroyPipeline(core, made.pipeline);
+    DestroyPipeline(core, fog->injectPipeline);
+    DestroyPipeline(core, fog->integratePipeline);
     DestroyImage(core, fog->marched);
+    DestroyImage(core, fog->injected);
+    DestroyImage(core, fog->integrated);
     DestroyShaderModule(core, fog->vertex);
     DestroyShaderModule(core, fog->march);
     DestroyShaderModule(core, fog->apply);
+    DestroyShaderModule(core, fog->inject);
+    DestroyShaderModule(core, fog->integrate);
+    DestroyShaderModule(core, fog->applyFroxels);
     // The layouts are not tracked by the core: wait until no recorded work uses them.
     WaitIdle(core);
     const Dispatch &vk = Functions(core);
     const VkDevice device = DeviceHandle(core);
-    if (fog->layout)
-        vk.vkDestroyPipelineLayout(device, fog->layout, nullptr);
-    if (fog->setLayout)
-        vk.vkDestroyDescriptorSetLayout(device, fog->setLayout, nullptr);
+    for (VkPipelineLayout layout : {fog->layout, fog->injectLayout, fog->integrateLayout})
+        if (layout)
+            vk.vkDestroyPipelineLayout(device, layout, nullptr);
+    for (VkDescriptorSetLayout layout : {fog->setLayout, fog->injectSet, fog->integrateSet})
+        if (layout)
+            vk.vkDestroyDescriptorSetLayout(device, layout, nullptr);
     delete fog;
 }
 
@@ -229,7 +283,8 @@ namespace
 {
 // One full-screen pass of `pipeline` over `area` into `target`.
 bool Pass(Core *core, Fog *fog, VkPipeline pipeline, Image *depth, Image *shadow, Image *spotShadow,
-          Image *marched, const Transient &params, Image *target, const VkRect2D &area, std::string &error)
+          Image *marched, Image *volume, const Transient &params, Image *target, const VkRect2D &area,
+          std::string &error)
 {
     const VkDescriptorSet set = AllocateDescriptorSet(core, fog->setLayout);
     if (!set)
@@ -243,6 +298,7 @@ bool Pass(Core *core, Fog *fog, VkPipeline pipeline, Image *depth, Image *shadow
         {fog->nearest, ImageSampleView(marched), VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL},
         {},
         {fog->compare, ImageSampleView(spotShadow), VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL},
+        {fog->linear, volume ? ImageSampleView(volume) : VK_NULL_HANDLE, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL},
     };
     const VkDescriptorBufferInfo buffer{params.buffer, params.offset, sizeof(Params)};
     VkWriteDescriptorSet writes[kBindings]{};
@@ -263,11 +319,16 @@ bool Pass(Core *core, Fog *fog, VkPipeline pipeline, Image *depth, Image *shadow
             writes[i].pImageInfo = &images[i];
         }
     }
-    Functions(core).vkUpdateDescriptorSets(DeviceHandle(core), kBindings, writes, 0, nullptr);
+    // The march's apply pass has no volume: its binding is left unwritten
+    // (that shader does not declare it).
+    Functions(core).vkUpdateDescriptorSets(DeviceHandle(core), volume ? kBindings : kVolumeBinding, writes, 0,
+                                           nullptr);
     UseImage(core, depth, ImageUse::Sampled);
     UseImage(core, shadow, ImageUse::Sampled);
     if (spotShadow != shadow)
         UseImage(core, spotShadow, ImageUse::Sampled);
+    if (volume)
+        UseImage(core, volume, ImageUse::Sampled);
     UseImage(core, marched, ImageUse::Sampled);
     PassDesc desc;
     desc.name = "modern fog";
@@ -295,6 +356,137 @@ bool Pass(Core *core, Fog *fog, VkPipeline pipeline, Image *depth, Image *shadow
         vk.vkCmdDraw(cmd, 3, 1, 0, 0);
     });
     EndPass(core);
+    return true;
+}
+
+// The froxel volume's layouts, shaders, pipelines and sampler.
+bool ReadyFroxels(Core *core, Fog *fog, std::string &error)
+{
+    const VkDescriptorType injectTypes[] = {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER};
+    const VkDescriptorType integrateTypes[] = {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
+    fog->injectSet = CreateSetLayout(core, injectTypes, 4, VK_SHADER_STAGE_COMPUTE_BIT);
+    fog->integrateSet = CreateSetLayout(core, integrateTypes, 2, VK_SHADER_STAGE_COMPUTE_BIT);
+    if (!fog->injectSet || !fog->integrateSet)
+    {
+        error = "vkCreateDescriptorSetLayout failed";
+        return false;
+    }
+    fog->injectLayout = CreateLayout(core, fog->injectSet);
+    fog->integrateLayout = CreateLayout(core, fog->integrateSet);
+    if (!fog->injectLayout || !fog->integrateLayout)
+    {
+        error = "vkCreatePipelineLayout failed";
+        return false;
+    }
+    fog->inject = CreateShaderModule(core, shaders::kFogFroxelInjectComp, sizeof(shaders::kFogFroxelInjectComp));
+    fog->integrate =
+        CreateShaderModule(core, shaders::kFogFroxelIntegrateComp, sizeof(shaders::kFogFroxelIntegrateComp));
+    fog->applyFroxels = CreateShaderModule(core, shaders::kFogApplyFroxelsFrag, sizeof(shaders::kFogApplyFroxelsFrag));
+    if (!fog->inject || !fog->integrate || !fog->applyFroxels)
+    {
+        error = LastError(core);
+        return false;
+    }
+    fog->injectPipeline = CreateComputePipeline(core, fog->injectLayout, fog->inject, error);
+    if (!fog->injectPipeline)
+        return false;
+    fog->integratePipeline = CreateComputePipeline(core, fog->integrateLayout, fog->integrate, error);
+    if (!fog->integratePipeline)
+        return false;
+    VkSamplerCreateInfo sampler{};
+    sampler.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    sampler.magFilter = sampler.minFilter = VK_FILTER_LINEAR;
+    sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    sampler.addressModeU = sampler.addressModeV = sampler.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    fog->linear = GetSampler(core, sampler);
+    if (!fog->linear)
+    {
+        error = LastError(core);
+        return false;
+    }
+    fog->froxelsReady = true;
+    return true;
+}
+
+// Records the froxel volume's two compute passes: each froxel's share into
+// fog->injected, then the sums front to back into fog->integrated.
+bool BuildFroxels(Core *core, Fog *fog, Image *shadow, Image *spotShadow, const Transient &params,
+                  std::string &error)
+{
+    const VkDescriptorSet injectSet = AllocateDescriptorSet(core, fog->injectSet);
+    const VkDescriptorSet integrateSet = AllocateDescriptorSet(core, fog->integrateSet);
+    if (!injectSet || !integrateSet)
+    {
+        error = LastError(core);
+        return false;
+    }
+    const VkDescriptorImageInfo injected{VK_NULL_HANDLE, ImageView(fog->injected), VK_IMAGE_LAYOUT_GENERAL};
+    const VkDescriptorImageInfo integrated{VK_NULL_HANDLE, ImageView(fog->integrated), VK_IMAGE_LAYOUT_GENERAL};
+    const VkDescriptorImageInfo sun{fog->compare, ImageSampleView(shadow), VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL};
+    const VkDescriptorImageInfo spot{fog->compare, ImageSampleView(spotShadow), VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL};
+    const VkDescriptorBufferInfo buffer{params.buffer, params.offset, sizeof(Params)};
+    VkWriteDescriptorSet writes[6]{};
+    const auto image = [](VkWriteDescriptorSet &write, VkDescriptorSet set, uint32_t binding, VkDescriptorType type,
+                          const VkDescriptorImageInfo *info) {
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = set;
+        write.dstBinding = binding;
+        write.descriptorCount = 1;
+        write.descriptorType = type;
+        write.pImageInfo = info;
+    };
+    image(writes[0], injectSet, 0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &injected);
+    image(writes[1], injectSet, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &sun);
+    image(writes[2], injectSet, 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &spot);
+    writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[3].dstSet = injectSet;
+    writes[3].dstBinding = 3;
+    writes[3].descriptorCount = 1;
+    writes[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writes[3].pBufferInfo = &buffer;
+    image(writes[4], integrateSet, 0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &injected);
+    image(writes[5], integrateSet, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &integrated);
+    Functions(core).vkUpdateDescriptorSets(DeviceHandle(core), static_cast<uint32_t>(std::size(writes)), writes, 0,
+                                           nullptr);
+    const ImageDesc &size = ImageInfo(fog->injected);
+
+    if (!BeginComputePass(core, "modern fog froxels"))
+    {
+        error = LastError(core);
+        return false;
+    }
+    UseImage(core, shadow, ImageUse::Sampled);
+    if (spotShadow != shadow)
+        UseImage(core, spotShadow, ImageUse::Sampled);
+    UseImage(core, fog->injected, ImageUse::StorageWrite);
+    const VkPipeline injectPipeline = fog->injectPipeline;
+    const VkPipelineLayout injectLayout = fog->injectLayout;
+    Record(core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
+        vk.vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, injectPipeline);
+        vk.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, injectLayout, 0, 1, &injectSet, 0, nullptr);
+    });
+    DispatchCompute(core, GroupCount(size.width, kInjectGroup), GroupCount(size.height, kInjectGroup),
+                    GroupCount(size.depth, kInjectGroup));
+    EndComputePass(core);
+
+    if (!BeginComputePass(core, "modern fog froxels"))
+    {
+        error = LastError(core);
+        return false;
+    }
+    UseImage(core, fog->injected, ImageUse::StorageRead);
+    UseImage(core, fog->integrated, ImageUse::StorageWrite);
+    const VkPipeline integratePipeline = fog->integratePipeline;
+    const VkPipelineLayout integrateLayout = fog->integrateLayout;
+    Record(core, [=](VkCommandBuffer cmd, const Dispatch &vk) {
+        vk.vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, integratePipeline);
+        vk.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, integrateLayout, 0, 1, &integrateSet, 0,
+                                   nullptr);
+    });
+    DispatchCompute(core, GroupCount(size.width, kIntegrateGroup), GroupCount(size.height, kIntegrateGroup), 1);
+    EndComputePass(core);
     return true;
 }
 } // namespace
@@ -334,7 +526,7 @@ bool DrawFog(Core *core, Fog *fog, Image *color, Image *depth, Image *shadowMap,
         error = "the viewport is not inside the colour and depth images";
         return false;
     }
-    if (!InFrame(core) || InPass(core))
+    if (!InFrame(core) || InPass(core) || InComputePass(core))
     {
         error = "not between passes of a frame";
         return false;
@@ -414,8 +606,21 @@ bool DrawFog(Core *core, Fog *fog, Image *color, Image *depth, Image *shadowMap,
     block.spotInfo[0] = static_cast<float>(spots);
     block.spotInfo[1] = static_cast<float>(params.spotSteps ? params.spotSteps : 1u);
 
+    const bool froxels = params.froxels && !fog->froxelsFailed;
+    if (froxels && !fog->froxelsReady && !ReadyFroxels(core, fog, error))
+    {
+        fog->froxelsFailed = true;
+        error = "no froxel volume (the march is used from now on): " + error;
+        return false;
+    }
+    const uint32_t tile = params.froxelTile ? params.froxelTile : 1u;
+    const uint32_t slices = params.froxelSlices ? params.froxelSlices : 1u;
+    block.shape[0] = static_cast<float>(slices);
+    block.shape[1] = static_cast<float>(tile);
+
     // The march's image and area: the scene's, or a pixel for each 2x2
-    // block of it.
+    // block of it. The froxel volume's: a froxel for each tile of the
+    // scene's area, `slices` deep.
     const uint32_t marchWidth = params.half ? (depthInfo.width + 1) / 2 : depthInfo.width;
     const uint32_t marchHeight = params.half ? (depthInfo.height + 1) / 2 : depthInfo.height;
     VkRect2D marchArea = view.area;
@@ -427,16 +632,38 @@ bool DrawFog(Core *core, Fog *fog, Image *color, Image *depth, Image *shadowMap,
         marchArea.offset = {x0, y0};
         marchArea.extent = {static_cast<uint32_t>(x1 - x0 + 1), static_cast<uint32_t>(y1 - y0 + 1)};
     }
-    if (fog->marched)
-    {
-        const ImageDesc &have = ImageInfo(fog->marched);
-        if (have.width != marchWidth || have.height != marchHeight)
+    const auto ready = [&](Image *&image, const ImageDesc &desc) {
+        if (image)
         {
-            DestroyImage(core, fog->marched);
-            fog->marched = nullptr;
+            const ImageDesc &have = ImageInfo(image);
+            if (have.width == desc.width && have.height == desc.height && have.depth == desc.depth)
+                return true;
+            DestroyImage(core, image);
+            image = nullptr;
         }
+        image = CreateImage(core, desc);
+        if (!image)
+            error = LastError(core);
+        return image != nullptr;
+    };
+    if (froxels)
+    {
+        ImageDesc volume;
+        volume.kind = ImageKind::Tex3D;
+        volume.format = kMarchFormat;
+        volume.width = (view.area.extent.width + tile - 1) / tile;
+        volume.height = (view.area.extent.height + tile - 1) / tile;
+        volume.depth = slices;
+        volume.usage = VK_IMAGE_USAGE_STORAGE_BIT;
+        volume.name = "modern fog froxels";
+        if (!ready(fog->injected, volume))
+            return false;
+        volume.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        volume.name = "modern fog froxels added";
+        if (!ready(fog->integrated, volume))
+            return false;
     }
-    if (!fog->marched)
+    else
     {
         ImageDesc desc;
         desc.format = kMarchFormat;
@@ -444,24 +671,21 @@ bool DrawFog(Core *core, Fog *fog, Image *color, Image *depth, Image *shadowMap,
         desc.height = marchHeight;
         desc.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         desc.name = "modern fog march";
-        fog->marched = CreateImage(core, desc);
-        if (!fog->marched)
-        {
-            error = LastError(core);
+        if (!ready(fog->marched, desc))
             return false;
-        }
     }
     const bool additive = !params.debug;
     VkPipeline apply = VK_NULL_HANDLE;
     for (const Fog::ApplyPipeline &made : fog->applyPipelines)
-        if (made.format == colorInfo.format && made.additive == additive)
+        if (made.format == colorInfo.format && made.additive == additive && made.froxels == froxels)
             apply = made.pipeline;
     if (!apply)
     {
-        apply = CreateFullscreenPipeline(core, fog->layout, fog->vertex, fog->apply, colorInfo.format, additive, error);
+        apply = CreateFullscreenPipeline(core, fog->layout, fog->vertex, froxels ? fog->applyFroxels : fog->apply,
+                                         colorInfo.format, additive, error);
         if (!apply)
             return false;
-        fog->applyPipelines.push_back({colorInfo.format, additive, apply});
+        fog->applyPipelines.push_back({colorInfo.format, additive, froxels, apply});
     }
 
     const VkDeviceSize alignment = Limits(core).minUniformBufferOffsetAlignment;
@@ -472,16 +696,29 @@ bool DrawFog(Core *core, Fog *fog, Image *color, Image *depth, Image *shadowMap,
         return false;
     }
     std::memcpy(uniforms.data, &block, sizeof(block));
-    // Without a shadow map the march reads nothing from its binding; the
-    // scene depth stands in so that the set is whole. The march's own image
-    // stands in for binding 2 while it is being drawn: the depth.
+    // Without a shadow map nothing reads its binding; the scene depth stands
+    // in so that the set is whole. The march's own image stands in for
+    // binding 2 while it is being drawn, and with froxels: the depth.
     Image *shadow = shadowMap ? shadowMap : depth;
     Image *spotShadow = spotShadowMap ? spotShadowMap : depth;
-    if (!Pass(core, fog, fog->marchPipeline, depth, shadow, spotShadow, depth, uniforms, fog->marched, marchArea,
-              error))
-        return false;
-    if (!Pass(core, fog, apply, depth, shadow, spotShadow, fog->marched, uniforms, color, view.area, error))
-        return false;
+    if (froxels)
+    {
+        if (!BuildFroxels(core, fog, shadow, spotShadow, uniforms, error))
+            return false;
+        if (!Pass(core, fog, apply, depth, shadow, spotShadow, depth, fog->integrated, uniforms, color, view.area,
+                  error))
+            return false;
+        ++fog->stats.froxels;
+    }
+    else
+    {
+        if (!Pass(core, fog, fog->marchPipeline, depth, shadow, spotShadow, depth, nullptr, uniforms, fog->marched,
+                  marchArea, error))
+            return false;
+        if (!Pass(core, fog, apply, depth, shadow, spotShadow, fog->marched, nullptr, uniforms, color, view.area,
+                  error))
+            return false;
+    }
     ++fog->stats.scenes;
     if (sunShadowed)
         ++fog->stats.shadowed;

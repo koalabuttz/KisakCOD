@@ -82,6 +82,7 @@ back to them.
 | `r_modernFog` | default, off, on | `KISAK_VK_MODERN_FOG` |
 | `r_modernFogSun`, `r_modernFogScatter` | -1, or 0 to 1 and 0 to 0.9 | `KISAK_VK_MODERN_FOG_SUN`, `_SCATTER` |
 | `r_modernFogSpots` | -1, or 0 to 4 | `KISAK_VK_MODERN_FOG_SPOTS` |
+| `r_modernFogFroxels` | default, off, on | `KISAK_VK_MODERN_FOG_FROXELS` |
 | `r_modernTonemap` | default, clamp, neutral, agx, aces | `KISAK_VK_MODERN_TONEMAP` |
 | `r_modernDebug` | default, none, velocity, velocity-all, normals, ao, reflections, fog | `KISAK_VK_MODERN_DEBUG` |
 
@@ -1585,20 +1586,48 @@ without a shadow map does not light the air.
    the pixel that was marched), and adds the light above (blend one, one).
    The anti-aliasing then averages the march's noise away.
 
-Both passes are timed as "modern fog". With `r_modernDebug fog` (or
+**Froxels, the second option** (`r_modernFogFroxels on`, or
+`KISAK_VK_MODERN_FOG_FROXELS=1`): the same sums from a volume in place of the
+march, on the core's compute passes (below). In place of step 3:
+
+- `fog_froxel_inject.comp` fills a froxel volume (`R16G16B16A16_SFLOAT`)
+  over the scene's area, one froxel per 8 x 8 pixels and 64 slices deep.
+  Slice z covers the ray from 3000 (z / 64)^2 to 3000 ((z + 1) / 64)^2 world
+  units, the march's spacing and length. Each froxel takes one point of its
+  stretch of its centre ray, jittered per froxel and frame, and writes what
+  the march's step there would add: the sun's shadowed share and the spot
+  lights' light.
+- `fog_froxel_integrate.comp` adds the slices up front to back, one
+  invocation per column, into a second volume: slice z holds the sums from
+  the camera to its far end.
+- The apply pass (`fog_apply.frag` built with `FOG_FROXELS=1`) reads that
+  volume with linear filtering at the pixel's place across the view and its
+  distance's place along the slices (growing from 0 at the camera through
+  the first slice), then adds the same light as the march's.
+
+The volume does not depend on the screen's resolution beyond its size in
+froxels, so its cost stays nearly the same at any resolution, and it is
+the natural place for what a march per pixel cannot share, such as lights
+from many sources and keeping last frame's volume. What it gives up: detail
+finer than a froxel across (a thin shaft through a small gap is wider and
+softer), and light between slices is read linearly where the fog's falloff
+is not. Spot lights past the march length are left out of it.
+
+The full-screen passes are timed as "modern fog", the two compute passes as
+"modern fog froxels". With `r_modernDebug fog` (or
 `KISAK_VK_MODERN_DEBUG=fog`, which switches the fog on) the apply pass
 writes the added light alone, four times over, onto grey 0.18 in place of
 the scene.
 
 **What it does not do yet:** spot lights without shadow maps and omni
 lights in the air, the light def's falloff texture, fog on effects drawn
-after the scene (they keep the game's fog), and a froxel volume as a second
-option once the core has compute passes (David, 2026-11-15).
+after the scene (they keep the game's fog), and keeping last frame's froxel
+volume to settle its noise (the anti-aliasing does that per pixel for now).
 
-The statistics line: `vulkan d3d9: modern: S scenes with volumetric fog (M
-through the sun's shadow map, P with L spot lights; sun K, scatter G, spot
-lights J, N steps over D units, half resolution), T ms GPU each` (both
-passes).
+The statistics line: `vulkan d3d9: modern: S scenes with volumetric fog (F
+from froxels, M through the sun's shadow map, P with L spot lights; sun K,
+scatter G, spot lights J, N steps over D units, half resolution), T ms GPU
+each` (all its passes, for the mix of march and froxel scenes drawn).
 
 **Check:** the D3D9 check's `modern_fog` scene draws grey 100 at depth 0.5
 under identity matrices, seen from 1.5 units behind, through fog of density
@@ -1612,9 +1641,12 @@ camera shines along the view with a wide cone and a reach far past the
 scene, colour grey 0.5, looking up the same cleared map: lit, the middle
 pixel gains 0.214 x 0.5 of light; in shadow with fade 1 nothing; with fade
 0.5 half; with its tile in the sun's map (the sun unshadowed) the same as
-lit; with `r_modernFogSpots` 0 nothing. `test_vulkan_d3d9_front.py` counts
-its eight fog scenes, three through the sun's map and four with a spot
-light.
+lit; with `r_modernFogSpots` 0 nothing. Last, lit air, air in shadow and
+the lit spot light again from froxels: the middle pixel's 2 units fall in
+the second slice (0.73 to 2.93 units), read 0.494 of the way between the
+slices' sums rather than 0.5, the same within the check's tolerance.
+`test_vulkan_d3d9_front.py` counts its eleven fog scenes, three from
+froxels, five through the sun's map and five with a spot light.
 
 ## Compute passes
 
@@ -1665,7 +1697,7 @@ has not run them yet).
 What this guide still lists as missing is in [What it does not do
 yet](#what-it-does-not-do-yet): a reactive mask for effects, sharpening, one
 history per view and the rest of the lit shaders. The plan's later stages
-(volumetric fog's froxel volume, screen-space global illumination, and a
+(screen-space global illumination, and a
 ray-tracing tier for GPUs that have it) are in the project files'
 `renderer/modern-renderer-plan.md`, section 6.5; the Modern switches becoming
 dvars that change mid-match is section 6.6. Which pieces are in review is on

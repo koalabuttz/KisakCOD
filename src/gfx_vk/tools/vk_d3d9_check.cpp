@@ -6366,7 +6366,9 @@ void Check::ModernLive()
 // the air adds 0.214 * (1 - T) = 0.214 * 0.5 of light when lit, nothing when
 // in shadow with fade 1, and half when in shadow with fade 0.5; with its tile
 // in the sun's map (the sun itself unshadowed) the same as lit. Spot share 0
-// adds nothing. Without linear light there is no fog: grey 100 throughout.
+// adds nothing. Last, lit air, air in shadow and the lit spot light again
+// from a froxel volume (r_modernFogFroxels): the same within the check's
+// tolerance. Without linear light there is no fog: grey 100 throughout.
 void Check::ModernFog()
 {
     const bool linear = EnvText("KISAK_VK_MODERN_LINEAR") != "0";
@@ -6411,8 +6413,10 @@ void Check::ModernFog()
     // One scene with the fog switched as given, the sun's share `sun` and
     // the shadow lookup's reference `reference`; the middle pixel's shown
     // value is expected to be `want`.
-    const auto scene = [&](const char *name, int fogOn, float sun, float reference, int want, Spot spot = {}) {
+    const auto scene = [&](const char *name, int fogOn, float sun, float reference, int want, Spot spot = {},
+                           bool froxels = false) {
         front::ModernTuning modern;
+        modern.fogFroxels = froxels ? 1 : 0;
         modern.exposure = 0;
         modern.fog = fogOn;
         modern.fogSun = sun;
@@ -6495,6 +6499,12 @@ void Check::ModernFog()
         scene("fog_spot_half_faded", 1, 0.0f, 0.5f, spotHalf, Spot{1, 0.5f, 0.5f, false, 1.0f});
         scene("fog_spot_in_sun_map", 1, 0.0f, 0.5f, spotLit, Spot{1, 0.1f, 1.0f, true, 1.0f});
         scene("fog_spot_share_0", 1, 0.0f, 0.5f, plain, Spot{1, 0.1f, 1.0f, false, 0.0f});
+        // The same from a froxel volume: the middle pixel's 2 units fall in
+        // its second slice (0.73 to 2.93 units of the 3000 marched), read
+        // between the two slices' sums, 0.494 of the way rather than 0.5.
+        scene("fog_froxels_lit_air", 1, 1.0f, 0.1f, plain, Spot{}, true);
+        scene("fog_froxels_shadowed_air", 1, 1.0f, 0.5f, shaded, Spot{}, true);
+        scene("fog_froxels_spot_lit_air", 1, 0.0f, 0.5f, spotLit, Spot{1, 0.1f, 1.0f, false, 1.0f}, true);
     }
     take(front::ModernTuning{});
     SafeRelease(depth);
