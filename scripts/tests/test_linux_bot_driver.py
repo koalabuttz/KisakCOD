@@ -247,6 +247,17 @@ class RefillEvidenceTests(unittest.TestCase):
         self.assertIn('name=bot11', final)
         self.assertNotIn('name=bot0\n', final)
 
+    def test_refills_may_reuse_names(self):
+        # Bots reuse "[BOT] Name" names in every refill (src/bots/bot_names.h).
+        log = healthy_refills()
+        for n in range(12):
+            log = log.replace(f'name=bot{n}\n', f'name=[BOT] ms rat {n % 3}\n')
+        self.assertTrue(self.passed(log))
+        kicks = [(str(i), f'[BOT] ms rat {i}') for i in range(3)] * 2
+        output = ''.join(f'{e}:{n} EXE_PLAYERKICKED\n' for e, n in kicks)
+        self.assertTrue(validate_kick_window(output, kicks))
+        self.assertFalse(validate_kick_window(output, kicks[:3]))
+
     def test_map_transitions_retain_final_not_original_cohort(self):
         maps = healthy_transitions()
         maps = maps[maps.index('0:00 BOTFEATURE stage=1'):]
