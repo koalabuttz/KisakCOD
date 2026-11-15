@@ -160,7 +160,12 @@ the number of bots. It lists every map in the game folder (`zone/*/mp_*.ff`
 and `usermaps`); a map starts a match against KisakCOD's bots
 (`+set developer_script 1 +set bot_brain 1 +set scr_testclients <n> +set
 g_gametype war|dm +devmap <map>`), "Multiplayer" starts the multiplayer
-game's own menu and "Campaign" the singleplayer game's. The game runs in a
+game's own menu and "Campaign" the singleplayer game's. "Visuals" switches
+every start between Legacy (`+set r_visuals legacy`) and Modern (`+set
+r_aaSamples 1 +set r_visuals modern`, docs/vulkan-modern.md); the choice is
+kept with the bot count and mode. Modern has not been measured on the Adreno
+yet, and the sun's shadows stay off on Android (`sm_enable 0`), so the fog
+shows no light shafts there. The game runs in a
 process of its own (`:game`), which ends with the game: the engine never
 starts twice in one process, and the first screen comes back when the game
 quits.
