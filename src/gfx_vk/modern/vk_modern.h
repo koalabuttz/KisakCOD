@@ -407,6 +407,80 @@ struct FogStats
 };
 FogStats Stats(const Fog *fog);
 
+// ---- God rays (docs/vulkan-modern.md "God rays") ----
+//
+// Shafts of the sky's light streaming from the sun past what blocks it, made
+// on the screen (the classic radial blur): a pass at half resolution keeps
+// the sky's light near the sun (rays.frag's first pass: sky pixels, by how close
+// they are to the sun's direction, plus a small glow of the sun's own
+// colour, above a threshold), a second smears that along each pixel's line
+// to the sun's place on the screen (its second), and a full-screen pass
+// adds the result to the linear-light scene (its third), less of it
+// over the sky itself, faded out as the sun leaves the view. Where buildings or trees stand in front of the sky the mask is dark,
+// so the smear leaves dark gaps between the shafts. Independent of the map's
+// fog: the air's own thickness does not change.
+
+struct RaysParams
+{
+    // How much of the smeared light is added: 0 none.
+    float strength = 0.6f;
+    // Samples along each pixel's line towards the sun.
+    uint32_t samples = 48;
+    // How far towards the sun each line reaches, as a share of the way.
+    float length = 0.85f;
+    // Each sample counts this much less than the one before it.
+    float decay = 0.96f;
+    // How tightly the kept sky gathers round the sun: its light is weighted
+    // by cos(angle to the sun) to this power (32: half at about 12 degrees).
+    float spread = 32.0f;
+    // Only the sky's light above this (linear light, a soft knee) is kept:
+    // an open sky does not smear into a veil, the bright light round the sun
+    // does.
+    float threshold = 0.8f;
+    // The share of the rays added over the sky itself (0 to 1); whole over
+    // what stands in front of it.
+    float sky = 0.3f;
+    // The sun's own glow added to the kept sky (its colour times this, in a
+    // disc a few degrees across), so a sky without a drawn sun still has
+    // rays.
+    float glow = 1.0f;
+    // Light in the kept sky is held below this (linear light), so one very
+    // bright pixel does not streak.
+    float most = 8.0f;
+    uint32_t frame = 0; // moves the samples' offset from frame to frame
+};
+
+// The view's sun (front ModernSceneView::Sun).
+struct RaysInputs
+{
+    float sunDirection[3] = {}; // towards the sun, world space
+    float sunColor[3] = {};     // display values (may pass 1)
+};
+
+struct Rays;
+
+// The pipelines (the half-resolution images are made at the first DrawRays
+// and again when the area's size changes). Null with the reason.
+Rays *CreateRays(Core *core, std::string &error);
+// Waits for the GPU to finish what was recorded.
+void DestroyRays(Core *core, Rays *rays);
+// Records the god rays over view.area of `color` (the linear-light scene,
+// single-sampled, sampled and colour attachment usage), reading it and
+// `depth` (single-sampled, sampled usage; the sky at SkyDepth). Outside a
+// pass, inside a frame. When the sun is not in front of the camera nothing
+// is recorded and `drawn` is false. The three passes are timed under
+// "modern god rays". False with the reason, and nothing recorded, when it
+// cannot.
+bool DrawRays(Core *core, Rays *rays, Image *color, Image *depth, const SceneView &view, const RaysInputs &inputs,
+              const RaysParams &params, bool &drawn, std::string &error);
+
+struct RaysStats
+{
+    uint64_t scenes; // DrawRays calls that recorded
+    uint64_t behind; // DrawRays calls with the sun out of the view, nothing recorded
+};
+RaysStats Stats(const Rays *rays);
+
 // ---- Screen-space reflections (docs/vulkan-modern.md "Screen-space reflections") ----
 //
 // What each pixel's surface would mirror, found on the screen: the view ray

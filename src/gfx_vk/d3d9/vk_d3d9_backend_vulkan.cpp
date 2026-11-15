@@ -240,6 +240,26 @@ struct Backend
     modern::FogParams fogParams{};
     uint32_t fogFrame = 0;
     modern::FogStats fogBase{};
+    // God rays (vk_modern.h DrawRays): shafts of the sky's light from the sun
+    // on the screen, added to the linear-light scene after the fog, before
+    // its anti-aliasing, where the view has a sun. Off unless switched on
+    // (r_modernGodRays, KISAK_VK_MODERN_GOD_RAYS=1); their strength
+    // (KISAK_VK_MODERN_GOD_RAYS_STRENGTH live; _SAMPLES start-up only); the
+    // scenes counted at the last reset.
+    bool raysWanted = false;
+    bool raysFailed = false;
+    modern::Rays *rays = nullptr;
+    modern::RaysParams raysParams{};
+    uint32_t raysFrame = 0;
+    modern::RaysStats raysBase{};
+    // The last Modern scene's fog and sun as the engine gave them, for the
+    // statistics: what each map sets, to choose where the air could be
+    // thicker.
+    bool lastSceneSeen = false;
+    bool lastFogOn = false;
+    float lastFogStart = 0.0f, lastFogDensity = 0.0f, lastFogColor[3] = {};
+    bool lastSunOn = false;
+    float lastSunColor[3] = {}, lastSunDirection[3] = {};
     // Screen-space reflections (vk_modern.h TraceReflections), traced right
     // after the normals buffer from the prepass depth and last scene's
     // anti-aliased linear-light colour: wanted when something reads it (our
@@ -338,7 +358,7 @@ struct Backend
     {
         bool bloom = true, exposure = true, velocity = true;
         bool shaders = true, modelShaders = true, noSunShaders = true, lightShaders = true;
-        int ao = -1, reflections = -1, normals = -1, fog = -1;
+        int ao = -1, reflections = -1, normals = -1, fog = -1, rays = -1;
         ModernDebugView debug = ModernDebugNone;
         modern::TonemapCurve curve = modern::TonemapCurve::Neutral;
         float sunStrength = 1.0f, skyStrength = 1.0f;
@@ -346,6 +366,7 @@ struct Backend
         modern::AoParams aoParams{};
         modern::ReflectionParams reflectionParams{};
         modern::FogParams fogParams{};
+        modern::RaysParams raysParams{};
     } modernStart;
     ModernTuning modernTuning{};
 };
@@ -631,6 +652,15 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
                                                                                  : start.fogParams.scatter;
     fogParams.spotShare = number(tuning.fogSpots, start.fogParams.spotShare, 0.0f, 4.0f, true);
     fogParams.froxels = tuning.fogFroxels >= 0 ? tuning.fogFroxels == 1 : start.fogParams.froxels;
+    // God rays are off unless switched on.
+    const int rays = tuning.godRays >= 0 ? tuning.godRays : start.rays;
+    backend->raysWanted = backend->linearWanted && rays == 1;
+    modern::RaysParams &raysParams = backend->raysParams;
+    raysParams = start.raysParams;
+    raysParams.strength = number(tuning.godRaysStrength, start.raysParams.strength, 0.0f, 8.0f, true);
+    raysParams.spread = number(tuning.godRaysSpread, start.raysParams.spread, 1.0f, 512.0f, true);
+    raysParams.threshold = number(tuning.godRaysThreshold, start.raysParams.threshold, 0.0f, 16.0f, true);
+    raysParams.sky = number(tuning.godRaysSky, start.raysParams.sky, 0.0f, 1.0f, true);
 
     backend->tonemapCurve = tuning.tonemap >= static_cast<int>(modern::TonemapCurve::Clamp)
                                     && tuning.tonemap <= static_cast<int>(modern::TonemapCurve::Aces)
@@ -645,7 +675,9 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
             "vulkan d3d9: modern: switches now: bloom %s, exposure %s (key %.3f), velocity %s, our shaders %s "
             "(models %s, without the sun %s, lights %s; sun %.2f, sky %.2f), ambient occlusion %s (radius %.1f, power %.2f, "
             "thickness %.1f, grazing %.2f, floor %.2f, edge %.3f%s), reflections %s (distance %.0f, thickness %.1f), normals %s, "
-            "volumetric fog %s (%s, sun %.2f, scatter %.2f, spot lights %.2f), tonemap %s, debug view %s",
+            "volumetric fog %s (%s, sun %.2f, scatter %.2f, spot lights %.2f), god rays %s (strength %.2f, "
+            "spread %.0f, threshold %.2f, sky %.2f), "
+            "tonemap %s, debug view %s",
             onOff(backend->bloomWanted), onOff(backend->exposureWanted), backend->exposureParams.key,
             onOff(backend->velocityWanted), onOff(backend->shadersWanted), onOff(backend->modelShadersWanted),
             onOff(backend->noSunShadersWanted), onOff(backend->lightShadersWanted), backend->sunStrength, backend->skyStrength, onOff(backend->aoWanted),
@@ -653,7 +685,9 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
             aoParams.half ? ", half resolution" : "",
             onOff(backend->reflectionsWanted), reflectionParams.maxDistance, reflectionParams.thickness,
             onOff(backend->normalsWanted), onOff(backend->fogWanted), fogParams.froxels ? "froxels" : "march",
-            fogParams.sunShare, fogParams.scatter, fogParams.spotShare, modern::CurveName(backend->tonemapCurve), DebugViewName(view));
+            fogParams.sunShare, fogParams.scatter, fogParams.spotShare, onOff(backend->raysWanted), raysParams.strength,
+            raysParams.spread, raysParams.threshold, raysParams.sky,
+            modern::CurveName(backend->tonemapCurve), DebugViewName(view));
 }
 } // namespace
 
@@ -774,6 +808,27 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         if (length > 0.0f)
             fog.march = length;
         fog.half = !EnvIsZero("KISAK_VK_MODERN_FOG_HALF");
+    }
+    start.rays = onOff("KISAK_VK_MODERN_GOD_RAYS");
+    {
+        modern::RaysParams &rays = start.raysParams;
+        const std::string strength = EnvText("KISAK_VK_MODERN_GOD_RAYS_STRENGTH");
+        const float value = strength.empty() ? -1.0f : std::strtof(strength.c_str(), nullptr);
+        if (value >= 0.0f && value <= 8.0f)
+            rays.strength = value;
+        const std::string samples = EnvText("KISAK_VK_MODERN_GOD_RAYS_SAMPLES");
+        const long count = samples.empty() ? 0 : std::strtol(samples.c_str(), nullptr, 10);
+        if (count >= 8 && count <= 128)
+            rays.samples = static_cast<uint32_t>(count);
+        const auto number = [](const char *name, float low, float high, float &out) {
+            const std::string text = EnvText(name);
+            const float read = text.empty() ? -1.0f : std::strtof(text.c_str(), nullptr);
+            if (read >= low && read <= high)
+                out = read;
+        };
+        number("KISAK_VK_MODERN_GOD_RAYS_SPREAD", 1.0f, 512.0f, rays.spread);
+        number("KISAK_VK_MODERN_GOD_RAYS_THRESHOLD", 0.0f, 16.0f, rays.threshold);
+        number("KISAK_VK_MODERN_GOD_RAYS_SKY", 0.0f, 1.0f, rays.sky);
     }
     // Reflection probes are filtered as their textures load, so this one
     // stays start-up only.
@@ -1150,6 +1205,37 @@ void BackendLogStats(Backend *backend, bool reset)
                 backend->fogParams.march, backend->fogParams.half ? ", half resolution" : "",
                 pass.supported ? each : 0.0);
     }
+    // God rays: the scenes they were drawn over (and those whose sun was out
+    // of the view) and their three passes' GPU time per scene drawn.
+    if (backend->rays)
+    {
+        const modern::RaysStats rays = modern::Stats(backend->rays);
+        const PassTimings pass = PassTimingsFor(backend->core, "modern god rays");
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with god rays (%llu with the sun out of view; strength %.2f, "
+                   "spread %.0f, threshold %.2f, sky %.2f, %u samples), %.3f ms GPU each",
+                static_cast<unsigned long long>(rays.scenes - backend->raysBase.scenes),
+                static_cast<unsigned long long>(rays.behind - backend->raysBase.behind), backend->raysParams.strength,
+                backend->raysParams.spread, backend->raysParams.threshold, backend->raysParams.sky,
+                backend->raysParams.samples, pass.supported ? 3.0 * average(pass) : 0.0);
+    }
+    // The last scene's fog and sun, as the map sets them.
+    if (backend->lastSceneSeen)
+    {
+        if (backend->lastFogOn && backend->lastFogDensity > 0.0f)
+            HostLog(h, "vulkan d3d9: modern: the last scene's fog: start %.0f, density %.7f (half the light gone "
+                       "%.0f units out), colour %.3f %.3f %.3f",
+                    backend->lastFogStart, backend->lastFogDensity,
+                    backend->lastFogStart + 1.0f / backend->lastFogDensity, backend->lastFogColor[0],
+                    backend->lastFogColor[1], backend->lastFogColor[2]);
+        else
+            HostLog(h, "vulkan d3d9: modern: the last scene's fog: none");
+        if (backend->lastSunOn)
+            HostLog(h, "vulkan d3d9: modern: the last scene's sun: colour %.3f %.3f %.3f, towards %.3f %.3f %.3f",
+                    backend->lastSunColor[0], backend->lastSunColor[1], backend->lastSunColor[2],
+                    backend->lastSunDirection[0], backend->lastSunDirection[1], backend->lastSunDirection[2]);
+        else
+            HostLog(h, "vulkan d3d9: modern: the last scene's sun: none");
+    }
     // Reflection probes: filtered as the world loaded, since the device was made.
     if (backend->probesFiltered || backend->probesLeft)
         HostLog(h, "vulkan d3d9: modern: %u reflection probes filtered by gloss in linear light (%u left as they "
@@ -1205,6 +1291,7 @@ void BackendLogStats(Backend *backend, bool reset)
         backend->normalsBase = modern::Stats(backend->normals);
         backend->aoBase = modern::Stats(backend->ao);
         backend->fogBase = modern::Stats(backend->fog);
+        backend->raysBase = modern::Stats(backend->rays);
         backend->reflectionsBase = modern::Stats(backend->reflections);
         backend->keptBase = modern::Stats(backend->kept);
         backend->linearScenesBase = backend->linearScenes;
@@ -1257,6 +1344,11 @@ void CloseBackend(Backend *backend)
     {
         modern::DestroyFog(backend->core, backend->fog);
         backend->fog = nullptr;
+    }
+    if (backend->rays)
+    {
+        modern::DestroyRays(backend->core, backend->rays);
+        backend->rays = nullptr;
     }
     if (backend->legacy && backend->aoTexture)
     {
@@ -2453,6 +2545,36 @@ void DrawSceneFog(Backend *backend, Image *color, Image *depth, Image *sunShadow
                          error))
         LogModernOnce(backend, "no volumetric fog", error);
 }
+
+// God rays over the linear-light scene (vk_modern.h DrawRays), when they are
+// wanted and the view has a sun. A failure is logged once and the scene goes
+// on without them.
+void DrawSceneRays(Backend *backend, Image *color, Image *depth, const ModernSceneView &view,
+                   const modern::SceneView &scene)
+{
+    if (!backend->raysWanted || backend->raysFailed || !view.sun.on)
+        return;
+    if (!backend->rays)
+    {
+        std::string error;
+        backend->rays = modern::CreateRays(backend->core, error);
+        if (!backend->rays)
+        {
+            backend->raysFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no god rays: %s", error.c_str());
+            return;
+        }
+    }
+    modern::RaysInputs inputs;
+    std::memcpy(inputs.sunDirection, view.sun.direction, sizeof(inputs.sunDirection));
+    std::memcpy(inputs.sunColor, view.sun.color, sizeof(inputs.sunColor));
+    modern::RaysParams params = backend->raysParams;
+    params.frame = backend->raysFrame++;
+    bool drawn = false;
+    std::string error;
+    if (!modern::DrawRays(backend->core, backend->rays, color, depth, scene, inputs, params, drawn, error))
+        LogModernOnce(backend, "no god rays", error);
+}
 } // namespace
 
 ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surface *depth,
@@ -2584,12 +2706,26 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
     }
     if (!lg::HandOverRecording(backend->legacy))
         return ModernResult::Skipped; // nothing of this frame is drawn either
+    if (display)
+    {
+        backend->lastSceneSeen = true;
+        backend->lastFogOn = view.fog.on;
+        backend->lastFogStart = view.fog.start;
+        backend->lastFogDensity = view.fog.density;
+        std::memcpy(backend->lastFogColor, view.fog.color, sizeof(backend->lastFogColor));
+        backend->lastSunOn = view.sun.on;
+        std::memcpy(backend->lastSunColor, view.sun.color, sizeof(backend->lastSunColor));
+        std::memcpy(backend->lastSunDirection, view.sun.direction, sizeof(backend->lastSunDirection));
+    }
     const modern::SceneView scene = SceneViewOf(view);
     std::string error;
     // The fog is lit before the anti-aliasing, which averages its noise away.
     if (display)
         DrawSceneFog(backend, colorImage, depthImage, sunShadow ? lg::SurfaceImage(sunShadow) : nullptr,
                      spotShadow ? lg::SurfaceImage(spotShadow) : nullptr, view, scene);
+    // The god rays after it, before the anti-aliasing, which averages their noise away.
+    if (display)
+        DrawSceneRays(backend, colorImage, depthImage, view, scene);
     // Skinned surfaces whose vertices the last scene kept are drawn from
     // those and this scene's.
     if (!scene.cut)
