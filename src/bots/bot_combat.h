@@ -67,9 +67,29 @@ struct SkillProfile
     float aimMaxSpeed = 450.0f;
 
     // Where an aimed movement lands: off by a normal error with deviation
-    // aimErrorBase + aimErrorPerDegree * the movement's size, in degrees.
-    float aimErrorBase = 0.35f;
+    // aimErrorBase + aimErrorPerDegree * the movement's size, in degrees,
+    // plus trackErrorPerDegreeSecond * how fast the player crosses the view
+    // (degrees a second: a moving player is harder to stay on), plus
+    // sprayErrorPerSecond for each second the trigger has been kept going (a
+    // long spray wanders, up to sprayErrorMax).
+    float aimErrorBase = 0.55f;
     float aimErrorPerDegree = 0.07f;
+    float trackErrorPerDegreeSecond = 0.04f;
+    float sprayErrorPerSecond = 1.0f;
+    float sprayErrorMax = 2.0f;
+    // Where on the player it aims: the chest, give or take a normal error of
+    // this many units up or down, drawn for each fight (some aim high, some
+    // low), never more than twice it.
+    float aimHeightDeviation = 8.0f;
+    // Going from one player to the next: the hand waits this much longer than
+    // for a first player (mean, deviation, floor), when the last fight ended
+    // or changed within switchWindowMs, and the first movement to the new
+    // player lands switchFirstErrorScale times as far off.
+    float switchOnsetMeanMs = 250.0f;
+    float switchOnsetDeviationMs = 80.0f;
+    float switchOnsetMinMs = 120.0f;
+    int switchWindowMs = 2000;
+    float switchFirstErrorScale = 1.5f;
     // The next corrective movement starts this long after the last one
     // (mean, deviation, floor).
     float correctionMeanMs = 170.0f;
@@ -82,7 +102,7 @@ struct SkillProfile
     // The trigger: on target when the view is within this share of the
     // player's angular half-width of where the bot thinks they are, and
     // never tighter than fireConeMinDegrees.
-    float fireConeScale = 1.0f;
+    float fireConeScale = 1.25f;
     float fireConeMinDegrees = 0.5f;
     // Semi-automatic: one click every tapMeanMs (deviation, floor).
     float tapMeanMs = 170.0f;
@@ -94,9 +114,12 @@ struct SkillProfile
     float burstMeanMs = 450.0f;
     float burstPauseMs = 250.0f;
 
-    // Recoil: the share of the view kick the hand pulls back, and how late
-    // (the time constant of the hand following the kick, in seconds).
-    float recoilCompensation = 0.5f;
+    // Recoil: the share of the view kick the hand pulls back (drawn for each
+    // fight around recoilCompensation, deviation recoilCompensationDeviation,
+    // within 0.1 to 0.8), and how late (the time constant of the hand
+    // following the kick, in seconds).
+    float recoilCompensation = 0.4f;
+    float recoilCompensationDeviation = 0.15f;
     float recoilLagSeconds = 0.15f;
 
     // Aims down the sight at players further than this.
@@ -221,25 +244,58 @@ struct AimState
     float offset[2] = {0.0f, 0.0f};
     // The kick as the hand has caught up with it so far.
     float kickFelt[2] = {0.0f, 0.0f};
+    // This fight's share of the kick the hand pulls back, and how far above
+    // the chest it aims (units).
+    float recoilShare = 0.4f;
+    float heightOffset = 0.0f;
+    // The next movement is the first toward a player it switched to.
+    bool roughFirst = false;
+    // How fast the target crosses the view (degrees a second, smoothed), from
+    // where it was on the last frame.
+    float lastTarget[2] = {0.0f, 0.0f};
+    int lastTargetMs = -1;
+    float targetSpeed = 0.0f;
 };
 
 // Starts aiming at `target`, noticed at `noticedAt`: the hand moves after the
 // reaction onset, counted from the notice or from now, whichever is later.
-inline void Engage(AimState &aim, int target, int noticedAt, int nowMs, const SkillProfile &skill, Rng &rng)
+// `switching` when it comes straight from another fight: a longer wait, and
+// a rougher first movement.
+inline void Engage(AimState &aim, int target, int noticedAt, int nowMs, const SkillProfile &skill, Rng &rng,
+                   bool switching = false)
 {
     aim = AimState();
     aim.target = target;
     const int from = noticedAt > nowMs ? noticedAt : nowMs;
     aim.startMs = from + DelayMs(rng, skill.onsetMeanMs, skill.onsetDeviationMs, skill.onsetMinMs);
+    if (switching)
+    {
+        aim.startMs += DelayMs(rng, skill.switchOnsetMeanMs, skill.switchOnsetDeviationMs, skill.switchOnsetMinMs);
+        aim.roughFirst = true;
+    }
     aim.nextMoveMs = aim.startMs;
+    float share = skill.recoilCompensation + skill.recoilCompensationDeviation * Gaussian(rng);
+    aim.recoilShare = share < 0.1f ? 0.1f : (share > 0.8f ? 0.8f : share);
+    float height = skill.aimHeightDeviation * Gaussian(rng);
+    const float most = 2.0f * skill.aimHeightDeviation;
+    aim.heightOffset = height < -most ? -most : (height > most ? most : height);
 }
 
 // One frame of aiming at `target` (pitch, yaw, where the bot thinks the
 // player is) for `seconds`, with the weapon's kick now at `kick` (pitch,
 // yaw). Moves `view`, the hand's view without the kick.
 inline void StepAim(AimState &aim, ViewMotorState &view, const float *target, const float *kick, int nowMs,
-                    float seconds, const SkillProfile &skill, Rng &rng)
+                    float seconds, const SkillProfile &skill, Rng &rng, int sprayMs = 0)
 {
+    if (aim.lastTargetMs >= 0 && nowMs > aim.lastTargetMs)
+    {
+        const float speed = AimError(aim.lastTarget, target) * 1000.0f / static_cast<float>(nowMs - aim.lastTargetMs);
+        aim.targetSpeed += (speed - aim.targetSpeed) * 0.3f;
+    }
+    aim.lastTarget[0] = target[0];
+    aim.lastTarget[1] = target[1];
+    aim.lastTargetMs = nowMs;
+
     if (seconds > 0.0f && skill.recoilLagSeconds > 0.0f)
     {
         const float follow = 1.0f - std::exp(-seconds / skill.recoilLagSeconds);
@@ -263,15 +319,24 @@ inline void StepAim(AimState &aim, ViewMotorState &view, const float *target, co
         // far the hand has to go (the kick included: the eye sees the view).
         const float seen[2] = {view.angles[0] + kick[0], view.angles[1] + kick[1]};
         const float size = AimError(seen, target);
-        const float deviation = skill.aimErrorBase + skill.aimErrorPerDegree * size;
+        float spray = skill.sprayErrorPerSecond * static_cast<float>(sprayMs) * 0.001f;
+        if (spray > skill.sprayErrorMax)
+            spray = skill.sprayErrorMax;
+        float deviation = skill.aimErrorBase + skill.aimErrorPerDegree * size
+                          + skill.trackErrorPerDegreeSecond * aim.targetSpeed + spray;
+        if (aim.roughFirst)
+        {
+            deviation *= skill.switchFirstErrorScale;
+            aim.roughFirst = false;
+        }
         aim.offset[0] = deviation * Gaussian(rng) * 0.7f; // people err less up and down
         aim.offset[1] = deviation * Gaussian(rng);
         aim.nextMoveMs = nowMs + DelayMs(rng, skill.correctionMeanMs, skill.correctionDeviationMs,
                                          skill.correctionMinMs);
     }
 
-    const float goalPitch = target[0] + aim.offset[0] - skill.recoilCompensation * aim.kickFelt[0];
-    const float goalYaw = target[1] + aim.offset[1] - skill.recoilCompensation * aim.kickFelt[1];
+    const float goalPitch = target[0] + aim.offset[0] - aim.recoilShare * aim.kickFelt[0];
+    const float goalYaw = target[1] + aim.offset[1] - aim.recoilShare * aim.kickFelt[1];
     StepView(view, goalPitch, goalYaw, seconds, params);
 }
 

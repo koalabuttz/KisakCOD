@@ -376,6 +376,33 @@ bool ModernReflectionProbe(IDirect3DDevice9 *device, IDirect3DCubeTexture9 *prob
     return false;
 }
 
+bool ModernProbeCaptureWanted(IDirect3DDevice9 *device)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernProbeCaptureWanted();
+    return false;
+}
+
+void ModernProbeCapture(IDirect3DDevice9 *device, bool on)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernProbeCapture(on);
+}
+
+bool ModernProbeCaptureRead(IDirect3DDevice9 *device, uint32_t x, uint32_t y, uint32_t width, uint32_t height,
+                            float *rgb)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernProbeCaptureRead(x, y, width, height, rgb);
+    return false;
+}
+
 bool ModernPlanarWanted(IDirect3DDevice9 *device)
 {
     const FrontLock lock;

@@ -524,9 +524,14 @@ def validate_brain_view(log_text: str, bots: int, hold_seconds: int, combat: boo
             (bool(turned), f"bot brain: every bot looked around (at least {BRAIN_MIN_TOTAL_TURN:g} degrees)")]
 
 
-# A player runs about 190 units a second; a bot walks the mesh (with a jump
-# when stuck), so a second between samples never covers more than a sprint.
-BRAIN_MAX_MOVE_PER_SAMPLE = 300.0
+# A player runs about 190 units a second and sprints about 285; a bot walks
+# the mesh (with a jump when stuck) and never sprints. Around a round's start
+# the engine moves a few freshly spawned bots in one long server frame (PC
+# runs 16 to 18: 304 to 346 units in that second, 44 to 100 units in one
+# 150 ms frame while their velocity read 0: the engine placing them, not
+# their running), so the limit leaves room for that, and is still far below
+# what a bot moving faster than a player could do every second.
+BRAIN_MAX_MOVE_PER_SAMPLE = 360.0
 BRAIN_MIN_WALKED = 300.0
 
 
@@ -610,6 +615,7 @@ PUSH_ROW = re.compile(r"^bots: \d+ pushes to a callout \d+ units away\s*$", re.M
 ANCHOR_ROW = re.compile(r"^bots: \d+ anchors \d+ units from a callout\s*$", re.M)
 OBJECTIVE_ROW = re.compile(r"^bots: \d+ (attacks an objective \d+ units away|defends an objective from \d+ units)\s*$",
                            re.M)
+SHOTS_ROW = re.compile(r"^bots: (\d+) shots fired so far\s*$", re.M)
 GRENADE_ROW = re.compile(r"^bots: \d+ throws a grenade \d+ units\s*$", re.M)
 KNIFE_ROW = re.compile(r"^bots: \d+ knifes \d+, \d+ units\s*$", re.M)
 TEAM_OBJECTIVES_ROW = re.compile(r"^bots: team (\d+) objectives: take (\d+), hold (\d+)\s*$", re.M)
@@ -982,7 +988,12 @@ def main() -> int:
                    f"{min(r[3] for r in rows)} to {max(r[3] for r in rows)} units)" if rows else ""))
             cover = len(COVER_ROW.findall(output))
             hunts = len(HUNT_ROW.findall(output))
-            print(f"INFO: bots took cover {cover} times and went hunting {hunts} times")
+            noWay = len(re.findall(r"^bots: \d+ finds no way to a lead", output, re.M))
+            print(f"INFO: bots took cover {cover} times and went hunting {hunts} times "
+                  f"(and found no way to a lead on another floor {noWay} times)")
+            drops = re.search(r"^bots: navigation mesh for (\S+) (?:built|loaded).*?(\d+) drop-downs", output, re.M)
+            if drops:
+                print(f"INFO: the navigation mesh for {drops.group(1)} has {drops.group(2)} drop-downs")
             team = team_play(output)
             print("INFO: the commander gave parts: " +
                   (", ".join(f"{role} {count}" for role, count in sorted(team["roles"].items())) or "none") +
@@ -998,8 +1009,12 @@ def main() -> int:
                   (f" ({min(r[2] for r in fights)} to {max(r[2] for r in fights)} ms after noticing, "
                    f"{min(r[3] for r in fights)} to {max(r[3] for r in fights)} ms after coming into view, "
                    f"{min(r[4] for r in fights)} to {max(r[4] for r in fights)} units)" if fights else ""))
-            print(f"INFO: the game logged {len(DAMAGE_LOG_ROW.findall(log_text))} hits and "
-                  f"{len(KILL_LOG_ROW.findall(log_text))} kills")
+            hits = len(DAMAGE_LOG_ROW.findall(log_text))
+            print(f"INFO: the game logged {hits} hits and {len(KILL_LOG_ROW.findall(log_text))} kills")
+            fired = SHOTS_ROW.findall(output)
+            if fired:
+                print(f"INFO: {fired[-1]} shots fired by the last count, "
+                      f"{hits / max(int(fired[-1]), 1):.2f} hits a shot")
         print(f"\ncompleted in {elapsed:.1f}s on isolated port {port}")
         print("NOT verified: " + ("" if args.combat else "combat kills, ") + "client-originated disconnect packets, " +
               ("drop/refill, " if not args.refill_cycles else "") +

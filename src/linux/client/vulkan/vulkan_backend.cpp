@@ -22,6 +22,12 @@
 #error "the Vulkan back end's host is SDL3 (KISAK_LINUX_SDL_MAJOR=3)"
 #endif
 #include <SDL3/SDL_vulkan.h>
+#ifdef __ANDROID__
+#include <SDL3/SDL_system.h>
+#include <android/native_window_jni.h>
+#include <jni.h>
+#include <vulkan/vulkan_android.h>
+#endif
 
 #include "vulkan_backend.h"
 
@@ -138,9 +144,70 @@ void LoadModes()
 
 // ---- The window system --------------------------------------------------------
 
+#ifdef __ANDROID__
+// The activity's window as Android has it now, acquired (null while it has
+// none). SDL's own copy is not enough: the window goes on the Java thread
+// (surfaceDestroyed) while the render thread may be making a surface, and
+// SDL's window property keeps the old pointer, so SDL_Vulkan_CreateSurface
+// handed Vulkan a null window and crashed (Retroid Pocket 6, run 7, screen
+// off). Called from the render thread too: SDL attaches it to the VM.
+ANativeWindow *AndroidWindowNow()
+{
+    JNIEnv *const env = static_cast<JNIEnv *>(SDL_GetAndroidJNIEnv());
+    if (!env || env->PushLocalFrame(8) != JNI_OK)
+        return nullptr;
+    ANativeWindow *window = nullptr;
+    const jobject activity = static_cast<jobject>(SDL_GetAndroidActivity());
+    const jclass activityClass = activity ? env->GetObjectClass(activity) : nullptr;
+    // SDLActivity.getNativeSurface(), the static method SDL uses.
+    const jmethodID getSurface =
+        activityClass ? env->GetStaticMethodID(activityClass, "getNativeSurface", "()Landroid/view/Surface;") : nullptr;
+    const jobject surface = getSurface ? env->CallStaticObjectMethod(activityClass, getSurface) : nullptr;
+    if (env->ExceptionCheck())
+        env->ExceptionClear();
+    else if (surface)
+    {
+        const jclass surfaceClass = env->GetObjectClass(surface);
+        const jmethodID isValid = env->GetMethodID(surfaceClass, "isValid", "()Z");
+        const bool valid = isValid && env->CallBooleanMethod(surface, isValid);
+        if (env->ExceptionCheck())
+            env->ExceptionClear();
+        else if (valid)
+            window = ANativeWindow_fromSurface(env, surface);
+    }
+    env->PopLocalFrame(nullptr);
+    return window;
+}
+#endif
+
 bool CreateSurface(void *user, VkInstance instance, VkSurfaceKHR *surface)
 {
     SDL_Window *const window = static_cast<SDL_Window *>(user);
+#ifdef __ANDROID__
+    // While the app has no window (in the background, the screen off) there
+    // is no surface, quietly, and the core asks again next frame. The surface
+    // holds its own reference to the window.
+    ANativeWindow *const native = AndroidWindowNow();
+    if (!native)
+        return false;
+    const auto getInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(SDL_Vulkan_GetVkGetInstanceProcAddr());
+    const auto createAndroidSurface = getInstanceProcAddr ? reinterpret_cast<PFN_vkCreateAndroidSurfaceKHR>(
+                                                                getInstanceProcAddr(instance, "vkCreateAndroidSurfaceKHR"))
+                                                          : nullptr;
+    VkResult result = VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (createAndroidSurface)
+    {
+        VkAndroidSurfaceCreateInfoKHR info{};
+        info.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
+        info.window = native;
+        result = createAndroidSurface(instance, &info, nullptr, surface);
+    }
+    ANativeWindow_release(native);
+    if (result == VK_SUCCESS)
+        return true;
+    Com_Printf(CON_CHANNEL_GFX, "Vulkan: vkCreateAndroidSurfaceKHR failed (%d)\n", int(result));
+    return false;
+#endif
     if (SDL_Vulkan_CreateSurface(window, instance, nullptr, surface))
         return true;
     Com_Printf(CON_CHANNEL_GFX, "Vulkan: SDL_Vulkan_CreateSurface failed: %s\n", SDL_GetError());
@@ -565,11 +632,30 @@ void ModernPlanarDone(void *, IDirect3DDevice9 *device, const GfxModernPlanar *p
         front::ModernPlanarDone(device, ModernPlanarViewOf(planar));
 }
 
+bool ModernProbeCaptureWanted(void *, IDirect3DDevice9 *device)
+{
+    return !s_modernRefused.load(std::memory_order_relaxed) && front::ModernProbeCaptureWanted(device);
+}
+
+void ModernProbeCapture(void *, IDirect3DDevice9 *device, bool on)
+{
+    front::ModernProbeCapture(device, on);
+}
+
+bool ModernProbeCaptureRead(void *, IDirect3DDevice9 *device, int x, int y, int width, int height, float *rgb)
+{
+    if (x < 0 || y < 0 || width <= 0 || height <= 0)
+        return false;
+    return front::ModernProbeCaptureRead(device, static_cast<uint32_t>(x), static_cast<uint32_t>(y),
+                                         static_cast<uint32_t>(width), static_cast<uint32_t>(height), rgb);
+}
+
 const GfxModernHooks s_modernHooks = {nullptr,          ModernJitterPixels, ModernSceneDone,
                                       ModernSceneBegin, ModernSceneLit,     ModernSurfaceMoved,
                                       ModernSkinnedSurfaceMoved, ModernLitInputs, ModernWantsSceneDepth,
                                       ModernSceneDepth, ModernReflectionProbe, ModernPlanarWanted,
-                                      ModernPlanarBegin, ModernPlanarDone};
+                                      ModernPlanarBegin, ModernPlanarDone,
+                                      ModernProbeCaptureWanted, ModernProbeCapture, ModernProbeCaptureRead};
 } // namespace
 
 void Kisak_VulkanRegisterDvars()

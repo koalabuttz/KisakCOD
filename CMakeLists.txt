@@ -33,8 +33,14 @@ elseif(KISAK_PLATFORM STREQUAL "android")
     # aarch64 track's rules apply (signed char, no fused multiply-add; set in
     # scripts/platform/linux/platform.cmake, since the NDK's toolchain file
     # replaces the *_FLAGS_INIT variables).
+    # x86_64 (ANDROID_ABI=x86_64) is for the Android emulator on a PC: it
+    # takes the x86_64 Linux track's code paths instead.
     include(${CMAKE_CURRENT_LIST_DIR}/scripts/platform/android/android_toolchain.cmake)
-    set(KISAK_LINUX_ARCH "aarch64" CACHE STRING "Native Linux architecture" FORCE)
+    if(ANDROID_ABI STREQUAL "x86_64")
+        set(KISAK_LINUX_ARCH "x86_64" CACHE STRING "Native Linux architecture" FORCE)
+    else()
+        set(KISAK_LINUX_ARCH "aarch64" CACHE STRING "Native Linux architecture" FORCE)
+    endif()
 elseif(KISAK_PLATFORM STREQUAL "macos")
     # One architecture per build directory: arm64 (Apple silicon) or x86_64
     # (Intel Macs), the host's unless CMAKE_OSX_ARCHITECTURES says otherwise.

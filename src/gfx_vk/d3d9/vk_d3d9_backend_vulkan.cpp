@@ -56,6 +56,11 @@ struct SlowFrame
     FrameGpuTimes gpu{};
 };
 constexpr uint32_t kSlowFrames = 3;
+// The extra light passes' (muzzle flashes, explosions) strength as physical
+// light: brighter than the game's colours alone, which were set for light
+// added in display values (David, 2026-11-15: "the physical light with the
+// flash made brighter").
+constexpr float kLightPassStrength = 2.0f;
 } // namespace
 
 struct Backend
@@ -134,6 +139,11 @@ struct Backend
     // Water's (water_l_sun) shader of ours, unless KISAK_VK_MODERN_WATER=0
     // (at start-up only).
     bool waterShaderWanted = true;
+    // The extra light passes' (l_) shader of ours, unless
+    // KISAK_VK_MODERN_LIGHT_PASS=0, and its strength as physical light
+    // (KISAK_VK_MODERN_LIGHT_PASS_STRENGTH; at start-up only).
+    bool lightPassWanted = true;
+    float lightPassStrength = kLightPassStrength;
     float sunStrength = 1.0f;
     float skyStrength = 1.0f;
     uint64_t litShaderChanges = 0, litShaderChangesBase = 0;
@@ -256,6 +266,17 @@ struct Backend
     uint32_t probesFiltered = 0;
     uint32_t probesLeft = 0;
     double probesMs = 0.0;
+    // Re-capturing the probes with the Modern path's own light (on with the
+    // filter above, off with KISAK_VK_MODERN_PROBES_CAPTURE=0): while the
+    // renderer captures (BackendModernProbeCapture), each scene's linear-light
+    // image is read back before its bloom, exposure and tonemap, for
+    // BackendModernProbeCaptureRead. Counts since the device was made: scenes
+    // read back, and rectangles taken from them.
+    bool probeCaptureWanted = false;
+    bool probeCapturing = false;
+    Readback *probeCaptureReadback = nullptr;
+    uint32_t probeCaptureScenes = 0;
+    uint32_t probeCaptureReads = 0;
     // KISAK_VK_MODERN_DEBUG=velocity: the velocity debug view over each
     // anti-aliased scene (docs/vulkan-modern.md), made at its first use.
     // velocity-all: the same, with every surface that moves on its own drawn
@@ -758,11 +779,19 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     // stays start-up only.
     backend->probesWanted = !EnvIsZero("KISAK_VK_MODERN_PROBES")
         && (EnvIs("KISAK_VK_MODERN_PROBES", "1") || backend->linearWanted);
+    backend->probeCaptureWanted =
+        backend->probesWanted && backend->linearWanted && !EnvIsZero("KISAK_VK_MODERN_PROBES_CAPTURE");
     // The planar view and its debug view are start-up only, as the probes.
     backend->debugPlanar = EnvIs("KISAK_VK_MODERN_DEBUG", "planar");
     backend->debugCompute = EnvIs("KISAK_VK_MODERN_DEBUG", "compute");
     backend->debugPlanarRead = EnvIs("KISAK_VK_MODERN_DEBUG", "planar-read");
     backend->waterShaderWanted = !EnvIsZero("KISAK_VK_MODERN_WATER");
+    backend->lightPassWanted = !EnvIsZero("KISAK_VK_MODERN_LIGHT_PASS");
+    {
+        const std::string strength = EnvText("KISAK_VK_MODERN_LIGHT_PASS_STRENGTH");
+        const float value = strength.empty() ? -1.0f : std::strtof(strength.c_str(), nullptr);
+        backend->lightPassStrength = value >= 0.0f ? value : kLightPassStrength;
+    }
     backend->planarWanted = backend->linearWanted && !EnvIsZero("KISAK_VK_MODERN_PLANAR")
                             && (EnvIs("KISAK_VK_MODERN_PLANAR", "1") || backend->debugPlanar
                                 || backend->debugPlanarRead);
@@ -845,6 +874,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     }
     backend->ownFeed = lg::GetGpuFeed(backend->legacy);
     lg::SetModernLitStrengths(backend->legacy, backend->sunStrength, backend->skyStrength);
+    lg::SetModernLightPass(backend->legacy, backend->lightPassStrength);
     return backend;
 }
 
@@ -1035,10 +1065,11 @@ void BackendLogStats(Backend *backend, bool reset)
         // modules built as them (and that could not be).
         if (backend->shadersWanted)
             HostLog(h, "vulkan d3d9: modern: lit shaders of our own: %.1f changes to one each scene, %u pixel modules "
-                       "built as one (%u could not be), sun strength %.2f, sky strength %.2f",
+                       "built as one (%u could not be), sun strength %.2f, sky strength %.2f, light pass %s at %.2f",
                     double(backend->litShaderChanges - backend->litShaderChangesBase) / double(scenes),
                     stats.modernLitModules - was.modernLitModules, stats.modernLitRefused - was.modernLitRefused,
-                    backend->sunStrength, backend->skyStrength);
+                    backend->sunStrength, backend->skyStrength, backend->lightPassWanted ? "on" : "off",
+                    backend->lightPassStrength);
     }
     // Velocity: the surfaces drawn again with their own motion, and the
     // GPU time of that pass.
@@ -1125,6 +1156,10 @@ void BackendLogStats(Backend *backend, bool reset)
                    "are), %.1f ms each",
                 backend->probesFiltered, backend->probesLeft,
                 backend->probesFiltered ? backend->probesMs / double(backend->probesFiltered) : 0.0);
+    if (backend->probeCaptureScenes)
+        HostLog(h, "vulkan d3d9: modern: %u scenes read back in linear light to capture reflection probes (%u "
+                   "faces taken)",
+                backend->probeCaptureScenes, backend->probeCaptureReads);
     // Planar reflections: the views drawn into the planar image, and its size.
     if (backend->planarViews > backend->planarViewsBase)
         HostLog(h, "vulkan d3d9: modern: %llu planar reflection views (%ux%u)",
@@ -1271,6 +1306,12 @@ void CloseBackend(Backend *backend)
         modern::DestroyTonemap(backend->core, backend->tonemap);
         backend->tonemap = nullptr;
     }
+    if (backend->probeCaptureReadback)
+    {
+        DestroyReadback(backend->core, backend->probeCaptureReadback);
+        backend->probeCaptureReadback = nullptr;
+    }
+    backend->probeCapturing = false;
     if (backend->legacy && backend->planarColor)
         lg::DestroyTexture(backend->legacy, backend->planarColor);
     if (backend->legacy && backend->planarDepth)
@@ -1584,7 +1625,8 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
     if ((lg::ModernLitModel(shader) && !backend->modelShadersWanted)
         || ((shader & lg::ModernLitFamilyMask) == lg::ModernLitNoSun && !backend->noSunShadersWanted)
         || (lg::ModernLitPointLight(shader) && !backend->lightShadersWanted)
-        || (shader == lg::ModernLitWater && !backend->waterShaderWanted))
+        || (shader == lg::ModernLitWater && !backend->waterShaderWanted)
+        || (lg::ModernLitLightPass(shader) && !backend->lightPassWanted))
         shader = lg::ModernLitNone;
     if (inputs && backend->linearScene && !backend->linearFailed)
     {
@@ -1834,8 +1876,10 @@ void DrawAoDebug(Backend *backend, Image *ao, Image *target, const VkRect2D &are
 }
 
 // The reflections debug view over a finished scene
-// (KISAK_VK_MODERN_DEBUG=reflections).
-void DrawReflectionsDebug(Backend *backend, Image *reflections, Image *target, const VkRect2D &area)
+// (KISAK_VK_MODERN_DEBUG=reflections); with `plain`, an image shown as it is
+// (the planar view's, KISAK_VK_MODERN_DEBUG=planar).
+void DrawReflectionsDebug(Backend *backend, Image *reflections, Image *target, const VkRect2D &area,
+                          bool plain = false)
 {
     if (backend->debugFailed || !reflections || !target)
         return;
@@ -1850,7 +1894,10 @@ void DrawReflectionsDebug(Backend *backend, Image *reflections, Image *target, c
             return;
         }
     }
-    if (!modern::DrawReflectionsDebug(backend->core, backend->debug, reflections, target, area, error))
+    const bool drawn = plain ? modern::DrawImageDebug(backend->core, backend->debug, reflections, target, area, error)
+                             : modern::DrawReflectionsDebug(backend->core, backend->debug, reflections, target, area,
+                                                            error);
+    if (!drawn)
         LogModernOnce(backend, "the reflections debug view is not drawn", error);
 }
 
@@ -2107,6 +2154,79 @@ bool BackendModernReflectionProbe(Backend *backend, lg::Device *legacy, lg::Text
     ++backend->probesFiltered;
     backend->probesMs +=
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+    return true;
+}
+
+namespace
+{
+// An IEEE half (binary16) as a float.
+float HalfToFloat(uint16_t half)
+{
+    const uint32_t sign = (half & 0x8000u) << 16;
+    const uint32_t exponent = (half >> 10) & 0x1fu;
+    const uint32_t mantissa = half & 0x3ffu;
+    uint32_t bits;
+    if (exponent == 0)
+    {
+        if (mantissa == 0)
+            bits = sign;
+        else
+        {
+            // Subnormal: 2^-14 times mantissa / 1024.
+            const float value = std::ldexp(static_cast<float>(mantissa), -24);
+            return sign ? -value : value;
+        }
+    }
+    else if (exponent == 31)
+        bits = sign | 0x7f800000u | (mantissa << 13);
+    else
+        bits = sign | ((exponent + 112u) << 23) | (mantissa << 13);
+    float value;
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+} // namespace
+
+bool BackendModernProbeCaptureWanted(Backend *backend)
+{
+    return backend && backend->legacy && backend->core && backend->probeCaptureWanted && !backend->linearFailed;
+}
+
+void BackendModernProbeCapture(Backend *backend, bool on)
+{
+    if (!backend)
+        return;
+    backend->probeCapturing = on && BackendModernProbeCaptureWanted(backend);
+    if (!backend->probeCapturing && backend->probeCaptureReadback && backend->core)
+    {
+        DestroyReadback(backend->core, backend->probeCaptureReadback);
+        backend->probeCaptureReadback = nullptr;
+    }
+}
+
+bool BackendModernProbeCaptureRead(Backend *backend, uint32_t x, uint32_t y, uint32_t width, uint32_t height,
+                                   float *rgb)
+{
+    if (!backend || !backend->core || !backend->probeCaptureReadback || !rgb || !width || !height)
+        return false;
+    ReadbackData data{};
+    if (!WaitReadback(backend->core, backend->probeCaptureReadback, &data) || !data.pixels
+        || data.format != modern::kSceneFormat || uint64_t(x) + width > data.width
+        || uint64_t(y) + height > data.height)
+        return false;
+    for (uint32_t row = 0; row < height; ++row)
+    {
+        const uint8_t *from = data.pixels + static_cast<size_t>(y + row) * data.rowBytes + static_cast<size_t>(x) * 8;
+        float *to = rgb + static_cast<size_t>(row) * width * 3;
+        for (uint32_t column = 0; column < width; ++column)
+            for (uint32_t c = 0; c < 3; ++c)
+            {
+                uint16_t half;
+                std::memcpy(&half, from + column * 8 + c * 2, sizeof(half));
+                to[column * 3 + c] = HalfToFloat(half);
+            }
+    }
+    ++backend->probeCaptureReads;
     return true;
 }
 
@@ -2399,6 +2519,16 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
         litPasses();
         const VkRect2D area = {{static_cast<int32_t>(view.x), static_cast<int32_t>(view.y)}, {view.width, view.height}};
         Image *scene = lg::SurfaceImage(color);
+        if (backend->probeCapturing && scene)
+        {
+            // A reflection probe's face: the light before bloom, exposure
+            // and the tonemap (BackendModernProbeCaptureRead).
+            if (backend->probeCaptureReadback)
+                DestroyReadback(backend->core, backend->probeCaptureReadback);
+            backend->probeCaptureReadback = ReadImage(backend->core, scene, 0, 0);
+            if (backend->probeCaptureReadback)
+                ++backend->probeCaptureScenes;
+        }
         float bloomScale = 0.0f;
         Image *bloom = DrawBloom(backend, scene, area, view, bloomScale);
         Image *exposure = MeasureExposure(backend, scene, area, view.cut);
@@ -2424,7 +2554,7 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
                                          {std::min(area.extent.width, backend->planarView.width),
                                           std::min(area.extent.height, backend->planarView.height)}};
             DrawReflectionsDebug(backend, lg::SurfaceImage(backend->planarColorSurface), lg::SurfaceImage(display),
-                                 planarArea);
+                                 planarArea, true);
         }
         FinishedScenePasses(backend, lg::SurfaceImage(display), area);
         return passes;

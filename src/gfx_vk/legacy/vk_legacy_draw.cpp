@@ -526,6 +526,7 @@ VkShaderModule FindPixelModule(Device &device, Shader &ps, const Shader &vs, uin
         inputs.shader = linear.linearShader;
         recipe.sunStrength = device.modernSunStrength;
         recipe.skyStrength = device.modernSkyStrength;
+        recipe.lightPass = device.modernLightPass;
     }
     // Where depth compare is fixed, so is the reference's clamp
     // (SamplerStateBlock::drefClamp, as FillUniformBlock writes it).
@@ -573,6 +574,39 @@ bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Sh
         if (fits
             && BuildModernLitSpirv(shader, vs.translated, recipe.sunStrength, recipe.skyStrength, false, alphaTest,
                                    spirv))
+        {
+            recipe.modernBuilt = true;
+            return true;
+        }
+    }
+    else if (ModernLitLightPass(shader) && ModernLitShaderValid(shader))
+    {
+        // An extra light pass (l_light.frag): 2D images at s0 and from s4 the
+        // shadow map (hsm), the normal map, the attenuation and the detail
+        // map; the shadow map a depth image where depth compare is fixed.
+        const ls::Reflection &pr = ps.translated.reflection;
+        const bool shadowed = (shader & ModernLitShadow) != 0;
+        const uint32_t normal = 4u + (shadowed ? 1u : 0u);
+        const uint32_t attenuation = normal + (shader & ModernLitNormal ? 1u : 0u);
+        const uint32_t images = 1u << 0 | (shadowed ? 1u << 4 : 0u) | (shader & ModernLitNormal ? 1u << normal : 0u)
+            | 1u << attenuation | (shader & ModernLitDetail ? 1u << (attenuation + 1u) : 0u);
+        const uint32_t modern = 1u << kModernAoSampler | 1u << kModernReflectionsSampler
+            | 1u << kModernPlanarSampler;
+        const uint32_t uniforms = 1u << static_cast<uint32_t>(ls::Uniform::FloatConstants)
+            | 1u << static_cast<uint32_t>(ls::Uniform::AlphaTest);
+        bool fits = !(pr.samplers & modern) && pr.floatConstants >= ModernLitConstantCount(shader)
+            && (pr.uniforms & uniforms) == uniforms && (pr.samplers & images) == images
+            && (!shadowed || !recipe.fixDepth || (recipe.depthCompare & (1u << 4)));
+        for (uint32_t sampler = 0; sampler < ls::kSamplerCount && fits; ++sampler)
+        {
+            if (images & (1u << sampler))
+                fits = pr.samplerTypes[sampler] == ls::TextureType::Tex2D;
+        }
+        const bool alphaTest =
+            !recipe.fixAlpha || recipe.alphaCompare != static_cast<uint32_t>(ls::AlphaCompare::Always);
+        if (fits
+            && BuildModernLitSpirv(shader, vs.translated, recipe.lightPass, 1.0f,
+                                   (recipe.depthCompare & ls::kFixedDepthClamp) != 0, alphaTest, spirv))
         {
             recipe.modernBuilt = true;
             return true;
@@ -3164,6 +3198,12 @@ void SetModernPlanar(Device *device, Image *image, const ModernPlanarParams *par
         device->modernPlanarParams = next;
         ++device->modernPlanarGeneration;
     }
+}
+
+void SetModernLightPass(Device *device, float strength)
+{
+    if (device)
+        device->modernLightPass = strength >= 0.0f ? strength : 1.0f;
 }
 
 void SetModernLitStrengths(Device *device, float sun, float sky)

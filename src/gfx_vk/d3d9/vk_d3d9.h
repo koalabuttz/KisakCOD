@@ -381,6 +381,19 @@ void SetModernLitInputs(IDirect3DDevice9 *device, const ModernLitInputs *inputs)
 // texture is not an 8-bit colour cube with levels, or on a back end without
 // a Modern path. Filtering a probe again gives the same levels.
 bool ModernReflectionProbe(IDirect3DDevice9 *device, IDirect3DCubeTexture9 *probe);
+// Re-capturing the reflection probes with the Modern path's own light
+// (docs/vulkan-modern.md "Reflection probes"): whether it is wanted
+// (KISAK_VK_MODERN_PROBES_CAPTURE=1, with linear light and the probe filter;
+// false on a back end without a Modern path). While capturing is on, each
+// scene's linear-light image is read back before its bloom, exposure and
+// tonemap; ModernProbeCaptureRead gives a rectangle of the last one (in
+// pixels of render target 0) as linear light, rgb floats in rows from the
+// top, after waiting for the GPU. False when none was read back, or the
+// rectangle is outside it.
+bool ModernProbeCaptureWanted(IDirect3DDevice9 *device);
+void ModernProbeCapture(IDirect3DDevice9 *device, bool on);
+bool ModernProbeCaptureRead(IDirect3DDevice9 *device, uint32_t x, uint32_t y, uint32_t width, uint32_t height,
+                            float *rgb);
 // A planar reflection view (docs/vulkan-modern.md "Planar reflections"): the
 // scene seen in a mirror laid on one plane, which the renderer draws after
 // the main view.

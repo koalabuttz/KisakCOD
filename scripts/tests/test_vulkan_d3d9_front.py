@@ -48,10 +48,11 @@ involved. The checks:
                  modern_velocity, modern_normals, modern_ao,
                  modern_reflections, modern_planar, modern_fog, modern_live
                  and modern_live_cut (a second modern_taa run), 44 of them
-                 without history, the 43 scenes of modern_linear,
+                 without history (modern_light_pass's scene has no depth to
+                 anti-alias with), the 44 scenes of modern_linear,
                  modern_bloom, modern_effects, modern_lit, modern_lit_shader,
                  modern_lit_models, modern_lit_skin, modern_lit_no_sun,
-                 modern_lit_lights,
+                 modern_lit_lights, modern_light_pass,
                  modern_tonemap, modern_exposure, modern_normals, modern_ao,
                  modern_reflections, modern_planar, modern_fog and
                  modern_live in linear light with one copy read from them
@@ -63,27 +64,28 @@ involved. The checks:
                  KISAK_VK_MODERN_LINEAR=0 or KISAK_VK_MODERN_BLOOM=0),
                  modern_lit's, modern_lit_shader's, modern_lit_models',
                  modern_lit_skin's, modern_lit_no_sun's, modern_lit_lights',
-                 modern_tonemap's,
+                 modern_light_pass's, modern_tonemap's,
                  modern_ao's, modern_reflections' three lit-floor scenes,
                  modern_planar's two (its floor's and its water's) and
                  modern_live's three with lit surfaces
-                 kept over white, inputs changed 2.7 times in each (2.6 with
-                 KISAK_VK_MODERN_MODEL_SHADERS=0 or KISAK_VK_MODERN_SHADERS=0,
-                 where modern_ao's wall is not ours; twice in
-                 modern_lit and
+                 kept over white, inputs changed 2.6 times in each (twice in
+                 modern_lit, modern_light_pass and
                  modern_tonemap, four times in modern_lit_skin, five times in
                  modern_lit_lights, six in
                  modern_lit_shader and modern_lit_models, seven in
                  modern_lit_no_sun, twice in modern_ao when our model shaders
-                 draw its wall and once when not, once in each of
+                 draw its wall and once when not, which leaves 2.6, once in each of
                  modern_reflections', modern_planar's and modern_live's), and
-                 the thirty-two
+                 the thirty-four
                  pixel modules
                  modern_lit_shader's, modern_lit_models', modern_lit_no_sun's
                  and modern_lit_lights' twenty-four, modern_lit_skin's four,
+                 modern_light_pass's two (none with
+                 KISAK_VK_MODERN_LIGHT_PASS=0 or
+                 KISAK_VK_MODERN_LIGHT_SHADERS=0),
                  modern_ao's two (its
                  floor and wall are depth-tested against the prepass, a depth
-                 compare of their own; thirty in all with
+                 compare of their own; thirty-two in all with
                  KISAK_VK_DEPTH_COMPARE=dynamic, where the compare is not
                  built in), modern_reflections' one and modern_planar's
                  water built as our own lit shaders (one fewer with
@@ -132,6 +134,10 @@ involved. The checks:
                  KISAK_VK_MODERN_LIGHT_SHADERS=0, where the spot and omni
                  lights' pixel shaders are drawn as they are and no pixel
                  module is built as ours
+  light-pass-off --scene modern_light_pass passes with
+                 KISAK_VK_MODERN_LIGHT_PASS=0, where the extra light passes'
+                 pixel shaders are drawn as they are and no pixel module is
+                 built as ours
   debug-velocity --scene modern_velocity passes with
                  KISAK_VK_MODERN_DEBUG=velocity, where the velocity debug
                  view colours the moving band (the scene's own points)
@@ -169,6 +175,16 @@ involved. The checks:
                  fourth frame's water, drawn by our water shader, reads it
                  the same way (dark with KISAK_VK_MODERN_WATER=0 too); the
                  full run takes none
+  probe-capture  --scene modern_probe_capture passes as it is (wanted by
+                 default, nothing drawn), with
+                 KISAK_VK_MODERN_PROBES_CAPTURE=0 (not wanted), and with
+                 KISAK_VK_MODERN_PROBES_CAPTURE=1 beside
+                 KISAK_VK_MODERN_PROBES=0 or KISAK_VK_MODERN_LINEAR=0, where
+                 nothing is captured, and with
+                 KISAK_VK_MODERN_PROBES_CAPTURE=1 alone, where its scene is
+                 read back in linear light (logged) and two rectangles of it
+                 (the clear's and a quad's) come back as the light their
+                 colours decode to; the full run reads none back
   ao             --scene modern_ao passes as it is, where our lit shader
                  darkens the floor in the corner by the ambient occlusion
                  (the scene's own points), with KISAK_VK_MODERN_DEBUG=ao (and
@@ -223,9 +239,9 @@ SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'model_lig
           'references', 'threads', 'queries', 'occlusion', 'frame_loop', 'gpu_feed', 'tuning', 'slow_frames',
           'kept_state', 'multisample', 'modern_taa', 'modern_linear', 'modern_bloom', 'modern_effects',
           'modern_lit', 'modern_lit_shader', 'modern_lit_models', 'modern_lit_skin', 'modern_lit_no_sun',
-          'modern_lit_lights', 'modern_tonemap', 'modern_exposure', 'modern_velocity', 'modern_normals', 'modern_ao',
-          'modern_reflections', 'modern_probes', 'modern_planar', 'modern_fog', 'modern_live', 'modern_live_cut',
-          'reset',
+          'modern_lit_lights', 'modern_light_pass', 'modern_tonemap', 'modern_exposure', 'modern_velocity', 'modern_normals', 'modern_ao',
+          'modern_reflections', 'modern_probes', 'modern_planar', 'modern_probe_capture', 'modern_fog', 'modern_live',
+          'modern_live_cut', 'reset',
           'fullscreen', 'present')
 
 
@@ -421,6 +437,17 @@ def main():
                   and all(m == '0' for m in re.findall(r'lit shaders of our own: [0-9.]+ changes to one each scene, '
                                                         r'(\d+) pixel modules', stdout)),
                   f'status {code}\n{stdout}')
+    # light-pass-off
+    off = dict(env)
+    off['KISAK_VK_MODERN_LIGHT_PASS'] = '0'
+    code, stdout, _ = run(binary, ['--scene', 'modern_light_pass', '--validation', args.validation], off)
+    found, scenes = parse(stdout)
+    checks.expect('modern_light_pass passes with KISAK_VK_MODERN_LIGHT_PASS=0',
+                  code == 0 and found.get('d3d9_check') == 'passed'
+                  and [s[0] for s in scenes] == ['modern_light_pass']
+                  and all(m == '0' for m in re.findall(r'lit shaders of our own: [0-9.]+ changes to one each scene, '
+                                                        r'(\d+) pixel modules', stdout)),
+                  f'status {code}\n{stdout}')
     # debug-velocity
     debug = dict(env)
     debug['KISAK_VK_MODERN_DEBUG'] = 'velocity'
@@ -599,6 +626,29 @@ def main():
                       and (line is not None and line.group(1) == str(views) and line.group(2) == '64'
                            and line.group(3) == '64' if views else line is None)
                       and (reads is not None and reads.group(1) == '2' if views else reads is None),
+                      f'status {code}\n{stdout}')
+
+    # probe-capture
+    capture_line = re.compile(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes read back in linear light to '
+                              r'capture reflection probes \((\d+) faces taken\)$', re.M)
+    for settings, taken in (({}, 0),
+                            ({'KISAK_VK_MODERN_PROBES_CAPTURE': '0'}, 0),
+                            ({'KISAK_VK_MODERN_PROBES_CAPTURE': '1'}, 2),
+                            ({'KISAK_VK_MODERN_PROBES_CAPTURE': '1', 'KISAK_VK_MODERN_PROBES': '0'}, 0),
+                            ({'KISAK_VK_MODERN_PROBES_CAPTURE': '1', 'KISAK_VK_MODERN_LINEAR': '0'}, 0)):
+        chosen = dict(env)
+        for name in ('KISAK_VK_MODERN_PROBES_CAPTURE', 'KISAK_VK_MODERN_PROBES', 'KISAK_VK_MODERN_LINEAR'):
+            chosen.pop(name, None)
+        chosen.update(settings)
+        code, stdout, _ = run(binary, ['--scene', 'modern_probe_capture', '--validation', args.validation], chosen)
+        found, scenes = parse(stdout)
+        line = capture_line.search(stdout)
+        named = ' '.join(f'{k}={v}' for k, v in settings.items()) or 'the defaults'
+        checks.expect(f'modern_probe_capture passes with {named}',
+                      code == 0 and found.get('d3d9_check') == 'passed'
+                      and [s[0] for s in scenes] == ['modern_probe_capture']
+                      and (line is not None and line.group(1) == '1' and line.group(2) == str(taken)
+                           if taken else line is None),
                       f'status {code}\n{stdout}')
 
     # compute
@@ -780,6 +830,12 @@ def main():
                           reflections.group(0) if reflections else 'no reflections line')
         else:
             checks.expect('no screen-space reflections when nothing reads them', reflections is None)
+    # Reflection probes captured again only when asked for.
+    if 'KISAK_VK_MODERN_PROBES_CAPTURE' not in env:
+        captured = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes read back in linear light to '
+                             r'capture', stdout)
+        checks.expect('no scene read back for reflection probes unless asked for', captured is None,
+                      captured.group(0) if captured else '')
     # Planar reflections: modern_planar's two views, and its lit floor reading
     # them, only when asked for.
     if 'KISAK_VK_MODERN_PLANAR' not in env and 'KISAK_VK_MODERN_DEBUG' not in env:
@@ -803,8 +859,8 @@ def main():
         checks.expect('no scene in linear light with KISAK_VK_MODERN_LINEAR=0', linear is None,
                       linear.group(0) if linear else '')
     else:
-        checks.expect('the Modern path drew 43 scenes in linear light and read 1 copy from them',
-                      linear is not None and linear.group(1) == '43' and linear.group(2) == '1',
+        checks.expect('the Modern path drew 44 scenes in linear light and read 1 copy from them',
+                      linear is not None and linear.group(1) == '44' and linear.group(2) == '1',
                       linear.group(0) if linear else 'missing')
     # Volumetric fog: modern_fog's eleven scenes with the fog switched on,
     # the last three from froxels; five through the sun's shadow map (the
@@ -836,12 +892,11 @@ def main():
                       lit.group(0) if lit else '')
     else:
         # modern_ao changes them twice, its floor's and its wall's, with our
-        # model shaders (43 in 16 scenes); once without them or without any
-        # lit shaders of our own (42).
-        ours_wall = env.get('KISAK_VK_MODERN_MODEL_SHADERS') != '0' and env.get('KISAK_VK_MODERN_SHADERS') != '0'
-        changes = '2.7' if ours_wall else '2.6'
-        checks.expect(f'the Modern path drew lit surfaces in linear light in 16 scenes, inputs changed {changes} times each',
-                      lit is not None and lit.group(1) == '16' and lit.group(2) == changes,
+        # model shaders (45 in 17 scenes); once without them or without any
+        # lit shaders of our own (44): 2.6 each either way.
+        changes = '2.6'
+        checks.expect(f'the Modern path drew lit surfaces in linear light in 17 scenes, inputs changed {changes} times each',
+                      lit is not None and lit.group(1) == '17' and lit.group(2) == changes,
                       lit.group(0) if lit else 'missing')
     shaders = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: lit shaders of our own: ([0-9.]+) changes to one '
                         r'each scene, (\d+) pixel modules built as one \((\d+) could not be\)', stdout)
@@ -854,7 +909,7 @@ def main():
         # compare of their own, built into their modules unless chosen at run
         # time (then the wall's is modern_lit_models' lp_sun_r0c0).
         dynamic = env.get('KISAK_VK_DEPTH_COMPARE') == 'dynamic'
-        modules = 32 if not dynamic else 30
+        modules = 34 if not dynamic else 32
         if env.get('KISAK_VK_MODERN_WATER') == '0':
             modules -= 1  # modern_planar's water
         if env.get('KISAK_VK_MODERN_MODEL_SHADERS') == '0':
@@ -865,8 +920,11 @@ def main():
         if env.get('KISAK_VK_MODERN_NO_SUN_SHADERS') == '0':
             modules -= 4 if env.get('KISAK_VK_MODERN_MODEL_SHADERS') == '0' else 6
         if env.get('KISAK_VK_MODERN_LIGHT_SHADERS') == '0':
-            # modern_lit_lights' spot and omni passes: three of the world's, two models'
-            modules -= 3 if env.get('KISAK_VK_MODERN_MODEL_SHADERS') == '0' else 5
+            # modern_lit_lights' spot and omni passes: three of the world's,
+            # two models'; and modern_light_pass's two extra light passes
+            modules -= 5 if env.get('KISAK_VK_MODERN_MODEL_SHADERS') == '0' else 7
+        elif env.get('KISAK_VK_MODERN_LIGHT_PASS') == '0':
+            modules -= 2  # modern_light_pass's extra light passes
         modules = str(modules)
         checks.expect(f'the Modern path built {modules} pixel modules as our own lit shaders, none refused',
                       shaders is not None and shaders.group(2) == modules and shaders.group(3) == '0',

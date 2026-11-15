@@ -571,6 +571,13 @@ public:
     }
     void SetModernLitInputs(const ModernLitInputs *inputs);
     bool ModernReflectionProbe(lg::Texture *probe) { return BackendModernReflectionProbe(backend_, legacy_, probe); }
+    // Under FrontLock (vk_d3d9.h ModernProbeCapture).
+    bool ModernProbeCaptureWanted() { return BackendModernProbeCaptureWanted(backend_); }
+    void ModernProbeCapture(bool on) { BackendModernProbeCapture(backend_, on); }
+    bool ModernProbeCaptureRead(uint32_t x, uint32_t y, uint32_t width, uint32_t height, float *rgb)
+    {
+        return BackendModernProbeCaptureRead(backend_, x, y, width, height, rgb);
+    }
     // Under FrontLock (vk_d3d9.h ModernPlanarBegin and ModernPlanarDone).
     bool ModernPlanarWanted() { return BackendModernPlanarWanted(backend_); }
     bool ModernPlanarBegin(const ModernPlanarView &view);

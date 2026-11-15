@@ -10,8 +10,9 @@ server or game data is involved. The checks:
   no-driver      with no Vulkan driver visible the probe fails closed (status 1)
                  at the "loader" stage (SDL finds no surface extension without
                  a driver) or the "core" stage, instead of crashing
-  frames         a full run (resize halfway, capture of the last frame) passes,
-                 the swapchain followed the resize, the captured frame is the
+  frames         a full run (surface lost a quarter in, resize halfway, capture
+                 of the last frame) passes, the core made a new surface and
+                 swapchain, the swapchain followed the resize, the captured frame is the
                  cleared colour, the clear pass was timed (untimed, and the
                  frame timed, with KISAK_VK_PASS_TIMESTAMPS=0), the core's choice
                  of present mode was checked against a table of surfaces
@@ -102,7 +103,7 @@ def main():
 
     # frames
     code, stdout, stderr = run(binary, ['--frames', str(args.frames), '--validation', args.validation,
-                                        '--resize', '--check-capture'], env)
+                                        '--lose-surface', '--resize', '--check-capture'], env)
     print(stdout, end='')
     if stderr.strip():
         print(stderr, end='', file=sys.stderr)
@@ -114,6 +115,9 @@ def main():
                       found.get('vulkan_probe.resize', ''))
     checks.expect('swapchain followed the resize', bool(resize) and resize.group(3, 4) == resize.group(5, 6)
                   and int(resize.group(7)) >= 2, found.get('vulkan_probe.resize', 'missing'))
+    checks.expect('a lost surface was renewed', found.get('vulkan_probe.surfaces_lost') == '1'
+                  and int(found.get('vulkan_probe.swapchain_builds', '0')) >= 3,
+                  f"lost {found.get('vulkan_probe.surfaces_lost')} builds {found.get('vulkan_probe.swapchain_builds')}")
     checks.expect('capture is the cleared colour',
                   found.get('vulkan_probe.capture', '').endswith('mismatched_pixels=0'),
                   found.get('vulkan_probe.capture', 'missing'))
