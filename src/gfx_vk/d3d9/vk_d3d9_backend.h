@@ -122,6 +122,10 @@ bool BackendModernPlanarWanted(Backend *backend);
 bool BackendModernPlanarBegin(Backend *backend, const ModernPlanarView &view, lg::Surface *&color,
                               lg::Surface *&depth);
 void BackendModernPlanarDone(Backend *backend, const ModernPlanarView &view);
+// The sun's shadow map for the lit surfaces that draw next (vk_d3d9.h
+// ModernSunShadow): with soft shadows wanted, the lit shaders' soft filter
+// parameters (lg::SetModernShadow) from it; else the game's taps.
+void BackendModernSunShadow(Backend *backend, lg::Device *legacy, const ModernSunShadowView &view);
 // Whether the Modern path wants the scene's opaque depth before its lit
 // surfaces (vk_d3d9.h ModernWantsSceneDepth); false on a back end without one.
 bool BackendModernWantsSceneDepth(Backend *backend);

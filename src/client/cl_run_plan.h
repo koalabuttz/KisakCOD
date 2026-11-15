@@ -81,6 +81,14 @@ namespace detail
         }
         text[used] = '\0';
         Com_Printf(CON_CHANNEL_SYSTEM, "run: sending \"%s\"\n", text);
+        // A timed "quit" ends the run as the quit timers do, and says so the
+        // same way: runners (android_run.py, pc_run.py) wait for this line to
+        // tell a quit they asked for from a crash.
+        const char *word = text;
+        while (*word == ' ')
+            ++word;
+        if (!strncmp(word, "quit", 4) && (!word[4] || word[4] == ' ' || word[4] == ';'))
+            Com_Printf(CON_CHANNEL_SYSTEM, "run: quitting as asked\n");
         Cbuf_AddText(0, text);
         Cbuf_AddText(0, "\n");
     }

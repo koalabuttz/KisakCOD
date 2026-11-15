@@ -455,7 +455,8 @@ Layout *GetLayout(Device &device, const LayoutKey &key)
     pipelineInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineInfo.setLayoutCount = 2;
     pipelineInfo.pSetLayouts = sets;
-    const VkPushConstantRange push{VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(ModernPlanarParams)};
+    const VkPushConstantRange push{VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                                   sizeof(ModernPlanarParams) + sizeof(ModernShadowParams)};
     if (key.modernPush)
     {
         pipelineInfo.pushConstantRangeCount = 1;
@@ -1136,6 +1137,11 @@ VkSampler MakeSampler(Device &device, uint32_t slot, const Texture *texture)
     {
         info.compareEnable = VK_TRUE;
         info.compareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+        if (!device.depthFilterLinear)
+        {
+            info.magFilter = info.minFilter = VK_FILTER_NEAREST;
+            info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        }
     }
     // As DXVK: a single level gets the range 0-1, no mip filter level 0 only.
     if (!texture || texture->desc.levels <= 1)
@@ -2124,14 +2130,19 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
             });
         }
     }
-    // A Modern lit shader of ours: the planar reflection's parameters, pushed
-    // when they change (about once a scene) or a layout was bound since (a
-    // layout without the range disturbs them).
+    // A Modern lit shader of ours: the planar reflection's and the sun
+    // shadow's parameters, pushed when they change (about once a scene) or a
+    // layout was bound since (a layout without the range disturbs them).
     if (layout.key.modernPush && device.pushedPlanarGeneration != device.modernPlanarGeneration)
     {
         device.pushedPlanarGeneration = device.modernPlanarGeneration;
         const VkPipelineLayout pipelineLayout = layout.pipeline;
-        const ModernPlanarParams params = device.modernPlanarParams;
+        struct
+        {
+            ModernPlanarParams planar;
+            ModernShadowParams shadow;
+        } params{device.modernPlanarParams, device.modernShadowParams};
+        static_assert(sizeof(params) == sizeof(ModernPlanarParams) + sizeof(ModernShadowParams), "packed");
         Record(device.core, [pipelineLayout, params](VkCommandBuffer cmd, const Dispatch &vk) {
             vk.vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(params), &params);
         });
@@ -3204,6 +3215,18 @@ void SetModernLightPass(Device *device, float strength)
 {
     if (device)
         device->modernLightPass = strength >= 0.0f ? strength : 1.0f;
+}
+
+void SetModernShadow(Device *device, const ModernShadowParams *params)
+{
+    if (!device)
+        return;
+    const ModernShadowParams next = params && params->on != 0.0f ? *params : ModernShadowParams{};
+    if (std::memcmp(&next, &device->modernShadowParams, sizeof(next)) != 0)
+    {
+        device->modernShadowParams = next;
+        ++device->modernPlanarGeneration;
+    }
 }
 
 void SetModernLitStrengths(Device *device, float sun, float sky)

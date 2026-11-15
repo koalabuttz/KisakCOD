@@ -14,6 +14,8 @@
 #include <universal/com_constantconfigstrings.h>
 #include <universal/profile.h>
 #include "sv_handshake_auth.h"
+#include <bots/bot_brain.h>
+#include <bots/bot_names.h>
 #if (defined(__linux__) || defined(__APPLE__) || defined(__vita__)) && defined(KISAK_DEDICATED)
 #include <linux/net_internal.h>
 #endif
@@ -1205,6 +1207,7 @@ void SV_DirectConnect(netadr_t from)
         newcl->voicePacketCount = 0;
         newcl->sendVoice = 1;
         I_strncpyz(newcl->userinfo, userinfo, 1024);
+        SV_KeepBotTagForBots(newcl);
         denied = ClientConnect(clientNum, newcl->scriptId);
         if (denied)
         {
@@ -1653,8 +1656,24 @@ void SV_Disconnect_f(client_t *cl)
     SV_DropClient(cl, "EXE_DISCONNECTED", 1);
 }
 
+// "[BOT]" in a name is kept for the server's own test clients (bot_names.h):
+// a person's name loses it, so a player can tell a bot from a person.
+void SV_KeepBotTagForBots(client_t *cl)
+{
+    if (cl->header.netchan.remoteAddress.type == NA_BOT)
+        return;
+    char name[64];
+    I_strncpyz(name, Info_ValueForKey(cl->userinfo, "name"), sizeof(name));
+    if (!kisak::bots::WearsBotTag(name))
+        return;
+    char kept[64];
+    kisak::bots::RemoveBotTag(name, kept, sizeof(kept));
+    Info_SetValueForKey(cl->userinfo, "name", kept);
+}
+
 void SV_UserinfoChanged(client_t *cl)
 {
+    SV_KeepBotTagForBots(cl);
     const char *v1; // eax
     const char *val; // [esp+30h] [ebp-8h]
     const char *vala; // [esp+30h] [ebp-8h]
@@ -2165,12 +2184,15 @@ gentity_s *SV_AddTestClient()
         ++i;
     if (i == sv_maxclients->current.integer)
         return 0;
+    // "[BOT] Name" (bot_names.h), not the retail "bot<port>".
+    char botName[32];
+    Bot_PickName(botName, sizeof(botName));
     snprintf(
         file,
         ARRAYSIZE(file),
         "connect \"\\cg_predictItems\\1\\cl_punkbuster\\0\\cl_anonymous\\0\\color\\4\\head\\default\\model\\multi\\snaps\\20\\"
-        "rate\\5000\\name\\bot%d\\protocol\\%d\\qport\\%d\"",
-        botport,
+        "rate\\5000\\name\\%s\\protocol\\%d\\qport\\%d\"",
+        botName,
         1,
         botport + 1);
     SV_Cmd_TokenizeString(file);

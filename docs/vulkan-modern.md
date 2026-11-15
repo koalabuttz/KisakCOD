@@ -86,6 +86,12 @@ back to them.
 | `r_modernGodRays` | default, off, on | `KISAK_VK_MODERN_GOD_RAYS` |
 | `r_modernGodRaysStrength` | -1, or 0 to 8 | `KISAK_VK_MODERN_GOD_RAYS_STRENGTH` |
 | `r_modernGodRaysSpread`, `r_modernGodRaysThreshold`, `r_modernGodRaysSky` | -1, or 1 to 512, 0 to 16 and 0 to 1 | `KISAK_VK_MODERN_GOD_RAYS_SPREAD`, `_THRESHOLD`, `_SKY` |
+| `r_modernSoftShadows` | default, off, on | `KISAK_VK_MODERN_SOFT_SHADOWS` |
+| `r_modernShadowSoftness` | -1, or above 0 to 20 (degrees) | `KISAK_VK_MODERN_SHADOW_SOFTNESS` |
+| `r_modernContactShadows` | default, off, on | `KISAK_VK_MODERN_CONTACT_SHADOWS` |
+| `r_modernContactLength` | -1, or above 0 to 256 (world units) | `KISAK_VK_MODERN_CONTACT_LENGTH` |
+| `r_modernSoftSpotShadows` | default, off, on | `KISAK_VK_MODERN_SOFT_SPOT_SHADOWS` |
+| `r_modernSpotLightSize` | -1, or 0 to 64 (world units) | `KISAK_VK_MODERN_SPOT_LIGHT_SIZE` |
 | `r_modernTonemap` | default, clamp, neutral, agx, aces | `KISAK_VK_MODERN_TONEMAP` |
 | `r_modernDebug` | default, none, velocity, velocity-all, normals, ao, reflections, fog | `KISAK_VK_MODERN_DEBUG` |
 
@@ -1144,8 +1150,9 @@ shadow, and darkening it too would draw dark halos on sunlit ground.
 
 **How a scene goes with it.** Ambient occlusion is recorded right after the
 normals buffer, in the same `sceneDepth` hand-over, before the lit surfaces
-are drawn (`modern::BuildAmbientOcclusion`, `vk_modern_ao.cpp`, both passes
-timed as "modern ao"):
+are drawn (`modern::BuildAmbientOcclusion`, `vk_modern_ao.cpp`; the trace is
+timed as "modern ao trace" and the blur as "modern ao", and `r_vkStats` prints
+both apart on an "ambient occlusion passes" line):
 
 1. `shaders/gtao.frag`: ground-truth ambient occlusion (Jimenez et al.,
    "Practical Real-Time Strategies for Accurate Indirect Occlusion", 2016).
@@ -1966,6 +1973,153 @@ blue over the 3D view; the statistics line at teardown is `modern: N compute
 check volumes built (N drawn), X ms GPU each for its compute passes`. On
 lavapipe the two passes take about 1.2 to 1.5 ms together (software; a GPU
 has not run them yet).
+
+## Soft sun shadows
+
+Modern still draws CoD4's own sun shadow map (two 1024-texel partitions, the
+near one about a quarter of a world unit a texel and the far one about one
+unit, past which the primary lightmap's sun visibility takes over), but our
+lit shaders (`lm_sun.frag`, `lp_sun.frag`, the sun families with `hsm_`)
+filter it as percentage-closer soft shadows (Fernando 2005) instead of the
+game's four fixed taps, so a shadow is sharp where it meets its caster and
+softer the further it falls:
+
+1. a blocker search: the centre texel and 8 more on a Vogel disc as wide as
+   the widest filter (16 texels), fetched as depths; no blocker found is
+   fully lit;
+2. the filter radius: the average depth between the point and those
+   blockers, in world units, times the tangent of half the sun's apparent
+   size (`r_modernShadowSoftness`, 1.5 degrees by default; the real sun is
+   0.53), over the partition's texel size, from 1 texel to 16;
+3. 12 depth-compare taps on a Vogel disc of that radius (each tap the
+   hardware's bilinear 2x2 compare).
+
+Both discs turn by interleaved gradient noise (Jimenez 2014) that moves every
+frame, so the TAA averages them into a smooth edge. Each tap compares with
+the receiver's depth at that tap, from the shadow coordinate's screen
+derivatives (receiver plane depth bias, Isidoro 2006, capped at a 2:1 slope),
+so the wider disc does not shadow a surface with itself. The partition blend
+and the far partition's edge fade are the game's, with the soft filter in
+each partition (taps stay inside the partition's half of the map).
+
+The engine hands the back end each partition's texel size and depth scale
+from its shadow projection before a view's lit surfaces draw
+(`GfxModernHooks::sunShadow`, `R_ModernSunShadow` in `r_scene.cpp`;
+`front::ModernSunShadow`). The back end turns them into the lit shaders' push
+constants after the planar reflection's (`lg::ModernShadowParams`, 32 bytes
+at offset 96; the block is now 128 bytes, Vulkan's guaranteed minimum). A
+view without the sun's shadow map, or with soft shadows off, pushes `on` 0
+and the shaders take the game's taps. On by default with our lit shaders;
+`r_modernSoftShadows off` (or `KISAK_VK_MODERN_SOFT_SHADOWS=0`) keeps the
+game's. Their cost is inside the lit passes' own time; the statistics line is
+`modern: N scenes with soft sun shadows (sun 1.50 degrees)`. Spot and omni
+light shadows have their own switch: [Soft spot-light
+shadows](#soft-spot-light-shadows).
+
+The `modern_soft_shadow` check scene draws lm_hsm_sun_r0c0 across a blocker's
+edge in the shadow map: the game's taps give an edge about a texel wide, the
+soft filter one whose radius is four texels at that depth (three texels
+either side part lit, ten away fully lit or shaded). With
+`KISAK_VK_MODERN_SOFT_SHADOWS=0` both rows are sharp.
+
+## Contact shadows
+
+The sun's shadow map is too coarse for the smallest shadows: a boot on the
+ground, a rifle lying on a crate, a ledge on its wall. Contact shadows find
+those in screen space, as Bend Studio's screen-space shadows do: from each
+pixel's surface in the depth prepass a ray of `r_modernContactLength` world
+units (12 by default, about 30 cm) is stepped towards the sun in 16 steps
+(`shaders/contact.frag`), all moved along it by interleaved gradient noise
+that changes every frame so the TAA smooths them. A step is hidden when the
+scene's surface at its pixel lies in front of it by more than a small bias
+(0.03 units plus 0.15% of the distance) and less than 8 units (what is
+further in front is taken to be a separate thing that does not reach the
+ray). A hit in the first half of the ray hides the sun in full and one
+further along less, so the shadow fades out away from its caster; it also
+fades out towards the screen's edges and where the whole ray spans under 8
+pixels. The ray starts a little off its surface along the normals buffer's
+normal, and surfaces that face away from the sun are left alone.
+
+The pass is drawn right after the ambient occlusion, into the green channel
+of the same texture (the occlusion's blur leaves green at 1, and the contact
+pass writes green alone; without ambient occlusion the texture is cleared to
+white first), so the lit shaders read no new texture: `lm_sun.frag` and
+`lp_sun.frag`, in their sun families, take the smaller of the sun's shadow
+(the shadow map, or the lightmap's or volume's sun visibility) and the
+contact visibility. They darken the sun's light and its highlight alone,
+never the sky's (that is the ambient occlusion's).
+
+The sun's direction comes with the view's `sunShadow` hook, from the back
+end's sun light (towards the sun, as the lit shaders' sun constant), which
+the renderer now calls before the view's `sceneDepth` so the scene depth's
+passes have it. Contact shadows make the normals buffer wanted. On by
+default with our lit shaders; `r_modernContactShadows off` (or
+`KISAK_VK_MODERN_CONTACT_SHADOWS=0`) turns them off. The statistics line is
+`modern: N scenes with contact shadows (length 12.0, thickness 8.0, strength
+1.00), X ms GPU each` (the `modern contact shadows` pass).
+
+The `modern_contact_shadow` check scene puts a kerb 10 units tall on a sunlit
+floor with the sun behind it at 45 degrees: the floor 3 units in front of
+the kerb is shaded, open floor beside it stays sunlit, and with
+`KISAK_VK_MODERN_CONTACT_SHADOWS=0` both are sunlit.
+
+## Soft spot-light shadows
+
+The primary spot and omni lights' shadows (CoD4's spot shadow map, 512-texel
+tiles one under the other) get the same percentage-closer soft filter as the
+sun's, in the lit shaders' spot families with `hsm_` (`SoftSpotShadow` in
+`lm_sun.frag` and `lp_sun.frag`), so a lamp's shadow is sharp at its caster
+and spreads with distance instead of the game's four taps' hard edge. Taps
+stay inside the light's own tile.
+
+The light's shadow projection is a perspective one with its near plane at 1
+and its far plane at the light's radius (`1 / lightPosition.w`, a constant
+the shaders already have), so the blocker search turns stored depths into
+distances from the light, and the receiver's distance is the shadow
+coordinate's w. The cone's half angle comes from the spot factors (their ramp
+is 0 at the outer cosine), and with it a texel's width at the receiver. The
+filter radius is the light's size (`r_modernSpotLightSize`, 4 world units by
+default, about a bulb in its fitting) times how far the receiver lies past
+its blockers over the blockers' distance from the light, in texels, from 1 to
+16. Each tap follows the receiver's slope as the sun's do (capped at 2:1), and
+the discs turn with the same per-frame noise for the TAA. Nothing per light
+is pushed: the lit shaders' push block carries only the light size and a flag
+(`lg::ModernShadowParams` is repacked to fit: `on` is now 1 for soft sun
+shadows plus 2 for soft spot-light shadows).
+
+On by default with our lit shaders; `r_modernSoftSpotShadows off` (or
+`KISAK_VK_MODERN_SOFT_SPOT_SHADOWS=0`) keeps the game's taps, and a light size
+of 0 gives the narrowest filter. Their cost is inside the lit passes' own
+time; the statistics line is `modern: N scenes drew soft spot-light shadows
+(lights 4.0 units)`, counting only scenes that drew a shadowed spot or omni
+light's surfaces with them (a view without a shadowed lamp counts none).
+
+The `modern_soft_spot_shadow` check scene draws lm_hsm_spot_r0c0 across a
+blocker's edge in a spot light's tile, the blocker 10 units from the light
+and the floor 50: the game's taps give a hard edge, the soft filter a
+penumbra a few texels wide either side of it, and with
+`KISAK_VK_MODERN_SOFT_SPOT_SHADOWS=0` the edge is hard again.
+
+## Real lights
+
+The plan to make every map's lamps, lanterns, fires and lit windows act as
+real lights (light on players, highlights, moving shadows, glow in the fog) is
+in the project files' plan doc ("Real lights in Modern visuals: plan"). Its
+first piece is a survey of what each map's lamps are made of: the console
+command `r_modernLightSurvey` (in `r_cmds.cpp`; it reads only) prints, each
+line starting `light survey:`,
+
+- the map's primary lights: type, place, radius, colour, cone, and whether
+  they may use a shadow map;
+- the glowing-texture surfaces (technique sets `mc_unlit*` and `wc_unlit*`,
+  the same test as the Modern emissive) on world surfaces and static models,
+  grouped into clusters within 64 units, each with the light grid's baked
+  light there and 48 units below it and its nearest primary light;
+- the effects running now, by name, with how many of their elements are omni
+  or spot lights.
+
+`r_modernLightSurvey all` prints every cluster and effect instead of the first
+256 and 128.
 
 ## Next
 

@@ -80,6 +80,12 @@ struct ModernTuning
     float godRaysSpread = -1.0f;   // how tightly the kept sky gathers round the sun, 1 to 512 (_SPREAD)
     float godRaysThreshold = -1.0f; // the sky's light below this is not kept, 0 to 16 (_THRESHOLD)
     float godRaysSky = -1.0f;      // the share of the rays added over the sky itself, 0 to 1 (_SKY)
+    int softShadows = -1;         // soft sun shadows (KISAK_VK_MODERN_SOFT_SHADOWS)
+    float shadowSoftness = -1.0f; // the sun's apparent size, degrees (KISAK_VK_MODERN_SHADOW_SOFTNESS)
+    int softSpotShadows = -1;     // soft spot-light shadows (KISAK_VK_MODERN_SOFT_SPOT_SHADOWS)
+    float spotLightSize = -1.0f;  // the lights' size, world units (KISAK_VK_MODERN_SPOT_LIGHT_SIZE)
+    int contactShadows = -1;      // contact shadows (KISAK_VK_MODERN_CONTACT_SHADOWS)
+    float contactLength = -1.0f;  // their ray's length, world units (KISAK_VK_MODERN_CONTACT_LENGTH)
 };
 
 // The debug view over each Modern scene (ModernTuning::debug,
@@ -425,4 +431,17 @@ bool ModernPlanarWanted(IDirect3DDevice9 *device);
 // view (the program then draws nothing for it).
 bool ModernPlanarBegin(IDirect3DDevice9 *device, const ModernPlanarView &view);
 void ModernPlanarDone(IDirect3DDevice9 *device, const ModernPlanarView &view);
+// The sun's shadow map as a view's lit surfaces will read it, given before
+// they draw (docs/vulkan-modern.md "Soft sun shadows"): the Modern lit
+// shaders size their soft filter from it. Nothing on a back end without a
+// Modern path.
+struct ModernSunShadowView
+{
+    bool on = false;            // the view's lit surfaces read the sun's shadow map
+    float texel[2] = {};        // world units across a texel, near and far partitions
+    float depthUnits[2] = {};   // world units per unit of the map's depth, near and far
+    bool sun = false;           // the view has a sun: sunDir holds the direction towards it
+    float sunDir[3] = {};       // world space, unit length
+};
+void ModernSunShadow(IDirect3DDevice9 *device, const ModernSunShadowView &view);
 } // namespace gfx_vk::d3d9

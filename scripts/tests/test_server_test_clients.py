@@ -373,6 +373,8 @@ playerState_s *SV_GameClientNum(int num);
 // case asks it to take the command, so the retail random path runs as before.
 struct client_t;
 bool Bot_UserMove(client_t *cl);
+// The name the brain gives a new bot ("[BOT] Name", src/bots/bot_names.h).
+void Bot_PickName(char *out, size_t size);
 extern bool gBotBrainTakes;
 extern std::vector<int> gBotBrainCalls;
 
@@ -522,6 +524,10 @@ std::vector<int> gBotBrainCalls;
 bool Bot_UserMove(client_t *cl) {
     gBotBrainCalls.push_back(static_cast<int>(cl - svs.clients));
     return gBotBrainTakes;
+}
+int gPickNameCalls = 0;
+void Bot_PickName(char *out, size_t size) {
+    std::snprintf(out, size, "[BOT] ms rat %d", ++gPickNameCalls);
 }
 """
 
@@ -695,7 +701,8 @@ int main() {
     Check(ui.rfind("connect \"", 0) == 0, "starts with connect \"");
     Check(ui.find("\\protocol\\1") != std::string::npos, "advertises protocol 1");
     Check(ui.find("\\cl_punkbuster\\0") != std::string::npos, "declares no punkbuster");
-    Check(ui.find("\\name\\bot") != std::string::npos, "names the bot after botport");
+    Check(ui.find("\\name\\[BOT] ms rat ") != std::string::npos && ui.find("\\protocol\\") != std::string::npos,
+          "names the bot with the brain's \"[BOT] Name\", spaces and all");
     Check(gTokenizeCalls == 3, "exactly one tokenize per bot, none left over");
     Check(gEndTokenizeCalls == 3, "every tokenize is released");
 

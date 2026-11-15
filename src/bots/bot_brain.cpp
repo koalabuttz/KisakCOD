@@ -37,12 +37,17 @@
 #include "bot_grenades.h"
 #include "bot_mind.h"
 #include "bot_motor.h"
+#include "bot_names.h"
 #include "bot_navmesh.h"
 #include "bot_perception.h"
 #include "bot_team.h"
 
+#include <universal/com_files.h>
+
 #include <cmath>
 #include <cstring>
+#include <string>
+#include <vector>
 
 namespace
 {
@@ -1526,6 +1531,80 @@ void Bot_RegisterDvars()
         DvarLimits(0, 1),
         DVAR_NOFLAG,
         "0 KisakCOD's bots never fire, 1 they fight the players they see (docs/bots.md)");
+}
+
+namespace
+{
+// Names from bots/names.txt: one to a line, up to 9 characters kept, with no
+// character a userinfo string or a console command treats as its own.
+std::vector<std::string> NamesFromFile()
+{
+    std::vector<std::string> names;
+    int handle = 0;
+    const int length = FS_SV_FOpenFileRead("bots/names.txt", &handle);
+    if (!handle)
+        return names;
+    std::string text;
+    if (length > 0 && length < 64 * 1024)
+    {
+        text.resize(static_cast<size_t>(length));
+        uint8_t *bytes = reinterpret_cast<uint8_t *>(text.data());
+        if (FS_Read(bytes, static_cast<uint32_t>(length), handle) != static_cast<uint32_t>(length))
+            text.clear();
+    }
+    FS_FCloseFile(handle);
+    std::string line;
+    const size_t room = kb::kNameChars - std::strlen(kb::kBotTag);
+    auto finish = [&]() {
+        while (!line.empty() && line.back() == ' ')
+            line.pop_back();
+        if (!line.empty() && !kb::WearsBotTag(line.c_str()))
+            names.push_back(line.substr(0, room));
+        line.clear();
+    };
+    for (char c : text)
+    {
+        if (c == '\n' || c == '\r')
+        {
+            finish();
+            continue;
+        }
+        if (c == '\\' || c == '"' || c == ';' || c == '%' || static_cast<unsigned char>(c) < 32)
+            continue;
+        if (c == ' ' && line.empty())
+            continue;
+        line.push_back(c);
+    }
+    finish();
+    return names;
+}
+
+bool NameTaken(const char *name, void *)
+{
+    for (int i = 0; i < sv_maxclients->current.integer; ++i)
+    {
+        const client_t &cl = svs.clients[i];
+        if (cl.header.state != CS_FREE && !I_stricmp(cl.name, name))
+            return true;
+    }
+    return false;
+}
+} // namespace
+
+void Bot_PickName(char *out, size_t size)
+{
+    static uint32_t s_seed = 0;
+    if (!s_seed)
+        s_seed = static_cast<uint32_t>(Sys_Milliseconds()) | 1u;
+    s_seed = s_seed * 1664525u + 1013904223u;
+    const std::vector<std::string> file = NamesFromFile();
+    std::vector<const char *> names;
+    for (const std::string &name : file)
+        names.push_back(name.c_str());
+    if (names.empty())
+        names.assign(kb::kBotNames, kb::kBotNames + kb::kBotNameCount);
+    const int start = static_cast<int>((s_seed >> 8) % names.size());
+    kb::PickBotName(names.data(), static_cast<int>(names.size()), start, NameTaken, nullptr, out, size);
 }
 
 int Bot_Ping(int clientNum)
