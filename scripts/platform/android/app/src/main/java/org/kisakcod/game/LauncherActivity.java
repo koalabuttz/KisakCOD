@@ -43,9 +43,9 @@ import java.util.TreeMap;
  * The Visuals button picks the look for every start: Legacy (the game as it
  * was made), Modern (r_visuals modern: anti-aliasing, linear light, ambient
  * occlusion, reflections, fog and the rest; docs/vulkan-modern.md) held to an
- * even 30 fps, or Modern Fast (Modern without ambient occlusion and
- * screen-space reflections, its two dearest passes on a handheld GPU) at the
- * display's rate. The presets' feature and vsync settings go with the first
+ * even 30 fps, or Modern Fast (Modern without ambient occlusion, screen-space
+ * reflections and contact shadows, its dearest passes on a handheld GPU) at
+ * the display's rate. The presets' feature and vsync settings go with the first
  * start after the choice changes, so a change made later in the game's own
  * settings menu stays.
  *
@@ -231,8 +231,9 @@ public class LauncherActivity extends Activity {
         if (!presetChanged)
             return args;
         if (visuals == 1)
-            return args + " +set r_modernAo default +set r_modernSsr default +set r_vsync 1 +set r_vsyncInterval 2";
-        return args + " +set r_modernAo off +set r_modernSsr off +set r_vsyncInterval 1";
+            return args + " +set r_modernAo default +set r_modernSsr default +set r_modernContactShadows default"
+                + " +set r_vsync 1 +set r_vsyncInterval 2";
+        return args + " +set r_modernAo off +set r_modernSsr off +set r_modernContactShadows off +set r_vsyncInterval 1";
     }
 
     private void update() {
@@ -285,7 +286,10 @@ public class LauncherActivity extends Activity {
         button.setText(text);
         button.setAllCaps(false);
         button.setTextColor(Color.WHITE);
-        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+        // One or two lines, smaller where a label would not fit whole (a word
+        // is never broken).
+        button.setMaxLines(2);
+        button.setAutoSizeTextTypeUniformWithConfiguration(12, 22, 1, TypedValue.COMPLEX_UNIT_SP);
         button.setGravity(Gravity.CENTER);
         button.setFocusable(true);
         button.setFocusableInTouchMode(false);
