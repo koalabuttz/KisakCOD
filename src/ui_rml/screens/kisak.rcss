@@ -8,9 +8,9 @@ body {
     height: 100%;
     margin: 0;
     padding: 0;
-    background-color: #05070ab8;
+    background-color: #05070aeb;
     font-family: "fonts/normalFont";
-    font-size: 22dp;
+    font-size: 26dp;
     color: #e6e4dc;
 }
 
@@ -20,7 +20,7 @@ body {
     right: 7%;
     top: 5%;
     bottom: 5%;
-    decorator: vertical-gradient(#1b1f24f2 #0b0d10f2);
+    decorator: vertical-gradient(#1b1f24ff #0b0d10ff);
     border-top: 3dp #e0b04a;
 }
 
@@ -36,8 +36,8 @@ body {
 #subtitle {
     position: absolute;
     right: 28dp;
-    top: 30dp;
-    font-size: 16dp;
+    top: 28dp;
+    font-size: 22dp;
     color: #9a988f;
 }
 
@@ -101,14 +101,14 @@ h2 {
     height: 34dp;
     padding: 12dp 16dp 0dp 16dp;
     font-family: "fonts/boldFont";
-    font-size: 18dp;
+    font-size: 22dp;
     color: #e0b04a;
 }
 
 row {
     display: block;
     position: relative;
-    height: 46dp;
+    height: 52dp;
     border-bottom: 1dp #ffffff0f;
     tab-index: auto;
     nav-up: auto;
@@ -126,15 +126,15 @@ row:focus {
 row .label {
     position: absolute;
     left: 18dp;
-    top: 12dp;
+    top: 13dp;
 }
 
 row .value {
     position: absolute;
     right: 14dp;
-    top: 12dp;
-    width: 250dp;
-    height: 24dp;
+    top: 13dp;
+    width: 280dp;
+    height: 28dp;
 }
 
 row .text {
@@ -145,9 +145,9 @@ row .text {
 
 row .arrow {
     position: absolute;
-    top: -8dp;
-    width: 44dp;
-    height: 40dp;
+    top: -10dp;
+    width: 52dp;
+    height: 46dp;
     padding-top: 8dp;
     text-align: center;
     color: #9a988f;
@@ -167,8 +167,8 @@ row:focus .arrow, row .arrow:hover {
 
 row .bar {
     position: absolute;
-    right: 286dp;
-    top: 10dp;
+    right: 316dp;
+    top: 13dp;
     width: 220dp;
     height: 26dp;
 }
@@ -187,14 +187,14 @@ row .bar:hover {
 row .mark {
     display: none;
     position: absolute;
-    right: 520dp;
-    top: 15dp;
-    font-size: 15dp;
+    right: 560dp;
+    top: 16dp;
+    font-size: 20dp;
     color: #e0b04a;
 }
 
 row.slider .mark {
-    right: 520dp;
+    right: 560dp;
 }
 
 row.pending .mark {
@@ -209,9 +209,9 @@ row.pending .mark {
 .preset {
     display: inline-block;
     width: 21%;
-    height: 120dp;
+    height: 128dp;
     margin: 0dp 1.5%;
-    padding-top: 26dp;
+    padding-top: 24dp;
     text-align: center;
     font-family: "fonts/boldFont";
     font-size: 26dp;
@@ -223,9 +223,9 @@ row.pending .mark {
 
 .preset span {
     display: block;
-    padding-top: 10dp;
+    padding: 12dp 10dp 0dp 10dp;
     font-family: "fonts/normalFont";
-    font-size: 15dp;
+    font-size: 23dp;
     color: #9a988f;
 }
 
@@ -236,8 +236,8 @@ row.pending .mark {
 
 p {
     display: block;
-    padding: 6dp 18dp;
-    font-size: 17dp;
+    padding: 10dp 18dp;
+    font-size: 24dp;
     color: #9a988f;
 }
 
@@ -253,9 +253,9 @@ p {
 #hint {
     position: absolute;
     left: 6dp;
-    right: 360dp;
-    top: 12dp;
-    font-size: 16dp;
+    right: 340dp;
+    top: 10dp;
+    font-size: 22dp;
     color: #9a988f;
 }
 

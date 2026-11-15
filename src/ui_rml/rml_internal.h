@@ -52,6 +52,7 @@ float FontAscent(const Font_s *font, float yScale);
 void ClassicRegister();
 void ClassicPaint(UiContext *dc, Rml::Context *context);
 void ClassicHide();
+void ClassicDump(); // the last frame's slots, to the console
 void ClassicRelease();
 
 // The screen files built into the game (src/ui_rml/screens, embedded by

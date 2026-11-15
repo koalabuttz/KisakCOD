@@ -255,6 +255,7 @@ void Screens::Release()
     shownHint.clear();
     shownPending = -1;
     pressed = dragging = swallowClick = false;
+    mouseUsed = false;
     dragTarget = nullptr;
 }
 
@@ -863,6 +864,7 @@ void Screens::MouseMove(int x, int y)
 {
     if (!document)
         return;
+    mouseUsed = true;
     mouseAt = Rml::Vector2i(x, y);
     if (pressed && dragTarget)
     {

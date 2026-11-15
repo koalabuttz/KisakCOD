@@ -1002,7 +1002,11 @@ void UI_Refresh(int localClientNum)
         }
         if (uiInfoArray.uiDC.isCursorVisible)
         {
-            if (!Dvar_GetBool("cl_bypassMouseInput") && UI_GetActiveMenu(localClientNum) != UIMENU_SCOREBOARD)
+            if (!Dvar_GetBool("cl_bypassMouseInput") && UI_GetActiveMenu(localClientNum) != UIMENU_SCOREBOARD
+#ifdef KISAK_RMLUI
+                && !RmlFrontend_HidesCursor()
+#endif
+            )
             {
                 UI_DrawCursor(&uiInfoArray.uiDC, &scrPlaceFull, &scrPlaceView[localClientNum], sharedUiInfo.assets.cursor);
             }

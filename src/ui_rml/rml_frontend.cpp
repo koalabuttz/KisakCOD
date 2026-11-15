@@ -115,6 +115,10 @@ void UI_RmlStats_f()
     Com_Printf(CON_CHANNEL_UI,
                "RmlUi classic mode, last frame: %d slots (%d drawn by the stock painter), %d draw commands, %d vertices, %d indices\n",
                lastFrame.slots, lastFrame.fallbacks, lastFrame.commands, lastFrame.vertices, lastFrame.indices);
+    // ui_rmlStats 1 also lists the slots: the window that made each, and
+    // what it set.
+    if (Cmd_Argc() > 1 && atoi(Cmd_Argv(1)) != 0)
+        kisak_rml::ClassicDump();
 }
 
 void UI_RmlOpen_f()
@@ -248,6 +252,16 @@ bool RmlFrontend_MouseEvent(int x, int y)
 bool RmlFrontend_ScreenOpen()
 {
     return screens.IsOpen();
+}
+
+bool RmlFrontend_HidesCursor()
+{
+#ifdef __ANDROID__
+    // A touch screen and a controller: the arrow only gets in the way.
+    return screens.IsOpen();
+#else
+    return screens.IsOpen() && !screens.MouseUsed();
+#endif
 }
 
 void RmlFrontend_Shutdown()

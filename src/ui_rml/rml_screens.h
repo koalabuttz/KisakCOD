@@ -69,6 +69,8 @@ public:
     // while open).
     bool KeyEvent(int key, bool down);
     void MouseMove(int x, int y);
+    // The mouse moved since the screen opened (a pointer is in use).
+    bool MouseUsed() const { return mouseUsed; }
 
     // The context is going away: forget the document without closing it.
     void Release();
@@ -111,6 +113,7 @@ private:
     bool swallowClick = false;
     Rml::Vector2i pressAt;
     Rml::Vector2i mouseAt;
+    bool mouseUsed = false;
     Rml::Element *dragTarget = nullptr;
     float dragScrollStart = 0.0f;
 };
