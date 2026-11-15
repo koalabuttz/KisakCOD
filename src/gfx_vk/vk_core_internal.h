@@ -217,6 +217,24 @@ struct RecordState : RecordContext
     uint32_t shownId = 0;
     uint64_t shownNs = 0;
     uint64_t pacedPresents = 0;
+    // How far before the refresh it means a present's time is set, adapted
+    // to where the display takes it (PacePresent), and that offset as each
+    // of the last kPaceOffsets presents used it, by id.
+    uint64_t paceOffsetNs = 0;
+    static constexpr uint32_t kPaceOffsets = 32;
+    uint64_t paceOffsets[kPaceOffsets] = {};
+    // What the display reported, logged every kPaceReport frames: the last
+    // id counted and when it showed, the frames shown 1, 2, 3 and 4 or more
+    // refreshes after the one before, those shown a refresh or more before or
+    // after the refresh asked for, and the sum of the differences.
+    static constexpr uint32_t kPaceReport = 240;
+    uint32_t paceCountedId = 0;
+    uint64_t paceCountedNs = 0;
+    uint32_t paceAfter[4] = {};
+    uint32_t paceEarly = 0;
+    uint32_t paceLate = 0;
+    uint32_t paceCounted = 0;
+    int64_t paceMissNs = 0;
 };
 
 // Packets start at multiples of kRecordAlign in memory from operator new,
@@ -321,6 +339,9 @@ public:
     bool displayTiming = false;
     // CoreDesc::swapInterval as SetSwapInterval last set it.
     std::atomic<uint32_t> swapInterval{1};
+    // Paced presents move their time when the display shows them a refresh
+    // early or late (PacePresent); KISAK_VK_PACE_ADAPT=0 keeps half a refresh.
+    bool paceAdapt = true;
     VkDebugUtilsMessengerEXT messenger = VK_NULL_HANDLE;
     VkSurfaceKHR surface = VK_NULL_HANDLE;
 
