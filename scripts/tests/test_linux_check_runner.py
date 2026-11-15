@@ -239,6 +239,7 @@ class PlannedCommandTests(unittest.TestCase):
             "server_test_clients",
             "weapon_def_ownership",
             "bot_motor",
+            "bot_navmesh",
             "bot_driver",
             "database_publication",
             "mod_zone_detection",
