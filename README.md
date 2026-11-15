@@ -143,7 +143,8 @@ public-server authentication or general compatibility proof.
 **Other platforms.** Opt-in builds exist for 64-bit Arm Linux
 ([aarch64](docs/linux-arm64.md)), 32-bit Arm Linux ([armv7](docs/linux-armv7.md),
 dedicated server), macOS on Apple silicon and Intel ([macOS](docs/macos.md)) and
-a hacked PS Vita ([server](docs/vita.md), [client](docs/vita-client.md)). They
+a hacked PS Vita ([server](docs/vita.md), [client](docs/vita-client.md)) and
+Android on arm64 ([Android](docs/android.md), dedicated server so far). They
 build and pass their checks in hosted CI; how far each has run with game data
 is in the [status page](docs/status.md).
 

@@ -94,7 +94,8 @@ normals buffer's own switch (`KISAK_VK_MODERN_NORMALS`), the reflection
 probes' filter (`KISAK_VK_MODERN_PROBES`, applied as their textures load), the
 exposure range, the reflections' steps and levels, and planar reflections
 (`KISAK_VK_MODERN_PLANAR` and `KISAK_VK_MODERN_DEBUG=planar` or
-`planar-read`, which `r_modernDebug` does not list) stay start-up only, and `r_visuals` itself is
+`planar-read`, which `r_modernDebug` does not list), and the compute check
+(`KISAK_VK_MODERN_DEBUG=compute`, not listed either) stay start-up only, and `r_visuals` itself is
 latched (above).
 
 ## How a frame goes
@@ -1131,16 +1132,18 @@ as one of ours the texture at pixel sampler 15 (`lg::kModernAoSampler`,
 which the game's lit shaders leave free; set 1 bindings 15 and 31), or a 1x1
 white texture where the scene has none (`lg::SetModernAmbientOcclusion`,
 from the scene's depth hand-over until the scene is lit). `lm_sun.frag`
-reads it by pixel position and darkens only the light from all around:
+(the world) and `lp_sun.frag` (models) read it by pixel position and darken
+only the light from all around:
 
-* the lightmap's sky term: `sky * sky strength * ao`. The sun's share is
-  still taken from the undarkened sky (`decode(sky + sun) - decode(sky)`),
-  and the sun keeps its own shadow;
+* the sky term (the lightmap's, or the model's lighting volume):
+  `sky * sky strength * ao`. The sun's share (or the spot or omni light's)
+  is still taken from the undarkened sky (`decode(sky + sun) - decode(sky)`),
+  and that light keeps its own shadow;
 * the reflection probe (`s0`), through a specular occlusion for the view
   angle and gloss (Lagarde and de Rousiers 2014, roughness `1 - gloss`).
 
-Surfaces drawn with the game's shaders (models, effects, families we have no
-shader for yet) are not darkened.
+Surfaces drawn with the game's shaders (effects, families we have no shader
+for yet) are not darkened.
 
 | Setting | Default | Switch |
 | --- | --- | --- |
@@ -1516,6 +1519,50 @@ shaders, arguments, blend state, custom samplers, whether it is among the
 lit passes and whether our water shader can draw it, the material's
 constants and the water simulation's settings (at most 32). It works on any
 path.
+
+## Compute passes
+
+The Modern path's work that is not a full-screen draw runs as compute
+passes on the core ([vulkan-core.md](vulkan-core.md), "Compute passes"),
+on the same queue as the draws: volumes such as a froxel fog's, and later
+users like AO, screen-space GI or GPU particles. What the core gives them:
+
+| Piece | How |
+| --- | --- |
+| Pipelines | `CreateComputePipeline` through the core's pipeline cache, counted with the graphics ones; `modern::CreateComputePipeline(core, layout, module, error, specialization)` for one shader with entry point `main`, and `GroupCount(size, local)` for the work groups that cover a size. GLSL `.comp` sources live in `src/gfx_vk/modern/shaders` and go through `gen_spirv_header.py` like the others. |
+| Images | Storage images in the GENERAL layout (`ImageUse::StorageRead`, `StorageWrite`), 2D or 3D (`ImageKind::Tex3D`), bound through `ImageView` (identity swizzle). `R16G16B16A16_SFLOAT` can always be one; R11G11B10 and the other extended formats need `Features().storageImageExtendedFormats` and `FormatSupports(format, VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT)`. Sampled (by any shader, with linear filtering for a 3D volume) through `ImageSampleView` after `UseImage(Sampled)`, which also waits for the compute shader's writes. |
+| Buffers | Storage buffers (`VK_BUFFER_USAGE_STORAGE_BUFFER_BIT`) through `UseBuffer`: `ShaderWrite` for a compute shader that writes, `ShaderRead` for any shader that reads, `Indirect` for dispatch arguments. Uniform data for a pass comes from `AllocateTransient` as for the full-screen passes. |
+| Passes | `BeginComputePass(core, "modern ...")`, then for each dispatch the `UseImage`/`UseBuffer` calls it needs, its bindings through `Record` (bind point COMPUTE) and `DispatchCompute`; `EndComputePass`. Timed by name like a render pass, so a feature's statistics line reports `PassTimingsFor` per stage. Descriptor sets are the per-frame ones (`AllocateDescriptorSet`); history kept across frames is two images the feature swaps itself, as TAA's. |
+| Where they run | Two places in the back end's scene (`vk_d3d9_backend_vulkan.cpp`): `LitScenePasses`, once per scene between passes, when the lit surfaces are drawn into the scene image (the linear-light one in linear light) and nothing has read it yet: before velocity, TAA, bloom, exposure and the tonemap, and before the effects unless they blend in linear light. A feature that changes the lit scene (volumetric fog) or builds what a later point draws goes there. `FinishedScenePasses`, once per finished scene, over the display image after the tonemap (or the anti-aliased scene without linear light): debug views. |
+
+**The compute check** (`modern::ComputeCheck`, `vk_modern_compute.cpp`,
+shaders `compute_check_fill.comp`, `compute_check_integrate.comp` and
+`compute_check_draw.frag`) is the smallest user, and checks the whole
+facility. `KISAK_VK_MODERN_DEBUG=compute` (start-up only) builds it at each
+scene's lit point and draws it over the finished scene:
+
+1. `modern compute check fill`: one invocation per texel of a 16 x 8 x 8
+   `R16G16B16A16_SFLOAT` 3D storage image writes the texel's centre (x, y, z
+   in 0..1) and alpha 0.5, and each slice's weights (1, 1, 1, 2) into a
+   storage buffer.
+2. `modern compute check integrate`: one invocation per column walks that
+   volume front to back, as a froxel fog's integration does, and writes into
+   a second volume at each slice the weighted mean of the slices so far.
+3. `modern compute check draw`: a full-screen pass samples the second volume
+   with linear filtering halfway along z over the scene's viewport. Red and
+   green show the pixel's place across the viewport (clamped to the outer
+   texel centres), blue the mean of the slice centres so far (0.28125
+   halfway, which linear filtering gives exactly as it is linear in z),
+   all times alpha, which is 1 only when the buffer reached pass two.
+
+The D3D9 front check's `modern_compute` scene reads those pixels back
+([vulkan-d3d9-front.md](vulkan-d3d9-front.md)) under the synchronization
+validation layer, which is what caught the storage-write barrier the core
+first left out. In the game the view is a red-green gradient with a little
+blue over the 3D view; the statistics line at teardown is `modern: N compute
+check volumes built (N drawn), X ms GPU each for its compute passes`. On
+lavapipe the two passes take about 1.2 to 1.5 ms together (software; a GPU
+has not run them yet).
 
 ## Next
 

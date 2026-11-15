@@ -387,6 +387,11 @@ void Device::LogStats(bool reset)
     BackendLogStats(backend_, reset);
 }
 
+void Device::LogMemory(const char *when)
+{
+    BackendLogMemory(backend_, when);
+}
+
 DeviceCounters Device::counters() const
 {
     const FrontLock lock;

@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -183,6 +184,99 @@ static int TryBindUdp(const char *ipString, int port)
 static bool PortIsFree(int port)
 {
     return port > 0 && TryBindUdp("0.0.0.0", port) == 0;
+}
+
+// True when a socket of THIS process is bound to UDP `port` on any IPv4 or
+// IPv6 address. This answers "did the engine open a socket?" without asking the
+// kernel whether the port is free for everybody: on a shared hosted runner
+// another process can hold the port PickFreeUdpPort() released a moment
+// earlier, and the wildcard probe then reported a socket that the engine never
+// opened (macOS arm64 dedicated server, 2026-11-14 RelWithDebInfo and
+// 2026-11-15 Debug: "start-up opened no socket").
+static bool ProcessHoldsUdpPort(int port)
+{
+    if (port <= 0)
+        return false;
+    const long limit = sysconf(_SC_OPEN_MAX);
+    const int last = (limit > 0 && limit < 65536) ? (int)limit : 65536;
+    for (int fd = 0; fd < last; ++fd)
+    {
+        struct stat info;
+        if (fstat(fd, &info) != 0 || !S_ISSOCK(info.st_mode))
+            continue;
+        int type = 0;
+        socklen_t typeLength = sizeof(type);
+        if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &typeLength) != 0 || type != SOCK_DGRAM)
+            continue;
+        struct sockaddr_storage addr;
+        socklen_t addrLength = sizeof(addr);
+        memset(&addr, 0, sizeof(addr));
+        if (getsockname(fd, (struct sockaddr *)&addr, &addrLength) != 0)
+            continue;
+        if (addr.ss_family == AF_INET && ntohs(((const struct sockaddr_in *)&addr)->sin_port) == port)
+            return true;
+        if (addr.ss_family == AF_INET6 && ntohs(((const struct sockaddr_in6 *)&addr)->sin6_port) == port)
+            return true;
+    }
+    return false;
+}
+
+// True when the engine opened no UDP socket on `port`: the question every
+// "nothing was bound" check asks.
+static bool EngineHoldsNoSocket(int port)
+{
+    return port > 0 && !ProcessHoldsUdpPort(port);
+}
+
+// Self-test for ProcessHoldsUdpPort(): it must see a socket this process
+// binds (on 127.0.0.1 and on the wildcard), stop seeing it once closed, and
+// ignore a socket another process holds on the port.
+static bool ProcessProbeWorks()
+{
+    int port = 0;
+    const int sock = MakePeerSocket(&port);
+    if (sock == -1)
+        return false;
+    const bool seen = ProcessHoldsUdpPort(port);
+    close(sock);
+    const bool gone = !ProcessHoldsUdpPort(port);
+
+    // A child holds a fresh port on 0.0.0.0 until it is told to go.
+    int ready[2], release[2];
+    if (pipe(ready) != 0 || pipe(release) != 0)
+        return false;
+    const pid_t child = fork();
+    if (child == 0)
+    {
+        close(ready[0]);
+        close(release[1]);
+        struct sockaddr_in addr;
+        socklen_t length = sizeof(addr);
+        int held = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        int childPort = -1;
+        if (held != -1 && bind(held, (struct sockaddr *)&addr, sizeof(addr)) == 0 &&
+            getsockname(held, (struct sockaddr *)&addr, &length) == 0)
+            childPort = ntohs(addr.sin_port);
+        if (write(ready[1], &childPort, sizeof(childPort)) != (ssize_t)sizeof(childPort))
+            _exit(1);
+        char byte;
+        if (read(release[0], &byte, 1) < 0)
+            _exit(1);
+        _exit(0);
+    }
+    close(ready[1]);
+    close(release[0]);
+    int otherPort = -1;
+    const bool got = child > 0 && read(ready[0], &otherPort, sizeof(otherPort)) == (ssize_t)sizeof(otherPort);
+    const bool othersIgnored = got && otherPort > 0 && !ProcessHoldsUdpPort(otherPort) && !PortIsFree(otherPort);
+    close(release[1]);
+    close(ready[0]);
+    if (child > 0)
+        waitpid(child, nullptr, 0);
+    return seen && gone && othersIgnored;
 }
 
 // True when the engine's socket is bound to 127.0.0.1 specifically rather than
@@ -464,7 +558,7 @@ static void ScenarioNetNoudp()
     Check(Shim_ComErrorCount() == 0, "a safe configuration raises no diagnostic even when nothing binds");
     Check(!NET_CanBypassLoopbackAuth(AdrIP("127.0.0.1", 5555)),
           "with no socket bound the bypass is refused");
-    Check(PortIsFree(PortFromDvar()), "net_noudp 1 bound no port at all");
+    Check(EngineHoldsNoSocket(PortFromDvar()), "net_noudp 1 bound no port at all");
     Check(!EngineReadsLoopbackDatagram(PortFromDvar(), &from),
           "nothing is read, because no socket exists to read it");
 
@@ -715,7 +809,7 @@ static void ScenarioRestartSafe()
     NET_Restart();
     Check(!NET_CanBypassLoopbackAuth(AdrIP("127.0.0.1", 5555)),
           "net_noudp 1 through net_restart closes the gate (no socket to authorise)");
-    Check(PortIsFree(bound), "net_noudp 1 through net_restart closed the socket");
+    Check(EngineHoldsNoSocket(bound), "net_noudp 1 through net_restart closed the socket");
 
     SetDvarBool("net_noudp", false);
     NET_Restart();
@@ -765,7 +859,7 @@ static void ScenarioPendingLatched()
     Shim_ComErrorReset();
     NET_Restart();
     Check(Shim_ComErrorCount() > 0, "net_restart with an unsafe net_ip reports the configuration error");
-    Check(PortIsFree(bound), "no socket was opened for the unsafe address");
+    Check(EngineHoldsNoSocket(bound), "no socket was opened for the unsafe address");
     Check(!NET_CanBypassLoopbackAuth(AdrIP("127.0.0.1", 5555)),
           "no bypass survives the refused restart");
 
@@ -865,7 +959,7 @@ static void ScenarioUnsafeRestartMatrix()
         Check(!NET_CanBypassLoopbackAuth(AdrIP("127.0.0.1", 5555)), what);
 
         snprintf(what, sizeof(what), "%s: no socket exists on the port", cases[i].label);
-        Check(PortIsFree(bound), what);
+        Check(EngineHoldsNoSocket(bound), what);
 
         snprintf(what, sizeof(what), "%s: nothing is received on 127.0.0.1", cases[i].label);
         Check(!EngineReadsLoopbackDatagram(bound, &from), what);
@@ -898,7 +992,7 @@ static void ScenarioUnsafeRestartMatrix()
         Check(Shim_ComErrorCount() > 0, what);
 
         snprintf(what, sizeof(what), "%s with net_noudp 1: nothing is bound", cases[i].label);
-        Check(PortIsFree(bound), what);
+        Check(EngineHoldsNoSocket(bound), what);
     }
 
     NET_Shutdown();
@@ -926,7 +1020,7 @@ static void ScenarioUnsafeStartup(const char *value, const char *what)
           "the cvar capture is 'enabled' even though the configuration is unsafe");
     Check(Shim_ComErrorCount() > 0, "start-up refused with a diagnostic");
     Check(!NET_CanBypassLoopbackAuth(AdrIP("127.0.0.1", 5555)), "no bypass is granted");
-    Check(PortIsFree(PortFromDvar()), "start-up opened no socket");
+    Check(EngineHoldsNoSocket(PortFromDvar()), "start-up opened no socket");
     Check(!EngineReadsLoopbackDatagram(PortFromDvar(), &from),
           "nothing is read on 127.0.0.1, because no socket was opened");
 
@@ -967,7 +1061,7 @@ static void ScenarioDedicatedZero()
     Check(NET_LoopbackAuthTestEnabled(), "the cvar capture is 'enabled'");
     Check(Shim_ComErrorCount() > 0, "a listen server is refused at start-up");
     Check(!NET_CanBypassLoopbackAuth(AdrIP("127.0.0.1", 5555)), "no bypass on a listen server");
-    Check(PortIsFree(PortFromDvar()), "no socket was opened");
+    Check(EngineHoldsNoSocket(PortFromDvar()), "no socket was opened");
     Check(!EngineReadsLoopbackDatagram(PortFromDvar(), &from), "nothing is read");
 
     NET_Shutdown();
@@ -992,7 +1086,7 @@ static void ScenarioDedicatedUnset()
     Check(NET_CanBypassLoopbackAuth(AdrIP("127.0.0.1", 5555)) == false,
           "a NULL com_dedicated refuses instead of dereferencing it");
     Check(Shim_ComErrorCount() > 0, "the start-up is refused with a diagnostic");
-    Check(PortIsFree(PortFromDvar()), "no socket was opened");
+    Check(EngineHoldsNoSocket(PortFromDvar()), "no socket was opened");
     Check(!EngineReadsLoopbackDatagram(PortFromDvar(), &from), "nothing is read");
 
     NET_Shutdown();
@@ -1157,6 +1251,10 @@ static void RunScenarioProcess(const ScenarioEntry *entry)
 void RunLoopbackAuthScenarioProcesses()
 {
     size_t i;
+
+    Section("loopback auth guard: the probe behind every 'no socket' check");
+    Check(ProcessProbeWorks(),
+          "a socket of this process on the port is seen, a closed one is not, another process's is ignored");
 
     Section("loopback auth guard: start-up decisions, one process each");
     printf("  (each scenario below runs in a forked child so it decides sv_loopbackTestAuth\n"

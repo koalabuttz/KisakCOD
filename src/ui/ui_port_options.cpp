@@ -98,6 +98,15 @@ constexpr Choice kMaxFpsChoices[] = {
     {"240", "240"},     {"250", "250"}, {"333", "333"},
 };
 
+// The Vita's automatic 3D resolution (vita_sceneScaleMin): how far the 3D
+// picture may shrink where the GPU needs it. 1 is off, the default.
+constexpr Choice kSceneScaleMinChoices[] = {
+    {"Off", "1"},
+    {"Down to 85%", "0.85"},
+    {"Down to 70%", "0.7"},
+    {"Down to 50%", "0.5"},
+};
+
 constexpr Choice kRendererChoices[] = {
     {"Direct3D 9", "d3d9"},
     {"Vulkan", "vulkan"},
@@ -142,6 +151,10 @@ const RowSpec kGameRows[] = {
     Slider("cg_fov", "Field of View", 65.0f, 120.0f, 1.0f, false),
     Choices("cg_drawFPS", "FPS Counter", kFpsCounterChoices, KISAK_COUNT(kFpsCounterChoices), false, false),
     Choices("com_maxfps", "Max Frame Rate", kMaxFpsChoices, KISAK_COUNT(kMaxFpsChoices), false, false),
+    // Only the Vita's renderer registers these two.
+    Choices("vita_sceneScaleMin", "Dynamic Resolution", kSceneScaleMinChoices, KISAK_COUNT(kSceneScaleMinChoices),
+            false, true),
+    YesNo("vita_sceneSharpen", "Sharpen Scaled Picture", false, true),
 };
 
 const RowSpec kDisplayRows[] = {

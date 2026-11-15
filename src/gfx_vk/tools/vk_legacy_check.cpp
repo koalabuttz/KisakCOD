@@ -410,6 +410,7 @@ public:
     void PassClear();
     void PipelinesAhead();
     void Gamma();
+    void MapReload();
 };
 
 void Check::Clear()
@@ -1852,6 +1853,167 @@ void Check::PipelinesAhead()
 // image: the back buffer keeps what was drawn, and the swapchain image shows
 // each channel through the ramp. The back buffer (128 square) is scaled to the
 // window (512 square), so the points sit in the middle of two flat halves.
+// Map loads one after another (pc-water-run-4: the fourth map load ran out of
+// GPU memory on an 8 GB card). First the memory type order on a made-up
+// discrete GPU without resizable BAR, whose device-local memory the CPU can
+// map is a 256 MB heap: staging goes to system memory, Upload memory takes
+// that heap only up to half of it, and a full type falls back to the next.
+// Then three "maps" of 200 1 MB textures, each loaded through staging and
+// destroyed, with a dynamic buffer drawn in between: what the core holds
+// after each unload does not grow, emptied blocks go back to the driver, and
+// staging that a load grew shrinks once frames stop needing it.
+void Check::MapReload()
+{
+    auto point = [this](const char *name, bool ok, const std::string &got) {
+        ++result->points;
+        if (!ok)
+        {
+            ++result->mismatched;
+            result->detail += std::string(" ") + name + "=" + got;
+        }
+    };
+    auto list = [](const std::vector<uint32_t> &order) {
+        std::string text;
+        for (uint32_t type : order)
+            text += (text.empty() ? "" : ",") + std::to_string(type);
+        return "[" + text + "]";
+    };
+    {
+        VkPhysicalDeviceMemoryProperties memory{};
+        memory.memoryHeapCount = 3;
+        memory.memoryHeaps[0] = {8ull << 30, VK_MEMORY_HEAP_DEVICE_LOCAL_BIT};
+        memory.memoryHeaps[1] = {16ull << 30, 0};
+        memory.memoryHeaps[2] = {256ull << 20, VK_MEMORY_HEAP_DEVICE_LOCAL_BIT};
+        const VkMemoryPropertyFlags local = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        const VkMemoryPropertyFlags mapped = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        memory.memoryTypeCount = 4;
+        memory.memoryTypes[0] = {local, 0};
+        memory.memoryTypes[1] = {mapped, 1};
+        memory.memoryTypes[2] = {mapped | VK_MEMORY_PROPERTY_HOST_CACHED_BIT, 1};
+        memory.memoryTypes[3] = {local | mapped, 2};
+        uint64_t used[VK_MAX_MEMORY_HEAPS] = {};
+        const auto order = [&](gfx_vk::MemoryKind kind, VkDeviceSize size) {
+            return list(gfx_vk::MemoryTypeOrder(memory, 0xf, kind, size, used));
+        };
+        const VkDeviceSize chunk = 16ull << 20;
+        std::string got = order(gfx_vk::MemoryKind::Staging, chunk);
+        point("staging_in_system_memory", got == "[1,2,3]", got);
+        got = order(gfx_vk::MemoryKind::Upload, chunk);
+        point("upload_in_the_window", got == "[3,1,2]", got);
+        got = order(gfx_vk::MemoryKind::Device, chunk);
+        point("device_off_the_window", got == "[0,3,1,2]", got);
+        got = order(gfx_vk::MemoryKind::Readback, chunk);
+        point("readback_cached", got == "[2,1,3]", got);
+        used[2] = 120ull << 20;
+        got = order(gfx_vk::MemoryKind::Upload, chunk);
+        point("upload_leaves_half_the_window", got == "[1,2,3]", got);
+        got = list(gfx_vk::MemoryTypeOrder(memory, 0x8, gfx_vk::MemoryKind::Upload, chunk, used));
+        point("upload_window_only_type", got == "[3]", got);
+        // Resizable BAR: the whole of video memory is the window.
+        memory.memoryHeaps[2].size = 8ull << 30;
+        used[2] = 1ull << 30;
+        got = order(gfx_vk::MemoryKind::Upload, chunk);
+        point("upload_resizable_bar", got == "[3,1,2]", got);
+    }
+
+    Reset();
+    constexpr uint32_t kTextures = 200;
+    constexpr uint32_t kSide = 512;
+    lg::VertexBuffer *dynamic = lg::CreateVertexBuffer(device, 64 * 1024, d3d::USAGE_DYNAMIC | d3d::USAGE_WRITEONLY,
+                                                       d3d::POOL_DEFAULT, "check map dynamic");
+    if (!dynamic)
+        return Fail("CreateVertexBuffer failed");
+    cleanup.push_back([this, dynamic] { lg::DestroyVertexBuffer(device, dynamic); });
+    auto frames = [this, dynamic](uint32_t count) {
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            Reset();
+            lg::SetStreamSource(device, 0, dynamic, 0, sizeof(Vertex));
+            Vertex *data = static_cast<Vertex *>(lg::Lock(device, dynamic, 0, 6 * sizeof(Vertex), d3d::LOCK_DISCARD));
+            if (!data)
+                return false;
+            QuadPx(data, 0, 0, 32, 32, 0.5f, Argb(255, 0, 255, 0));
+            lg::Unlock(device, dynamic);
+            lg::DrawPrimitive(device, d3d::PT_TRIANGLELIST, 0, 2);
+            lg::SetStreamSource(device, 0, nullptr, 0, 0);
+            if (lg::Present(device) == lg::PresentResult::Failed)
+                return false;
+        }
+        return true;
+    };
+    const gfx_vk::CoreStats before = gfx_vk::Stats(core);
+    std::vector<uint8_t> texels(kSide * 4, 0x80);
+    uint64_t deviceAfter[3] = {}, hostAfter[3] = {};
+    uint32_t imagesAfter[3] = {};
+    for (uint32_t map = 0; map < 3; ++map)
+    {
+        std::vector<lg::Texture *> textures;
+        for (uint32_t i = 0; i < kTextures; ++i)
+        {
+            lg::TextureDesc desc;
+            desc.kind = lg::TextureKind::Tex2D;
+            desc.width = desc.height = kSide;
+            desc.depth = 1;
+            desc.levels = 1;
+            desc.format = d3d::FMT_A8R8G8B8;
+            desc.pool = d3d::POOL_MANAGED;
+            desc.name = "check map texture";
+            lg::Texture *texture = lg::CreateTexture(device, desc);
+            lg::LockedRect locked;
+            if (!texture || !lg::LockRect(device, texture, 0, 0, nullptr, 0, locked))
+            {
+                for (lg::Texture *made : textures)
+                    lg::DestroyTexture(device, made);
+                if (texture)
+                    lg::DestroyTexture(device, texture);
+                return Fail("map " + std::to_string(map) + ": texture " + std::to_string(i) + " failed: "
+                            + lg::DeviceError(device));
+            }
+            for (uint32_t y = 0; y < kSide; ++y)
+                std::memcpy(static_cast<uint8_t *>(locked.bits) + y * locked.pitch, texels.data(), texels.size());
+            lg::UnlockRect(device, texture, 0, 0);
+            textures.push_back(texture);
+        }
+        if (!frames(3))
+            return Fail("a frame failed during map " + std::to_string(map));
+        for (lg::Texture *texture : textures)
+            lg::DestroyTexture(device, texture);
+        // Enough frames for the destroyed images to go and staging to shrink
+        // (kArenaQuietRecycles recycles of each of the two slots).
+        if (!frames(80))
+            return Fail("a frame failed after map " + std::to_string(map));
+        const gfx_vk::CoreStats &now = gfx_vk::Stats(core);
+        deviceAfter[map] = now.deviceMemoryBytes;
+        hostAfter[map] = now.hostMemoryBytes;
+        imagesAfter[map] = now.imagesAlive;
+    }
+    const gfx_vk::CoreStats &after = gfx_vk::Stats(core);
+    const auto mb = [](uint64_t bytes) { return std::to_string(bytes >> 20) + "MB"; };
+    std::printf("legacy_check.map_reload=device %s %s %s %s host %s %s %s %s images %u %u %u %u "
+                "empty_blocks_freed %u arena_chunks_freed %u fallbacks %u\n",
+                mb(before.deviceMemoryBytes).c_str(), mb(deviceAfter[0]).c_str(), mb(deviceAfter[1]).c_str(),
+                mb(deviceAfter[2]).c_str(), mb(before.hostMemoryBytes).c_str(), mb(hostAfter[0]).c_str(),
+                mb(hostAfter[1]).c_str(), mb(hostAfter[2]).c_str(), before.imagesAlive, imagesAfter[0],
+                imagesAfter[1], imagesAfter[2], after.emptyBlocksFreed - before.emptyBlocksFreed,
+                after.arenaChunksFreed - before.arenaChunksFreed, after.memoryFallbacks - before.memoryFallbacks);
+    point("images_destroyed", imagesAfter[2] == before.imagesAlive && imagesAfter[0] == before.imagesAlive,
+          std::to_string(imagesAfter[2]));
+    // 200 MB of textures fill three or four 64 MB blocks; after the unload
+    // one empty block stays for the next request and the others go back.
+    point("device_memory_back", deviceAfter[0] <= before.deviceMemoryBytes + (64ull << 20), mb(deviceAfter[0]));
+    point("device_memory_steady", deviceAfter[2] <= deviceAfter[0], mb(deviceAfter[2]));
+    point("empty_blocks_freed", after.emptyBlocksFreed - before.emptyBlocksFreed >= 6,
+          std::to_string(after.emptyBlocksFreed - before.emptyBlocksFreed));
+    // Each load grew a slot's staging past its first 16 MB chunk.
+    point("staging_shrinks", after.arenaChunksFreed > before.arenaChunksFreed,
+          std::to_string(after.arenaChunksFreed - before.arenaChunksFreed));
+    // Each frame slot keeps its first staging chunk: the second map's load
+    // may be the first to give the other slot one.
+    point("mapped_memory_steady", hostAfter[2] <= hostAfter[1], mb(hostAfter[2]));
+    point("mapped_memory_back", hostAfter[0] <= before.hostMemoryBytes + (32ull << 20), mb(hostAfter[0]));
+    Reset();
+}
+
 void Check::Gamma()
 {
     auto point = [this](const char *name, bool ok, const std::string &got = std::string()) {
@@ -2106,6 +2268,7 @@ int Run(const Options &options)
         {"pass_clear", &Check::PassClear},
         {"pipelines_ahead", &Check::PipelinesAhead},
         {"gamma", &Check::Gamma},
+        {"map_reload", &Check::MapReload},
     };
     const char *failedStage = nullptr;
     std::string failedReason;

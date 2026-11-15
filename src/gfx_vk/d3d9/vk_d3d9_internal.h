@@ -550,6 +550,8 @@ public:
     void DetachWindow();
     // Under FrontLock (LogDeviceStats).
     void LogStats(bool reset);
+    // Under FrontLock (LogDeviceMemory).
+    void LogMemory(const char *when);
     // Under FrontLock (vk_d3d9.h ModernSceneBegin and ModernSceneDone): the
     // scene is render target 0 and the depth surface as they are set now, or
     // the linear-light image standing in for the back buffer.

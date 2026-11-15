@@ -19,6 +19,7 @@
 #include "r_sunshadow.h" // SCENE_VIEW_CAMERA
 #include "r_scene.h"
 #include <universal/profile.h>
+#include <linux/sys_perf.h>
 
 #ifdef KISAK_MP
 #include <cgame_mp/cg_local_mp.h>
@@ -2424,6 +2425,7 @@ void R_AddCellSurfacesAndCullGroupsInFrustumDelayed(
     DpvsDynamicCellCmd dpvsDynamicCell; // [esp+0h] [ebp-18h] BYREF
     DpvsStaticCellCmd dpvsStaticCell; // [esp+Ch] [ebp-Ch] BYREF
 
+    SysPerfScope perfScope(SYS_PERF_PROBE_CELLS_HAND_OVER);
     dpvsStaticCell.cell = cell;
     dpvsStaticCell.planes = planes;
     dpvsStaticCell.planeCount = planeCount;

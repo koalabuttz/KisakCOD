@@ -936,8 +936,10 @@ void R_GetViewport(GfxCmdBufSourceState *source, GfxViewport *outViewport)
         // viewport, stretched to all of it before the HUD.
         if (source->viewMode != VIEW_MODE_2D && KISAK_GXM_SCENE_SCALE() < 1.0f)
         {
-            outViewport->width = gfx_gxm::SceneScaled(outViewport->width, KISAK_GXM_SCENE_SCALE());
-            outViewport->height = gfx_gxm::SceneScaled(outViewport->height, KISAK_GXM_SCENE_SCALE());
+            outViewport->width =
+                gfx_gxm::SceneScaled(outViewport->width, gfx_gxm::SceneScaleX(KISAK_GXM_SCENE_SCALE()));
+            outViewport->height =
+                gfx_gxm::SceneScaled(outViewport->height, gfx_gxm::SceneScaleY(KISAK_GXM_SCENE_SCALE()));
         }
 #endif
     }
