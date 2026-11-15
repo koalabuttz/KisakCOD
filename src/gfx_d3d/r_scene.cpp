@@ -4,6 +4,7 @@
 #include <qcommon/mem_track.h>
 #include "r_init.h"
 #include "r_debug.h"
+#include "r_reflection_probe.h"
 #include "r_dvars.h"
 #include <qcommon/threads.h>
 #include <xanim/dobj_utils.h>
@@ -1319,7 +1320,7 @@ static const GfxViewInfo *s_modernSceneView;
 void R_ModernJitterScene(const refdef_s *refdef, GfxViewParms *viewParms)
 {
     const GfxModernHooks *hooks = R_ModernHooks();
-    if (!hooks || !hooks->jitterPixels || refdef->width <= 0 || refdef->height <= 0)
+    if (!hooks || !hooks->jitterPixels || refdef->width <= 0 || refdef->height <= 0 || R_ModernProbeCaptureActive())
         return;
     float x = 0.0f, y = 0.0f;
     hooks->jitterPixels(hooks->user, s_modernSceneCount++, &x, &y);
@@ -2546,6 +2547,13 @@ static GfxModernScene &R_ModernScene(const GfxViewInfo *viewInfo)
     s_modernLastOrigin[1] = parms.origin[1];
     s_modernLastOrigin[2] = parms.origin[2];
     s_modernHaveOrigin = true;
+    // A reflection probe's face (R_ModernCaptureProbes) looks elsewhere than
+    // the last scene, and the first scene of play after the probes is cut too.
+    if (R_ModernProbeCaptureActive())
+    {
+        modern.cut = true;
+        s_modernHaveOrigin = false;
+    }
     // The glow, as RB_ApplyGlowFilter sizes it: the radius is in 480-line
     // units, quartered twice on its way to the quarter-size glow image's
     // pixels; four of those make one of the scene's.

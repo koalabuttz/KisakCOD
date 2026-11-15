@@ -543,6 +543,7 @@ public:
     void ModernReflections();
     void ModernProbes();
     void ModernPlanar();
+    void ModernProbeCapture();
     void Bench();
     void BenchRuns();
     void BenchFrames(bool runs);
@@ -2954,6 +2955,89 @@ void Check::Multisample()
 // engine applies, a pixel the jitter covers in some frames and not in others
 // ends between the two colours, where without the pass it would be one or the
 // other; a scene with no depth surface is refused.
+// Re-capturing the reflection probes (vk_d3d9.h ModernProbeCapture): wanted
+// by default with linear light and the probe filter, not with
+// KISAK_VK_MODERN_PROBES_CAPTURE=0. With the switch at 1, a scene done while
+// capturing is read back in linear light: its clear and an opaque quad come
+// back, a rectangle at a time, as the light their colours decode to; a
+// rectangle outside the scene's image, or any once capturing is off, is
+// refused. Without it nothing is drawn (so a full run's scene counts stay as
+// they are).
+void Check::ModernProbeCapture()
+{
+    const auto envIs = [](const char *name, const char *value) {
+#if defined(_MSC_VER)
+        char *env = nullptr;
+        size_t envLength = 0;
+        const bool is = _dupenv_s(&env, &envLength, name) == 0 && env && !std::strcmp(env, value);
+        std::free(env);
+        return is;
+#else
+        const char *env = std::getenv(name);
+        return env && !std::strcmp(env, value);
+#endif
+    };
+    // On by default; the scene draws and reads only when asked for by name
+    // (=1), so a full run's counts stay as they were.
+    const bool wanted = !envIs("KISAK_VK_MODERN_PROBES_CAPTURE", "0") && !envIs("KISAK_VK_MODERN_LINEAR", "0")
+                        && !envIs("KISAK_VK_MODERN_PROBES", "0");
+    Equal("probe_capture_wanted", front::ModernProbeCaptureWanted(device), wanted);
+    std::vector<float> rgb(16 * 16 * 3, -1.0f);
+    if (!wanted || !envIs("KISAK_VK_MODERN_PROBES_CAPTURE", "1"))
+    {
+        Equal("probe_capture_nothing", front::ModernProbeCaptureRead(device, 0, 0, 1, 1, rgb.data()), false);
+        return;
+    }
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    // Every pixel of a rectangle read back within 0.01 of the light a colour
+    // decodes to.
+    const auto lightIs = [&](uint32_t color) {
+        const float want[3] = {static_cast<float>((color >> 16) & 0xff), static_cast<float>((color >> 8) & 0xff),
+                               static_cast<float>(color & 0xff)};
+        for (size_t i = 0; i < rgb.size(); ++i)
+        {
+            const float v = want[i % 3] / 255.0f;
+            const float light = v <= 0.04045f ? v / 12.92f : std::pow((v + 0.055f) / 1.055f, 2.4f);
+            if (std::fabs(rgb[i] - light) > 0.01f)
+                return false;
+        }
+        return true;
+    };
+    front::ModernProbeCapture(device, true);
+    Reset(Argb(255, 90, 90, 90));
+    front::ModernSceneBegin(device);
+    device->SetDepthStencilSurface(depth);
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 40, 120, 200), 1.0f, 0),
+       "Clear(scene)");
+    DrawQuad(0, 0, 64, kSize, 0.5f, Argb(255, 10, 128, 250));
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    view.width = kSize;
+    view.height = kSize;
+    view.cut = true;
+    Equal("probe_capture_done", front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
+    const bool clear = front::ModernProbeCaptureRead(device, 88, 40, 16, 16, rgb.data());
+    Equal("probe_capture_read_clear", clear, true);
+    if (clear)
+        Equal("probe_capture_clear_light", lightIs(Argb(255, 40, 120, 200)), true);
+    const bool quad = front::ModernProbeCaptureRead(device, 24, 40, 16, 16, rgb.data());
+    Equal("probe_capture_read_quad", quad, true);
+    if (quad)
+        Equal("probe_capture_quad_light", lightIs(Argb(255, 10, 128, 250)), true);
+    // Past the scene image's right edge.
+    Equal("probe_capture_outside", front::ModernProbeCaptureRead(device, 4096, 0, 16, 16, rgb.data()), false);
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    front::ModernProbeCapture(device, false);
+    Equal("probe_capture_off", front::ModernProbeCaptureRead(device, 24, 40, 16, 16, rgb.data()), false);
+    device->SetDepthStencilSurface(nullptr);
+    SafeRelease(depth);
+}
+
 // Planar reflections (vk_d3d9.h ModernPlanarBegin): two frames, each a scene
 // in linear light (a grey clear) and then a planar view of half its size, in
 // which the renderer sets the back buffer and the scene's depth as its targets
@@ -7210,6 +7294,7 @@ int Run(const Options &options)
         {"modern_reflections", &Check::ModernReflections, true},
         {"modern_probes", &Check::ModernProbes, true},
         {"modern_planar", &Check::ModernPlanar, true},
+        {"modern_probe_capture", &Check::ModernProbeCapture, true},
         {"modern_fog", &Check::ModernFog, true},
         {"modern_live", &Check::ModernLive, true},
         // A scene that starts with a cut after modern_live's switch changes

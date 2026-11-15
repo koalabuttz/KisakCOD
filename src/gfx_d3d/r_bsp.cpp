@@ -1,6 +1,7 @@
 #include <universal/q_shared.h>
 #include "r_bsp.h"
 #include "r_init.h"
+#include "r_reflection_probe.h"
 #include "r_dvars.h"
 #include "r_model_lighting.h"
 #include "r_staticmodelcache.h"
@@ -175,6 +176,8 @@ void R_LoadWorld(char *name, int *checksum, int savegame)
                 hooks->reflectionProbe(hooks->user, dx.device, image->texture.cubemap);
         }
     }
+    // The Modern path may draw them again once play starts.
+    R_ModernProbesLoaded();
     for (lightmapIndex = 0; lightmapIndex < rgp.world->lightmapCount; ++lightmapIndex)
     {
         rgp.world->lightmapPrimaryTextures[lightmapIndex].basemap = rgp.world->lightmaps[lightmapIndex].primary->texture.basemap;

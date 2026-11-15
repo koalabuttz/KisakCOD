@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "r_reflection_probe.h"
+#include <algorithm>
 #include "r_dvars.h"
 #include <qcommon/com_bsp.h>
 #include "r_bsp.h"
@@ -12,6 +13,9 @@
 #include <universal/com_files.h>
 #include <universal/q_parse.h>
 #include "r_image.h"
+#include "r_init.h"
+#include "rhi/r_rhi.h"
+#include "rhi/r_rhi_modern.h"
 #include <win32/win_local.h>
 
 int s_numColorCorrectionDataEntries;
@@ -545,4 +549,561 @@ void R_GenerateReflections(char *mapname, GfxReflectionProbe *probes, uint32_t p
         }
         Dvar_SetBool(r_reflectionProbeGenerate, 0);
     }
+}
+// ---- The Modern path's own probes (GfxModernHooks::probeCaptureWanted) ----------------
+//
+// docs/vulkan-modern.md "Reflection probes". Once a world, after its first
+// frames of play, each of the world's probes (index 0 is the default probe,
+// not one of the map's) is drawn again from its origin: six square views of
+// 90 degrees, one along each face of the cube, through the Modern path with
+// the back end reading each scene's light back (linear, before bloom,
+// exposure and the tonemap). Each texel of the probe's first level is the
+// light the views saw along its direction (two by two of the views' pixels),
+// stored in the game's encoding; the back end then makes the blurrier levels
+// again from it (GfxModernHooks::reflectionProbe).
+
+static bool s_modernProbeCapturing;
+// Whether the world loaded last still has its probes to draw.
+static bool s_modernProbesPending;
+
+bool R_ModernProbeCaptureActive() { return s_modernProbeCapturing; }
+
+void R_ModernProbesLoaded() { s_modernProbesPending = true; }
+
+// The direction through (u, v) of a face of a D3D9 cube (+X, -X, +Y, -Y, +Z,
+// -Z), u and v from -1 to 1 across and down it; the game reads its probes
+// with world directions. Not normalised.
+static void R_ModernCubeDirection(int face, float u, float v, float *d)
+{
+    switch (face)
+    {
+    case 0: d[0] = 1.0f; d[1] = -v; d[2] = -u; break;
+    case 1: d[0] = -1.0f; d[1] = -v; d[2] = u; break;
+    case 2: d[0] = u; d[1] = 1.0f; d[2] = v; break;
+    case 3: d[0] = u; d[1] = -1.0f; d[2] = -v; break;
+    case 4: d[0] = u; d[1] = -v; d[2] = 1.0f; break;
+    default: d[0] = -u; d[1] = -v; d[2] = -1.0f; break;
+    }
+}
+
+static float R_ModernEncodeSrgb(float light)
+{
+    const float v = light > 0.0f ? light : 0.0f;
+    return v <= 0.0031308f ? v * 12.92f : 1.055f * powf(v, 1.0f / 2.4f) - 0.055f;
+}
+
+static float R_ModernDecodeSrgb(float value)
+{
+    const float v = value > 0.0f ? value : 0.0f;
+    return v <= 0.04045f ? v / 12.92f : powf((v + 0.055f) / 1.055f, 2.4f);
+}
+
+// The game's encoding of a probe texel (R_ColorCorrectBGRAPixel): the display
+// value's rgb over its largest channel (at least 0.1, at most 4), alpha that
+// channel over 4. BGRA.
+static void R_ModernStoreProbeTexel(const float *light, uint8_t *texel)
+{
+    float value[3];
+    float largest = 0.1f;
+    for (int c = 0; c < 3; ++c)
+    {
+        value[c] = R_ModernEncodeSrgb(light[c]);
+        value[c] = value[c] > 4.0f ? 4.0f : value[c];
+        largest = value[c] > largest ? value[c] : largest;
+    }
+    int alpha = (int)ceilf(largest / 4.0f * 255.0f);
+    alpha = alpha < 1 ? 1 : alpha > 255 ? 255 : alpha;
+    const float scale = (float)alpha / 255.0f * 4.0f;
+    for (int c = 0; c < 3; ++c)
+    {
+        int channel = (int)(value[c] / scale * 255.0f + 0.5f);
+        channel = channel < 0 ? 0 : channel > 255 ? 255 : channel;
+        texel[2 - c] = (uint8_t)channel;
+    }
+    texel[3] = (uint8_t)alpha;
+}
+
+// The mean light (linear, the channels' mean) of a face's first level as the
+// game stores it.
+static float R_ModernProbeTexelLight(const uint8_t *texel)
+{
+    const float scale = (float)texel[3] / 255.0f * 4.0f;
+    float sum = 0.0f;
+    for (int c = 0; c < 3; ++c)
+        sum += R_ModernDecodeSrgb((float)texel[2 - c] / 255.0f * scale);
+    return sum / 3.0f;
+}
+
+// The light the game's encoding can hold in a channel (a display value of 4).
+static float R_ModernProbeLightLimit()
+{
+    static const float limit = R_ModernDecodeSrgb(4.0f);
+    return limit;
+}
+
+// One face: a frame of the probe's origin looking along the face, which the
+// back end reads back. size is the view's inner square (a pixel of border
+// around it, as the game's own cube shots). overlay, when given, draws the
+// frame's 2D on top (the loading screen), after the scene that is read.
+static bool R_ModernCaptureFace(const GfxModernHooks *hooks, const float *origin, int face, int size, float *rgb,
+                                void (*overlay)())
+{
+    float forward[3], down[3], up[3], left[3];
+    R_ModernCubeDirection(face, 0.0f, 0.0f, forward);
+    // The direction's change down the face: v from -1 to 1.
+    float below[3];
+    R_ModernCubeDirection(face, 0.0f, 1.0f, below);
+    for (int i = 0; i < 3; ++i)
+    {
+        down[i] = below[i] - forward[i];
+        up[i] = -down[i];
+    }
+    // Right-handed: forward x left = up.
+    Vec3Cross(up, forward, left);
+
+    refdef_s *refdef = (refdef_s *)Z_Malloc(sizeof(refdef_s), "R_ModernCaptureFace", 0);
+    memset(refdef, 0, sizeof(*refdef));
+    refdef->x = 0;
+    refdef->y = 0;
+    refdef->width = size + 2;
+    refdef->height = size + 2;
+    // The inner square spans exactly 90 degrees.
+    refdef->tanHalfFovX = (float)(size + 2) / (float)size;
+    refdef->tanHalfFovY = refdef->tanHalfFovX;
+    refdef->zNear = 0.0f;
+    for (int i = 0; i < 3; ++i)
+    {
+        refdef->vieworg[i] = origin[i];
+        refdef->viewaxis[0][i] = forward[i];
+        refdef->viewaxis[1][i] = left[i];
+        refdef->viewaxis[2][i] = up[i];
+    }
+    refdef->localClientNum = 0;
+    refdef->time = 0;
+    refdef->blurRadius = 0.0f;
+    refdef->useScissorViewport = 0;
+    R_InitPrimaryLights(refdef->primaryLights);
+
+    FxCmd cmd;
+    R_BeginFrame();
+    R_BeginSharedCmdList();
+    R_ClearClientCmdList2D();
+    R_ClearScene(0);
+    FX_BeginUpdate(0);
+    R_SetLodOrigin(refdef);
+    const float zfar = R_GetFarPlaneDist();
+    FX_SetNextUpdateCamera(0, refdef, zfar);
+    FX_FillUpdateCmd(0, &cmd);
+    R_UpdateSpotLightEffect(&cmd);
+    R_UpdateNonDependentEffects(&cmd);
+    R_UpdateRemainingEffects(&cmd);
+    R_RenderScene(refdef);
+    if (overlay)
+        overlay();
+    R_EndFrame();
+    R_IssueRenderCommands(0xFFFFFFFF);
+    R_SyncRenderThread();
+    Z_Free(refdef, 0);
+    return hooks->probeCaptureRead(hooks->user, dx.device, 1, 1, size, size, rgb);
+}
+
+// A probe drawn again: the light along each texel's direction of its first
+// level, by face, and the mean light of the probe as stored and as drawn.
+struct ModernCapturedProbe
+{
+    uint32_t index;
+    int edge;
+    float *light;
+    float before;
+    float after;
+    // The same over the face looking up (+Z), where the sky is.
+    float beforeUp;
+    float afterUp;
+};
+
+
+static bool R_ModernDrawProbe(const GfxModernHooks *hooks, const GfxReflectionProbe &probe, int edge, float *rgb[6],
+                              float *light, void (*overlay)())
+{
+    const int size = 2 * edge;
+    for (int face = 0; face < 6; ++face)
+    {
+        if (!R_ModernCaptureFace(hooks, probe.origin, face, size, rgb[face], overlay))
+            return false;
+    }
+    for (int face = 0; face < 6; ++face)
+    {
+        // Each texel: the light along its direction in the view of the same
+        // face (its forward is the face's centre), averaged over the two by
+        // two pixels around where the direction lands.
+        float forward[3], below[3], up[3], left[3];
+        R_ModernCubeDirection(face, 0.0f, 0.0f, forward);
+        R_ModernCubeDirection(face, 0.0f, 1.0f, below);
+        for (int i = 0; i < 3; ++i)
+            up[i] = forward[i] - below[i];
+        Vec3Cross(up, forward, left);
+        for (int y = 0; y < edge; ++y)
+        {
+            for (int x = 0; x < edge; ++x)
+            {
+                float d[3];
+                R_ModernCubeDirection(face, 2.0f * ((float)x + 0.5f) / (float)edge - 1.0f,
+                                      2.0f * ((float)y + 0.5f) / (float)edge - 1.0f, d);
+                const float along = Vec3Dot(d, forward);
+                // Across (right is -left) and down the view, -1 to 1.
+                const float sx = -Vec3Dot(d, left) / along;
+                const float sy = -Vec3Dot(d, up) / along;
+                // The view's pixel centres are at (i + 0.5) / size * 2 - 1.
+                const float px = (sx + 1.0f) * 0.5f * (float)size - 0.5f;
+                const float py = (sy + 1.0f) * 0.5f * (float)size - 0.5f;
+                int x0 = (int)floorf(px), y0 = (int)floorf(py);
+                x0 = x0 < 0 ? 0 : x0 > size - 2 ? size - 2 : x0;
+                y0 = y0 < 0 ? 0 : y0 > size - 2 ? size - 2 : y0;
+                float *out = &light[3 * ((face * edge + y) * edge + x)];
+                out[0] = out[1] = out[2] = 0.0f;
+                for (int dy = 0; dy < 2; ++dy)
+                    for (int dx = 0; dx < 2; ++dx)
+                    {
+                        const float *pixel = &rgb[face][3 * ((y0 + dy) * size + x0 + dx)];
+                        for (int c = 0; c < 3; ++c)
+                            out[c] += 0.25f * pixel[c];
+                    }
+            }
+        }
+    }
+    return true;
+}
+
+// The mean light of a probe as stored (its first level), and of its new light
+// as the encoding would hold it.
+static bool R_ModernProbeMeans(IDirect3DCubeTexture9 *cube, int edge, const float *light, ModernCapturedProbe *kept)
+{
+    float stored = 0.0f, drawn = 0.0f, storedUp = 0.0f, drawnUp = 0.0f;
+    for (int face = 0; face < 6; ++face)
+    {
+        D3DLOCKED_RECT locked;
+        if (FAILED(R_HW_LockRect(cube, (D3DCUBEMAP_FACES)face, 0, &locked, nullptr, 0)))
+            return false;
+        for (int y = 0; y < edge; ++y)
+        {
+            const uint8_t *row = (const uint8_t *)locked.pBits + y * locked.Pitch;
+            for (int x = 0; x < edge; ++x)
+            {
+                const float texel = R_ModernProbeTexelLight(&row[4 * x]);
+                stored += texel;
+                storedUp += face == 4 ? texel : 0.0f;
+            }
+        }
+        R_HW_UnlockRect(cube, (D3DCUBEMAP_FACES)face, 0);
+    }
+    const int count = 6 * edge * edge;
+    for (int i = 0; i < 3 * count; ++i)
+    {
+        const float held = light[i] < R_ModernProbeLightLimit() ? light[i] : R_ModernProbeLightLimit();
+        drawn += held;
+        drawnUp += i / (3 * edge * edge) == 4 ? held : 0.0f;
+    }
+    kept->before = stored / (float)count;
+    kept->after = drawn / (float)(3 * count);
+    kept->beforeUp = storedUp / (float)(edge * edge);
+    kept->afterUp = drawnUp / (float)(3 * edge * edge);
+    return true;
+}
+
+// KISAK_VK_MODERN_PROBES_DUMP=1: each probe's first level, as stored and as
+// drawn again, is written to the game's folder as a picture
+// (modern_probe_<map>_<n>_stock.ppm and _new.ppm): the six faces side by side
+// (+X, -X, +Y, -Y, +Z, -Z), in display values, light above white clipped, and
+// below them the same at a quarter of the light, so what is above white shows
+// too.
+static bool R_ModernProbeDumpOn()
+{
+    static const bool on = [] {
+        const char *text = getenv("KISAK_VK_MODERN_PROBES_DUMP");
+        return text && *text && *text != '0';
+    }();
+    return on;
+}
+
+static uint8_t R_ModernDumpChannel(float light)
+{
+    const float v = R_ModernEncodeSrgb(light);
+    return (uint8_t)(v >= 1.0f ? 255 : v <= 0.0f ? 0 : (int)(v * 255.0f + 0.5f));
+}
+
+static void R_ModernDumpProbe(uint32_t index, int edge, const float *light, const char *which)
+{
+    const char *name = rgp.world && rgp.world->name ? rgp.world->name : "map";
+    const char *slash = strrchr(name, '/');
+    name = slash ? slash + 1 : name;
+    char base[64];
+    I_strncpyz(base, name, sizeof(base));
+    if (char *dot = strchr(base, '.'))
+        *dot = 0;
+    char path[128];
+    Com_sprintf(path, sizeof(path), "modern_probe_%s_%02u_%s.ppm", base, index, which);
+    FILE *file = fopen(path, "wb");
+    if (!file)
+    {
+        Com_Printf(CON_CHANNEL_GFX, "modern: could not write %s\n", path);
+        return;
+    }
+    const int width = 6 * edge;
+    fprintf(file, "P6\n%d %d\n255\n", width, 2 * edge);
+    uint8_t *row = (uint8_t *)Z_Malloc(3 * width, "R_ModernDumpProbe", 0);
+    for (int half = 0; half < 2; ++half)
+    {
+        const float scale = half ? 0.25f : 1.0f;
+        for (int y = 0; y < edge; ++y)
+        {
+            for (int face = 0; face < 6; ++face)
+                for (int x = 0; x < edge; ++x)
+                    for (int c = 0; c < 3; ++c)
+                        row[3 * (face * edge + x) + c] =
+                            R_ModernDumpChannel(scale * light[3 * ((face * edge + y) * edge + x) + c]);
+            fwrite(row, 1, 3 * width, file);
+        }
+    }
+    Z_Free(row, 0);
+    fclose(file);
+    Com_Printf(CON_CHANNEL_GFX, "modern: wrote %s\n", path);
+}
+
+static bool R_ModernWriteProbe(IDirect3DCubeTexture9 *cube, uint32_t index, int edge, const float *light,
+                               float scale)
+{
+    float *dump = R_ModernProbeDumpOn()
+                      ? (float *)Z_Malloc(sizeof(float) * 3 * 6 * edge * edge, "R_ModernWriteProbe", 0)
+                      : nullptr;
+    for (int face = 0; face < 6; ++face)
+    {
+        D3DLOCKED_RECT locked;
+        if (FAILED(R_HW_LockRect(cube, (D3DCUBEMAP_FACES)face, 0, &locked, nullptr, 0)))
+        {
+            if (dump)
+                Z_Free(dump, 0);
+            return false;
+        }
+        for (int y = 0; y < edge; ++y)
+        {
+            uint8_t *row = (uint8_t *)locked.pBits + y * locked.Pitch;
+            for (int x = 0; x < edge; ++x)
+            {
+                if (dump)
+                {
+                    // The stored texel's light, before it is written over.
+                    const uint8_t *texel = &row[4 * x];
+                    const float texelScale = (float)texel[3] / 255.0f * 4.0f;
+                    for (int c = 0; c < 3; ++c)
+                        dump[3 * ((face * edge + y) * edge + x) + c] =
+                            R_ModernDecodeSrgb((float)texel[2 - c] / 255.0f * texelScale);
+                }
+                const float *in = &light[3 * ((face * edge + y) * edge + x)];
+                const float scaled[3] = {in[0] * scale, in[1] * scale, in[2] * scale};
+                R_ModernStoreProbeTexel(scaled, &row[4 * x]);
+            }
+        }
+        R_HW_UnlockRect(cube, (D3DCUBEMAP_FACES)face, 0);
+    }
+    if (dump)
+    {
+        R_ModernDumpProbe(index, edge, dump, "stock");
+        for (int i = 0; i < 3 * 6 * edge * edge; ++i)
+            dump[i] = light[i] * scale;
+        R_ModernDumpProbe(index, edge, dump, "new");
+        Z_Free(dump, 0);
+    }
+    return true;
+}
+
+// Each new probe takes its stock probe's spread of light (David's choice
+// 2026-11-15: on, at the old brightness, so mp_bog's water keeps its glints).
+// Drawn as they are the new probes came out about half as bright (PC probes
+// run 2); scaled to the stock mean (runs 3 and 4) their dark parts rose and
+// their highlights stayed low. The stock probes went through each probe's
+// colour correction when the map was built, which likely steepens them, and a
+// fast file does not keep it (run 5's dumps: the stock probes' brightest 0.1% at a
+// quarter light 121 to 250 of 255, the new ones 31 to 205). So each texel's
+// light, the channels' mean, is moved to the stock probe's light at the same
+// place in the order of all its texels (texels of equal light alike), and its
+// channels follow it: what the probe shows and its colours are the Modern
+// path's, how bright and how steep it is the stock probe's.
+static bool R_ModernMatchProbe(IDirect3DCubeTexture9 *cube, int edge, float *light, float *mean, float *meanUp)
+{
+    const int count = 6 * edge * edge;
+    float *stock = (float *)Z_Malloc(sizeof(float) * count, "R_ModernMatchProbe", 0);
+    float *drawn = (float *)Z_Malloc(sizeof(float) * count, "R_ModernMatchProbe", 0);
+    float *order = (float *)Z_Malloc(sizeof(float) * count, "R_ModernMatchProbe", 0);
+    bool read = true;
+    for (int face = 0; face < 6 && read; ++face)
+    {
+        D3DLOCKED_RECT locked;
+        if (FAILED(R_HW_LockRect(cube, (D3DCUBEMAP_FACES)face, 0, &locked, nullptr, 0)))
+        {
+            read = false;
+            break;
+        }
+        for (int y = 0; y < edge; ++y)
+        {
+            const uint8_t *row = (const uint8_t *)locked.pBits + y * locked.Pitch;
+            for (int x = 0; x < edge; ++x)
+                stock[(face * edge + y) * edge + x] = R_ModernProbeTexelLight(&row[4 * x]);
+        }
+        R_HW_UnlockRect(cube, (D3DCUBEMAP_FACES)face, 0);
+    }
+    if (read)
+    {
+        for (int i = 0; i < count; ++i)
+        {
+            const float *in = &light[3 * i];
+            drawn[i] = (in[0] + in[1] + in[2]) / 3.0f;
+            order[i] = drawn[i];
+        }
+        std::sort(stock, stock + count);
+        std::sort(order, order + count);
+        float sum = 0.0f, sumUp = 0.0f;
+        for (int i = 0; i < count; ++i)
+        {
+            // Its place among the drawn texels, the middle of those as bright.
+            const int first = (int)(std::lower_bound(order, order + count, drawn[i]) - order);
+            const int last = (int)(std::upper_bound(order, order + count, drawn[i]) - order) - 1;
+            const float at = 0.5f * (float)(first + last);
+            const int below = (int)at;
+            const int above = below + 1 < count ? below + 1 : below;
+            const float t = at - (float)below;
+            const float target = stock[below] + (stock[above] - stock[below]) * t;
+            float *out = &light[3 * i];
+            if (drawn[i] > 1.0e-5f)
+            {
+                const float factor = target / drawn[i];
+                for (int c = 0; c < 3; ++c)
+                    out[c] *= factor;
+            }
+            else
+                out[0] = out[1] = out[2] = target;
+            sum += target;
+            sumUp += i / (edge * edge) == 4 ? target : 0.0f;
+        }
+        *mean = sum / (float)count;
+        *meanUp = sumUp / (float)(edge * edge);
+    }
+    Z_Free(order, 0);
+    Z_Free(drawn, 0);
+    Z_Free(stock, 0);
+    return read;
+}
+
+void R_ModernCaptureProbes(void (*overlay)())
+{
+    if (!s_modernProbesPending || !rgp.world || !rg.registered || r_norefresh->current.enabled)
+        return;
+    // KISAK_VK_MODERN_PROBES_AT_PLAY=1 waits for play instead of the loading
+    // screen (the effects of the map, such as its lamps' glows, have started
+    // by then), to compare the two.
+    static const bool atPlay = [] {
+        const char *text = getenv("KISAK_VK_MODERN_PROBES_AT_PLAY");
+        return text && *text && *text != '0';
+    }();
+    if (overlay && atPlay)
+        return;
+    s_modernProbesPending = false;
+    const GfxModernHooks *hooks = R_ModernHooks();
+    if (!hooks || !hooks->probeCaptureWanted || !hooks->probeCapture || !hooks->probeCaptureRead
+        || !hooks->reflectionProbe || !hooks->probeCaptureWanted(hooks->user, dx.device))
+        return;
+    const int started = Sys_Milliseconds();
+    int skipped = 0;
+    float *rgb[6] = {};
+    int rgbEdge = 0;
+    const uint32_t probeCount = rgp.world->reflectionProbeCount;
+    ModernCapturedProbe *probes =
+        (ModernCapturedProbe *)Z_Malloc(sizeof(ModernCapturedProbe) * (probeCount ? probeCount : 1),
+                                        "R_ModernCaptureProbes", 0);
+    uint32_t captured = 0;
+    float before = 0.0f, after = 0.0f;
+
+    // First every probe is drawn, and its light kept.
+    s_modernProbeCapturing = true;
+    hooks->probeCapture(hooks->user, dx.device, true);
+    for (uint32_t probeIndex = 1; probeIndex < probeCount; ++probeIndex)
+    {
+        const GfxReflectionProbe &probe = rgp.world->reflectionProbes[probeIndex];
+        IDirect3DCubeTexture9 *cube = probe.reflectionImage ? probe.reflectionImage->texture.cubemap : nullptr;
+        D3DSURFACE_DESC desc;
+        if (!cube || FAILED(R_HW_GetLevelDesc(cube, 0, &desc)) || desc.Format != D3DFMT_A8R8G8B8 || desc.Width < 2
+            || desc.Width > 256 || desc.Width != desc.Height)
+        {
+            ++skipped;
+            continue;
+        }
+        const int edge = (int)desc.Width;
+        // Two by two of the views' pixels for each texel.
+        const int size = 2 * edge;
+        if (edge != rgbEdge)
+        {
+            for (int face = 0; face < 6; ++face)
+            {
+                if (rgb[face])
+                    Z_Free(rgb[face], 0);
+                rgb[face] = (float *)Z_Malloc(sizeof(float) * 3 * size * size, "R_ModernCaptureProbes", 0);
+            }
+            rgbEdge = edge;
+        }
+        ModernCapturedProbe &kept = probes[captured];
+        kept.index = probeIndex;
+        kept.edge = edge;
+        kept.light = (float *)Z_Malloc(sizeof(float) * 3 * 6 * edge * edge, "R_ModernCaptureProbes", 0);
+        if (!R_ModernDrawProbe(hooks, probe, edge, rgb, kept.light, overlay)
+            || !R_ModernProbeMeans(cube, edge, kept.light, &kept))
+        {
+            Z_Free(kept.light, 0);
+            ++skipped;
+            continue;
+        }
+        before += kept.before;
+        after += kept.after;
+        ++captured;
+    }
+    hooks->probeCapture(hooks->user, dx.device, false);
+    s_modernProbeCapturing = false;
+    for (int face = 0; face < 6; ++face)
+    {
+        if (rgb[face])
+            Z_Free(rgb[face], 0);
+    }
+
+    // Then each is matched to its stock probe's light, written over its first
+    // level, and its blurrier levels made again.
+    int written = 0;
+    float matched = 0.0f;
+    for (uint32_t i = 0; i < captured; ++i)
+    {
+        ModernCapturedProbe &kept = probes[i];
+        const GfxReflectionProbe &probe = rgp.world->reflectionProbes[kept.index];
+        IDirect3DCubeTexture9 *cube = probe.reflectionImage->texture.cubemap;
+        float matchedMean = 0.0f, matchedUp = 0.0f;
+        if (R_ModernMatchProbe(cube, kept.edge, kept.light, &matchedMean, &matchedUp)
+            && R_ModernWriteProbe(cube, kept.index, kept.edge, kept.light, 1.0f))
+        {
+            hooks->reflectionProbe(hooks->user, dx.device, cube);
+            ++written;
+            matched += matchedMean;
+            if (written <= 64)
+                Com_Printf(CON_CHANNEL_GFX,
+                           "modern: probe %u at (%.0f %.0f %.0f): mean light %.3f as stored, %.3f drawn, %.3f "
+                           "matched; looking up %.3f as stored, %.3f drawn, %.3f matched\n",
+                           kept.index, probe.origin[0], probe.origin[1], probe.origin[2], kept.before, kept.after,
+                           matchedMean, kept.beforeUp, kept.afterUp, matchedUp);
+        }
+        else
+            ++skipped;
+        Z_Free(kept.light, 0);
+    }
+    Z_Free(probes, 0);
+    const int took = Sys_Milliseconds() - started;
+    Com_Printf(CON_CHANNEL_GFX,
+               "modern: %d reflection probes drawn again with the Modern path (%d left as they were) in %d ms; "
+               "mean light %.3f as stored, %.3f drawn, %.3f matched (each to its stored light's spread)\n",
+               written, skipped, took, captured ? before / (float)captured : 0.0f,
+               captured ? after / (float)captured : 0.0f, written ? matched / (float)written : 0.0f);
 }

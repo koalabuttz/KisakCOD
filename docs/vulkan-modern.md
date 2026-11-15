@@ -1412,6 +1412,7 @@ Nothing is done per frame.
 | Setting | Default | Switch |
 | --- | --- | --- |
 | Probe filter | on with linear light | `KISAK_VK_MODERN_PROBES=0` keeps the game's levels; `KISAK_VK_MODERN_PROBES=1` filters them also without linear light |
+| Probes drawn again | on | Every probe is drawn again with the Modern path behind the map's loading screen, each matched to its stock probe's spread of light; `KISAK_VK_MODERN_PROBES_CAPTURE=0` keeps the stock probes (start-up only; needs linear light and the filter) |
 
 The statistics line: `vulkan d3d9: modern: N reflection probes filtered by
 gloss in linear light (M left as they are), X ms each` (M counts the cubes
@@ -1427,6 +1428,82 @@ marks are kept. `test_vulkan_d3d9_front.py` runs it as it is, with
 `KISAK_VK_MODERN_PROBES=1` (beside `KISAK_VK_MODERN_LINEAR=0` or not), with
 `KISAK_VK_MODERN_PROBES=0` and with `KISAK_VK_MODERN_LINEAR=0`, and checks
 that a full run filters 2 (none without linear light).
+
+**Drawn again with the Modern path's light** (on by default with linear
+light and the filter, off with `KISAK_VK_MODERN_PROBES_CAPTURE=0`; start-up
+only; multiplayer). Matched to the stock probes' spread of light, mp_bog's
+water keeps about as many bright streaks as with the stock probes, where the
+Modern path's light puts them (PC probes run 6: 0.92% of the water's pixels
+above 100 against 1.22%; scaled to the mean only, 0.09%). The game's probes were drawn with the original renderer
+when the map was compiled, so what shiny surfaces reflect is the old
+lighting, clipped at white. Once a world is loaded (`R_LoadWorld` calls
+`R_ModernProbesLoaded`), the client calls `R_ModernCaptureProbes` while it
+still shows the loading screen (connection state `CA_PRIMED`: the game is
+set up and waits for its first snapshot), and draws the loading screen over
+each of its frames; a world that comes without a loading screen is done
+after its first frames of play instead, as the game's own probe generator.
+Every probe of the map is drawn again from its origin, in
+`src/gfx_d3d/r_reflection_probe.cpp`:
+
+* six frames of play are drawn for each probe, each a square view of 90
+  degrees along one face of the cube (D3D9's faces, in world directions, as
+  the lit shaders read them), at twice the probe's size (128 pixels, with a
+  pixel of border), with no scene entities (the game's generator clears
+  them too) and the effects updated from the probe's origin;
+* each such scene is a camera cut (no history, no screen-space or planar
+  reflections) without jitter, and the scene after the capture is a cut too;
+* while capturing (the `probeCapture` hook), the back end reads each scene's
+  light back in linear light before bloom, exposure and the tonemap
+  (`ReadImage` of the scene image), and `probeCaptureRead` gives the view's
+  inner square as floats: light above white is kept (up to 4 in display
+  values, as the game's encoding stores it);
+* each texel of level 0 is the light along its direction in the view of its
+  face, the mean of the two by two pixels around where it lands;
+* once every probe is drawn, each takes its stock probe's spread of light:
+  each texel's light (the channels' mean) moves to the stock probe's light
+  at the same place in the order of all its texels (texels of equal light
+  alike), and its channels follow, so what the probe shows and its colours
+  are the Modern path's, and how bright and how steep it is are the stock
+  probe's. It is then stored in the game's encoding, and the
+  `reflectionProbe` hook makes levels 1 to 6 again from it, as above.
+  Drawn as they are, the new probes came out about half as bright as the
+  stock ones (PC probes run 2: mp_crash 0.294 against 0.134, mp_bog 0.160
+  against 0.080), and mp_bog's water lost its glints. Scaled to the stock
+  mean, one number per map (run 3) or per probe (run 4), their dark parts
+  rose and their highlights stayed low, so the water stayed flat: run 5's
+  dumps showed the stock probes' brightest 0.1% at a quarter light at 121 to
+  250 of 255, the new ones at 31 to 205. The stock probes went through each
+  probe's colour correction when the map was built, which a fast file does
+  not keep.
+
+It logs a line per probe (`modern: probe N at (x y z): mean light A as
+stored, B drawn, C matched; looking up D as stored, E drawn, F matched`,
+the last three over the face looking up, where the sky is; at most 64) and one for the map (`modern: N
+reflection probes drawn again with the Modern path (M left as they were) in
+T ms; mean light A as stored, B drawn, C matched (each to its stored
+light's spread)`); the statistics line `vulkan d3d9: modern: N
+scenes read back in linear light to capture reflection probes (M faces
+taken)`. The game's colour correction of each probe (a file named in the
+map's probe lump, which a fast file does not keep) is not applied.
+
+Two switches help to see what the new probes hold:
+`KISAK_VK_MODERN_PROBES_DUMP=1` writes each probe's first level as stored
+and as drawn again into the game's folder (`modern_probe_<map>_<n>_stock.ppm`
+and `_new.ppm`: the six faces side by side, +X, -X, +Y, -Y, +Z, -Z, in
+display values, and below them the same at a quarter of the light), and
+`KISAK_VK_MODERN_PROBES_AT_PLAY=1` draws them after the first frames of play
+instead of behind the loading screen, once the map's effects have started.
+
+**Checks:** the D3D9 check's `modern_probe_capture` scene checks that the
+capture is wanted by default and not with `KISAK_VK_MODERN_PROBES_CAPTURE=0`.
+With the switch at 1 it draws a scene in linear light (a clear
+and an opaque quad) while capturing: two rectangles read back come back as
+the light their colours decode to, one outside the scene's image is
+refused, and none is read once capturing is off. Without the switch
+nothing is drawn; with it at 0, or with `KISAK_VK_MODERN_PROBES=0` or
+`KISAK_VK_MODERN_LINEAR=0` beside it, it is not wanted and nothing is drawn.
+`test_vulkan_d3d9_front.py` runs it in those five ways and checks that a
+full run reads nothing back.
 
 ## Planar reflections
 
