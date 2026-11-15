@@ -1001,6 +1001,35 @@ What the GXM back end does so far (step 2d):
   the copy it makes anyway, so the stretch costs no scene of its own; an
   empty file `no-filter-stretch` in the folder of the compiled programs, or
   `vita_gxm no-filter-stretch 1`, keeps the two scenes.
+- **Three scenes a frame instead of five.** Each scene makes the GPU load
+  the whole colour and depth targets and store them again, whatever is
+  drawn: console run V measured 2.25 ms for a scene with no draw, and
+  console run BX (2026-11-15) 16.9 ms of fragment work a frame in a view
+  of 65 draws. The frame of a map with a film colour filter had five: a
+  clear of the back buffer, the depth pass, the lit and emissive passes,
+  the copy the filter reads, and the filter with the HUD. Three choices,
+  each with the same picture (src/gfx_gxm/gxm_engine_options.h;
+  src/gfx_d3d/rb_draw3d.cpp, RB_StandardDrawCommands):
+  - the depth pass's scene clears the depth and stencil itself and the lit
+    pass's scene clears the colour, so the scene that held only the clear
+    is gone (`no-prepass-clear` turns it off);
+  - the depth pass's scene is begun with sceGxm's disabled colour surface,
+    since the pass writes no colour and nothing reads its colour target,
+    so that scene loads and stores no colour (`no-depth-only-scene`). The
+    engine marks the pass's draws for the back end, which keeps them in a
+    scene of their own even when the lit pass draws to the same surface:
+    depth and lit passes in one scene cost the GPU more (console runs AA
+    and AD);
+  - when the film filter is the view's only post effect, the 3D passes
+    draw into the image the filter reads and not into the back buffer, so
+    the copy between the two is not made (`no-scene-in-copy`). Depth of
+    field, glow, blur and the debug views keep the back buffer and the
+    copy, and so does a view that reads that image while it draws
+    (distortion, shadow cookies).
+
+  The three names are empty files in the folder of the compiled programs,
+  or `vita_gxm <name> 1` while the game runs. The log's `gpu watch` line
+  says how many scenes a frame had.
 - **The CPU a frame ahead of the GPU.** The CPU fills frame N while the GPU
   still draws frame N - 1, so a frame costs the longer of the two times and
   not their sum. Console run U (2026-11-11, mp_crash) had shown them taking

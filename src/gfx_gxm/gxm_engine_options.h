@@ -58,6 +58,43 @@
 // and the filter puts them back to 1. An empty file `no-filter-stretch` in
 // the folder of the compiled programs, or "vita_gxm no-filter-stretch 1",
 // turns it off.
+//
+// Fewer scenes a frame. Every scene makes the GPU load the whole colour and
+// depth targets at its start and store them at its end, whatever is drawn
+// (console run V: 2.25 ms for a scene with no draw), and console run BX
+// (2026-11-15) found the frame's five scenes at 16.9 ms of fragment work in
+// a view of 65 draws. Three choices take two of the five out and a store
+// off a third, with the same picture:
+//
+// - g_prepassClears: the frame's first scene held only the clear of the
+//   back buffer, since the depth pass that follows has a colour target of
+//   its own. With this the depth pass's scene clears the depth and stencil
+//   itself and the lit pass's scene clears the colour (when r_clear asks),
+//   as the engine already does for the depth copy of soft particles.
+//   `no-prepass-clear` turns it off.
+// - g_prepassNoColour: the depth pass writes no colour and nothing reads
+//   its colour target, so its scene has none: the engine sets
+//   g_prepassScene while it draws that pass and the back end opens the
+//   scene with sceGxm's disabled colour surface. `no-depth-only-scene`
+//   turns it off. The back end reads g_prepassScene when a draw or a clear
+//   asks for its scene, not when the target is set: the pass's colour
+//   target shares its surface with the image below
+//   (R_InitRenderTargets_PC), so with the third choice the engine goes
+//   from the pass to the lit pass without a call the back end sees. The
+//   flag is also what ends the pass's scene then: depth and lit passes in
+//   one scene cost the GPU more (console runs AA and AD).
+// - g_sceneInCopy: when the view's only post effect is the film colour
+//   filter, the 3D passes draw into the image the filter reads
+//   (R_RENDERTARGET_RESOLVED_SCENE) and not into the back buffer, so the
+//   copy between the two, a scene of its own, is not made. g_sceneIsCopy is
+//   true from the start of such a view until the filter (or the stretch of
+//   a scaled picture) has taken the picture from the image.
+//   A view that reads that image while it draws (distortion's copy of the
+//   picture, shadow cookies) keeps the back buffer.
+//   `no-scene-in-copy` turns it off.
+//
+// The three markers are empty files in the folder of the compiled programs,
+// or "vita_gxm <name> 1" while the game runs.
 
 #pragma once
 
@@ -73,6 +110,11 @@ extern float g_sceneScale;
 extern bool g_stretchInFilter;
 extern float g_filterReadS;
 extern float g_filterReadT;
+extern bool g_prepassClears;
+extern bool g_prepassNoColour;
+extern bool g_prepassScene;
+extern bool g_sceneInCopy;
+extern bool g_sceneIsCopy;
 
 // A size of the screen as the scaled picture has it.
 inline int SceneScaled(int size, float scale)
@@ -88,6 +130,8 @@ inline int SceneScaled(int size, float scale)
 #define KISAK_GXM_RESOLVE_WHEN_USED() (::gfx_gxm::g_resolveWhenUsed)
 #define KISAK_GXM_SCENE_SCALE() (::gfx_gxm::g_sceneScale)
 #define KISAK_GXM_STRETCH_IN_FILTER() (::gfx_gxm::g_stretchInFilter)
+#define KISAK_GXM_PREPASS_CLEARS() (::gfx_gxm::g_prepassClears)
+#define KISAK_GXM_SET_PREPASS_SCENE(on) (::gfx_gxm::g_prepassScene = (on))
 #else
 #define KISAK_GXM_DEPTH_PREPASS() false
 #define KISAK_GXM_PREPASS_SKIP_MODELS() false
@@ -95,4 +139,6 @@ inline int SceneScaled(int size, float scale)
 #define KISAK_GXM_RESOLVE_WHEN_USED() false
 #define KISAK_GXM_SCENE_SCALE() 1.0f
 #define KISAK_GXM_STRETCH_IN_FILTER() false
+#define KISAK_GXM_PREPASS_CLEARS() false
+#define KISAK_GXM_SET_PREPASS_SCENE(on) ((void)0)
 #endif
