@@ -14,6 +14,7 @@
 #include <universal/q_parse.h>
 #include "r_image.h"
 #include "r_init.h"
+#include "rhi/r_rhi.h"
 #include "rhi/r_rhi_modern.h"
 #include <win32/win_local.h>
 
@@ -781,7 +782,7 @@ static bool R_ModernProbeMeans(IDirect3DCubeTexture9 *cube, int edge, const floa
     for (int face = 0; face < 6; ++face)
     {
         D3DLOCKED_RECT locked;
-        if (FAILED(cube->LockRect((D3DCUBEMAP_FACES)face, 0, &locked, nullptr, 0)))
+        if (FAILED(R_HW_LockRect(cube, (D3DCUBEMAP_FACES)face, 0, &locked, nullptr, 0)))
             return false;
         for (int y = 0; y < edge; ++y)
         {
@@ -793,7 +794,7 @@ static bool R_ModernProbeMeans(IDirect3DCubeTexture9 *cube, int edge, const floa
                 storedUp += face == 4 ? texel : 0.0f;
             }
         }
-        cube->UnlockRect((D3DCUBEMAP_FACES)face, 0);
+        R_HW_UnlockRect(cube, (D3DCUBEMAP_FACES)face, 0);
     }
     const int count = 6 * edge * edge;
     for (int i = 0; i < 3 * count; ++i)
@@ -877,7 +878,7 @@ static bool R_ModernWriteProbe(IDirect3DCubeTexture9 *cube, uint32_t index, int 
     for (int face = 0; face < 6; ++face)
     {
         D3DLOCKED_RECT locked;
-        if (FAILED(cube->LockRect((D3DCUBEMAP_FACES)face, 0, &locked, nullptr, 0)))
+        if (FAILED(R_HW_LockRect(cube, (D3DCUBEMAP_FACES)face, 0, &locked, nullptr, 0)))
         {
             if (dump)
                 Z_Free(dump, 0);
@@ -902,7 +903,7 @@ static bool R_ModernWriteProbe(IDirect3DCubeTexture9 *cube, uint32_t index, int 
                 R_ModernStoreProbeTexel(scaled, &row[4 * x]);
             }
         }
-        cube->UnlockRect((D3DCUBEMAP_FACES)face, 0);
+        R_HW_UnlockRect(cube, (D3DCUBEMAP_FACES)face, 0);
     }
     if (dump)
     {
@@ -937,7 +938,7 @@ static bool R_ModernMatchProbe(IDirect3DCubeTexture9 *cube, int edge, float *lig
     for (int face = 0; face < 6 && read; ++face)
     {
         D3DLOCKED_RECT locked;
-        if (FAILED(cube->LockRect((D3DCUBEMAP_FACES)face, 0, &locked, nullptr, 0)))
+        if (FAILED(R_HW_LockRect(cube, (D3DCUBEMAP_FACES)face, 0, &locked, nullptr, 0)))
         {
             read = false;
             break;
@@ -948,7 +949,7 @@ static bool R_ModernMatchProbe(IDirect3DCubeTexture9 *cube, int edge, float *lig
             for (int x = 0; x < edge; ++x)
                 stock[(face * edge + y) * edge + x] = R_ModernProbeTexelLight(&row[4 * x]);
         }
-        cube->UnlockRect((D3DCUBEMAP_FACES)face, 0);
+        R_HW_UnlockRect(cube, (D3DCUBEMAP_FACES)face, 0);
     }
     if (read)
     {
@@ -1029,7 +1030,7 @@ void R_ModernCaptureProbes(void (*overlay)())
         const GfxReflectionProbe &probe = rgp.world->reflectionProbes[probeIndex];
         IDirect3DCubeTexture9 *cube = probe.reflectionImage ? probe.reflectionImage->texture.cubemap : nullptr;
         D3DSURFACE_DESC desc;
-        if (!cube || FAILED(cube->GetLevelDesc(0, &desc)) || desc.Format != D3DFMT_A8R8G8B8 || desc.Width < 2
+        if (!cube || FAILED(R_HW_GetLevelDesc(cube, 0, &desc)) || desc.Format != D3DFMT_A8R8G8B8 || desc.Width < 2
             || desc.Width > 256 || desc.Width != desc.Height)
         {
             ++skipped;
