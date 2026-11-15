@@ -799,6 +799,12 @@ FrameResult BeginFrame(Core *core_)
         return FrameResult::Skipped;
     }
 
+    // A swapchain the compositor turns (Android) hears of no resize: Android
+    // scales a picture of the old size without a word (the Retroid Pocket 6,
+    // run 5, kept 1920x970 after the window went full screen). Every 32nd
+    // frame compares the sizes.
+    if (core.transformLeftToCompositor && (++core.turnedFrames & 31u) == 0)
+        core.resizePending = true;
     if (core.resizePending && !core.rebuildPending)
     {
         // A size event: rebuild only when the size really changed (or the
@@ -870,13 +876,10 @@ Image *AcquireImage(Core &core)
     }
     if (result == VK_SUBOPTIMAL_KHR)
     {
-        // Still usable: draw this one, rebuild after. When the compositor
-        // turning the picture makes every acquire suboptimal, only a size
-        // change rebuilds: the first and every 32nd ask for the size check.
+        // Still usable: draw this one, rebuild after (unless the compositor
+        // turning the picture is all it means; BeginFrame watches the size).
         if (!core.transformLeftToCompositor)
             core.rebuildPending = true;
-        else if ((core.turnedSuboptimal++ & 31u) == 0)
-            core.resizePending = true;
     }
     else if (!Check(core, result, "vkAcquireNextImageKHR"))
         return nullptr;
