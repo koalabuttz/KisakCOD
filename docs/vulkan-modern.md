@@ -76,6 +76,7 @@ back to them.
 | `r_modernSunStrength`, `r_modernSkyStrength` | -1, or 0 to 16 | `KISAK_VK_MODERN_SUN_STRENGTH`, `_SKY_STRENGTH` |
 | `r_modernAo` | default, off, on | `KISAK_VK_MODERN_AO` |
 | `r_modernAoRadius`, `r_modernAoPower`, `r_modernAoThickness`, `r_modernAoGrazing`, `r_modernAoFloor`, `r_modernAoEdge` | -1, or the variable's range | `KISAK_VK_MODERN_AO_RADIUS`, `_POWER`, `_THICKNESS`, `_GRAZING`, `_FLOOR`, `_EDGE` |
+| `r_modernAoHalf` | default, off, on | `KISAK_VK_MODERN_AO_HALF` |
 | `r_modernSsr` | default, off, on | `KISAK_VK_MODERN_SSR` |
 | `r_modernSsrDistance`, `r_modernSsrThickness` | -1, or above 0 | `KISAK_VK_MODERN_SSR_DISTANCE`, `_THICKNESS` |
 | `r_modernTonemap` | default, clamp, neutral, agx, aces | `KISAK_VK_MODERN_TONEMAP` |
@@ -1126,11 +1127,12 @@ shader for yet) are not darkened.
 | Strength | power 2 (PC AO run 1: 1 read slightly weak, 2 about right in the shade; with the thickness, PC AO run 3 found 1.5 as weak as run 1's 1) | `KISAK_VK_MODERN_AO_POWER=<p>`: the visibility is raised to p (2 darkens, 1 lightens, 0 turns it off) |
 | Floor | 0.35: after the power the visibility is kept above it, through a soft knee from 0.45 down (lighter shading is unchanged). PC AO run 7: the crash-in arch line is a narrow slot between the pillar's side and the arch's inside face that went near black (0.13) and ended in a hard edge; ground contact shadows sit near 0.85 | `KISAK_VK_MODERN_AO_FLOOR=<0 to 1>`: 0 turns it off |
 | Blur edge | 0.08: the blur counts a tap half when its view depth is 8% of the pixel's away, so it keeps to each surface but runs across small depth steps. PC AO run 9: at 0.02 the crash-in arch slot ended in a one-pixel step; at 0.08 it ramps over four, with no halos and the ground unchanged | `KISAK_VK_MODERN_AO_EDGE=<share>`: 0.02 is the old, stricter blur; more lightens depth edges such as ceiling beams' |
+| Half resolution | off | `KISAK_VK_MODERN_AO_HALF=1` (live: `r_modernAoHalf on`) works the occlusion out at one pixel of each 2x2 block, which pixel moving over the four from frame to frame, into a half-size raw image; the blur then takes the 3x3 raw pixels around each pixel's block, weighted by the depth of the scene pixel each was worked out at, back to full size. About a quarter of the occlusion's work; contact shadows come out softer and a little lighter (the `modern_ao` scene's wall foot 175 to 200 of 255 in the debug view, its corner 152 to 159) |
 | Debug view | off | `KISAK_VK_MODERN_DEBUG=ao` draws the visibility as grey over the finished scene (after the tonemap): white open, darker in corners |
 
 The statistics line: `vulkan d3d9: modern: N scenes with ambient occlusion
-(radius R, thickness T, power P, floor F, edge E), X ms GPU each` (both
-passes).
+(radius R, thickness T, power P, floor F, edge E[, half resolution]), X ms
+GPU each` (both passes).
 
 **Checks:** the D3D9 check's `modern_ao` scene draws a floor 120 units below
 a camera with the engine's 90-degree perspective, and a wall rising from it
