@@ -161,8 +161,7 @@ involved. The checks:
                  fourth frame's water, drawn by our water shader, reads it
                  the same way (dark with KISAK_VK_MODERN_WATER=0 too); the
                  full run takes none
-  probe-capture  --scene modern_probe_capture passes as it is (wanted by
-                 default, nothing drawn), with
+  probe-capture  --scene modern_probe_capture passes as it is and with
                  KISAK_VK_MODERN_PROBES_CAPTURE=0 (not wanted), and with
                  KISAK_VK_MODERN_PROBES_CAPTURE=1 beside
                  KISAK_VK_MODERN_PROBES=0 or KISAK_VK_MODERN_LINEAR=0, where

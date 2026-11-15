@@ -2953,8 +2953,8 @@ void Check::Multisample()
 // ends between the two colours, where without the pass it would be one or the
 // other; a scene with no depth surface is refused.
 // Re-capturing the reflection probes (vk_d3d9.h ModernProbeCapture): wanted
-// by default with linear light and the probe filter, not with
-// KISAK_VK_MODERN_PROBES_CAPTURE=0. With the switch at 1, a scene done while
+// only with KISAK_VK_MODERN_PROBES_CAPTURE=1, linear light and the probe
+// filter. Then a scene done while
 // capturing is read back in linear light: its clear and an opaque quad come
 // back, a rectangle at a time, as the light their colours decode to; a
 // rectangle outside the scene's image, or any once capturing is off, is
@@ -2974,13 +2974,13 @@ void Check::ModernProbeCapture()
         return env && !std::strcmp(env, value);
 #endif
     };
-    // On by default; the scene draws and reads only when asked for by name
-    // (=1), so a full run's counts stay as they were.
-    const bool wanted = !envIs("KISAK_VK_MODERN_PROBES_CAPTURE", "0") && !envIs("KISAK_VK_MODERN_LINEAR", "0")
+    // Off by default (PC probes run 4: redrawn, mp_bog's water lost its
+    // glints), so a full run's counts stay as they were.
+    const bool wanted = envIs("KISAK_VK_MODERN_PROBES_CAPTURE", "1") && !envIs("KISAK_VK_MODERN_LINEAR", "0")
                         && !envIs("KISAK_VK_MODERN_PROBES", "0");
     Equal("probe_capture_wanted", front::ModernProbeCaptureWanted(device), wanted);
     std::vector<float> rgb(16 * 16 * 3, -1.0f);
-    if (!wanted || !envIs("KISAK_VK_MODERN_PROBES_CAPTURE", "1"))
+    if (!wanted)
     {
         Equal("probe_capture_nothing", front::ModernProbeCaptureRead(device, 0, 0, 1, 1, rgb.data()), false);
         return;

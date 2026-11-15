@@ -243,8 +243,8 @@ struct Backend
     uint32_t probesFiltered = 0;
     uint32_t probesLeft = 0;
     double probesMs = 0.0;
-    // Re-capturing the probes with the Modern path's own light (on with the
-    // filter above, off with KISAK_VK_MODERN_PROBES_CAPTURE=0): while the
+    // Re-capturing the probes with the Modern path's own light
+    // (KISAK_VK_MODERN_PROBES_CAPTURE=1, with the filter above): while the
     // renderer captures (BackendModernProbeCapture), each scene's linear-light
     // image is read back before its bloom, exposure and tonemap, for
     // BackendModernProbeCaptureRead. Counts since the device was made: scenes
@@ -712,7 +712,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     backend->probesWanted = !EnvIsZero("KISAK_VK_MODERN_PROBES")
         && (EnvIs("KISAK_VK_MODERN_PROBES", "1") || backend->linearWanted);
     backend->probeCaptureWanted =
-        backend->probesWanted && backend->linearWanted && !EnvIsZero("KISAK_VK_MODERN_PROBES_CAPTURE");
+        backend->probesWanted && backend->linearWanted && EnvIs("KISAK_VK_MODERN_PROBES_CAPTURE", "1");
     // The planar view and its debug view are start-up only, as the probes.
     backend->debugPlanar = EnvIs("KISAK_VK_MODERN_DEBUG", "planar");
     backend->debugCompute = EnvIs("KISAK_VK_MODERN_DEBUG", "compute");
