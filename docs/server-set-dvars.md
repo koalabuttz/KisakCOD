@@ -29,11 +29,15 @@ All three routes now go through `CL_SetDvarFromServer`
 (without regard to letter case), so it holds for a setting the client has not
 registered yet.
 
-The list is every setting this port added, 51 today: the renderer choices and
-the Vulkan and GPU wait settings (`r_backend`, `r_visuals`, `r_vk*`,
-`r_gpuSyncSleep*`), the controller and Vita settings (`in_gamepad*`,
-`vita_*`), `cl_keyCodeOnly`, `cl_steam`, `con_restricted`, `snd_adpcm`, `snd_alDebug`,
-`xanim_blendOnce`, `ui_fastExpressions`, `r_pretessPrefetch`, and the settings for how the player's own server admits
+The list is every setting this port added, 86 on 2026-11-15 (count the names
+in `kServerDvarsOfThisPort`; it grows with the port): the renderer choices, the
+Modern visuals settings and the Vulkan and GPU wait settings (`r_backend`,
+`r_visuals`, `r_modern*`, `r_vk*`, `r_gpuSyncSleep*`, `r_dynamicBufferReport`,
+`r_fullscreenMode`), the controller and Vita settings (`in_gamepad*`,
+`vita_*`), the settings machine runs use (`run_*`), `cl_keyCodeOnly`,
+`cl_steam`, `con_restricted`, `snd_adpcm`, `snd_alDebug`, `xanim_blendOnce`,
+`ui_fastExpressions`, `r_pretessPrefetch`, the bot settings (`bot_brain`, `bot_log`,
+`sv_botSnapshots`), and the settings for how the player's own server admits
 players (`sv_allowUnverifiedGuids`, `sv_allowProtocol6`,
 `sv_advertisedProtocol`, `sv_loopbackTestAuth`). No retail server or mod knows these names, and none of
 them is one the engine replicates to clients.

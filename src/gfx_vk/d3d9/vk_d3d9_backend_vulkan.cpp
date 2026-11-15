@@ -565,6 +565,7 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
     aoParams.grazing = number(tuning.aoGrazing, start.aoParams.grazing, 0.0f, 1.0f, false);
     aoParams.floor = tuning.aoFloor >= 0.0f && tuning.aoFloor < 1.0f ? tuning.aoFloor : start.aoParams.floor;
     aoParams.edge = number(tuning.aoEdge, start.aoParams.edge, 0.0f, 10.0f, false);
+    aoParams.half = tuning.aoHalf >= 0 ? tuning.aoHalf == 1 : start.aoParams.half;
     modern::ReflectionParams &reflectionParams = backend->reflectionParams;
     reflectionParams = start.reflectionParams;
     reflectionParams.maxDistance = number(tuning.ssrDistance, start.reflectionParams.maxDistance, 0.0f, kAny, false);
@@ -582,12 +583,13 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
     HostLog(*backend->host,
             "vulkan d3d9: modern: switches now: bloom %s, exposure %s (key %.3f), velocity %s, our shaders %s "
             "(models %s, without the sun %s, lights %s; sun %.2f, sky %.2f), ambient occlusion %s (radius %.1f, power %.2f, "
-            "thickness %.1f, grazing %.2f, floor %.2f, edge %.3f), reflections %s (distance %.0f, thickness %.1f), normals %s, "
+            "thickness %.1f, grazing %.2f, floor %.2f, edge %.3f%s), reflections %s (distance %.0f, thickness %.1f), normals %s, "
             "tonemap %s, debug view %s",
             onOff(backend->bloomWanted), onOff(backend->exposureWanted), backend->exposureParams.key,
             onOff(backend->velocityWanted), onOff(backend->shadersWanted), onOff(backend->modelShadersWanted),
             onOff(backend->noSunShadersWanted), onOff(backend->lightShadersWanted), backend->sunStrength, backend->skyStrength, onOff(backend->aoWanted),
             aoParams.radius, aoParams.power, aoParams.thickness, aoParams.grazing, aoParams.floor, aoParams.edge,
+            aoParams.half ? ", half resolution" : "",
             onOff(backend->reflectionsWanted), reflectionParams.maxDistance, reflectionParams.thickness,
             onOff(backend->normalsWanted), modern::CurveName(backend->tonemapCurve), DebugViewName(view));
 }
@@ -682,6 +684,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         const float edge = edgeText.empty() ? 0.0f : std::strtof(edgeText.c_str(), nullptr);
         if (edge > 0.0f && edge <= 10.0f)
             start.aoParams.edge = edge;
+        start.aoParams.half = EnvIs("KISAK_VK_MODERN_AO_HALF", "1");
     }
     // Reflection probes are filtered as their textures load, so this one
     // stays start-up only.
@@ -1002,9 +1005,10 @@ void BackendLogStats(Backend *backend, bool reset)
         const PassTimings pass = PassTimingsFor(backend->core, "modern ao");
         const uint64_t scenes = modern::Stats(backend->ao).builds - backend->aoBase.builds;
         HostLog(h, "vulkan d3d9: modern: %llu scenes with ambient occlusion (radius %.1f, thickness %.1f, "
-                   "power %.2f, floor %.2f, edge %.2f), %.3f ms GPU each",
+                   "power %.2f, floor %.2f, edge %.2f%s), %.3f ms GPU each",
                 static_cast<unsigned long long>(scenes), backend->aoParams.radius, backend->aoParams.thickness,
                 backend->aoParams.power, backend->aoParams.floor, backend->aoParams.edge,
+                backend->aoParams.half ? ", half resolution" : "",
                 pass.supported ? 2.0 * average(pass) : 0.0);
     }
     // Screen-space reflections: the scenes traced, the levels of the last,
