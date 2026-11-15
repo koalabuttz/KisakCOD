@@ -991,6 +991,9 @@ def main() -> int:
             noWay = len(re.findall(r"^bots: \d+ finds no way to a lead", output, re.M))
             print(f"INFO: bots took cover {cover} times and went hunting {hunts} times "
                   f"(and found no way to a lead on another floor {noWay} times)")
+            drops = re.search(r"^bots: navigation mesh for (\S+) (?:built|loaded).*?(\d+) drop-downs", output, re.M)
+            if drops:
+                print(f"INFO: the navigation mesh for {drops.group(1)} has {drops.group(2)} drop-downs")
             team = team_play(output)
             print("INFO: the commander gave parts: " +
                   (", ".join(f"{role} {count}" for role, count in sorted(team["roles"].items())) or "none") +
