@@ -45,8 +45,8 @@ cmake --build build-vita-mp --target KisakCOD-mp-vpk
 Hosted CI: the **PS Vita multiplayer client** job of the PS Vita workflow
 (`.github/workflows/build-kisakcod-vita.yaml`) builds Debug
 and RelWithDebInfo. It runs the server's float checks (no fused multiply-add, no
-NEON float outside the vector skinning path, which has to be there and be
-NEON) and link checks (weak pthread references, the main stack size), and
+NEON float outside the vector skinning path and the MP3 decoder, which both
+have to be there and be NEON) and link checks (weak pthread references, the main stack size), and
 uploads the RelWithDebInfo `.vpk`. It also runs the controls' and the sound's
 host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`), the run
 plan's, the GPU heap's, the frame time figures', the GPU progress bookkeeping's
@@ -624,6 +624,16 @@ What changes for the game:
   its own (`FS_FOpenFileReadStream`). It used to read through the archive's
   one handle when no other file of that archive was open, and every later
   open in that archive seeks and reads on that handle from the main thread.
+
+The MP3 decoder itself (dr_mp3) is built for NEON on the Vita: its synthesis
+filter and transforms work on four floats at a time. Until 2026-11-15 it ran
+on scalar VFP like the rest of the port, because the toolchain file's
+`-mfpu=vfpv3` hid the CPU's NEON from it. The file it is built in
+(`src/sound/snd_driver_load_obj.cpp`) gets `-mfpu=neon`
+(`scripts/platform/vita/mp_client.cmake`); the samples are the scalar
+build's to within one step of 16 bits
+(`scripts/tests/test_mp3_neon_decode.py`, under `qemu-arm` in the Linux
+workflow's armv7 job). Not timed on a console yet.
 
 `snd_streamThread 0` gives the decoding back to the main thread, at once and
 also for streams that are playing: the same feed is then stepped by the sound
