@@ -432,6 +432,8 @@ static Marks runScalar(Scene &scene, const DpvsPlane *planes, uint32_t planeCoun
     return Marks{scene.modelVis, scene.surfaceVis};
 }
 
+static bool s_fetchAhead; // dpvs_vec::World::fetchAhead of the next vector walk
+
 static dpvs_vec::World vecWorld(Scene &scene, bool drawModels, bool drawWorld, bool decals)
 {
     dpvs_vec::World world;
@@ -443,6 +445,7 @@ static dpvs_vec::World vecWorld(Scene &scene, bool drawModels, bool drawWorld, b
     world.modelVis = drawModels ? scene.modelVis.data() : nullptr;
     world.surfaceVis = drawWorld ? scene.surfaceVis.data() : nullptr;
     world.decals = decals;
+    world.fetchAhead = s_fetchAhead;
     return world;
 }
 
@@ -498,6 +501,8 @@ static void compare(Scene &scene, Numbers kind, Totals &totals, uint32_t rounds)
         const Marks scalar = runScalar(scene, planes, planeCount, before, drawModels, drawWorld, decals);
         s_dpvsCounting = false;
         Marks vec;
+        // with and without asking for boxes ahead, each with and without counting
+        s_fetchAhead = (totals.walks & 2) != 0;
         check(runVec(scene, planes, planeCount, before, drawModels, drawWorld, decals, &vec),
               "the vector walk refused planes the engine makes");
         if (!(scalar == vec))

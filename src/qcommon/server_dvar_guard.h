@@ -47,6 +47,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     // Renderer.
     "r_backend",
     "r_dynamicBufferReport",
+    "r_fetchAhead",
     "r_fullscreenMode",
     "r_gpuSyncSleep",
     "r_gpuSyncSleepThreads",
@@ -74,7 +75,6 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "r_modernSunStrength",
     "r_modernTonemap",
     "r_modernVelocity",
-    "r_pretessPrefetch",
     "r_staticCullVec",
     "r_visuals",
     "r_vkDevice",

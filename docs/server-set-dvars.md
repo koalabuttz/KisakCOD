@@ -36,7 +36,7 @@ Modern visuals settings and the Vulkan and GPU wait settings (`r_backend`,
 `r_fullscreenMode`), the controller and Vita settings (`in_gamepad*`,
 `vita_*`), the settings machine runs use (`run_*`), `cl_keyCodeOnly`,
 `cl_steam`, `con_restricted`, `snd_adpcm`, `snd_alDebug`, `snd_streamThread`,
-`xanim_blendOnce`, `ui_fastExpressions`, `r_staticCullVec`, `r_pretessPrefetch`, the bot settings
+`xanim_blendOnce`, `ui_fastExpressions`, `r_staticCullVec`, `r_fetchAhead`, the bot settings
 (`bot_brain`, `bot_log`,
 `sv_botSnapshots`), and the settings for how the player's own server admits
 players (`sv_allowUnverifiedGuids`, `sv_allowProtocol6`,

@@ -54,10 +54,10 @@ char R_PreTessStaticModelCachedList(
         PROF_SCOPED("R_memcpy");
         dstIndices = preTessIndices;
 #if defined(__GNUC__)
-        // r_pretessPrefetch (r_add_bsp.cpp): the next instance's indices are
+        // r_fetchAhead (r_add_bsp.cpp): the next instance's indices are
         // asked for while this one's are copied. The instances of a batch lie
         // anywhere in the cache.
-        const bool prefetch = r_pretessPrefetch->current.enabled;
+        const bool prefetch = r_fetchAhead->current.enabled;
 #endif
         for (listIter = 0; listIter < count; ++listIter)
         {
@@ -250,12 +250,44 @@ void R_AddAllStaticModelSurfacesCamera()
     currentProbeIndex = 255;
     currentLightIndex = 0;
 
+#if defined(__GNUC__)
+    // r_fetchAhead: the record of the visible static model two ahead is asked
+    // for while this one is handed on. The visible ones lie anywhere in the
+    // world's list, 76 bytes each, so the processor does not see them coming.
+    // `scan` runs ahead of smodelIndex through the same marks; what the loop
+    // clears is at or behind smodelIndex.
+    const bool fetchAhead = r_fetchAhead->current.enabled;
+    uint32_t scan = 0;
+    const auto askForNextVisible = [&]() {
+        while (scan < smodelCount)
+        {
+            if (visData[scan++])
+            {
+                const char *record = reinterpret_cast<const char *>(&smodelDrawInsts[scan - 1]);
+                __builtin_prefetch(record);
+                __builtin_prefetch(record + 32);
+                __builtin_prefetch(record + sizeof(GfxStaticModelDrawInst) - 1);
+                return;
+            }
+        }
+    };
+    if (fetchAhead)
+    {
+        askForNextVisible();
+        askForNextVisible();
+    }
+#endif
+
     for (smodelIndex = 0; smodelIndex < smodelCount; ++smodelIndex)
     {
         if (!visData[smodelIndex])
         {
             continue;
         }
+#if defined(__GNUC__)
+        if (fetchAhead)
+            askForNextVisible();
+#endif
 
         inst = &smodelDrawInsts[smodelIndex];
         originDist = Vec3Distance(inst->placement.origin, origin) * scale + bias;

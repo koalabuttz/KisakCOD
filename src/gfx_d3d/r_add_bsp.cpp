@@ -17,11 +17,13 @@ static uint32_t R_WorldStagePerfProbe(uint32_t stage)
     return stage == DRAW_SURF_BSP_CAMERA_DECAL ? SYS_PERF_PROBE_WORLD_DECAL : SYS_PERF_PROBE_WORLD_EMISSIVE;
 }
 
-// r_pretessPrefetch: the indices of a surface a batch is about to copy are
-// asked for while the surface before it is copied. A batch's surfaces lie
-// anywhere in the world's index array, so the processor does not see them
-// coming by itself. Whole cache lines, a few at most: a longer surface's
-// tail is in sequence with its start.
+// r_fetchAhead: the indices of a surface a batch is about to copy are asked
+// for while the surface before it is copied, and the surface's own record
+// four surfaces ahead. A batch's surfaces lie anywhere in the world's index
+// array and surface list, so the processor does not see them coming by
+// itself. Whole cache lines, a few at most: a longer surface's tail is in
+// sequence with its start. (Indices two surfaces ahead bought nothing more on
+// the PS Vita: docs/perf-ab.md.)
 #if defined(__GNUC__)
 #if defined(__arm__)
 #define KISAK_PRETESS_LINE 32 // Cortex-A9 and its like
@@ -41,6 +43,7 @@ static inline void R_PrefetchSurfaceIndices(const GfxSurface *surf)
         __builtin_prefetch(from + 3 * KISAK_PRETESS_LINE);
 }
 #define KISAK_PRETESS_PREFETCH 1
+#define KISAK_PRETESS_RECORDS_AHEAD 4
 #else
 #define KISAK_PRETESS_PREFETCH 0
 #endif
@@ -72,11 +75,22 @@ char R_PreTessBspDrawSurfs(
 
     SysPerfScope perfScope(SYS_PERF_PROBE_WORLD_PRETESS);
 #if KISAK_PRETESS_PREFETCH
-    const bool prefetch = r_pretessPrefetch->current.enabled;
+    const bool prefetch = r_fetchAhead->current.enabled;
 #endif
     triCount = 0;
     for (surfIter = 0; surfIter < count; ++surfIter)
     {
+#if KISAK_PRETESS_PREFETCH
+        if (prefetch && surfIter + KISAK_PRETESS_RECORDS_AHEAD < count)
+        {
+            // the record may lie over two lines; its triangles and what the
+            // copy compares are in its first 24 bytes
+            const char *record =
+                reinterpret_cast<const char *>(&rgp.world->dpvs.surfaces[list[surfIter + KISAK_PRETESS_RECORDS_AHEAD]]);
+            __builtin_prefetch(record);
+            __builtin_prefetch(record + 23);
+        }
+#endif
         bcassert(list[surfIter], rgp.world->surfaceCount);
         triCount += rgp.world->dpvs.surfaces[list[surfIter]].tris.triCount;
     }
@@ -106,6 +120,8 @@ char R_PreTessBspDrawSurfs(
 #if KISAK_PRETESS_PREFETCH
             if (prefetch && surfIter + 1 < count)
                 R_PrefetchSurfaceIndices(&rgp.world->dpvs.surfaces[list[surfIter + 1]]);
+            if (prefetch && surfIter + KISAK_PRETESS_RECORDS_AHEAD < count)
+                __builtin_prefetch(&rgp.world->dpvs.surfaces[list[surfIter + KISAK_PRETESS_RECORDS_AHEAD]]);
 #endif
             if (baseVertex != surf->tris.firstVertex
                 || lmapIndex != surf->lightmapIndex
