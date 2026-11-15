@@ -39,7 +39,10 @@ buffer by the core's `Recording()` number.
   the core's pipeline cache. Everything the render states change often is
   dynamic state, so it never makes a new pipeline: viewport, scissor, cull mode,
   depth test, write and compare, depth bias, stencil (both faces), blend
-  constants, topology and the vertex stride. The adapter counts pipelines built
+  constants, topology and the vertex stride. The pipelines' static depth bias
+  switch is on, in case a driver drops the dynamic one; the dynamic amounts are
+  0 for every draw that wants no bias. `KISAK_VK_DEPTH_BIAS=<factor>` multiplies
+  every draw's bias, for tests (0 drops it, -1 turns it round). The adapter counts pipelines built
   during a frame; the plan's target for play is none (warm-up comes with the
   renderer hookup).
 * **Shaders.** `CreateShader` translates D3D9 bytecode once. A vertex shader's

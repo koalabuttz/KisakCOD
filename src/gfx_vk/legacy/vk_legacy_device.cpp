@@ -2,7 +2,9 @@
 
 #include "vk_legacy_internal.h"
 
+#include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 namespace gfx_vk::legacy
@@ -260,6 +262,22 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     // D3DRS_DEPTHBIAS is in units of the depth range; Vulkan's constant factor
     // is in units of the format's smallest step.
     device->depthBiasScale = device->depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ? float(1u << 24) : float(1u << 23);
+    // KISAK_VK_DEPTH_BIAS=<factor> multiplies every draw's depth bias, both
+    // parts: 0 drops it, -1 turns it round. A test switch, for finding out
+    // what a driver does with the bias (the Retroid's sun-facing walls).
+    if (const char *text = std::getenv("KISAK_VK_DEPTH_BIAS"); text && *text)
+    {
+        char *end = nullptr;
+        const float factor = std::strtof(text, &end);
+        if (end != text && !*end && std::isfinite(factor))
+        {
+            device->depthBiasScale *= factor;
+            device->depthSlopeScale = factor;
+            Log(*device, "depth bias: every draw's bias times %g (KISAK_VK_DEPTH_BIAS)", factor);
+        }
+        else
+            Log(*device, "depth bias: KISAK_VK_DEPTH_BIAS=%s is not a number, left as it is", text);
+    }
     // Shadow maps are depth textures that D3D9 samples with a linear filter
     // (hardware PCF); Vulkan defines that only where the format allows it.
     device->depthFilterLinear =
