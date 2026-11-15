@@ -258,7 +258,11 @@ struct PipelineKey
     // Its low byte is where the one-byte code was (pipelines.list keeps its
     // version: the high byte was unused and 0).
     uint16_t linearShader = 0;
-    uint8_t unused[6] = {};
+    // The cull mode (VkCullModeFlags) plus 1, baked into the pipeline as well
+    // as set per draw, with the KISAK_VK_STATIC_CULL=1 test switch
+    // (Device::staticCull); else 0.
+    uint8_t staticCull = 0;
+    uint8_t unused[5] = {};
     bool operator==(const PipelineKey &other) const { return std::memcmp(this, &other, sizeof(*this)) == 0; }
 };
 struct PipelineKeyHash
@@ -479,6 +483,7 @@ struct Device
     // scale them back (Shader::byteModules, legacy_shader::BuildSpirv).
     bool byteStandIn = false;
     float depthBiasScale = 1.0f;                 // D3DRS_DEPTHBIAS to Vulkan's constant factor
+    bool staticCull = false;                     // KISAK_VK_STATIC_CULL=1 (PipelineKey::staticCull)
     float depthSlopeScale = 1.0f;                // KISAK_VK_DEPTH_BIAS on D3DRS_SLOPESCALEDEPTHBIAS
     // depthFormat can be sampled with linear filtering. Without it, depth
     // textures (shadow maps) are sampled with the nearest texel: Vulkan leaves

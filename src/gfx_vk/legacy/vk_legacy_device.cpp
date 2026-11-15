@@ -265,6 +265,14 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     // KISAK_VK_DEPTH_BIAS=<factor> multiplies every draw's depth bias, both
     // parts: 0 drops it, -1 turns it round. A test switch, for finding out
     // what a driver does with the bias (the Retroid's sun-facing walls).
+    // KISAK_VK_STATIC_CULL=1 bakes each draw's cull mode into its pipeline as
+    // well as setting it per draw: a test switch for a driver that may drop
+    // the dynamic cull mode (every shadow caster would then draw both faces).
+    if (const char *text = std::getenv("KISAK_VK_STATIC_CULL"); text && std::strcmp(text, "1") == 0)
+    {
+        device->staticCull = true;
+        Log(*device, "cull mode: baked into each pipeline as well (KISAK_VK_STATIC_CULL)");
+    }
     if (const char *text = std::getenv("KISAK_VK_DEPTH_BIAS"); text && *text)
     {
         char *end = nullptr;

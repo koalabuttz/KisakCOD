@@ -42,7 +42,7 @@ buffer by the core's `Recording()` number.
   constants, topology and the vertex stride. The pipelines' static depth bias
   switch is on, in case a driver drops the dynamic one; the dynamic amounts are
   0 for every draw that wants no bias. `KISAK_VK_DEPTH_BIAS=<factor>` multiplies
-  every draw's bias, for tests (0 drops it, -1 turns it round). The adapter counts pipelines built
+  every draw's bias, for tests (0 drops it, -1 turns it round). The static winding is clockwise, as every draw sets it; `KISAK_VK_STATIC_CULL=1` also puts each draw's cull mode in its pipeline key and static state, for tests on a driver that may drop the dynamic cull mode. The adapter counts pipelines built
   during a frame; the plan's target for play is none (warm-up comes with the
   renderer hookup).
 * **Shaders.** `CreateShader` translates D3D9 bytecode once. A vertex shader's
