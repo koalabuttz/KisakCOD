@@ -684,7 +684,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         const float edge = edgeText.empty() ? 0.0f : std::strtof(edgeText.c_str(), nullptr);
         if (edge > 0.0f && edge <= 10.0f)
             start.aoParams.edge = edge;
-        start.aoParams.half = EnvIs("KISAK_VK_MODERN_AO_HALF", "1");
+        start.aoParams.half = !EnvIsZero("KISAK_VK_MODERN_AO_HALF");
     }
     // Reflection probes are filtered as their textures load, so this one
     // stays start-up only.

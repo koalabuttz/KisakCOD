@@ -101,7 +101,7 @@ inline void Register()
                                    "(KISAK_VK_MODERN_AO_GRAZING or 0.2)");
     aoHalf = Dvar_RegisterEnum("r_modernAoHalf", kOnOffNames, 0, DVAR_NOFLAG,
                                "Modern visuals: ambient occlusion worked out at half resolution and blurred back "
-                               "up, about a quarter of its work (default: off unless KISAK_VK_MODERN_AO_HALF=1)");
+                               "up, about a quarter of its work (default: on unless KISAK_VK_MODERN_AO_HALF=0)");
     aoFloor = Dvar_RegisterFloat("r_modernAoFloor", -1.0f, -1.0f, 0.99f, DVAR_NOFLAG,
                                  "Modern visuals: the least light ambient occlusion leaves (0 to 0.99); -1 the "
                                  "default (KISAK_VK_MODERN_AO_FLOOR or 0.35)");

@@ -448,7 +448,8 @@ def main():
                               'KISAK_VK_MODERN_AO_FLOOR': '0.6'}, True),
                             ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_AO_EDGE': '0.25'}, True),
                             ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_LINEAR': '0'}, True),
-                            ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_AO_HALF': '1'}, True),
+                            ({'KISAK_VK_MODERN_DEBUG': 'ao', 'KISAK_VK_MODERN_AO_HALF': '0'}, True),
+                            ({'KISAK_VK_MODERN_AO_HALF': '0'}, True),
                             ({'KISAK_VK_MODERN_AO_HALF': '1'}, True),
                             ({'KISAK_VK_MODERN_AO': '1'}, True),
                             ({'KISAK_VK_MODERN_AO': '0'}, False),
@@ -471,7 +472,7 @@ def main():
         thickness = '1000.0' if settings.get('KISAK_VK_MODERN_AO_THICKNESS') == '1000' else '8.0'
         floor = '0.60' if settings.get('KISAK_VK_MODERN_AO_FLOOR') == '0.6' else '0.35'
         edge = '0.25' if settings.get('KISAK_VK_MODERN_AO_EDGE') == '0.25' else '0.08'
-        half = settings.get('KISAK_VK_MODERN_AO_HALF') == '1'
+        half = settings.get('KISAK_VK_MODERN_AO_HALF') != '0'
         named = ' '.join(f'{k}={v}' for k, v in settings.items()) or 'the defaults'
         checks.expect(f'modern_ao passes with {named}',
                       code == 0 and found.get('d3d9_check') == 'passed' and [s[0] for s in scenes] == ['modern_ao']
