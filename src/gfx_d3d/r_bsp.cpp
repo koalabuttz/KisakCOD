@@ -156,6 +156,12 @@ void R_LoadWorld(char *name, int *checksum, int savegame)
     RB_SetBspImages();
     DynEntCl_InitFilter();
     R_GenerateShadowMapCasterCells();
+    {
+        // The map's images are made by now (its fast file loaded first).
+        char when[96];
+        Com_sprintf(when, sizeof(when), "map load %s", name);
+        R_LogBackendMemory(when);
+    }
     for (reflectionProbeIndex = 0; reflectionProbeIndex < rgp.world->reflectionProbeCount; ++reflectionProbeIndex)
         rgp.world->reflectionProbeTextures[reflectionProbeIndex].basemap = rgp.world->reflectionProbes[reflectionProbeIndex].reflectionImage->texture.basemap;
     // The Modern path may make the probes' blurrier levels again (index 0 is

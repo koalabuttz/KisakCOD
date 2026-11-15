@@ -213,6 +213,19 @@ const GfxModernHooks *R_ModernHooks()
     return s_modernHooksSet ? &s_modernHooks : nullptr;
 }
 
+static void (*s_backendMemoryLog)(const char *when);
+
+void R_SetBackendMemoryLog(void (*log)(const char *when))
+{
+    s_backendMemoryLog = log;
+}
+
+void R_LogBackendMemory(const char *when)
+{
+    if (s_backendMemoryLog)
+        s_backendMemoryLog(when);
+}
+
 IDirect3D9 *R_HW_Direct3DCreate9(UINT SDKVersion)
 {
 #if defined(KISAK_VULKAN_BACKEND)
