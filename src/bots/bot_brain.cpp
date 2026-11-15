@@ -95,6 +95,11 @@ struct BotSlot
     // (the bot's own, as a player's client keeps it), moving under fire.
     kb::AimState aim;
     kb::TriggerState trigger;
+    // When its last fight ended (or changed player), and the shots it has kept
+    // going: since when, and the last one.
+    int aimEndedAt = -100000;
+    int sprayStart = 0;
+    int lastShotAt = -100000;
     kb::ViewKick kick;
     kb::StrafeState strafe;
     int eventSequence = 0;
@@ -515,16 +520,25 @@ int Fight(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focus 
     const kb::Contact &contact = bot.perception.contacts[focus.entity];
     if (bot.aim.target != focus.entity)
     {
-        kb::Engage(bot.aim, focus.entity, contact.noticedAt, svs.time, skill, bot.rng);
+        // Straight from another fight: the eye and hand still have the last
+        // player, and need a moment to take in the next.
+        const bool switching = bot.aim.target >= 0 || svs.time - bot.aimEndedAt < skill.switchWindowMs;
+        kb::Engage(bot.aim, focus.entity, contact.noticedAt, svs.time, skill, bot.rng, switching);
         bot.trigger = kb::TriggerState();
         bot.firstShotLogged = false;
     }
 
     float place[3];
     kb::LeadPlace(contact.lastSeen, contact.velocity, svs.time - contact.lastSeenAt, skill, place);
+    place[2] += bot.aim.heightOffset;
     float target[2];
     ViewToward(ps, place, target);
-    kb::StepAim(bot.aim, bot.view, target, bot.kick.angles, svs.time, seconds, skill, bot.rng);
+    // A spray kept going (shots no more than 0.3 s apart) wanders; clicks of a
+    // semi-automatic half as much.
+    int sprayMs = svs.time - bot.lastShotAt < 300 ? svs.time - bot.sprayStart : 0;
+    if (const WeaponDef *held = HeldWeapon(ps); held && held->fireType != WEAPON_FIRETYPE_FULLAUTO)
+        sprayMs /= 2;
+    kb::StepAim(bot.aim, bot.view, target, bot.kick.angles, svs.time, seconds, skill, bot.rng, sprayMs);
     if (focus.kind != kb::FocusKind::Seen)
         return 0;
 
@@ -586,6 +600,9 @@ int Fight(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focus 
     if (kb::StepTrigger(bot.trigger, onTarget, automatic, distance, svs.time, skill, bot.rng))
     {
         cmd.buttons |= BUTTON_ATTACK;
+        if (svs.time - bot.lastShotAt >= 300)
+            bot.sprayStart = svs.time;
+        bot.lastShotAt = svs.time;
         if (!bot.firstShotLogged)
         {
             bot.firstShotLogged = true;
@@ -684,26 +701,75 @@ bool HuntPlace(const BotSlot &bot, const kb::Focus &focus, float *out)
     return false;
 }
 
-// A place to roam to: the most interesting of a few reachable ones, by the
-// bot's own memory of where it has been and met enemies.
-bool RoamGoal(BotSlot &bot, const kb::NavMesh &nav, const float *origin, float *out)
+team_t TeamOf(int clientNum);
+
+// Calls fn(clientNum, slot) for each bot on `clientNum`'s team that is
+// playing (none in free-for-all).
+template <typename Fn>
+void ForTeammateBots(int clientNum, Fn fn)
 {
-    float bestScore = -1.0f;
-    for (int attempt = 0; attempt < 6; ++attempt)
+    const team_t team = TeamOf(clientNum);
+    if (team != TEAM_AXIS && team != TEAM_ALLIES)
+        return;
+    for (int other = 0; other < kMaxBotSlots && other < sv_maxclients->current.integer; ++other)
+    {
+        const BotSlot &mate = s_slots[other];
+        if (other == clientNum || !mate.active || svs.time - mate.lastTime > 1000 || TeamOf(other) != team)
+            continue;
+        fn(other, mate);
+    }
+}
+
+// How crowded `place` is with the bot's team: teammates (people too) within
+// 400 units of it, and teammate bots on their way to within 500 of it.
+float Crowding(int clientNum, const float *place)
+{
+    const team_t team = TeamOf(clientNum);
+    if (team != TEAM_AXIS && team != TEAM_ALLIES)
+        return 0.0f;
+    float crowd = 0.0f;
+    for (int other = 0; other < sv_maxclients->current.integer; ++other)
+    {
+        if (other == clientNum || TeamOf(other) != team)
+            continue;
+        const gentity_s *ent = SV_GentityNum(other);
+        if (!ent || !ent->client || ent->client->ps.pm_type != PM_NORMAL)
+            continue;
+        if (Distance2D(ent->client->ps.origin, place) < 400.0f)
+            crowd += 0.5f;
+    }
+    ForTeammateBots(clientNum, [&](int, const BotSlot &mate) {
+        if (mate.hasGoal && Distance2D(mate.goal, place) < 500.0f)
+            crowd += 1.0f;
+    });
+    return crowd;
+}
+
+// A place to roam to: the most interesting of a few reachable ones, by the
+// bot's own memory of where it has been and met enemies, away from where its
+// teammates are and are going (a team spreads out rather than moving as a
+// pack).
+bool RoamGoal(BotSlot &bot, int clientNum, const kb::NavMesh &nav, const float *origin, float *out)
+{
+    float bestScore = -1000.0f;
+    bool found = false;
+    for (int attempt = 0; attempt < 8; ++attempt)
     {
         float place[3];
         if (!nav.RandomReachablePoint(origin, NextUnit, &bot.rng, place))
             continue;
         if (Distance2D(origin, place) < 300.0f)
             continue;
-        const float score = bot.areas.Interest(place, svs.time, bot.personality) + bot.rng.Range(0.0f, 0.3f);
+        found = true;
+        const float score = bot.areas.Interest(place, svs.time, bot.personality) + bot.rng.Range(0.0f, 0.3f)
+                            - 0.5f * Crowding(clientNum, place);
         if (score > bestScore)
         {
             bestScore = score;
             std::memcpy(out, place, sizeof(place));
         }
     }
-    return bestScore >= 0.0f;
+    return found;
 }
 
 // ---------------------------------------------------------------------------
@@ -1050,9 +1116,31 @@ RolePlan PlanRole(BotSlot &bot, int clientNum, const kb::NavMesh &nav, const flo
             bot.roleGoal = false;
             return RolePlan::Default;
         }
-        if (bot.roleGoal && Distance2D(bot.goal, call->place) < 256.0f && !arrived)
+        if (bot.roleGoal && Distance2D(bot.goal, call->place) < 400.0f && !arrived)
             return RolePlan::Keep;
-        if (!PlaceOnMesh(bot, nav, call->place, bot.goal))
+        // Teammates already on their way there: two at most go, and the second
+        // comes from another side of it.
+        int others = 0;
+        ForTeammateBots(clientNum, [&](int, const BotSlot &mate) {
+            if (mate.roleGoal && mate.role == kb::Role::Push && Distance2D(mate.goal, call->place) < 400.0f)
+                ++others;
+        });
+        if (others >= 2)
+        {
+            bot.pushedCall = call->heardAtMs;
+            return RolePlan::Default;
+        }
+        if (others == 1)
+        {
+            float place[3];
+            if (!nav.RandomPointNear(call->place, 400.0f, NextUnit, &bot.rng, place)
+                || Crowding(clientNum, place) >= 1.0f || !PlaceOnMesh(bot, nav, place, bot.goal))
+            {
+                bot.pushedCall = call->heardAtMs;
+                return RolePlan::Default;
+            }
+        }
+        else if (!PlaceOnMesh(bot, nav, call->place, bot.goal))
             return RolePlan::Default;
         bot.roleGoal = true;
         bot.holdUntil = 0;
@@ -1228,6 +1316,19 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
     s.coverKnown = bot.coverKnown;
     s.inCover = bot.coverKnown && Distance2D(origin, bot.cover) < 40.0f && std::fabs(origin[2] - bot.cover[2]) < 48.0f;
     s.forObjective = bot.role == kb::Role::Attack && bot.objectiveKnown;
+    // Teammates who went after the same lead before this bot did.
+    if (float lead[3]; !s.enemyInView && HuntPlace(bot, focus, lead))
+    {
+        const bool hunting = bot.mind.intent == kb::Intent::Hunt;
+        ForTeammateBots(clientNum, [&](int other, const BotSlot &mate) {
+            if (mate.mind.intent != kb::Intent::Hunt || !mate.hasGoal || Distance2D(mate.goal, lead) > 600.0f)
+                return;
+            if (hunting && (mate.mind.sinceMs > bot.mind.sinceMs
+                            || (mate.mind.sinceMs == bot.mind.sinceMs && other > clientNum)))
+                return;
+            ++s.teammatesHunting;
+        });
+    }
 
     const kb::Intent intent = bot.mind.Decide(s, bot.personality);
     if (bot.mind.changed && bot_log && bot_log->current.integer)
@@ -1294,7 +1395,7 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
         bot.holdFacingKnown = false;
         if (arrived || replan)
         {
-            if (!RoamGoal(bot, *nav, origin, bot.goal))
+            if (!RoamGoal(bot, clientNum, *nav, origin, bot.goal))
             {
                 bot.hasGoal = false;
                 return;
@@ -1488,6 +1589,7 @@ bool Bot_UserMove(client_t *cl)
         if (!fighting && bot.aim.target >= 0)
         {
             bot.aim = kb::AimState();
+            bot.aimEndedAt = svs.time;
             bot.trigger = kb::TriggerState();
         }
         if (alive)

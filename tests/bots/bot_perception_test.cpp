@@ -80,6 +80,32 @@ static void NoticeRates()
     Check(MsToNotice(sliver) > close, "a player mostly behind cover takes longer");
 }
 
+static void Scopes()
+{
+    std::printf("\n== aiming down a sight narrows the screen ==\n");
+    kb::PerceptionParams params;
+    const kb::PerceptionParams hip = kb::SightThrough(params, 0.0f, 20.0f, true);
+    Check(hip.screenHalfYaw == params.screenHalfYaw && hip.screenHalfPitch == params.screenHalfPitch,
+          "at the hip the screen is the whole screen");
+    const kb::PerceptionParams irons = kb::SightThrough(params, 1.0f, 50.0f, false);
+    const kb::PerceptionParams acog = kb::SightThrough(params, 1.0f, 20.0f, true);
+    const kb::PerceptionParams half = kb::SightThrough(params, 0.5f, 20.0f, true);
+    Check(irons.screenHalfYaw < params.screenHalfYaw && irons.screenHalfYaw > 25.0f,
+          "iron sights narrow the screen a little");
+    Check(acog.screenHalfYaw < 12.0f && acog.screenHalfYaw == acog.screenHalfPitch,
+          "a scope leaves a narrow circle (under 12 degrees each side)");
+    Check(half.screenHalfYaw > acog.screenHalfYaw && half.screenHalfYaw < params.screenHalfYaw,
+          "halfway up, the scope's view is in between, with no circle yet");
+
+    kb::SightSample flank = Plain(300.0f);
+    flank.yawOff = 20.0f;
+    Check(kb::NoticeRate(flank, params) > 0.0f && kb::NoticeRate(flank, acog) == 0.0f,
+          "a player 20 degrees off is on the screen at the hip but not through an ACOG");
+    kb::SightSample far = Plain(3000.0f);
+    Check(kb::NoticeRate(far, acog) > kb::NoticeRate(far, params),
+          "a far player in the middle of the scope is picked out faster than at the hip");
+}
+
 static void HumanFloor()
 {
     std::printf("\n== nobody is noticed faster than a human could ==\n");
@@ -280,6 +306,7 @@ static void SmokeClouds()
 int main()
 {
     NoticeRates();
+    Scopes();
     HumanFloor();
     Memory();
     Hearing();

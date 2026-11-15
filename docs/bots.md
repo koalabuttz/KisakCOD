@@ -136,7 +136,7 @@ hunt goes to where it last saw or heard them.
 
   | Part | Who | What it does when nothing more pressing is on |
   |---|---|---|
-  | push | the boldest | goes to the latest callout (10 s at most), then roams |
+  | push | the boldest | goes to the latest callout (10 s at most), then roams; two pushers at most go to one callout, the second to another side of it |
   | anchor | the most patient | goes to a spot that overlooks the callout nearest it, holds there for 7 to 35 s, crouched or standing, watching it |
   | attack | the boldest, when the compass shows places to take | goes to the objective and stays on it, holding use (a flag captures while someone stands in it, a bomb plants or defuses while use is held), lying prone (more often the more patient it is), crouched or standing; on its way and on it, it fights an enemy in view but does not leave to chase a sound or a lead, and a prone bot stays down on the flag and fights from there |
   | defend | the most patient, when the compass shows places to hold | holds a spot that overlooks the objective for 8 to 35 s, watching it |
@@ -145,7 +145,11 @@ hunt goes to where it last saw or heard them.
   With no objectives (team deathmatch), about 40% push, 25% anchor and the
   rest roam. Attackers and defenders are spread over the objectives
   nearest the team first, so a team takes the flags on its side of the map
-  before it contests the others. Fights, cover and hunts come first: a part is what a bot does
+  before it contests the others. A roaming bot prefers places its teammates
+  are not at or going to, so a team spreads out rather than moving as a
+  pack. A lead (a sound, an enemy lost from sight) is chased by one or two
+  bots: one more goes only for an enemy it saw itself, and the rest look
+  and keep on. Fights, cover and hunts come first: a part is what a bot does
   between them.
 - **Objectives.** A bot reads them off its own compass: the objectives the game
   sends its team, active ones only. The stock gametypes mark them with
@@ -175,9 +179,21 @@ player is, never at where they really are:
   a further 120 ms on average (deviation 40, never under 60): a player's
   decision and motor onset.
 - **Flick, then settle.** The hand makes aimed movements at up to 450 degrees a
-  second. Each lands off by a normal error of 0.35 degrees plus 7% of the
+  second. Each lands off by a normal error of 0.55 degrees plus 7% of the
   movement's size, so a 60 degree flick lands a few degrees off and a small
-  correction lands close; a new correction starts every 170 ms or so. In the
+  correction lands close; a new correction starts every 170 ms or so. A
+  player crossing the view is harder to land on: 0.04 degrees more for each
+  degree a second they cross it. The hand aims at the chest give or take a
+  few units up or down, drawn for each fight (some fights it aims high, some
+  low).
+- **Sprays wander.** Each second the trigger is kept going (shots no more than
+  0.3 s apart) adds a degree to where the corrections land, up to two
+  degrees; quick clicks of a semi-automatic add half as much. A short burst
+  is accurate, a long spray is not.
+- **Switching players.** Going straight from one player to the next (or
+  within 2 s of the last fight) the hand waits a further 250 ms on average
+  (never less than 120), and its first movement lands half as far off again:
+  the eye and hand are still on the last player. In the
   host test the first moment on a still player 5 to 64 degrees off comes a
   median 0.45 s after the notice, and a second after a 60 degree flick the
   error is under 0.6 degrees in nine runs out of ten.
@@ -186,8 +202,9 @@ player is, never at where they really are:
   trails a player strafing back and forth: in the host test it is on one
   strafing at 500 units about a fifth of the time, against all the time on a
   still one.
-- **Trigger.** It fires while its view is within the player's angular
-  half-width of where it thinks they are (never tighter than half a degree).
+- **Trigger.** It fires while its view is within 1.25 times the player's
+  angular half-width of where it thinks they are (never tighter than half a
+  degree): like a person, it fires a little before it is truly on them.
   It clicks a semi-automatic about six times a second (never more than every
   110 ms), holds an automatic close up and fires it in bursts of about 0.45 s
   beyond 900 units. It aims down the sight beyond 400 units or with a scope,
@@ -197,7 +214,8 @@ player is, never at where they really are:
   server only moves the gun model. A bot has no client, so it would have no
   kick at all. The brain therefore runs the same kick for its own shots, with
   the weapon's numbers and the same 5 ms steps, and adds it to its command;
-  the hand pulls back half of it, 0.15 s late. Entering the sight throws its
+  the hand pulls back part of it, 0.15 s late: 40% on average, drawn for each
+  fight between 10% and 80%. Entering the sight throws its
   view off by the weapon's ADS view error, as `CG_PredictPlayerState` does a
   player's, and the hand has to find the player again.
 - **Moving.** While it fights it keeps walking its way or strafes for 0.4 to
@@ -231,6 +249,12 @@ left out; in a free-for-all everybody is an opponent.
   client), and then only as much of them as a clear line from the bot's eye
   reaches: head, chest and hips, through what blocks a player's sight
   (`MASK_AIMTARGET_VISIBILITY`: walls, foliage, no-sight brushes, vehicles).
+- **Aiming down a sight.** The screen zooms to the weapon's sight as it comes
+  up (from `cg_fov 65` to the weapon's `fAdsZoomFov`), so less of the world
+  fits on it, and a scope's overlay (an ACOG's or a sniper's) leaves only a
+  circle as tall as the screen. A flanker it would have seen at the hip goes
+  unseen through a scope. What is in the sight is magnified as much, so a
+  far player in it is picked out sooner.
 - **Noticing.** What the bot sees fills a meter. A running opponent close by in
   the middle of the screen fills it in 0.3 s. It fills more slowly with
   distance (beyond 600 units, in proportion), toward the screen's edge (to 30%
