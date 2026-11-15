@@ -310,6 +310,8 @@ bool DrawRays(Core *core, Rays *rays, Image *color, Image *depth, const SceneVie
     push.glow[3] = strength;
     push.misc[0] = w;
     push.misc[1] = std::max(params.most, 0.0f);
+    push.misc[2] = std::max(params.threshold, 0.0f);
+    push.misc[3] = std::clamp(params.sky, 0.0f, 1.0f);
 
     // The half-resolution images, a pixel for each 2x2 block of the area.
     const uint32_t halfWidth = (view.area.extent.width + 1) / 2;

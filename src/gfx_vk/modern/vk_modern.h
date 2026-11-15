@@ -411,12 +411,12 @@ FogStats Stats(const Fog *fog);
 //
 // Shafts of the sky's light streaming from the sun past what blocks it, made
 // on the screen (the classic radial blur): a pass at half resolution keeps
-// the sky's light near the sun (rays_mask.frag: sky pixels, by how close
+// the sky's light near the sun (rays.frag's first pass: sky pixels, by how close
 // they are to the sun's direction, plus a small glow of the sun's own
-// colour), a second smears that along each pixel's line to the sun's place
-// on the screen (rays_blur.frag), and a full-screen pass adds the result to
-// the linear-light scene (rays_apply.frag), faded out as the sun leaves the
-// view. Where buildings or trees stand in front of the sky the mask is dark,
+// colour, above a threshold), a second smears that along each pixel's line
+// to the sun's place on the screen (its second), and a full-screen pass
+// adds the result to the linear-light scene (its third), less of it
+// over the sky itself, faded out as the sun leaves the view. Where buildings or trees stand in front of the sky the mask is dark,
 // so the smear leaves dark gaps between the shafts. Independent of the map's
 // fog: the air's own thickness does not change.
 
@@ -431,8 +431,15 @@ struct RaysParams
     // Each sample counts this much less than the one before it.
     float decay = 0.96f;
     // How tightly the kept sky gathers round the sun: its light is weighted
-    // by cos(angle to the sun) to this power.
-    float spread = 12.0f;
+    // by cos(angle to the sun) to this power (32: half at about 12 degrees).
+    float spread = 32.0f;
+    // Only the sky's light above this (linear light, a soft knee) is kept:
+    // an open sky does not smear into a veil, the bright light round the sun
+    // does.
+    float threshold = 0.8f;
+    // The share of the rays added over the sky itself (0 to 1); whole over
+    // what stands in front of it.
+    float sky = 0.3f;
     // The sun's own glow added to the kept sky (its colour times this, in a
     // disc a few degrees across), so a sky without a drawn sun still has
     // rays.

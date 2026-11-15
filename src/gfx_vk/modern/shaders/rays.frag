@@ -6,9 +6,13 @@
 // (RAYS_PASS):
 //
 // 0, the mask, at half resolution: the sky's light kept where the sky shows
-//    (the scene depth at the sky's), weighted by how close each pixel's view
-//    ray is to the sun's direction, cos^spread, plus the sun's own glow in a
-//    small disc. What stands in front of the sky keeps nothing.
+//    (the scene depth at the sky's) and only what is above a threshold (a
+//    soft knee, as bloom's), weighted by how close each pixel's view ray is
+//    to the sun's direction, cos^spread, plus the sun's own glow in a small
+//    disc. What stands in front of the sky keeps nothing. The threshold and
+//    a tight spread keep an open sky from smearing into a veil over
+//    everything (PC god rays run 1): only the bright light round the sun
+//    streaks.
 // 1, the smear, at half resolution: each pixel sums the mask along its line
 //    to the sun's place on the screen (samples, each `decay` times the one
 //    before), from a per-pixel offset that moves each frame (the
@@ -16,14 +20,15 @@
 //    blocks the sky become the dark gaps between the shafts.
 // 2, the apply, at full resolution: adds the smear, times the strength and
 //    the fade as the sun leaves the view, to the linear-light scene (blend
-//    one, one).
+//    one, one); over the sky itself only a share of it (the sky is where the
+//    light comes from, and its clouds would wash out).
 
 #ifndef RAYS_PASS
 #define RAYS_PASS 0
 #endif
 
 layout(set = 0, binding = 0) uniform sampler2D sceneColor;  // linear, the scene (mask pass)
-layout(set = 0, binding = 1) uniform sampler2D sceneDepth;  // nearest, depth aspect (mask pass)
+layout(set = 0, binding = 1) uniform sampler2D sceneDepth;  // nearest, depth aspect (mask and apply passes)
 layout(set = 0, binding = 2) uniform sampler2D source;      // linear, the mask or the smear
 
 layout(push_constant, std430) uniform Push
@@ -35,7 +40,7 @@ layout(push_constant, std430) uniform Push
     vec4 shape;   // x spread, y samples, z length, w decay
     vec4 glow;    // rgb the sun's glow (linear light), a the strength
     vec4 target;  // xy the half-resolution images' size, zw its inverse
-    vec4 misc;    // x the projection's [2][3], y the most light kept
+    vec4 misc;    // x the projection's [2][3], y the most light kept, z the threshold, w the share over the sky
 } push;
 
 layout(location = 0) out vec4 outColor;
@@ -65,7 +70,7 @@ void main()
     const float facing = max(dot(ray, push.sunView.xyz), 0.0);
     vec3 light = textureLod(sceneColor, at / vec2(textureSize(sceneColor, 0)), 0.0).rgb;
     const float luminance = dot(light, vec3(0.2126, 0.7152, 0.0722));
-    light *= min(1.0, push.misc.y / max(luminance, 1e-4));
+    light *= min(1.0, push.misc.y / max(luminance, 1e-4)) * (max(luminance - push.misc.z, 0.0) / max(luminance, 1e-4));
     // The sun's glow: cos^256 is half at about 4 degrees from its middle.
     const vec3 kept = light * pow(facing, push.shape.x) + push.glow.rgb * pow(facing, 256.0);
     outColor = vec4(kept * sky, 1.0);
@@ -101,6 +106,7 @@ void main()
 {
     const vec2 uv = (gl_FragCoord.xy - push.area.xy) / push.area.zw;
     const vec3 rays = textureLod(source, uv, 0.0).rgb;
-    outColor = vec4(rays * (push.glow.a * push.sun.z), 1.0);
+    const bool sky = texelFetch(sceneDepth, ivec2(gl_FragCoord.xy), 0).r >= push.sunView.w;
+    outColor = vec4(rays * (push.glow.a * push.sun.z * (sky ? push.misc.w : 1.0)), 1.0);
 }
 #endif

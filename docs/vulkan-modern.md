@@ -85,6 +85,7 @@ back to them.
 | `r_modernFogFroxels` | default, off, on | `KISAK_VK_MODERN_FOG_FROXELS` |
 | `r_modernGodRays` | default, off, on | `KISAK_VK_MODERN_GOD_RAYS` |
 | `r_modernGodRaysStrength` | -1, or 0 to 8 | `KISAK_VK_MODERN_GOD_RAYS_STRENGTH` |
+| `r_modernGodRaysSpread`, `r_modernGodRaysThreshold`, `r_modernGodRaysSky` | -1, or 1 to 512, 0 to 16 and 0 to 1 | `KISAK_VK_MODERN_GOD_RAYS_SPREAD`, `_THRESHOLD`, `_SKY` |
 | `r_modernTonemap` | default, clamp, neutral, agx, aces | `KISAK_VK_MODERN_TONEMAP` |
 | `r_modernDebug` | default, none, velocity, velocity-all, normals, ao, reflections, fog | `KISAK_VK_MODERN_DEBUG` |
 
@@ -1721,11 +1722,13 @@ the frame's sun light with its overrides, set when the map has a sun):
 
 1. **Mask**, at half resolution: the scene's light where the sky shows (the
    scene depth at the sky's, `SkyDepth`, as a share of the four pixels
-   under each), weighted by cos(angle to the sun)^12, plus a glow of the
-   sun's own colour (cos^256, half at about 4 degrees), so a sky without a
-   bright sun drawn in it still has rays. Light is held below 8 (linear) so
-   one bright pixel does not streak. Whatever stands in front of the sky
-   keeps nothing.
+   under each), only what is above a threshold (`r_modernGodRaysThreshold`,
+   default 0.8 of linear light, a soft knee as bloom's), weighted by
+   cos(angle to the sun) to a power (`r_modernGodRaysSpread`, default 32:
+   half at about 12 degrees), plus a glow of the sun's own colour (cos^256,
+   half at about 4 degrees), so a sky without a bright sun drawn in it
+   still has rays. Light is held below 8 (linear) so one bright pixel does
+   not streak. Whatever stands in front of the sky keeps nothing.
 2. **Smear**, at half resolution: each pixel averages the mask along its
    line towards the sun's place on the screen, 48 samples
    (`KISAK_VK_MODERN_GOD_RAYS_SAMPLES`, 8 to 128) over 0.85 of the way, each
@@ -1736,12 +1739,22 @@ the frame's sun light with its overrides, set when the map has a sun):
 3. **Apply**: adds the smear, times `r_modernGodRaysStrength` (default 0.6,
    up to 8) and a fade as the sun leaves the view (whole while the sun is
    within about 70 degrees of the view's middle, none from 90), to the
-   linear-light scene (blend one, one).
+   linear-light scene (blend one, one); over the sky itself only a share of
+   it (`r_modernGodRaysSky`, default 0.3).
+
+PC god rays run 1 (2026-11-15, eda2c0d9, RTX 2080 Super, 1280x720): 0.084
+to 0.097 ms GPU a scene. With the first settings (no threshold, cos^12, the
+whole share over the sky) the shafts were right where the sun stands behind
+something with gaps (mp_overgrown's trees the best, mp_backlot, mp_strike),
+but against an open sky (mp_crash, mp_crossfire) the smeared sky was a white
+veil that washed out clouds and the sun's halo and faded wires and poles.
+The threshold, the tighter spread and the smaller share over the sky are
+for that; the old look is spread 12, threshold 0, sky 1.
 
 With the sun behind the camera nothing is recorded. All three passes are
 timed under "modern god rays". The statistics line: `vulkan d3d9: modern: S
-scenes with god rays (B with the sun out of view; strength K, N samples), T
-ms GPU each`, T for the three passes of a scene drawn.
+scenes with god rays (B with the sun out of view; strength K, spread P,
+threshold L, sky Q, N samples), T ms GPU each`, T for the three passes of a scene drawn.
 
 Two more lines say what the last scene's map set, for choosing where the
 air could be thicker: `the last scene's fog: start S, density D (half the
@@ -1759,7 +1772,10 @@ middle. At depth 1 the whole scene is sky and the middle pixel gets grey x
 (1 + strength): strength 1 and 0.5. At depth 0.5 nothing is sky: no rays.
 The sun behind the camera, a view without a sun, or the god rays off: no
 rays. With the sun's colour 0.5 its glow adds about 0.214 x 0.95 of light
-more. Without linear light, grey 100 throughout.
+more. These run with no threshold and the whole share over the sky; then a
+threshold of 0.1 keeps grey - 0.1, the default 0.8 keeps nothing, and a
+share of 0.5 over the sky adds half. Without linear light, grey 100
+throughout.
 
 ## Compute passes
 

@@ -637,6 +637,9 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
     modern::RaysParams &raysParams = backend->raysParams;
     raysParams = start.raysParams;
     raysParams.strength = number(tuning.godRaysStrength, start.raysParams.strength, 0.0f, 8.0f, true);
+    raysParams.spread = number(tuning.godRaysSpread, start.raysParams.spread, 1.0f, 512.0f, true);
+    raysParams.threshold = number(tuning.godRaysThreshold, start.raysParams.threshold, 0.0f, 16.0f, true);
+    raysParams.sky = number(tuning.godRaysSky, start.raysParams.sky, 0.0f, 1.0f, true);
 
     backend->tonemapCurve = tuning.tonemap >= static_cast<int>(modern::TonemapCurve::Clamp)
                                     && tuning.tonemap <= static_cast<int>(modern::TonemapCurve::Aces)
@@ -651,7 +654,8 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
             "vulkan d3d9: modern: switches now: bloom %s, exposure %s (key %.3f), velocity %s, our shaders %s "
             "(models %s, without the sun %s, lights %s; sun %.2f, sky %.2f), ambient occlusion %s (radius %.1f, power %.2f, "
             "thickness %.1f, grazing %.2f, floor %.2f, edge %.3f%s), reflections %s (distance %.0f, thickness %.1f), normals %s, "
-            "volumetric fog %s (%s, sun %.2f, scatter %.2f, spot lights %.2f), god rays %s (strength %.2f), "
+            "volumetric fog %s (%s, sun %.2f, scatter %.2f, spot lights %.2f), god rays %s (strength %.2f, "
+            "spread %.0f, threshold %.2f, sky %.2f), "
             "tonemap %s, debug view %s",
             onOff(backend->bloomWanted), onOff(backend->exposureWanted), backend->exposureParams.key,
             onOff(backend->velocityWanted), onOff(backend->shadersWanted), onOff(backend->modelShadersWanted),
@@ -661,6 +665,7 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
             onOff(backend->reflectionsWanted), reflectionParams.maxDistance, reflectionParams.thickness,
             onOff(backend->normalsWanted), onOff(backend->fogWanted), fogParams.froxels ? "froxels" : "march",
             fogParams.sunShare, fogParams.scatter, fogParams.spotShare, onOff(backend->raysWanted), raysParams.strength,
+            raysParams.spread, raysParams.threshold, raysParams.sky,
             modern::CurveName(backend->tonemapCurve), DebugViewName(view));
 }
 } // namespace
@@ -794,6 +799,15 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         const long count = samples.empty() ? 0 : std::strtol(samples.c_str(), nullptr, 10);
         if (count >= 8 && count <= 128)
             rays.samples = static_cast<uint32_t>(count);
+        const auto number = [](const char *name, float low, float high, float &out) {
+            const std::string text = EnvText(name);
+            const float read = text.empty() ? -1.0f : std::strtof(text.c_str(), nullptr);
+            if (read >= low && read <= high)
+                out = read;
+        };
+        number("KISAK_VK_MODERN_GOD_RAYS_SPREAD", 1.0f, 512.0f, rays.spread);
+        number("KISAK_VK_MODERN_GOD_RAYS_THRESHOLD", 0.0f, 16.0f, rays.threshold);
+        number("KISAK_VK_MODERN_GOD_RAYS_SKY", 0.0f, 1.0f, rays.sky);
     }
     // Reflection probes are filtered as their textures load, so this one
     // stays start-up only.
@@ -1167,9 +1181,10 @@ void BackendLogStats(Backend *backend, bool reset)
         const modern::RaysStats rays = modern::Stats(backend->rays);
         const PassTimings pass = PassTimingsFor(backend->core, "modern god rays");
         HostLog(h, "vulkan d3d9: modern: %llu scenes with god rays (%llu with the sun out of view; strength %.2f, "
-                   "%u samples), %.3f ms GPU each",
+                   "spread %.0f, threshold %.2f, sky %.2f, %u samples), %.3f ms GPU each",
                 static_cast<unsigned long long>(rays.scenes - backend->raysBase.scenes),
                 static_cast<unsigned long long>(rays.behind - backend->raysBase.behind), backend->raysParams.strength,
+                backend->raysParams.spread, backend->raysParams.threshold, backend->raysParams.sky,
                 backend->raysParams.samples, pass.supported ? 3.0 * average(pass) : 0.0);
     }
     // The last scene's fog and sun, as the map sets them.

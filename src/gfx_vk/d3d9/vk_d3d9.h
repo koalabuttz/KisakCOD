@@ -77,6 +77,9 @@ struct ModernTuning
     int fogFroxels = -1;       // the fog from a froxel volume, not a march (KISAK_VK_MODERN_FOG_FROXELS)
     int godRays = -1;          // god rays, light shafts from the sun on the screen (KISAK_VK_MODERN_GOD_RAYS)
     float godRaysStrength = -1.0f; // how bright the god rays are, 0 to 8 (KISAK_VK_MODERN_GOD_RAYS_STRENGTH)
+    float godRaysSpread = -1.0f;   // how tightly the kept sky gathers round the sun, 1 to 512 (_SPREAD)
+    float godRaysThreshold = -1.0f; // the sky's light below this is not kept, 0 to 16 (_THRESHOLD)
+    float godRaysSky = -1.0f;      // the share of the rays added over the sky itself, 0 to 1 (_SKY)
 };
 
 // The debug view over each Modern scene (ModernTuning::debug,

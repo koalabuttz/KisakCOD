@@ -6719,10 +6719,13 @@ void Check::ModernFog()
 
 // God rays (vk_modern.h DrawRays, docs/vulkan-modern.md): scenes of grey 100
 // (0.127 of light) under identity matrices with the sun straight ahead, so
-// its place on the screen is the middle. Cleared to depth 1 the whole scene
-// is sky: near the middle every pixel's ray is within a degree or two of the
-// sun, so the mask keeps the grey whole and the smear towards the middle
-// gives it back, and the middle pixel gets grey * (1 + strength). Cleared to
+// its place on the screen is the middle, with no threshold and the whole
+// share over the sky unless said. Cleared to depth 1 the whole scene is sky:
+// near the middle every pixel's ray is within a degree or two of the sun, so
+// the mask keeps the grey whole and the smear towards the middle gives it
+// back, and the middle pixel gets grey * (1 + strength). A threshold of 0.1
+// keeps grey - 0.1 of it; the default 0.8 none. A share of 0.5 over the sky
+// adds half. Cleared to
 // depth 0.5 nothing is sky: no rays. The sun behind the camera, or a view
 // without a sun, or the god rays switched off: no rays. With the sun's
 // colour 0.5 (0.214 of light) its glow adds about that much more to the
@@ -6751,12 +6754,16 @@ void Check::ModernGodRays()
         float sunZ = 1.0f;
         bool sun = true;
         float sunColor = 0.0f;
+        float threshold = 0.0f;
+        float skyShare = 1.0f;
     };
     const auto scene = [&](const char *name, const Scene &with, int want) {
         front::ModernTuning modern;
         modern.exposure = 0;
         modern.godRays = with.on;
         modern.godRaysStrength = with.strength;
+        modern.godRaysThreshold = with.threshold;
+        modern.godRaysSky = with.skyShare;
         {
             const std::lock_guard<std::mutex> lock(host->mutex);
             host->tuning = front::Tuning{};
@@ -6794,6 +6801,9 @@ void Check::ModernGodRays()
     scene("god_rays_sun_behind", Scene{1, 1.0f, 1.0f, -1.0f}, plain);
     scene("god_rays_no_sun", Scene{1, 1.0f, 1.0f, 1.0f, false}, plain);
     scene("god_rays_sun_glow", Scene{1, 1.0f, 1.0f, 1.0f, true, 0.5f}, rays(grey + sunLight * 0.95));
+    scene("god_rays_threshold", Scene{1, 1.0f, 1.0f, 1.0f, true, 0.0f, 0.1f}, rays(grey - 0.1));
+    scene("god_rays_default_threshold", Scene{1, 1.0f, 1.0f, 1.0f, true, 0.0f, -1.0f}, plain);
+    scene("god_rays_half_over_sky", Scene{1, 1.0f, 1.0f, 1.0f, true, 0.0f, 0.0f, 0.5f}, rays(grey * 0.5));
     {
         const std::lock_guard<std::mutex> lock(host->mutex);
         host->tuning = front::Tuning{};

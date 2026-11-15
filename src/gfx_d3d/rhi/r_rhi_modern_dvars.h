@@ -50,6 +50,9 @@ inline const dvar_s *fogSpots;
 inline const dvar_s *fogFroxels;
 inline const dvar_s *godRays;
 inline const dvar_s *godRaysStrength;
+inline const dvar_s *godRaysSpread;
+inline const dvar_s *godRaysThreshold;
+inline const dvar_s *godRaysSky;
 
 // Harmless to call again (the engine keeps the first registration).
 inline void Register()
@@ -144,6 +147,16 @@ inline void Register()
     godRaysStrength = Dvar_RegisterFloat("r_modernGodRaysStrength", -1.0f, -1.0f, 8.0f, DVAR_NOFLAG,
                                          "Modern visuals: how bright the god rays are (0 none); -1 the default "
                                          "(KISAK_VK_MODERN_GOD_RAYS_STRENGTH or 0.6)");
+    godRaysSpread = Dvar_RegisterFloat("r_modernGodRaysSpread", -1.0f, -1.0f, 512.0f, DVAR_NOFLAG,
+                                       "Modern visuals: how tightly the sky that makes god rays gathers round the "
+                                       "sun (cos to this power, 1 to 512); -1 the default "
+                                       "(KISAK_VK_MODERN_GOD_RAYS_SPREAD or 32)");
+    godRaysThreshold = Dvar_RegisterFloat("r_modernGodRaysThreshold", -1.0f, -1.0f, 16.0f, DVAR_NOFLAG,
+                                          "Modern visuals: only sky brighter than this (linear light) makes god "
+                                          "rays; -1 the default (KISAK_VK_MODERN_GOD_RAYS_THRESHOLD or 0.8)");
+    godRaysSky = Dvar_RegisterFloat("r_modernGodRaysSky", -1.0f, -1.0f, 1.0f, DVAR_NOFLAG,
+                                    "Modern visuals: the share of the god rays added over the sky itself (0 to 1); "
+                                    "-1 the default (KISAK_VK_MODERN_GOD_RAYS_SKY or 0.3)");
 }
 
 // The switches as the back end takes them: an enum's index 0 (default) is -1,
@@ -182,5 +195,8 @@ inline void Read(gfx_vk::d3d9::ModernTuning &out)
     out.fogFroxels = fogFroxels->current.integer - 1;
     out.godRays = godRays->current.integer - 1;
     out.godRaysStrength = godRaysStrength->current.value;
+    out.godRaysSpread = godRaysSpread->current.value;
+    out.godRaysThreshold = godRaysThreshold->current.value;
+    out.godRaysSky = godRaysSky->current.value;
 }
 } // namespace modern_dvars
