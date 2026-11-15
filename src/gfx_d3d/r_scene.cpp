@@ -1463,12 +1463,13 @@ static bool R_ModernTakeWord(const char **name, size_t *length, const char *word
 // can be drawn as, before its arguments are checked:
 // lm_[hsm_]sun_<r0|b0|t0>c0[d0][n0][s0]_sm3, or lm_[hsm_]sun_r0c0_sm2; and for
 // models lp_[hsm_][i_]sun_<r0|b0|t0>c0[d0][n0][s0]_sm3 (i_, instanced, shares
-// the pixel shader; skin_ and flag_ have shaders of their own that model-lit
-// shader facts did not read, sm_ compares in the shader). Without the sun
+// the pixel shader; sm_ compares in the shader). Character skin (bare hands and
+// forearms) is lp_[hsm_][i_]skin_sun_<r0c0|r0c0n0|r0c0s0|r0c0n0s0> and cloth
+// (flags, banners) lp_[hsm_]flag_[sun_]<t0c0>[n0][s0] (skin and flag shader
+// facts, and the materials facts). Without the sun
 // (interiors, lit shader facts 5): lm_<r0|b0|t0>c0[d0][n0][s0]_sm3 and
 // lp_[i_]<r0|b0|t0>c0[d0][n0][s0]_sm3 (their shader model 2 builds read the
-// lightmap's UV elsewhere; lp_skin_ s0 has a shader of its own, and flag_,
-// the same shader as lp_t0, is left with skin_ for now). A spot or omni light
+// lightmap's UV elsewhere). A spot or omni light
 // as the primary light (lit shader facts 6 and 7): lm_[hsm_]<spot|omni>_...
 // and lp_[hsm_][i_]<spot|omni>_..., shader model 3 only, and with the light's
 // shadow map not with a detail map (facts 7 did not read those).
@@ -1487,6 +1488,7 @@ static uint16_t R_ModernLitShaderFromName(const char *name)
     if (length > 5 && !strcmp(name + length - 5, ".hlsl"))
         length -= 5;
     uint16_t shader;
+    bool skin = false, flag = false;
     if (R_ModernTakeWord(&name, &length, "lm_"))
     {
         const bool shadow = R_ModernTakeWord(&name, &length, "hsm_");
@@ -1503,8 +1505,15 @@ static uint16_t R_ModernLitShaderFromName(const char *name)
     else if (R_ModernTakeWord(&name, &length, "lp_"))
     {
         const bool shadow = R_ModernTakeWord(&name, &length, "hsm_");
-        R_ModernTakeWord(&name, &length, "i_");
-        if (!shadow && R_ModernTakeWord(&name, &length, "amb_"))
+        // flag_ (cloth) never with i_; skin_ (character skin) after it.
+        // Both are checked against the surface below.
+        flag = R_ModernTakeWord(&name, &length, "flag_");
+        if (!flag)
+        {
+            R_ModernTakeWord(&name, &length, "i_");
+            skin = R_ModernTakeWord(&name, &length, "skin_");
+        }
+        if (!shadow && !skin && !flag && R_ModernTakeWord(&name, &length, "amb_"))
         {
             // lp_[i_]amb[_sun|_spot|_omni]_t0c0: one program whatever the
             // light (lit shader facts 6).
@@ -1542,6 +1551,29 @@ static uint16_t R_ModernLitShaderFromName(const char *name)
     const bool pointLight = (shader & GFX_MODERN_LIT_SHADER_LIGHT) != 0;
     if (pointLight && (shader & GFX_MODERN_LIT_SHADER_SHADOW) && (shader & GFX_MODERN_LIT_SHADER_DETAIL))
         return GFX_MODERN_LIT_SHADER_NONE;
+    // Skin and flag shader facts: skin_ is the plain model's shader for the
+    // sun's r0c0 and r0c0n0, and with s0 the plain one with the reflection
+    // probe's light times 0.3; it has no other surfaces, and without the sun
+    // or with a spot or omni light it was not read. flag_ is the plain t0
+    // shader with the sun lighting both faces, and without a light the plain
+    // one itself; with a spot or omni light it was not read.
+    const uint16_t family = shader & GFX_MODERN_LIT_SHADER_FAMILY;
+    if (skin)
+    {
+        if (family != GFX_MODERN_LIT_SHADER_LP_SUN || pointLight
+            || (shader & (GFX_MODERN_LIT_SHADER_DETAIL | GFX_MODERN_LIT_SHADER_BLENDED
+                          | GFX_MODERN_LIT_SHADER_ALPHA_TESTED)))
+            return GFX_MODERN_LIT_SHADER_NONE;
+        if (shader & GFX_MODERN_LIT_SHADER_SPECULAR)
+            shader |= GFX_MODERN_LIT_SHADER_SKIN_PROBE;
+    }
+    if (flag)
+    {
+        if (pointLight || (shader & GFX_MODERN_LIT_SHADER_DETAIL) || !(shader & GFX_MODERN_LIT_SHADER_ALPHA_TESTED))
+            return GFX_MODERN_LIT_SHADER_NONE;
+        if (family == GFX_MODERN_LIT_SHADER_LP_SUN)
+            shader |= GFX_MODERN_LIT_SHADER_TWO_SIDED_SUN;
+    }
     // The shader model 2 builds are known only without maps or a mode (world-lit
     // shader facts 1 and 2); facts 3 read the shader model 3 ones.
     const uint16_t sm3Only = GFX_MODERN_LIT_SHADER_NORMAL | GFX_MODERN_LIT_SHADER_SPECULAR
