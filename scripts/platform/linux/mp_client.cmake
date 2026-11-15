@@ -477,6 +477,8 @@ elseif(KISAK_PLATFORM STREQUAL "android")
     target_link_options(KisakCOD-mp PRIVATE -Wl,--gc-sections ${KISAK_LINUX_HARDENING_LINK_OPTIONS}
         "-Wl,--version-script=${SCRIPTS_DIR}/platform/android/main_exports.map")
     set_property(TARGET KisakCOD-mp APPEND PROPERTY LINK_DEPENDS "${SCRIPTS_DIR}/platform/android/main_exports.map")
+    # The console goes to logcat (src/linux/main.cpp).
+    target_link_libraries(KisakCOD-mp PRIVATE log)
 else()
     target_link_options(KisakCOD-mp PRIVATE -Wl,--gc-sections ${KISAK_LINUX_HARDENING_LINK_OPTIONS}
         "-Wl,--version-script=${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")

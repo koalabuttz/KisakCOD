@@ -982,8 +982,72 @@ namespace
     }
 }
 
+#if defined(__ANDROID__) && defined(KISAK_LINUX_GAME_CLIENT)
+#include <android/log.h>
+#include <pthread.h>
+#include <stdint.h>
+#include <string.h>
+#include <unistd.h>
+namespace
+{
+// An app's stdout and stderr go nowhere on Android, and the client prints its
+// console to stderr, so both are sent through a pipe whose lines a thread
+// copies to logcat under the tag KisakCOD (adb logcat -s KisakCOD).
+void *CopyConsoleToLogcat(void *arg)
+{
+    const int fd = static_cast<int>(reinterpret_cast<intptr_t>(arg));
+    char buffer[1024];
+    size_t used = 0;
+    for (;;)
+    {
+        const ssize_t got = read(fd, buffer + used, sizeof(buffer) - 1 - used);
+        if (got < 0 && errno == EINTR)
+            continue;
+        if (got <= 0)
+            break;
+        used += static_cast<size_t>(got);
+        char *start = buffer;
+        while (char *newline = static_cast<char *>(memchr(start, '\n', buffer + used - start)))
+        {
+            *newline = 0;
+            __android_log_write(ANDROID_LOG_INFO, "KisakCOD", start);
+            start = newline + 1;
+        }
+        used -= static_cast<size_t>(start - buffer);
+        memmove(buffer, start, used);
+        if (used == sizeof(buffer) - 1)
+        {
+            // A line longer than the buffer goes out in pieces.
+            buffer[used] = 0;
+            __android_log_write(ANDROID_LOG_INFO, "KisakCOD", buffer);
+            used = 0;
+        }
+    }
+    return nullptr;
+}
+
+void SendConsoleToLogcat()
+{
+    int fds[2];
+    if (pipe(fds) != 0)
+        return;
+    setvbuf(stdout, nullptr, _IOLBF, 0);
+    setvbuf(stderr, nullptr, _IOLBF, 0);
+    dup2(fds[1], STDOUT_FILENO);
+    dup2(fds[1], STDERR_FILENO);
+    close(fds[1]);
+    pthread_t thread;
+    if (pthread_create(&thread, nullptr, CopyConsoleToLogcat, reinterpret_cast<void *>(static_cast<intptr_t>(fds[0])))
+        == 0)
+        pthread_detach(thread);
+}
+} // namespace
+#endif
 int main(int argc, char **argv)
 {
+#if defined(__ANDROID__) && defined(KISAK_LINUX_GAME_CLIENT)
+    SendConsoleToLogcat();
+#endif
 #if defined(__vita__)
     // Network, data folder, console log and the command line from
     // cmdline.txt, before anything else runs (src/vita/vita_main.cpp).

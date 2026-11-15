@@ -162,7 +162,19 @@ adb logcat -s KisakCOD SDL
 
 Extra engine arguments for a run go in the `args` extra, split at spaces:
 `adb shell am start -n org.kisakcod.game/.KisakActivity --es args "+set developer 1"`.
-Not tried on a device yet.
+The game's console goes to logcat under the tag KisakCOD: Android drops an
+app's stdout and stderr, so `src/linux/main.cpp` copies them there.
+
+First start on the Retroid Pocket 6 (2026-11-15, CI APK of 91d7799): the menu
+drew with Vulkan, but turned a quarter and squeezed. The panel's own
+orientation is portrait, so the surface reports a quarter-turn transform while
+the game runs in landscape, and the swapchain passed that transform on: the
+compositor took the landscape picture as already turned. The swapchain now
+asks for no rotation (`ChoosePreTransform` in `src/gfx_vk/vk_core.cpp`), the
+compositor turns the picture, and the `VK_SUBOPTIMAL_KHR` that Android
+reports for that alone does not rebuild the swapchain. Drawing the picture
+turned (Android's pre-rotation) would save the compositor that work; it is
+left for the speed stage.
 
 ## Running the server on a device
 

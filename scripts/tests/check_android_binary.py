@@ -19,7 +19,8 @@ ELF file with the NDK's llvm-readelf and llvm-objdump:
 
 With --library the file is libmain.so, the game client in the APK: a shared
 object with no program interpreter that may also need the libraries packed
-beside it (libSDL3.so, libopenal.so, libd3d9_unavailable.so) and exports
+beside it (libSDL3.so, libopenal.so, libd3d9_unavailable.so) and Android's
+liblog.so, and exports
 SDL_main, the one name SDL3's activity looks up, and nothing else.
 
 --ndk defaults to $ANDROID_NDK_HOME, $ANDROID_NDK_ROOT or $ANDROID_NDK.
@@ -32,7 +33,8 @@ import subprocess
 import sys
 
 ALLOWED_LIBRARIES = {'libc.so', 'libm.so', 'libdl.so'}
-APP_LIBRARIES = {'libSDL3.so', 'libopenal.so', 'libd3d9_unavailable.so'}
+# liblog.so is Android's own: the client copies its console to logcat.
+APP_LIBRARIES = {'libSDL3.so', 'libopenal.so', 'libd3d9_unavailable.so', 'liblog.so'}
 APP_EXPORTS = ['SDL_main']
 INTERPRETER = '/system/bin/linker64'
 MIN_ALIGNMENT = 16 * 1024
