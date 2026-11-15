@@ -1,4 +1,4 @@
-// gfx_vk pipelines: shader modules, graphics pipelines through an on-disk
+// gfx_vk pipelines: shader modules, graphics and compute pipelines through an on-disk
 // pipeline cache with a compile counter, and cached samplers. See vk_core.h.
 
 #include "vk_core_internal.h"
@@ -166,6 +166,33 @@ VkPipeline CreateGraphicsPipeline(Core *core, const VkGraphicsPipelineCreateInfo
     core->stats.pipelineCreateMs +=
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     if (!Check(*core, result, "vkCreateGraphicsPipelines"))
+        return VK_NULL_HANDLE;
+    ++core->stats.pipelinesCreated;
+    if (core->inFrame)
+        ++core->stats.pipelinesCreatedInFrame;
+    if ((pipelineFeedback.flags & VK_PIPELINE_CREATION_FEEDBACK_VALID_BIT)
+        && (pipelineFeedback.flags & VK_PIPELINE_CREATION_FEEDBACK_APPLICATION_PIPELINE_CACHE_HIT_BIT))
+        ++core->stats.pipelineCacheHits;
+    return pipeline;
+}
+
+VkPipeline CreateComputePipeline(Core *core, const VkComputePipelineCreateInfo &info)
+{
+    VkPipelineCreationFeedback pipelineFeedback{};
+    VkPipelineCreationFeedbackCreateInfo feedback{};
+    feedback.sType = VK_STRUCTURE_TYPE_PIPELINE_CREATION_FEEDBACK_CREATE_INFO;
+    feedback.pNext = info.pNext;
+    feedback.pPipelineCreationFeedback = &pipelineFeedback;
+    VkComputePipelineCreateInfo chained = info;
+    chained.pNext = &feedback;
+
+    const auto start = std::chrono::steady_clock::now();
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    const VkResult result =
+        core->vk.vkCreateComputePipelines(core->dev, core->pipelineCache, 1, &chained, nullptr, &pipeline);
+    core->stats.pipelineCreateMs +=
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    if (!Check(*core, result, "vkCreateComputePipelines"))
         return VK_NULL_HANDLE;
     ++core->stats.pipelinesCreated;
     if (core->inFrame)

@@ -456,7 +456,8 @@ Candidate Evaluate(Core &core, VkPhysicalDevice physical)
     bool found = false;
     for (uint32_t i = 0; i < count && !found; ++i)
     {
-        if (!(families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT))
+        // The Modern path's compute passes run on the same queue as the draws.
+        if (!(families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) || !(families[i].queueFlags & VK_QUEUE_COMPUTE_BIT))
             continue;
         VkBool32 present = VK_FALSE;
         if (vk.vkGetPhysicalDeviceSurfaceSupportKHR(physical, i, core.surface, &present) == VK_SUCCESS && present)
@@ -467,7 +468,7 @@ Candidate Evaluate(Core &core, VkPhysicalDevice physical)
     }
     if (!found)
     {
-        std::snprintf(candidate.why, sizeof(candidate.why), "no queue family both draws and presents to this window");
+        std::snprintf(candidate.why, sizeof(candidate.why), "no queue family draws, computes and presents to this window");
         return candidate;
     }
 
@@ -692,6 +693,7 @@ bool CreateDevice(Core &core)
     core.optional.independentBlend = supported.independentBlend;
     core.optional.shaderClipDistance = supported.shaderClipDistance;
     core.optional.shaderFloat16 = supported12.shaderFloat16;
+    core.optional.storageImageExtendedFormats = supported.shaderStorageImageExtendedFormats;
     // MoltenVK's paths (see OptionalFeatures), or forced for testing.
     core.optional.dynamicVertexStride = !portability && !EnvEquals("KISAK_VK_VERTEX_STRIDE", "static");
     core.optional.ownIndexMemory = EnvEquals("KISAK_VK_INDEX_MEMORY", "own")
@@ -743,6 +745,7 @@ bool CreateDevice(Core &core)
     features.features.fillModeNonSolid = supported.fillModeNonSolid;
     features.features.independentBlend = supported.independentBlend;
     features.features.shaderClipDistance = supported.shaderClipDistance;
+    features.features.shaderStorageImageExtendedFormats = supported.shaderStorageImageExtendedFormats;
     features.features.occlusionQueryPrecise = core.optional.occlusionCounts ? VK_TRUE : VK_FALSE;
 
     VkDeviceCreateInfo info{};

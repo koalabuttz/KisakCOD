@@ -190,6 +190,14 @@ involved. The checks:
                  KISAK_VK_MODERN_SSR=0 and KISAK_VK_MODERN_NORMALS=0, where
                  they are not; the full run traces them for 3 scenes
                  unless linear light, lit inputs or our lit shaders are off
+  compute        --scene modern_compute, which a full run leaves out, passes
+                 with KISAK_VK_MODERN_DEBUG=compute (and with linear light
+                 off), where two compute passes build a 3D volume (a storage
+                 image and a storage buffer, then a front-to-back
+                 integration along z) and a draw samples it over the
+                 viewport (the scene's own points; one volume built and
+                 drawn, logged), and without the debug view, where nothing
+                 is built and the scene is as drawn
 
 Usage:
   test_vulkan_d3d9_front.py --binary build/bin/KisakCOD-vulkan-d3d9-check
@@ -582,6 +590,30 @@ def main():
                       and (line is not None and line.group(1) == str(views) and line.group(2) == '64'
                            and line.group(3) == '64' if views else line is None)
                       and (reads is not None and reads.group(1) == '2' if views else reads is None),
+                      f'status {code}\n{stdout}')
+
+    # compute
+    compute_line = re.compile(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) compute check volumes built \((\d+) '
+                              r'drawn\), ([0-9.]+) ms GPU each for its compute passes$', re.M)
+    for settings, built in (({'KISAK_VK_MODERN_DEBUG': 'compute'}, True),
+                            ({'KISAK_VK_MODERN_DEBUG': 'compute', 'KISAK_VK_MODERN_LINEAR': '0'}, True),
+                            ({}, False),
+                            ({'KISAK_VK_MODERN_LINEAR': '0'}, False)):
+        chosen = dict(env)
+        for name in ('KISAK_VK_MODERN_LINEAR', 'KISAK_VK_MODERN_DEBUG'):
+            chosen.pop(name, None)
+        chosen.update(settings)
+        code, stdout, _ = run(binary, ['--scene', 'modern_compute', '--validation', args.validation], chosen)
+        found, scenes = parse(stdout)
+        line = compute_line.search(stdout)
+        named = ' '.join(f'{k}={v}' for k, v in settings.items()) or 'the defaults'
+        checks.expect(f'modern_compute passes with {named}',
+                      code == 0 and found.get('d3d9_check') == 'passed'
+                      and len(scenes) == 1 and scenes[0][0] == 'modern_compute' and scenes[0][1] > 0
+                      and scenes[0][2] == 0
+                      and (line is not None and line.group(1) == '1' and line.group(2) == '1' if built
+                           else line is None)
+                      and 'no compute check' not in stdout and 'compute check is not' not in stdout,
                       f'status {code}\n{stdout}')
 
     # present-mode
