@@ -42,8 +42,9 @@ map"` (next section).
 
 ## Runs that play themselves: `run_atMap`
 
-The multiplayer client on Windows, Linux and macOS takes the PS Vita's timed
-console commands and quit timers under `run_*` names. A start with
+The multiplayer client on Windows, Linux and macOS, and the singleplayer game
+(also on Android; both share `src/client/cl_run_plan.h`), take the PS Vita's
+timed console commands and quit timers under `run_*` names. A start with
 
     +set run_atMap "5 setviewpos 336 60 268 65 | 10 framelog 10 A | 21 screenshot | 23 quit"
 
