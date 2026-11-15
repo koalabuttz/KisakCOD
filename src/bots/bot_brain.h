@@ -64,6 +64,10 @@ int Bot_Sense(int clientNum,
               BotNotice *notices,
               int maxNotices);
 
+// Every shot the players have fired since the server started, as the bots'
+// ears counted them (bot_senses.cpp).
+int Bot_ShotsFired();
+
 // The map sense (bot_tactics.cpp): what a player learns of a map's shape by
 // playing it, from the map's own geometry and never from other players.
 
