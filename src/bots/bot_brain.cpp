@@ -1153,6 +1153,7 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
     s.hurtAgoMs = svs.time - bot.hurtAt;
     s.coverKnown = bot.coverKnown;
     s.inCover = bot.coverKnown && Distance2D(origin, bot.cover) < 40.0f && std::fabs(origin[2] - bot.cover[2]) < 48.0f;
+    s.onObjective = bot.role == kb::Role::Attack && bot.objectiveKnown && Distance2D(origin, bot.objective) < 160.0f;
 
     const kb::Intent intent = bot.mind.Decide(s, bot.personality);
     if (bot.mind.changed && bot_log && bot_log->current.integer)
@@ -1436,24 +1437,25 @@ bool Bot_UserMove(client_t *cl)
             Decide(bot, clientNum, ps, focus, nav, fighting);
 
             int side = 0;
-            if (fighting)
-            {
-                // An enemy in view: a throw still being lined up is dropped.
-                if (bot.grenadePhase == 1)
-                    bot.grenadePhase = 0;
-                if (bot.grenadePhase == 0)
-                    side = Fight(bot, clientNum, ps, focus, seconds, cmd);
-            }
+            // An enemy in view: a throw still being lined up is dropped.
+            if (focus.kind == kb::FocusKind::Seen && bot.grenadePhase == 1)
+                bot.grenadePhase = 0;
+            // The enemy it fought has gone out of sight: a moment to think of
+            // a grenade (the hand keeps its aim there meanwhile).
+            if (CombatOn())
+                ConsiderGrenade(bot, clientNum, ps, focus);
+            if (fighting && bot.grenadePhase == 0)
+                side = Fight(bot, clientNum, ps, focus, seconds, cmd);
             if (!(cmd.buttons & BUTTON_MELEE))
                 bot.meleeHeld = false;
-            if (!fighting && CombatOn())
-                ConsiderGrenade(bot, clientNum, ps, focus);
             const float *grenadeView = CombatOn() ? StepGrenade(bot, clientNum, ps, cmd) : nullptr;
 
             // Not fighting: look at the player it lost or the sound it heard,
             // else pre-aim the corner of its way, else along the way. A throw
             // looks where it throws.
             const float *look = grenadeView ? grenadeView : watching;
+            // The fight's hand has the view, unless a throw is being lined up.
+            const bool handAims = fighting && !grenadeView;
             float preAimView[2];
             if (!fighting && !look && bot.pathIndex < bot.pathCount)
             {
@@ -1484,7 +1486,7 @@ bool Bot_UserMove(client_t *cl)
             }
             else if (!holding)
             {
-                walked = Walk(bot, ps, seconds, cmd, look, fighting);
+                walked = Walk(bot, ps, seconds, cmd, look, handAims);
             }
             else
             {
@@ -1497,7 +1499,7 @@ bool Bot_UserMove(client_t *cl)
                     cmd.buttons |= BUTTON_USE;
             }
 
-            if (fighting || walked)
+            if (handAims || walked)
             {
                 bot.lookHeld = 0.0f;
                 bot.look.holdSeconds = 0.0f;

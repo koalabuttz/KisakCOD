@@ -106,6 +106,13 @@ static void Choices()
     faded.rememberedConfidence = 0.0f;
     faded.enemyRemembered = false;
     Check(Pick(faded, calm) == kb::Intent::Roam, "a forgotten lead: roam");
+    kb::Situation flag = lead;
+    flag.heardSomething = true;
+    flag.onObjective = true;
+    Check(Pick(flag, bold) == kb::Intent::Roam, "on a flag it is taking, it stays rather than hunt a lead");
+    kb::Situation flagFight = fight;
+    flagFight.onObjective = true;
+    Check(Pick(flagFight, bold) == kb::Intent::Fight, "but it fights an enemy in view there");
 }
 
 static void Steadiness()

@@ -631,6 +631,9 @@ def validate_objectives(output: str) -> list:
     for team, take, hold in TEAM_OBJECTIVES_ROW.findall(output):
         shown[team] = max(shown.get(team, 0), int(take) + int(hold))
     attacks = len(re.findall(r"^bots: \d+ attacks an objective", output, re.M))
+    held = sum(1 for _, _, hold in TEAM_OBJECTIVES_ROW.findall(output) if int(hold) > 0)
+    print(f"INFO: a team's compass showed a flag of its own to hold {held} times "
+          "(a capture turns a flag to take into one to hold)")
     return [
         (len(shown) == 2 and all(count > 0 for count in shown.values()),
          f"both teams' bots read objectives off their compass (teams {sorted(shown)})"),
