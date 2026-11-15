@@ -307,6 +307,28 @@ off. It prints numbers only, never an expression's text. Outside a match
 there is no frame count and the figures are per second. While it is off it
 costs one load and a branch per operator.
 
+## `r_dpvs_stats`
+
+A perf window times the culling of a cell's models and surfaces (`main thread
+runs: dpvs cell static` and `other threads run: dpvs cell static`) but cannot
+say what the time goes on. `r_dpvs_stats` counts it: the first call starts
+counting and the second prints four lines, all per view walked:
+
+- cells culled and the planes each started with; the nodes of the cells' box
+  trees that were visited, the plane tests made on them (each tests two
+  corners of the box), and how many nodes were outside, wholly inside (their
+  models and surfaces are marked with no further test) or leaves cut by a
+  plane;
+- those cut leaves by the number of planes left at them;
+- for static models and for surfaces: how many were marked with their leaf,
+  had been seen before through another cell, or were tested, with how many
+  plane tests and how many of the tested were culled; and the cull groups
+  tested.
+
+The walk is `R_AddAabbTreeSurfacesInFrustum_r` (`src/gfx_d3d/r_dpvs_static.cpp`);
+the counts are for deciding what a faster box test is worth there. While it is
+off it costs a load and a branch per node.
+
 ## Checks
 
 `scripts/tests/test_linux_perf_ab.py` (the `perf_ab` check of
