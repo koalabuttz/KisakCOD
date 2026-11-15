@@ -665,6 +665,7 @@ bool CreateDevice(Core &core)
                          && !EnvEquals("KISAK_VK_DISPLAY_TIMING", "0");
     if (core.displayTiming)
         extensions.push_back(VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME);
+    core.paceAdapt = !EnvEquals("KISAK_VK_PACE_ADAPT", "0");
 
     const float priority = 1.0f;
     VkDeviceQueueCreateInfo queueInfo{};
