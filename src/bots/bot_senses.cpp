@@ -14,7 +14,12 @@
 //             and shots, from the fire events in each player's state, quieter
 //             with a silenced weapon.
 //   compass   a player the HUD shows as a red dot (eFlags 0x400000, set while
-//             a script pings them).
+//             a script pings them), and every opponent without UAV Jammer
+//             (specialty_gpsjammer) at each radar sweep while the bot's own
+//             player state says its side has a UAV (radarEnabled).
+//   smoke     each smoke grenade's burst, from the event entity
+//             G_ExplodeMissile spawns for it, becomes a cloud that hides
+//             what is behind it (bot_perception.h).
 //
 // The bot reads its own player state as its client would. It never reads
 // another player's place except through these tests.
@@ -30,6 +35,8 @@
 #include "bot_brain.h"
 #include "bot_motor.h"
 #include "bot_perception.h"
+
+#include <qcommon/ent.h>
 
 #include <cmath>
 
@@ -57,6 +64,16 @@ int s_shotCount = 0;
 int s_scannedTime = -1;
 int s_eventSequence[kMaxPlayers];
 bool s_eventSequenceKnown[kMaxPlayers];
+
+// Smoke clouds seen to burst lately, and the burst event entities already
+// counted (an event entity lives a few frames).
+constexpr int kSmokeRing = 16;
+kb::Smoke s_smokes[kSmokeRing];
+int s_smokeCount = 0;
+int s_smokeEventSeen[MAX_GENTITIES];
+
+// When each bot's compass last swept with a UAV up.
+int s_radarSweptAt[kMaxPlayers];
 
 const gclient_s *PlayingClient(int entity)
 {
@@ -131,6 +148,42 @@ void Scan(int now)
         }
         s_eventSequence[entity] = ps.eventSequence;
     }
+
+    // A new map takes the old one's clouds with it.
+    static uint32_t smokeMap = 0;
+    if (cm.checksum != smokeMap)
+    {
+        smokeMap = cm.checksum;
+        s_smokeCount = 0;
+    }
+    // Smoke bursts: G_ExplodeMissile spawns an ET_GENERAL event entity with
+    // the grenade's weapon where it bursts.
+    for (int entity = kMaxPlayers; entity < sv.num_entities && entity < MAX_GENTITIES; ++entity)
+    {
+        const gentity_s *ent = SV_GentityNum(entity);
+        if (!ent || !ent->r.inuse || ent->s.eType != ET_GENERAL || !ent->s.weapon)
+        {
+            s_smokeEventSeen[entity] = 0;
+            continue;
+        }
+        if (s_smokeEventSeen[entity])
+            continue;
+        const WeaponDef *weapon = BG_GetWeaponDef(ent->s.weapon);
+        if (!weapon || weapon->offhandClass != OFFHAND_CLASS_SMOKE_GRENADE)
+            continue;
+        s_smokeEventSeen[entity] = 1;
+        kb::Smoke &smoke = s_smokes[s_smokeCount % kSmokeRing];
+        ++s_smokeCount;
+        smoke.burst[0] = ent->r.currentOrigin[0];
+        smoke.burst[1] = ent->r.currentOrigin[1];
+        smoke.burst[2] = ent->r.currentOrigin[2];
+        smoke.startMs = now;
+    }
+}
+
+int SmokeCount()
+{
+    return s_smokeCount < kSmokeRing ? s_smokeCount : kSmokeRing;
 }
 
 float Distance(const float *a, const float *b)
@@ -148,16 +201,21 @@ void HearAt(kb::Perception &perception, int entity, const float *eye, const floa
     perception.Hear(entity, place, now);
 }
 
+uint32_t PerkBit(const char *name)
+{
+    const uint32_t index = BG_GetPerkIndexForName(name);
+    return index < 32 ? (1u << index) : 0;
+}
+
 uint32_t QuietPerkBit()
 {
-    static uint32_t bit = 0;
-    static bool known = false;
-    if (!known)
-    {
-        const uint32_t index = BG_GetPerkIndexForName("specialty_quieter");
-        bit = index < 32 ? (1u << index) : 0;
-        known = true;
-    }
+    static const uint32_t bit = PerkBit("specialty_quieter");
+    return bit;
+}
+
+uint32_t JammerPerkBit()
+{
+    static const uint32_t bit = PerkBit("specialty_gpsjammer");
     return bit;
 }
 
@@ -178,7 +236,15 @@ int Bot_Sense(int clientNum, kb::Perception &perception, const kb::PerceptionPar
     const float seconds = static_cast<float>(now - lastSense) * 0.001f;
     const float eye[3] = {me.origin[0], me.origin[1], me.origin[2] + me.viewHeightCurrent};
     const uint32_t quietBit = QuietPerkBit();
+    const uint32_t jammerBit = JammerPerkBit();
     int noticed = 0;
+    // A UAV sweep on the bot's compass this tick.
+    bool sweep = false;
+    if (me.radarEnabled && now - s_radarSweptAt[clientNum] >= static_cast<int>(params.radarSweepSeconds * 1000.0f))
+    {
+        sweep = true;
+        s_radarSweptAt[clientNum] = now;
+    }
 
     for (int entity = 0; entity < kMaxPlayers && entity < sv_maxclients->current.integer; ++entity)
     {
@@ -199,8 +265,8 @@ int Bot_Sense(int clientNum, kb::Perception &perception, const kb::PerceptionPar
                                                   quietBit && (ps.perks & quietBit), params);
         if (footsteps > 0.0f && Distance(eye, ps.origin) < footsteps)
             HearAt(perception, entity, eye, ps.origin, params.hearingError, now, rng);
-        if (ps.eFlags & kCompassPingFlag)
-            HearAt(perception, entity, eye, ps.origin, 0.05f, now, rng);
+        if ((ps.eFlags & kCompassPingFlag) || (sweep && !(jammerBit && (ps.perks & jammerBit))))
+            HearAt(perception, entity, eye, ps.origin, params.compassError, now, rng);
 
         // Sight.
         const float vh = ps.viewHeightCurrent;
@@ -230,6 +296,8 @@ int Bot_Sense(int clientNum, kb::Perception &perception, const kb::PerceptionPar
         int clear = 0;
         for (const float *point : points)
         {
+            if (kb::SmokeHides(eye, point, s_smokes, SmokeCount(), now, params))
+                continue;
             int hit = 0;
             SV_SightTrace(&hit, eye, vec3_origin, vec3_origin, point, clientNum, entity, MASK_AIMTARGET_VISIBILITY);
             if (!hit)

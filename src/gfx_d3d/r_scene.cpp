@@ -1766,6 +1766,76 @@ static uint16_t R_ModernLitShader(const char *name, const Material *material, co
     return found == wanted ? shader : GFX_MODERN_LIT_SHADER_NONE;
 }
 
+// Whether a pass's pixel shader is CoD4's water (water_l_sun) as water
+// shader facts read it (PC water run 1, mp_bog): the reflection probe (a
+// custom sampler, s1), the material's water map at s4, fog colour at c0,
+// envMapParms at c5, waterColor at c6, the sun's direction and colour at
+// c17 and c18, each once and nothing else. Our water shader then draws it.
+static bool R_ModernWaterShader(const char *name, const Material *material, const MaterialPass *pass)
+{
+    size_t length = strlen(name);
+    if (length > 5 && !strcmp(name + length - 5, ".hlsl"))
+        length -= 5;
+    if (length != 11 || strncmp(name, "water_l_sun", 11))
+        return false;
+    if (!(pass->customSamplerFlags & 1u))
+        return false;
+    enum : uint32_t
+    {
+        WATER_MAP = 1u << 0,
+        FOG_COLOR = 1u << 1,
+        ENV_MAP_PARMS = 1u << 2,
+        WATER_COLOR = 1u << 3,
+        SUN_POSITION = 1u << 4,
+        SUN_DIFFUSE = 1u << 5,
+        ALL = (1u << 6) - 1,
+    };
+    uint32_t found = 0;
+    const uint32_t argCount = pass->perPrimArgCount + pass->perObjArgCount + pass->stableArgCount;
+    for (uint32_t i = 0; i < argCount; ++i)
+    {
+        const MaterialShaderArgument &arg = pass->args[i];
+        uint32_t what = 0;
+        switch (arg.type)
+        {
+        case MTL_ARG_MATERIAL_PIXEL_SAMPLER:
+            for (uint32_t t = 0; t < material->textureCount; ++t)
+            {
+                const MaterialTextureDef &def = material->textureTable[t];
+                if (def.nameHash == arg.u.nameHash && def.semantic == TS_WATER_MAP && arg.dest == 4)
+                    what = WATER_MAP;
+            }
+            break;
+        case MTL_ARG_CODE_PIXEL_SAMPLER:
+            return false;
+        case MTL_ARG_CODE_PIXEL_CONST:
+            if (arg.u.codeConst.rowCount != 1)
+                break;
+            if (arg.u.codeConst.index == CONST_SRC_CODE_FOG_COLOR && arg.dest == 0)
+                what = FOG_COLOR;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_SUN_POSITION && arg.dest == 17)
+                what = SUN_POSITION;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_SUN_DIFFUSE && arg.dest == 18)
+                what = SUN_DIFFUSE;
+            break;
+        case MTL_ARG_MATERIAL_PIXEL_CONST:
+            if (arg.dest == 5 && R_ModernMaterialConstIs(material, arg.u.nameHash, "envMapParms"))
+                what = ENV_MAP_PARMS;
+            else if (arg.dest == 6 && R_ModernMaterialConstIs(material, arg.u.nameHash, "waterColor"))
+                what = WATER_COLOR;
+            break;
+        case MTL_ARG_LITERAL_PIXEL_CONST:
+            return false;
+        default:
+            continue; // vertex arguments
+        }
+        if (!what || (found & what))
+            return false;
+        found |= what;
+    }
+    return found == ALL;
+}
+
 // Which colours a lit pass's pixel shader reads, by its kind (the pixel
 // shader's name: lm_ world surfaces lit by lightmaps, lp_ models lit by the
 // lighting volume, l_ dynamic lights) and what its arguments bind. The rest
@@ -1773,8 +1843,240 @@ static uint16_t R_ModernLitShader(const char *name, const Material *material, co
 // fog and shadow parameters) are not colours. A detail map is added to the
 // colour map around grey (colour + detail - 0.5), so it stays as it is: the
 // offset is not a colour of its own.
+static bool R_ModernWaterShader(const char *name, const Material *material, const MaterialPass *pass);
+
+// The material's water map (the FFT water simulation), or null.
+static const MaterialTextureDef *R_ModernWaterMap(const Material *material)
+{
+    for (uint32_t t = 0; t < material->textureCount; ++t)
+    {
+        if (material->textureTable[t].semantic == TS_WATER_MAP)
+            return &material->textureTable[t];
+    }
+    return nullptr;
+}
+
+// KISAK_VK_MODERN_WATER_LOG=1 names how water is drawn, for planar
+// reflections on water (piece 3): once per world, every world surface whose
+// material has a water map, by material, with the union of their bounds, then
+// each surface's bounds (at most 96); and once per material and pass of water
+// that is drawn, the technique, shaders, arguments, blend state, the
+// material's constants and the simulation's settings (at most 32).
+static void R_ModernLogWaterPass(const Material *material, const MaterialPass *pass)
+{
+    static const bool on = [] {
+        const char *text = getenv("KISAK_VK_MODERN_WATER_LOG");
+        return text && *text && *text != '0';
+    }();
+    if (!on || !material || !pass)
+        return;
+    const MaterialTextureDef *water = R_ModernWaterMap(material);
+    if (!water)
+        return;
+
+    static const GfxWorld *loggedWorld;
+    if (rgp.world && loggedWorld != rgp.world)
+    {
+        loggedWorld = rgp.world;
+        const Material *done[16];
+        int doneCount = 0;
+        const GfxWorldDpvsStatic &dpvs = rgp.world->dpvs;
+        for (uint32_t s = 0; s < dpvs.staticSurfaceCount && doneCount < 16; ++s)
+        {
+            const Material *surfaceMaterial = dpvs.surfaces[s].material;
+            if (!surfaceMaterial || !R_ModernWaterMap(surfaceMaterial))
+                continue;
+            bool seen = false;
+            for (int i = 0; i < doneCount; ++i)
+                seen = seen || done[i] == surfaceMaterial;
+            if (seen)
+                continue;
+            done[doneCount++] = surfaceMaterial;
+            float mins[3] = {FLT_MAX, FLT_MAX, FLT_MAX};
+            float maxs[3] = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
+            uint32_t count = 0;
+            uint32_t tris = 0;
+            for (uint32_t o = s; o < dpvs.staticSurfaceCount; ++o)
+            {
+                const GfxSurface &surface = dpvs.surfaces[o];
+                if (surface.material != surfaceMaterial)
+                    continue;
+                ++count;
+                tris += surface.tris.triCount;
+                for (int i = 0; i < 3; ++i)
+                {
+                    mins[i] = surface.bounds[0][i] < mins[i] ? surface.bounds[0][i] : mins[i];
+                    maxs[i] = surface.bounds[1][i] > maxs[i] ? surface.bounds[1][i] : maxs[i];
+                }
+            }
+            Com_Printf(CON_CHANNEL_GFX,
+                       "modern water: world %s: material %s (technique set %s): %u surfaces, %u triangles, "
+                       "bounds (%.1f %.1f %.1f) to (%.1f %.1f %.1f)\n",
+                       rgp.world->name ? rgp.world->name : "?", surfaceMaterial->info.name,
+                       surfaceMaterial->techniqueSet ? surfaceMaterial->techniqueSet->name : "?", count, tris,
+                       mins[0], mins[1], mins[2], maxs[0], maxs[1], maxs[2]);
+        }
+        if (!doneCount)
+            Com_Printf(CON_CHANNEL_GFX, "modern water: world %s: no world surface has a water map\n",
+                       rgp.world->name ? rgp.world->name : "?");
+        // Each surface on its own (at most 96), to see which are flat and at
+        // what height.
+        int surfaceLines = 0;
+        for (uint32_t s = 0; s < dpvs.staticSurfaceCount && surfaceLines < 96; ++s)
+        {
+            const GfxSurface &surface = dpvs.surfaces[s];
+            if (!surface.material || !R_ModernWaterMap(surface.material))
+                continue;
+            ++surfaceLines;
+            Com_Printf(CON_CHANNEL_GFX,
+                       "modern water:   surface %u (%s): %u triangles, x %.1f to %.1f, y %.1f to %.1f, z %.1f to %.1f\n",
+                       s, surface.material->info.name, (uint32_t)surface.tris.triCount, surface.bounds[0][0],
+                       surface.bounds[1][0], surface.bounds[0][1], surface.bounds[1][1], surface.bounds[0][2],
+                       surface.bounds[1][2]);
+        }
+    }
+
+    // By material and pass: materials of one technique set share its passes.
+    static const MaterialPass *logged[32];
+    static const Material *loggedMaterials[32];
+    static int loggedCount;
+    if (loggedCount >= 32)
+        return;
+    for (int i = 0; i < loggedCount; ++i)
+    {
+        if (logged[i] == pass && loggedMaterials[i] == material)
+            return;
+    }
+    loggedMaterials[loggedCount] = material;
+    logged[loggedCount++] = pass;
+
+    // Which technique and pass of the material's set this is.
+    int techType = -1;
+    int passIndex = -1;
+    const char *techName = "?";
+    if (material->techniqueSet)
+    {
+        for (int t = 0; t < TECHNIQUE_COUNT && techType < 0; ++t)
+        {
+            const MaterialTechnique *technique = material->techniqueSet->techniques[t];
+            if (!technique)
+                continue;
+            for (int p = 0; p < technique->passCount; ++p)
+            {
+                if (&technique->passArray[p] == pass)
+                {
+                    techType = t;
+                    passIndex = p;
+                    techName = technique->name ? technique->name : "?";
+                }
+            }
+        }
+    }
+    uint32_t loadBits[2] = {0, 0};
+    if (techType >= 0 && material->stateBitsTable
+        && material->stateBitsEntry[techType] + passIndex < material->stateBitsCount)
+    {
+        const GfxStateBits &bits = material->stateBitsTable[material->stateBitsEntry[techType] + passIndex];
+        loadBits[0] = bits.loadBits[0];
+        loadBits[1] = bits.loadBits[1];
+    }
+    Com_Printf(CON_CHANNEL_GFX,
+               "modern water: material %s, technique %d (%s) pass %d: vertex shader %s, pixel shader %s, "
+               "state bits 0x%08x 0x%08x, custom samplers 0x%x, %s, %s\n",
+               material->info.name, techType, techName, passIndex,
+               pass->vertexShader ? pass->vertexShader->name : "?", pass->pixelShader ? pass->pixelShader->name : "?",
+               loadBits[0], loadBits[1], pass->customSamplerFlags,
+               s_modernLitPasses ? "among the lit passes" : "outside the lit passes",
+               pass->pixelShader && R_ModernWaterShader(pass->pixelShader->name, material, pass)
+                   ? "our water shader can draw it"
+                   : "not ours");
+
+    char args[768];
+    size_t used = 0;
+    args[0] = 0;
+    const uint32_t argCount = pass->perPrimArgCount + pass->perObjArgCount + pass->stableArgCount;
+    for (uint32_t i = 0; i < argCount && used < sizeof(args) - 40; ++i)
+    {
+        const MaterialShaderArgument &arg = pass->args[i];
+        int wrote = 0;
+        switch (arg.type)
+        {
+        case MTL_ARG_MATERIAL_PIXEL_SAMPLER:
+        {
+            int semantic = -1;
+            char first = '?';
+            char last = '?';
+            for (uint32_t t = 0; t < material->textureCount; ++t)
+            {
+                const MaterialTextureDef &def = material->textureTable[t];
+                if (def.nameHash == arg.u.nameHash)
+                {
+                    semantic = def.semantic;
+                    first = def.nameStart;
+                    last = def.nameEnd;
+                }
+            }
+            wrote = snprintf(args + used, sizeof(args) - used, " ps s%u=mat(sem %d, %c..%c)", arg.dest, semantic,
+                             first, last);
+            break;
+        }
+        case MTL_ARG_CODE_PIXEL_SAMPLER:
+            wrote = snprintf(args + used, sizeof(args) - used, " ps s%u=code %u", arg.dest, arg.u.codeSampler);
+            break;
+        case MTL_ARG_CODE_PIXEL_CONST:
+            wrote = snprintf(args + used, sizeof(args) - used, " ps c%u=code 0x%x(%u rows)", arg.dest,
+                             arg.u.codeConst.index, arg.u.codeConst.rowCount);
+            break;
+        case MTL_ARG_CODE_VERTEX_CONST:
+            wrote = snprintf(args + used, sizeof(args) - used, " vs c%u=code 0x%x(%u rows)", arg.dest,
+                             arg.u.codeConst.index, arg.u.codeConst.rowCount);
+            break;
+        case MTL_ARG_MATERIAL_PIXEL_CONST:
+        case MTL_ARG_MATERIAL_VERTEX_CONST:
+        {
+            const char *constName = "?";
+            for (uint32_t c = 0; c < material->constantCount; ++c)
+            {
+                if (material->constantTable[c].nameHash == arg.u.nameHash)
+                    constName = material->constantTable[c].name;
+            }
+            wrote = snprintf(args + used, sizeof(args) - used, " %s c%u=mat(%.12s)",
+                             arg.type == MTL_ARG_MATERIAL_PIXEL_CONST ? "ps" : "vs", arg.dest, constName);
+            break;
+        }
+        case MTL_ARG_LITERAL_PIXEL_CONST:
+        case MTL_ARG_LITERAL_VERTEX_CONST:
+            wrote = snprintf(args + used, sizeof(args) - used, " %s c%u=lit(%g %g %g %g)",
+                             arg.type == MTL_ARG_LITERAL_PIXEL_CONST ? "ps" : "vs", arg.dest, arg.u.literalConst[0],
+                             arg.u.literalConst[1], arg.u.literalConst[2], arg.u.literalConst[3]);
+            break;
+        default:
+            break;
+        }
+        if (wrote > 0)
+            used += (size_t)wrote < sizeof(args) - used ? (size_t)wrote : sizeof(args) - used - 1;
+    }
+    Com_Printf(CON_CHANNEL_GFX, "modern water:   arguments:%s\n", args);
+    for (uint32_t c = 0; c < material->constantCount; ++c)
+    {
+        const MaterialConstantDef &def = material->constantTable[c];
+        Com_Printf(CON_CHANNEL_GFX, "modern water:   constant %.12s = (%g %g %g %g)\n", def.name, def.literal[0],
+                   def.literal[1], def.literal[2], def.literal[3]);
+    }
+    if (const water_t *map = water->u.water)
+    {
+        Com_Printf(CON_CHANNEL_GFX,
+                   "modern water:   simulation: %dx%d, size %g x %g, gravity %g, wind %g toward (%g %g), "
+                   "amplitude %g, code constant (%g %g %g %g), image %dx%d\n",
+                   map->M, map->N, map->Lx, map->Lz, map->gravity, map->windvel, map->winddir[0], map->winddir[1],
+                   map->amplitude, map->codeConstant[0], map->codeConstant[1], map->codeConstant[2],
+                   map->codeConstant[3], map->image ? map->image->width : 0, map->image ? map->image->height : 0);
+    }
+}
+
 void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
 {
+    R_ModernLogWaterPass(material, pass);
     if (!s_modernLitPasses || !pass || !material)
         return;
     if (pass == s_modernInputsPass && material == s_modernInputsMaterial)
@@ -1782,6 +2084,16 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
     s_modernInputsPass = pass;
     s_modernInputsMaterial = material;
     const char *name = pass->pixelShader ? pass->pixelShader->name : nullptr;
+    // Water: our water shader, which takes its colour to linear light itself.
+    if (name && !strncmp(name, "water_", 6) && R_ModernWaterShader(name, material, pass))
+    {
+        GfxModernLitInputs inputs{};
+        inputs.overWhite = true;
+        inputs.shader = GFX_MODERN_LIT_SHADER_WATER;
+        R_ModernLogPassInputs(name, pass, material, inputs);
+        R_ModernSendInputs(&inputs);
+        return;
+    }
     const bool lit = name && (!strncmp(name, "lm_", 3) || !strncmp(name, "lp_", 3) || !strncmp(name, "l_", 2));
     if (!lit)
     {
@@ -2014,8 +2326,63 @@ static refdef_s s_modernPlanarRefdef;
 // Geometry within this many units above the plane is cut too, so the
 // reflecting surface itself is not in its own reflection.
 static const float kModernPlanarCut = 1.0f;
+// The planar view's field of view against the main view's (tangents).
+static const float kModernPlanarWiden = 1.1f;
 
 bool R_ModernPlanarViewActive() { return s_modernPlanarActive; }
+
+// A map not in the table reflects in its water, if it has any: the height
+// where the most flat water lies, counted in triangles (of the world surfaces
+// whose material has a water map and whose bounds are flat, by height within
+// half a unit), when that is at least kModernPlanarWaterTriangles. Not by the
+// area of their bounds: mp_bog's swamp lies mostly at -20 (1,100 triangles),
+// but a sheet of 200 triangles at -26 around the whole map has bounds a
+// hundred times larger (PC water run 2).
+static const uint32_t kModernPlanarWaterTriangles = 64;
+
+static void R_ModernPlanarFindWater(const char *name)
+{
+    constexpr int kHeights = 8;
+    float heights[kHeights];
+    uint32_t triangles[kHeights];
+    int heightCount = 0;
+    const GfxWorldDpvsStatic &dpvs = rgp.world->dpvs;
+    for (uint32_t s = 0; s < dpvs.staticSurfaceCount; ++s)
+    {
+        const GfxSurface &surface = dpvs.surfaces[s];
+        if (!surface.material || !R_ModernWaterMap(surface.material))
+            continue;
+        const float z = surface.bounds[1][2];
+        if (z - surface.bounds[0][2] > 0.5f)
+            continue;
+        int h = 0;
+        while (h < heightCount && fabsf(heights[h] - z) > 0.5f)
+            ++h;
+        if (h == heightCount)
+        {
+            if (heightCount == kHeights)
+                continue;
+            heights[heightCount] = z;
+            triangles[heightCount++] = 0;
+        }
+        triangles[h] += surface.tris.triCount;
+    }
+    int best = -1;
+    for (int h = 0; h < heightCount; ++h)
+    {
+        if (triangles[h] >= kModernPlanarWaterTriangles && (best < 0 || triangles[h] > triangles[best]))
+            best = h;
+    }
+    if (best < 0)
+        return;
+    s_modernPlanarPlane[0] = 0.0f;
+    s_modernPlanarPlane[1] = 0.0f;
+    s_modernPlanarPlane[2] = 1.0f;
+    s_modernPlanarPlane[3] = -heights[best];
+    s_modernPlanarHavePlane = true;
+    Com_Printf(CON_CHANNEL_GFX, "modern: planar reflections on %s at height %.1f (water, %u triangles)\n", name,
+               heights[best], triangles[best]);
+}
 
 static void R_ModernPlanarFindPlane()
 {
@@ -2049,6 +2416,7 @@ static void R_ModernPlanarFindPlane()
                    -s_modernPlanarPlane[3]);
         return;
     }
+    R_ModernPlanarFindWater(name);
 }
 
 // The projection's near plane becomes the reflection plane (raised by
@@ -2117,6 +2485,11 @@ void R_ModernPlanarScene(const refdef_s *refdef)
     mirror.height = refdef->height / 2 > 0 ? refdef->height / 2 : 1;
     mirror.useScissorViewport = false;
     mirror.blurRadius = 0.0f;
+    // A little wider than the main view, so a reflection near the screen's
+    // sides, moved by a ripple or a slope, still finds itself in the image
+    // (PC water run 2: the outer 3% of each side read nothing).
+    mirror.tanHalfFovX = refdef->tanHalfFovX * kModernPlanarWiden;
+    mirror.tanHalfFovY = refdef->tanHalfFovY * kModernPlanarWiden;
     for (int i = 0; i < 3; ++i)
         mirror.vieworg[i] = o[i] - 2.0f * above * n[i];
     for (int axis = 0; axis < 3; ++axis)

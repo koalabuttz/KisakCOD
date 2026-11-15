@@ -150,7 +150,9 @@ enum SysPerfProbe : uint32_t
     // Inside the 3D parts' R_DrawSurfs: a run of surfaces of one material.
     SYS_PERF_PROBE_RENDER_MATERIAL,    // R_SetupMaterial and R_SetupPass: the material's state and constants
     SYS_PERF_PROBE_RENDER_TESS,        // + surface type: rb_tessTable's function, with its draws
-    SYS_PERF_PROBE_WAIT_RENDERER = SYS_PERF_PROBE_RENDER_TESS + SYS_PERF_TESS_SLOTS,
+    SYS_PERF_PROBE_RENDER_TESS_DRAWS = SYS_PERF_PROBE_RENDER_TESS + SYS_PERF_TESS_SLOTS,
+                                       // + surface type: the same time again; its calls are the draws made
+    SYS_PERF_PROBE_WAIT_RENDERER = SYS_PERF_PROBE_RENDER_TESS_DRAWS + SYS_PERF_TESS_SLOTS,
                                        // main thread asleep until the render thread takes the frame
     SYS_PERF_PROBE_WAIT_WORKERS_ALL,   // ... until every front-end worker command is done
     SYS_PERF_PROBE_WAIT_WORKERS_OTHER, // ... in any other wait that runs worker commands
@@ -196,14 +198,15 @@ inline uint64_t Sys_PerfNowNs()
 #endif
 }
 
-inline void Sys_PerfProbeAdd(uint32_t probe, uint64_t ns)
+// `calls`: how many calls the time was for (a run of draws timed as one).
+inline void Sys_PerfProbeAdd(uint32_t probe, uint64_t ns, uint32_t calls = 1)
 {
     if (probe >= SYS_PERF_PROBE_COUNT)
         return;
     const uint32_t ns32 = ns > 0xFFFFFFFFull ? 0xFFFFFFFFu : (uint32_t)ns;
     SysPerfProbeSlot &slot = g_sysPerfProbes[probe];
     slot.ns.fetch_add(ns32, std::memory_order_relaxed);
-    slot.calls.fetch_add(1, std::memory_order_relaxed);
+    slot.calls.fetch_add(calls, std::memory_order_relaxed);
     // Two threads can race here and lose the larger value; the longest call
     // is a hint, not a sum.
     if (ns32 > slot.maxNs.load(std::memory_order_relaxed))

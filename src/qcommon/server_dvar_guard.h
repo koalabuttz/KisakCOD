@@ -75,6 +75,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "r_modernTonemap",
     "r_modernVelocity",
     "r_pretessPrefetch",
+    "r_staticCullVec",
     "r_visuals",
     "r_vkDevice",
     "r_vkGpuFeed",
@@ -86,6 +87,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     // Sound and animation.
     "snd_adpcm",
     "snd_alDebug",
+    "snd_streamThread",
     "xanim_blendOnce",
     // Menus.
     "ui_fastExpressions",

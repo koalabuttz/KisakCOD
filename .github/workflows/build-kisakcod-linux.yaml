@@ -473,6 +473,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/tests/test_openal_channel_stop.py
+          python3 scripts/tests/test_snd_stream_feed.py
           python3 scripts/tests/test_openal_packed_sounds.py
           python3 scripts/tests/test_openal_stream_lengths.py
 
@@ -968,6 +969,16 @@ jobs:
             --emulator "qemu-arm -L /usr/arm-linux-gnueabihf" "$binary"
           COMMANDS
 
+      # The PS Vita client builds its MP3 decoder for NEON
+      # (docs/linux-armv7.md). This job has the Arm compiler and qemu-arm, so
+      # it compares that build's samples with the scalar build's.
+      - name: Compare the MP3 decoder built for NEON with the scalar build
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/tests/test_mp3_neon_decode.py --require
+
       - name: Report compiler cache
         if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
         shell: bash
@@ -1321,6 +1332,16 @@ jobs:
           set -euo pipefail
           "$OUT_DIR/KisakCOD-skin-scalar-test"
 
+      # The static culling walk that holds a box against four clip planes at a
+      # time (SSE here), against the scalar walk: the same models and surfaces.
+      - name: Run the static culling check
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/tests/test_static_cull_vec.py
+          python3 scripts/tests/test_static_cull_vec.py --sanitize
+
       - name: Report compiler cache
         if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
         shell: bash
@@ -1528,6 +1549,16 @@ jobs:
         run: |
           set -euo pipefail
           "$OUT_DIR/KisakCOD-skin-scalar-test"
+
+      # The static culling walk that holds a box against four clip planes at a
+      # time is NEON here; it has to mark what the scalar walk marks, and as
+      # many models and surfaces as on x86.
+      - name: Run the static culling check
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/tests/test_static_cull_vec.py
 
       - name: Report compiler cache
         if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}

@@ -288,7 +288,11 @@ The switches that can be turned: `no-depth-prepass`, `no-frame-overlap`,
 GPU back at its default clocks), `no-prepass-governor` (the depth pass
 on in every frame instead of timed both ways), `no-same-state` (every
 draw works out its programs and fixed state anew),
-`no-world-only-prepass` (the forced depth pass draws the models too) and
+`no-world-only-prepass` (the forced depth pass draws the models too),
+`no-alpha-test-drop` (every alpha test is a discard in its fragment
+program, also the ones that cannot change the picture),
+`no-alpha-test-zero` (a blended draw's alpha test discards a rejected
+pixel instead of writing zero for it) and
 `gpu-watch` (the log gets a `gpu watch` line that says how long the GPU
 works on a frame, [vita-client.md](vita-client.md)). Turning `no-depth-prepass`
 or `no-prepass-governor` starts the governor afresh. The others size or make things at
@@ -529,9 +533,10 @@ linker script and stub libraries). `-Wl,-q` keeps the relocations that
   fused multiply-add (`-ffp-contract=off`), signed `char`: the armv7 rules,
   so the server's movement and collision maths give the same results as on a
   PC. The whole binary, VitaSDK's libraries included, has no NEON float
-  instruction (CI checks), but for the client's vector skinning path, which
-  only makes vertices to draw (`src/gfx_d3d/r_model_skin_vec.cpp`,
-  [the rule](linux-armv7.md)). At start-up each thread clears the FPSCR
+  instruction (CI checks), but for the client's vector skinning path and its
+  static culling walk, which only make what is drawn
+  (`src/gfx_d3d/r_model_skin_vec.cpp`, `src/gfx_d3d/r_dpvs_static_vec.cpp`),
+  and its MP3 decoder, which only makes sound ([the rule](linux-armv7.md)). At start-up each thread clears the FPSCR
   flush-to-zero and default-NaN bits (`Vita_SetIeeeFloatMode`); the log
   records what the system had set.
 - **Thread-local storage.** VitaSDK's GCC is built without native TLS, and the
