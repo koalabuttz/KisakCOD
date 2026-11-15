@@ -6,7 +6,8 @@
 namespace gfx_vk::modern
 {
 VkPipeline CreateFullscreenPipeline(Core *core, VkPipelineLayout layout, VkShaderModule vertex,
-                                    VkShaderModule fragment, VkFormat format, bool additive, std::string &error)
+                                    VkShaderModule fragment, VkFormat format, bool additive, std::string &error,
+                                    VkColorComponentFlags writeMask)
 {
     VkPipelineShaderStageCreateInfo stages[2]{};
     stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -38,8 +39,7 @@ VkPipeline CreateFullscreenPipeline(Core *core, VkPipelineLayout layout, VkShade
     VkPipelineDepthStencilStateCreateInfo depthState{};
     depthState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     VkPipelineColorBlendAttachmentState blendAttachment{};
-    blendAttachment.colorWriteMask =
-        VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    blendAttachment.colorWriteMask = writeMask;
     if (additive)
     {
         blendAttachment.blendEnable = VK_TRUE;

@@ -498,6 +498,9 @@ front::ModernSceneView ModernViewOf(const GfxModernScene *scene)
         std::memcpy(to.shadowLookup, from.shadowLookup, sizeof(to.shadowLookup));
         to.inSunMap = from.inSunMap;
     }
+    view.sun.on = scene->sun.on;
+    std::memcpy(view.sun.direction, scene->sun.direction, sizeof(view.sun.direction));
+    std::memcpy(view.sun.color, scene->sun.color, sizeof(view.sun.color));
     return view;
 }
 
@@ -581,6 +584,7 @@ void ModernLitInputs(void *, IDirect3DDevice9 *device, const GfxModernLitInputs 
     lit.doubled = inputs->doubled;
     lit.colorInput = inputs->colorInput;
     lit.overWhite = inputs->overWhite;
+    lit.emissive = inputs->emissive;
     lit.shader = inputs->shader;
     front::SetModernLitInputs(device, &lit);
 }
@@ -650,12 +654,31 @@ bool ModernProbeCaptureRead(void *, IDirect3DDevice9 *device, int x, int y, int 
                                          static_cast<uint32_t>(width), static_cast<uint32_t>(height), rgb);
 }
 
+// The sun's shadow map the view's lit surfaces read, for the soft filter.
+void ModernSunShadow(void *, IDirect3DDevice9 *device, const GfxModernSunShadow *shadow)
+{
+    if (s_modernRefused.load(std::memory_order_relaxed) || !shadow)
+        return;
+    front::ModernSunShadowView view;
+    view.on = shadow->on;
+    for (int i = 0; i < 2; ++i)
+    {
+        view.texel[i] = shadow->texel[i];
+        view.depthUnits[i] = shadow->depthUnits[i];
+    }
+    view.sun = shadow->sun;
+    for (int i = 0; i < 3; ++i)
+        view.sunDir[i] = shadow->sunDir[i];
+    front::ModernSunShadow(device, view);
+}
+
 const GfxModernHooks s_modernHooks = {nullptr,          ModernJitterPixels, ModernSceneDone,
                                       ModernSceneBegin, ModernSceneLit,     ModernSurfaceMoved,
                                       ModernSkinnedSurfaceMoved, ModernLitInputs, ModernWantsSceneDepth,
                                       ModernSceneDepth, ModernReflectionProbe, ModernPlanarWanted,
                                       ModernPlanarBegin, ModernPlanarDone,
-                                      ModernProbeCaptureWanted, ModernProbeCapture, ModernProbeCaptureRead};
+                                      ModernProbeCaptureWanted, ModernProbeCapture, ModernProbeCaptureRead,
+                                      ModernSunShadow};
 } // namespace
 
 void Kisak_VulkanRegisterDvars()

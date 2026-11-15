@@ -160,12 +160,32 @@ the number of bots. It lists every map in the game folder (`zone/*/mp_*.ff`
 and `usermaps`); a map starts a match against KisakCOD's bots
 (`+set developer_script 1 +set bot_brain 1 +set scr_testclients <n> +set
 g_gametype war|dm +devmap <map>`), "Multiplayer" starts the multiplayer
-game's own menu and "Campaign" the singleplayer game's. "Visuals" switches
-every start between Legacy (`+set r_visuals legacy`) and Modern (`+set
-r_aaSamples 1 +set r_visuals modern`, docs/vulkan-modern.md); the choice is
-kept with the bot count and mode. Modern has not been measured on the Adreno
-yet, and the sun's shadows stay off on Android (`sm_enable 0`), so the fog
-shows no light shafts there. The game runs in a
+game's own menu and "Campaign" the singleplayer game's. "Visuals" opens a
+page of its own (`VisualsActivity.java`) with a button for each setting of
+the look and a Preset button that sets them together: Legacy (`+set
+r_visuals legacy`, 60 fps), Modern (`+set r_aaSamples 1 +set r_visuals
+modern`, docs/vulkan-modern.md, every pass at the renderer's default and god
+rays on, held to an even 30 fps with `r_vsync 1`, `r_vsyncInterval 2`) or
+Modern Fast (Modern at 60 fps with ambient occlusion, screen-space
+reflections and contact shadows off). Changing any setting makes the preset
+Custom. The settings: the look; the frame rate (60 fps, 30 fps or no
+vsync); the sun's shadows (`sm_enable`, off by default, see below); ambient
+occlusion (default, on, half resolution or off); screen-space reflections,
+contact shadows, soft sun and lamp shadows, volumetric fog, fog lit by
+lamps, god rays, bloom and auto exposure (each default, on or off, the
+`r_modern*` switches); mirror (planar) reflections, live reflection probes,
+glowing lamps, muzzle-flash light and the water shader (each default, on or
+off, as `KISAK_VK_MODERN_*` variables in the start's env extra, since they
+have no dvar); and the tone map. Modern's settings show dimmed while the look
+is Legacy. On the Retroid Pocket 6, Modern with everything on drew Crash in
+about 30 ms (33 fps); ambient occlusion cost about 6 ms and reflections about
+5; Modern Fast runs at 60 fps (GPU frame about 15 ms). The look, the sun's
+shadows and the variables go with every start; the game's saved settings
+(frame rate, the `r_modern*` switches, the tone map) only when they changed
+since the last start, so what the game's settings menu changes later stays.
+The sun's shadows are off on Android unless the Visuals page turns them on
+(`KisakActivity` passes `sm_enable 0` first), so the fog shows no light
+shafts there by default. The game runs in a
 process of its own (`:game`), which ends with the game: the engine never
 starts twice in one process, and the first screen comes back when the game
 quits.
@@ -213,11 +233,23 @@ adb logcat -s KisakCOD SDL
 
 Extra engine arguments for a run go in the `args` extra, split at spaces:
 `adb shell am start -n org.kisakcod.game/.KisakActivity --es args "+set developer 1"`.
+`KISAK_*` environment variables (the start-up knobs such as
+`KISAK_VK_MODERN_SSR_STEPS`) go in the `env` extra as `NAME=VALUE` pairs split
+at spaces, and the activity sets them in its process before the game starts:
+`--es env "KISAK_VK_MODERN_SSR_STEPS=16 KISAK_VK_MODERN_AO_HALF=0"`. Other
+names are refused. `scripts/runs/android_run.py` fills it from a recipe's or
+launch's `env`.
 The activity starts the game without shadow maps (`+set sm_enable 0`): on
 the Adreno 740 the sun's shadows flickered from frame to frame (2026-11-15,
 cause not found yet). The activity always starts the game full screen (`+set r_fullscreen 1`, so
 SDL hides Android's system bars; run 3 had a 1920x970 window under the
-navigation bar). The game's console goes to logcat under the tag KisakCOD: Android drops an
+navigation bar). For an even 30 frames a second (Modern visuals on the Retroid Pocket 6
+run at 33-40), `+set r_vsync 1 +set r_vsyncInterval 2` shows each frame for
+two refreshes of a 60 Hz screen (four at 120 Hz: `r_vsyncInterval 4`), paced
+through Android's `VK_GOOGLE_display_timing` (docs/vulkan-core.md, Swapchain).
+On the Retroid (run 380, PR 457) every Legacy frame at interval 2 showed for
+exactly two refreshes (p99 35.9 ms); the launcher's Modern preset uses it.
+The game's console goes to logcat under the tag KisakCOD: Android drops an
 app's stdout and stderr, so `src/linux/main.cpp` copies them there.
 
 First start on the Retroid Pocket 6 (2026-11-15, CI APK of 91d7799): the menu

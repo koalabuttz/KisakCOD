@@ -250,6 +250,18 @@ uint32_t ColorCount(Surface *const targets[kMaxRenderTargets])
     return count;
 }
 
+// An additive draw (blend ONE, ONE, add) into a linear-light target while
+// SetModernAdditive's strength is not 1: its colour is added that many times
+// over, the source factor being the blend constant (MakePipelineKey) and the
+// constant the strength (MakeDynamicState).
+bool AdditiveBoosted(const Device &device)
+{
+    const uint32_t *rs = device.renderStates;
+    return device.modernAdditive != 1.0f && device.passTargets[0] && device.passTargets[0]->texture->linearLight
+        && rs[d3d::RS_ALPHABLENDENABLE] && rs[d3d::RS_SRCBLEND] == d3d::BLEND_ONE
+        && rs[d3d::RS_DESTBLEND] == d3d::BLEND_ONE && BlendOperation(rs[d3d::RS_BLENDOP]) == VK_BLEND_OP_ADD;
+}
+
 bool UsesTexture(const Surface *surface, const Texture *texture) { return surface && surface->texture == texture; }
 
 // The texture is one of the targets the next pass draws to.
@@ -455,7 +467,8 @@ Layout *GetLayout(Device &device, const LayoutKey &key)
     pipelineInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineInfo.setLayoutCount = 2;
     pipelineInfo.pSetLayouts = sets;
-    const VkPushConstantRange push{VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(ModernPlanarParams)};
+    const VkPushConstantRange push{VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                                   sizeof(ModernPlanarParams) + sizeof(ModernShadowParams)};
     if (key.modernPush)
     {
         pipelineInfo.pushConstantRangeCount = 1;
@@ -523,6 +536,7 @@ VkShaderModule FindPixelModule(Device &device, Shader &ps, const Shader &vs, uin
         inputs.samplers = linear.linearSamplers;
         inputs.doubled = linear.linearDoubled;
         inputs.flags = linear.linearColorInput;
+        inputs.emissive = inputs.flags & ls::kLinearEmissive ? device.modernEmissive : uint8_t(0);
         inputs.shader = linear.linearShader;
         recipe.sunStrength = device.modernSunStrength;
         recipe.skyStrength = device.modernSkyStrength;
@@ -1072,6 +1086,8 @@ PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, co
     {
         key.blendEnable = 0;
     }
+    if (key.blendEnable && AdditiveBoosted(device))
+        key.srcColor = static_cast<uint8_t>(VK_BLEND_FACTOR_CONSTANT_COLOR);
     static const d3d::RenderState kWriteMasks[kMaxRenderTargets] = {
         d3d::RS_COLORWRITEENABLE, d3d::RS_COLORWRITEENABLE1, d3d::RS_COLORWRITEENABLE2, d3d::RS_COLORWRITEENABLE3};
     const bool independent = Features(device.core).independentBlend;
@@ -1136,6 +1152,11 @@ VkSampler MakeSampler(Device &device, uint32_t slot, const Texture *texture)
     {
         info.compareEnable = VK_TRUE;
         info.compareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+        if (!device.depthFilterLinear)
+        {
+            info.magFilter = info.minFilter = VK_FILTER_NEAREST;
+            info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        }
     }
     // As DXVK: a single level gets the range 0-1, no mip filter level 0 only.
     if (!texture || texture->desc.levels <= 1)
@@ -1858,6 +1879,12 @@ DynamicState MakeDynamicState(const Device &device, d3d::PrimitiveType type)
     state.stencilMask = rs[d3d::RS_STENCILMASK] & 0xff;
     state.stencilWriteMask = rs[d3d::RS_STENCILWRITEMASK] & 0xff;
     UnpackColor(rs[d3d::RS_BLENDFACTOR], state.blendConstants);
+    if (AdditiveBoosted(device))
+    {
+        for (int i = 0; i < 3; ++i)
+            state.blendConstants[i] = device.modernAdditive;
+        state.blendConstants[3] = 1.0f;
+    }
     return state;
 }
 
@@ -2124,14 +2151,19 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
             });
         }
     }
-    // A Modern lit shader of ours: the planar reflection's parameters, pushed
-    // when they change (about once a scene) or a layout was bound since (a
-    // layout without the range disturbs them).
+    // A Modern lit shader of ours: the planar reflection's and the sun
+    // shadow's parameters, pushed when they change (about once a scene) or a
+    // layout was bound since (a layout without the range disturbs them).
     if (layout.key.modernPush && device.pushedPlanarGeneration != device.modernPlanarGeneration)
     {
         device.pushedPlanarGeneration = device.modernPlanarGeneration;
         const VkPipelineLayout pipelineLayout = layout.pipeline;
-        const ModernPlanarParams params = device.modernPlanarParams;
+        struct
+        {
+            ModernPlanarParams planar;
+            ModernShadowParams shadow;
+        } params{device.modernPlanarParams, device.modernShadowParams};
+        static_assert(sizeof(params) == sizeof(ModernPlanarParams) + sizeof(ModernShadowParams), "packed");
         Record(device.core, [pipelineLayout, params](VkCommandBuffer cmd, const Dispatch &vk) {
             vk.vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(params), &params);
         });
@@ -3150,7 +3182,7 @@ void SetLinearLight(Texture *texture, bool linear)
 }
 
 void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint16_t doubled, bool colorInput,
-                     bool overWhite, uint16_t shader)
+                     bool overWhite, uint16_t shader, bool emissive)
 {
     if (!device)
         return;
@@ -3159,6 +3191,11 @@ void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint
     {
         inputs.flags = ls::kLinearOverWhite;
         inputs.shader = ModernLitShaderValid(shader) ? shader : uint16_t(ModernLitNone);
+    }
+    else if (emissive)
+    {
+        inputs.flags = ls::kLinearEmissive;
+        inputs.emissive = device->modernEmissive;
     }
     else
     {
@@ -3204,6 +3241,34 @@ void SetModernLightPass(Device *device, float strength)
 {
     if (device)
         device->modernLightPass = strength >= 0.0f ? strength : 1.0f;
+}
+
+void SetModernEmissive(Device *device, float strength)
+{
+    if (device)
+        device->modernEmissive = static_cast<uint8_t>(std::lround(std::clamp(strength, 1.0f, 63.75f) * 4.0f));
+}
+
+void SetModernShadow(Device *device, const ModernShadowParams *params)
+{
+    if (!device)
+        return;
+    const ModernShadowParams next = params && params->on != 0.0f ? *params : ModernShadowParams{};
+    if (std::memcmp(&next, &device->modernShadowParams, sizeof(next)) != 0)
+    {
+        device->modernShadowParams = next;
+        ++device->modernPlanarGeneration;
+    }
+}
+
+void SetModernAdditive(Device *device, float strength)
+{
+    if (device)
+    {
+        device->modernAdditive = strength >= 0.0f ? strength : 1.0f;
+        device->keyStale = true;
+        device->dynamicStale = true;
+    }
 }
 
 void SetModernLitStrengths(Device *device, float sun, float sky)

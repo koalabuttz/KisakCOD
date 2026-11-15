@@ -82,6 +82,12 @@ struct CoreDesc
     // then virtual, then CPU).
     int deviceIndex = -1;
     bool vsync = true;
+    // With vsync, how many refreshes each frame stays on screen: 2 shows the
+    // game at half the display's rate (30 frames a second on a 60 Hz screen),
+    // evenly. Needs VK_GOOGLE_display_timing (Android has it); without it
+    // every frame is shown at the next refresh, as with 1. SetSwapInterval
+    // changes it.
+    uint32_t swapInterval = 1;
     // Ask for swapchain images that can be copied from, so CaptureNextFrame and
     // copies from SwapchainImage() work.
     bool allowCapture = false;
@@ -884,6 +890,9 @@ VkPresentModeKHR ChoosePresentMode(const VkPresentModeKHR *offered, uint32_t cou
 // supports it, so the compositor turns the picture for a rotated panel
 // (Android), else the surface's own transform.
 VkSurfaceTransformFlagBitsKHR ChoosePreTransform(const VkSurfaceCapabilitiesKHR &caps);
+// With vsync, the refreshes each frame stays on screen from the next present
+// on (CoreDesc::swapInterval, 1 to 4).
+void SetSwapInterval(Core *core, uint32_t interval);
 const char *PresentModeName(VkPresentModeKHR mode);
 const char *FormatName(VkFormat format);
 const char *DeviceTypeName(VkPhysicalDeviceType type);
