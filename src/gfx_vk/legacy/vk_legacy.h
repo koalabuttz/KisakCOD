@@ -1002,6 +1002,11 @@ constexpr float kModernSoftSun = 1.0f;
 constexpr float kModernSoftSpot = 2.0f;
 static_assert(sizeof(ModernShadowParams) == 32, "the lit shaders' push constant block, after the planar's");
 void SetModernShadow(Device *device, const ModernShadowParams *params);
+// How many times over an additive draw (blend ONE, ONE, add) adds its colour
+// into a linear-light target (1 by default: as it is). The game's additive
+// layers (light pools on floors, glows) were made for colours added in
+// display values; added as light they add less. Applies from the next draw.
+void SetModernAdditive(Device *device, float strength);
 #endif
 
 // The device's window is about to be destroyed: an open pass and frame end
