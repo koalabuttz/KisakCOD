@@ -29,10 +29,11 @@ All three routes now go through `CL_SetDvarFromServer`
 (without regard to letter case), so it holds for a setting the client has not
 registered yet.
 
-The list is every setting this port added, 51 today: the renderer choices and
+The list is every setting this port added, 52 today: the renderer choices and
 the Vulkan and GPU wait settings (`r_backend`, `r_visuals`, `r_vk*`,
 `r_gpuSyncSleep*`), the controller and Vita settings (`in_gamepad*`,
 `vita_*`), `cl_keyCodeOnly`, `cl_steam`, `con_restricted`, `snd_adpcm`, `snd_alDebug`,
+`snd_streamThread`,
 `xanim_blendOnce`, `ui_fastExpressions`, and the settings for how the player's own server admits
 players (`sv_allowUnverifiedGuids`, `sv_allowProtocol6`,
 `sv_advertisedProtocol`, `sv_loopbackTestAuth`). No retail server or mod knows these names, and none of

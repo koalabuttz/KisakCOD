@@ -167,7 +167,7 @@ Static data of the RelWithDebInfo build (2026-11-09):
 
 Other large static arrays in the client:
 - `cls` 2.9 MB, `odeGlob` 2.8 MB, `gfxBuf` 2.3 MB (1.5 MB since the smaller skinned caches below), `s_backEndData` 2.2 MB, `tess` 2.2 MB;
-- `clients` 1.7 MB, `g_streamState` 1.7 MB.
+- `clients` 1.7 MB, `g_streamStates` 0.4 MB (1.7 MB until 2026-11-15, when the sound driver kept an MP3 decoder's 33 KB of state for each of its 53 channels; only 13 of them stream).
 
 The heap and the engine reservations are the server's for now: a 64 MB heap, the 128 MB zone arena and the hunks. Textures go to the GPU's own memory (CDRAM, about 112 MB), not main memory.
 
@@ -588,6 +588,56 @@ right (`played through: F frames, not the G its size gave`), and level 2 also
 reads a constant bit rate file through at its start and prints both counts.
 The host test holds the size's answer against the decoder's own count on
 made-up files, and `--survey` does the same for real ones.
+
+**Streamed sounds on a thread** (`snd_streamThread`). The driver decoded a
+stream where it queued it: on the main thread, 8192 frames at a time, each
+time one of the stream's four OpenAL buffers had played out. On the Vita that
+is 10 ms and more of MP3 decoding in one frame, every 186 ms for each stream
+that plays: console run BM (2026-11-15) timed the sound update at 3.3 ms a
+frame at the busy view of `mp_crash`, with single updates of 23 ms, on a
+main thread that is busy 27 ms of a 37 ms frame. A stream that starts part of
+the way in, as the ambient sounds do, also decoded its way to that place
+before the start returned.
+
+With `snd_streamThread 1`, the default on the Vita, a thread named `sound
+decode` does that work. Each stream channel has a feed
+(`src/sound/snd_stream_feed.h`): the thread decodes into it, two chunks
+ahead, and the sound update only hands finished chunks to OpenAL. The thread
+runs one priority step below the engine's threads, so it decodes when a core
+has nothing else to do; the 0.7 s of sound a stream has queued is its margin.
+What changes for the game:
+
+- A stream's first sound is queued a frame or two after its start, when the
+  thread has decoded it. The driver remembers that the source was told to
+  play and plays it then (`AL_PlayStream`); a stream with nothing queued yet
+  is not taken for one that has ended.
+- The way to the starting place is the thread's as well. The MP3 decoder
+  reaches a frame by decoding everything before it, which the feed does
+  itself, a chunk's worth at a time between the other streams' chunks, so a
+  stream that starts 100 s in neither holds up the streams that play nor a
+  stop of its own channel.
+- Stopping a stream waits until the thread is out of its decoder: a chunk is
+  decoded in pieces of 2048 frames and the thread gives up at the next piece,
+  so that is a wait of 3 ms at the most, and none most of the time.
+- A stream's file inside an `.iwd` is always read through a file handle of
+  its own (`FS_FOpenFileReadStream`). It used to read through the archive's
+  one handle when no other file of that archive was open, and every later
+  open in that archive seeks and reads on that handle from the main thread.
+
+`snd_streamThread 0` gives the decoding back to the main thread, at once and
+also for streams that are playing: the same feed is then stepped by the sound
+update, a chunk at a time as chunks are wanted. That is the default on the
+other platforms, where the decoding is too small to see. `snd_alDebug 1`
+adds to its 5 second line how many chunks the thread decoded, how many the
+main thread did, and how often a playing stream down to its last buffer found
+none ready (`late`). `scripts/tests/test_snd_stream_feed.py` runs the feed and its
+thread on the host under the address, undefined-behaviour and thread
+sanitizers, and `test_openal_channel_stop.py` runs the driver's side against
+OpenAL both ways.
+
+The same change takes 1.3 MB off the client's static memory: the driver kept
+decoder state for all 53 sound channels and now keeps it for the 13 that
+stream.
 
 **Loaded sounds in memory** (`snd_adpcm`). The OpenAL driver keeps every
 loaded sound as 16-bit PCM, and that is also how the fastfiles hold the sounds
