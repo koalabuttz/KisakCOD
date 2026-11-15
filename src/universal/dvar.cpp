@@ -20,6 +20,7 @@
 #include "memfile.h"        // Dvar_Save/LoadDvars
 
 #include <algorithm>
+#include <atomic>
 
 #ifdef KISAK_MP
 #include <client_mp/client_mp.h>
@@ -801,6 +802,28 @@ int Dvar_ValuesEqual(uint8_t type, DvarValue val0, DvarValue val1)
     return result;
 }
 
+// The dvar found last time through each name pointer. Callers mostly pass the
+// same pointer for the same name every time (a string literal, a menu
+// expression's operand, a script string), so the hash of the name and the walk
+// along one of only 256 chains can be skipped: the remembered dvar is right
+// exactly when its name still compares equal, because names are unique. A
+// pointer that now holds another name, or one never seen, takes the full
+// lookup. A missing dvar is never remembered. Dvars are only ever removed all
+// at once (Dvar_Shutdown), which forgets everything under the write lock.
+static std::atomic<dvar_s *> s_dvarFoundByPointer[1024];
+
+static std::atomic<dvar_s *> &Dvar_FoundByPointerSlot(const char *dvarName)
+{
+    const uint32_t bits = (uint32_t)(uintptr_t)dvarName;
+    return s_dvarFoundByPointer[(bits * 2654435761u) >> 22];
+}
+
+static void Dvar_ForgetFoundByPointer()
+{
+    for (std::atomic<dvar_s *> &slot : s_dvarFoundByPointer)
+        slot.store(nullptr, std::memory_order_relaxed);
+}
+
 static dvar_s *Dvar_FindMalleableVar(const char *dvarName)
 {
     dvar_s *var; // [esp+8h] [ebp-8h]
@@ -810,10 +833,21 @@ static dvar_s *Dvar_FindMalleableVar(const char *dvarName)
     while (g_dvarCritSect.writeCount)
         NET_Sleep(0);
 
+    if (dvarName)
+    {
+        var = Dvar_FoundByPointerSlot(dvarName).load(std::memory_order_relaxed);
+        if (var && !I_stricmp(dvarName, var->name))
+        {
+            InterlockedDecrement(&g_dvarCritSect.readCount);
+            return var;
+        }
+    }
+
     for (var = dvarHashTable[generateHashValue(dvarName)]; var; var = var->hashNext)
     {
         if (!I_stricmp(dvarName, var->name))
         {
+            Dvar_FoundByPointerSlot(dvarName).store(var, std::memory_order_relaxed);
             if (g_dvarCritSect.readCount <= 0)
                 MyAssertHandler(
                     "c:\\trees\\cod3\\src\\universal\\../qcommon/threads_interlock.h",
@@ -1197,6 +1231,7 @@ void Dvar_Shutdown()
     dvar_modifiedFlags = 0;
     isDvarSystemActive = 0;
     memset((uint8_t *)dvarHashTable, 0, sizeof(dvarHashTable));
+    Dvar_ForgetFoundByPointer();
     Sys_UnlockWrite(&g_dvarCritSect);
 }
 
