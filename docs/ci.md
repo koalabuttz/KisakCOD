@@ -27,6 +27,16 @@ of them.
   whoever merged looks at master's run, and a failure is fixed forward in a new
   pull request. A manual run of a workflow on a branch (`workflow_dispatch`)
   runs everything, for a change that is about one of those platforms.
+- **Fast PR lane (2026-11-15).** A pull request runs 6 of the Linux
+  workflow's jobs: the SDL3 window host, the native dedicated server in both
+  configurations, the native D3D9 boundary, and the two Vulkan back-end jobs.
+  The 12 slow sweeps run after the merge only: the x86_64, aarch64 and armv7
+  builds with their 32-bit size and layout scans, the client, singleplayer and
+  x86_64 compile censuses, the world front-end and surface checks, the D3D9
+  device probe and the free camera. In the run that prompted this, those 12
+  took 84 of the 116 runner-minutes, and jobs waited 30-57 min for a runner. A
+  break they find shows on master's run and is fixed forward. The contract is
+  `test_linux_pull_requests_run_only_the_fast_lane`.
 - **Paths.** A workflow starts only when a changed path can reach it. The
   Windows workflow skips documentation, the Linux, macOS and PS Vita ports' own
   sources and tests, and the test machines' run scripts; the macOS workflow
