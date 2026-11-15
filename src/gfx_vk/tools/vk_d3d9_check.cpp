@@ -521,6 +521,7 @@ public:
     void Multisample();
     void ModernTaa();
     void ModernLinear();
+    void ModernCompute();
     void ModernBloom();
     void ModernEffects();
     void ModernLit();
@@ -4719,6 +4720,74 @@ void Check::ModernLinear()
     SafeRelease(depth);
 }
 
+// The Modern path's compute passes (vk_core.h BeginComputePass,
+// docs/vulkan-modern.md "Compute passes"), by name only: with
+// KISAK_VK_MODERN_DEBUG=compute the back end's compute check builds its 3D
+// volume at the scene's lit point (two compute passes: a fill of a storage
+// image and a storage buffer, then a front-to-back integration along z that
+// reads both) and draws it, sampled with linear filtering halfway along z,
+// over the finished scene's viewport. Red and green are each pixel's place
+// across the viewport (clamped to the outer texel centres of the 16 x 8
+// volume), blue the mean of the slice centres up to the sample (0.28125
+// halfway: exact under linear filtering, as it is linear in z) and alpha
+// the storage buffer's weight times the fill's 0.5, which must come to 1.
+// Outside the viewport, and everywhere without the debug view, the scene is
+// as drawn. In linear light or without it.
+void Check::ModernCompute()
+{
+    const bool shown = EnvText("KISAK_VK_MODERN_DEBUG") == "compute";
+    const bool linear = EnvText("KISAK_VK_MODERN_LINEAR") != "0";
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    Reset(Argb(255, 90, 90, 90));
+    front::ModernSceneBegin(device);
+    device->SetDepthStencilSurface(depth);
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 40, 120, 200), 1.0f, 0),
+       "Clear(scene)");
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    constexpr UINT kWidth = 96; // the scene's viewport: the right quarter is not the scene
+    view.width = kWidth;
+    view.height = kSize;
+    view.cut = true;
+    Equal("done", static_cast<int>(front::ModernSceneDone(device, view)),
+          static_cast<int>(front::ModernResult::Done));
+    device->SetDepthStencilSurface(nullptr);
+
+    const std::array<int, 3> scene = ThroughCurve(40, 120, 200);
+    const auto across = [](UINT at, UINT size, UINT texels) {
+        const double place = (at + 0.5) / size;
+        const double edge = 0.5 / texels;
+        return static_cast<int>(std::lround(std::clamp(place, edge, 1.0 - edge) * 255.0));
+    };
+    const int blue = static_cast<int>(std::lround(0.28125 * 255.0));
+    if (Read())
+    {
+        const UINT points[][2] = {{0, 0}, {95, 127}, {48, 64}, {10, 100}, {80, 20}, {33, 7}};
+        for (const auto &point : points)
+        {
+            const UINT x = point[0], y = point[1];
+            if (shown)
+                Expect("volume", x, y, across(x, kWidth, gfx_vk::modern::kComputeCheckSize[0]),
+                       across(y, kSize, gfx_vk::modern::kComputeCheckSize[1]), blue);
+            else
+                Expect("scene", x, y, scene[0], scene[1], scene[2]);
+        }
+        // Linear light writes back only the viewport; without it the clear
+        // reached the whole back buffer.
+        if (linear)
+            Expect("outside_viewport", 112, 64, 90, 90, 90);
+        else
+            Expect("outside_viewport", 112, 64, scene[0], scene[1], scene[2]);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    SafeRelease(depth);
+}
+
 // Bloom in place of the glow (vk_d3d9.h ModernSceneDone, view.glow): three
 // scenes drawn in linear light. A white square on black with glow: light
 // spreads around it and the renderer is told to leave its glow out. Grey
@@ -6586,6 +6655,7 @@ int Run(const Options &options)
         // (the velocity pass made again waits for the GPU): its barriers must
         // still hold for the validation layer.
         {"modern_live_cut", &Check::ModernTaa, true},
+        {"modern_compute", &Check::ModernCompute, true, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},
