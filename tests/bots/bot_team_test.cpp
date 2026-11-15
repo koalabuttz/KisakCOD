@@ -304,6 +304,10 @@ static void Names()
     std::vector<std::string> one = {"[BOT] Guillaume"};
     kb::PickBotName(longName, 1, 0, TakenIn, &one, out, sizeof(out));
     Check(!std::strcmp(out, "[BOT] Guillau 2"), "a long name is shortened to fit its number");
+    const char *eight[] = {"Sunshine"};
+    std::vector<std::string> sun = {"[BOT] Sunshine"};
+    kb::PickBotName(eight, 1, 0, TakenIn, &sun, out, sizeof(out));
+    Check(!std::strcmp(out, "[BOT] Sunshine2"), "an eight-letter name drops the space before its number instead");
 }
 
 int main()

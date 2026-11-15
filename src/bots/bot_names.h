@@ -127,8 +127,8 @@ inline void RemoveBotTag(const char *name, char *out, size_t size)
 
 // A bot's name: "[BOT] " and a name from `names` that `taken` says no one
 // has, starting at `start`; when every one is taken, the first with a
-// number ("[BOT] Capy 2"), shortened to fit. `taken(name, context)` gets the
-// whole name.
+// number ("[BOT] Capy 2", "[BOT] Sunshine2"), shortened to fit.
+// `taken(name, context)` gets the whole name.
 inline void PickBotName(const char *const *names,
                         int count,
                         int start,
@@ -160,9 +160,15 @@ inline void PickBotName(const char *const *names,
             }
             else
             {
+                // "Capy 2"; "Sunshine2" when the space does not fit; else the
+                // name is shortened: "Guillau 2".
                 char suffix[16];
+                const int space = static_cast<int>(kNameChars - tagLength);
                 std::snprintf(suffix, sizeof(suffix), " %d", number);
-                const int room = static_cast<int>(kNameChars - tagLength) - static_cast<int>(std::strlen(suffix));
+                if (static_cast<int>(std::strlen(name) + std::strlen(suffix)) > space
+                    && static_cast<int>(std::strlen(name) + std::strlen(suffix)) - 1 <= space)
+                    std::snprintf(suffix, sizeof(suffix), "%d", number);
+                const int room = space - static_cast<int>(std::strlen(suffix));
                 std::snprintf(candidate, sizeof(candidate), "%s%.*s%s", kBotTag, room, name, suffix);
             }
             if (!taken || !taken(candidate, context))
