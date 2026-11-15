@@ -161,6 +161,11 @@ struct Options
     // vertex program hands over (PlanHoist). Null for none. Only read
     // during Emit.
     const struct HoistPlan *hoist = nullptr;
+    // Pixel shaders, run diagnostics: what a volume sampler's read is
+    // made of, to time the model lighting lookup. The picture is wrong.
+    //   1: no read, a constant grey
+    //   2: one read, of the nearest slice (no blend between two)
+    uint8_t diagVolume = 0;
 };
 
 // ---- Parsed form ---------------------------------------------------------------------------

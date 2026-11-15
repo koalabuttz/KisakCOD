@@ -181,6 +181,9 @@ CHECKS = [
      "    out_POSITION = float4(v0.x / 480.0 - 1.0, 1.0 - v0.y / 272.0, 0.5, 1.0);", "constants=6"),
     ("vs2_oT_oD_fog", ["--diag-position", "8"],
      "out_TEXCOORD0 = float4(out_POSITION.z * 0.25 + 0.5, out_POSITION.w * 0.25 + 0.5, 0.25, 1.0);", "constants=6"),
+    ("ps3_texld_volume", ["--diag-volume", "1"], "float4(0.5, 0.5, 0.5, 1.0)", "samplers=0:volume"),
+    ("ps3_texld_volume", ["--diag-volume", "2"], "kisak_tex3D_near(s0, (v0).xyz, kisak_depth_s0)",
+     "samplers=0:volume"),
     # Hoisted reads. Three coordinates for four reads (two are the same);
     # the reads of s1 stay as they were.
     ("ps3_vita_hoist", [], "r2 = tex2D(s0, (r2).xy);", "instructions="),

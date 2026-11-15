@@ -711,7 +711,11 @@ bool Emitter::Texture(const Instruction &ins, std::string &value)
         std::string uvw = "(" + coord + ").xyz";
         if (ins.opcode == kTex && ins.control == 1)
             uvw = "(" + coord + ").xyz / (" + coord + ").w";
-        value = "kisak_tex3D(" + s + ", " + uvw + ", " + depth + ")" + SwizzleSuffix(ins.sources[1].swizzle);
+        if (options_.diagVolume == 1)
+            value = "float4(0.5, 0.5, 0.5, 1.0)" + SwizzleSuffix(ins.sources[1].swizzle);
+        else
+            value = std::string(options_.diagVolume == 2 ? "kisak_tex3D_near(" : "kisak_tex3D(") + s + ", " + uvw +
+                    ", " + depth + ")" + SwizzleSuffix(ins.sources[1].swizzle);
         return true;
     }
     if (type == SamplerType::None)
@@ -1135,6 +1139,10 @@ bool Emitter::Run(std::string &cg, std::string &error)
     if (alphaTest)
         out += "uniform float kisak_alpha_ref;\n";
     out += kHelpers;
+    if (options_.diagVolume == 2)
+        out += "float4 kisak_tex3D_near(sampler2D s, float3 p, float depth)\n{\n"
+               "    float a = floor(p.z * depth);\n    a = a - depth * floor(a / depth);\n"
+               "    return tex2D(s, float2(p.x, (a + frac(p.y)) / depth));\n}\n";
 
     // The signature and the code that copies parameters to registers and
     // registers to results.

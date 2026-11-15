@@ -211,7 +211,7 @@ struct PipelineKey
     uint8_t alphaFunc; // the pixel shader variant's alpha test
     uint8_t index32;
     uint8_t hoist; // DrawState::readHoist when the draw came by
-    uint8_t pad;
+    uint8_t diagVolume; // DrawState::diagVolume then
 };
 struct Pipeline
 {
@@ -355,6 +355,9 @@ struct DrawState
     // the pixel shader's plan.
     bool readHoist = true;
     uint64_t hoistedDraws = 0, hoistUnfed = 0;
+    // Run diagnostic: volume sampler reads as cg::Options::diagVolume
+    // makes them (switches diag-flat-volume and diag-volume-one-read).
+    uint8_t diagVolume = 0;
     // 0: the last draw had no alpha test, 1: one with a discard, 2: one
     // that was left out, 3: one that writes zero.
     uint8_t lastDrawAlphaTest = 0;
@@ -788,6 +791,7 @@ uint64_t VariantKey(const gxm::cg::Options &options)
     return (uint64_t(options.bgraInputs) | uint64_t(options.absentInputs) << 16) ^ (components << 32) ^
            (options.alphaFunc == gxm::cg::AlphaFunc::Always ? 0 : uint64_t(options.alphaFunc)) ^
            (options.alphaZero ? 0x00a5000000000000ull : 0) ^ (options.hoist ? options.hoist->hash : 0) ^
+           (uint64_t(options.diagVolume) << 44) ^
            (options.farPlaneInside ? 0x5a5a000000000000ull : 0) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
 }
 
@@ -2596,7 +2600,7 @@ const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "n
                                      "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
                                      "gpu-watch",           "no-prepass-clear",  "no-depth-only-scene",
                                      "no-scene-in-copy",    "no-alpha-test-drop", "no-alpha-test-zero",
-                                     "no-read-hoist"};
+                                     "no-read-hoist",       "diag-flat-volume",   "diag-volume-one-read"};
 struct LiveSwitch
 {
     const char *name;
@@ -2668,6 +2672,11 @@ void ApplyLiveSwitches(Device &device)
             d.lastDrawValid = false;
             Log(device, "diag: read hoist so far: %llu draws with texture coordinates from the vertex program",
                 (unsigned long long)d.hoistedDraws);
+        }
+        else if (name == "diag-flat-volume" || name == "diag-volume-one-read")
+        {
+            d.diagVolume = s.on ? (name == "diag-flat-volume" ? 1 : 2) : 0;
+            d.lastDrawValid = false;
         }
         else if (name == "no-filter-stretch")
             gfx_gxm::g_stretchInFilter = !s.on;
@@ -3307,6 +3316,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     else
     {
         gxm::cg::Options pixelOptions;
+        pixelOptions.diagVolume = d.diagVolume;
         d.lastDrawAlphaTest = 0;
         if (device.renderStates[d3d::RS_ALPHATESTENABLE])
         {
@@ -3348,6 +3358,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             pipelineKey.alphaFunc = uint8_t(uint8_t(pixelOptions.alphaFunc) | (pixelOptions.alphaZero ? 0x80 : 0));
             pipelineKey.index32 = index32;
             pipelineKey.hoist = d.readHoist;
+            pipelineKey.diagVolume = d.diagVolume;
             pipeline = &PipelineSlot(d, pipelineKey);
             known = std::memcmp(&pipeline->key, &pipelineKey, sizeof(pipelineKey)) == 0;
             ++d.pipelineLookups;
