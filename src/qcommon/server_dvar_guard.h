@@ -95,6 +95,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     // Test clients on the player's own server.
     "bot_brain",
     "bot_log",
+    "bot_combat",
     "sv_botSnapshots",
     // Runs that play themselves (the run plan's timed console commands).
     "run_atMap",
