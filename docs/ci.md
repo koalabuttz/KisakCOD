@@ -35,7 +35,12 @@ of them.
   `test_vita3k_runner.py`)
   start only the one-job **Machine run scripts** workflow (`run-scripts.yaml`);
   on 2026-11-10 a PowerShell-only change had started 26 Linux and PS Vita
-  jobs. The filters look at the whole pull request, not the last push.
+  jobs. An edit to a workflow file starts the one-job **Workflow contracts**
+  workflow (`workflow-contracts.yaml`), which runs the contract test that
+  reads every workflow, plus that workflow's own builds; the Linux workflow no
+  longer starts for Vita or Windows workflow edits (on 2026-11-15 that ran all
+  17 Linux jobs for Vita-only pull requests while jobs waited 30-57 min for a
+  runner). The filters look at the whole pull request, not the last push.
 - **PS Vita.** The port's two build jobs and its host tests are their own
   workflow (`build-kisakcod-vita.yaml`; they were part of the Linux one). A
   change to the port's own files only (`src/vita`, `src/gfx_gxm`,
