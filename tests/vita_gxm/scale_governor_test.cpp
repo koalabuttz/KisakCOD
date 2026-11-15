@@ -7,10 +7,17 @@
 // longer of the two and the CPU waits for the GPU the difference (the
 // pacing wait of gxm_legacy_draw.cpp, PaceFrame).
 
+#include <gfx_gxm/gxm_engine_options.h>
 #include <gfx_gxm/gxm_scale_governor.h>
 
 #include <cstdio>
 #include <cstdlib>
+
+// The engine option the helpers under test read (the back end defines it).
+namespace gfx_gxm
+{
+bool g_sceneWidthOnly = false;
+}
 
 namespace
 {
@@ -271,6 +278,32 @@ void TestHold()
     CHECK(c.GpuMs(c.governor.Scale()) <= ScaleGovernor::kSlowGoalMs - ScaleGovernor::kMarginMs + ScaleGovernor::kSlackMs + 0.01);
 }
 
+// The helpers that keep a smaller picture sharp (gxm_engine_options.h).
+void TestSharpHelpers()
+{
+    using namespace gfx_gxm;
+    // The mip bias: 8 * log2(scale), in sceGxm's eighths of a level.
+    CHECK(SceneMipBiasSteps(1.0f) == 0);
+    CHECK(SceneMipBiasSteps(1.5f) == 0);
+    CHECK(SceneMipBiasSteps(0.97f) == 0);
+    CHECK(SceneMipBiasSteps(0.9375f) == -1);
+    CHECK(SceneMipBiasSteps(0.85f) == -2);
+    CHECK(SceneMipBiasSteps(0.7f) == -4);
+    CHECK(SceneMipBiasSteps(0.5f) == -8);
+    CHECK(SceneMipBiasSteps(0.01f) == -16); // never more than two levels
+    // Width and height together, or the same share of pixels from the
+    // width alone.
+    g_sceneWidthOnly = false;
+    CHECK(SceneScaleX(0.8f) == 0.8f && SceneScaleY(0.8f) == 0.8f);
+    g_sceneWidthOnly = true;
+    CHECK(SceneScaleY(0.8f) == 1.0f);
+    CHECK(SceneScaleX(0.8f) > 0.6399f && SceneScaleX(0.8f) < 0.6401f);
+    CHECK(SceneScaleX(0.5f) == 0.5f); // no narrower than half the screen
+    CHECK(SceneScaled(960, SceneScaleX(0.9375f)) == 843);
+    CHECK(SceneScaled(544, SceneScaleY(0.9375f)) == 544);
+    g_sceneWidthOnly = false;
+}
+
 // The engine's limits move while the game runs.
 void TestLimitsMove()
 {
@@ -308,6 +341,7 @@ int main()
     TestLeast();
     TestNoise();
     TestHold();
+    TestSharpHelpers();
     TestLimitsMove();
     if (g_failures)
     {

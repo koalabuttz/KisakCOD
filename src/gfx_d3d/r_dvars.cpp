@@ -165,6 +165,8 @@
  const dvar_t *vita_sceneScale;
  const dvar_t *vita_sceneScaleMin;
  const dvar_t *vita_sceneScaleGoal;
+ const dvar_t *vita_sceneScaleWidthOnly;
+ const dvar_t *vita_sceneSharpen;
 #endif
  const dvar_t *r_normal;
  const dvar_t *sm_sunShadowCenter;
@@ -968,6 +970,18 @@
          DVAR_NOFLAG,
          "The frame time in ms that vita_sceneScaleMin keeps the GPU under; 0 picks 16.7 where the CPU fills a "
          "frame in that time and 33.3 elsewhere");
+     // Two ways to keep a smaller 3D picture sharp
+     // (src/gfx_gxm/gxm_engine_options.h).
+     vita_sceneScaleWidthOnly = Dvar_RegisterBool(
+         "vita_sceneScaleWidthOnly",
+         false,
+         DVAR_NOFLAG,
+         "A smaller 3D picture keeps its height and gives up the same share of pixels in its width alone");
+     vita_sceneSharpen = Dvar_RegisterBool(
+         "vita_sceneSharpen",
+         false,
+         DVAR_NOFLAG,
+         "Sharpen a smaller 3D picture as it is stretched to the screen");
 #endif
      r_smp_backend = Dvar_RegisterBool("r_smp_backend", true, DVAR_NOFLAG, "Process renderer back end in a separate thread");
      r_smp_worker = Dvar_RegisterBool("r_smp_worker", true, DVAR_NOFLAG, "Process renderer front end in a separate thread");

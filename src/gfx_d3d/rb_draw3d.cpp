@@ -99,26 +99,32 @@ static void RB_StretchScaledScene(const GfxViewInfo *viewInfo)
     const GfxViewport &view = viewInfo->sceneViewport;
     const int width = gfxCmdBufSourceState.renderTargetWidth;
     const int height = gfxCmdBufSourceState.renderTargetHeight;
-    if (KISAK_GXM_STRETCH_IN_FILTER() && RB_FilmFilterOnly(viewInfo) && view.x == 0 && view.y == 0 &&
-        view.width == width && view.height == height)
+    const int drawnWidth = gfx_gxm::SceneScaled(view.width, gfx_gxm::SceneScaleX(scale));
+    const int drawnHeight = gfx_gxm::SceneScaled(view.height, gfx_gxm::SceneScaleY(scale));
+    // The sharpening stretch is the back end's own program: it cannot ride
+    // in the film filter's quad.
+    gfx_gxm::g_sceneSharpen = vita_sceneSharpen && vita_sceneSharpen->current.enabled;
+    if (KISAK_GXM_STRETCH_IN_FILTER() && !gfx_gxm::g_sceneSharpen && RB_FilmFilterOnly(viewInfo) && view.x == 0 &&
+        view.y == 0 && view.width == width && view.height == height)
     {
         // The film filter's full-screen quad reads only the drawn corner of
         // the copy (RB_ApplyColorManipulationFullscreen). Half a texel is
         // kept off the far edges so the linear filter never mixes in the
         // part of the copy that was not drawn this frame.
-        gfx_gxm::g_filterReadS = (float(gfx_gxm::SceneScaled(view.width, scale)) - 0.5f) / float(width);
-        gfx_gxm::g_filterReadT = (float(gfx_gxm::SceneScaled(view.height, scale)) - 0.5f) / float(height);
+        gfx_gxm::g_filterReadS = (float(drawnWidth) - 0.5f) / float(width);
+        gfx_gxm::g_filterReadT = (float(drawnHeight) - 0.5f) / float(height);
         return;
     }
     const RECT whole = {view.x, view.y, view.x + view.width, view.y + view.height};
-    const RECT drawn = {view.x, view.y, view.x + gfx_gxm::SceneScaled(view.width, scale),
-                        view.y + gfx_gxm::SceneScaled(view.height, scale)};
+    const RECT drawn = {view.x, view.y, view.x + drawnWidth, view.y + drawnHeight};
     IDirect3DSurface9 *scene = gfxRenderTargets[R_RENDERTARGET_SCENE].surface.color;
     IDirect3DSurface9 *copy = Image_GetSurface(gfxRenderTargets[R_RENDERTARGET_RESOLVED_SCENE].image);
     if (!scene || !copy)
         return;
     R_HW_StretchRect(gfxCmdBufState.prim.device, scene, &drawn, copy, &drawn, D3DTEXF_POINT);
+    gfx_gxm::g_sharpenThisStretch = gfx_gxm::g_sceneSharpen;
     R_HW_StretchRect(gfxCmdBufState.prim.device, copy, &drawn, scene, &whole, D3DTEXF_LINEAR);
+    gfx_gxm::g_sharpenThisStretch = false;
     R_HW_Release(copy);
 }
 #endif
@@ -140,6 +146,7 @@ void RB_Draw3DInternal(const GfxViewInfo *viewInfo)
         const float most = std::clamp(vita_sceneScale->current.value, 0.5f, 1.0f);
         const float least = vita_sceneScaleMin ? std::clamp(vita_sceneScaleMin->current.value, 0.5f, 1.0f) : 1.0f;
         const float goalMs = vita_sceneScaleGoal ? vita_sceneScaleGoal->current.value : 0.0f;
+        gfx_gxm::g_sceneWidthOnly = vita_sceneScaleWidthOnly && vita_sceneScaleWidthOnly->current.enabled;
         gfx_gxm::g_sceneScale = gfx_gxm::SceneScaleFor(least, most, goalMs);
     }
     else

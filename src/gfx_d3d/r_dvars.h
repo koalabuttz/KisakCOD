@@ -174,6 +174,8 @@ extern const dvar_t *r_scaleViewport;
 extern const dvar_t *vita_sceneScale;
 extern const dvar_t *vita_sceneScaleMin;
 extern const dvar_t *vita_sceneScaleGoal;
+extern const dvar_t *vita_sceneScaleWidthOnly;
+extern const dvar_t *vita_sceneSharpen;
 #endif
 extern const dvar_t *r_normal;
 extern const dvar_t *sm_sunShadowCenter;

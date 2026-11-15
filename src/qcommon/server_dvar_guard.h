@@ -125,6 +125,8 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "vita_sceneScale",
     "vita_sceneScaleGoal",
     "vita_sceneScaleMin",
+    "vita_sceneScaleWidthOnly",
+    "vita_sceneSharpen",
     "vita_statsEvery",
     "vita_stickDeadzone",
 };

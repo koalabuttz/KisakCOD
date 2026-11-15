@@ -934,6 +934,34 @@ What the GXM back end does so far (step 2d):
   follows the way that was kept. A game server can set neither dvar.
   `scripts/tests/test_vita_scale_governor.py` runs it on a model of the
   console with run BV's times.
+- **Keeping a smaller 3D picture sharp.** The Vita has none of the
+  upscalers a PC pairs with a moving resolution (they need motion vectors
+  and a history of frames), so the smaller picture is kept close to the
+  full one in three plain ways, each with its own switch
+  (`src/gfx_gxm/gxm_engine_options.h`):
+  - *Mip bias, on by default.* A picture drawn smaller makes the GPU pick
+    smaller mip levels, and the stretched picture would show blurrier
+    textures than the full-size one. While the picture is scaled, every
+    mipped texture's level of detail is biased by log2 of the scale, in
+    sceGxm's steps of 1/8 of a level (one step at 0.92, four at 0.7), so it
+    samples the texels the full-size picture would have. An empty file
+    `no-mip-bias`, or `vita_gxm no-mip-bias 1`, turns it off. The start-up
+    line `diag: a fresh texture's LOD bias reads N` gives the value the
+    bias counts from.
+  - *Width only* (`vita_sceneScaleWidthOnly 1`). The picture keeps its
+    height and gives up the same share of its pixels in width alone: the
+    width's factor is the scale squared (0.85 at a scale of 0.92), no less
+    than a half. Every line of the screen is still drawn.
+  - *A sharpening stretch* (`vita_sceneSharpen 1`). The stretch is drawn
+    by a program of the back end's that reads the picture at each pixel
+    and one texel up, left, right and down, adds 0.2 of the pixel's
+    difference from its neighbours and holds the result between the
+    darkest and the brightest of the five, so an edge gets steeper and
+    gains no halo. It cannot ride in the film filter's quad, so it costs
+    the copy's and the stretch's two scenes again.
+  The HUD and all text are drawn after the stretch at 960x544 in every
+  case. The `3D picture size` log line counts the biased texture views and
+  the sharpened stretches. Not measured on a console yet.
 - **The CPU a frame ahead of the GPU.** The CPU fills frame N while the GPU
   still draws frame N - 1, so a frame costs the longer of the two times and
   not their sum. Console run U (2026-11-11, mp_crash) had shown them taking

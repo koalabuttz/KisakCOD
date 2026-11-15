@@ -60,6 +60,24 @@
 // 35.5 ms a frame at the full size, held by the GPU, and 29.6 ms at 0.7,
 // held by the CPU.
 //
+// Keeping the smaller picture sharp:
+// - g_mipBias: a picture drawn smaller makes the GPU pick smaller mip
+//   levels of every texture, so the stretched picture would show blurrier
+//   textures than the full-size one. While the 3D picture is scaled, the
+//   back end biases each mipped texture's level of detail by log2 of the
+//   scale (in sceGxm's steps of 1/8 of a level), which gives the texels the
+//   full-size picture would have used. An empty file `no-mip-bias`, or
+//   "vita_gxm no-mip-bias 1", turns it off.
+// - g_sceneWidthOnly (vita_sceneScaleWidthOnly): the picture keeps its
+//   height and gives up the same share of its pixels in width alone (the
+//   width's factor is the scale squared, no less than a half), so every
+//   line of the screen is still drawn.
+// - g_sceneSharpen (vita_sceneSharpen): the stretch is drawn by a program
+//   of the back end's that reads the picture five times and raises each
+//   pixel's contrast against its four neighbours, held inside the range of
+//   the five so that no halo appears. It costs the two scenes of the copy
+//   and the stretch, which g_stretchInFilter otherwise saves.
+//
 // g_stretchInFilter: the copy and the stretch of the scaled picture are two
 // more scenes a frame (console run AH, 2026-11-14: 5 became 7). When the
 // only post effect of the view is the map's film colour filter, which reads
@@ -75,6 +93,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 
 namespace gfx_gxm
 {
@@ -87,6 +106,11 @@ extern std::atomic<float> g_sceneScaleLeast;
 extern std::atomic<float> g_sceneScaleMost;
 extern std::atomic<float> g_sceneScaleGoalMs;
 extern std::atomic<float> g_sceneScaleNow;
+extern bool g_mipBias;
+extern bool g_sceneWidthOnly;
+extern bool g_sceneSharpen;
+// True while the engine asks for the scaled picture's stretch (StretchRect).
+extern bool g_sharpenThisStretch;
 extern bool g_stretchInFilter;
 extern float g_filterReadS;
 extern float g_filterReadT;
@@ -95,6 +119,26 @@ extern float g_filterReadT;
 inline int SceneScaled(int size, float scale)
 {
     return (std::max)(1, int(float(size) * scale));
+}
+
+// The factors of the picture's width and height for a scale.
+inline float SceneScaleX(float scale)
+{
+    return g_sceneWidthOnly ? (std::max)(scale * scale, 0.5f) : scale;
+}
+inline float SceneScaleY(float scale)
+{
+    return g_sceneWidthOnly ? 1.0f : scale;
+}
+
+// Steps of 1/8 of a mip level (sceGxm's unit) that a picture scaled by
+// `smallest` on its smaller side moves every texture's level of detail by:
+// 8 * log2(smallest), rounded; 0 or less.
+inline int SceneMipBiasSteps(float smallest)
+{
+    if (smallest >= 1.0f)
+        return 0;
+    return int(std::lround(8.0f * std::log2((std::max)(smallest, 0.25f))));
 }
 
 // The size of this frame's 3D picture: the engine's own (`most`), or the
