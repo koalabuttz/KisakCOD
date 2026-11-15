@@ -217,6 +217,9 @@ struct RecordState : RecordContext
     uint32_t shownId = 0;
     uint64_t shownNs = 0;
     uint64_t pacedPresents = 0;
+    // The refresh the last paced present was meant for (its time plus the
+    // offset below).
+    uint64_t lastTargetNs = 0;
     // How far before the refresh it means a present's time is set, adapted
     // to where the display takes it (PacePresent), and that offset as each
     // of the last kPaceOffsets presents used it, by id.

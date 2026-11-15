@@ -498,11 +498,19 @@ void EndTimed(Core &core, int query)
         WriteTimestamp(core, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, static_cast<uint32_t>(query) + 1);
 }
 // The time a present asks for (VK_GOOGLE_display_timing), on the record
-// thread: N refreshes after the newest frame the display says it showed, one
-// more N for each present since, less an offset so the target sits just
-// before the refresh it means. Until the display has reported a frame, and
-// whenever the GPU is late, the time is already past and the frame shows at
-// the next refresh.
+// thread: N refreshes after the refresh the present before it was meant for,
+// less an offset so the target sits just before the refresh it means. When
+// the display reports a frame shown later than that chain allows (the GPU or
+// the game was late), the chain starts again from it: N refreshes after the
+// newest frame shown, one more N for each present since. Until the display
+// has reported a frame the time is 0 and the frame shows at the next refresh.
+//
+// The chain is what keeps the spacing even when the game runs ahead of the
+// display. Worked out from the newest report alone, each target was N
+// refreshes per present after a frame several presents back, so any uneven
+// spacing at the start (a load, a hitch) repeated with that many presents'
+// period: Legacy on the Retroid Pocket 6, five presents queued, showed frames
+// 1, 3, 1, 3 and 2 refreshes apart at r_vsyncInterval 2, every one on time.
 //
 // The offset starts at half a refresh. Where the display's reported times
 // sit apart from the clock the compositor compares a present's time with,
@@ -578,6 +586,7 @@ void PacePresent(RecordState &state, VkDevice dev, VkSwapchainKHR swapchain, uin
         state.shownNs = 0;
         state.paceCountedId = 0;
         state.paceCountedNs = 0;
+        state.lastTargetNs = 0;
     }
     if (!state.refreshNs)
     {
@@ -618,8 +627,10 @@ void PacePresent(RecordState &state, VkDevice dev, VkSwapchainKHR swapchain, uin
     if (state.refreshNs && state.shownId)
     {
         const uint64_t step = uint64_t(interval) * state.refreshNs;
-        time.desiredPresentTime =
-            state.shownNs + uint64_t(state.presentId - state.shownId) * step - state.paceOffsetNs;
+        const uint64_t fromShown = state.shownNs + uint64_t(state.presentId - state.shownId) * step;
+        const uint64_t chained = state.lastTargetNs + step;
+        state.lastTargetNs = state.lastTargetNs && chained >= fromShown ? chained : fromShown;
+        time.desiredPresentTime = state.lastTargetNs - state.paceOffsetNs;
     }
     ++state.pacedPresents;
 }
