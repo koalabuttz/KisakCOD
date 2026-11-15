@@ -215,7 +215,7 @@ def test_emulator(work):
                  "host": [{"after": "menu", "at": 0.1, "do": "screencap", "name": "emu-cap"}]}]
     path = write_recipe(work, launches, apk=str(apk),
                         emulator={"exe": [sys.executable, str(FAKE), "--emulator"], "avd": "kisak-a13-x64",
-                                  "port": 5556, "boot_timeout": 20},
+                                  "port": 5556, "boot_timeout": 20, "env": {"ANDROID_AVD_HOME": "E:/Android/avd"}},
                         game_files={"from": str(game), "check": "main/iw_00.iwd"})
     env = {"FAKE_ADB_EMULATOR": "1", "FAKE_ADB_STATE": str(state)}
     for attempt, expected in ((1, "copied"), (2, "already there")):
@@ -227,7 +227,8 @@ def test_emulator(work):
         check(results["game_files"]["status"] == expected, f"game files {attempt}: {results['game_files']}")
         check(results["launches"] and results["launches"][0]["status"] == "ok", f"emulator launch {attempt}")
     args = (state / "emulator-args.txt").read_text()
-    for word in ("-avd kisak-a13-x64", "-port 5556", "-gpu host", "-no-window", "-no-snapshot-save"):
+    for word in ("-avd kisak-a13-x64", "-port 5556", "-gpu host", "-no-window", "-no-snapshot-save",
+                 "ANDROID_AVD_HOME=E:/Android/avd"):
         check(word in args, f"emulator started with {word}: {args}")
     check((state / "sdcard" / "Android/data/org.kisakcod.game/files/zone/x.ff").is_file(), "game files pushed")
     check("-s emulator-5556" in (state / "calls.txt").read_text(), "adb talks to emulator-5556")
