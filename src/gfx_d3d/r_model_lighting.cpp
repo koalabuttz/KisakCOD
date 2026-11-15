@@ -10,6 +10,7 @@
 #include "rb_logfile.h"
 #include <universal/profile.h>
 #include "r_state.h"
+#include <linux/sys_perf.h>
 
 struct $D83B18AC5ED51685DB5F92059A920C50 // sizeof=0x4
 {                                       // ...
@@ -489,12 +490,14 @@ void R_SetModelGroundLighting(uint32_t entryIndex, const uint8_t *groundLighting
 
 void R_SetModelLightingCoordsForSource(uint16_t handle, GfxCmdBufSourceState *source)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_LIGHTING_COORDS);
     R_SetModelLightingCoords(handle, source->input.consts[CONST_SRC_CODE_BASE_LIGHTING_COORDS]);
     R_DirtyCodeConstant(source, CONST_SRC_CODE_BASE_LIGHTING_COORDS);
 }
 
 void R_SetStaticModelLightingCoordsForSource(uint32_t smodelIndex, GfxCmdBufSourceState *source)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_LIGHTING_COORDS);
     R_SetModelLightingCoords(rgp.world->dpvs.smodelDrawInsts[smodelIndex].lightingHandle, source->input.consts[CONST_SRC_CODE_BASE_LIGHTING_COORDS]);
     R_DirtyCodeConstant(source, CONST_SRC_CODE_BASE_LIGHTING_COORDS);
 }

@@ -834,6 +834,7 @@ void R_DrawSurfs(GfxCmdBufContext context, GfxCmdBufState *prepassState, const G
     uint32_t drawSurfCount; // [esp+5Ch] [ebp-4h]
 
     PROF_SCOPED("R_DrawSurfs");
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_LIST);
 
     iassert(context.source->cameraView == info->cameraView);
     context.state->origMaterial = 0;
@@ -908,6 +909,7 @@ uint32_t R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArgs, GfxCm
     }
     const bool timed = Sys_PerfProbesOn();
     uint64_t mark = timed ? Sys_PerfNowNs() : 0;
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_MATERIAL);
     if (!R_SetupMaterial(listArgs->context, &prepassContext, listArgs->info, drawSurf))
         return R_SkipDrawSurfListMaterial(drawSurfList, drawSurfCount);
     isPixelCostEnabled = pixelCostMode != GFX_PIXEL_COST_MODE_OFF;
@@ -944,7 +946,13 @@ uint32_t R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArgs, GfxCm
             mark = now;
         }
         const uint32_t drawsBefore = rb_drawPrimCalls;
-        subListCount = rb_tessTable[drawSurf.fields.surfType](listArgs, passPrepassContext);
+        {
+            SysPerfPhaseScope tessPhase(
+                drawSurf.fields.surfType < SYS_PERF_TESS_SLOTS
+                    ? (uint8_t)(SYS_PERF_PHASE_TESS + drawSurf.fields.surfType)
+                    : (uint8_t)SYS_PERF_PHASE_NONE);
+            subListCount = rb_tessTable[drawSurf.fields.surfType](listArgs, passPrepassContext);
+        }
         if (timed)
         {
             const uint64_t now = Sys_PerfNowNs();
@@ -1770,6 +1778,7 @@ void DrawText2D(
     const Material *fxMaterial,
     const Material *fxMaterialGlow)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_TEXT_2D);
     int v21; // esi
     const char *v22; // eax
     double v23; // st7
@@ -2925,6 +2934,7 @@ void RB_Draw3D()
     {
         PROF_SCOPED("ExecuteRenderCmds");
         SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_3D);
+        SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_3D);
         RB_Draw3DInternal(&data->viewInfo[data->viewInfoIndex]);
         // Then the Modern path's planar reflection view, which reuses the
         // main view's shadow maps (R_ModernPlanarScene).
@@ -2990,6 +3000,7 @@ void RB_CallExecuteRenderCommands()
     
     PROF_SCOPED("ExecuteRenderCmds");
     SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_2D);
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_2D);
     if ((backEndData->drawType & 2) != 0)
     {
         if (g_primStats)
@@ -3138,6 +3149,7 @@ void RB_RenderThread(uint32_t threadContext)
             {
                 PROF_SCOPED("WaitBackendEvent");
                 SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_IDLE);
+                SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_IDLE);
                 KISAK_NULLSUB();
                 R_ProcessWorkerCmdsWithTimeout(Sys_WaitBackendEvent, 1);
             }
@@ -3236,12 +3248,14 @@ void RB_RenderCommandFrame(const GfxBackEndData *data)
     {
         PROF_SCOPED("WaitRenderSwap");
         SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_SWAP_WAIT);
+        SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_IDLE);
         R_ProcessWorkerCmdsWithTimeout(RB_BackendTimeout, 1);
     }
     if (allowRendering)
     {
         KISAK_NULLSUB();
         SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_PRESENT);
+        SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_PRESENT);
         RB_EndFrame(drawType);
     }
     //Profile_Begin(172);
