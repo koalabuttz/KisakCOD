@@ -15,7 +15,10 @@
 // a layout D3D9's LockRect can hand out: rows of whole multiples of 8 texels
 // (blocks of 4x4 for DXT). LockRect hands out the GPU memory itself.
 //
-// One thread at a time calls everything; the front's lock sees to that.
+// One thread at a time calls everything; the front's lock sees to that. With
+// the submit thread on, the calls that set state and draw are only written
+// down by their caller and made by a thread of the back end's own ("The
+// submit thread" below).
 
 #if !defined(KISAK_GFX_GXM)
 #error "gxm_legacy.cpp is the PS Vita's Legacy back end (KISAK_GFX_GXM)"
@@ -551,6 +554,180 @@ bool TakeFromPoolsQuietly(Memory &memory, uint32_t bytes, MemoryUse use)
 
 // ---- The device ------------------------------------------------------------------------
 
+// ---- The submit thread ----------------------------------------------------------------------
+//
+// In a busy view the render thread spends about 30 ms a frame, 12.5 ms of it
+// in this back end's draws (console run BG: 1380 draws at 9.1 us each), and
+// the other two busy threads leave a core free much of the time. So the
+// engine's part of a draw and this back end's part can be on two threads.
+//
+// With the marker file gxm-submit-thread beside the compiled programs (or
+// "vita_gxm gxm-submit-thread 1" while the game runs), the calls that set
+// state and draw are written to a queue (gxm_call_queue.h) and their caller
+// goes on; the submit thread makes them in the order they were written, by
+// calling the same functions the caller would have (the ...Now functions
+// below). Everything else is made by its caller as before, after Sync has
+// waited for the queue to empty: creating, destroying and locking resources,
+// reading what was drawn, Present. So whatever such a call touches, no draw
+// still to be made can be using it, and a frame's draws are all with sceGxm
+// before the frame is presented: the GPU pacing and the buffer renames see
+// what they saw before.
+//
+// The exceptions, made by the caller without waiting:
+// - A lock of a vertex or index buffer without DISCARD hands out the
+//   buffer's memory where it is. A buffer's memory moves only in a DISCARD
+//   lock, which waits first, and the bytes of a NOOVERWRITE lock are by
+//   D3D9's rule ones no earlier draw reads.
+// - Calls that only read what never changes after the resource was made
+//   (sizes, formats), and the queries, which draw nothing here.
+//
+// Every sceGxm scene begins and ends on one thread: while the submit thread
+// runs, a caller that must end the scene (to read a target, to wait for the
+// GPU, at Present) has the submit thread end it and waits
+// (EndSceneOnSubmitThread).
+//
+// What is copied into the queue: shader constants and the vertices of
+// DrawPrimitiveUP, whose memory is the caller's. Everything else a call
+// names is a resource, which cannot go before the queue has emptied.
+//
+// A call that waits costs its caller the time the submit thread is behind,
+// which is little: it makes a draw faster than the engine prepares the next
+// one. The log's `submit thread` line counts those waits.
+namespace
+{
+enum QueuedCall : uint32_t
+{
+    kCallRenderState = 1,
+    kCallSamplerState,
+    kCallTexture,
+    kCallVertexShader,
+    kCallPixelShader,
+    kCallVertexConstants,
+    kCallPixelConstants,
+    kCallVertexDecl,
+    kCallStreamSource,
+    kCallIndices,
+    kCallViewport,
+    kCallScissorRect,
+    kCallRenderTarget,
+    kCallDepthStencil,
+    kCallClear,
+    kCallDrawIndexed,
+    kCallDraw,
+    kCallDrawUp,
+    kCallStretchRect,
+    kCallEndScene,
+    kCallEndFrame,
+};
+
+// The ring, in words (256 KB: a good part of a busy frame's calls). The
+// submit thread is woken once this many words wait for it, some tens of
+// draws: it then works through them and what comes meanwhile, and sleeps
+// again when it has caught up. Its stack holds what a draw's log lines need.
+constexpr uint32_t kSubmitRingWords = 1u << 16;
+constexpr uint32_t kSubmitWakeWords = 2048;
+constexpr size_t kSubmitStackBytes = 512u << 10;
+
+static_assert(sizeof(void *) == sizeof(uint32_t), "a queued call keeps a pointer in one word");
+static_assert(sizeof(Viewport) == 6 * sizeof(uint32_t) && sizeof(Rect) == 4 * sizeof(uint32_t),
+              "queued as whole words");
+
+template <class T> uint32_t Word(T *pointer)
+{
+    return uint32_t(reinterpret_cast<uintptr_t>(pointer));
+}
+
+template <class T> T *Pointer(uint32_t word)
+{
+    return reinterpret_cast<T *>(uintptr_t(word));
+}
+
+// The queue to write a call to, or null when the caller makes it itself.
+inline gxm::CallQueue *Queue(Device *device)
+{
+    return device ? device->submit : nullptr;
+}
+
+// Every call written so far has been made when this returns: the caller is
+// about to touch what those calls use. Nothing to do without the submit
+// thread, or on it (it makes the calls, so all before the one it is making
+// are made).
+void Sync(Device *device)
+{
+    gxm::CallQueue *queue = Queue(device);
+    if (!queue || queue->OnItsThread() || queue->Idle())
+        return;
+    const uint64_t from = Micros();
+    queue->Drain();
+    ++device->submitCounts.waits;
+    device->submitCounts.waitMicros += Micros() - from;
+}
+
+void RunQueued(void *user, uint32_t call, const uint32_t *words, uint32_t count); // with Present
+
+void LogSubmitThread(Device &device)
+{
+    if (!device.submit)
+        return;
+    Device::SubmitCounts &c = device.submitCounts;
+    const gxm::CallQueueCounts now = device.submit->Counts();
+    const uint64_t frames = device.shaderCounts.frames - c.loggedFrames;
+    if (frames)
+    {
+        const double perFrame = 1.0 / double(frames);
+        Log(device,
+            "submit thread: a frame, %.0f calls queued, the thread woken %.1f times and asleep %.1f times, %.1f waits "
+            "for it (%.3f ms), %.2f of them for room in the queue; %llu frames",
+            double(now.calls - c.logged.calls) * perFrame, double(now.wakes - c.logged.wakes) * perFrame,
+            double(now.sleeps - c.logged.sleeps) * perFrame, double(c.waits - c.loggedWaits) * perFrame,
+            double(c.waitMicros - c.loggedWaitMicros) / 1000.0 * perFrame,
+            double(now.fullWaits - c.logged.fullWaits) * perFrame, (unsigned long long)frames);
+    }
+    c.logged = now;
+    c.loggedFrames = device.shaderCounts.frames;
+    c.loggedWaits = c.waits;
+    c.loggedWaitMicros = c.waitMicros;
+}
+} // namespace
+
+bool EndSceneOnSubmitThread(Device &device)
+{
+    gxm::CallQueue *queue = device.submit;
+    if (!queue || queue->OnItsThread())
+        return false;
+    queue->Begin(kCallEndScene, 0);
+    queue->End(true);
+    Sync(&device);
+    return true;
+}
+
+void SetSubmitThread(Device &device, bool on)
+{
+    if (on == (device.submit != nullptr))
+        return;
+    // The open scene ends where it began, before the calls change threads.
+    Sync(&device);
+    EndScene(device);
+    if (!on)
+    {
+        LogSubmitThread(device);
+        device.submit->Stop();
+        delete device.submit;
+        device.submit = nullptr;
+        return;
+    }
+    gxm::CallQueue *queue = new gxm::CallQueue;
+    if (!queue->Start(RunQueued, nullptr, &device, kSubmitRingWords, kSubmitWakeWords, kSubmitStackBytes))
+    {
+        Log(device, "the submit thread could not be started: sceGxm's calls stay with their callers");
+        delete queue;
+        return;
+    }
+    device.submitCounts = Device::SubmitCounts{};
+    device.submitCounts.loggedFrames = device.shaderCounts.frames;
+    device.submit = queue;
+}
+
 Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
 {
     if (core)
@@ -628,6 +805,15 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     Log(*device, "%s", gxm::DescribeMemory().c_str());
     SetDefaultState(*device);
     device->frameTime.since = Micros();
+    // sceGxm's calls on a thread of their own: off unless a file named
+    // gxm-submit-thread is beside the compiled programs, until console runs
+    // have compared the two ways.
+    if (gxm::ProgramCacheMarker("gxm-submit-thread"))
+    {
+        SetSubmitThread(*device, true);
+        if (device->submit)
+            Log(*device, "diag: gxm-submit-thread is there: sceGxm's calls are made by a thread of their own");
+    }
     return device.release();
 }
 
@@ -635,6 +821,7 @@ void DestroyDevice(Device *device)
 {
     if (!device)
         return;
+    SetSubmitThread(*device, false);
     if (device->live)
         Log(*device, "%u resources were not destroyed before the device", device->live);
     LogProgramFailures(*device);
@@ -746,6 +933,7 @@ bool EnsureTargetMemory(Device &device, Texture &texture)
 
 Texture *CreateTexture(Device *device, const TextureDesc &desc)
 {
+    Sync(device);
     const FormatInfo *format = LookupFormat(desc.format);
     if (!device || !format || !desc.width || !desc.height)
         return nullptr;
@@ -789,6 +977,7 @@ Texture *CreateTexture(Device *device, const TextureDesc &desc)
 
 void DestroyTexture(Device *device, Texture *texture)
 {
+    Sync(device);
     if (!texture)
         return;
     // A scene may be drawing into it.
@@ -830,6 +1019,7 @@ const TextureDesc &Describe(const Texture *texture)
 bool LockRect(Device *device, Texture *texture, uint32_t face, uint32_t level, const Box *box, uint32_t flags,
               LockedRect &out)
 {
+    Sync(device);
     out = LockedRect{};
     if (!device || !texture || face >= texture->faces || level >= texture->desc.levels)
         return false;
@@ -879,6 +1069,7 @@ bool LockRect(Device *device, Texture *texture, uint32_t face, uint32_t level, c
 
 void UnlockRect(Device *device, Texture *texture, uint32_t face, uint32_t level)
 {
+    Sync(device);
     if (!device || !texture || face >= texture->faces || level >= texture->desc.levels)
         return;
     Level &lock = texture->levels[face * texture->desc.levels + level];
@@ -987,6 +1178,7 @@ void SurfaceSize(const Surface *surface, uint32_t &width, uint32_t &height, d3d:
 
 bool LockSurface(Device *device, Surface *surface, const Box *box, uint32_t flags, LockedRect &out)
 {
+    Sync(device);
     out = LockedRect{};
     if (!surface)
         return false;
@@ -1011,6 +1203,7 @@ namespace
 template <class T>
 T *CreateBuffer(Device *device, uint32_t bytes, uint32_t usage, d3d::Pool pool, bool vertices, const char *name)
 {
+    Sync(device);
     if (!device || !bytes)
         return nullptr;
     const MemoryUse use = vertices ? ((usage & d3d::USAGE_DYNAMIC) ? MemoryUse::VertexDynamic : MemoryUse::VertexStatic)
@@ -1040,9 +1233,15 @@ void *LockBuffer(Device *device, GpuBuffer *buffer, uint32_t offset, uint32_t by
     if (!device || !buffer || offset > buffer->size || (bytes && offset + bytes > buffer->size))
         return nullptr;
     // DISCARD on a buffer a draw read: fresh memory, so the GPU keeps what
-    // it reads. NOOVERWRITE and plain locks write in place.
-    if ((flags & d3d::LOCK_DISCARD) && buffer->drawn && buffer->memory.gpu)
-        Rename(*device, *buffer);
+    // it reads. NOOVERWRITE and plain locks write in place. Whether a draw
+    // read it is known once the draws written so far are made (Sync); the
+    // other locks do not wait for them, as nothing they use changes here.
+    if (flags & d3d::LOCK_DISCARD)
+    {
+        Sync(device);
+        if (buffer->drawn && buffer->memory.gpu)
+            Rename(*device, *buffer);
+    }
     buffer->locked = true;
     return buffer->memory.data + offset;
 }
@@ -1062,6 +1261,7 @@ VertexBuffer *CreateVertexBuffer(Device *device, uint32_t bytes, uint32_t usage,
 
 void DestroyVertexBuffer(Device *device, VertexBuffer *buffer)
 {
+    Sync(device);
     if (!buffer)
         return;
     for (auto &stream : device->streams)
@@ -1082,6 +1282,7 @@ IndexBuffer *CreateIndexBuffer(Device *device, uint32_t bytes, uint32_t usage, d
 
 void DestroyIndexBuffer(Device *device, IndexBuffer *buffer)
 {
+    Sync(device);
     if (!buffer)
         return;
     if (device->indices == buffer)
@@ -1233,6 +1434,7 @@ void LogProgramFailures(Device &device)
 
 Shader *CreateShader(Device *device, const void *bytecode, size_t bytes, std::string &error)
 {
+    Sync(device);
     if (!device || !bytecode || bytes < 8)
     {
         error = "no shader bytecode";
@@ -1259,6 +1461,7 @@ Shader *CreateShader(Device *device, const void *bytecode, size_t bytes, std::st
 
 void DestroyShader(Device *device, Shader *shader)
 {
+    Sync(device);
     if (!shader)
         return;
     if (device->vertexShader == shader)
@@ -1272,6 +1475,7 @@ void DestroyShader(Device *device, Shader *shader)
 
 VertexDecl *CreateVertexDecl(Device *device, const VertexElement *elements, uint32_t count)
 {
+    Sync(device);
     if (!device || (count && !elements))
         return nullptr;
     VertexDecl *decl = new VertexDecl;
@@ -1282,6 +1486,7 @@ VertexDecl *CreateVertexDecl(Device *device, const VertexElement *elements, uint
 
 void DestroyVertexDecl(Device *device, VertexDecl *decl)
 {
+    Sync(device);
     if (!decl)
         return;
     if (device->decl == decl)
@@ -1293,7 +1498,7 @@ void DestroyVertexDecl(Device *device, VertexDecl *decl)
 
 // ---- State ------------------------------------------------------------------------------------
 
-void SetRenderState(Device *device, d3d::RenderState state, uint32_t value)
+static void SetRenderStateNow(Device *device, d3d::RenderState state, uint32_t value)
 {
     if (device && state < d3d::RS_COUNT && device->renderStates[state] != value)
     {
@@ -1302,8 +1507,22 @@ void SetRenderState(Device *device, d3d::RenderState state, uint32_t value)
     }
 }
 
+void SetRenderState(Device *device, d3d::RenderState state, uint32_t value)
+{
+    if (gxm::CallQueue *queue = Queue(device))
+    {
+        uint32_t *words = queue->Begin(kCallRenderState, 2);
+        words[0] = state;
+        words[1] = value;
+        queue->End(false);
+        return;
+    }
+    SetRenderStateNow(device, state, value);
+}
+
 uint32_t GetRenderState(const Device *device, d3d::RenderState state)
 {
+    Sync(const_cast<Device *>(device));
     return device && state < d3d::RS_COUNT ? device->renderStates[state] : 0;
 }
 
@@ -1319,21 +1538,48 @@ int SamplerSlot(uint32_t sampler)
 }
 } // namespace
 
-void SetSamplerState(Device *device, uint32_t sampler, d3d::SamplerState state, uint32_t value)
+static void SetSamplerStateNow(Device *device, uint32_t sampler, d3d::SamplerState state, uint32_t value)
 {
     const int slot = SamplerSlot(sampler);
     if (device && slot >= 0 && state < d3d::SAMP_COUNT)
         device->samplerStates[slot][state] = value;
 }
 
-void SetTexture(Device *device, uint32_t sampler, Texture *texture)
+void SetSamplerState(Device *device, uint32_t sampler, d3d::SamplerState state, uint32_t value)
+{
+    if (gxm::CallQueue *queue = Queue(device))
+    {
+        uint32_t *words = queue->Begin(kCallSamplerState, 3);
+        words[0] = sampler;
+        words[1] = state;
+        words[2] = value;
+        queue->End(false);
+        return;
+    }
+    SetSamplerStateNow(device, sampler, state, value);
+}
+
+static void SetTextureNow(Device *device, uint32_t sampler, Texture *texture)
 {
     const int slot = SamplerSlot(sampler);
     if (device && slot >= 0)
         device->textures[slot] = texture;
 }
 
-void SetVertexShader(Device *device, Shader *shader)
+void SetTexture(Device *device, uint32_t sampler, Texture *texture)
+{
+    if (gxm::CallQueue *queue = Queue(device))
+    {
+        uint32_t *words = queue->Begin(kCallTexture, 2);
+        words[0] = sampler;
+        words[1] = Word(texture);
+        queue->End(false);
+        return;
+    }
+    SetTextureNow(device, sampler, texture);
+}
+
+static void SetVertexShaderNow(Device *device, Shader *shader)
 {
     if (device && device->vertexShader != shader)
     {
@@ -1342,13 +1588,35 @@ void SetVertexShader(Device *device, Shader *shader)
     }
 }
 
-void SetPixelShader(Device *device, Shader *shader)
+void SetVertexShader(Device *device, Shader *shader)
+{
+    if (gxm::CallQueue *queue = Queue(device))
+    {
+        *queue->Begin(kCallVertexShader, 1) = Word(shader);
+        queue->End(false);
+        return;
+    }
+    SetVertexShaderNow(device, shader);
+}
+
+static void SetPixelShaderNow(Device *device, Shader *shader)
 {
     if (device && device->pixelShader != shader)
     {
         device->pixelShader = shader;
         ++device->stateSerial;
     }
+}
+
+void SetPixelShader(Device *device, Shader *shader)
+{
+    if (gxm::CallQueue *queue = Queue(device))
+    {
+        *queue->Begin(kCallPixelShader, 1) = Word(shader);
+        queue->End(false);
+        return;
+    }
+    SetPixelShaderNow(device, shader);
 }
 
 namespace
@@ -1368,7 +1636,33 @@ bool SetConstants(std::vector<float> &constants, uint32_t start, const float *da
 }
 } // namespace
 
-void SetVertexShaderConstantF(Device *device, uint32_t start, const float *data, uint32_t count)
+namespace
+{
+// Shader constants into the queue: the caller's memory is its own again when
+// the call returns. False when the caller is to make the call itself.
+bool QueueConstants(Device *device, QueuedCall call, uint32_t start, const float *data, uint32_t count)
+{
+    gxm::CallQueue *queue = Queue(device);
+    if (!queue)
+        return false;
+    if (!data)
+        count = 0;
+    uint32_t *words = queue->Begin(call, 2 + count * 4);
+    if (!words)
+    {
+        Sync(device);
+        return false;
+    }
+    words[0] = start;
+    words[1] = count;
+    if (count)
+        std::memcpy(words + 2, data, size_t(count) * 16);
+    queue->End(false);
+    return true;
+}
+} // namespace
+
+static void SetVertexShaderConstantFNow(Device *device, uint32_t start, const float *data, uint32_t count)
 {
     if (device)
     {
@@ -1378,7 +1672,13 @@ void SetVertexShaderConstantF(Device *device, uint32_t start, const float *data,
     }
 }
 
-void SetPixelShaderConstantF(Device *device, uint32_t start, const float *data, uint32_t count)
+void SetVertexShaderConstantF(Device *device, uint32_t start, const float *data, uint32_t count)
+{
+    if (!QueueConstants(device, kCallVertexConstants, start, data, count))
+        SetVertexShaderConstantFNow(device, start, data, count);
+}
+
+static void SetPixelShaderConstantFNow(Device *device, uint32_t start, const float *data, uint32_t count)
 {
     if (device)
     {
@@ -1388,7 +1688,13 @@ void SetPixelShaderConstantF(Device *device, uint32_t start, const float *data, 
     }
 }
 
-void SetVertexDecl(Device *device, VertexDecl *decl)
+void SetPixelShaderConstantF(Device *device, uint32_t start, const float *data, uint32_t count)
+{
+    if (!QueueConstants(device, kCallPixelConstants, start, data, count))
+        SetPixelShaderConstantFNow(device, start, data, count);
+}
+
+static void SetVertexDeclNow(Device *device, VertexDecl *decl)
 {
     if (device && device->decl != decl)
     {
@@ -1397,7 +1703,19 @@ void SetVertexDecl(Device *device, VertexDecl *decl)
     }
 }
 
-void SetStreamSource(Device *device, uint32_t stream, VertexBuffer *buffer, uint32_t offset, uint32_t stride)
+void SetVertexDecl(Device *device, VertexDecl *decl)
+{
+    if (gxm::CallQueue *queue = Queue(device))
+    {
+        *queue->Begin(kCallVertexDecl, 1) = Word(decl);
+        queue->End(false);
+        return;
+    }
+    SetVertexDeclNow(device, decl);
+}
+
+static void SetStreamSourceNow(Device *device, uint32_t stream, VertexBuffer *buffer, uint32_t offset,
+                               uint32_t stride)
 {
     if (device && stream < kMaxStreams)
     {
@@ -1408,13 +1726,39 @@ void SetStreamSource(Device *device, uint32_t stream, VertexBuffer *buffer, uint
     }
 }
 
-void SetIndices(Device *device, IndexBuffer *buffer)
+void SetStreamSource(Device *device, uint32_t stream, VertexBuffer *buffer, uint32_t offset, uint32_t stride)
+{
+    if (gxm::CallQueue *queue = Queue(device))
+    {
+        uint32_t *words = queue->Begin(kCallStreamSource, 4);
+        words[0] = stream;
+        words[1] = Word(buffer);
+        words[2] = offset;
+        words[3] = stride;
+        queue->End(false);
+        return;
+    }
+    SetStreamSourceNow(device, stream, buffer, offset, stride);
+}
+
+static void SetIndicesNow(Device *device, IndexBuffer *buffer)
 {
     if (device)
         device->indices = buffer;
 }
 
-void SetViewport(Device *device, const Viewport &viewport)
+void SetIndices(Device *device, IndexBuffer *buffer)
+{
+    if (gxm::CallQueue *queue = Queue(device))
+    {
+        *queue->Begin(kCallIndices, 1) = Word(buffer);
+        queue->End(false);
+        return;
+    }
+    SetIndicesNow(device, buffer);
+}
+
+static void SetViewportNow(Device *device, const Viewport &viewport)
 {
     if (device && std::memcmp(&device->viewport, &viewport, sizeof(viewport)) != 0)
     {
@@ -1423,7 +1767,18 @@ void SetViewport(Device *device, const Viewport &viewport)
     }
 }
 
-void SetScissorRect(Device *device, const Rect &rect)
+void SetViewport(Device *device, const Viewport &viewport)
+{
+    if (gxm::CallQueue *queue = Queue(device))
+    {
+        std::memcpy(queue->Begin(kCallViewport, 6), &viewport, sizeof(viewport));
+        queue->End(false);
+        return;
+    }
+    SetViewportNow(device, viewport);
+}
+
+static void SetScissorRectNow(Device *device, const Rect &rect)
 {
     if (device && std::memcmp(&device->scissor, &rect, sizeof(rect)) != 0)
     {
@@ -1432,7 +1787,18 @@ void SetScissorRect(Device *device, const Rect &rect)
     }
 }
 
-void SetRenderTarget(Device *device, uint32_t index, Surface *surface)
+void SetScissorRect(Device *device, const Rect &rect)
+{
+    if (gxm::CallQueue *queue = Queue(device))
+    {
+        std::memcpy(queue->Begin(kCallScissorRect, 4), &rect, sizeof(rect));
+        queue->End(false);
+        return;
+    }
+    SetScissorRectNow(device, rect);
+}
+
+static void SetRenderTargetNow(Device *device, uint32_t index, Surface *surface)
 {
     if (!device || index >= kMaxRenderTargets)
         return;
@@ -1448,13 +1814,37 @@ void SetRenderTarget(Device *device, uint32_t index, Surface *surface)
     }
 }
 
-void SetDepthStencilSurface(Device *device, Surface *surface)
+void SetRenderTarget(Device *device, uint32_t index, Surface *surface)
+{
+    if (gxm::CallQueue *queue = Queue(device))
+    {
+        uint32_t *words = queue->Begin(kCallRenderTarget, 2);
+        words[0] = index;
+        words[1] = Word(surface);
+        queue->End(false);
+        return;
+    }
+    SetRenderTargetNow(device, index, surface);
+}
+
+static void SetDepthStencilSurfaceNow(Device *device, Surface *surface)
 {
     if (device)
     {
         device->depthStencil = surface;
         ++device->stateSerial;
     }
+}
+
+void SetDepthStencilSurface(Device *device, Surface *surface)
+{
+    if (gxm::CallQueue *queue = Queue(device))
+    {
+        *queue->Begin(kCallDepthStencil, 1) = Word(surface);
+        queue->End(false);
+        return;
+    }
+    SetDepthStencilSurfaceNow(device, surface);
 }
 
 // ---- Drawing --------------------------------------------------------------------------------
@@ -1494,8 +1884,8 @@ template <typename Call> void TimedOther(Device &device, Call &&call)
 }
 } // namespace
 
-void Clear(Device *device, uint32_t rectCount, const Rect *rects, uint32_t flags, uint32_t color, float z,
-           uint32_t stencil)
+static void ClearNow(Device *device, uint32_t rectCount, const Rect *rects, uint32_t flags, uint32_t color, float z,
+                     uint32_t stencil)
 {
     if (!device || device->detached)
         return;
@@ -1503,8 +1893,32 @@ void Clear(Device *device, uint32_t rectCount, const Rect *rects, uint32_t flags
     TimedOther(*device, [&] { ClearTargets(*device, rectCount, rects, flags, color, z, stencil); });
 }
 
-void DrawIndexedPrimitive(Device *device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t, uint32_t,
-                          uint32_t startIndex, uint32_t primitiveCount)
+void Clear(Device *device, uint32_t rectCount, const Rect *rects, uint32_t flags, uint32_t color, float z,
+           uint32_t stencil)
+{
+    if (gxm::CallQueue *queue = Queue(device))
+    {
+        if (!rects)
+            rectCount = 0;
+        if (uint32_t *words = queue->Begin(kCallClear, 5 + rectCount * 4))
+        {
+            words[0] = rectCount;
+            words[1] = flags;
+            words[2] = color;
+            std::memcpy(words + 3, &z, sizeof(z));
+            words[4] = stencil;
+            if (rectCount)
+                std::memcpy(words + 5, rects, size_t(rectCount) * sizeof(Rect));
+            queue->End(true);
+            return;
+        }
+        Sync(device);
+    }
+    ClearNow(device, rectCount, rects, flags, color, z, stencil);
+}
+
+static void DrawIndexedPrimitiveNow(Device *device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t,
+                                    uint32_t, uint32_t startIndex, uint32_t primitiveCount)
 {
     if (!device || device->detached)
         return;
@@ -1512,7 +1926,23 @@ void DrawIndexedPrimitive(Device *device, d3d::PrimitiveType type, int32_t baseV
     TimedDraw(*device, [&] { Draw(*device, type, baseVertex, startIndex, primitiveCount, true, nullptr, 0); });
 }
 
-void DrawPrimitive(Device *device, d3d::PrimitiveType type, uint32_t startVertex, uint32_t primitiveCount)
+void DrawIndexedPrimitive(Device *device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t minIndex,
+                          uint32_t vertexCount, uint32_t startIndex, uint32_t primitiveCount)
+{
+    if (gxm::CallQueue *queue = Queue(device))
+    {
+        uint32_t *words = queue->Begin(kCallDrawIndexed, 4);
+        words[0] = type;
+        words[1] = uint32_t(baseVertex);
+        words[2] = startIndex;
+        words[3] = primitiveCount;
+        queue->End(true);
+        return;
+    }
+    DrawIndexedPrimitiveNow(device, type, baseVertex, minIndex, vertexCount, startIndex, primitiveCount);
+}
+
+static void DrawPrimitiveNow(Device *device, d3d::PrimitiveType type, uint32_t startVertex, uint32_t primitiveCount)
 {
     if (!device || device->detached)
         return;
@@ -1520,8 +1950,22 @@ void DrawPrimitive(Device *device, d3d::PrimitiveType type, uint32_t startVertex
     TimedDraw(*device, [&] { Draw(*device, type, int32_t(startVertex), 0, primitiveCount, false, nullptr, 0); });
 }
 
-void DrawPrimitiveUP(Device *device, d3d::PrimitiveType type, uint32_t primitiveCount, const void *vertices,
-                     uint32_t stride)
+void DrawPrimitive(Device *device, d3d::PrimitiveType type, uint32_t startVertex, uint32_t primitiveCount)
+{
+    if (gxm::CallQueue *queue = Queue(device))
+    {
+        uint32_t *words = queue->Begin(kCallDraw, 3);
+        words[0] = type;
+        words[1] = startVertex;
+        words[2] = primitiveCount;
+        queue->End(true);
+        return;
+    }
+    DrawPrimitiveNow(device, type, startVertex, primitiveCount);
+}
+
+static void DrawPrimitiveUPNow(Device *device, d3d::PrimitiveType type, uint32_t primitiveCount,
+                               const void *vertices, uint32_t stride)
 {
     if (!device)
         return;
@@ -1532,16 +1976,80 @@ void DrawPrimitiveUP(Device *device, d3d::PrimitiveType type, uint32_t primitive
     device->streams[0] = Device::Stream{};
 }
 
+namespace
+{
+// The vertices a draw without indices reads (Draw, gxm_legacy_draw.cpp).
+uint32_t VerticesOf(d3d::PrimitiveType type, uint32_t primitives)
+{
+    switch (type)
+    {
+    case d3d::PT_POINTLIST: return primitives;
+    case d3d::PT_LINELIST: return primitives * 2;
+    case d3d::PT_TRIANGLELIST: return primitives * 3;
+    case d3d::PT_TRIANGLESTRIP:
+    case d3d::PT_TRIANGLEFAN: return primitives + 2;
+    default: return 0;
+    }
+}
+} // namespace
+
+void DrawPrimitiveUP(Device *device, d3d::PrimitiveType type, uint32_t primitiveCount, const void *vertices,
+                     uint32_t stride)
+{
+    if (gxm::CallQueue *queue = Queue(device))
+    {
+        // The vertices go with the call: they are the caller's to change
+        // once this returns.
+        const uint64_t bytes = vertices ? uint64_t(VerticesOf(type, primitiveCount)) * stride : 0;
+        uint32_t *words = bytes < (1u << 24) ? queue->Begin(kCallDrawUp, 4 + uint32_t(bytes + 3) / 4) : nullptr;
+        if (words)
+        {
+            words[0] = type;
+            words[1] = primitiveCount;
+            words[2] = stride;
+            words[3] = vertices != nullptr;
+            if (bytes)
+                std::memcpy(words + 4, vertices, size_t(bytes));
+            queue->End(true);
+            return;
+        }
+        Sync(device);
+    }
+    DrawPrimitiveUPNow(device, type, primitiveCount, vertices, stride);
+}
+
 // ---- Copies, frames and queries ---------------------------------------------------------------
 
-void StretchRect(Device *device, Surface *src, const Rect *srcRect, Surface *dst, const Rect *dstRect, bool linear)
+static void StretchRectNow(Device *device, Surface *src, const Rect *srcRect, Surface *dst, const Rect *dstRect,
+                           bool linear)
 {
     if (device && !device->detached)
         TimedOther(*device, [&] { Copy(*device, src, srcRect, dst, dstRect, linear); });
 }
 
+void StretchRect(Device *device, Surface *src, const Rect *srcRect, Surface *dst, const Rect *dstRect, bool linear)
+{
+    if (gxm::CallQueue *queue = Queue(device))
+    {
+        uint32_t *words = queue->Begin(kCallStretchRect, 13);
+        words[0] = Word(src);
+        words[1] = Word(dst);
+        words[2] = linear;
+        words[3] = srcRect != nullptr;
+        words[4] = dstRect != nullptr;
+        if (srcRect)
+            std::memcpy(words + 5, srcRect, sizeof(Rect));
+        if (dstRect)
+            std::memcpy(words + 9, dstRect, sizeof(Rect));
+        queue->End(true);
+        return;
+    }
+    StretchRectNow(device, src, srcRect, dst, dstRect, linear);
+}
+
 bool GetRenderTargetData(Device *device, Surface *renderTarget, Surface *dst)
 {
+    Sync(device);
     Target source, destination;
     if (!device)
         return false;
@@ -1580,6 +2088,7 @@ bool GetRenderTargetData(Device *device, Surface *renderTarget, Surface *dst)
 
 void UpdateTexture(Device *device, Texture *src, Texture *dst)
 {
+    Sync(device);
     if (!device || !src || !dst || src->desc.format != dst->desc.format || src->faces != dst->faces)
         return;
     // The game does this to the model lighting volume every frame, while the
@@ -1676,14 +2185,123 @@ void LogFrameTime(Device &device)
 }
 } // namespace
 
+namespace
+{
+// One queued call, on the submit thread: the words are what its wrapper
+// wrote.
+void RunQueued(void *user, uint32_t call, const uint32_t *w, uint32_t)
+{
+    Device *device = static_cast<Device *>(user);
+    switch (call)
+    {
+    case kCallRenderState:
+        SetRenderStateNow(device, d3d::RenderState(w[0]), w[1]);
+        break;
+    case kCallSamplerState:
+        SetSamplerStateNow(device, w[0], d3d::SamplerState(w[1]), w[2]);
+        break;
+    case kCallTexture:
+        SetTextureNow(device, w[0], Pointer<Texture>(w[1]));
+        break;
+    case kCallVertexShader:
+        SetVertexShaderNow(device, Pointer<Shader>(w[0]));
+        break;
+    case kCallPixelShader:
+        SetPixelShaderNow(device, Pointer<Shader>(w[0]));
+        break;
+    case kCallVertexConstants:
+        SetVertexShaderConstantFNow(device, w[0], w[1] ? reinterpret_cast<const float *>(w + 2) : nullptr, w[1]);
+        break;
+    case kCallPixelConstants:
+        SetPixelShaderConstantFNow(device, w[0], w[1] ? reinterpret_cast<const float *>(w + 2) : nullptr, w[1]);
+        break;
+    case kCallVertexDecl:
+        SetVertexDeclNow(device, Pointer<VertexDecl>(w[0]));
+        break;
+    case kCallStreamSource:
+        SetStreamSourceNow(device, w[0], Pointer<VertexBuffer>(w[1]), w[2], w[3]);
+        break;
+    case kCallIndices:
+        SetIndicesNow(device, Pointer<IndexBuffer>(w[0]));
+        break;
+    case kCallViewport:
+    {
+        Viewport viewport;
+        std::memcpy(&viewport, w, sizeof(viewport));
+        SetViewportNow(device, viewport);
+        break;
+    }
+    case kCallScissorRect:
+    {
+        Rect rect;
+        std::memcpy(&rect, w, sizeof(rect));
+        SetScissorRectNow(device, rect);
+        break;
+    }
+    case kCallRenderTarget:
+        SetRenderTargetNow(device, w[0], Pointer<Surface>(w[1]));
+        break;
+    case kCallDepthStencil:
+        SetDepthStencilSurfaceNow(device, Pointer<Surface>(w[0]));
+        break;
+    case kCallClear:
+    {
+        float z;
+        std::memcpy(&z, w + 3, sizeof(z));
+        ClearNow(device, w[0], w[0] ? reinterpret_cast<const Rect *>(w + 5) : nullptr, w[1], w[2], z, w[4]);
+        break;
+    }
+    case kCallDrawIndexed:
+        DrawIndexedPrimitiveNow(device, d3d::PrimitiveType(w[0]), int32_t(w[1]), 0, 0, w[2], w[3]);
+        break;
+    case kCallDraw:
+        DrawPrimitiveNow(device, d3d::PrimitiveType(w[0]), w[1], w[2]);
+        break;
+    case kCallDrawUp:
+        DrawPrimitiveUPNow(device, d3d::PrimitiveType(w[0]), w[1], w[3] ? w + 4 : nullptr, w[2]);
+        break;
+    case kCallStretchRect:
+        StretchRectNow(device, Pointer<Surface>(w[0]), w[3] ? reinterpret_cast<const Rect *>(w + 5) : nullptr,
+                       Pointer<Surface>(w[1]), w[4] ? reinterpret_cast<const Rect *>(w + 9) : nullptr, w[2] != 0);
+        break;
+    case kCallEndScene:
+        EndScene(*device);
+        break;
+    case kCallEndFrame:
+        if (!device->detached)
+        {
+            DiagnoseFrame(*device);
+            EndFrameScene(*device);
+        }
+        break;
+    default:
+        break;
+    }
+}
+} // namespace
+
 PresentResult Present(Device *device)
 {
     if (!device)
         return PresentResult::Failed;
-    if (device->detached)
-        return PresentResult::Skipped;
-    DiagnoseFrame(*device);
-    EndFrameScene(*device);
+    if (gxm::CallQueue *queue = Queue(device))
+    {
+        // The frame's draws are all made, and its last scene ended where it
+        // began, before the frame is shown: what follows is this thread's,
+        // as it always was.
+        queue->Begin(kCallEndFrame, 0);
+        queue->End(true);
+        Sync(device);
+        if (device->detached)
+            return PresentResult::Skipped;
+    }
+    else
+    {
+        if (device->detached)
+            return PresentResult::Skipped;
+        DiagnoseFrame(*device);
+        EndFrameScene(*device);
+    }
     const uint64_t from = Micros();
     const bool shown = gxm::Present();
     device->frameTime.Shown(Micros() - from);
@@ -1707,6 +2325,7 @@ PresentResult Present(Device *device)
         Log(*device, "%s", DescribeMemoryUse().c_str());
         LogFrameTime(*device);
         LogWaitCauses(*device);
+        LogSubmitThread(*device);
     }
     if (!shown)
     {
@@ -1718,6 +2337,7 @@ PresentResult Present(Device *device)
 
 void DetachWindow(Device *device)
 {
+    Sync(device);
     if (device)
         device->detached = true;
 }
@@ -1737,12 +2357,14 @@ bool ResizeBackBuffer(Device *device, uint32_t width, uint32_t height)
 
 void ResetState(Device *device)
 {
+    Sync(device);
     if (device)
         SetDefaultState(*device);
 }
 
 void WaitIdle(Device *device)
 {
+    Sync(device);
     if (device)
         FinishGpu(*device);
 }

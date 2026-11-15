@@ -51,7 +51,8 @@ host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`), the run
 plan's, the GPU heap's, the frame time figures', the GPU progress bookkeeping's
 and the shader translator's (`test_vita_run_plan.py`, `test_vita_gxm_heap.py`,
 `test_vita_frame_time.py`, `test_vita_gpu_progress.py`,
-`test_vita_cg_translate.py`), and the static model cache's size arithmetic
+`test_vita_cg_translate.py`), the submit thread's call queue's
+(`test_vita_call_queue.py`), and the static model cache's size arithmetic
 (`test_static_model_cache_sizes.py`).
 
 ## Running
@@ -899,6 +900,30 @@ What the GXM back end does so far (step 2d):
   may not hold every map), and `big-gxm-rings` twice the default rings
   (3 MB more of main memory).
   Not run on a console or in Vita3K yet.
+- **sceGxm's calls on a thread of their own** (built, not run on a console
+  yet; off by default). In the busy view the render thread spends about
+  30 ms a frame, and the back end's own draws are 12.5 ms of that (console
+  run BG: 1380 draws at 9.1 us each). With an empty file
+  `gxm-submit-thread` in the folder of the compiled programs, or
+  `vita_gxm gxm-submit-thread 1` while the game runs, the calls that set
+  state and draw are written to a queue and their caller goes on; a thread
+  of the back end's own, `gxm submit` in the perf windows' thread table,
+  makes them in order (`src/gfx_gxm/gxm_call_queue.h`, "The submit thread"
+  in `gxm_legacy.cpp`). Every other call is made by its caller once the
+  queue is empty: creating, destroying and locking resources, reading a
+  target, Present. So a frame's draws are all with sceGxm before the frame
+  is shown, and the pacing and the buffer renames see what they saw
+  before. Two kinds of call do not wait: a buffer lock without DISCARD,
+  which hands out memory no queued draw reads, and calls that only read
+  what never changes. Shader constants and `DrawPrimitiveUP`'s vertices
+  are copied into the queue. A scene begins and ends on one thread: a
+  caller that must end one has the submit thread do it. The thread sleeps
+  when it has caught up and is woken once 8 KB of calls wait, so a frame
+  costs some tens of wakes, not one for every draw. Once a minute the log
+  says what it cost (`submit thread: a frame, N calls queued, the thread
+  woken N times ..., N waits for it (N ms)`). The queue is tested on the
+  host with the address and thread sanitizers
+  (`scripts/tests/test_vita_call_queue.py`).
 - **Textures** are linear: rows of whole multiples of 8 texels, and the
   levels of a mipmapped texture sized from the power of two above the base,
   which is how sceGxm reads them and also a layout LockRect can hand out.

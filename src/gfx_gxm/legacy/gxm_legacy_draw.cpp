@@ -2224,6 +2224,8 @@ void EndScene(Device &device)
     DrawState *d = device.draw;
     if (!d || !d->sceneOpen)
         return;
+    if (EndSceneOnSubmitThread(device))
+        return;
     d->sceneOpen = false;
     d->sceneColor = d->sceneDepth = nullptr;
     // The frame's last scene tells when the GPU is done with the frame.
@@ -2355,7 +2357,8 @@ void LogWaitCauses(Device &device)
 // (gxm_live_switch.h). The others size or make things at start-up.
 const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "no-vsync",
                                      "no-draw-reuse",     "no-filter-stretch", "no-gpu-boost",
-                                     "no-prepass-governor", "no-same-state",     "no-world-only-prepass"};
+                                     "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
+                                     "gxm-submit-thread"};
 struct LiveSwitch
 {
     const char *name;
@@ -2408,6 +2411,8 @@ void ApplyLiveSwitches(Device &device)
         }
         else if (name == "no-filter-stretch")
             gfx_gxm::g_stretchInFilter = !s.on;
+        else if (name == "gxm-submit-thread")
+            SetSubmitThread(device, s.on);
         else if (name == "no-gpu-boost")
         {
             vita::SetGpuBoost(!s.on);

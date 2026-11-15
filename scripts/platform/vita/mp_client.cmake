@@ -189,6 +189,7 @@ set(vita_mp_gfx_sources
     "${SRC_DIR}/gfx_vk/d3d9/vk_d3d9_device.cpp"
     "${SRC_DIR}/gfx_vk/d3d9/vk_d3d9_direct3d.cpp"
     "${SRC_DIR}/gfx_vk/d3d9/vk_d3d9_resources.cpp"
+    "${SRC_DIR}/gfx_gxm/gxm_call_queue.cpp"
     "${SRC_DIR}/gfx_gxm/gxm_display.cpp"
     "${SRC_DIR}/gfx_gxm/gxm_heap.cpp"
     "${SRC_DIR}/gfx_gxm/gxm_memory.cpp"

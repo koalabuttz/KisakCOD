@@ -12,6 +12,7 @@
 
 #include <gfx_vk/legacy/vk_legacy.h>
 
+#include <gfx_gxm/gxm_call_queue.h>
 #include <gfx_gxm/gxm_display.h>
 #include <gfx_gxm/gxm_frame_time.h>
 #include <gfx_gxm/gxm_gpu_progress.h>
@@ -341,6 +342,18 @@ struct Device
     gxm::FrameTime frameTime;
     uint32_t live = 0; // resources not yet destroyed
     DrawState *draw = nullptr;
+    // The queue of the submit thread while sceGxm's calls are made by a
+    // thread of their own, else null (gxm_legacy.cpp, "The submit thread").
+    // It changes only where no call waits in it, under the front's lock.
+    gxm::CallQueue *submit = nullptr;
+    // What that cost its callers: the times one of them waited for the queue
+    // to empty, and for how long; and the counts at the last log line.
+    struct SubmitCounts
+    {
+        uint64_t waits = 0, waitMicros = 0;
+        uint64_t loggedFrames = 0, loggedWaits = 0, loggedWaitMicros = 0;
+        gxm::CallQueueCounts logged;
+    } submitCounts;
 };
 
 // Where a colour surface's texels are.
@@ -465,4 +478,15 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
 // StretchRect: a textured quad drawn into dst.
 void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const Rect *dstRect, bool linear);
 void LogDrawSummary(Device &device);
+
+// ---- The submit thread (gxm_legacy.cpp) ----------------------------------------------------
+
+// Starts or ends the thread that makes sceGxm's calls. Between two frames,
+// on the thread that presents (ApplyLiveSwitches).
+void SetSubmitThread(Device &device, bool on);
+// A scene ends on the thread that began it. While the submit thread runs and
+// the caller is another thread, this has the submit thread end the open
+// scene, waits for that, and returns true; else false, and the caller ends
+// it (EndScene).
+bool EndSceneOnSubmitThread(Device &device);
 } // namespace gfx_vk::legacy
