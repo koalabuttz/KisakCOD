@@ -160,6 +160,22 @@ inline void Register()
     fogFroxels = Dvar_RegisterEnum("r_modernFogFroxels", kOnOffNames, 0, DVAR_NOFLAG,
                                    "Modern visuals: volumetric fog from a froxel volume (compute passes) in place "
                                    "of a march per pixel (default: off unless KISAK_VK_MODERN_FOG_FROXELS=1)");
+    godRays = Dvar_RegisterEnum("r_modernGodRays", kOnOffNames, 0, DVAR_NOFLAG,
+                                "Modern visuals: god rays, shafts of the sky's light streaming from the sun past "
+                                "what blocks it (default: off unless KISAK_VK_MODERN_GOD_RAYS=1)");
+    godRaysStrength = Dvar_RegisterFloat("r_modernGodRaysStrength", -1.0f, -1.0f, 8.0f, DVAR_NOFLAG,
+                                         "Modern visuals: how bright the god rays are (0 none); -1 the default "
+                                         "(KISAK_VK_MODERN_GOD_RAYS_STRENGTH or 0.6)");
+    godRaysSpread = Dvar_RegisterFloat("r_modernGodRaysSpread", -1.0f, -1.0f, 512.0f, DVAR_NOFLAG,
+                                       "Modern visuals: how tightly the sky that makes god rays gathers round the "
+                                       "sun (cos to this power, 1 to 512); -1 the default "
+                                       "(KISAK_VK_MODERN_GOD_RAYS_SPREAD or 32)");
+    godRaysThreshold = Dvar_RegisterFloat("r_modernGodRaysThreshold", -1.0f, -1.0f, 16.0f, DVAR_NOFLAG,
+                                          "Modern visuals: only sky brighter than this (linear light) makes god "
+                                          "rays; -1 the default (KISAK_VK_MODERN_GOD_RAYS_THRESHOLD or 0.8)");
+    godRaysSky = Dvar_RegisterFloat("r_modernGodRaysSky", -1.0f, -1.0f, 1.0f, DVAR_NOFLAG,
+                                    "Modern visuals: the share of the god rays added over the sky itself (0 to 1); "
+                                    "-1 the default (KISAK_VK_MODERN_GOD_RAYS_SKY or 0.3)");
     softShadows = Dvar_RegisterEnum("r_modernSoftShadows", kOnOffNames, 0, DVAR_NOFLAG,
                                     "Modern visuals: soft sun shadows, sharp where they meet their caster and "
                                     "softer away from it (default: with our lit shaders, unless "
@@ -183,23 +199,6 @@ inline void Register()
     contactLength = Dvar_RegisterFloat("r_modernContactLength", -1.0f, -1.0f, 256.0f, DVAR_NOFLAG,
                                        "Modern visuals: how far towards the sun contact shadows look, in world "
                                        "units; -1 the default (KISAK_VK_MODERN_CONTACT_LENGTH or 12)");
-    godRays = Dvar_RegisterEnum("r_modernGodRays", kOnOffNames, 0, DVAR_NOFLAG,
-                                "Modern visuals: god rays, shafts of the sky's light streaming from the sun past "
-                                "what blocks it (default: off unless KISAK_VK_MODERN_GOD_RAYS=1)");
-    godRaysStrength = Dvar_RegisterFloat("r_modernGodRaysStrength", -1.0f, -1.0f, 8.0f, DVAR_NOFLAG,
-                                         "Modern visuals: how bright the god rays are (0 none); -1 the default "
-                                         "(KISAK_VK_MODERN_GOD_RAYS_STRENGTH or 0.6)");
-    godRaysSpread = Dvar_RegisterFloat("r_modernGodRaysSpread", -1.0f, -1.0f, 512.0f, DVAR_NOFLAG,
-                                       "Modern visuals: how tightly the sky that makes god rays gathers round the "
-                                       "sun (cos to this power, 1 to 512); -1 the default "
-                                       "(KISAK_VK_MODERN_GOD_RAYS_SPREAD or 32)");
-    godRaysThreshold = Dvar_RegisterFloat("r_modernGodRaysThreshold", -1.0f, -1.0f, 16.0f, DVAR_NOFLAG,
-                                          "Modern visuals: only sky brighter than this (linear light) makes god "
-                                          "rays; -1 the default (KISAK_VK_MODERN_GOD_RAYS_THRESHOLD or 0.8)");
-    godRaysSky = Dvar_RegisterFloat("r_modernGodRaysSky", -1.0f, -1.0f, 1.0f, DVAR_NOFLAG,
-                                    "Modern visuals: the share of the god rays added over the sky itself (0 to 1); "
-                                    "-1 the default (KISAK_VK_MODERN_GOD_RAYS_SKY or 0.3)");
-
     probes = Dvar_RegisterEnum("r_modernProbes", kOnOffNames, 0, DVAR_LATCH,
                                "Modern visuals: the map's reflection probes, filtered for rough surfaces, applied "
                                "at the next renderer restart (default: on with linear light, unless "

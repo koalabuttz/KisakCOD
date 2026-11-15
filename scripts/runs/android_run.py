@@ -208,6 +208,7 @@ PID_EVERY = 1.0
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 DEFAULT_EMULATOR_PORT = 5554
 DEFAULT_BOOT_TIMEOUT = 300
+SHARED_STORAGE = "/sdcard/Android/data"  # there once shared storage is mounted
 MKDIR_BATCH = 20
 EMULATOR_ARGS = ["-no-snapshot-save", "-no-boot-anim", "-no-audio"]
 
@@ -528,7 +529,12 @@ def booted(adb):
     if code != 0 or state.strip() != "device":
         return False
     _, value, _ = adb.shell("getprop sys.boot_completed", timeout=20)
-    return value.strip() == "1"
+    if value.strip() != "1":
+        return False
+    # Shared storage comes up after boot_completed: before it, the game
+    # files' mkdir gets "mkdir: '/sdcard/Android': Permission denied" (PC
+    # item 365, an emulator the runner had just booted).
+    return adb.shell(f"ls -d {SHARED_STORAGE}", timeout=20)[0] == 0
 
 
 class Emulator:
