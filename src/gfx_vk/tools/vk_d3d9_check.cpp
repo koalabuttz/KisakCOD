@@ -545,6 +545,7 @@ public:
     void ModernAoAs(bool liveOff);
     void ModernLive();
     void ModernFog();
+    void ModernGodRays();
     void ModernReflections();
     void ModernProbes();
     void ModernPlanar();
@@ -7431,6 +7432,101 @@ void Check::ModernFog()
     SafeRelease(shadow);
 }
 
+// God rays (vk_modern.h DrawRays, docs/vulkan-modern.md): scenes of grey 100
+// (0.127 of light) under identity matrices with the sun straight ahead, so
+// its place on the screen is the middle, with no threshold and the whole
+// share over the sky unless said. Cleared to depth 1 the whole scene is sky:
+// near the middle every pixel's ray is within a degree or two of the sun, so
+// the mask keeps the grey whole and the smear towards the middle gives it
+// back, and the middle pixel gets grey * (1 + strength). A threshold of 0.1
+// keeps grey - 0.1 of it; the default 0.8 none. A share of 0.5 over the sky
+// adds half. Cleared to
+// depth 0.5 nothing is sky: no rays. The sun behind the camera, or a view
+// without a sun, or the god rays switched off: no rays. With the sun's
+// colour 0.5 (0.214 of light) its glow adds about that much more to the
+// mask in the middle (cos^256 of the few hundredths of a radian the samples
+// read from it: 0.95 of it), times the strength. Without linear light there
+// are no god rays: grey 100 throughout.
+void Check::ModernGodRays()
+{
+    const bool linear = EnvText("KISAK_VK_MODERN_LINEAR") != "0";
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    const auto shown = [](double light) {
+        const Rgb c = TonemapCurve(ModernCurve(), {light, light, light});
+        return ShownByte(c[0]);
+    };
+    const double grey = std::pow((100.0 / 255.0 + 0.055) / 1.055, 2.4);
+    const double sunLight = std::pow((0.5 + 0.055) / 1.055, 2.4);
+    struct Scene
+    {
+        int on = 1;
+        float strength = 1.0f;
+        float depth = 1.0f;
+        float sunZ = 1.0f;
+        bool sun = true;
+        float sunColor = 0.0f;
+        float threshold = 0.0f;
+        float skyShare = 1.0f;
+    };
+    const auto scene = [&](const char *name, const Scene &with, int want) {
+        front::ModernTuning modern;
+        modern.exposure = 0;
+        modern.godRays = with.on;
+        modern.godRaysStrength = with.strength;
+        modern.godRaysThreshold = with.threshold;
+        modern.godRaysSky = with.skyShare;
+        {
+            const std::lock_guard<std::mutex> lock(host->mutex);
+            host->tuning = front::Tuning{};
+            host->tuning.modern = modern;
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+        Reset(Argb(255, 0, 0, 0));
+        front::ModernSceneBegin(device);
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 100, 100, 100), with.depth, 0),
+           "Clear(scene)");
+        front::ModernSceneView view{};
+        for (int i = 0; i < 4; ++i)
+            view.view[i][i] = view.projection[i][i] = 1.0f;
+        view.width = view.height = kSize;
+        view.cut = true;
+        view.sun.on = with.sun;
+        view.sun.direction[2] = with.sunZ;
+        view.sun.color[0] = view.sun.color[1] = view.sun.color[2] = with.sunColor;
+        Equal("done", static_cast<int>(front::ModernSceneDone(device, view)),
+              static_cast<int>(front::ModernResult::Done));
+        device->SetDepthStencilSurface(nullptr);
+        if (Read())
+        {
+            Expect(name, 64, 64, want, want, want);
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    };
+    const int plain = shown(grey);
+    const auto rays = [&](double added) { return linear ? shown(grey + added) : plain; };
+    scene("god_rays_off", Scene{0}, plain);
+    scene("god_rays_sky", Scene{}, rays(grey));
+    scene("god_rays_half_strength", Scene{1, 0.5f}, rays(grey * 0.5));
+    scene("god_rays_blocked", Scene{1, 1.0f, 0.5f}, plain);
+    scene("god_rays_sun_behind", Scene{1, 1.0f, 1.0f, -1.0f}, plain);
+    scene("god_rays_no_sun", Scene{1, 1.0f, 1.0f, 1.0f, false}, plain);
+    scene("god_rays_sun_glow", Scene{1, 1.0f, 1.0f, 1.0f, true, 0.5f}, rays(grey + sunLight * 0.95));
+    scene("god_rays_threshold", Scene{1, 1.0f, 1.0f, 1.0f, true, 0.0f, 0.1f}, rays(grey - 0.1));
+    scene("god_rays_default_threshold", Scene{1, 1.0f, 1.0f, 1.0f, true, 0.0f, -1.0f}, plain);
+    scene("god_rays_half_over_sky", Scene{1, 1.0f, 1.0f, 1.0f, true, 0.0f, 0.0f, 0.5f}, rays(grey * 0.5));
+    {
+        const std::lock_guard<std::mutex> lock(host->mutex);
+        host->tuning = front::Tuning{};
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    SafeRelease(depth);
+}
+
 // Auto exposure (vk_modern.h MeasureExposure), with the default key 0.115 and
 // range -1 to 0 EV: four scenes, each one grey all over. A cut takes the
 // exposure at once: grey 100 (0.127 of light) is brought to the key exactly
@@ -7812,6 +7908,7 @@ int Run(const Options &options)
         {"modern_planar", &Check::ModernPlanar, true},
         {"modern_probe_capture", &Check::ModernProbeCapture, true},
         {"modern_fog", &Check::ModernFog, true},
+        {"modern_god_rays", &Check::ModernGodRays, true},
         {"modern_live", &Check::ModernLive, true},
         // A scene that starts with a cut after modern_live's switch changes
         // (the velocity pass made again waits for the GPU): its barriers must

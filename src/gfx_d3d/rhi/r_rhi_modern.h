@@ -65,6 +65,15 @@ struct GfxModernFog
     GfxModernFogSpot spots[4];
 };
 
+// The view's sun, for the god rays (light shafts drawn on the screen from
+// the sun past what blocks it): set where the map has a sun.
+struct GfxModernSun
+{
+    bool on;
+    float direction[3]; // towards the sun, world space, unit length
+    float color[3];     // the sun light's colour, display values (may pass 1)
+};
+
 struct GfxModernScene
 {
     float view[4][4];
@@ -81,6 +90,7 @@ struct GfxModernScene
     // the renderer then leaves its own glow out of this view.
     bool glowDrawn;
     GfxModernFog fog;
+    GfxModernSun sun;
 };
 
 // A planar reflection view (r_modern_planar): the scene seen in a mirror

@@ -2566,6 +2566,18 @@ static GfxModernScene &R_ModernScene(const GfxViewInfo *viewInfo)
         modern.glowDesaturation = viewInfo->glow.bloomDesaturation;
     }
     R_ModernSceneFog(viewInfo, modern.fog);
+    // The sun, as the frame's lit shaders get it (R_SetFrameSunLight's
+    // overrides included), where the map has one.
+    if (backEndData && rgp.world && rgp.world->sunPrimaryLightIndex)
+    {
+        const GfxLight &sun = backEndData->sunLight;
+        modern.sun.on = true;
+        for (int i = 0; i < 3; ++i)
+        {
+            modern.sun.direction[i] = sun.dir[i];
+            modern.sun.color[i] = sun.color[i];
+        }
+    }
     return modern;
 }
 
