@@ -75,8 +75,17 @@
 // - g_sceneSharpen (vita_sceneSharpen): the stretch is drawn by a program
 //   of the back end's that reads the picture five times and raises each
 //   pixel's contrast against its four neighbours, held inside the range of
-//   the five so that no halo appears. It costs the two scenes of the copy
-//   and the stretch, which g_stretchInFilter otherwise saves.
+//   the five so that no halo appears. As a stretch of its own it costs
+//   the two scenes of the copy and the stretch, which g_stretchInFilter
+//   otherwise saves: console run CC (2026-11-15) measured 2.3 to 3.1 ms a
+//   frame, as much as a picture of 0.85 saves at the busy view.
+// - g_sharpenInFilter: so where the film filter's quad does the stretch
+//   (g_stretchInFilter), the quad sharpens as well. The engine sets
+//   g_sharpenDraws for that one draw, and the back end draws it with a
+//   variant of the filter's own program whose reads of the picture go
+//   through the same five-read filter (gxm_cg_translate.h,
+//   Options::sharpSamplers). No scene is added. An empty file
+//   `no-filter-sharpen`, or "vita_gxm no-filter-sharpen 1", turns it off.
 //
 // g_stretchInFilter: the copy and the stretch of the scaled picture are two
 // more scenes a frame (console run AH, 2026-11-14: 5 became 7). When the
@@ -111,6 +120,8 @@ extern bool g_sceneWidthOnly;
 extern bool g_sceneSharpen;
 // True while the engine asks for the scaled picture's stretch (StretchRect).
 extern bool g_sharpenThisStretch;
+extern bool g_sharpenInFilter;
+extern bool g_sharpenDraws;
 extern bool g_stretchInFilter;
 extern float g_filterReadS;
 extern float g_filterReadT;

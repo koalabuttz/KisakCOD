@@ -68,6 +68,8 @@ bool g_mipBias = true;
 bool g_sceneWidthOnly = false;
 bool g_sceneSharpen = false;
 bool g_sharpenThisStretch = false;
+bool g_sharpenInFilter = true;
+bool g_sharpenDraws = false;
 bool g_stretchInFilter = true;
 float g_filterReadS = 1.0f;
 float g_filterReadT = 1.0f;
@@ -208,7 +210,7 @@ struct PipelineKey
     uint32_t strides[kMaxStreams];
     uint8_t alphaFunc; // the pixel shader variant's alpha test
     uint8_t index32;
-    uint8_t pad[2];
+    uint16_t sharp; // and the samplers it reads through the sharpening filter
 };
 struct Pipeline
 {
@@ -738,6 +740,8 @@ bool Register(Device &device, Variant &variant, const char *what)
     const SceGxmProgram *program = variant.program();
     variant.constants = sceGxmProgramFindParameterByName(program, "c");
     variant.alphaRef = sceGxmProgramFindParameterByName(program, "kisak_alpha_ref");
+    variant.sharp = sceGxmProgramFindParameterByName(program, "kisak_sharp");
+    variant.sharpMax = sceGxmProgramFindParameterByName(program, "kisak_sharp_max");
     char name[32];
     for (int i = 0; i < 16; ++i)
     {
@@ -765,6 +769,7 @@ uint64_t VariantKey(const gxm::cg::Options &options)
         components |= uint64_t(options.inputComponents[i] & 3) << (2 * i);
     return (uint64_t(options.bgraInputs) | uint64_t(options.absentInputs) << 16) ^ (components << 32) ^
            (options.alphaFunc == gxm::cg::AlphaFunc::Always ? 0 : uint64_t(options.alphaFunc)) ^
+           (uint64_t(options.sharpSamplers) * 0xff51afd7ed558ccdull) ^
            (options.farPlaneInside ? 0x5a5a000000000000ull : 0) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
 }
 
@@ -945,7 +950,7 @@ Pipeline &PipelineSlot(DrawState &d, const PipelineKey &key)
     uint32_t hash = uint32_t(reinterpret_cast<uintptr_t>(key.vs) >> 4) * 0x9e3779b1u;
     hash ^= uint32_t(reinterpret_cast<uintptr_t>(key.ps) >> 4) * 0x85ebca6bu;
     hash ^= uint32_t(reinterpret_cast<uintptr_t>(key.decl) >> 4) * 0xc2b2ae35u;
-    hash ^= (uint32_t(key.alphaFunc) << 1 | key.index32) * 0x27d4eb2fu;
+    hash ^= (uint32_t(key.sharp) << 9 | uint32_t(key.alphaFunc) << 1 | key.index32) * 0x27d4eb2fu;
     return d.pipelines[(hash >> 16) & (kPipelines - 1)];
 }
 
@@ -1646,6 +1651,9 @@ const char kCopyFragmentCg[] = "// KisakCOD: StretchRect quad\n"
 // Each pixel's difference from the mean of its four neighbours is added to
 // it, and the result is held between the darkest and the brightest of the
 // five, so that an edge gets steeper and never gains a halo.
+// The same filter is in the translator's sharpening read
+// (gxm_cg_translate.cpp, kisak_sharp2D), which takes this strength.
+constexpr float kSharpenStrength = 0.2f;
 const char kSharpenVertexCg[] =
     "// KisakCOD: sharpening stretch\n"
     "void main(float2 in_position, float2 in_texcoord, uniform float4 kisak_step,\n"
@@ -1932,6 +1940,7 @@ bool InitDraw(Device &device, std::string &error)
     if (!MakeStandIns(device, error) || !MakeClearPrograms(device, error) || !MakeCopyPrograms(device, error))
         return false;
     MakeSharpenPrograms(device);
+    gfx_gxm::g_sharpenInFilter = !gxm::ProgramCacheMarker("no-filter-sharpen");
     gfx_gxm::g_mipBias = !gxm::ProgramCacheMarker("no-mip-bias");
     Log(device, "diag: a fresh texture's LOD bias reads %u (the scaled 3D picture's mip bias counts from it; %s)",
         unsigned(sceGxmTextureGetLodBias(&d.white)),
@@ -2552,7 +2561,7 @@ void LogWaitCauses(Device &device)
 // (gxm_live_switch.h). The others size or make things at start-up.
 const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "no-vsync",
                                      "no-draw-reuse",     "no-filter-stretch", "no-gpu-boost",
-                                     "no-mip-bias",
+                                     "no-mip-bias",         "no-filter-sharpen",
                                      "no-prepass-governor", "no-same-state",     "no-world-only-prepass"};
 struct LiveSwitch
 {
@@ -2608,6 +2617,8 @@ void ApplyLiveSwitches(Device &device)
             gfx_gxm::g_stretchInFilter = !s.on;
         else if (name == "no-mip-bias")
             gfx_gxm::g_mipBias = !s.on;
+        else if (name == "no-filter-sharpen")
+            gfx_gxm::g_sharpenInFilter = !s.on;
         else if (name == "no-gpu-boost")
         {
             vita::SetGpuBoost(!s.on);
@@ -3199,6 +3210,21 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         strides[0] = upStride;
     const uint32_t upStrideUsed = upVertices ? upStride : 0u;
     const bool plain = d.reuse && !test && !d.diagnosedDraws;
+    // The engine's pass that stretches the scaled 3D picture
+    // (gxm_engine_options.h, g_sharpenDraws): the draw's program reads its
+    // render target textures through the sharpening filter.
+    uint16_t sharpSamplers = 0;
+    if (gfx_gxm::g_sharpenDraws && ps)
+    {
+        for (uint32_t i = 0; i < 16; ++i)
+        {
+            const Texture *texture = device.textures[i];
+            if (ps->parsed.reflection.samplers[i] == gxm::cg::SamplerType::Tex2D && texture &&
+                (texture->desc.usage & d3d::USAGE_RENDERTARGET))
+                sharpSamplers |= uint16_t(1u << i);
+        }
+        d.lastDrawValid = false;
+    }
     gxm::FrameTime &frameTime = device.frameTime;
     const auto part = [&frameTime](gxm::FrameTime::DrawPart done) {
         if (frameTime.parting)
@@ -3242,6 +3268,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             if (func >= d3d::CMP_NEVER && func < d3d::CMP_ALWAYS)
                 pixelOptions.alphaFunc = gxm::cg::AlphaFunc(func);
         }
+        pixelOptions.sharpSamplers = sharpSamplers;
         // The programs this combination last drew with (Pipeline), unless a
         // run diagnostic wants to see or change how they are found.
         PipelineKey pipelineKey;
@@ -3255,6 +3282,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             pipelineKey.decl = device.decl;
             std::memcpy(pipelineKey.strides, strides, sizeof(strides));
             pipelineKey.alphaFunc = uint8_t(pixelOptions.alphaFunc);
+            pipelineKey.sharp = sharpSamplers;
             pipelineKey.index32 = index32;
             pipeline = &PipelineSlot(d, pipelineKey);
             known = std::memcmp(&pipeline->key, &pipelineKey, sizeof(pipelineKey)) == 0;
@@ -3283,6 +3311,18 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         if (!vertex)
             vertex = GetVariant(device, *vsUsed, plan.options, waiting);
         pixel = known ? pipeline->pixel : GetVariant(device, *ps, pixelOptions, waiting);
+        if (!pixel && sharpSamplers)
+        {
+            // The sharpening variant is still being made, or was refused:
+            // this draw is the frame's picture, so it is drawn plain
+            // meanwhile and not left out.
+            bool plainWaiting = false;
+            pixelOptions.sharpSamplers = sharpSamplers = 0;
+            pixel = GetVariant(device, *ps, pixelOptions, plainWaiting);
+            waiting = (vertex ? false : waiting) || plainWaiting;
+            // Not kept as this combination's programs.
+            pipeline = nullptr;
+        }
         if (!vertex || !pixel)
         {
             if (waiting)
@@ -3348,7 +3388,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
                 : GetFragmentProgram(device, *pixel, passThrough ? *standIn : *vertex, blended ? &blend : nullptr);
         if (!fragmentProgram)
             return;
-        if (plain)
+        if (plain && pipeline)
         {
             pipeline->key = pipelineKey;
             pipeline->vertex = vertex;
@@ -3560,7 +3600,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     // Not kept for a program that takes a texture's depth as a uniform
     // (BindTextures writes those).
     const uint32_t alphaRef = device.renderStates[d3d::RS_ALPHAREF] & 0xff;
-    const bool pixelKept = plain && d.fragmentUniformsLive && !pixel->depthUniforms &&
+    const bool pixelKept = plain && d.fragmentUniformsLive && !pixel->depthUniforms && !pixel->sharp &&
                            d.fragmentUniformsVersion == device.psConstantsVersion &&
                            (!pixel->alphaRef || d.fragmentAlphaRef == alphaRef);
     d.uniformWrites += pixel->uniforms;
@@ -3575,6 +3615,21 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         {
             const float ref = float(alphaRef) / 255.0f;
             sceGxmSetUniformDataF(pixelUniforms, pixel->alphaRef, 0, 1, &ref);
+        }
+        if (pixel->sharp && pixel->sharpMax && sharpSamplers)
+        {
+            // One texel of the picture it reads, the filter's strength, and
+            // the far edge of the part that was drawn this frame.
+            const Texture *source = nullptr;
+            for (uint32_t i = 0; i < 16 && !source; ++i)
+                if (sharpSamplers >> i & 1)
+                    source = device.textures[i];
+            const float step[4] = {1.0f / float((std::max)(source->desc.width, 1u)),
+                                   1.0f / float((std::max)(source->desc.height, 1u)), kSharpenStrength, 0.0f};
+            const float most[4] = {gfx_gxm::g_filterReadS, gfx_gxm::g_filterReadT, 0.0f, 0.0f};
+            sceGxmSetUniformDataF(pixelUniforms, pixel->sharp, 0, 4, step);
+            sceGxmSetUniformDataF(pixelUniforms, pixel->sharpMax, 0, 4, most);
+            ++d.sharpenStretches;
         }
         d.fragmentUniformsLive = reserved >= 0 && pixelUniforms != nullptr;
         d.fragmentUniformsVersion = device.psConstantsVersion;

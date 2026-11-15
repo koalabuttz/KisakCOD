@@ -238,6 +238,9 @@ struct Variant
     // What the draws write, found once by name.
     const SceGxmProgramParameter *constants = nullptr; // "c"
     const SceGxmProgramParameter *alphaRef = nullptr;  // "kisak_alpha_ref"
+    // "kisak_sharp" and "kisak_sharp_max": a variant that reads a scaled
+    // picture through the sharpening filter (cg::Options::sharpSamplers).
+    const SceGxmProgramParameter *sharp = nullptr, *sharpMax = nullptr;
     const SceGxmProgramParameter *depth[16] = {};      // "kisak_depth_s<n>"
     const SceGxmProgramParameter *inputs[16] = {};     // "in_v<n>"
     int8_t textureUnit[16];                            // sampler s<n>'s unit, -1 none

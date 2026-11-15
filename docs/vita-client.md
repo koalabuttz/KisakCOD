@@ -957,11 +957,22 @@ What the GXM back end does so far (step 2d):
     and one texel up, left, right and down, adds 0.2 of the pixel's
     difference from its neighbours and holds the result between the
     darkest and the brightest of the five, so an edge gets steeper and
-    gains no halo. It cannot ride in the film filter's quad, so it costs
-    the copy's and the stretch's two scenes again.
+    gains no halo. As a stretch of its own it costs the copy's and the
+    stretch's two scenes again. Where the film filter's quad does the
+    stretch, that quad is drawn with a variant of the filter's own
+    program whose reads of the picture go through the same filter
+    (`gxm_cg_translate.h`, `Options::sharpSamplers`), and no scene is
+    added; `no-filter-sharpen`, or `vita_gxm no-filter-sharpen 1`, goes
+    back to the stretch of its own. Until the variant is compiled (once,
+    then it is in the program cache) the quad is drawn plain.
   The HUD and all text are drawn after the stretch at 960x544 in every
   case. The `3D picture size` log line counts the biased texture views and
-  the sharpened stretches. Not measured on a console yet.
+  the sharpened stretches. Console run CC (2026-11-15, mp_crash, busy
+  view at 0.85): the mip bias costs nothing (33.05 ms a frame without,
+  33.14 with), width only costs nothing (32.91), and the sharpening
+  stretch of its own costs 2.3 to 3.1 ms a frame, which is all that 0.85
+  saves there (35.82 ms at the full size). The sharpening in the filter's
+  quad is not measured yet.
 - **The CPU a frame ahead of the GPU.** The CPU fills frame N while the GPU
   still draws frame N - 1, so a frame costs the longer of the two times and
   not their sum. Console run U (2026-11-11, mp_crash) had shown them taking

@@ -101,11 +101,12 @@ static void RB_StretchScaledScene(const GfxViewInfo *viewInfo)
     const int height = gfxCmdBufSourceState.renderTargetHeight;
     const int drawnWidth = gfx_gxm::SceneScaled(view.width, gfx_gxm::SceneScaleX(scale));
     const int drawnHeight = gfx_gxm::SceneScaled(view.height, gfx_gxm::SceneScaleY(scale));
-    // The sharpening stretch is the back end's own program: it cannot ride
-    // in the film filter's quad.
+    // A sharpened picture goes the same way as a plain one where it can:
+    // the film filter's quad then draws with a program that reads the
+    // picture through the sharpening filter (g_sharpenInFilter).
     gfx_gxm::g_sceneSharpen = vita_sceneSharpen && vita_sceneSharpen->current.enabled;
-    if (KISAK_GXM_STRETCH_IN_FILTER() && !gfx_gxm::g_sceneSharpen && RB_FilmFilterOnly(viewInfo) && view.x == 0 &&
-        view.y == 0 && view.width == width && view.height == height)
+    if (KISAK_GXM_STRETCH_IN_FILTER() && (!gfx_gxm::g_sceneSharpen || gfx_gxm::g_sharpenInFilter) &&
+        RB_FilmFilterOnly(viewInfo) && view.x == 0 && view.y == 0 && view.width == width && view.height == height)
     {
         // The film filter's full-screen quad reads only the drawn corner of
         // the copy (RB_ApplyColorManipulationFullscreen). Half a texel is
