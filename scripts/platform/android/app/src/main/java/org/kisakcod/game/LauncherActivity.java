@@ -174,7 +174,10 @@ public class LauncherActivity extends Activity {
     private String matchArgs(String map) {
         String mode = MODES[modeIndex][0];
         int bots = BOT_COUNTS[botIndex];
-        return String.format(Locale.ROOT, "+set bot_brain 1 +set scr_testclients %d +set g_gametype %s +map %s",
+        // The stock scripts add test clients only in their developer blocks
+        // (developer_script), with devmap as the PC's bot runs start them.
+        return String.format(Locale.ROOT,
+                "+set developer_script 1 +set bot_brain 1 +set scr_testclients %d +set g_gametype %s +devmap %s",
                 bots, mode, map);
     }
 

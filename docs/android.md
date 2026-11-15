@@ -158,10 +158,15 @@ The app opens on a screen of big buttons (`LauncherActivity.java`) that the
 controller works: the d-pad or left stick moves, A presses, L1 and R1 change
 the number of bots. It lists every map in the game folder (`zone/*/mp_*.ff`
 and `usermaps`); a map starts a match against KisakCOD's bots
-(`+set bot_brain 1 +set scr_testclients <n> +set g_gametype war|dm +map <map>`),
-and "Main menu" starts the game's own menu. The game runs in a process of its
+(`+set developer_script 1 +set bot_brain 1 +set scr_testclients <n> +set
+g_gametype war|dm +devmap <map>`), and "Main menu" starts the game's own menu. The game runs in a process of its
 own (`:game`), which ends with the game: the engine never starts twice in one
 process, and the first screen comes back when the game quits.
+
+The stock scripts read `scr_testclients` only in their developer blocks
+(`/# ... #/`), so without `developer_script 1` no bot joins (run 6 on the
+Pocket 6: the dvar read back as 9 and nobody came). `devmap` is what the PC's
+bot runs use (`scripts/runs/recipes/vulkan-ab-mp-crash.json`).
 
 ### Installing and starting the app
 
