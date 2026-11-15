@@ -18,6 +18,7 @@ namespace kisak::bots
 {
 class NavMesh;
 class Perception;
+class SpotTable;
 struct PerceptionParams;
 struct Rng;
 }
@@ -33,6 +34,10 @@ bool Bot_UserMove(client_t *cl);
 // folder's cache the first time it is asked for (bot_nav_world.cpp), or
 // nullptr when there is none.
 const kisak::bots::NavMesh *Bot_Nav();
+
+// Changes each time Bot_Nav() loads a mesh (a new map, or the same one
+// again), for what is worked out from the mesh.
+int Bot_NavGeneration();
 
 // A player a bot noticed on a sense tick, for the log and the fairness
 // audit: how long the player was in view first, how far and how far off the
@@ -77,3 +82,17 @@ bool Bot_FindCover(const float *origin, const float *threat, const kisak::bots::
 // Whether a player standing at `place` (feet) has their chest and head hidden
 // from `threat`.
 bool Bot_HiddenFrom(const float *place, const float *threat);
+
+// The spots of the map and which see each other (bot_spots.h), worked out
+// once per map a little each server frame: call Bot_StepSpots once a frame
+// with a place on the mesh (a bot's feet) to start and continue it. The
+// cover search uses the table once it is ready, and so does Bot_FindOverwatch.
+void Bot_StepSpots(const kisak::bots::NavMesh &nav, const float *seed);
+const kisak::bots::SpotTable *Bot_Spots();
+
+// A spot within `radius` of `near` from which a standing player sees
+// `target` (an eye or a place at chest height), reachable from `origin`; one
+// of the most sheltered few, by `rng`. False without the spot table or such a
+// spot.
+bool Bot_FindOverwatch(const float *origin, const float *target, const float *near, float radius,
+                       const kisak::bots::NavMesh &nav, kisak::bots::Rng &rng, float *out);
