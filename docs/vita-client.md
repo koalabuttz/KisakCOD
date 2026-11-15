@@ -45,7 +45,8 @@ cmake --build build-vita-mp --target KisakCOD-mp-vpk
 Hosted CI: the **PS Vita multiplayer client** job of the PS Vita workflow
 (`.github/workflows/build-kisakcod-vita.yaml`) builds Debug
 and RelWithDebInfo. It runs the server's float checks (no fused multiply-add, no
-NEON float) and link checks (weak pthread references, the main stack size), and
+NEON float outside the vector skinning path, which has to be there and be
+NEON) and link checks (weak pthread references, the main stack size), and
 uploads the RelWithDebInfo `.vpk`. It also runs the controls' and the sound's
 host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`), the run
 plan's, the GPU heap's, the frame time figures', the GPU progress bookkeeping's
@@ -926,6 +927,18 @@ What the GXM back end does so far (step 2d):
   map's before a frame is shown (run Z8's long warm-ups ran out of CDRAM
   going from mp_crash to mp_backlot). DrawPrimitiveUP and the clear quads
   copy their vertices into a 512 KB per-frame ring.
+- **Skinning.** Animated models (the hands and weapon, players) are skinned
+  on a worker thread into the skinned cache. Console run BD measured 6 ms a
+  frame for the 3227 vertices of the hands and weapon alone, 1.9 us a
+  vertex, with the engine's scalar code: it writes a vertex field by field
+  into memory the CPU does not cache and reads a weighted vertex's position
+  back from it, on a CPU whose NEON the build did not use. The client now
+  skins with the vector path (`src/gfx_d3d/r_model_skin_vec.cpp`, the one
+  file built for NEON; [the rule](linux-armv7.md)): the same bytes, a vertex
+  put together in registers and written once. `r_sse_skinning 0` goes back
+  to the scalar code, so `perf_ab "set r_sse_skinning 0" "set r_sse_skinning 1"`
+  holds the two against each other (`other threads run: skin xmodel` is its timer).
+  Not run on a console or in Vita3K yet.
 
 ### Shaders (step 2c)
 

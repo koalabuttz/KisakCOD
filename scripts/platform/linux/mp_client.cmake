@@ -569,6 +569,7 @@ endif()
 add_executable(KisakCOD-skin-scalar-test
     "${TESTS_DIR}/skinning/skin_scalar_test.cpp"
     "${SRC_DIR}/gfx_d3d/r_model_skin.cpp"
+    "${SRC_DIR}/gfx_d3d/r_model_skin_vec.cpp"
     "${SRC_DIR}/universal/com_math.cpp"
     "${SRC_DIR}/qcommon/com_pack.cpp")
 target_compile_features(KisakCOD-skin-scalar-test PRIVATE cxx_std_20)

@@ -12,9 +12,15 @@
 //     x86 builds use: positions to float rounding, packed normals and tangents
 //     to one step, everything else exactly.
 //
+// It also runs the vector path that Arm builds with GCC or Clang skin with
+// (R_SkinXSurfaceSkinnedVec, r_model_skin_vec.h) on the same surfaces: it has
+// to write the scalar code's bytes, every one. The vector code is NEON on Arm
+// and SSE on an x86 host, so every host checks it.
+//
 // No game data is read.
 #include <universal/q_shared.h>
 #include <gfx_d3d/r_model_skin.h>
+#include <gfx_d3d/r_model_skin_vec.h>
 #include <qcommon/com_pack.h>
 #include <xanim/xanim.h>
 #include <universal/profile.h>
@@ -115,6 +121,13 @@ int main()
 
     uint64_t hash = 1469598103934665603ull; // FNV-1a
     int failures = 0;
+#if KISAK_SKIN_VEC
+    // One vertex more than the surface has on each side: the vector path
+    // writes 16 bytes at a time and must not write past its last vertex.
+    alignas(16) static GfxPackedVertex vecOut[kVerts + 2];
+    long long vecDifferent = 0;
+    long long vecOutside = 0;
+#endif
 #if KISAK_ARCH_X86
     alignas(16) static GfxPackedVertex sseOut[kVerts];
     double worstPosition = 0.0;
@@ -177,6 +190,27 @@ int main()
                 hash ^= reinterpret_cast<const unsigned char *>(scalarOut)[i];
                 hash *= 1099511628211ull;
             }
+#if KISAK_SKIN_VEC
+            memset(vecOut, 0xCD, sizeof(vecOut));
+            R_SkinXSurfaceSkinnedVec(&surf, bones, vecOut + 1);
+            for (int i = 0; i < kVerts; ++i)
+            {
+                if (memcmp(&vecOut[i + 1], &scalarOut[i], sizeof(GfxPackedVertex)) != 0)
+                {
+                    if (!vecDifferent)
+                        printf("first difference: trial %d, %s, vertex %d: position %.9g %.9g %.9g against %.9g "
+                               "%.9g %.9g, normal %08x against %08x, tangent %08x against %08x\n",
+                               trial, deformed ? "weighted" : "rigid", i, vecOut[i + 1].xyz[0],
+                               vecOut[i + 1].xyz[1], vecOut[i + 1].xyz[2], scalarOut[i].xyz[0], scalarOut[i].xyz[1],
+                               scalarOut[i].xyz[2], vecOut[i + 1].normal.packed, scalarOut[i].normal.packed,
+                               vecOut[i + 1].tangent.packed, scalarOut[i].tangent.packed);
+                    ++vecDifferent;
+                }
+            }
+            for (const GfxPackedVertex *guard : { &vecOut[0], &vecOut[kVerts + 1] })
+                for (size_t i = 0; i < sizeof(GfxPackedVertex); ++i)
+                    vecOutside += reinterpret_cast<const unsigned char *>(guard)[i] != 0xCD;
+#endif
 #if KISAK_ARCH_X86
             memset(sseOut, 0xCD, sizeof(sseOut));
             R_SkinXSurfaceSkinnedSse(&surf, bones, nullptr, nullptr, sseOut);
@@ -211,6 +245,17 @@ int main()
         printf("FAIL: the scalar skinning code does not match the SSE path\n");
         ++failures;
     }
+#endif
+#if KISAK_SKIN_VEC
+    printf("scalar vs vector skinning: %lld vertices differ, %lld bytes written outside the surface\n",
+           vecDifferent, vecOutside);
+    if (vecDifferent != 0 || vecOutside != 0)
+    {
+        printf("FAIL: the vector skinning code does not write the scalar code's bytes\n");
+        ++failures;
+    }
+#else
+    printf("scalar vs vector skinning: this compiler has no vector path\n");
 #endif
     printf("scalar skinning output hash %016llx (expected %016llx)\n", static_cast<unsigned long long>(hash),
            static_cast<unsigned long long>(kExpectedScalarHash));
