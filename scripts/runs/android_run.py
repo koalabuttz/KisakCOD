@@ -36,9 +36,11 @@ One run is, in order:
    when the game quits, crashes, or runs out of time. Then pull the
    screenshots the game took (``screenshot <name>`` in a timed command writes
    ``home/main/screenshots/<name>.tga`` in the app's folder). Each host step
-   runs at its own moment, whatever the others wait for. A crash after the
-   game said it was quitting is ``crash_at_quit``, not ``crash``: the launch
-   did everything it asked first.
+   runs at its own moment, whatever the others wait for. The game is
+   quitting once it sends a timed ``quit`` (``run: sending "quit"``) or its
+   ``run_quitAfter*`` timer says ``run: quitting as asked``. A crash after
+   that is ``crash_at_quit``, not ``crash``: the launch did everything it
+   asked first.
 
 The launch's timed commands (``at_menu``, ``at_map``, ``variants``,
 ``quit_after_map``) are pc_run.py's, with the same checks: the client reads
@@ -176,6 +178,19 @@ GAME_PROCESS = ":game"
 DEFAULT_TAGS = ["KisakCOD", "SDL", "AndroidRuntime", "DEBUG", "libc"]
 LOGCAT_LINE = re.compile(r"^(\d\d-\d\d \d\d:\d\d:\d\d\.\d+)\s+(\d+)\s+(\d+)\s+([VDIWEFA])\s+(.*?)\s*: ?(.*)$")
 EVENT_LINES = {"menu": "run: the menu is up", "map": "run: the map is up", "quit": "run: quitting as asked"}
+# A "quit" in a timed list is only sent ("run: sending "quit"", by
+# src/client/cl_run_plan.h); "run: quitting as asked" comes from the
+# run_quitAfter* timers alone (item 351).
+SENT_LINE = re.compile(r'^run: sending "(.*)"$')
+
+
+def says_quit(message):
+    """Whether a game line means it is quitting as the launch asked."""
+    message = message.strip()
+    if message == EVENT_LINES["quit"]:
+        return True
+    sent = SENT_LINE.match(message)
+    return bool(sent) and any(part.split()[:1] == ["quit"] for part in sent.group(1).split(";"))
 CRASH = re.compile(r"Fatal signal|FATAL EXCEPTION|ANR in ")
 HOST_AFTER = ("start", "menu", "map")
 KEY_SOURCES = ("gamepad", "keyboard", "dpad", "joystick", "touchscreen")
@@ -779,7 +794,7 @@ def run_launch(recipe, adb, launch, out):
                 pids_seen.add(pid)
                 messages.append(message)
                 for event, text in EVENT_LINES.items():
-                    if event not in events and message.strip() == text:
+                    if event not in events and (says_quit(message) if event == "quit" else message.strip() == text):
                         events[event] = time.time()
             if CRASH.search(message) and (ours or tag == "KisakCOD"):
                 crashes.append(line)

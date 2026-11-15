@@ -195,6 +195,15 @@ def test_failures(work):
     check(steps["early"].get("ok") and steps["late"].get("not_run") == "the launch ended first",
           f"each host step waits only for its own moment: {launch['host_steps']}")
 
+    # The game's own quit timer says "run: quitting as asked"; a timed
+    # "quit" is only sent (item 351). Both end a launch as asked.
+    launches = [{"name": "t", "args": ["+devmap", "mp_crash"], "quit_after_map": 1}]
+    path = write_recipe(work, launches)
+    done = run(work, path, work / "out-timer")
+    launch = json.loads((work / "out-timer" / "results.json").read_text())["launches"][0]
+    check(done.returncode == 0 and launch["status"] == "ok" and launch["events"].get("quit"),
+          f"a quit by the game's timer: {launch}")
+
     launches = [{"name": "q", "at_menu": ["0.3 quit"]}]
     path = write_recipe(work, launches)
     done = run(work, path, work / "out-quit-crash", env={"FAKE_APP_CRASH_AT_QUIT": "1"})
