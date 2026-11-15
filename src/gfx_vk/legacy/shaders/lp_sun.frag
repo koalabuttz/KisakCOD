@@ -260,6 +260,16 @@ float AmbientOcclusion()
     return texelFetch(sampler2D(ambientOcclusion, ambientOcclusionSampler), at, 0).r;
 }
 
+// The Modern path's contact shadows (docs/vulkan-modern.md "Contact
+// shadows"): the sun's visibility from a short screen-space trace, in the
+// green of the same texture (1 where there are none).
+float ContactShadow()
+{
+    const ivec2 size = textureSize(sampler2D(ambientOcclusion, ambientOcclusionSampler), 0);
+    const ivec2 at = min(ivec2(gl_FragCoord.xy), size - 1);
+    return texelFetch(sampler2D(ambientOcclusion, ambientOcclusionSampler), at, 0).g;
+}
+
 // D3D9's alpha test on the output alpha, in 8 bits.
 bool AlphaPasses(float alpha)
 {
@@ -523,6 +533,8 @@ void main()
         }
     }
 #endif
+    // What the shadow map or the volume is too coarse to hold.
+    shadow = min(shadow, ContactShadow());
 #if LP_SUN_AMBIENT
     const float facingSun = 1.0;
 #else

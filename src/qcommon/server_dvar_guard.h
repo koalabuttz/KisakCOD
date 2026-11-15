@@ -60,6 +60,8 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "r_modernAoRadius",
     "r_modernAoThickness",
     "r_modernBloom",
+    "r_modernContactLength",
+    "r_modernContactShadows",
     "r_modernDebug",
     "r_modernExposure",
     "r_modernExposureKey",

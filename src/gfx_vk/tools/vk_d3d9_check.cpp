@@ -525,6 +525,7 @@ public:
     void ModernLit();
     void ModernLitShader();
     void ModernSoftShadow();
+    void ModernContactShadow();
     void ModernLitModels();
     void ModernLitNoSun();
     void ModernLitLights();
@@ -3424,6 +3425,10 @@ void Check::ModernNormals()
             || (!envIs("KISAK_VK_MODERN_AO", "0")
                 && (envIs("KISAK_VK_MODERN_AO", "1") || envIs("KISAK_VK_MODERN_DEBUG", "ao")
                     || (!envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
+                        && !envIs("KISAK_VK_MODERN_SHADERS", "0"))))
+            || (!envIs("KISAK_VK_MODERN_CONTACT_SHADOWS", "0")
+                && (envIs("KISAK_VK_MODERN_CONTACT_SHADOWS", "1")
+                    || (!envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
                         && !envIs("KISAK_VK_MODERN_SHADERS", "0")))));
     const bool shown = wanted && debugView;
     Equal("wants_scene_depth", front::ModernWantsSceneDepth(device), wanted);
@@ -5451,6 +5456,170 @@ void Check::ModernSoftShadow()
 }
 
 
+// Contact shadows (docs/vulkan-modern.md "Contact shadows"): the camera looks
+// along +z (90 degrees, the engine's infinite projection, near plane 4) at a
+// floor 30 units below it, from 30 to 200 units ahead, drawn as lm_sun_r0c0
+// under a grey 128 sun with the primary lightmap's sun fully visible (no
+// shadow map), as modern_soft_shadow's sunlit row. A kerb stands on it, 10
+// units tall and 50 ahead, from x -20 to -2, and the sun shines from behind
+// it at 45 degrees (towards the camera): the floor just in front of the kerb
+// (3 units) has the sun hidden within the trace's 12 units, so it is shaded
+// there; the same distance in front of open floor beside it stays sunlit.
+// With KISAK_VK_MODERN_CONTACT_SHADOWS=0 both stay sunlit (the ambient
+// occlusion darkens the sky's share at the kerb's foot alone).
+void Check::ModernContactShadow()
+{
+    const bool on = EnvText("KISAK_VK_MODERN_LINEAR") != "0" && EnvText("KISAK_VK_MODERN_LIT") != "0"
+        && EnvText("KISAK_VK_MODERN_SHADERS") != "0";
+    const bool contact = on && EnvText("KISAK_VK_MODERN_CONTACT_SHADOWS") != "0"
+        && EnvText("KISAK_VK_MODERN_NORMALS") != "0";
+    IDirect3DTexture9 *color = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 128, 128, 128); });
+    IDirect3DTexture9 *primary = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
+    IDirect3DTexture9 *secondary = FilledTexture(1, 2, [](UINT, UINT) { return Argb(130, 64, 64, 64); });
+    IDirect3DSurface9 *depth = nullptr;
+    const bool made = color && primary && secondary
+        && Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                                nullptr),
+              "CreateDepthStencilSurface");
+    if (made)
+    {
+        constexpr float k = 0.99951172f, nearPlane = 4.0f;
+        front::ModernSceneView view{};
+        for (int i = 0; i < 4; ++i)
+            view.view[i][i] = 1.0f;
+        view.projection[0][0] = k;
+        view.projection[1][1] = k;
+        view.projection[2][2] = k;
+        view.projection[2][3] = 1.0f;
+        view.projection[3][2] = -nearPlane * k;
+        view.width = view.height = kSize;
+        view.cut = true;
+        const auto project = [&](float x, float y, float z, uint32_t c) {
+            return Vertex{k * x / z, k * y / z, k - nearPlane * k / z, 0.0f, 0.0f, c};
+        };
+        const uint32_t white = Argb(255, 255, 255, 255), kerbColor = Argb(255, 90, 110, 150);
+        const Vertex floorCorners[4] = {project(-100, -30, 30, white), project(100, -30, 30, white),
+                                        project(100, -30, 200, white), project(-100, -30, 200, white)};
+        const Vertex kerbCorners[4] = {project(-20, -30, 50, kerbColor), project(-2, -30, 50, kerbColor),
+                                       project(-2, -20, 50, kerbColor), project(-20, -20, 50, kerbColor)};
+        Vertex surfaces[12];
+        const int order[6] = {0, 1, 2, 0, 2, 3};
+        for (int i = 0; i < 6; ++i)
+        {
+            surfaces[i] = floorCorners[order[i]];
+            surfaces[6 + i] = kerbCorners[order[i]];
+        }
+
+        Reset(Argb(255, 0, 0, 0));
+        front::ModernSceneBegin(device);
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0),
+           "Clear(scene)");
+        device->SetRenderState(D3DRS_ZENABLE, TRUE);
+        device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+        device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(prepass)");
+        device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xf);
+        // The sun, behind the kerb at 45 degrees (the view is the world
+        // here), before the scene depth as the engine sends it; no shadow map.
+        front::ModernSunShadowView sun;
+        sun.sun = true;
+        sun.sunDir[0] = 0.0f;
+        sun.sunDir[1] = sun.sunDir[2] = 0.70710678f;
+        front::ModernSunShadow(device, sun);
+        front::ModernSceneDepth(device, view);
+        device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+        device->SetVertexShader(vsLmSun);
+        device->SetPixelShader(psLmSunStandIn);
+        device->SetTexture(0, color);
+        device->SetTexture(2, primary);
+        device->SetTexture(3, secondary);
+        const float grey = 128.0f / 255.0f;
+        const float pixel[19][4] = {{}, {}, {0, 0, 0, 1}, {}, {}, {}, {}, {}, {}, {},
+                                    {}, {}, {}, {}, {}, {}, {}, {0, 0, 1, 0}, {grey, grey, grey, 0}};
+        Ok(device->SetPixelShaderConstantF(0, &pixel[0][0], 19), "SetPixelShaderConstantF");
+        const float vertex[4][4] = {{0, 0, 0, 0}, {0.5f, 0.5f, 0.5f, 0.5f}, {0, 0, 1, 1}, {0.5f, 0.5f, 0.25f, 0.5f}};
+        Ok(device->SetVertexShaderConstantF(0, &vertex[0][0], 4), "SetVertexShaderConstantF");
+        front::ModernLitInputs inputs;
+        inputs.overWhite = true;
+        inputs.shader = 0x40; // lm_sun_r0c0
+        front::SetModernLitInputs(device, &inputs);
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(floor)");
+        front::SetModernLitInputs(device, nullptr);
+        for (DWORD sampler : {0u, 2u, 3u})
+            device->SetTexture(sampler, nullptr);
+        device->SetVertexShader(vsBasic);
+        device->SetPixelShader(psColor);
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, surfaces + 6, sizeof(Vertex)), "DrawPrimitiveUP(kerb)");
+        Equal("scene_done", front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
+        front::ModernSunShadow(device, front::ModernSunShadowView{});
+        device->SetDepthStencilSurface(nullptr);
+        const auto pixelOf = [&](float x, float y, float z, UINT &px, UINT &py) {
+            px = static_cast<UINT>((k * x / z + 1.0f) * 0.5f * kSize);
+            py = static_cast<UINT>((1.0f - k * y / z) * 0.5f * kSize);
+        };
+        UINT footX, footY, openX, openY;
+        pixelOf(-11, -30, 47, footX, footY);
+        pixelOf(30, -30, 47, openX, openY);
+        if (Read())
+        {
+            const std::string curve = ModernCurve();
+            const auto decode = [](double v) {
+                v = std::max(v, 0.0);
+                return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+            };
+            const auto shownByte = [&](double light) { return ShownByte(TonemapCurve(curve, {light, light, light})[0]); };
+            // As modern_soft_shadow's sunlit and shaded (strengths 1).
+            const double b = 130 / 255.0 * 4.06452 - 2.06452;
+            const double lengthD = 1.0 / std::sqrt(b * b + 1.0);
+            const double greyValue = 128 / 255.0;
+            const auto lit = [&](bool sunlit) {
+                const double skyDisplay = 64 / 255.0 + 64 / 255.0 * std::clamp(lengthD, 0.0, 1.0);
+                const double display = skyDisplay + (sunlit ? greyValue : 0.0);
+                const double light = decode(display);
+                return decode(greyValue * display) * light / std::max(decode(display), 1e-12);
+            };
+            const int sunlit = shownByte(lit(true));
+            const int shaded = shownByte(lit(false));
+            const int foot = static_cast<int>(pixels[(footY * readSize + footX) * 4 + 1]);
+            const int open = static_cast<int>(pixels[(openY * readSize + openX) * 4 + 1]);
+            if (!on)
+            {
+                // The stand-in's black.
+                Expect("floor_at_kerb", footX, footY, 0, 0, 0);
+                Expect("floor_open", openX, openY, 0, 0, 0);
+            }
+            else
+            {
+                // The open floor: sunlit, a level or two under it where one
+                // frame's ambient occlusion noise reaches it.
+                Equal("floor_open_sunlit", open <= sunlit + 1 && open >= sunlit - 6, true);
+                if (contact)
+                {
+                    // The sun hidden: as the shaded floor, or darker by the
+                    // ambient occlusion at the kerb's foot.
+                    Equal("floor_at_kerb_shaded", foot <= shaded + 2 && foot >= shaded / 2, true);
+                }
+                else
+                {
+                    // Sunlit, darker only by the ambient occlusion of the
+                    // sky's share.
+                    Equal("floor_at_kerb_sunlit", foot > (sunlit + shaded) / 2 && foot <= sunlit + 1, true);
+                }
+            }
+            char line[160];
+            std::snprintf(line, sizeof(line), " floor_at_kerb@%u,%u=%d floor_open@%u,%u=%d sunlit=%d shaded=%d", footX,
+                          footY, foot, openX, openY, open, sunlit, shaded);
+            result->detail += line;
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    }
+    SafeRelease(depth);
+    SafeRelease(secondary);
+    SafeRelease(primary);
+    SafeRelease(color);
+}
+
 // The model shaders of our own (lp_sun.frag): a stand-in for
 // lp_hsm_sun_<mode>c0d0n0s0 that reads what those read but shows black is
 // drawn as our shader instead. The lighting volume is 1x1x2: its first slice
@@ -6759,6 +6928,7 @@ int Run(const Options &options)
         {"modern_lit", &Check::ModernLit, true},
         {"modern_lit_shader", &Check::ModernLitShader, true},
         {"modern_soft_shadow", &Check::ModernSoftShadow, true},
+        {"modern_contact_shadow", &Check::ModernContactShadow, true},
         {"modern_lit_models", &Check::ModernLitModels, true},
         {"modern_lit_no_sun", &Check::ModernLitNoSun, true},
         {"modern_lit_lights", &Check::ModernLitLights, true},

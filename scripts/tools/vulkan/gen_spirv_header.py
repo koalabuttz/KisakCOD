@@ -117,6 +117,7 @@ SETS = [
             ("gtao.frag", "kGtaoFrag"),
             ("ao_blur.frag", "kAoBlurFrag"),
             ("debug_ao.frag", "kDebugAoFrag"),
+            ("contact.frag", "kContactFrag"),
             ("reflections.frag", "kReflectionsFrag"),
             ("debug_reflections.frag", "kDebugReflectionsFrag"),
         ],

@@ -72,6 +72,8 @@ struct ModernTuning
     float ssrThickness = -1.0f;
     int softShadows = -1;         // soft sun shadows (KISAK_VK_MODERN_SOFT_SHADOWS)
     float shadowSoftness = -1.0f; // the sun's apparent size, degrees (KISAK_VK_MODERN_SHADOW_SOFTNESS)
+    int contactShadows = -1;      // contact shadows (KISAK_VK_MODERN_CONTACT_SHADOWS)
+    float contactLength = -1.0f;  // their ray's length, world units (KISAK_VK_MODERN_CONTACT_LENGTH)
 };
 
 // The debug view over each Modern scene (ModernTuning::debug,
@@ -360,6 +362,8 @@ struct ModernSunShadowView
     bool on = false;            // the view's lit surfaces read the sun's shadow map
     float texel[2] = {};        // world units across a texel, near and far partitions
     float depthUnits[2] = {};   // world units per unit of the map's depth, near and far
+    bool sun = false;           // the view has a sun: sunDir holds the direction towards it
+    float sunDir[3] = {};       // world space, unit length
 };
 void ModernSunShadow(IDirect3DDevice9 *device, const ModernSunShadowView &view);
 } // namespace gfx_vk::d3d9

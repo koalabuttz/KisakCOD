@@ -81,6 +81,8 @@ back to them.
 | `r_modernSsrDistance`, `r_modernSsrThickness` | -1, or above 0 | `KISAK_VK_MODERN_SSR_DISTANCE`, `_THICKNESS` |
 | `r_modernSoftShadows` | default, off, on | `KISAK_VK_MODERN_SOFT_SHADOWS` |
 | `r_modernShadowSoftness` | -1, or above 0 to 20 (degrees) | `KISAK_VK_MODERN_SHADOW_SOFTNESS` |
+| `r_modernContactShadows` | default, off, on | `KISAK_VK_MODERN_CONTACT_SHADOWS` |
+| `r_modernContactLength` | -1, or above 0 to 256 (world units) | `KISAK_VK_MODERN_CONTACT_LENGTH` |
 | `r_modernTonemap` | default, clamp, neutral, agx, aces | `KISAK_VK_MODERN_TONEMAP` |
 | `r_modernDebug` | default, none, velocity, velocity-all, normals, ao, reflections | `KISAK_VK_MODERN_DEBUG` |
 
@@ -1496,6 +1498,47 @@ edge in the shadow map: the game's taps give an edge about a texel wide, the
 soft filter one whose radius is four texels at that depth (three texels
 either side part lit, ten away fully lit or shaded). With
 `KISAK_VK_MODERN_SOFT_SHADOWS=0` both rows are sharp.
+
+## Contact shadows
+
+The sun's shadow map is too coarse for the smallest shadows: a boot on the
+ground, a rifle lying on a crate, a ledge on its wall. Contact shadows find
+those in screen space, as Bend Studio's screen-space shadows do: from each
+pixel's surface in the depth prepass a ray of `r_modernContactLength` world
+units (12 by default, about 30 cm) is stepped towards the sun in 16 steps
+(`shaders/contact.frag`), all moved along it by interleaved gradient noise
+that changes every frame so the TAA smooths them. A step is hidden when the
+scene's surface at its pixel lies in front of it by more than a small bias
+(0.03 units plus 0.15% of the distance) and less than 8 units (what is
+further in front is taken to be a separate thing that does not reach the
+ray). A hit in the first half of the ray hides the sun in full and one
+further along less, so the shadow fades out away from its caster; it also
+fades out towards the screen's edges and where the whole ray spans under 8
+pixels. The ray starts a little off its surface along the normals buffer's
+normal, and surfaces that face away from the sun are left alone.
+
+The pass is drawn right after the ambient occlusion, into the green channel
+of the same texture (the occlusion's blur leaves green at 1, and the contact
+pass writes green alone; without ambient occlusion the texture is cleared to
+white first), so the lit shaders read no new texture: `lm_sun.frag` and
+`lp_sun.frag`, in their sun families, take the smaller of the sun's shadow
+(the shadow map, or the lightmap's or volume's sun visibility) and the
+contact visibility. They darken the sun's light and its highlight alone,
+never the sky's (that is the ambient occlusion's).
+
+The sun's direction comes with the view's `sunShadow` hook, from the back
+end's sun light (towards the sun, as the lit shaders' sun constant), which
+the renderer now calls before the view's `sceneDepth` so the scene depth's
+passes have it. Contact shadows make the normals buffer wanted. On by
+default with our lit shaders; `r_modernContactShadows off` (or
+`KISAK_VK_MODERN_CONTACT_SHADOWS=0`) turns them off. The statistics line is
+`modern: N scenes with contact shadows (length 12.0, thickness 8.0, strength
+1.00), X ms GPU each` (the `modern contact shadows` pass).
+
+The `modern_contact_shadow` check scene puts a kerb 10 units tall on a sunlit
+floor with the sun behind it at 45 degrees: the floor 3 units in front of
+the kerb is shaded, open floor beside it stays sunlit, and with
+`KISAK_VK_MODERN_CONTACT_SHADOWS=0` both are sunlit.
 
 ## Next
 

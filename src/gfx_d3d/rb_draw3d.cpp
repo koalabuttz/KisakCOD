@@ -530,10 +530,11 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
         KISAK_GXM_SET_PREPASS_SKIP_MODELS(false);
         depthPrepassed = true;
     }
+    // The Modern path's lit shaders size their soft sun shadows from it, and
+    // the scene depth's passes (contact shadows) take the sun's direction.
+    R_ModernSunShadow(viewInfo, sunShadowMap);
     if (modernDepth && depthPrepassed)
         R_ModernSceneDepth(viewInfo);
-    // The Modern path's lit shaders size their soft sun shadows from it.
-    R_ModernSunShadow(viewInfo, sunShadowMap);
     {
         SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_LIT);
         R_InitContext(data, &cmdBuf);
