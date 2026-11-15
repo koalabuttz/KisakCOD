@@ -29,7 +29,7 @@ All three routes now go through `CL_SetDvarFromServer`
 (without regard to letter case), so it holds for a setting the client has not
 registered yet.
 
-The list is every setting this port added, 100 on 2026-11-15 (count the names
+The list is every setting this port added, 111 on 2026-11-15 (count the names
 in `kServerDvarsOfThisPort`; it grows with the port): the renderer choices, the
 Modern visuals settings and the Vulkan and GPU wait settings (`r_backend`,
 `r_visuals`, `r_modern*`, `r_vk*`, `r_gpuSyncSleep*`, `r_dynamicBufferReport`,
