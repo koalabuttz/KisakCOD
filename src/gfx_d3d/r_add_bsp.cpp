@@ -7,6 +7,43 @@
 #include "r_buffers.h"
 #include "r_add_staticmodel.h"
 #include <universal/profile.h>
+#include <linux/sys_perf.h>
+
+// The perf probe of a camera stage's world surfaces.
+static uint32_t R_WorldStagePerfProbe(uint32_t stage)
+{
+    if (stage == DRAW_SURF_BSP_CAMERA_LIT)
+        return SYS_PERF_PROBE_WORLD_LIT;
+    return stage == DRAW_SURF_BSP_CAMERA_DECAL ? SYS_PERF_PROBE_WORLD_DECAL : SYS_PERF_PROBE_WORLD_EMISSIVE;
+}
+
+// r_pretessPrefetch: the indices of a surface a batch is about to copy are
+// asked for while the surface before it is copied. A batch's surfaces lie
+// anywhere in the world's index array, so the processor does not see them
+// coming by itself. Whole cache lines, a few at most: a longer surface's
+// tail is in sequence with its start.
+#if defined(__GNUC__)
+#if defined(__arm__)
+#define KISAK_PRETESS_LINE 32 // Cortex-A9 and its like
+#else
+#define KISAK_PRETESS_LINE 64
+#endif
+static inline void R_PrefetchSurfaceIndices(const GfxSurface *surf)
+{
+    const char *from = reinterpret_cast<const char *>(&rgp.world->indices[surf->tris.baseIndex]);
+    const uint32_t bytes = 6u * surf->tris.triCount;
+    __builtin_prefetch(from);
+    if (bytes > KISAK_PRETESS_LINE)
+        __builtin_prefetch(from + KISAK_PRETESS_LINE);
+    if (bytes > 2 * KISAK_PRETESS_LINE)
+        __builtin_prefetch(from + 2 * KISAK_PRETESS_LINE);
+    if (bytes > 3 * KISAK_PRETESS_LINE)
+        __builtin_prefetch(from + 3 * KISAK_PRETESS_LINE);
+}
+#define KISAK_PRETESS_PREFETCH 1
+#else
+#define KISAK_PRETESS_PREFETCH 0
+#endif
 
 void R_InitBspDrawSurf(GfxBspDrawSurfData* surfData)
 {
@@ -33,6 +70,10 @@ char R_PreTessBspDrawSurfs(
     uint32_t surfIter; // [esp+25Ch] [ebp-8h]
     int baseVertex; // [esp+260h] [ebp-4h]
 
+    SysPerfScope perfScope(SYS_PERF_PROBE_WORLD_PRETESS);
+#if KISAK_PRETESS_PREFETCH
+    const bool prefetch = r_pretessPrefetch->current.enabled;
+#endif
     triCount = 0;
     for (surfIter = 0; surfIter < count; ++surfIter)
     {
@@ -53,11 +94,19 @@ char R_PreTessBspDrawSurfs(
         baseVertex = 0x7FFFFFFF;
         lmapIndex = 31;
         reflectionProbeIndex = 255;
+#if KISAK_PRETESS_PREFETCH
+        if (prefetch)
+            R_PrefetchSurfaceIndices(&rgp.world->dpvs.surfaces[list[0]]);
+#endif
         for (surfIter = 0; surfIter < count; ++surfIter)
         {
             surfIndex = list[surfIter];
             surf = &rgp.world->dpvs.surfaces[surfIndex];
             tris = surf;
+#if KISAK_PRETESS_PREFETCH
+            if (prefetch && surfIter + 1 < count)
+                R_PrefetchSurfaceIndices(&rgp.world->dpvs.surfaces[list[surfIter + 1]]);
+#endif
             if (baseVertex != surf->tris.firstVertex
                 || lmapIndex != surf->lightmapIndex
                 || reflectionProbeIndex != surf->reflectionProbeIndex)
@@ -136,6 +185,7 @@ void R_AddAllBspDrawSurfacesRangeCamera(
     GfxBspDrawSurfData surfData; // [esp+160h] [ebp-18h] BYREF
 
     PROF_SCOPED("BspSurfaces");
+    SysPerfScope perfScope(R_WorldStagePerfProbe(stage));
 
     iassert( rgp.world );
     bcassert(beginSurface, rgp.world->models[0].surfaceCount + 1);
@@ -200,6 +250,7 @@ void R_AddAllBspDrawSurfacesCameraNonlit(
     GfxBspDrawSurfData surfData; // [esp+128h] [ebp-20h] BYREF
     int drawSurfCount; // [esp+144h] [ebp-4h]
 
+    SysPerfScope perfScope(R_WorldStagePerfProbe(stage));
     iassert(rgp.world);
     surfaceVisData = rgp.world->dpvs.surfaceVisData[0];
     surfaceMaterials = rgp.world->dpvs.surfaceMaterials;

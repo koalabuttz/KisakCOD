@@ -124,6 +124,25 @@ perf: done
     (`R_AddAllStaticModelSurfacesCamera`), `entities`
     (`R_DrawAllSceneEnt`) and `sorted lists`
     (`R_MergeAndEmitDrawSurfLists`, `R_SortDrawSurfs`).
+  - `cells: a cell handed to the workers`: inside `scene: cells`, the four
+    worker commands queued for each visible cell
+    (`R_AddCellSurfacesAndCullGroupsInFrustumDelayed`). What is left of
+    `scene: cells` is the walk through the portals.
+  - `world: <part>`: parts of `scene: world surfaces`: `lit surfaces`,
+    `decals` and `emissive surfaces` (the three walks over the world's
+    visible surfaces, each making its batches), `lights and shadow maps` (the
+    shadowed lights chosen, the draw method, the sun shadow's maps set up)
+    and `a batch's indices copied` (`R_PreTessBspDrawSurfs`, inside the
+    three walks and the sun shadow's: the indices of a batch's surfaces
+    copied into the frame's index buffer).
+  - `static models: <part>`: parts of `scene: static models`: `a model's
+    draw surfaces` (`R_SkinStaticModelsCameraForLod`: the visible instances
+    of one model made draw surfaces) and, inside it, `cached indices copied`
+    (`R_PreTessStaticModelCachedList`). What is left of `scene: static
+    models` is the walk over the visible models itself: distance, level of
+    detail, lighting slot and cache entry of each. The two copies are timed
+    for every batch, hundreds a frame, so on a slow machine take two clock
+    readings off each call before comparing them with anything.
   - `workers: awake`: a worker thread from waking to its next sleep, both
     workers added up. Its calls are wake-ups; a wake-up that finds no
     command still counts.
@@ -341,6 +360,25 @@ counting and the second prints four lines, all per view walked:
 The walk is `R_AddAabbTreeSurfacesInFrustum_r` (`src/gfx_d3d/r_dpvs_static.cpp`);
 the counts are for deciding what a faster box test is worth there. While it is
 off it costs a load and a branch per node.
+
+## `r_pretessPrefetch`
+
+The world's visible surfaces are drawn in batches, and for each batch the main
+thread copies its surfaces' indices into the frame's index buffer
+(`R_PreTessBspDrawSurfs`, `r_pretess`). The surfaces of a batch lie anywhere in
+the world's index array, a hundred or two hundred bytes each. `r_pretessPrefetch
+1` (builds with GCC or Clang; off by default) asks the processor for the next
+surface's indices while it copies the one before, and does the same for the
+instances of a cached static model (`R_PreTessStaticModelCachedList`). The
+same bytes are copied either way.
+
+```
+perf_ab "set r_pretessPrefetch 0" "set r_pretessPrefetch 1"
+```
+
+compares the two; `world: a batch's indices copied`, `static models: cached
+indices copied` and the two `scene:` parts they sit in are its timers. No
+machine has run it yet.
 
 ## Checks
 

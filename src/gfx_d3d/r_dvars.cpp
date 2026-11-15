@@ -240,6 +240,7 @@
  const dvar_t *r_fastSkin;
  const dvar_t *r_smc_enable;
  const dvar_t *r_pretess;
+ const dvar_t *r_pretessPrefetch;
  const dvar_t *r_dynamicBufferReport;
  const dvar_t *r_picmip_manual;
  const dvar_t *r_picmip;
@@ -633,6 +634,13 @@
      r_smc_enable = Dvar_RegisterBool("r_smc_enable", false, DVAR_ROM, "Enable static model cache");
 #endif
      r_pretess = Dvar_RegisterBool("r_pretess", true, DVAR_NOFLAG, "Batch surfaces to reduce primitive count");
+     // The same indices are copied either way (r_add_bsp.cpp); off until a
+     // machine shows what it is worth.
+     r_pretessPrefetch = Dvar_RegisterBool(
+         "r_pretessPrefetch",
+         false,
+         DVAR_NOFLAG,
+         "Ask for the indices a batch copies next while it copies (world surfaces, cached static models; builds with GCC or Clang)");
      // The PS Vita's buffers are smaller than the retail game's (r_gfx.h), and
      // its runs are read from the log: there the line is on.
      r_dynamicBufferReport = Dvar_RegisterInt(

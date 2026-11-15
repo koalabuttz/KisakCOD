@@ -17,6 +17,7 @@
 #include "r_buffers.h"
 #include "r_staticmodelcache.h"
 #include <cgame/cg_local.h>
+#include <linux/sys_perf.h>
 
 int g_dumpStaticModelCount;
 int g_dumpStaticModelFileHandle;
@@ -42,6 +43,7 @@ char R_PreTessStaticModelCachedList(
     const XSurface *xsurf; // [esp+50h] [ebp-8h]
     uint32_t surfIndexCount; // [esp+54h] [ebp-4h]
 
+    SysPerfScope perfScope(SYS_PERF_PROBE_SMODEL_PRETESS);
     xsurf = XModelGetSurface(model, lod, surfaceIndex);
     surfIndexCount = 3 * xsurf->triCount;
     preTessIndices = R_AllocPreTessIndices(surfIndexCount * count);
@@ -51,8 +53,24 @@ char R_PreTessStaticModelCachedList(
     {
         PROF_SCOPED("R_memcpy");
         dstIndices = preTessIndices;
+#if defined(__GNUC__)
+        // r_pretessPrefetch (r_add_bsp.cpp): the next instance's indices are
+        // asked for while this one's are copied. The instances of a batch lie
+        // anywhere in the cache.
+        const bool prefetch = r_pretessPrefetch->current.enabled;
+#endif
         for (listIter = 0; listIter < count; ++listIter)
         {
+#if defined(__GNUC__)
+            if (prefetch && listIter + 1 < count)
+            {
+                const char *next = reinterpret_cast<const char *>(
+                    &gfxBuf.smodelCache.indices[3 * xsurf->baseTriIndex
+                                                + 4 * R_GetCachedSModelSurf(list[listIter + 1])->baseVertIndex]);
+                for (uint32_t ahead = 0; ahead < 2 * surfIndexCount && ahead < 256; ahead += 32)
+                    __builtin_prefetch(next + ahead);
+            }
+#endif
             baseIndex = 3 * xsurf->baseTriIndex + 4 * R_GetCachedSModelSurf(list[listIter])->baseVertIndex;
             if (baseIndex >= SMC_MAX_INDEX_IN_CACHE || surfIndexCount + baseIndex > SMC_MAX_INDEX_IN_CACHE)
             {
@@ -359,6 +377,7 @@ void R_SkinStaticModelsCameraForLod(
     XSurface *surfaces; // [esp+24h] [ebp-8h] BYREF
     uint32_t region; // [esp+28h] [ebp-4h]
 
+    SysPerfScope perfScope(SYS_PERF_PROBE_SMODEL_HAND_ON);
     surfaceCount = XModelGetSurfaces(model, &surfaces, lod);
     iassert(surfaceCount);
     materialForSurf = XModelGetSkins(model, lod);

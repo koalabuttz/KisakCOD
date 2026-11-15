@@ -118,6 +118,21 @@ enum SysPerfProbe : uint32_t
     SYS_PERF_PROBE_SCENE_STATIC_MODELS, // R_AddAllStaticModelSurfacesCamera
     SYS_PERF_PROBE_SCENE_ENTITIES,     // R_DrawAllSceneEnt
     SYS_PERF_PROBE_SCENE_MERGE,        // R_MergeAndEmitDrawSurfLists and R_SortDrawSurfs: the lists sorted
+    // Parts of the cells, of the world's surfaces and of the static models,
+    // so that their time can be split. The first sits inside
+    // SYS_PERF_PROBE_SCENE_CELLS, the next five inside
+    // SYS_PERF_PROBE_SCENE_WORLD (a sun shadow's batches also copy indices),
+    // the last two inside SYS_PERF_PROBE_SCENE_STATIC_MODELS. The two copies
+    // are timed for every batch, hundreds a frame: take a clock reading off
+    // each call.
+    SYS_PERF_PROBE_CELLS_HAND_OVER,    // R_AddCellSurfacesAndCullGroupsInFrustumDelayed: a cell's four worker commands queued
+    SYS_PERF_PROBE_WORLD_LIT,          // R_AddAllBspDrawSurfacesRangeCamera or ...CameraNonlit: the lit surfaces
+    SYS_PERF_PROBE_WORLD_DECAL,        // ... the decals
+    SYS_PERF_PROBE_WORLD_EMISSIVE,     // ... the emissive surfaces
+    SYS_PERF_PROBE_WORLD_LIGHTS,       // the shadowed lights chosen, the draw method, the sun shadow's maps
+    SYS_PERF_PROBE_WORLD_PRETESS,      // R_PreTessBspDrawSurfs: one batch's indices copied (inside the three first)
+    SYS_PERF_PROBE_SMODEL_HAND_ON,     // R_SkinStaticModelsCameraForLod: a model's instances made draw surfaces
+    SYS_PERF_PROBE_SMODEL_PRETESS,     // R_PreTessStaticModelCachedList: cached instances' indices copied (inside it)
     // The render thread (gfx_d3d), so its frame can be split as the main
     // thread's is. The 3D parts sit inside SYS_PERF_PROBE_RENDER_3D.
     SYS_PERF_PROBE_RENDER_3D,          // RB_Draw3D: the 3D views of a frame
