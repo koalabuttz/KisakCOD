@@ -1,0 +1,19 @@
+// The KisakCOD Android app (docs/android.md). Built by
+// scripts/platform/android/build_apk.py, which builds the native libraries
+// first and passes their folder and SDL3's Java sources as properties.
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = 'KisakCOD'
+include ':app'

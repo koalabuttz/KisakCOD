@@ -25,9 +25,11 @@ Nothing on this page changes the default build or any other track.
    arm64-v8a with the Android NDK and passes the binary checks below in
    hosted CI. It has not run on a device yet; the first device check is to
    run it with `adb` and load a stock map.
-2. **The game as an app**: `KisakCOD-mp` built as the native library of an
-   SDL3 app (an APK), with the Vulkan back end, the D3D9 stand-in in place of
-   DXVK and OpenAL Soft for sound. CI builds the APK without game data.
+2. **The game as an app** (builds; see [below](#building-the-app)):
+   `KisakCOD-mp` built as `libmain.so`, the native library of an SDL3 app
+   (an APK), with the Vulkan back end, the D3D9 stand-in in place of DXVK
+   and OpenAL Soft for sound. CI builds the APK without game data. Not
+   installed on a device yet.
 3. **First frame on the handheld**: the menu drawn through Vulkan on the
    Adreno driver, the built-in controls as an SDL gamepad (the Linux client's
    gamepad support, `KISAK_LINUX_GAMEPAD`), the touch screen as the menu
@@ -90,6 +92,77 @@ dynamic linker and system libraries. Hosted CI: the **Android** workflow
 (`.github/workflows/build-kisakcod-android.yaml`) builds Debug and
 RelWithDebInfo, runs the check on both, and keeps the RelWithDebInfo server as
 the artifact `KisakCOD-dedi-android-arm64-RelWithDebInfo` for device runs.
+
+## Building the app
+
+```sh
+python3 scripts/platform/android/build_apk.py --work /tmp/kisak-android \
+    --ndk /path/to/android-ndk --sdk /path/to/android-sdk
+```
+
+writes `/tmp/kisak-android/KisakCOD-RelWithDebInfo.apk`, signed with Gradle's
+debug key. It needs the NDK, the Android SDK (platform 35 and build-tools),
+CMake, Ninja, git, Java 17 or newer and Gradle 8.13 or newer (`--gradle`, or
+`gradle` on `PATH`); `--native-only` stops before the SDK and Gradle are
+needed. Everything it fetches is pinned in the script:
+
+| Piece | Version | What for |
+| --- | --- | --- |
+| SDL3 | 3.2.10 (`877399b2`), as the Linux client | Window, input, the gamepad API, and its Java activity (`org.libsdl.app`), compiled into the app unchanged |
+| OpenAL Soft | 1.24.3 (`dc7d7054`) | Sound (its OpenSL ES output) |
+| DXVK Native headers | 2.7.1 (`c3dd74be`), headers only | The D3D9 types the renderer compiles against |
+
+The libraries in the APK:
+
+| Library | From |
+| --- | --- |
+| `libmain.so` | `KisakCOD-mp` with `KISAK_PLATFORM=android`: a shared library, not a program, exporting only `SDL_main` (`scripts/platform/android/main_exports.map`) |
+| `libSDL3.so` | SDL3 |
+| `libopenal.so` | OpenAL Soft |
+| `libd3d9_unavailable.so` | `tests/linux_device_probe/d3d9_unavailable.cpp`: answers "no device" to anything that asks the system's D3D9 |
+
+What is Android-specific in the client:
+
+- `src/linux/main.cpp` names its `main` `SDL_main` on Android (C linkage,
+  exported), as SDL3's `SDL_main.h` would: SDL3's activity loads
+  `libmain.so` and calls it once the window exists.
+- `r_backend` defaults to `vulkan` on Android
+  (`src/linux/client/vulkan/vulkan_backend.cpp`). `d3d9` reaches only the
+  stand-in.
+- The configuration refuses `KisakCOD-mp` without the Vulkan back end
+  (`KISAK_BUILD_VULKAN_PROBE`, `_SHADERS`, `_LEGACY` and `_BACKEND`, which
+  the script turns on), and builds the controller support
+  (`KISAK_LINUX_GAMEPAD`, [linux-mp-client.md](linux-mp-client.md)).
+- `scripts/platform/android/app/.../KisakActivity.java` extends SDL3's
+  activity: it loads `libSDL3.so` and `libmain.so` and starts the game with
+  `+set fs_basepath <app folder> +set fs_homepath <app folder>/home`, where
+  the app folder is `Android/data/org.kisakcod.game/files` on shared
+  storage. The app needs no storage permission for its own folder.
+- The manifest asks for Vulkan 1.3, keeps the app in landscape and full
+  screen, and asks for network access (multiplayer).
+
+`check_android_binary.py --library libmain.so` checks the client library the
+way it checks the server, except that a library has no program interpreter,
+may need the three libraries above, and must export `SDL_main` alone.
+
+### Installing and starting the app
+
+Install, start once (the first start makes the app's folder), copy the game
+folder from your own install (`main`, `zone` and the rest) into it, and start
+again:
+
+```sh
+adb install -r KisakCOD-RelWithDebInfo.apk
+adb shell am start -n org.kisakcod.game/.KisakActivity
+adb shell am force-stop org.kisakcod.game
+adb push "Call of Duty 4/." /sdcard/Android/data/org.kisakcod.game/files/
+adb shell am start -n org.kisakcod.game/.KisakActivity
+adb logcat -s KisakCOD SDL
+```
+
+Extra engine arguments for a run go in the `args` extra, split at spaces:
+`adb shell am start -n org.kisakcod.game/.KisakActivity --es args "+set developer 1"`.
+Not tried on a device yet.
 
 ## Running the server on a device
 

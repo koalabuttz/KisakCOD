@@ -41,6 +41,16 @@
 #if defined(__vita__)
 #include <vita/vita_platform.h> // Vita_Startup, Vita_QuitRequested, Vita_Frame*
 #endif
+
+#if defined(__ANDROID__) && defined(KISAK_LINUX_GAME_CLIENT)
+// On Android the game is the native library of SDL3's Java activity, which
+// calls SDL_main once the app's window exists, as SDL3's SDL_main.h would
+// arrange: main below is renamed SDL_main, with C linkage, and exported
+// (scripts/platform/android/main_exports.map; docs/android.md). This unit
+// does not see SDL's headers, so the declaration is spelled out here.
+#define main SDL_main
+extern "C" __attribute__((visibility("default"))) int SDL_main(int argc, char **argv);
+#endif
 #include <errno.h>
 #include <limits.h>
 #include <sched.h>

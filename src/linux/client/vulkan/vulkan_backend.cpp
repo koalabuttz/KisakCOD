@@ -545,7 +545,14 @@ const GfxModernHooks s_modernHooks = {nullptr,          ModernJitterPixels, Mode
 
 void Kisak_VulkanRegisterDvars()
 {
-    r_backend = Dvar_RegisterEnum("r_backend", s_backendNames, BACKEND_D3D9, DVAR_ARCHIVE | DVAR_LATCH,
+#if defined(__ANDROID__)
+    // Android has no system D3D9 (no DXVK): the Vulkan back end is the
+    // renderer there, and d3d9 reaches only the stand-in that has no device.
+    const int defaultBackend = BACKEND_VULKAN;
+#else
+    const int defaultBackend = BACKEND_D3D9;
+#endif
+    r_backend = Dvar_RegisterEnum("r_backend", s_backendNames, defaultBackend, DVAR_ARCHIVE | DVAR_LATCH,
                                   "Graphics back end: d3d9 (the system's Direct3D 9, DXVK on Linux) or vulkan "
                                   "(KisakCOD's own Vulkan renderer)");
     r_vkValidation = Dvar_RegisterEnum("r_vkValidation", s_validationNames, 0, DVAR_ARCHIVE | DVAR_LATCH,
