@@ -39,6 +39,14 @@
             </intent-filter>
         </activity>
 
+        <!-- The launcher's Visuals page: presets and every setting of the look
+             (VisualsActivity.java). -->
+        <activity android:name=".VisualsActivity"
+            android:label="@string/app_name"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation"
+            android:exported="false" />
+
         <!-- The game, in a process of its own that ends with it: the engine's
              state lives in that process and is never started twice in one.
              Test runs start it straight away (adb shell am start -n
