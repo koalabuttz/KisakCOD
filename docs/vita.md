@@ -288,7 +288,9 @@ The switches that can be turned: `no-depth-prepass`, `no-frame-overlap`,
 GPU back at its default clocks), `no-prepass-governor` (the depth pass
 on in every frame instead of timed both ways), `no-same-state` (every
 draw works out its programs and fixed state anew),
-`no-world-only-prepass` (the forced depth pass draws the models too) and
+`no-world-only-prepass` (the forced depth pass draws the models too),
+`no-alpha-test-drop` (every alpha test is a discard in its fragment
+program, also the ones that cannot change the picture) and
 `gpu-watch` (the log gets a `gpu watch` line that says how long the GPU
 works on a frame, [vita-client.md](vita-client.md)). Turning `no-depth-prepass`
 or `no-prepass-governor` starts the governor afresh. The others size or make things at

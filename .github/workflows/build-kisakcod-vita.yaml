@@ -315,6 +315,7 @@ jobs:
           python3 scripts/tests/test_vita_frame_time.py
           python3 scripts/tests/test_vita_gpu_progress.py
           python3 scripts/tests/test_vita_gpu_watch.py
+          python3 scripts/tests/test_vita_idle_alpha_test.py
           python3 scripts/tests/test_vita_prepass_governor.py
           python3 scripts/tests/test_vita_cg_translate.py --require-glslang
           # The static model cache's size arithmetic, at every size: the
