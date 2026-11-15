@@ -583,11 +583,17 @@ bool PickDevice(Core &core)
 
 // ---- Logical device and timestamps ------------------------------------------------------
 
+bool EnvEquals(const char *name, const char *value);
+
 VkFormat PickDepthStencilFormat(Core &core)
 {
     const VkFormatFeatureFlags needed =
         VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
-    const VkFormat candidates[] = {VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT};
+    // KISAK_VK_DEPTH_FORMAT=d32 tries D32_SFLOAT_S8 first, to rule the 24-bit
+    // format in or out of a depth problem on one device.
+    const bool d32 = EnvEquals("KISAK_VK_DEPTH_FORMAT", "d32");
+    const VkFormat candidates[] = {d32 ? VK_FORMAT_D32_SFLOAT_S8_UINT : VK_FORMAT_D24_UNORM_S8_UINT,
+                                   d32 ? VK_FORMAT_D24_UNORM_S8_UINT : VK_FORMAT_D32_SFLOAT_S8_UINT};
     for (VkFormat format : candidates)
     {
         VkFormatProperties props{};
