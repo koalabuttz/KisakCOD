@@ -2314,6 +2314,9 @@ static float s_modernPlanarDpvsOrigin[3];
 // The world the plane below was found for, and the plane (n.p + d >= 0 is
 // above it); no plane when s_modernPlanarHavePlane is false.
 static const GfxWorld *s_modernPlanarWorld;
+// Its name too: a devmap can load the next map's world at the same address,
+// and the old map's planes stayed (PC water run 5).
+static char s_modernPlanarWorldName[64];
 static bool s_modernPlanarHavePlane;
 static float s_modernPlanarPlane[4];
 // The main view the planar one follows, and whether it drew sun shadows.
@@ -2359,6 +2362,12 @@ static int s_modernPlanarWaterTaken = -1;
 // How much of each plane the main view has shown lately: rays that reached
 // its water this frame, plus kModernPlanarWaterKeep of the last frame's.
 static float s_modernPlanarWaterSeen[kModernPlanarWaterPlanes];
+// The same rays, each by how close its water is (1 / (1 + (d / 512)^2)): which
+// plane is taken. Counted plainly, a far sheet could outweigh the water at the
+// camera's feet: mp_bog's view of its swamp at -20 settled on the -26 sheet
+// beyond it (PC water run 5).
+static float s_modernPlanarWaterNear[kModernPlanarWaterPlanes];
+static const float kModernPlanarWaterNearDistance = 512.0f;
 static uint32_t s_modernPlanarWaterRayFrame;
 // Rays cast through the main view each frame, on a grid that moves by half a
 // cell from frame to frame (four frames cover twice the grid both ways).
@@ -2565,7 +2574,9 @@ static void R_ModernPlanarFindWater(const char *name)
 // The cells and frustum the main view drew are not enough: mp_bog's sheet of
 // water under the whole map and mp_creek's water under its ground passed
 // that test from everywhere, so the view was never skipped (PC water run 4).
-// The plane last taken stays while it counts at least half the best. -1 when
+// The plane taken is the one whose rays weigh most by closeness
+// (s_modernPlanarWaterNear); the plane last taken stays while it weighs at
+// least half the best. -1 when
 // no water shows: the view is not drawn (it cost Bog 1.9 ms a frame, PC water
 // run 3).
 static int R_ModernPlanarChooseWater(const refdef_s *refdef)
@@ -2586,6 +2597,7 @@ static int R_ModernPlanarChooseWater(const refdef_s *refdef)
         order[at] = p;
     }
     float hits[kModernPlanarWaterPlanes] = {};
+    float nearHits[kModernPlanarWaterPlanes] = {};
     const uint32_t frame = s_modernPlanarWaterRayFrame++;
     const float shiftX = (frame & 1) ? 0.75f : 0.25f;
     const float shiftY = (frame & 2) ? 0.75f : 0.25f;
@@ -2608,7 +2620,12 @@ static int R_ModernPlanarChooseWater(const refdef_s *refdef)
                 if (!R_ModernPlanarOnWater(water, point[0], point[1]))
                     continue;
                 if (!CM_BoxSightTrace(0, eye, point, vec3_origin, vec3_origin, 0, CONTENTS_SOLID))
+                {
+                    const float distanceSq = t * t * (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
                     hits[order[i]] += 1.0f;
+                    nearHits[order[i]] += 1.0f / (1.0f + distanceSq / (kModernPlanarWaterNearDistance
+                                                                         * kModernPlanarWaterNearDistance));
+                }
                 break;
             }
         }
@@ -2617,13 +2634,14 @@ static int R_ModernPlanarChooseWater(const refdef_s *refdef)
     for (int p = 0; p < s_modernPlanarWaterCount; ++p)
     {
         s_modernPlanarWaterSeen[p] = s_modernPlanarWaterSeen[p] * kModernPlanarWaterKeep + hits[p];
+        s_modernPlanarWaterNear[p] = s_modernPlanarWaterNear[p] * kModernPlanarWaterKeep + nearHits[p];
         if (s_modernPlanarWaterSeen[p] >= kModernPlanarWaterEnter
-            && (best < 0 || s_modernPlanarWaterSeen[p] > s_modernPlanarWaterSeen[best]))
+            && (best < 0 || s_modernPlanarWaterNear[p] > s_modernPlanarWaterNear[best]))
             best = p;
     }
     const int last = s_modernPlanarWaterTaken;
     if (last >= 0 && s_modernPlanarWaterSeen[last] >= kModernPlanarWaterStay
-        && (best < 0 || 2.0f * s_modernPlanarWaterSeen[last] >= s_modernPlanarWaterSeen[best]))
+        && (best < 0 || 2.0f * s_modernPlanarWaterNear[last] >= s_modernPlanarWaterNear[best]))
         best = last;
     return best;
 }
@@ -2631,10 +2649,13 @@ static int R_ModernPlanarChooseWater(const refdef_s *refdef)
 static void R_ModernPlanarFindPlane()
 {
     s_modernPlanarWorld = rgp.world;
+    I_strncpyz(s_modernPlanarWorldName, rgp.world && rgp.world->name ? rgp.world->name : "",
+               sizeof(s_modernPlanarWorldName));
     s_modernPlanarHavePlane = false;
     s_modernPlanarWaterCount = 0;
     s_modernPlanarWaterTaken = -1;
     memset(s_modernPlanarWaterSeen, 0, sizeof(s_modernPlanarWaterSeen));
+    memset(s_modernPlanarWaterNear, 0, sizeof(s_modernPlanarWaterNear));
     if (!rgp.world || !rgp.world->name)
         return;
     const char *slash = strrchr(rgp.world->name, '/');
@@ -2714,7 +2735,8 @@ void R_ModernPlanarScene(const refdef_s *refdef)
         return;
     if (!hooks->planarWanted(hooks->user, dx.device))
         return;
-    if (s_modernPlanarWorld != rgp.world)
+    if (s_modernPlanarWorld != rgp.world || !rgp.world->name
+        || strcmp(s_modernPlanarWorldName, rgp.world->name) != 0)
         R_ModernPlanarFindPlane();
     if (!s_modernPlanarHavePlane)
         return;
@@ -2730,8 +2752,10 @@ void R_ModernPlanarScene(const refdef_s *refdef)
                 if (water < 0)
                     Com_Printf(CON_CHANNEL_GFX, "modern water: no water in view: no planar view\n");
                 else
-                    Com_Printf(CON_CHANNEL_GFX, "modern water: planar view on the water at height %.1f\n",
-                               s_modernPlanarWater[water].height);
+                    Com_Printf(CON_CHANNEL_GFX,
+                               "modern water: planar view on the water at height %.1f (seen %.1f, near %.2f)\n",
+                               s_modernPlanarWater[water].height, s_modernPlanarWaterSeen[water],
+                               s_modernPlanarWaterNear[water]);
             }
         }
         s_modernPlanarWaterTaken = water;

@@ -1369,10 +1369,14 @@ a cell from frame to frame, goes down to each plane the camera is above,
 highest first. A ray that lands on one of a plane's water triangles counts
 for it if nothing solid stands between the camera and that point (a sight
 trace through the collision world), and goes no further. Each plane keeps
-its count plus 0.8 of the last frame's; it is taken from 2 (about 2% of the
-screen held for a few frames) and kept down to 0.5, and the plane last taken
-stays while it counts at least half the best, so the view does not hop
-between two. When no plane counts enough, no planar view is drawn at all (it
+its count plus 0.8 of the last frame's; it may be taken from 2 (about 2% of
+the screen held for a few frames) and kept down to 0.5. Of those, the plane
+taken is the one whose rays weigh most by closeness, 1 / (1 + (d / 512)^2)
+for water d units away, so the swamp at the camera's feet beats the sheet
+beyond it; the plane last taken stays while it weighs at least half the
+best, so the view does not hop between two. The planes are found again when
+the world's name changes too, since a `devmap` can load the next map's world
+at the same address. When no plane counts enough, no planar view is drawn at all (it
 cost mp_bog 1.9 ms a frame wherever the camera looked, PC water run 3). The
 main view's own visibility (its cells, portals and frustum) is not enough for
 this: the sheet at -26 under mp_bog and the water under mp_creek's ground
