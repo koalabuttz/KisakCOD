@@ -48,6 +48,8 @@ inline const dvar_s *fogSun;
 inline const dvar_s *fogScatter;
 inline const dvar_s *fogSpots;
 inline const dvar_s *fogFroxels;
+inline const dvar_s *godRays;
+inline const dvar_s *godRaysStrength;
 
 // Harmless to call again (the engine keeps the first registration).
 inline void Register()
@@ -136,6 +138,12 @@ inline void Register()
     fogFroxels = Dvar_RegisterEnum("r_modernFogFroxels", kOnOffNames, 0, DVAR_NOFLAG,
                                    "Modern visuals: volumetric fog from a froxel volume (compute passes) in place "
                                    "of a march per pixel (default: off unless KISAK_VK_MODERN_FOG_FROXELS=1)");
+    godRays = Dvar_RegisterEnum("r_modernGodRays", kOnOffNames, 0, DVAR_NOFLAG,
+                                "Modern visuals: god rays, shafts of the sky's light streaming from the sun past "
+                                "what blocks it (default: off unless KISAK_VK_MODERN_GOD_RAYS=1)");
+    godRaysStrength = Dvar_RegisterFloat("r_modernGodRaysStrength", -1.0f, -1.0f, 8.0f, DVAR_NOFLAG,
+                                         "Modern visuals: how bright the god rays are (0 none); -1 the default "
+                                         "(KISAK_VK_MODERN_GOD_RAYS_STRENGTH or 0.6)");
 }
 
 // The switches as the back end takes them: an enum's index 0 (default) is -1,
@@ -172,5 +180,7 @@ inline void Read(gfx_vk::d3d9::ModernTuning &out)
     out.fogScatter = fogScatter->current.value;
     out.fogSpots = fogSpots->current.value;
     out.fogFroxels = fogFroxels->current.integer - 1;
+    out.godRays = godRays->current.integer - 1;
+    out.godRaysStrength = godRaysStrength->current.value;
 }
 } // namespace modern_dvars

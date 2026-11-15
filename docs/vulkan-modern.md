@@ -83,6 +83,8 @@ back to them.
 | `r_modernFogSun`, `r_modernFogScatter` | -1, or 0 to 1 and 0 to 0.9 | `KISAK_VK_MODERN_FOG_SUN`, `_SCATTER` |
 | `r_modernFogSpots` | -1, or 0 to 4 | `KISAK_VK_MODERN_FOG_SPOTS` |
 | `r_modernFogFroxels` | default, off, on | `KISAK_VK_MODERN_FOG_FROXELS` |
+| `r_modernGodRays` | default, off, on | `KISAK_VK_MODERN_GOD_RAYS` |
+| `r_modernGodRaysStrength` | -1, or 0 to 8 | `KISAK_VK_MODERN_GOD_RAYS_STRENGTH` |
 | `r_modernTonemap` | default, clamp, neutral, agx, aces | `KISAK_VK_MODERN_TONEMAP` |
 | `r_modernDebug` | default, none, velocity, velocity-all, normals, ao, reflections, fog | `KISAK_VK_MODERN_DEBUG` |
 
@@ -1700,6 +1702,64 @@ the second slice (0.73 to 2.93 units), read 0.494 of the way between the
 slices' sums rather than 0.5, the same within the check's tolerance.
 `test_vulkan_d3d9_front.py` counts its eleven fog scenes, three from
 froxels, five through the sun's map and five with a spot light.
+
+## God rays
+
+Light shafts: the sky's light streaming from the sun past buildings and
+trees, with dark gaps where they block it. PC fog runs 1 to 3 (2026-11-15)
+found the volumetric fog shows none on multiplayer maps: their fog is too
+thin for the light it scatters to read as shafts, even at its strongest
+settings or with the air made up to nine times thicker for the light alone.
+David chose (2026-11-15) the effect most games use for them instead, drawn
+on the screen, independent of the map's fog: `r_modernGodRays on` (or
+`KISAK_VK_MODERN_GOD_RAYS=1`), off by default, in linear light only.
+
+`DrawSceneRays` records `modern::DrawRays` (`vk_modern_rays.cpp`, one shader
+`shaders/rays.frag` built three ways) right after the volumetric fog,
+before the anti-aliasing, where the view has a sun (`GfxModernScene::sun`,
+the frame's sun light with its overrides, set when the map has a sun):
+
+1. **Mask**, at half resolution: the scene's light where the sky shows (the
+   scene depth at the sky's, `SkyDepth`, as a share of the four pixels
+   under each), weighted by cos(angle to the sun)^12, plus a glow of the
+   sun's own colour (cos^256, half at about 4 degrees), so a sky without a
+   bright sun drawn in it still has rays. Light is held below 8 (linear) so
+   one bright pixel does not streak. Whatever stands in front of the sky
+   keeps nothing.
+2. **Smear**, at half resolution: each pixel averages the mask along its
+   line towards the sun's place on the screen, 48 samples
+   (`KISAK_VK_MODERN_GOD_RAYS_SAMPLES`, 8 to 128) over 0.85 of the way, each
+   counting 0.96 of the one before, from an offset that moves each frame
+   (interleaved gradient noise; the anti-aliasing averages it). Lines are
+   at most a screen long, and outside the screen the mask reads as black.
+   The mask's gaps become the dark gaps between the shafts.
+3. **Apply**: adds the smear, times `r_modernGodRaysStrength` (default 0.6,
+   up to 8) and a fade as the sun leaves the view (whole while the sun is
+   within about 70 degrees of the view's middle, none from 90), to the
+   linear-light scene (blend one, one).
+
+With the sun behind the camera nothing is recorded. All three passes are
+timed under "modern god rays". The statistics line: `vulkan d3d9: modern: S
+scenes with god rays (B with the sun out of view; strength K, N samples), T
+ms GPU each`, T for the three passes of a scene drawn.
+
+Two more lines say what the last scene's map set, for choosing where the
+air could be thicker: `the last scene's fog: start S, density D (half the
+light gone H units out), colour R G B` (or `none`), and `the last scene's
+sun: colour R G B, towards X Y Z` (or `none`).
+
+**What it does not do yet:** rays from spot lights or from bright windows,
+and shafts in the air itself (that is the volumetric fog's part, which
+shows them only where a map's fog is thick). Thicker air for hazy maps
+only, chosen per map from each map's own fog, is planned next.
+
+**Check:** the D3D9 check's `modern_god_rays` scene clears grey 100 under
+identity matrices with the sun straight ahead, its place the screen's
+middle. At depth 1 the whole scene is sky and the middle pixel gets grey x
+(1 + strength): strength 1 and 0.5. At depth 0.5 nothing is sky: no rays.
+The sun behind the camera, a view without a sun, or the god rays off: no
+rays. With the sun's colour 0.5 its glow adds about 0.214 x 0.95 of light
+more. Without linear light, grey 100 throughout.
 
 ## Compute passes
 

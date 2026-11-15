@@ -75,6 +75,8 @@ struct ModernTuning
     float fogScatter = -1.0f;  // forward scattering, 0 to below 0.95 (KISAK_VK_MODERN_FOG_SCATTER)
     float fogSpots = -1.0f;    // how brightly spot lights light the fog, 0 to 4 (KISAK_VK_MODERN_FOG_SPOTS)
     int fogFroxels = -1;       // the fog from a froxel volume, not a march (KISAK_VK_MODERN_FOG_FROXELS)
+    int godRays = -1;          // god rays, light shafts from the sun on the screen (KISAK_VK_MODERN_GOD_RAYS)
+    float godRaysStrength = -1.0f; // how bright the god rays are, 0 to 8 (KISAK_VK_MODERN_GOD_RAYS_STRENGTH)
 };
 
 // The debug view over each Modern scene (ModernTuning::debug,
@@ -291,6 +293,13 @@ struct ModernSceneView
         int spotCount = 0;
         Spot spots[4];
     } fog;
+    // The view's sun, for the god rays: where the map has one.
+    struct Sun
+    {
+        bool on = false;
+        float direction[3] = {}; // towards the sun, world space
+        float color[3] = {};     // the sun light's colour, display values (may pass 1)
+    } sun;
 };
 enum class ModernResult
 {
