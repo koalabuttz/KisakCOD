@@ -36,6 +36,12 @@
 // of an open surface seen at an angle gives more than 1 or less, and only the
 // average over slice angles is 1, so clamping each pixel would darken open
 // surfaces seen at an angle. The blur averages it and then clamps it.
+//
+// At half resolution (up.w above 0, KISAK_VK_MODERN_AO_HALF) each output
+// pixel stands for a 2x2 block of the scene and works out one pixel of it,
+// which one moving from frame to frame over the four (up.w - 1); everything
+// else is the same, on the full-resolution depth and normals. The blur then
+// brings it back to full resolution.
 
 layout(set = 0, binding = 0) uniform sampler2D sceneDepth; // nearest, depth aspect
 layout(set = 0, binding = 1) uniform sampler2D normals;    // nearest, the normals buffer
@@ -52,7 +58,7 @@ layout(push_constant) uniform Params
     uint frame;      // moves the noise from frame to frame
     float thickness; // world units a sample's surface is taken to reach behind it
     float grazing;   // |N.V| from which the effect is whole on walls; below it, it fades out
-    vec4 up;         // xyz: world up in view space
+    vec4 up;         // xyz: world up in view space; w: 0 at full resolution, else half, 1 + which pixel of 2x2
 } params;
 
 layout(location = 0) out vec4 outVisibility;
@@ -105,7 +111,14 @@ float Noise(vec2 pixel)
 
 void main()
 {
-    const ivec2 pixel = ivec2(gl_FragCoord.xy);
+    ivec2 pixel = ivec2(gl_FragCoord.xy);
+    const int halfMode = int(params.up.w + 0.5);
+    if (halfMode > 0)
+    {
+        const int k = halfMode - 1; // (0, 0), (1, 1), (1, 0), (0, 1)
+        const ivec2 first = ivec2(params.area.xy);
+        pixel = clamp(pixel * 2 + ivec2((k >> 1) ^ (k & 1), k & 1), first, first + ivec2(params.area.zw) - 1);
+    }
     const float depth = texelFetch(sceneDepth, pixel, 0).r;
     const vec4 stored = texelFetch(normals, pixel, 0);
     if (depth >= params.sky || stored.a < 0.9)
