@@ -128,6 +128,8 @@ def main():
                       found.get('vulkan_probe.frame_gpu_ms', 'missing'))
     checks.expect('present mode choice checked', found.get('vulkan_probe.present_mode_choice') == 'checked',
                   found.get('vulkan_probe.present_mode_choice', 'missing'))
+    checks.expect('pre-transform choice checked', found.get('vulkan_probe.pre_transform_choice') == 'checked',
+                  found.get('vulkan_probe.pre_transform_choice', 'missing'))
     if args.validation == 'require':
         checks.expect('validation with synchronisation checks was on',
                       found.get('vulkan_probe.validation') == 'on+sync', found.get('vulkan_probe.validation'))

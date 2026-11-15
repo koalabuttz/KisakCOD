@@ -333,6 +333,11 @@ public:
     std::vector<VkSemaphore> renderDone; // one per swapchain image
     bool rebuildPending = false;
     bool resizePending = false;
+    // The swapchain was built with an identity preTransform on a rotated
+    // surface (Android, a panel whose own orientation is not the game's):
+    // the compositor turns the picture, and presents report
+    // VK_SUBOPTIMAL_KHR for that alone, which must not rebuild every frame.
+    bool transformLeftToCompositor = false;
     bool windowDetached = false; // DetachWindow: no swapchain or surface any more
 
     FrameSlot frames[kFramesInFlight];

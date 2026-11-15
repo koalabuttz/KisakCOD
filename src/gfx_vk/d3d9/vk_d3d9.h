@@ -70,6 +70,9 @@ struct ModernTuning
     float aoEdge = -1.0f;
     float ssrDistance = -1.0f;
     float ssrThickness = -1.0f;
+    int fog = -1;              // volumetric fog (KISAK_VK_MODERN_FOG)
+    float fogSun = -1.0f;      // the sun's share of the fog's light, 0 to 1 (KISAK_VK_MODERN_FOG_SUN)
+    float fogScatter = -1.0f;  // forward scattering, 0 to below 0.95 (KISAK_VK_MODERN_FOG_SCATTER)
 };
 
 // The debug view over each Modern scene (ModernTuning::debug,
@@ -82,6 +85,7 @@ enum ModernDebugView : int
     ModernDebugNormals = 3,
     ModernDebugAo = 4,
     ModernDebugReflections = 5,
+    ModernDebugFog = 6,         // the light the volumetric fog adds, over grey
 };
 
 // Settings the program may change while a device exists, so that one run can
@@ -247,6 +251,24 @@ struct ModernSceneView
         float cutoff = 0.0f;       // display value (0 to 1) below which nothing glows
         float desaturation = 0.0f; // 0 keeps the colour, 1 makes the glow grey
     } glow;
+    // The view's fog as the game's shaders apply it, and the sun's shadow
+    // map: the back end lights the fog where the sun reaches it (volumetric
+    // fog, docs/vulkan-modern.md).
+    struct Fog
+    {
+        bool on = false;               // the map's fog is drawn and has a density
+        float color[3] = {};           // display values, 0 to 1
+        float density = 0.0f;          // what reaches the eye through d units: 2^(-density (d - start)), at most 1
+        float start = 0.0f;            // world units
+        float origin[3] = {};          // the camera, world units
+        float sunDirection[3] = {};    // towards the sun, world space
+        // The sun's shadow map the view's lit surfaces read (one of this
+        // device's textures, depth), or null; then the rest is not set.
+        IDirect3DTexture9 *shadowMap = nullptr;
+        float shadowLookup[4][4] = {}; // world (p * M) to near xy, depth z (lit at most stored), partition w
+        float switchPartition[4] = {}; // far xy = near xy * w + xy
+        float shadowmapScale[2] = {};  // the far partition's edge fade
+    } fog;
 };
 enum class ModernResult
 {

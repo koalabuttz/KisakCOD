@@ -402,6 +402,17 @@ front::ModernSceneView ModernViewOf(const GfxModernScene *scene)
     view.glow.intensity = scene->glowIntensity;
     view.glow.cutoff = scene->glowCutoff;
     view.glow.desaturation = scene->glowDesaturation;
+    const GfxModernFog &fog = scene->fog;
+    view.fog.on = fog.on;
+    std::memcpy(view.fog.color, fog.color, sizeof(view.fog.color));
+    view.fog.density = fog.density;
+    view.fog.start = fog.start;
+    std::memcpy(view.fog.origin, fog.origin, sizeof(view.fog.origin));
+    std::memcpy(view.fog.sunDirection, fog.sunDirection, sizeof(view.fog.sunDirection));
+    view.fog.shadowMap = fog.shadowMap;
+    std::memcpy(view.fog.shadowLookup, fog.shadowLookup, sizeof(view.fog.shadowLookup));
+    std::memcpy(view.fog.switchPartition, fog.switchPartition, sizeof(view.fog.switchPartition));
+    std::memcpy(view.fog.shadowmapScale, fog.shadowmapScale, sizeof(view.fog.shadowmapScale));
     return view;
 }
 
@@ -545,7 +556,14 @@ const GfxModernHooks s_modernHooks = {nullptr,          ModernJitterPixels, Mode
 
 void Kisak_VulkanRegisterDvars()
 {
-    r_backend = Dvar_RegisterEnum("r_backend", s_backendNames, BACKEND_D3D9, DVAR_ARCHIVE | DVAR_LATCH,
+#if defined(__ANDROID__)
+    // Android has no system D3D9 (no DXVK): the Vulkan back end is the
+    // renderer there, and d3d9 reaches only the stand-in that has no device.
+    const int defaultBackend = BACKEND_VULKAN;
+#else
+    const int defaultBackend = BACKEND_D3D9;
+#endif
+    r_backend = Dvar_RegisterEnum("r_backend", s_backendNames, defaultBackend, DVAR_ARCHIVE | DVAR_LATCH,
                                   "Graphics back end: d3d9 (the system's Direct3D 9, DXVK on Linux) or vulkan "
                                   "(KisakCOD's own Vulkan renderer)");
     r_vkValidation = Dvar_RegisterEnum("r_vkValidation", s_validationNames, 0, DVAR_ARCHIVE | DVAR_LATCH,

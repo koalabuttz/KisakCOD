@@ -865,6 +865,10 @@ bool SavePipelineCache(Core *core);
 // wish): that mode is taken whenever it is offered, vsync or not. The core
 // passes KISAK_VK_PRESENT_MODE there, to compare the modes on one machine.
 VkPresentModeKHR ChoosePresentMode(const VkPresentModeKHR *offered, uint32_t count, bool vsync, const char *wanted);
+// The preTransform a swapchain asks for: the identity whenever the surface
+// supports it, so the compositor turns the picture for a rotated panel
+// (Android), else the surface's own transform.
+VkSurfaceTransformFlagBitsKHR ChoosePreTransform(const VkSurfaceCapabilitiesKHR &caps);
 const char *PresentModeName(VkPresentModeKHR mode);
 const char *FormatName(VkFormat format);
 const char *DeviceTypeName(VkPhysicalDeviceType type);

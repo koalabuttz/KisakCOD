@@ -18,7 +18,7 @@ namespace modern_dvars
 inline const char *kOnOffNames[] = {"default", "off", "on", nullptr};
 inline const char *kTonemapNames[] = {"default", "clamp", "neutral", "agx", "aces", nullptr};
 inline const char *kDebugNames[] = {"default", "none", "velocity", "velocity-all", "normals", "ao", "reflections",
-                                    nullptr};
+                                    "fog", nullptr};
 
 inline const dvar_s *bloom;
 inline const dvar_s *exposure;
@@ -43,6 +43,9 @@ inline const dvar_s *aoFloor;
 inline const dvar_s *aoEdge;
 inline const dvar_s *ssrDistance;
 inline const dvar_s *ssrThickness;
+inline const dvar_s *fog;
+inline const dvar_s *fogSun;
+inline const dvar_s *fogScatter;
 
 // Harmless to call again (the engine keeps the first registration).
 inline void Register()
@@ -114,6 +117,16 @@ inline void Register()
     ssrThickness = Dvar_RegisterFloat("r_modernSsrThickness", -1.0f, -1.0f, 1024.0f, DVAR_NOFLAG,
                                       "Modern visuals: how far behind a surface a reflection ray still meets it, in "
                                       "world units; -1 the default (KISAK_VK_MODERN_SSR_THICKNESS or 16)");
+    fog = Dvar_RegisterEnum("r_modernFog", kOnOffNames, 0, DVAR_NOFLAG,
+                            "Modern visuals: volumetric fog, the map's fog lit by the sun, darker in shadow and "
+                            "brighter towards the sun (default: off unless KISAK_VK_MODERN_FOG=1)");
+    fogSun = Dvar_RegisterFloat("r_modernFogSun", -1.0f, -1.0f, 1.0f, DVAR_NOFLAG,
+                                "Modern visuals: the share of the fog's light that comes from the sun (0 the "
+                                "game's flat fog, 1 all of it); -1 the default (KISAK_VK_MODERN_FOG_SUN or 0.6)");
+    fogScatter = Dvar_RegisterFloat("r_modernFogScatter", -1.0f, -1.0f, 0.9f, DVAR_NOFLAG,
+                                    "Modern visuals: how much brighter the fog gets looking towards the sun "
+                                    "(forward scattering, 0 to 0.9); -1 the default (KISAK_VK_MODERN_FOG_SCATTER "
+                                    "or 0.35)");
 }
 
 // The switches as the back end takes them: an enum's index 0 (default) is -1,
@@ -132,7 +145,7 @@ inline void Read(gfx_vk::d3d9::ModernTuning &out)
     out.ao = ao->current.integer - 1;
     out.reflections = ssr->current.integer - 1;
     out.tonemap = tonemap->current.integer - 1;  // clamp, neutral, agx, aces: modern::TonemapCurve 0 to 3
-    out.debug = debug->current.integer - 1;      // none, velocity, ...: ModernDebugView 0 to 5
+    out.debug = debug->current.integer - 1;      // none, velocity, ...: ModernDebugView 0 to 6
     out.sunStrength = sunStrength->current.value;
     out.skyStrength = skyStrength->current.value;
     out.exposureKey = exposureKey->current.value;
@@ -145,5 +158,8 @@ inline void Read(gfx_vk::d3d9::ModernTuning &out)
     out.aoEdge = aoEdge->current.value;
     out.ssrDistance = ssrDistance->current.value;
     out.ssrThickness = ssrThickness->current.value;
+    out.fog = fog->current.integer - 1;
+    out.fogSun = fogSun->current.value;
+    out.fogScatter = fogScatter->current.value;
 }
 } // namespace modern_dvars

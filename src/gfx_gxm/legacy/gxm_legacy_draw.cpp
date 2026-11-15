@@ -335,6 +335,28 @@ struct DrawState
     // reserves and writes neither again. Both end when either program is set
     // (SetPrograms) and with the scene.
     bool vertexUniformsLive = false, fragmentUniformsLive = false;
+    // What the live fragment buffer holds: the pixel constants as they were
+    // when it was written, and the depth BindTextures wrote for each volume
+    // sampler. A program with a depth uniform keeps the buffer while the
+    // volumes bound have those depths (marker and switch no-frag-keep-depth
+    // for never, as it was), and a draw after a constant changed keeps it
+    // when none of the constants its program reads did (no-frag-keep-same).
+    // frag-direct-write copies the constants into the buffer itself in
+    // place of sceGxmSetUniformDataF, for programs where a first copy
+    // matched sceGxm's own.
+    bool fragKeepDepth = true, fragKeepSame = true, fragDirect = false;
+    std::vector<float> fragmentConstantsWritten = std::vector<float>(224 * 4, 0.0f);
+    float fragmentDepthWritten[16] = {};
+    // Since the last "fragment constants" line: buffers written and their
+    // bytes, buffers kept by each of the two rules, and for the timed draws
+    // (FrameTime) what reserving and writing took.
+    struct FragmentCounts
+    {
+        uint64_t written = 0, bytes = 0, keptDepth = 0, keptSame = 0, direct = 0;
+        uint64_t timed = 0, reserveMicros = 0, writeMicros = 0;
+    } fragmentCounts, fragmentTotals;
+    uint32_t directMismatches = 0;
+    uint64_t fragmentCountsDrawn = 0;
     uint64_t vertexUniformsVersion = 0, fragmentUniformsVersion = 0;
     uint32_t fragmentAlphaRef = 0;
     uint64_t uniformWrites = 0, uniformWritesLeftOut = 0;
@@ -792,10 +814,16 @@ bool Register(Device &device, Variant &variant, const char *what)
         std::snprintf(name, sizeof(name), "kisak_depth_s%d", i);
         variant.depth[i] = sceGxmProgramFindParameterByName(program, name);
         variant.depthUniforms |= variant.depth[i] != nullptr;
+        variant.depthMask |= uint16_t(variant.depth[i] ? 1u << i : 0u);
         std::snprintf(name, sizeof(name), "in_v%d", i);
         variant.inputs[i] = sceGxmProgramFindParameterByName(program, name);
     }
-    variant.uniforms = sceGxmProgramGetDefaultUniformBufferSize(program) != 0;
+    variant.uniformBytes = sceGxmProgramGetDefaultUniformBufferSize(program);
+    variant.uniforms = variant.uniformBytes != 0;
+    if (variant.constants && sceGxmProgramParameterGetCategory(variant.constants) == SCE_GXM_PARAMETER_CATEGORY_UNIFORM &&
+        sceGxmProgramParameterGetType(variant.constants) == SCE_GXM_PARAMETER_TYPE_F32 &&
+        sceGxmProgramParameterGetComponentCount(variant.constants) == 4)
+        variant.constantsAt = int32_t(sceGxmProgramParameterGetResourceIndex(variant.constants));
     return true;
 }
 
@@ -1524,6 +1552,36 @@ SceGxmTextureAddrMode AddressMode(uint32_t address)
 }
 
 // False when the draw samples an unfilled colour target and must not happen.
+// The depth BindTextures writes for the texture a volume sampler has.
+float VolumeDepth(const Texture *texture)
+{
+    return texture && texture->sampleable && texture->desc.kind == TextureKind::Volume ? float(texture->desc.depth)
+                                                                                       : 1.0f;
+}
+
+// The fragment constants line: what the draws since the last one did with
+// their fragment uniform buffers.
+void LogFragmentConstants(Device &device, const char *when)
+{
+    DrawState &d = *device.draw;
+    const DrawState::FragmentCounts &c = d.fragmentCounts;
+    Log(device,
+        "fragment constants %s: in %llu draws %llu buffers written (%llu bytes), %llu kept by a program that takes a "
+        "volume's depth, %llu kept though other constants changed, %llu written by a direct copy; %llu timed draws "
+        "wrote one, reserving took %.2f us and writing %.2f us each%s%s%s",
+        when, (unsigned long long)(d.drawn - d.fragmentCountsDrawn), (unsigned long long)c.written,
+        (unsigned long long)c.bytes, (unsigned long long)c.keptDepth, (unsigned long long)c.keptSame,
+        (unsigned long long)c.direct, (unsigned long long)c.timed,
+        c.timed ? double(c.reserveMicros) / double(c.timed) : 0.0,
+        c.timed ? double(c.writeMicros) / double(c.timed) : 0.0, d.fragKeepDepth ? "" : " (no-frag-keep-depth)",
+        d.fragKeepSame ? "" : " (no-frag-keep-same)", d.fragDirect ? " (frag-direct-write)" : "");
+    DrawState::FragmentCounts &t = d.fragmentTotals;
+    t.written += c.written, t.bytes += c.bytes, t.keptDepth += c.keptDepth, t.keptSame += c.keptSame;
+    t.direct += c.direct, t.timed += c.timed, t.reserveMicros += c.reserveMicros, t.writeMicros += c.writeMicros;
+    d.fragmentCounts = DrawState::FragmentCounts();
+    d.fragmentCountsDrawn = d.drawn;
+}
+
 bool BindTextures(Device &device, const Variant &pixel, void *uniforms)
 {
     DrawState &d = *device.draw;
@@ -1628,7 +1686,10 @@ bool BindTextures(Device &device, const Variant &pixel, void *uniforms)
             }
         }
         if (pixel.depth[i] && uniforms)
+        {
             sceGxmSetUniformDataF(uniforms, pixel.depth[i], 0, 1, &depth);
+            d.fragmentDepthWritten[i] = depth;
+        }
     }
     return true;
 }
@@ -2042,6 +2103,23 @@ bool InitDraw(Device &device, std::string &error)
         d.dropIdleAlphaTest = false;
         Log(device, "diag: no-alpha-test-drop is there: an alpha test that cannot change the picture stays in its "
                     "fragment program");
+    }
+    if (gxm::ProgramCacheMarker("no-frag-keep-depth"))
+    {
+        d.fragKeepDepth = false;
+        Log(device, "diag: no-frag-keep-depth is there: a program that takes a volume's depth gets a new fragment "
+                    "uniform buffer every draw");
+    }
+    if (gxm::ProgramCacheMarker("no-frag-keep-same"))
+    {
+        d.fragKeepSame = false;
+        Log(device, "diag: no-frag-keep-same is there: a draw after any pixel constant changed gets a new fragment "
+                    "uniform buffer");
+    }
+    if (gxm::ProgramCacheMarker("frag-direct-write"))
+    {
+        d.fragDirect = true;
+        Log(device, "diag: frag-direct-write is there: pixel constants are copied into the uniform buffer directly");
     }
     if (gxm::ProgramCacheMarker("no-alpha-test-zero"))
     {
@@ -2786,7 +2864,8 @@ const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "n
                                      "no-mip-bias",         "no-filter-sharpen",
                                      "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
                                      "gpu-watch",           "no-prepass-clear",  "no-depth-only-scene",
-                                     "no-scene-in-copy",    "no-alpha-test-drop", "no-alpha-test-zero"};
+                                     "no-scene-in-copy",    "no-alpha-test-drop", "no-alpha-test-zero",
+                                     "no-frag-keep-depth",  "no-frag-keep-same",  "frag-direct-write"};
 struct LiveSwitch
 {
     const char *name;
@@ -2839,6 +2918,17 @@ void ApplyLiveSwitches(Device &device)
         {
             d.sameState = !s.on;
             d.lastDrawValid = false;
+        }
+        else if (name == "no-frag-keep-depth" || name == "no-frag-keep-same" || name == "frag-direct-write")
+        {
+            // The line covers the draws up to the change.
+            LogFragmentConstants(device, "so far");
+            if (name == "frag-direct-write")
+                d.fragDirect = s.on;
+            else
+                (name == "no-frag-keep-depth" ? d.fragKeepDepth : d.fragKeepSame) = !s.on;
+            d.lastDrawValid = false;
+            d.fragmentUniformsLive = false;
         }
         else if (name == "no-alpha-test-drop" || name == "no-alpha-test-zero")
         {
@@ -3862,20 +3952,83 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     }
     part(gxm::FrameTime::PartVertexConstants);
     void *pixelUniforms = nullptr;
-    // Not kept for a program that takes a texture's depth as a uniform
-    // (BindTextures writes those).
     const uint32_t alphaRef = device.renderStates[d3d::RS_ALPHAREF] & 0xff;
-    const bool pixelKept = plain && d.fragmentUniformsLive && !pixel->depthUniforms && !pixel->sharp &&
-                           d.fragmentUniformsVersion == device.psConstantsVersion &&
-                           (!pixel->alphaRef || d.fragmentAlphaRef == alphaRef);
+    bool pixelKept = plain && d.fragmentUniformsLive && !pixel->sharp && pixel->uniforms &&
+                     (!pixel->alphaRef || d.fragmentAlphaRef == alphaRef);
+    if (pixelKept && pixel->depthMask)
+    {
+        // BindTextures writes a volume's depth into a new buffer only: the
+        // live one serves while the volumes bound have the depths it holds.
+        pixelKept = d.fragKeepDepth;
+        for (uint32_t mask = pixel->depthMask; pixelKept && mask; mask &= mask - 1)
+        {
+            const int i = __builtin_ctz(mask);
+            pixelKept = VolumeDepth(device.textures[i]) == d.fragmentDepthWritten[i];
+        }
+        d.fragmentCounts.keptDepth += pixelKept && d.fragmentUniformsVersion == device.psConstantsVersion;
+    }
+    if (pixelKept && d.fragmentUniformsVersion != device.psConstantsVersion)
+    {
+        // A constant changed since the buffer was written. It still serves
+        // when none of the constants this program reads did.
+        pixelKept = d.fragKeepSame && !diagPixel;
+        for (size_t run = 0; pixelKept && run < ps->constantRuns.size(); ++run)
+            pixelKept = std::memcmp(&device.psConstants[ps->constantRuns[run].first * 4u],
+                                    &d.fragmentConstantsWritten[ps->constantRuns[run].first * 4u],
+                                    ps->constantRuns[run].second * 4u * sizeof(float)) == 0;
+        if (pixelKept)
+        {
+            d.fragmentUniformsVersion = device.psConstantsVersion;
+            ++d.fragmentCounts.keptSame;
+        }
+    }
     d.uniformWrites += pixel->uniforms;
     d.uniformWritesLeftOut += pixel->uniforms && pixelKept;
     if (pixel->uniforms && !pixelKept)
     {
+        const bool timed = frameTime.parting;
+        const uint64_t reserveFrom = timed ? Micros() : 0;
         const int reserved = sceGxmReserveFragmentDefaultUniformBuffer(context, &pixelUniforms);
+        const uint64_t writeFrom = timed ? Micros() : 0;
         const uint16_t count = ps->parsed.reflection.floatConstants;
-        if (pixel->constants && count)
-            sceGxmSetUniformDataF(pixelUniforms, pixel->constants, 0, count * 4u, device.psConstants.data());
+        if (pixel->constants && count && pixelUniforms)
+        {
+            const size_t bytes = count * 4u * sizeof(float);
+            float *const at = pixel->constantsAt >= 0 ? static_cast<float *>(pixelUniforms) + pixel->constantsAt : nullptr;
+            if (d.fragDirect && at && pixel->directChecked == 1 && pixel->constantsAt * 4u + bytes <= pixel->uniformBytes)
+            {
+                std::memcpy(at, device.psConstants.data(), bytes);
+                ++d.fragmentCounts.direct;
+            }
+            else
+            {
+                sceGxmSetUniformDataF(pixelUniforms, pixel->constants, 0, count * 4u, device.psConstants.data());
+                if (d.fragDirect && at && !pixel->directChecked)
+                {
+                    // Once a program: does a plain copy put the same bytes
+                    // where sceGxm puts them?
+                    const bool fits = pixel->constantsAt * 4u + bytes <= pixel->uniformBytes;
+                    pixel->directChecked = fits && std::memcmp(at, device.psConstants.data(), bytes) == 0 ? 1 : 2;
+                    if (pixel->directChecked == 2 && d.directMismatches++ < 5)
+                        Log(device, "fragment constants: a direct copy would not match sceGxm's write for program "
+                                    "%016llx (constants at float %d, %u of %u bytes); it keeps sceGxm's",
+                            (unsigned long long)pixel->cacheKey, int(pixel->constantsAt), unsigned(bytes),
+                            unsigned(pixel->uniformBytes));
+                }
+            }
+            for (const std::pair<uint16_t, uint16_t> &run : ps->constantRuns)
+                std::memcpy(&d.fragmentConstantsWritten[run.first * 4u], &device.psConstants[run.first * 4u],
+                            run.second * 4u * sizeof(float));
+        }
+        ++d.fragmentCounts.written;
+        d.fragmentCounts.bytes += pixel->uniformBytes;
+        if (timed)
+        {
+            const uint64_t done = Micros();
+            ++d.fragmentCounts.timed;
+            d.fragmentCounts.reserveMicros += writeFrom - reserveFrom;
+            d.fragmentCounts.writeMicros += done - writeFrom;
+        }
         if (pixel->alphaRef)
         {
             const float ref = float(alphaRef) / 255.0f;
@@ -3909,6 +4062,8 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         CountSkip(device, SkipUnfilledSource);
         if (target)
             target->unfilled = true;
+        // A new buffer may lack a depth BindTextures did not get to.
+        d.fragmentUniformsLive = false;
         return;
     }
     part(gxm::FrameTime::PartTextures);
@@ -4174,6 +4329,20 @@ void LogDrawSummary(Device &device)
         (unsigned long long)d->alphaTestDraws, (unsigned long long)d->idleAlphaTestDraws,
         d->dropIdleAlphaTest ? "" : " (no-alpha-test-drop)", (unsigned long long)d->zeroAlphaTestDraws,
         d->zeroAlphaTest ? "" : " (no-alpha-test-zero)");
+    {
+        const DrawState::FragmentCounts &c = d->fragmentCounts, &t = d->fragmentTotals;
+        const uint64_t timed = c.timed + t.timed;
+        Log(device,
+            "fragment constants in all: %llu buffers written (%llu bytes), %llu kept by a program that takes a "
+            "volume's depth%s, %llu kept though other constants changed%s, %llu written by a direct copy%s; %llu "
+            "timed draws wrote one, reserving took %.2f us and writing %.2f us each",
+            (unsigned long long)(c.written + t.written), (unsigned long long)(c.bytes + t.bytes),
+            (unsigned long long)(c.keptDepth + t.keptDepth), d->fragKeepDepth ? "" : " (no-frag-keep-depth)",
+            (unsigned long long)(c.keptSame + t.keptSame), d->fragKeepSame ? "" : " (no-frag-keep-same)",
+            (unsigned long long)(c.direct + t.direct), d->fragDirect ? " (frag-direct-write)" : "",
+            (unsigned long long)timed, timed ? double(c.reserveMicros + t.reserveMicros) / double(timed) : 0.0,
+            timed ? double(c.writeMicros + t.writeMicros) / double(timed) : 0.0);
+    }
     // What the draws did not do again (Pipeline, BindTextures, the uniform
     // buffers in Draw).
     Log(device,

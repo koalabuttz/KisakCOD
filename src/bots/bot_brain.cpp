@@ -741,7 +741,12 @@ void Command()
         }
         if (!count)
             continue;
+        const int oldTake = team.takeCount;
+        const int oldHold = team.holdCount;
         ReadObjectives(team, SV_GameClientNum(members[0]));
+        if ((team.takeCount != oldTake || team.holdCount != oldHold) && LogOn())
+            Com_Printf(CON_CHANNEL_SERVER, "bots: team %d objectives: take %d, hold %d\n", teamIndex, team.takeCount,
+                       team.holdCount);
 
         kb::Role roles[kMaxBotSlots];
         kb::AssignRoles(people, count, team.takeCount, team.holdCount, roles);

@@ -1,0 +1,8 @@
+# Gradle output of build_apk.py (docs/android.md)
+/.gradle/
+/build/
+/app/build/
+/local.properties
+# The top-level .gitignore drops every res/ folder (Visual Studio
+# resources); the app's Android resources are sources.
+!/app/src/main/res/

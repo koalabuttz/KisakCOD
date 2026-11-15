@@ -15,6 +15,30 @@
 
 struct IDirect3DDevice9;
 struct IDirect3DCubeTexture9;
+struct IDirect3DTexture9;
+
+// A view's fog as the game's shaders apply it, and the sun that lights it,
+// for the Modern path's volumetric fog (docs/vulkan-modern.md, "Volumetric
+// fog"): with it the back end lights the map's own fog where the sun reaches
+// it.
+struct GfxModernFog
+{
+    bool on;               // the map's fog is drawn (r_fog) and has a density
+    float color[3];        // the fog's colour, display values 0 to 1
+    float density;         // what reaches the eye through d units is 2^(-density (d - start)), at most 1
+    float start;           // world units
+    float origin[3];       // the camera, world units
+    float sunDirection[3]; // towards the sun, world space, unit length
+    // The sun's shadow map, as the view's lit surfaces read it, when it is
+    // drawn for the view (else null and nothing below is set).
+    IDirect3DTexture9 *shadowMap;
+    // World (row vector, p * M) to the near partition's texture coordinates
+    // (xy), depth (z, lit where it is at most the stored depth) and partition
+    // value (w: the near partition to 1, then the far one).
+    float shadowLookup[4][4];
+    float switchPartition[4]; // the far partition's xy: near xy * w + this xy
+    float shadowmapScale[2];  // the far partition's edge fade (lit shaders' c4)
+};
 
 struct GfxModernScene
 {
@@ -31,6 +55,7 @@ struct GfxModernScene
     // Set by sceneDone when the back end drew bloom in place of the glow:
     // the renderer then leaves its own glow out of this view.
     bool glowDrawn;
+    GfxModernFog fog;
 };
 
 // A planar reflection view (r_modern_planar): the scene seen in a mirror
