@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "r_dpvs.h"
+#include "r_dpvs_stats.h"
 #include <qcommon/mem_track.h>
 #include "r_model_lighting.h"
 #include "r_dvars.h"
@@ -2807,6 +2808,7 @@ void R_AddWorldSurfacesDpvs(const GfxViewParms *viewParms, int cameraCellIndex)
     iassert( rgp.world );
     iassert( viewParms );
     rg.debugViewParms = viewParms;
+    R_DpvsStatsCountView();
     R_AddWorldSurfacesPortalWalk(cameraCellIndex);
     dpvsView = dpvsGlob.views[scene.dpvs.localClientNum];
     if (dpvsGlob.farPlane)
