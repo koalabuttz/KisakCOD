@@ -132,6 +132,13 @@ struct Options
     // Pixel shaders: D3DRS_ALPHATESTENABLE's test, done in the program
     // since GXM has none. Always is no test.
     AlphaFunc alphaFunc = AlphaFunc::Always;
+    // Pixel shaders: the 2D samplers s<n> whose plain reads (texld) go
+    // through a sharpening filter: the texel and its four neighbours, a
+    // step of `kisak_sharp.xy` apart and no further than `kisak_sharp_max`,
+    // as an unsharp mask of strength `kisak_sharp.z` kept between the
+    // least and the most of the five. The Vita's scaled 3D picture is read
+    // this way by the pass that stretches it (gxm_engine_options.h).
+    uint16_t sharpSamplers = 0;
     // Pixel shaders: a pixel that fails the alpha test is written as
     // (0, 0, 0, 0) and not discarded. For draws whose blend leaves the
     // target as it was for such a source (gxm_idle_alpha_test.h): the

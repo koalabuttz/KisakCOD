@@ -58,3 +58,22 @@ int Bot_Sense(int clientNum,
               kisak::bots::Rng &rng,
               BotNotice *notices,
               int maxNotices);
+
+// The map sense (bot_tactics.cpp): what a player learns of a map's shape by
+// playing it, from the map's own geometry and never from other players.
+
+// A clear line between two points through the map's solid geometry (walls,
+// floors, closed doors); players and foliage do not count. `context` is
+// unused, for kisak::bots::ClearLine.
+bool Bot_ClearLine(const float *from, const float *to, void *context);
+
+// A place on the mesh near `origin` (the bot's feet) that hides a player's
+// chest and head from `threat` (an eye where the bot thinks an enemy is),
+// reachable in a short walk; the nearest of a few tries. False when none is
+// found.
+bool Bot_FindCover(const float *origin, const float *threat, const kisak::bots::NavMesh &nav,
+                   kisak::bots::Rng &rng, float *out);
+
+// Whether a player standing at `place` (feet) has their chest and head hidden
+// from `threat`.
+bool Bot_HiddenFrom(const float *place, const float *threat);

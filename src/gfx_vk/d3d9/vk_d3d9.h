@@ -214,6 +214,13 @@ bool Counters(IDirect3DDevice9 *device, DeviceCounters &out);
 // Any thread. Returns how many devices there were.
 uint32_t LogDeviceStats(bool reset);
 
+// Logs the memory every live device holds through its host, one `memory`
+// line each: device-local and mapped memory, live buffers and images, and
+// each memory heap's share (the engine calls it at each map load, with
+// `when` as "map load mp_crash"). Any thread. Returns how many devices there
+// were.
+uint32_t LogDeviceMemory(const char *when);
+
 // The window is about to be destroyed (WM_DESTROY on Windows, before
 // SDL_DestroyWindow elsewhere). Every device the front made for it lets go of
 // its Vulkan swapchain and surface now, while the window still exists; a

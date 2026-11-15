@@ -12,7 +12,7 @@ a tab, a page, the Apply button), so it keeps their sizes, colours, highlight
 and sounds. Captions are plain English: the game's string tables have no
 entries for them.
 
-## Options > Game: three rows
+## Options > Game: three rows, five on the PS Vita
 
 Under "Enable console" in multiplayer (the subtitles and crosshair rows of the
 same menu are singleplayer settings that multiplayer hides), under "Enable
@@ -24,7 +24,18 @@ the buttons at the bottom stay put.
 | Field of View | `cg_fov` | slider 65 to 120, value shown rounded to a whole degree |
 | FPS Counter | `cg_drawFPS` | Off, On, With ranges, Detailed |
 | Max Frame Rate | `com_maxfps` | Unlimited, 30, 60, 85, 100, 120, 125, 144, 165, 200, 240, 250, 333 |
+| Dynamic Resolution (PS Vita) | `vita_sceneScaleMin` | Off, Down to 85%, Down to 70%, Down to 50% |
+| Sharpen Scaled Picture (PS Vita) | `vita_sceneSharpen` | No, Yes |
 
+- **Dynamic Resolution.** Only the PS Vita's build has these two rows (its
+  renderer alone registers the settings). Off, the default, draws the 3D
+  picture at the screen's full size in every frame. The other choices let
+  it shrink, frame by frame, as far as the GPU needs to keep the frame
+  rate and no further than the size named; the HUD and the menus keep the
+  full size ([vita-client.md](vita-client.md)). "Sharpen Scaled Picture"
+  sharpens the 3D picture while it is smaller; on the console it costs 2.4
+  to 3.7 ms a frame. Both are saved with the player's settings and take
+  effect at once.
 - **FOV range.** In retail 1.7 and CoD4X, multiplayer `cg_fov` runs 65 to 80
   (read from `iw3mp.exe`). This port's multiplayer `cg_fov` came from the
   decompile with 65 to 120, and the slider covers that range on every server.

@@ -87,6 +87,7 @@ PRODUCTION_SOURCES = (
     # Renderer front end under test.
     "src/gfx_d3d/r_dpvs.cpp",
     "src/gfx_d3d/r_dpvs_static.cpp",
+    "src/gfx_d3d/r_dpvs_static_vec.cpp",
     "src/gfx_d3d/r_dpvs_dynmodel.cpp",
     "src/gfx_d3d/r_dpvs_sceneent.cpp",
     "src/gfx_d3d/r_dpvs_entity.cpp",

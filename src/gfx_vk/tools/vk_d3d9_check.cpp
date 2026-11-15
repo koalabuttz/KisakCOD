@@ -521,6 +521,7 @@ public:
     void Multisample();
     void ModernTaa();
     void ModernLinear();
+    void ModernCompute();
     void ModernBloom();
     void ModernEffects();
     void ModernLit();
@@ -3590,7 +3591,10 @@ void Check::ModernNormals()
 // shader multiplies that light by the ambient occlusion, so the floor in the
 // corner is darker than open floor by a clear margin; without ambient
 // occlusion the two are the same, and without our shaders the floor is black.
-// The wall is drawn in its colour. Ambient occlusion is built for our lit
+// The wall is drawn as lp_sun_r0c0 (the model shaders' stand-in), lit by a
+// grey lighting volume alone, when our model shader draws: its foot in the
+// corner is darker than its top by the ambient occlusion (the same without
+// it); else (and the plate always) in its colour. Ambient occlusion is built for our lit
 // shaders (linear light, lit inputs and our shaders on), with
 // KISAK_VK_MODERN_AO=1 or its debug view, never with KISAK_VK_MODERN_AO=0 or
 // KISAK_VK_MODERN_NORMALS=0.
@@ -3625,6 +3629,9 @@ void Check::ModernAoAs(bool liveOff)
                                               && (ours || envIs("KISAK_VK_MODERN_SSR", "1")
                                                   || envIs("KISAK_VK_MODERN_DEBUG", "reflections")))));
     const bool shown = built && envIs("KISAK_VK_MODERN_DEBUG", "ao");
+    // The wall is drawn as lp_sun_r0c0 by our model shader (which reads the
+    // ambient occlusion too) when that draws; else in its vertex colour.
+    const bool models = ours && !envIs("KISAK_VK_MODERN_MODEL_SHADERS", "0");
     IDirect3DSurface9 *depth = nullptr;
     if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
                                               nullptr),
@@ -3678,6 +3685,20 @@ void Check::ModernAoAs(bool liveOff)
     IDirect3DTexture9 *colorMap = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
     IDirect3DTexture9 *primary = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
     IDirect3DTexture9 *secondary = FilledTexture(1, 2, [](UINT, UINT) { return Argb(130, 96, 96, 96); });
+    // The wall's lighting volume: grey 128 all round (doubled to 1.0 by the
+    // game), the sun not visible.
+    IDirect3DVolumeTexture9 *volume = nullptr;
+    if (Ok(device->CreateVolumeTexture(1, 1, 1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &volume, nullptr),
+           "CreateVolumeTexture(lighting)"))
+    {
+        D3DLOCKED_BOX locked{};
+        if (Ok(volume->LockBox(0, &locked, nullptr, 0), "LockBox(lighting)"))
+        {
+            *static_cast<uint32_t *>(locked.pBits) = Argb(0, 128, 128, 128);
+            volume->UnlockBox(0);
+        }
+    }
+    bool wallDrawn = false;
     if (colorMap && primary && secondary)
     {
         device->SetVertexShader(vsLmSun);
@@ -3695,17 +3716,44 @@ void Check::ModernAoAs(bool liveOff)
         inputs.shader = 0x40; // lm_sun_r0c0
         front::SetModernLitInputs(device, &inputs);
         Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, surfaces, sizeof(Vertex)), "DrawPrimitiveUP(floor)");
+        if (models && volume)
+        {
+            // The wall as lp_sun_r0c0: white colour map times its vertex
+            // colour, lit by the volume alone (no sun), its normal towards
+            // the camera, no fog.
+            device->SetTexture(2, nullptr);
+            device->SetTexture(3, nullptr);
+            device->SetVertexShader(vsLpSunMaps);
+            device->SetPixelShader(psLpSunMapsStandIn);
+            device->SetTexture(4, volume);
+            const float modelPixel[20][4] = {{}, {}, {0, 0, 0, 1}, {}, {}, {}, {}, {}, {}, {},
+                                             {}, {}, {}, {}, {}, {}, {}, {0, 0, 1, 0}, {}, {}};
+            Ok(device->SetPixelShaderConstantF(0, &modelPixel[0][0], 20), "SetPixelShaderConstantF");
+            const float modelVertex[8][4] = {{0, 0, 0, 0},       {0.5f, 0.5f, 0, 0}, {0, 0, -1, 1},
+                                             {0, 1, 0, 0},       {1, 0, 0, 0},       {0.5f, 0.5f, 0.25f, 0.5f},
+                                             {0, 0, 1, 0},       {0.5f, 0.5f, 0.5f, 0}};
+            Ok(device->SetVertexShaderConstantF(0, &modelVertex[0][0], 8), "SetVertexShaderConstantF");
+            inputs.shader = 0x80; // lp_sun_r0c0
+            front::SetModernLitInputs(device, &inputs);
+            Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, surfaces + 6, sizeof(Vertex)), "DrawPrimitiveUP(wall)");
+            device->SetTexture(4, nullptr);
+            wallDrawn = true;
+        }
         front::SetModernLitInputs(device, nullptr);
         for (DWORD sampler : {0u, 2u, 3u})
             device->SetTexture(sampler, nullptr);
         device->SetVertexShader(vsBasic);
         device->SetPixelShader(psColor);
     }
-    Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces + 6, sizeof(Vertex)), "DrawPrimitiveUP(wall)");
+    if (wallDrawn)
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, surfaces + 12, sizeof(Vertex)), "DrawPrimitiveUP(plate)");
+    else
+        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, surfaces + 6, sizeof(Vertex)), "DrawPrimitiveUP(wall)");
     Equal("scene_done", front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
     SafeRelease(colorMap);
     SafeRelease(primary);
     SafeRelease(secondary);
+    SafeRelease(volume);
     // Pixels of view points: x and y / z, NDC to pixels.
     const auto pixelOf = [&](float x, float y, float z, UINT &px, UINT &py) {
         px = static_cast<UINT>((k * x / z + 1.0f) * 0.5f * kSize);
@@ -3765,11 +3813,31 @@ void Check::ModernAoAs(bool liveOff)
             {
                 Equal("corner_floor_as_open", std::abs(corner - open) <= 1, true);
             }
-            Expect("wall_foot", footX, footY, 90, 110, 150);
-            Expect("wall", wallX, wallY, 90, 110, 150);
+            const int wall = at(wallX, wallY), foot = at(footX, footY);
+            if (wallDrawn)
+            {
+                // The model shader's wall: its foot, in the corner with the
+                // floor, darker by the ambient occlusion.
+                Equal("model_wall_lit", wall >= 60, true);
+                if (built)
+                {
+                    Equal("model_wall_foot_darker", foot + 6 <= wall, true);
+                    Equal("model_wall_foot_not_black", foot >= wall / 2, true);
+                }
+                else
+                {
+                    Equal("model_wall_foot_as_wall", std::abs(foot - wall) <= 1, true);
+                }
+            }
+            else
+            {
+                Expect("wall_foot", footX, footY, 90, 110, 150);
+                Expect("wall", wallX, wallY, 90, 110, 150);
+            }
             Expect("sky", 20, 10, 0, 0, 0);
-            char line[96];
-            std::snprintf(line, sizeof(line), " lit_open=%d lit_corner=%d", open, corner);
+            char line[128];
+            std::snprintf(line, sizeof(line), " lit_open=%d lit_corner=%d model_wall=%d model_wall_foot=%d", open,
+                          corner, wall, foot);
             result->detail += line;
         }
         else
@@ -4717,6 +4785,74 @@ void Check::ModernLinear()
     Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
     SafeRelease(copyLevel);
     SafeRelease(copy);
+    SafeRelease(depth);
+}
+
+// The Modern path's compute passes (vk_core.h BeginComputePass,
+// docs/vulkan-modern.md "Compute passes"), by name only: with
+// KISAK_VK_MODERN_DEBUG=compute the back end's compute check builds its 3D
+// volume at the scene's lit point (two compute passes: a fill of a storage
+// image and a storage buffer, then a front-to-back integration along z that
+// reads both) and draws it, sampled with linear filtering halfway along z,
+// over the finished scene's viewport. Red and green are each pixel's place
+// across the viewport (clamped to the outer texel centres of the 16 x 8
+// volume), blue the mean of the slice centres up to the sample (0.28125
+// halfway: exact under linear filtering, as it is linear in z) and alpha
+// the storage buffer's weight times the fill's 0.5, which must come to 1.
+// Outside the viewport, and everywhere without the debug view, the scene is
+// as drawn. In linear light or without it.
+void Check::ModernCompute()
+{
+    const bool shown = EnvText("KISAK_VK_MODERN_DEBUG") == "compute";
+    const bool linear = EnvText("KISAK_VK_MODERN_LINEAR") != "0";
+    IDirect3DSurface9 *depth = nullptr;
+    if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                              nullptr),
+            "CreateDepthStencilSurface"))
+        return;
+    Reset(Argb(255, 90, 90, 90));
+    front::ModernSceneBegin(device);
+    device->SetDepthStencilSurface(depth);
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 40, 120, 200), 1.0f, 0),
+       "Clear(scene)");
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    constexpr UINT kWidth = 96; // the scene's viewport: the right quarter is not the scene
+    view.width = kWidth;
+    view.height = kSize;
+    view.cut = true;
+    Equal("done", static_cast<int>(front::ModernSceneDone(device, view)),
+          static_cast<int>(front::ModernResult::Done));
+    device->SetDepthStencilSurface(nullptr);
+
+    const std::array<int, 3> scene = ThroughCurve(40, 120, 200);
+    const auto across = [](UINT at, UINT size, UINT texels) {
+        const double place = (at + 0.5) / size;
+        const double edge = 0.5 / texels;
+        return static_cast<int>(std::lround(std::clamp(place, edge, 1.0 - edge) * 255.0));
+    };
+    const int blue = static_cast<int>(std::lround(0.28125 * 255.0));
+    if (Read())
+    {
+        const UINT points[][2] = {{0, 0}, {95, 127}, {48, 64}, {10, 100}, {80, 20}, {33, 7}};
+        for (const auto &point : points)
+        {
+            const UINT x = point[0], y = point[1];
+            if (shown)
+                Expect("volume", x, y, across(x, kWidth, gfx_vk::modern::kComputeCheckSize[0]),
+                       across(y, kSize, gfx_vk::modern::kComputeCheckSize[1]), blue);
+            else
+                Expect("scene", x, y, scene[0], scene[1], scene[2]);
+        }
+        // Linear light writes back only the viewport; without it the clear
+        // reached the whole back buffer.
+        if (linear)
+            Expect("outside_viewport", 112, 64, 90, 90, 90);
+        else
+            Expect("outside_viewport", 112, 64, scene[0], scene[1], scene[2]);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
     SafeRelease(depth);
 }
 
@@ -6695,6 +6831,7 @@ int Run(const Options &options)
         // (the velocity pass made again waits for the GPU): its barriers must
         // still hold for the validation layer.
         {"modern_live_cut", &Check::ModernTaa, true},
+        {"modern_compute", &Check::ModernCompute, true, true},
         {"bench", &Check::Bench, true, true},
         {"bench_runs", &Check::BenchRuns, true, true},
         {"reset", &Check::ResetDevice, true},

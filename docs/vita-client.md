@@ -45,7 +45,7 @@ cmake --build build-vita-mp --target KisakCOD-mp-vpk
 Hosted CI: the **PS Vita multiplayer client** job of the PS Vita workflow
 (`.github/workflows/build-kisakcod-vita.yaml`) builds Debug
 and RelWithDebInfo. It runs the server's float checks (no fused multiply-add, no
-NEON float outside the vector skinning path and the MP3 decoder, which both
+NEON float outside the vector skinning path, the static culling walk and the MP3 decoder, which all
 have to be there and be NEON) and link checks (weak pthread references, the main stack size), and
 uploads the RelWithDebInfo `.vpk`. It also runs the controls' and the sound's
 host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`), the run
@@ -54,7 +54,8 @@ the GPU watch's, the idle alpha test's and the shader translator's
 (`test_vita_run_plan.py`, `test_vita_gxm_heap.py`,
 `test_vita_frame_time.py`, `test_vita_gpu_progress.py`,
 `test_vita_gpu_watch.py`, `test_vita_idle_alpha_test.py`,
-`test_vita_cg_translate.py`), and the static model cache's size arithmetic
+`test_vita_cg_translate.py`), the 3D picture size governor's
+(`test_vita_scale_governor.py`), and the static model cache's size arithmetic
 (`test_static_model_cache_sizes.py`).
 
 ## Running
@@ -1001,6 +1002,107 @@ What the GXM back end does so far (step 2d):
   the copy it makes anyway, so the stretch costs no scene of its own; an
   empty file `no-filter-stretch` in the folder of the compiled programs, or
   `vita_gxm no-filter-stretch 1`, keeps the two scenes.
+- **A 3D picture that shrinks only where the GPU needs it.** Console run
+  BV (2026-11-15, mp_crash, busy view) found the frame held by the GPU's
+  pixel work at the full size (35.5 ms a frame, 6.6 to 8.4 ms of it the CPU
+  waiting for the frame before last) and by the CPU at 0.7 (29.6 ms, no
+  wait). With `vita_sceneScaleMin` (0.5 to 1; 1 by default, which is off)
+  under `vita_sceneScale`, the back end picks the size between the two
+  frame by frame (`src/gfx_gxm/gxm_scale_governor.h`), in steps of 1/32 of
+  the screen. Its measure is the time a frame waits for the GPU: the frame
+  less its waits is what the CPU needs, and a frame with waits took what
+  the GPU needs. Its goal is a frame every refresh (16.7 ms) where the CPU
+  fills one in that time and every second refresh (33.3 ms) elsewhere,
+  since with vsync a frame between the two is no smoother than 33.3 ms;
+  `vita_sceneScaleGoal` names another goal in ms, and a goal the CPU does
+  not reach means "the GPU must not hold the frame at all". Windows of 12
+  frames, the 2 longest and 2 shortest left out: over the goal, the
+  picture's area shrinks by the share that is over (times 1.4, as not all
+  GPU time is pixel work); when a step more is known to fit, it grows a
+  step; when the GPU's time is not known because it did not hold the
+  frame, a step more is tried, and a try that fails is taken back and
+  doubles the wait before the next (2 to 32 seconds). A goal of 16.7 ms
+  that the smallest picture does not reach is given up for 16 seconds,
+  doubled by each loss up to 128. The size costs nothing to change: the
+  targets keep the screen's size and only the viewport moves. The log's
+  `3D picture size` line, beside the frame time line, gives the sizes
+  picked. While the depth pass governor tries the scene the other way the
+  size stays as it is, so that the try is timed at one size; the size then
+  follows the way that was kept. A game server can set neither dvar.
+  Options > Game has the setting as "Dynamic Resolution" (Off, or down to
+  85, 70 or 50 %) and `vita_sceneSharpen` as "Sharpen Scaled Picture"
+  ([options-menu.md](options-menu.md)); both are saved in the player's
+  settings.
+  `scripts/tests/test_vita_scale_governor.py` runs it on a model of the
+  console with run BV's times.
+- **Keeping a smaller 3D picture sharp.** The Vita has none of the
+  upscalers a PC pairs with a moving resolution (they need motion vectors
+  and a history of frames), so the smaller picture is kept close to the
+  full one in three plain ways, each with its own switch
+  (`src/gfx_gxm/gxm_engine_options.h`):
+  - *Mip bias, on by default.* A picture drawn smaller makes the GPU pick
+    smaller mip levels, and the stretched picture would show blurrier
+    textures than the full-size one. While the picture is scaled, every
+    mipped texture's level of detail is biased by log2 of the scale, in
+    sceGxm's steps of 1/8 of a level (one step at 0.92, four at 0.7), so it
+    samples the texels the full-size picture would have. An empty file
+    `no-mip-bias`, or `vita_gxm no-mip-bias 1`, turns it off. The start-up
+    line `diag: a fresh texture's LOD bias reads N` gives the value the
+    bias counts from.
+  - *Width only* (`vita_sceneScaleWidthOnly 1`). The picture keeps its
+    height and gives up the same share of its pixels in width alone: the
+    width's factor is the scale squared (0.85 at a scale of 0.92), no less
+    than a half. Every line of the screen is still drawn.
+  - *A sharpening stretch* (`vita_sceneSharpen 1`). The stretch is drawn
+    by a program of the back end's that reads the picture at each pixel
+    and one texel up, left, right and down, adds 0.2 of the pixel's
+    difference from its neighbours and holds the result between the
+    darkest and the brightest of the five, so an edge gets steeper and
+    gains no halo. As a stretch of its own it costs the copy's and the
+    stretch's two scenes again. Where the film filter's quad does the
+    stretch, that quad is drawn with a variant of the filter's own
+    program whose reads of the picture go through the same filter
+    (`gxm_cg_translate.h`, `Options::sharpSamplers`), and no scene is
+    added; `no-filter-sharpen`, or `vita_gxm no-filter-sharpen 1`, goes
+    back to the stretch of its own. Until the variant is compiled (once,
+    then it is in the program cache) the quad is drawn plain.
+  The HUD and all text are drawn after the stretch at 960x544 in every
+  case. The `3D picture size` log line counts the biased texture views and
+  the sharpened stretches. Console run CC (2026-11-15, mp_crash, busy
+  view at 0.85): the mip bias costs nothing (33.05 ms a frame without,
+  33.14 with), width only costs nothing (32.91), and the sharpening
+  stretch of its own costs 2.3 to 3.1 ms a frame, which is all that 0.85
+  saves there (35.82 ms at the full size). The sharpening in the filter's
+  quad is not measured yet.
+- **Three scenes a frame instead of five.** Each scene makes the GPU load
+  the whole colour and depth targets and store them again, whatever is
+  drawn: console run V measured 2.25 ms for a scene with no draw, and
+  console run BX (2026-11-15) 16.9 ms of fragment work a frame in a view
+  of 65 draws. The frame of a map with a film colour filter had five: a
+  clear of the back buffer, the depth pass, the lit and emissive passes,
+  the copy the filter reads, and the filter with the HUD. Three choices,
+  each with the same picture (src/gfx_gxm/gxm_engine_options.h;
+  src/gfx_d3d/rb_draw3d.cpp, RB_StandardDrawCommands):
+  - the depth pass's scene clears the depth and stencil itself and the lit
+    pass's scene clears the colour, so the scene that held only the clear
+    is gone (`no-prepass-clear` turns it off);
+  - the depth pass's scene is begun with sceGxm's disabled colour surface,
+    since the pass writes no colour and nothing reads its colour target,
+    so that scene loads and stores no colour (`no-depth-only-scene`). The
+    engine marks the pass's draws for the back end, which keeps them in a
+    scene of their own even when the lit pass draws to the same surface:
+    depth and lit passes in one scene cost the GPU more (console runs AA
+    and AD);
+  - when the film filter is the view's only post effect, the 3D passes
+    draw into the image the filter reads and not into the back buffer, so
+    the copy between the two is not made (`no-scene-in-copy`). Depth of
+    field, glow, blur and the debug views keep the back buffer and the
+    copy, and so does a view that reads that image while it draws
+    (distortion, shadow cookies).
+
+  The three names are empty files in the folder of the compiled programs,
+  or `vita_gxm <name> 1` while the game runs. The log's `gpu watch` line
+  says how many scenes a frame had.
 - **The CPU a frame ahead of the GPU.** The CPU fills frame N while the GPU
   still draws frame N - 1, so a frame costs the longer of the two times and
   not their sum. Console run U (2026-11-11, mp_crash) had shown them taking

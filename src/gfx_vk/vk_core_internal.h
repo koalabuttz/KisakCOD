@@ -66,6 +66,9 @@ struct Buffer
     BufferDesc desc{};
     Allocation allocation{};
     std::string name;
+    // Tracked use by shaders (UseBuffer); copies keep their own barriers.
+    VkPipelineStageFlags2 lastStages = VK_PIPELINE_STAGE_2_NONE;
+    VkAccessFlags2 lastAccess = VK_ACCESS_2_NONE;
 };
 
 struct Image
@@ -113,8 +116,13 @@ struct LinearArena
 {
     VkBufferUsageFlags usage = 0;
     VkDeviceSize chunkSize = 0;
+    MemoryKind memory = MemoryKind::Upload;
     std::vector<LinearChunk> chunks;
     uint32_t current = 0;
+    // Whether a request went past the first chunk since the slot's last
+    // recycle, and the recycles in a row where none did (TrimArena).
+    bool spilled = false;
+    uint32_t quietRecycles = 0;
 };
 
 enum class DeferredKind
@@ -337,6 +345,7 @@ public:
     bool recordingOpen = false;      // a command buffer is being recorded
     uint64_t recordingId = 0;        // counts command buffers begun
     bool inPass = false;
+    bool inComputePass = false; // BeginComputePass ... EndComputePass
     int currentTimedPass = -1;
     bool bufferCopiesOpen = false;            // see CloseBufferCopies
     std::vector<Image *> pendingUploads;      // uploadPending images

@@ -104,6 +104,7 @@ add_library(kisak_gfx_vk_modern STATIC
     "${SRC_DIR}/gfx_vk/modern/vk_modern_bloom.cpp"
     "${SRC_DIR}/gfx_vk/modern/vk_modern_exposure.cpp"
     "${SRC_DIR}/gfx_vk/modern/vk_modern_fullscreen.cpp"
+    "${SRC_DIR}/gfx_vk/modern/vk_modern_compute.cpp"
 
     "${SRC_DIR}/gfx_vk/modern/vk_modern_velocity.cpp"
     "${SRC_DIR}/gfx_vk/modern/vk_modern_normals.cpp"

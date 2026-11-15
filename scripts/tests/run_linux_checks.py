@@ -367,6 +367,20 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
     )
     checks.append(
         Check(
+            "bot_combat",
+            "KisakCOD bots aim with a human hand and reaction, click at a human pace and kick their own view",
+            [Command([python, TESTS / "test_bot_combat.py", "--cxx", cxx, "--m32"], timeout=300)],
+        )
+    )
+    checks.append(
+        Check(
+            "bot_mind",
+            "KisakCOD bots choose to fight, take cover, hunt or roam like players, and pre-aim corners",
+            [Command([python, TESTS / "test_bot_mind.py", "--cxx", cxx, "--m32"], timeout=300)],
+        )
+    )
+    checks.append(
+        Check(
             "bot_navmesh",
             "KisakCOD bots' navigation mesh finds the ways a player has, and its cache refuses damage",
             [Command([python, TESTS / "test_bot_navmesh.py", "--cxx", cxx, "--m32"], timeout=600)],
@@ -655,7 +669,7 @@ def main():
     parser.add_argument("--list", action="store_true", help="print the command list and exit without running")
     options = parser.parse_args()
 
-    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "remote_input", "master_server", "open_url", "server_dvar_guard", "steam_session", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range", "gameplay_lifecycle", "server_test_clients", "weapon_def_ownership", "bot_motor", "bot_perception", "bot_navmesh", "bot_driver", "database_publication", "mod_zone_detection", "crt_shims", "assert_continue", "sl_trace", "phys_objid", "speed_build", "perf_ab"]
+    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "remote_input", "master_server", "open_url", "server_dvar_guard", "steam_session", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range", "gameplay_lifecycle", "server_test_clients", "weapon_def_ownership", "bot_motor", "bot_perception", "bot_combat", "bot_mind", "bot_navmesh", "bot_driver", "database_publication", "mod_zone_detection", "crt_shims", "assert_continue", "sl_trace", "phys_objid", "speed_build", "perf_ab"]
     options.only = parse_names(options.only)
     options.skip = parse_names(options.skip)
     for name in options.only | options.skip:
