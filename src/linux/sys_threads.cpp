@@ -130,6 +130,7 @@ void Sys_InitMainThread()
     threadId[THREAD_CONTEXT_MAIN] = Sys_GetCurrentThreadId();
 #if defined(__vita__)
     Vita_NoteThread(s_threadNames[THREAD_CONTEXT_MAIN]);
+    Vita_QuietWaits();
 #endif
     s_threadSlots[THREAD_CONTEXT_MAIN].tid = pthread_self();
     s_threadSlots[THREAD_CONTEXT_MAIN].id = threadId[THREAD_CONTEXT_MAIN];
@@ -182,6 +183,7 @@ static void *ThreadTrampoline(void *argument)
     Vita_SetIeeeFloatMode();
     // For the perf windows' thread table (vita_threads.cpp).
     Vita_NoteThread(s_threadNames[context]);
+    Vita_QuietWaits();
 #endif
 
     SetThreadName(0xFFFFFFFFu, s_threadNames[context]);
