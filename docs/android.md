@@ -247,6 +247,8 @@ navigation bar). For an even 30 frames a second (Modern visuals on the Retroid P
 run at 33-40), `+set r_vsync 1 +set r_vsyncInterval 2` shows each frame for
 two refreshes of a 60 Hz screen (four at 120 Hz: `r_vsyncInterval 4`), paced
 through Android's `VK_GOOGLE_display_timing` (docs/vulkan-core.md, Swapchain).
+On the Retroid (run 380, PR 457) every Legacy frame at interval 2 showed for
+exactly two refreshes (p99 35.9 ms); the launcher's Modern preset uses it.
 The game's console goes to logcat under the tag KisakCOD: Android drops an
 app's stdout and stderr, so `src/linux/main.cpp` copies them there.
 
