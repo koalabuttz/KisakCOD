@@ -2637,6 +2637,38 @@ void R_ModernSceneDepth(const GfxViewInfo *viewInfo)
     hooks->sceneDepth(hooks->user, dx.device, &R_ModernScene(viewInfo));
 }
 
+void R_ModernSunShadow(const GfxViewInfo *viewInfo, bool sunShadowMap)
+{
+    const GfxModernHooks *hooks = R_ModernHooks();
+    if (!hooks || !hooks->sunShadow)
+        return;
+    // Each partition is a 1024-texel square (R_RENDERTARGET_SHADOWMAP_SUN)
+    // whose projection takes 2 / (texel * 1024) of a world unit across to
+    // clip space, and 1 / (depth range) along the sun (R_SunShadow
+    // MapProjectionMatrix).
+    GfxModernSunShadow shadow{};
+    shadow.on = sunShadowMap;
+    for (int i = 0; i < 2 && shadow.on; ++i)
+    {
+        const GfxMatrix &projection = viewInfo->sunShadow.partition[i].shadowViewParms.projectionMatrix;
+        if (projection.m[0][0] <= 0.0f || projection.m[2][2] <= 0.0f)
+        {
+            shadow.on = false;
+            break;
+        }
+        shadow.texel[i] = 2.0f / (projection.m[0][0] * 1024.0f);
+        shadow.depthUnits[i] = 1.0f / projection.m[2][2];
+    }
+    // The sun's direction (towards it, as the lit shaders' sun position
+    // constant has it: R_SetSunConstants).
+    const GfxLight &sun = backEndData->sunLight;
+    const float length = sqrtf(sun.dir[0] * sun.dir[0] + sun.dir[1] * sun.dir[1] + sun.dir[2] * sun.dir[2]);
+    shadow.sun = sun.type == GFX_LIGHT_TYPE_DIR && length > 1e-4f;
+    for (int i = 0; i < 3 && shadow.sun; ++i)
+        shadow.sunDir[i] = sun.dir[i] / length;
+    hooks->sunShadow(hooks->user, dx.device, &shadow);
+}
+
 void R_ModernSceneLit(const GfxViewInfo *viewInfo)
 {
     R_ModernEndLitPasses();

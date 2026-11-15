@@ -644,7 +644,10 @@ struct Device
     // SetModernEmissive: how much brighter than white unlit, light-giving
     // surfaces built from now on make their white, in quarters (4 = as they are).
     uint8_t modernEmissive = 4;
-    // Bumped whenever SetModernPlanar changes the parameters; the parameters
+    // SetModernShadow: pushed after modernPlanarParams.
+    ModernShadowParams modernShadowParams{};
+    // Bumped whenever SetModernPlanar or SetModernShadow changes the
+    // parameters; the parameters
     // were last pushed for pushedPlanarGeneration in the bound layout (0:
     // not since the layout or the command buffer changed).
     uint64_t modernPlanarGeneration = 1;
