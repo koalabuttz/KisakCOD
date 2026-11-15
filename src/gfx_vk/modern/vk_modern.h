@@ -302,6 +302,70 @@ struct AoStats
 };
 AoStats Stats(const AmbientOcclusion *ao);
 
+// ---- Volumetric fog (docs/vulkan-modern.md "Volumetric fog") ----
+//
+// The map's own fog lit by the sun: a ray march through the sun's shadow map
+// (fog_march.frag, at half resolution by default) sums how much of each view
+// ray's fog is in shadow, then a full-screen pass (fog_apply.frag) adds the
+// difference that makes to the scene in linear light. A share of the fog's
+// light (sunShare) comes from the sun: air in shadow loses it, and looking
+// towards the sun the air gets more of it (forward scattering), so with
+// sunShare 0, or with all the air lit and no forward scattering, the scene
+// is as the game fogged it.
+
+struct FogParams
+{
+    // The share of the fog's light that comes from the sun, 0 to 1.
+    float sunShare = 0.6f;
+    // Henyey-Greenstein forward scattering, 0 (even) to below 1.
+    float scatter = 0.35f;
+    // World units of each ray marched through the shadow map; air past it
+    // counts as lit.
+    float march = 3000.0f;
+    uint32_t steps = 24;
+    bool half = true;   // march at half resolution
+    uint32_t frame = 0; // moves the noise and the half-resolution pixel from frame to frame
+    // Write the light the fog adds alone, over mid grey, instead of adding it.
+    bool debug = false;
+};
+
+// The view's fog and sun, as the engine gives them (front ModernSceneView::Fog).
+struct FogInputs
+{
+    float color[3] = {};       // display values, 0 to 1
+    float density = 0.0f;      // log2 units per world unit
+    float start = 0.0f;        // world units
+    float origin[3] = {};      // the camera, world units
+    float sunDirection[3] = {}; // towards the sun, world space
+    // World (p * M) to the near partition's xy, depth z and partition value
+    // w; with shadowMap given to DrawFog.
+    float shadowLookup[4][4] = {};
+    float switchPartition[4] = {};
+    float shadowmapScale[2] = {};
+};
+
+struct Fog;
+
+// The pipelines (the march image is made at the first DrawFog and again when
+// the depth's size changes). Null with the reason.
+Fog *CreateFog(Core *core, std::string &error);
+// Waits for the GPU to finish what was recorded.
+void DestroyFog(Core *core, Fog *fog);
+// Records the fog over view.area of `color` (a linear-light colour target),
+// reading `depth` (single-sampled, sampled usage) and, when given, the sun's
+// shadow map `shadowMap` (a depth image; without it all the air counts as
+// lit). Outside a pass, inside a frame. Both passes are timed under "modern
+// fog". False with the reason, and nothing recorded, when it cannot.
+bool DrawFog(Core *core, Fog *fog, Image *color, Image *depth, Image *shadowMap, const SceneView &view,
+             const FogInputs &inputs, const FogParams &params, std::string &error);
+
+struct FogStats
+{
+    uint64_t scenes;   // DrawFog calls that recorded
+    uint64_t shadowed; // of those, ones that marched a shadow map
+};
+FogStats Stats(const Fog *fog);
+
 // ---- Screen-space reflections (docs/vulkan-modern.md "Screen-space reflections") ----
 //
 // What each pixel's surface would mirror, found on the screen: the view ray

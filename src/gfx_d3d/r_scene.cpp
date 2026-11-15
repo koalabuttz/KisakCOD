@@ -2204,6 +2204,42 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
     R_ModernSendInputs(&inputs);
 }
 
+// The view's fog and the sun's shadow map (GfxModernFog), as the game's
+// shaders get them: the fog from R_SetFrameFog's settings, the shadow map
+// when RB_StandardDrawCommands draws it for the view.
+static void R_ModernSceneFog(const GfxViewInfo *viewInfo, GfxModernFog &fog)
+{
+    const GfxBackEndData *data = backEndData;
+    if (!data || !r_fog->current.enabled || data->fogSettings.density <= 0.0f)
+        return;
+    fog.on = true;
+    float color[4];
+    Byte4UnpackBgra((const uint8_t *)&data->fogSettings.color, color);
+    fog.color[0] = color[0];
+    fog.color[1] = color[1];
+    fog.color[2] = color[2];
+    fog.density = data->fogSettings.density;
+    fog.start = data->fogSettings.fogStart;
+    const GfxViewParms &parms = viewInfo->viewParms;
+    fog.origin[0] = parms.origin[0];
+    fog.origin[1] = parms.origin[1];
+    fog.origin[2] = parms.origin[2];
+    fog.sunDirection[0] = data->sunLight.dir[0];
+    fog.sunDirection[1] = data->sunLight.dir[1];
+    fog.sunDirection[2] = data->sunLight.dir[2];
+    if (viewInfo->dynamicShadowType != SHADOW_MAP || !rgp.world
+        || !Com_BitCheckAssert(data->shadowableLightHasShadowMap, rgp.world->sunPrimaryLightIndex, 32))
+        return;
+    const GfxImage *image = gfxRenderTargets[R_RENDERTARGET_SHADOWMAP_SUN].image;
+    if (!image || !image->texture.map)
+        return;
+    fog.shadowMap = image->texture.map;
+    memcpy(fog.shadowLookup, viewInfo->sunShadow.lookupMatrix.m, sizeof(fog.shadowLookup));
+    memcpy(fog.switchPartition, viewInfo->sunShadow.sunProj.switchPartition, sizeof(fog.switchPartition));
+    fog.shadowmapScale[0] = viewInfo->sunShadow.sunProj.shadowmapScale[0];
+    fog.shadowmapScale[1] = viewInfo->sunShadow.sunProj.shadowmapScale[1];
+}
+
 static GfxModernScene &R_ModernScene(const GfxViewInfo *viewInfo)
 {
     GfxModernScene &modern = s_modernScene;
@@ -2240,6 +2276,7 @@ static GfxModernScene &R_ModernScene(const GfxViewInfo *viewInfo)
         modern.glowCutoff = viewInfo->glow.bloomCutoff;
         modern.glowDesaturation = viewInfo->glow.bloomDesaturation;
     }
+    R_ModernSceneFog(viewInfo, modern.fog);
     return modern;
 }
 
