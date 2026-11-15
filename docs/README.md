@@ -55,6 +55,9 @@ what is still missing. Build steps are in the
 - [macOS track](macos.md): the opt-in macOS dedicated server and multiplayer
   client build (arm64 and x86_64), the app bundle, what differs from the Linux
   build, and the hosted CI checks, including the Vulkan back end on MoltenVK
+- [Android track](android.md): the opt-in Android arm64 build for the Retroid Pocket 6;
+  the NDK dedicated server has run `mp_crash` on the handheld, and the
+  multiplayer client as an SDL3 app on the Vulkan back end is in progress
 
 ## Linux client foundations (opt-in)
 
