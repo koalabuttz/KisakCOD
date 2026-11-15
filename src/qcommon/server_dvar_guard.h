@@ -84,6 +84,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     // Sound and animation.
     "snd_adpcm",
     "snd_alDebug",
+    "snd_streamThread",
     "xanim_blendOnce",
     // Menus.
     "ui_fastExpressions",
