@@ -157,6 +157,20 @@ perf: done
     front-end command before the frame is handed over, `other` any other.
   - `wait for the render thread`: the main thread asleep until the render
     thread takes the frame.
+
+    Both waits sleep on the worker command event, a millisecond at a time.
+    Until 2026-11-15 a thread on Linux, macOS and the PS Vita missed a set of
+    that event that another thread reset straight afterwards (the render
+    thread and the workers do that every frame) and slept to the end of its
+    millisecond, where Windows lets it go at the set
+    (`PosixEvent::setCount` in `src/linux/sys_posix.cpp`). On the console
+    (trial builds of dc9dc6a7 with a switch between the two, eight windows of
+    6 s each at the busy view of mp_crash) `wait for workers: add scene ent`
+    went from 1.40 to 0.22 ms a frame and `render: waiting for a frame` from
+    0.70 to 0.10. At full size the GPU sets that view's frame and its mean
+    stayed at 36.0 ms (p95 37.3 to 36.3); with the 3D picture at half size
+    the frame went from 26.59 to 25.74 ms, every window with the fix ahead of
+    every window without, and at 0.7 from 26.68 to 26.47.
   - `render: <part>`: the render thread's frame. `3d` is `RB_Draw3D`, the
     3D views, and holds `depth pass` (`R_DepthPrepass`), `lit`
     (`R_DrawLit`), `decals`, `sun`, `point lights`, `emissive` (effects and
