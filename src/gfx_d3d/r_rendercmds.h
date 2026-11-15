@@ -58,9 +58,14 @@ enum GfxRenderCommand : __int32
     // renderer has no equivalent (the game sets sun constants in-scene). Appended so
     // existing values hold; RC_COUNT bumps.
     RC_SET_CUSTOM_CONSTANT = 0x18,
-    RC_COUNT = 0x19,
+    // Port addition, last in both lists so every retail and editor value holds:
+    // indexed, coloured, textured 2D triangles with an optional scissor
+    // rectangle (R_AddCmdDrawUiTriangles), for the RmlUi front-end (src/ui_rml).
+    RC_DRAW_UI_TRIANGLES = 0x19,
+    RC_COUNT = 0x1A,
 #else
-    RC_COUNT = 0x16,
+    RC_DRAW_UI_TRIANGLES = 0x16, // see above
+    RC_COUNT = 0x17,
 #endif
 };
 enum GfxRenderTargetId : __int32
@@ -599,6 +604,30 @@ void R_ClearClientCmdList2D();
 void R_BeginSharedCmdList();
 void R_AddCmdEndOfList();
 GfxCmdHeader *R_GetCommandBuffer(GfxRenderCommand renderCmd, int bytes);
+
+// One vertex of R_AddCmdDrawUiTriangles: a position in screen pixels, texture
+// coordinates and a packed colour, as R_SetVertex2d takes them.
+struct GfxUiVertex
+{
+    float x;
+    float y;
+    float s;
+    float t;
+    uint32_t color; // R_ConvertColorToBytes order
+};
+
+// Draws indexed 2D triangles with one material in the 2D pass, in command
+// order with the stretch pics and text around them. A null scissor draws
+// unclipped; otherwise drawing is limited to {left, top, right, bottom} in
+// screen pixels. Large meshes are split into several commands. Used by the
+// RmlUi front-end (src/ui_rml); no retail code calls it.
+void R_AddCmdDrawUiTriangles(
+    Material *material,
+    const GfxUiVertex *verts,
+    int vertexCount,
+    const uint16_t *indices,
+    int indexCount,
+    const int *scissor);
 #ifdef KISAK_RADIANT
 // Editor line-batching bridge (cod3src\src\gfx_d3d\r_rendercmds.cpp). See the
 // implementation at the end of r_rendercmds.cpp for the §11 signature notes.

@@ -2299,3 +2299,83 @@ void R_AddCmdStretchRaw(int x,int y,int width,int height,int columns,int rows,co
         return R_GetCommandBuffer(id,bytes);
     },x,y,width,height,columns,rows,rgba);
 }
+
+// ---------------------------------------------------------------------------
+// R_AddCmdDrawUiTriangles (port addition; see r_rendercmds.h). The RmlUi
+// front-end in src/ui_rml hands its meshes here. One command holds at most
+// kUiChunkVerts vertices and kUiChunkIndices indices, which keeps it inside a
+// command's 16-bit byte count and the tess buffer; a larger mesh is cut into
+// runs of whole triangles (R_SplitUiTriangles, r_ui_triangles.h).
+// ---------------------------------------------------------------------------
+#include "rb_backend.h" // GfxCmdDrawUiTriangles
+#include "r_ui_triangles.h"
+#include <string.h>
+
+namespace
+{
+constexpr int kUiChunkVerts = 1500;
+constexpr int kUiChunkIndices = 12000;
+
+void R_EmitUiTriangles(
+    const Material *material,
+    const GfxUiVertex *verts,
+    int vertexCount,
+    const uint16_t *indices,
+    int indexCount,
+    const int *scissor)
+{
+    const int indexBytes = 2 * ((indexCount + 1) & ~1);
+    const int bytes = (int)sizeof(GfxCmdDrawUiTriangles) + (int)sizeof(GfxUiVertex) * vertexCount + indexBytes;
+    GfxCmdDrawUiTriangles *cmd = (GfxCmdDrawUiTriangles *)R_GetCommandBuffer(RC_DRAW_UI_TRIANGLES, bytes);
+    if (!cmd)
+        return;
+    cmd->material = material;
+    cmd->vertexCount = (uint16_t)vertexCount;
+    cmd->indexCount = (uint16_t)indexCount;
+    cmd->scissorEnabled = scissor ? 1 : 0;
+    for (int i = 0; i < 4; ++i)
+        cmd->scissor[i] = scissor ? scissor[i] : 0;
+    GfxUiVertex *outVerts = (GfxUiVertex *)(cmd + 1);
+    memcpy(outVerts, verts, sizeof(GfxUiVertex) * vertexCount);
+    uint16_t *outIndices = (uint16_t *)(outVerts + vertexCount);
+    memcpy(outIndices, indices, sizeof(uint16_t) * indexCount);
+    if (indexCount & 1)
+        outIndices[indexCount] = 0;
+}
+} // namespace
+
+void R_AddCmdDrawUiTriangles(
+    Material *material,
+    const GfxUiVertex *verts,
+    int vertexCount,
+    const uint16_t *indices,
+    int indexCount,
+    const int *scissor)
+{
+    if (vertexCount <= 0 || indexCount < 3)
+        return;
+    const Material *actual = material ? Material_FromHandle(material) : rgp.defaultMaterial;
+    if (Material_HasAnyFogableTechnique(actual) && !Material_IsDefault(actual))
+    {
+        R_WarnOncePerFrame(R_WARN_FOGABLE_2DTEXT, actual->info.name);
+        actual = rgp.defaultMaterial;
+    }
+    if (Material_UsesDepthBuffer(const_cast<Material *>(actual)))
+        actual = rgp.defaultMaterial;
+    for (int i = 0; i < indexCount; ++i)
+    {
+        if (indices[i] >= vertexCount)
+            return; // a bad mesh draws nothing
+    }
+
+    if (vertexCount <= kUiChunkVerts && indexCount <= kUiChunkIndices)
+    {
+        R_EmitUiTriangles(actual, verts, vertexCount, indices, indexCount, scissor);
+        return;
+    }
+
+    R_SplitUiTriangles<kUiChunkVerts, kUiChunkIndices>(
+        verts, indices, indexCount, [&](const GfxUiVertex *runVerts, int runVertCount, const uint16_t *runIndices, int runIndexCount) {
+            R_EmitUiTriangles(actual, runVerts, runVertCount, runIndices, runIndexCount, scissor);
+        });
+}
