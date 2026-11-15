@@ -7,6 +7,13 @@
 // to 1, raised to the strength's power and kept above the floor through a
 // soft knee, so a narrow slot (the crash-in arch edge, PC AO run 7) does not
 // go near black while lighter shading stays as it was.
+//
+// At half resolution (halfJitter 1 to 4, gtao.frag's up.w) the raw result
+// has one pixel for each 2x2 block of the scene, worked out at one pixel of
+// the block (which one: halfJitter - 1). The blur then takes the 3x3 raw
+// pixels around this pixel's block, each weighted by the depth of the scene
+// pixel it was worked out at, and so brings the result back to full
+// resolution without spreading it across depth edges.
 
 layout(set = 0, binding = 0) uniform sampler2D sceneDepth; // nearest, depth aspect
 layout(set = 0, binding = 1) uniform sampler2D raw;        // nearest, gtao.frag's output
@@ -19,6 +26,7 @@ layout(push_constant) uniform Params
     float edge;   // the share of the view depth at which a tap's weight halves
     float power;
     float lowest; // the darkest the visibility may go (0: no floor)
+    float halfJitter; // 0 at full resolution, else half, 1 + which pixel of 2x2 the raw one is
 } params;
 
 layout(location = 0) out vec4 outVisibility;
@@ -59,18 +67,42 @@ void main()
     const ivec2 first = ivec2(params.area.xy);
     const ivec2 last = first + ivec2(params.area.zw) - 1;
     float sum = 0.0, weights = 0.0;
-    for (int y = -2; y <= 2; ++y)
-        for (int x = -2; x <= 2; ++x)
-        {
-            const ivec2 at = clamp(pixel + ivec2(x, y), first, last);
-            const float sampleDepth = texelFetch(sceneDepth, at, 0).r;
-            if (sampleDepth >= params.sky)
-                continue;
-            const float apart = abs(ViewDepth(at, sampleDepth) - z) / max(abs(z) * params.edge, 1e-4);
-            const float weight = exp2(-apart * apart);
-            sum += texelFetch(raw, at, 0).r * weight;
-            weights += weight;
-        }
+    const int halfMode = int(params.halfJitter + 0.5);
+    if (halfMode > 0)
+    {
+        const int k = halfMode - 1;
+        const ivec2 jitter = ivec2((k >> 1) ^ (k & 1), k & 1);
+        const ivec2 block = (pixel - jitter) >> 1; // the raw pixel worked out at or before this one
+        const ivec2 lastBlock = (last >> 1);
+        for (int y = -1; y <= 1; ++y)
+            for (int x = -1; x <= 1; ++x)
+            {
+                const ivec2 at = clamp(block + ivec2(x, y), first >> 1, lastBlock);
+                const ivec2 from = clamp(at * 2 + jitter, first, last);
+                const float sampleDepth = texelFetch(sceneDepth, from, 0).r;
+                if (sampleDepth >= params.sky)
+                    continue;
+                const float apart = abs(ViewDepth(from, sampleDepth) - z) / max(abs(z) * params.edge, 1e-4);
+                const float weight = exp2(-apart * apart);
+                sum += texelFetch(raw, at, 0).r * weight;
+                weights += weight;
+            }
+    }
+    else
+    {
+        for (int y = -2; y <= 2; ++y)
+            for (int x = -2; x <= 2; ++x)
+            {
+                const ivec2 at = clamp(pixel + ivec2(x, y), first, last);
+                const float sampleDepth = texelFetch(sceneDepth, at, 0).r;
+                if (sampleDepth >= params.sky)
+                    continue;
+                const float apart = abs(ViewDepth(at, sampleDepth) - z) / max(abs(z) * params.edge, 1e-4);
+                const float weight = exp2(-apart * apart);
+                sum += texelFetch(raw, at, 0).r * weight;
+                weights += weight;
+            }
+    }
     const float visibility = weights > 0.0 ? clamp(sum / weights, 0.0, 1.0) : 1.0;
     outVisibility = vec4(Floored(pow(visibility, params.power), params.lowest));
 }

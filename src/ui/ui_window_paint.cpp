@@ -4,6 +4,7 @@
 #include "ui_window_services.h"
 #include <client/client.h>
 #include <universal/profile.h>
+#include <linux/sys_perf.h>
 #ifdef KISAK_MP
 #include <client_mp/client_mp.h>
 #elif defined(KISAK_SP)
@@ -19,6 +20,7 @@ void Window_Paint(
     float fadeCycle)
 {
     PROF_SCOPED("Window_Paint");
+    SysPerfScope perfScope(SYS_PERF_PROBE_UI_WINDOWS);
 
     float *v6; // [esp+24h] [ebp-80h]
     float *v7; // [esp+28h] [ebp-7Ch]

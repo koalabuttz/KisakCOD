@@ -449,6 +449,11 @@ void ScaleFrame(Device &device);
 void LogSceneScale(Device &device);
 // The waits for the whole GPU since the last such line, by cause.
 void LogWaitCauses(Device &device);
+// With the marker or live switch gpu-watch: how long the GPU worked on a
+// frame since the last such line (gxm_gpu_watch.h).
+void LogGpuWatch(Device &device);
+// Turns it on or off, between two frames on the thread that draws.
+void SetGpuWatch(Device &device, bool on);
 // A texture's whole content is about to be rewritten: when the GPU may still
 // sample it, the write goes to its second piece of memory. Textures with one
 // level and one face in linear GPU memory only; others are written in place.

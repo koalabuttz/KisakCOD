@@ -65,6 +65,7 @@ struct ModernTuning
     float aoPower = -1.0f;
     float aoThickness = -1.0f;
     float aoGrazing = -1.0f;
+    int aoHalf = -1;        // ambient occlusion at half resolution (KISAK_VK_MODERN_AO_HALF)
     float aoFloor = -1.0f;
     float aoEdge = -1.0f;
     float ssrDistance = -1.0f;

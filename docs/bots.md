@@ -56,8 +56,8 @@ A bot that noticed an opponent watches them while it walks on, turning at up
 to 200 degrees a second; it looks where it last saw one it lost, and toward a
 sound or a compass dot it heard. It does not aim or shoot yet.
 
-Next phases, in order: smoke, the UAV and objectives for perception, the motor
-model and combat for TDM and FFA, decisions and objective modes, then
+Next phases, in order: the motor model and combat for TDM and FFA, decisions
+and objective modes (with the objectives the bot's own HUD shows), then
 difficulty levels, start-a-game and start-a-server options, and the PS Vita's
 bot budget (6v6 TDM first, then 9v9 Ground War).
 
@@ -90,8 +90,20 @@ left out; in a free-for-all everybody is an opponent.
   Silence (`specialty_quieter`) make none. A shot carries 4000 units, 300
   silenced. A sound gives a place off by up to 15% of its distance (half that
   for a shot) and turns the bot's head for 2 s; it does not count as noticing.
-- **Compass.** An opponent the HUD shows as a red dot (pinged by a script) gives
-  a place as the compass shows it.
+- **Compass.** An opponent the HUD shows as a red dot gives a place as the
+  compass shows it (off by up to 5% of the distance): one a script pings, and,
+  while the bot's side has a UAV (its own player state's `radarEnabled`, which
+  is what the HUD reads), every opponent without UAV Jammer
+  (`specialty_gpsjammer`) at each radar sweep, every 4 s
+  (`compassRadarUpdateTime`).
+- **Smoke.** A smoke cloud is only the client's effect, so the server never
+  knew where it was. The bots keep their own estimate from each smoke
+  grenade's burst (the event entity `G_ExplodeMissile` spawns): a ball 64
+  units above the burst that grows to 320 units across in 2 s, holds, and
+  shrinks to nothing over the last 5 of 45 s. It hides any of head, chest and
+  hips the line from the eye passes through, as a wall would. The size is an
+  estimate, kept on the large side so a bot never sees through smoke a player
+  could not.
 
 `bot_log 1` prints each opponent a bot notices, for example
 `bots: 3 noticed 4 after 300 ms in view, 912 units, 12 degrees off centre, 67%
@@ -162,7 +174,8 @@ to one second behind.
   or past the sight range is noticed; over 2000 random runs nobody is noticed
   in under 0.2 s in view; distance, the screen's edge, stillness, crouching
   and cover slow noticing; a lost player is remembered, then forgotten;
-  footsteps and shots are heard in range and only roughly.
+  footsteps and shots are heard in range and only roughly; a smoke cloud
+  grows, holds and fades, and hides what is behind or inside it.
 - `server_test_clients` (`scripts/tests/test_server_test_clients.py`): the
   extracted `SV_UpdateBots` asks the brain about active bots only, and a brain
   that takes the command replaces the random inputs.

@@ -1734,6 +1734,7 @@ PresentResult Present(Device *device)
         LogFrameTime(*device);
         LogWaitCauses(*device);
         LogSceneScale(*device);
+        LogGpuWatch(*device);
     }
     if (!shown)
     {

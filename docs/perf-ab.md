@@ -93,6 +93,19 @@ perf: done
   - `menu expressions`: `EvaluateExpression`, every menu expression
     (`visible when`, `exp text` and the like), in the HUD or in any other
     menu.
+  - `menus: <part>`: parts of painting a menu, in the HUD or in any other
+    menu, so the time outside the expressions can be split: `windows`
+    (`Window_Paint`, a menu's or an item's background and border),
+    `text items` (`Item_Text_Paint`, with its translation and its text
+    expression), `ownerdraw items` (`Item_OwnerDraw_Paint`, what the game
+    draws itself: ammo, compass and the like), `other items` (every other
+    item type), `translate` (`UI_SafeTranslateString`, a `@NAME` text looked
+    up), `materials by name` (a background material found by its name each
+    frame) and `show by dvar` (`Item_EnableShowViaDvar`, an item shown or
+    hidden by a dvar's value). The parts overlap: `translate` and the text
+    expressions sit inside `text items`. On a slow machine each timed call
+    adds two clock readings, so compare the parts with each other, not with
+    a run without them.
   - `client: <part>`: the main thread's client frame (multiplayer client).
     `frame` is `CL_Frame` (packets in and out). `screen` is
     `SCR_UpdateScreen` and holds the others and `hud`: `snapshots`
@@ -141,7 +154,12 @@ perf: done
     pass's setup (`R_SetupMaterial`, `R_SetupPass`: state, textures,
     constants), then the surface type's function from `rb_tessTable`
     (static models, brush models, skinned models, triangles and so on) with
-    the draws it makes. The calls a frame count the runs. These take two
+    the draws it makes. The calls a frame count the runs. `render: draws by
+    tess <surface type>` is the same time again with the draws the runs
+    made as its calls, so its time over its calls is what one draw of that
+    kind costs with the engine's work for it; runs that drew nothing (their
+    surfaces only went into a batch that a later run draws) are left out,
+    and a batch's draw counts for the run that flushed it. These take two
     clock readings a run, which on the Vita (about 0.7 us each) adds about
     a millisecond to a busy frame while a run is active.
   - `lock <name>`: any thread getting into that critical section. The time is

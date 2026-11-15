@@ -4,6 +4,7 @@
 #include <qcommon/threads.h>
 #include <universal/q_parse.h>
 #include <universal/profile.h>
+#include <linux/sys_perf.h>
 
 stringDef_s *g_strHandle[2048];
 
@@ -114,6 +115,7 @@ bool Item_EnableShowViaDvar(const itemDef_s *item, int flag)
         MyAssertHandler(".\\ui\\ui_utils.cpp", 207, 0, "%s", "item");
     if (!item->enableDvar || !*item->enableDvar || !item->dvarTest || !*item->dvarTest)
         return 1;
+    SysPerfScope perfScope(SYS_PERF_PROBE_UI_SHOW_BY_DVAR);
     testValue = Dvar_GetVariantString(item->dvarTest);
     p = item->enableDvar;
     do
