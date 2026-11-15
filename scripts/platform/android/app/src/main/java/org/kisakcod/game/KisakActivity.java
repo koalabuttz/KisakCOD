@@ -27,13 +27,15 @@ import org.libsdl.app.SDLActivity;
  * they win):
  *   adb shell am start -n org.kisakcod.game/.KisakActivity --es args "+set developer 1"
  *   adb shell am start -n org.kisakcod.game/.KisakActivity --ez campaign true --es args "+devmap killhouse"
+ *   adb shell am start -n org.kisakcod.game/.CampaignActivity --es args "+devmap killhouse"
  */
 public class KisakActivity extends SDLActivity {
     private static final String TAG = "KisakCOD";
     // The campaign's player profile when the home folder has none yet.
     private static final String PROFILE = "player";
 
-    private boolean campaign() {
+    // CampaignActivity says yes whatever the intent holds.
+    protected boolean campaign() {
         Intent intent = getIntent();
         return intent != null && intent.getBooleanExtra("campaign", false);
     }

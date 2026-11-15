@@ -186,11 +186,10 @@ public class LauncherActivity extends Activity {
 
     private void start(String args, boolean campaign) {
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt("mode", modeIndex).putInt("bots", botIndex).apply();
-        Intent intent = new Intent(this, KisakActivity.class);
+        Intent intent = new Intent(this, campaign ? CampaignActivity.class : KisakActivity.class);
         if (args != null) {
             intent.putExtra("args", args);
         }
-        intent.putExtra("campaign", campaign);
         startActivity(intent);
     }
 

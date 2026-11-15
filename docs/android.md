@@ -169,11 +169,12 @@ quits.
 
 The singleplayer game, KisakCOD-sp, builds as `libmain_sp.so` beside
 `libmain.so` (`sp_game.cmake`, `build_apk.py`), through the same Vulkan back
-end. KisakActivity loads it instead of `libmain.so` when the intent's boolean
-extra `campaign` is true:
+end. CampaignActivity (KisakActivity in the same `:game` process) loads it
+instead of `libmain.so`, as KisakActivity does when the intent's boolean extra
+`campaign` is true; runs that can only name an activity use the first:
 
 ```
-adb shell am start -n org.kisakcod.game/.KisakActivity --ez campaign true --es args "+devmap killhouse"
+adb shell am start -n org.kisakcod.game/.CampaignActivity --es args "+devmap killhouse"
 ```
 
 A level needs an active player profile ("Tried to use a player profile before
