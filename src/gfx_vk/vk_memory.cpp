@@ -21,49 +21,28 @@ VkDeviceSize AlignUp(VkDeviceSize value, VkDeviceSize alignment)
     return alignment ? (value + alignment - 1) / alignment * alignment : value;
 }
 
-// The memory type for a request: the wanted flags, then fallbacks.
-uint32_t FindMemoryType(const Core &core, uint32_t typeBits, MemoryKind kind)
-{
-    std::vector<VkMemoryPropertyFlags> wanted;
-    switch (kind)
-    {
-    case MemoryKind::Device:
-        wanted = {VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0};
-        break;
-    case MemoryKind::Upload:
-        // Device-local and host-visible (resizable BAR, unified memory) first.
-        wanted = {VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-                      | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT};
-        break;
-    case MemoryKind::Readback:
-        wanted = {VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
-                  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT};
-        break;
-    }
-    for (VkMemoryPropertyFlags flags : wanted)
-    {
-        for (uint32_t i = 0; i < core.memory.memoryTypeCount; ++i)
-        {
-            if ((typeBits & (1u << i)) && (core.memory.memoryTypes[i].propertyFlags & flags) == flags)
-                return i;
-        }
-    }
-    return UINT32_MAX;
-}
+// Device-local memory the CPU can map in a heap smaller than this is the
+// PCI BAR window of a discrete GPU without resizable BAR (256 MB): shared with
+// the driver and every other program, so the core never fills it.
+constexpr VkDeviceSize kSmallHeap = 1ull << 30;
 
-bool IsHostVisible(const Core &core, uint32_t type)
-{
-    return (core.memory.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0;
-}
+constexpr VkMemoryPropertyFlags kHostVisible = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+constexpr VkMemoryPropertyFlags kCoherent = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+constexpr VkMemoryPropertyFlags kDeviceLocal = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
 bool IsCoherent(const Core &core, uint32_t type)
 {
     return (core.memory.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
 }
 
-bool NewBlock(Core &core, MemoryPool &pool, VkDeviceSize size, bool dedicated, uint32_t &blockIndex)
+enum class BlockResult
+{
+    Made,
+    NoRoom, // the driver has no room in this memory type: try the next
+    Failed,
+};
+
+BlockResult NewBlock(Core &core, MemoryPool &pool, VkDeviceSize size, bool dedicated, uint32_t &blockIndex)
 {
     VkMemoryAllocateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -73,13 +52,23 @@ bool NewBlock(Core &core, MemoryPool &pool, VkDeviceSize size, bool dedicated, u
     block.size = size;
     block.dedicated = dedicated;
     const StandStill allocating(core.stats.memoryAllocateMs);
-    if (!Check(core, core.vk.vkAllocateMemory(core.dev, &info, nullptr, &block.memory), "vkAllocateMemory"))
-        return false;
-    if (pool.host
-        && !Check(core, core.vk.vkMapMemory(core.dev, block.memory, 0, VK_WHOLE_SIZE, 0, &block.mapped), "vkMapMemory"))
+    const VkResult allocated = core.vk.vkAllocateMemory(core.dev, &info, nullptr, &block.memory);
+    if (allocated == VK_ERROR_OUT_OF_DEVICE_MEMORY || allocated == VK_ERROR_OUT_OF_HOST_MEMORY)
+        return BlockResult::NoRoom;
+    if (!Check(core, allocated, "vkAllocateMemory"))
+        return BlockResult::Failed;
+    if (pool.host)
     {
-        core.vk.vkFreeMemory(core.dev, block.memory, nullptr);
-        return false;
+        const VkResult mapped = core.vk.vkMapMemory(core.dev, block.memory, 0, VK_WHOLE_SIZE, 0, &block.mapped);
+        if (mapped != VK_SUCCESS)
+        {
+            core.vk.vkFreeMemory(core.dev, block.memory, nullptr);
+            // A 32-bit process can run out of address space to map it.
+            if (mapped == VK_ERROR_MEMORY_MAP_FAILED || mapped == VK_ERROR_OUT_OF_HOST_MEMORY)
+                return BlockResult::NoRoom;
+            Check(core, mapped, "vkMapMemory");
+            return BlockResult::Failed;
+        }
     }
     ++core.stats.memoryAllocations;
     block.freeRanges[0] = size;
@@ -87,21 +76,22 @@ bool NewBlock(Core &core, MemoryPool &pool, VkDeviceSize size, bool dedicated, u
         core.stats.hostMemoryBytes += size;
     else
         core.stats.deviceMemoryBytes += size;
+    core.stats.heapBytes[core.memory.memoryTypes[pool.memoryType].heapIndex] += size;
     ++core.stats.memoryBlocks;
 
-    // Reuse an empty slot left by a freed dedicated block.
+    // Reuse an empty slot left by a block given back.
     for (uint32_t i = 0; i < pool.blocks.size(); ++i)
     {
         if (!pool.blocks[i].memory)
         {
             pool.blocks[i] = std::move(block);
             blockIndex = i;
-            return true;
+            return BlockResult::Made;
         }
     }
     pool.blocks.push_back(std::move(block));
     blockIndex = static_cast<uint32_t>(pool.blocks.size() - 1);
-    return true;
+    return BlockResult::Made;
 }
 
 // First fit in a block's free list; splits the range it takes.
@@ -159,6 +149,7 @@ void ReleaseBlock(Core &core, MemoryPool &pool, MemoryBlock &block)
         core.stats.hostMemoryBytes -= block.size;
     else
         core.stats.deviceMemoryBytes -= block.size;
+    core.stats.heapBytes[core.memory.memoryTypes[pool.memoryType].heapIndex] -= block.size;
     --core.stats.memoryBlocks;
     block = MemoryBlock();
 }
@@ -263,70 +254,164 @@ VkImageAspectFlags FormatAspect(VkFormat format)
     }
 }
 
-bool Allocate(Core &core, const VkMemoryRequirements &requirements, MemoryKind kind, bool image, Allocation &out,
-              bool own)
+std::vector<uint32_t> MemoryTypeOrder(const VkPhysicalDeviceMemoryProperties &memory, uint32_t typeBits,
+                                      MemoryKind kind, VkDeviceSize size, const uint64_t *heapUsed)
 {
-    const uint32_t type = FindMemoryType(core, requirements.memoryTypeBits, kind);
-    if (type == UINT32_MAX)
-        return Fail(core, "no memory type fits the request (type bits %08x)", requirements.memoryTypeBits);
-    // Only Upload and Readback memory is mapped, even where every memory type
-    // is host-visible (integrated GPUs): mapping textures would spend a 32-bit
-    // process's address space for nothing.
-    const bool host = kind != MemoryKind::Device;
-    if (host && !IsHostVisible(core, type))
-        return Fail(core, "no host-visible memory type for a mapped buffer");
+    // Each step: the flags a type must have and those it must not; a type
+    // found in an earlier step is not listed again.
+    struct Step
+    {
+        VkMemoryPropertyFlags want;
+        VkMemoryPropertyFlags avoid;
+    };
+    std::vector<Step> steps;
+    switch (kind)
+    {
+    case MemoryKind::Device:
+        // Device-local memory the CPU cannot map first: the mappable kind is
+        // the small window Upload memory wants.
+        steps = {{kDeviceLocal, kHostVisible}, {kDeviceLocal, 0}, {0, 0}};
+        break;
+    case MemoryKind::Upload:
+        // Device-local and host-visible (resizable BAR, unified memory) first.
+        steps = {{kHostVisible | kCoherent | kDeviceLocal, 0}, {kHostVisible | kCoherent, 0}, {kHostVisible, 0}};
+        break;
+    case MemoryKind::Readback:
+        steps = {{kHostVisible | VK_MEMORY_PROPERTY_HOST_CACHED_BIT, 0}, {kHostVisible, 0}};
+        break;
+    case MemoryKind::Staging:
+        // A copy reads it once: system memory, leaving the device-local
+        // window to what the GPU reads in place.
+        steps = {{kHostVisible | kCoherent, kDeviceLocal}, {kHostVisible, kDeviceLocal},
+                 {kHostVisible | kCoherent, 0}, {kHostVisible, 0}};
+        break;
+    }
+    std::vector<uint32_t> order;
+    for (const Step &step : steps)
+    {
+        for (uint32_t i = 0; i < memory.memoryTypeCount; ++i)
+        {
+            const VkMemoryPropertyFlags flags = memory.memoryTypes[i].propertyFlags;
+            if (!(typeBits & (1u << i)) || (flags & step.want) != step.want || (flags & step.avoid))
+                continue;
+            if (std::find(order.begin(), order.end(), i) != order.end())
+                continue;
+            const VkMemoryHeap &heap = memory.memoryHeaps[memory.memoryTypes[i].heapIndex];
+            const bool window = (flags & kDeviceLocal) && (flags & kHostVisible) && heap.size < kSmallHeap;
+            // Upload memory keeps within half the window; the other kinds
+            // reach it only as a last resort (Device's {0} step lists it, in
+            // the order the device gives its types, after the rest).
+            if (window && kind == MemoryKind::Upload && heapUsed
+                && heapUsed[memory.memoryTypes[i].heapIndex] + size > heap.size / 2)
+                continue;
+            order.push_back(i);
+        }
+    }
+    // The window, when Upload memory passed it over, is still the last resort.
+    if (kind == MemoryKind::Upload)
+    {
+        for (uint32_t i = 0; i < memory.memoryTypeCount; ++i)
+        {
+            if ((typeBits & (1u << i)) && (memory.memoryTypes[i].propertyFlags & kHostVisible)
+                && std::find(order.begin(), order.end(), i) == order.end())
+                order.push_back(i);
+        }
+    }
+    return order;
+}
 
-    uint32_t poolIndex = UINT32_MAX;
+namespace
+{
+uint32_t PoolFor(Core &core, uint32_t type, bool image, bool host)
+{
     for (uint32_t i = 0; i < core.memoryPools.size(); ++i)
     {
         const MemoryPool &pool = core.memoryPools[i];
         if (pool.memoryType == type && pool.images == image && pool.host == host)
-            poolIndex = i;
+            return i;
     }
-    if (poolIndex == UINT32_MAX)
-    {
-        MemoryPool pool;
-        pool.memoryType = type;
-        pool.images = image;
-        pool.host = host;
-        core.memoryPools.push_back(std::move(pool));
-        poolIndex = static_cast<uint32_t>(core.memoryPools.size() - 1);
-    }
-    MemoryPool &pool = core.memoryPools[poolIndex];
+    MemoryPool pool;
+    pool.memoryType = type;
+    pool.images = image;
+    pool.host = host;
+    core.memoryPools.push_back(std::move(pool));
+    return static_cast<uint32_t>(core.memoryPools.size() - 1);
+}
+} // namespace
+
+bool Allocate(Core &core, const VkMemoryRequirements &requirements, MemoryKind kind, bool image, Allocation &out,
+              bool own)
+{
+    const std::vector<uint32_t> types =
+        MemoryTypeOrder(core.memory, requirements.memoryTypeBits, kind, requirements.size, core.stats.heapBytes);
+    // Only Upload, Staging and Readback memory is mapped, even where every
+    // memory type is host-visible (integrated GPUs): mapping textures would
+    // spend a 32-bit process's address space for nothing.
+    const bool host = kind != MemoryKind::Device;
+    if (types.empty())
+        return Fail(core, host ? "no host-visible memory type for a mapped buffer (type bits %08x)"
+                               : "no memory type fits the request (type bits %08x)",
+                    requirements.memoryTypeBits);
 
     const VkDeviceSize blockSize = host ? kHostBlockSize : kDeviceBlockSize;
-    uint32_t blockIndex = UINT32_MAX;
-    VkDeviceSize offset = 0;
-    if (own || requirements.size > blockSize / 2)
+    const bool alone = own || requirements.size > blockSize / 2;
+    for (size_t t = 0; t < types.size(); ++t)
     {
-        if (!NewBlock(core, pool, requirements.size, true, blockIndex))
+        const uint32_t type = types[t];
+        const uint32_t poolIndex = PoolFor(core, type, image, host);
+        uint32_t blockIndex = UINT32_MAX;
+        VkDeviceSize offset = 0;
+        BlockResult made = BlockResult::Made;
+        if (alone)
+        {
+            made = NewBlock(core, core.memoryPools[poolIndex], requirements.size, true, blockIndex);
+            if (made == BlockResult::Made)
+                TakeRange(core.memoryPools[poolIndex].blocks[blockIndex], requirements.size, 1, offset);
+        }
+        else
+        {
+            MemoryPool &pool = core.memoryPools[poolIndex];
+            for (uint32_t i = 0; i < pool.blocks.size() && blockIndex == UINT32_MAX; ++i)
+            {
+                MemoryBlock &block = pool.blocks[i];
+                if (block.memory && !block.dedicated
+                    && TakeRange(block, requirements.size, requirements.alignment, offset))
+                    blockIndex = i;
+            }
+            if (blockIndex == UINT32_MAX)
+            {
+                made = NewBlock(core, pool, blockSize, false, blockIndex);
+                if (made == BlockResult::Made)
+                    TakeRange(pool.blocks[blockIndex], requirements.size, requirements.alignment, offset);
+            }
+        }
+        if (made == BlockResult::Failed)
             return false;
-        TakeRange(pool.blocks[blockIndex], requirements.size, 1, offset);
-    }
-    else
-    {
-        for (uint32_t i = 0; i < pool.blocks.size() && blockIndex == UINT32_MAX; ++i)
+        if (made == BlockResult::NoRoom)
         {
-            MemoryBlock &block = pool.blocks[i];
-            if (block.memory && !block.dedicated && TakeRange(block, requirements.size, requirements.alignment, offset))
-                blockIndex = i;
+            if (t + 1 < types.size())
+            {
+                ++core.stats.memoryFallbacks;
+                continue;
+            }
+            return Fail(core,
+                        "vkAllocateMemory failed: VK_ERROR_OUT_OF_DEVICE_MEMORY in each of the %zu memory types "
+                        "that fit (%llu bytes; the core holds %llu MB of device memory and %llu MB mapped)",
+                        types.size(), static_cast<unsigned long long>(requirements.size),
+                        static_cast<unsigned long long>(core.stats.deviceMemoryBytes >> 20),
+                        static_cast<unsigned long long>(core.stats.hostMemoryBytes >> 20));
         }
-        if (blockIndex == UINT32_MAX)
-        {
-            if (!NewBlock(core, pool, blockSize, false, blockIndex))
-                return false;
-            TakeRange(pool.blocks[blockIndex], requirements.size, requirements.alignment, offset);
-        }
+        const MemoryBlock &block = core.memoryPools[poolIndex].blocks[blockIndex];
+        out.pool = poolIndex;
+        out.block = blockIndex;
+        out.memory = block.memory;
+        out.offset = offset;
+        out.size = requirements.size;
+        out.mapped = block.mapped ? static_cast<uint8_t *>(block.mapped) + offset : nullptr;
+        out.coherent = IsCoherent(core, type);
+        return true;
     }
-    MemoryBlock &block = pool.blocks[blockIndex];
-    out.pool = poolIndex;
-    out.block = blockIndex;
-    out.memory = block.memory;
-    out.offset = offset;
-    out.size = requirements.size;
-    out.mapped = block.mapped ? static_cast<uint8_t *>(block.mapped) + offset : nullptr;
-    out.coherent = IsCoherent(core, type);
-    return true;
+    return false;
 }
 
 void Free(Core &core, Allocation &allocation)
@@ -336,10 +421,27 @@ void Free(Core &core, Allocation &allocation)
     MemoryPool &pool = core.memoryPools[allocation.pool];
     MemoryBlock &block = pool.blocks[allocation.block];
     ReturnRange(block, allocation.offset, allocation.size);
-    // Dedicated blocks go back at once; pooled blocks stay for reuse.
-    if (block.dedicated)
-        ReleaseBlock(core, pool, block);
     allocation = Allocation();
+    // Dedicated blocks go back at once. A pooled block that empties goes back
+    // too unless it is the pool's only empty one, kept for the next request:
+    // a map's unload empties dozens, and keeping them would hold the old
+    // map's memory for good (and a small heap's, which the next map needs).
+    if (block.dedicated)
+    {
+        ReleaseBlock(core, pool, block);
+        return;
+    }
+    if (block.used)
+        return;
+    for (const MemoryBlock &other : pool.blocks)
+    {
+        if (&other != &block && other.memory && !other.dedicated && !other.used)
+        {
+            ReleaseBlock(core, pool, block);
+            ++core.stats.emptyBlocksFreed;
+            return;
+        }
+    }
 }
 
 void DestroyMemoryPools(Core &core)

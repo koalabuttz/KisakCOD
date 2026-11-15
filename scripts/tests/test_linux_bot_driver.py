@@ -5,7 +5,8 @@ from test_linux_bots import (FIXTURE_GSC, transition_fixture, transition_plan,
                              final_cohort_log, refill_fixture, validate_refills,
                              validate_kick_window, validate_hold, validate_transitions,
                              validate_brain_view, validate_brain_walk, balanced_teams,
-                             uses_both_teams, TEAM_CAPACITY, MAX_BOTS, validate_brain_notices)
+                             uses_both_teams, TEAM_CAPACITY, MAX_BOTS, validate_brain_notices,
+                             validate_brain_fights, COVER_ROW, HUNT_ROW)
 
 
 def healthy_log():
@@ -17,11 +18,12 @@ def healthy_log():
     return log
 
 
-def view_log(yaws, pitch=0.0, bots=3):
+def view_log(yaws, pitch=0.0, bots=3, states=None):
     log = ''
     for tick, yaw in enumerate(yaws):
         for i in range(bots):
-            log += f'0:05 BOTFEATURE view entity={i} tick={tick} angles=({pitch}, {yaw + i}, 0)\n'
+            state = f' state={states[tick]}' if states else ''
+            log += f'0:05 BOTFEATURE view entity={i} tick={tick}{state} angles=({pitch}, {yaw + i}, 0)\n'
     return log
 
 
@@ -55,8 +57,24 @@ class BrainViewTests(unittest.TestCase):
         self.assertFalse(self.passed(log + log.splitlines(keepends=True)[0]))
         self.assertFalse(self.passed(''))
 
+    def test_a_fighting_bot_may_flick_faster(self):
+        # 100 degrees in a quarter second: past walking, within the aiming hand.
+        log = view_log([0, 100, 100, 100, 60])
+        self.assertFalse(self.passed(log))
+        self.assertTrue(all(ok for ok, _ in validate_brain_view(log, 3, 1, combat=True)))
+        # 180 in a quarter second is past even the aiming hand.
+        self.assertFalse(all(ok for ok, _ in validate_brain_view(view_log([0, 90, -90, -90, -60]), 3, 1,
+                                                                 combat=True)))
+
+    def test_a_death_and_spawn_is_no_turn(self):
+        states = ['playing', 'dead', 'dead', 'playing', 'playing']
+        self.assertTrue(self.passed(view_log([0, 40, 170, -60, -20], states=states)))
+        # The same jump while playing is a snap.
+        self.assertFalse(self.passed(view_log([0, 40, 170, -60, -20], states=['playing'] * 5)))
+
     def test_fixture_logs_the_view(self):
         self.assertIn('BOTFEATURE view entity=', FIXTURE_GSC)
+        self.assertIn('" state=" + b.sessionstate + " angles="', FIXTURE_GSC)
         self.assertIn('botTest_LogViews(sample * 4 + quarter);', FIXTURE_GSC)
         self.assertIn('getplayerangles', FIXTURE_GSC)
 
@@ -86,6 +104,14 @@ class BrainWalkTests(unittest.TestCase):
         log = place_log([0, 150, 300, 300, 420])
         self.assertFalse(self.passed(log.replace(log.splitlines(keepends=True)[3], '', 1)))
         self.assertFalse(self.passed(''))
+
+    def test_a_respawn_is_no_walk(self):
+        log = place_log([0, 150, 2000, 2150, 2300])
+        self.assertFalse(self.passed(log))
+        held = ''.join(f'0:05 BOTFEATURE held entity={i} sample={s} state={"dead" if s == 1 else "playing"} '
+                       'health=0 team=allies class=CLASS_ASSAULT weapon=m16_mp\n'
+                       for s in range(5) for i in range(3))
+        self.assertTrue(self.passed(held + log))
 
     def test_fixture_logs_the_place(self):
         self.assertIn('BOTFEATURE place entity=', FIXTURE_GSC)
@@ -303,6 +329,50 @@ class BrainNoticeTests(unittest.TestCase):
     def test_off_screen_or_hidden_fails(self):
         self.assertFalse(self.passed(notice(0, 1, off=60)))
         self.assertFalse(self.passed(notice(0, 1, showing=0)))
+
+
+def fired(bot, target, after=150, view=450, units=700):
+    return (f'bots: {bot} fired at {target}, {after} ms after noticing, {view} ms after it came into view, '
+            f'{units} units\n')
+
+
+class BrainFightTests(unittest.TestCase):
+    def passed(self, output, both_teams=True):
+        return all(ok for ok, _ in validate_brain_fights(output, both_teams))
+
+    def test_fair_first_shots_pass(self):
+        self.assertTrue(self.passed(fired(0, 1) + fired(3, 4, after=60, view=260)))
+
+    def test_bots_on_both_teams_must_fight(self):
+        self.assertFalse(self.passed(''))
+        self.assertTrue(self.passed('', both_teams=False))
+
+    def test_a_teammate_fails(self):
+        self.assertFalse(self.passed(fired(0, 2)))
+        self.assertFalse(self.passed(fired(0, 1), both_teams=False))
+
+    def test_faster_than_a_human_fails(self):
+        self.assertFalse(self.passed(fired(0, 1, after=40)))
+        self.assertFalse(self.passed(fired(0, 1, view=250)))
+
+
+class DecisionLogTests(unittest.TestCase):
+    def test_cover_and_hunt_lines_are_counted(self):
+        output = ('bots: 3 takes cover 210 units away (reloading)\n'
+                  'bots: 4 takes cover 0 units away (hurt)\n'
+                  'bots: 5 hunts (heard)\nbots: 6 hunts (seen)\nbots: 7 hunts (hit)\n'
+                  'bots: 8 hunts (guessed)\n')
+        self.assertEqual(len(COVER_ROW.findall(output)), 2)
+        self.assertEqual(len(HUNT_ROW.findall(output)), 3)
+
+
+class CombatHoldTests(unittest.TestCase):
+    def test_a_bot_may_die_after_the_first_sample(self):
+        log = healthy_log().replace('sample=2 state=playing health=100', 'sample=2 state=dead health=0', 1)
+        self.assertFalse(all(ok for ok, _ in validate_hold(log, 3, 2)))
+        self.assertTrue(all(ok for ok, _ in validate_hold(log, 3, 2, combat=True)))
+        first = healthy_log().replace('sample=0 state=playing health=100', 'sample=0 state=dead health=0', 1)
+        self.assertFalse(all(ok for ok, _ in validate_hold(first, 3, 2, combat=True)))
 
 
 class TeamCapacityTests(unittest.TestCase):

@@ -163,6 +163,10 @@
  const dvar_t *r_scaleViewport;
 #ifdef KISAK_GFX_GXM
  const dvar_t *vita_sceneScale;
+ const dvar_t *vita_sceneScaleMin;
+ const dvar_t *vita_sceneScaleGoal;
+ const dvar_t *vita_sceneScaleWidthOnly;
+ const dvar_t *vita_sceneSharpen;
 #endif
  const dvar_t *r_normal;
  const dvar_t *sm_sunShadowCenter;
@@ -948,6 +952,36 @@
          DVAR_NOFLAG,
          "Draw the 3D picture at this fraction of the screen's width and height and stretch it to the screen; "
          "the HUD keeps the full resolution");
+     // Under vita_sceneScale: the back end picks the size between the two
+     // from the time each frame waits for the GPU (gxm_scale_governor.h).
+     vita_sceneScaleMin = Dvar_RegisterFloat(
+         "vita_sceneScaleMin",
+         1.0f,
+         minv,
+         DVAR_ARCHIVE,
+         "Under vita_sceneScale: the 3D picture shrinks down to this fraction, frame by frame, as far as the GPU "
+         "needs to keep the frame's goal, and no further");
+     minv.value.max = 100.0f;
+     minv.value.min = 0.0f;
+     vita_sceneScaleGoal = Dvar_RegisterFloat(
+         "vita_sceneScaleGoal",
+         0.0f,
+         minv,
+         DVAR_NOFLAG,
+         "The frame time in ms that vita_sceneScaleMin keeps the GPU under; 0 picks 16.7 where the CPU fills a "
+         "frame in that time and 33.3 elsewhere");
+     // Two ways to keep a smaller 3D picture sharp
+     // (src/gfx_gxm/gxm_engine_options.h).
+     vita_sceneScaleWidthOnly = Dvar_RegisterBool(
+         "vita_sceneScaleWidthOnly",
+         false,
+         DVAR_NOFLAG,
+         "A smaller 3D picture keeps its height and gives up the same share of pixels in its width alone");
+     vita_sceneSharpen = Dvar_RegisterBool(
+         "vita_sceneSharpen",
+         false,
+         DVAR_ARCHIVE,
+         "Sharpen a smaller 3D picture as it is stretched to the screen");
 #endif
      r_smp_backend = Dvar_RegisterBool("r_smp_backend", true, DVAR_NOFLAG, "Process renderer back end in a separate thread");
      r_smp_worker = Dvar_RegisterBool("r_smp_worker", true, DVAR_NOFLAG, "Process renderer front end in a separate thread");

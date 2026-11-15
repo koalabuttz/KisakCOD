@@ -97,6 +97,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     // Test clients on the player's own server.
     "bot_brain",
     "bot_log",
+    "bot_combat",
     "sv_botSnapshots",
     // Runs that play themselves (the run plan's timed console commands).
     "run_atMap",
@@ -125,6 +126,10 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "vita_quitAfterMenu",
     "vita_rearTouch",
     "vita_sceneScale",
+    "vita_sceneScaleGoal",
+    "vita_sceneScaleMin",
+    "vita_sceneScaleWidthOnly",
+    "vita_sceneSharpen",
     "vita_statsEvery",
     "vita_stickDeadzone",
 };
