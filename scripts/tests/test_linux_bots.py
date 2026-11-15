@@ -45,6 +45,11 @@ admits a new cohort. Both teams are used through normal menus to respect team
 capacity; sv_botsPressAttackBtn=0 keeps combat out of these lifecycle checks.
 Map cycles, if requested, retain the final refill cohort.
 
+A stock team holds at most half the server's slots (sv_maxclients), so with
+more than TEAM_CAPACITY bots every mode splits them over both teams by entity
+number (odd numbers to axis) and sets sv_botsPressAttackBtn=0 as above. With up
+to MAX_BOTS bots sv_maxclients is the larger of 8 and the bot count.
+
 NOT implemented or claimed: combat kills, client-originated disconnect packets,
 client-side/snapshot decoding, retail/Steam compatibility, and AI.
 
@@ -79,6 +84,19 @@ botTest_Log(msg)
 {
     // logprint (flag 0) reaches games_mp.log at developer 0; println does not.
     logprint(msg + "\\n");
+}
+
+// Where every bot looks (pitch, yaw, roll), four times a second: KisakCOD's
+// bot brain (--brain 1) turns it at a human pace.
+botTest_LogViews(tick)
+{
+    for (i = 0; i < level.botTestBots.size; i++)
+    {
+        b = level.botTestBots[i];
+        if (isdefined(b))
+            botTest_Log("BOTFEATURE view entity=" + b getentitynumber()
+                        + " tick=" + tick + " angles=" + b getplayerangles());
+    }
 }
 
 botTest_Watch()
@@ -122,14 +140,24 @@ botTest_Watch()
                             + " health=" + b.health + " team=" + b.sessionteam
                             + " class=" + b.pers["class"]
                             + " weapon=" + b getcurrentweapon());
+                botTest_Log("BOTFEATURE place entity=" + b getentitynumber()
+                            + " sample=" + sample + " origin=" + b.origin);
             }
             else
             {
                 botTest_Log("BOTFEATURE held missing=" + i + " sample=" + sample);
             }
         }
+        botTest_LogViews(sample * 4);
         if (sample < {hold_seconds})
-            wait 1;
+        {
+            for (quarter = 1; quarter < 4; quarter++)
+            {
+                wait 0.25;
+                botTest_LogViews(sample * 4 + quarter);
+            }
+            wait 0.25;
+        }
     }
     botTest_Log("BOTFEATURE hold=done");
 }
@@ -249,18 +277,36 @@ def validate_transitions(log_text: str, bots: int, hold_seconds: int,
     return checks
 
 
+# Bots a stock team takes when sv_maxclients is 8: a team holds half the slots.
+TEAM_CAPACITY = 4
+# 9 against 9, the largest match the bots are meant for (docs/bots.md).
+MAX_BOTS = 18
+TEAM_RESPONSE = '        level.botTestBots[i] notify("menuresponse", game["menu_team"], "{team}");'
+BALANCED_TEAM_RESPONSE = '''    {
+        team = "allies";
+        if ((level.botTestBots[i] getentitynumber() % 2) == 1)
+            team = "axis";
+        level.botTestBots[i] notify("menuresponse", game["menu_team"], team);
+    }'''
+
+
+def balanced_teams(fixture: str) -> str:
+    """Send odd entity numbers to axis and even ones to allies."""
+    assert TEAM_RESPONSE in fixture
+    return fixture.replace(TEAM_RESPONSE, BALANCED_TEAM_RESPONSE)
+
+
+def uses_both_teams(bots: int, refill_cycles: int) -> bool:
+    return bool(refill_cycles) or bots > TEAM_CAPACITY
+
+
 def refill_fixture() -> str:
     """Drop only the tracked cohort, await normal expiry, and refill its slots."""
     fixture = transition_fixture()
     start = fixture.index('    botTest_Log("BOTFEATURE auth_loopback=')
     end = fixture.index('\n}\n\nbotTest_RestoreConnecting()', start)
     body = fixture[start:end]
-    body = body.replace('        level.botTestBots[i] notify("menuresponse", game["menu_team"], "{team}");', '''    {
-        team = "allies";
-        if ((level.botTestBots[i] getentitynumber() % 2) == 1)
-            team = "axis";
-        level.botTestBots[i] notify("menuresponse", game["menu_team"], team);
-    }''')
+    body = balanced_teams(body)
     prefix = '''    rounds = 0;
     if (stage == 0)
         rounds = {refill_cycles};
@@ -407,6 +453,83 @@ def validate_hold(log_text: str, bots: int, hold_seconds: int, balanced: bool = 
             (bool(loadout), "stock team/class flow equipped every client")]
 
 
+VIEW_ROW = re.compile(r"BOTFEATURE view entity=(\d+) tick=(\d+) "
+                      r"angles=\((-?[\d.e+-]+), (-?[\d.e+-]+), (-?[\d.e+-]+)\)\s*$", re.M)
+PLACE_ROW = re.compile(r"BOTFEATURE place entity=(\d+) sample=(\d+) "
+                       r"origin=\((-?[\d.e+-]+), (-?[\d.e+-]+), (-?[\d.e+-]+)\)\s*$", re.M)
+# docs/bots.md: a bot turns at most 200 degrees a second while it walks (120
+# while it looks around), keeps its pitch within the player's limits and picks
+# a new direction every 1.5 to 4 seconds. Views are logged four times a second
+# on the server's clock (a whole number of 50 ms server frames), so a snap the
+# motor cannot make shows as more than a tick's worth of turn: at one sample a
+# second any turn would fit, since the short way round is never past 180.
+VIEW_TICKS_PER_SECOND = 4
+BRAIN_MAX_TURN_PER_TICK = 200.0 / VIEW_TICKS_PER_SECOND * 1.1 + 5.0
+BRAIN_MAX_PITCH = 85.0 + 0.5
+BRAIN_MIN_TOTAL_TURN = 10.0
+
+
+def angle_delta(to: float, frm: float) -> float:
+    return (to - frm + 180.0) % 360.0 - 180.0
+
+
+def validate_brain_view(log_text: str, bots: int, hold_seconds: int) -> list:
+    """With bot_brain 1, every bot looks around: it turns, never faster than the
+    view motor's top speed allows, and keeps its pitch within the limits."""
+    rows = [(int(e), int(t), float(p), float(y)) for e, t, p, y, _ in VIEW_ROW.findall(log_text)]
+    ticks = hold_seconds * VIEW_TICKS_PER_SECOND + 1
+    by_bot = {}
+    for entity, tick, pitch, yaw in rows:
+        by_bot.setdefault(entity, {})[tick] = (pitch, yaw)
+    complete = (len(rows) == bots * ticks and len(by_bot) == bots
+                and all(sorted(views) == list(range(ticks)) for views in by_bot.values()))
+    pitch_ok = complete and all(abs(p) <= BRAIN_MAX_PITCH for _, _, p, _ in rows)
+    paced = complete
+    turned = complete
+    for views in by_bot.values() if complete else ():
+        total = 0.0
+        for tick in range(1, ticks):
+            step = abs(angle_delta(views[tick][1], views[tick - 1][1]))
+            step = max(step, abs(views[tick][0] - views[tick - 1][0]))
+            total += step
+            paced = paced and step <= BRAIN_MAX_TURN_PER_TICK
+        turned = turned and total >= BRAIN_MIN_TOTAL_TURN
+    return [(bool(complete), "bot brain: every bot's view is in every quarter second of the hold"),
+            (bool(pitch_ok), "bot brain: every pitch is within the player's limits"),
+            (bool(paced), "bot brain: no bot turned faster than the view motor's top speed"),
+            (bool(turned), f"bot brain: every bot looked around (at least {BRAIN_MIN_TOTAL_TURN:g} degrees)")]
+
+
+# A player runs about 190 units a second; a bot walks the mesh (with a jump
+# when stuck), so a second between samples never covers more than a sprint.
+BRAIN_MAX_MOVE_PER_SAMPLE = 300.0
+BRAIN_MIN_WALKED = 300.0
+
+
+def validate_brain_walk(log_text: str, bots: int, hold_seconds: int) -> list:
+    """With bot_brain 1 on a map with a navigation mesh, every bot walks: it
+    covers ground over the hold, never faster than a player can move."""
+    rows = [(int(e), int(s), float(x), float(y), float(z)) for e, s, x, y, z in PLACE_ROW.findall(log_text)]
+    by_bot = {}
+    for entity, sample, x, y, z in rows:
+        by_bot.setdefault(entity, {})[sample] = (x, y, z)
+    complete = (len(rows) == bots * (hold_seconds + 1) and len(by_bot) == bots
+                and all(sorted(samples) == list(range(hold_seconds + 1)) for samples in by_bot.values()))
+    paced = complete
+    walked = complete
+    for samples in by_bot.values() if complete else ():
+        total = 0.0
+        for sample in range(1, hold_seconds + 1):
+            (ax, ay, _), (bx, by, _) = samples[sample - 1], samples[sample]
+            step = ((bx - ax) ** 2 + (by - ay) ** 2) ** 0.5
+            total += step
+            paced = paced and step <= BRAIN_MAX_MOVE_PER_SAMPLE
+        walked = walked and total >= BRAIN_MIN_WALKED
+    return [(bool(complete), "bot brain: every bot's place is in every hold sample"),
+            (bool(paced), "bot brain: no bot moved faster than a player can"),
+            (bool(walked), f"bot brain: every bot walked (at least {BRAIN_MIN_WALKED:g} units over the hold)")]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -423,7 +546,11 @@ def main() -> int:
     parser.add_argument("--refill-cycles", type=int, default=0,
                         help="drop and refill the full cohort before map cycles; forces maxclients=bots")
     parser.add_argument("--keep", action="store_true", help="keep the temporary tree")
+    parser.add_argument("--brain", type=int, choices=(0, 1), default=0,
+                        help="bot_brain: 0 the retail random inputs, 1 KisakCOD's bots (docs/bots.md)")
     args = parser.parse_args()
+    if args.brain and (args.cycles or args.refill_cycles):
+        parser.error("--brain 1 holds one map: use it without --cycles and --refill-cycles")
 
     if args.hold_seconds < 1:
         parser.error("--hold-seconds must be positive")
@@ -439,8 +566,9 @@ def main() -> int:
         parser.error("--refill-cycles must be nonnegative")
     if not re.fullmatch(r"mp_[a-z0-9_]+", args.map_name):
         parser.error("--map must be a stock-style mp_ map name")
-    if not 1 <= args.bots <= 8:
-        parser.error("--bots must be between 1 and 8")
+    if not 1 <= args.bots <= MAX_BOTS:
+        parser.error(f"--bots must be between 1 and {MAX_BOTS}")
+    both_teams = uses_both_teams(args.bots, args.refill_cycles)
     game = args.game_dir.expanduser().resolve()
     binary = args.binary.expanduser().resolve()
     for name in ("main", "zone", "localization.txt"):
@@ -462,7 +590,9 @@ def main() -> int:
         scripts = mod / "maps" / "mp" / "gametypes"
         scripts.mkdir(parents=True)
         (scripts / "dm.gsc").write_text(
-            (refill_fixture() if args.refill_cycles else transition_fixture() if args.cycles else FIXTURE_GSC)
+            (refill_fixture() if args.refill_cycles else
+             balanced_teams(transition_fixture() if args.cycles else FIXTURE_GSC) if both_teams else
+             transition_fixture() if args.cycles else FIXTURE_GSC)
             .replace("{bots}", str(args.bots)).replace("{team}", "allies")
             .replace("{hold_seconds}", str(args.hold_seconds))
             .replace("{refill_cycles}", str(args.refill_cycles))
@@ -477,22 +607,24 @@ def main() -> int:
             "+set", "dedicated", "1",
             "+set", "net_ip", "127.0.0.1",
             "+set", "net_port", str(port),
-            "+set", "sv_maxclients", str(args.bots) if args.refill_cycles else "8",
+            "+set", "sv_maxclients", str(args.bots) if args.refill_cycles else str(max(8, args.bots)),
             "+set", "g_gametype", "dm",
             # Write and flush the game log so the marker barrier can read it.
             "+set", "g_log", "games_mp.log",
             "+set", "g_logSync", "1",
+            "+set", "bot_brain", str(args.brain),
             "+map", args.map_name,
         ]
         if args.cycles or args.refill_cycles:
             command[-2:-2] = ["+set", "botTest_stage", "0", "+set", "sv_mapRotation",
                               f"gametype dm map {args.map_name}", "+set", "botTest_refill", "0"]
-        if args.refill_cycles:
-            # Full capacity needs both teams. Isolate lifecycle from combat;
-            # this gameplay setting does not alter authentication.
+        if both_teams:
+            # A team holds half the slots, so these bots use both. Isolate
+            # lifecycle from combat; this gameplay setting does not alter
+            # authentication.
             command[-2:-2] = ["+set", "sv_botsPressAttackBtn", "0"]
         print(f"+ {binary}")
-        print(f"+ 127.0.0.1:{port} map={args.map_name} gametype=dm(fixture) bots={args.bots}")
+        print(f"+ 127.0.0.1:{port} map={args.map_name} gametype=dm(fixture) bots={args.bots} bot_brain={args.brain}")
         print(f"+ isolated tree {work}")
 
         # With fs_game set, the game log lives in the mod directory, not main/.
@@ -557,7 +689,7 @@ def main() -> int:
                     stage_log = (refill_segments(log)[-1][1] if args.refill_cycles and stage == 0
                                  else log[segments[-1].end():])
                     stage_log = stage_log.replace("BOTFEATURE retained entity=", "BOTFEATURE spawned entity=")
-                    if not all(ok for ok, _ in validate_hold(stage_log, args.bots, args.hold_seconds, bool(args.refill_cycles))):
+                    if not all(ok for ok, _ in validate_hold(stage_log, args.bots, args.hold_seconds, both_teams)):
                         stage_failure = f"stage {stage}: invalid hold evidence"
                         break
                     print(f"PASS: live stage {stage} map={expected_map} hold reached", flush=True)
@@ -631,9 +763,13 @@ def main() -> int:
             (len(set(spawned)) == args.bots, "admissions used exactly the expected slots"),
             *(validate_refills(log_text, args.bots, args.hold_seconds, args.refill_cycles) if args.refill_cycles else []),
             *(validate_transitions(final_cohort_log(log_text) if args.refill_cycles else log_text,
-                                   args.bots, args.hold_seconds, args.map_name, args.cycles, bool(args.refill_cycles))
-              if args.cycles or args.refill_cycles else validate_hold(log_text, args.bots, args.hold_seconds)),
+                                   args.bots, args.hold_seconds, args.map_name, args.cycles, both_teams)
+              if args.cycles or args.refill_cycles else validate_hold(log_text, args.bots, args.hold_seconds, both_teams)),
             *kick_checks,
+            *(validate_brain_view(log_text, args.bots, args.hold_seconds) if args.brain else []),
+            *(validate_brain_walk(log_text, args.bots, args.hold_seconds) if args.brain else []),
+            *([(bool(re.search(r"bots: navigation mesh for \S+ (built|loaded)", output)),
+                "bot brain: the map's navigation mesh was built or loaded")] if args.brain else []),
             (len(spawned) == expected_admissions and (combined.count("Gamestate has") >= len(spawned) or
              combined.count("Going from CS_FREE to CS_CONNECTED for bot") >= len(spawned)),
              "the server sent gamestates / connected each bot"),

@@ -380,6 +380,27 @@ namespace
         for (const std::string &line : brief.lines)
             Check(line.find("frames with a") == std::string::npos, "a tick probe the host lacks is ignored");
 
+        // A long list goes on with a second line that starts the same way.
+        ProbeGame wrapped;
+        PerfRunner wrappedRunner(&wrapped);
+        config.probeRows = 16;
+        config.probesPerLine = 1;
+        wrappedRunner.Start(config, wrapped.nowNs);
+        for (int i = 0; i < 100000 && wrappedRunner.Active(); ++i)
+            wrapped.Step(&wrappedRunner);
+        int timedLines = 0;
+        bool hudOnItsOwn = false;
+        for (const std::string &line : wrapped.lines)
+        {
+            if (line.find("perf:   timed, ms/frame (calls/frame, longest ms):") != 0)
+                continue;
+            ++timedLines;
+            if (line.find(": hud ") != std::string::npos && line.find("server frame") == std::string::npos)
+                hudOnItsOwn = true;
+        }
+        Check(timedLines == 2 && hudOnItsOwn, "a probe list longer than a line goes on with another line");
+        config.probesPerLine = 16;
+
         // A stopped run switches the probes off as well.
         ProbeGame stopped;
         PerfRunner stoppedRunner(&stopped);

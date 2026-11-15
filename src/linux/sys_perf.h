@@ -89,6 +89,26 @@ enum SysPerfProbe : uint32_t
     SYS_PERF_PROBE_HUD_COMPASS,        // CG_CompassUpdateActors
     SYS_PERF_PROBE_HUD_SCOREBOARD,     // CG_DrawScoreboard
     SYS_PERF_PROBE_UI_EXPRESSIONS,     // EvaluateExpression: every menu expression, in the HUD or not
+    // The main thread's client frame (client_mp, cgame_mp), so its time can
+    // be split. All but the first sit inside SYS_PERF_PROBE_CLIENT_SCREEN;
+    // the HUD's probes above do too.
+    SYS_PERF_PROBE_CLIENT_FRAME,       // CL_Frame: packets in and out, the client's own upkeep
+    SYS_PERF_PROBE_CLIENT_SCREEN,      // SCR_UpdateScreen: everything a frame draws, the scene's making included
+    SYS_PERF_PROBE_CLIENT_SNAPSHOTS,   // CG_ProcessSnapshots
+    SYS_PERF_PROBE_CLIENT_ENTITIES,    // CG_AddPacketEntities: every entity of the snapshot
+    SYS_PERF_PROBE_CLIENT_PREDICT,     // CL_Input and CG_PredictPlayerState
+    SYS_PERF_PROBE_CLIENT_VIEW,        // the view's values, the view weapon, the player's own entity
+    SYS_PERF_PROBE_CLIENT_SCENE,       // CG_DrawActive: R_RenderScene, with its waits for workers
+    SYS_PERF_PROBE_CLIENT_SOUND,       // CL_UpdateSound (inside the scene in a map)
+    SYS_PERF_PROBE_CLIENT_2D,          // SCR_DrawScreenField and CL_DrawScreen: menus over the game, the console
+    SYS_PERF_PROBE_CLIENT_HAND_OVER,   // R_EndFrame and R_IssueRenderCommands, with the wait for the render thread
+    // Parts of R_GenerateSortedDrawSurfs on the main thread (gfx_d3d), inside
+    // SYS_PERF_PROBE_CLIENT_SCENE.
+    SYS_PERF_PROBE_SCENE_CELLS,        // R_AddWorldSurfacesDpvs: the visible cells, handed to the workers
+    SYS_PERF_PROBE_SCENE_WORLD,        // the world's surfaces added, and the sun shadow's maps set up
+    SYS_PERF_PROBE_SCENE_STATIC_MODELS, // R_AddAllStaticModelSurfacesCamera
+    SYS_PERF_PROBE_SCENE_ENTITIES,     // R_DrawAllSceneEnt
+    SYS_PERF_PROBE_SCENE_MERGE,        // R_MergeAndEmitDrawSurfLists and R_SortDrawSurfs: the lists sorted
     // The render thread (gfx_d3d), so its frame can be split as the main
     // thread's is. The 3D parts sit inside SYS_PERF_PROBE_RENDER_3D.
     SYS_PERF_PROBE_RENDER_3D,          // RB_Draw3D: the 3D views of a frame
@@ -111,7 +131,14 @@ enum SysPerfProbe : uint32_t
     SYS_PERF_PROBE_WAIT_WORKERS_ALL,   // ... until every front-end worker command is done
     SYS_PERF_PROBE_WAIT_WORKERS_OTHER, // ... in any other wait that runs worker commands
     SYS_PERF_PROBE_WAIT_WORKER_TYPE,   // + WorkerCmdType: ... until the commands of that type are done
-    SYS_PERF_PROBE_LOCK = SYS_PERF_PROBE_WAIT_WORKER_TYPE + SYS_PERF_WORKER_TYPE_SLOTS,
+    // Worker commands as they run (gfx_d3d/r_workercmds.cpp). The main thread
+    // runs them too while it waits, so its share is inside its wait above.
+    SYS_PERF_PROBE_WORKERS_AWAKE = SYS_PERF_PROBE_WAIT_WORKER_TYPE + SYS_PERF_WORKER_TYPE_SLOTS,
+                                       // a worker thread from waking to its next sleep; calls are wake-ups
+    SYS_PERF_PROBE_WORK_MAIN,          // + WorkerCmdType: commands of that type run by the main thread
+    SYS_PERF_PROBE_WORK_OTHER = SYS_PERF_PROBE_WORK_MAIN + SYS_PERF_WORKER_TYPE_SLOTS,
+                                       // + WorkerCmdType: ... run by any other thread
+    SYS_PERF_PROBE_LOCK = SYS_PERF_PROBE_WORK_OTHER + SYS_PERF_WORKER_TYPE_SLOTS,
                                        // + critical section: any thread getting into it
     SYS_PERF_PROBE_COUNT = SYS_PERF_PROBE_LOCK + SYS_PERF_LOCK_SLOTS
 };

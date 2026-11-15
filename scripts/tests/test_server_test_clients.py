@@ -369,6 +369,12 @@ int G_GetClientArchiveTime(int clientNum);
 void SV_ClientThink(client_t *cl, usercmd_s *cmd);
 void SV_ResetSkeletonCache();
 playerState_s *SV_GameClientNum(int num);
+// KisakCOD's bot brain (src/bots/bot_brain.cpp). The double declines unless a
+// case asks it to take the command, so the retail random path runs as before.
+struct client_t;
+bool Bot_UserMove(client_t *cl);
+extern bool gBotBrainTakes;
+extern std::vector<int> gBotBrainCalls;
 
 // The production definitions under test, declared for the test translation unit.
 gentity_s *SV_AddTestClient();
@@ -510,6 +516,13 @@ void SV_ClientThink(client_t *cl, usercmd_s *cmd) {
 }
 
 void SV_ResetSkeletonCache() { ++gResetSkeletonCacheCalls; }
+
+bool gBotBrainTakes = false;
+std::vector<int> gBotBrainCalls;
+bool Bot_UserMove(client_t *cl) {
+    gBotBrainCalls.push_back(static_cast<int>(cl - svs.clients));
+    return gBotBrainTakes;
+}
 """
 
 TEST_SOURCE = r"""
@@ -557,6 +570,8 @@ static void Reset() {
     gEnterWorldCalls.clear();
     gEnterWorldCmds.clear();
     gThinkCalls.clear();
+    gBotBrainCalls.clear();
+    gBotBrainTakes = false;
     gCompareAddrOperands.clear();
     gDirectConnectMode = DC_ADMIT;
     gRandomScript.clear();
@@ -831,6 +846,16 @@ int main() {
     Check(gThinkCalls.size() == 1, "exactly one client was driven");
     Check(!gThinkCalls.empty() && gThinkCalls[0].first == 0, "only the NA_BOT client");
     Check(gResetSkeletonCacheCalls > 0, "the skeleton cache is reset per frame");
+    Check(gBotBrainCalls == std::vector<int>{0}, "the bot brain is asked about the active bot only");
+
+    std::printf("\n== dispatch: a bot brain that takes the command replaces the random inputs ==\n");
+    gThinkCalls.clear();
+    gBotBrainCalls.clear();
+    gBotBrainTakes = true;
+    SV_UpdateBots();
+    gBotBrainTakes = false;
+    Check(gBotBrainCalls == std::vector<int>{0}, "the brain is asked once for the active bot");
+    Check(gThinkCalls.empty(), "the retail random command is not also sent");
 
     std::printf("\n== failed initial bot gamestate cannot enter the world ==\n");
     Reset();

@@ -10,6 +10,7 @@
 #include <qcommon/threads.h>
 #include <qcommon/cmd.h>
 #include <qcommon/mem_track.h>
+#include <linux/sys_perf.h>
 #include <qcommon/com_fileaccess.h>
 
 #include <universal/com_memory.h>
@@ -3772,6 +3773,7 @@ Font_s *CL_RegisterFont(const char *fontName, int32_t imageTrack)
 void CL_UpdateSound()
 {
     PROF_SCOPED("update sound");
+    SysPerfScope perfScope(SYS_PERF_PROBE_CLIENT_SOUND);
 
     SND_PlayFXSounds();
     SND_UpdateLoopingSounds();

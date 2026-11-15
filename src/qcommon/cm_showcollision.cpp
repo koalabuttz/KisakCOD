@@ -52,14 +52,16 @@ void CM_ShowSingleBrushCollision(
     void(*drawCollisionPoly)(int, float (*)[3], const float *))
 {
     int ptCount; // [esp+30h] [ebp-506Ch]
-    ShowCollisionBrushPt brushPts; // [esp+34h] [ebp-5068h] BYREF
+    // Up to 1024 points (CM_AddSimpleBrushPoint's limit): the retail frame
+    // holds 0x5004 bytes here. A single point overran the stack on any brush.
+    ShowCollisionBrushPt brushPts[1024]; // [esp+34h] [ebp-5068h] BYREF
     int sideIndex; // [esp+5038h] [ebp-64h]
     float axialPlanes[6][4]; // [esp+503Ch] [ebp-60h] BYREF
 
     iassert( brush );
     iassert( color );
     CM_BuildAxialPlanes(brush, &axialPlanes);
-    ptCount = CM_ForEachBrushPlaneIntersection(brush, (float(*)[4])&axialPlanes, &brushPts);
+    ptCount = CM_ForEachBrushPlaneIntersection(brush, (float(*)[4])&axialPlanes, brushPts);
     if (ptCount >= 4)
     {
         for (sideIndex = 0; (uint32_t)sideIndex < 6; ++sideIndex)
@@ -68,7 +70,7 @@ void CM_ShowSingleBrushCollision(
                 (winding_t *)windingPool,
                 (float *)&axialPlanes[sideIndex],
                 sideIndex,
-                &brushPts,
+                brushPts,
                 ptCount))
             {
                 drawCollisionPoly(*(uint32_t *)windingPool, (float (*)[3]) & windingPool[4], color);
@@ -80,7 +82,7 @@ void CM_ShowSingleBrushCollision(
                 (winding_t *)windingPool,
                 brush->sides[sideIndex - 6].plane->normal,
                 sideIndex,
-                &brushPts,
+                brushPts,
                 ptCount))
             {
                 drawCollisionPoly(*(uint32_t *)windingPool, (float (*)[3]) & windingPool[4], color);
@@ -201,12 +203,16 @@ int CM_AddSimpleBrushPoint(
         if (dist > 0.1000000014901161)
             return ptCount;
     }
+    // Indices below 6 are the axial planes, which have no side: reading
+    // sides[index - 6] for them read the previous brush's sides (or before
+    // the array) and could skip a plane that happened to match.
+    const cplane_s *pointPlanes[3];
+    for (int corner = 0; corner < 3; ++corner)
+        pointPlanes[corner] = sideIndices[corner] >= 6 ? brush->sides[sideIndices[corner] - 6].plane : nullptr;
     for (sideIndexa = 0; sideIndexa < brush->numsides; ++sideIndexa)
     {
         plane = brush->sides[sideIndexa].plane;
-        if (plane != brush->sides[*sideIndices - 6].plane
-            && plane != brush->sides[sideIndices[1] - 6].plane
-            && plane != brush->sides[sideIndices[2] - 6].plane)
+        if (plane != pointPlanes[0] && plane != pointPlanes[1] && plane != pointPlanes[2])
         {
             dista = Vec3Dot(plane->normal, xyz) - plane->dist;
             if (dista > 0.1000000014901161)

@@ -25,6 +25,9 @@ perf_stop
 - `perf_sample 20 3` measures three windows of 20 s without changing anything.
 - Defaults: 10 s windows, 4 rounds for `perf_ab` and 1 window for
   `perf_sample`, 2 s (`perf_ab`) or 1 s (`perf_sample`) to settle.
+- A last number after the settle time is how many timed pieces a window
+  lists (16 by default): `perf_sample 15 2 1 48` lists the 48 with the most
+  time, sixteen to a line.
 - A run leaves the last window's variant applied. With an even number of
   rounds that is A.
 
@@ -66,7 +69,8 @@ perf: done
   below). Threads of one name are
   added up.
 - **timed** lists pieces of the frame that are timed while a run is active,
-  the sixteen with the most time: per frame, calls per frame, and the longest
+  the sixteen with the most time (or as many as the command's last number
+  asks for, sixteen to a line): per frame, calls per frame, and the longest
   single call of the window.
   - `server frame`: one frame of a server (20 a second) with its sends. Its
     time per server frame is its ms/frame divided by its calls/frame.
@@ -89,6 +93,33 @@ perf: done
   - `menu expressions`: `EvaluateExpression`, every menu expression
     (`visible when`, `exp text` and the like), in the HUD or in any other
     menu.
+  - `client: <part>`: the main thread's client frame (multiplayer client).
+    `frame` is `CL_Frame` (packets in and out). `screen` is
+    `SCR_UpdateScreen` and holds the others and `hud`: `snapshots`
+    (`CG_ProcessSnapshots`), `entities` (`CG_AddPacketEntities`, every
+    entity of the snapshot), `input and prediction` (`CL_Input`,
+    `CG_PredictPlayerState`), `view and weapon` (the view's values, the view
+    weapon, the player's own entity), `scene` (`CG_DrawActive`:
+    `R_RenderScene` with its waits for workers), `sound` (`CL_UpdateSound`,
+    inside `scene` in a map), `2d` (menus over the game, the console) and
+    `hand over the frame` (`R_EndFrame` and `R_IssueRenderCommands`, which
+    holds `wait for the render thread`).
+  - `scene: <part>`: the main thread's own parts of the scene, inside
+    `client: scene`: `cells` (`R_AddWorldSurfacesDpvs`: the visible cells,
+    handed to the workers), `world surfaces` (the world's surfaces added and
+    the sun shadow's maps set up), `static models`
+    (`R_AddAllStaticModelSurfacesCamera`), `entities`
+    (`R_DrawAllSceneEnt`) and `sorted lists`
+    (`R_MergeAndEmitDrawSurfLists`, `R_SortDrawSurfs`).
+  - `workers: awake`: a worker thread from waking to its next sleep, both
+    workers added up. Its calls are wake-ups; a wake-up that finds no
+    command still counts.
+  - `main thread runs: <type>` and `other threads run: <type>`: worker
+    commands of that type as they run (`R_ProcessWorkerCmdInternal`), by who
+    ran them. The main thread runs commands while it waits, so its share is
+    inside its `wait for workers` time; the other threads are the two
+    workers and the render thread. A command that waits for commands of
+    another type holds their time too.
   - `wait for workers: <type>`: the main thread asleep until the worker
     threads finish the commands of that type; `all` is the wait for every
     front-end command before the frame is handed over, `other` any other.
@@ -151,6 +182,22 @@ The same commands, lines and probes, with these differences:
 The Windows PC is a desktop with a GPU much faster than its CPU, so there a
 frame's time is mostly the CPU's and what the CPU saves shows as frames per
 second, which a laptop that waits for its GPU does not show.
+
+## On the PS Vita
+
+- **cpu ms/frame** is the time the kernel counted each thread as running
+  (`sceKernelGetThreadInfo`, `runClocks`). A thread that waits for a lock, a
+  file or another thread does not run, so `main` against the frame's length
+  says how much of a frame the main thread worked and how much it waited.
+- **threads** lists the threads the port starts, by the engine's names
+  (`MAIN`, `BACKEND`, `WORKER0`, ...) plus `sound output` and `gxm programs`:
+  an application cannot list its threads, so each says its name once when it
+  starts (`Vita_NoteThread`, `src/vita/vita_threads.cpp`). The system's own
+  threads in the process (sceGxm's display queue, the audio ports) are not in
+  the list, and `all` is the sum of the list.
+- The Vita gives an application three cores: a table that adds up to less
+  than two frames' worth of time leaves a core free.
+- No machine readings.
 
 ## `r_gpuSyncSleep`
 
@@ -237,6 +284,28 @@ it saves. On the PC (Windows, 12 bots on mp_crash) `menu expressions` went from
 from 2.88 to 2.21 ms a frame. Neither changed the frame rate beyond the spread
 (the PC's HUD is small, and the Vita waits for its render thread), so 1 is the
 default because it does less work for the same results.
+
+## `ui_exprStats`
+
+`ui_exprStats [seconds]` (10 s if left out, 1 to 600) times every operator of
+every menu expression for that long, then prints:
+
+```
+exprstats: 10.0 s, 601 frames, 124.0 expressions a frame, 6.31 entries each, 2.203 ms a frame in all, one clock reading 0.412 us
+exprstats:   dvarbool: 96.00 a frame, 0.4100 ms a frame, 4.27 us each
+exprstats:   ...
+exprstats:   outside the operators: 0.5210 ms a frame
+exprstats: done
+```
+
+Operators are listed by time, most first, by the name they have in a menu
+file (`dvarint`, `tablelookup`, `&&` ...). A `)` runs the operators it closes
+and is not listed itself. The clock is read twice around each operator, so an
+operator's time holds about one reading of the clock and `outside the
+operators` holds two for each operator; `one clock reading` says what to take
+off. It prints numbers only, never an expression's text. Outside a match
+there is no frame count and the figures are per second. While it is off it
+costs one load and a branch per operator.
 
 ## Checks
 

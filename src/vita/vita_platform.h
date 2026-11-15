@@ -34,6 +34,35 @@ void Vita_ConsoleWrite(const char *text, size_t length);
 // NaN), as on x86 and on Linux armv7. Returns the FPSCR value found.
 unsigned int Vita_SetIeeeFloatMode();
 
+// The CPU time of the port's threads (src/vita/vita_threads.cpp). The Vita
+// has no list of a process's threads, so each thread the port starts calls
+// Vita_NoteThread once with its name (at most 23 characters are kept).
+// Vita_ThreadTimes fills the time each of them has run since it started and
+// returns how many it filled; threads that have ended are left out.
+struct VitaThreadTime
+{
+    int id;
+    char name[24];
+    uint64_t runMicroseconds;
+    bool self; // the calling thread
+};
+void Vita_NoteThread(const char *name);
+int Vita_ThreadTimes(VitaThreadTime *times, int count);
+
+// Makes the calling thread's pthread waits real waits. VitaSDK's pthreads
+// wake a thread that waits on a condition or a semaphore every 500
+// microseconds to look for a cancel request, unless the thread has turned
+// cancellation off: a thread with nothing to do then still runs 3.6% of the
+// time (console run AZ: three idle threads, 1.4 ms of a 38 ms frame each).
+// Nothing in the port cancels a thread. Each thread the port starts calls
+// this once.
+void Vita_QuietWaits();
+// How long a wait of `msec` on an event nothing sets takes, in microseconds.
+// The start-up log prints one: VitaSDK's pthreads read every deadline against
+// the wall clock, and until the port's waits allowed for that
+// (linux/sys_posix.cpp) no timed wait waited.
+uint32_t Vita_TimedWaitMicroseconds(uint32_t msec);
+
 // Load and memory figures for the first runs (src/vita/vita_stats.cpp), so
 // console.log answers how many players the Vita can serve.
 //

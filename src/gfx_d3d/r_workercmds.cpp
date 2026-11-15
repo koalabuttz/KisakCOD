@@ -327,6 +327,11 @@ int R_ProcessWorkerCmd(WorkerCmdType type)
 
 void R_ProcessWorkerCmdInternal(WorkerCmdType type, void *data)
 {
+    // Which thread ran it tells the main thread's own share from the workers'
+    // (docs/perf-ab.md).
+    SysPerfScope perfScope(!Sys_PerfProbesOn() ? SYS_PERF_PROBE_COUNT
+                           : (Sys_IsMainThread() ? SYS_PERF_PROBE_WORK_MAIN : SYS_PERF_PROBE_WORK_OTHER)
+                                 + (uint32_t)type);
     R_NotifyWorkerCmdType(type);
     switch (type)
     {
@@ -555,6 +560,7 @@ void R_WorkerThread()
         }
         {
             PROF_SCOPED("WorkerThread");
+            SysPerfScope perfScope(SYS_PERF_PROBE_WORKERS_AWAKE);
             R_ProcessWorkerCmds();
         }
     }

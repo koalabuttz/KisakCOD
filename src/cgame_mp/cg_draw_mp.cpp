@@ -141,6 +141,7 @@ void CG_Draw2D(int32_t localClientNum)
     const cg_s *cgameGlob;
 
     SysPerfScope perfScope(SYS_PERF_PROBE_HUD);
+    UI_ExprStatsFrame();
 
     cgameGlob = CG_GetLocalClientGlobals(0);
 

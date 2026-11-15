@@ -19,6 +19,7 @@
 #include <qcommon/cmd.h>
 #include <gfx_d3d/r_screenshot.h>
 #include <qcommon/qcommon.h>
+#include <linux/sys_perf.h>
 
 int scr_initialized;
 BOOL updateScreenCalled;
@@ -89,10 +90,16 @@ void SCR_UpdateFrame()
     refreshedUI = CL_CGameRendering(0);
     if (Sys_IsMainThread() && !refreshedUI)
         CL_UpdateSound();
-    SCR_DrawScreenField(0, refreshedUI);
-    CL_DrawScreen(0);
-    R_EndFrame();
-    R_IssueRenderCommands(0xFFFFFFFF);
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_CLIENT_2D);
+        SCR_DrawScreenField(0, refreshedUI);
+        CL_DrawScreen(0);
+    }
+    {
+        SysPerfScope perfScope(SYS_PERF_PROBE_CLIENT_HAND_OVER);
+        R_EndFrame();
+        R_IssueRenderCommands(0xFFFFFFFF);
+    }
     if (r_reflectionProbeGenerate->current.enabled && refreshedUI && CL_GetLocalClientGlobals(0)->serverTime > 1000)
         R_BspGenerateReflections();
 }

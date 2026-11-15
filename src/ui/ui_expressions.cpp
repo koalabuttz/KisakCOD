@@ -8,6 +8,9 @@
 #include <win32/win_storage.h>
 #include <universal/profile.h>
 #include <linux/sys_perf.h>
+#include <qcommon/cmd.h>
+
+#include <algorithm>
 
 #ifdef KISAK_MP
 #include <cgame_mp/cg_local_mp.h>
@@ -693,6 +696,175 @@ void GetIsIntermission(int localClientNum, Operand *result)
 #endif
 
 
+// ---------------------------------------------------------------------------
+// ui_exprStats [seconds]: times every expression operator for that long (10 s
+// if left out) and prints, per operator, how often it ran and what it cost a
+// frame. It prints numbers only, never an expression's text. The clock is read
+// twice around every operator while it runs, so the line also gives what one
+// reading costs on this machine. docs/perf-ab.md describes the lines.
+// ---------------------------------------------------------------------------
+namespace
+{
+    constexpr int UI_EXPR_STATS_OPS = sizeof(g_expOperatorNames) / sizeof(g_expOperatorNames[0]);
+
+    struct UiExprStats
+    {
+        bool on;
+        uint64_t startNs;
+        uint64_t endNs;
+        uint32_t frames;
+        uint64_t expressions;
+        uint64_t entries;
+        uint64_t expressionNs;
+        uint64_t opCalls[UI_EXPR_STATS_OPS];
+        uint64_t opNs[UI_EXPR_STATS_OPS];
+    };
+
+    UiExprStats s_exprStats;
+    cmd_function_s s_exprStatsCmd;
+
+    void UI_ExprStatsPrint()
+    {
+        UiExprStats &stats = s_exprStats;
+        stats.on = false;
+
+        // What one reading of the clock costs here.
+        const uint64_t clockStart = Sys_PerfNowNs();
+        uint64_t clockEnd = clockStart;
+        for (int i = 0; i < 1000; ++i)
+            clockEnd = Sys_PerfNowNs();
+        const double clockUs = (double)(clockEnd - clockStart) / 1000.0 / 1000.0;
+
+        const double seconds = (double)(Sys_PerfNowNs() - stats.startNs) / 1e9;
+        // Without a frame count (a program that never calls UI_ExprStatsFrame)
+        // the figures are a second, and the line says so.
+        const bool perFrame = stats.frames > 0;
+        const double per = perFrame ? (double)stats.frames : (seconds > 0.0 ? seconds : 1.0);
+        const char *unit = perFrame ? "a frame" : "a second";
+
+        uint64_t opNsSum = 0;
+        int order[UI_EXPR_STATS_OPS];
+        int used = 0;
+        for (int op = 0; op < UI_EXPR_STATS_OPS; ++op)
+        {
+            opNsSum += stats.opNs[op];
+            if (stats.opCalls[op])
+                order[used++] = op;
+        }
+        std::sort(order, order + used, [&stats](int a, int b) { return stats.opNs[a] > stats.opNs[b]; });
+
+        Com_Printf(
+            CON_CHANNEL_SYSTEM,
+            "exprstats: %.1f s, %u frames, %.1f expressions %s, %.2f entries each, %.3f ms %s in all, one clock reading %.3f us\n",
+            seconds,
+            stats.frames,
+            (double)stats.expressions / per,
+            unit,
+            stats.expressions ? (double)stats.entries / (double)stats.expressions : 0.0,
+            (double)stats.expressionNs / 1e6 / per,
+            unit,
+            clockUs);
+        for (int i = 0; i < used; ++i)
+        {
+            const int op = order[i];
+            Com_Printf(
+                CON_CHANNEL_SYSTEM,
+                "exprstats:   %s: %.2f %s, %.4f ms %s, %.2f us each\n",
+                g_expOperatorNames[op],
+                (double)stats.opCalls[op] / per,
+                unit,
+                (double)stats.opNs[op] / 1e6 / per,
+                unit,
+                (double)stats.opNs[op] / 1e3 / (double)stats.opCalls[op]);
+        }
+        const uint64_t outsideNs = stats.expressionNs > opNsSum ? stats.expressionNs - opNsSum : 0;
+        Com_Printf(
+            CON_CHANNEL_SYSTEM,
+            "exprstats:   outside the operators: %.4f ms %s\n",
+            (double)outsideNs / 1e6 / per,
+            unit);
+        Com_Printf(CON_CHANNEL_SYSTEM, "exprstats: done\n");
+    }
+
+    void UI_ExprStats_f()
+    {
+        double seconds = Cmd_Argc() > 1 ? atof(Cmd_Argv(1)) : 10.0;
+        if (!(seconds >= 1.0))
+            seconds = 1.0;
+        if (seconds > 600.0)
+            seconds = 600.0;
+        s_exprStats = UiExprStats();
+        s_exprStats.startNs = Sys_PerfNowNs();
+        s_exprStats.endNs = s_exprStats.startNs + (uint64_t)(seconds * 1e9);
+        s_exprStats.on = true;
+        Com_Printf(CON_CHANNEL_SYSTEM, "exprstats: timing menu expressions for %.0f s\n", seconds);
+    }
+
+    // Times one operator. A ")" runs the operators it closes through RunOp
+    // again, so it is not timed itself: its time is theirs.
+    struct UiExprStatsOpScope
+    {
+        explicit UiExprStatsOpScope(const OperatorStack *opStack) : op_(-1), startNs_(0)
+        {
+            if (!s_exprStats.on || opStack->numOperators <= 0)
+                return;
+            const int op = opStack->stack[opStack->numOperators - 1];
+            if (op == OP_RIGHTPAREN || op < 0 || op >= UI_EXPR_STATS_OPS)
+                return;
+            op_ = op;
+            startNs_ = Sys_PerfNowNs();
+        }
+        ~UiExprStatsOpScope()
+        {
+            if (op_ < 0)
+                return;
+            s_exprStats.opNs[op_] += Sys_PerfNowNs() - startNs_;
+            ++s_exprStats.opCalls[op_];
+        }
+        int op_;
+        uint64_t startNs_;
+    };
+
+    struct UiExprStatsExpressionScope
+    {
+        explicit UiExprStatsExpressionScope(const statement_s *statement) : startNs_(0)
+        {
+            if (!s_exprStats.on)
+                return;
+            startNs_ = Sys_PerfNowNs();
+            if (startNs_ >= s_exprStats.endNs)
+            {
+                UI_ExprStatsPrint();
+                startNs_ = 0;
+                return;
+            }
+            ++s_exprStats.expressions;
+            s_exprStats.entries += (uint64_t)statement->numEntries;
+        }
+        ~UiExprStatsExpressionScope()
+        {
+            if (startNs_ && s_exprStats.on)
+                s_exprStats.expressionNs += Sys_PerfNowNs() - startNs_;
+        }
+        uint64_t startNs_;
+    };
+}
+
+void UI_ExprStats_Init()
+{
+    static bool s_added;
+    if (s_added)
+        return;
+    s_added = true;
+    Cmd_AddCommandInternal("ui_exprStats", UI_ExprStats_f, &s_exprStatsCmd);
+}
+
+void UI_ExprStatsFrame()
+{
+    if (s_exprStats.on)
+        ++s_exprStats.frames;
+}
+
 void RunOp(int localClientNum, OperatorStack *opStack, OperandStack *dataStack)
 {
     operandInternalDataUnion v3; // eax
@@ -705,6 +877,8 @@ void RunOp(int localClientNum, OperatorStack *opStack, OperandStack *dataStack)
     Operand operandResult; // [esp+150h] [ebp-14h] BYREF
     int localVarStringIndex; // [esp+158h] [ebp-Ch]
     Operand data1; // [esp+15Ch] [ebp-8h] BYREF
+
+    UiExprStatsOpScope statsScope(opStack);
 
     localVarStringIndex = 0;
     if (opStack->numOperators <= 0)
@@ -2643,6 +2817,7 @@ Operand *EvaluateExpression(int localClientNum, const statement_s *statement, Op
     int i; // [esp+14B8h] [ebp-4h]
 
     SysPerfScope perfScope(SYS_PERF_PROBE_UI_EXPRESSIONS);
+    UiExprStatsExpressionScope statsScope(statement);
 
     g_releaseBuildStatement = statement;
     if (UI_FastExpressions())
