@@ -245,10 +245,13 @@ struct Backend
     uint64_t softShadowScenes = 0, softShadowScenesBase = 0;
     // Soft spot-light shadows (docs/vulkan-modern.md "Soft spot-light
     // shadows"), wanted as the sun's, and the lights' size in world units;
-    // the scenes whose lit surfaces were told to use them.
+    // the scenes that drew a shadowed spot or omni light's surfaces with our
+    // lit shaders while they were on (not every scene with the switch on: a
+    // view with no shadowed lamp in it counts none).
     bool softSpotShadowsWanted = false;
     float spotLightSize = 4.0f;
     uint64_t softSpotScenes = 0, softSpotScenesBase = 0;
+    bool softSpotThisScene = false;
     uint32_t shadowFrame = 0;
     // Contact shadows (docs/vulkan-modern.md "Contact shadows"): wanted with
     // our lit shaders unless switched on or off outright, which makes the
@@ -1126,7 +1129,7 @@ void BackendLogStats(Backend *backend, bool reset)
                 static_cast<unsigned long long>(backend->softShadowScenes - backend->softShadowScenesBase),
                 backend->shadowSoftness);
     if (backend->softSpotScenes > backend->softSpotScenesBase)
-        HostLog(h, "vulkan d3d9: modern: %llu scenes with soft spot-light shadows (lights %.1f units)",
+        HostLog(h, "vulkan d3d9: modern: %llu scenes drew soft spot-light shadows (lights %.1f units)",
                 static_cast<unsigned long long>(backend->softSpotScenes - backend->softSpotScenesBase),
                 backend->spotLightSize);
     // Bloom: the scenes it ran for in place of the glow, the passes of each,
@@ -1516,6 +1519,7 @@ lg::Surface *BackendModernSceneTarget(Backend *backend, lg::Surface *backBuffer,
     }
     ++backend->linearScenes;
     backend->litThisScene = false;
+    backend->softSpotThisScene = false;
     result = ModernResult::Done;
     return backend->linearSceneSurface;
 }
@@ -1538,6 +1542,12 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
         if (!backend->litThisScene)
             ++backend->litScenes;
         backend->litThisScene = true;
+        if (inputs->overWhite && backend->softSpotShadowsWanted && lg::ModernLitPointLight(shader)
+            && lg::ModernLitShadowed(shader) && !backend->softSpotThisScene)
+        {
+            ++backend->softSpotScenes;
+            backend->softSpotThisScene = true;
+        }
     }
     lg::SetLinearInputs(backend->legacy, inputs ? inputs->constants : 0, inputs ? inputs->samplers : 0,
                         inputs ? inputs->doubled : 0, inputs && inputs->colorInput, inputs && inputs->overWhite,
@@ -2195,7 +2205,6 @@ void BackendModernSunShadow(Backend *backend, lg::Device *legacy, const ModernSu
     {
         params.spotSize = backend->spotLightSize;
         params.on += lg::kModernSoftSpot;
-        ++backend->softSpotScenes;
     }
     params.frame = static_cast<float>(backend->shadowFrame++ & 63u);
     lg::SetModernShadow(legacy, &params);

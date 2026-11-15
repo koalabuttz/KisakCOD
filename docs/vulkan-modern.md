@@ -1570,8 +1570,9 @@ shadows plus 2 for soft spot-light shadows).
 On by default with our lit shaders; `r_modernSoftSpotShadows off` (or
 `KISAK_VK_MODERN_SOFT_SPOT_SHADOWS=0`) keeps the game's taps, and a light size
 of 0 gives the narrowest filter. Their cost is inside the lit passes' own
-time; the statistics line is `modern: N scenes with soft spot-light shadows
-(lights 4.0 units)`.
+time; the statistics line is `modern: N scenes drew soft spot-light shadows
+(lights 4.0 units)`, counting only scenes that drew a shadowed spot or omni
+light's surfaces with them (a view without a shadowed lamp counts none).
 
 The `modern_soft_spot_shadow` check scene draws lm_hsm_spot_r0c0 across a
 blocker's edge in a spot light's tile, the blocker 10 units from the light

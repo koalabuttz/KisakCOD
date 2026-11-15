@@ -420,7 +420,7 @@ def main():
     checks.expect('modern_soft_spot_shadow passes with KISAK_VK_MODERN_SOFT_SPOT_SHADOWS=0',
                   code == 0 and found.get('d3d9_check') == 'passed'
                   and [s[0] for s in scenes] == ['modern_soft_spot_shadow']
-                  and 'soft spot-light shadows (' not in stdout,
+                  and 'drew soft spot-light shadows (' not in stdout,
                   f'status {code}\n{stdout}')
     # debug-velocity
     debug = dict(env)
@@ -769,6 +769,19 @@ def main():
         reads = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes read the planar reflection', stdout)
         checks.expect('no scene reads a planar reflection unless asked for', reads is None,
                       reads.group(0) if reads else '')
+    # Soft spot-light shadows: counted only in scenes that drew a shadowed
+    # spot or omni light's surfaces with our lit shaders, which is
+    # modern_soft_spot_shadow's one.
+    if 'KISAK_VK_MODERN_DEBUG' not in env:
+        spot = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes drew soft spot-light shadows', stdout)
+        if all(env.get(name) != '0' for name in ('KISAK_VK_MODERN_LINEAR', 'KISAK_VK_MODERN_LIT', 'KISAK_VK_MODERN_SHADERS',
+                                                  'KISAK_VK_MODERN_LIGHT_SHADERS',
+                                                  'KISAK_VK_MODERN_SOFT_SPOT_SHADOWS')):
+            checks.expect('soft spot-light shadows drawn in the 1 scene with a shadowed spot light',
+                          spot is not None and spot.group(1) == '1', spot.group(0) if spot else 'no soft spot line')
+        else:
+            checks.expect('no soft spot-light shadows without our spot shaders', spot is None,
+                          spot.group(0) if spot else '')
     # Reflection probes, filtered again at load: modern_probes' one, twice.
     if 'KISAK_VK_MODERN_PROBES' not in env:
         probes = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) reflection probes filtered', stdout)
