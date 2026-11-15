@@ -87,6 +87,14 @@ since the device was made or since the last call that started them again.
   written and reused, constant data, buffer renames and submissions; the
   flushes by kind (at a swap fence, to feed the GPU); and the GPU frame time,
   which runs from a frame's first command to its last.
+* `vulkan d3d9: memory:` gives the device memory and mapped memory the core
+  holds from the driver, in how many blocks, the buffers and images alive,
+  what it holds in each memory heap (with the heap's size), and the blocks
+  that went to a later memory type, empty blocks given back and staging
+  chunks given back ([core](vulkan-core.md)). `LogDeviceMemory(when)` logs
+  the same line as `memory at <when>:`; the game calls it through
+  `R_LogBackendMemory` at each map load (`R_LoadWorld`, as `map load
+  <name>`), so a log shows whether memory comes back between maps.
 * `vulkan d3d9: GPU time:` splits that time: the milliseconds per frame the
   GPU spent in the frame's passes, the milliseconds between them (the GPU
   waiting for the frame's next part), and the milliseconds before the frame

@@ -1,0 +1,151 @@
+name: Android
+
+# Opt-in Android track, stage one (docs/android.md): build the dedicated
+# server KisakCOD-dedi with -DKISAK_PLATFORM=android for arm64-v8a with the
+# Android NDK the hosted Ubuntu runner carries ($ANDROID_NDK_HOME), Debug and
+# RelWithDebInfo, and check each binary without running it
+# (scripts/tests/check_android_binary.py): an Android executable that needs
+# only bionic, with 16 KiB segments and no fused multiply-add. There is no
+# Android device or emulator here, so start-up and map loading are checked on
+# David's handheld. The RelWithDebInfo binary is kept as an artifact for that.
+# The Linux, macOS, Windows and Vita builds are untouched.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "master" ]
+    paths:
+      - CMakeLists.txt
+      - scripts/common_files.cmake
+      - scripts/mp/**
+      - scripts/extern/**
+      - scripts/platform/linux/**
+      - scripts/platform/android/**
+      - scripts/tests/check_android_binary.py
+      - scripts/ci/each-config.sh
+      - scripts/ci/use-ccache.sh
+      - src/**
+      # The PS Vita port's own sources reach no Android build: shared sources
+      # include its headers only in Vita builds. Later patterns override
+      # earlier ones.
+      - '!src/vita/**'
+      - '!src/gfx_gxm/**'
+      - deps/**
+      - .github/workflows/build-kisakcod-android.yaml
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [ "master" ]
+    paths:
+      - CMakeLists.txt
+      - scripts/common_files.cmake
+      - scripts/mp/**
+      - scripts/extern/**
+      - scripts/platform/linux/**
+      - scripts/platform/android/**
+      - scripts/tests/check_android_binary.py
+      - scripts/ci/each-config.sh
+      - scripts/ci/use-ccache.sh
+      - src/**
+      - '!src/vita/**'
+      - '!src/gfx_gxm/**'
+      - deps/**
+      - .github/workflows/build-kisakcod-android.yaml
+
+permissions:
+  contents: read
+
+# A newer push to a pull request cancels its older run; a master run in
+# progress always finishes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  android_dedicated:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # Debug and RelWithDebInfo run one after the other in this one job
+    # (scripts/ci/each-config.sh): the pair needs one runner, not two, and the
+    # second configuration still runs when the first fails.
+    name: Android arm64 dedicated server
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
+
+      - name: Install build tools
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/ci/apt-install.sh cmake ninja-build python3 ccache
+
+      - name: Show the Android NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "${ANDROID_NDK_HOME:?the runner image sets ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake"
+          grep Pkg.Revision "$ANDROID_NDK_HOME/source.properties"
+          python3 scripts/tests/check_android_binary.py --self-test
+
+      - name: Restore compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-android-dedicated-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-android-dedicated-
+      - name: Use compiler cache
+        id: ccache
+        shell: bash
+        env:
+          # One cache holds both configurations.
+          KISAK_CCACHE_MAXSIZE: 1G
+        run: |
+          set -euo pipefail
+          scripts/ci/use-ccache.sh
+
+      - name: Build and check Android KisakCOD-dedi, Debug then RelWithDebInfo
+        timeout-minutes: 50
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/ci/each-config.sh <<'COMMANDS'
+          build_dir="build-android/$config"
+          binary="out/android-arm64-$config/KisakCOD-dedi"
+          cmake -S . -B "$build_dir" -G Ninja \
+            -DKISAK_PLATFORM=android \
+            -DCMAKE_BUILD_TYPE="$config" \
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$GITHUB_WORKSPACE/out/android-arm64-$config"
+          cmake --build "$build_dir" --target KisakCOD-dedi --parallel "$(nproc)"
+          ls -l "$binary"
+          python3 scripts/tests/check_android_binary.py "$binary"
+          COMMANDS
+
+      - name: Upload the RelWithDebInfo server
+        uses: actions/upload-artifact@v4
+        with:
+          name: KisakCOD-dedi-android-arm64-RelWithDebInfo
+          path: out/android-arm64-RelWithDebInfo/KisakCOD-dedi
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Report compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats
+      - name: Save compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-android-dedicated-${{ github.run_id }}-${{ github.run_attempt }}

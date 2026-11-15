@@ -164,6 +164,100 @@ namespace
         Posix_DestroyEvent(event);
     }
 
+    // A worker thread sets the worker command event when a command ends, goes
+    // to wait itself, is let through at once and resets the event, all before
+    // the main thread it woke has run again. SetEvent on Windows has let the
+    // main thread go by then; a waiter here that only looked at the state
+    // slept on to the end of its timeout.
+    struct SetThenResetWaiterArgs
+    {
+        PosixEvent *event;
+        bool timed;
+        volatile int waiting;
+        volatile int arrived;
+        bool signalled;
+        uint64_t arrivedAt;
+    };
+
+    void *SetThenResetWaiter(void *raw)
+    {
+        SetThenResetWaiterArgs *args = (SetThenResetWaiterArgs *)raw;
+        __atomic_store_n(&args->waiting, 1, __ATOMIC_SEQ_CST);
+        if (args->timed)
+        {
+            args->signalled = Posix_WaitEvent(args->event, 3000);
+        }
+        else
+        {
+            Posix_WaitEventInfinite(args->event);
+            args->signalled = true;
+        }
+        args->arrivedAt = Posix_MonotonicNanoseconds();
+        __atomic_store_n(&args->arrived, 1, __ATOMIC_SEQ_CST);
+        return nullptr;
+    }
+
+    void TestSetThenResetLetsWaitersGo()
+    {
+        printf("a set that is reset at once\n");
+        PosixEvent *event = Posix_CreateEvent(true, false);
+
+        constexpr int kRounds = 40;
+        int letGo = 0;
+        int inTime = 0;
+        for (int round = 0; round < kRounds; ++round)
+        {
+            SetThenResetWaiterArgs args = {};
+            args.event = event;
+            args.timed = (round & 1) == 0;
+            pthread_t thread;
+            pthread_create(&thread, nullptr, SetThenResetWaiter, &args);
+            while (!__atomic_load_n(&args.waiting, __ATOMIC_SEQ_CST))
+                usleep(100);
+            usleep(2 * 1000); // let it block
+
+            const uint64_t setAt = Posix_MonotonicNanoseconds();
+            Posix_SetEvent(event);
+            // What the worker does next.
+            Posix_WaitEvent(event, 1);
+            Posix_ResetEvent(event);
+
+            // An untimed waiter that was not let go would wait for ever: give
+            // it a second, then set the event for good so the test can end.
+            for (int waited = 0; waited < 1000 && !__atomic_load_n(&args.arrived, __ATOMIC_SEQ_CST); ++waited)
+                usleep(1000);
+            const bool arrived = __atomic_load_n(&args.arrived, __ATOMIC_SEQ_CST) != 0;
+            if (!arrived)
+                Posix_SetEvent(event);
+            pthread_join(thread, nullptr);
+            if (arrived && args.signalled)
+            {
+                ++letGo;
+                if ((args.arrivedAt - setAt) / 1000000ull < 500)
+                    ++inTime;
+            }
+            Posix_ResetEvent(event);
+        }
+        Check(letGo == kRounds, "every waiter was let go by a set that was reset at once");
+        Check(inTime == kRounds, "and at the set, not at the end of its timeout");
+
+        // Only a thread that waited at the set: one that comes afterwards
+        // finds the event reset.
+        Posix_SetEvent(event);
+        Posix_ResetEvent(event);
+        Check(!Posix_WaitEvent(event, 20), "a wait begun after the reset times out");
+        Check(!Posix_WaitEvent(event, 0), "and a poll after the reset reports false");
+
+        // An auto-reset event is taken by one waiter and has no such rule.
+        PosixEvent *automatic = Posix_CreateEvent(false, false);
+        Posix_SetEvent(automatic);
+        Posix_ResetEvent(automatic);
+        Check(!Posix_WaitEvent(automatic, 20), "an auto-reset event that was reset times out");
+        Posix_DestroyEvent(automatic);
+
+        Posix_DestroyEvent(event);
+    }
+
     void TestTimedWaitAccuracy()
     {
         printf("timed wait\n");
@@ -519,6 +613,7 @@ int main()
     TestAutoResetEvent();
     TestZeroTimeoutPollDoesNotSleep();
     TestManualResetWakesAllWaiters();
+    TestSetThenResetLetsWaitersGo();
     TestTimedWaitAccuracy();
     TestRecursiveCriticalSection();
     TestArena();

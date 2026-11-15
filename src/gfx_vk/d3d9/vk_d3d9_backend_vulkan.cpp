@@ -875,6 +875,7 @@ void BackendLogStats(Backend *backend, bool reset)
                 average(core.frame), average(core.frameGap), core.frameGap.samples ? core.frameGap.maxMs : 0.0,
                 static_cast<unsigned long long>(stats.feedIdleFlushes - was.feedIdleFlushes));
     LogSlowFrames(*backend);
+    BackendLogMemory(backend, nullptr);
     if (core.recordThread)
         HostLog(h,
                 "vulkan d3d9: record thread: per frame %.0f commands in %.1f blocks; render thread waited "
@@ -1200,6 +1201,36 @@ void DetachBackendWindow(Backend *backend)
         lg::DetachWindow(backend->legacy);
     else if (backend->core)
         gfx_vk::DetachWindow(backend->core);
+}
+
+void BackendLogMemory(Backend *backend, const char *when)
+{
+    if (!backend || !backend->core)
+        return;
+    // What the core holds from the driver, and where: a heap that only grows
+    // from one map load to the next is memory not given back; the small
+    // device-local heap the CPU can map (256 MB without resizable BAR) is
+    // the one that ran out on the PC (pc-water-run-4).
+    const CoreStats &core = Stats(backend->core);
+    VkPhysicalDeviceMemoryProperties memory{};
+    Functions(backend->core).vkGetPhysicalDeviceMemoryProperties(PhysicalDeviceHandle(backend->core), &memory);
+    std::string heaps;
+    for (uint32_t i = 0; i < memory.memoryHeapCount && i < VK_MAX_MEMORY_HEAPS; ++i)
+    {
+        char heap[96];
+        std::snprintf(heap, sizeof(heap), "%s%u (%s%llu MB) %.1f MB", i ? ", " : "", i,
+                      (memory.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) ? "device-local, " : "",
+                      static_cast<unsigned long long>(memory.memoryHeaps[i].size >> 20),
+                      double(core.heapBytes[i]) / (1024.0 * 1024.0));
+        heaps += heap;
+    }
+    HostLog(*backend->host,
+            "vulkan d3d9: memory%s%s: %.1f MB device memory and %.1f MB mapped in %u blocks, %u buffers and %u "
+            "images alive; by heap %s; %u blocks went to a later memory type, %u empty blocks and %u arena chunks "
+            "given back",
+            when ? " at " : "", when ? when : "", double(core.deviceMemoryBytes) / (1024.0 * 1024.0),
+            double(core.hostMemoryBytes) / (1024.0 * 1024.0), core.memoryBlocks, core.buffersAlive,
+            core.imagesAlive, heaps.c_str(), core.memoryFallbacks, core.emptyBlocksFreed, core.arenaChunksFreed);
 }
 
 uint64_t BackendTextureMemory(const Backend *backend)

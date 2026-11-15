@@ -2914,6 +2914,7 @@ void R_GenerateSortedDrawSurfs(
         if (gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD)
         {
             R_AddAllBspDrawSurfacesCamera();
+            SysPerfScope lightsScope(SYS_PERF_PROBE_WORLD_LIGHTS);
             if (planar)
             {
                 // The main view's shadow maps, drawn before this view.

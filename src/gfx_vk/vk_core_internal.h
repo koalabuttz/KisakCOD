@@ -113,8 +113,13 @@ struct LinearArena
 {
     VkBufferUsageFlags usage = 0;
     VkDeviceSize chunkSize = 0;
+    MemoryKind memory = MemoryKind::Upload;
     std::vector<LinearChunk> chunks;
     uint32_t current = 0;
+    // Whether a request went past the first chunk since the slot's last
+    // recycle, and the recycles in a row where none did (TrimArena).
+    bool spilled = false;
+    uint32_t quietRecycles = 0;
 };
 
 enum class DeferredKind

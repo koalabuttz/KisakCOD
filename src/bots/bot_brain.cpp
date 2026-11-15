@@ -8,11 +8,12 @@
 //   sense     ten times a second, what its eyes and ears get of the other
 //             players (bot_senses.cpp) goes into what it knows
 //             (bot_perception.h): noticed, remembered and heard players;
-//   decide    where to go and what to look at (for now: walk to random
-//             places on the map's navigation mesh, look around when there is
-//             none, watch the player it noticed, remembers or heard, fight
-//             the one it sees (bot_combat.h, with bot_combat 1), ask to
-//             respawn when dead; later phases add objectives, docs/bots.md);
+//   decide    what to do (bot_mind.h: roam, hunt, fight, take cover), where
+//             to go for it on the map's navigation mesh, and what to look
+//             at: the player it sees, a sound it just heard, or the corner of
+//             its way an enemy would come round (pre-aim); fight the player
+//             it sees (bot_combat.h, with bot_combat 1); ask to respawn when
+//             dead; objectives come later (docs/bots.md);
 //   move      the view motor (bot_motor.h) turns toward that at a human pace,
 //             the hand of bot_combat.h aims, and the bot kicks its own view
 //             when it fires, as a player's client does;
@@ -29,6 +30,7 @@
 
 #include "bot_brain.h"
 #include "bot_combat.h"
+#include "bot_mind.h"
 #include "bot_motor.h"
 #include "bot_navmesh.h"
 #include "bot_perception.h"
@@ -94,6 +96,31 @@ struct BotSlot
     int lastFightTime = -100000;
     bool reloadHeld = false;
     int nextReloadTime = 0;
+
+    // Deciding: what it is doing, its leanings, where it has been and met
+    // enemies, where it is going and why.
+    kb::Mind mind;
+    kb::Personality personality;
+    kb::AreaMemory areas;
+    float goal[3] = {0.0f, 0.0f, 0.0f};
+    bool hasGoal = false;
+    kb::Intent goalFor = kb::Intent::Roam;
+    int holdUntil = 0;
+    bool holdCrouched = false;
+    // Cover from the threat it knows of, looked for at most once a second.
+    float cover[3] = {0.0f, 0.0f, 0.0f};
+    bool coverKnown = false;
+    int nextCoverSearch = 0;
+    // The corner of its way it pre-aims, looked for four times a second.
+    float preAim[3] = {0.0f, 0.0f, 0.0f};
+    bool preAimKnown = false;
+    int nextPreAim = 0;
+    // The HUD's hit indicator: when it was last hit, and from which way.
+    int damageEvent = 0;
+    bool damageKnown = false;
+    int hurtAt = -1000000;
+    bool hurtFromKnown = false;
+    float hurtFrom[3] = {0.0f, 0.0f, 0.0f};
 };
 
 BotSlot s_slots[kMaxBotSlots];
@@ -196,14 +223,13 @@ void Sense(BotSlot &bot, int clientNum)
                    notices[i].exposure * 100.0f);
 }
 
-// Picks a reachable place and the way there. False when there is none.
-bool PlanWalk(BotSlot &bot, const kb::NavMesh &nav, const float *origin)
+// The way from `origin` to `goal`. False when there is none.
+bool PlanWalk(BotSlot &bot, const kb::NavMesh &nav, const float *origin, const float *goal)
 {
     bot.pathCount = 0;
     bot.pathIndex = 0;
-    float goal[3];
-    if (!nav.RandomReachablePoint(origin, NextUnit, &bot.rng, goal))
-        return false;
+    bot.preAimKnown = false;
+    bot.nextPreAim = 0;
     const int count = nav.FindPath(origin, goal, bot.path, BotSlot::kMaxCorners);
     if (count < 2)
         return false;
@@ -214,24 +240,16 @@ bool PlanWalk(BotSlot &bot, const kb::NavMesh &nav, const float *origin)
     return true;
 }
 
-// One server frame of walking: turn toward the next corner, move toward it,
-// jump when stuck, find another way when still stuck. Returns false when the
-// bot has nowhere to go this frame (it then looks around). With `aiming` the
-// view is the fight's and is left alone.
-bool Walk(BotSlot &bot, const kb::NavMesh &nav, const playerState_s *ps, float seconds, usercmd_s &cmd,
-          const float *watch, bool aiming = false)
+// One server frame of walking the way planned: turn toward the next corner
+// (or look at `watch`), move toward it, jump when stuck, drop the way when
+// still stuck. Returns false when the bot has no way or has arrived. With
+// `aiming` the view is the fight's and is left alone.
+bool Walk(BotSlot &bot, const playerState_s *ps, float seconds, usercmd_s &cmd, const float *watch,
+          bool aiming = false)
 {
     const float *origin = ps->origin;
     if (bot.pathIndex >= bot.pathCount)
-    {
-        if (svs.time < bot.nextPlanTime)
-            return false;
-        if (!PlanWalk(bot, nav, origin))
-        {
-            bot.nextPlanTime = svs.time + 1000;
-            return false;
-        }
-    }
+        return false;
 
     while (bot.pathIndex < bot.pathCount
            && Distance2D(origin, bot.path[bot.pathIndex]) < kCornerReach
@@ -246,8 +264,6 @@ bool Walk(BotSlot &bot, const kb::NavMesh &nav, const playerState_s *ps, float s
     }
     if (bot.pathIndex >= bot.pathCount)
     {
-        // Arrived: look around for a moment, as a player would, then go on.
-        bot.nextPlanTime = svs.time + static_cast<int>(bot.rng.Range(500.0f, 2500.0f));
         bot.stuckCount = 0;
         return false;
     }
@@ -265,7 +281,12 @@ bool Walk(BotSlot &bot, const kb::NavMesh &nav, const playerState_s *ps, float s
         ++bot.stuckCount;
         bot.pathCount = 0;
         bot.pathIndex = 0;
-        bot.nextPlanTime = svs.time;
+        // Stuck twice on the way to the same place: go somewhere else.
+        if (bot.stuckCount >= 2)
+        {
+            bot.hasGoal = false;
+            bot.stuckCount = 0;
+        }
         return false;
     }
 
@@ -476,6 +497,270 @@ int Fight(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focus 
     return kb::StepStrafe(bot.strafe, svs.time, skill, bot.rng);
 }
 
+// ---------------------------------------------------------------------------
+// Deciding (bot_mind.h) and the map sense (bot_tactics.cpp).
+
+bool IsReloading(const playerState_s *ps)
+{
+    return ps->weaponstate >= WEAPON_RELOADING && ps->weaponstate <= WEAPON_RELOAD_END;
+}
+
+// The HUD's hit indicator: when the bot was hit, and from which way (the game
+// sends the direction of the hit in the player state for the client to draw).
+void NoticeHits(BotSlot &bot, const playerState_s *ps)
+{
+    if (!bot.damageKnown)
+    {
+        bot.damageEvent = ps->damageEvent;
+        bot.damageKnown = true;
+        return;
+    }
+    if (ps->damageEvent == bot.damageEvent)
+        return;
+    bot.damageEvent = ps->damageEvent;
+    bot.hurtAt = svs.time;
+    bot.hurtFromKnown = false;
+    if (ps->damageYaw == 255 && ps->damagePitch == 255)
+        return; // hurt by the world: no direction
+    const float yaw = static_cast<float>(ps->damageYaw) * (360.0f / 256.0f) * (3.14159265358979f / 180.0f);
+    bot.hurtFrom[0] = ps->origin[0] + std::cos(yaw) * 600.0f;
+    bot.hurtFrom[1] = ps->origin[1] + std::sin(yaw) * 600.0f;
+    bot.hurtFrom[2] = ps->origin[2] + ps->viewHeightCurrent;
+    bot.hurtFromKnown = true;
+}
+
+bool RecentlyHurt(const BotSlot &bot, int withinMs)
+{
+    return svs.time - bot.hurtAt < withinMs;
+}
+
+// Where the bot thinks the enemy it worries about is, at eye height: the one
+// it sees or remembers, else a sound, else the way it was hit from.
+bool Threat(const BotSlot &bot, const kb::Focus &focus, float *out)
+{
+    if (focus.kind == kb::FocusKind::Seen || focus.kind == kb::FocusKind::Remembered)
+    {
+        const float *seen = bot.perception.contacts[focus.entity].lastSeen;
+        out[0] = seen[0];
+        out[1] = seen[1];
+        out[2] = seen[2] + 18.0f; // the chest it saw, up to the eyes
+        return true;
+    }
+    if (focus.kind == kb::FocusKind::Heard)
+    {
+        out[0] = focus.position[0];
+        out[1] = focus.position[1];
+        out[2] = focus.position[2] + kb::kHeadHeight;
+        return true;
+    }
+    if (bot.hurtFromKnown && RecentlyHurt(bot, 5000))
+    {
+        out[0] = bot.hurtFrom[0];
+        out[1] = bot.hurtFrom[1];
+        out[2] = bot.hurtFrom[2];
+        return true;
+    }
+    return false;
+}
+
+// Where a hunt goes: where the bot last saw the enemy, or heard one, or the
+// way it was hit from.
+bool HuntPlace(const BotSlot &bot, const kb::Focus &focus, float *out)
+{
+    if (focus.kind == kb::FocusKind::Remembered || focus.kind == kb::FocusKind::Heard)
+    {
+        std::memcpy(out, focus.position, sizeof(focus.position));
+        return true;
+    }
+    if (bot.hurtFromKnown && RecentlyHurt(bot, 5000))
+    {
+        out[0] = bot.hurtFrom[0];
+        out[1] = bot.hurtFrom[1];
+        out[2] = bot.hurtFrom[2] - kb::kHeadHeight;
+        return true;
+    }
+    return false;
+}
+
+// A place to roam to: the most interesting of a few reachable ones, by the
+// bot's own memory of where it has been and met enemies.
+bool RoamGoal(BotSlot &bot, const kb::NavMesh &nav, const float *origin, float *out)
+{
+    float bestScore = -1.0f;
+    for (int attempt = 0; attempt < 6; ++attempt)
+    {
+        float place[3];
+        if (!nav.RandomReachablePoint(origin, NextUnit, &bot.rng, place))
+            continue;
+        if (Distance2D(origin, place) < 300.0f)
+            continue;
+        const float score = bot.areas.Interest(place, svs.time, bot.personality) + bot.rng.Range(0.0f, 0.3f);
+        if (score > bestScore)
+        {
+            bestScore = score;
+            std::memcpy(out, place, sizeof(place));
+        }
+    }
+    return bestScore >= 0.0f;
+}
+
+const char *CoverReason(const kb::Situation &s)
+{
+    if (s.reloading || s.clip < 0.25f)
+        return "reloading";
+    if (s.health < 0.8f)
+        return "hurt";
+    return "outnumbered";
+}
+
+// This frame's decision: what the bot knows goes into a Situation, the Mind
+// picks an intent, and the intent picks where to walk. Looks for cover when a
+// fight is on.
+void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focus &focus, const kb::NavMesh *nav,
+            bool fighting)
+{
+    const float *origin = ps->origin;
+    float threat[3];
+    const bool threatKnown = Threat(bot, focus, threat);
+
+    // What the bot remembers of the map: where it has been and met enemies.
+    bot.areas.Visit(origin, svs.time);
+    if (focus.kind != kb::FocusKind::None)
+        bot.areas.EnemyAt(focus.position, svs.time);
+    if (bot.hurtFromKnown && bot.hurtAt == svs.time)
+        bot.areas.EnemyAt(bot.hurtFrom, svs.time);
+
+    // Cover from the threat, while there is a fight or a hit to hide from.
+    if (!threatKnown || !CombatOn())
+    {
+        bot.coverKnown = false;
+    }
+    else if (nav && svs.time >= bot.nextCoverSearch
+             && (focus.kind == kb::FocusKind::Seen || RecentlyHurt(bot, 3000) || bot.mind.intent == kb::Intent::Cover))
+    {
+        bot.nextCoverSearch = svs.time + 1000;
+        if (!(bot.coverKnown && Bot_HiddenFrom(bot.cover, threat)))
+            bot.coverKnown = Bot_FindCover(origin, threat, *nav, bot.rng, bot.cover);
+    }
+
+    kb::Situation s;
+    s.nowMs = svs.time;
+    const int maxHealth = ps->stats[STAT_MAX_HEALTH] > 0 ? ps->stats[STAT_MAX_HEALTH] : 100;
+    s.health = static_cast<float>(ps->stats[STAT_HEALTH]) / static_cast<float>(maxHealth);
+    const WeaponDef *def = HeldWeapon(ps);
+    if (IsGun(def) && def->iClipSize > 0)
+    {
+        s.clip = static_cast<float>(ps->ammoclip[BG_ClipForWeapon(ps->weapon)]) / static_cast<float>(def->iClipSize);
+        s.canReload = ps->ammo[BG_AmmoForWeapon(ps->weapon)] > 0;
+    }
+    s.reloading = IsReloading(ps);
+    for (const kb::Contact &contact : bot.perception.contacts)
+        if (contact.active && contact.noticed && contact.visible)
+            ++s.seenEnemies;
+    s.enemyInView = fighting && focus.kind == kb::FocusKind::Seen;
+    s.enemyRemembered = focus.kind == kb::FocusKind::Remembered;
+    if (s.enemyRemembered)
+        s.rememberedConfidence = bot.perception.Confidence(focus.entity, svs.time, Senses());
+    s.heardSomething = focus.kind == kb::FocusKind::Heard || (bot.hurtFromKnown && RecentlyHurt(bot, 3000));
+    s.hurtAgoMs = svs.time - bot.hurtAt;
+    s.coverKnown = bot.coverKnown;
+    s.inCover = bot.coverKnown && Distance2D(origin, bot.cover) < 40.0f && std::fabs(origin[2] - bot.cover[2]) < 48.0f;
+
+    const kb::Intent intent = bot.mind.Decide(s, bot.personality);
+    if (bot.mind.changed && bot_log && bot_log->current.integer)
+    {
+        if (intent == kb::Intent::Cover)
+            Com_Printf(CON_CHANNEL_SERVER, "bots: %d takes cover %.0f units away (%s)\n", clientNum,
+                       Distance2D(origin, bot.cover), CoverReason(s));
+        else if (intent == kb::Intent::Hunt)
+            Com_Printf(CON_CHANNEL_SERVER, "bots: %d hunts (%s)\n", clientNum,
+                       s.enemyRemembered ? "seen" : focus.kind == kb::FocusKind::Heard ? "heard" : "hit");
+    }
+    if (!nav)
+        return;
+
+    // Where the intent goes.
+    const bool arrived = bot.hasGoal && bot.pathCount > 0 && bot.pathIndex >= bot.pathCount;
+    bool replan = bot.mind.changed || !bot.hasGoal || bot.goalFor != intent;
+    switch (intent)
+    {
+    case kb::Intent::Fight:
+        // Keep walking the way it was on (bot_combat.h may strafe instead).
+        return;
+    case kb::Intent::Cover:
+        if (!bot.coverKnown)
+            return;
+        if (Distance2D(bot.goal, bot.cover) > 32.0f)
+            replan = true;
+        std::memcpy(bot.goal, bot.cover, sizeof(bot.goal));
+        if (arrived && !replan)
+            return; // in cover: wait there
+        break;
+    case kb::Intent::Hunt:
+    {
+        float place[3];
+        if (!HuntPlace(bot, focus, place))
+            return;
+        if (arrived && !replan && Distance2D(origin, bot.goal) < 128.0f)
+        {
+            // Got there and nobody is: the lead is cold.
+            if (focus.kind == kb::FocusKind::Remembered || focus.kind == kb::FocusKind::Heard)
+                bot.perception.Forget(focus.entity);
+            bot.hurtFromKnown = false;
+            return;
+        }
+        if (Distance2D(bot.goal, place) > 128.0f)
+            replan = true;
+        if (replan)
+            std::memcpy(bot.goal, place, sizeof(place));
+        break;
+    }
+    case kb::Intent::Roam:
+        if (arrived || replan)
+        {
+            if (!RoamGoal(bot, *nav, origin, bot.goal))
+            {
+                bot.hasGoal = false;
+                return;
+            }
+            // Now and then a bot that got somewhere stays a while and holds
+            // the way it will go next, crouched or standing.
+            const float hold = 0.15f + 0.45f * bot.personality.patience * (1.0f - bot.personality.aggression);
+            if (arrived && bot.rng.Unit() < hold)
+            {
+                bot.holdUntil =
+                    svs.time + static_cast<int>(bot.rng.Range(2500.0f, 7000.0f) * (0.5f + bot.personality.patience));
+                bot.holdCrouched = bot.rng.Unit() < 0.5f;
+            }
+            replan = true;
+        }
+        break;
+    }
+
+    if (replan || (bot.pathIndex >= bot.pathCount && !arrived && svs.time >= bot.nextPlanTime))
+    {
+        bot.hasGoal = true;
+        bot.goalFor = intent;
+        if (!PlanWalk(bot, *nav, origin, bot.goal))
+        {
+            bot.nextPlanTime = svs.time + 1000;
+            if (intent == kb::Intent::Roam)
+                bot.hasGoal = false;
+        }
+    }
+}
+
+// The corner of the bot's way it pre-aims, refreshed four times a second.
+void UpdatePreAim(BotSlot &bot, const playerState_s *ps)
+{
+    if (svs.time < bot.nextPreAim)
+        return;
+    bot.nextPreAim = svs.time + 250;
+    const float eye[3] = {ps->origin[0], ps->origin[1], ps->origin[2] + ps->viewHeightCurrent};
+    bot.preAimKnown = kb::PreAimPoint(eye, ps->origin, bot.path, bot.pathCount, bot.pathIndex, Bot_ClearLine,
+                                      nullptr, bot.preAim);
+}
+
 } // namespace
 
 void Bot_RegisterDvars()
@@ -523,6 +808,9 @@ bool Bot_UserMove(client_t *cl)
         bot.lastTime = svs.time;
         bot.rng.Seed(0x6b6973u ^ (port * 2654435761u) ^ static_cast<uint32_t>(clientNum));
         bot.nextSense = svs.time + (clientNum * 37) % kSenseMs;
+        bot.personality = kb::RandomPersonality(bot.rng);
+        bot.areas.Reset();
+        bot.mind.Reset(svs.time);
     }
 
     const playerState_s *ps = SV_GameClientNum(clientNum);
@@ -561,6 +849,11 @@ bool Bot_UserMove(client_t *cl)
             bot.perception.Reset();
             bot.pathCount = 0;
             bot.pathIndex = 0;
+            bot.hasGoal = false;
+            bot.holdUntil = 0;
+            bot.coverKnown = false;
+            bot.hurtFromKnown = false;
+            bot.mind.Reset(svs.time);
             bot.look.pitch = bot.view.angles[0];
             bot.look.yaw = bot.view.angles[1];
             bot.look.holdSeconds = 0.0f;
@@ -614,16 +907,41 @@ bool Bot_UserMove(client_t *cl)
         {
             bot.pathCount = 0;
             bot.pathIndex = 0;
+            bot.hasGoal = false;
+            bot.holdUntil = 0;
+            bot.mind.Reset(svs.time);
             // Tap use now and then: the stock gametypes respawn on it where
             // they wait for a button, and it skips nothing that matters.
             bot.respawnTap = (bot.respawnTap + 1) % 10;
             if (bot.respawnTap == 0)
                 cmd.buttons |= BUTTON_USE_RELOAD;
         }
-        else if (fighting)
+        else if (alive)
         {
-            const int side = Fight(bot, clientNum, ps, focus, seconds, cmd);
-            if (side != 0)
+            NoticeHits(bot, ps);
+            Decide(bot, clientNum, ps, focus, nav, fighting);
+
+            int side = 0;
+            if (fighting)
+                side = Fight(bot, clientNum, ps, focus, seconds, cmd);
+
+            // Not fighting: look at the player it lost or the sound it heard,
+            // else pre-aim the corner of its way, else along the way.
+            const float *look = watching;
+            float preAimView[2];
+            if (!fighting && !look && bot.pathIndex < bot.pathCount)
+            {
+                UpdatePreAim(bot, ps);
+                if (bot.preAimKnown)
+                {
+                    ViewToward(ps, bot.preAim, preAimView);
+                    look = preAimView;
+                }
+            }
+
+            const bool holding = bot.mind.intent == kb::Intent::Roam && svs.time < bot.holdUntil;
+            bool walked = false;
+            if (side != 0 && bot.mind.intent != kb::Intent::Cover)
             {
                 cmd.rightmove = static_cast<char>(side * 127);
                 // A strafe is not being stuck on the way.
@@ -631,33 +949,38 @@ bool Bot_UserMove(client_t *cl)
                     bot.bestDistance = Distance2D(ps->origin, bot.path[bot.pathIndex]);
                 bot.progressTime = svs.time;
             }
-            else if (nav)
+            else if (!holding)
             {
-                Walk(bot, *nav, ps, seconds, cmd, nullptr, true);
+                walked = Walk(bot, ps, seconds, cmd, look, fighting);
             }
-            bot.lookHeld = 0.0f;
-            bot.look.holdSeconds = 0.0f;
-        }
-        else if (nav && ps->pm_type == PM_NORMAL && Walk(bot, *nav, ps, seconds, cmd, watching))
-        {
-            bot.lookHeld = 0.0f;
-            bot.look.holdSeconds = 0.0f;
-        }
-        else if (watching)
-        {
-            kb::StepView(bot.view, watch[0], watch[1], seconds, WatchMotor());
-            bot.lookHeld = 0.0f;
-            bot.look.holdSeconds = 0.0f;
-        }
-        else
-        {
-            bot.lookHeld += seconds;
-            if (bot.lookHeld >= bot.look.holdSeconds)
+            else
             {
-                bot.look = kb::NextIdleLook(bot.rng, bot.view.angles[1]);
+                bot.progressTime = svs.time;
+                if (bot.holdCrouched)
+                    cmd.buttons |= BUTTON_CROUCH;
+            }
+
+            if (fighting || walked)
+            {
                 bot.lookHeld = 0.0f;
+                bot.look.holdSeconds = 0.0f;
             }
-            kb::StepView(bot.view, bot.look.pitch, bot.look.yaw, seconds, IdleMotor());
+            else if (look)
+            {
+                kb::StepView(bot.view, look[0], look[1], seconds, WatchMotor());
+                bot.lookHeld = 0.0f;
+                bot.look.holdSeconds = 0.0f;
+            }
+            else
+            {
+                bot.lookHeld += seconds;
+                if (bot.lookHeld >= bot.look.holdSeconds)
+                {
+                    bot.look = kb::NextIdleLook(bot.rng, bot.view.angles[1]);
+                    bot.lookHeld = 0.0f;
+                }
+                kb::StepView(bot.view, bot.look.pitch, bot.look.yaw, seconds, IdleMotor());
+            }
         }
     }
 

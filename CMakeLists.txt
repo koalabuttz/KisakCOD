@@ -26,6 +26,15 @@ if(KISAK_PLATFORM STREQUAL "vita")
     if(NOT CMAKE_TOOLCHAIN_FILE)
         set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_LIST_DIR}/scripts/platform/vita/vita-clang.cmake")
     endif()
+elseif(KISAK_PLATFORM STREQUAL "android")
+    # Opt-in Android track (docs/android.md): 64-bit Arm (arm64-v8a) through
+    # the Android NDK's own toolchain file. Bionic is a Linux C library, so
+    # the POSIX layer (src/linux) builds as it does for Arm Linux, and the
+    # aarch64 track's rules apply (signed char, no fused multiply-add; set in
+    # scripts/platform/linux/platform.cmake, since the NDK's toolchain file
+    # replaces the *_FLAGS_INIT variables).
+    include(${CMAKE_CURRENT_LIST_DIR}/scripts/platform/android/android_toolchain.cmake)
+    set(KISAK_LINUX_ARCH "aarch64" CACHE STRING "Native Linux architecture" FORCE)
 elseif(KISAK_PLATFORM STREQUAL "macos")
     # One architecture per build directory: arm64 (Apple silicon) or x86_64
     # (Intel Macs), the host's unless CMAKE_OSX_ARCHITECTURES says otherwise.
@@ -92,7 +101,7 @@ project(KisakCOD)
 # scripts/common_files.cmake), and movies are built out (r_cinematic.cpp
 # without CINEMA) unless KISAK_WIN64_CINEMATICS plays them through the FFmpeg
 # Bink shim (scripts/extern/bink_shim.cmake).
-if(NOT KISAK_PLATFORM MATCHES "^(linux|macos|vita)$" AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+if(NOT KISAK_PLATFORM MATCHES "^(linux|macos|vita|android)$" AND CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(KISAK_WIN64 ON)
     if(NOT KISAK_OPENAL)
         message(STATUS "64-bit Windows build: Miles is 32-bit only, so KISAK_OPENAL is turned on")
@@ -118,8 +127,8 @@ add_compile_definitions(_CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
 
 # Set this to match the folder name in scripts/platform
 # This will handle the path overrides if needed
-set(KISAK_PLATFORM "win32" CACHE STRING "Build platform: win32|mingw|linux|macos|vita")
-set_property(CACHE KISAK_PLATFORM PROPERTY STRINGS win32 mingw linux macos vita)
+set(KISAK_PLATFORM "win32" CACHE STRING "Build platform: win32|mingw|linux|macos|vita|android")
+set_property(CACHE KISAK_PLATFORM PROPERTY STRINGS win32 mingw linux macos vita android)
 
 # Set Address Sanitizer
 # NOTE: If you use this you will need to copy to the game's directory
@@ -200,7 +209,7 @@ message("Building KISAK_PLATFORM: ${KISAK_PLATFORM}")
 # macOS shares the POSIX platform directory (and the src/linux layer).
 if(KISAK_PLATFORM STREQUAL "vita")
     add_subdirectory(${SCRIPTS_DIR}/platform/vita)
-elseif(KISAK_PLATFORM MATCHES "^(linux|macos)$")
+elseif(KISAK_PLATFORM MATCHES "^(linux|macos|android)$")
     add_subdirectory(${SCRIPTS_DIR}/platform/linux)
 else()
     # Opt-in r_backend vulkan for KisakCOD-mp (KISAK_BUILD_VULKAN_BACKEND):

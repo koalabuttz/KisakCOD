@@ -244,6 +244,7 @@
  const dvar_t *r_fastSkin;
  const dvar_t *r_smc_enable;
  const dvar_t *r_pretess;
+ const dvar_t *r_fetchAhead;
  const dvar_t *r_dynamicBufferReport;
  const dvar_t *r_picmip_manual;
  const dvar_t *r_picmip;
@@ -262,6 +263,7 @@
  const dvar_t *r_glow_allowed_script_forced;
  const dvar_t *r_outdoor;
  const dvar_t *r_sse_skinning;
+ const dvar_t *r_staticCullVec;
  const dvar_t *r_monitor;
  const dvar_t *r_rendererPreference;
  const dvar_t *r_rendererInUse;
@@ -637,6 +639,20 @@
      r_smc_enable = Dvar_RegisterBool("r_smc_enable", false, DVAR_ROM, "Enable static model cache");
 #endif
      r_pretess = Dvar_RegisterBool("r_pretess", true, DVAR_NOFLAG, "Batch surfaces to reduce primitive count");
+     // Nothing but the time changes (r_add_bsp.cpp, r_add_staticmodel.cpp,
+     // r_dpvs_static_vec.cpp). On for the PS Vita, where console runs CB and
+     // trial A measured it (docs/perf-ab.md); off elsewhere until a machine
+     // shows what it is worth there.
+#ifdef KISAK_GFX_GXM
+     const bool fetchAheadDefault = true;
+#else
+     const bool fetchAheadDefault = false;
+#endif
+     r_fetchAhead = Dvar_RegisterBool(
+         "r_fetchAhead",
+         fetchAheadDefault,
+         DVAR_NOFLAG,
+         "Ask the processor ahead of time for what the scene's walks read next (index copies, static model records, a culled leaf's boxes; builds with GCC or Clang)");
      // The PS Vita's buffers are smaller than the retail game's (r_gfx.h), and
      // its runs are read from the log: there the line is on.
      r_dynamicBufferReport = Dvar_RegisterInt(
@@ -1586,6 +1602,13 @@
      sv_cheats = Dvar_RegisterBool("sv_cheats", 1, DVAR_SYSTEMINFO | DVAR_ROM, "Allow server side cheats");
      com_statmon = Dvar_RegisterBool("com_statmon", false, DVAR_NOFLAG, "Draw stats monitor");
      r_sse_skinning = Dvar_RegisterBool("r_sse_skinning", true, DVAR_NOFLAG, "Use Streaming SIMD Extensions for skinning");
+     // The same models and surfaces come out either way (r_dpvs_static_vec.h);
+     // the setting is there to time the two against each other.
+     r_staticCullVec = Dvar_RegisterBool(
+         "r_staticCullVec",
+         true,
+         DVAR_NOFLAG,
+         "Hold a cell's static models and surfaces against four clip planes at a time (builds with GCC or Clang)");
      r_monitor = Dvar_RegisterInt(
          "r_monitor",
          0,
