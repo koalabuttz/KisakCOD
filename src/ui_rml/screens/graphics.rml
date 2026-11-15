@@ -85,6 +85,15 @@
         <row dvar="r_modernFog" type="choice" label="Volumetric Fog" options="Auto=default|Off=off|On=on" save="1"
              hint="The map's fog lit by the sun: darker in shadow, brighter towards the sun."/>
         <row dvar="r_modernFogFroxels" type="choice" label="Fog Quality" options="Auto=default|Ray march=off|Froxels=on" save="1"/>
+        <row dvar="r_modernProbes" type="choice" label="Reflection Probes" options="Auto=default|Off=off|On=on" save="1"
+             hint="The map's reflection cubemaps, blurred for rough surfaces. Applies on restart."/>
+        <row dvar="r_modernPlanar" type="choice" label="Planar Reflections" options="Auto=default|Off=off|On=on" save="1"
+             hint="Mirror-sharp reflections on water and flat floors. Costly. Applies on restart."/>
+        <row dvar="r_modernWater" type="choice" label="Modern Water" options="Auto=default|Off=off|On=on" save="1"
+             hint="Our own water shader. Applies on restart."/>
+        <h2>FLASHES</h2>
+        <row dvar="r_modernLightPass" type="choice" label="Muzzle Flash Light" options="Auto=default|Off=off|On=on" save="1"
+             hint="Muzzle flashes and other moving lights light the world as real light. Applies on restart."/>
     </page>
 
     <page id="advanced" title="Advanced" show-if="r_visuals=modern">
@@ -98,6 +107,7 @@
         <row dvar="r_modernFogSun" type="slider" label="Fog Sunlight" min="0" max="1" step="0.05" scale="100" suffix="%" auto="-1" save="1"/>
         <row dvar="r_modernFogScatter" type="slider" label="Fog Glow Towards Sun" min="0" max="0.9" step="0.05" scale="100" suffix="%" auto="-1" save="1"/>
         <row dvar="r_modernFogSpots" type="slider" label="Fog Lamp Light" min="0" max="4" step="0.1" decimals="1" auto="-1" save="1"/>
+        <row dvar="r_modernLightPassStrength" type="slider" label="Muzzle Flash Brightness" min="0" max="8" step="0.25" decimals="2" auto="-1" save="1"/>
     </page>
 
     <div id="footer">

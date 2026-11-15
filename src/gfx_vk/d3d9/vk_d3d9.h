@@ -413,4 +413,12 @@ bool ModernPlanarWanted(IDirect3DDevice9 *device);
 // view (the program then draws nothing for it).
 bool ModernPlanarBegin(IDirect3DDevice9 *device, const ModernPlanarView &view);
 void ModernPlanarDone(IDirect3DDevice9 *device, const ModernPlanarView &view);
+
+// Start-up switches the program sets in place of the environment: a
+// KISAK_VK_MODERN_* variable's name and the value it would have. The back end
+// reads them where it reads that variable, when it makes a device, so a
+// renderer restart applies them. The hosts fill them from the r_modern*
+// start-up dvars (gfx_d3d/rhi/r_rhi_modern_dvars.h). Null or "" clears one,
+// and the environment counts again.
+void SetStartSetting(const char *name, const char *value);
 } // namespace gfx_vk::d3d9
