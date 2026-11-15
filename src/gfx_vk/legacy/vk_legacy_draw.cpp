@@ -917,6 +917,12 @@ void MakePipelineInfo(PipelineInfo &out, const PipelineKey &key, const Shader &v
     out.raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     out.raster.polygonMode = static_cast<VkPolygonMode>(key.polygonMode);
     out.raster.lineWidth = 1.0f;
+    // Depth bias is switched per draw (VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE),
+    // so this is ignored where the driver honours that. A driver that drops
+    // the dynamic switch falls back to it: on, with the dynamic amounts,
+    // which are 0 for every draw that wants no bias. The Retroid's Adreno
+    // shadows sun-facing walls as if the shadow pass had no bias.
+    out.raster.depthBiasEnable = VK_TRUE;
     out.multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     out.multisample.rasterizationSamples = static_cast<VkSampleCountFlagBits>(key.samples);
     out.depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
