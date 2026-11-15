@@ -32,7 +32,7 @@ import sys
 
 # The scenes the check draws, in order. A scene added to the check is added here.
 SCENES = (
-    'clear', 'vertex_color', 'half_pixel', 'texture_levels', 'formats', 'alpha_test', 'blend', 'depth',
+    'clear', 'vertex_color', 'byte_inputs', 'half_pixel', 'texture_levels', 'formats', 'alpha_test', 'blend', 'depth',
     'stencil', 'cull', 'render_to_texture', 'dynamic_buffer', 'static_buffers', 'cube_volume',
     'shader_model_2', 'partial_precision', 'missing_input', 'event_query', 'occlusion_query', 'state_reuse',
     'shader_cache', 'pass_clear', 'pipelines_ahead', 'gamma', 'map_reload',

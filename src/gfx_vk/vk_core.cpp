@@ -700,6 +700,7 @@ bool CreateDevice(Core &core)
                                    || (portability && !EnvEquals("KISAK_VK_INDEX_MEMORY", "shared"));
     core.optional.fixedDepthCompare = portability || !EnvEquals("KISAK_VK_DEPTH_COMPARE", "dynamic");
     core.optional.forceWideRenderTargets = EnvEquals("KISAK_VK_RENDER_TARGETS", "wide");
+    core.optional.forceByteStandIn = EnvEquals("KISAK_VK_BYTE_INPUTS", "unorm");
     core.optional.staticUniforms = EnvEquals("KISAK_VK_UNIFORMS", "static");
     core.optional.fenceFlush = !EnvEquals("KISAK_VK_FENCE_FLUSH", "0");
     core.optional.passClears = !EnvEquals("KISAK_VK_PASS_CLEARS", "0");
@@ -1227,6 +1228,13 @@ bool FormatSupports(const Core *core, VkFormat format, VkFormatFeatureFlags feat
     VkFormatProperties props{};
     core->vk.vkGetPhysicalDeviceFormatProperties(core->physical, format, &props);
     return (props.optimalTilingFeatures & features) == features;
+}
+
+bool VertexFormatSupported(const Core *core, VkFormat format)
+{
+    VkFormatProperties props{};
+    core->vk.vkGetPhysicalDeviceFormatProperties(core->physical, format, &props);
+    return (props.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT) != 0;
 }
 
 const char *PresentModeName(VkPresentModeKHR mode)

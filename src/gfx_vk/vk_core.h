@@ -351,6 +351,11 @@ struct OptionalFeatures
     // MoltenVK on Intel and AMD Macs (and macOS VMs) lacks them. True forces
     // that on every device (KISAK_VK_RENDER_TARGETS=wide), for testing.
     bool forceWideRenderTargets;
+    // The Legacy adapter reads UBYTE4 vertex elements as R8G8B8A8_UNORM and
+    // scales them back in the vertex shader where the device cannot read
+    // R8G8B8A8_USCALED vertex data (Adreno). True forces that on every device
+    // (KISAK_VK_BYTE_INPUTS=unorm), for testing.
+    bool forceByteStandIn;
     // The Legacy adapter writes a new uniform descriptor set for every draw
     // instead of binding its pipeline's set again with dynamic offsets
     // (KISAK_VK_UNIFORMS=static), to compare the two or rule one out.
@@ -420,6 +425,8 @@ struct OptionalFeatures
 const OptionalFeatures &Features(const Core *core);
 // Whether images of this format with optimal tiling support these features.
 bool FormatSupports(const Core *core, VkFormat format, VkFormatFeatureFlags features);
+// True when the device reads the format as vertex data (its buffer features).
+bool VertexFormatSupported(const Core *core, VkFormat format);
 // The depth-stencil format for depth targets: D24S8 where it can be a depth
 // attachment and sampled, else D32_SFLOAT_S8_UINT.
 VkFormat DepthStencilFormat(const Core *core);
