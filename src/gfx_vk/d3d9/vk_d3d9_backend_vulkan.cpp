@@ -12,6 +12,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
+#include <mutex>
+#include <string>
 #include <vector>
 
 namespace gfx_vk::d3d9
@@ -501,9 +504,27 @@ void LogSlowFrames(const Backend &backend)
 
 namespace
 {
+// Start-up switches the program set in place of the environment
+// (SetStartSetting): looked up before the environment.
+std::mutex s_startSettingsLock;
+std::map<std::string, std::string> s_startSettings;
+
+bool StartSetting(const char *name, std::string &out)
+{
+    std::lock_guard<std::mutex> lock(s_startSettingsLock);
+    const auto found = s_startSettings.find(name);
+    if (found == s_startSettings.end())
+        return false;
+    out = found->second;
+    return true;
+}
+
 // Whether the environment variable is set to "0".
 bool EnvIs(const char *name, const char *value)
 {
+    std::string set;
+    if (StartSetting(name, set))
+        return set == value;
 #if defined(_MSC_VER)
     char *text = nullptr;
     size_t length = 0;
@@ -521,6 +542,9 @@ bool EnvIsZero(const char *name) { return EnvIs(name, "0"); }
 // The variable's text, empty when unset.
 std::string EnvText(const char *name)
 {
+    std::string set;
+    if (StartSetting(name, set))
+        return set;
 #if defined(_MSC_VER)
     char *text = nullptr;
     size_t length = 0;
@@ -701,6 +725,15 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
             modern::CurveName(backend->tonemapCurve), DebugViewName(view));
 }
 } // namespace
+
+void SetStartSetting(const char *name, const char *value)
+{
+    std::lock_guard<std::mutex> lock(s_startSettingsLock);
+    if (!value || !*value)
+        s_startSettings.erase(name);
+    else
+        s_startSettings[name] = value;
+}
 
 Backend *OpenBackend(const BackendDesc &desc, std::string &error)
 {

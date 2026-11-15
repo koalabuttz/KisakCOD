@@ -8,7 +8,8 @@
 // match, without a map or renderer restart. Their defaults keep what the
 // device started with: the KISAK_VK_MODERN_* environment variable of the same
 // switch, or the built-in default. They are not saved, and a server may not
-// set them (src/qcommon/server_dvar_guard.h).
+// set them (src/qcommon/server_dvar_guard.h). The start-up switches below
+// (r_modernProbes and the rest) wait for a renderer restart instead.
 //
 // Needs <qcommon/qcommon.h> and <gfx_vk/d3d9/vk_d3d9.h> first.
 
@@ -53,6 +54,18 @@ inline const dvar_s *godRaysStrength;
 inline const dvar_s *godRaysSpread;
 inline const dvar_s *godRaysThreshold;
 inline const dvar_s *godRaysSky;
+
+// Start-up switches: features the back end sets up when it makes its device
+// (reflection probes, planar reflections, the water shader, the muzzle-flash
+// light passes). They hold a latch, so a change waits for a renderer restart
+// (vid_restart), and ApplyStart hands them to the back end in place of their
+// KISAK_VK_MODERN_* variables just before it makes the device. "default"
+// leaves the variable, or the built-in default, in charge.
+inline const dvar_s *probes;
+inline const dvar_s *planar;
+inline const dvar_s *water;
+inline const dvar_s *lightPass;
+inline const dvar_s *lightPassStrength;
 
 // Harmless to call again (the engine keeps the first registration).
 inline void Register()
@@ -157,6 +170,44 @@ inline void Register()
     godRaysSky = Dvar_RegisterFloat("r_modernGodRaysSky", -1.0f, -1.0f, 1.0f, DVAR_NOFLAG,
                                     "Modern visuals: the share of the god rays added over the sky itself (0 to 1); "
                                     "-1 the default (KISAK_VK_MODERN_GOD_RAYS_SKY or 0.3)");
+
+    probes = Dvar_RegisterEnum("r_modernProbes", kOnOffNames, 0, DVAR_LATCH,
+                               "Modern visuals: the map's reflection probes, filtered for rough surfaces, applied "
+                               "at the next renderer restart (default: on with linear light, unless "
+                               "KISAK_VK_MODERN_PROBES says otherwise)");
+    planar = Dvar_RegisterEnum("r_modernPlanar", kOnOffNames, 0, DVAR_LATCH,
+                               "Modern visuals: planar reflections on water and flat floors, applied at the next "
+                               "renderer restart (default: off unless KISAK_VK_MODERN_PLANAR=1)");
+    water = Dvar_RegisterEnum("r_modernWater", kOnOffNames, 0, DVAR_LATCH,
+                              "Modern visuals: our own water shader, applied at the next renderer restart "
+                              "(default: on unless KISAK_VK_MODERN_WATER=0)");
+    lightPass = Dvar_RegisterEnum("r_modernLightPass", kOnOffNames, 0, DVAR_LATCH,
+                                  "Modern visuals: muzzle flashes and other moving lights lit as physical light, "
+                                  "applied at the next renderer restart (default: on unless "
+                                  "KISAK_VK_MODERN_LIGHT_PASS=0)");
+    lightPassStrength = Dvar_RegisterFloat("r_modernLightPassStrength", -1.0f, -1.0f, 8.0f, DVAR_LATCH,
+                                           "Modern visuals: how bright those lights are, applied at the next "
+                                           "renderer restart; -1 the default (KISAK_VK_MODERN_LIGHT_PASS_STRENGTH "
+                                           "or 2)");
+}
+
+// Hands the start-up switches to the back end (before it makes a device).
+inline void ApplyStart()
+{
+    if (!probes)
+        return;
+    auto onOff = [](const char *name, const dvar_s *dvar) {
+        const int value = dvar->current.integer; // 0 default, 1 off, 2 on
+        gfx_vk::d3d9::SetStartSetting(name, value == 1 ? "0" : value == 2 ? "1" : nullptr);
+    };
+    onOff("KISAK_VK_MODERN_PROBES", probes);
+    onOff("KISAK_VK_MODERN_PLANAR", planar);
+    onOff("KISAK_VK_MODERN_WATER", water);
+    onOff("KISAK_VK_MODERN_LIGHT_PASS", lightPass);
+    char strength[32] = "";
+    if (lightPassStrength->current.value >= 0.0f)
+        snprintf(strength, sizeof(strength), "%g", lightPassStrength->current.value);
+    gfx_vk::d3d9::SetStartSetting("KISAK_VK_MODERN_LIGHT_PASS_STRENGTH", strength);
 }
 
 // The switches as the back end takes them: an enum's index 0 (default) is -1,

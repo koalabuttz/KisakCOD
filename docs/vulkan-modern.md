@@ -89,6 +89,24 @@ back to them.
 | `r_modernTonemap` | default, clamp, neutral, agx, aces | `KISAK_VK_MODERN_TONEMAP` |
 | `r_modernDebug` | default, none, velocity, velocity-all, normals, ao, reflections, fog | `KISAK_VK_MODERN_DEBUG` |
 
+Start-up switches. Some features are set up when the back end makes its
+device, so their dvars hold a latch: a change shows after a renderer restart
+(`vid_restart`, or Apply on the graphics screen). Just before the device is
+made, the host hands them to the back end in place of their variables
+(`modern_dvars::ApplyStart`, `gfx_vk::d3d9::SetStartSetting`); `default` (or
+`-1`) leaves the variable in charge.
+
+| Dvar | Values | Variable it overrides |
+| --- | --- | --- |
+| `r_modernProbes` | default, off, on | `KISAK_VK_MODERN_PROBES` |
+| `r_modernPlanar` | default, off, on | `KISAK_VK_MODERN_PLANAR` |
+| `r_modernWater` | default, off, on | `KISAK_VK_MODERN_WATER` |
+| `r_modernLightPass` | default, off, on | `KISAK_VK_MODERN_LIGHT_PASS` |
+| `r_modernLightPassStrength` | -1, or 0 to 8 | `KISAK_VK_MODERN_LIGHT_PASS_STRENGTH` |
+
+The graphics settings screen (`docs/rmlui-frontend.md`) saves the `r_modern*`
+dvars it changes to the config.
+
 As with the variables, `r_modernAo` and `r_modernSsr` at `default` turn the
 pass on for what reads it (our lit shaders, or its debug view), so
 `r_modernShaders off` turns them off too unless they are set `on`. A pass

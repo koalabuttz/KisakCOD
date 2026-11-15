@@ -622,6 +622,10 @@ void UI_MouseEvent(int localClientNum, int x, int y)
 
     UI_UpdateCursorPosition(&uiInfoArray.uiDC, &scrPlaceFull, x, y);
     CL_ShowSystemCursor(uiInfoArray.uiDC.isCursorVisible == 0);
+#ifdef KISAK_RMLUI
+    if (RmlFrontend_MouseEvent(x, y))
+        return;
+#endif
     if (uiInfoArray.uiDC.isCursorVisible)
     {
         if (Menu_Count(&uiInfoArray.uiDC) > 0)
@@ -984,11 +988,10 @@ void UI_Refresh(int localClientNum)
     if (Menu_Count(&uiInfoArray.uiDC) > 0)
     {
 #ifdef KISAK_RMLUI
-        if (RmlFrontend_WantsClassicMenus())
-            RmlFrontend_PaintClassic(&uiInfoArray.uiDC);
-        else
-#endif
+        RmlFrontend_PaintMenus(&uiInfoArray.uiDC);
+#else
         Menu_PaintAll(&uiInfoArray.uiDC);
+#endif
         UI_DoServerRefresh(&uiInfoArray);
         UI_BuildServerStatus(&uiInfoArray, 0);
         UI_BuildFindPlayerList();
@@ -4914,6 +4917,10 @@ void UI_KeyEvent(int localClientNum, int key, int down)
             "%s\n\t(localClientNum) = %i",
             "(localClientNum == 0)",
             localClientNum);
+#ifdef KISAK_RMLUI
+    if (Menu_Count(&uiInfoArray.uiDC) && RmlFrontend_KeyEvent(key, down))
+        return;
+#endif
     if (Menu_Count(&uiInfoArray.uiDC))
     {
         menu = Menu_GetFocused(&uiInfoArray.uiDC);

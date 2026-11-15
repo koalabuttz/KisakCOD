@@ -459,7 +459,9 @@ if(KISAK_RMLUI)
     add_executable(KisakCOD-rmlui-test
         "${TESTS_DIR}/rmlui/rmlui_frontend_test.cpp"
         "${SRC_DIR}/ui_rml/rml_font.cpp"
-        "${SRC_DIR}/ui_rml/rml_render.cpp")
+        "${SRC_DIR}/ui_rml/rml_render.cpp"
+        "${SRC_DIR}/ui_rml/rml_screens.cpp"
+        "${kisak_rmlui_embedded}")
     target_compile_features(KisakCOD-rmlui-test PRIVATE cxx_std_20)
     target_compile_definitions(KisakCOD-rmlui-test PRIVATE ${KISAK_MP_CLIENT_DEFINITIONS} KISAK_RMLUI)
     target_compile_options(KisakCOD-rmlui-test PRIVATE ${KISAK_MP_CLIENT_OPTIONS})

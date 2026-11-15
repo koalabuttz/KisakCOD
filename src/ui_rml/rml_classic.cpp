@@ -221,6 +221,15 @@ public:
         fallbacks = 0;
     }
 
+    // ui_rml went back to 0 while a screen still draws through the context:
+    // the classic slots must not draw with it.
+    void HideAll()
+    {
+        for (size_t i = 0; i < slots.size(); ++i)
+            Hide(slots[i]);
+        used = 0;
+    }
+
     void Release()
     {
         // The document goes with the context (rml_frontend.cpp).
@@ -761,6 +770,11 @@ void ClassicRegister()
 void ClassicPaint(UiContext *dc, Rml::Context *context)
 {
     Painter().Paint(dc, context);
+}
+
+void ClassicHide()
+{
+    Painter().HideAll();
 }
 
 void ClassicRelease()

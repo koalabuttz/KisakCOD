@@ -752,6 +752,9 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
     s_modernRefused.store(false, std::memory_order_relaxed);
     R_SetModernHooks(r_visuals->current.integer == VISUALS_MODERN ? &s_modernHooks : nullptr);
     R_SetBackendMemoryLog([](const char *when) { front::LogDeviceMemory(when); });
+    // The Modern start-up switches (r_modernPlanar and the rest), as they are
+    // after this restart's latch.
+    modern_dvars::ApplyStart();
     return front::CreateDirect3D9(host);
 }
 

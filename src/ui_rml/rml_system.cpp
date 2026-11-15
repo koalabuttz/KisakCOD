@@ -63,7 +63,16 @@ public:
         void *buffer = nullptr;
         const int length = FS_ReadFile(path.c_str(), &buffer);
         if (length < 0 || !buffer)
-            return 0;
+        {
+            const char *data = nullptr;
+            size_t size = 0;
+            if (!EmbeddedFile(path.c_str(), &data, &size))
+                return 0;
+            auto *file = new OpenFile();
+            file->data.assign(data, data + size);
+            file->position = 0;
+            return reinterpret_cast<Rml::FileHandle>(file);
+        }
         auto *file = new OpenFile();
         file->data.assign(static_cast<const char *>(buffer), static_cast<const char *>(buffer) + length);
         file->position = 0;
