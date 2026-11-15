@@ -1383,9 +1383,10 @@ static uint32_t R_ModernLitParts()
 
 // KISAK_VK_MODERN_LIT_LOG=1 prints what each lit pixel shader reads, what is
 // decoded and which Modern lit shader of ours it is drawn as (0 for none),
-// once per shader name (at most 96 names).
+// once per shader name (at most 96 names): with the pass's first state word
+// (blend factors and op, alpha test) and the values of its literal constants.
 static void R_ModernLogPassInputs(const char *name, const MaterialPass *pass, const Material *material,
-                                  const GfxModernLitInputs &inputs)
+                                  const GfxModernLitInputs &inputs, uint32_t stateBits0)
 {
     static const bool on = [] {
         const char *text = getenv("KISAK_VK_MODERN_LIT_LOG");
@@ -1401,7 +1402,7 @@ static void R_ModernLogPassInputs(const char *name, const MaterialPass *pass, co
             return;
     }
     logged[loggedCount++] = name;
-    char args[512];
+    char args[768];
     size_t used = 0;
     args[0] = 0;
     const uint32_t argCount = pass->perPrimArgCount + pass->perObjArgCount + pass->stableArgCount;
@@ -1433,7 +1434,12 @@ static void R_ModernLogPassInputs(const char *name, const MaterialPass *pass, co
             wrote = snprintf(args + used, sizeof(args) - used, " c%u=mat", arg.dest);
             break;
         case MTL_ARG_LITERAL_PIXEL_CONST:
-            wrote = snprintf(args + used, sizeof(args) - used, " c%u=lit", arg.dest);
+            if (arg.u.literalConst)
+                wrote = snprintf(args + used, sizeof(args) - used, " c%u=lit(%g %g %g %g)", arg.dest,
+                                 arg.u.literalConst[0], arg.u.literalConst[1], arg.u.literalConst[2],
+                                 arg.u.literalConst[3]);
+            else
+                wrote = snprintf(args + used, sizeof(args) - used, " c%u=lit", arg.dest);
             break;
         default:
             break;
@@ -1443,9 +1449,9 @@ static void R_ModernLogPassInputs(const char *name, const MaterialPass *pass, co
     }
     Com_Printf(CON_CHANNEL_GFX,
                "Modern lit inputs: %s: decode samplers 0x%04x (doubled 0x%04x), constants 0x%08x%08x, vertex %d; "
-               "custom samplers 0x%x; our shader 0x%03x;%s\n",
+               "custom samplers 0x%x; our shader 0x%03x; state 0x%08x;%s\n",
                name, inputs.samplers, inputs.doubled, (uint32_t)(inputs.constants >> 32), (uint32_t)inputs.constants,
-               inputs.colorInput ? 1 : 0, pass->customSamplerFlags, inputs.shader, args);
+               inputs.colorInput ? 1 : 0, pass->customSamplerFlags, inputs.shader, stateBits0, args);
 }
 
 // Takes word off the front of *name (of *length characters) if it is there.
@@ -2104,7 +2110,7 @@ static void R_ModernLogWaterPass(const Material *material, const MaterialPass *p
     }
 }
 
-void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
+void R_ModernPassInputs(const Material *material, const MaterialPass *pass, uint32_t stateBits0)
 {
     R_ModernLogWaterPass(material, pass);
     if (!s_modernLitPasses || !pass || !material)
@@ -2120,7 +2126,7 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
         GfxModernLitInputs inputs{};
         inputs.overWhite = true;
         inputs.shader = GFX_MODERN_LIT_SHADER_WATER;
-        R_ModernLogPassInputs(name, pass, material, inputs);
+        R_ModernLogPassInputs(name, pass, material, inputs, stateBits0);
         R_ModernSendInputs(&inputs);
         return;
     }
@@ -2146,7 +2152,7 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
         GfxModernLitInputs inputs{};
         inputs.overWhite = true;
         inputs.shader = R_ModernLitShader(name, material, pass);
-        R_ModernLogPassInputs(name, pass, material, inputs);
+        R_ModernLogPassInputs(name, pass, material, inputs, stateBits0);
         R_ModernSendInputs(&inputs);
         return;
     }
@@ -2232,7 +2238,7 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
         inputs.samplers |= (uint16_t)(1u << 3);
     if ((pass->customSamplerFlags & 1) && (parts & MODERN_LIT_PROBE))
         inputs.samplers |= (uint16_t)(1u << 1);
-    R_ModernLogPassInputs(name, pass, material, inputs);
+    R_ModernLogPassInputs(name, pass, material, inputs, stateBits0);
     R_ModernSendInputs(&inputs);
 }
 

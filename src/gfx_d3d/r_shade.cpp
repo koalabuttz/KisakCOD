@@ -483,7 +483,7 @@ void R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     iassert( pass->pixelShader );
     R_SetPixelShader(context.state, pass->pixelShader);
     // The Modern path's lit surfaces in linear light (r_visuals modern, Vulkan).
-    R_ModernPassInputs(material, pass);
+    R_ModernPassInputs(material, pass, stateBits[0]);
     if (pass->stableArgCount)
         R_SetPassShaderStableArguments(
             context,

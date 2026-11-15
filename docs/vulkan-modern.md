@@ -463,7 +463,9 @@ names the kinds to decode (`colormap`, `specmap`, `detail`, `lightmap`,
 `probe`, `volume`, `fog`, `sun`, `light`, `material`, `vertex`; `all`, the
 default, is every kind but `detail`; `none`), and `KISAK_VK_MODERN_LIT_LOG=1`
 prints once per lit pixel shader what it decodes and what each of its
-sampler and constant registers binds (`Modern lit inputs: <shader>: ...`).
+sampler and constant registers binds (`Modern lit inputs: <shader>: ...`),
+with the pass's first state word (`state 0x...`: blend factors and op, alpha
+test) and each literal constant's value (`c0=lit(0 0 0 0)`).
 The engine reads these three.
 
 **Cost:** one pixel shader module per lit shader (the same count as without
