@@ -1,0 +1,47 @@
+name: Workflow contracts
+
+# scripts/tests/test_linux_window_workflow.py reads every workflow file and
+# checks their contracts: triggers, path filters, concurrency, draft rules,
+# uploads, the Vita and Windows jobs' shape. It is Python with PyYAML and needs
+# no build, so an edit to a workflow file starts this one job. Before
+# 2026-11-15 the Linux workflow ran on Vita and Windows workflow edits just to
+# run this test, which started all 17 Linux jobs for a Vita-only pull request
+# that added a check (about 2 runner-hours each, while jobs waited 30-57 min
+# for a runner). The Linux workflow's window job still runs it whenever the
+# Linux workflow runs anyway.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "master" ]
+    paths:
+      - .github/workflows/**
+      - scripts/tests/test_linux_window_workflow.py
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [ "master" ]
+    paths:
+      - .github/workflows/**
+      - scripts/tests/test_linux_window_workflow.py
+
+permissions:
+  contents: read
+
+# The same rule as the Linux workflow: a newer push to a pull request cancels
+# its older run; a master run in progress always finishes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  contracts:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: Workflow contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check the workflow contracts
+        run: python3 scripts/tests/test_linux_window_workflow.py

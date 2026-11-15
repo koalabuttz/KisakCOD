@@ -253,12 +253,14 @@ namespace
                 const uint32_t lock = (uint32_t)(probe - SYS_PERF_PROBE_LOCK);
                 return NumberedName("lock", LockName((int)lock), lock);
             }
-            if (probe >= SYS_PERF_PROBE_RENDER_TESS && probe < SYS_PERF_PROBE_RENDER_TESS + SYS_PERF_TESS_SLOTS)
+            if (probe >= SYS_PERF_PROBE_RENDER_TESS && probe < SYS_PERF_PROBE_RENDER_TESS_DRAWS + SYS_PERF_TESS_SLOTS)
             {
                 static const char *const kTess[SYS_PERF_TESS_SLOTS] = {
                     "triangles", "pretessellated triangles", "static models", "pretessellated static models",
                     "cached static models", "skinned static models", "brush models", "rigid models",
                     "rigid skinned models", "skinned models", "code meshes", "marks", "particle clouds"};
+                if (probe >= SYS_PERF_PROBE_RENDER_TESS_DRAWS)
+                    return std::string("render: draws by tess ") + kTess[probe - SYS_PERF_PROBE_RENDER_TESS_DRAWS];
                 return std::string("render: tess ") + kTess[probe - SYS_PERF_PROBE_RENDER_TESS];
             }
             if (probe >= SYS_PERF_PROBE_WORK_MAIN)
@@ -295,6 +297,13 @@ namespace
             case SYS_PERF_PROBE_HUD_COMPASS: return "hud: compass";
             case SYS_PERF_PROBE_HUD_SCOREBOARD: return "hud: scoreboard";
             case SYS_PERF_PROBE_UI_EXPRESSIONS: return "menu expressions";
+            case SYS_PERF_PROBE_UI_WINDOWS: return "menus: windows";
+            case SYS_PERF_PROBE_UI_TEXT_ITEMS: return "menus: text items";
+            case SYS_PERF_PROBE_UI_OWNERDRAW_ITEMS: return "menus: ownerdraw items";
+            case SYS_PERF_PROBE_UI_OTHER_ITEMS: return "menus: other items";
+            case SYS_PERF_PROBE_UI_TRANSLATE: return "menus: translate";
+            case SYS_PERF_PROBE_UI_MATERIAL_NAMES: return "menus: materials by name";
+            case SYS_PERF_PROBE_UI_SHOW_BY_DVAR: return "menus: show by dvar";
             case SYS_PERF_PROBE_CLIENT_FRAME: return "client: frame";
             case SYS_PERF_PROBE_CLIENT_SCREEN: return "client: screen";
             case SYS_PERF_PROBE_CLIENT_SNAPSHOTS: return "client: snapshots";
@@ -310,6 +319,14 @@ namespace
             case SYS_PERF_PROBE_SCENE_STATIC_MODELS: return "scene: static models";
             case SYS_PERF_PROBE_SCENE_ENTITIES: return "scene: entities";
             case SYS_PERF_PROBE_SCENE_MERGE: return "scene: sorted lists";
+            case SYS_PERF_PROBE_CELLS_HAND_OVER: return "cells: a cell handed to the workers";
+            case SYS_PERF_PROBE_WORLD_LIT: return "world: lit surfaces";
+            case SYS_PERF_PROBE_WORLD_DECAL: return "world: decals";
+            case SYS_PERF_PROBE_WORLD_EMISSIVE: return "world: emissive surfaces";
+            case SYS_PERF_PROBE_WORLD_LIGHTS: return "world: lights and shadow maps";
+            case SYS_PERF_PROBE_WORLD_PRETESS: return "world: a batch's indices copied";
+            case SYS_PERF_PROBE_SMODEL_HAND_ON: return "static models: a model's draw surfaces";
+            case SYS_PERF_PROBE_SMODEL_PRETESS: return "static models: cached indices copied";
             case SYS_PERF_PROBE_RENDER_3D: return "render: 3d";
             case SYS_PERF_PROBE_RENDER_DEPTH: return "render: depth pass";
             case SYS_PERF_PROBE_RENDER_LIT: return "render: lit";

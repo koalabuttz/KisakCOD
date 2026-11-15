@@ -76,6 +76,7 @@ back to them.
 | `r_modernSunStrength`, `r_modernSkyStrength` | -1, or 0 to 16 | `KISAK_VK_MODERN_SUN_STRENGTH`, `_SKY_STRENGTH` |
 | `r_modernAo` | default, off, on | `KISAK_VK_MODERN_AO` |
 | `r_modernAoRadius`, `r_modernAoPower`, `r_modernAoThickness`, `r_modernAoGrazing`, `r_modernAoFloor`, `r_modernAoEdge` | -1, or the variable's range | `KISAK_VK_MODERN_AO_RADIUS`, `_POWER`, `_THICKNESS`, `_GRAZING`, `_FLOOR`, `_EDGE` |
+| `r_modernAoHalf` | default, off, on | `KISAK_VK_MODERN_AO_HALF` |
 | `r_modernSsr` | default, off, on | `KISAK_VK_MODERN_SSR` |
 | `r_modernSsrDistance`, `r_modernSsrThickness` | -1, or above 0 | `KISAK_VK_MODERN_SSR_DISTANCE`, `_THICKNESS` |
 | `r_modernTonemap` | default, clamp, neutral, agx, aces | `KISAK_VK_MODERN_TONEMAP` |
@@ -93,7 +94,8 @@ normals buffer's own switch (`KISAK_VK_MODERN_NORMALS`), the reflection
 probes' filter (`KISAK_VK_MODERN_PROBES`, applied as their textures load), the
 exposure range, the reflections' steps and levels, and planar reflections
 (`KISAK_VK_MODERN_PLANAR` and `KISAK_VK_MODERN_DEBUG=planar` or
-`planar-read`, which `r_modernDebug` does not list) stay start-up only, and `r_visuals` itself is
+`planar-read`, which `r_modernDebug` does not list), and the compute check
+(`KISAK_VK_MODERN_DEBUG=compute`, not listed either) stay start-up only, and `r_visuals` itself is
 latched (above).
 
 ## How a frame goes
@@ -1106,16 +1108,18 @@ as one of ours the texture at pixel sampler 15 (`lg::kModernAoSampler`,
 which the game's lit shaders leave free; set 1 bindings 15 and 31), or a 1x1
 white texture where the scene has none (`lg::SetModernAmbientOcclusion`,
 from the scene's depth hand-over until the scene is lit). `lm_sun.frag`
-reads it by pixel position and darkens only the light from all around:
+(the world) and `lp_sun.frag` (models) read it by pixel position and darken
+only the light from all around:
 
-* the lightmap's sky term: `sky * sky strength * ao`. The sun's share is
-  still taken from the undarkened sky (`decode(sky + sun) - decode(sky)`),
-  and the sun keeps its own shadow;
+* the sky term (the lightmap's, or the model's lighting volume):
+  `sky * sky strength * ao`. The sun's share (or the spot or omni light's)
+  is still taken from the undarkened sky (`decode(sky + sun) - decode(sky)`),
+  and that light keeps its own shadow;
 * the reflection probe (`s0`), through a specular occlusion for the view
   angle and gloss (Lagarde and de Rousiers 2014, roughness `1 - gloss`).
 
-Surfaces drawn with the game's shaders (models, effects, families we have no
-shader for yet) are not darkened.
+Surfaces drawn with the game's shaders (effects, families we have no shader
+for yet) are not darkened.
 
 | Setting | Default | Switch |
 | --- | --- | --- |
@@ -1126,11 +1130,12 @@ shader for yet) are not darkened.
 | Strength | power 2 (PC AO run 1: 1 read slightly weak, 2 about right in the shade; with the thickness, PC AO run 3 found 1.5 as weak as run 1's 1) | `KISAK_VK_MODERN_AO_POWER=<p>`: the visibility is raised to p (2 darkens, 1 lightens, 0 turns it off) |
 | Floor | 0.35: after the power the visibility is kept above it, through a soft knee from 0.45 down (lighter shading is unchanged). PC AO run 7: the crash-in arch line is a narrow slot between the pillar's side and the arch's inside face that went near black (0.13) and ended in a hard edge; ground contact shadows sit near 0.85 | `KISAK_VK_MODERN_AO_FLOOR=<0 to 1>`: 0 turns it off |
 | Blur edge | 0.08: the blur counts a tap half when its view depth is 8% of the pixel's away, so it keeps to each surface but runs across small depth steps. PC AO run 9: at 0.02 the crash-in arch slot ended in a one-pixel step; at 0.08 it ramps over four, with no halos and the ground unchanged | `KISAK_VK_MODERN_AO_EDGE=<share>`: 0.02 is the old, stricter blur; more lightens depth edges such as ceiling beams' |
+| Half resolution | on | `KISAK_VK_MODERN_AO_HALF=0` (live: `r_modernAoHalf off`) works it out at full resolution instead. Half resolution works the occlusion out at one pixel of each 2x2 block, which pixel moving over the four from frame to frame, into a half-size raw image; the blur then takes the 3x3 raw pixels around each pixel's block, weighted by the depth of the scene pixel each was worked out at, back to full size. About a quarter of the occlusion's work; contact shadows come out softer and a little lighter (the `modern_ao` scene's wall foot 175 to 200 of 255 in the debug view, its corner 152 to 159). PC AO run 11 (2080 Super, 1280x720): the pass 0.60-0.63 ms at full resolution, 0.18-0.19 ms at half, the lit view nearly the same, so it is on by default |
 | Debug view | off | `KISAK_VK_MODERN_DEBUG=ao` draws the visibility as grey over the finished scene (after the tonemap): white open, darker in corners |
 
 The statistics line: `vulkan d3d9: modern: N scenes with ambient occlusion
-(radius R, thickness T, power P, floor F, edge E), X ms GPU each` (both
-passes).
+(radius R, thickness T, power P, floor F, edge E[, half resolution]), X ms
+GPU each` (both passes).
 
 **Checks:** the D3D9 check's `modern_ao` scene draws a floor 120 units below
 a camera with the engine's 90-degree perspective, and a wall rising from it
@@ -1399,22 +1404,33 @@ reflections on mp_strike at height H`. Only `mp_strike`'s main street is
 listed now (picked from the reflections' PC run 4). A map not in the list
 reflects in its water, if it has any: of the world surfaces whose material
 has a water map and whose bounds are flat, the height where the most of them
-lie, counted in triangles (at least 64), makes the plane, logged as `modern:
-planar reflections on <map> at height H (water, N triangles)`. On mp_bog that
-is -20, where 41 of the swamp's 53 surfaces lie (PC water run 2); counted by
-the area of their bounds instead, a 200-triangle sheet at -26 around the
-whole map won, and the reflections sat 6 units low. Every other height with
-at least 64 triangles of flat water is a plane too (up to eight), logged as
-`... also at height H (water, N triangles)`: on mp_bog the western swamp at
--36 and the sheet at -26. Each frame the view takes one of them, from what
-the main view just found visible (its cells, portals and frustum: the
-world's `surfaceVisData[0]`): the plane whose visible water surfaces weigh
-most, each by its triangles, half as much at 1024 units away, almost nothing
-when it is wider than 4096 units both ways (the sheet, visible from nearly
-everywhere), and only planes the camera is above. The plane last taken stays
-while it weighs at least half the best, so the view does not hop between
-two. When no water is visible, no planar view is drawn at all (it cost
-mp_bog 1.9 ms a frame wherever the camera looked, PC water run 3). The frame
+lie, counted in triangles, makes the plane, logged as `modern: planar
+reflections on <map> at height H (water, N triangles, A square units)`. A
+height qualifies with at least 64 triangles of flat water or at least
+1024 x 1024 square units of them (seen from above), so mp_cargoship's sea,
+48 large triangles, is a plane too. On mp_bog the plane is -20, where 41 of
+the swamp's 53 surfaces lie (PC water run 2); counted by the area of their
+bounds instead, a 200-triangle sheet at -26 around the whole map won, and the
+reflections sat 6 units low. Every other qualifying height is a plane too (up
+to eight), logged as `... also at height H ...`: on mp_bog the western swamp
+at -36 and the sheet at -26. Each frame the view takes the plane the main
+view shows most of. A grid of 6 x 4 rays through the main view, moved by half
+a cell from frame to frame, goes down to each plane the camera is above,
+highest first. A ray that lands on one of a plane's water triangles counts
+for it if nothing solid stands between the camera and that point (a sight
+trace through the collision world), and goes no further. Each plane keeps
+its count plus 0.8 of the last frame's; it may be taken from 2 (about 2% of
+the screen held for a few frames) and kept down to 0.5. Of those, the plane
+taken is the one whose rays weigh most by closeness, 1 / (1 + (d / 512)^2)
+for water d units away, so the swamp at the camera's feet beats the sheet
+beyond it; the plane last taken stays while it weighs at least half the
+best, so the view does not hop between two. The planes are found again when
+the world's name changes too, since a `devmap` can load the next map's world
+at the same address. When no plane counts enough, no planar view is drawn at all (it
+cost mp_bog 1.9 ms a frame wherever the camera looked, PC water run 3). The
+main view's own visibility (its cells, portals and frustum) is not enough for
+this: the sheet at -26 under mp_bog and the water under mp_creek's ground
+passed it from everywhere, so the view was never skipped (PC water run 4). The frame
 after a change of plane, or after frames without the view, reads the image
 last drawn, through its own matrices: the world in it lines up, and water
 more than 16 units off its plane reads the probe for that frame.
@@ -1553,6 +1569,50 @@ once per material and pass of water that draws, its technique, shaders,
 arguments, blend state, custom samplers, whether it is among the lit passes
 and whether our water shader can draw it, the material's constants and the
 water simulation's settings (at most 32). It works on any path.
+
+## Compute passes
+
+The Modern path's work that is not a full-screen draw runs as compute
+passes on the core ([vulkan-core.md](vulkan-core.md), "Compute passes"),
+on the same queue as the draws: volumes such as a froxel fog's, and later
+users like AO, screen-space GI or GPU particles. What the core gives them:
+
+| Piece | How |
+| --- | --- |
+| Pipelines | `CreateComputePipeline` through the core's pipeline cache, counted with the graphics ones; `modern::CreateComputePipeline(core, layout, module, error, specialization)` for one shader with entry point `main`, and `GroupCount(size, local)` for the work groups that cover a size. GLSL `.comp` sources live in `src/gfx_vk/modern/shaders` and go through `gen_spirv_header.py` like the others. |
+| Images | Storage images in the GENERAL layout (`ImageUse::StorageRead`, `StorageWrite`), 2D or 3D (`ImageKind::Tex3D`), bound through `ImageView` (identity swizzle). `R16G16B16A16_SFLOAT` can always be one; R11G11B10 and the other extended formats need `Features().storageImageExtendedFormats` and `FormatSupports(format, VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT)`. Sampled (by any shader, with linear filtering for a 3D volume) through `ImageSampleView` after `UseImage(Sampled)`, which also waits for the compute shader's writes. |
+| Buffers | Storage buffers (`VK_BUFFER_USAGE_STORAGE_BUFFER_BIT`) through `UseBuffer`: `ShaderWrite` for a compute shader that writes, `ShaderRead` for any shader that reads, `Indirect` for dispatch arguments. Uniform data for a pass comes from `AllocateTransient` as for the full-screen passes. |
+| Passes | `BeginComputePass(core, "modern ...")`, then for each dispatch the `UseImage`/`UseBuffer` calls it needs, its bindings through `Record` (bind point COMPUTE) and `DispatchCompute`; `EndComputePass`. Timed by name like a render pass, so a feature's statistics line reports `PassTimingsFor` per stage. Descriptor sets are the per-frame ones (`AllocateDescriptorSet`); history kept across frames is two images the feature swaps itself, as TAA's. |
+| Where they run | Two places in the back end's scene (`vk_d3d9_backend_vulkan.cpp`): `LitScenePasses`, once per scene between passes, when the lit surfaces are drawn into the scene image (the linear-light one in linear light) and nothing has read it yet: before velocity, TAA, bloom, exposure and the tonemap, and before the effects unless they blend in linear light. A feature that changes the lit scene (volumetric fog) or builds what a later point draws goes there. `FinishedScenePasses`, once per finished scene, over the display image after the tonemap (or the anti-aliased scene without linear light): debug views. |
+
+**The compute check** (`modern::ComputeCheck`, `vk_modern_compute.cpp`,
+shaders `compute_check_fill.comp`, `compute_check_integrate.comp` and
+`compute_check_draw.frag`) is the smallest user, and checks the whole
+facility. `KISAK_VK_MODERN_DEBUG=compute` (start-up only) builds it at each
+scene's lit point and draws it over the finished scene:
+
+1. `modern compute check fill`: one invocation per texel of a 16 x 8 x 8
+   `R16G16B16A16_SFLOAT` 3D storage image writes the texel's centre (x, y, z
+   in 0..1) and alpha 0.5, and each slice's weights (1, 1, 1, 2) into a
+   storage buffer.
+2. `modern compute check integrate`: one invocation per column walks that
+   volume front to back, as a froxel fog's integration does, and writes into
+   a second volume at each slice the weighted mean of the slices so far.
+3. `modern compute check draw`: a full-screen pass samples the second volume
+   with linear filtering halfway along z over the scene's viewport. Red and
+   green show the pixel's place across the viewport (clamped to the outer
+   texel centres), blue the mean of the slice centres so far (0.28125
+   halfway, which linear filtering gives exactly as it is linear in z),
+   all times alpha, which is 1 only when the buffer reached pass two.
+
+The D3D9 front check's `modern_compute` scene reads those pixels back
+([vulkan-d3d9-front.md](vulkan-d3d9-front.md)) under the synchronization
+validation layer, which is what caught the storage-write barrier the core
+first left out. In the game the view is a red-green gradient with a little
+blue over the 3D view; the statistics line at teardown is `modern: N compute
+check volumes built (N drawn), X ms GPU each for its compute passes`. On
+lavapipe the two passes take about 1.2 to 1.5 ms together (software; a GPU
+has not run them yet).
 
 ## Next
 

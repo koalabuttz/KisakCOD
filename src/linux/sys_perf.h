@@ -89,6 +89,15 @@ enum SysPerfProbe : uint32_t
     SYS_PERF_PROBE_HUD_COMPASS,        // CG_CompassUpdateActors
     SYS_PERF_PROBE_HUD_SCOREBOARD,     // CG_DrawScoreboard
     SYS_PERF_PROBE_UI_EXPRESSIONS,     // EvaluateExpression: every menu expression, in the HUD or not
+    // Parts of painting a menu (ui), in the HUD or not, so the time outside the
+    // expressions can be split. The item parts sit inside Item_Paint.
+    SYS_PERF_PROBE_UI_WINDOWS,         // Window_Paint: a menu's or an item's background and border
+    SYS_PERF_PROBE_UI_TEXT_ITEMS,      // Item_Text_Paint, with its translation and text expression
+    SYS_PERF_PROBE_UI_OWNERDRAW_ITEMS, // Item_OwnerDraw_Paint: items the game draws itself (ammo, compass, ...)
+    SYS_PERF_PROBE_UI_OTHER_ITEMS,     // every other item type's paint
+    SYS_PERF_PROBE_UI_TRANSLATE,       // UI_SafeTranslateString: a "@NAME" text looked up
+    SYS_PERF_PROBE_UI_MATERIAL_NAMES,  // Item_Paint: a background material found by its name each frame
+    SYS_PERF_PROBE_UI_SHOW_BY_DVAR,    // Item_EnableShowViaDvar: an item shown or hidden by a dvar's value
     // The main thread's client frame (client_mp, cgame_mp), so its time can
     // be split. All but the first sit inside SYS_PERF_PROBE_CLIENT_SCREEN;
     // the HUD's probes above do too.
@@ -109,6 +118,21 @@ enum SysPerfProbe : uint32_t
     SYS_PERF_PROBE_SCENE_STATIC_MODELS, // R_AddAllStaticModelSurfacesCamera
     SYS_PERF_PROBE_SCENE_ENTITIES,     // R_DrawAllSceneEnt
     SYS_PERF_PROBE_SCENE_MERGE,        // R_MergeAndEmitDrawSurfLists and R_SortDrawSurfs: the lists sorted
+    // Parts of the cells, of the world's surfaces and of the static models,
+    // so that their time can be split. The first sits inside
+    // SYS_PERF_PROBE_SCENE_CELLS, the next five inside
+    // SYS_PERF_PROBE_SCENE_WORLD (a sun shadow's batches also copy indices),
+    // the last two inside SYS_PERF_PROBE_SCENE_STATIC_MODELS. The two copies
+    // are timed for every batch, hundreds a frame: take a clock reading off
+    // each call.
+    SYS_PERF_PROBE_CELLS_HAND_OVER,    // R_AddCellSurfacesAndCullGroupsInFrustumDelayed: a cell's four worker commands queued
+    SYS_PERF_PROBE_WORLD_LIT,          // R_AddAllBspDrawSurfacesRangeCamera or ...CameraNonlit: the lit surfaces
+    SYS_PERF_PROBE_WORLD_DECAL,        // ... the decals
+    SYS_PERF_PROBE_WORLD_EMISSIVE,     // ... the emissive surfaces
+    SYS_PERF_PROBE_WORLD_LIGHTS,       // the shadowed lights chosen, the draw method, the sun shadow's maps
+    SYS_PERF_PROBE_WORLD_PRETESS,      // R_PreTessBspDrawSurfs: one batch's indices copied (inside the three first)
+    SYS_PERF_PROBE_SMODEL_HAND_ON,     // R_SkinStaticModelsCameraForLod: a model's instances made draw surfaces
+    SYS_PERF_PROBE_SMODEL_PRETESS,     // R_PreTessStaticModelCachedList: cached instances' indices copied (inside it)
     // The render thread (gfx_d3d), so its frame can be split as the main
     // thread's is. The 3D parts sit inside SYS_PERF_PROBE_RENDER_3D.
     SYS_PERF_PROBE_RENDER_3D,          // RB_Draw3D: the 3D views of a frame
@@ -126,7 +150,9 @@ enum SysPerfProbe : uint32_t
     // Inside the 3D parts' R_DrawSurfs: a run of surfaces of one material.
     SYS_PERF_PROBE_RENDER_MATERIAL,    // R_SetupMaterial and R_SetupPass: the material's state and constants
     SYS_PERF_PROBE_RENDER_TESS,        // + surface type: rb_tessTable's function, with its draws
-    SYS_PERF_PROBE_WAIT_RENDERER = SYS_PERF_PROBE_RENDER_TESS + SYS_PERF_TESS_SLOTS,
+    SYS_PERF_PROBE_RENDER_TESS_DRAWS = SYS_PERF_PROBE_RENDER_TESS + SYS_PERF_TESS_SLOTS,
+                                       // + surface type: the same time again; its calls are the draws made
+    SYS_PERF_PROBE_WAIT_RENDERER = SYS_PERF_PROBE_RENDER_TESS_DRAWS + SYS_PERF_TESS_SLOTS,
                                        // main thread asleep until the render thread takes the frame
     SYS_PERF_PROBE_WAIT_WORKERS_ALL,   // ... until every front-end worker command is done
     SYS_PERF_PROBE_WAIT_WORKERS_OTHER, // ... in any other wait that runs worker commands
@@ -172,14 +198,15 @@ inline uint64_t Sys_PerfNowNs()
 #endif
 }
 
-inline void Sys_PerfProbeAdd(uint32_t probe, uint64_t ns)
+// `calls`: how many calls the time was for (a run of draws timed as one).
+inline void Sys_PerfProbeAdd(uint32_t probe, uint64_t ns, uint32_t calls = 1)
 {
     if (probe >= SYS_PERF_PROBE_COUNT)
         return;
     const uint32_t ns32 = ns > 0xFFFFFFFFull ? 0xFFFFFFFFu : (uint32_t)ns;
     SysPerfProbeSlot &slot = g_sysPerfProbes[probe];
     slot.ns.fetch_add(ns32, std::memory_order_relaxed);
-    slot.calls.fetch_add(1, std::memory_order_relaxed);
+    slot.calls.fetch_add(calls, std::memory_order_relaxed);
     // Two threads can race here and lose the larger value; the longest call
     // is a hint, not a sum.
     if (ns32 > slot.maxNs.load(std::memory_order_relaxed))

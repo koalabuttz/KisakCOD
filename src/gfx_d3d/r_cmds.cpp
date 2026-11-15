@@ -17,6 +17,7 @@
 #include <DynEntity/DynEntity_client.h>
 #include <database/database.h>
 #include "r_staticmodelcache.h"
+#include "r_dpvs_stats.h"
 
 #include <algorithm>
 
@@ -66,6 +67,7 @@ cmd_function_s R_Cmd_SaveSun_VAR;
 cmd_function_s R_MaterialList_f_VAR;
 cmd_function_s R_ModelList_f_VAR;
 cmd_function_s RB_Stats_f_VAR;
+cmd_function_s R_DpvsStats_f_VAR;
 cmd_function_s R_StaticModelCacheStats_f_VAR;
 cmd_function_s R_StaticModelCacheFlush_f_VAR;
 
@@ -83,6 +85,7 @@ void R_RegisterCmds()
 	Cmd_AddCommandInternal("gfx_stats", RB_Stats_f, &RB_Stats_f_VAR);
 	Cmd_AddCommandInternal("r_smc_stats", R_StaticModelCacheStats_f, &R_StaticModelCacheStats_f_VAR);
 	Cmd_AddCommandInternal("r_smc_flush", R_StaticModelCacheFlush_f, &R_StaticModelCacheFlush_f_VAR);
+	Cmd_AddCommandInternal("r_dpvs_stats", R_DpvsStats_f, &R_DpvsStats_f_VAR);
 #if defined(KISAK_VULKAN_BACKEND)
 	Cmd_AddCommandInternal("r_vkStats", R_Cmd_VulkanStats, &R_Cmd_VulkanStats_VAR);
 #endif
@@ -101,6 +104,7 @@ void R_UnregisterCmds()
 	Cmd_RemoveCommand("gfx_model");
 	Cmd_RemoveCommand("gfx_stats");
 	Cmd_RemoveCommand("r_smc_stats");
+	Cmd_RemoveCommand("r_dpvs_stats");
 	Cmd_RemoveCommand("r_smc_flush");
 #if defined(KISAK_VULKAN_BACKEND)
 	Cmd_RemoveCommand("r_vkStats");

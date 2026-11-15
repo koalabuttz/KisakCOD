@@ -25,24 +25,33 @@ constexpr VkDeviceSize kTransientChunk = 4ull << 20;
 // Staging memory a frame slot may hold before an upload flushes and waits, so
 // a map load does not grow staging without bound.
 constexpr VkDeviceSize kStagingFlushBytes = 64ull << 20;
+// Recycles of a frame slot in a row that needed no more than an arena's first
+// chunk before the arena gives the rest back (about a second at 60 fps with
+// two slots): what a map load grew is not held through play.
+constexpr uint32_t kArenaQuietRecycles = 30;
 
 constexpr uint32_t kDescriptorSetsPerPool = 1024;
 
-constexpr VkPipelineStageFlags2 kShaderStages =
-    VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+// Shaders that sample images and read buffers: the compute stage too, so an
+// image written by a copy, a pass or a compute shader and then made Sampled
+// is visible to every shader that samples it, whichever comes first.
+constexpr VkPipelineStageFlags2 kShaderStages = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
+    | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
 constexpr VkPipelineStageFlags2 kDepthStages =
     VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
 // What reads a buffer written by a copy: vertex input, index fetch, shaders,
-// further copies.
+// indirect arguments, further copies.
 constexpr VkPipelineStageFlags2 kBufferReadStages = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT | kShaderStages
-    | VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+    | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
 constexpr VkAccessFlags2 kBufferReadAccess = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_2_INDEX_READ_BIT
-    | VK_ACCESS_2_UNIFORM_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_TRANSFER_READ_BIT;
+    | VK_ACCESS_2_UNIFORM_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT
+    | VK_ACCESS_2_TRANSFER_READ_BIT;
 
 // Device writes only. Host writes need no barrier: submitting the command
 // buffer makes them visible. A HOST_WRITE source access is also invalid with
 // the ALL_COMMANDS stage the buffer-copy barrier uses.
-constexpr VkAccessFlags2 kWriteAccess = VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
+constexpr VkAccessFlags2 kWriteAccess = VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+    | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
     | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT
     | VK_ACCESS_2_MEMORY_WRITE_BIT;
 
@@ -86,6 +95,34 @@ void DestroyArena(Core &core, LinearArena &arena)
     arena.current = 0;
 }
 
+// At a slot's recycle, before ResetArena: an arena that has needed only its
+// first chunk for kArenaQuietRecycles recycles gives the other chunks back,
+// and the first too when a large request made it bigger than a chunk. The
+// slot's work has finished, so nothing on the GPU reads them.
+void TrimArena(Core &core, LinearArena &arena)
+{
+    if (arena.spilled)
+    {
+        arena.spilled = false;
+        arena.quietRecycles = 0;
+        return;
+    }
+    const bool oversized = !arena.chunks.empty() && BufferSize(arena.chunks[0].buffer) > arena.chunkSize;
+    if (arena.chunks.size() <= 1 && !oversized)
+        return;
+    if (++arena.quietRecycles < kArenaQuietRecycles)
+        return;
+    const size_t keep = oversized ? 0 : 1;
+    for (size_t i = keep; i < arena.chunks.size(); ++i)
+    {
+        DestroyBuffer(&core, arena.chunks[i].buffer);
+        ++core.stats.arenaChunksFreed;
+    }
+    arena.chunks.resize(keep);
+    arena.current = 0;
+    arena.quietRecycles = 0;
+}
+
 VkDeviceSize ArenaBytes(const LinearArena &arena)
 {
     VkDeviceSize bytes = 0;
@@ -107,13 +144,15 @@ bool ArenaAllocate(Core &core, LinearArena &arena, VkDeviceSize size, VkDeviceSi
             chunk.used = offset + size;
             chunkOut = &chunk;
             offsetOut = offset;
+            arena.spilled = arena.spilled || arena.current > 0;
             return true;
         }
     }
+    arena.spilled = true;
     BufferDesc desc;
     desc.size = std::max(arena.chunkSize, AlignUp(size, 256));
     desc.usage = arena.usage;
-    desc.memory = MemoryKind::Upload;
+    desc.memory = arena.memory;
     desc.name = name;
     Buffer *buffer = CreateBuffer(&core, desc);
     if (!buffer)
@@ -365,6 +404,8 @@ bool RecycleSlot(Core &core, uint32_t slotIndex)
                 state.slots[slotIndex].used = 0;
         }))
         return false;
+    TrimArena(core, slot.staging);
+    TrimArena(core, slot.transient);
     ResetArena(slot.staging);
     ResetArena(slot.transient);
     for (VkDescriptorPool pool : slot.descriptorPools)
@@ -399,6 +440,16 @@ void UseState(ImageUse use, const Image &image, VkImageLayout &layout, VkPipelin
         layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         stages = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
         access = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+        break;
+    case ImageUse::StorageRead:
+        layout = VK_IMAGE_LAYOUT_GENERAL;
+        stages = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        access = VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
+        break;
+    case ImageUse::StorageWrite:
+        layout = VK_IMAGE_LAYOUT_GENERAL;
+        stages = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        access = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
         break;
     }
     (void)image;
@@ -450,7 +501,7 @@ void EndTimed(Core &core, int query)
 
 bool AbandonFrame(Core &core)
 {
-    if (!core.inFrame || core.inPass)
+    if (!core.inFrame || core.inPass || core.inComputePass)
         return false;
     SettleUploads(core);
     const bool submitted = SubmitRecording(core, false);
@@ -689,6 +740,7 @@ bool CreateFrameResources(Core &core)
             return false;
         slot.staging.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         slot.staging.chunkSize = kStagingChunk;
+        slot.staging.memory = MemoryKind::Staging;
         slot.transient.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT
             | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
             | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
@@ -838,9 +890,11 @@ FrameResult Present(Core *core_)
     Core &core = *core_;
     if (core.failed)
         return FrameResult::Failed;
-    if (!core.inFrame || core.inPass)
+    if (!core.inFrame || core.inPass || core.inComputePass)
     {
-        Fail(core, core.inPass ? "Present inside a pass" : "Present outside a frame");
+        Fail(core, core.inPass          ? "Present inside a pass"
+                   : core.inComputePass ? "Present inside a compute pass"
+                                        : "Present outside a frame");
         return FrameResult::Failed;
     }
     // A frame that never asked for its image shows it anyway (undefined).
@@ -911,8 +965,8 @@ bool Flush(Core *core_, bool wait)
     Core &core = *core_;
     if (core.failed)
         return false;
-    if (core.inPass)
-        return Fail(core, "Flush inside a pass");
+    if (core.inPass || core.inComputePass)
+        return Fail(core, core.inPass ? "Flush inside a pass" : "Flush inside a compute pass");
     SettleUploads(core);
     if (!SubmitRecording(core, false))
         return false;
@@ -952,6 +1006,12 @@ void WaitIdle(Core *core)
 
 void UseImage(Core *core, Image *image, ImageUse use)
 {
+    if ((use == ImageUse::StorageRead || use == ImageUse::StorageWrite)
+        && !(image->desc.usage & VK_IMAGE_USAGE_STORAGE_BIT))
+    {
+        Fail(*core, "image %s is used as a storage image without storage usage", image->name.c_str());
+        return;
+    }
     VkImageLayout layout;
     VkPipelineStageFlags2 stages;
     VkAccessFlags2 access;
@@ -968,6 +1028,8 @@ bool BeginPass(Core *core_, const PassDesc &desc)
         return false;
     if (core.inPass)
         return Fail(core, "BeginPass inside a pass");
+    if (core.inComputePass)
+        return Fail(core, "BeginPass %s inside a compute pass", desc.name);
     if (desc.colorCount > kMaxColorAttachments)
         return Fail(core, "BeginPass: %u colour attachments, at most %u", desc.colorCount, kMaxColorAttachments);
     SettleUploads(core);
@@ -1068,6 +1130,146 @@ void EndPass(Core *core_)
 }
 
 bool InPass(const Core *core) { return core->inPass; }
+
+// ---- Public API: buffers in shaders and compute passes ---------------------------------
+
+void UseBuffer(Core *core_, Buffer *buffer, BufferUse use)
+{
+    Core &core = *core_;
+    if (core.failed)
+        return;
+    if (core.inPass)
+    {
+        Fail(core, "UseBuffer inside a pass (%s)", buffer->name.c_str());
+        return;
+    }
+    VkPipelineStageFlags2 stages = VK_PIPELINE_STAGE_2_NONE;
+    VkAccessFlags2 access = VK_ACCESS_2_NONE;
+    switch (use)
+    {
+    case BufferUse::ShaderRead:
+        stages = kShaderStages;
+        access = VK_ACCESS_2_UNIFORM_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
+        break;
+    case BufferUse::ShaderWrite:
+        stages = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        access = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
+        break;
+    case BufferUse::Indirect:
+        stages = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
+        access = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
+        break;
+    }
+    // Copies recorded so far finish before shaders read the buffers.
+    CloseBufferCopies(core);
+    const bool writes = (access & kWriteAccess) != 0;
+    const bool wrote = (buffer->lastAccess & kWriteAccess) != 0;
+    if (!writes && !wrote)
+    {
+        // Read after read: no hazard. A later write waits for every reader.
+        buffer->lastStages |= stages;
+        buffer->lastAccess |= access;
+        return;
+    }
+    VkBufferMemoryBarrier2 barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+    // A write also waits for the copies before it (CloseBufferCopies makes
+    // them visible to reads only).
+    barrier.srcStageMask = buffer->lastStages | (writes ? VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT : 0);
+    barrier.srcAccessMask = (buffer->lastAccess & kWriteAccess) | (writes ? VK_ACCESS_2_TRANSFER_WRITE_BIT : 0);
+    barrier.dstStageMask = stages;
+    barrier.dstAccessMask = access;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.buffer = buffer->buffer;
+    barrier.offset = 0;
+    barrier.size = VK_WHOLE_SIZE;
+    Record(&core, [barrier](VkCommandBuffer cmd, const Dispatch &vk) {
+        VkDependencyInfo dependency{};
+        dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        dependency.bufferMemoryBarrierCount = 1;
+        dependency.pBufferMemoryBarriers = &barrier;
+        vk.vkCmdPipelineBarrier2(cmd, &dependency);
+    });
+    ++core.stats.bufferBarriers;
+    buffer->lastStages = stages;
+    buffer->lastAccess = access;
+}
+
+bool BeginComputePass(Core *core_, const char *name)
+{
+    Core &core = *core_;
+    if (core.failed)
+        return false;
+    if (core.inPass || core.inComputePass)
+        return Fail(core, "BeginComputePass %s inside a pass", name);
+    SettleUploads(core);
+    if (!EnsureRecording(core))
+        return false;
+    BeginTimed(core, name, core.currentTimedPass);
+    core.inComputePass = true;
+    ++core.stats.computePasses;
+    return !core.failed;
+}
+
+void EndComputePass(Core *core_)
+{
+    Core &core = *core_;
+    if (!core.inComputePass)
+    {
+        Fail(core, "EndComputePass outside a compute pass");
+        return;
+    }
+    EndTimed(core, core.currentTimedPass);
+    core.currentTimedPass = -1;
+    core.inComputePass = false;
+}
+
+bool InComputePass(const Core *core) { return core->inComputePass; }
+
+void DispatchCompute(Core *core_, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ)
+{
+    Core &core = *core_;
+    if (core.failed)
+        return;
+    if (!core.inComputePass)
+    {
+        Fail(core, "DispatchCompute outside a compute pass");
+        return;
+    }
+    const uint32_t *most = core.properties.limits.maxComputeWorkGroupCount;
+    if (groupsX > most[0] || groupsY > most[1] || groupsZ > most[2])
+    {
+        Fail(core, "DispatchCompute: %u x %u x %u groups, at most %u x %u x %u", groupsX, groupsY, groupsZ, most[0],
+             most[1], most[2]);
+        return;
+    }
+    if (!groupsX || !groupsY || !groupsZ)
+        return;
+    Record(&core, [=](VkCommandBuffer cmd, const Dispatch &vk) { vk.vkCmdDispatch(cmd, groupsX, groupsY, groupsZ); });
+    ++core.stats.dispatches;
+}
+
+void DispatchComputeIndirect(Core *core_, Buffer *args, VkDeviceSize offset)
+{
+    Core &core = *core_;
+    if (core.failed)
+        return;
+    if (!core.inComputePass)
+    {
+        Fail(core, "DispatchComputeIndirect outside a compute pass");
+        return;
+    }
+    if (!(args->desc.usage & VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT) || offset % 4 || offset + 12 > args->desc.size)
+    {
+        Fail(core, "DispatchComputeIndirect: %s has no indirect usage or no room at %llu", args->name.c_str(),
+             static_cast<unsigned long long>(offset));
+        return;
+    }
+    const VkBuffer buffer = args->buffer;
+    Record(&core, [=](VkCommandBuffer cmd, const Dispatch &vk) { vk.vkCmdDispatchIndirect(cmd, buffer, offset); });
+    ++core.stats.dispatches;
+}
 
 PassTimings PassTimingsFor(const Core *core, const char *name)
 {
@@ -1237,7 +1439,7 @@ void *StageBufferWrite(Core *core_, Buffer *target, VkDeviceSize offset, VkDevic
     Core &core = *core_;
     if (core.failed)
         return nullptr;
-    if (core.inPass)
+    if (core.inPass || core.inComputePass)
     {
         Fail(core, "StageBufferWrite inside a pass (%s)", target->name.c_str());
         return nullptr;
@@ -1266,7 +1468,7 @@ bool CopyBufferRegions(Core *core_, VkBuffer source, Buffer *target, const VkBuf
     Core &core = *core_;
     if (core.failed)
         return false;
-    if (core.inPass)
+    if (core.inPass || core.inComputePass)
     {
         Fail(core, "CopyBufferRegions inside a pass (%s)", target->name.c_str());
         return false;
@@ -1313,7 +1515,7 @@ bool StageImageWrites(Core *core_, Image *image, const ImageRegion *regions, uin
     Core &core = *core_;
     if (core.failed || !count)
         return false;
-    if (core.inPass)
+    if (core.inPass || core.inComputePass)
     {
         Fail(core, "StageImageWrite inside a pass (%s)", image->name.c_str());
         return false;

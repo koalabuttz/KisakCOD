@@ -107,9 +107,17 @@ VITA_CASES = {
 CHECKS = [
     ("ps1_vita_constant", [], "    oC0 = r0;\n", "constants=1 "),
     ("ps1_vita_constant", ["--alpha", "5"], "if (!(a > ref)) discard;", "varyings= "),
+    ("ps1_vita_constant", ["--alpha", "5", "--alpha-zero"],
+     "if (!(a > ref)) oC0 = float4(0.0, 0.0, 0.0, 0.0);\n    return oC0;", "varyings= "),
     ("ps1_vita_texture", [], "    r2 = tex2D(s0, (t0).xy);\n    r0 = r2;\n    oC0 = r0;\n",
      "samplers=0:2d"),
     ("ps1_vita_texture", [], "float4 in_TEXCOORD0 : TEXCOORD0", "varyings=TEXCOORD0"),
+    # The sharpening read of a scaled picture: only the samplers asked for,
+    # and nothing of it in a program that did not ask.
+    ("ps1_vita_texture", ["--sharp", "1"], "    r2 = kisak_sharp2D(s0, (t0).xy);\n", "samplers=0:2d"),
+    ("ps1_vita_texture", ["--sharp", "1"], "uniform float4 kisak_sharp_max;\nfloat4 kisak_sharp2D(sampler2D s, float2 uv)",
+     "samplers=0:2d"),
+    ("ps1_vita_texture", ["--sharp", "2"], "    r2 = tex2D(s0, (t0).xy);\n", "samplers=0:2d"),
     ("ps1_vita_modulate", [], "    r0.xyz = ((r2 * v0)).xyz;\n    r0.w = (r2.wwww).w;\n", "samplers=0:2d,1:2d"),
     ("ps1_vita_modulate", [], "r1 = (((r3 * 2.0 - 1.0) * float4(0.25, 0.5, 0.75, 1.0)) * 2.0);",
      "varyings=TEXCOORD0,TEXCOORD1,COLOR0,COLOR1"),

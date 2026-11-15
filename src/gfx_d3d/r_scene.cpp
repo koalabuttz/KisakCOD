@@ -2322,6 +2322,9 @@ static float s_modernPlanarDpvsOrigin[3];
 // The world the plane below was found for, and the plane (n.p + d >= 0 is
 // above it); no plane when s_modernPlanarHavePlane is false.
 static const GfxWorld *s_modernPlanarWorld;
+// Its name too: a devmap can load the next map's world at the same address,
+// and the old map's planes stayed (PC water run 5).
+static char s_modernPlanarWorldName[64];
 static bool s_modernPlanarHavePlane;
 static float s_modernPlanarPlane[4];
 // The main view the planar one follows, and whether it drew sun shadows.
@@ -2340,18 +2343,18 @@ bool R_ModernPlanarViewActive() { return s_modernPlanarActive; }
 // A map not in the table reflects in its water, if it has any. Its flat water
 // (world surfaces whose material has a water map and whose bounds are flat)
 // is grouped by height, within half a unit; each height with at least
-// kModernPlanarWaterTriangles triangles is a plane the view may take, the
-// one with the most first. Counted in triangles, not by the area of their
-// bounds: mp_bog's swamp lies mostly at -20 (1,100 triangles), but a sheet of
-// 200 triangles at -26 around the whole map has bounds a hundred times larger
-// (PC water run 2).
+// kModernPlanarWaterTriangles triangles, or kModernPlanarWaterArea square
+// units of triangles, is a plane the view may take. Most triangles first.
+// The area lets mp_cargoship's sea in: 48 large triangles (PC water run 4).
 static const uint32_t kModernPlanarWaterTriangles = 64;
+static const float kModernPlanarWaterArea = 1024.0f * 1024.0f;
 namespace
 {
 struct ModernPlanarWater
 {
     float height;
     uint32_t triangles;
+    float area;
     // Its surfaces, in s_modernPlanarWaterSurfaces.
     uint32_t firstSurface;
     uint32_t surfaceCount;
@@ -2364,12 +2367,25 @@ static int s_modernPlanarWaterCount;
 static uint32_t s_modernPlanarWaterSurfaces[2048];
 // The plane the last planar view took (an index above), or -1.
 static int s_modernPlanarWaterTaken = -1;
-// A surface wider than this both ways (Bog's sheet of water under the whole
-// map, seen from nearly everywhere) says little about where the water on
-// screen lies: it counts for almost nothing when a plane is chosen.
-static const float kModernPlanarWaterWide = 4096.0f;
-// Water this far away counts half as much as water close by.
-static const float kModernPlanarWaterHalfDistance = 1024.0f;
+// How much of each plane the main view has shown lately: rays that reached
+// its water this frame, plus kModernPlanarWaterKeep of the last frame's.
+static float s_modernPlanarWaterSeen[kModernPlanarWaterPlanes];
+// The same rays, each by how close its water is (1 / (1 + (d / 512)^2)): which
+// plane is taken. Counted plainly, a far sheet could outweigh the water at the
+// camera's feet: mp_bog's view of its swamp at -20 settled on the -26 sheet
+// beyond it (PC water run 5).
+static float s_modernPlanarWaterNear[kModernPlanarWaterPlanes];
+static const float kModernPlanarWaterNearDistance = 512.0f;
+static uint32_t s_modernPlanarWaterRayFrame;
+// Rays cast through the main view each frame, on a grid that moves by half a
+// cell from frame to frame (four frames cover twice the grid both ways).
+constexpr int kModernPlanarWaterRaysX = 6;
+constexpr int kModernPlanarWaterRaysY = 4;
+static const float kModernPlanarWaterKeep = 0.8f;
+// A plane is taken once its count reaches kModernPlanarWaterEnter (about 2%
+// of the screen held for a few frames) and kept down to kModernPlanarWaterStay.
+static const float kModernPlanarWaterEnter = 2.0f;
+static const float kModernPlanarWaterStay = 0.5f;
 
 static bool R_ModernWaterLogOn()
 {
@@ -2435,6 +2451,50 @@ static void R_ModernLogWaterMaterials(const char *name)
         Com_Printf(CON_CHANNEL_GFX, "modern water: map %s: no world surface has a water map\n", name);
 }
 
+static const float *R_ModernSurfaceCorner(const GfxSurface &surface, uint32_t triangle, int corner)
+{
+    const uint16_t index = rgp.world->indices[surface.tris.baseIndex + triangle * 3 + corner];
+    return rgp.world->vd.vertices[surface.tris.firstVertex + index].xyz;
+}
+
+// The area of a surface's triangles seen from above.
+static float R_ModernSurfaceArea(const GfxSurface &surface)
+{
+    float area = 0.0f;
+    for (uint32_t t = 0; t < surface.tris.triCount; ++t)
+    {
+        const float *a = R_ModernSurfaceCorner(surface, t, 0);
+        const float *b = R_ModernSurfaceCorner(surface, t, 1);
+        const float *c = R_ModernSurfaceCorner(surface, t, 2);
+        area += 0.5f * fabsf((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+    }
+    return area;
+}
+
+// Whether (x, y) lies on one of a plane's water triangles, seen from above.
+static bool R_ModernPlanarOnWater(const ModernPlanarWater &water, float x, float y)
+{
+    for (uint32_t i = 0; i < water.surfaceCount; ++i)
+    {
+        const GfxSurface &surface = rgp.world->dpvs.surfaces[s_modernPlanarWaterSurfaces[water.firstSurface + i]];
+        if (x < surface.bounds[0][0] || x > surface.bounds[1][0] || y < surface.bounds[0][1]
+            || y > surface.bounds[1][1])
+            continue;
+        for (uint32_t t = 0; t < surface.tris.triCount; ++t)
+        {
+            const float *a = R_ModernSurfaceCorner(surface, t, 0);
+            const float *b = R_ModernSurfaceCorner(surface, t, 1);
+            const float *c = R_ModernSurfaceCorner(surface, t, 2);
+            const float ab = (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]);
+            const float bc = (c[0] - b[0]) * (y - b[1]) - (c[1] - b[1]) * (x - b[0]);
+            const float ca = (a[0] - c[0]) * (y - c[1]) - (a[1] - c[1]) * (x - c[0]);
+            if ((ab >= 0.0f && bc >= 0.0f && ca >= 0.0f) || (ab <= 0.0f && bc <= 0.0f && ca <= 0.0f))
+                return true;
+        }
+    }
+    return false;
+}
+
 static void R_ModernPlanarFindWater(const char *name)
 {
     if (R_ModernWaterLogOn())
@@ -2442,6 +2502,7 @@ static void R_ModernPlanarFindWater(const char *name)
     constexpr int kHeights = 16;
     float heights[kHeights];
     uint32_t triangles[kHeights];
+    float areas[kHeights];
     int heightCount = 0;
     const GfxWorldDpvsStatic &dpvs = rgp.world->dpvs;
     for (uint32_t s = 0; s < dpvs.staticSurfaceCount; ++s)
@@ -2460,9 +2521,11 @@ static void R_ModernPlanarFindWater(const char *name)
             if (heightCount == kHeights)
                 continue;
             heights[heightCount] = z;
+            areas[heightCount] = 0.0f;
             triangles[heightCount++] = 0;
         }
         triangles[h] += surface.tris.triCount;
+        areas[h] += R_ModernSurfaceArea(surface);
     }
     // The heights with enough water, most triangles first.
     bool taken[kHeights] = {};
@@ -2472,7 +2535,8 @@ static void R_ModernPlanarFindWater(const char *name)
         int best = -1;
         for (int h = 0; h < heightCount; ++h)
         {
-            if (!taken[h] && triangles[h] >= kModernPlanarWaterTriangles
+            if (!taken[h]
+                && (triangles[h] >= kModernPlanarWaterTriangles || areas[h] >= kModernPlanarWaterArea)
                 && (best < 0 || triangles[h] > triangles[best]))
                 best = h;
         }
@@ -2482,6 +2546,7 @@ static void R_ModernPlanarFindWater(const char *name)
         ModernPlanarWater &water = s_modernPlanarWater[s_modernPlanarWaterCount++];
         water.height = heights[best];
         water.triangles = triangles[best];
+        water.area = areas[best];
         water.firstSurface = used;
         water.surfaceCount = 0;
         for (uint32_t s = 0; s < dpvs.staticSurfaceCount; ++s)
@@ -2496,8 +2561,9 @@ static void R_ModernPlanarFindWater(const char *name)
             s_modernPlanarWaterSurfaces[used++] = s;
             ++water.surfaceCount;
         }
-        Com_Printf(CON_CHANNEL_GFX, "modern: planar reflections on %s %s height %.1f (water, %u triangles)\n", name,
-                   s_modernPlanarWaterCount == 1 ? "at" : "also at", water.height, water.triangles);
+        Com_Printf(CON_CHANNEL_GFX, "modern: planar reflections on %s %s height %.1f (water, %u triangles, %.0f square units)\n",
+                   name, s_modernPlanarWaterCount == 1 ? "at" : "also at", water.height, water.triangles,
+                   water.area);
     }
     if (!s_modernPlanarWaterCount)
         return;
@@ -2508,55 +2574,82 @@ static void R_ModernPlanarFindWater(const char *name)
     s_modernPlanarHavePlane = true;
 }
 
-// Which water plane the planar view takes this frame, from what the main view
-// just found visible (its cells, portals and frustum: the world's
-// surfaceVisData[0], before the planar view's own replaces it): the plane
-// whose visible surfaces weigh most, each by its triangles, less with
-// distance (kModernPlanarWaterHalfDistance), almost nothing when it is wider
-// than kModernPlanarWaterWide, and only planes the eye is above. The plane
-// last taken stays while it weighs at least half the best, so the view does
-// not hop between two planes. -1 when no water is visible: the view is not
-// drawn (it cost Bog 1.9 ms a frame, PC water run 3).
-static int R_ModernPlanarChooseWater(const float *eye)
+// Which water plane the planar view takes this frame: the one the main view
+// shows most of. A grid of rays through the main view goes down to each plane
+// the eye is above, highest first; a ray that lands on a plane's water
+// triangles counts for that plane if nothing solid stands between the eye and
+// the point (a sight trace through the collision world), and stops there.
+// The cells and frustum the main view drew are not enough: mp_bog's sheet of
+// water under the whole map and mp_creek's water under its ground passed
+// that test from everywhere, so the view was never skipped (PC water run 4).
+// The plane taken is the one whose rays weigh most by closeness
+// (s_modernPlanarWaterNear); the plane last taken stays while it weighs at
+// least half the best. -1 when
+// no water shows: the view is not drawn (it cost Bog 1.9 ms a frame, PC water
+// run 3).
+static int R_ModernPlanarChooseWater(const refdef_s *refdef)
 {
-    const uint8_t *visible = rgp.world->dpvs.surfaceVisData[0];
-    if (!visible || !rgp.world->models)
-        return -1;
-    const uint32_t surfaceLimit = rgp.world->models[0].surfaceCount;
-    float weights[kModernPlanarWaterPlanes] = {};
+    const float *eye = refdef->vieworg;
+    int order[kModernPlanarWaterPlanes];
+    int orderCount = 0;
+    for (int p = 0; p < s_modernPlanarWaterCount; ++p)
+    {
+        if (eye[2] - s_modernPlanarWater[p].height <= kModernPlanarCut)
+            continue;
+        int at = orderCount++;
+        while (at > 0 && s_modernPlanarWater[order[at - 1]].height < s_modernPlanarWater[p].height)
+        {
+            order[at] = order[at - 1];
+            --at;
+        }
+        order[at] = p;
+    }
+    float hits[kModernPlanarWaterPlanes] = {};
+    float nearHits[kModernPlanarWaterPlanes] = {};
+    const uint32_t frame = s_modernPlanarWaterRayFrame++;
+    const float shiftX = (frame & 1) ? 0.75f : 0.25f;
+    const float shiftY = (frame & 2) ? 0.75f : 0.25f;
+    for (int ry = 0; ry < kModernPlanarWaterRaysY && orderCount; ++ry)
+    {
+        const float sy = (2.0f * (ry + shiftY) / kModernPlanarWaterRaysY - 1.0f) * refdef->tanHalfFovY;
+        for (int rx = 0; rx < kModernPlanarWaterRaysX; ++rx)
+        {
+            const float sx = (2.0f * (rx + shiftX) / kModernPlanarWaterRaysX - 1.0f) * refdef->tanHalfFovX;
+            float d[3];
+            for (int k = 0; k < 3; ++k)
+                d[k] = refdef->viewaxis[0][k] + sx * refdef->viewaxis[1][k] + sy * refdef->viewaxis[2][k];
+            if (d[2] > -1.0e-4f)
+                continue;
+            for (int i = 0; i < orderCount; ++i)
+            {
+                const ModernPlanarWater &water = s_modernPlanarWater[order[i]];
+                const float t = (water.height - eye[2]) / d[2];
+                const float point[3] = {eye[0] + t * d[0], eye[1] + t * d[1], water.height + kModernPlanarCut};
+                if (!R_ModernPlanarOnWater(water, point[0], point[1]))
+                    continue;
+                if (!CM_BoxSightTrace(0, eye, point, vec3_origin, vec3_origin, 0, CONTENTS_SOLID))
+                {
+                    const float distanceSq = t * t * (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+                    hits[order[i]] += 1.0f;
+                    nearHits[order[i]] += 1.0f / (1.0f + distanceSq / (kModernPlanarWaterNearDistance
+                                                                         * kModernPlanarWaterNearDistance));
+                }
+                break;
+            }
+        }
+    }
     int best = -1;
     for (int p = 0; p < s_modernPlanarWaterCount; ++p)
     {
-        const ModernPlanarWater &water = s_modernPlanarWater[p];
-        if (eye[2] - water.height <= kModernPlanarCut)
-            continue;
-        float weight = 0.0f;
-        for (uint32_t i = 0; i < water.surfaceCount; ++i)
-        {
-            const uint32_t s = s_modernPlanarWaterSurfaces[water.firstSurface + i];
-            if (s >= surfaceLimit || !visible[s])
-                continue;
-            const GfxSurface &surface = rgp.world->dpvs.surfaces[s];
-            float distanceSq = 0.0f;
-            for (int k = 0; k < 3; ++k)
-            {
-                const float out = eye[k] < surface.bounds[0][k]   ? surface.bounds[0][k] - eye[k]
-                                  : eye[k] > surface.bounds[1][k] ? eye[k] - surface.bounds[1][k]
-                                                                  : 0.0f;
-                distanceSq += out * out;
-            }
-            const bool wide = surface.bounds[1][0] - surface.bounds[0][0] > kModernPlanarWaterWide
-                              && surface.bounds[1][1] - surface.bounds[0][1] > kModernPlanarWaterWide;
-            const float closeness =
-                1.0f / (1.0f + distanceSq / (kModernPlanarWaterHalfDistance * kModernPlanarWaterHalfDistance));
-            weight += static_cast<float>(surface.tris.triCount) * closeness * (wide ? 0.001f : 1.0f);
-        }
-        weights[p] = weight;
-        if (weight > 0.0f && (best < 0 || weight > weights[best]))
+        s_modernPlanarWaterSeen[p] = s_modernPlanarWaterSeen[p] * kModernPlanarWaterKeep + hits[p];
+        s_modernPlanarWaterNear[p] = s_modernPlanarWaterNear[p] * kModernPlanarWaterKeep + nearHits[p];
+        if (s_modernPlanarWaterSeen[p] >= kModernPlanarWaterEnter
+            && (best < 0 || s_modernPlanarWaterNear[p] > s_modernPlanarWaterNear[best]))
             best = p;
     }
     const int last = s_modernPlanarWaterTaken;
-    if (best >= 0 && last >= 0 && last != best && weights[last] > 0.0f && 2.0f * weights[last] >= weights[best])
+    if (last >= 0 && s_modernPlanarWaterSeen[last] >= kModernPlanarWaterStay
+        && (best < 0 || 2.0f * s_modernPlanarWaterNear[last] >= s_modernPlanarWaterNear[best]))
         best = last;
     return best;
 }
@@ -2564,9 +2657,13 @@ static int R_ModernPlanarChooseWater(const float *eye)
 static void R_ModernPlanarFindPlane()
 {
     s_modernPlanarWorld = rgp.world;
+    I_strncpyz(s_modernPlanarWorldName, rgp.world && rgp.world->name ? rgp.world->name : "",
+               sizeof(s_modernPlanarWorldName));
     s_modernPlanarHavePlane = false;
     s_modernPlanarWaterCount = 0;
     s_modernPlanarWaterTaken = -1;
+    memset(s_modernPlanarWaterSeen, 0, sizeof(s_modernPlanarWaterSeen));
+    memset(s_modernPlanarWaterNear, 0, sizeof(s_modernPlanarWaterNear));
     if (!rgp.world || !rgp.world->name)
         return;
     const char *slash = strrchr(rgp.world->name, '/');
@@ -2646,14 +2743,15 @@ void R_ModernPlanarScene(const refdef_s *refdef)
         return;
     if (!hooks->planarWanted(hooks->user, dx.device))
         return;
-    if (s_modernPlanarWorld != rgp.world)
+    if (s_modernPlanarWorld != rgp.world || !rgp.world->name
+        || strcmp(s_modernPlanarWorldName, rgp.world->name) != 0)
         R_ModernPlanarFindPlane();
     if (!s_modernPlanarHavePlane)
         return;
     const float *o = refdef->vieworg;
     if (s_modernPlanarWaterCount)
     {
-        const int water = R_ModernPlanarChooseWater(o);
+        const int water = R_ModernPlanarChooseWater(refdef);
         if (water != s_modernPlanarWaterTaken && R_ModernWaterLogOn())
         {
             static int changes;
@@ -2662,8 +2760,10 @@ void R_ModernPlanarScene(const refdef_s *refdef)
                 if (water < 0)
                     Com_Printf(CON_CHANNEL_GFX, "modern water: no water in view: no planar view\n");
                 else
-                    Com_Printf(CON_CHANNEL_GFX, "modern water: planar view on the water at height %.1f\n",
-                               s_modernPlanarWater[water].height);
+                    Com_Printf(CON_CHANNEL_GFX,
+                               "modern water: planar view on the water at height %.1f (seen %.1f, near %.2f)\n",
+                               s_modernPlanarWater[water].height, s_modernPlanarWaterSeen[water],
+                               s_modernPlanarWaterNear[water]);
             }
         }
         s_modernPlanarWaterTaken = water;
@@ -3113,6 +3213,7 @@ void R_GenerateSortedDrawSurfs(
         if (gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD)
         {
             R_AddAllBspDrawSurfacesCamera();
+            SysPerfScope lightsScope(SYS_PERF_PROBE_WORLD_LIGHTS);
             if (planar)
             {
                 // The main view's shadow maps, drawn before this view.

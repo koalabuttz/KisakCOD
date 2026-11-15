@@ -149,5 +149,6 @@ void BackendModernSkinnedSurfaceMoved(Backend *, lg::Device *, uint64_t, const f
 
 // No frame statistics are kept here, and the host has no settings to take up.
 void BackendLogStats(Backend *, bool) {}
+void BackendLogMemory(Backend *, const char *) {}
 void BackendFrame(Backend *) {}
 } // namespace gfx_vk::d3d9

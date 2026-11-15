@@ -143,12 +143,12 @@ void PatcherFragmentUsseFree(void *, void *memory)
     Free(MemoryKind::FragmentUsse, memory);
 }
 
-bool CreateContext(uint32_t ringScale, std::string &error)
+bool CreateContext(const DisplayDesc &desc, std::string &error)
 {
-    const uint32_t scale = ringScale ? ringScale : 1;
-    const uint32_t vdmBytes = SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE * scale;
-    const uint32_t vertexBytes = SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE * scale;
-    const uint32_t fragmentBytes = SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE * scale;
+    const uint32_t vdmBytes = std::max<uint32_t>(desc.vdmRingBytes, SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE);
+    const uint32_t vertexBytes = std::max<uint32_t>(desc.vertexRingBytes, SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE);
+    const uint32_t fragmentBytes =
+        std::max<uint32_t>(desc.fragmentRingBytes, SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE);
     g.hostMem = std::malloc(SCE_GXM_MINIMUM_CONTEXT_HOST_MEM_SIZE);
     g.vdmRing = Allocate(MemoryKind::Main, vdmBytes, 4096);
     g.vertexRing = Allocate(MemoryKind::Main, vertexBytes, 4096);
@@ -273,16 +273,19 @@ bool InitDisplay(const DisplayDesc &desc, std::string &error)
         return false;
     }
     g.memory = true;
-    if (!CreateContext(desc.ringScale, error) || !CreateSurfaces(error) || !CreatePatcher(error))
+    if (!CreateContext(desc, error) || !CreateSurfaces(error) || !CreatePatcher(error))
     {
         ShutdownDisplay();
         return false;
     }
     g.back = 0;
     g.front = kDisplayBuffers - 1;
-    Log("gxm: display %ux%u, %u buffers, vsync %s, parameter buffer %u KB, ring buffers %u times sceGxm's defaults",
+    Log("gxm: display %ux%u, %u buffers, vsync %s, parameter buffer %u KB, ring buffers %u KB for draw calls, %u KB "
+        "for vertex constants and %u KB for fragment constants",
         kDisplayWidth, kDisplayHeight, kDisplayBuffers, g.vsync ? "on" : "off", desc.parameterBufferBytes >> 10,
-        desc.ringScale ? desc.ringScale : 1);
+        std::max<uint32_t>(desc.vdmRingBytes, SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE) >> 10,
+        std::max<uint32_t>(desc.vertexRingBytes, SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE) >> 10,
+        std::max<uint32_t>(desc.fragmentRingBytes, SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE) >> 10);
     return true;
 }
 

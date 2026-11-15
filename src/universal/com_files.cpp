@@ -939,7 +939,11 @@ uint32_t FS_FOpenFileReadForThread(const char *filename, int *file, FsThread thr
     }
     if (!iwd->referenced && !FS_FilesAreLoadedGlobally(sanitizedName))
         iwd->referenced = 1;
-    if (InterlockedCompareExchange(&iwd->hasOpenFile, 1, 0) == 1)
+    // A stream never reads through iwd->handle itself. Its reads can come from
+    // another thread (the OpenAL driver's decode thread, Miles' own), while every
+    // open of another file in this .iwd reads the archive's directory through
+    // iwd->handle below: a seek and a read on the one file both would share.
+    if (thread == FS_THREAD_STREAM || InterlockedCompareExchange(&iwd->hasOpenFile, 1, 0) == 1)
     {
         fsh[*file].handleFiles.iwdIsClone = 1;
         fsh[*file].handleFiles.file.z = unzReOpen(iwd->iwdFilename, iwd->handle);

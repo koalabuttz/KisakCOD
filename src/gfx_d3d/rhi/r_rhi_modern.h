@@ -182,3 +182,10 @@ struct GfxModernHooks
 void R_SetModernHooks(const GfxModernHooks *hooks);
 // The hooks installed, or null.
 const GfxModernHooks *R_ModernHooks();
+
+// The graphics back end's memory log, with any visuals: the Vulkan back end
+// sets it when it makes its Direct3D object (null clears it), and
+// R_LogBackendMemory calls it when set. R_LoadWorld logs the memory at each
+// map load, so a log shows whether memory comes back between maps.
+void R_SetBackendMemoryLog(void (*log)(const char *when));
+void R_LogBackendMemory(const char *when);

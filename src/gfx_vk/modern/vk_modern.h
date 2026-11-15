@@ -274,6 +274,10 @@ struct AoParams
     // within 2 levels; 0.25 and 0.6 soften it no further but lighten the
     // ceiling beams' edges more.
     float edge = 0.08f;
+    // Work the occlusion out at half resolution, one pixel of each 2x2 block
+    // (which one moving from frame to frame), and blur it back up to full
+    // resolution across the depth: about a quarter of the occlusion's work.
+    bool half = true;
     uint32_t frame = 0;    // moves the noise
 };
 
@@ -401,6 +405,54 @@ bool DrawAoDebug(Core *core, DebugView *debug, Image *ao, Image *target, const V
 // the sRGB curve. Outside a pass, inside a frame.
 bool DrawReflectionsDebug(Core *core, DebugView *debug, Image *reflections, Image *target, const VkRect2D &area,
                           std::string &error);
+
+// ---- Compute passes (docs/vulkan-modern.md "Compute passes") ----
+//
+// The core's compute passes (vk_core.h BeginComputePass) carry the Modern
+// path's work that is not a full-screen draw: volumes such as a froxel fog's,
+// and later AO or particles. The compute check is the smallest such user, and
+// what checks the facility end to end (KISAK_VK_MODERN_DEBUG=compute): two
+// compute passes build an RGBA16F 3D volume and a draw samples it.
+//
+//   "modern compute check fill"       one invocation per texel writes the
+//                                     texel's centre (x, y, z in 0..1) and
+//                                     alpha 0.5 into a 3D storage image, and
+//                                     each slice's weights (1, 1, 1, 2) into
+//                                     a storage buffer
+//   "modern compute check integrate"  one invocation per column walks the
+//                                     first volume front to back (as a froxel
+//                                     fog integrates) and writes into a second
+//                                     the weighted mean of the slices so far
+//   "modern compute check draw"       a full-screen pass samples the second
+//                                     volume with linear filtering at one
+//                                     depth over an area: red and green the
+//                                     pixel's place across the area (clamped
+//                                     to the outer texel centres), blue the
+//                                     mean slice centre, times alpha (1)
+
+// The check's volume, in texels: x, y, z.
+constexpr uint32_t kComputeCheckSize[3] = {16, 8, 8};
+
+struct ComputeCheck;
+
+// Its pipelines, volumes and buffer. Null with the reason.
+ComputeCheck *CreateComputeCheck(Core *core, std::string &error);
+// Waits for the GPU to finish what was recorded.
+void DestroyComputeCheck(Core *core, ComputeCheck *check);
+// Records the two compute passes. Outside a pass, inside a frame. False with
+// the reason when nothing could be recorded.
+bool BuildComputeCheck(Core *core, ComputeCheck *check, std::string &error);
+// Draws the last volume BuildComputeCheck built over `area` of `target`,
+// sampled at `depth` (0..1 along z). Outside a pass, inside a frame.
+bool DrawComputeCheck(Core *core, ComputeCheck *check, Image *target, const VkRect2D &area, float depth,
+                      std::string &error);
+
+struct ComputeCheckStats
+{
+    uint64_t builds; // BuildComputeCheck calls that recorded
+    uint64_t draws;  // DrawComputeCheck calls that recorded
+};
+ComputeCheckStats Stats(const ComputeCheck *check);
 
 // ---- Linear light (renderer plan MD1; docs/vulkan-modern.md) ----
 //
