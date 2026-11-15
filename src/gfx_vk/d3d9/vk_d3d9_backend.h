@@ -33,6 +33,9 @@ struct BackendDesc
     const Host *host = nullptr;
     D3D9Window window{};
     bool vsync = true;
+    // With vsync, the refreshes each frame stays on screen
+    // (D3DPRESENT_INTERVAL_TWO to _FOUR: 2 to 4).
+    uint32_t swapInterval = 1;
     // The back buffer the program asked for; 0 takes the window's size.
     uint32_t width = 0;
     uint32_t height = 0;
@@ -67,6 +70,9 @@ uint64_t BackendTextureMemory(const Backend *backend);
 // The window's size in pixels, for a Reset that asks for 0 x 0. False when
 // the back end cannot tell.
 bool BackendWindowSize(const Backend *backend, uint32_t &width, uint32_t &height);
+// With vsync, the refreshes each frame stays on screen from the next present
+// on (BackendDesc::swapInterval); a back end that cannot pace ignores it.
+void BackendSetSwapInterval(Backend *backend, uint32_t interval);
 // Fills the back end's part of DeviceCounters (validation, submissions).
 void BackendCounters(const Backend *backend, DeviceCounters &out);
 // Called without FrontLock, from any thread, before a query is asked for its

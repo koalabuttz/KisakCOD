@@ -497,6 +497,143 @@ void EndTimed(Core &core, int query)
     if (query >= 0)
         WriteTimestamp(core, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, static_cast<uint32_t>(query) + 1);
 }
+// The time a present asks for (VK_GOOGLE_display_timing), on the record
+// thread: N refreshes after the refresh the present before it was meant for,
+// less an offset so the target sits just before the refresh it means. When
+// the display reports a frame shown later than that chain allows (the GPU or
+// the game was late), the chain starts again from it: N refreshes after the
+// newest frame shown, one more N for each present since. Until the display
+// has reported a frame the time is 0 and the frame shows at the next refresh.
+//
+// The chain is what keeps the spacing even when the game runs ahead of the
+// display. Worked out from the newest report alone, each target was N
+// refreshes per present after a frame several presents back, so any uneven
+// spacing at the start (a load, a hitch) repeated with that many presents'
+// period: Legacy on the Retroid Pocket 6, five presents queued, showed frames
+// 1, 3, 1, 3 and 2 refreshes apart at r_vsyncInterval 2, every one on time.
+//
+// The offset starts at half a refresh. Where the display's reported times
+// sit apart from the clock the compositor compares a present's time with,
+// half a refresh can land on the edge between two refreshes, and frames then
+// show a refresh early or late at random: a mix of one and three refreshes
+// where two were asked for. A frame shown a refresh early moves the offset an
+// eighth of a refresh later; one shown late, though the display could have
+// shown it in time, an eighth earlier (Core::paceAdapt).
+void CountShown(RecordState &state, const VkPastPresentationTimingGOOGLE &shown, uint32_t interval)
+{
+    const uint64_t refresh = state.refreshNs;
+    if (shown.presentID == state.paceCountedId + 1 && state.paceCountedNs && shown.actualPresentTime > state.paceCountedNs)
+    {
+        const uint64_t refreshes = (shown.actualPresentTime - state.paceCountedNs + refresh / 2) / refresh;
+        ++state.paceAfter[std::min<uint64_t>(std::max<uint64_t>(refreshes, 1), 4) - 1];
+        ++state.paceCounted;
+    }
+    state.paceCountedId = shown.presentID;
+    state.paceCountedNs = shown.actualPresentTime;
+    if (shown.desiredPresentTime)
+    {
+        const uint64_t offset = state.paceOffsets[shown.presentID % RecordState::kPaceOffsets];
+        const int64_t miss =
+            static_cast<int64_t>(shown.actualPresentTime) - static_cast<int64_t>(shown.desiredPresentTime + offset);
+        state.paceMissNs += miss;
+        // Could the display have shown it at the refresh asked for? Not when
+        // the frame was ready only after it (the GPU was late).
+        const bool ready = !shown.earliestPresentTime
+            || shown.earliestPresentTime <= shown.desiredPresentTime + offset + refresh / 2;
+        if (miss < -static_cast<int64_t>(refresh / 2))
+        {
+            ++state.paceEarly;
+            if (state.core->paceAdapt && state.paceOffsetNs >= refresh / 8)
+                state.paceOffsetNs -= refresh / 8;
+        }
+        else if (miss > static_cast<int64_t>(refresh / 2) && ready)
+        {
+            ++state.paceLate;
+            if (state.core->paceAdapt && state.paceOffsetNs + refresh / 8 < refresh)
+                state.paceOffsetNs += refresh / 8;
+        }
+    }
+    if (state.paceCounted < RecordState::kPaceReport)
+        return;
+    char line[320];
+    std::snprintf(line, sizeof(line),
+                  "display timing: %u frames at a frame every %u refreshes of %.2f ms: shown 1/2/3/4+ refreshes "
+                  "after the one before %u/%u/%u/%u; %u a refresh or more early, %u late though ready; on average "
+                  "%.2f ms after the refresh asked for; times now %.2f ms before it%s",
+                  state.paceCounted, interval, refresh / 1e6, state.paceAfter[0], state.paceAfter[1],
+                  state.paceAfter[2], state.paceAfter[3], state.paceEarly, state.paceLate,
+                  state.paceMissNs / 1e6 / state.paceCounted, state.paceOffsetNs / 1e6,
+                  state.core->paceAdapt ? "" : " (fixed: KISAK_VK_PACE_ADAPT=0)");
+    {
+        Recorder &recorder = state.core->recorder;
+        std::lock_guard<std::mutex> lock(recorder.messageMutex);
+        recorder.messages.push_back(line);
+    }
+    std::fill(std::begin(state.paceAfter), std::end(state.paceAfter), 0u);
+    state.paceEarly = state.paceLate = state.paceCounted = 0;
+    state.paceMissNs = 0;
+}
+
+void PacePresent(RecordState &state, VkDevice dev, VkSwapchainKHR swapchain, uint32_t interval,
+                 VkPresentTimeGOOGLE &time)
+{
+    const Dispatch &vk = *state.vk;
+    if (state.pacedSwapchain != swapchain)
+    {
+        state.pacedSwapchain = swapchain;
+        state.refreshNs = 0;
+        state.shownId = 0;
+        state.shownNs = 0;
+        state.paceCountedId = 0;
+        state.paceCountedNs = 0;
+        state.lastTargetNs = 0;
+    }
+    if (!state.refreshNs)
+    {
+        VkRefreshCycleDurationGOOGLE cycle{};
+        if (vk.vkGetRefreshCycleDurationGOOGLE(dev, swapchain, &cycle) == VK_SUCCESS)
+            state.refreshNs = cycle.refreshDuration;
+        if (!state.paceOffsetNs)
+            state.paceOffsetNs = state.refreshNs / 2;
+    }
+    VkPastPresentationTimingGOOGLE past[8];
+    for (int batch = 0; batch < 8; ++batch)
+    {
+        uint32_t count = static_cast<uint32_t>(std::size(past));
+        const VkResult result = vk.vkGetPastPresentationTimingGOOGLE(dev, swapchain, &count, past);
+        if (result != VK_SUCCESS && result != VK_INCOMPLETE)
+            break;
+        std::sort(past, past + count, [](const VkPastPresentationTimingGOOGLE &a, const VkPastPresentationTimingGOOGLE &b) {
+            return a.presentID < b.presentID;
+        });
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            if (!past[i].actualPresentTime)
+                continue;
+            if (past[i].presentID > state.shownId)
+            {
+                state.shownId = past[i].presentID;
+                state.shownNs = past[i].actualPresentTime;
+            }
+            if (state.refreshNs)
+                CountShown(state, past[i], interval);
+        }
+        if (result != VK_INCOMPLETE)
+            break;
+    }
+    time.presentID = ++state.presentId;
+    time.desiredPresentTime = 0;
+    state.paceOffsets[time.presentID % RecordState::kPaceOffsets] = state.paceOffsetNs;
+    if (state.refreshNs && state.shownId)
+    {
+        const uint64_t step = uint64_t(interval) * state.refreshNs;
+        const uint64_t fromShown = state.shownNs + uint64_t(state.presentId - state.shownId) * step;
+        const uint64_t chained = state.lastTargetNs + step;
+        state.lastTargetNs = state.lastTargetNs && chained >= fromShown ? chained : fromShown;
+        time.desiredPresentTime = state.lastTargetNs - state.paceOffsetNs;
+    }
+    ++state.pacedPresents;
+}
 } // namespace
 
 bool AbandonFrame(Core &core)
@@ -955,6 +1092,15 @@ FrameResult Present(Core *core_)
     const VkSemaphore renderDone = core.renderDone[core.imageIndex];
     const uint32_t imageIndex = core.imageIndex;
     const bool turnedByCompositor = core.transformLeftToCompositor;
+    // A frame every N refreshes (CoreDesc::swapInterval): with vsync and
+    // display timing, each present asks not to be shown before N refreshes
+    // after the one before it was.
+    const VkPresentModeKHR mode = core.swapInfo.presentMode;
+    const uint32_t interval = core.displayTiming
+            && (mode == VK_PRESENT_MODE_FIFO_KHR || mode == VK_PRESENT_MODE_FIFO_RELAXED_KHR)
+        ? core.swapInterval.load()
+        : 1u;
+    const VkDevice dev = core.dev;
     if (!RecordControl(core, [=](RecordState &state) {
             VkPresentInfoKHR present{};
             present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -963,6 +1109,16 @@ FrameResult Present(Core *core_)
             present.swapchainCount = 1;
             present.pSwapchains = &swapchain;
             present.pImageIndices = &imageIndex;
+            VkPresentTimeGOOGLE time{};
+            VkPresentTimesInfoGOOGLE times{};
+            if (interval > 1)
+            {
+                PacePresent(state, dev, swapchain, interval, time);
+                times.sType = VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE;
+                times.swapchainCount = 1;
+                times.pTimes = &time;
+                present.pNext = &times;
+            }
             const VkResult result = state.vk->vkQueuePresentKHR(state.queue, &present);
             ++state.presents;
             // VK_SUBOPTIMAL_KHR is expected for a swapchain the compositor turns.
