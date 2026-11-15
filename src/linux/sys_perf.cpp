@@ -253,12 +253,14 @@ namespace
                 const uint32_t lock = (uint32_t)(probe - SYS_PERF_PROBE_LOCK);
                 return NumberedName("lock", LockName((int)lock), lock);
             }
-            if (probe >= SYS_PERF_PROBE_RENDER_TESS && probe < SYS_PERF_PROBE_RENDER_TESS + SYS_PERF_TESS_SLOTS)
+            if (probe >= SYS_PERF_PROBE_RENDER_TESS && probe < SYS_PERF_PROBE_RENDER_TESS_DRAWS + SYS_PERF_TESS_SLOTS)
             {
                 static const char *const kTess[SYS_PERF_TESS_SLOTS] = {
                     "triangles", "pretessellated triangles", "static models", "pretessellated static models",
                     "cached static models", "skinned static models", "brush models", "rigid models",
                     "rigid skinned models", "skinned models", "code meshes", "marks", "particle clouds"};
+                if (probe >= SYS_PERF_PROBE_RENDER_TESS_DRAWS)
+                    return std::string("render: draws by tess ") + kTess[probe - SYS_PERF_PROBE_RENDER_TESS_DRAWS];
                 return std::string("render: tess ") + kTess[probe - SYS_PERF_PROBE_RENDER_TESS];
             }
             if (probe >= SYS_PERF_PROBE_WORK_MAIN)
