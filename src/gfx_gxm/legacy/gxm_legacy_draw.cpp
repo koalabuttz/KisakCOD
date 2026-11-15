@@ -39,6 +39,7 @@
 
 #include <gfx_gxm/gxm_engine_options.h>
 #include <gfx_gxm/gxm_gpu_watch.h>
+#include <gfx_gxm/gxm_idle_alpha_test.h>
 #include <gfx_gxm/gxm_live_switch.h>
 #include <gfx_gxm/gxm_prepass_governor.h>
 #include <gfx_gxm/gxm_scale_governor.h>
@@ -78,6 +79,11 @@ bool g_sharpenDraws = false;
 bool g_stretchInFilter = true;
 float g_filterReadS = 1.0f;
 float g_filterReadT = 1.0f;
+bool g_prepassClears = true;
+bool g_prepassNoColour = true;
+bool g_prepassScene = false;
+bool g_sceneInCopy = true;
+bool g_sceneIsCopy = false;
 } // namespace gfx_gxm
 
 namespace gfx_vk::legacy
@@ -297,6 +303,12 @@ struct DrawState
     bool sceneOpen = false;
     Surface *sceneColor = nullptr;
     Surface *sceneDepth = nullptr;
+    // The open scene was asked to begin with sceGxm's disabled colour
+    // surface (gxm_engine_options.h, g_prepassNoColour).
+    bool sceneNoColour = false;
+    // The open scene is the depth pass's own (g_prepassScene).
+    bool scenePrepass = false;
+    bool noColourLogged = false;
     uint32_t sceneWidth = 0, sceneHeight = 0;
     bool hasColor = false;
     ColorTarget color{};
@@ -337,6 +349,18 @@ struct DrawState
     Pipeline lastDraw{};
     bool lastDrawValid = false;
     bool sameState = true;
+    // An alpha test that cannot change the picture is left out, so that the
+    // draw's fragment program has no discard (gxm_idle_alpha_test.h). The
+    // marker and switch no-alpha-test-drop turn it off.
+    bool dropIdleAlphaTest = true;
+    // And one on a blend that keeps the target for a source of zero writes
+    // zero for a rejected pixel in place of the discard. The marker and
+    // switch no-alpha-test-zero turn it off.
+    bool zeroAlphaTest = true;
+    // 0: the last draw had no alpha test, 1: one with a discard, 2: one
+    // that was left out, 3: one that writes zero.
+    uint8_t lastDrawAlphaTest = 0;
+    uint64_t alphaTestDraws = 0, idleAlphaTestDraws = 0, zeroAlphaTestDraws = 0;
     bool lastDrawIndex32 = false;
     uint32_t lastDrawType = 0, lastDrawUpStride = 0;
     uint64_t lastDrawSerial = 0, lastDrawScene = 0;
@@ -785,6 +809,7 @@ uint64_t VariantKey(const gxm::cg::Options &options)
     return (uint64_t(options.bgraInputs) | uint64_t(options.absentInputs) << 16) ^ (components << 32) ^
            (options.alphaFunc == gxm::cg::AlphaFunc::Always ? 0 : uint64_t(options.alphaFunc)) ^
            (uint64_t(options.sharpSamplers) * 0xff51afd7ed558ccdull) ^
+           (options.alphaZero ? 0x00a5000000000000ull : 0) ^
            (options.farPlaneInside ? 0x5a5a000000000000ull : 0) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
 }
 
@@ -1083,6 +1108,34 @@ uint8_t BlendFunc(uint32_t op)
     }
 }
 
+// The state the alpha test rules read (gxm_idle_alpha_test.h).
+gfx_gxm::AlphaTestState AlphaTestStateOf(const Device &device)
+{
+    static_assert(d3d::CMP_GREATER == gfx_gxm::d3d9::kCmpGreater && d3d::CMP_NOTEQUAL == gfx_gxm::d3d9::kCmpNotEqual);
+    static_assert(d3d::BLEND_ZERO == gfx_gxm::d3d9::kBlendZero && d3d::BLEND_ONE == gfx_gxm::d3d9::kBlendOne &&
+                  d3d::BLEND_INVSRCCOLOR == gfx_gxm::d3d9::kBlendInvSrcColor &&
+                  d3d::BLEND_SRCALPHA == gfx_gxm::d3d9::kBlendSrcAlpha &&
+                  d3d::BLEND_INVSRCALPHA == gfx_gxm::d3d9::kBlendInvSrcAlpha &&
+                  d3d::BLEND_BOTHSRCALPHA == gfx_gxm::d3d9::kBlendBothSrcAlpha &&
+                  d3d::BLEND_BOTHINVSRCALPHA == gfx_gxm::d3d9::kBlendBothInvSrcAlpha);
+    static_assert(d3d::BLENDOP_ADD == gfx_gxm::d3d9::kBlendOpAdd &&
+                  d3d::BLENDOP_REVSUBTRACT == gfx_gxm::d3d9::kBlendOpRevSubtract);
+    const uint32_t *rs = device.renderStates;
+    gfx_gxm::AlphaTestState state;
+    state.func = rs[d3d::RS_ALPHAFUNC];
+    state.ref = rs[d3d::RS_ALPHAREF];
+    state.blend = rs[d3d::RS_ALPHABLENDENABLE] != 0;
+    state.separateAlpha = rs[d3d::RS_SEPARATEALPHABLENDENABLE] != 0;
+    state.op = rs[d3d::RS_BLENDOP];
+    state.src = rs[d3d::RS_SRCBLEND];
+    state.dst = rs[d3d::RS_DESTBLEND];
+    state.opAlpha = rs[d3d::RS_BLENDOPALPHA];
+    state.dstAlpha = rs[d3d::RS_DESTBLENDALPHA];
+    state.depthWrite = rs[d3d::RS_ZWRITEENABLE] != 0;
+    state.stencil = rs[d3d::RS_STENCILENABLE] != 0;
+    return state;
+}
+
 // False: no blend info at all (no blending, every channel written).
 bool MakeBlend(Device &device, bool noAlpha, SceGxmBlendInfo &blend)
 {
@@ -1171,7 +1224,17 @@ bool OpenScene(Device &device)
     DrawState &d = *device.draw;
     Surface *color = device.renderTargets[0];
     Surface *depth = device.depthStencil;
-    if (d.sceneOpen && d.sceneColor == color && d.sceneDepth == depth)
+    // The depth pass has a scene of its own, whatever its targets are: the
+    // engine's flag is read here and not when the targets are set, since the
+    // pass's colour target can be the very surface the lit pass draws to
+    // (gxm_engine_options.h, g_prepassScene). Nobody reads that colour
+    // target, so with a depth surface to draw into the scene is begun
+    // without it.
+    const bool prepass = gfx_gxm::g_prepassScene;
+    const bool noColour = prepass && gfx_gxm::g_prepassNoColour && depth && color &&
+                          color->kind == SurfaceKind::TextureLevel;
+    if (d.sceneOpen && d.sceneColor == color && d.sceneDepth == depth && d.scenePrepass == prepass &&
+        d.sceneNoColour == noColour)
         return true;
     EndScene(device);
 
@@ -1202,14 +1265,25 @@ bool OpenScene(Device &device)
             NotYet(device, "a render target format sceGxm cannot draw to (draws skipped)");
             return false;
         }
-        const int result = sceGxmColorSurfaceInit(&d.colorSurface, d.color.format, SCE_GXM_COLOR_SURFACE_LINEAR,
-                                                  SCE_GXM_COLOR_SURFACE_SCALE_NONE, d.color.size, level.width,
-                                                  level.height, level.pitch / texture.format->blockBytes,
-                                                  texture.memory.data + level.offset);
+        // Without colour the draws keep the programs made for the target's
+        // format; what they write goes nowhere.
+        const int result =
+            noColour ? sceGxmColorSurfaceInitDisabled(&d.colorSurface)
+                     : sceGxmColorSurfaceInit(&d.colorSurface, d.color.format, SCE_GXM_COLOR_SURFACE_LINEAR,
+                                              SCE_GXM_COLOR_SURFACE_SCALE_NONE, d.color.size, level.width,
+                                              level.height, level.pitch / texture.format->blockBytes,
+                                              texture.memory.data + level.offset);
         if (result < 0)
         {
-            Log(device, "sceGxmColorSurfaceInit on %s failed (0x%08x)", texture.name.c_str(), unsigned(result));
+            Log(device, "%s on %s failed (0x%08x)", noColour ? "sceGxmColorSurfaceInitDisabled" : "sceGxmColorSurfaceInit",
+                texture.name.c_str(), unsigned(result));
             return false;
+        }
+        if (noColour && !d.noColourLogged)
+        {
+            d.noColourLogged = true;
+            Log(device, "diag: a scene on %s (%ux%u) is begun without its colour: nothing reads it", texture.name.c_str(),
+                level.width, level.height);
         }
         colorSurface = &d.colorSurface;
         width = level.width;
@@ -1259,6 +1333,8 @@ bool OpenScene(Device &device)
     d.sceneOpen = true;
     d.sceneColor = color;
     d.sceneDepth = depth;
+    d.sceneNoColour = noColour;
+    d.scenePrepass = prepass;
     d.sceneWidth = width;
     d.sceneHeight = height;
     d.boundVertex = nullptr;
@@ -1929,6 +2005,14 @@ bool InitDraw(Device &device, std::string &error)
     if (!gfx_gxm::g_stretchInFilter)
         Log(device, "diag: no-filter-stretch is there: a scaled picture is always copied and stretched in two "
                     "scenes of its own");
+    gfx_gxm::g_prepassClears = !gxm::ProgramCacheMarker("no-prepass-clear");
+    gfx_gxm::g_prepassNoColour = !gxm::ProgramCacheMarker("no-depth-only-scene");
+    gfx_gxm::g_sceneInCopy = !gxm::ProgramCacheMarker("no-scene-in-copy");
+    Log(device, "diag: fewer scenes: the depth pass's scene clears the depth %s, has no colour surface %s, the 3D "
+                "passes draw into the film filter's image %s",
+        gfx_gxm::g_prepassClears ? "on" : "off (no-prepass-clear)",
+        gfx_gxm::g_prepassNoColour ? "on" : "off (no-depth-only-scene)",
+        gfx_gxm::g_sceneInCopy ? "on" : "off (no-scene-in-copy)");
     d.notifications = sceGxmGetNotificationRegion();
     if (gxm::ProgramCacheMarker("no-frame-overlap"))
     {
@@ -1952,6 +2036,18 @@ bool InitDraw(Device &device, std::string &error)
     {
         d.sameState = false;
         Log(device, "diag: no-same-state is there: every draw works out its programs and fixed state anew");
+    }
+    if (gxm::ProgramCacheMarker("no-alpha-test-drop"))
+    {
+        d.dropIdleAlphaTest = false;
+        Log(device, "diag: no-alpha-test-drop is there: an alpha test that cannot change the picture stays in its "
+                    "fragment program");
+    }
+    if (gxm::ProgramCacheMarker("no-alpha-test-zero"))
+    {
+        d.zeroAlphaTest = false;
+        Log(device, "diag: no-alpha-test-zero is there: an alpha test on a blended draw is a discard, not a pixel "
+                    "of zero");
     }
     if (gxm::ProgramCacheMarker("no-draw-reuse"))
     {
@@ -2689,7 +2785,8 @@ const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "n
                                      "no-draw-reuse",     "no-filter-stretch", "no-gpu-boost",
                                      "no-mip-bias",         "no-filter-sharpen",
                                      "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
-                                     "gpu-watch"};
+                                     "gpu-watch",           "no-prepass-clear",  "no-depth-only-scene",
+                                     "no-scene-in-copy",    "no-alpha-test-drop", "no-alpha-test-zero"};
 struct LiveSwitch
 {
     const char *name;
@@ -2743,12 +2840,28 @@ void ApplyLiveSwitches(Device &device)
             d.sameState = !s.on;
             d.lastDrawValid = false;
         }
+        else if (name == "no-alpha-test-drop" || name == "no-alpha-test-zero")
+        {
+            (name == "no-alpha-test-drop" ? d.dropIdleAlphaTest : d.zeroAlphaTest) = !s.on;
+            d.lastDrawValid = false;
+            Log(device,
+                "diag: alpha tests so far: %llu draws with a discard, %llu with the test left out, %llu that write "
+                "zero",
+                (unsigned long long)d.alphaTestDraws, (unsigned long long)d.idleAlphaTestDraws,
+                (unsigned long long)d.zeroAlphaTestDraws);
+        }
         else if (name == "no-filter-stretch")
             gfx_gxm::g_stretchInFilter = !s.on;
         else if (name == "no-mip-bias")
             gfx_gxm::g_mipBias = !s.on;
         else if (name == "no-filter-sharpen")
             gfx_gxm::g_sharpenInFilter = !s.on;
+        else if (name == "no-prepass-clear")
+            gfx_gxm::g_prepassClears = !s.on;
+        else if (name == "no-depth-only-scene")
+            gfx_gxm::g_prepassNoColour = !s.on;
+        else if (name == "no-scene-in-copy")
+            gfx_gxm::g_sceneInCopy = !s.on;
         else if (name == "gpu-watch")
             SetGpuWatch(device, s.on);
         else if (name == "no-gpu-boost")
@@ -3394,11 +3507,31 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     else
     {
         gxm::cg::Options pixelOptions;
+        d.lastDrawAlphaTest = 0;
         if (device.renderStates[d3d::RS_ALPHATESTENABLE])
         {
             const uint32_t func = device.renderStates[d3d::RS_ALPHAFUNC];
             if (func >= d3d::CMP_NEVER && func < d3d::CMP_ALWAYS)
                 pixelOptions.alphaFunc = gxm::cg::AlphaFunc(func);
+            d.lastDrawAlphaTest = pixelOptions.alphaFunc != gxm::cg::AlphaFunc::Always;
+            // A test that only rejects what the blend would not show is
+            // left out, and one on a blend that keeps the target for a
+            // source of zero writes zero: neither program has a discard
+            // (gxm_idle_alpha_test.h).
+            if (d.lastDrawAlphaTest && (d.dropIdleAlphaTest || d.zeroAlphaTest))
+            {
+                const gfx_gxm::AlphaTestState state = AlphaTestStateOf(device);
+                if (d.dropIdleAlphaTest && gfx_gxm::AlphaTestIsIdle(state))
+                {
+                    pixelOptions.alphaFunc = gxm::cg::AlphaFunc::Always;
+                    d.lastDrawAlphaTest = 2;
+                }
+                else if (d.zeroAlphaTest && gfx_gxm::AlphaTestCanZero(state))
+                {
+                    pixelOptions.alphaZero = true;
+                    d.lastDrawAlphaTest = 3;
+                }
+            }
         }
         pixelOptions.sharpSamplers = sharpSamplers;
         // The programs this combination last drew with (Pipeline), unless a
@@ -3413,7 +3546,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             pipelineKey.ps = ps;
             pipelineKey.decl = device.decl;
             std::memcpy(pipelineKey.strides, strides, sizeof(strides));
-            pipelineKey.alphaFunc = uint8_t(pixelOptions.alphaFunc);
+            pipelineKey.alphaFunc = uint8_t(uint8_t(pixelOptions.alphaFunc) | (pixelOptions.alphaZero ? 0x80 : 0));
             pipelineKey.sharp = sharpSamplers;
             pipelineKey.index32 = index32;
             pipeline = &PipelineSlot(d, pipelineKey);
@@ -3796,6 +3929,9 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         return;
     }
     ++d.drawn;
+    d.alphaTestDraws += d.lastDrawAlphaTest == 1;
+    d.idleAlphaTestDraws += d.lastDrawAlphaTest == 2;
+    d.zeroAlphaTestDraws += d.lastDrawAlphaTest == 3;
     if (target)
         target->unfilled = false;
     part(gxm::FrameTime::PartSubmit);
@@ -4032,6 +4168,12 @@ void LogDrawSummary(Device &device)
         (unsigned long long)d->drawn, (unsigned long long)d->copies, (unsigned long long)d->scenes, unsigned(d->vertexPrograms.size()),
         unsigned(d->fragmentPrograms.size()), d->variantsMade, d->variantFailures, (unsigned long long)d->renames,
         (unsigned long long)d->ringOverflows, d->drawFailures);
+    Log(device,
+        "alpha tests: %llu draws with a discard in their fragment program, %llu with the test left out because it "
+        "could not change the picture%s, %llu that write zero for a rejected pixel%s",
+        (unsigned long long)d->alphaTestDraws, (unsigned long long)d->idleAlphaTestDraws,
+        d->dropIdleAlphaTest ? "" : " (no-alpha-test-drop)", (unsigned long long)d->zeroAlphaTestDraws,
+        d->zeroAlphaTest ? "" : " (no-alpha-test-zero)");
     // What the draws did not do again (Pipeline, BindTextures, the uniform
     // buffers in Draw).
     Log(device,

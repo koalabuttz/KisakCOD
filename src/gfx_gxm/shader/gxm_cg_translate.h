@@ -139,6 +139,11 @@ struct Options
     // least and the most of the five. The Vita's scaled 3D picture is read
     // this way by the pass that stretches it (gxm_engine_options.h).
     uint16_t sharpSamplers = 0;
+    // Pixel shaders: a pixel that fails the alpha test is written as
+    // (0, 0, 0, 0) and not discarded. For draws whose blend leaves the
+    // target as it was for such a source (gxm_idle_alpha_test.h): the
+    // picture is the same and the program has no discard.
+    bool alphaZero = false;
     // Vertex shaders: keep the position's z just inside the far plane
     // (z <= w * 0.99999). D3D9 draws z == w; a run-diagnostic option while
     // finding out whether GXM clips it.

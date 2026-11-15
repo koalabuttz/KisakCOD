@@ -107,6 +107,8 @@ VITA_CASES = {
 CHECKS = [
     ("ps1_vita_constant", [], "    oC0 = r0;\n", "constants=1 "),
     ("ps1_vita_constant", ["--alpha", "5"], "if (!(a > ref)) discard;", "varyings= "),
+    ("ps1_vita_constant", ["--alpha", "5", "--alpha-zero"],
+     "if (!(a > ref)) oC0 = float4(0.0, 0.0, 0.0, 0.0);\n    return oC0;", "varyings= "),
     ("ps1_vita_texture", [], "    r2 = tex2D(s0, (t0).xy);\n    r0 = r2;\n    oC0 = r0;\n",
      "samplers=0:2d"),
     ("ps1_vita_texture", [], "float4 in_TEXCOORD0 : TEXCOORD0", "varyings=TEXCOORD0"),

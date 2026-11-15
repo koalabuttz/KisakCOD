@@ -226,6 +226,15 @@ target_include_directories(KisakCOD-mp-vita-input-sound SYSTEM PRIVATE "${KISAK_
 
 set_property(SOURCE "${SRC_DIR}/sound/snd_driver_load_obj.cpp" TARGET_DIRECTORY KisakCOD-mp-vita-standin
     APPEND PROPERTY COMPILE_DEFINITIONS DR_WAV_IMPLEMENTATION DR_MP3_IMPLEMENTATION)
+# dr_mp3 lives in that file and has a NEON path it takes when the compiler
+# offers NEON: the synthesis filter and the transforms four floats at a time.
+# It only makes sound, so NEON's flushed denormals touch nothing the game's
+# sums depend on. The rest of the file is the WAV loader, which the compiler
+# does not vectorize for float (the Vita workflow checks: NEON float
+# instructions only in drmp3 functions and the skinning path).
+# scripts/tests/test_mp3_neon_decode.py compares the two builds' samples.
+set_property(SOURCE "${SRC_DIR}/sound/snd_driver_load_obj.cpp" TARGET_DIRECTORY KisakCOD-mp-vita-standin
+    APPEND PROPERTY COMPILE_OPTIONS "-mfpu=neon")
 target_link_libraries(KisakCOD-mp-vita-native PRIVATE kisak_linux_native_d3d9)
 target_link_libraries(KisakCOD-mp-vita-own PRIVATE kisak_linux_native_d3d9)
 
