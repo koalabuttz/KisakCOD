@@ -97,7 +97,7 @@ def main():
     parser.add_argument('--gradle-arg', action='append', default=[],
                         help='one more argument for Gradle (repeatable), such as --init-script for a Maven mirror')
     parser.add_argument('--cmake-arg', action='append', default=[],
-                        help='one more argument for the game\'s CMake configure (repeatable), such as -DKISAK_RMLUI=ON')
+                        help='one more argument for the game\'s CMake configure (repeatable), written --cmake-arg=-DKISAK_RMLUI=ON')
     parser.add_argument('--native-only', action='store_true',
                         help='stop after the native libraries (no Android SDK or Gradle needed)')
     args = parser.parse_args()
