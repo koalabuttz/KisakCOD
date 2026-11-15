@@ -52,7 +52,8 @@ host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`), the run
 plan's, the GPU heap's, the frame time figures', the GPU progress bookkeeping's
 and the shader translator's (`test_vita_run_plan.py`, `test_vita_gxm_heap.py`,
 `test_vita_frame_time.py`, `test_vita_gpu_progress.py`,
-`test_vita_cg_translate.py`), and the static model cache's size arithmetic
+`test_vita_cg_translate.py`), the submit thread's call queue's
+(`test_vita_call_queue.py`), and the static model cache's size arithmetic
 (`test_static_model_cache_sizes.py`).
 
 ## Running
@@ -973,6 +974,72 @@ What the GXM back end does so far (step 2d):
   kind costs a frame. It is for measuring: whether the GPU always sees what
   the CPU wrote last from cached memory is not known, so the picture may
   be wrong with it.
+- **sceGxm's calls on a thread of their own** (off by default; console
+  runs BN and BP: it runs without a fault and the render thread's CPU
+  time falls from about 32 to 19 ms a frame, but the frame stays at
+  37 ms in every arrangement of cores BP tried. BP's thread lines say
+  why. The port's main thread has priority 160 and every thread the
+  engine starts 159, which the kernel runs first, and threads of one
+  priority are not given turns: with four busy threads on three cores
+  one always goes without. And a caller waits for the thread about five
+  times a frame until it has caught up: at Present and, as the code
+  reads, at the DISCARD locks of the dynamic buffers. The spare pieces
+  below take those away; `vita_thread` and `vita_threads` are there to find an
+  arrangement of priorities for the first). In the busy view the render
+  thread spends about
+  30 ms a frame, and the back end's own draws are 12.5 ms of that (console
+  run BG: 1380 draws at 9.1 us each). With an empty file
+  `gxm-submit-thread` in the folder of the compiled programs, or
+  `vita_gxm gxm-submit-thread 1` while the game runs, the calls that set
+  state and draw are written to a queue and their caller goes on; a thread
+  of the back end's own, `gxm submit` in the perf windows' thread table,
+  makes them in order (`src/gfx_gxm/gxm_call_queue.h`, "The submit thread"
+  in `gxm_legacy.cpp`). Every other call is made by its caller once the
+  queue is empty: creating, destroying and locking resources, reading a
+  target, Present. So a frame's draws are all with sceGxm before the frame
+  is shown, and the pacing and the buffer renames see what they saw
+  before. Two kinds of call do not wait: a buffer lock without DISCARD,
+  which hands out memory no queued draw reads, and calls that only read
+  what never changes. Shader constants and `DrawPrimitiveUP`'s vertices
+  are copied into the queue. A scene begins and ends on one thread: a
+  caller that must end one has the submit thread do it. The thread sleeps
+  when it has caught up and is woken once 8 KB of calls wait, so a frame
+  costs some tens of wakes, not one for every draw. Once a minute the log
+  says what it cost (`submit thread: a frame, N calls queued, the thread
+  woken N times ..., N waits for it (N ms)`). The queue is tested on the
+  host with the address and thread sanitizers
+  (`scripts/tests/test_vita_call_queue.py`).
+  A DISCARD lock is the one lock that had to wait: only when the draws
+  written before it are made is it known whether one of them read the
+  buffer, and so whether the GPU still needs its memory. The engine locks
+  its dynamic buffers that way in the middle of a frame, from the render
+  thread and from the main thread, and each such wait stopped its caller
+  for as long as the submit thread was behind. So the back end keeps
+  spare pieces: memory of a buffer's size and use that the GPU is done
+  with. A DISCARD lock that finds one hands it out at once, and a queued
+  call gives it to the buffer when the draws before the lock are made;
+  the memory the buffer had then waits for the GPU as it always did and
+  becomes a spare piece in its turn (after each such call, and after the
+  pacing wait at Present). A lock that finds none waits as before, and
+  makes a first spare piece for its kind of dynamic buffer if there is
+  none anywhere. The log's `submit thread waits, a frame:` line counts
+  the waits by what the caller was about to do (the end of the frame,
+  buffer discards, texture writes, target reads, scene ends, calls too
+  large to queue) and the DISCARD locks that did not wait. An empty file
+  `no-spare-pieces`, or `vita_gxm no-spare-pieces 1`, makes every DISCARD
+  lock wait again, for comparing.
+- **Threads on cores and priorities of a run's choice.** Every thread of
+  the port starts on all three user cores at the process's priority, and
+  the kernel decides the rest. `vita_threads` logs one line for each
+  thread the port started (`Vita thread: <name> priority N (started at
+  N), cores 012, last ran on core N, ran N ms, pre-empted N, gave way N,
+  changed core N`). `vita_thread <part of a name> cores <0-7>` keeps the
+  threads of that name on the user cores whose bits are set (0: all
+  three), and `vita_thread <part of a name> priority <N>` adds N to the
+  priority they started with (a higher number runs later). Both are
+  remembered, so a thread that starts later under a matching name (the
+  submit thread, turned off and on) gets the same. They are commands for
+  run files: nothing is saved, and the port's own defaults do not change.
 - **Textures** are linear: rows of whole multiples of 8 texels, and the
   levels of a mipmapped texture sized from the power of two above the base,
   which is how sceGxm reads them and also a layout LockRect can hand out.
