@@ -69,7 +69,8 @@ elseif(KISAK_PLATFORM STREQUAL "android")
     # default; r27, which GitHub's runners carry, aligns to 4 KiB.
     add_link_options(LINKER:-z,max-page-size=16384)
     message(WARNING "KISAK_PLATFORM=android is the opt-in Android track (${ANDROID_ABI}, ${ANDROID_PLATFORM}): "
-        "KisakCOD-dedi and KisakCOD-mp (libmain.so) build; neither has run on an Android device yet. See docs/android.md.")
+        "KisakCOD-dedi, KisakCOD-mp (libmain.so) and KisakCOD-sp (libmain_sp.so) build; the campaign has not run on Android yet. "
+        "See docs/android.md.")
 elseif(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     message(FATAL_ERROR "KISAK_PLATFORM=linux requires a Linux target toolchain.")
 elseif(KISAK_LINUX_ARCH STREQUAL "x86_64")
