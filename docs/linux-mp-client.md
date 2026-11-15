@@ -126,6 +126,44 @@ to find its length: M ms` the first time an MP3 stream without a length tag
 plays: the decoder has to read such a file through to know how long it is,
 and the driver keeps the answer for the next start of that file.
 
+### Speakers
+
+The sound driver here is the OpenAL one, shared with macOS, the PS Vita and
+64-bit Windows; only the 32-bit Windows build uses Miles. They now agree on
+three things (OpenAL Soft 1.22 or newer; an older OpenAL keeps the old
+behaviour, stereo with every sound as recorded):
+
+* `snd_outputConfiguration` picks the layout: `0` ("Windows default") leaves it
+  to the system, `1` to `4` ask for mono, stereo, 4 or 5.1 speakers. It is a
+  latched setting, so it takes effect at `snd_restart` or the next start. The
+  second startup line says what OpenAL mixes for, for example
+  `OpenAL output: 5.1 speakers, 6 speakers (multichannel); speaker maps on;
+  centre and LFE share on`. More than two speakers counts as multichannel, as
+  on Miles.
+* A 2D sound whose alias names a speaker map plays with the map's level on each
+  speaker: the driver mixes it into the output's layout and plays that with
+  `AL_SOFT_direct_channels`. Sounds with the default map play as before (OpenAL
+  centres a mono sound). Loaded sounds up to about 47 seconds and 2D streams
+  are mixed; a longer loaded sound plays as recorded.
+* On multichannel output a 3D sound keeps `1 - centerPercentage` of its panned
+  level, and `centerPercentage` and `lfePercentage` of it go straight to the
+  centre and LFE speakers (OpenAL Soft's dedicated dialogue and LFE effects).
+  One difference stays: OpenAL pans a sound in front partly into the centre
+  speaker, where Miles' levels would leave the centre silent.
+
+With `snd_alDebug 1` the 5-second summary also counts the sounds played by a
+speaker map and the 3D sounds with a centre or LFE share; `snd_alDebug 2` names
+each one (`snd_al: speakers ch 3 '<alias>': speaker map <map>, ...`). A mapped
+loaded sound is mixed again at every start, a few milliseconds for a long one.
+
+`scripts/tests/test_openal_speaker_maps.py` plays tones through the driver's own
+code into OpenAL Soft's loopback device in stereo and 5.1 and measures every
+speaker. To record the real game's mix to a file instead of a sound card, start
+it with `ALSOFT_DRIVERS=wave` and an `ALSOFT_CONF` file holding
+`[general]` `channels=surround51` and `[wave]` `file=/path/out.wav`;
+`scripts/runs/wav_levels.py out.wav` then gives each speaker's level, its share
+of the mix and how often it carried anything.
+
 The OpenAL headers (`AL/al.h`) are needed too, whichever library is linked,
 because the sound headers include them. Without `libopenal-dev` installed, unpack
 the package somewhere (`apt-get download libopenal-dev`, then `dpkg-deb -x`) and

@@ -49,7 +49,8 @@ def extract(source: str, pattern: str, name: str) -> str:
 
 def production_code() -> str:
     source = SOURCE.read_text(errors="replace")
-    parts = [extract(source, r"^struct AlStreamState\s*\{", "AlStreamState")]
+    parts = [extract(source, r"^static ALenum SND_SpeakerMixFormat\([^)]*\)\s*\{", "SND_SpeakerMixFormat"),
+             extract(source, r"^struct AlStreamState\s*\{", "AlStreamState")]
     for name in ("g_streamState", "AL_STREAM_BUFFER_COUNT", "AL_STREAM_BUFFER_FRAMES"):
         line = re.search(rf"^static [^\n]*\b{name}\b[^\n]*;$", source, re.MULTILINE)
         if line is None:
@@ -68,6 +69,7 @@ HARNESS = r"""
 #include <AL/al.h>
 #include <AL/alc.h>
 #include <AL/alext.h>
+#include <sound/snd_speaker_mix.h>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -386,7 +388,7 @@ def main() -> int:
         binary = Path(tmp) / "channel_stop"
         program.write_text(code)
         subprocess.run(
-            ["c++", "-std=c++17", "-O1", "-Wall", "-Wno-unused-function", "-I", str(ROOT / "deps"),
+            ["c++", "-std=c++17", "-O1", "-Wall", "-Wno-unused-function", "-I", str(ROOT / "deps"), "-I", str(ROOT / "src"),
              str(program), "-o", str(binary), "-lopenal"],
             check=True,
         )
