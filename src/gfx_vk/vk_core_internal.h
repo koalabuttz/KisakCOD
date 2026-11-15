@@ -338,6 +338,10 @@ public:
     // the compositor turns the picture, and presents report
     // VK_SUBOPTIMAL_KHR for that alone, which must not rebuild every frame.
     bool transformLeftToCompositor = false;
+    // Those suboptimal acquires, counted: every 32nd still compares the
+    // surface's size with the swapchain's, because Android reports a resize
+    // (the window going full screen) by that same result alone.
+    uint32_t turnedSuboptimal = 0;
     bool windowDetached = false; // DetachWindow: no swapchain or surface any more
 
     FrameSlot frames[kFramesInFlight];
