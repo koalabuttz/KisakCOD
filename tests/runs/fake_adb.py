@@ -25,6 +25,11 @@ kill``; with FAKE_ADB_EMULATOR=1 adb finds a device only while it runs.
 ``push <folder>/. <device folder>/`` copies a folder in, ``shell ls`` says
 whether a path is there.
 
+The app's game runs in its own process (``pidof org.kisakcod.game:game``)
+beside the launcher's, as AndroidManifest.xml has it; FAKE_ONE_PROCESS=1
+gives the one process of older builds. FAKE_APP_EXIT=1: the game ends
+without a word when the map is up.
+
 FAKE_ADB_OFFLINE=1: no device. FAKE_EMULATOR_FAIL=1: the emulator exits at once. FAKE_INSTALL_FAIL=1: the install fails.
 FAKE_APP_CRASH=1: the app crashes when the map is up. FAKE_APP_LINGER=1: the
 app process stays after the game quits (SDL's activity). FAKE_ASLEEP=1: the
@@ -46,6 +51,7 @@ STATE = Path(os.environ.get("FAKE_ADB_STATE", "fake-adb-state"))
 PACKAGE = "org.kisakcod.game"
 APP_FOLDER = f"/storage/emulated/0/Android/data/{PACKAGE}/files"
 PNG = None
+LAUNCHER_PID = 4242
 
 
 def device_path(path):
@@ -101,11 +107,22 @@ def shell(command):
     elif words[:1] == ["date"]:
         print(time.strftime("%m-%d %H:%M:%S.000"))
     elif words[:1] == ["pidof"]:
-        pid = alive("app.pid")
-        if not pid:
+        # The game runs in "<package>:game", the launcher in "<package>",
+        # unless FAKE_ONE_PROCESS=1 (builds from before the :game process).
+        one = os.environ.get("FAKE_ONE_PROCESS") == "1"
+        found = []
+        for name in words[1:]:
+            if name == PACKAGE + ":game" and not one and alive("app.pid"):
+                found.append(alive("app.pid"))
+            elif name == PACKAGE and one and alive("app.pid"):
+                found.append(alive("app.pid"))
+            elif name == PACKAGE and not one and (STATE / "launcher").exists():
+                found.append(LAUNCHER_PID)
+        if not found:
             return 1
-        print(pid)
+        print(" ".join(map(str, found)))
     elif words[:2] == ["am", "force-stop"]:
+        (STATE / "launcher").unlink(missing_ok=True)
         pid = alive("app.pid")
         if pid:
             os.kill(pid, 9)
@@ -116,6 +133,7 @@ def shell(command):
         app = subprocess.Popen([sys.executable, __file__, "--app", extra], start_new_session=True,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         (STATE / "app.pid").write_text(str(app.pid))
+        (STATE / "launcher").write_text("1")
         print(f"Starting: Intent {{ cmp={words[words.index('-n') + 1]} }}\nStatus: ok")
     elif words[:1] == ["input"]:
         if words[-1] == "KEYCODE_WAKEUP":
@@ -275,6 +293,8 @@ def app(extra):
         if text == "-map":
             log(f"Loading fastfile {devmap}_load")
             log("run: the map is up")
+            if os.environ.get("FAKE_APP_EXIT") == "1":
+                return 0
             if os.environ.get("FAKE_APP_CRASH") == "1":
                 log("Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0 in tid 1 (SDLThread)",
                     tag="libc", level="F")

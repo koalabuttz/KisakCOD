@@ -147,6 +147,7 @@ def test_whole_run(work):
     report = (out / "report.md").read_text()
     check("install -r: ok" in report and "| crash | ok |" in report and results["sha256"] in report, "report")
     check(made.count("am force-stop org.kisakcod.game") >= 4, "force-stop before and after each launch")
+    check("pidof org.kisakcod.game:game" in made, "the game's own process is watched")
 
 
 def test_variants(work):
@@ -170,6 +171,18 @@ def test_failures(work):
     launch = json.loads((work / "out-crash" / "results.json").read_text())["launches"][0]
     check(done.returncode == 1 and launch["status"] == "crash", f"crash: {launch.get('status')}")
     check(any("Fatal signal 11" in line for line in launch["crash_lines"]), "crash line kept")
+
+    launches = [{"name": "d", "args": ["+devmap", "mp_crash"], "at_map": ["2 quit"]}]
+    path = write_recipe(work, launches)
+    done = run(work, path, work / "out-died", env={"FAKE_APP_EXIT": "1"})
+    launch = json.loads((work / "out-died" / "results.json").read_text())["launches"][0]
+    check(done.returncode == 1 and launch["status"] == "died" and launch["seconds"] < 10,
+          f"a game that ends without its quit has died, though the launcher's process stays: {launch}")
+
+    done = run(work, path.with_name(path.name), work / "out-one", env={"FAKE_ONE_PROCESS": "1"})
+    launch = json.loads((work / "out-one" / "results.json").read_text())["launches"][0]
+    check(done.returncode == 0 and launch["status"] == "ok" and launch["events"].get("quit"),
+          f"a build with one process: {launch}")
 
     launches = [{"name": "l", "at_menu": ["0.2 quit"]}]
     path = write_recipe(work, launches)
