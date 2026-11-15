@@ -958,7 +958,7 @@
          "vita_sceneScaleMin",
          1.0f,
          minv,
-         DVAR_NOFLAG,
+         DVAR_ARCHIVE,
          "Under vita_sceneScale: the 3D picture shrinks down to this fraction, frame by frame, as far as the GPU "
          "needs to keep the frame's goal, and no further");
      minv.value.max = 100.0f;
@@ -980,7 +980,7 @@
      vita_sceneSharpen = Dvar_RegisterBool(
          "vita_sceneSharpen",
          false,
-         DVAR_NOFLAG,
+         DVAR_ARCHIVE,
          "Sharpen a smaller 3D picture as it is stretched to the screen");
 #endif
      r_smp_backend = Dvar_RegisterBool("r_smp_backend", true, DVAR_NOFLAG, "Process renderer back end in a separate thread");

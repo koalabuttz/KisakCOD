@@ -933,6 +933,10 @@ What the GXM back end does so far (step 2d):
   picked. While the depth pass governor tries the scene the other way the
   size stays as it is, so that the try is timed at one size; the size then
   follows the way that was kept. A game server can set neither dvar.
+  Options > Game has the setting as "Dynamic Resolution" (Off, or down to
+  85, 70 or 50 %) and `vita_sceneSharpen` as "Sharpen Scaled Picture"
+  ([options-menu.md](options-menu.md)); both are saved in the player's
+  settings.
   `scripts/tests/test_vita_scale_governor.py` runs it on a model of the
   console with run BV's times.
 - **Keeping a smaller 3D picture sharp.** The Vita has none of the
