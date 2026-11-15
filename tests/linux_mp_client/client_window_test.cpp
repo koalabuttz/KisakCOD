@@ -267,6 +267,25 @@ void CheckWindowLifetime()
     GameWindow()->ShowSystemCursor(true);
     Check(!GameWindow()->Host().EngineCursorActive(), "showing the system cursor gives it back");
 
+    // A tap on a touch screen moves the pointer and clicks in one pump: the
+    // engine hears the new position before the click is queued, so the menu
+    // clicks under the finger, not where the last tap left the cursor.
+    Drain();
+    const size_t beforeTap = rec.mouse.size();
+    Push(sdl::MakeMotion(id, 120, 90, 100, 60));
+    Push(sdl::MakeButton(id, SDL_BUTTON_LEFT, true));
+    GameWindow()->Pump();
+    Check(rec.mouse.size() == beforeTap + 1 && rec.mouse.back().x == 120 && rec.mouse.back().y == 90,
+          "a click in a menu hands the engine the pointer's new position first");
+    Check(HasKey(Drain(), K_MOUSE1, 1), "the click is still queued as a key");
+    Push(sdl::MakeButton(id, SDL_BUTTON_LEFT, false));
+    Push(sdl::MakeButton(id, SDL_BUTTON_LEFT, true));
+    GameWindow()->Pump();
+    Check(rec.mouse.size() == beforeTap + 1, "a click where the pointer already is asks the engine nothing more");
+    Push(sdl::MakeButton(id, SDL_BUTTON_LEFT, false));
+    GameWindow()->Pump();
+    Drain();
+
     rec.lookAnswer = 1;
     GameWindow()->Frame(true);
     Push(sdl::MakeMotion(id, 30, 30, 7, 7));

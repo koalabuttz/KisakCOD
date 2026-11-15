@@ -870,10 +870,13 @@ Image *AcquireImage(Core &core)
     }
     if (result == VK_SUBOPTIMAL_KHR)
     {
-        // Still usable: draw this one, rebuild after (unless the compositor
-        // turning the picture is all it means).
+        // Still usable: draw this one, rebuild after. When the compositor
+        // turning the picture makes every acquire suboptimal, only a size
+        // change rebuilds: the first and every 32nd ask for the size check.
         if (!core.transformLeftToCompositor)
             core.rebuildPending = true;
+        else if ((core.turnedSuboptimal++ & 31u) == 0)
+            core.resizePending = true;
     }
     else if (!Check(core, result, "vkAcquireNextImageKHR"))
         return nullptr;

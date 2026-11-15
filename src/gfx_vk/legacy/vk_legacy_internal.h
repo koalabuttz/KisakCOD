@@ -177,6 +177,10 @@ struct Shader
     // vertex shader they are linked to, the depth samplers where those are
     // fixed, and the alpha test's compare where that is).
     std::unordered_map<LinkedKey, VkShaderModule, LinkedKeyHash> linked;
+    // Vertex shaders on a device that cannot read UBYTE4 elements as they are
+    // (Device::byteStandIn): modules built for the attribute locations fed
+    // such an element (ByteInputs), by that location mask.
+    std::vector<std::pair<uint32_t, VkShaderModule>> byteModules;
     // 64-bit FNV-1a of the bytecode, by 8-byte words (ContentHash): names the
     // shader in the pipeline list, across launches.
     uint64_t contentHash = 0;
@@ -468,6 +472,10 @@ struct Device
     DeviceStats stats{};
     uint32_t nextId = 1;
     VkFormat depthFormat = VK_FORMAT_UNDEFINED; // the core's depth-stencil format
+    // The device reads no R8G8B8A8_USCALED vertex data (Adreno): UBYTE4
+    // elements are fed as R8G8B8A8_UNORM and the vertex shaders reading them
+    // scale them back (Shader::byteModules, legacy_shader::BuildSpirv).
+    bool byteStandIn = false;
     float depthBiasScale = 1.0f;                 // D3DRS_DEPTHBIAS to Vulkan's constant factor
     uint32_t uniformAlignment = 16;
     bool dynamicUniforms = true; // !OptionalFeatures::staticUniforms
@@ -787,8 +795,15 @@ bool BuildModernLitSpirv(uint16_t shader, const ls::Shader &vs, float sunStrengt
 bool KeepPixelModule(Device &device, Shader &ps, const PixelModuleRecipe &recipe, VkShaderModule module);
 // Fills info for a pipeline of key. Reads only its arguments: safe on any
 // thread while they live.
-void MakePipelineInfo(PipelineInfo &info, const PipelineKey &key, const Shader &vs, VkShaderModule fragment,
-                      const VertexDecl &decl, const Layout &layout, bool dynamicStride);
+// vertex is vs's module for decl (VertexModule); byteStandIn is the
+// device's Device::byteStandIn.
+void MakePipelineInfo(PipelineInfo &info, const PipelineKey &key, const Shader &vs, VkShaderModule vertex,
+                      VkShaderModule fragment, const VertexDecl &decl, const Layout &layout, bool dynamicStride,
+                      bool byteStandIn);
+// The vertex shader's module for drawing with decl: its own, or one built
+// for the UBYTE4 elements decl feeds it (Device::byteStandIn). Device thread
+// only. VK_NULL_HANDLE when that build fails (Device::error says why).
+VkShaderModule VertexModule(Device &device, Shader &vs, const VertexDecl &decl);
 // Adds a built pipeline to Device::pipelines (it must not be there yet).
 Pipeline *AddPipeline(Device &device, const PipelineKey &key, VkPipeline handle, Layout *layout,
                       uint32_t bindings, const Shader &vs, const Shader &ps, const VertexDecl &decl);

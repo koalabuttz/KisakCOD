@@ -1239,7 +1239,7 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
             'Build the Vulkan window probe', 'Run the Vulkan window probe on lavapipe',
             'Check the Legacy shader translator', 'Run the Legacy adapter check on lavapipe',
             'Run the D3D9 front check on lavapipe'], debug_only=[
-            "Run both checks again on MoltenVK's paths",
+            "Run both checks again on MoltenVK's and Adreno's paths",
             'Run the checks again with the record thread switched',
             'Run the checks again with the GPU feed off and at its extreme',
             'Run the checks again without occlusion counts',
