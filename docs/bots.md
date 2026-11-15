@@ -339,6 +339,11 @@ bots: navigation mesh for mp_crash built in <seconds> s (geometry ..., N drop-do
 bots: navigation mesh for mp_crash loaded from bots/nav/mp_crash.kbnav (...)
 ```
 
+To look at a place the mesh gets wrong away from the game, start the server
+with `KISAK_BOT_NAVDUMP="x y z across up"` in its environment: the collision
+triangles in that box are written to `bots/nav/<map>-dump.obj` in the home
+folder (game coordinates, z up) when the mesh is built or loaded.
+
 Each mesh build or layout change bumps the cache version, so older caches are
 rebuilt (version 2 added the drop-downs). The cache is read only from the home and base folders, never from a game
 archive or a server's download, and each tile's size is checked before Detour

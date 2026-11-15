@@ -21,7 +21,10 @@
 #include "bot_navmesh.h"
 
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <string>
 #include <vector>
 
 namespace
@@ -208,23 +211,9 @@ bool WriteCache(const char *path, const std::vector<uint8_t> &blob)
     return written == size;
 }
 
-void LoadOrBuild(const char *mapName, uint32_t checksum)
+// The map's player-solid collision as a triangle soup.
+int Gather(kb::NavGeometry &geometry)
 {
-    char path[128];
-    Com_sprintf(path, sizeof(path), "bots/nav/%s.kbnav", mapName);
-
-    std::vector<uint8_t> blob;
-    uint32_t cached = 0;
-    if (ReadCache(path, blob) && kb::NavBlobChecksum(blob.data(), blob.size(), &cached) && cached == checksum
-        && s_nav.Load(blob.data(), blob.size()))
-    {
-        Com_Printf(CON_CHANNEL_SERVER, "bots: navigation mesh for %s loaded from %s (%d polygons, %d drop-downs, %d KB)\n",
-                   mapName, path, s_nav.PolygonCount(), s_nav.DropLinkCount(), static_cast<int>(blob.size() / 1024));
-        return;
-    }
-
-    const uint32_t started = Sys_Milliseconds();
-    kb::NavGeometry geometry;
     std::vector<float> faceVerts;
     std::vector<int> faceCounts;
     int brushes = 0;
@@ -237,6 +226,93 @@ void LoadOrBuild(const char *mapName, uint32_t checksum)
         ++brushes;
     }
     AddTerrain(geometry);
+    return brushes;
+}
+
+// For looking at a place the mesh gets wrong away from the game: with
+// KISAK_BOT_NAVDUMP="x y z across up" set, the collision triangles in that
+// box (x, y within `across`, z within `up`) are written as a Wavefront OBJ to
+// bots/nav/<map>-dump.obj in the home folder, in game coordinates. A host
+// build of bot_navmesh.cpp can build a mesh from it.
+void DumpRegion(const char *mapName, const kb::NavGeometry *built)
+{
+    const char *spec = std::getenv("KISAK_BOT_NAVDUMP");
+    if (!spec || !spec[0])
+        return;
+    float centre[3];
+    float across = 0.0f;
+    float up = 0.0f;
+    if (std::sscanf(spec, "%f %f %f %f %f", &centre[0], &centre[1], &centre[2], &across, &up) != 5 || across <= 0.0f
+        || up <= 0.0f)
+    {
+        Com_PrintWarning(CON_CHANNEL_SERVER, "bots: KISAK_BOT_NAVDUMP wants \"x y z across up\", not \"%s\"\n", spec);
+        return;
+    }
+    kb::NavGeometry gathered;
+    if (!built)
+        Gather(gathered);
+    const kb::NavGeometry &geometry = built ? *built : gathered;
+    const float lo[3] = {centre[0] - across, centre[1] - across, centre[2] - up};
+    const float hi[3] = {centre[0] + across, centre[1] + across, centre[2] + up};
+    std::string text = "# KisakCOD bot navigation dump: player-solid collision, game units, z up\n";
+    text += "# map " + std::string(mapName) + ", box " + spec + "\no collision\n";
+    int written = 0;
+    const int count = geometry.TriangleCount();
+    char line[128];
+    for (int t = 0; t < count; ++t)
+    {
+        const float *v[3];
+        for (int k = 0; k < 3; ++k)
+            v[k] = &geometry.verts[geometry.tris[t * 3 + k] * 3];
+        // Keep a triangle whose bounds touch the box.
+        bool touches = true;
+        for (int a = 0; a < 3 && touches; ++a)
+        {
+            const float minA = std::fmin(v[0][a], std::fmin(v[1][a], v[2][a]));
+            const float maxA = std::fmax(v[0][a], std::fmax(v[1][a], v[2][a]));
+            touches = maxA >= lo[a] && minA <= hi[a];
+        }
+        if (!touches)
+            continue;
+        for (int k = 0; k < 3; ++k)
+        {
+            std::snprintf(line, sizeof(line), "v %.2f %.2f %.2f\n", v[k][0], v[k][1], v[k][2]);
+            text += line;
+        }
+        std::snprintf(line, sizeof(line), "f %d %d %d\n", written * 3 + 1, written * 3 + 2, written * 3 + 3);
+        text += line;
+        ++written;
+    }
+    char path[128];
+    Com_sprintf(path, sizeof(path), "bots/nav/%s-dump.obj", mapName);
+    const int handle = FS_SV_FOpenFileWrite(path);
+    const bool saved = handle && FS_Write(text.data(), static_cast<uint32_t>(text.size()), handle) == text.size();
+    if (handle)
+        FS_FCloseFile(handle);
+    Com_Printf(CON_CHANNEL_SERVER, "bots: navigation dump of %s: %d triangles in the box %s%s\n", mapName, written,
+               saved ? "written to " : "not written", saved ? path : "");
+}
+
+void LoadOrBuild(const char *mapName, uint32_t checksum)
+{
+    char path[128];
+    Com_sprintf(path, sizeof(path), "bots/nav/%s.kbnav", mapName);
+
+    std::vector<uint8_t> blob;
+    uint32_t cached = 0;
+    if (ReadCache(path, blob) && kb::NavBlobChecksum(blob.data(), blob.size(), &cached) && cached == checksum
+        && s_nav.Load(blob.data(), blob.size()))
+    {
+        Com_Printf(CON_CHANNEL_SERVER, "bots: navigation mesh for %s loaded from %s (%d polygons, %d drop-downs, %d KB)\n",
+                   mapName, path, s_nav.PolygonCount(), s_nav.DropLinkCount(), static_cast<int>(blob.size() / 1024));
+        DumpRegion(mapName, nullptr);
+        return;
+    }
+
+    const uint32_t started = Sys_Milliseconds();
+    kb::NavGeometry geometry;
+    const int brushes = Gather(geometry);
+    DumpRegion(mapName, &geometry);
     const uint32_t gathered = Sys_Milliseconds();
 
     kb::NavBuildStats stats;
