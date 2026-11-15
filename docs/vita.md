@@ -298,6 +298,8 @@ pixel instead of writing zero for it),
 fragment constants anew though nothing it reads changed),
 `frag-direct-write` (the constants are copied into the uniform buffer
 directly),
+`no-texture-keep` (every draw goes through its textures, also when they
+are the last draw's),
 `gpu-watch` (the log gets a `gpu watch` line that says how long the GPU
 works on a frame, [vita-client.md](vita-client.md)) and the three that
 give a frame its scenes back, `no-prepass-clear`, `no-depth-only-scene`

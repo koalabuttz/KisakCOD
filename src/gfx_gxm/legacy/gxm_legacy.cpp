@@ -394,6 +394,7 @@ void SetDefaultState(Device &device)
     device.viewport = Viewport{0, 0, device.width, device.height, 0.0f, 1.0f};
     device.scissor = Rect{0, 0, int32_t(device.width), int32_t(device.height)};
     ++device.stateSerial;
+    ++device.textureSerial;
 }
 
 // The GPU memory to reserve: nearly all of CDRAM for textures and targets,
@@ -759,6 +760,7 @@ bool EnsureTargetMemory(Device &device, Texture &texture)
     if (!got)
     {
         texture.deferFailed = true;
+        ++device.textureSerial;
         texture.deferRetryAt = Micros() + kTargetRetryMicros;
         if (texture.deferRefusals++ == 0)
             Log(device,
@@ -832,6 +834,7 @@ void DestroyTexture(Device *device, Texture *texture)
     for (Texture *&bound : device->textures)
         if (bound == texture)
             bound = nullptr;
+    ++device->textureSerial;
     for (const auto &surface : texture->surfaces)
     {
         if (!surface)
@@ -1388,15 +1391,21 @@ int SamplerSlot(uint32_t sampler)
 void SetSamplerState(Device *device, uint32_t sampler, d3d::SamplerState state, uint32_t value)
 {
     const int slot = SamplerSlot(sampler);
-    if (device && slot >= 0 && state < d3d::SAMP_COUNT)
+    if (device && slot >= 0 && state < d3d::SAMP_COUNT && device->samplerStates[slot][state] != value)
+    {
         device->samplerStates[slot][state] = value;
+        ++device->textureSerial;
+    }
 }
 
 void SetTexture(Device *device, uint32_t sampler, Texture *texture)
 {
     const int slot = SamplerSlot(sampler);
-    if (device && slot >= 0)
+    if (device && slot >= 0 && device->textures[slot] != texture)
+    {
         device->textures[slot] = texture;
+        ++device->textureSerial;
+    }
 }
 
 void SetVertexShader(Device *device, Shader *shader)

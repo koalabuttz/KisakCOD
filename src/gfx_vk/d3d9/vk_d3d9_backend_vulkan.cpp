@@ -217,12 +217,13 @@ struct Backend
     bool sceneAo = false;
     uint32_t aoFrame = 0;
     modern::AoStats aoBase{};
-    // Volumetric fog (vk_modern.h DrawFog): the map's fog lit by the sun,
-    // drawn over the linear-light scene before its anti-aliasing, where the
-    // view has fog. Off unless switched on (r_modernFog,
-    // KISAK_VK_MODERN_FOG=1) or its debug view is; its parameters
-    // (KISAK_VK_MODERN_FOG_SUN, _SCATTER live; _STEPS, _MARCH, _HALF
-    // start-up only); the scenes counted at the last reset.
+    // Volumetric fog (vk_modern.h DrawFog): the map's fog lit by the sun and
+    // the shadowed spot lights, drawn over the linear-light scene before its
+    // anti-aliasing, where the view has fog. Off unless switched on
+    // (r_modernFog, KISAK_VK_MODERN_FOG=1) or its debug view is; its
+    // parameters (KISAK_VK_MODERN_FOG_SUN, _SCATTER, _SPOTS, _FROXELS live;
+    // _STEPS, _MARCH, _HALF start-up only); the scenes counted at the last
+    // reset.
     bool fogWanted = false;
     bool fogFailed = false;
     modern::Fog *fog = nullptr;
@@ -607,6 +608,8 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
     fogParams.sunShare = number(tuning.fogSun, start.fogParams.sunShare, 0.0f, 1.0f, true);
     fogParams.scatter = tuning.fogScatter >= 0.0f && tuning.fogScatter < 0.95f ? tuning.fogScatter
                                                                                  : start.fogParams.scatter;
+    fogParams.spotShare = number(tuning.fogSpots, start.fogParams.spotShare, 0.0f, 4.0f, true);
+    fogParams.froxels = tuning.fogFroxels >= 0 ? tuning.fogFroxels == 1 : start.fogParams.froxels;
 
     backend->tonemapCurve = tuning.tonemap >= static_cast<int>(modern::TonemapCurve::Clamp)
                                     && tuning.tonemap <= static_cast<int>(modern::TonemapCurve::Aces)
@@ -621,15 +624,15 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
             "vulkan d3d9: modern: switches now: bloom %s, exposure %s (key %.3f), velocity %s, our shaders %s "
             "(models %s, without the sun %s, lights %s; sun %.2f, sky %.2f), ambient occlusion %s (radius %.1f, power %.2f, "
             "thickness %.1f, grazing %.2f, floor %.2f, edge %.3f%s), reflections %s (distance %.0f, thickness %.1f), normals %s, "
-            "volumetric fog %s (sun %.2f, scatter %.2f), tonemap %s, debug view %s",
+            "volumetric fog %s (%s, sun %.2f, scatter %.2f, spot lights %.2f), tonemap %s, debug view %s",
             onOff(backend->bloomWanted), onOff(backend->exposureWanted), backend->exposureParams.key,
             onOff(backend->velocityWanted), onOff(backend->shadersWanted), onOff(backend->modelShadersWanted),
             onOff(backend->noSunShadersWanted), onOff(backend->lightShadersWanted), backend->sunStrength, backend->skyStrength, onOff(backend->aoWanted),
             aoParams.radius, aoParams.power, aoParams.thickness, aoParams.grazing, aoParams.floor, aoParams.edge,
             aoParams.half ? ", half resolution" : "",
             onOff(backend->reflectionsWanted), reflectionParams.maxDistance, reflectionParams.thickness,
-            onOff(backend->normalsWanted), onOff(backend->fogWanted), fogParams.sunShare, fogParams.scatter,
-            modern::CurveName(backend->tonemapCurve), DebugViewName(view));
+            onOff(backend->normalsWanted), onOff(backend->fogWanted), fogParams.froxels ? "froxels" : "march",
+            fogParams.sunShare, fogParams.scatter, fogParams.spotShare, modern::CurveName(backend->tonemapCurve), DebugViewName(view));
 }
 } // namespace
 
@@ -736,6 +739,11 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         const float g = scatter.empty() ? -1.0f : std::strtof(scatter.c_str(), nullptr);
         if (g >= 0.0f && g < 0.95f)
             fog.scatter = g;
+        const std::string spots = EnvText("KISAK_VK_MODERN_FOG_SPOTS");
+        const float spotShare = spots.empty() ? -1.0f : std::strtof(spots.c_str(), nullptr);
+        if (spotShare >= 0.0f && spotShare <= 4.0f)
+            fog.spotShare = spotShare;
+        fog.froxels = EnvIs("KISAK_VK_MODERN_FOG_FROXELS", "1");
         const std::string steps = EnvText("KISAK_VK_MODERN_FOG_STEPS");
         const long count = steps.empty() ? 0 : std::strtol(steps.c_str(), nullptr, 10);
         if (count >= 4 && count <= 128)
@@ -1084,18 +1092,32 @@ void BackendLogStats(Backend *backend, bool reset)
                 static_cast<unsigned long long>(reflections.traces - backend->reflectionsBase.traces),
                 reflections.levels, pass.supported ? average(pass) : 0.0);
     }
-    // Volumetric fog: the scenes it was drawn over (those that marched the
-    // sun's shadow map) and its two passes' GPU time.
+    // Volumetric fog: the scenes it was drawn over (those from a froxel
+    // volume, those that marched the sun's shadow map, those with spot
+    // lights in the air and how many) and its GPU time per scene: two
+    // full-screen passes for a march, one and two compute passes for
+    // froxels.
     if (backend->fog)
     {
         const modern::FogStats fog = modern::Stats(backend->fog);
         const PassTimings pass = PassTimingsFor(backend->core, "modern fog");
-        HostLog(h, "vulkan d3d9: modern: %llu scenes with volumetric fog (%llu through the sun's shadow map; sun %.2f, "
-                   "scatter %.2f, %u steps over %.0f units%s), %.3f ms GPU each",
-                static_cast<unsigned long long>(fog.scenes - backend->fogBase.scenes),
-                static_cast<unsigned long long>(fog.shadowed - backend->fogBase.shadowed), backend->fogParams.sunShare,
-                backend->fogParams.scatter, backend->fogParams.steps, backend->fogParams.march,
-                backend->fogParams.half ? ", half resolution" : "", pass.supported ? 2.0 * average(pass) : 0.0);
+        const PassTimings froxelPass = PassTimingsFor(backend->core, "modern fog froxels");
+        const uint64_t scenes = fog.scenes - backend->fogBase.scenes;
+        const uint64_t froxelScenes = fog.froxels - backend->fogBase.froxels;
+        const double each = scenes ? (average(pass) * double(2 * (scenes - froxelScenes) + froxelScenes)
+                                      + average(froxelPass) * double(2 * froxelScenes))
+                                         / double(scenes)
+                                   : 0.0;
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with volumetric fog (%llu from froxels, %llu through the sun's "
+                   "shadow map, %llu with %llu spot lights; sun %.2f, scatter %.2f, spot lights %.2f, %u steps over "
+                   "%.0f units%s), %.3f ms GPU each",
+                static_cast<unsigned long long>(scenes), static_cast<unsigned long long>(froxelScenes),
+                static_cast<unsigned long long>(fog.shadowed - backend->fogBase.shadowed),
+                static_cast<unsigned long long>(fog.spotScenes - backend->fogBase.spotScenes),
+                static_cast<unsigned long long>(fog.spots - backend->fogBase.spots), backend->fogParams.sunShare,
+                backend->fogParams.scatter, backend->fogParams.spotShare, backend->fogParams.steps,
+                backend->fogParams.march, backend->fogParams.half ? ", half resolution" : "",
+                pass.supported ? each : 0.0);
     }
     // Reflection probes: filtered as the world loaded, since the device was made.
     if (backend->probesFiltered || backend->probesLeft)
@@ -2261,8 +2283,8 @@ namespace
 // Volumetric fog over the linear-light scene (vk_modern.h DrawFog), when it
 // is wanted and the view has fog. A failure is logged once and the scene
 // goes on without it.
-void DrawSceneFog(Backend *backend, Image *color, Image *depth, Image *sunShadow, const ModernSceneView &view,
-                  const modern::SceneView &scene)
+void DrawSceneFog(Backend *backend, Image *color, Image *depth, Image *sunShadow, Image *spotShadow,
+                  const ModernSceneView &view, const modern::SceneView &scene)
 {
     if (!backend->fogWanted || backend->fogFailed || !view.fog.on)
         return;
@@ -2283,21 +2305,39 @@ void DrawSceneFog(Backend *backend, Image *color, Image *depth, Image *sunShadow
     inputs.start = view.fog.start;
     std::memcpy(inputs.origin, view.fog.origin, sizeof(inputs.origin));
     std::memcpy(inputs.sunDirection, view.fog.sunDirection, sizeof(inputs.sunDirection));
+    inputs.sunShadowed = view.fog.sunShadowed;
     std::memcpy(inputs.shadowLookup, view.fog.shadowLookup, sizeof(inputs.shadowLookup));
     std::memcpy(inputs.switchPartition, view.fog.switchPartition, sizeof(inputs.switchPartition));
     std::memcpy(inputs.shadowmapScale, view.fog.shadowmapScale, sizeof(inputs.shadowmapScale));
+    inputs.spotCount = 0;
+    for (int i = 0; i < view.fog.spotCount && i < static_cast<int>(modern::kFogSpots); ++i)
+    {
+        const ModernSceneView::Fog::Spot &from = view.fog.spots[i];
+        modern::FogInputs::Spot &to = inputs.spots[inputs.spotCount++];
+        std::memcpy(to.origin, from.origin, sizeof(to.origin));
+        to.radius = from.radius;
+        std::memcpy(to.dir, from.dir, sizeof(to.dir));
+        to.exponent = from.exponent;
+        to.cosHalfFovOuter = from.cosHalfFovOuter;
+        to.cosHalfFovInner = from.cosHalfFovInner;
+        to.fade = from.fade;
+        std::memcpy(to.color, from.color, sizeof(to.color));
+        std::memcpy(to.shadowLookup, from.shadowLookup, sizeof(to.shadowLookup));
+        to.inSunMap = from.inSunMap;
+    }
     modern::FogParams params = backend->fogParams;
     params.frame = backend->fogFrame++;
     params.debug = backend->debugFog;
     std::string error;
-    if (!modern::DrawFog(backend->core, backend->fog, color, depth, sunShadow, scene, inputs, params, error))
+    if (!modern::DrawFog(backend->core, backend->fog, color, depth, sunShadow, spotShadow, scene, inputs, params,
+                         error))
         LogModernOnce(backend, "no volumetric fog", error);
 }
 } // namespace
 
 ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surface *depth,
                                 const ModernSceneView &view, lg::Surface *display, bool *glowDrawn,
-                                lg::Surface *sunShadow)
+                                lg::Surface *sunShadow, lg::Surface *spotShadow)
 {
     if (!backend || !backend->legacy || !backend->core)
         return ModernResult::Refused;
@@ -2418,8 +2458,8 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
     std::string error;
     // The fog is lit before the anti-aliasing, which averages its noise away.
     if (display)
-        DrawSceneFog(backend, colorImage, depthImage, sunShadow ? lg::SurfaceImage(sunShadow) : nullptr, view,
-                     scene);
+        DrawSceneFog(backend, colorImage, depthImage, sunShadow ? lg::SurfaceImage(sunShadow) : nullptr,
+                     spotShadow ? lg::SurfaceImage(spotShadow) : nullptr, view, scene);
     // Skinned surfaces whose vertices the last scene kept are drawn from
     // those and this scene's.
     if (!scene.cut)
