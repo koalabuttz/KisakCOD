@@ -206,8 +206,10 @@ def test_emulator(work):
     game = work / "cod4"
     (game / "main").mkdir(parents=True)
     (game / "main" / "iw_00.iwd").write_bytes(b"iwd")
-    (game / "zone").mkdir()
-    (game / "zone" / "x.ff").write_bytes(b"ff")
+    (game / "zone" / "english").mkdir(parents=True)
+    (game / "zone" / "english" / "x.ff").write_bytes(b"ff")
+    (game / "players" / "profiles" / "my player").mkdir(parents=True)
+    (game / "players" / "profiles" / "my player" / "config_mp.cfg").write_bytes(b"cfg")
     apk = work / "app.apk"
     apk.write_bytes(b"PK emu")
     state = work / "emu-device"
@@ -230,7 +232,9 @@ def test_emulator(work):
     for word in ("-avd kisak-a13-x64", "-port 5556", "-gpu host", "-no-window", "-no-snapshot-save",
                  "ANDROID_AVD_HOME=E:/Android/avd"):
         check(word in args, f"emulator started with {word}: {args}")
-    check((state / "sdcard" / "Android/data/org.kisakcod.game/files/zone/x.ff").is_file(), "game files pushed")
+    files = state / "sdcard" / "Android/data/org.kisakcod.game/files"
+    check((files / "zone/english/x.ff").is_file() and (files / "players/profiles/my player/config_mp.cfg").is_file(),
+          "game files pushed, folders three deep and with a space made first")
     check("-s emulator-5556" in (state / "calls.txt").read_text(), "adb talks to emulator-5556")
     check(not (state / "booted").exists(), "the emulator is down after the run")
 
