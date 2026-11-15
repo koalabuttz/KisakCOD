@@ -371,6 +371,10 @@ struct DrawState
     // the buffer's last draw made needless, and the bytes of renamed buffers'
     // old memory the GPU may still read.
     uint64_t renameWaits = 0, renamesSpared = 0, renameSwaps = 0, textureSwaps = 0;
+    // With the submit thread: discards that took a spare piece without a
+    // wait for the thread, how many of them found that no draw had read the
+    // buffer, and the first spare pieces made.
+    uint64_t renamesQueued = 0, renamesQueuedUnread = 0, sparesMade = 0;
     // Memory a discarded buffer left and the GPU may still read; the next
     // discard of a buffer of its size and use takes it once the GPU is done
     // (Rename).
@@ -2358,7 +2362,7 @@ void LogWaitCauses(Device &device)
 const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "no-vsync",
                                      "no-draw-reuse",     "no-filter-stretch", "no-gpu-boost",
                                      "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
-                                     "gxm-submit-thread"};
+                                     "gxm-submit-thread", "no-spare-pieces"};
 struct LiveSwitch
 {
     const char *name;
@@ -2413,6 +2417,8 @@ void ApplyLiveSwitches(Device &device)
             gfx_gxm::g_stretchInFilter = !s.on;
         else if (name == "gxm-submit-thread")
             SetSubmitThread(device, s.on);
+        else if (name == "no-spare-pieces")
+            device.noSpares = s.on;
         else if (name == "no-gpu-boost")
         {
             vita::SetGpuBoost(!s.on);
@@ -2533,9 +2539,101 @@ bool GpuDoneWith(const DrawState &d, uint64_t drawnWait, uint64_t drawnStamp)
 
 bool SameKind(const Memory &kept, const GpuBuffer &buffer)
 {
-    return kept.gpu && kept.bytes == buffer.memory.bytes && kept.use == buffer.memory.use;
+    return kept.gpu && kept.bytes == buffer.pieceBytes && kept.use == buffer.pieceUse;
+}
+
+size_t SparesOfKind(Device &device, const GpuBuffer &buffer)
+{
+    const std::lock_guard<std::mutex> lock(device.spares.lock);
+    size_t count = 0;
+    for (const Memory &spare : device.spares.pieces)
+        count += SameKind(spare, buffer) ? 1 : 0;
+    return count;
 }
 } // namespace
+
+bool TakeSpare(Device &device, const GpuBuffer &buffer, Memory &spare)
+{
+    if (!buffer.pieceBytes)
+        return false;
+    const std::lock_guard<std::mutex> lock(device.spares.lock);
+    std::vector<Memory> &pieces = device.spares.pieces;
+    for (size_t i = 0; i < pieces.size(); ++i)
+    {
+        if (!SameKind(pieces[i], buffer))
+            continue;
+        spare = std::move(pieces[i]);
+        if (i + 1 != pieces.size())
+            pieces[i] = std::move(pieces.back());
+        pieces.pop_back();
+        return true;
+    }
+    return false;
+}
+
+void ReleaseSpares(Device &device)
+{
+    DrawState *d = device.draw;
+    if (!d || d->kept.empty())
+        return;
+    PollGpu(*d);
+    for (size_t i = 0; i < d->kept.size();)
+    {
+        if (!GpuDoneWith(*d, d->kept[i].drawnWait, d->kept[i].drawnStamp))
+        {
+            ++i;
+            continue;
+        }
+        {
+            const std::lock_guard<std::mutex> lock(device.spares.lock);
+            device.spares.pieces.push_back(std::move(d->kept[i].memory));
+        }
+        if (i + 1 != d->kept.size())
+            d->kept[i] = std::move(d->kept.back());
+        d->kept.pop_back();
+    }
+}
+
+void RenameQueued(Device &device, GpuBuffer &buffer, Memory &fresh)
+{
+    DrawState &d = *device.draw;
+    std::swap(buffer.memory, fresh); // `fresh` is now what the buffer had
+    ++d.renamesQueued;
+    ++device.stats.dynamicRenames;
+    if (buffer.drawn)
+    {
+        d.kept.push_back(DrawState::KeptCopy{std::move(fresh), buffer.drawnWait, buffer.drawnStamp});
+        buffer.drawn = false;
+    }
+    else
+    {
+        // No draw read it since it was last renamed: nothing waits for it.
+        ++d.renamesQueuedUnread;
+        const std::lock_guard<std::mutex> lock(device.spares.lock);
+        device.spares.pieces.push_back(std::move(fresh));
+    }
+    ReleaseSpares(device);
+}
+
+void MakeSpare(Device &device, const GpuBuffer &buffer)
+{
+    DrawState *d = device.draw;
+    if (!d || device.noSpares || !buffer.pieceBytes || !(buffer.usage & d3d::USAGE_DYNAMIC))
+        return;
+    // A kept piece becomes a spare once the GPU is done with it.
+    for (const DrawState::KeptCopy &kept : d->kept)
+        if (SameKind(kept.memory, buffer))
+            return;
+    if (SparesOfKind(device, buffer))
+        return;
+    Memory fresh;
+    if (!AllocateRenamed(fresh, buffer.pieceBytes, 16, gxm::MemoryKind::Main, buffer.pieceUse))
+        return;
+    d->copyBytes += fresh.bytes;
+    ++d->sparesMade;
+    const std::lock_guard<std::mutex> lock(device.spares.lock);
+    device.spares.pieces.push_back(std::move(fresh));
+}
 
 void Rename(Device &device, GpuBuffer &buffer)
 {
@@ -2545,6 +2643,16 @@ void Rename(Device &device, GpuBuffer &buffer)
     {
         buffer.drawn = false;
         ++d.renamesSpared;
+        return;
+    }
+    // A spare piece is one the GPU is done with (ReleaseSpares).
+    if (Memory spare; TakeSpare(device, buffer, spare))
+    {
+        std::swap(spare, buffer.memory);
+        d.kept.push_back(DrawState::KeptCopy{std::move(spare), buffer.drawnWait, buffer.drawnStamp});
+        buffer.drawn = false;
+        ++d.renameSwaps;
+        ++device.stats.dynamicRenames;
         return;
     }
     size_t ofThisKind = 0;
@@ -2600,6 +2708,11 @@ void RetireCopies(Device &device, GpuBuffer &buffer)
         d->copyBytes -= std::min(d->copyBytes, d->kept[i].memory.bytes);
         Retire(device, d->kept[i].memory);
         d->kept.erase(d->kept.begin() + i);
+    }
+    for (Memory spare; TakeSpare(device, buffer, spare); spare = Memory{})
+    {
+        d->copyBytes -= std::min(d->copyBytes, spare.bytes);
+        Retire(device, spare);
     }
 }
 
@@ -3652,6 +3765,12 @@ void LogDrawSummary(Device &device)
         "the second piece; kept pieces and second pieces hold %u KB",
         (unsigned long long)d->renamesSpared, (unsigned long long)d->renameSwaps, (unsigned long long)d->renames,
         (unsigned long long)d->renameWaits, (unsigned long long)d->textureSwaps, d->copyBytes >> 10);
+    if (d->renamesQueued || d->sparesMade)
+        Log(device,
+            "buffer discards with the submit thread: %llu took a spare piece and waited for nothing (%llu of them on "
+            "a buffer no draw had read); %llu first spare pieces made",
+            (unsigned long long)d->renamesQueued, (unsigned long long)d->renamesQueuedUnread,
+            (unsigned long long)d->sparesMade);
     Log(device,
         "frames overlap: %s; %llu of %llu frames waited for the frame before last, %.1f ms each on average; %u "
         "notifications did not come",

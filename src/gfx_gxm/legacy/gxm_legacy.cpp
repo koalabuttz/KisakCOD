@@ -618,6 +618,7 @@ enum QueuedCall : uint32_t
     kCallStretchRect,
     kCallEndScene,
     kCallEndFrame,
+    kCallRenameBuffer,
 };
 
 // The ring, in words (256 KB: a good part of a busy frame's calls). The
@@ -651,16 +652,21 @@ inline gxm::CallQueue *Queue(Device *device)
 // Every call written so far has been made when this returns: the caller is
 // about to touch what those calls use. Nothing to do without the submit
 // thread, or on it (it makes the calls, so all before the one it is making
-// are made).
-void Sync(Device *device)
+// are made). True when the caller had to wait.
+bool Sync(Device *device, SyncCause cause = SyncCause::Other)
 {
     gxm::CallQueue *queue = Queue(device);
     if (!queue || queue->OnItsThread() || queue->Idle())
-        return;
+        return false;
     const uint64_t from = Micros();
     queue->Drain();
-    ++device->submitCounts.waits;
-    device->submitCounts.waitMicros += Micros() - from;
+    const uint64_t micros = Micros() - from;
+    Device::SubmitCounts &c = device->submitCounts;
+    ++c.waits;
+    c.waitMicros += micros;
+    ++c.waitsBy[size_t(cause)];
+    c.microsBy[size_t(cause)] += micros;
+    return true;
 }
 
 void RunQueued(void *user, uint32_t call, const uint32_t *words, uint32_t count); // with Present
@@ -682,11 +688,38 @@ void LogSubmitThread(Device &device)
             double(now.sleeps - c.logged.sleeps) * perFrame, double(c.waits - c.loggedWaits) * perFrame,
             double(c.waitMicros - c.loggedWaitMicros) / 1000.0 * perFrame,
             double(now.fullWaits - c.logged.fullWaits) * perFrame, (unsigned long long)frames);
+        // The waits by what the caller was about to do, and the DISCARD locks
+        // that needed none.
+        static const char *const kCauses[size_t(SyncCause::Count)] = {
+            "other calls",  "the end of the frame", "buffer discards",          "texture writes",
+            "target reads", "scene ends",           "calls too large to queue"};
+        char line[512];
+        int at = std::snprintf(line, sizeof(line), "submit thread waits, a frame:");
+        for (size_t i = 0; i < size_t(SyncCause::Count) && at > 0 && at < int(sizeof(line)); ++i)
+        {
+            const uint64_t waits = c.waitsBy[i] - c.loggedWaitsBy[i];
+            if (!waits)
+                continue;
+            at += std::snprintf(line + at, sizeof(line) - size_t(at), " %s %.2f (%.3f ms),", kCauses[i],
+                                double(waits) * perFrame,
+                                double(c.microsBy[i] - c.loggedMicrosBy[i]) / 1000.0 * perFrame);
+        }
+        if (at > 0 && at < int(sizeof(line)))
+            std::snprintf(line + at, sizeof(line) - size_t(at),
+                          " %.2f buffer discards took a spare piece and did not wait",
+                          double(c.renamesQueued - c.loggedRenamesQueued) * perFrame);
+        Log(device, "%s", line);
     }
     c.logged = now;
     c.loggedFrames = device.shaderCounts.frames;
     c.loggedWaits = c.waits;
     c.loggedWaitMicros = c.waitMicros;
+    for (size_t i = 0; i < size_t(SyncCause::Count); ++i)
+    {
+        c.loggedWaitsBy[i] = c.waitsBy[i];
+        c.loggedMicrosBy[i] = c.microsBy[i];
+    }
+    c.loggedRenamesQueued = c.renamesQueued;
 }
 } // namespace
 
@@ -697,7 +730,7 @@ bool EndSceneOnSubmitThread(Device &device)
         return false;
     queue->Begin(kCallEndScene, 0);
     queue->End(true);
-    Sync(&device);
+    Sync(&device, SyncCause::EndScene);
     return true;
 }
 
@@ -814,6 +847,9 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
         if (device->submit)
             Log(*device, "diag: gxm-submit-thread is there: sceGxm's calls are made by a thread of their own");
     }
+    device->noSpares = gxm::ProgramCacheMarker("no-spare-pieces");
+    if (device->noSpares)
+        Log(*device, "diag: no-spare-pieces is there: every DISCARD lock waits for the submit thread");
     return device.release();
 }
 
@@ -1019,7 +1055,7 @@ const TextureDesc &Describe(const Texture *texture)
 bool LockRect(Device *device, Texture *texture, uint32_t face, uint32_t level, const Box *box, uint32_t flags,
               LockedRect &out)
 {
-    Sync(device);
+    Sync(device, SyncCause::TextureWrite);
     out = LockedRect{};
     if (!device || !texture || face >= texture->faces || level >= texture->desc.levels)
         return false;
@@ -1069,7 +1105,7 @@ bool LockRect(Device *device, Texture *texture, uint32_t face, uint32_t level, c
 
 void UnlockRect(Device *device, Texture *texture, uint32_t face, uint32_t level)
 {
-    Sync(device);
+    Sync(device, SyncCause::TextureWrite);
     if (!device || !texture || face >= texture->faces || level >= texture->desc.levels)
         return;
     Level &lock = texture->levels[face * texture->desc.levels + level];
@@ -1178,7 +1214,7 @@ void SurfaceSize(const Surface *surface, uint32_t &width, uint32_t &height, d3d:
 
 bool LockSurface(Device *device, Surface *surface, const Box *box, uint32_t flags, LockedRect &out)
 {
-    Sync(device);
+    Sync(device, SyncCause::TextureWrite);
     out = LockedRect{};
     if (!surface)
         return false;
@@ -1219,6 +1255,9 @@ T *CreateBuffer(Device *device, uint32_t bytes, uint32_t usage, d3d::Pool pool, 
     const bool dynamic = (usage & d3d::USAGE_DYNAMIC) != 0;
     if (!AllocateMemory(*device, buffer->memory, bytes, 16, pool, !dynamic, use, name))
         return nullptr;
+    buffer->write = buffer->memory.data;
+    buffer->pieceBytes = buffer->memory.gpu ? buffer->memory.bytes : 0;
+    buffer->pieceUse = buffer->memory.use;
     {
         char what[48];
         std::snprintf(what, sizeof(what), "usage 0x%x", usage);
@@ -1228,22 +1267,58 @@ T *CreateBuffer(Device *device, uint32_t bytes, uint32_t usage, d3d::Pool pool, 
     return buffer.release();
 }
 
+// A DISCARD lock while the submit thread has draws still to make. Waiting for
+// them (Sync) would stop the caller, mid-frame, for as long as the thread is
+// behind, which gives back the time the thread saves. So when a spare piece
+// of the buffer's kind is there, the caller writes that at once, and a queued
+// call gives it to the buffer when the draws written before the lock are
+// made: the buffer's old memory then goes the way Rename sends it. With no
+// spare piece, or nothing waiting in the queue, the caller does it the old
+// way.
+bool QueueRename(Device *device, GpuBuffer *buffer)
+{
+    gxm::CallQueue *queue = Queue(device);
+    if (!queue || device->noSpares || queue->OnItsThread() || queue->Idle())
+        return false;
+    Memory spare;
+    if (!TakeSpare(*device, *buffer, spare))
+        return false;
+    uint32_t *words = queue->Begin(kCallRenameBuffer, 2);
+    if (!words)
+    {
+        const std::lock_guard<std::mutex> lock(device->spares.lock);
+        device->spares.pieces.push_back(std::move(spare));
+        return false;
+    }
+    Memory *fresh = new Memory(std::move(spare));
+    buffer->write = fresh->data;
+    words[0] = Word(buffer);
+    words[1] = Word(fresh);
+    queue->End(false);
+    ++device->submitCounts.renamesQueued;
+    return true;
+}
+
 void *LockBuffer(Device *device, GpuBuffer *buffer, uint32_t offset, uint32_t bytes, uint32_t flags)
 {
     if (!device || !buffer || offset > buffer->size || (bytes && offset + bytes > buffer->size))
         return nullptr;
     // DISCARD on a buffer a draw read: fresh memory, so the GPU keeps what
     // it reads. NOOVERWRITE and plain locks write in place. Whether a draw
-    // read it is known once the draws written so far are made (Sync); the
-    // other locks do not wait for them, as nothing they use changes here.
-    if (flags & d3d::LOCK_DISCARD)
+    // read it is known once the draws written so far are made; the other
+    // locks do not wait for them, as nothing they use changes here.
+    if ((flags & d3d::LOCK_DISCARD) && !QueueRename(device, buffer))
     {
-        Sync(device);
+        const bool waited = Sync(device, SyncCause::BufferDiscard);
         if (buffer->drawn && buffer->memory.gpu)
             Rename(*device, *buffer);
+        buffer->write = buffer->memory.data;
+        // So that this buffer's next DISCARD lock finds a spare piece.
+        if (waited)
+            MakeSpare(*device, *buffer);
     }
     buffer->locked = true;
-    return buffer->memory.data + offset;
+    return buffer->write + offset;
 }
 
 void DestroyBuffer(Device *device, GpuBuffer *buffer)
@@ -1650,7 +1725,7 @@ bool QueueConstants(Device *device, QueuedCall call, uint32_t start, const float
     uint32_t *words = queue->Begin(call, 2 + count * 4);
     if (!words)
     {
-        Sync(device);
+        Sync(device, SyncCause::Unqueued);
         return false;
     }
     words[0] = start;
@@ -1912,7 +1987,7 @@ void Clear(Device *device, uint32_t rectCount, const Rect *rects, uint32_t flags
             queue->End(true);
             return;
         }
-        Sync(device);
+        Sync(device, SyncCause::Unqueued);
     }
     ClearNow(device, rectCount, rects, flags, color, z, stencil);
 }
@@ -2013,7 +2088,7 @@ void DrawPrimitiveUP(Device *device, d3d::PrimitiveType type, uint32_t primitive
             queue->End(true);
             return;
         }
-        Sync(device);
+        Sync(device, SyncCause::Unqueued);
     }
     DrawPrimitiveUPNow(device, type, primitiveCount, vertices, stride);
 }
@@ -2049,7 +2124,7 @@ void StretchRect(Device *device, Surface *src, const Rect *srcRect, Surface *dst
 
 bool GetRenderTargetData(Device *device, Surface *renderTarget, Surface *dst)
 {
-    Sync(device);
+    Sync(device, SyncCause::ReadTarget);
     Target source, destination;
     if (!device)
         return false;
@@ -2088,7 +2163,7 @@ bool GetRenderTargetData(Device *device, Surface *renderTarget, Surface *dst)
 
 void UpdateTexture(Device *device, Texture *src, Texture *dst)
 {
-    Sync(device);
+    Sync(device, SyncCause::TextureWrite);
     if (!device || !src || !dst || src->desc.format != dst->desc.format || src->faces != dst->faces)
         return;
     // The game does this to the model lighting volume every frame, while the
@@ -2274,6 +2349,13 @@ void RunQueued(void *user, uint32_t call, const uint32_t *w, uint32_t)
             EndFrameScene(*device);
         }
         break;
+    case kCallRenameBuffer:
+    {
+        Memory *fresh = Pointer<Memory>(w[1]);
+        RenameQueued(*device, *Pointer<GpuBuffer>(w[0]), *fresh);
+        delete fresh;
+        break;
+    }
     default:
         break;
     }
@@ -2291,7 +2373,7 @@ PresentResult Present(Device *device)
         // as it always was.
         queue->Begin(kCallEndFrame, 0);
         queue->End(true);
-        Sync(device);
+        Sync(device, SyncCause::Present);
         if (device->detached)
             return PresentResult::Skipped;
     }
@@ -2307,6 +2389,10 @@ PresentResult Present(Device *device)
     device->frameTime.Shown(Micros() - from);
     FrameDone(*device);
     PaceFrame(*device);
+    // What the GPU has finished with by now serves the next frame's DISCARD
+    // locks (QueueRename).
+    if (device->submit)
+        ReleaseSpares(*device);
     gxm::ProgramCacheFrame();
     LogProgramFailures(*device);
     if (device->shaderCounts.waitedThisFrame)

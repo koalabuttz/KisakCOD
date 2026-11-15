@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -127,6 +128,21 @@ struct Memory
     std::vector<uint8_t> host;
 };
 
+// What a caller was about to do when it waited for the submit thread to make
+// every call written so far (Sync in gxm_legacy.cpp); the log counts the
+// waits by it.
+enum class SyncCause : uint8_t
+{
+    Other,         // making or destroying a resource, a state read, a reset
+    Present,       // the end of a frame
+    BufferDiscard, // a DISCARD lock that found no spare piece (QueueRename)
+    TextureWrite,  // a texture lock or unlock, UpdateTexture
+    ReadTarget,    // the CPU reads what was drawn
+    EndScene,      // a caller that must end the open scene
+    Unqueued,      // a call too large for the queue, made by its caller
+    Count
+};
+
 struct Texture
 {
     TextureDesc desc{};
@@ -209,6 +225,15 @@ struct GpuBuffer
     d3d::Pool pool = d3d::POOL_DEFAULT;
     d3d::Format indexFormat = d3d::FMT_UNKNOWN;
     Memory memory;
+    // Where a lock writes. It is memory.data, but for the time between a
+    // DISCARD lock that took a spare piece and the queued call that gives
+    // the buffer that piece (QueueRename): the draws written before the lock
+    // are still to be made, and read the memory the buffer has until then.
+    uint8_t *write = nullptr;
+    // What every piece of memory this buffer can have is like, for the
+    // thread that locks it: `memory` itself is the drawing thread's.
+    uint32_t pieceBytes = 0; // 0: not GPU memory, never renamed
+    MemoryUse pieceUse = MemoryUse::Texture;
     bool locked = false;
     bool drawn = false; // read by a draw since its memory was last renamed
     uint64_t drawnWait = 0; // the count of waits for the GPU when a draw last read it
@@ -352,8 +377,25 @@ struct Device
     {
         uint64_t waits = 0, waitMicros = 0;
         uint64_t loggedFrames = 0, loggedWaits = 0, loggedWaitMicros = 0;
+        // The same by what the caller was about to do (SyncCause).
+        uint64_t waitsBy[size_t(SyncCause::Count)] = {}, microsBy[size_t(SyncCause::Count)] = {};
+        uint64_t loggedWaitsBy[size_t(SyncCause::Count)] = {}, loggedMicrosBy[size_t(SyncCause::Count)] = {};
+        // DISCARD locks that took a spare piece and waited for nothing.
+        uint64_t renamesQueued = 0, loggedRenamesQueued = 0;
         gxm::CallQueueCounts logged;
     } submitCounts;
+    // Pieces of buffer memory the GPU is done with, for the DISCARD locks of
+    // buffers of their size and use while the submit thread makes the draws
+    // (QueueRename). The locking thread takes them and the drawing thread
+    // puts them back, so they have a lock of their own.
+    struct Spares
+    {
+        std::mutex lock;
+        std::vector<Memory> pieces;
+    } spares;
+    // The marker and live switch no-spare-pieces: every DISCARD lock waits
+    // for the submit thread, as it did before there were spare pieces.
+    bool noSpares = false;
 };
 
 // Where a colour surface's texels are.
@@ -471,6 +513,20 @@ void ForgetDecl(Device &device, VertexDecl &decl);
 // with that draw's frame, else it changes memory with a kept piece the GPU
 // is done with (made when there is none), else a wait for the GPU.
 void Rename(Device &device, GpuBuffer &buffer);
+// The same while the submit thread makes the draws, without a wait for it.
+// TakeSpare gives the locking thread a piece of the buffer's size and use
+// that the GPU is done with, if there is one. RenameQueued is the queued
+// call that follows, on the drawing thread: the buffer takes that piece, and
+// the memory it had goes to the kept pieces, or to the spares if no draw
+// read it. ReleaseSpares moves the kept pieces the GPU is done with to the
+// spares; MakeSpare makes a first piece for a dynamic buffer's kind when
+// there is none anywhere, so that its next DISCARD lock need not wait.
+// ReleaseSpares and MakeSpare are for the drawing thread, or for a caller
+// that has waited for it (Sync).
+bool TakeSpare(Device &device, const GpuBuffer &buffer, Memory &spare);
+void RenameQueued(Device &device, GpuBuffer &buffer, Memory &fresh);
+void ReleaseSpares(Device &device);
+void MakeSpare(Device &device, const GpuBuffer &buffer);
 void ClearTargets(Device &device, uint32_t rectCount, const Rect *rects, uint32_t flags, uint32_t color, float z,
                   uint32_t stencil);
 void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t startIndex, uint32_t primitiveCount,

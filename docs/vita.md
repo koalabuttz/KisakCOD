@@ -288,9 +288,10 @@ The switches that can be turned: `no-depth-prepass`, `no-frame-overlap`,
 GPU back at its default clocks), `no-prepass-governor` (the depth pass
 on in every frame instead of timed both ways), `no-same-state` (every
 draw works out its programs and fixed state anew),
-`no-world-only-prepass` (the forced depth pass draws the models too) and
+`no-world-only-prepass` (the forced depth pass draws the models too),
 `gxm-submit-thread` (sceGxm's calls are made by a thread of their own,
-[vita-client.md](vita-client.md)). Turning `no-depth-prepass`
+[vita-client.md](vita-client.md)) and `no-spare-pieces` (with that
+thread, every DISCARD lock of a buffer waits for it again). Turning `no-depth-prepass`
 or `no-prepass-governor` starts the governor afresh. The others size or make things at
 start-up and are refused by name. A switch is turned between two frames
 and the log says so (`diag: switch no-depth-prepass is on from frame 1840 on
