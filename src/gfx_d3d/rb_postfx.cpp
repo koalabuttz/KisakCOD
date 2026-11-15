@@ -82,7 +82,15 @@ void RB_GetResolvedScene()
     if (!gfxCmdBufSourceState.input.codeImages[TEXTURE_SRC_CODE_RESOLVED_SCENE])
     {
         iassert(gfxCmdBufState.renderTargetId == R_RENDERTARGET_SCENE);
+#ifdef KISAK_GFX_GXM
+        // The Vita's 3D passes may have drawn the picture into this image
+        // (gxm_engine_options.h, g_sceneInCopy): then there is nothing to copy.
+        if (!gfx_gxm::g_sceneIsCopy)
+            R_Resolve(gfxCmdBufContext, gfxRenderTargets[R_RENDERTARGET_RESOLVED_SCENE].image);
+        gfx_gxm::g_sceneIsCopy = false;
+#else
         R_Resolve(gfxCmdBufContext, gfxRenderTargets[R_RENDERTARGET_RESOLVED_SCENE].image);
+#endif
         R_SetCodeImageTexture(&gfxCmdBufSourceState, TEXTURE_SRC_CODE_RESOLVED_SCENE, gfxRenderTargets[R_RENDERTARGET_RESOLVED_SCENE].image);
     }
 }

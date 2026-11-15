@@ -298,6 +298,9 @@ struct Device
     IndexBuffer *indices = nullptr;
     Surface *renderTargets[kMaxRenderTargets] = {};
     Surface *depthStencil = nullptr;
+    // What the engine said of the first render target when it was set:
+    // nobody reads its colour (gxm_engine_options.h, g_colourUnread).
+    bool colorUnread = false;
     Viewport viewport{};
     Rect scissor{};
     std::vector<float> vsConstants, psConstants;

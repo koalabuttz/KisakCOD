@@ -67,6 +67,11 @@ float g_sceneScale = 1.0f;
 bool g_stretchInFilter = true;
 float g_filterReadS = 1.0f;
 float g_filterReadT = 1.0f;
+bool g_prepassClears = true;
+bool g_prepassNoColour = true;
+bool g_colourUnread = false;
+bool g_sceneInCopy = true;
+bool g_sceneIsCopy = false;
 } // namespace gfx_gxm
 
 namespace gfx_vk::legacy
@@ -286,6 +291,10 @@ struct DrawState
     bool sceneOpen = false;
     Surface *sceneColor = nullptr;
     Surface *sceneDepth = nullptr;
+    // The open scene was asked to begin with sceGxm's disabled colour
+    // surface (gxm_engine_options.h, g_prepassNoColour).
+    bool sceneNoColour = false;
+    bool noColourLogged = false;
     uint32_t sceneWidth = 0, sceneHeight = 0;
     bool hasColor = false;
     ColorTarget color{};
@@ -1140,7 +1149,10 @@ bool OpenScene(Device &device)
     DrawState &d = *device.draw;
     Surface *color = device.renderTargets[0];
     Surface *depth = device.depthStencil;
-    if (d.sceneOpen && d.sceneColor == color && d.sceneDepth == depth)
+    // A colour target the engine says nobody reads, with a depth surface to
+    // draw into: the scene is begun without it.
+    const bool noColour = device.colorUnread && depth && color && color->kind == SurfaceKind::TextureLevel;
+    if (d.sceneOpen && d.sceneColor == color && d.sceneDepth == depth && d.sceneNoColour == noColour)
         return true;
     EndScene(device);
 
@@ -1171,14 +1183,25 @@ bool OpenScene(Device &device)
             NotYet(device, "a render target format sceGxm cannot draw to (draws skipped)");
             return false;
         }
-        const int result = sceGxmColorSurfaceInit(&d.colorSurface, d.color.format, SCE_GXM_COLOR_SURFACE_LINEAR,
-                                                  SCE_GXM_COLOR_SURFACE_SCALE_NONE, d.color.size, level.width,
-                                                  level.height, level.pitch / texture.format->blockBytes,
-                                                  texture.memory.data + level.offset);
+        // Without colour the draws keep the programs made for the target's
+        // format; what they write goes nowhere.
+        const int result =
+            noColour ? sceGxmColorSurfaceInitDisabled(&d.colorSurface)
+                     : sceGxmColorSurfaceInit(&d.colorSurface, d.color.format, SCE_GXM_COLOR_SURFACE_LINEAR,
+                                              SCE_GXM_COLOR_SURFACE_SCALE_NONE, d.color.size, level.width,
+                                              level.height, level.pitch / texture.format->blockBytes,
+                                              texture.memory.data + level.offset);
         if (result < 0)
         {
-            Log(device, "sceGxmColorSurfaceInit on %s failed (0x%08x)", texture.name.c_str(), unsigned(result));
+            Log(device, "%s on %s failed (0x%08x)", noColour ? "sceGxmColorSurfaceInitDisabled" : "sceGxmColorSurfaceInit",
+                texture.name.c_str(), unsigned(result));
             return false;
+        }
+        if (noColour && !d.noColourLogged)
+        {
+            d.noColourLogged = true;
+            Log(device, "diag: a scene on %s (%ux%u) is begun without its colour: nothing reads it", texture.name.c_str(),
+                level.width, level.height);
         }
         colorSurface = &d.colorSurface;
         width = level.width;
@@ -1228,6 +1251,7 @@ bool OpenScene(Device &device)
     d.sceneOpen = true;
     d.sceneColor = color;
     d.sceneDepth = depth;
+    d.sceneNoColour = noColour;
     d.sceneWidth = width;
     d.sceneHeight = height;
     d.boundVertex = nullptr;
@@ -1788,6 +1812,14 @@ bool InitDraw(Device &device, std::string &error)
     if (!gfx_gxm::g_stretchInFilter)
         Log(device, "diag: no-filter-stretch is there: a scaled picture is always copied and stretched in two "
                     "scenes of its own");
+    gfx_gxm::g_prepassClears = !gxm::ProgramCacheMarker("no-prepass-clear");
+    gfx_gxm::g_prepassNoColour = !gxm::ProgramCacheMarker("no-depth-only-scene");
+    gfx_gxm::g_sceneInCopy = !gxm::ProgramCacheMarker("no-scene-in-copy");
+    Log(device, "diag: fewer scenes: the depth pass's scene clears the depth %s, has no colour surface %s, the 3D "
+                "passes draw into the film filter's image %s",
+        gfx_gxm::g_prepassClears ? "on" : "off (no-prepass-clear)",
+        gfx_gxm::g_prepassNoColour ? "on" : "off (no-depth-only-scene)",
+        gfx_gxm::g_sceneInCopy ? "on" : "off (no-scene-in-copy)");
     d.notifications = sceGxmGetNotificationRegion();
     if (gxm::ProgramCacheMarker("no-frame-overlap"))
     {
@@ -2482,7 +2514,8 @@ void SetGpuWatch(Device &device, bool on)
 const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "no-vsync",
                                      "no-draw-reuse",     "no-filter-stretch", "no-gpu-boost",
                                      "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
-                                     "gpu-watch"};
+                                     "gpu-watch",           "no-prepass-clear",  "no-depth-only-scene",
+                                     "no-scene-in-copy"};
 struct LiveSwitch
 {
     const char *name;
@@ -2538,6 +2571,12 @@ void ApplyLiveSwitches(Device &device)
         }
         else if (name == "no-filter-stretch")
             gfx_gxm::g_stretchInFilter = !s.on;
+        else if (name == "no-prepass-clear")
+            gfx_gxm::g_prepassClears = !s.on;
+        else if (name == "no-depth-only-scene")
+            gfx_gxm::g_prepassNoColour = !s.on;
+        else if (name == "no-scene-in-copy")
+            gfx_gxm::g_sceneInCopy = !s.on;
         else if (name == "gpu-watch")
             SetGpuWatch(device, s.on);
         else if (name == "no-gpu-boost")
