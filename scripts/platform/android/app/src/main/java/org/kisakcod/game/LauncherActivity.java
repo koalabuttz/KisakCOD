@@ -41,8 +41,13 @@ import java.util.TreeMap;
  * screen comes back when the game quits.
  *
  * The Visuals button picks the look for every start: Legacy (the game as it
- * was made) or Modern (r_visuals modern: anti-aliasing, linear light,
- * ambient occlusion, reflections, fog and the rest; docs/vulkan-modern.md).
+ * was made), Modern (r_visuals modern: anti-aliasing, linear light, ambient
+ * occlusion, reflections, fog and the rest; docs/vulkan-modern.md) held to an
+ * even 30 fps, or Modern Fast (Modern without ambient occlusion and
+ * screen-space reflections, its two dearest passes on a handheld GPU) at the
+ * display's rate. The presets' feature and vsync settings go with the first
+ * start after the choice changes, so a change made later in the game's own
+ * settings menu stays.
  *
  * Controls: the d-pad or the left stick moves between buttons (Android turns
  * them into arrow keys), A presses, L1 and R1 change the number of bots.
@@ -71,7 +76,9 @@ public class LauncherActivity extends Activity {
 
     private int modeIndex;
     private int botIndex;
-    private boolean modern;
+    // The Visuals button's choices: Legacy, Modern, Modern Fast.
+    private static final String[] VISUALS = {"Legacy", "Modern", "Modern Fast"};
+    private int visualsIndex;
     private Button modeButton;
     private Button botButton;
     private Button visualsButton;
@@ -82,7 +89,9 @@ public class LauncherActivity extends Activity {
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         modeIndex = Math.max(0, Math.min(MODES.length - 1, prefs.getInt("mode", 0)));
         botIndex = Math.max(0, Math.min(BOT_COUNTS.length - 1, prefs.getInt("bots", 4)));
-        modern = prefs.getBoolean("modern", false);
+        // "modern" is the switch before Modern Fast: Legacy or Modern.
+        visualsIndex = Math.max(0, Math.min(VISUALS.length - 1,
+                prefs.getInt("visuals", prefs.getBoolean("modern", false) ? 1 : 0)));
 
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
@@ -107,14 +116,14 @@ public class LauncherActivity extends Activity {
             update();
         });
         visualsButton = button("", v -> {
-            modern = !modern;
+            visualsIndex = (visualsIndex + 1) % VISUALS.length;
             update();
         });
         Button menu = button("Multiplayer", v -> start(null, false));
         Button campaign = button("Campaign", v -> start(null, true));
         settings.addView(modeButton, weighted(2));
         settings.addView(botButton, weighted(1));
-        settings.addView(visualsButton, weighted(1.4f));
+        settings.addView(visualsButton, weighted(1.8f));
         settings.addView(menu, weighted(1));
         settings.addView(campaign, weighted(1));
         page.addView(settings);
@@ -197,21 +206,39 @@ public class LauncherActivity extends Activity {
     }
 
     private void start(String args, boolean campaign) {
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt("mode", modeIndex).putInt("bots", botIndex)
-                .putBoolean("modern", modern).apply();
+        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        // The preset last sent with a start, -1 for none yet.
+        boolean presetChanged = prefs.getInt("visualsSent", -1) != visualsIndex;
+        prefs.edit().putInt("mode", modeIndex).putInt("bots", botIndex).putInt("visuals", visualsIndex)
+                .putInt("visualsSent", visualsIndex).apply();
         Intent intent = new Intent(this, campaign ? CampaignActivity.class : KisakActivity.class);
-        // r_visuals is saved in the game's config and read at start-up, so
-        // every start names the look, Legacy as well. Modern's anti-aliasing
-        // needs a one-sample back buffer (r_aaSamples 1).
-        String visuals = modern ? "+set r_aaSamples 1 +set r_visuals modern" : "+set r_visuals legacy";
+        String visuals = visualsArgs(visualsIndex, presetChanged);
         intent.putExtra("args", args != null ? visuals + " " + args : visuals);
         startActivity(intent);
+    }
+
+    // r_visuals is saved in the game's config and read at start-up, so every
+    // start names the look, Legacy as well. Modern's anti-aliasing needs a
+    // one-sample back buffer (r_aaSamples 1). The rest is saved too, and is
+    // sent only when the preset changed: the passes the preset turns off or
+    // leaves to the game ("default"), and the pace. Modern holds 30 fps with
+    // vsync on every second refresh (r_vsyncInterval 2); the others run at
+    // the display's rate.
+    static String visualsArgs(int visuals, boolean presetChanged) {
+        if (visuals == 0)
+            return presetChanged ? "+set r_visuals legacy +set r_vsyncInterval 1" : "+set r_visuals legacy";
+        String args = "+set r_aaSamples 1 +set r_visuals modern";
+        if (!presetChanged)
+            return args;
+        if (visuals == 1)
+            return args + " +set r_modernAo default +set r_modernSsr default +set r_vsync 1 +set r_vsyncInterval 2";
+        return args + " +set r_modernAo off +set r_modernSsr off +set r_vsyncInterval 1";
     }
 
     private void update() {
         modeButton.setText("Mode: " + MODES[modeIndex][1]);
         botButton.setText("Bots: " + BOT_COUNTS[botIndex]);
-        visualsButton.setText("Visuals: " + (modern ? "Modern" : "Legacy"));
+        visualsButton.setText("Visuals: " + VISUALS[visualsIndex]);
     }
 
     // The maps in the game folder: zone/<language>/mp_*.ff (not the _load
