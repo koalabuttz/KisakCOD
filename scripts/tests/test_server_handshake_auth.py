@@ -937,6 +937,14 @@ static char *ClientConnect(uint32_t clientNum, uint16_t scriptPersId)
     return const_cast<char *>(g_clientConnectDenial);
 }
 
+// The bot tag is kept for test clients (src/bots/bot_names.h); a person's
+// userinfo is cleaned before the game sees it. Recorded, not exercised here.
+static void SV_KeepBotTagForBots(client_t *cl)
+{
+    (void)cl;
+    Record("keep_bot_tag");
+}
+
 static void SV_UserinfoChanged(client_t *cl)
 {
     (void)cl;
