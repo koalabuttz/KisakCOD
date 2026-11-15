@@ -65,7 +65,7 @@ def ndk_cmake(ndk, source, build, *extra):
     run('cmake', '-S', source, '-B', build, '-G', 'Ninja',
         f'-DCMAKE_TOOLCHAIN_FILE={ndk}/build/cmake/android.toolchain.cmake',
         f'-DANDROID_ABI={ABI}', f'-DANDROID_PLATFORM=android-{API}', '-DANDROID_STL=c++_static',
-        '-DCMAKE_BUILD_TYPE=Release', *extra)
+        '-DCMAKE_BUILD_TYPE=Release', '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON', *extra)
     run('cmake', '--build', build)
 
 
