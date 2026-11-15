@@ -34,6 +34,7 @@
 
 #include "bot_brain.h"
 #include "bot_combat.h"
+#include "bot_grenades.h"
 #include "bot_mind.h"
 #include "bot_motor.h"
 #include "bot_navmesh.h"
@@ -80,6 +81,8 @@ struct BotSlot
     int progressTime = 0;
     int nextPlanTime = 0;
     bool jumpHeld = false;
+    int nextJump = 0;
+    int stallJumps = 0; // jumps since it last got closer to the corner
     int stuckCount = 0;
     float lastOrigin[3] = {0.0f, 0.0f, 0.0f};
 
@@ -112,6 +115,8 @@ struct BotSlot
     kb::Intent goalFor = kb::Intent::Roam;
     int holdUntil = 0;
     bool holdCrouched = false;
+    // Lies prone while it holds (on a flag it takes, the patient most often).
+    bool holdProne = false;
     // Cover from the threat it knows of, looked for at most once a second.
     float cover[3] = {0.0f, 0.0f, 0.0f};
     bool coverKnown = false;
@@ -140,6 +145,20 @@ struct BotSlot
     bool holdFacingKnown = false;
     bool atObjective = false;
     int roleRetryAt = 0;
+    bool shortLogged = false; // said it stopped short of its objective
+    int onObjectiveSince = 0; // when an attacker stepped onto its objective, or 0
+
+    // A grenade: lining up the throw, holding the button (the fuse runs),
+    // when it may throw again, and the enemy it last thought about one for.
+    int grenadePhase = 0; // 0 none, 1 lining up, 2 holding
+    float grenadeView[2] = {0.0f, 0.0f};
+    int grenadeUntil = 0;
+    int nextGrenade = 0;
+    int grenadeThoughtAt = -1;
+    float grenadeDistance = 0.0f;
+    // The knife: pressed on one frame, released on the next.
+    bool meleeHeld = false;
+    int nextMelee = 0;
 };
 
 BotSlot s_slots[kMaxBotSlots];
@@ -156,6 +175,9 @@ struct TeamState
     float hold[kMaxObjectives][3];
     int takeCount = 0;
     int holdCount = 0;
+    // Where the team started: its side of the map.
+    float side[3] = {0.0f, 0.0f, 0.0f};
+    bool sideKnown = false;
 };
 
 TeamState s_teams[TEAM_NUM_TEAMS];
@@ -196,6 +218,11 @@ const kb::SkillProfile &Skill()
 bool CombatOn()
 {
     return bot_combat && bot_combat->current.integer != 0;
+}
+
+bool LogOn()
+{
+    return bot_log && bot_log->current.integer;
 }
 
 kb::ViewMotorParams WalkMotor()
@@ -273,6 +300,7 @@ bool PlanWalk(BotSlot &bot, const kb::NavMesh &nav, const float *origin, const f
     bot.pathIndex = 1; // corner 0 is where the bot stands
     bot.bestDistance = Distance2D(origin, bot.path[1]);
     bot.progressTime = svs.time;
+    bot.stallJumps = 0;
     return true;
 }
 
@@ -287,9 +315,15 @@ bool Walk(BotSlot &bot, const playerState_s *ps, float seconds, usercmd_s &cmd, 
     if (bot.pathIndex >= bot.pathCount)
         return false;
 
-    while (bot.pathIndex < bot.pathCount
-           && Distance2D(origin, bot.path[bot.pathIndex]) < kCornerReach
-           && std::fabs(origin[2] - bot.path[bot.pathIndex][2]) < 48.0f)
+    // The last corner of the way to an objective it takes is the objective
+    // itself, often a flag on a base the walls of the map leave out: close
+    // to it, on the base or against it, is there.
+    auto reached = [&](int index) {
+        const bool objective = bot.roleGoal && bot.role == kb::Role::Attack && index == bot.pathCount - 1;
+        return Distance2D(origin, bot.path[index]) < (objective ? 64.0f : kCornerReach)
+               && std::fabs(origin[2] - bot.path[index][2]) < (objective ? 72.0f : 48.0f);
+    };
+    while (bot.pathIndex < bot.pathCount && reached(bot.pathIndex))
     {
         ++bot.pathIndex;
         if (bot.pathIndex < bot.pathCount)
@@ -310,6 +344,7 @@ bool Walk(BotSlot &bot, const playerState_s *ps, float seconds, usercmd_s &cmd, 
     {
         bot.bestDistance = distance;
         bot.progressTime = svs.time;
+        bot.stallJumps = 0;
     }
     const int stalled = svs.time - bot.progressTime;
     if (stalled > kReplanAfterMs)
@@ -326,6 +361,9 @@ bool Walk(BotSlot &bot, const playerState_s *ps, float seconds, usercmd_s &cmd, 
             {
                 bot.roleGoal = false;
                 bot.roleRetryAt = svs.time + 3000;
+                if (bot.role == kb::Role::Attack && LogOn())
+                    Com_Printf(CON_CHANNEL_SERVER, "bots: %d is stuck on its way to an objective at %.0f %.0f %.0f\n",
+                               static_cast<int>(&bot - s_slots), origin[0], origin[1], origin[2]);
             }
         }
         return false;
@@ -342,11 +380,16 @@ bool Walk(BotSlot &bot, const playerState_s *ps, float seconds, usercmd_s &cmd, 
     cmd.rightmove = static_cast<char>(keys.right);
 
     // Jump is pressed on one frame and released on the next: the game jumps
-    // on the press only.
-    if (stalled > kJumpAfterMs && !bot.jumpHeld)
+    // on the press only. Once a second at most: a jump into a ledge mantles
+    // (the weapon goes down meanwhile), and PC bot brain run 11 had a bot
+    // that pressed it every other frame keep its gun down for 28 s.
+    // Two jumps that got it no closer: no more until it does.
+    if (stalled > kJumpAfterMs && !bot.jumpHeld && svs.time >= bot.nextJump && bot.stallJumps < 2)
     {
         cmd.buttons |= BUTTON_JUMP;
         bot.jumpHeld = true;
+        bot.nextJump = svs.time + 1000;
+        ++bot.stallJumps;
     }
     else
     {
@@ -517,6 +560,24 @@ int Fight(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focus 
         bot.adsErrorDone = false;
     }
 
+    // Close enough to knife, with the hand on them: a player knifes (one
+    // hit kills from behind or hurt, two from the front).
+    const float meleeReach = (player_meleeRange ? player_meleeRange->current.value : 64.0f) + 8.0f;
+    if (distance < meleeReach && svs.time >= bot.aim.startMs)
+    {
+        const float off = std::fmax(std::fabs(kb::AngleDelta(bot.view.angles[0], target[0])),
+                                    std::fabs(kb::AngleDelta(bot.view.angles[1], target[1])));
+        if (off < 25.0f && !bot.meleeHeld && svs.time >= bot.nextMelee)
+        {
+            cmd.buttons |= BUTTON_MELEE;
+            bot.meleeHeld = true;
+            bot.nextMelee = svs.time + static_cast<int>(bot.rng.Range(450.0f, 700.0f));
+            if (LogOn())
+                Com_Printf(CON_CHANNEL_SERVER, "bots: %d knifes %d, %.0f units\n", clientNum, focus.entity, distance);
+            return kb::StepStrafe(bot.strafe, svs.time, skill, bot.rng);
+        }
+    }
+
     const int clip = ps->ammoclip[BG_ClipForWeapon(ps->weapon)];
     const bool ready = clip > 0 && (!sight || ps->fWeaponPosFrac >= 0.9f);
     const bool onTarget =
@@ -646,12 +707,119 @@ bool RoamGoal(BotSlot &bot, const kb::NavMesh &nav, const float *origin, float *
 }
 
 // ---------------------------------------------------------------------------
-// The team (bot_team.h).
+// Grenades (bot_grenades.h).
 
-bool LogOn()
+// A frag the bot carries, or 0.
+int FragWeapon(const playerState_s *ps)
 {
-    return bot_log && bot_log->current.integer;
+    return BG_GetFirstAvailableOffhand(ps, OFFHAND_CLASS_FRAG_GRENADE);
 }
+
+// Whether the arc from `eye` clears the map until it is close to `target`
+// (it may bounce off what is right at the target).
+bool ArcClear(const kb::ThrowParams &params, const float *eye, float yaw, float pitchUp, float distance,
+              const float *target)
+{
+    float arc[64][3];
+    const int count = kb::ArcPoints(params, eye, yaw, pitchUp, distance, 0.05f, arc, 64);
+    const float *from = eye;
+    for (int i = 0; i < count; ++i)
+    {
+        const float *to = arc[i];
+        const float left = std::hypot(to[0] - target[0], to[1] - target[1]);
+        if (left > 96.0f && !Bot_ClearLine(from, to, nullptr))
+            return false;
+        from = to;
+    }
+    return true;
+}
+
+// A player throws a frag where an enemy just went out of sight. Once per
+// enemy lost, a bot thinks about it: the enemy it remembers was seen a
+// moment ago, at a throwing distance, out of sight now, and the arc to where
+// they were clears the map. Bolder bots throw more often.
+void ConsiderGrenade(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focus &focus)
+{
+    if (bot.grenadePhase != 0 || svs.time < bot.nextGrenade || focus.kind != kb::FocusKind::Remembered)
+        return;
+    const kb::Contact &contact = bot.perception.contacts[focus.entity];
+    const int lostMs = svs.time - contact.lastSeenAt;
+    if (lostMs < 400 || lostMs > 3500 || bot.grenadeThoughtAt == contact.lastSeenAt)
+        return;
+    bot.grenadeThoughtAt = contact.lastSeenAt;
+    if (IsReloading(ps) || ps->weaponstate != WEAPON_READY)
+        return;
+    const int frag = FragWeapon(ps);
+    if (!frag)
+        return;
+    const float eye[3] = {ps->origin[0], ps->origin[1], ps->origin[2] + ps->viewHeightCurrent};
+    // Their feet: the place it saw is their chest.
+    const float target[3] = {contact.lastSeen[0], contact.lastSeen[1], contact.lastSeen[2] - 40.0f};
+    const float distance = std::hypot(target[0] - eye[0], target[1] - eye[1]);
+    if (distance < 250.0f || distance > 1000.0f)
+        return;
+    if (bot.rng.Unit() > 0.2f + 0.5f * bot.personality.aggression)
+        return;
+
+    const WeaponDef *def = BG_GetWeaponDef(frag);
+    kb::ThrowParams params;
+    params.speed = static_cast<float>(def->iProjectileSpeed);
+    params.speedUp = static_cast<float>(def->iProjectileSpeedUp);
+    params.speedForward = static_cast<float>(def->iProjectileSpeedForward);
+    params.gravity = ps->gravity > 0 ? static_cast<float>(ps->gravity) : 800.0f;
+    float pitchUp = 0.0f;
+    if (!kb::ThrowPitch(params, distance, target[2] + 8.0f - eye[2], &pitchUp))
+        return;
+    const float yaw = std::atan2(target[1] - eye[1], target[0] - eye[0]) * (180.0f / 3.14159265358979f);
+    if (!ArcClear(params, eye, yaw, pitchUp, distance, target))
+        return;
+
+    bot.grenadePhase = 1;
+    bot.grenadeView[0] = -pitchUp;
+    bot.grenadeView[1] = yaw;
+    bot.grenadeUntil = svs.time + 1500; // give up lining it up after this
+    bot.grenadeDistance = distance;
+    (void)clientNum;
+}
+
+// One frame of a throw under way: line up the view, then hold the button a
+// moment (the fuse runs, as when a player cooks it) and let go. Returns the
+// view to turn to, or nullptr when no throw is under way.
+const float *StepGrenade(BotSlot &bot, int clientNum, const playerState_s *ps, usercmd_s &cmd)
+{
+    if (bot.grenadePhase == 0)
+        return nullptr;
+    if (bot.grenadePhase == 1)
+    {
+        const float off = std::fmax(std::fabs(kb::AngleDelta(bot.view.angles[0], bot.grenadeView[0])),
+                                    std::fabs(kb::AngleDelta(bot.view.angles[1], bot.grenadeView[1])));
+        if (svs.time >= bot.grenadeUntil || !FragWeapon(ps))
+        {
+            bot.grenadePhase = 0;
+            return nullptr;
+        }
+        if (off < 2.0f)
+        {
+            bot.grenadePhase = 2;
+            bot.grenadeUntil = svs.time + static_cast<int>(bot.rng.Range(250.0f, 600.0f));
+        }
+        return bot.grenadeView;
+    }
+    // Holding: the throw goes on letting go.
+    if (svs.time < bot.grenadeUntil)
+    {
+        cmd.buttons |= BUTTON_FRAG;
+        return bot.grenadeView;
+    }
+    bot.grenadePhase = 0;
+    bot.nextGrenade = svs.time + static_cast<int>(bot.rng.Range(10000.0f, 20000.0f));
+    if (LogOn())
+        Com_Printf(CON_CHANNEL_SERVER, "bots: %d throws a grenade %.0f units\n", clientNum, bot.grenadeDistance);
+    return bot.grenadeView;
+}
+
+// ---------------------------------------------------------------------------
+// The team (bot_team.h).
 
 team_t TeamOf(int clientNum)
 {
@@ -721,6 +889,7 @@ void Command()
         {
             team.board.Reset();
             team.nextCommand = 0;
+            team.sideKnown = false;
         }
         team.lastTime = svs.time;
         if (svs.time < team.nextCommand)
@@ -744,9 +913,37 @@ void Command()
         const int oldTake = team.takeCount;
         const int oldHold = team.holdCount;
         ReadObjectives(team, SV_GameClientNum(members[0]));
+        // Nearest the team first: the first attackers go to the flags on its
+        // side of the map. The side is where the team was when objectives
+        // first showed (its spawn), so the order holds while bots spread out.
+        if (!team.sideKnown && team.takeCount + team.holdCount > 0)
+        {
+            team.side[0] = 0.0f;
+            team.side[1] = 0.0f;
+            for (int i = 0; i < count; ++i)
+            {
+                const playerState_s *member = SV_GameClientNum(members[i]);
+                team.side[0] += member->origin[0] / static_cast<float>(count);
+                team.side[1] += member->origin[1] / static_cast<float>(count);
+            }
+            team.sideKnown = true;
+        }
+        if (team.sideKnown)
+        {
+            kb::SortNearestFirst(team.take, team.takeCount, team.side);
+            kb::SortNearestFirst(team.hold, team.holdCount, team.side);
+        }
         if ((team.takeCount != oldTake || team.holdCount != oldHold) && LogOn())
+        {
             Com_Printf(CON_CHANNEL_SERVER, "bots: team %d objectives: take %d, hold %d\n", teamIndex, team.takeCount,
                        team.holdCount);
+            for (int i = 0; i < team.takeCount; ++i)
+                Com_Printf(CON_CHANNEL_SERVER, "bots: team %d objective to take at %.0f %.0f %.0f\n", teamIndex,
+                           team.take[i][0], team.take[i][1], team.take[i][2]);
+            for (int i = 0; i < team.holdCount; ++i)
+                Com_Printf(CON_CHANNEL_SERVER, "bots: team %d objective to hold at %.0f %.0f %.0f\n", teamIndex,
+                           team.hold[i][0], team.hold[i][1], team.hold[i][2]);
+        }
 
         kb::Role roles[kMaxBotSlots];
         kb::AssignRoles(people, count, team.takeCount, team.holdCount, roles);
@@ -821,6 +1018,7 @@ void HoldFor(BotSlot &bot, int untilMs, const float *facing, bool crouched)
 {
     bot.holdUntil = untilMs;
     bot.holdCrouched = crouched;
+    bot.holdProne = false;
     bot.holdFacingKnown = facing != nullptr;
     if (facing && facing != bot.holdFacing)
         std::memcpy(bot.holdFacing, facing, sizeof(bot.holdFacing));
@@ -831,6 +1029,7 @@ void HoldFor(BotSlot &bot, int untilMs, const float *facing, bool crouched)
 RolePlan PlanRole(BotSlot &bot, int clientNum, const kb::NavMesh &nav, const float *origin, bool arrived)
 {
     TeamState *team = BoardOf(clientNum);
+    const bool wasAtObjective = bot.atObjective;
     bot.atObjective = false;
     // Its last goal could not be reached: roam a moment first.
     if (svs.time < bot.roleRetryAt)
@@ -900,9 +1099,22 @@ RolePlan PlanRole(BotSlot &bot, int clientNum, const kb::NavMesh &nav, const flo
             if (arrived)
             {
                 // There: stay on it (a flag captures while someone stands
-                // in it) and press use (a bomb plants or defuses on it).
-                HoldFor(bot, svs.time + 1000, nullptr, false);
+                // in it) and press use (a bomb plants or defuses on it), in
+                // the stance it chose on the way: many players lie down on a
+                // flag and wait for whoever comes to take it back.
+                const bool prone = bot.holdProne;
+                HoldFor(bot, svs.time + 1000, nullptr, bot.holdCrouched);
+                bot.holdProne = prone;
                 bot.atObjective = Distance2D(origin, bot.objective) < 96.0f;
+                if (bot.atObjective && !wasAtObjective && LogOn())
+                    Com_Printf(CON_CHANNEL_SERVER, "bots: %d is on an objective, %s\n", clientNum,
+                               bot.holdProne ? "prone" : bot.holdCrouched ? "crouched" : "standing");
+                if (!bot.atObjective && !bot.shortLogged && LogOn())
+                {
+                    bot.shortLogged = true;
+                    Com_Printf(CON_CHANNEL_SERVER, "bots: %d stopped %.0f units from an objective at %.0f %.0f %.0f\n",
+                               clientNum, Distance2D(origin, bot.objective), origin[0], origin[1], origin[2]);
+                }
             }
             return RolePlan::Keep;
         }
@@ -910,6 +1122,11 @@ RolePlan PlanRole(BotSlot &bot, int clientNum, const kb::NavMesh &nav, const flo
             return RolePlan::Default;
         bot.roleGoal = true;
         bot.holdUntil = 0;
+        bot.shortLogged = false;
+        // How it will wait there: prone (the patient more often), crouched or
+        // standing.
+        bot.holdProne = bot.rng.Unit() < 0.3f + 0.5f * bot.personality.patience;
+        bot.holdCrouched = !bot.holdProne && bot.rng.Unit() < 0.6f;
         if (LogOn())
             Com_Printf(CON_CHANNEL_SERVER, "bots: %d attacks an objective %.0f units away\n", clientNum,
                        Distance2D(origin, bot.objective));
@@ -1010,6 +1227,7 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
     s.hurtAgoMs = svs.time - bot.hurtAt;
     s.coverKnown = bot.coverKnown;
     s.inCover = bot.coverKnown && Distance2D(origin, bot.cover) < 40.0f && std::fabs(origin[2] - bot.cover[2]) < 48.0f;
+    s.forObjective = bot.role == kb::Role::Attack && bot.objectiveKnown;
 
     const kb::Intent intent = bot.mind.Decide(s, bot.personality);
     if (bot.mind.changed && bot_log && bot_log->current.integer)
@@ -1089,6 +1307,7 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
                 bot.holdUntil =
                     svs.time + static_cast<int>(bot.rng.Range(2500.0f, 7000.0f) * (0.5f + bot.personality.patience));
                 bot.holdCrouched = bot.rng.Unit() < 0.5f;
+                bot.holdProne = false;
             }
             replan = true;
         }
@@ -1109,6 +1328,9 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
             {
                 bot.roleGoal = false;
                 bot.roleRetryAt = svs.time + 3000;
+                if (bot.role == kb::Role::Attack && LogOn())
+                    Com_Printf(CON_CHANNEL_SERVER, "bots: %d finds no way to an objective at %.0f %.0f %.0f\n",
+                               clientNum, bot.goal[0], bot.goal[1], bot.goal[2]);
             }
         }
     }
@@ -1219,6 +1441,8 @@ bool Bot_UserMove(client_t *cl)
             bot.hurtFromKnown = false;
             bot.roleGoal = false;
             bot.holdFacingKnown = false;
+            bot.atObjective = false;
+            bot.onObjectiveSince = 0;
             bot.mind.Reset(svs.time);
             bot.look.pitch = bot.view.angles[0];
             bot.look.yaw = bot.view.angles[1];
@@ -1277,6 +1501,11 @@ bool Bot_UserMove(client_t *cl)
             bot.holdUntil = 0;
             bot.roleGoal = false;
             bot.holdFacingKnown = false;
+            bot.atObjective = false;
+            if (bot.onObjectiveSince && LogOn())
+                Com_Printf(CON_CHANNEL_SERVER, "bots: %d left an objective after %.1f s (died)\n", clientNum,
+                           (svs.time - bot.onObjectiveSince) / 1000.0f);
+            bot.onObjectiveSince = 0;
             bot.mind.Reset(svs.time);
             // Tap use now and then: the stock gametypes respawn on it where
             // they wait for a button, and it skips nothing that matters.
@@ -1291,14 +1520,43 @@ bool Bot_UserMove(client_t *cl)
                 Bot_StepSpots(*nav, ps->origin);
             NoticeHits(bot, ps);
             Decide(bot, clientNum, ps, focus, nav, fighting);
+            // How long an attacker stays on the objective it takes, and what
+            // it was doing when it left.
+            {
+                const bool on = bot.role == kb::Role::Attack && bot.objectiveKnown &&
+                                Distance2D(ps->origin, bot.objective) < 96.0f;
+                if (on && !bot.onObjectiveSince)
+                    bot.onObjectiveSince = svs.time ? svs.time : 1;
+                else if (!on && bot.onObjectiveSince)
+                {
+                    if (LogOn())
+                        Com_Printf(CON_CHANNEL_SERVER, "bots: %d left an objective after %.1f s (%s, role %s)\n",
+                                   clientNum, (svs.time - bot.onObjectiveSince) / 1000.0f,
+                                   kb::IntentName(bot.mind.intent), kb::RoleName(bot.role));
+                    bot.onObjectiveSince = 0;
+                }
+            }
 
             int side = 0;
-            if (fighting)
+            // An enemy in view: a throw still being lined up is dropped.
+            if (focus.kind == kb::FocusKind::Seen && bot.grenadePhase == 1)
+                bot.grenadePhase = 0;
+            // The enemy it fought has gone out of sight: a moment to think of
+            // a grenade (the hand keeps its aim there meanwhile).
+            if (CombatOn())
+                ConsiderGrenade(bot, clientNum, ps, focus);
+            if (fighting && bot.grenadePhase == 0)
                 side = Fight(bot, clientNum, ps, focus, seconds, cmd);
+            if (!(cmd.buttons & BUTTON_MELEE))
+                bot.meleeHeld = false;
+            const float *grenadeView = CombatOn() ? StepGrenade(bot, clientNum, ps, cmd) : nullptr;
 
             // Not fighting: look at the player it lost or the sound it heard,
-            // else pre-aim the corner of its way, else along the way.
-            const float *look = watching;
+            // else pre-aim the corner of its way, else along the way. A throw
+            // looks where it throws.
+            const float *look = grenadeView ? grenadeView : watching;
+            // The fight's hand has the view, unless a throw is being lined up.
+            const bool handAims = fighting && !grenadeView;
             float preAimView[2];
             if (!fighting && !look && bot.pathIndex < bot.pathCount)
             {
@@ -1318,8 +1576,21 @@ bool Bot_UserMove(client_t *cl)
                 ViewToward(ps, bot.holdFacing, facingView);
                 look = facingView;
             }
+            // Prone on a flag it takes: it stays down and fights from there
+            // rather than strafing off the flag.
+            const bool downOnFlag = bot.holdProne && bot.atObjective && bot.role == kb::Role::Attack &&
+                                    (fighting || holding) && Distance2D(ps->origin, bot.objective) < 96.0f;
+            if (downOnFlag)
+                side = 0;
             bool walked = false;
-            if (side != 0 && bot.mind.intent != kb::Intent::Cover)
+            if (downOnFlag)
+            {
+                bot.progressTime = svs.time;
+                cmd.buttons |= BUTTON_PRONE;
+                if (holding)
+                    cmd.buttons |= BUTTON_USE;
+            }
+            else if (side != 0 && bot.mind.intent != kb::Intent::Cover)
             {
                 cmd.rightmove = static_cast<char>(side * 127);
                 // A strafe is not being stuck on the way.
@@ -1329,12 +1600,14 @@ bool Bot_UserMove(client_t *cl)
             }
             else if (!holding)
             {
-                walked = Walk(bot, ps, seconds, cmd, look, fighting);
+                walked = Walk(bot, ps, seconds, cmd, look, handAims);
             }
             else
             {
                 bot.progressTime = svs.time;
-                if (bot.holdCrouched)
+                if (bot.holdProne)
+                    cmd.buttons |= BUTTON_PRONE;
+                else if (bot.holdCrouched)
                     cmd.buttons |= BUTTON_CROUCH;
                 // On an objective: use it (a bomb plants or defuses while
                 // use is held there).
@@ -1342,7 +1615,7 @@ bool Bot_UserMove(client_t *cl)
                     cmd.buttons |= BUTTON_USE;
             }
 
-            if (fighting || walked)
+            if (handAims || walked)
             {
                 bot.lookHeld = 0.0f;
                 bot.look.holdSeconds = 0.0f;

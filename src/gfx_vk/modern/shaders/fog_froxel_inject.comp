@@ -1,0 +1,137 @@
+#version 450
+
+// The Modern path's volumetric fog as a froxel volume, first compute pass
+// (src/gfx_vk/modern/vk_modern_fog.cpp, docs/vulkan-modern.md "Volumetric
+// fog"): what each froxel adds, the same sums fog_march.frag takes along a
+// pixel's ray, for the stretch of the froxel's centre ray it covers.
+//
+// The volume covers the scene's area, shape.y froxels across in pixels;
+// slice z covers the ray from march (z / N)^2 to march ((z + 1) / N)^2 world
+// units (N = shape.x), the march's spacing. Each froxel samples one point of
+// its stretch, moved by interleaved gradient noise per froxel and frame, and
+// writes
+//
+//   r   = -(T(a) - T(b)) where the sun does not reach the point, else 0
+//   gba = (T(a) - T(b)) times the shadowed spot lights' light there
+//
+// which fog_froxel_integrate.comp adds up front to back.
+
+layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform writeonly image3D injected;
+layout(set = 0, binding = 1) uniform sampler2DShadow shadowMap;
+layout(set = 0, binding = 2) uniform sampler2DShadow spotShadowMap;
+
+struct Spot
+{
+    mat4 shadowLookup;
+    vec4 origin;
+    vec4 dir;
+    vec4 factors;
+    vec4 color;
+};
+
+// fog_march.frag's block.
+layout(set = 0, binding = 3, std140) uniform Params
+{
+    mat4 clipToWorld;
+    mat4 shadowLookup;
+    vec4 camera;
+    vec4 sun;
+    vec4 fog;
+    vec4 farPartition;
+    vec4 misc;
+    vec4 area;
+    vec4 shape; // x: the slices; y: pixels per froxel across
+    vec4 color;
+    vec4 spotInfo;
+    Spot spots[4];
+} params;
+
+float Transmittance(float t)
+{
+    return exp2(-params.fog.x * max(t - params.fog.y, 0.0));
+}
+
+float InterleavedGradientNoise(vec2 pixel, float frame)
+{
+    pixel += 5.588238 * mod(frame, 64.0);
+    return fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
+}
+
+float SunVisibility(vec3 p)
+{
+    const vec4 shadow = params.shadowLookup * vec4(p, 1.0);
+    const float reference = clamp(shadow.z, 0.0, 1.0);
+    if (shadow.w <= 1.0)
+        return texture(shadowMap, vec3(shadow.xy, reference));
+    const vec2 farUv = shadow.xy * params.farPartition.w + params.farPartition.xy;
+    const float edge = max(abs(farUv.x - 0.5) * params.misc.x, abs(farUv.y - 0.75) * params.misc.y);
+    if (edge >= 8.0)
+        return 1.0;
+    return mix(texture(shadowMap, vec3(farUv, reference)), 1.0, clamp(edge - 7.0, 0.0, 1.0));
+}
+
+float Phase(float cosine)
+{
+    const float g = params.sun.w;
+    return (1.0 - g * g) / pow(max(1.0 + g * g - 2.0 * g * cosine, 1e-4), 1.5);
+}
+
+// fog_march.frag's SpotLight.
+vec3 SpotLight(int i, vec3 p, vec3 direction)
+{
+    const vec3 toLight = params.spots[i].origin.xyz - p;
+    const float length0 = length(toLight);
+    const float falloff = clamp(1.0 - length0 * params.spots[i].origin.w, 0.0, 1.0);
+    const vec3 towards = toLight / max(length0, 1e-4);
+    const vec4 factors = params.spots[i].factors;
+    const float ramp = clamp(dot(towards, params.spots[i].dir.xyz) * factors.x + factors.y, 0.0, 1.0);
+    const float power = params.spots[i].dir.w;
+    const float cone = ramp <= 0.0 ? 0.0 : (power != 0.0 ? pow(ramp, power) : 1.0);
+    const float lit = falloff * falloff * cone;
+    if (lit <= 0.0)
+        return vec3(0.0);
+    float visibility = 1.0;
+    if (factors.z > 0.0)
+    {
+        const vec4 shadow = params.spots[i].shadowLookup * vec4(p, 1.0);
+        float tap = 1.0;
+        if (shadow.w > 0.0)
+        {
+            const vec3 lookup = vec3(shadow.xy / shadow.w, clamp(shadow.z / shadow.w, 0.0, 1.0));
+            tap = factors.w > 0.0 ? texture(shadowMap, lookup) : texture(spotShadowMap, lookup);
+        }
+        visibility = mix(1.0, tap, factors.z);
+    }
+    return params.spots[i].color.rgb * (lit * visibility * Phase(dot(direction, towards)));
+}
+
+void main()
+{
+    const ivec3 size = imageSize(injected);
+    const ivec3 froxel = ivec3(gl_GlobalInvocationID);
+    if (any(greaterThanEqual(froxel, size)))
+        return;
+    const vec2 uv = (vec2(froxel.xy) + 0.5) / vec2(size.xy);
+    const vec4 world = params.clipToWorld * vec4(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, 0.5, 1.0);
+    const vec3 direction = normalize(world.xyz / world.w - params.camera.xyz);
+    const float slices = float(size.z);
+    const float march = params.fog.z;
+    const float a = march * (float(froxel.z) / slices) * (float(froxel.z) / slices);
+    const float b = march * (float(froxel.z + 1) / slices) * (float(froxel.z + 1) / slices);
+    const float weight = Transmittance(a) - Transmittance(b);
+    vec4 value = vec4(0.0);
+    if (weight > 0.0)
+    {
+        const float jitter = InterleavedGradientNoise(vec2(froxel.xy) + vec2(17.0, 59.0) * float(froxel.z),
+                                                      params.misc.w);
+        const vec3 p = params.camera.xyz + direction * mix(a, b, jitter);
+        if (params.camera.w > 0.0)
+            value.r = -weight * (1.0 - SunVisibility(p));
+        const int spotCount = int(params.spotInfo.x);
+        for (int i = 0; i < spotCount; ++i)
+            value.gba += weight * SpotLight(i, p, direction);
+    }
+    imageStore(injected, froxel, value);
+}

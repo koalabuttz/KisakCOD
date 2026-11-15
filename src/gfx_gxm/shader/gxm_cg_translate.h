@@ -94,6 +94,9 @@ struct Reflection
     // from the API.
     uint16_t floatConstants = 0;
     bool relativeConstants = false;
+    // The float constants the shader reads from the API (not the ones it
+    // defines itself), ascending. Empty when it indexes them with a0.
+    std::vector<uint16_t> apiConstants;
     SamplerType samplers[16] = {};
     std::vector<VertexInput> inputs; // vertex shaders
     // What a vertex shader writes, or what a pixel shader reads, sorted by

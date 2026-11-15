@@ -25,6 +25,7 @@ on:
       - '!scripts/runs/**'
       - '!scripts/tests/test_perf_run.py'
       - '!scripts/tests/test_pc_run.py'
+      - '!scripts/tests/test_android_run.py'
       - '!scripts/tests/test_vita3k_runner.py'
       - src/**
       - deps/**
@@ -40,6 +41,7 @@ on:
       - '!scripts/runs/**'
       - '!scripts/tests/test_perf_run.py'
       - '!scripts/tests/test_pc_run.py'
+      - '!scripts/tests/test_android_run.py'
       - '!scripts/tests/test_vita3k_runner.py'
       - src/**
       - deps/**

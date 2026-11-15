@@ -81,6 +81,8 @@ back to them.
 | `r_modernSsrDistance`, `r_modernSsrThickness` | -1, or above 0 | `KISAK_VK_MODERN_SSR_DISTANCE`, `_THICKNESS` |
 | `r_modernFog` | default, off, on | `KISAK_VK_MODERN_FOG` |
 | `r_modernFogSun`, `r_modernFogScatter` | -1, or 0 to 1 and 0 to 0.9 | `KISAK_VK_MODERN_FOG_SUN`, `_SCATTER` |
+| `r_modernFogSpots` | -1, or 0 to 4 | `KISAK_VK_MODERN_FOG_SPOTS` |
+| `r_modernFogFroxels` | default, off, on | `KISAK_VK_MODERN_FOG_FROXELS` |
 | `r_modernTonemap` | default, clamp, neutral, agx, aces | `KISAK_VK_MODERN_TONEMAP` |
 | `r_modernDebug` | default, none, velocity, velocity-all, normals, ao, reflections, fog | `KISAK_VK_MODERN_DEBUG` |
 
@@ -802,10 +804,31 @@ game's formulas.
 The models' sunlit family, `lp_[hsm_][i_]sun_<mode>c0[d0][n0][s0]` (code 0x80
 plus the same flags), is drawn with `lp_sun.frag` the same way: 16 builds,
 the mode a specialization constant. `i_` (instanced) shares the pixel shader
-and only changes the vertex shader. `skin_` and `flag_` names keep the game's
-shader: some of them have pixel shaders of their own that model-lit shader
-facts (project files, 2026-11-13) did not read; so does `sm_`, which compares
-the shadow map in the shader.
+and only changes the vertex shader. `sm_` keeps the game's shader: it
+compares the shadow map in the shader.
+
+Skin and cloth draw with it too (skin and flag shader facts, and the
+materials that use them, project files, 2026-11-15). `skin_` is character
+skin, not skeletal skinning: in stock multiplayer only bare hands and
+forearms have it, the Marine glove (`mc/mtl_marine_glove`, common_mp) and
+the SAS woodland sleeves (mp_bloc, mp_countdown, mp_creek, mp_farm,
+mp_overgrown, mp_pipeline); no head or face material does, and the weapons
+are plain. `flag_` is cloth: the five Domination flags (`mtl_flag_*`,
+common_mp) and the large banners on mp_bloc and mp_showdown.
+
+* **`lp_[hsm_][i_]skin_sun_<r0c0|r0c0n0|r0c0s0|r0c0n0s0>`**: r0c0 and
+  r0c0n0 are the plain model's shaders. With `s0` the reflection probe's
+  light is scaled by 0.3, a literal in the game's shader (code bit 0x800,
+  the specialization constant `kProbeScale`): skin reflects less. The
+  vertex shaders are the plain ones.
+* **`lp_[hsm_]flag_[sun_]t0c0[n0][s0]`**: the plain `t0` shader, except
+  that with the sun the sun lights both faces, |N.L| in place of the clamp,
+  with the normal unflipped (code bit 0x1000, `kTwoSidedSun`). Without a
+  light it is the plain shader itself. Its vertex shader waves the cloth
+  but writes the same outputs.
+* skin_ without the sun or with a spot or omni light, and flag_
+  with a spot or omni light, keep the game's shader: the facts did not read
+  them.
 
 The game's model shader is the world's with the lighting volume in place of
 the lightmaps, so ours differs from `lm_sun.frag` only there:
@@ -840,7 +863,10 @@ blended and alpha-tested, and `lp_sun_r0c0n0` with a tilted normal. Its
 volume is 1x1x2, black in the first slice. Only a lookup that moves along
 the normal by lightingLookupScale reaches the grey second slice.
 `test_vulkan_d3d9_front.py` also runs it with
-`KISAK_VK_MODERN_MODEL_SHADERS=0`.
+`KISAK_VK_MODERN_MODEL_SHADERS=0`. The `modern_lit_skin` scene draws
+`lp_hsm_sun_r0c0n0s0` beside its `skin_` variation (the probe's grey 64
+counts 0.3), and, with the sun below the surface, `lp_hsm_sun_t0c0` (lit by
+the volume alone) beside its `flag_` variation (the sun lights its back).
 
 ### Without the sun: interiors
 
@@ -1533,9 +1559,11 @@ CoD4's fog is flat: one colour, a start distance and a density per map (set
 by the map and its scripts, `setExpFog`), blended over each surface by how
 far it is. The Modern path can light that same fog with the sun: air in the
 sun's shadow is darker, and looking towards the sun the air glows, so
-shafts show through windows, trees and gaps between buildings. The map's
-own fog still decides the look: with the sun's share at 0 the picture is
-the game's. Off by default until the PC has measured it.
+shafts show through windows, trees and gaps between buildings. The view's
+shadowed spot lights light the air in their cones too, with their own
+shadows. The map's own fog still decides the look: with the sun's and the
+spot lights' shares at 0 the picture is the game's, and a map without fog
+gets none. Off by default until the PC has measured it.
 
 ```
 +set r_modernFog on
@@ -1561,6 +1589,19 @@ game's shaders, effects included) and nothing has to be unfogged. The sky
 has no fog in the game: it gets only the shadows' share, k F phase
 shadowed, the shafts' dark side against it.
 
+**Spot lights.** The game's fog has no light from the spot lights, so
+theirs is added whole: for each stretch of the ray inside a light's reach,
+T(a) - T(b) times what the light gives a surface facing it there, times the
+same phase, measured from the light, times `r_modernFogSpots` (default 1).
+What it gives is worked out as the lit shaders do (`lp_sun.frag`): the
+cone from `cosHalfFovOuter` to `cosHalfFovInner` with its power, the
+diffuse colour times `r_diffuseColorScale`, and its shadow map tile faded in
+by the light's fade, the rest lit. One thing stands in: the light's falloff
+over its reach is (1 - d / radius)^2 rather than its light def's falloff
+texture. The lights are the view's shadowed spots (`spotShadows`, up to
+four, the ones whose shadow maps are drawn this frame); a spot light
+without a shadow map does not light the air.
+
 **How a scene goes with it:**
 
 1. The renderer hands the view's fog over with the scene
@@ -1570,9 +1611,12 @@ shadowed, the shafts' dark side against it.
    direction, and, when `RB_StandardDrawCommands` draws the sun's shadow
    map for the view, that texture with its lookup matrix and partition
    constants (the ones the lit shaders read: `lookupMatrix`,
-   `switchPartition`, `shadowmapScale`). The hosts copy it into
-   `front::ModernSceneView::fog`; the front checks the shadow map is one of
-   its textures and passes its level 0 to `BackendModernScene`.
+   `switchPartition`, `shadowmapScale`), and each shadowed spot light with
+   its lookup matrix and which texture its tile is in (the spot lights' own
+   map, or, while the sun has no shadow, the first two in the sun's, as
+   `sm_qualitySpotShadow` places them). The hosts copy it into
+   `front::ModernSceneView::fog`; the front checks the shadow maps are its
+   textures and passes their level 0 to `BackendModernScene`.
 2. In `BackendModernScene`, before the velocity and the anti-aliasing,
    `DrawSceneFog` records `modern::DrawFog` (`vk_modern_fog.cpp`) over the
    linear-light scene, when it is wanted and the view has fog. Without
@@ -1586,25 +1630,57 @@ shadowed, the shafts' dark side against it.
    noise per pixel and frame. It reads the map as the lit shaders do: the
    near partition while the partition value is at most 1, then the far one,
    fading to lit at its edge. Air past the march and past the map's reach
-   counts as lit. It writes `shadowed` and the ray's length.
+   counts as lit. Then it crosses each spot light's reach (the sphere of its
+   radius, short of the surface) in 12 even steps, jittered the same way.
+   It writes `shadowed` and the spot lights' light (RGBA16F).
 4. **The apply pass** (`shaders/fog_apply.frag`) brings that back to full
    resolution from the four nearest half-resolution pixels, weighted by how
-   alike their rays' lengths are, and adds the light above (blend one,
-   one). The anti-aliasing then averages the march's noise away.
+   alike their rays' lengths are (each found again from the scene depth at
+   the pixel that was marched), and adds the light above (blend one, one).
+   The anti-aliasing then averages the march's noise away.
 
-Both passes are timed as "modern fog". With `r_modernDebug fog` (or
+**Froxels, the second option** (`r_modernFogFroxels on`, or
+`KISAK_VK_MODERN_FOG_FROXELS=1`): the same sums from a volume in place of the
+march, on the core's compute passes (below). In place of step 3:
+
+- `fog_froxel_inject.comp` fills a froxel volume (`R16G16B16A16_SFLOAT`)
+  over the scene's area, one froxel per 8 x 8 pixels and 64 slices deep.
+  Slice z covers the ray from 3000 (z / 64)^2 to 3000 ((z + 1) / 64)^2 world
+  units, the march's spacing and length. Each froxel takes one point of its
+  stretch of its centre ray, jittered per froxel and frame, and writes what
+  the march's step there would add: the sun's shadowed share and the spot
+  lights' light.
+- `fog_froxel_integrate.comp` adds the slices up front to back, one
+  invocation per column, into a second volume: slice z holds the sums from
+  the camera to its far end.
+- The apply pass (`fog_apply.frag` built with `FOG_FROXELS=1`) reads that
+  volume with linear filtering at the pixel's place across the view and its
+  distance's place along the slices (growing from 0 at the camera through
+  the first slice), then adds the same light as the march's.
+
+The volume does not depend on the screen's resolution beyond its size in
+froxels, so its cost stays nearly the same at any resolution, and it is
+the natural place for what a march per pixel cannot share, such as lights
+from many sources and keeping last frame's volume. What it gives up: detail
+finer than a froxel across (a thin shaft through a small gap is wider and
+softer), and light between slices is read linearly where the fog's falloff
+is not. Spot lights past the march length are left out of it.
+
+The full-screen passes are timed as "modern fog", the two compute passes as
+"modern fog froxels". With `r_modernDebug fog` (or
 `KISAK_VK_MODERN_DEBUG=fog`, which switches the fog on) the apply pass
 writes the added light alone, four times over, onto grey 0.18 in place of
 the scene.
 
-**What it does not do yet:** spot lights in the air (each view's up to four
-shadowed spots, next), fog on effects drawn after the scene (they keep the
-game's fog), and a froxel volume as a second option once the core has
-compute passes (David, 2026-11-15).
+**What it does not do yet:** spot lights without shadow maps and omni
+lights in the air, the light def's falloff texture, fog on effects drawn
+after the scene (they keep the game's fog), and keeping last frame's froxel
+volume to settle its noise (the anti-aliasing does that per pixel for now).
 
-The statistics line: `vulkan d3d9: modern: S scenes with volumetric fog (M
-through the sun's shadow map; sun K, scatter G, N steps over D units, half
-resolution), T ms GPU each` (both passes).
+The statistics line: `vulkan d3d9: modern: S scenes with volumetric fog (F
+from froxels, M through the sun's shadow map, P with L spot lights; sun K,
+scatter G, spot lights J, N steps over D units, half resolution), T ms GPU
+each` (all its passes, for the mix of march and froxel scenes drawn).
 
 **Check:** the D3D9 check's `modern_fog` scene draws grey 100 at depth 0.5
 under identity matrices, seen from 1.5 units behind, through fog of density
@@ -1613,7 +1689,17 @@ and a shadow map cleared to 0.3 that every point looks up at its middle: at
 a reference of 0.1 the air is lit and nothing changes; at 0.5 it is in
 shadow, and the middle pixel loses 0.214 x 0.5 of light with the sun's share
 1, half that with 0.5; with the fog off, or without linear light, it stays
-grey 100. `test_vulkan_d3d9_front.py` counts its three fog scenes.
+grey 100. Then, with the sun's share 0, a spot light 3 units behind the
+camera shines along the view with a wide cone and a reach far past the
+scene, colour grey 0.5, looking up the same cleared map: lit, the middle
+pixel gains 0.214 x 0.5 of light; in shadow with fade 1 nothing; with fade
+0.5 half; with its tile in the sun's map (the sun unshadowed) the same as
+lit; with `r_modernFogSpots` 0 nothing. Last, lit air, air in shadow and
+the lit spot light again from froxels: the middle pixel's 2 units fall in
+the second slice (0.73 to 2.93 units), read 0.494 of the way between the
+slices' sums rather than 0.5, the same within the check's tolerance.
+`test_vulkan_d3d9_front.py` counts its eleven fog scenes, three from
+froxels, five through the sun's map and five with a spot light.
 
 ## Compute passes
 
@@ -1664,7 +1750,7 @@ has not run them yet).
 What this guide still lists as missing is in [What it does not do
 yet](#what-it-does-not-do-yet): a reactive mask for effects, sharpening, one
 history per view and the rest of the lit shaders. The plan's later stages
-(volumetric fog's spot lights and froxel volume, screen-space global illumination, and a
+(screen-space global illumination, and a
 ray-tracing tier for GPUs that have it) are in the project files'
 `renderer/modern-renderer-plan.md`, section 6.5; the Modern switches becoming
 dvars that change mid-match is section 6.6. Which pieces are in review is on

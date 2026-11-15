@@ -12,6 +12,7 @@
 #include "r_model_lighting.h"
 #include "r_dobj_skin.h"
 #include "r_modern_motion.h"
+#include <linux/sys_perf.h>
 
 
 // The Modern path (r_modern_motion.h): a rigid surface of an entity's model
@@ -63,6 +64,7 @@ void R_DrawXModelRigidModelSurf(GfxCmdBufContext context, XSurface *xsurf)
 
 void R_GetWorldMatrixForModelSurf(const GfxModelRigidSurface *modelSurf, float4 eyeOffset, vector4 *worldMat)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_PLACEMENT);
     float v3; // [esp+24h] [ebp-58h]
     float v4; // [esp+28h] [ebp-54h]
     float v5; // [esp+30h] [ebp-4Ch]

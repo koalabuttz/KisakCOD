@@ -107,11 +107,20 @@ namespace
         if (sceKernelGetFreeMemorySize(&system) < 0)
             system.size_user = system.size_cdram = system.size_phycont = 0;
         const struct mallinfo heap = mallinfo();
+        // What malloc has taken out of the heap's block so far, at most:
+        // what the block must hold. It is read when a line is written, so
+        // a short peak between two lines shows only while malloc keeps it.
+        static uint32_t taken = 0;
+        if ((uint32_t)heap.arena > taken)
+            taken = (uint32_t)heap.arena;
+        if ((uint32_t)heap.usmblks > taken)
+            taken = (uint32_t)heap.usmblks;
         snprintf(line, size,
-            "Vita memory %s: game memory %.1f MB free, heap %.1f of %d MB used, "
+            "Vita memory %s: game memory %.1f MB free, heap %.1f of %d MB used "
+            "(%.1f MB taken at most), "
             "engine reservations %.1f MB in %u blocks, system %.1f MB free\n",
             when, Megabytes(PMem_GetFreeAmount()), Megabytes(heap.uordblks),
-            Vita_HeapSizeMB(), Megabytes(Vita_MmapBytes()), Vita_MmapCount(),
+            Vita_HeapSizeMB(), Megabytes(taken), Megabytes(Vita_MmapBytes()), Vita_MmapCount(),
             Megabytes((uint32_t)system.size_user));
     }
 

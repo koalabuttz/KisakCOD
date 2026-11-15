@@ -45,8 +45,10 @@
 //   main thread stack 8 MB, worker stacks 1 MB each
 // which leaves about 45 MB. console.log reports the heap's use once a minute
 // (vita_stats.cpp); size it again from the first runs.
-// KISAK_VITA_HEAP_MB (a CMake option) is for emulator builds that measure what
-// the game would take with more; a console build keeps 64.
+// The multiplayer client's build gives 60 (KISAK_VITA_HEAP_MB, a CMake option,
+// scripts/platform/vita/mp_client.cmake): mp_crash uses 34 MB of it, and the
+// GPU's main pool has the other 4 MB. More is for emulator builds that measure
+// what the game would take.
 #ifndef KISAK_VITA_HEAP_MB
 #define KISAK_VITA_HEAP_MB 64
 #endif
