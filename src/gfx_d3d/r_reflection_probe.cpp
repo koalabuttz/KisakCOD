@@ -714,14 +714,18 @@ struct ModernCapturedProbe
     float *light;
     float before;
     float after;
+    // The same over the face looking up (+Z), where the sky is.
+    float beforeUp;
+    float afterUp;
 };
 
-// The new probes are scaled, all by one number for the map, to the stock
-// probes' mean light (David's choice 2026-11-15, PC probes run 2: drawn as
-// they are they came out about half as bright, and mp_bog's water lost its
-// glints); within these bounds.
+// Each new probe is scaled to its stock probe's mean light (David's choice
+// 2026-11-15, PC probes run 2: drawn as they are they came out about half as
+// bright, and mp_bog's water lost its glints). One number for the whole map
+// was not enough: mp_bog's probes over its water came out at a third of
+// their stock light and stayed dim (PC probes run 3). Within these bounds.
 static const float kModernProbeScaleLeast = 0.25f;
-static const float kModernProbeScaleMost = 4.0f;
+static const float kModernProbeScaleMost = 8.0f;
 
 static bool R_ModernDrawProbe(const GfxModernHooks *hooks, const GfxReflectionProbe &probe, int edge, float *rgb[6],
                               float *light, void (*overlay)())
@@ -777,10 +781,9 @@ static bool R_ModernDrawProbe(const GfxModernHooks *hooks, const GfxReflectionPr
 
 // The mean light of a probe as stored (its first level), and of its new light
 // as the encoding would hold it.
-static bool R_ModernProbeMeans(IDirect3DCubeTexture9 *cube, int edge, const float *light, float *before,
-                               float *after)
+static bool R_ModernProbeMeans(IDirect3DCubeTexture9 *cube, int edge, const float *light, ModernCapturedProbe *kept)
 {
-    float stored = 0.0f, drawn = 0.0f;
+    float stored = 0.0f, drawn = 0.0f, storedUp = 0.0f, drawnUp = 0.0f;
     for (int face = 0; face < 6; ++face)
     {
         D3DLOCKED_RECT locked;
@@ -790,15 +793,25 @@ static bool R_ModernProbeMeans(IDirect3DCubeTexture9 *cube, int edge, const floa
         {
             const uint8_t *row = (const uint8_t *)locked.pBits + y * locked.Pitch;
             for (int x = 0; x < edge; ++x)
-                stored += R_ModernProbeTexelLight(&row[4 * x]);
+            {
+                const float texel = R_ModernProbeTexelLight(&row[4 * x]);
+                stored += texel;
+                storedUp += face == 4 ? texel : 0.0f;
+            }
         }
         cube->UnlockRect((D3DCUBEMAP_FACES)face, 0);
     }
     const int count = 6 * edge * edge;
     for (int i = 0; i < 3 * count; ++i)
-        drawn += light[i] < R_ModernProbeLightLimit() ? light[i] : R_ModernProbeLightLimit();
-    *before = stored / (float)count;
-    *after = drawn / (float)(3 * count);
+    {
+        const float held = light[i] < R_ModernProbeLightLimit() ? light[i] : R_ModernProbeLightLimit();
+        drawn += held;
+        drawnUp += i / (3 * edge * edge) == 4 ? held : 0.0f;
+    }
+    kept->before = stored / (float)count;
+    kept->after = drawn / (float)(3 * count);
+    kept->beforeUp = storedUp / (float)(edge * edge);
+    kept->afterUp = drawnUp / (float)(3 * edge * edge);
     return true;
 }
 
@@ -876,7 +889,7 @@ void R_ModernCaptureProbes(void (*overlay)())
         kept.edge = edge;
         kept.light = (float *)Z_Malloc(sizeof(float) * 3 * 6 * edge * edge, "R_ModernCaptureProbes", 0);
         if (!R_ModernDrawProbe(hooks, probe, edge, rgb, kept.light, overlay)
-            || !R_ModernProbeMeans(cube, edge, kept.light, &kept.before, &kept.after))
+            || !R_ModernProbeMeans(cube, edge, kept.light, &kept))
         {
             Z_Free(kept.light, 0);
             ++skipped;
@@ -894,28 +907,32 @@ void R_ModernCaptureProbes(void (*overlay)())
             Z_Free(rgb[face], 0);
     }
 
-    // Then all of them are scaled to the stock probes' mean light, written
-    // over their first level, and their blurrier levels made again.
-    float scale = after > 0.0f ? before / after : 1.0f;
-    scale = scale < kModernProbeScaleLeast ? kModernProbeScaleLeast
-            : scale > kModernProbeScaleMost ? kModernProbeScaleMost
-                                             : scale;
+    // Then each is scaled to its stock probe's mean light, written over its
+    // first level, and its blurrier levels made again.
     int written = 0;
+    float scaled = 0.0f, scaleLeast = 0.0f, scaleMost = 0.0f;
     for (uint32_t i = 0; i < captured; ++i)
     {
         const ModernCapturedProbe &kept = probes[i];
+        float scale = kept.after > 0.0f ? kept.before / kept.after : 1.0f;
+        scale = scale < kModernProbeScaleLeast ? kModernProbeScaleLeast
+                : scale > kModernProbeScaleMost ? kModernProbeScaleMost
+                                                 : scale;
         const GfxReflectionProbe &probe = rgp.world->reflectionProbes[kept.index];
         IDirect3DCubeTexture9 *cube = probe.reflectionImage->texture.cubemap;
         if (R_ModernWriteProbe(cube, kept.edge, kept.light, scale))
         {
             hooks->reflectionProbe(hooks->user, dx.device, cube);
             ++written;
+            scaled += kept.after * scale;
+            scaleLeast = written == 1 || scale < scaleLeast ? scale : scaleLeast;
+            scaleMost = written == 1 || scale > scaleMost ? scale : scaleMost;
             if (written <= 64)
                 Com_Printf(CON_CHANNEL_GFX,
                            "modern: probe %u at (%.0f %.0f %.0f): mean light %.3f as stored, %.3f drawn, %.3f "
-                           "scaled\n",
+                           "scaled; looking up %.3f as stored, %.3f scaled\n",
                            kept.index, probe.origin[0], probe.origin[1], probe.origin[2], kept.before, kept.after,
-                           kept.after * scale);
+                           kept.after * scale, kept.beforeUp, kept.afterUp * scale);
         }
         else
             ++skipped;
@@ -925,7 +942,8 @@ void R_ModernCaptureProbes(void (*overlay)())
     const int took = Sys_Milliseconds() - started;
     Com_Printf(CON_CHANNEL_GFX,
                "modern: %d reflection probes drawn again with the Modern path (%d left as they were) in %d ms; "
-               "mean light %.3f as stored, %.3f drawn, scaled by %.2f to the stored light\n",
+               "mean light %.3f as stored, %.3f drawn, %.3f scaled (each to its stored light, by %.2f to %.2f)\n",
                written, skipped, took, captured ? before / (float)captured : 0.0f,
-               captured ? after / (float)captured : 0.0f, scale);
+               captured ? after / (float)captured : 0.0f, written ? scaled / (float)written : 0.0f, scaleLeast,
+               scaleMost);
 }
