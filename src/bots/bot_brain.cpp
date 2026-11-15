@@ -100,6 +100,7 @@ struct BotSlot
     int aimEndedAt = -100000;
     int sprayStart = 0;
     int lastShotAt = -100000;
+    int nextFastLog = 0;
     kb::ViewKick kick;
     kb::StrafeState strafe;
     int eventSequence = 0;
@@ -1516,6 +1517,21 @@ bool Bot_UserMove(client_t *cl)
     {
         bot.pathCount = 0;
         bot.pathIndex = 0;
+    }
+    // Faster than a player runs: say how (the probe once saw bots cover 330
+    // units in the first second after a round's start).
+    {
+        const float frameMove = Distance2D(ps->origin, bot.lastOrigin);
+        const float speed = std::hypot(ps->velocity[0], ps->velocity[1]);
+        if ((speed > 250.0f || (frameMove > 40.0f && frameMove <= 128.0f)) && svs.time >= bot.nextFastLog && LogOn())
+        {
+            bot.nextFastLog = svs.time + 2000;
+            Com_Printf(CON_CHANNEL_SERVER,
+                       "bots: %d moves fast: %.0f units in %d ms, velocity %.0f, pm_type %d, pm_flags 0x%x, "
+                       "command time %d behind\n",
+                       clientNum, frameMove, svs.time - bot.lastTime, speed, ps->pm_type, ps->pm_flags,
+                       svs.time - ps->commandTime);
+        }
     }
     bot.lastOrigin[0] = ps->origin[0];
     bot.lastOrigin[1] = ps->origin[1];
