@@ -85,6 +85,10 @@ public class KisakActivity extends SDLActivity {
         // shadows flicker from frame to frame (2026-11-15). The maps' baked
         // shadows stay. An "args" extra with "+set sm_enable 1" turns them on.
         Collections.addAll(args, "+set", "sm_enable", "0");
+        // Android preview build: the stock menus drawn through RmlUi (ui_rml,
+        // docs/rmlui-frontend.md; needs a -DKISAK_RMLUI=ON build). An "args"
+        // extra with "+set ui_rml 0" goes back to the stock painter.
+        Collections.addAll(args, "+set", "ui_rml", "1");
         Intent intent = getIntent();
         String extra = intent != null ? intent.getStringExtra("args") : null;
         if (extra != null) {

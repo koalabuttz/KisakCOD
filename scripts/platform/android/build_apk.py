@@ -96,6 +96,8 @@ def main():
     parser.add_argument('--gradle', default='gradle')
     parser.add_argument('--gradle-arg', action='append', default=[],
                         help='one more argument for Gradle (repeatable), such as --init-script for a Maven mirror')
+    parser.add_argument('--cmake-arg', action='append', default=[],
+                        help='one more argument for the game\'s CMake configure (repeatable), such as -DKISAK_RMLUI=ON')
     parser.add_argument('--native-only', action='store_true',
                         help='stop after the native libraries (no Android SDK or Gradle needed)')
     args = parser.parse_args()
@@ -153,7 +155,7 @@ def main():
         '-DKISAK_LINUX_CINEMATICS=OFF', '-DKISAK_LINUX_HTTP_DOWNLOADS=OFF', '-DKISAK_LINUX_GAMEPAD=ON',
         f'-DSDL3_DIR={sdl_sdk / "lib/cmake/SDL3"}',
         '-DKISAK_BUILD_VULKAN_PROBE=ON', '-DKISAK_BUILD_VULKAN_SHADERS=ON', '-DKISAK_BUILD_VULKAN_LEGACY=ON',
-        '-DKISAK_BUILD_VULKAN_BACKEND=ON')
+        '-DKISAK_BUILD_VULKAN_BACKEND=ON', *args.cmake_arg)
     run('cmake', '--build', build, '--target', 'KisakCOD-mp', 'KisakCOD-sp')
     libmain = out / 'libmain.so'
     libmain_sp = out / 'libmain_sp.so'

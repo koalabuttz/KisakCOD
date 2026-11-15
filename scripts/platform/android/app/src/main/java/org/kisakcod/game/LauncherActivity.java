@@ -203,7 +203,10 @@ public class LauncherActivity extends Activity {
         // r_visuals is saved in the game's config and read at start-up, so
         // every start names the look, Legacy as well. Modern's anti-aliasing
         // needs a one-sample back buffer (r_aaSamples 1).
-        String visuals = modern ? "+set r_aaSamples 1 +set r_visuals modern" : "+set r_visuals legacy";
+        // Modern also turns on the god rays (r_modernGodRays, off by default
+        // elsewhere until they have been seen on every map).
+        String visuals = modern ? "+set r_aaSamples 1 +set r_visuals modern +set r_modernGodRays on"
+                : "+set r_visuals legacy";
         intent.putExtra("args", args != null ? visuals + " " + args : visuals);
         startActivity(intent);
     }
