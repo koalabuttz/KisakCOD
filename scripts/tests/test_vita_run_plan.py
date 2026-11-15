@@ -17,7 +17,8 @@ not know (``%zu``, ``%jd``, ``%td``): it prints the letters and reads every
 later argument as the wrong type. That is how the first frame log line on the
 Vita came out as "zu frames" with a wild read behind it.
 
-And it reads them, and the other clients' ``src/client_mp/cl_main_mp.cpp``,
+And it reads them, and the other clients' ``src/client/cl_run_plan.h`` (with
+``src/client_mp/cl_main_mp.cpp`` and ``src/client/cl_main.cpp``, which use it),
 for the text settings (``vita_atMenu``, ``vita_atMap``, ``vita_keyboardAnswer``,
 ``run_atMenu``, ``run_atMap``): their text is run as console commands or typed for the
 player, and a game server sets a client's dvars by name, so each dvar may be
@@ -69,7 +70,8 @@ def unknown_formats(root=ROOT):
 # The dvars whose text is run as commands or typed for the player.
 START_TEXT_DVARS = ("vita_atMenu", "vita_atMap", "vita_keyboardAnswer", "run_atMenu", "run_atMap")
 # Where the other clients' run plan reads run_atMenu and run_atMap.
-OTHER_CLIENT_SOURCES = ("src/client_mp/cl_main_mp.cpp",)
+# The Windows and Linux clients' run plan, and the two games that use it.
+OTHER_CLIENT_SOURCES = ("src/client/cl_run_plan.h", "src/client_mp/cl_main_mp.cpp", "src/client/cl_main.cpp")
 TEXT_READ = re.compile(
     r"\b(" + "|".join(START_TEXT_DVARS) + r")\s*->\s*(current|latched|reset)\b"
     r"|Dvar_Get\w*\s*\(\s*\"(" + "|".join(START_TEXT_DVARS) + r")\"")
