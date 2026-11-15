@@ -164,8 +164,9 @@ game's own menu and "Campaign" the singleplayer game's. "Visuals" picks
 the look of every start: Legacy (`+set r_visuals legacy`), Modern (`+set
 r_aaSamples 1 +set r_visuals modern`, docs/vulkan-modern.md) held to an even
 30 fps (`r_vsync 1`, `r_vsyncInterval 2`), or Modern Fast, which turns off
-ambient occlusion and screen-space reflections (`r_modernAo off`,
-`r_modernSsr off`) and runs at the display's rate. On the Retroid Pocket 6,
+ambient occlusion, screen-space reflections and contact shadows
+(`r_modernAo off`, `r_modernSsr off`, `r_modernContactShadows off`) and runs
+at the display's rate (Crash: 55 fps with only the first two off, GPU 17 ms). On the Retroid Pocket 6,
 Modern with everything on drew Crash in about 30 ms (33 fps); ambient
 occlusion cost about 6 ms and reflections about 5. The feature and pace
 settings go only with the first start after the choice changes, so what the
