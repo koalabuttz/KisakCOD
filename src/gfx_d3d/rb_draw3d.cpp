@@ -133,11 +133,17 @@ void RB_Draw3DInternal(const GfxViewInfo *viewInfo)
     // Every 3D pass of this view draws the smaller picture until
     // RB_StretchScaledScene. Only the standard full-screen scene: a view
     // that is not the whole screen, fullbright and the debug shaders keep
-    // the full size.
-    gfx_gxm::g_sceneScale = gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD && viewInfo->isRenderingFullScreen &&
-                                    vita_sceneScale
-                                ? std::clamp(vita_sceneScale->current.value, 0.5f, 1.0f)
-                                : 1.0f;
+    // the full size. vita_sceneScaleMin under vita_sceneScale lets the back
+    // end pick the size between the two (gxm_engine_options.h).
+    if (gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD && viewInfo->isRenderingFullScreen && vita_sceneScale)
+    {
+        const float most = std::clamp(vita_sceneScale->current.value, 0.5f, 1.0f);
+        const float least = vita_sceneScaleMin ? std::clamp(vita_sceneScaleMin->current.value, 0.5f, 1.0f) : 1.0f;
+        const float goalMs = vita_sceneScaleGoal ? vita_sceneScaleGoal->current.value : 0.0f;
+        gfx_gxm::g_sceneScale = gfx_gxm::SceneScaleFor(least, most, goalMs);
+    }
+    else
+        gfx_gxm::g_sceneScale = 1.0f;
 #endif
 
     if (gfxDrawMethod.drawScene)

@@ -40,6 +40,7 @@
 #include <gfx_gxm/gxm_engine_options.h>
 #include <gfx_gxm/gxm_live_switch.h>
 #include <gfx_gxm/gxm_prepass_governor.h>
+#include <gfx_gxm/gxm_scale_governor.h>
 #include <gfx_gxm/gxm_program_cache.h>
 #include <vita/vita_gpu_clock.h>
 
@@ -59,6 +60,10 @@ bool g_prepassWorldOnly = true;
 bool g_prepassSkipModels = false;
 bool g_resolveWhenUsed = true;
 float g_sceneScale = 1.0f;
+std::atomic<float> g_sceneScaleLeast{1.0f};
+std::atomic<float> g_sceneScaleMost{1.0f};
+std::atomic<float> g_sceneScaleGoalMs{0.0f};
+std::atomic<float> g_sceneScaleNow{1.0f};
 bool g_stretchInFilter = true;
 float g_filterReadS = 1.0f;
 float g_filterReadT = 1.0f;
@@ -367,6 +372,10 @@ struct DrawState
     gfx_gxm::PrepassGovernor prepassGovernor;
     bool prepassOff = false, governorOff = false;
     uint64_t paceWaits = 0, paceMicros = 0;
+    // The size of the 3D picture, picked from each frame's waits for the GPU
+    // (gxm_scale_governor.h) when the engine allows a range of sizes.
+    gfx_gxm::ScaleGovernor scaleGovernor;
+    uint64_t scaleWaitMicros = 0; // this frame's waits for the GPU so far
     // Renames that found no room and waited for the GPU, renames a wait since
     // the buffer's last draw made needless, and the bytes of renamed buffers'
     // old memory the GPU may still read.
@@ -2257,9 +2266,11 @@ void FinishGpu(Device &device, WaitCause cause)
     EndScene(device);
     const uint64_t from = Micros();
     gxm::Finish();
-    device.frameTime.Wait(Micros() - from);
+    const uint64_t took = Micros() - from;
+    device.frameTime.Wait(took);
     if (DrawState *d = device.draw)
     {
+        d->scaleWaitMicros += took;
         ++d->gpuWaits;
         ++d->waitsBy[size_t(cause)];
         // Every frame before this one is drawn; what this frame has drawn so
@@ -2311,6 +2322,7 @@ void PaceFrame(Device &device)
         device.frameTime.Pace(took);
         ++d.paceWaits;
         d.paceMicros += took;
+        d.scaleWaitMicros += took;
         return;
     }
     // No notification will say so (the frame ended without a scene, or the
@@ -2324,6 +2336,41 @@ void PaceFrame(Device &device)
             "waits for the whole GPU at every Present (as with no-frame-overlap)",
             unsigned(kTimeoutMicros / 1000), kTimeoutsAllowed);
     }
+}
+
+// After PaceFrame, whose wait is the last of this frame's: the size of the
+// next frame's 3D picture.
+void ScaleFrame(Device &device)
+{
+    DrawState &d = *device.draw;
+    const gfx_gxm::ScaleGovernor::Limits limits{gfx_gxm::g_sceneScaleLeast.load(std::memory_order_relaxed),
+                                                gfx_gxm::g_sceneScaleMost.load(std::memory_order_relaxed),
+                                                gfx_gxm::g_sceneScaleGoalMs.load(std::memory_order_relaxed)};
+    d.scaleGovernor.FrameEnded(Micros(), d.scaleWaitMicros, limits);
+    d.scaleWaitMicros = 0;
+    gfx_gxm::g_sceneScaleNow.store(d.scaleGovernor.Scale(), std::memory_order_relaxed);
+}
+
+void LogSceneScale(Device &device)
+{
+    DrawState *d = device.draw;
+    if (!d)
+        return;
+    const gfx_gxm::ScaleGovernor::Counts &c = d->scaleGovernor.Totals();
+    if (!c.frames)
+        return;
+    Log(device,
+        "3D picture size, last %llu frames: %.3f of the screen now, %.3f on average (%.3f to %.3f; allowed %.3f to "
+        "%.3f). %llu steps down, %llu up, of them %llu tries of a larger picture (%llu taken back); 16.7 ms given up "
+        "%llu times. The GPU held the frame in %llu of %llu windows; the last window: %.1f ms a frame, %.1f ms of it "
+        "waiting for the GPU, goal %.1f ms",
+        (unsigned long long)c.frames, double(d->scaleGovernor.Scale()), c.scaleSum / double(c.frames),
+        double(c.lowest), double(c.highest), double(gfx_gxm::g_sceneScaleLeast.load(std::memory_order_relaxed)),
+        double(gfx_gxm::g_sceneScaleMost.load(std::memory_order_relaxed)), (unsigned long long)c.down,
+        (unsigned long long)c.up, (unsigned long long)c.tries, (unsigned long long)c.triesLost,
+        (unsigned long long)c.fastLost, (unsigned long long)c.boundWindows, (unsigned long long)c.windows, c.frameMs,
+        c.waitMs, c.goalMs);
+    d->scaleGovernor.ClearTotals();
 }
 
 void LogWaitCauses(Device &device)

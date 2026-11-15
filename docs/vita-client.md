@@ -52,7 +52,8 @@ host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`), the run
 plan's, the GPU heap's, the frame time figures', the GPU progress bookkeeping's
 and the shader translator's (`test_vita_run_plan.py`, `test_vita_gxm_heap.py`,
 `test_vita_frame_time.py`, `test_vita_gpu_progress.py`,
-`test_vita_cg_translate.py`), and the static model cache's size arithmetic
+`test_vita_cg_translate.py`), the 3D picture size governor's
+(`test_vita_scale_governor.py`), and the static model cache's size arithmetic
 (`test_static_model_cache_sizes.py`).
 
 ## Running
@@ -904,6 +905,35 @@ What the GXM back end does so far (step 2d):
   the copy it makes anyway, so the stretch costs no scene of its own; an
   empty file `no-filter-stretch` in the folder of the compiled programs, or
   `vita_gxm no-filter-stretch 1`, keeps the two scenes.
+- **A 3D picture that shrinks only where the GPU needs it.** Console run
+  BV (2026-11-15, mp_crash, busy view) found the frame held by the GPU's
+  pixel work at the full size (35.5 ms a frame, 6.6 to 8.4 ms of it the CPU
+  waiting for the frame before last) and by the CPU at 0.7 (29.6 ms, no
+  wait). With `vita_sceneScaleMin` (0.5 to 1; 1 by default, which is off)
+  under `vita_sceneScale`, the back end picks the size between the two
+  frame by frame (`src/gfx_gxm/gxm_scale_governor.h`), in steps of 1/32 of
+  the screen. Its measure is the time a frame waits for the GPU: the frame
+  less its waits is what the CPU needs, and a frame with waits took what
+  the GPU needs. Its goal is a frame every refresh (16.7 ms) where the CPU
+  fills one in that time and every second refresh (33.3 ms) elsewhere,
+  since with vsync a frame between the two is no smoother than 33.3 ms;
+  `vita_sceneScaleGoal` names another goal in ms, and a goal the CPU does
+  not reach means "the GPU must not hold the frame at all". Windows of 12
+  frames, the 2 longest and 2 shortest left out: over the goal, the
+  picture's area shrinks by the share that is over (times 1.4, as not all
+  GPU time is pixel work); when a step more is known to fit, it grows a
+  step; when the GPU's time is not known because it did not hold the
+  frame, a step more is tried, and a try that fails is taken back and
+  doubles the wait before the next (2 to 32 seconds). A goal of 16.7 ms
+  that the smallest picture does not reach is given up for 16 seconds,
+  doubled by each loss up to 128. The size costs nothing to change: the
+  targets keep the screen's size and only the viewport moves. The log's
+  `3D picture size` line, beside the frame time line, gives the sizes
+  picked. The depth pass governor times frames on its own and does not
+  know of this one yet: console runs of it keep the depth pass forced on
+  (`vita_gxm no-prepass-governor 1`). A game server can set neither dvar.
+  `scripts/tests/test_vita_scale_governor.py` runs it on a model of the
+  console with run BV's times.
 - **The CPU a frame ahead of the GPU.** The CPU fills frame N while the GPU
   still draws frame N - 1, so a frame costs the longer of the two times and
   not their sum. Console run U (2026-11-11, mp_crash) had shown them taking

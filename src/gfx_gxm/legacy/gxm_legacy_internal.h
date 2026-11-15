@@ -438,6 +438,12 @@ void FrameDone(Device &device);
 // After FrameDone: waits until the GPU has drawn the frame before last, so
 // that the CPU runs one frame ahead of it and no further.
 void PaceFrame(Device &device);
+// After PaceFrame: picks the size of the next frame's 3D picture from this
+// frame's time and its waits for the GPU (gxm_scale_governor.h).
+void ScaleFrame(Device &device);
+// The sizes picked since the last such line; nothing while the engine allows
+// one size only.
+void LogSceneScale(Device &device);
 // The waits for the whole GPU since the last such line, by cause.
 void LogWaitCauses(Device &device);
 // A texture's whole content is about to be rewritten: when the GPU may still

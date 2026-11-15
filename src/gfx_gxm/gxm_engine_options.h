@@ -48,6 +48,18 @@
 // and puts it back to 1 once the picture is stretched, so nothing drawn
 // after (the sun's flare, the HUD) is scaled.
 //
+// g_sceneScaleLeast, g_sceneScaleMost, g_sceneScaleGoalMs, g_sceneScaleNow:
+// with vita_sceneScaleMin under vita_sceneScale the back end picks the size
+// between the two, frame by frame, from the time each frame waited for the
+// GPU (gxm_scale_governor.h): the picture shrinks only as far as the GPU
+// needs to keep the frame's goal, and is whole again where the view allows.
+// The engine hands over the two limits and the goal (vita_sceneScaleGoal, in
+// ms; 0 lets the governor choose 16.7 or 33.3 ms) when a full-screen 3D view
+// starts and reads the size for that view. The back end's thread writes the
+// size at each Present. Console run BV (2026-11-15, mp_crash, busy view):
+// 35.5 ms a frame at the full size, held by the GPU, and 29.6 ms at 0.7,
+// held by the CPU.
+//
 // g_stretchInFilter: the copy and the stretch of the scaled picture are two
 // more scenes a frame (console run AH, 2026-11-14: 5 became 7). When the
 // only post effect of the view is the map's film colour filter, which reads
@@ -62,6 +74,7 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 
 namespace gfx_gxm
 {
@@ -70,6 +83,10 @@ extern bool g_prepassWorldOnly;
 extern bool g_prepassSkipModels;
 extern bool g_resolveWhenUsed;
 extern float g_sceneScale;
+extern std::atomic<float> g_sceneScaleLeast;
+extern std::atomic<float> g_sceneScaleMost;
+extern std::atomic<float> g_sceneScaleGoalMs;
+extern std::atomic<float> g_sceneScaleNow;
 extern bool g_stretchInFilter;
 extern float g_filterReadS;
 extern float g_filterReadT;
@@ -78,6 +95,19 @@ extern float g_filterReadT;
 inline int SceneScaled(int size, float scale)
 {
     return (std::max)(1, int(float(size) * scale));
+}
+
+// The size of this frame's 3D picture: the engine's own (`most`), or the
+// back end's choice between `least` and it. Hands the back end the limits
+// for the frames to come.
+inline float SceneScaleFor(float least, float most, float goalMs)
+{
+    g_sceneScaleLeast.store(least, std::memory_order_relaxed);
+    g_sceneScaleMost.store(most, std::memory_order_relaxed);
+    g_sceneScaleGoalMs.store(goalMs, std::memory_order_relaxed);
+    if (least >= most)
+        return most;
+    return std::clamp(g_sceneScaleNow.load(std::memory_order_relaxed), least, most);
 }
 } // namespace gfx_gxm
 

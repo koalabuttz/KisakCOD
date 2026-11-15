@@ -172,6 +172,8 @@ extern const dvar_t *r_filmTweakDarkTint;
 extern const dvar_t *r_scaleViewport;
 #ifdef KISAK_GFX_GXM
 extern const dvar_t *vita_sceneScale;
+extern const dvar_t *vita_sceneScaleMin;
+extern const dvar_t *vita_sceneScaleGoal;
 #endif
 extern const dvar_t *r_normal;
 extern const dvar_t *sm_sunShadowCenter;

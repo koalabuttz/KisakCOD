@@ -1714,6 +1714,7 @@ PresentResult Present(Device *device)
     device->frameTime.Shown(Micros() - from);
     FrameDone(*device);
     PaceFrame(*device);
+    ScaleFrame(*device);
     gxm::ProgramCacheFrame();
     LogProgramFailures(*device);
     if (device->shaderCounts.waitedThisFrame)
@@ -1732,6 +1733,7 @@ PresentResult Present(Device *device)
         Log(*device, "%s", DescribeMemoryUse().c_str());
         LogFrameTime(*device);
         LogWaitCauses(*device);
+        LogSceneScale(*device);
     }
     if (!shown)
     {
