@@ -43,6 +43,8 @@ inline const dvar_s *aoFloor;
 inline const dvar_s *aoEdge;
 inline const dvar_s *ssrDistance;
 inline const dvar_s *ssrThickness;
+inline const dvar_s *softShadows;
+inline const dvar_s *shadowSoftness;
 
 // Harmless to call again (the engine keeps the first registration).
 inline void Register()
@@ -114,6 +116,14 @@ inline void Register()
     ssrThickness = Dvar_RegisterFloat("r_modernSsrThickness", -1.0f, -1.0f, 1024.0f, DVAR_NOFLAG,
                                       "Modern visuals: how far behind a surface a reflection ray still meets it, in "
                                       "world units; -1 the default (KISAK_VK_MODERN_SSR_THICKNESS or 16)");
+    softShadows = Dvar_RegisterEnum("r_modernSoftShadows", kOnOffNames, 0, DVAR_NOFLAG,
+                                    "Modern visuals: soft sun shadows, sharp where they meet their caster and "
+                                    "softer away from it (default: with our lit shaders, unless "
+                                    "KISAK_VK_MODERN_SOFT_SHADOWS says otherwise)");
+    shadowSoftness = Dvar_RegisterFloat("r_modernShadowSoftness", -1.0f, -1.0f, 20.0f, DVAR_NOFLAG,
+                                        "Modern visuals: the sun's apparent size in degrees for soft shadows "
+                                        "(bigger is softer); -1 the default (KISAK_VK_MODERN_SHADOW_SOFTNESS or "
+                                        "1.5)");
 }
 
 // The switches as the back end takes them: an enum's index 0 (default) is -1,
@@ -145,5 +155,7 @@ inline void Read(gfx_vk::d3d9::ModernTuning &out)
     out.aoEdge = aoEdge->current.value;
     out.ssrDistance = ssrDistance->current.value;
     out.ssrThickness = ssrThickness->current.value;
+    out.softShadows = softShadows->current.integer - 1;
+    out.shadowSoftness = shadowSoftness->current.value;
 }
 } // namespace modern_dvars

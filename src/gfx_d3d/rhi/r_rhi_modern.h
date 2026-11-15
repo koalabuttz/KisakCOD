@@ -100,6 +100,15 @@ enum GfxModernLitShader : uint16_t
     GFX_MODERN_LIT_SHADER_LIGHT = 0x300,
 };
 
+// The sun's shadow map as a view's lit surfaces read it (sunShadow): its two
+// partitions' sizes, for the Modern lit shaders' soft filter.
+struct GfxModernSunShadow
+{
+    bool on;              // the view's lit surfaces read the sun's shadow map
+    float texel[2];       // world units across a texel, near and far partitions
+    float depthUnits[2];  // world units per unit of the map's depth, near and far
+};
+
 struct GfxModernHooks
 {
     void *user;
@@ -160,6 +169,10 @@ struct GfxModernHooks
     // (the renderer then draws nothing for the view).
     bool (*planarBegin)(void *user, IDirect3DDevice9 *device, const GfxModernPlanar *planar);
     void (*planarDone)(void *user, IDirect3DDevice9 *device, const GfxModernPlanar *planar);
+    // A view's lit surfaces come next (after its depth prepass, if any), and
+    // this is the sun's shadow map they read, or that they read none. May be
+    // null.
+    void (*sunShadow)(void *user, IDirect3DDevice9 *device, const GfxModernSunShadow *shadow);
 };
 
 // Null removes them. Called while no frame is being built (as the renderer

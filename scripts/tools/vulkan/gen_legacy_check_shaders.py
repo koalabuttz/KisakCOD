@@ -126,6 +126,23 @@ mov o2, c2
 mov o3, c3
 mov o4, v2
 """),
+    # The same with the shadow-map coordinate spread across the quad: c3
+    # plus the quad's UV times c4, for a shadow's edge (modern_soft_shadow).
+    ("kVsLmSunSpread", """vs_3_0
+dcl_position v0
+dcl_texcoord0 v1
+dcl_color0 v2
+dcl_position o0
+dcl_texcoord0 o1
+dcl_texcoord1 o2
+dcl_texcoord4 o3
+dcl_color0 o4
+add o0, v0, c0
+mov o1, c1
+mov o2, c2
+mad o3, v1.xyxy, c4, c3
+mov o4, v2
+"""),
     ("kPsLmSunStandIn", """ps_3_0
 dcl_texcoord0 v0
 dcl_texcoord1 v1

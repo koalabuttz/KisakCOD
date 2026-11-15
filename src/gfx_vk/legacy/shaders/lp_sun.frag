@@ -90,6 +90,9 @@
 #else
 #define SPOT_FACTORS 0
 #endif
+// The sun's shadow map is read with the soft filter where the push
+// constants say so (ModernShadowParams).
+#define SOFT_SUN_SHADOW (LP_SUN_SHADOW && LP_SUN_LIGHT == 1)
 // lp_[i_]amb[_<light>]_t0c0 (lit shader facts 6): the volume's light plus its
 // visibility times the sun's colour, with no normal (so no N.L, no lookup
 // push), no shadow and no maps; texcoord 1 holds the volume coordinate (xyz)
@@ -189,6 +192,18 @@ layout(set = 1, binding = 20) uniform sampler lightingVolumeSampler;
 #if LP_SUN_SHADOW
 layout(set = 1, binding = 5) uniform texture2D shadowMap;
 layout(set = 1, binding = 21) uniform sampler shadowMapSampler; // compares: reference <= stored is lit
+#endif
+#if SOFT_SUN_SHADOW
+// The push constants after vk_legacy.h ModernPlanarParams, which models do
+// not read: ModernShadowParams.
+layout(push_constant) uniform ModernPush
+{
+    // Penumbra near and far (texels per unit of depth), widest disc near and
+    // far (texels).
+    layout(offset = 96) vec4 shadowDepth;
+    // Slope cap near and far (depth per texel), on (1 soft), frame.
+    vec4 shadowFilter;
+} push;
 #endif
 #if LP_SUN_NORMAL
 layout(set = 1, binding = SAMPLER_NORMAL) uniform texture2D normalMap;
@@ -292,8 +307,110 @@ float ShadowTaps(vec2 xy, float reference)
 }
 #endif
 
+#if SOFT_SUN_SHADOW
+// Soft sun shadows (docs/vulkan-modern.md "Soft sun shadows"; percentage-
+// closer soft shadows, Fernando 2005): a search for the blockers around the
+// point, then depth-compare taps over a disc whose radius grows with the
+// point's distance below them, times the sun's apparent size: sharp where a
+// shadow meets its caster, softer further from it. Both use a Vogel disc
+// turned by interleaved gradient noise (Jimenez 2014) that moves each frame,
+// for TAA to average. The depth each tap compares with follows the
+// receiver's own slope (receiver plane depth bias, Isidoro 2006), so a wide
+// disc does not shadow a surface with itself.
+const int kShadowSearchTaps = 8;
+const int kShadowFilterTaps = 12;
+const float kGoldenAngle = 2.39996323;
+
+float ShadowRotation()
+{
+    const vec2 p = gl_FragCoord.xy + 5.588238 * mod(push.shadowFilter.w, 64.0);
+    return 6.28318531 * fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
+}
+
+// Tap i of n on a disc of radius 1, turned by `turn` (cosine, sine).
+vec2 VogelTap(int i, int n, vec2 turn)
+{
+    const float r = sqrt((float(i) + 0.5) / float(n));
+    const float a = float(i) * kGoldenAngle;
+    const vec2 p = r * vec2(cos(a), sin(a));
+    return vec2(p.x * turn.x - p.y * turn.y, p.x * turn.y + p.y * turn.x);
+}
+
+// The receiver's depth slope over the near partition's UV, from the
+// shadow coordinate's screen derivatives (taken in uniform control flow by
+// the caller); 0 where the surface is edge-on to the sun.
+vec2 ShadowDepthSlope(vec3 dx, vec3 dy)
+{
+    const float det = dx.x * dy.y - dx.y * dy.x;
+    if (abs(det) < 1e-14)
+        return vec2(0.0);
+    return vec2(dy.y * dx.z - dx.y * dy.z, dx.x * dy.z - dy.x * dx.z) / det;
+}
+
+// How much of the sun reaches xy (a UV in partition `far`, 0 near or 1 far)
+// with the soft filter; slope is the receiver's depth per UV there.
+float SoftShadow(vec2 xy, float reference, vec2 slope, int far, vec2 turn)
+{
+    const ivec2 size = textureSize(sampler2D(shadowMap, shadowMapSampler), 0);
+    const vec2 texel = 1.0 / vec2(size);
+    // The partition's tile: the near one is the top half, the far one the
+    // bottom; taps stay half a texel inside it.
+    const float top = far != 0 ? 0.5 : 0.0;
+    const vec2 lo = vec2(0.5 * texel.x, top + 0.5 * texel.y);
+    const vec2 hi = vec2(1.0 - 0.5 * texel.x, top + 0.5 - 0.5 * texel.y);
+    const float penumbra = far != 0 ? push.shadowDepth.y : push.shadowDepth.x;
+    const float widest = far != 0 ? push.shadowDepth.w : push.shadowDepth.z;
+    const float cap = far != 0 ? push.shadowFilter.y : push.shadowFilter.x;
+
+    // The blockers: the centre texel and a disc as wide as the widest filter.
+    float depthSum = 0.0;
+    float blockers = 0.0;
+    for (int i = 0; i <= kShadowSearchTaps; ++i)
+    {
+        const vec2 offset = i == kShadowSearchTaps ? vec2(0.0) : VogelTap(i, kShadowSearchTaps, turn) * widest;
+        const vec2 at = clamp(xy + offset * texel, lo, hi);
+        const float reach = cap * length(offset);
+        const float here = reference + clamp(dot(slope, offset * texel), -reach, reach);
+        const float stored = texelFetch(sampler2D(shadowMap, shadowMapSampler), ivec2(at * vec2(size)), 0).r;
+        if (stored < here)
+        {
+            depthSum += here - stored;
+            blockers += 1.0;
+        }
+    }
+    if (blockers == 0.0)
+        return 1.0;
+    const float radius = clamp(depthSum / blockers * penumbra, 1.0, widest);
+
+    float lit = 0.0;
+    for (int i = 0; i < kShadowFilterTaps; ++i)
+    {
+        const vec2 offset = VogelTap(i, kShadowFilterTaps, turn) * radius;
+        const vec2 at = clamp(xy + offset * texel, lo, hi);
+        const float reach = cap * length(offset);
+        const float here = reference + clamp(dot(slope, offset * texel), -reach, reach);
+        lit += textureLod(sampler2DShadow(shadowMap, shadowMapSampler), vec3(at, here), 0.0);
+    }
+    return lit / float(kShadowFilterTaps);
+}
+#endif
+
+#if SOFT_SUN_SHADOW
+// The sun's shadow at xy in partition `far`: soft, or the game's four taps.
+float SunShadow(vec2 xy, float reference, int far, vec2 slope, vec2 turn)
+{
+    return push.shadowFilter.z != 0.0 ? SoftShadow(xy, reference, slope, far, turn) : ShadowTaps(xy, reference);
+}
+#endif
+
 void main()
 {
+#if SOFT_SUN_SHADOW
+    // The shadow coordinate's screen derivatives, taken here in uniform
+    // control flow, for the soft filter's depth bias.
+    const vec3 shadowDx = dFdx(texcoord4.xyz);
+    const vec3 shadowDy = dFdy(texcoord4.xyz);
+#endif
     const vec2 uv = texcoord0.xy;
     const vec4 colorSample = texture(sampler2D(colorMap, colorMapSampler), uv);
     vec3 color = colorSample.rgb;
@@ -383,19 +500,26 @@ void main()
     {
         const float reference = kClampDepthReference != 0 ? clamp(texcoord4.z, 0.0, 1.0) : texcoord4.z;
         const vec2 farUv = texcoord4.xy * pc.c[2].w + pc.c[2].xy;
+        // The receiver's depth slope in each partition's UV (the far one's
+        // is the near one's scaled by c2.w), and this pixel's turn of the
+        // soft filter's discs.
+        const vec2 nearSlope = ShadowDepthSlope(shadowDx, shadowDy);
+        const vec2 farSlope = nearSlope / pc.c[2].w;
+        const float spin = ShadowRotation();
+        const vec2 turn = vec2(cos(spin), sin(spin));
         const float partitionValue = texcoord4.w;
         if (partitionValue <= 1.0)
         {
-            shadow = ShadowTaps(texcoord4.xy, reference);
+            shadow = SunShadow(texcoord4.xy, reference, 0, nearSlope, turn);
             if (partitionValue > 0.75)
-                shadow = mix(shadow, ShadowTaps(farUv, reference), 4.0 * partitionValue - 3.0);
+                shadow = mix(shadow, SunShadow(farUv, reference, 1, farSlope, turn), 4.0 * partitionValue - 3.0);
         }
         else
         {
             // Towards the far partition's edge the shadow fades to the
             // volume's sun visibility.
             const float edge = max(abs(farUv.x - 0.5) * pc.c[4].x, abs(farUv.y - 0.75) * pc.c[4].y);
-            shadow = edge >= 8.0 ? volume.a : mix(ShadowTaps(farUv, reference), volume.a, clamp(edge - 7.0, 0.0, 1.0));
+            shadow = edge >= 8.0 ? volume.a : mix(SunShadow(farUv, reference, 1, farSlope, turn), volume.a, clamp(edge - 7.0, 0.0, 1.0));
         }
     }
 #endif

@@ -1947,6 +1947,31 @@ void R_ModernSceneDepth(const GfxViewInfo *viewInfo)
     hooks->sceneDepth(hooks->user, dx.device, &R_ModernScene(viewInfo));
 }
 
+void R_ModernSunShadow(const GfxViewInfo *viewInfo, bool sunShadowMap)
+{
+    const GfxModernHooks *hooks = R_ModernHooks();
+    if (!hooks || !hooks->sunShadow)
+        return;
+    // Each partition is a 1024-texel square (R_RENDERTARGET_SHADOWMAP_SUN)
+    // whose projection takes 2 / (texel * 1024) of a world unit across to
+    // clip space, and 1 / (depth range) along the sun (R_SunShadow
+    // MapProjectionMatrix).
+    GfxModernSunShadow shadow{};
+    shadow.on = sunShadowMap;
+    for (int i = 0; i < 2 && shadow.on; ++i)
+    {
+        const GfxMatrix &projection = viewInfo->sunShadow.partition[i].shadowViewParms.projectionMatrix;
+        if (projection.m[0][0] <= 0.0f || projection.m[2][2] <= 0.0f)
+        {
+            shadow.on = false;
+            break;
+        }
+        shadow.texel[i] = 2.0f / (projection.m[0][0] * 1024.0f);
+        shadow.depthUnits[i] = 1.0f / projection.m[2][2];
+    }
+    hooks->sunShadow(hooks->user, dx.device, &shadow);
+}
+
 void R_ModernSceneLit(const GfxViewInfo *viewInfo)
 {
     R_ModernEndLitPasses();

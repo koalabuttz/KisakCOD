@@ -79,6 +79,8 @@ back to them.
 | `r_modernAoHalf` | default, off, on | `KISAK_VK_MODERN_AO_HALF` |
 | `r_modernSsr` | default, off, on | `KISAK_VK_MODERN_SSR` |
 | `r_modernSsrDistance`, `r_modernSsrThickness` | -1, or above 0 | `KISAK_VK_MODERN_SSR_DISTANCE`, `_THICKNESS` |
+| `r_modernSoftShadows` | default, off, on | `KISAK_VK_MODERN_SOFT_SHADOWS` |
+| `r_modernShadowSoftness` | -1, or above 0 to 20 (degrees) | `KISAK_VK_MODERN_SHADOW_SOFTNESS` |
 | `r_modernTonemap` | default, clamp, neutral, agx, aces | `KISAK_VK_MODERN_TONEMAP` |
 | `r_modernDebug` | default, none, velocity, velocity-all, normals, ao, reflections | `KISAK_VK_MODERN_DEBUG` |
 
@@ -1447,6 +1449,53 @@ run draws and reads no planar view unless asked.
 
 **Next.** Water (`mp_bog`, whose water has its own shader), and planes found
 on their own.
+
+## Soft sun shadows
+
+Modern still draws CoD4's own sun shadow map (two 1024-texel partitions, the
+near one about a quarter of a world unit a texel and the far one about one
+unit, past which the primary lightmap's sun visibility takes over), but our
+lit shaders (`lm_sun.frag`, `lp_sun.frag`, the sun families with `hsm_`)
+filter it as percentage-closer soft shadows (Fernando 2005) instead of the
+game's four fixed taps, so a shadow is sharp where it meets its caster and
+softer the further it falls:
+
+1. a blocker search: the centre texel and 8 more on a Vogel disc as wide as
+   the widest filter (16 texels), fetched as depths; no blocker found is
+   fully lit;
+2. the filter radius: the average depth between the point and those
+   blockers, in world units, times the tangent of half the sun's apparent
+   size (`r_modernShadowSoftness`, 1.5 degrees by default; the real sun is
+   0.53), over the partition's texel size, from 1 texel to 16;
+3. 12 depth-compare taps on a Vogel disc of that radius (each tap the
+   hardware's bilinear 2x2 compare).
+
+Both discs turn by interleaved gradient noise (Jimenez 2014) that moves every
+frame, so the TAA averages them into a smooth edge. Each tap compares with
+the receiver's depth at that tap, from the shadow coordinate's screen
+derivatives (receiver plane depth bias, Isidoro 2006, capped at a 2:1 slope),
+so the wider disc does not shadow a surface with itself. The partition blend
+and the far partition's edge fade are the game's, with the soft filter in
+each partition (taps stay inside the partition's half of the map).
+
+The engine hands the back end each partition's texel size and depth scale
+from its shadow projection before a view's lit surfaces draw
+(`GfxModernHooks::sunShadow`, `R_ModernSunShadow` in `r_scene.cpp`;
+`front::ModernSunShadow`). The back end turns them into the lit shaders' push
+constants after the planar reflection's (`lg::ModernShadowParams`, 32 bytes
+at offset 96; the block is now 128 bytes, Vulkan's guaranteed minimum). A
+view without the sun's shadow map, or with soft shadows off, pushes `on` 0
+and the shaders take the game's taps. On by default with our lit shaders;
+`r_modernSoftShadows off` (or `KISAK_VK_MODERN_SOFT_SHADOWS=0`) keeps the
+game's. Their cost is inside the lit passes' own time; the statistics line is
+`modern: N scenes with soft sun shadows (sun 1.50 degrees)`. Spot light
+shadows keep the game's taps for now.
+
+The `modern_soft_shadow` check scene draws lm_hsm_sun_r0c0 across a blocker's
+edge in the shadow map: the game's taps give an edge about a texel wide, the
+soft filter one whose radius is four texels at that depth (three texels
+either side part lit, ten away fully lit or shaded). With
+`KISAK_VK_MODERN_SOFT_SHADOWS=0` both rows are sharp.
 
 ## Next
 

@@ -70,6 +70,8 @@ struct ModernTuning
     float aoEdge = -1.0f;
     float ssrDistance = -1.0f;
     float ssrThickness = -1.0f;
+    int softShadows = -1;         // soft sun shadows (KISAK_VK_MODERN_SOFT_SHADOWS)
+    float shadowSoftness = -1.0f; // the sun's apparent size, degrees (KISAK_VK_MODERN_SHADOW_SOFTNESS)
 };
 
 // The debug view over each Modern scene (ModernTuning::debug,
@@ -349,4 +351,15 @@ bool ModernPlanarWanted(IDirect3DDevice9 *device);
 // view (the program then draws nothing for it).
 bool ModernPlanarBegin(IDirect3DDevice9 *device, const ModernPlanarView &view);
 void ModernPlanarDone(IDirect3DDevice9 *device, const ModernPlanarView &view);
+// The sun's shadow map as a view's lit surfaces will read it, given before
+// they draw (docs/vulkan-modern.md "Soft sun shadows"): the Modern lit
+// shaders size their soft filter from it. Nothing on a back end without a
+// Modern path.
+struct ModernSunShadowView
+{
+    bool on = false;            // the view's lit surfaces read the sun's shadow map
+    float texel[2] = {};        // world units across a texel, near and far partitions
+    float depthUnits[2] = {};   // world units per unit of the map's depth, near and far
+};
+void ModernSunShadow(IDirect3DDevice9 *device, const ModernSunShadowView &view);
 } // namespace gfx_vk::d3d9

@@ -624,7 +624,10 @@ struct Device
     // modernReflectionsSampler) and in their push constants.
     Image *modernPlanar = nullptr;
     ModernPlanarParams modernPlanarParams{};
-    // Bumped whenever SetModernPlanar changes the parameters; the parameters
+    // SetModernShadow: pushed after modernPlanarParams.
+    ModernShadowParams modernShadowParams{};
+    // Bumped whenever SetModernPlanar or SetModernShadow changes the
+    // parameters; the parameters
     // were last pushed for pushedPlanarGeneration in the bound layout (0:
     // not since the layout or the command buffer changed).
     uint64_t modernPlanarGeneration = 1;
