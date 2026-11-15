@@ -149,7 +149,8 @@ hunt goes to where it last saw or heard them.
   `compass_waypoint_*` icons: "defend" ones are to hold, the rest (capture,
   target, bomb, defuse) to take. An icon on an entity (a carried flag or bomb)
   follows it, as on the compass. Other icons (killstreak markers) are not
-  objectives.
+  objectives. `bot_log 1` prints a team's objective count when
+  it changes.
 
 `src/bots/bot_spots.h` is the map knowledge a player gets from playing a map a
 few times, worked out once per map while the bots play: spots 200 units apart
@@ -399,7 +400,10 @@ view; on both teams at least one bot must have fired. It prints how often the
 bots opened fire and the hits and kills the game logged. With `--brain 1` it
 also prints how often bots took cover and went hunting, the parts the
 commander gave, the callouts, pushes, anchors and objective moves, and when
-the map's spots were ready. Views are a
+the map's spots were ready. With `--objectives` (and more than four bots) the
+fixture starts the stock Domination game type instead of team deathmatch: the
+bots of both teams must read flags off their compass (`bots: team N
+objectives: take T, hold H`), and at least one must go to take one. Views are a
 quarter second apart because at one a second any turn would fit: the short way
 round is never more than 180 degrees.
 
