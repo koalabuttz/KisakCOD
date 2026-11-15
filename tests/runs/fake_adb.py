@@ -295,7 +295,8 @@ def app(extra):
 
 
 def emulator(argv):
-    (STATE / "emulator-args.txt").write_text(" ".join(argv) + "\n")
+    (STATE / "emulator-args.txt").write_text(" ".join(argv) + "\n"
+                                             + f"ANDROID_AVD_HOME={os.environ.get('ANDROID_AVD_HOME', '')}\n")
     if os.environ.get("FAKE_EMULATOR_FAIL") == "1":
         return 1
     (STATE / "emulator.pid").write_text(str(os.getpid()))

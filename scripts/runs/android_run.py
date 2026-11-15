@@ -105,9 +105,12 @@ booted (``boot_timeout``, default 300 s), and shuts it down after the run
 answers on the port is used as found and left running. ``game_files`` copies
 the game's files from this machine (``from``, your own install) into the
 app's folder with ``adb push`` when ``check`` (a file such as
-``main/iw_00.iwd``) is not there yet, which is once per virtual device::
+``main/iw_00.iwd``) is not there yet, which is once per virtual device.
+``emulator.env`` sets the emulator's environment, such as ``ANDROID_AVD_HOME``
+for virtual devices kept off the system drive::
 
-      "emulator": {"exe": "C:/Android/Sdk/emulator/emulator.exe", "avd": "kisak-a13-x64"},
+      "emulator": {"exe": "E:/Android/Sdk/emulator/emulator.exe", "avd": "kisak-a13-x64",
+                   "env": {"ANDROID_AVD_HOME": "E:/Android/avd"}},
       "game_files": {"from": "D:/Games/Call of Duty 4", "check": "main/iw_00.iwd"},
       "build": {..., "args": ["--abi", "x86_64"]},
 
@@ -298,6 +301,8 @@ def load_recipe(path):
             raise RecipeError("emulator.port is an even number from 5554 to 5682")
         if (recipe.get("device") or {}).get("serial"):
             raise RecipeError("give device.serial or emulator, not both: the emulator is emulator-<port>")
+        if not isinstance(emulator.get("env", {}), dict):
+            raise RecipeError("emulator.env is an object of environment variables")
     files = recipe.get("game_files")
     if files and (not files.get("from") or not re.fullmatch(r"[A-Za-z0-9_./-]+", str(files.get("check", "")))):
         raise RecipeError("game_files needs from (the game folder on this machine) and check (a file in it, "
@@ -482,7 +487,9 @@ class Emulator:
         started = time.time()
         log = open(self.out / "emulator.log", "wb")
         try:
-            self.process = subprocess.Popen(emulator_argv(self.recipe), stdout=log, stderr=subprocess.STDOUT)
+            env = dict(os.environ, **{key: str(value) for key, value in
+                                      (self.recipe["emulator"].get("env") or {}).items()})
+            self.process = subprocess.Popen(emulator_argv(self.recipe), stdout=log, stderr=subprocess.STDOUT, env=env)
         except OSError as error:
             self.result["status"] = f"cannot start: {error}"
             return False
