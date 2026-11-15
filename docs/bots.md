@@ -138,7 +138,7 @@ hunt goes to where it last saw or heard them.
   |---|---|---|
   | push | the boldest | goes to the latest callout (10 s at most), then roams |
   | anchor | the most patient | goes to a spot that overlooks the callout nearest it, holds there for 7 to 35 s, crouched or standing, watching it |
-  | attack | the boldest, when the compass shows places to take | goes to the objective and stays on it, holding use (a flag captures while someone stands in it, a bomb plants or defuses while use is held); on it, it fights an enemy in view but does not leave to chase a sound or a lead |
+  | attack | the boldest, when the compass shows places to take | goes to the objective and stays on it, holding use (a flag captures while someone stands in it, a bomb plants or defuses while use is held); on its way and on it, it fights an enemy in view but does not leave to chase a sound or a lead |
   | defend | the most patient, when the compass shows places to hold | holds a spot that overlooks the objective for 8 to 35 s, watching it |
   | roam | the rest | roams as before |
 

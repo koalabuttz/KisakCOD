@@ -93,7 +93,7 @@ struct Situation
     int hurtAgoMs = 1000000;     // since it last took damage
     bool coverKnown = false;     // the map sense found cover from the threat
     bool inCover = false;        // and the bot is there
-    bool onObjective = false;    // standing on an objective its team takes
+    bool forObjective = false;   // going for, or on, an objective its team takes
 };
 
 struct IntentScores
@@ -156,9 +156,9 @@ inline IntentScores ScoreIntents(const Situation &s, const Personality &p)
         if (hunt > 0.0f)
             scores.hunt = hunt * (0.6f + 0.8f * p.aggression);
     }
-    // On a flag it is taking, a player stays on it rather than chase what
-    // they heard: staying (its part, under roam) wins over a hunt.
-    if (s.onObjective)
+    // Going for a flag, or on it, a player keeps at it rather than chase what
+    // they heard: its part (under roam) wins over a hunt.
+    if (s.forObjective)
     {
         scores.roam = 0.6f;
         scores.hunt *= 0.25f;

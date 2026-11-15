@@ -974,6 +974,7 @@ void HoldFor(BotSlot &bot, int untilMs, const float *facing, bool crouched)
 RolePlan PlanRole(BotSlot &bot, int clientNum, const kb::NavMesh &nav, const float *origin, bool arrived)
 {
     TeamState *team = BoardOf(clientNum);
+    const bool wasAtObjective = bot.atObjective;
     bot.atObjective = false;
     // Its last goal could not be reached: roam a moment first.
     if (svs.time < bot.roleRetryAt)
@@ -1046,6 +1047,8 @@ RolePlan PlanRole(BotSlot &bot, int clientNum, const kb::NavMesh &nav, const flo
                 // in it) and press use (a bomb plants or defuses on it).
                 HoldFor(bot, svs.time + 1000, nullptr, false);
                 bot.atObjective = Distance2D(origin, bot.objective) < 96.0f;
+                if (bot.atObjective && !wasAtObjective && LogOn())
+                    Com_Printf(CON_CHANNEL_SERVER, "bots: %d is on an objective\n", clientNum);
             }
             return RolePlan::Keep;
         }
@@ -1153,7 +1156,7 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
     s.hurtAgoMs = svs.time - bot.hurtAt;
     s.coverKnown = bot.coverKnown;
     s.inCover = bot.coverKnown && Distance2D(origin, bot.cover) < 40.0f && std::fabs(origin[2] - bot.cover[2]) < 48.0f;
-    s.onObjective = bot.role == kb::Role::Attack && bot.objectiveKnown && Distance2D(origin, bot.objective) < 160.0f;
+    s.forObjective = bot.role == kb::Role::Attack && bot.objectiveKnown;
 
     const kb::Intent intent = bot.mind.Decide(s, bot.personality);
     if (bot.mind.changed && bot_log && bot_log->current.integer)

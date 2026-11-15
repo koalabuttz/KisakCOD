@@ -632,6 +632,8 @@ def validate_objectives(output: str) -> list:
         shown[team] = max(shown.get(team, 0), int(take) + int(hold))
     attacks = len(re.findall(r"^bots: \d+ attacks an objective", output, re.M))
     held = sum(1 for _, _, hold in TEAM_OBJECTIVES_ROW.findall(output) if int(hold) > 0)
+    arrived = len(re.findall(r"^bots: \d+ is on an objective\s*$", output, re.M))
+    print(f"INFO: bots got onto an objective {arrived} times")
     print(f"INFO: a team's compass showed a flag of its own to hold {held} times "
           "(a capture turns a flag to take into one to hold)")
     return [
