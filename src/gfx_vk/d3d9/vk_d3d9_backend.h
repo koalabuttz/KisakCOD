@@ -104,6 +104,16 @@ bool BackendModernEffectsOnDisplay(Backend *backend);
 // True when it was; false when it is not wanted, not an 8-bit colour cube
 // with levels, or on a back end without a Modern path.
 bool BackendModernReflectionProbe(Backend *backend, lg::Device *legacy, lg::Texture *probe);
+// Re-capturing the reflection probes (vk_d3d9.h ModernProbeCapture): whether
+// it is wanted (KISAK_VK_MODERN_PROBES_CAPTURE=1 with linear light and the
+// probe filter); capturing on or off (while on, each scene's linear-light
+// image is read back before its tonemap); and a rectangle of the last one
+// read back, as linear light (rgb floats, rows from the top; waits for the
+// GPU; false when there is none or the rectangle is outside it).
+bool BackendModernProbeCaptureWanted(Backend *backend);
+void BackendModernProbeCapture(Backend *backend, bool on);
+bool BackendModernProbeCaptureRead(Backend *backend, uint32_t x, uint32_t y, uint32_t width, uint32_t height,
+                                   float *rgb);
 // Planar reflections (vk_d3d9.h ModernPlanarBegin): whether a planar view is
 // wanted this frame; the planar image (linear light) and depth surface of the
 // view's size to draw it into, made or remade as needed (false when there is

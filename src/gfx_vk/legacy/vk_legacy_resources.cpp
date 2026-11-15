@@ -972,6 +972,8 @@ void DestroyShader(Device *device, Shader *shader)
     DestroyShaderModule(device->core, shader->module);
     for (const auto &entry : shader->linked)
         DestroyShaderModule(device->core, entry.second);
+    for (const auto &entry : shader->byteModules)
+        DestroyShaderModule(device->core, entry.second);
     delete shader;
 }
 

@@ -899,6 +899,13 @@ void SV_CalcPings()
                     if (v1->header.netchan.remoteAddress.type)
                         Com_DPrintf(CON_CHANNEL_SERVER, "Giving %s a 999 ping - !count:\n", v1->name);
                     v1->ping = 999;
+                    // KisakCOD's bots (docs/bots.md) show a ping of their own.
+                    if (v1->header.netchan.remoteAddress.type == NA_BOT)
+                    {
+                        const int botPing = Bot_Ping(i);
+                        if (botPing >= 0)
+                            v1->ping = botPing;
+                    }
                 }
             }
             else

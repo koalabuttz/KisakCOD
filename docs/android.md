@@ -145,6 +145,57 @@ What is Android-specific in the client:
 way it checks the server, except that a library has no program interpreter,
 may need the three libraries above, and must export `SDL_main` alone.
 
+`build_apk.py --abi x86_64` builds the app for the Android emulator on a PC
+instead (`KisakCOD-<config>-x86_64.apk`; its builds sit beside the arm64 ones
+in `--work`, named with `-x86_64`). It takes the x86_64 Linux track's code. No
+device is x86, and the emulator draws through the PC's own GPU driver, so it
+finds no Adreno-only fault; it is for runs nobody has to watch
+(`scripts/runs/android_run.py`).
+
+### The first screen
+
+The app opens on a screen of big buttons (`LauncherActivity.java`) that the
+controller works: the d-pad or left stick moves, A presses, L1 and R1 change
+the number of bots. It lists every map in the game folder (`zone/*/mp_*.ff`
+and `usermaps`); a map starts a match against KisakCOD's bots
+(`+set developer_script 1 +set bot_brain 1 +set scr_testclients <n> +set
+g_gametype war|dm +devmap <map>`), "Multiplayer" starts the multiplayer
+game's own menu and "Campaign" the singleplayer game's. "Visuals" switches
+every start between Legacy (`+set r_visuals legacy`) and Modern (`+set
+r_aaSamples 1 +set r_visuals modern`, docs/vulkan-modern.md); the choice is
+kept with the bot count and mode. Modern has not been measured on the Adreno
+yet, and the sun's shadows stay off on Android (`sm_enable 0`), so the fog
+shows no light shafts there. The game runs in a
+process of its own (`:game`), which ends with the game: the engine never
+starts twice in one process, and the first screen comes back when the game
+quits.
+
+Quitting ends the game's process with `_exit(0)` (`Sys_Quit`, `src/linux/main.cpp`): a plain `exit()` ran Android's UI libraries' exit handlers while the activity's render thread still drew, and every quit ended in SIGABRT in an hwui thread.
+
+### The campaign
+
+The singleplayer game, KisakCOD-sp, builds as `libmain_sp.so` beside
+`libmain.so` (`sp_game.cmake`, `build_apk.py`), through the same Vulkan back
+end. CampaignActivity (KisakActivity in the same `:game` process) loads it
+instead of `libmain.so`, as KisakActivity does when the intent's boolean extra
+`campaign` is true; runs that can only name an activity use the first:
+
+```
+adb shell am start -n org.kisakcod.game/.CampaignActivity --es args "+devmap killhouse"
+```
+
+A level needs an active player profile ("Tried to use a player profile before
+it was set"), and a handheld has no keyboard to name one, so the first
+campaign start makes one called `player` (`home/players/profiles/active.txt`)
+unless the home folder has one. The controller works as in multiplayer
+(`KISAK_LINUX_GAMEPAD`: `mp_client_gamepad.cpp` serves both games). It has
+not run on a device or the emulator yet.
+
+The stock scripts read `scr_testclients` only in their developer blocks
+(`/# ... #/`), so without `developer_script 1` no bot joins (run 6 on the
+Pocket 6: the dvar read back as 9 and nobody came). `devmap` is what the PC's
+bot runs use (`scripts/runs/recipes/vulkan-ab-mp-crash.json`).
+
 ### Installing and starting the app
 
 Install, start once (the first start makes the app's folder), copy the game
@@ -162,7 +213,11 @@ adb logcat -s KisakCOD SDL
 
 Extra engine arguments for a run go in the `args` extra, split at spaces:
 `adb shell am start -n org.kisakcod.game/.KisakActivity --es args "+set developer 1"`.
-The game's console goes to logcat under the tag KisakCOD: Android drops an
+The activity starts the game without shadow maps (`+set sm_enable 0`): on
+the Adreno 740 the sun's shadows flickered from frame to frame (2026-11-15,
+cause not found yet). The activity always starts the game full screen (`+set r_fullscreen 1`, so
+SDL hides Android's system bars; run 3 had a 1920x970 window under the
+navigation bar). The game's console goes to logcat under the tag KisakCOD: Android drops an
 app's stdout and stderr, so `src/linux/main.cpp` copies them there.
 
 First start on the Retroid Pocket 6 (2026-11-15, CI APK of 91d7799): the menu
@@ -174,7 +229,52 @@ asks for no rotation (`ChoosePreTransform` in `src/gfx_vk/vk_core.cpp`), the
 compositor turns the picture, and the `VK_SUBOPTIMAL_KHR` that Android
 reports for that alone does not rebuild the swapchain. Drawing the picture
 turned (Android's pre-rotation) would save the compositor that work; it is
-left for the speed stage.
+left for the speed stage. Android tells such a swapchain nothing when the
+window changes size (it goes full screen just after the game starts) and
+scales the old picture, so every 32nd frame compares the surface's size with
+the swapchain's and rebuilds it when they differ (runs 4 and 5 kept a
+1920x970 swapchain on the 1920x1080 screen).
+
+Android takes the window away from an app sent to the background (Home, the
+lock screen) and gives it a new one when it comes back; SDL meanwhile holds
+the game's main thread in its event loop. Presents, acquires and size queries
+on the old window answer `VK_ERROR_SURFACE_LOST_KHR`, which no longer fails
+the core: the next frame lets go of the swapchain and the surface and asks
+the window for a new surface (`RenewSurface` in `src/gfx_vk/vk_core.cpp`),
+skipping frames until there is one, and builds a swapchain on it. The Vulkan
+window probe's `--lose-surface` (in `test_vulkan_window_probe.py`) does the
+same on a desktop window. On Android the client makes the surface itself
+from the activity's `Surface` as Java has it at that moment
+(`AndroidWindowNow` in `src/linux/client/vulkan/vulkan_backend.cpp`): SDL's
+copy of the window goes on the Java thread while the render thread may be
+asking, and with the screen turned off SDL handed Vulkan a null window
+(run 7, a crash in `vkCreateAndroidSurfaceKHR`).
+
+The "computer changed, set optimal settings?" question is not asked on
+Android: a handheld measures a different CPU speed at nearly every start, and
+the box came up over a black screen (run 7).
+
+What run 4 (mp_crash on the Pocket 6) showed, and the fixes:
+
+- Sticks and triggers did nothing while the buttons worked. The window host
+  started SDL's text input for the window's whole life, as on a desktop; on
+  Android that brings up the on-screen keyboard and moves input focus to
+  SDL's hidden text field, which gets key events but not the controller's
+  motion. Where typing needs an on-screen keyboard
+  (`SDL_HasScreenKeyboardSupport`), text input now runs only while the game
+  wants text: the console, the chat line or a menu text field
+  (`WindowHost::SetTextWanted`, `WantsText` in `mp_client_input.cpp`).
+- A tap clicked where the previous tap was: the engine took the pointer's
+  position once a frame but the click at once. A click now hands over a
+  moved pointer first (`ClientWindow::DeliverPointer`).
+- Models (the car, the hands and gun) were flat colours. Their texture
+  coordinates and normals are UBYTE4 vertex data, which the adapter reads as
+  `R8G8B8A8_USCALED`; Adreno reads no USCALED vertex data. Such a device now
+  gets them as `R8G8B8A8_UNORM`, and the vertex shaders reading them scale
+  them back to bytes (`Device::byteStandIn`, `byteInputs` in
+  `legacy_shader::BuildSpirv`). `KISAK_VK_BYTE_INPUTS=unorm` takes that path
+  on any device; CI runs the Legacy checks with it, and the `byte_inputs`
+  scene fails without the scale.
 
 ## Running the server on a device
 

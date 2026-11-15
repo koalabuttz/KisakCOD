@@ -815,8 +815,14 @@ void G_PrintFastFileErrors(const char *fastfile)
         MyAssertHandler(".\\game_mp\\g_main_mp.cpp", 960, 1, "%s", "rawfile");
     if (rawfile->len)
     {
+        // KISAK: the fast file's build log is Infinity Ward's, written when the
+        // file was made (mp_crash_snow's lists 22 voice-over files missing on
+        // their machine), so it goes to the console without counting towards
+        // the map's load errors: no "There were 2 errors" box for stock data.
+        const uint32_t errorsBefore = com_errorPrintsCount;
         Com_PrintError(CON_CHANNEL_ERROR, "There were errors when building fast file '%s'\n", fastfile);
         Com_PrintError(CON_CHANNEL_ERROR, "%s", (char *)rawfile->buffer);
+        com_errorPrintsCount = errorsBefore;
     }
 }
 

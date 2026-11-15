@@ -2,7 +2,8 @@
 //
 // Made-up rooms in game units, z up: a floor, two rooms with a door, a door
 // too narrow for a player, a step and a ledge, ramps, a floor facing down,
-// two rooms with no way between. The mesh must find the ways a player has
+// two rooms with no way between, platforms a player steps down from (or
+// cannot: too high, a railing, a wall). The mesh must find the ways a player has
 // and no others, and its cache blob must refuse anything damaged.
 
 #include <bots/bot_navmesh.h>
@@ -177,6 +178,115 @@ static void Heights()
     Check(!Reaches(b.mesh, start, onSteepTop), "a 60 degree ramp is not");
 }
 
+// A yard 1600 x 800 with a platform `height` high over its far half; its
+// edge at x 800 looks over the floor. `rail` is the height of a wall along
+// that edge above the platform (0 for none).
+static void Platform(kb::NavGeometry &g, float height, float rail)
+{
+    Floor(g, 0, 0, 1600, 800);
+    Box(g, 800, 0, 0, 1600, 800, height);
+    if (rail > 0.0f)
+        Box(g, 800, 0, height, 808, 800, height + rail);
+}
+
+static void Drops()
+{
+    std::printf("\n== drop-downs ==\n");
+    float below[3] = {300, 400, 0};
+    {
+        kb::NavGeometry g;
+        Platform(g, 96, 0);
+        Built b;
+        Build(g, b);
+        std::printf("     %d drop-down(s)\n", b.stats.dropLinks);
+        float top[3] = {1200, 400, 96};
+        Check(b.ok && b.stats.dropLinks > 0 && b.mesh.DropLinkCount() == b.stats.dropLinks,
+              "a 96-unit platform over a floor has drop-downs, and the loaded mesh holds them all");
+        float pts[32][3];
+        const int n = b.mesh.FindPath(top, below, pts, 32);
+        bool drops = false;
+        for (int i = 1; i < n; ++i)
+            drops = drops || (pts[i - 1][2] - pts[i][2] > 80.0f && Dist2D(pts[i - 1], pts[i]) < 100.0f);
+        Check(Reaches(b.mesh, top, below), "the way from the platform steps off it to the floor below");
+        Check(drops, "with a corner at the edge and the next on the floor below it");
+        Check(!Reaches(b.mesh, below, top), "but not back up: a drop-down is one way");
+    }
+    {
+        kb::NavGeometry g;
+        Platform(g, 200, 0);
+        Built b;
+        Build(g, b);
+        float top[3] = {1200, 400, 200};
+        Check(b.ok && b.stats.dropLinks == 0 && !Reaches(b.mesh, top, below),
+              "a 200-unit drop would hurt: no drop-down");
+    }
+    {
+        kb::NavGeometry g;
+        Platform(g, 96, 40);
+        Built b;
+        Build(g, b);
+        float top[3] = {1200, 400, 96};
+        Check(b.ok && b.stats.dropLinks == 0 && !Reaches(b.mesh, top, below),
+              "a 40-unit railing along the edge: no drop-down");
+    }
+    {
+        kb::NavGeometry g;
+        Platform(g, 96, 200);
+        Built b;
+        Build(g, b);
+        float top[3] = {1200, 400, 96};
+        Check(b.ok && b.stats.dropLinks == 0 && !Reaches(b.mesh, top, below),
+              "a wall between the platform and the floor: no drop-down");
+    }
+    {
+        // A balcony: a slab 16 thick at z 104 over the floor, 200 deep,
+        // reached by nothing but the drop. The floor under it stays a floor.
+        kb::NavGeometry g;
+        Floor(g, 0, 0, 1600, 800);
+        Box(g, 800, 0, 88, 1000, 800, 104);
+        Built b;
+        Build(g, b);
+        float balcony[3] = {900, 400, 104};
+        float under[3] = {900, 400, 0};
+        Check(b.ok && Reaches(b.mesh, balcony, below), "from a balcony the way drops to the floor");
+        Check(Reaches(b.mesh, below, under), "and the floor under the balcony is still walked");
+    }
+}
+
+static void Storeys()
+{
+    std::printf("\n== a goal under a low ceiling ==\n");
+    // A floor, and over its far half an upper floor whose top is 100 units
+    // up (84 of clearance under it), reached by nothing but its edge.
+    kb::NavGeometry g;
+    Floor(g, 0, 0, 1600, 800);
+    Box(g, 800, 0, 84, 1600, 800, 100);
+    Built b;
+    Build(g, b);
+    Check(b.ok, "the two storeys build");
+    float start[3] = {300, 400, 0};
+    // A shot heard at a player's eye, 60 up, under the upper floor: its top
+    // is closer than the shooter's own floor.
+    float eye[3] = {1200, 400, 60};
+    float pts[32][3];
+    bool complete = false;
+    float onMesh[3] = {};
+    int n = b.mesh.FindPath(start, eye, pts, 32, &complete, onMesh);
+    Check(n >= 2 && std::fabs(pts[n - 1][2]) < 6.0f && complete && std::fabs(onMesh[2]) < 6.0f,
+          "the way to an eye under the upper floor ends on the floor under it, not upstairs");
+    float chest[3] = {1200, 400, 42};
+    n = b.mesh.FindPath(start, chest, pts, 32, &complete);
+    Check(n >= 2 && std::fabs(pts[n - 1][2]) < 6.0f && complete, "and so does the way to a chest");
+    float top[3] = {1300, 400, 100};
+    n = b.mesh.FindPath(top, eye, pts, 32, &complete);
+    Check(n >= 2 && std::fabs(pts[n - 1][2]) < 6.0f && complete,
+          "from upstairs, the way to a player right below drops off the edge and comes back under");
+    float upstairs[3] = {1200, 400, 160};
+    n = b.mesh.FindPath(start, upstairs, pts, 32, &complete, onMesh);
+    Check(n >= 2 && !complete && std::fabs(onMesh[2] - 100.0f) < 6.0f,
+          "an eye upstairs is upstairs, and from below no way reaches it");
+}
+
 static void Facing()
 {
     std::printf("\n== which side is the floor ==\n");
@@ -331,6 +441,8 @@ int main()
     OpenFloor();
     Doors();
     Heights();
+    Drops();
+    Storeys();
     Facing();
     Islands();
     Nearby();

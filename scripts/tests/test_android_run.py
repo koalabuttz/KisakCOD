@@ -147,6 +147,7 @@ def test_whole_run(work):
     report = (out / "report.md").read_text()
     check("install -r: ok" in report and "| crash | ok |" in report and results["sha256"] in report, "report")
     check(made.count("am force-stop org.kisakcod.game") >= 4, "force-stop before and after each launch")
+    check("pidof org.kisakcod.game:game" in made, "the game's own process is watched")
 
 
 def test_variants(work):
@@ -170,6 +171,35 @@ def test_failures(work):
     launch = json.loads((work / "out-crash" / "results.json").read_text())["launches"][0]
     check(done.returncode == 1 and launch["status"] == "crash", f"crash: {launch.get('status')}")
     check(any("Fatal signal 11" in line for line in launch["crash_lines"]), "crash line kept")
+
+    launches = [{"name": "d", "args": ["+devmap", "mp_crash"], "at_map": ["2 quit"]}]
+    path = write_recipe(work, launches)
+    done = run(work, path, work / "out-died", env={"FAKE_APP_EXIT": "1"})
+    launch = json.loads((work / "out-died" / "results.json").read_text())["launches"][0]
+    check(done.returncode == 1 and launch["status"] == "died" and launch["seconds"] < 10,
+          f"a game that ends without its quit has died, though the launcher's process stays: {launch}")
+
+    done = run(work, path.with_name(path.name), work / "out-one", env={"FAKE_ONE_PROCESS": "1"})
+    launch = json.loads((work / "out-one" / "results.json").read_text())["launches"][0]
+    check(done.returncode == 0 and launch["status"] == "ok" and launch["events"].get("quit"),
+          f"a build with one process: {launch}")
+
+    # A late "start" step does not hold back a "map" step due sooner.
+    launches = [{"name": "o", "args": ["+devmap", "mp_crash"], "at_map": ["1 quit"],
+                 "host": [{"after": "start", "at": 30, "do": "screencap", "name": "late"},
+                          {"after": "map", "at": 0.2, "do": "screencap", "name": "early"}]}]
+    path = write_recipe(work, launches)
+    run(work, path, work / "out-order")
+    launch = json.loads((work / "out-order" / "results.json").read_text())["launches"][0]
+    steps = {step["name"]: step for step in launch["host_steps"]}
+    check(steps["early"].get("ok") and steps["late"].get("not_run") == "the launch ended first",
+          f"each host step waits only for its own moment: {launch['host_steps']}")
+
+    launches = [{"name": "q", "at_menu": ["0.3 quit"]}]
+    path = write_recipe(work, launches)
+    done = run(work, path, work / "out-quit-crash", env={"FAKE_APP_CRASH_AT_QUIT": "1"})
+    launch = json.loads((work / "out-quit-crash" / "results.json").read_text())["launches"][0]
+    check(done.returncode == 1 and launch["status"] == "crash_at_quit", f"a crash at the quit: {launch['status']}")
 
     launches = [{"name": "l", "at_menu": ["0.2 quit"]}]
     path = write_recipe(work, launches)
@@ -206,8 +236,10 @@ def test_emulator(work):
     game = work / "cod4"
     (game / "main").mkdir(parents=True)
     (game / "main" / "iw_00.iwd").write_bytes(b"iwd")
-    (game / "zone").mkdir()
-    (game / "zone" / "x.ff").write_bytes(b"ff")
+    (game / "zone" / "english").mkdir(parents=True)
+    (game / "zone" / "english" / "x.ff").write_bytes(b"ff")
+    (game / "players" / "profiles" / "my player").mkdir(parents=True)
+    (game / "players" / "profiles" / "my player" / "config_mp.cfg").write_bytes(b"cfg")
     apk = work / "app.apk"
     apk.write_bytes(b"PK emu")
     state = work / "emu-device"
@@ -230,7 +262,9 @@ def test_emulator(work):
     for word in ("-avd kisak-a13-x64", "-port 5556", "-gpu host", "-no-window", "-no-snapshot-save",
                  "ANDROID_AVD_HOME=E:/Android/avd"):
         check(word in args, f"emulator started with {word}: {args}")
-    check((state / "sdcard" / "Android/data/org.kisakcod.game/files/zone/x.ff").is_file(), "game files pushed")
+    files = state / "sdcard" / "Android/data/org.kisakcod.game/files"
+    check((files / "zone/english/x.ff").is_file() and (files / "players/profiles/my player/config_mp.cfg").is_file(),
+          "game files pushed, folders three deep and with a space made first")
     check("-s emulator-5556" in (state / "calls.txt").read_text(), "adb talks to emulator-5556")
     check(not (state / "booted").exists(), "the emulator is down after the run")
 

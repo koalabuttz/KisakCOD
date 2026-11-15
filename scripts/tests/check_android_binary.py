@@ -17,10 +17,11 @@ ELF file with the NDK's llvm-readelf and llvm-objdump:
   * it holds no fused multiply-add instruction (-ffp-contract=off): float
     results have to match x86's, as on Arm Linux (docs/linux-arm64.md).
 
-With --library the file is libmain.so, the game client in the APK: a shared
+With --library the file is libmain.so or libmain_sp.so, the multiplayer
+client or the campaign in the APK: a shared
 object with no program interpreter that may also need the libraries packed
 beside it (libSDL3.so, libopenal.so, libd3d9_unavailable.so) and Android's
-liblog.so, and exports
+liblog.so and libandroid.so, and exports
 SDL_main, the one name SDL3's activity looks up, and nothing else.
 
 --ndk defaults to $ANDROID_NDK_HOME, $ANDROID_NDK_ROOT or $ANDROID_NDK.
@@ -33,8 +34,10 @@ import subprocess
 import sys
 
 ALLOWED_LIBRARIES = {'libc.so', 'libm.so', 'libdl.so'}
-# liblog.so is Android's own: the client copies its console to logcat.
-APP_LIBRARIES = {'libSDL3.so', 'libopenal.so', 'libd3d9_unavailable.so', 'liblog.so'}
+# liblog.so and libandroid.so are Android's own: the client copies its console
+# to logcat, and the Vulkan host takes the activity's window from its Surface
+# (ANativeWindow_fromSurface) when Android gives it a new one.
+APP_LIBRARIES = {'libSDL3.so', 'libopenal.so', 'libd3d9_unavailable.so', 'liblog.so', 'libandroid.so'}
 APP_EXPORTS = ['SDL_main']
 INTERPRETER = '/system/bin/linker64'
 MIN_ALIGNMENT = 16 * 1024

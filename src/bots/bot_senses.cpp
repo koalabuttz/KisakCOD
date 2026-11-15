@@ -221,6 +221,11 @@ uint32_t JammerPerkBit()
 
 } // namespace
 
+int Bot_ShotsFired()
+{
+    return s_shotCount;
+}
+
 int Bot_Sense(int clientNum, kb::Perception &perception, const kb::PerceptionParams &params, int now, int lastSense,
               kb::Rng &rng, BotNotice *notices, int maxNotices)
 {
@@ -235,6 +240,13 @@ int Bot_Sense(int clientNum, kb::Perception &perception, const kb::PerceptionPar
     const team_t myTeam = self->sess.cs.team;
     const float seconds = static_cast<float>(now - lastSense) * 0.001f;
     const float eye[3] = {me.origin[0], me.origin[1], me.origin[2] + me.viewHeightCurrent};
+    // Its own sight: zoomed, and maybe a scope's circle, while it aims down
+    // it (hearing is the same either way).
+    const WeaponDef *held = me.weapon && BG_ValidateWeaponNumber(me.weapon) ? BG_GetWeaponDef(me.weapon) : nullptr;
+    const kb::PerceptionParams sight =
+        held ? kb::SightThrough(params, me.fWeaponPosFrac, held->fAdsZoomFov,
+                                held->overlayReticle != WEAPOVERLAYRETICLE_NONE)
+             : params;
     const uint32_t quietBit = QuietPerkBit();
     const uint32_t jammerBit = JammerPerkBit();
     int noticed = 0;
@@ -288,7 +300,7 @@ int Bot_Sense(int clientNum, kb::Perception &perception, const kb::PerceptionPar
         sample.speed = speed;
         sample.stance = stance;
 
-        if (!kb::OnScreen(sample, params) || sample.distance >= params.maxRange || !SV_inSnapshot(eye, entity))
+        if (!kb::OnScreen(sample, sight) || sample.distance >= params.maxRange || !SV_inSnapshot(eye, entity))
         {
             perception.Unseen(entity, now, seconds, params);
             continue;
@@ -304,7 +316,7 @@ int Bot_Sense(int clientNum, kb::Perception &perception, const kb::PerceptionPar
                 ++clear;
         }
         sample.exposure = static_cast<float>(clear) / 3.0f;
-        if (perception.See(entity, sample, chest, now, seconds, params) && notices && noticed < maxNotices)
+        if (perception.See(entity, sample, chest, now, seconds, sight) && notices && noticed < maxNotices)
         {
             BotNotice &notice = notices[noticed++];
             notice.entity = entity;

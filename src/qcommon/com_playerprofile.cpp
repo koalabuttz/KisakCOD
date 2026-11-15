@@ -576,7 +576,14 @@ static bool Sys_ConfirmChangePrompt(const char *titleRef, const char *bodyRef)
 
     title = Win_LocalizeRef(titleRef);
     body = Win_LocalizeRef(bodyRef);
-#if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
+#if defined(__ANDROID__)
+    // KISAK: a handheld measures a different CPU speed at nearly every start
+    // (its cores change speed with power and heat), and the box came up over
+    // a black screen where the controller could not answer it (Retroid Pocket
+    // 6, run 7). The settings the first start chose stay.
+    Com_Printf(CON_CHANNEL_SYSTEM, "%s: %s\nNot asked on Android; the player profile stays as it is\n", title, body);
+    return false;
+#elif defined(__linux__) || defined(__APPLE__) || defined(__vita__)
     const SysDialogAnswer answer = Sys_ShowDialog(SysDialogKind::Question, title, body);
     if (answer != SysDialogAnswer::NotShown)
         return answer == SysDialogAnswer::Yes;

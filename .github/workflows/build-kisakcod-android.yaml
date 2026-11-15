@@ -228,8 +228,11 @@ jobs:
           grep Pkg.Revision "$ANDROID_NDK_HOME/source.properties"
           python3 scripts/platform/android/build_apk.py --work "$RUNNER_TEMP/android" \
             --ndk "$ANDROID_NDK_HOME" --sdk "$ANDROID_HOME" --config RelWithDebInfo
-          python3 scripts/tests/check_android_binary.py --library \
-            "$RUNNER_TEMP/android/out-RelWithDebInfo/libmain.so"
+          # libmain.so is multiplayer, libmain_sp.so the campaign.
+          for library in libmain.so libmain_sp.so; do
+            python3 scripts/tests/check_android_binary.py --library \
+              "$RUNNER_TEMP/android/out-RelWithDebInfo/$library"
+          done
           ls -l "$RUNNER_TEMP/android/KisakCOD-RelWithDebInfo.apk"
 
       - name: Upload the APK

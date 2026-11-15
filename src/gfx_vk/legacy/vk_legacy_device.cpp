@@ -242,6 +242,16 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
             Log(*device, "shader cache %s: %s", desc.shaderCachePath, message.c_str());
         }
     }
+    // UBYTE4 vertex data (model texcoords and normals) where the device cannot
+    // read it as it is: fed as UNORM and scaled back in the vertex shader.
+    device->byteStandIn =
+        Features(core).forceByteStandIn || !VertexFormatSupported(core, VK_FORMAT_R8G8B8A8_USCALED);
+    if (device->byteStandIn)
+        Log(*device, "the device reads no R8G8B8A8_USCALED vertex data: UBYTE4 elements are read as UNORM and "
+                     "scaled back in the vertex shaders");
+    // D3DCOLOR elements (vertex colours) have no stand-in yet.
+    if (!VertexFormatSupported(core, VK_FORMAT_B8G8R8A8_UNORM))
+        Log(*device, "the device reads no B8G8R8A8_UNORM vertex data: vertex colours read wrong");
     // Pipelines built ahead: before any shader is created, so each one
     // created queues what the list has for it.
     StartAhead(*device, desc.pipelineListPath);

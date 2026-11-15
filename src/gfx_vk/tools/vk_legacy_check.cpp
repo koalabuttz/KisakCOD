@@ -388,6 +388,7 @@ public:
     // ---- scenes -----------------------------------------------------------------------
     void Clear();
     void VertexColor();
+    void ByteInputs();
     void HalfPixel();
     void TextureLevels();
     void Formats();
@@ -445,6 +446,32 @@ void Check::VertexColor()
     Expect("red_edge_out", 15, 15, 0, 0, 0);
     Expect("moved", 64, 80, 0, 255, 0);
     Expect("moved_from", 24, 80, 0, 0, 0);
+}
+
+void Check::ByteInputs()
+{
+    // A UBYTE4 element reads its bytes as they are (D3D9: 0-255 each), here
+    // as the colour: bytes 1, 0, 1, 1 are full magenta, and read as UNORM
+    // without the vertex shader's scale (Device::byteStandIn) nearly black.
+    // KISAK_VK_BYTE_INPUTS=unorm takes the stand-in on any device.
+    Reset();
+    const lg::VertexElement elements[] = {
+        {0, 0, d3d::DECLTYPE_FLOAT3, 0, d3d::DECLUSAGE_POSITION, 0},
+        {0, 12, d3d::DECLTYPE_FLOAT2, 0, d3d::DECLUSAGE_TEXCOORD, 0},
+        {0, 20, d3d::DECLTYPE_UBYTE4, 0, d3d::DECLUSAGE_COLOR, 0},
+    };
+    lg::VertexDecl *bytes = lg::CreateVertexDecl(device, elements, 3);
+    if (!bytes)
+        return Fail(std::string("CreateVertexDecl failed: ") + lg::DeviceError(device));
+    lg::SetVertexDecl(device, bytes);
+    DrawQuadPx(32, 32, 96, 96, 0.5f, 0x01010001u); // bytes 1, 0, 1, 1
+    lg::SetVertexDecl(device, decl);
+    const bool read = Read();
+    lg::DestroyVertexDecl(device, bytes);
+    if (!read)
+        return;
+    Expect("bytes", 64, 64, 255, 0, 255, 255);
+    Expect("background", 8, 8, 0, 0, 0);
 }
 
 void Check::HalfPixel()
@@ -2246,6 +2273,7 @@ int Run(const Options &options)
     const Scene scenes[] = {
         {"clear", &Check::Clear},
         {"vertex_color", &Check::VertexColor},
+        {"byte_inputs", &Check::ByteInputs},
         {"half_pixel", &Check::HalfPixel},
         {"texture_levels", &Check::TextureLevels},
         {"formats", &Check::Formats},

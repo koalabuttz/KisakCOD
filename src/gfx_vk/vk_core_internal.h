@@ -207,6 +207,7 @@ struct RecordState : RecordContext
     uint64_t submitted = 0; // last serial submitted
     uint64_t presents = 0;  // presents made
     bool rebuild = false;   // a present found the swapchain out of date or suboptimal
+    bool surfaceLost = false; // a present found the surface gone (VK_ERROR_SURFACE_LOST_KHR)
 };
 
 // Packets start at multiples of kRecordAlign in memory from operator new,
@@ -239,6 +240,7 @@ struct RecordProgress
     uint64_t submitted = 0;
     uint64_t presents = 0;
     bool rebuild = false;
+    bool surfaceLost = false;
     uint64_t chunksDone = 0;
 };
 
@@ -338,7 +340,14 @@ public:
     // the compositor turns the picture, and presents report
     // VK_SUBOPTIMAL_KHR for that alone, which must not rebuild every frame.
     bool transformLeftToCompositor = false;
+    // Frames begun on such a swapchain: every 32nd compares the surface's
+    // size with the swapchain's, since Android reports no resize to it.
+    uint32_t turnedFrames = 0;
     bool windowDetached = false; // DetachWindow: no swapchain or surface any more
+    // The window system took the surface away (Android destroys the window of
+    // an app sent to the background): BeginFrame skips frames until
+    // RenewSurface gets a new one from the window.
+    bool surfaceLost = false;
 
     FrameSlot frames[kFramesInFlight];
     uint32_t frameIndex = 0;
@@ -437,6 +446,11 @@ bool Check(Core &core, VkResult result, const char *what);
 const char *ResultName(VkResult result);
 BuildResult BuildSwapchain(Core &core);
 bool SurfaceExtent(Core &core, VkSurfaceCapabilitiesKHR &caps, VkExtent2D &extent);
+// After surfaceLost, with nothing recorded or in flight: lets go of the
+// swapchain and the old surface, then asks the window for a new surface. True
+// once there is one (the swapchain is rebuilt next); false while the window has
+// none (or the core failed).
+bool RenewSurface(Core &core);
 
 // vk_memory.cpp
 // own: a memory allocation of its own (offset 0) whatever the size.
