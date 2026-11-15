@@ -381,6 +381,13 @@ def plan_checks(options, workdir, build_dir, binary, python, cxx):
     )
     checks.append(
         Check(
+            "bot_grenades",
+            "KisakCOD bots throw grenades on the arc the game gives them",
+            [Command([python, TESTS / "test_bot_grenades.py", "--cxx", cxx, "--m32"], timeout=300)],
+        )
+    )
+    checks.append(
+        Check(
             "bot_team",
             "KisakCOD bots call out enemies, play team roles and objectives, and know a map's cover and angles",
             [Command([python, TESTS / "test_bot_team.py", "--cxx", cxx, "--m32"], timeout=300)],
@@ -676,7 +683,7 @@ def main():
     parser.add_argument("--list", action="store_true", help="print the command list and exit without running")
     options = parser.parse_args()
 
-    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "remote_input", "master_server", "open_url", "server_dvar_guard", "steam_session", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range", "gameplay_lifecycle", "server_test_clients", "weapon_def_ownership", "bot_motor", "bot_perception", "bot_combat", "bot_mind", "bot_team", "bot_navmesh", "bot_driver", "database_publication", "mod_zone_detection", "crt_shims", "assert_continue", "sl_trace", "phys_objid", "speed_build", "perf_ab"]
+    known = ["bootstrap", "runtime", "lifecycle_driver", "handshake_auth", "remote_input", "master_server", "open_url", "server_dvar_guard", "steam_session", "debugger", "fastfile", "net_deadline", "huffman", "udp", "sys_fileio", "sys_virtualmem", "lexer_eof", "random_range", "gameplay_lifecycle", "server_test_clients", "weapon_def_ownership", "bot_motor", "bot_perception", "bot_combat", "bot_mind", "bot_grenades", "bot_team", "bot_navmesh", "bot_driver", "database_publication", "mod_zone_detection", "crt_shims", "assert_continue", "sl_trace", "phys_objid", "speed_build", "perf_ab"]
     options.only = parse_names(options.only)
     options.skip = parse_names(options.skip)
     for name in options.only | options.skip:

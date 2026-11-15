@@ -610,6 +610,8 @@ PUSH_ROW = re.compile(r"^bots: \d+ pushes to a callout \d+ units away\s*$", re.M
 ANCHOR_ROW = re.compile(r"^bots: \d+ anchors \d+ units from a callout\s*$", re.M)
 OBJECTIVE_ROW = re.compile(r"^bots: \d+ (attacks an objective \d+ units away|defends an objective from \d+ units)\s*$",
                            re.M)
+GRENADE_ROW = re.compile(r"^bots: \d+ throws a grenade \d+ units\s*$", re.M)
+KNIFE_ROW = re.compile(r"^bots: \d+ knifes \d+, \d+ units\s*$", re.M)
 TEAM_OBJECTIVES_ROW = re.compile(r"^bots: team (\d+) objectives: take (\d+), hold (\d+)\s*$", re.M)
 SPOTS_ROW = re.compile(r"^bots: map spots ready: (\d+) spots, (\d+) lines, in ([\d.]+) s\s*$", re.M)
 
@@ -629,6 +631,26 @@ def validate_objectives(output: str) -> list:
     for team, take, hold in TEAM_OBJECTIVES_ROW.findall(output):
         shown[team] = max(shown.get(team, 0), int(take) + int(hold))
     attacks = len(re.findall(r"^bots: \d+ attacks an objective", output, re.M))
+    held = sum(1 for _, _, hold in TEAM_OBJECTIVES_ROW.findall(output) if int(hold) > 0)
+    arrivals = re.findall(r"^bots: \d+ is on an objective(?:, (\w+))?\s*$", output, re.M)
+    arrived = len(arrivals)
+    prone = sum(1 for stance in arrivals if stance == "prone")
+    print(f"INFO: bots got onto an objective {arrived} times ({prone} of them lying prone)")
+    stays = [(float(seconds), why) for seconds, why in
+             re.findall(r"^bots: \d+ left an objective after ([\d.]+) s \(([^,)]+)", output, re.M)]
+    if stays:
+        longest = max(seconds for seconds, _ in stays)
+        reasons = {}
+        for _, why in stays:
+            reasons[why] = reasons.get(why, 0) + 1
+        print(f"INFO: attackers left an objective {len(stays)} times, after {longest:.1f} s at most ("
+              + ", ".join(f"{why} {count}" for why, count in sorted(reasons.items())) + ")")
+    stuck = len(re.findall(r"^bots: \d+ (is stuck on its way|finds no way) to an objective", output, re.M))
+    short = len(re.findall(r"^bots: \d+ stopped \d+ units from an objective", output, re.M))
+    print(f"INFO: bots got stuck or found no way to an objective {stuck} times and stopped short of one "
+          f"{short} times")
+    print(f"INFO: a team's compass showed a flag of its own to hold {held} times "
+          "(a capture turns a flag to take into one to hold)")
     return [
         (len(shown) == 2 and all(count > 0 for count in shown.values()),
          f"both teams' bots read objectives off their compass (teams {sorted(shown)})"),
@@ -969,6 +991,8 @@ def main() -> int:
             print("INFO: " + (f"map spots ready: {team['spots'][0]} spots, {team['spots'][1]} lines, "
                               f"in {team['spots'][2]} s" if team["spots"] else "map spots not ready yet"))
         if args.combat:
+            print(f"INFO: bots threw {len(GRENADE_ROW.findall(output))} grenades and knifed "
+                  f"{len(KNIFE_ROW.findall(output))} times")
             fights = fire_rows(output)
             print(f"INFO: bots opened fire {len(fights)} times" +
                   (f" ({min(r[2] for r in fights)} to {max(r[2] for r in fights)} ms after noticing, "

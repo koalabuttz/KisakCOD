@@ -133,6 +133,12 @@ static void Roles()
     Check(CountRole(roles, 12, kb::Role::Defend) == 6 && CountRole(roles, 12, kb::Role::Attack) == 0,
           "only objectives to hold: half the team defends");
 
+    float flags[3][3] = {{2000.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {-2000.0f, 0.0f, 0.0f}};
+    const float westSpawn[3] = {-2500.0f, 300.0f, 0.0f};
+    kb::SortNearestFirst(flags, 3, westSpawn);
+    Check(flags[0][0] == -2000.0f && flags[1][0] == 0.0f && flags[2][0] == 2000.0f,
+          "a team goes for the flags on its side first");
+
     kb::Role one;
     kb::AssignRoles(people, 1, 1, 1, &one);
     Check(one == kb::Role::Attack, "a team of one goes for the objective");
