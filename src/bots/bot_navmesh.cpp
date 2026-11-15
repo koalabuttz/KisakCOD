@@ -1006,12 +1006,13 @@ int NavMesh::FindPath(const float start[3],
     // The floor under the goal first: from 96 units below it to 24 above.
     const float under[3] = {e[0], e[1] - 36.0f, e[2]};
     const float underExtents[3] = {48.0f, 60.0f, 48.0f};
-    if (dtStatusFailed(m_query->findNearestPoly(under, underExtents, m_filter, &endRef, eOn)) || !endRef)
-    {
-        endRef = 0;
-        if (dtStatusFailed(m_query->findNearestPoly(e, extents, m_filter, &endRef, eOn)) || !endRef)
-            return 0;
-    }
+    // Then wider across (a heard place may be off by a wall's thickness),
+    // then anything near.
+    const float underWide[3] = {96.0f, 60.0f, 96.0f};
+    if ((dtStatusFailed(m_query->findNearestPoly(under, underExtents, m_filter, &endRef, eOn)) || !endRef)
+        && (dtStatusFailed(m_query->findNearestPoly(under, underWide, m_filter, &endRef, eOn)) || !endRef)
+        && (dtStatusFailed(m_query->findNearestPoly(e, extents, m_filter, &endRef, eOn)) || !endRef))
+        return 0;
     if (goalOnMesh)
         FromRecast(eOn, goalOnMesh);
 

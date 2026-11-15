@@ -1453,7 +1453,14 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
         {
             const float *end = bot.path[bot.pathCount - 1];
             const float floorAt = bot.goalOnMesh[2];
-            if (!bot.pathComplete && std::fabs(end[2] - floorAt) > 48.0f && Distance2D(end, bot.goal) < 400.0f)
+            // The lead is a player's feet, chest or eye: a way that ends
+            // from 72 units under it to 24 over it ends where the lead
+            // stands, whatever the mesh made of the floor there (PC run 21:
+            // a footstep beside a crate's top on Crash).
+            const float under = bot.goal[2] - end[2];
+            const bool besideLead = under > -24.0f && under < 72.0f;
+            if (!bot.pathComplete && !besideLead && std::fabs(end[2] - floorAt) > 48.0f
+                && Distance2D(end, bot.goal) < 400.0f)
             {
                 std::memcpy(bot.noWayTo, bot.goal, sizeof(bot.noWayTo));
                 bot.noWayUntil = svs.time + 10000;
