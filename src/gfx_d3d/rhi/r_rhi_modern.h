@@ -21,6 +21,25 @@ struct IDirect3DTexture9;
 // for the Modern path's volumetric fog (docs/vulkan-modern.md, "Volumetric
 // fog"): with it the back end lights the map's own fog where the sun reaches
 // it.
+// A spot light that lights the fog: one of the view's shadowed spot lights,
+// as the lit shaders read it (r_draw_shadowable_light.cpp).
+struct GfxModernFogSpot
+{
+    float origin[3];       // world units
+    float radius;          // its reach, world units
+    float dir[3];          // from a lit point towards the light along the cone's axis, unit length
+    float exponent;        // the cone's falloff power (0: none)
+    float cosHalfFovOuter; // the cone's edge
+    float cosHalfFovInner; // the cone's full-strength part (more than the edge)
+    float fade;            // how far its shadow map counts (0 none, 1 all); the rest is lit
+    float color[3];        // the light's diffuse colour, display values (may pass 1)
+    // World (row vector, p * M) to the shadow map, projective: xy / w the
+    // texture coordinates of its tile, z / w the depth (lit where it is at
+    // most the stored depth).
+    float shadowLookup[4][4];
+    bool inSunMap;         // its tile is in shadowMap (the sun's), else in spotShadowMap
+};
+
 struct GfxModernFog
 {
     bool on;               // the map's fog is drawn (r_fog) and has a density
@@ -29,8 +48,10 @@ struct GfxModernFog
     float start;           // world units
     float origin[3];       // the camera, world units
     float sunDirection[3]; // towards the sun, world space, unit length
-    // The sun's shadow map, as the view's lit surfaces read it, when it is
-    // drawn for the view (else null and nothing below is set).
+    // The sun's shadow is drawn for the view: the lookup below is set.
+    bool sunShadowed;
+    // The sun's shadow map: when the sun's shadow is in it, or a spot
+    // light's (they share it while the sun has none). Else null.
     IDirect3DTexture9 *shadowMap;
     // World (row vector, p * M) to the near partition's texture coordinates
     // (xy), depth (z, lit where it is at most the stored depth) and partition
@@ -38,6 +59,10 @@ struct GfxModernFog
     float shadowLookup[4][4];
     float switchPartition[4]; // the far partition's xy: near xy * w + this xy
     float shadowmapScale[2];  // the far partition's edge fade (lit shaders' c4)
+    // The spot lights' own shadow map, when a spot light's tile is in it.
+    IDirect3DTexture9 *spotShadowMap;
+    int spotCount;
+    GfxModernFogSpot spots[4];
 };
 
 struct GfxModernScene

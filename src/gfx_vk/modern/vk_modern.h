@@ -311,7 +311,15 @@ AoStats Stats(const AmbientOcclusion *ao);
 // light (sunShare) comes from the sun: air in shadow loses it, and looking
 // towards the sun the air gets more of it (forward scattering), so with
 // sunShare 0, or with all the air lit and no forward scattering, the scene
-// is as the game fogged it.
+// is as the game fogged it. The view's shadowed spot lights light the air in
+// their cones too, marched through their own shadow maps: light added on top
+// of the game's fog (spotShare times what the fog would scatter of it).
+//
+// With `froxels` the same sums come from a volume instead of a march per
+// pixel: compute passes fill a grid of froxels over the view (froxelTile
+// pixels square, froxelSlices deep over the march length, spaced as the
+// march's steps) with each froxel's share, add them up front to back, and
+// the apply pass reads the volume at each pixel's distance.
 
 struct FogParams
 {
@@ -323,7 +331,16 @@ struct FogParams
     // counts as lit.
     float march = 3000.0f;
     uint32_t steps = 24;
+    // How brightly the spot lights light the fog: 0 not at all, 1 as the
+    // fog scatters their light.
+    float spotShare = 1.0f;
+    // Steps marched through each spot light's reach.
+    uint32_t spotSteps = 12;
     bool half = true;   // march at half resolution
+    // Build a froxel volume (compute passes) in place of the march.
+    bool froxels = false;
+    uint32_t froxelTile = 8;    // pixels per froxel across
+    uint32_t froxelSlices = 64; // froxels deep
     uint32_t frame = 0; // moves the noise and the half-resolution pixel from frame to frame
     // Write the light the fog adds alone, over mid grey, instead of adding it.
     bool debug = false;
@@ -337,12 +354,30 @@ struct FogInputs
     float start = 0.0f;        // world units
     float origin[3] = {};      // the camera, world units
     float sunDirection[3] = {}; // towards the sun, world space
-    // World (p * M) to the near partition's xy, depth z and partition value
-    // w; with shadowMap given to DrawFog.
+    // The sun's shadow is in shadowMap (DrawFog): the lookup below is set.
+    bool sunShadowed = false;
+    // World (p * M) to the near partition's xy, depth z and partition value w.
     float shadowLookup[4][4] = {};
     float switchPartition[4] = {};
     float shadowmapScale[2] = {};
+    // The view's shadowed spot lights (front ModernSceneView::Fog::Spot).
+    struct Spot
+    {
+        float origin[3] = {};
+        float radius = 0.0f;
+        float dir[3] = {};             // from a lit point towards the light, the cone's axis
+        float exponent = 0.0f;         // the cone's falloff power, 0 none
+        float cosHalfFovOuter = 0.0f;
+        float cosHalfFovInner = 0.0f;
+        float fade = 0.0f;             // how far the shadow map counts, the rest lit
+        float color[3] = {};           // diffuse colour, display values
+        float shadowLookup[4][4] = {}; // world (p * M) to its tile, projective
+        bool inSunMap = false;         // its tile is in shadowMap, else in spotShadowMap
+    };
+    uint32_t spotCount = 0; // at most kFogSpots
+    Spot spots[4];
 };
+constexpr uint32_t kFogSpots = 4;
 
 struct Fog;
 
@@ -353,16 +388,22 @@ Fog *CreateFog(Core *core, std::string &error);
 void DestroyFog(Core *core, Fog *fog);
 // Records the fog over view.area of `color` (a linear-light colour target),
 // reading `depth` (single-sampled, sampled usage) and, when given, the sun's
-// shadow map `shadowMap` (a depth image; without it all the air counts as
-// lit). Outside a pass, inside a frame. Both passes are timed under "modern
-// fog". False with the reason, and nothing recorded, when it cannot.
-bool DrawFog(Core *core, Fog *fog, Image *color, Image *depth, Image *shadowMap, const SceneView &view,
-             const FogInputs &inputs, const FogParams &params, std::string &error);
+// shadow map `shadowMap` and the spot lights' `spotShadowMap` (depth images).
+// Without shadowMap the sun's air counts as lit; a spot light whose map is
+// not given is left out. Outside a pass, inside a frame. The full-screen passes are
+// timed under "modern fog", the froxel volume's two compute passes under
+// "modern fog froxels". False with the reason, and nothing recorded, when it
+// cannot.
+bool DrawFog(Core *core, Fog *fog, Image *color, Image *depth, Image *shadowMap, Image *spotShadowMap,
+             const SceneView &view, const FogInputs &inputs, const FogParams &params, std::string &error);
 
 struct FogStats
 {
-    uint64_t scenes;   // DrawFog calls that recorded
-    uint64_t shadowed; // of those, ones that marched a shadow map
+    uint64_t scenes;     // DrawFog calls that recorded
+    uint64_t shadowed;   // of those, ones that marched the sun's shadow map
+    uint64_t spotScenes; // of those, ones with a spot light in the air
+    uint64_t spots;      // spot lights marched, over all of them
+    uint64_t froxels;    // of the scenes, ones drawn from a froxel volume
 };
 FogStats Stats(const Fog *fog);
 

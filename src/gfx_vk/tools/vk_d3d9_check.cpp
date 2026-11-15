@@ -6561,7 +6561,16 @@ void Check::ModernLive()
 // in shadow) or 0.1 (in front: lit). Fog off: grey 100. Lit air: grey 100
 // (lit air changes nothing). Air in shadow with the sun's share 1: the
 // shadow takes 0.214 * 0.5 of light away; with the share 0.5, half that.
-// Without linear light there is no fog: grey 100 throughout.
+// Then a spot light, with the sun's share 0: behind the camera at (0, 0, -3)
+// shining along +z with a wide cone and a reach far past the scene, colour
+// 0.5 (0.214 of light), its shadow map the same cleared one. The middle
+// pixel's whole ray is in its cone at full strength, so with an even phase
+// the air adds 0.214 * (1 - T) = 0.214 * 0.5 of light when lit, nothing when
+// in shadow with fade 1, and half when in shadow with fade 0.5; with its tile
+// in the sun's map (the sun itself unshadowed) the same as lit. Spot share 0
+// adds nothing. Last, lit air, air in shadow and the lit spot light again
+// from a froxel volume (r_modernFogFroxels): the same within the check's
+// tolerance. Without linear light there is no fog: grey 100 throughout.
 void Check::ModernFog()
 {
     const bool linear = EnvText("KISAK_VK_MODERN_LINEAR") != "0";
@@ -6592,15 +6601,29 @@ void Check::ModernFog()
     };
     const double grey = std::pow((100.0 / 255.0 + 0.055) / 1.055, 2.4);
     const double fogLight = std::pow((0.5 + 0.055) / 1.055, 2.4);
+    // A spot light for a scene: none (count 0), or one with its shadow
+    // lookup's reference, fade, tile in the sun's map or its own, and the
+    // spot share.
+    struct Spot
+    {
+        int count = 0;
+        float reference = 0.1f;
+        float fade = 1.0f;
+        bool inSunMap = false;
+        float share = 1.0f;
+    };
     // One scene with the fog switched as given, the sun's share `sun` and
     // the shadow lookup's reference `reference`; the middle pixel's shown
     // value is expected to be `want`.
-    const auto scene = [&](const char *name, int fogOn, float sun, float reference, int want) {
+    const auto scene = [&](const char *name, int fogOn, float sun, float reference, int want, Spot spot = {},
+                           bool froxels = false) {
         front::ModernTuning modern;
+        modern.fogFroxels = froxels ? 1 : 0;
         modern.exposure = 0;
         modern.fog = fogOn;
         modern.fogSun = sun;
         modern.fogScatter = 0.0f;
+        modern.fogSpots = spot.share;
         take(modern);
         // The shadow pass: depth 0.3 everywhere.
         Ok(device->SetRenderTarget(0, shadowColorLevel), "SetRenderTarget(shadow colour)");
@@ -6623,7 +6646,8 @@ void Check::ModernFog()
         view.fog.start = 0.0f;
         view.fog.origin[2] = -1.5f;
         view.fog.sunDirection[0] = 1.0f;
-        view.fog.shadowMap = shadow;
+        view.fog.sunShadowed = !spot.count;
+        view.fog.shadowMap = !spot.count || spot.inSunMap ? shadow : nullptr;
         // Every point to the map's middle, the near partition, at the reference.
         view.fog.shadowLookup[3][0] = 0.5f;
         view.fog.shadowLookup[3][1] = 0.5f;
@@ -6631,6 +6655,24 @@ void Check::ModernFog()
         view.fog.shadowLookup[3][3] = 0.5f;
         view.fog.switchPartition[3] = 1.0f;
         view.fog.shadowmapScale[0] = view.fog.shadowmapScale[1] = 1.0f;
+        if (spot.count)
+        {
+            front::ModernSceneView::Fog::Spot &light = view.fog.spots[0];
+            light.origin[2] = -3.0f;
+            light.radius = 100000.0f;
+            light.dir[2] = -1.0f;
+            light.cosHalfFovOuter = 0.5f;
+            light.cosHalfFovInner = 0.9f;
+            light.fade = spot.fade;
+            light.color[0] = light.color[1] = light.color[2] = 0.5f;
+            light.shadowLookup[3][0] = 0.5f;
+            light.shadowLookup[3][1] = 0.5f;
+            light.shadowLookup[3][2] = spot.reference;
+            light.shadowLookup[3][3] = 1.0f;
+            light.inSunMap = spot.inSunMap;
+            view.fog.spotShadowMap = spot.inSunMap ? nullptr : shadow;
+            view.fog.spotCount = 1;
+        }
         Equal("done", static_cast<int>(front::ModernSceneDone(device, view)),
               static_cast<int>(front::ModernResult::Done));
         device->SetDepthStencilSurface(nullptr);
@@ -6650,6 +6692,21 @@ void Check::ModernFog()
         scene("fog_lit_air", 1, 1.0f, 0.1f, plain);
         scene("fog_shadowed_air", 1, 1.0f, 0.5f, shaded);
         scene("fog_shadowed_half_share", 1, 0.5f, 0.5f, halfShaded);
+        // The spot light's air, from 1.5 to 3.5 units from it of a 100000
+        // reach: its falloff is 1 to within 1e-4.
+        const int spotLit = linear ? shown(grey + fogLight * 0.5) : plain;
+        const int spotHalf = linear ? shown(grey + fogLight * 0.25) : plain;
+        scene("fog_spot_lit_air", 1, 0.0f, 0.5f, spotLit, Spot{1, 0.1f, 1.0f, false, 1.0f});
+        scene("fog_spot_shadowed_air", 1, 0.0f, 0.5f, plain, Spot{1, 0.5f, 1.0f, false, 1.0f});
+        scene("fog_spot_half_faded", 1, 0.0f, 0.5f, spotHalf, Spot{1, 0.5f, 0.5f, false, 1.0f});
+        scene("fog_spot_in_sun_map", 1, 0.0f, 0.5f, spotLit, Spot{1, 0.1f, 1.0f, true, 1.0f});
+        scene("fog_spot_share_0", 1, 0.0f, 0.5f, plain, Spot{1, 0.1f, 1.0f, false, 0.0f});
+        // The same from a froxel volume: the middle pixel's 2 units fall in
+        // its second slice (0.73 to 2.93 units of the 3000 marched), read
+        // between the two slices' sums, 0.494 of the way rather than 0.5.
+        scene("fog_froxels_lit_air", 1, 1.0f, 0.1f, plain, Spot{}, true);
+        scene("fog_froxels_shadowed_air", 1, 1.0f, 0.5f, shaded, Spot{}, true);
+        scene("fog_froxels_spot_lit_air", 1, 0.0f, 0.5f, spotLit, Spot{1, 0.1f, 1.0f, false, 1.0f}, true);
     }
     take(front::ModernTuning{});
     SafeRelease(depth);
