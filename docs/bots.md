@@ -35,6 +35,14 @@ server, with no network in between) rather than the retail 999 a test client
 gets for acknowledging no packets. The ping is only shown; nothing in the
 game uses it.
 
+Every test client is named "[BOT] " and a name nobody on the server has
+(`src/bots/bot_names.h`), from David's list or from `bots/names.txt` in the
+home or base folder (one name to a line, 9 characters kept). When every name
+is taken, a repeat gets a number ("[BOT] Capy 2"). The tag is kept for bots:
+the server takes "[BOT]" out of a person's name however it is coloured, spaced
+or cased (`SV_KeepBotTagForBots`), so the name alone tells a bot from a person.
+Only the server decides who is a bot, so a modified client cannot pass as one.
+
 Set it when the game or server starts, for example on a dedicated server:
 
 ```
@@ -152,8 +160,8 @@ hunt goes to where it last saw or heard them.
   nearest the team first, so a team takes the flags on its side of the map
   before it contests the others. A roaming bot prefers places its teammates
   are not at or going to, so a team spreads out rather than moving as a
-  pack. A lead whose way ends above or below it (a sound on a floor the
-  way does not reach) is left alone for 10 s rather than stood under, and a
+  pack. A lead whose way stops short of its floor, above or below it (a
+  sound on a floor the way does not reach) is left alone for 10 s rather than stood under, and a
   bot looks no more than 35 degrees up or down toward a sound or an enemy
   it lost from sight. A lead (a sound, an enemy lost from sight) is chased by one or two
   bots: one more goes only for an enemy it saw itself, and the rest look
@@ -309,23 +317,59 @@ triangles. The agent is a standing player: 15 units across from the middle, 70
 tall, steps up 18 units and walks slopes up to 45 degrees. Cells are 6 units
 across and 3 high, in tiles of 64 cells.
 
+A way's goal is the floor under the point asked for, up to 96 units down,
+before anything above it: a lead may be a player's feet, chest (seen) or eye
+(a shot heard), and under a low ceiling an eye is closer to the floor upstairs
+than to its own. On Chinatown, PC bot brain runs 19 and 20 sent bots upstairs
+over shots heard 93 and 109 units below them; there they stood over the
+shooter staring at the floor.
+
+Recast links only floors a player walks between, so a floor reached by
+stepping off a ledge (a balcony over a street, a landing over a room) is an
+island. The build adds drop-downs, one-way links from the
+edge of a floor to a floor 21 to 116 units below it (fall damage starts at
+128): along every edge of the mesh with nothing beyond it, every 64 units, it
+looks 44, 60 and 76 units out for a floor below, and keeps the link only when
+nothing solid crosses the way (segments at three heights a standing player
+fills, at its middle and both sides, out over the edge and down to the floor)
+against the map's collision triangles. A drop costs one and a half times its
+length, so a bot takes the stairs when they are not much longer. A bot walks
+a drop-down like any corner: it walks off the edge and falls. Nothing climbs
+back up one; that waits for jumps and mantles.
+
 The mesh is built the first time a bot needs it on a map, on the server's own
 frame, and saved as `bots/nav/<map>.kbnav` in the home folder with the map's
 collision checksum; later loads read it back when the checksum matches. The
 server prints which it did:
 
 ```
-bots: navigation mesh for mp_crash built in <seconds> s (geometry ...)
+bots: navigation mesh for mp_crash built in <seconds> s (geometry ..., N drop-downs, ...)
 bots: navigation mesh for mp_crash loaded from bots/nav/mp_crash.kbnav (...)
 ```
 
-The cache is read only from the home and base folders, never from a game
-archive or a server's download, and each tile's size is checked before Detour
-sees it. The mesh is derived from the map's data, so it is never committed.
+To look at a place the mesh gets wrong away from the game, start the server
+with `KISAK_BOT_NAVDUMP="x y z across up"` in its environment: the collision
+triangles in that box are written to `bots/nav/<map>-dump.obj` in the home
+folder (game coordinates, z up) when the mesh is built or loaded.
 
-Not in the mesh yet: static models' collision (props), entities (doors,
-vehicles, script models), and jumps or mantles between floors. A bot that
-walks into one notices it is stuck, jumps, then takes another way.
+Each mesh build or layout change bumps the cache version, so older caches are
+rebuilt (version 2 added the drop-downs, version 3 left out entities'
+brushes). The cache is read only from the home and base folders, never from a
+game archive or a server's download, and each tile's size is checked before
+Detour sees it. The mesh is derived from the map's data, so it is never
+committed.
+
+Entities' brushes (the map's submodels 1 and up: doors, script brushes,
+triggers) are left out, found by walking each submodel's leaf brush tree. They
+move, or are not solid where the map file puts them. On Chinatown one is a
+16-unit slab at z -8 to 8 across the whole map. The mesh took it for a floor
+over the sunken street (about 3000 polygons of it), and it closed off the
+stairs up out of there: PC bot brain run 24's dump, built on the host, linked
+the sunken street to the rest of the map once the slab was gone.
+
+Not in the mesh yet: static models' collision (props), moving entities, and
+jumps or mantles up between floors. A bot that walks into one notices it is
+stuck, jumps, then takes another way.
 
 ## Code
 
@@ -417,6 +461,8 @@ to one second behind.
   and Detour on the host, 64-bit with sanitizers and 32-bit. In made-up rooms a
   bot finds the way through a 64-unit door but not a 24-unit gap, up a 16-unit
   step but not a 40-unit ledge, up a 25 degree ramp but not a 60 degree one;
+  it steps down off a 96-unit platform or balcony (one way) but not off a
+  200-unit one, over a 40-unit railing or through a wall;
   it never walks on a floor's underside or between islands; a cache blob with
   a wrong checksum, a cut or a bad tile size is refused; and an 8000 by 8000
   yard builds in tiles; points picked near a bot stay near it. It also

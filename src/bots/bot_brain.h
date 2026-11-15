@@ -12,6 +12,8 @@
 
 #pragma once
 
+#include <cstddef>
+
 struct client_t;
 
 namespace kisak::bots
@@ -35,6 +37,12 @@ bool Bot_UserMove(client_t *cl);
 // SV_CalcPings would give it the retail 999. The brain runs in the server,
 // with no network in between, so a bot shows 0.
 int Bot_Ping(int clientNum);
+
+// A new test client's name: "[BOT] " and a name nobody on the server has,
+// from bots/names.txt in the home or base folder (one to a line) or else
+// David's list in bot_names.h. Only test clients wear the tag: the server
+// takes it out of a person's name (SV_KeepBotTagForBots).
+void Bot_PickName(char *out, size_t size);
 
 // The navigation mesh of the map that is loaded, built or read from the home
 // folder's cache the first time it is asked for (bot_nav_world.cpp), or

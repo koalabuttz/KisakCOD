@@ -260,6 +260,12 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     // D3DRS_DEPTHBIAS is in units of the depth range; Vulkan's constant factor
     // is in units of the format's smallest step.
     device->depthBiasScale = device->depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ? float(1u << 24) : float(1u << 23);
+    // Shadow maps are depth textures that D3D9 samples with a linear filter
+    // (hardware PCF); Vulkan defines that only where the format allows it.
+    device->depthFilterLinear =
+        FormatSupports(core, device->depthFormat, VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT);
+    Log(*device, "depth textures: format %d, linear filtering %s", static_cast<int>(device->depthFormat),
+        device->depthFilterLinear ? "supported" : "NOT supported: shadow maps are sampled with the nearest texel");
     device->dynamicUniforms = !Features(core).staticUniforms;
     device->uniformAlignment = static_cast<uint32_t>(std::max<VkDeviceSize>(16, Limits(core).minUniformBufferOffsetAlignment));
     device->verifyShortcuts = ValidationEnabled(core);

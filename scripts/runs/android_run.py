@@ -29,13 +29,21 @@ One run is, in order:
    after, which shows the data was kept.
 3. Each launch: force-stop the app, start it with ``am start`` and the
    launch's arguments in the ``args`` extra (KisakActivity splits it at
-   spaces and puts it after its own ``fs_basepath``/``fs_homepath``), read
+   spaces and puts it after its own ``fs_basepath``/``fs_homepath``), and
+   the recipe's and launch's ``env`` (KISAK_* variables such as
+   KISAK_VK_MODERN_SSR_STEPS) in the ``env`` extra, which KisakActivity sets
+   in the process before the game starts; read
    logcat as it comes, run the host steps (screen captures, taps, keys) timed
    from the moment the app started, the menu came up or the map came up (the
    client's "run: the menu is up" and "run: the map is up" lines), and stop
    when the game quits, crashes, or runs out of time. Then pull the
    screenshots the game took (``screenshot <name>`` in a timed command writes
-   ``home/main/screenshots/<name>.tga`` in the app's folder).
+   ``home/main/screenshots/<name>.tga`` in the app's folder). Each host step
+   runs at its own moment, whatever the others wait for. The game is
+   quitting once it sends a timed ``quit`` (``run: sending "quit"``) or its
+   ``run_quitAfter*`` timer says ``run: quitting as asked``. A crash after
+   that is ``crash_at_quit``, not ``crash``: the launch did everything it
+   asked first.
 
 The launch's timed commands (``at_menu``, ``at_map``, ``variants``,
 ``quit_after_map``) are pc_run.py's, with the same checks: the client reads
@@ -64,7 +72,7 @@ The recipe (JSON)::
       "launches": [
         {"name": "menu", "at_menu": ["20 quit"],
          "host": [{"after": "menu", "at": 10, "do": "screencap", "name": "menu-10"}]},
-        {"name": "crash", "args": ["+devmap", "mp_crash"],
+        {"name": "crash", "args": ["+devmap", "mp_crash"], "env": {"KISAK_VK_MODERN_SSR_STEPS": "16"},
          "at_map": ["3 cmd mr {serverid} 8 autoassign", "5 cmd mr {serverid} 15 assault_mp,0",
                     "25 framelog 10 crash", "37 screenshot crash-37", "40 quit"],
          "host": [{"after": "map", "at": 30, "do": "screencap", "name": "crash-30"},
@@ -173,6 +181,19 @@ GAME_PROCESS = ":game"
 DEFAULT_TAGS = ["KisakCOD", "SDL", "AndroidRuntime", "DEBUG", "libc"]
 LOGCAT_LINE = re.compile(r"^(\d\d-\d\d \d\d:\d\d:\d\d\.\d+)\s+(\d+)\s+(\d+)\s+([VDIWEFA])\s+(.*?)\s*: ?(.*)$")
 EVENT_LINES = {"menu": "run: the menu is up", "map": "run: the map is up", "quit": "run: quitting as asked"}
+# A "quit" in a timed list is only sent ("run: sending "quit"", by
+# src/client/cl_run_plan.h); "run: quitting as asked" comes from the
+# run_quitAfter* timers alone (item 351).
+SENT_LINE = re.compile(r'^run: sending "(.*)"$')
+
+
+def says_quit(message):
+    """Whether a game line means it is quitting as the launch asked."""
+    message = message.strip()
+    if message == EVENT_LINES["quit"]:
+        return True
+    sent = SENT_LINE.match(message)
+    return bool(sent) and any(part.split()[:1] == ["quit"] for part in sent.group(1).split(";"))
 CRASH = re.compile(r"Fatal signal|FATAL EXCEPTION|ANR in ")
 HOST_AFTER = ("start", "menu", "map")
 KEY_SOURCES = ("gamepad", "keyboard", "dpad", "joystick", "touchscreen")
@@ -187,6 +208,7 @@ PID_EVERY = 1.0
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 DEFAULT_EMULATOR_PORT = 5554
 DEFAULT_BOOT_TIMEOUT = 300
+SHARED_STORAGE = "/sdcard/Android/data"  # there once shared storage is mounted
 MKDIR_BATCH = 20
 EMULATOR_ARGS = ["-no-snapshot-save", "-no-boot-anim", "-no-audio"]
 
@@ -335,6 +357,13 @@ def load_recipe(path):
             raise RecipeError(f"launch name {name!r} given twice")
         names.add(name)
         pc_run.check_variants(launch)
+        for scope in (recipe, launch):
+            if not isinstance(scope.get("env", {}), dict):
+                raise RecipeError(f"{name}: env is an object of KISAK_* variables")
+        for env_name, value in launch_env(recipe, launch).items():
+            if not ENV_NAME.fullmatch(env_name) or not ENV_VALUE.fullmatch(value):
+                raise RecipeError(f"{name}: env {env_name}={value!r}: the app sets only KISAK_* variables, with "
+                                  "values of letters, digits and _ . : , -")
         for key in ("at_menu", "at_map"):
             commands = pc_run.launch_commands(launch, key)
             if len(commands) > 32:
@@ -460,12 +489,27 @@ def host_command(step):
     raise ValueError(kind)
 
 
+ENV_NAME = re.compile(r"KISAK_[A-Z0-9_]+")
+ENV_VALUE = re.compile(r"[A-Za-z0-9_.:,-]*")
+
+
+def launch_env(recipe, launch):
+    """The recipe's then the launch's "env": KISAK_* variables the app sets
+    before the game starts (KisakActivity's "env" extra, NAME=VALUE pairs)."""
+    env = dict(recipe.get("env") or {})
+    env.update(launch.get("env") or {})
+    return {str(name): str(value) for name, value in env.items()}
+
+
 def start_command(recipe, launch):
     target = device(recipe)
     command = f"am start -W -n {target['package']}/{target['activity']}"
     extra = extra_text(recipe, launch)
     if extra:
         command += f" --es args {shlex.quote(extra)}"
+    env = launch_env(recipe, launch)
+    if env:
+        command += " --es env " + shlex.quote(" ".join(f"{name}={value}" for name, value in env.items()))
     return command
 
 
@@ -485,7 +529,12 @@ def booted(adb):
     if code != 0 or state.strip() != "device":
         return False
     _, value, _ = adb.shell("getprop sys.boot_completed", timeout=20)
-    return value.strip() == "1"
+    if value.strip() != "1":
+        return False
+    # Shared storage comes up after boot_completed: before it, the game
+    # files' mkdir gets "mkdir: '/sdcard/Android': Permission denied" (PC
+    # item 365, an emulator the runner had just booted).
+    return adb.shell(f"ls -d {SHARED_STORAGE}", timeout=20)[0] == 0
 
 
 class Emulator:
@@ -776,7 +825,7 @@ def run_launch(recipe, adb, launch, out):
                 pids_seen.add(pid)
                 messages.append(message)
                 for event, text in EVENT_LINES.items():
-                    if event not in events and message.strip() == text:
+                    if event not in events and (says_quit(message) if event == "quit" else message.strip() == text):
                         events[event] = time.time()
             if CRASH.search(message) and (ours or tag == "KisakCOD"):
                 crashes.append(line)
@@ -784,9 +833,17 @@ def run_launch(recipe, adb, launch, out):
     while True:
         take(logcat.take())
         now_time = time.time()
-        while steps and steps[0]["after"] in events and \
-                now_time >= events[steps[0]["after"]] + steps[0]["at"]:
-            step = steps.pop(0)
+        # Every step whose moment has come, earliest first. A step waits only
+        # for its own moment: a late "start" step must not hold back a
+        # "map" step that is due sooner (item 332b: start +90 held map +15
+        # and +35 until the launch ended).
+        while True:
+            due = [step for step in steps if step["after"] in events
+                   and now_time >= events[step["after"]] + step["at"]]
+            if not due:
+                break
+            step = min(due, key=lambda step: events[step["after"]] + step["at"])
+            steps.remove(step)
             done_steps.append(run_host_step(adb, step, folder, events, now_time))
             now_time = time.time()
         if now_time - last_pid_check >= PID_EVERY:
@@ -798,7 +855,10 @@ def run_launch(recipe, adb, launch, out):
             elif pids_seen or now_time - started > NEVER_STARTED:
                 gone_at = gone_at or now_time
         if crashes:
-            status = "crash"
+            # A crash once the game had said it was quitting still is one,
+            # but everything the launch asked for has run (item 332b: SIGABRT
+            # in an hwui thread after "window detached").
+            status = "crash_at_quit" if "quit" in events else "crash"
         elif gone_at and now_time - gone_at >= 1:
             status = "ok" if "quit" in events else "died"
         elif "quit" in events and now_time - events["quit"] >= QUIT_GRACE:

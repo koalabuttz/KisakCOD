@@ -293,6 +293,9 @@ void R_ModernSceneBegin();
 bool R_ModernWantsSceneDepth();
 // The view's depth prepass is drawn and its lit surfaces come next.
 void R_ModernSceneDepth(const GfxViewInfo *viewInfo);
+// The view's lit surfaces come next: tells the Modern path which sun shadow
+// map they read (GfxModernHooks::sunShadow).
+void R_ModernSunShadow(const GfxViewInfo *viewInfo, bool sunShadowMap);
 void R_ModernSceneLit(const GfxViewInfo *viewInfo);
 void R_ModernSceneDone(const GfxViewInfo *viewInfo);
 // R_SetupPass's call: tells the back end which colours a lit pass's pixel

@@ -40,6 +40,10 @@ import java.util.TreeMap;
  * ends with the game, so every match starts the engine afresh and this
  * screen comes back when the game quits.
  *
+ * The Visuals button picks the look for every start: Legacy (the game as it
+ * was made) or Modern (r_visuals modern: anti-aliasing, linear light,
+ * ambient occlusion, reflections, fog and the rest; docs/vulkan-modern.md).
+ *
  * Controls: the d-pad or the left stick moves between buttons (Android turns
  * them into arrow keys), A presses, L1 and R1 change the number of bots.
  */
@@ -67,8 +71,10 @@ public class LauncherActivity extends Activity {
 
     private int modeIndex;
     private int botIndex;
+    private boolean modern;
     private Button modeButton;
     private Button botButton;
+    private Button visualsButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,6 +82,7 @@ public class LauncherActivity extends Activity {
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         modeIndex = Math.max(0, Math.min(MODES.length - 1, prefs.getInt("mode", 0)));
         botIndex = Math.max(0, Math.min(BOT_COUNTS.length - 1, prefs.getInt("bots", 4)));
+        modern = prefs.getBoolean("modern", false);
 
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
@@ -99,10 +106,15 @@ public class LauncherActivity extends Activity {
             botIndex = (botIndex + 1) % BOT_COUNTS.length;
             update();
         });
+        visualsButton = button("", v -> {
+            modern = !modern;
+            update();
+        });
         Button menu = button("Multiplayer", v -> start(null, false));
         Button campaign = button("Campaign", v -> start(null, true));
         settings.addView(modeButton, weighted(2));
         settings.addView(botButton, weighted(1));
+        settings.addView(visualsButton, weighted(1.4f));
         settings.addView(menu, weighted(1));
         settings.addView(campaign, weighted(1));
         page.addView(settings);
@@ -185,17 +197,21 @@ public class LauncherActivity extends Activity {
     }
 
     private void start(String args, boolean campaign) {
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt("mode", modeIndex).putInt("bots", botIndex).apply();
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt("mode", modeIndex).putInt("bots", botIndex)
+                .putBoolean("modern", modern).apply();
         Intent intent = new Intent(this, campaign ? CampaignActivity.class : KisakActivity.class);
-        if (args != null) {
-            intent.putExtra("args", args);
-        }
+        // r_visuals is saved in the game's config and read at start-up, so
+        // every start names the look, Legacy as well. Modern's anti-aliasing
+        // needs a one-sample back buffer (r_aaSamples 1).
+        String visuals = modern ? "+set r_aaSamples 1 +set r_visuals modern" : "+set r_visuals legacy";
+        intent.putExtra("args", args != null ? visuals + " " + args : visuals);
         startActivity(intent);
     }
 
     private void update() {
         modeButton.setText("Mode: " + MODES[modeIndex][1]);
         botButton.setText("Bots: " + BOT_COUNTS[botIndex]);
+        visualsButton.setText("Visuals: " + (modern ? "Modern" : "Legacy"));
     }
 
     // The maps in the game folder: zone/<language>/mp_*.ff (not the _load

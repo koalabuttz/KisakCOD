@@ -68,6 +68,7 @@ Usage:
 
 import argparse
 import re
+from collections import Counter
 from pathlib import Path
 import select
 import shutil
@@ -260,7 +261,7 @@ def validate_transitions(log_text: str, bots: int, hold_seconds: int,
         label = f"stage {index} ({expected_map})"
         checks.append((marker.group(1) == str(index) and marker.group(2) == expected_map,
                        f"{label}: stage number and map match"))
-        identities = re.findall(r"BOTFEATURE identity entity=(\d+) name=(\S+)\s*$", segment, re.M)
+        identities = re.findall(r"BOTFEATURE identity entity=(\d+) name=(.+?)\s*$", segment, re.M)
         distinct = len(identities) == bots and len(set(identities)) == bots
         distinct = distinct and len({pair[0] for pair in identities}) == bots
         if index == 0:
@@ -374,19 +375,18 @@ def validate_refills(log_text: str, bots: int, hold_seconds: int, cycles: int) -
     rounds = refill_segments(log_text)
     checks = [(len(rounds) == cycles + 1, "exactly the planned refill rounds occurred")]
     previous = None
-    seen_names = set()
     for index, (marker, segment) in enumerate(rounds):
         label = f"refill {index}"
         checks.append((marker.group(1) == str(index) and marker.group(2) == str(bots),
                        f"{label}: ordered round at full configured capacity"))
-        identities = re.findall(r"BOTFEATURE identity entity=(\d+) name=(\S+)\s*$", segment, re.M)
+        identities = re.findall(r"BOTFEATURE identity entity=(\d+) name=(.+?)\s*$", segment, re.M)
         current = set(identities)
         checks.append((len(identities) == bots and len(current) == bots and
                        len({p[0] for p in identities}) == bots, f"{label}: distinct complete cohort"))
-        checks.append((not (seen_names & {p[1] for p in identities}), f"{label}: newly admitted bot names"))
-        seen_names.update(p[1] for p in identities)
-        kicks = re.findall(r"BOTFEATURE kick entity=(\d+) name=(\S+)\s*$", segment, re.M)
-        vacated = re.findall(r"BOTFEATURE vacated entity=(\d+) name=(\S+)\s*$", segment, re.M)
+        # Bots reuse names between refills (bot_names.h), so a fresh cohort is
+        # proven by the kick, vacate and spawn order below, not by new names.
+        kicks = re.findall(r"BOTFEATURE kick entity=(\d+) name=(.+?)\s*$", segment, re.M)
+        vacated = re.findall(r"BOTFEATURE vacated entity=(\d+) name=(.+?)\s*$", segment, re.M)
         if previous is not None:
             checks.append((len(kicks) == bots and set(kicks) == previous and
                            len(vacated) == bots and set(vacated) == previous,
@@ -427,12 +427,17 @@ def final_cohort_log(log_text: str) -> str:
             (log_text[later_stage.start():] if later_stage else ''))
 
 
-def validate_kick_window(output: str, expected: set) -> bool:
-    """Match engine kick lines exactly; planned script markers alone cannot pass."""
+def validate_kick_window(output: str, expected) -> bool:
+    """Match engine kick lines exactly; planned script markers alone cannot pass.
+
+    `expected` holds (entity, name) pairs, one per planned kick. Bots reuse
+    names ("[BOT] Capy" in every refill, src/bots/bot_names.h), so the same
+    pair may be planned more than once and is counted, not merely present.
+    """
     lines = [line for line in output.splitlines() if "EXE_PLAYERKICKED" in line]
-    parsed = [re.fullmatch(r"(\d+):(\S+) EXE_PLAYERKICKED", line.strip()) for line in lines]
+    parsed = [re.fullmatch(r"(\d+):(.+?) EXE_PLAYERKICKED", line.strip()) for line in lines]
     pairs = [(m.group(1), m.group(2)) for m in parsed if m]
-    return len(pairs) == len(lines) == len(expected) and set(pairs) == expected
+    return len(pairs) == len(lines) and Counter(pairs) == Counter(expected)
 
 
 def read_text(path: Path) -> str:
@@ -829,7 +834,7 @@ def main() -> int:
         marker_seen = False
         stage_failure = ""
         kick_checks = []
-        planned_kicks = set()
+        planned_kicks = []
         cohort = set()
         output_offset = 0
         try:
@@ -885,9 +890,9 @@ def main() -> int:
                         expected_kicks = cohort if stage == 0 and refill_round > 0 else set()
                         window_ok = validate_kick_window(output_now[output_offset:], expected_kicks)
                         kick_checks.append((window_ok, f"step {step}: only exact planned kicks in engine output window"))
-                        planned_kicks.update(expected_kicks)
+                        planned_kicks.extend(expected_kicks)
                         output_offset = len(output_now)
-                        cohort = set(re.findall(r"BOTFEATURE identity entity=(\d+) name=(\S+)\s*$", stage_log, re.M))
+                        cohort = set(re.findall(r"BOTFEATURE identity entity=(\d+) name=(.+?)\s*$", stage_log, re.M))
                         if not window_ok:
                             stage_failure = f"step {step}: unexpected or missing engine kick"
                             break
@@ -962,7 +967,7 @@ def main() -> int:
             *(validate_brain_fights(output, both_teams) if args.combat else []),
             *(validate_objectives(output) if args.objectives else []),
             (len(spawned) == expected_admissions and (combined.count("Gamestate has") >= len(spawned) or
-             combined.count("Going from CS_FREE to CS_CONNECTED for bot") >= len(spawned)),
+             len(re.findall(r"Going from CS_FREE to CS_CONNECTED for \[BOT\] ", combined)) >= len(spawned)),
              "the server sent gamestates / connected each bot"),
             (process.returncode == 0, f"clean exit (got {process.returncode})"),
             (validate_kick_window(output, planned_kicks) if args.refill_cycles else
@@ -991,6 +996,9 @@ def main() -> int:
             noWay = len(re.findall(r"^bots: \d+ finds no way to a lead", output, re.M))
             print(f"INFO: bots took cover {cover} times and went hunting {hunts} times "
                   f"(and found no way to a lead on another floor {noWay} times)")
+            drops = re.search(r"^bots: navigation mesh for (\S+) (?:built|loaded).*?(\d+) drop-downs", output, re.M)
+            if drops:
+                print(f"INFO: the navigation mesh for {drops.group(1)} has {drops.group(2)} drop-downs")
             team = team_play(output)
             print("INFO: the commander gave parts: " +
                   (", ".join(f"{role} {count}" for role, count in sorted(team["roles"].items())) or "none") +

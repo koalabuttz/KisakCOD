@@ -479,6 +479,10 @@ struct Device
     // scale them back (Shader::byteModules, legacy_shader::BuildSpirv).
     bool byteStandIn = false;
     float depthBiasScale = 1.0f;                 // D3DRS_DEPTHBIAS to Vulkan's constant factor
+    // depthFormat can be sampled with linear filtering. Without it, depth
+    // textures (shadow maps) are sampled with the nearest texel: Vulkan leaves
+    // a linear filter on such a format undefined.
+    bool depthFilterLinear = true;
     uint32_t uniformAlignment = 16;
     bool dynamicUniforms = true; // !OptionalFeatures::staticUniforms
 
@@ -640,7 +644,10 @@ struct Device
     // SetModernEmissive: how much brighter than white unlit, light-giving
     // surfaces built from now on make their white, in quarters (4 = as they are).
     uint8_t modernEmissive = 4;
-    // Bumped whenever SetModernPlanar changes the parameters; the parameters
+    // SetModernShadow: pushed after modernPlanarParams.
+    ModernShadowParams modernShadowParams{};
+    // Bumped whenever SetModernPlanar or SetModernShadow changes the
+    // parameters; the parameters
     // were last pushed for pushedPlanarGeneration in the bound layout (0:
     // not since the layout or the command buffer changed).
     uint64_t modernPlanarGeneration = 1;

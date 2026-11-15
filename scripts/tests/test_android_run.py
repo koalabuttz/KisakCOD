@@ -90,6 +90,9 @@ def test_recipe_checks(work):
         ({"apk": "a.apk", "build": {"source": "s"}, "launches": [{"name": "a"}]}, "not both"),
         ({"game_files": {"from": "x"}, "launches": [{"name": "a"}]}, "check"),
         ({"launches": [{"name": "a"}], "pictures": {"compare": [{"a": "a", "b": "b"}]}}, "which no launch takes"),
+        ({"launches": [{"name": "a", "env": {"LD_PRELOAD": "x.so"}}]}, "KISAK_*"),
+        ({"launches": [{"name": "a", "env": {"KISAK_X": "1; reboot"}}]}, "KISAK_*"),
+        ({"launches": [{"name": "a", "env": ["KISAK_X=1"]}]}, "object"),
     ]
     for index, (extra, message) in enumerate(bad):
         launches = extra.pop("launches")
@@ -99,6 +102,17 @@ def test_recipe_checks(work):
             check(False, f"recipe {index} refused ({message})")
         except pc_run.RecipeError as error:
             check(message in str(error), f"recipe {index}: {error!r} names {message!r}")
+
+
+def test_env(work):
+    recipe = {"device": {"package": "org.kisakcod.game", "activity": ".KisakActivity"},
+              "env": {"KISAK_VK_MODERN_SSR_STEPS": "16"}}
+    launch = {"name": "a", "args": ["+devmap", "mp_crash"], "env": {"KISAK_VK_MODERN_AO_HALF": "0"}}
+    command = android_run.start_command(recipe, launch)
+    check(command.endswith(" --es env 'KISAK_VK_MODERN_SSR_STEPS=16 KISAK_VK_MODERN_AO_HALF=0'"),
+          f"env extra: {command}")
+    check(" --es env " not in android_run.start_command(recipe | {"env": {}}, {"name": "b"}),
+          "no env extra without env")
 
 
 def test_whole_run(work):
@@ -183,6 +197,32 @@ def test_failures(work):
     launch = json.loads((work / "out-one" / "results.json").read_text())["launches"][0]
     check(done.returncode == 0 and launch["status"] == "ok" and launch["events"].get("quit"),
           f"a build with one process: {launch}")
+
+    # A late "start" step does not hold back a "map" step due sooner.
+    launches = [{"name": "o", "args": ["+devmap", "mp_crash"], "at_map": ["1 quit"],
+                 "host": [{"after": "start", "at": 30, "do": "screencap", "name": "late"},
+                          {"after": "map", "at": 0.2, "do": "screencap", "name": "early"}]}]
+    path = write_recipe(work, launches)
+    run(work, path, work / "out-order")
+    launch = json.loads((work / "out-order" / "results.json").read_text())["launches"][0]
+    steps = {step["name"]: step for step in launch["host_steps"]}
+    check(steps["early"].get("ok") and steps["late"].get("not_run") == "the launch ended first",
+          f"each host step waits only for its own moment: {launch['host_steps']}")
+
+    # The game's own quit timer says "run: quitting as asked"; a timed
+    # "quit" is only sent (item 351). Both end a launch as asked.
+    launches = [{"name": "t", "args": ["+devmap", "mp_crash"], "quit_after_map": 1}]
+    path = write_recipe(work, launches)
+    done = run(work, path, work / "out-timer")
+    launch = json.loads((work / "out-timer" / "results.json").read_text())["launches"][0]
+    check(done.returncode == 0 and launch["status"] == "ok" and launch["events"].get("quit"),
+          f"a quit by the game's timer: {launch}")
+
+    launches = [{"name": "q", "at_menu": ["0.3 quit"]}]
+    path = write_recipe(work, launches)
+    done = run(work, path, work / "out-quit-crash", env={"FAKE_APP_CRASH_AT_QUIT": "1"})
+    launch = json.loads((work / "out-quit-crash" / "results.json").read_text())["launches"][0]
+    check(done.returncode == 1 and launch["status"] == "crash_at_quit", f"a crash at the quit: {launch['status']}")
 
     launches = [{"name": "l", "at_menu": ["0.2 quit"]}]
     path = write_recipe(work, launches)
@@ -362,7 +402,7 @@ def test_png_reader(work):
 def main():
     with tempfile.TemporaryDirectory() as temp:
         work = Path(temp)
-        for test in (test_recipe_checks, test_png_reader, test_whole_run, test_variants, test_failures,
+        for test in (test_recipe_checks, test_env, test_png_reader, test_whole_run, test_variants, test_failures,
                      test_emulator, test_build, test_queue):
             folder = work / test.__name__
             folder.mkdir()

@@ -37,12 +37,17 @@
 #include "bot_grenades.h"
 #include "bot_mind.h"
 #include "bot_motor.h"
+#include "bot_names.h"
 #include "bot_navmesh.h"
 #include "bot_perception.h"
 #include "bot_team.h"
 
+#include <universal/com_files.h>
+
 #include <cmath>
 #include <cstring>
+#include <string>
+#include <vector>
 
 namespace
 {
@@ -77,6 +82,8 @@ struct BotSlot
     float path[kMaxCorners][3];
     int pathCount = 0;
     int pathIndex = 0;
+    bool pathComplete = false;   // the way reaches the goal's floor
+    float goalOnMesh[3] = {0.0f, 0.0f, 0.0f};
     float bestDistance = 0.0f;
     int progressTime = 0;
     int nextPlanTime = 0;
@@ -303,7 +310,7 @@ bool PlanWalk(BotSlot &bot, const kb::NavMesh &nav, const float *origin, const f
     bot.pathIndex = 0;
     bot.preAimKnown = false;
     bot.nextPreAim = 0;
-    const int count = nav.FindPath(origin, goal, bot.path, BotSlot::kMaxCorners);
+    const int count = nav.FindPath(origin, goal, bot.path, BotSlot::kMaxCorners, &bot.pathComplete, bot.goalOnMesh);
     if (count < 2)
         return false;
     bot.pathCount = count;
@@ -1443,14 +1450,22 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
         bot.hasGoal = true;
         bot.goalFor = intent;
         const bool walkable = PlanWalk(bot, *nav, origin, bot.goal);
-        // A hunt whose way ends short of the lead, above or below it (on
-        // another floor the way does not reach): no way there. Standing under
-        // a sound and staring at the ceiling is what a player does not do.
+        // A hunt whose way stops short of the lead's floor, above or below
+        // it (on another floor the way does not reach): no way there.
+        // Standing under a sound and staring at the ceiling is what a player
+        // does not do.
         if (walkable && intent == kb::Intent::Hunt)
         {
             const float *end = bot.path[bot.pathCount - 1];
-            const float floorAt = bot.goal[2] - kb::kHeadHeight;
-            if (std::fabs(end[2] - floorAt) > 80.0f && Distance2D(end, bot.goal) < 400.0f)
+            const float floorAt = bot.goalOnMesh[2];
+            // The lead is a player's feet, chest or eye: a way that ends
+            // from 72 units under it to 24 over it ends where the lead
+            // stands, whatever the mesh made of the floor there (PC run 21:
+            // a footstep beside a crate's top on Crash).
+            const float under = bot.goal[2] - end[2];
+            const bool besideLead = under > -24.0f && under < 72.0f;
+            if (!bot.pathComplete && !besideLead && std::fabs(end[2] - floorAt) > 48.0f
+                && Distance2D(end, bot.goal) < 400.0f)
             {
                 std::memcpy(bot.noWayTo, bot.goal, sizeof(bot.noWayTo));
                 bot.noWayUntil = svs.time + 10000;
@@ -1458,8 +1473,11 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
                 bot.pathIndex = 0;
                 bot.hasGoal = false;
                 if (LogOn())
-                    Com_Printf(CON_CHANNEL_SERVER, "bots: %d finds no way to a lead %.0f units %s\n", clientNum,
-                               std::fabs(end[2] - floorAt), end[2] < floorAt ? "above" : "below");
+                    Com_Printf(CON_CHANNEL_SERVER,
+                               "bots: %d finds no way to a lead %.0f units %s (bot at %.0f %.0f %.0f, lead %.0f %.0f "
+                               "%.0f, way ends %.0f %.0f %.0f)\n",
+                               clientNum, std::fabs(end[2] - floorAt), end[2] < floorAt ? "above" : "below", origin[0],
+                               origin[1], origin[2], bot.goal[0], bot.goal[1], bot.goal[2], end[0], end[1], end[2]);
                 return;
             }
         }
@@ -1513,6 +1531,80 @@ void Bot_RegisterDvars()
         DvarLimits(0, 1),
         DVAR_NOFLAG,
         "0 KisakCOD's bots never fire, 1 they fight the players they see (docs/bots.md)");
+}
+
+namespace
+{
+// Names from bots/names.txt: one to a line, up to 9 characters kept, with no
+// character a userinfo string or a console command treats as its own.
+std::vector<std::string> NamesFromFile()
+{
+    std::vector<std::string> names;
+    int handle = 0;
+    const int length = FS_SV_FOpenFileRead("bots/names.txt", &handle);
+    if (!handle)
+        return names;
+    std::string text;
+    if (length > 0 && length < 64 * 1024)
+    {
+        text.resize(static_cast<size_t>(length));
+        uint8_t *bytes = reinterpret_cast<uint8_t *>(text.data());
+        if (FS_Read(bytes, static_cast<uint32_t>(length), handle) != static_cast<uint32_t>(length))
+            text.clear();
+    }
+    FS_FCloseFile(handle);
+    std::string line;
+    const size_t room = kb::kNameChars - std::strlen(kb::kBotTag);
+    auto finish = [&]() {
+        while (!line.empty() && line.back() == ' ')
+            line.pop_back();
+        if (!line.empty() && !kb::WearsBotTag(line.c_str()))
+            names.push_back(line.substr(0, room));
+        line.clear();
+    };
+    for (char c : text)
+    {
+        if (c == '\n' || c == '\r')
+        {
+            finish();
+            continue;
+        }
+        if (c == '\\' || c == '"' || c == ';' || c == '%' || static_cast<unsigned char>(c) < 32)
+            continue;
+        if (c == ' ' && line.empty())
+            continue;
+        line.push_back(c);
+    }
+    finish();
+    return names;
+}
+
+bool NameTaken(const char *name, void *)
+{
+    for (int i = 0; i < sv_maxclients->current.integer; ++i)
+    {
+        const client_t &cl = svs.clients[i];
+        if (cl.header.state != CS_FREE && !I_stricmp(cl.name, name))
+            return true;
+    }
+    return false;
+}
+} // namespace
+
+void Bot_PickName(char *out, size_t size)
+{
+    static uint32_t s_seed = 0;
+    if (!s_seed)
+        s_seed = static_cast<uint32_t>(Sys_Milliseconds()) | 1u;
+    s_seed = s_seed * 1664525u + 1013904223u;
+    const std::vector<std::string> file = NamesFromFile();
+    std::vector<const char *> names;
+    for (const std::string &name : file)
+        names.push_back(name.c_str());
+    if (names.empty())
+        names.assign(kb::kBotNames, kb::kBotNames + kb::kBotNameCount);
+    const int start = static_cast<int>((s_seed >> 8) % names.size());
+    kb::PickBotName(names.data(), static_cast<int>(names.size()), start, NameTaken, nullptr, out, size);
 }
 
 int Bot_Ping(int clientNum)

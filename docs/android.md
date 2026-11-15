@@ -160,10 +160,17 @@ the number of bots. It lists every map in the game folder (`zone/*/mp_*.ff`
 and `usermaps`); a map starts a match against KisakCOD's bots
 (`+set developer_script 1 +set bot_brain 1 +set scr_testclients <n> +set
 g_gametype war|dm +devmap <map>`), "Multiplayer" starts the multiplayer
-game's own menu and "Campaign" the singleplayer game's. The game runs in a
+game's own menu and "Campaign" the singleplayer game's. "Visuals" switches
+every start between Legacy (`+set r_visuals legacy`) and Modern (`+set
+r_aaSamples 1 +set r_visuals modern`, docs/vulkan-modern.md); the choice is
+kept with the bot count and mode. Modern has not been measured on the Adreno
+yet, and the sun's shadows stay off on Android (`sm_enable 0`), so the fog
+shows no light shafts there. The game runs in a
 process of its own (`:game`), which ends with the game: the engine never
 starts twice in one process, and the first screen comes back when the game
 quits.
+
+Quitting ends the game's process with `_exit(0)` (`Sys_Quit`, `src/linux/main.cpp`): a plain `exit()` ran Android's UI libraries' exit handlers while the activity's render thread still drew, and every quit ended in SIGABRT in an hwui thread.
 
 ### The campaign
 
@@ -206,6 +213,12 @@ adb logcat -s KisakCOD SDL
 
 Extra engine arguments for a run go in the `args` extra, split at spaces:
 `adb shell am start -n org.kisakcod.game/.KisakActivity --es args "+set developer 1"`.
+`KISAK_*` environment variables (the start-up knobs such as
+`KISAK_VK_MODERN_SSR_STEPS`) go in the `env` extra as `NAME=VALUE` pairs split
+at spaces, and the activity sets them in its process before the game starts:
+`--es env "KISAK_VK_MODERN_SSR_STEPS=16 KISAK_VK_MODERN_AO_HALF=0"`. Other
+names are refused. `scripts/runs/android_run.py` fills it from a recipe's or
+launch's `env`.
 The activity starts the game without shadow maps (`+set sm_enable 0`): on
 the Adreno 740 the sun's shadows flickered from frame to frame (2026-11-15,
 cause not found yet). The activity always starts the game full screen (`+set r_fullscreen 1`, so
