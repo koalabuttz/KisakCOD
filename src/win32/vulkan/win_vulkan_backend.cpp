@@ -681,12 +681,28 @@ bool ModernProbeCaptureRead(void *, IDirect3DDevice9 *device, int x, int y, int 
                                          static_cast<uint32_t>(width), static_cast<uint32_t>(height), rgb);
 }
 
+// The sun's shadow map the view's lit surfaces read, for the soft filter.
+void ModernSunShadow(void *, IDirect3DDevice9 *device, const GfxModernSunShadow *shadow)
+{
+    if (s_modernRefused.load(std::memory_order_relaxed) || !shadow)
+        return;
+    front::ModernSunShadowView view;
+    view.on = shadow->on;
+    for (int i = 0; i < 2; ++i)
+    {
+        view.texel[i] = shadow->texel[i];
+        view.depthUnits[i] = shadow->depthUnits[i];
+    }
+    front::ModernSunShadow(device, view);
+}
+
 const GfxModernHooks s_modernHooks = {nullptr,          ModernJitterPixels, ModernSceneDone,
                                       ModernSceneBegin, ModernSceneLit,     ModernSurfaceMoved,
                                       ModernSkinnedSurfaceMoved, ModernLitInputs, ModernWantsSceneDepth,
                                       ModernSceneDepth, ModernReflectionProbe, ModernPlanarWanted,
                                       ModernPlanarBegin, ModernPlanarDone,
-                                      ModernProbeCaptureWanted, ModernProbeCapture, ModernProbeCaptureRead};
+                                      ModernProbeCaptureWanted, ModernProbeCapture, ModernProbeCaptureRead,
+                                      ModernSunShadow};
 } // namespace
 
 int Kisak_VulkanBackendSelected()

@@ -262,6 +262,14 @@ struct Backend
     // counts since the device was made (a world loads before statistics are
     // started): filtered, left as they are (not 8-bit colour, too small),
     // and the time taken.
+    // Soft sun shadows (docs/vulkan-modern.md "Soft sun shadows"): wanted
+    // with our lit shaders unless switched on or off outright, and the sun's
+    // apparent size in degrees; the scenes that used them, and the shadow
+    // parameters' frame count, which turns the filter's discs.
+    bool softShadowsWanted = false;
+    float shadowSoftness = 1.5f;
+    uint64_t softShadowScenes = 0, softShadowScenesBase = 0;
+    uint32_t shadowFrame = 0;
     bool probesWanted = false;
     uint32_t probesFiltered = 0;
     uint32_t probesLeft = 0;
@@ -338,7 +346,8 @@ struct Backend
     {
         bool bloom = true, exposure = true, velocity = true;
         bool shaders = true, modelShaders = true, noSunShaders = true, lightShaders = true;
-        int ao = -1, reflections = -1, normals = -1, fog = -1;
+        int ao = -1, reflections = -1, normals = -1, fog = -1, softShadows = -1;
+        float shadowSoftness = 1.5f;
         ModernDebugView debug = ModernDebugNone;
         modern::TonemapCurve curve = modern::TonemapCurve::Neutral;
         float sunStrength = 1.0f, skyStrength = 1.0f;
@@ -576,6 +585,10 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
     backend->reflectionsWanted = reflections == 1 || (reflections < 0 && (backend->debugReflections || ours));
     backend->normalsWanted = start.normals != 0 && (start.normals == 1 || backend->debugNormals || backend->aoWanted
                                                     || backend->reflectionsWanted || backend->planarWanted);
+    const int softShadows = tuning.softShadows >= 0 ? tuning.softShadows : start.softShadows;
+    backend->softShadowsWanted = softShadows == 1 || (softShadows < 0 && ours);
+    if (!backend->softShadowsWanted && backend->legacy)
+        lg::SetModernShadow(backend->legacy, nullptr);
     if (backend->legacy)
     {
         if (!backend->aoWanted || !backend->normalsWanted)
@@ -631,6 +644,7 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
                                                                                  : start.fogParams.scatter;
     fogParams.spotShare = number(tuning.fogSpots, start.fogParams.spotShare, 0.0f, 4.0f, true);
     fogParams.froxels = tuning.fogFroxels >= 0 ? tuning.fogFroxels == 1 : start.fogParams.froxels;
+    backend->shadowSoftness = number(tuning.shadowSoftness, start.shadowSoftness, 0.0f, 20.0f, false);
 
     backend->tonemapCurve = tuning.tonemap >= static_cast<int>(modern::TonemapCurve::Clamp)
                                     && tuning.tonemap <= static_cast<int>(modern::TonemapCurve::Aces)
@@ -645,7 +659,8 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
             "vulkan d3d9: modern: switches now: bloom %s, exposure %s (key %.3f), velocity %s, our shaders %s "
             "(models %s, without the sun %s, lights %s; sun %.2f, sky %.2f), ambient occlusion %s (radius %.1f, power %.2f, "
             "thickness %.1f, grazing %.2f, floor %.2f, edge %.3f%s), reflections %s (distance %.0f, thickness %.1f), normals %s, "
-            "volumetric fog %s (%s, sun %.2f, scatter %.2f, spot lights %.2f), tonemap %s, debug view %s",
+            "volumetric fog %s (%s, sun %.2f, scatter %.2f, spot lights %.2f), soft shadows %s (sun %.2f degrees), "
+            "tonemap %s, debug view %s",
             onOff(backend->bloomWanted), onOff(backend->exposureWanted), backend->exposureParams.key,
             onOff(backend->velocityWanted), onOff(backend->shadersWanted), onOff(backend->modelShadersWanted),
             onOff(backend->noSunShadersWanted), onOff(backend->lightShadersWanted), backend->sunStrength, backend->skyStrength, onOff(backend->aoWanted),
@@ -653,7 +668,8 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
             aoParams.half ? ", half resolution" : "",
             onOff(backend->reflectionsWanted), reflectionParams.maxDistance, reflectionParams.thickness,
             onOff(backend->normalsWanted), onOff(backend->fogWanted), fogParams.froxels ? "froxels" : "march",
-            fogParams.sunShare, fogParams.scatter, fogParams.spotShare, modern::CurveName(backend->tonemapCurve), DebugViewName(view));
+            fogParams.sunShare, fogParams.scatter, fogParams.spotShare, onOff(backend->softShadowsWanted),
+            backend->shadowSoftness, modern::CurveName(backend->tonemapCurve), DebugViewName(view));
 }
 } // namespace
 
@@ -819,6 +835,15 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     // The normals buffer is built for what reads it; KISAK_VK_MODERN_NORMALS=0
     // keeps it (and so ambient occlusion and reflections) off whatever asks.
     start.normals = onOff("KISAK_VK_MODERN_NORMALS");
+    // Soft sun shadows with our lit shaders, unless this says otherwise; the
+    // sun's apparent size in degrees (bigger is softer).
+    start.softShadows = onOff("KISAK_VK_MODERN_SOFT_SHADOWS");
+    {
+        const std::string softness = EnvText("KISAK_VK_MODERN_SHADOW_SOFTNESS");
+        const float value = softness.empty() ? 0.0f : std::strtof(softness.c_str(), nullptr);
+        if (value > 0.0f && value <= 20.0f)
+            start.shadowSoftness = value;
+    }
     ApplyModernTuning(backend, backend->modernTuning);
     if (!h.windowSystem || !h.windowSystem(h.user, desc.window, backend->windowSystem))
     {
@@ -1168,6 +1193,12 @@ void BackendLogStats(Backend *backend, bool reset)
     if (backend->planarReads > backend->planarReadsBase)
         HostLog(h, "vulkan d3d9: modern: %llu scenes read the planar reflection",
                 static_cast<unsigned long long>(backend->planarReads - backend->planarReadsBase));
+    // Soft sun shadows: the scenes whose lit surfaces filtered the sun's
+    // shadow map with them (their cost is in the lit passes' own time).
+    if (backend->softShadowScenes > backend->softShadowScenesBase)
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with soft sun shadows (sun %.2f degrees)",
+                static_cast<unsigned long long>(backend->softShadowScenes - backend->softShadowScenesBase),
+                backend->shadowSoftness);
     // Bloom: the scenes it ran for in place of the glow, the passes of each,
     // and their GPU time per scene.
     if (backend->bloom)
@@ -1210,6 +1241,7 @@ void BackendLogStats(Backend *backend, bool reset)
         backend->linearScenesBase = backend->linearScenes;
         backend->planarViewsBase = backend->planarViews;
         backend->planarReadsBase = backend->planarReads;
+        backend->softShadowScenesBase = backend->softShadowScenes;
         modern::ResetStats(backend->exposure);
         if (backend->exposure)
             backend->exposureMsBase = PassTimingsFor(backend->core, "modern exposure").totalMs;
@@ -2290,6 +2322,39 @@ bool BackendModernPlanarBegin(Backend *backend, const ModernPlanarView &view, lg
     color = backend->planarColorSurface;
     depth = backend->planarDepth;
     return true;
+}
+
+void BackendModernSunShadow(Backend *backend, lg::Device *legacy, const ModernSunShadowView &view)
+{
+    if (!backend || !legacy)
+        return;
+    const bool usable = view.on && view.texel[0] > 0.0f && view.texel[1] > 0.0f && view.depthUnits[0] > 0.0f
+                        && view.depthUnits[1] > 0.0f;
+    if (!backend->softShadowsWanted || !usable)
+    {
+        lg::SetModernShadow(legacy, nullptr);
+        return;
+    }
+    // The filter's radius (texels) is the receiver's depth below its
+    // blockers times the tangent of half the sun's apparent size, over a
+    // texel's width; it reaches at most 16 texels, the blocker search with
+    // it, so a soft edge costs the same taps everywhere.
+    constexpr float kWidestTexels = 16.0f;
+    constexpr float kPi = 3.14159265f;
+    const float tanHalf = std::tan(0.5f * backend->shadowSoftness * kPi / 180.0f);
+    lg::ModernShadowParams params{};
+    for (int i = 0; i < 2; ++i)
+    {
+        params.penumbra[i] = view.depthUnits[i] * tanHalf / view.texel[i];
+        params.maxRadius[i] = kWidestTexels;
+        // The steepest receiver the per-tap bias follows: two units of
+        // height a unit across (63 degrees), in depth per texel.
+        params.slopeCap[i] = 2.0f * view.texel[i] / view.depthUnits[i];
+    }
+    params.on = 1.0f;
+    params.frame = static_cast<float>(backend->shadowFrame++ & 63u);
+    lg::SetModernShadow(legacy, &params);
+    ++backend->softShadowScenes;
 }
 
 void BackendModernPlanarDone(Backend *backend, const ModernPlanarView &view)

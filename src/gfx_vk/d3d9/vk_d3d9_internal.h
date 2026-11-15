@@ -582,6 +582,8 @@ public:
     bool ModernPlanarWanted() { return BackendModernPlanarWanted(backend_); }
     bool ModernPlanarBegin(const ModernPlanarView &view);
     void ModernPlanarDone(const ModernPlanarView &view);
+    // Under FrontLock (vk_d3d9.h ModernSunShadow).
+    void ModernSunShadow(const ModernSunShadowView &view) { BackendModernSunShadow(backend_, legacy_, view); }
     const Host &host() const { return parent_->host(); }
     HRESULT Unsupported(const char *method);
     DeviceCounters counters() const;

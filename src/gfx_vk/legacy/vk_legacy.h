@@ -966,6 +966,26 @@ void SetModernPlanar(Device *device, Image *image, const ModernPlanarParams *par
 // times this (1 by default). Set before the first draw that uses one:
 // shaders already built keep theirs.
 void SetModernLightPass(Device *device, float strength);
+// Soft sun shadows (docs/vulkan-modern.md "Soft sun shadows"): how the
+// Modern lit shaders with the sun's shadow map filter it, pushed after
+// ModernPlanarParams (fragment stage, offset 96) to every pipeline drawn as
+// one of ours. on 0 keeps the game's four taps. Set before a scene's lit
+// surfaces draw; null turns soft shadows off.
+struct ModernShadowParams
+{
+    // Filter radius (texels) per unit of the map's depth between a receiver
+    // and its blockers, near and far partitions: the sun's apparent size.
+    float penumbra[2];
+    // The widest filter and blocker search (texels), near and far.
+    float maxRadius[2];
+    // Depth per texel at the steepest receiver slope the per-tap depth bias
+    // follows (steeper slopes are capped), near and far.
+    float slopeCap[2];
+    float on;    // 1 soft shadows, 0 the game's four taps
+    float frame; // turns the sample pattern each frame, for TAA to average
+};
+static_assert(sizeof(ModernShadowParams) == 32, "the lit shaders' push constant block, after the planar's");
+void SetModernShadow(Device *device, const ModernShadowParams *params);
 #endif
 
 // The device's window is about to be destroyed: an open pass and frame end
