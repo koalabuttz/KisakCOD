@@ -22,6 +22,7 @@ constexpr const char *kBotTag = "[BOT] ";
 // bots/names.txt in the home folder, one name to a line.
 constexpr const char *kBotNames[] = {
     "Oinks", "Guillaume", "Bjorn", "Bjarna", "Gorbachev", "Skoggy", "Ginkgo", "Sunshine", "Capy", "ms rat",
+    "anna",
 };
 constexpr int kBotNameCount = static_cast<int>(sizeof(kBotNames) / sizeof(kBotNames[0]));
 
