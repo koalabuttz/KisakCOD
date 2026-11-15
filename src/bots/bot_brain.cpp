@@ -315,9 +315,15 @@ bool Walk(BotSlot &bot, const playerState_s *ps, float seconds, usercmd_s &cmd, 
     if (bot.pathIndex >= bot.pathCount)
         return false;
 
-    while (bot.pathIndex < bot.pathCount
-           && Distance2D(origin, bot.path[bot.pathIndex]) < kCornerReach
-           && std::fabs(origin[2] - bot.path[bot.pathIndex][2]) < 48.0f)
+    // The last corner of the way to an objective it takes is the objective
+    // itself, often a flag on a base the walls of the map leave out: close
+    // to it, on the base or against it, is there.
+    auto reached = [&](int index) {
+        const bool objective = bot.roleGoal && bot.role == kb::Role::Attack && index == bot.pathCount - 1;
+        return Distance2D(origin, bot.path[index]) < (objective ? 64.0f : kCornerReach)
+               && std::fabs(origin[2] - bot.path[index][2]) < (objective ? 72.0f : 48.0f);
+    };
+    while (bot.pathIndex < bot.pathCount && reached(bot.pathIndex))
     {
         ++bot.pathIndex;
         if (bot.pathIndex < bot.pathCount)
