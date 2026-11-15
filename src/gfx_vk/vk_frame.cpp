@@ -869,7 +869,12 @@ Image *AcquireImage(Core &core)
         return nullptr;
     }
     if (result == VK_SUBOPTIMAL_KHR)
-        core.rebuildPending = true; // still usable: draw this one, rebuild after
+    {
+        // Still usable: draw this one, rebuild after (unless the compositor
+        // turning the picture is all it means).
+        if (!core.transformLeftToCompositor)
+            core.rebuildPending = true;
+    }
     else if (!Check(core, result, "vkAcquireNextImageKHR"))
         return nullptr;
     core.imageAcquired = true;
@@ -925,6 +930,7 @@ FrameResult Present(Core *core_)
     const VkSwapchainKHR swapchain = core.swapchain;
     const VkSemaphore renderDone = core.renderDone[core.imageIndex];
     const uint32_t imageIndex = core.imageIndex;
+    const bool turnedByCompositor = core.transformLeftToCompositor;
     if (!RecordControl(core, [=](RecordState &state) {
             VkPresentInfoKHR present{};
             present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -935,9 +941,11 @@ FrameResult Present(Core *core_)
             present.pImageIndices = &imageIndex;
             const VkResult result = state.vk->vkQueuePresentKHR(state.queue, &present);
             ++state.presents;
-            if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+            // VK_SUBOPTIMAL_KHR is expected for a swapchain the compositor turns.
+            const bool expected = result == VK_SUBOPTIMAL_KHR && turnedByCompositor;
+            if (!expected && (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR))
                 state.rebuild = true;
-            else
+            else if (!expected)
                 RecordCheck(state, result, "vkQueuePresentKHR");
         }))
         return FrameResult::Failed;

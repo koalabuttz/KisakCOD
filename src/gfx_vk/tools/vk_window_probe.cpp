@@ -281,6 +281,27 @@ const char *PresentModeChoiceFault()
     return nullptr;
 }
 
+// The first case ChoosePreTransform gets wrong, or null: no rotation asked
+// whenever the surface supports it (an Android panel turned a quarter), else
+// the surface's own transform.
+const char *PreTransformChoiceFault()
+{
+    VkSurfaceCapabilitiesKHR caps{};
+    caps.supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR | VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR
+        | VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR;
+    caps.currentTransform = VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR;
+    if (gfx_vk::ChoosePreTransform(caps) != VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+        return "a rotated surface that supports the identity";
+    caps.currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    if (gfx_vk::ChoosePreTransform(caps) != VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+        return "an upright surface";
+    caps.supportedTransforms = VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR;
+    caps.currentTransform = VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR;
+    if (gfx_vk::ChoosePreTransform(caps) != VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR)
+        return "a surface without the identity";
+    return nullptr;
+}
+
 int Run(const Options &options)
 {
     if (!SDL_Init(SDL_INIT_VIDEO))
@@ -355,6 +376,12 @@ int Run(const Options &options)
         return Failed("present_mode", wrong);
     }
     std::printf("vulkan_probe.present_mode_choice=checked\n");
+    if (const char *wrong = PreTransformChoiceFault())
+    {
+        gfx_vk::DestroyCore(core);
+        return Failed("pre_transform", wrong);
+    }
+    std::printf("vulkan_probe.pre_transform_choice=checked\n");
 
     vk_probe::DrawScene *scene = nullptr;
     if (options.draw)

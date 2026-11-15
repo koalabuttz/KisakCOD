@@ -883,6 +883,23 @@ VkPresentModeKHR ChoosePresentMode(const VkPresentModeKHR *offered, uint32_t cou
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
+// The picture is drawn upright for the extent the surface reports, so the
+// swapchain asks for no rotation whenever the surface allows it, and the
+// compositor turns the picture for the panel. On desktops the surface's own
+// transform is the identity anyway. On Android a panel whose own orientation
+// is portrait reports a quarter turn while the game runs in landscape, and
+// handing that transform over unchanged told the compositor the landscape
+// picture was already turned: it came out squeezed into portrait (first app
+// run on the Retroid Pocket 6, 2026-11-15). Drawing the picture turned
+// instead (Android's "pre-rotation") saves the compositor that work and is
+// left for later.
+VkSurfaceTransformFlagBitsKHR ChoosePreTransform(const VkSurfaceCapabilitiesKHR &caps)
+{
+    if (caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+        return VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    return caps.currentTransform;
+}
+
 bool SurfaceExtent(Core &core, VkSurfaceCapabilitiesKHR &caps, VkExtent2D &extent)
 {
     if (!Check(core, core.vk.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(core.physical, core.surface, &caps),
@@ -976,7 +993,7 @@ BuildResult BuildSwapchain(Core &core)
     info.imageArrayLayers = 1;
     info.imageUsage = usage;
     info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    info.preTransform = caps.currentTransform;
+    info.preTransform = ChoosePreTransform(caps);
     info.compositeAlpha = alpha;
     info.presentMode = mode;
     info.clipped = VK_TRUE;
@@ -1031,9 +1048,11 @@ BuildResult BuildSwapchain(Core &core)
                      static_cast<uint32_t>(core.swapImages.size()), canCapture};
     core.rebuildPending = false;
     core.resizePending = false;
+    core.transformLeftToCompositor = info.preTransform != caps.currentTransform;
     ++core.stats.swapchainBuilds;
-    Log(core, "swapchain %ux%u %s %s, %u images%s", extent.width, extent.height, FormatName(format.format),
-        PresentModeName(mode), core.swapInfo.imageCount, canCapture ? ", capturable" : "");
+    Log(core, "swapchain %ux%u %s %s, %u images%s%s", extent.width, extent.height, FormatName(format.format),
+        PresentModeName(mode), core.swapInfo.imageCount, canCapture ? ", capturable" : "",
+        core.transformLeftToCompositor ? ", turned by the compositor" : "");
     return BuildResult::Built;
 }
 
