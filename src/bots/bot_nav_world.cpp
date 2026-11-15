@@ -33,6 +33,8 @@ kb::NavMesh s_nav;
 char s_navMap[64];
 uint32_t s_navChecksum;
 bool s_navTried;
+// Counts the meshes loaded, so what is worked out from one knows when it is stale.
+int s_navGeneration;
 
 // CM_ShowSingleBrushCollision hands each face of a brush to a callback with
 // no context; this collects them for one brush at a time.
@@ -272,6 +274,12 @@ const kisak::bots::NavMesh *Bot_Nav()
     s_navTried = true;
     s_navChecksum = cm.checksum;
     I_strncpyz(s_navMap, mapName, sizeof(s_navMap));
+    ++s_navGeneration;
     LoadOrBuild(mapName, cm.checksum);
     return s_nav.Loaded() ? &s_nav : nullptr;
+}
+
+int Bot_NavGeneration()
+{
+    return s_navGeneration;
 }
