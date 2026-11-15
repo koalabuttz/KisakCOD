@@ -879,7 +879,8 @@ What the GXM back end does so far (step 2d):
   summary says how often each applied: `draw work left out: N draws kept
   the last draw's programs and fixed state; N of N others found their
   programs in the table; of N texture binds N were set already and N set
-  their filters anew; of N uniform buffers N were the last draw's`. A file
+  their filters anew; of N uniform buffers N were the last draw's; of N
+  draws with textures N had the last draw's and set none`. A file
   named `no-draw-reuse` in the folder of the compiled programs turns all of
   them off (the log says so at start-up), so that a console run can tell a
   fault of theirs without another build. Console run AR (2026-11-14) put a
@@ -905,6 +906,15 @@ What the GXM back end does so far (step 2d):
   (off unless asked for) copies the constants into the buffer itself in
   place of `sceGxmSetUniformDataF`, for programs where a first copy
   matched sceGxm's own, to measure what that call costs.
+- **The last draw's textures kept.** Going through a draw's textures
+  was the largest part of a draw in the back end (about 2.1 us of 7.5 in
+  console run CP), also when every one of them was set already. The
+  D3D9 front now counts the changes to what a bind reads (a sampler's
+  texture or state, a texture made anew, moved to other memory, left
+  unfilled or destroyed), and a draw that finds the count, its pixel
+  program, the mip bias and the frame as the last draw's textures were
+  set with in the same scene sets none. An empty file `no-texture-keep`,
+  or `vita_gxm no-texture-keep 1`, turns it off.
 - **The last draw's state kept.** The D3D9 front counts every call that
   changes what a draw's programs and fixed state come from (a render
   state, a shader, the vertex declaration, a stream's stride, the

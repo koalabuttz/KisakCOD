@@ -244,6 +244,7 @@ struct Variant
     const SceGxmProgramParameter *depth[16] = {};      // "kisak_depth_s<n>"
     const SceGxmProgramParameter *inputs[16] = {};     // "in_v<n>"
     int8_t textureUnit[16];                            // sampler s<n>'s unit, -1 none
+    uint16_t samplers = 0;      // the samplers with a unit
     bool uniforms = false; // has a default uniform buffer
     bool depthUniforms = false; // any of depth[] is there: its uniforms follow the textures
     uint16_t depthMask = 0;     // the samplers whose depth[] is there
@@ -326,6 +327,11 @@ struct Device
     // finds it as the last draw left it takes that draw's programs and state
     // (Draw, gxm_legacy_draw.cpp).
     uint64_t stateSerial = 0;
+    // Counts the changes to what BindTextures reads: a sampler's texture or
+    // state, a texture made anew, moved to other memory, left unfilled or
+    // destroyed. A draw that finds it as the last draw of the same pixel
+    // program left it binds nothing again.
+    uint64_t textureSerial = 0;
 
     // Things the back end does not do yet, each logged once.
     std::vector<const char *> notYet;
