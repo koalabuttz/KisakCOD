@@ -176,7 +176,32 @@ asks for no rotation (`ChoosePreTransform` in `src/gfx_vk/vk_core.cpp`), the
 compositor turns the picture, and the `VK_SUBOPTIMAL_KHR` that Android
 reports for that alone does not rebuild the swapchain. Drawing the picture
 turned (Android's pre-rotation) would save the compositor that work; it is
-left for the speed stage.
+left for the speed stage. Android reports a change of size (the window going
+full screen) by that same result alone, so every 32nd one still compares the
+surface's size with the swapchain's and rebuilds it when they differ (run 4
+kept a 1920x970 swapchain on the 1920x1080 screen).
+
+What run 4 (mp_crash on the Pocket 6) showed, and the fixes:
+
+- Sticks and triggers did nothing while the buttons worked. The window host
+  started SDL's text input for the window's whole life, as on a desktop; on
+  Android that brings up the on-screen keyboard and moves input focus to
+  SDL's hidden text field, which gets key events but not the controller's
+  motion. Where typing needs an on-screen keyboard
+  (`SDL_HasScreenKeyboardSupport`), text input now runs only while the game
+  wants text: the console, the chat line or a menu text field
+  (`WindowHost::SetTextWanted`, `WantsText` in `mp_client_input.cpp`).
+- A tap clicked where the previous tap was: the engine took the pointer's
+  position once a frame but the click at once. A click now hands over a
+  moved pointer first (`ClientWindow::DeliverPointer`).
+- Models (the car, the hands and gun) were flat colours. Their texture
+  coordinates and normals are UBYTE4 vertex data, which the adapter reads as
+  `R8G8B8A8_USCALED`; Adreno reads no USCALED vertex data. Such a device now
+  gets them as `R8G8B8A8_UNORM`, and the vertex shaders reading them scale
+  them back to bytes (`Device::byteStandIn`, `byteInputs` in
+  `legacy_shader::BuildSpirv`). `KISAK_VK_BYTE_INPUTS=unorm` takes that path
+  on any device; CI runs the Legacy checks with it, and the `byte_inputs`
+  scene fails without the scale.
 
 ## Running the server on a device
 
