@@ -172,6 +172,8 @@ set(SERVER_MP
     "${SRC_DIR}/bots/bot_nav_world.cpp"
     "${SRC_DIR}/bots/bot_navmesh.cpp"
     "${SRC_DIR}/bots/bot_navmesh.h"
+    "${SRC_DIR}/bots/bot_perception.h"
+    "${SRC_DIR}/bots/bot_senses.cpp"
     "${DEPS_DIR}/recastnavigation/Detour/DetourAlloc.cpp"
     "${DEPS_DIR}/recastnavigation/Detour/DetourAlloc.h"
     "${DEPS_DIR}/recastnavigation/Detour/DetourAssert.cpp"

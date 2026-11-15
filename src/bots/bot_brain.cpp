@@ -5,15 +5,18 @@
 //
 //   read      the bot's own player state (view, weapon, alive or dead), as a
 //             player's client knows it;
+//   sense     ten times a second, what its eyes and ears get of the other
+//             players (bot_senses.cpp) goes into what it knows
+//             (bot_perception.h): noticed, remembered and heard players;
 //   decide    where to go and what to look at (for now: walk to random
 //             places on the map's navigation mesh, look around when there is
-//             none, ask to respawn when dead; later phases add perception,
-//             combat and objectives, docs/bots.md);
+//             none, watch the player it noticed, remembers or heard, ask to
+//             respawn when dead; later phases add combat and objectives,
+//             docs/bots.md);
 //   move      the view motor (bot_motor.h) turns toward that at a human pace;
 //   send      the usercmd_s goes through SV_ClientThink like a player's.
 //
-// The brain does not read other players or entities. Later phases add a
-// perception step that only reports what this bot could see or hear.
+// The brain reads other players only through the sense step.
 
 #include <universal/q_shared.h>
 #include <server_mp/server_mp.h>
@@ -23,6 +26,7 @@
 #include "bot_brain.h"
 #include "bot_motor.h"
 #include "bot_navmesh.h"
+#include "bot_perception.h"
 
 #include <cmath>
 #include <cstring>
@@ -33,6 +37,7 @@ namespace
 namespace kb = kisak::bots;
 
 const dvar_t *bot_brain;
+const dvar_t *bot_log;
 
 constexpr int kMaxBotSlots = 64;
 
@@ -64,6 +69,11 @@ struct BotSlot
     bool jumpHeld = false;
     int stuckCount = 0;
     float lastOrigin[3] = {0.0f, 0.0f, 0.0f};
+
+    // What the bot knows of the other players, and when it last sensed.
+    kb::Perception perception;
+    int lastSense = 0;
+    int nextSense = 0;
 };
 
 BotSlot s_slots[kMaxBotSlots];
@@ -75,6 +85,24 @@ kb::ViewMotorParams IdleMotor()
     params.maxSpeed = 120.0f;
     return params;
 }
+
+// Watching a player it noticed, remembers or heard: quicker than a look
+// around, no faster than walking (aiming comes with combat, phase 3).
+kb::ViewMotorParams WatchMotor()
+{
+    kb::ViewMotorParams params;
+    params.responsiveness = 10.0f;
+    params.maxSpeed = 200.0f;
+    return params;
+}
+
+const kb::PerceptionParams &Senses()
+{
+    static const kb::PerceptionParams params;
+    return params;
+}
+
+constexpr int kSenseMs = 100;
 
 kb::ViewMotorParams WalkMotor()
 {
@@ -105,6 +133,38 @@ constexpr float kCornerReach = 20.0f;
 constexpr int kJumpAfterMs = 1200;
 constexpr int kReplanAfterMs = 2500;
 
+// The view (pitch, yaw) from the bot's eye toward `place`.
+void ViewToward(const playerState_s *ps, const float *place, float *view)
+{
+    const float dx = place[0] - ps->origin[0];
+    const float dy = place[1] - ps->origin[1];
+    const float dz = place[2] - (ps->origin[2] + ps->viewHeightCurrent);
+    view[0] = -std::atan2(dz, std::hypot(dx, dy)) * (180.0f / 3.14159265358979f);
+    view[1] = std::atan2(dy, dx) * (180.0f / 3.14159265358979f);
+}
+
+// A sense tick when one is due; logs what the bot noticed when bot_log is set.
+void Sense(BotSlot &bot, int clientNum)
+{
+    if (svs.time < bot.nextSense)
+        return;
+    // The first tick, and the first after a gap (dead, spectating), counts as
+    // one tick's worth of looking.
+    const bool recent = bot.lastSense && svs.time - bot.lastSense <= 2 * kSenseMs;
+    const int lastSense = recent ? bot.lastSense : svs.time - kSenseMs;
+    BotNotice notices[8];
+    const int count = Bot_Sense(clientNum, bot.perception, Senses(), svs.time, lastSense, bot.rng, notices, 8);
+    bot.lastSense = svs.time;
+    bot.nextSense = svs.time + kSenseMs;
+    if (!bot_log || !bot_log->current.integer)
+        return;
+    for (int i = 0; i < count; ++i)
+        Com_Printf(CON_CHANNEL_SERVER,
+                   "bots: %d noticed %d after %d ms in view, %.0f units, %.0f degrees off centre, %.0f%% showing\n",
+                   clientNum, notices[i].entity, notices[i].afterMs, notices[i].distance, notices[i].offDegrees,
+                   notices[i].exposure * 100.0f);
+}
+
 // Picks a reachable place and the way there. False when there is none.
 bool PlanWalk(BotSlot &bot, const kb::NavMesh &nav, const float *origin)
 {
@@ -126,7 +186,8 @@ bool PlanWalk(BotSlot &bot, const kb::NavMesh &nav, const float *origin)
 // One server frame of walking: turn toward the next corner, move toward it,
 // jump when stuck, find another way when still stuck. Returns false when the
 // bot has nowhere to go this frame (it then looks around).
-bool Walk(BotSlot &bot, const kb::NavMesh &nav, const playerState_s *ps, float seconds, usercmd_s &cmd)
+bool Walk(BotSlot &bot, const kb::NavMesh &nav, const playerState_s *ps, float seconds, usercmd_s &cmd,
+          const float *watch)
 {
     const float *origin = ps->origin;
     if (bot.pathIndex >= bot.pathCount)
@@ -176,7 +237,10 @@ bool Walk(BotSlot &bot, const kb::NavMesh &nav, const playerState_s *ps, float s
         return false;
     }
 
-    kb::StepView(bot.view, 0.0f, kb::YawToward(origin, corner), seconds, WalkMotor());
+    if (watch)
+        kb::StepView(bot.view, watch[0], watch[1], seconds, WatchMotor());
+    else
+        kb::StepView(bot.view, 0.0f, kb::YawToward(origin, corner), seconds, WalkMotor());
     const kb::MoveKeys keys = kb::MoveToward(bot.view.angles[1], origin, corner);
     cmd.forwardmove = static_cast<char>(keys.forward);
     cmd.rightmove = static_cast<char>(keys.right);
@@ -205,6 +269,12 @@ void Bot_RegisterDvars()
         DvarLimits(0, 1),
         DVAR_NOFLAG,
         "Which brain test clients use: 0 the retail random inputs, 1 KisakCOD's bots (docs/bots.md)");
+    bot_log = Dvar_RegisterInt(
+        "bot_log",
+        0,
+        DvarLimits(0, 1),
+        DVAR_NOFLAG,
+        "1 prints to the console each player a KisakCOD bot notices, and after how long in view (docs/bots.md)");
 }
 
 bool Bot_UserMove(client_t *cl)
@@ -229,6 +299,7 @@ bool Bot_UserMove(client_t *cl)
         bot.port = port;
         bot.lastTime = svs.time;
         bot.rng.Seed(0x6b6973u ^ (port * 2654435761u) ^ static_cast<uint32_t>(clientNum));
+        bot.nextSense = svs.time + (clientNum * 37) % kSenseMs;
     }
 
     const playerState_s *ps = SV_GameClientNum(clientNum);
@@ -263,6 +334,7 @@ bool Bot_UserMove(client_t *cl)
         kb::PrimeView(bot.view, ps->viewangles[0], ps->viewangles[1]);
         if (newPlace)
         {
+            bot.perception.Reset();
             bot.pathCount = 0;
             bot.pathIndex = 0;
             bot.look.pitch = bot.view.angles[0];
@@ -275,6 +347,21 @@ bool Bot_UserMove(client_t *cl)
     if (!G_GetClientArchiveTime(clientNum))
     {
         const kb::NavMesh *nav = Bot_Nav();
+        if (IsDead(ps) || ps->pm_type != PM_NORMAL)
+            bot.perception.Reset();
+        else
+            Sense(bot, clientNum);
+        kb::Focus focus;
+        if (!IsDead(ps) && ps->pm_type == PM_NORMAL)
+        {
+            const float eye[3] = {ps->origin[0], ps->origin[1], ps->origin[2] + ps->viewHeightCurrent};
+            focus = bot.perception.Choose(eye, svs.time, Senses());
+        }
+        float watch[2] = {0.0f, 0.0f};
+        if (focus.kind != kb::FocusKind::None)
+            ViewToward(ps, focus.position, watch);
+        const float *watching = focus.kind != kb::FocusKind::None ? watch : nullptr;
+
         if (IsDead(ps))
         {
             bot.pathCount = 0;
@@ -285,8 +372,14 @@ bool Bot_UserMove(client_t *cl)
             if (bot.respawnTap == 0)
                 cmd.buttons |= BUTTON_USE_RELOAD;
         }
-        else if (nav && ps->pm_type == PM_NORMAL && Walk(bot, *nav, ps, seconds, cmd))
+        else if (nav && ps->pm_type == PM_NORMAL && Walk(bot, *nav, ps, seconds, cmd, watching))
         {
+            bot.lookHeld = 0.0f;
+            bot.look.holdSeconds = 0.0f;
+        }
+        else if (watching)
+        {
+            kb::StepView(bot.view, watch[0], watch[1], seconds, WatchMotor());
             bot.lookHeld = 0.0f;
             bot.look.holdSeconds = 0.0f;
         }

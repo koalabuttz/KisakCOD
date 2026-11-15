@@ -89,6 +89,15 @@ enum SysPerfProbe : uint32_t
     SYS_PERF_PROBE_HUD_COMPASS,        // CG_CompassUpdateActors
     SYS_PERF_PROBE_HUD_SCOREBOARD,     // CG_DrawScoreboard
     SYS_PERF_PROBE_UI_EXPRESSIONS,     // EvaluateExpression: every menu expression, in the HUD or not
+    // Parts of painting a menu (ui), in the HUD or not, so the time outside the
+    // expressions can be split. The item parts sit inside Item_Paint.
+    SYS_PERF_PROBE_UI_WINDOWS,         // Window_Paint: a menu's or an item's background and border
+    SYS_PERF_PROBE_UI_TEXT_ITEMS,      // Item_Text_Paint, with its translation and text expression
+    SYS_PERF_PROBE_UI_OWNERDRAW_ITEMS, // Item_OwnerDraw_Paint: items the game draws itself (ammo, compass, ...)
+    SYS_PERF_PROBE_UI_OTHER_ITEMS,     // every other item type's paint
+    SYS_PERF_PROBE_UI_TRANSLATE,       // UI_SafeTranslateString: a "@NAME" text looked up
+    SYS_PERF_PROBE_UI_MATERIAL_NAMES,  // Item_Paint: a background material found by its name each frame
+    SYS_PERF_PROBE_UI_SHOW_BY_DVAR,    // Item_EnableShowViaDvar: an item shown or hidden by a dvar's value
     // The main thread's client frame (client_mp, cgame_mp), so its time can
     // be split. All but the first sit inside SYS_PERF_PROBE_CLIENT_SCREEN;
     // the HUD's probes above do too.

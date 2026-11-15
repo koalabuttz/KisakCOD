@@ -35,14 +35,24 @@ struct DisplayDesc
     uint32_t parameterBufferBytes = SCE_GXM_DEFAULT_PARAMETER_BUFFER_SIZE;
     // The GPU memory pools (gxm_memory.h). The display's own buffers come out
     // of them: the display buffers and depth-stencil about 9 MB of CDRAM,
-    // the context's ring buffers about 2.6 MB of main memory and 16 KB of
+    // the context's ring buffers about 3.3 MB of main memory and 16 KB of
     // fragment USSE.
     MemorySizes memory;
-    // The context's ring buffers, from the main pool: sceGxm's defaults times
-    // this. They hold the draw calls and uniform buffers of the scenes the GPU
-    // has not finished, which is two frames' when the CPU fills one frame
-    // while the GPU draws another.
-    uint32_t ringScale = 1;
+    // The context's ring buffers, from the main pool. They hold the draw
+    // calls (VDM), the vertex constants and the fragment constants of the
+    // scenes the GPU has not finished, which is two frames' when the CPU
+    // fills one frame while the GPU draws another. A draw that finds one of
+    // them full waits inside sceGxm until the GPU has finished a scene, and
+    // no line of the log names that wait. Console run BV (2026-11-15, the
+    // busy view of mp_crash, 1500 draws a frame): with sceGxm's defaults
+    // (128 KB, 2 MB and 512 KB) one draw a frame waited 5 to 11 ms, in
+    // sceGxmDraw or where the fragment constants are reserved; with all
+    // three doubled none did and the frame was 1.5 ms shorter. The draw
+    // calls' and the fragment constants' rings are the two that were seen
+    // full, and doubling them costs 640 KB.
+    uint32_t vdmRingBytes = 2 * SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE;
+    uint32_t vertexRingBytes = SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE;
+    uint32_t fragmentRingBytes = 2 * SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE;
     bool vsync = true;
     // One line per call, no newline. Null: nowhere.
     void (*log)(void *user, const char *line) = nullptr;

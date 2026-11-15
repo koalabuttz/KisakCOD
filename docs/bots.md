@@ -15,9 +15,9 @@ now and how to use it.
 - A bot turns at a human pace. The view motor (`src/bots/bot_motor.h`) moves
   the view like a hand moves a mouse or a stick: it starts a turn smoothly, has
   a top speed and slows as it arrives.
-- A bot will only know what a player could know (later phases): what it saw in
-  its field of view, what it heard, and what its own HUD shows. It does not read
-  other players' positions from the server.
+- A bot only knows what a player could know: what it saw on its screen, what
+  it heard, and what its own HUD shows (see "What a bot knows" below). It does
+  not read other players' positions from the server to decide anything.
 
 ## Using them
 
@@ -40,7 +40,7 @@ changed at any time; each bot starts afresh when it does.
 `bot_brain` is a setting this port added, so it is on the list a game server
 may not set on a player's client (`src/qcommon/server_dvar_guard.h`).
 
-## What the bots do now (phase 1)
+## What the bots do now (phase 2)
 
 The brain takes over the test clients' commands. A bot that is playing walks to
 random places on the map's navigation mesh: it turns toward the next corner of
@@ -50,12 +50,53 @@ arrives, jumps when it has made no headway for 1.2 seconds and picks another
 place after 2.5. Without a mesh it stands and looks around at a human pace (a
 new direction every 1.5 to 4 seconds, up to 120 degrees a second). It carries
 on from wherever the server puts its view (a spawn, a killcam, a script's
-`setPlayerAngles`) and taps use while dead. It does not aim or shoot yet.
+`setPlayerAngles`) and taps use while dead.
 
-Next phases, in order: the perception step (sight, hearing, HUD), the motor
+A bot that noticed an opponent watches them while it walks on, turning at up
+to 200 degrees a second; it looks where it last saw one it lost, and toward a
+sound or a compass dot it heard. It does not aim or shoot yet.
+
+Next phases, in order: smoke, the UAV and objectives for perception, the motor
 model and combat for TDM and FFA, decisions and objective modes, then
 difficulty levels, start-a-game and start-a-server options, and the PS Vita's
 bot budget (6v6 TDM first, then 9v9 Ground War).
+
+## What a bot knows
+
+Ten times a second each bot senses the other players (`src/bots/bot_senses.cpp`)
+and `src/bots/bot_perception.h` turns that into what it knows. Teammates are
+left out; in a free-for-all everybody is an opponent.
+
+- **Sight.** An opponent counts only when they are on the bot's screen (within
+  40 degrees across and 24 up or down of where it looks, about what `cg_fov 65`
+  shows on a 16:9 screen), in its potentially visible set and inside the map's
+  fog (`SV_inSnapshot`, the test the server uses before it sends a player to a
+  client), and then only as much of them as a clear line from the bot's eye
+  reaches: head, chest and hips, through what blocks a player's sight
+  (`MASK_AIMTARGET_VISIBILITY`: walls, foliage, no-sight brushes, vehicles).
+- **Noticing.** What the bot sees fills a meter. A running opponent close by in
+  the middle of the screen fills it in 0.3 s. It fills more slowly with
+  distance (beyond 600 units, in proportion), toward the screen's edge (to 30%
+  of the rate), for a still player (half), a crouched or prone one (three
+  quarters, half) and for one mostly behind cover. Nobody is noticed in less
+  than 0.2 s in view, however things fall: that is the floor of a human's
+  reaction. A meter that is not full drains when the opponent goes out of
+  sight.
+- **Memory.** A noticed opponent who goes out of sight stays where the bot
+  last saw them; the bot's confidence halves every 3 s and it forgets them
+  after 10 s.
+- **Hearing.** Footsteps carry 250 units walking, 500 running and 800
+  sprinting; crouched, prone and standing-still players and those with Dead
+  Silence (`specialty_quieter`) make none. A shot carries 4000 units, 300
+  silenced. A sound gives a place off by up to 15% of its distance (half that
+  for a shot) and turns the bot's head for 2 s; it does not count as noticing.
+- **Compass.** An opponent the HUD shows as a red dot (pinged by a script) gives
+  a place as the compass shows it.
+
+`bot_log 1` prints each opponent a bot notices, for example
+`bots: 3 noticed 4 after 300 ms in view, 912 units, 12 degrees off centre, 67%
+showing`. Like `bot_brain`, it is on the list a game server may not set on a
+player's client.
 
 ## The navigation mesh
 
@@ -90,6 +131,8 @@ walks into one notices it is stuck, jumps, then takes another way.
 | Where | What |
 |---|---|
 | `src/bots/bot_brain.h`, `bot_brain.cpp` | `bot_brain`, and `Bot_UserMove`: one bot's command for this server frame |
+| `src/bots/bot_perception.h` | what a bot knows: the noticing meter, memory, hearing, what to look at; no engine types |
+| `src/bots/bot_senses.cpp` | `Bot_Sense`: one sense tick of a bot's eyes, ears and compass on the server |
 | `src/bots/bot_motor.h` | the view motor, command angle conversion, the movement keys toward a point and each bot's random source; no engine types |
 | `src/bots/bot_navmesh.h`, `bot_navmesh.cpp` | building the mesh from a triangle soup, the cache blob, and the queries (nearest point, path, random reachable place); no engine types |
 | `src/bots/bot_nav_world.cpp` | `Bot_Nav`: the current map's collision as triangles, and the cache in the home folder |
@@ -113,6 +156,13 @@ to one second behind.
   `delta_angles`; turns take the short way, keep their top speed, never
   overshoot, settle in 0.6 to 3 seconds and do not depend on the frame rate; a
   bot's random choices replay from its seed.
+- `bot_perception` (`scripts/tests/test_bot_perception.py`, in
+  `run_linux_checks.py`): builds `tests/bots/bot_perception_test.cpp` on the
+  host, 64-bit with sanitizers and 32-bit. Nobody off the screen, behind cover
+  or past the sight range is noticed; over 2000 random runs nobody is noticed
+  in under 0.2 s in view; distance, the screen's edge, stillness, crouching
+  and cover slow noticing; a lost player is remembered, then forgotten;
+  footsteps and shots are heard in range and only roughly.
 - `server_test_clients` (`scripts/tests/test_server_test_clients.py`): the
   extracted `SV_UpdateBots` asks the brain about active bots only, and a brain
   that takes the command replaces the random inputs.
@@ -147,7 +197,10 @@ health, team, class and clean-quit checks, requires the server's navigation
 mesh line, logs every bot's view four times a second and its place once a
 second, and requires that each bot looked around, never turned faster than 200
 degrees a second (with a margin), kept its pitch within the player's limits and
-walked at least 300 units, never more than 300 in a second. Views are a
+walked at least 300 units, never more than 300 in a second. With `bot_log 1`
+it audits every notice: an opponent (with up to four bots, all on one team,
+there are none), on the bot's screen, partly in view and in view for at least
+200 ms; it prints how many there were. Views are a
 quarter second apart because at one a second any turn would fit: the short way
 round is never more than 180 degrees.
 
