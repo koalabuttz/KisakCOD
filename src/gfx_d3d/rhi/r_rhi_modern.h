@@ -114,6 +114,11 @@ struct GfxModernLitInputs
     // registers and vertex outputs, which the renderer has checked), or
     // GFX_MODERN_LIT_SHADER_NONE.
     uint16_t shader;
+    // Instead of all the above: an unlit, light-giving surface (a lamp, a
+    // lantern, a lit sign; a material whose technique set is mc_unlit* or
+    // wc_unlit*). Its colour is taken to linear light as an ordinary draw's,
+    // then its brightest parts are made brighter than white, so that it glows.
+    bool emissive;
 };
 
 // The Modern lit shader's code: the family, plus flags for its maps and its

@@ -531,6 +531,7 @@ public:
     void ModernLitNoSun();
     void ModernLitLights();
     void ModernLightPass();
+    void ModernEmissive();
     void ModernTonemap();
     void ModernTonemapAs(const std::string &curve);
     void ModernExposure();
@@ -6621,6 +6622,69 @@ void Check::ModernLightPass()
     SafeRelease(color);
 }
 
+// Lamps and lit signs (front ModernLitInputs::emissive): three unlit quads
+// in the linear-light scene, white, grey 230 and grey 128, drawn as
+// light-giving. Each is decoded as an ordinary draw is, then multiplied by
+// one factor from its brightest channel: 1 below display value 0.75, rising
+// along a smoothstep to the strength (KISAK_VK_MODERN_EMISSIVE_STRENGTH, 4 by
+// default) at white. So white is 4, grey 230 (0.902) is decode(0.902) times
+// 2.98, and grey 128 is decoded only. With KISAK_VK_MODERN_EMISSIVE=0 (or
+// without linear light or lit passes) every grey is decoded only.
+void Check::ModernEmissive()
+{
+    const bool on = EnvText("KISAK_VK_MODERN_LINEAR") != "0" && EnvText("KISAK_VK_MODERN_LIT") != "0"
+        && EnvText("KISAK_VK_MODERN_EMISSIVE") != "0";
+    Reset(Argb(255, 0, 0, 0));
+    front::ModernSceneBegin(device);
+    Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET, Argb(255, 0, 0, 0), 1.0f, 0), "Clear(scene)");
+    device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+    device->SetVertexShader(vsBasic);
+    device->SetPixelShader(psColor);
+    front::ModernLitInputs inputs;
+    inputs.emissive = true;
+    front::SetModernLitInputs(device, &inputs);
+    DrawQuad(0, 0, 32, 64, 0.5f, Argb(255, 255, 255, 255));
+    DrawQuad(32, 0, 64, 64, 0.5f, Argb(255, 230, 230, 230));
+    DrawQuad(64, 0, 96, 64, 0.5f, Argb(255, 128, 128, 128));
+    front::SetModernLitInputs(device, nullptr);
+    // An ordinary draw beside them keeps its white at 1.
+    DrawQuad(96, 0, 128, 64, 0.5f, Argb(255, 255, 255, 255));
+    device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+
+    front::ModernSceneView view{};
+    for (int i = 0; i < 4; ++i)
+        view.view[i][i] = view.projection[i][i] = 1.0f;
+    view.width = view.height = kSize;
+    view.cut = true;
+    if (front::ModernSceneLit(device, view) == front::ModernResult::Skipped)
+        front::ModernSceneDone(device, view);
+    if (Read())
+    {
+        const std::string curve = ModernCurve();
+        const auto decode = [](double v) {
+            v = std::clamp(v, 0.0, 1.0);
+            return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+        };
+        const std::string strengthText = EnvText("KISAK_VK_MODERN_EMISSIVE_STRENGTH");
+        const double strengthValue = strengthText.empty() ? -1.0 : std::strtod(strengthText.c_str(), nullptr);
+        const double strength = strengthValue >= 1.0 ? std::min(strengthValue, 63.75) : 4.0;
+        const auto light = [&](int grey) {
+            const double v = grey / 255.0;
+            const double t = std::clamp((v - 0.75) / 0.25, 0.0, 1.0);
+            return decode(v) * (on ? 1.0 + (strength - 1.0) * t * t * (3.0 - 2.0 * t) : 1.0);
+        };
+        const auto expect = [&](const char *name, int x, double value) {
+            const int byte = ShownByte(TonemapCurve(curve, {value, value, value})[0]);
+            Expect(name, x, 32, byte, byte, byte);
+        };
+        expect("emissive_white", 16, light(255));
+        expect("emissive_230", 48, light(230));
+        expect("emissive_128", 80, light(128));
+        expect("ordinary_white", 112, 1.0);
+    }
+    Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+}
+
 // The tonemap's curve (KISAK_VK_MODERN_TONEMAP): grey 128 (0.216 of light),
 // white (1), and white added twice (2) and four times (4) in the linear-light
 // scene, as each curve shows them. Clamp shows 128, 255, 255, 255; the others
@@ -7286,6 +7350,7 @@ int Run(const Options &options)
         {"modern_lit_no_sun", &Check::ModernLitNoSun, true},
         {"modern_lit_lights", &Check::ModernLitLights, true},
         {"modern_light_pass", &Check::ModernLightPass, true},
+        {"modern_emissive", &Check::ModernEmissive, true},
         {"modern_tonemap", &Check::ModernTonemap, true},
         {"modern_exposure", &Check::ModernExposure, true},
         {"modern_velocity", &Check::ModernVelocity, true},

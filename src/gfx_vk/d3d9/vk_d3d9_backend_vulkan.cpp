@@ -61,6 +61,11 @@ constexpr uint32_t kSlowFrames = 3;
 // added in display values (David, 2026-11-15: "the physical light with the
 // flash made brighter").
 constexpr float kLightPassStrength = 2.0f;
+// How much brighter than white the white parts of lamps, lanterns and lit
+// signs (unlit materials) are made, so that they glow and bloom as the light
+// sources they are (David, 2026-11-15: the maps should look lit by their own
+// lights).
+constexpr float kEmissiveStrength = 4.0f;
 } // namespace
 
 struct Backend
@@ -144,6 +149,12 @@ struct Backend
     // (KISAK_VK_MODERN_LIGHT_PASS_STRENGTH; at start-up only).
     bool lightPassWanted = true;
     float lightPassStrength = kLightPassStrength;
+    // Lamps and lit signs (ModernLitInputs::emissive) made brighter than
+    // white, unless KISAK_VK_MODERN_EMISSIVE=0, by
+    // KISAK_VK_MODERN_EMISSIVE_STRENGTH (at start-up only).
+    bool emissiveWanted = true;
+    float emissiveStrength = kEmissiveStrength;
+    uint64_t emissiveChanges = 0, emissiveChangesBase = 0;
     float sunStrength = 1.0f;
     float skyStrength = 1.0f;
     uint64_t litShaderChanges = 0, litShaderChangesBase = 0;
@@ -792,6 +803,12 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         const float value = strength.empty() ? -1.0f : std::strtof(strength.c_str(), nullptr);
         backend->lightPassStrength = value >= 0.0f ? value : kLightPassStrength;
     }
+    backend->emissiveWanted = !EnvIsZero("KISAK_VK_MODERN_EMISSIVE");
+    {
+        const std::string strength = EnvText("KISAK_VK_MODERN_EMISSIVE_STRENGTH");
+        const float value = strength.empty() ? -1.0f : std::strtof(strength.c_str(), nullptr);
+        backend->emissiveStrength = value >= 1.0f ? std::min(value, 63.75f) : kEmissiveStrength;
+    }
     backend->planarWanted = backend->linearWanted && !EnvIsZero("KISAK_VK_MODERN_PLANAR")
                             && (EnvIs("KISAK_VK_MODERN_PLANAR", "1") || backend->debugPlanar
                                 || backend->debugPlanarRead);
@@ -875,6 +892,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     backend->ownFeed = lg::GetGpuFeed(backend->legacy);
     lg::SetModernLitStrengths(backend->legacy, backend->sunStrength, backend->skyStrength);
     lg::SetModernLightPass(backend->legacy, backend->lightPassStrength);
+    lg::SetModernEmissive(backend->legacy, backend->emissiveStrength);
     return backend;
 }
 
@@ -1071,6 +1089,13 @@ void BackendLogStats(Backend *backend, bool reset)
                     backend->sunStrength, backend->skyStrength, backend->lightPassWanted ? "on" : "off",
                     backend->lightPassStrength);
     }
+    // Lamps and lit signs made brighter than white: how often a scene in
+    // linear light switched to drawing one.
+    if (backend->litWanted && backend->linearScenes != backend->linearScenesBase)
+        HostLog(h, "vulkan d3d9: modern: lamps and lit signs: %s at %.2f, %.2f changes to one each scene",
+                backend->emissiveWanted ? "on" : "off", backend->emissiveStrength,
+                double(backend->emissiveChanges - backend->emissiveChangesBase)
+                    / double(backend->linearScenes - backend->linearScenesBase));
     // Velocity: the surfaces drawn again with their own motion, and the
     // GPU time of that pass.
     if (backend->velocity || backend->velocityRemade)
@@ -1216,6 +1241,7 @@ void BackendLogStats(Backend *backend, bool reset)
         backend->litScenesBase = backend->litScenes;
         backend->litChangesBase = backend->litChanges;
         backend->litShaderChangesBase = backend->litShaderChanges;
+        backend->emissiveChangesBase = backend->emissiveChanges;
         backend->linearCopiesBase = backend->linearCopies;
         backend->statsBase = stats;
         backend->coreBase = core;
@@ -1628,7 +1654,10 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
         || (shader == lg::ModernLitWater && !backend->waterShaderWanted)
         || (lg::ModernLitLightPass(shader) && !backend->lightPassWanted))
         shader = lg::ModernLitNone;
-    if (inputs && backend->linearScene && !backend->linearFailed)
+    const bool emissive = inputs && !inputs->overWhite && inputs->emissive;
+    if (emissive && backend->emissiveWanted && backend->linearScene && !backend->linearFailed)
+        ++backend->emissiveChanges;
+    else if (inputs && !emissive && backend->linearScene && !backend->linearFailed)
     {
         ++backend->litChanges;
         if (inputs->overWhite && shader)
@@ -1640,7 +1669,7 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
     }
     lg::SetLinearInputs(backend->legacy, inputs ? inputs->constants : 0, inputs ? inputs->samplers : 0,
                         inputs ? inputs->doubled : 0, inputs && inputs->colorInput, inputs && inputs->overWhite,
-                        shader);
+                        shader, emissive && backend->emissiveWanted);
 }
 
 bool BackendModernEffectsOnDisplay(Backend *backend) { return backend && !backend->effectsInLinear; }

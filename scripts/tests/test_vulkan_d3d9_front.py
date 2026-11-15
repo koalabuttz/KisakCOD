@@ -49,10 +49,11 @@ involved. The checks:
                  modern_reflections, modern_planar, modern_fog, modern_live
                  and modern_live_cut (a second modern_taa run), 44 of them
                  without history (modern_light_pass's scene has no depth to
-                 anti-alias with), the 44 scenes of modern_linear,
+                 anti-alias with, nor modern_emissive's), the 45 scenes of
+                 modern_linear,
                  modern_bloom, modern_effects, modern_lit, modern_lit_shader,
                  modern_lit_models, modern_lit_skin, modern_lit_no_sun,
-                 modern_lit_lights, modern_light_pass,
+                 modern_lit_lights, modern_light_pass, modern_emissive,
                  modern_tonemap, modern_exposure, modern_normals, modern_ao,
                  modern_reflections, modern_planar, modern_fog and
                  modern_live in linear light with one copy read from them
@@ -138,6 +139,9 @@ involved. The checks:
                  KISAK_VK_MODERN_LIGHT_PASS=0, where the extra light passes'
                  pixel shaders are drawn as they are and no pixel module is
                  built as ours
+  emissive-off   --scene modern_emissive passes with
+                 KISAK_VK_MODERN_EMISSIVE=0, where lamps and lit signs are
+                 decoded as any unlit draw and none is made brighter
   debug-velocity --scene modern_velocity passes with
                  KISAK_VK_MODERN_DEBUG=velocity, where the velocity debug
                  view colours the moving band (the scene's own points)
@@ -239,7 +243,7 @@ SCENES = ('adapter', 'states', 'draw', 'render_target', 'shadow_map', 'model_lig
           'references', 'threads', 'queries', 'occlusion', 'frame_loop', 'gpu_feed', 'tuning', 'slow_frames',
           'kept_state', 'multisample', 'modern_taa', 'modern_linear', 'modern_bloom', 'modern_effects',
           'modern_lit', 'modern_lit_shader', 'modern_lit_models', 'modern_lit_skin', 'modern_lit_no_sun',
-          'modern_lit_lights', 'modern_light_pass', 'modern_tonemap', 'modern_exposure', 'modern_velocity', 'modern_normals', 'modern_ao',
+          'modern_lit_lights', 'modern_light_pass', 'modern_emissive', 'modern_tonemap', 'modern_exposure', 'modern_velocity', 'modern_normals', 'modern_ao',
           'modern_reflections', 'modern_probes', 'modern_planar', 'modern_probe_capture', 'modern_fog', 'modern_live',
           'modern_live_cut', 'reset',
           'fullscreen', 'present')
@@ -447,6 +451,15 @@ def main():
                   and [s[0] for s in scenes] == ['modern_light_pass']
                   and all(m == '0' for m in re.findall(r'lit shaders of our own: [0-9.]+ changes to one each scene, '
                                                         r'(\d+) pixel modules', stdout)),
+                  f'status {code}\n{stdout}')
+    # emissive-off
+    off = dict(env)
+    off['KISAK_VK_MODERN_EMISSIVE'] = '0'
+    code, stdout, _ = run(binary, ['--scene', 'modern_emissive', '--validation', args.validation], off)
+    found, scenes = parse(stdout)
+    checks.expect('modern_emissive passes with KISAK_VK_MODERN_EMISSIVE=0 (every grey decoded only)',
+                  code == 0 and found.get('d3d9_check') == 'passed'
+                  and [s[0] for s in scenes] == ['modern_emissive'],
                   f'status {code}\n{stdout}')
     # debug-velocity
     debug = dict(env)
@@ -859,9 +872,25 @@ def main():
         checks.expect('no scene in linear light with KISAK_VK_MODERN_LINEAR=0', linear is None,
                       linear.group(0) if linear else '')
     else:
-        checks.expect('the Modern path drew 44 scenes in linear light and read 1 copy from them',
-                      linear is not None and linear.group(1) == '44' and linear.group(2) == '1',
+        checks.expect('the Modern path drew 45 scenes in linear light and read 1 copy from them',
+                      linear is not None and linear.group(1) == '45' and linear.group(2) == '1',
                       linear.group(0) if linear else 'missing')
+    # Lamps and lit signs: modern_emissive's light-giving draws, once in its
+    # one scene, at strength 4 (none with linear light or lit inputs off; off
+    # with KISAK_VK_MODERN_EMISSIVE=0).
+    emissive = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: lamps and lit signs: (on|off) at ([0-9.]+), '
+                         r'([0-9.]+) changes to one each scene$', stdout)
+    if env.get('KISAK_VK_MODERN_LINEAR') == '0' or env.get('KISAK_VK_MODERN_LIT') == '0':
+        checks.expect('no light-giving draws with linear light or lit inputs off',
+                      emissive is None or emissive.group(3) == '0.00', emissive.group(0) if emissive else '')
+    elif env.get('KISAK_VK_MODERN_EMISSIVE') == '0':
+        checks.expect('lamps and lit signs off with KISAK_VK_MODERN_EMISSIVE=0',
+                      emissive is not None and emissive.group(1) == 'off' and emissive.group(3) == '0.00',
+                      emissive.group(0) if emissive else 'missing')
+    else:
+        checks.expect('lamps and lit signs made brighter at 4, in modern_emissive',
+                      emissive is not None and emissive.group(1) == 'on' and emissive.group(2) == '4.00'
+                      and float(emissive.group(3)) > 0, emissive.group(0) if emissive else 'missing')
     # Volumetric fog: modern_fog's eleven scenes with the fog switched on,
     # the last three from froxels; five through the sun's shadow map (the
     # first three and two froxel ones), five with a spot light in the air, in

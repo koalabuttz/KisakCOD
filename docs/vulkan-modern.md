@@ -1051,6 +1051,35 @@ The `lit shaders of our own` stats line ends with the light pass's state
 and strength. **Check:** `modern_light_pass` adds an omni light with the
 game's blend over grey 128, over black, and normal-mapped over the grey.
 
+### Lamps and lit signs
+
+David, 2026-11-15: the maps should look lit by their own lights. On the
+night maps the lamps, lanterns, neon and shop signs are unlit materials
+(technique sets `mc_unlit*` for models, `wc_unlit*` for the world; night
+lamps facts 1: 51 materials on mp_carentan, 28 on mp_crash_snow). Drawn as
+any unlit surface they reach white at most, so nothing at night glows or
+blooms. The renderer marks those materials' passes as light-giving
+(`R_ModernEmissiveMaterial`, `GfxModernLitInputs::emissive`). Their stored
+colour is decoded as an ordinary draw's (clamped to 1, then the sRGB curve),
+then the three channels are multiplied by one factor, so the hue stays. The
+factor is 1 while the brightest channel is under display value 0.75, and it
+rises along a smoothstep to the strength at white
+(`legacy_shader::EmissiveColorOutput`). Bulbs, flames and neon letters go
+over white and bloom; the darker parts of a sign stay as they were. The
+glow sprites that effects place around lamps are effects, drawn after the
+tonemap, and are not changed.
+
+| Switch | Default |
+| --- | --- |
+| `KISAK_VK_MODERN_EMISSIVE=0` | on: lamps and lit signs made brighter than white |
+| `KISAK_VK_MODERN_EMISSIVE_STRENGTH` | 4: white's light, 1 to 63.75 (start-up only) |
+
+The `lamps and lit signs` stats line gives the state, the strength and how
+often a scene switched to one. `KISAK_VK_MODERN_LIT_LOG=1` prints each
+light-giving material once (`Modern emissive: <material> (<technique set>),
+pixel shader <name>`). **Check:** `modern_emissive` draws white, grey 230
+and grey 128 as light-giving, and a white ordinary draw beside them.
+
 ## Normals buffer
 
 Ambient occlusion and screen-space reflections need the normal of the surface
