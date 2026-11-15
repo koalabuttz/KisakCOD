@@ -1,6 +1,7 @@
 #include <universal/q_shared.h>
 #include "ui_input_core.h"
 #include "ui_registration.h"
+#include <universal/name_miss_memory.h>
 #include <client/client.h>
 #include <qcommon/cmd.h>
 #include <universal/profile.h>
@@ -1094,6 +1095,13 @@ int Menus_MenuIsInStack(UiContext *dc, menuDef_t *menu)
 static std::atomic<const UiContext *> s_menuContexts[4];
 static std::atomic<uint32_t> s_menuFoundByPointer[256];
 
+// A name that is in no menu of the context walks the whole list every time
+// (menuisopen in the HUD asks the menus' context about names it does not
+// have, every frame). A miss is remembered with the context's number, the
+// change count and the list's length: while those are the same the list is
+// the same, so the name is still not in it.
+static NameMissMemory<6> s_menuMisses;
+
 static int Menus_ContextNumber(const UiContext *dc)
 {
     for (int number = 0; number < 4; ++number)
@@ -1116,7 +1124,7 @@ menuDef_t *Menus_FindByName(const UiContext *dc, const char *p)
 
     const int context = Menus_ContextNumber(dc);
     const uint32_t changes = g_uiMenuListChanges.load(std::memory_order_relaxed);
-    if (context < 0 || changes >= (1u << 20))
+    if (context < 0 || changes >= (1u << 20) || (uint32_t)dc->menuCount > 0x3ffu)
     {
         for (i = 0; i < dc->menuCount; ++i)
         {
@@ -1133,6 +1141,8 @@ menuDef_t *Menus_FindByName(const UiContext *dc, const char *p)
     i = (int)(found & 0x3ff);
     if ((found & ~0x3ffu) == tag && i < dc->menuCount && !I_stricmp(dc->Menus[i]->window.name, p))
         return dc->Menus[i];
+    if (s_menuMisses.Has(p, tag | (uint32_t)dc->menuCount))
+        return 0;
 
     for (i = 0; i < dc->menuCount; ++i)
     {
@@ -1143,6 +1153,7 @@ menuDef_t *Menus_FindByName(const UiContext *dc, const char *p)
             return dc->Menus[i];
         }
     }
+    s_menuMisses.Remember(p, tag | (uint32_t)dc->menuCount);
     return 0;
 }
 

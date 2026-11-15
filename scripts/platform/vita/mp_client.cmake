@@ -159,6 +159,12 @@ set(KISAK_VITA_MP_OPTIONS
 add_library(KisakCOD-mp-vita-native OBJECT ${vita_mp_native_sources} ${vita_mp_client_sources})
 add_library(KisakCOD-mp-vita-standin OBJECT ${vita_mp_standin_sources} ${vita_mp_posix_sources} ${KISAK_VITA_SOURCES})
 add_library(KisakCOD-mp-vita-own OBJECT ${vita_mp_own_sources})
+# The vector skinning path is the client's one file built for NEON, which the
+# Vita's Cortex-A9 has; the toolchain file's -mfpu=vfpv3 keeps everything else
+# on scalar VFP. The file includes nothing of the engine
+# (src/gfx_d3d/r_model_skin_vec.h says why).
+set_source_files_properties("${SRC_DIR}/gfx_d3d/r_model_skin_vec.cpp" TARGET_DIRECTORY KisakCOD-mp-vita-standin
+    PROPERTIES COMPILE_OPTIONS "-mfpu=neon")
 # newlib's heap (src/vita/vita_main.cpp). More than 64 is for measuring in an
 # emulator what the game would take; a console has no memory for it.
 set(KISAK_VITA_HEAP_MB "64" CACHE STRING "Size of the Vita client's heap in MB (64 on a console; more only for emulator measurements)")

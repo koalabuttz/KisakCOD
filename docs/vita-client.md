@@ -45,7 +45,8 @@ cmake --build build-vita-mp --target KisakCOD-mp-vpk
 Hosted CI: the **PS Vita multiplayer client** job of the PS Vita workflow
 (`.github/workflows/build-kisakcod-vita.yaml`) builds Debug
 and RelWithDebInfo. It runs the server's float checks (no fused multiply-add, no
-NEON float) and link checks (weak pthread references, the main stack size), and
+NEON float outside the vector skinning path, which has to be there and be
+NEON) and link checks (weak pthread references, the main stack size), and
 uploads the RelWithDebInfo `.vpk`. It also runs the controls' and the sound's
 host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`), the run
 plan's, the GPU heap's, the frame time figures', the GPU progress bookkeeping's
@@ -554,8 +555,41 @@ it opens it: the seek to the end read the whole file and the step back to the
 tag read it again. AY's 3.5 MB was one 1.2 MB file read three times. The
 driver now opens a stream without that callback, so the open reads the file's
 head only; a tag at the end of a file reaches the decoder as bytes that are no
-frame, which it skips. The same host test opens a made-up MP3 both ways and
-counts the bytes.
+frame, which it skips (and with them the last frame before the tag, 26 ms,
+which the decoder cannot confirm against what follows). The same host test
+opens a made-up MP3 both ways and counts the bytes.
+
+That left the first play of each file, one read for the length: a quarter of
+a second for a 1.2 MB file. The game's music is constant bit rate (128 kbit/s,
+44.1 kHz), where every frame has the same length, so the file's size says how
+many frames it holds. A file has to show that it is one, twice over. The
+driver reads the first 32 KB of a file it has no length for: past an ID3v2
+tag, every frame there has to be a layer 3 frame of one bit rate and sample
+rate, each starting where the one before ends, and at least 16 of them. And
+the file has to be a whole number of such frames long to the byte, alone or
+with an ID3v1 tag's 128 bytes behind the last frame. Then the length comes
+from the size, and nothing more is read. Any other file (variable bit rate,
+as the ambient streams are; a tag longer than the head) is read through once
+as before.
+
+The head alone is not enough. A survey of the game's 119 MP3 streams on the
+owner's PC (2026-11-14, `test_openal_stream_lengths.py --survey <folder>`)
+found the 60 music files constant bit rate, each with an ID3v1 tag, and six of
+the 59 variable bit rate ambient streams with one bit rate all through their
+first 32 KB: their sizes gave lengths up to 40 s wrong. The second proof
+turns five of the six away. The sixth is a whole number of frames long by
+chance (about one file in seventy of another kind is) and gets a length 78 ms
+out, for a stream that loops and so never uses it.
+
+So a length from a size is put right at the first full play. When the decoder
+reaches the end of a file it began at the first frame, the frames it gave
+replace the size's answer (`AL_CountStreamLength`). For the music that takes
+one frame off, 26 ms: the frame before the tag that the decoder does not
+play. `snd_alDebug 1` prints which way each file went and each length put
+right (`played through: F frames, not the G its size gave`), and level 2 also
+reads a constant bit rate file through at its start and prints both counts.
+The host test holds the size's answer against the decoder's own count on
+made-up files, and `--survey` does the same for real ones.
 
 **Loaded sounds in memory** (`snd_adpcm`). The OpenAL driver keeps every
 loaded sound as 16-bit PCM, and that is also how the fastfiles hold the sounds
@@ -924,6 +958,22 @@ What the GXM back end does so far (step 2d):
   may not hold every map), and `big-gxm-rings` twice the default rings
   (3 MB more of main memory).
   Not run on a console or in Vita3K yet.
+- **What the CPU pays for GPU memory.** The main pool is memory the CPU
+  does not cache (`SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE`), as Sony's
+  samples have it, and CDRAM is not cached either. The engine skins
+  vertices into the pool and reads some of them back, writes a frame's
+  indices there and fills the uniform buffers there, on three threads. At
+  start-up the back end measures what that memory costs and logs one line:
+  `gpu memory speed, 256 KB at a time: the heap: copy in N MB/s, copy out
+  N MB/s, a word written N ns, read N ns; main: ...; cdram: ...` (the
+  shortest of four passes each; "copy out" and "read" are the CPU reading
+  the pool). An empty file `cached-main-memory` in the folder of the
+  compiled programs gives the main pool as ordinary cached memory
+  (`diag: cached-main-memory is there ...`; the two memory lines then say
+  `main (cached)`), so that one console sitting can say what the uncached
+  kind costs a frame. It is for measuring: whether the GPU always sees what
+  the CPU wrote last from cached memory is not known, so the picture may
+  be wrong with it.
 - **sceGxm's calls on a thread of their own** (off by default; console
   runs BN and BP: it runs without a fault and the render thread's CPU
   time falls from about 32 to 19 ms a frame, but the frame stays at
@@ -1017,6 +1067,18 @@ What the GXM back end does so far (step 2d):
   map's before a frame is shown (run Z8's long warm-ups ran out of CDRAM
   going from mp_crash to mp_backlot). DrawPrimitiveUP and the clear quads
   copy their vertices into a 512 KB per-frame ring.
+- **Skinning.** Animated models (the hands and weapon, players) are skinned
+  on a worker thread into the skinned cache. Console run BD measured 6 ms a
+  frame for the 3227 vertices of the hands and weapon alone, 1.9 us a
+  vertex, with the engine's scalar code: it writes a vertex field by field
+  into memory the CPU does not cache and reads a weighted vertex's position
+  back from it, on a CPU whose NEON the build did not use. The client now
+  skins with the vector path (`src/gfx_d3d/r_model_skin_vec.cpp`, the one
+  file built for NEON; [the rule](linux-armv7.md)): the same bytes, a vertex
+  put together in registers and written once. `r_sse_skinning 0` goes back
+  to the scalar code, so `perf_ab "set r_sse_skinning 0" "set r_sse_skinning 1"`
+  holds the two against each other (`other threads run: skin xmodel` is its timer).
+  Not run on a console or in Vita3K yet.
 
 ### Shaders (step 2c)
 

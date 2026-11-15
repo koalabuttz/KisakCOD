@@ -89,12 +89,22 @@ contains fused multiply-add instructions.
 
 ### Skinning
 
-`r_model_skin_sse.cpp` (SSE and MMX) compiles empty off x86, `sys_info.SSE` is
-false on Arm, and skinned models go through the engine's scalar code
-(`R_SkinXSurfaceSkinned`), the same path x86 takes with `r_sse_skinning 0`.
-`tests/skinning/skin_scalar_test.cpp` runs that code on generated surfaces and
-bones and checks two things: its output bytes hash to the same value on i386,
-x86_64 and aarch64, and on x86 it matches the SSE path (positions to float
+`r_model_skin_sse.cpp` (SSE and MMX) compiles empty off x86 and `sys_info.SSE`
+is false on Arm. Skinned models go through the vector path
+(`R_SkinXSurfaceSkinnedVec`, `src/gfx_d3d/r_model_skin_vec.cpp`), which is
+written with the compiler's vector types and so is NEON here; with
+`r_sse_skinning 0` they go through the engine's scalar code
+(`R_SkinXSurfaceSkinned`), the same path x86 takes with that setting. The
+vector path makes every sum in the scalar code's order and writes the same
+bytes. It puts a vertex together in registers and writes it once, where the
+scalar code writes field by field and reads a weighted vertex's position back
+from the vertex buffer. Windows ARM64 (MSVC has no such vector types) keeps the
+scalar code.
+`tests/skinning/skin_scalar_test.cpp` runs both on generated surfaces and
+bones and checks three things: the scalar output bytes hash to the same value
+on i386, x86_64 and aarch64, the vector path writes exactly the scalar bytes
+(on every host: the same source is SSE on x86), and on x86 the scalar code
+matches the SSE path (positions to float
 rounding, packed normals and tangents to one step, everything else exactly).
 With multiply-add fusion turned back on, the aarch64 hash changes, which is the
 check that `-ffp-contract=off` is in force.
@@ -156,7 +166,7 @@ movies only with `KISAK_WIN64_CINEMATICS`) with these differences, keyed on
   map loads from raw assets (`useFastFile 0`) and its shaders have to be
   compiled from HLSL. Fastfile loading, the normal path, never calls D3DX. The
   D3DX headers are still needed.
-- **No SSE**: skinning takes the scalar path, as on Arm Linux.
+- **No SSE**: skinning takes the scalar path (Arm Linux has the vector path, [above](#skinning); MSVC has no vector types for it).
 - **No `cpuid`**: the Intel-only physical core count is skipped. The engine
   already reports a fixed CPU vendor on every Windows build, so it never ran.
 - **Stack traces** in assert messages use `RtlCaptureStackBackTrace`, as on x64.

@@ -189,6 +189,7 @@ client src/gfx_d3d/r_model.cpp
 client src/gfx_d3d/r_model_pose.cpp
 client src/gfx_d3d/r_model_skin.cpp
 client src/gfx_d3d/r_model_skin_sse.cpp
+client src/gfx_d3d/r_model_skin_vec.cpp
 client src/gfx_d3d/r_outdoor.cpp
 client src/gfx_d3d/r_pixelcost_load_obj.cpp
 client src/gfx_d3d/r_pretess.cpp

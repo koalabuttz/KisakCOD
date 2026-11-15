@@ -5,7 +5,7 @@ from test_linux_bots import (FIXTURE_GSC, transition_fixture, transition_plan,
                              final_cohort_log, refill_fixture, validate_refills,
                              validate_kick_window, validate_hold, validate_transitions,
                              validate_brain_view, validate_brain_walk, balanced_teams,
-                             uses_both_teams, TEAM_CAPACITY, MAX_BOTS)
+                             uses_both_teams, TEAM_CAPACITY, MAX_BOTS, validate_brain_notices)
 
 
 def healthy_log():
@@ -275,6 +275,34 @@ class RefillEvidenceTests(unittest.TestCase):
         self.assertIn('getdvarint("botTest_refill") < round', fixture)
         self.assertNotIn('setdvar("sv_zombietime"', fixture)
         self.assertEqual(fixture.count('addtestclient()'), 1)
+
+
+def notice(bot, target, after=300, units=900, off=12, showing=67):
+    return (f"bots: {bot} noticed {target} after {after} ms in view, {units} units, "
+            f"{off} degrees off centre, {showing}% showing\n")
+
+
+class BrainNoticeTests(unittest.TestCase):
+    def passed(self, output, both_teams=True):
+        return all(ok for ok, _ in validate_brain_notices(output, both_teams))
+
+    def test_fair_notices_pass(self):
+        self.assertTrue(self.passed(notice(0, 1) + notice(3, 4, after=200, off=40)))
+        self.assertTrue(self.passed(''))
+        self.assertTrue(self.passed('', both_teams=False))
+
+    def test_a_teammate_or_itself_fails(self):
+        self.assertFalse(self.passed(notice(0, 2)))
+        self.assertFalse(self.passed(notice(1, 1)))
+        # With every bot on one team nobody is an opponent.
+        self.assertFalse(self.passed(notice(0, 1), both_teams=False))
+
+    def test_faster_than_the_floor_fails(self):
+        self.assertFalse(self.passed(notice(0, 1, after=100)))
+
+    def test_off_screen_or_hidden_fails(self):
+        self.assertFalse(self.passed(notice(0, 1, off=60)))
+        self.assertFalse(self.passed(notice(0, 1, showing=0)))
 
 
 class TeamCapacityTests(unittest.TestCase):
