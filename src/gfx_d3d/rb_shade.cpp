@@ -8,6 +8,7 @@
 #include "r_state.h"
 #include "r_draw_bsp.h"
 #include <universal/profile.h>
+#include <linux/sys_perf.h>
 
 
 
@@ -151,6 +152,7 @@ void RB_DrawTessSurface()
 
 void R_DrawTessTechnique(GfxCmdBufContext context, const GfxDrawPrimArgs *args)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_TESS_END);
     const MaterialTechnique *technique; // [esp+38h] [ebp-14h]
     IDirect3DVertexBuffer9 *vb; // [esp+3Ch] [ebp-10h]
     uint32_t vertexOffset; // [esp+40h] [ebp-Ch]

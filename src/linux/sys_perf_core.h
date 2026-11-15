@@ -607,3 +607,61 @@ private:
     int gaugeCounts_[4] = {0, 0, 0, 0};
     std::vector<PerfWindowResult> results_;
 };
+
+// ---------------------------------------------------------------------------
+// perf_phases: the lines of one count.
+//
+// A thread looked at what the render thread was in `looks` times, at even
+// intervals over `seconds`; the render thread entered each phase `entries`
+// times and finished `frames` frames meanwhile. A phase's share of the looks
+// is its share of the time, the time being its own only: a phase entered
+// inside another takes the looks while it lasts.
+//
+// The first line states the count; each further line is one phase the thread
+// was seen in or entered, the largest share first.
+// ---------------------------------------------------------------------------
+struct PerfPhaseRow
+{
+    std::string name;
+    uint64_t looks = 0;
+    uint64_t entries = 0;
+};
+
+inline std::vector<std::string> Perf_PhaseLines(std::vector<PerfPhaseRow> rows, double seconds, uint64_t frames)
+{
+    uint64_t total = 0;
+    for (const PerfPhaseRow &row : rows)
+        total += row.looks;
+    std::stable_sort(rows.begin(), rows.end(),
+                     [](const PerfPhaseRow &a, const PerfPhaseRow &b) { return a.looks > b.looks; });
+
+    std::vector<std::string> lines;
+    char text[256];
+    int length = snprintf(text, sizeof(text), "render thread phases, %llu looks in %.2f s (one each %.0f us)",
+                          (unsigned long long)total, seconds, total ? seconds * 1e6 / (double)total : 0.0);
+    if (frames)
+        snprintf(text + length, sizeof(text) - (size_t)length, ", %llu frames (%.2f ms a frame)",
+                 (unsigned long long)frames, seconds * 1e3 / (double)frames);
+    lines.emplace_back(text);
+
+    for (const PerfPhaseRow &row : rows)
+    {
+        if (!row.looks && !row.entries)
+            continue;
+        const double share = total ? (double)row.looks / (double)total : 0.0;
+        length = snprintf(text, sizeof(text), "phase %s: %.2f %%", row.name.c_str(), 100.0 * share);
+        if (frames)
+            length += snprintf(text + length, sizeof(text) - (size_t)length, ", %.3f ms a frame",
+                               share * seconds * 1e3 / (double)frames);
+        if (row.entries)
+        {
+            if (frames)
+                length += snprintf(text + length, sizeof(text) - (size_t)length, ", %.1f calls a frame",
+                                   (double)row.entries / (double)frames);
+            snprintf(text + length, sizeof(text) - (size_t)length, ", %.2f us a call",
+                     share * seconds * 1e6 / (double)row.entries);
+        }
+        lines.emplace_back(text);
+    }
+    return lines;
+}

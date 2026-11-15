@@ -17,6 +17,7 @@ Windows reads differs in places; see [On Windows](#on-windows).
 perf_ab "<commands A>" "<commands B>" [seconds] [rounds] [settle seconds]
 perf_sample [seconds] [windows] [settle seconds]
 perf_stop
+perf_phases [1|0]
 ```
 
 - `perf_ab "set r_gpuSyncSleep 0" "set r_gpuSyncSleep 100" 15 4` measures
@@ -30,6 +31,8 @@ perf_stop
   time, sixteen to a line.
 - A run leaves the last window's variant applied. With an even number of
   rounds that is A.
+- `perf_phases` is a different kind of count, for the render thread alone:
+  see [Where the render thread's time goes](#where-the-render-threads-time-goes-perf_phases).
 
 Each window applies its variant, waits the settle time without recording, then
 records every frame for the sample time. The order A B B A puts both variants
@@ -249,6 +252,12 @@ second, which a laptop that waits for its GPU does not show.
 - The Vita gives an application three cores: a table that adds up to less
   than two frames' worth of time leaves a core free.
 - No machine readings.
+- A clock read costs about 0.7 us there and a timed piece is two, so a run
+  slows the frames it measures: the busy view of `mp_crash` at half size ran
+  26.0 ms a frame inside a run's windows and 23.2 ms right after it (console,
+  2026-11-15). Both variants carry it, so the comparison stays fair; for the
+  frame time itself read `vita_statsEvery`'s lines outside a run, and for the
+  render thread's split use `perf_phases`, which reads no clock there.
 
 ## `r_gpuSyncSleep`
 
@@ -478,12 +487,84 @@ without the vectors (0.05 ms slower).
 No other machine has run it; a desktop processor does this work in a small
 fraction of the time, so the setting stays off there until one does.
 
+## Where the render thread's time goes (`perf_phases`)
+
+The timed pieces above read a clock twice each. That is too dear for what the
+render thread does a few thousand times a frame, per draw and per constant:
+on the Vita the clock reads would outweigh the work. `perf_phases` counts
+without a clock. The render thread writes one byte whenever it enters or
+leaves a marked piece of work (`SysPerfPhaseScope`, `src/linux/sys_perf.h`;
+the innermost mark is the one that stands), and a thread of high priority
+looks at that byte a few thousand times a second and counts what it sees. A
+phase's share of the looks is its share of the thread's time.
+
+```
+perf_phases 1      start a count
+perf_phases 0      end it and print
+```
+
+The lines of a count (the figures here are made up to show the layout):
+
+```
+perf: render thread phases, 16000 looks in 20.00 s (one each 1250 us), 800 frames (25.00 ms a frame)
+perf: phase device: draw: 56.00 %, 14.000 ms a frame, 1600.0 calls a frame, 8.75 us a call
+perf: phase 2d: 7.00 %, 1.750 ms a frame, 1.0 calls a frame, 1750.00 us a call
+...
+```
+
+- The time is a phase's own: work marked inside it is counted under its own
+  name. **calls a frame** counts entries, and **us a call** is the phase's own
+  time over them.
+- The marks are compiled in only in Debug builds and in a build configured
+  with `-DKISAK_PERF_PHASES=ON`; measure with the second, which is a release
+  build otherwise. Elsewhere a mark is nothing and the command says so.
+- The looks are asked for every 397 us; a busy console gave one each 1.2 ms.
+  Twenty seconds is some 16 000 looks, which holds a 1 % share to about a
+  tenth of itself. Two counts of the same view agreed within 0.7 points.
+- The phases: `waiting for a frame`, `present`, `3d outside the lists`, `2d`
+  and `2d text`, `a filled batch drawn` (2D, effects and code meshes flushed),
+  `list walk`, `material setup`, `pass setup`, `a pass's textures and
+  constants`, `critical args`, `per-object args`, `per-prim args`, `matrices
+  derived`, `model placement`, `lighting coords`, `state bits`, `vertex
+  declaration`, `index fill`, `vertex fill`, one `tess <surface type>` for each
+  kind of surface (the kind's own loop, outside all of the others), and the
+  graphics device's part: `device: draw`, `device: vertex constants`, `device:
+  pixel constants`, `device: textures`, `device: streams`, `device: shaders`.
+
+The first count, on a PS Vita (console, the busy view of `mp_crash` at
+`1264 -1896 124` yaw 90, twelve bots, `vita_sceneScale 0.5` so that the
+processor and not the graphics chip sets the frame, 25.8 ms a frame, 18 001
+looks in 22 s, 2026-11-15, with an earlier and coarser set of marks):
+
+| Phase | Share |
+| --- | --- |
+| device: draw | 55.7 % |
+| 2d (the HUD, text included) | 6.8 % |
+| material setup (passes and their constants included) | 6.4 % |
+| device: vertex constants | 5.0 % |
+| tess pretessellated triangles (the world) | 4.8 % |
+| device: textures | 3.6 % |
+| tess rigid models | 3.2 % |
+| device: streams | 2.3 % |
+| per-prim args | 1.5 % |
+| device: shaders | 1.3 % |
+| state bits | 1.3 % |
+| everything else, each under 1.2 % | 8.0 % |
+
+So more than half of that thread is inside the draw call of the Vita's
+graphics back end, an eighth in the other device calls and about a third in
+the engine's own code, the HUD first. Deriving matrices was 0.4 %: replacing
+the 4x4 products there with vector code (tried on the console as `r_ignore`
+in a trial build) changed nothing that a run could show, and was dropped. At
+full size the same view waits for the graphics chip: device: draw 72.0 %,
+present 6.5 %.
+
 ## Checks
 
 `scripts/tests/test_linux_perf_ab.py` (the `perf_ab` check of
 `run_linux_checks.py`) compiles the logic as it is and drives it with a
 made-up clock, a made-up game whose speed and power depend on the variant, and
 a made-up `/sys` and `/proc` tree: window order, settle time, statistics,
-counters across a wrap, the printed lines, each machine reading, and the timed
-pieces (fed from four threads). It uses no game data. The commands themselves need a running game, so they have only run
+counters across a wrap, the printed lines, each machine reading, the timed
+pieces (fed from four threads), and the phase marks with the lines of a count. It uses no game data. The commands themselves need a running game, so they have only run
 on machines with the game files; say which when quoting numbers.
