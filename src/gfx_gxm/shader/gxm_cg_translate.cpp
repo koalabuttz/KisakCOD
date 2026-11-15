@@ -1892,13 +1892,57 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
         r.floatConstants = uint16_t(highestFromApi + 1);
     }
 
-    // The varyings, for linking checks.
+    // The varyings, for linking checks, with the components used.
     std::vector<Varying> &varyings = r.varyings;
-    auto add = [&](Semantic semantic, uint8_t index) {
-        for (const Varying &v : varyings)
+    auto add = [&](Semantic semantic, uint8_t index, uint8_t mask) {
+        for (Varying &v : varyings)
             if (v.semantic == semantic && v.index == index)
+            {
+                v.mask |= mask;
                 return;
-        varyings.push_back(Varying{semantic, index});
+            }
+        varyings.push_back(Varying{semantic, index, mask});
+    };
+    // The components of source i that the instruction can read.
+    auto lanesRead = [&](const Instruction &ins, int i) {
+        const Operand &src = ins.sources[i];
+        const auto lane = [&](int c) { return uint8_t(1u << ((src.swizzle >> (2 * c)) & 3)); };
+        if (src.modifier == kSmDz || src.modifier == kSmDw)
+            return uint8_t(0xf);
+        switch (ins.opcode)
+        {
+        case kMov:
+        case kAdd:
+        case kSub:
+        case kMad:
+        case kMul:
+        case kMin:
+        case kMax:
+        case kLrp:
+        case kCmp:
+        case kAbs:
+        case kFrc:
+        {
+            uint8_t lanes = 0;
+            for (int c = 0; c < 4; ++c)
+                if (ins.destination.mask & (1u << c))
+                    lanes |= lane(c);
+            return lanes;
+        }
+        case kDp3:
+            return uint8_t(lane(0) | lane(1) | lane(2));
+        case kTex:
+            // A plain read takes two components for a 2D sampler and
+            // three for a cube or a volume; the projected and the biased
+            // kinds take the fourth as well.
+            if (r.major >= 2 && i == 0 && ins.control == 0 && ins.sourceCount == 2 && ins.sources[1].number < 16)
+                return r.samplers[ins.sources[1].number] == SamplerType::Tex2D
+                           ? uint8_t(lane(0) | lane(1))
+                           : uint8_t(lane(0) | lane(1) | lane(2));
+            return uint8_t(0xf);
+        default:
+            return uint8_t(lane(0) | lane(1) | lane(2) | lane(3));
+        }
     };
     for (const Instruction &ins : shader.instructions)
     {
@@ -1914,7 +1958,7 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
                 if (!VaryingFromUsage(usage, index, semantic, error))
                     return false;
                 if (semantic != Semantic::Position)
-                    add(semantic, index);
+                    add(semantic, index, dst.mask ? dst.mask : uint8_t(0xf));
             }
             continue;
         }
@@ -1924,13 +1968,13 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
                 continue;
             const Operand &dst = ins.destination;
             if (dst.type == kAttrOut)
-                add(Semantic::Color, uint8_t(dst.number));
+                add(Semantic::Color, uint8_t(dst.number), dst.mask);
             else if (dst.type == kOutput)
-                add(Semantic::Texcoord, uint8_t(dst.number));
+                add(Semantic::Texcoord, uint8_t(dst.number), dst.mask);
             else if (dst.type == kRastOut && dst.number == 1)
-                add(Semantic::Fog, 0);
+                add(Semantic::Fog, 0, 1);
             else if (dst.type == kRastOut && dst.number == 2)
-                add(Semantic::PointSize, 0);
+                add(Semantic::PointSize, 0, 1);
         }
         else
         {
@@ -1938,12 +1982,12 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
             {
                 const Operand &src = ins.sources[i];
                 if (src.type == kInput)
-                    add(Semantic::Color, uint8_t(src.number));
+                    add(Semantic::Color, uint8_t(src.number), lanesRead(ins, i));
                 else if (src.type == kTexture)
-                    add(Semantic::Texcoord, uint8_t(src.number));
+                    add(Semantic::Texcoord, uint8_t(src.number), lanesRead(ins, i));
             }
             if (ins.opcode == kTexKill && ins.destination.type == kTexture)
-                add(Semantic::Texcoord, uint8_t(ins.destination.number));
+                add(Semantic::Texcoord, uint8_t(ins.destination.number), 0x7);
         }
     }
     std::sort(varyings.begin(), varyings.end(), [](const Varying &a, const Varying &b) {

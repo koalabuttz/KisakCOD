@@ -86,6 +86,11 @@ struct Varying
 {
     Semantic semantic;
     uint8_t index;
+    // The components (bit 0 = x) a vertex shader writes or a pixel shader
+    // reads: the declarations' masks from shader model 3 on; before that
+    // the write masks of a vertex shader's instructions, and for a pixel
+    // shader what its instructions can read (never fewer than they do).
+    uint8_t mask = 0;
 };
 
 struct Reflection

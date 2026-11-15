@@ -372,6 +372,24 @@ struct DrawState
     // program.
     bool hoistOneVarying = false;
     uint64_t hoistedDraws = 0, hoistUnfed = 0;
+    // The vertex census (live switch vertex-census): what the draws gave
+    // the GPU's vertex job while the switch was on, for the depth pass's
+    // scenes [0] and the others [1]. Turning the switch off writes it.
+    struct VertexCensus
+    {
+        uint64_t draws = 0, indices = 0;
+        uint64_t vertices = 0;    // the draws' index ranges, summed
+        uint64_t inputBytes = 0;  // vertices times stream 0's stride
+        uint64_t floats = 0;      // texture coordinate floats written, four a coordinate
+        uint64_t floatsOwn = 0;   // as wide as the vertex shaders write them
+        uint64_t floatsRead = 0;  // as wide as the pixel shaders read them
+        uint64_t hoistFloats = 0; // the coordinates handed over (in none of the three)
+        uint64_t others = 0;      // colours and fog written
+        uint64_t oldVertices = 0; // in pairs with a shader before model 3
+    };
+    bool vertexCensus = false;
+    uint64_t censusFrame = 0;
+    VertexCensus vertexCounts[2];
     // 0: the last draw had no alpha test, 1: one with a discard, 2: one
     // that was left out, 3: one that writes zero.
     uint8_t lastDrawAlphaTest = 0;
@@ -2817,7 +2835,7 @@ const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "n
                                      "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
                                      "gpu-watch",           "no-prepass-clear",  "no-depth-only-scene",
                                      "no-scene-in-copy",    "no-alpha-test-drop", "no-alpha-test-zero",
-                                     "no-read-hoist",       "hoist-one-varying"};
+                                     "no-read-hoist",       "hoist-one-varying", "vertex-census"};
 struct LiveSwitch
 {
     const char *name;
@@ -2827,6 +2845,8 @@ std::mutex g_liveSwitchLock;
 std::vector<LiveSwitch> g_liveSwitches;
 
 // Between two frames, on the thread that draws.
+void LogVertexCensus(Device &device);
+
 void ApplyLiveSwitches(Device &device)
 {
     std::vector<LiveSwitch> asked;
@@ -2889,6 +2909,14 @@ void ApplyLiveSwitches(Device &device)
             d.lastDrawValid = false;
             Log(device, "diag: read hoist so far: %llu draws with texture coordinates from the vertex program",
                 (unsigned long long)d.hoistedDraws);
+        }
+        else if (name == "vertex-census")
+        {
+            if (!s.on && d.vertexCensus)
+                LogVertexCensus(device);
+            d.vertexCensus = s.on;
+            d.censusFrame = d.frame;
+            d.vertexCounts[0] = d.vertexCounts[1] = DrawState::VertexCensus();
         }
         else if (name == "hoist-one-varying")
         {
@@ -3429,6 +3457,72 @@ void LogCensus(Device &device, const Shader &vs, const Shader &ps, const Variant
         textures += part;
     }
     Log(device, "census %u textures:%s", n, textures.empty() ? " none" : textures.c_str());
+}
+
+// One draw into the vertex census (DrawState::vertexCounts).
+void CensusDraw(DrawState &d, const Shader &vs, const Shader &ps, const Variant &pixel, const void *indices,
+                bool index32, uint32_t indexCount, bool indexed, uint32_t stride)
+{
+    DrawState::VertexCensus &c = d.vertexCounts[d.scenePrepass ? 0 : 1];
+    uint32_t vertices = indexCount;
+    if (indexed && indexCount)
+    {
+        uint32_t low = ~0u, high = 0;
+        for (uint32_t i = 0; i < indexCount; ++i)
+        {
+            const uint32_t index = index32 ? static_cast<const uint32_t *>(indices)[i]
+                                           : static_cast<const uint16_t *>(indices)[i];
+            low = std::min(low, index);
+            high = std::max(high, index);
+        }
+        vertices = std::min(indexCount, high - low + 1);
+    }
+    const auto width = [](uint8_t mask) { return mask & 8 ? 4u : mask & 4 ? 3u : mask & 2 ? 2u : mask & 1 ? 1u : 0u; };
+    const gxm::cg::Reflection &vr = vs.parsed.reflection, &pr = ps.parsed.reflection;
+    uint32_t floats = 0, own = 0, read = 0, others = 0;
+    for (const gxm::cg::Varying &v : vr.varyings)
+    {
+        if (v.semantic != gxm::cg::Semantic::Texcoord)
+        {
+            ++others;
+            continue;
+        }
+        floats += 4;
+        own += width(v.mask);
+        for (const gxm::cg::Varying &p : pr.varyings)
+            if (p.semantic == v.semantic && p.index == v.index)
+                read += width(p.mask);
+    }
+    ++c.draws;
+    c.indices += indexCount;
+    c.vertices += vertices;
+    c.inputBytes += uint64_t(vertices) * stride;
+    c.floats += uint64_t(vertices) * floats;
+    c.floatsOwn += uint64_t(vertices) * own;
+    c.floatsRead += uint64_t(vertices) * read;
+    c.others += uint64_t(vertices) * others;
+    if (pixel.hoisted)
+        c.hoistFloats += uint64_t(vertices) * (2 * ps.hoist.coords.size() + (d.hoistOneVarying ? 1 : 0));
+    if (vr.major < 3 || pr.major < 3)
+        c.oldVertices += vertices;
+}
+
+void LogVertexCensus(Device &device)
+{
+    DrawState &d = *device.draw;
+    const double frames = double(std::max<uint64_t>(1, d.frame - d.censusFrame));
+    for (int i = 0; i < 2; ++i)
+    {
+        const DrawState::VertexCensus &c = d.vertexCounts[i];
+        Log(device,
+            "diag: vertex census over %.0f frames, %s, a frame: %.0f draws, %.0f indices, %.0f vertices in the "
+            "draws' index ranges (%.0f KB of stream 0); texture coordinates written %.0f floats (%.0f as wide as "
+            "the vertex shaders write them, %.0f as the pixel shaders read them), handed over %.0f floats more; "
+            "%.0f colours and fog; %.0f vertices in shaders before model 3",
+            frames, i ? "the other scenes" : "the depth pass's scenes", c.draws / frames, c.indices / frames,
+            c.vertices / frames, c.inputBytes / frames / 1024.0, c.floats / frames, c.floatsOwn / frames,
+            c.floatsRead / frames, c.hoistFloats / frames, c.others / frames, c.oldVertices / frames);
+    }
 }
 
 void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t startIndex, uint32_t primitiveCount,
@@ -4013,6 +4107,8 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     d.idleAlphaTestDraws += d.lastDrawAlphaTest == 2;
     d.zeroAlphaTestDraws += d.lastDrawAlphaTest == 3;
     d.hoistedDraws += pixel->hoisted;
+    if (d.vertexCensus && vsUsed && ps)
+        CensusDraw(d, *vsUsed, *ps, *pixel, drawIndices, drawIndex32, indexCount, indexed, strides[0]);
     if (target)
         target->unfilled = false;
     part(gxm::FrameTime::PartSubmit);
