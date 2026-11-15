@@ -1055,6 +1055,20 @@ class CiTriggerTests(unittest.TestCase):
                             f'{path.name}: job {key} would run on a draft pull request')
         self.assertGreaterEqual(seen, 3)
 
+    # The fast PR lane (2026-11-15, hosted jobs waited 30-57 min for a runner):
+    # a pull request runs the main i386 builds and the Vulkan back end; the
+    # slow sweeps (64-bit and ARM builds and scans, compile censuses, the world
+    # and device probes) run after the merge, and a break there is fixed forward.
+    LINUX_PR_JOBS = {'window', 'native', 'native_d3d9_boundary', 'vulkan_window', 'vulkan_engine'}
+
+    def test_linux_pull_requests_run_only_the_fast_lane(self):
+        jobs = self.linux['jobs']
+        self.assertTrue(self.LINUX_PR_JOBS <= set(jobs), self.LINUX_PR_JOBS - set(jobs))
+        for key, job in jobs.items():
+            with self.subTest(job=key):
+                expected = self.DRAFT_RULE if key in self.LINUX_PR_JOBS else self.AFTER_MERGE_RULE
+                self.assertEqual(job.get('if'), expected)
+
     def test_windows_arm64_and_intel_macs_build_after_a_merge(self):
         self.assertEqual(self.windows['jobs']['arm64']['if'], self.AFTER_MERGE_RULE)
         for key in ('runtime-regressions', 'build', 'vulkan-probe'):
