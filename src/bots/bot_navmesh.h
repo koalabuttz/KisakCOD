@@ -52,6 +52,9 @@ struct NavBuildStats
     int tilesY = 0;
     int tilesBuilt = 0;
     int polygons = 0;
+    // Drop-downs: one-way links from the edge of a floor to a floor below it
+    // that a player steps off to without fall damage.
+    int dropLinks = 0;
     size_t bytes = 0;
 };
 
@@ -95,6 +98,8 @@ public:
     void Clear();
     bool Loaded() const { return m_mesh != nullptr; }
     int PolygonCount() const;
+    // The drop-downs in the mesh (NavBuildStats::dropLinks).
+    int DropLinkCount() const;
 
     // The closest point on the mesh within `reach` across and twice that up
     // and down. False when there is none.

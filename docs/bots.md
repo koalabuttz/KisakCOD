@@ -309,22 +309,37 @@ triangles. The agent is a standing player: 15 units across from the middle, 70
 tall, steps up 18 units and walks slopes up to 45 degrees. Cells are 6 units
 across and 3 high, in tiles of 64 cells.
 
+Recast links only floors a player walks between, so a floor reached by
+stepping off a ledge (a balcony over a street, a landing over a room) was an
+island: on Chinatown, bots upstairs hunted enemies 80 to 110 units below them
+and found no way down. The build now adds drop-downs, one-way links from the
+edge of a floor to a floor 21 to 116 units below it (fall damage starts at
+128): along every edge of the mesh with nothing beyond it, every 64 units, it
+looks 44, 60 and 76 units out for a floor below, and keeps the link only when
+nothing solid crosses the way (segments at three heights a standing player
+fills, at its middle and both sides, out over the edge and down to the floor)
+against the map's collision triangles. A drop costs one and a half times its
+length, so a bot takes the stairs when they are not much longer. A bot walks
+a drop-down like any corner: it walks off the edge and falls. Nothing climbs
+back up one; that waits for jumps and mantles.
+
 The mesh is built the first time a bot needs it on a map, on the server's own
 frame, and saved as `bots/nav/<map>.kbnav` in the home folder with the map's
 collision checksum; later loads read it back when the checksum matches. The
 server prints which it did:
 
 ```
-bots: navigation mesh for mp_crash built in <seconds> s (geometry ...)
+bots: navigation mesh for mp_crash built in <seconds> s (geometry ..., N drop-downs, ...)
 bots: navigation mesh for mp_crash loaded from bots/nav/mp_crash.kbnav (...)
 ```
 
-The cache is read only from the home and base folders, never from a game
+Each mesh build or layout change bumps the cache version, so older caches are
+rebuilt (version 2 added the drop-downs). The cache is read only from the home and base folders, never from a game
 archive or a server's download, and each tile's size is checked before Detour
 sees it. The mesh is derived from the map's data, so it is never committed.
 
 Not in the mesh yet: static models' collision (props), entities (doors,
-vehicles, script models), and jumps or mantles between floors. A bot that
+vehicles, script models), and jumps or mantles up between floors. A bot that
 walks into one notices it is stuck, jumps, then takes another way.
 
 ## Code
@@ -417,6 +432,8 @@ to one second behind.
   and Detour on the host, 64-bit with sanitizers and 32-bit. In made-up rooms a
   bot finds the way through a 64-unit door but not a 24-unit gap, up a 16-unit
   step but not a 40-unit ledge, up a 25 degree ramp but not a 60 degree one;
+  it steps down off a 96-unit platform or balcony (one way) but not off a
+  200-unit one, over a 40-unit railing or through a wall;
   it never walks on a floor's underside or between islands; a cache blob with
   a wrong checksum, a cut or a bad tile size is refused; and an 8000 by 8000
   yard builds in tiles; points picked near a bot stay near it. It also
