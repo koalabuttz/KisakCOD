@@ -137,6 +137,10 @@ struct Options
     // target as it was for such a source (gxm_idle_alpha_test.h): the
     // picture is the same and the program has no discard.
     bool alphaZero = false;
+    // Pixel shaders, a run diagnostic: the program writes one constant and
+    // nothing else, (0, 0, 0, 0) for 1 and (1, 1, 1, 1) for 2. For timing
+    // what a blended layer costs apart from its fragment program.
+    uint8_t diagFlat = 0;
     // Vertex shaders: keep the position's z just inside the far plane
     // (z <= w * 0.99999). D3D9 draws z == w; a run-diagnostic option while
     // finding out whether GXM clips it.

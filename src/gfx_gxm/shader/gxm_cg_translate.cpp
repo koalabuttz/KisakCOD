@@ -1295,6 +1295,9 @@ bool Emitter::Run(std::string &cg, std::string &error)
             epilogue += std::string("    if (!(") + tests[func] + ")) " +
                         (options_.alphaZero ? "oC0 = float4(0.0, 0.0, 0.0, 0.0);\n" : "discard;\n");
         }
+        if (options_.diagFlat)
+            epilogue += options_.diagFlat == 2 ? "    oC0 = float4(1.0, 1.0, 1.0, 1.0);\n"
+                                               : "    oC0 = float4(0.0, 0.0, 0.0, 0.0);\n";
         epilogue += "    return oC0;\n";
         if (!local("oC0"))
             prologue += "    float4 oC0 = float4(0.0, 0.0, 0.0, 1.0);\n";

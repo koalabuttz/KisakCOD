@@ -335,6 +335,14 @@ struct DrawState
     // zero for a rejected pixel in place of the discard. The marker and
     // switch no-alpha-test-zero turn it off.
     bool zeroAlphaTest = true;
+    // Run diagnostic (switch diag-flat-blend): blended draws of the 3D
+    // scene that write no depth take a fragment program that writes one
+    // constant the blend shows nothing of. They vanish from the picture and
+    // keep their vertices, their coverage and their blend, so the frame
+    // time says what their fragment programs cost.
+    bool diagFlatBlend = false;
+    bool lastDrawFlat = false;
+    uint64_t flatBlendDraws = 0;
     // 0: the last draw had no alpha test, 1: one with a discard, 2: one
     // that was left out, 3: one that writes zero.
     uint8_t lastDrawAlphaTest = 0;
@@ -767,7 +775,7 @@ uint64_t VariantKey(const gxm::cg::Options &options)
         components |= uint64_t(options.inputComponents[i] & 3) << (2 * i);
     return (uint64_t(options.bgraInputs) | uint64_t(options.absentInputs) << 16) ^ (components << 32) ^
            (options.alphaFunc == gxm::cg::AlphaFunc::Always ? 0 : uint64_t(options.alphaFunc)) ^
-           (options.alphaZero ? 0x00a5000000000000ull : 0) ^
+           (options.alphaZero ? 0x00a5000000000000ull : 0) ^ (uint64_t(options.diagFlat) << 44) ^
            (options.farPlaneInside ? 0x5a5a000000000000ull : 0) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
 }
 
@@ -2536,7 +2544,8 @@ void SetGpuWatch(Device &device, bool on)
 const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "no-vsync",
                                      "no-draw-reuse",     "no-filter-stretch", "no-gpu-boost",
                                      "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
-                                     "gpu-watch",           "no-alpha-test-drop", "no-alpha-test-zero"};
+                                     "gpu-watch",           "no-alpha-test-drop", "no-alpha-test-zero",
+                                     "diag-flat-blend"};
 struct LiveSwitch
 {
     const char *name;
@@ -2589,6 +2598,12 @@ void ApplyLiveSwitches(Device &device)
         {
             d.sameState = !s.on;
             d.lastDrawValid = false;
+        }
+        else if (name == "diag-flat-blend")
+        {
+            d.diagFlatBlend = s.on;
+            d.lastDrawValid = false;
+            Log(device, "diag: flat blended draws so far: %llu", (unsigned long long)d.flatBlendDraws);
         }
         else if (name == "no-alpha-test-drop" || name == "no-alpha-test-zero")
         {
@@ -3258,6 +3273,28 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
                 }
             }
         }
+        d.lastDrawFlat = false;
+        if (d.diagFlatBlend && device.renderStates[d3d::RS_ZENABLE] &&
+            device.renderStates[d3d::RS_ZFUNC] != d3d::CMP_ALWAYS)
+        {
+            const gfx_gxm::AlphaTestState state = AlphaTestStateOf(device);
+            uint8_t flat = 0;
+            if (state.blend && !state.depthWrite && !state.stencil)
+            {
+                if (state.src == d3d::BLEND_ZERO && state.dst == d3d::BLEND_SRCCOLOR)
+                    flat = 2;
+                else if (gfx_gxm::AlphaTestCanZero(state))
+                    flat = 1;
+            }
+            if (flat)
+            {
+                pixelOptions.alphaFunc = gxm::cg::AlphaFunc::Always;
+                pixelOptions.alphaZero = false;
+                pixelOptions.diagFlat = flat;
+                d.lastDrawAlphaTest = 0;
+                d.lastDrawFlat = true;
+            }
+        }
         // The programs this combination last drew with (Pipeline), unless a
         // run diagnostic wants to see or change how they are found.
         PipelineKey pipelineKey;
@@ -3270,7 +3307,8 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             pipelineKey.ps = ps;
             pipelineKey.decl = device.decl;
             std::memcpy(pipelineKey.strides, strides, sizeof(strides));
-            pipelineKey.alphaFunc = uint8_t(uint8_t(pixelOptions.alphaFunc) | (pixelOptions.alphaZero ? 0x80 : 0));
+            pipelineKey.alphaFunc = uint8_t(uint8_t(pixelOptions.alphaFunc) | (pixelOptions.alphaZero ? 0x80 : 0) |
+                                            (pixelOptions.diagFlat << 5));
             pipelineKey.index32 = index32;
             pipeline = &PipelineSlot(d, pipelineKey);
             known = std::memcmp(&pipeline->key, &pipelineKey, sizeof(pipelineKey)) == 0;
@@ -3628,6 +3666,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     d.alphaTestDraws += d.lastDrawAlphaTest == 1;
     d.idleAlphaTestDraws += d.lastDrawAlphaTest == 2;
     d.zeroAlphaTestDraws += d.lastDrawAlphaTest == 3;
+    d.flatBlendDraws += d.lastDrawFlat;
     if (target)
         target->unfilled = false;
     part(gxm::FrameTime::PartSubmit);
