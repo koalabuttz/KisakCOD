@@ -1359,11 +1359,36 @@ reflections on mp_strike at height H`. Only `mp_strike`'s main street is
 listed now (picked from the reflections' PC run 4). A map not in the list
 reflects in its water, if it has any: of the world surfaces whose material
 has a water map and whose bounds are flat, the height where the most of them
-lie, counted in triangles (at least 64), makes the plane, logged as `modern:
-planar reflections on <map> at height H (water, N triangles)`. On mp_bog that
-is -20, where 41 of the swamp's 53 surfaces lie (PC water run 2); counted by
-the area of their bounds instead, a 200-triangle sheet at -26 around the
-whole map won, and the reflections sat 6 units low.
+lie, counted in triangles, makes the plane, logged as `modern: planar
+reflections on <map> at height H (water, N triangles, A square units)`. A
+height qualifies with at least 64 triangles of flat water or at least
+1024 x 1024 square units of them (seen from above), so mp_cargoship's sea,
+48 large triangles, is a plane too. On mp_bog the plane is -20, where 41 of
+the swamp's 53 surfaces lie (PC water run 2); counted by the area of their
+bounds instead, a 200-triangle sheet at -26 around the whole map won, and the
+reflections sat 6 units low. Every other qualifying height is a plane too (up
+to eight), logged as `... also at height H ...`: on mp_bog the western swamp
+at -36 and the sheet at -26. Each frame the view takes the plane the main
+view shows most of. A grid of 6 x 4 rays through the main view, moved by half
+a cell from frame to frame, goes down to each plane the camera is above,
+highest first. A ray that lands on one of a plane's water triangles counts
+for it if nothing solid stands between the camera and that point (a sight
+trace through the collision world), and goes no further. Each plane keeps
+its count plus 0.8 of the last frame's; it may be taken from 2 (about 2% of
+the screen held for a few frames) and kept down to 0.5. Of those, the plane
+taken is the one whose rays weigh most by closeness, 1 / (1 + (d / 512)^2)
+for water d units away, so the swamp at the camera's feet beats the sheet
+beyond it; the plane last taken stays while it weighs at least half the
+best, so the view does not hop between two. The planes are found again when
+the world's name changes too, since a `devmap` can load the next map's world
+at the same address. When no plane counts enough, no planar view is drawn at all (it
+cost mp_bog 1.9 ms a frame wherever the camera looked, PC water run 3). The
+main view's own visibility (its cells, portals and frustum) is not enough for
+this: the sheet at -26 under mp_bog and the water under mp_creek's ground
+passed it from everywhere, so the view was never skipped (PC water run 4). The frame
+after a change of plane, or after frames without the view, reads the image
+last drawn, through its own matrices: the world in it lines up, and water
+more than 16 units off its plane reads the probe for that frame.
 
 **The view.** After each main view (`R_RenderScene` from the game), while
 the camera is above the plane, `R_ModernPlanarScene` draws the scene again:
@@ -1486,15 +1511,19 @@ read (also with `KISAK_VK_MODERN_WATER=0`). With
 (the floor's halves show the same colours, unweighted), checks the two lines, and that a full
 run draws and reads no planar view unless asked.
 
-**Next.** The right height for Bog's swamp, more than one plane a map, and
-planes found on their own for floors. `KISAK_VK_MODERN_WATER_LOG=1` names how
-water is drawn: once per map, every world surface whose material has a water
-map, by material, with their bounds, then each surface's bounds (at most
-96); and once per material and pass of water that draws, its technique,
-shaders, arguments, blend state, custom samplers, whether it is among the
-lit passes and whether our water shader can draw it, the material's
-constants and the water simulation's settings (at most 32). It works on any
-path.
+**Next.** Water on the other maps that have it, and planes found on their
+own for floors. `KISAK_VK_MODERN_WATER_LOG=1` names how water is drawn: as a
+map's water is looked at for the planar view (with it wanted), each material
+with a water map, its surfaces, triangles (flat ones), bounds and lit pixel
+shader, and whether our water shader can draw it (`modern water: map ...`),
+then each change of the plane the view takes (`modern water: planar view on
+the water at height H`, or `no water in view`; at most 64); once per map that
+draws water, every world surface whose material has a water map, by
+material, with their bounds, then each surface's bounds (at most 96); and
+once per material and pass of water that draws, its technique, shaders,
+arguments, blend state, custom samplers, whether it is among the lit passes
+and whether our water shader can draw it, the material's constants and the
+water simulation's settings (at most 32). It works on any path.
 
 ## Compute passes
 
