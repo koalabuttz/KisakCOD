@@ -26,7 +26,6 @@
 #include <gfx_vk/legacy/vk_legacy.h>
 
 #include <gfx_gxm/gxm_display.h>
-#include <gfx_gxm/gxm_engine_options.h>
 #include <gfx_gxm/gxm_heap.h>
 #include <gfx_gxm/gxm_memory.h>
 #include <gfx_gxm/gxm_program_cache.h>
@@ -1453,8 +1452,6 @@ void SetRenderTarget(Device *device, uint32_t index, Surface *surface)
         return;
     device->renderTargets[index] = surface;
     ++device->stateSerial;
-    if (index == 0)
-        device->colorUnread = gfx_gxm::g_colourUnread;
     if (index == 0 && surface)
     {
         uint32_t width = 0, height = 0;

@@ -74,15 +74,23 @@
 //   `no-prepass-clear` turns it off.
 // - g_prepassNoColour: the depth pass writes no colour and nothing reads
 //   its colour target, so its scene has none: the engine sets
-//   g_colourUnread while it binds that target and the back end opens the
+//   g_prepassScene while it draws that pass and the back end opens the
 //   scene with sceGxm's disabled colour surface. `no-depth-only-scene`
-//   turns it off.
+//   turns it off. The back end reads g_prepassScene when a draw or a clear
+//   asks for its scene, not when the target is set: the pass's colour
+//   target shares its surface with the image below
+//   (R_InitRenderTargets_PC), so with the third choice the engine goes
+//   from the pass to the lit pass without a call the back end sees. The
+//   flag is also what ends the pass's scene then: depth and lit passes in
+//   one scene cost the GPU more (console runs AA and AD).
 // - g_sceneInCopy: when the view's only post effect is the film colour
 //   filter, the 3D passes draw into the image the filter reads
 //   (R_RENDERTARGET_RESOLVED_SCENE) and not into the back buffer, so the
 //   copy between the two, a scene of its own, is not made. g_sceneIsCopy is
 //   true from the start of such a view until the filter (or the stretch of
 //   a scaled picture) has taken the picture from the image.
+//   A view that reads that image while it draws (distortion's copy of the
+//   picture, shadow cookies) keeps the back buffer.
 //   `no-scene-in-copy` turns it off.
 //
 // The three markers are empty files in the folder of the compiled programs,
@@ -104,7 +112,7 @@ extern float g_filterReadS;
 extern float g_filterReadT;
 extern bool g_prepassClears;
 extern bool g_prepassNoColour;
-extern bool g_colourUnread;
+extern bool g_prepassScene;
 extern bool g_sceneInCopy;
 extern bool g_sceneIsCopy;
 
@@ -123,7 +131,7 @@ inline int SceneScaled(int size, float scale)
 #define KISAK_GXM_SCENE_SCALE() (::gfx_gxm::g_sceneScale)
 #define KISAK_GXM_STRETCH_IN_FILTER() (::gfx_gxm::g_stretchInFilter)
 #define KISAK_GXM_PREPASS_CLEARS() (::gfx_gxm::g_prepassClears)
-#define KISAK_GXM_SET_COLOUR_UNREAD(on) (::gfx_gxm::g_colourUnread = (on) && ::gfx_gxm::g_prepassNoColour)
+#define KISAK_GXM_SET_PREPASS_SCENE(on) (::gfx_gxm::g_prepassScene = (on))
 #else
 #define KISAK_GXM_DEPTH_PREPASS() false
 #define KISAK_GXM_PREPASS_SKIP_MODELS() false
@@ -132,5 +140,5 @@ inline int SceneScaled(int size, float scale)
 #define KISAK_GXM_SCENE_SCALE() 1.0f
 #define KISAK_GXM_STRETCH_IN_FILTER() false
 #define KISAK_GXM_PREPASS_CLEARS() false
-#define KISAK_GXM_SET_COLOUR_UNREAD(on) ((void)0)
+#define KISAK_GXM_SET_PREPASS_SCENE(on) ((void)0)
 #endif

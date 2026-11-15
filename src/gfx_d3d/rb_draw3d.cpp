@@ -129,13 +129,16 @@ static void RB_StretchScaledScene(const GfxViewInfo *viewInfo)
 // draw into the image the filter reads, so that no scene is spent on copying
 // the picture there (gxm_engine_options.h, g_sceneInCopy). While they do,
 // R_RENDERTARGET_SCENE's colour is that image's surface, and this holds the
-// scene's own.
+// scene's own. The image is also the colour target of the dynamic shadows
+// and the copy of the picture that distortion reads
+// (R_InitRenderTargets_PC), so a view that uses either while it draws
+// (imageRead) keeps the back buffer.
 static IDirect3DSurface9 *s_sceneOwnColor;
 
-static void RB_SceneIntoCopy(const GfxViewInfo *viewInfo)
+static void RB_SceneIntoCopy(const GfxViewInfo *viewInfo, bool imageRead)
 {
     gfx_gxm::g_sceneIsCopy = false;
-    if (!gfx_gxm::g_sceneInCopy || s_sceneOwnColor || !RB_FilmFilterOnly(viewInfo))
+    if (!gfx_gxm::g_sceneInCopy || s_sceneOwnColor || imageRead || !RB_FilmFilterOnly(viewInfo))
         return;
     GfxRenderTarget &scene = gfxRenderTargets[R_RENDERTARGET_SCENE];
     GfxImage *image = gfxRenderTargets[R_RENDERTARGET_RESOLVED_SCENE].image;
@@ -535,8 +538,11 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     // The Modern path (r_visuals modern, Vulkan) may want the view's depth
     // before its lit surfaces, for its normals buffer.
     const bool modernDepth = R_ModernWantsSceneDepth();
+    // Whether the picture is copied after the sun for distortion to read.
+    const bool resolvePostSun =
+        rg.distortion && (!KISAK_GXM_RESOLVE_WHEN_USED() || RB_ListReadsResolvedPostSun(&viewInfo->emissiveInfo));
 #ifdef KISAK_GFX_GXM
-    RB_SceneIntoCopy(viewInfo);
+    RB_SceneIntoCopy(viewInfo, resolvePostSun || dynamicShadowType == SHADOW_COOKIE);
 #endif
     needsDepthPrepass = r_depthPrepass->current.enabled || KISAK_GXM_DEPTH_PREPASS() || modernDepth;
     // Whether the scene's depth holds its opaque surfaces before R_DrawLit.
@@ -587,20 +593,21 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
         // the scene's target before it is a scene that holds nothing else.
         // The depth pass's scene clears the depth and stencil instead, and
         // the scene's colour is cleared below, with the lit pass, as it was
-        // (gxm_engine_options.h, g_prepassClears). Nobody reads the colour
-        // target of this pass, which the back end is told while it is bound
-        // (g_prepassNoColour).
+        // (gxm_engine_options.h, g_prepassClears). The back end is told
+        // which draws are this pass's, so that they have a scene of their
+        // own and one without the colour target nobody reads
+        // (g_prepassScene).
         SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_DEPTH);
-        KISAK_GXM_SET_COLOUR_UNREAD(true);
         R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_DYNAMICSHADOWS);
         R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_DYNAMICSHADOWS);
+        KISAK_GXM_SET_PREPASS_SCENE(true);
         R_ClearScreen(gfxCmdBufState.prim.device, 6, colorWhite, 1.0, 0, 0);
         memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
         R_InitContext(data, &cmdBuf);
         KISAK_GXM_SET_PREPASS_SKIP_MODELS(!r_depthPrepass->current.enabled && !modernDepth);
         R_DepthPrepass(R_RENDERTARGET_SCENE, viewInfo, &cmdBuf);
         KISAK_GXM_SET_PREPASS_SKIP_MODELS(false);
-        KISAK_GXM_SET_COLOUR_UNREAD(false);
+        KISAK_GXM_SET_PREPASS_SCENE(false);
         whichToClearForScene = 1;
         clearSceneColor = true;
         needsDepthPrepass = false;
@@ -618,7 +625,9 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
         // The pass the GXM back end alone asks for may leave the models out
         // (gxm_engine_options.h, g_prepassWorldOnly).
         KISAK_GXM_SET_PREPASS_SKIP_MODELS(!r_depthPrepass->current.enabled && !modernDepth);
+        KISAK_GXM_SET_PREPASS_SCENE(true);
         R_DepthPrepass(R_RENDERTARGET_SCENE, viewInfo, &cmdBuf);
+        KISAK_GXM_SET_PREPASS_SCENE(false);
         KISAK_GXM_SET_PREPASS_SKIP_MODELS(false);
         depthPrepassed = true;
     }
@@ -656,7 +665,7 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
         SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_LIGHTS);
         R_DrawLights(viewInfo, &cmdBuf);
     }
-    if (rg.distortion && (!KISAK_GXM_RESOLVE_WHEN_USED() || RB_ListReadsResolvedPostSun(&viewInfo->emissiveInfo)))
+    if (resolvePostSun)
     {
         PROF_SCOPED("RB_ApplyPostEffects");
         R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_SCENE);

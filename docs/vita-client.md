@@ -919,12 +919,17 @@ What the GXM back end does so far (step 2d):
     is gone (`no-prepass-clear` turns it off);
   - the depth pass's scene is begun with sceGxm's disabled colour surface,
     since the pass writes no colour and nothing reads its colour target,
-    so that scene loads and stores no colour (`no-depth-only-scene`);
+    so that scene loads and stores no colour (`no-depth-only-scene`). The
+    engine marks the pass's draws for the back end, which keeps them in a
+    scene of their own even when the lit pass draws to the same surface:
+    depth and lit passes in one scene cost the GPU more (console runs AA
+    and AD);
   - when the film filter is the view's only post effect, the 3D passes
     draw into the image the filter reads and not into the back buffer, so
     the copy between the two is not made (`no-scene-in-copy`). Depth of
     field, glow, blur and the debug views keep the back buffer and the
-    copy.
+    copy, and so does a view that reads that image while it draws
+    (distortion, shadow cookies).
 
   The three names are empty files in the folder of the compiled programs,
   or `vita_gxm <name> 1` while the game runs. The log's `gpu watch` line

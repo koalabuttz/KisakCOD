@@ -69,7 +69,7 @@ float g_filterReadS = 1.0f;
 float g_filterReadT = 1.0f;
 bool g_prepassClears = true;
 bool g_prepassNoColour = true;
-bool g_colourUnread = false;
+bool g_prepassScene = false;
 bool g_sceneInCopy = true;
 bool g_sceneIsCopy = false;
 } // namespace gfx_gxm
@@ -294,6 +294,8 @@ struct DrawState
     // The open scene was asked to begin with sceGxm's disabled colour
     // surface (gxm_engine_options.h, g_prepassNoColour).
     bool sceneNoColour = false;
+    // The open scene is the depth pass's own (g_prepassScene).
+    bool scenePrepass = false;
     bool noColourLogged = false;
     uint32_t sceneWidth = 0, sceneHeight = 0;
     bool hasColor = false;
@@ -1149,10 +1151,17 @@ bool OpenScene(Device &device)
     DrawState &d = *device.draw;
     Surface *color = device.renderTargets[0];
     Surface *depth = device.depthStencil;
-    // A colour target the engine says nobody reads, with a depth surface to
-    // draw into: the scene is begun without it.
-    const bool noColour = device.colorUnread && depth && color && color->kind == SurfaceKind::TextureLevel;
-    if (d.sceneOpen && d.sceneColor == color && d.sceneDepth == depth && d.sceneNoColour == noColour)
+    // The depth pass has a scene of its own, whatever its targets are: the
+    // engine's flag is read here and not when the targets are set, since the
+    // pass's colour target can be the very surface the lit pass draws to
+    // (gxm_engine_options.h, g_prepassScene). Nobody reads that colour
+    // target, so with a depth surface to draw into the scene is begun
+    // without it.
+    const bool prepass = gfx_gxm::g_prepassScene;
+    const bool noColour = prepass && gfx_gxm::g_prepassNoColour && depth && color &&
+                          color->kind == SurfaceKind::TextureLevel;
+    if (d.sceneOpen && d.sceneColor == color && d.sceneDepth == depth && d.scenePrepass == prepass &&
+        d.sceneNoColour == noColour)
         return true;
     EndScene(device);
 
@@ -1252,6 +1261,7 @@ bool OpenScene(Device &device)
     d.sceneColor = color;
     d.sceneDepth = depth;
     d.sceneNoColour = noColour;
+    d.scenePrepass = prepass;
     d.sceneWidth = width;
     d.sceneHeight = height;
     d.boundVertex = nullptr;
