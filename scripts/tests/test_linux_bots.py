@@ -988,7 +988,9 @@ def main() -> int:
                    f"{min(r[3] for r in rows)} to {max(r[3] for r in rows)} units)" if rows else ""))
             cover = len(COVER_ROW.findall(output))
             hunts = len(HUNT_ROW.findall(output))
-            print(f"INFO: bots took cover {cover} times and went hunting {hunts} times")
+            noWay = len(re.findall(r"^bots: \d+ finds no way to a lead", output, re.M))
+            print(f"INFO: bots took cover {cover} times and went hunting {hunts} times "
+                  f"(and found no way to a lead on another floor {noWay} times)")
             team = team_play(output)
             print("INFO: the commander gave parts: " +
                   (", ".join(f"{role} {count}" for role, count in sorted(team["roles"].items())) or "none") +

@@ -101,6 +101,8 @@ struct BotSlot
     int sprayStart = 0;
     int lastShotAt = -100000;
     int nextFastLog = 0;
+    // The ping the scoreboard shows for it, drawn when it joins.
+    int pingBase = 50;
     kb::ViewKick kick;
     kb::StrafeState strafe;
     int eventSequence = 0;
@@ -137,6 +139,10 @@ struct BotSlot
     int hurtAt = -1000000;
     bool hurtFromKnown = false;
     float hurtFrom[3] = {0.0f, 0.0f, 0.0f};
+    // A lead it found no way to (a sound on a floor its way does not reach):
+    // left alone until then.
+    float noWayTo[3] = {0.0f, 0.0f, 0.0f};
+    int noWayUntil = 0;
 
     // Its team (bot_team.h): its part, the objective that part is about, when
     // it last called out each enemy, and the goal the part gave it.
@@ -1322,6 +1328,14 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
     if (s.enemyRemembered)
         s.rememberedConfidence = bot.perception.Confidence(focus.entity, svs.time, Senses());
     s.heardSomething = focus.kind == kb::FocusKind::Heard || (bot.hurtFromKnown && RecentlyHurt(bot, 3000));
+    // A lead where it found no way to go: a player hears someone on the floor
+    // above and does not stand under them; it keeps on with what it did.
+    if (float lead[3]; svs.time < bot.noWayUntil && !s.enemyInView && HuntPlace(bot, focus, lead)
+                       && Distance2D(lead, bot.noWayTo) < 300.0f && std::fabs(lead[2] - bot.noWayTo[2]) < 96.0f)
+    {
+        s.heardSomething = false;
+        s.enemyRemembered = false;
+    }
     s.hurtAgoMs = svs.time - bot.hurtAt;
     s.coverKnown = bot.coverKnown;
     s.inCover = bot.coverKnown && Distance2D(origin, bot.cover) < 40.0f && std::fabs(origin[2] - bot.cover[2]) < 48.0f;
@@ -1430,7 +1444,28 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
     {
         bot.hasGoal = true;
         bot.goalFor = intent;
-        if (!PlanWalk(bot, *nav, origin, bot.goal))
+        const bool walkable = PlanWalk(bot, *nav, origin, bot.goal);
+        // A hunt whose way ends short of the lead, above or below it (on
+        // another floor the way does not reach): no way there. Standing under
+        // a sound and staring at the ceiling is what a player does not do.
+        if (walkable && intent == kb::Intent::Hunt)
+        {
+            const float *end = bot.path[bot.pathCount - 1];
+            const float floorAt = bot.goal[2] - kb::kHeadHeight;
+            if (std::fabs(end[2] - floorAt) > 80.0f && Distance2D(end, bot.goal) < 400.0f)
+            {
+                std::memcpy(bot.noWayTo, bot.goal, sizeof(bot.noWayTo));
+                bot.noWayUntil = svs.time + 10000;
+                bot.pathCount = 0;
+                bot.pathIndex = 0;
+                bot.hasGoal = false;
+                if (LogOn())
+                    Com_Printf(CON_CHANNEL_SERVER, "bots: %d finds no way to a lead %.0f units %s\n", clientNum,
+                               std::fabs(end[2] - floorAt), end[2] < floorAt ? "above" : "below");
+                return;
+            }
+        }
+        if (!walkable)
         {
             bot.nextPlanTime = svs.time + 1000;
             if (intent == kb::Intent::Roam)
@@ -1482,6 +1517,19 @@ void Bot_RegisterDvars()
         "0 KisakCOD's bots never fire, 1 they fight the players they see (docs/bots.md)");
 }
 
+int Bot_Ping(int clientNum)
+{
+    if (!bot_brain || bot_brain->current.integer != 1 || clientNum < 0 || clientNum >= kMaxBotSlots)
+        return -1;
+    const BotSlot &bot = s_slots[clientNum];
+    if (!bot.active || svs.time - bot.lastTime > 1000)
+        return -1;
+    // A few ms either way, changing smoothly with time.
+    const float wobble = std::sin(static_cast<float>(svs.time) * 0.0007f + static_cast<float>(clientNum) * 1.7f)
+                         + 0.5f * std::sin(static_cast<float>(svs.time) * 0.0023f + static_cast<float>(clientNum));
+    return bot.pingBase + static_cast<int>(std::lround(wobble * 3.0f));
+}
+
 bool Bot_UserMove(client_t *cl)
 {
     if (!bot_brain || bot_brain->current.integer != 1)
@@ -1506,6 +1554,7 @@ bool Bot_UserMove(client_t *cl)
         bot.rng.Seed(0x6b6973u ^ (port * 2654435761u) ^ static_cast<uint32_t>(clientNum));
         bot.nextSense = svs.time + (clientNum * 37) % kSenseMs;
         bot.personality = kb::RandomPersonality(bot.rng);
+        bot.pingBase = static_cast<int>(bot.rng.Range(25.0f, 75.0f));
         bot.areas.Reset();
         bot.mind.Reset(svs.time);
     }
@@ -1603,7 +1652,13 @@ bool Bot_UserMove(client_t *cl)
         }
         float watch[2] = {0.0f, 0.0f};
         if (focus.kind != kb::FocusKind::None)
+        {
             ViewToward(ps, focus.position, watch);
+            // A sound or a memory straight above or below: a player looks
+            // toward it, not at the ceiling or the floor.
+            if (focus.kind != kb::FocusKind::Seen)
+                watch[0] = std::fmax(-35.0f, std::fmin(35.0f, watch[0]));
+        }
         const float *watching = focus.kind != kb::FocusKind::None ? watch : nullptr;
 
         // A fight: the player it sees, or the one it was fighting and has just
