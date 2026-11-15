@@ -123,6 +123,8 @@ SETS = [
             ("debug_ao.frag", "kDebugAoFrag"),
             ("reflections.frag", "kReflectionsFrag"),
             ("debug_reflections.frag", "kDebugReflectionsFrag"),
+            ("fog_march.frag", "kFogMarchFrag"),
+            ("fog_apply.frag", "kFogApplyFrag"),
         ],
     ),
     ShaderSet(

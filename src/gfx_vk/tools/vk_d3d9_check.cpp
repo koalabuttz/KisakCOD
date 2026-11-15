@@ -536,6 +536,7 @@ public:
     void ModernAo();
     void ModernAoAs(bool liveOff);
     void ModernLive();
+    void ModernFog();
     void ModernReflections();
     void ModernProbes();
     void ModernPlanar();
@@ -6213,6 +6214,113 @@ void Check::ModernLive()
     }
 }
 
+// Volumetric fog (vk_modern.h DrawFog, docs/vulkan-modern.md): four scenes of
+// grey 100 at depth 0.5 under identity matrices, so a pixel's world point is
+// (x, y, 0.5) in NDC, seen from (0, 0, -1.5): about 2 units away, where fog
+// of density 0.5 from 0 leaves T = 0.5. Fog grey 0.5 (0.214 of light), no
+// forward scattering. The sun's shadow map is cleared to depth 0.3 and the
+// lookup sends every point to its middle at a reference of 0.5 (behind it:
+// in shadow) or 0.1 (in front: lit). Fog off: grey 100. Lit air: grey 100
+// (lit air changes nothing). Air in shadow with the sun's share 1: the
+// shadow takes 0.214 * 0.5 of light away; with the share 0.5, half that.
+// Without linear light there is no fog: grey 100 throughout.
+void Check::ModernFog()
+{
+    const bool linear = EnvText("KISAK_VK_MODERN_LINEAR") != "0";
+    const auto take = [&](const front::ModernTuning &modern) {
+        {
+            const std::lock_guard<std::mutex> lock(host->mutex);
+            host->tuning = front::Tuning{};
+            host->tuning.modern = modern;
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    };
+    IDirect3DTexture9 *shadow = nullptr, *shadowColor = nullptr;
+    IDirect3DSurface9 *shadowLevel = nullptr, *shadowColorLevel = nullptr, *depth = nullptr;
+    const bool made =
+        Ok(device->CreateTexture(64, 64, 1, D3DUSAGE_DEPTHSTENCIL, D3DFMT_D24S8, D3DPOOL_DEFAULT, &shadow, nullptr),
+           "CreateTexture(D24S8 depth)")
+        && Ok(shadow->GetSurfaceLevel(0, &shadowLevel), "GetSurfaceLevel(depth)")
+        && Ok(device->CreateTexture(64, 64, 1, D3DUSAGE_RENDERTARGET, D3DFMT_R5G6B5, D3DPOOL_DEFAULT, &shadowColor,
+                                    nullptr),
+              "CreateTexture(R5G6B5 target)")
+        && Ok(shadowColor->GetSurfaceLevel(0, &shadowColorLevel), "GetSurfaceLevel(colour)")
+        && Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                                nullptr),
+              "CreateDepthStencilSurface");
+    const auto shown = [](double light) {
+        const Rgb c = TonemapCurve(ModernCurve(), {light, light, light});
+        return ShownByte(c[0]);
+    };
+    const double grey = std::pow((100.0 / 255.0 + 0.055) / 1.055, 2.4);
+    const double fogLight = std::pow((0.5 + 0.055) / 1.055, 2.4);
+    // One scene with the fog switched as given, the sun's share `sun` and
+    // the shadow lookup's reference `reference`; the middle pixel's shown
+    // value is expected to be `want`.
+    const auto scene = [&](const char *name, int fogOn, float sun, float reference, int want) {
+        front::ModernTuning modern;
+        modern.exposure = 0;
+        modern.fog = fogOn;
+        modern.fogSun = sun;
+        modern.fogScatter = 0.0f;
+        take(modern);
+        // The shadow pass: depth 0.3 everywhere.
+        Ok(device->SetRenderTarget(0, shadowColorLevel), "SetRenderTarget(shadow colour)");
+        Ok(device->SetDepthStencilSurface(shadowLevel), "SetDepthStencilSurface(shadow)");
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 0.3f, 0),
+           "Clear(shadow)");
+        Reset(Argb(255, 0, 0, 0));
+        front::ModernSceneBegin(device);
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 100, 100, 100), 0.5f, 0),
+           "Clear(scene)");
+        front::ModernSceneView view{};
+        for (int i = 0; i < 4; ++i)
+            view.view[i][i] = view.projection[i][i] = 1.0f;
+        view.width = view.height = kSize;
+        view.cut = true;
+        view.fog.on = true;
+        view.fog.color[0] = view.fog.color[1] = view.fog.color[2] = 0.5f;
+        view.fog.density = 0.5f;
+        view.fog.start = 0.0f;
+        view.fog.origin[2] = -1.5f;
+        view.fog.sunDirection[0] = 1.0f;
+        view.fog.shadowMap = shadow;
+        // Every point to the map's middle, the near partition, at the reference.
+        view.fog.shadowLookup[3][0] = 0.5f;
+        view.fog.shadowLookup[3][1] = 0.5f;
+        view.fog.shadowLookup[3][2] = reference;
+        view.fog.shadowLookup[3][3] = 0.5f;
+        view.fog.switchPartition[3] = 1.0f;
+        view.fog.shadowmapScale[0] = view.fog.shadowmapScale[1] = 1.0f;
+        Equal("done", static_cast<int>(front::ModernSceneDone(device, view)),
+              static_cast<int>(front::ModernResult::Done));
+        device->SetDepthStencilSurface(nullptr);
+        if (Read())
+        {
+            Expect(name, 64, 64, want, want, want);
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    };
+    if (made)
+    {
+        const int plain = shown(grey);
+        // The middle pixel's ray is 2 units long to within 1e-4: T = 0.5.
+        const int shaded = linear ? shown(grey - fogLight * 0.5) : plain;
+        const int halfShaded = linear ? shown(grey - fogLight * 0.25) : plain;
+        scene("fog_off", 0, 1.0f, 0.5f, plain);
+        scene("fog_lit_air", 1, 1.0f, 0.1f, plain);
+        scene("fog_shadowed_air", 1, 1.0f, 0.5f, shaded);
+        scene("fog_shadowed_half_share", 1, 0.5f, 0.5f, halfShaded);
+    }
+    take(front::ModernTuning{});
+    SafeRelease(depth);
+    SafeRelease(shadowColorLevel);
+    SafeRelease(shadowColor);
+    SafeRelease(shadowLevel);
+    SafeRelease(shadow);
+}
+
 // Auto exposure (vk_modern.h MeasureExposure), with the default key 0.115 and
 // range -1 to +1.5 EV: four scenes, each one grey all over. A cut takes the
 // exposure at once: grey 100 (0.127 of light) is brought to the key exactly
@@ -6581,6 +6689,7 @@ int Run(const Options &options)
         {"modern_reflections", &Check::ModernReflections, true},
         {"modern_probes", &Check::ModernProbes, true},
         {"modern_planar", &Check::ModernPlanar, true},
+        {"modern_fog", &Check::ModernFog, true},
         {"modern_live", &Check::ModernLive, true},
         // A scene that starts with a cut after modern_live's switch changes
         // (the velocity pass made again waits for the GPU): its barriers must

@@ -79,8 +79,10 @@ back to them.
 | `r_modernAoHalf` | default, off, on | `KISAK_VK_MODERN_AO_HALF` |
 | `r_modernSsr` | default, off, on | `KISAK_VK_MODERN_SSR` |
 | `r_modernSsrDistance`, `r_modernSsrThickness` | -1, or above 0 | `KISAK_VK_MODERN_SSR_DISTANCE`, `_THICKNESS` |
+| `r_modernFog` | default, off, on | `KISAK_VK_MODERN_FOG` |
+| `r_modernFogSun`, `r_modernFogScatter` | -1, or 0 to 1 and 0 to 0.9 | `KISAK_VK_MODERN_FOG_SUN`, `_SCATTER` |
 | `r_modernTonemap` | default, clamp, neutral, agx, aces | `KISAK_VK_MODERN_TONEMAP` |
-| `r_modernDebug` | default, none, velocity, velocity-all, normals, ao, reflections | `KISAK_VK_MODERN_DEBUG` |
+| `r_modernDebug` | default, none, velocity, velocity-all, normals, ao, reflections, fog | `KISAK_VK_MODERN_DEBUG` |
 
 As with the variables, `r_modernAo` and `r_modernSsr` at `default` turn the
 pass on for what reads it (our lit shaders, or its debug view), so
@@ -1493,12 +1495,100 @@ lit passes and whether our water shader can draw it, the material's
 constants and the water simulation's settings (at most 32). It works on any
 path.
 
+## Volumetric fog
+
+CoD4's fog is flat: one colour, a start distance and a density per map (set
+by the map and its scripts, `setExpFog`), blended over each surface by how
+far it is. The Modern path can light that same fog with the sun: air in the
+sun's shadow is darker, and looking towards the sun the air glows, so
+shafts show through windows, trees and gaps between buildings. The map's
+own fog still decides the look: with the sun's share at 0 the picture is
+the game's. Off by default until the PC has measured it.
+
+```
++set r_modernFog on
+```
+
+**The model.** The game's vertex shaders leave 2^(-density (d - start)) of a
+surface's light (T, at most 1) at distance d, and the fog's colour F makes
+up the rest, 1 - T: that is uniform air, where each stretch from a to b
+adds the fog's light in proportion to T(a) - T(b). Here a share k of that
+light (`r_modernFogSun`, default 0.6) comes from the sun instead: only from
+air the sun reaches, weighted by a Henyey-Greenstein phase with forward
+scattering g (`r_modernFogScatter`, default 0.35) divided by its average,
+so it is 1 over all directions. With `shadowed` the (negative) sum of
+T(a) - T(b) over the stretches in shadow:
+
+```
+added = k F (phase (1 - T + shadowed) - (1 - T))
+```
+
+is added onto the linear-light scene. Only the difference from the game's
+fog is added, so every surface keeps the fog it was drawn with (ours or the
+game's shaders, effects included) and nothing has to be unfogged. The sky
+has no fog in the game: it gets only the shadows' share, k F phase
+shadowed, the shafts' dark side against it.
+
+**How a scene goes with it:**
+
+1. The renderer hands the view's fog over with the scene
+   (`GfxModernScene::fog`, filled by `R_ModernSceneFog` in
+   `src/gfx_d3d/r_scene.cpp`): the fog's colour, density and start as
+   `R_SetFrameFog` gives them to the shaders, the camera, the sun's
+   direction, and, when `RB_StandardDrawCommands` draws the sun's shadow
+   map for the view, that texture with its lookup matrix and partition
+   constants (the ones the lit shaders read: `lookupMatrix`,
+   `switchPartition`, `shadowmapScale`). The hosts copy it into
+   `front::ModernSceneView::fog`; the front checks the shadow map is one of
+   its textures and passes its level 0 to `BackendModernScene`.
+2. In `BackendModernScene`, before the velocity and the anti-aliasing,
+   `DrawSceneFog` records `modern::DrawFog` (`vk_modern_fog.cpp`) over the
+   linear-light scene, when it is wanted and the view has fog. Without
+   linear light there is no fog pass.
+3. **The march** (`shaders/fog_march.frag`, at half resolution unless
+   `KISAK_VK_MODERN_FOG_HALF=0`: each output pixel marches one pixel of its
+   2x2 block, which one moving from frame to frame) steps each view ray
+   through the sun's shadow map, 24 steps (`KISAK_VK_MODERN_FOG_STEPS`, 4
+   to 128) over its first 3000 units (`KISAK_VK_MODERN_FOG_MARCH`), closer
+   together near the camera, each step's point moved by interleaved gradient
+   noise per pixel and frame. It reads the map as the lit shaders do: the
+   near partition while the partition value is at most 1, then the far one,
+   fading to lit at its edge. Air past the march and past the map's reach
+   counts as lit. It writes `shadowed` and the ray's length.
+4. **The apply pass** (`shaders/fog_apply.frag`) brings that back to full
+   resolution from the four nearest half-resolution pixels, weighted by how
+   alike their rays' lengths are, and adds the light above (blend one,
+   one). The anti-aliasing then averages the march's noise away.
+
+Both passes are timed as "modern fog". With `r_modernDebug fog` (or
+`KISAK_VK_MODERN_DEBUG=fog`, which switches the fog on) the apply pass
+writes the added light alone, four times over, onto grey 0.18 in place of
+the scene.
+
+**What it does not do yet:** spot lights in the air (each view's up to four
+shadowed spots, next), fog on effects drawn after the scene (they keep the
+game's fog), and a froxel volume as a second option once the core has
+compute passes (David, 2026-11-15).
+
+The statistics line: `vulkan d3d9: modern: S scenes with volumetric fog (M
+through the sun's shadow map; sun K, scatter G, N steps over D units, half
+resolution), T ms GPU each` (both passes).
+
+**Check:** the D3D9 check's `modern_fog` scene draws grey 100 at depth 0.5
+under identity matrices, seen from 1.5 units behind, through fog of density
+0.5 (T 0.5 at the middle pixel) and grey 0.5, with no forward scattering,
+and a shadow map cleared to 0.3 that every point looks up at its middle: at
+a reference of 0.1 the air is lit and nothing changes; at 0.5 it is in
+shadow, and the middle pixel loses 0.214 x 0.5 of light with the sun's share
+1, half that with 0.5; with the fog off, or without linear light, it stays
+grey 100. `test_vulkan_d3d9_front.py` counts its three fog scenes.
+
 ## Next
 
 What this guide still lists as missing is in [What it does not do
 yet](#what-it-does-not-do-yet): a reactive mask for effects, sharpening, one
 history per view and the rest of the lit shaders. The plan's later stages
-(volumetric fog and light shafts, screen-space global illumination, and a
+(volumetric fog's spot lights and froxel volume, screen-space global illumination, and a
 ray-tracing tier for GPUs that have it) are in the project files'
 `renderer/modern-renderer-plan.md`, section 6.5; the Modern switches becoming
 dvars that change mid-match is section 6.6. Which pieces are in review is on
