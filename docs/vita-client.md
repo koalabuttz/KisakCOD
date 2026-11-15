@@ -984,9 +984,23 @@ What the GXM back end does so far (step 2d):
   phase; with David's settings 86-91 against 68 ms a frame), at the cost of
   4 MB of CDRAM. For comparing, `small-parameter-buffer` gives the old
   8 MB, `big-parameter-buffer` 16 MB (4 MB less for the CDRAM pool, which
-  may not hold every map), and `big-gxm-rings` twice the default rings
-  (3 MB more of main memory).
-  Not run on a console or in Vita3K yet.
+  may not hold every map).
+  sceGxm's ring buffers are 256 KB for draw calls, 2 MB for vertex
+  constants and 1 MB for fragment constants: the first and the last at
+  twice sceGxm's default. A draw that finds a ring full waits inside sceGxm
+  until the GPU has finished a scene, and no line of the log names that
+  wait. Console run BV (2026-11-15, the busy view of `mp_crash`, 1500
+  draws a frame) found it: with the default rings about one timed draw a
+  frame took 5 to 11 ms, in `sceGxmDraw` or where the fragment constants
+  are reserved (`N timed draws took over 2 ms` on the frame time line, 7 to
+  18 in 10 s, and those two steps of a draw's parts at 3.5 to 9.5 us), and
+  with all three rings doubled none did, the two steps cost 2.4 and 0.7 us
+  and the frame was 37.1 against 35.5 ms. The time left is the pacing
+  wait: that view is bound by the GPU at full size. `small-gxm-rings`
+  gives sceGxm's defaults (and the main pool 1 MB less), `big-gxm-rings`
+  twice the default for the vertex constants too (2 MB more of main
+  memory), for comparing. The sizes as they are now have not run on a
+  console yet.
 - **What the CPU pays for GPU memory.** The main pool is memory the CPU
   does not cache (`SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE`), as Sony's
   samples have it, and CDRAM is not cached either. The engine skins

@@ -274,6 +274,10 @@ struct AoParams
     // within 2 levels; 0.25 and 0.6 soften it no further but lighten the
     // ceiling beams' edges more.
     float edge = 0.08f;
+    // Work the occlusion out at half resolution, one pixel of each 2x2 block
+    // (which one moving from frame to frame), and blur it back up to full
+    // resolution across the depth: about a quarter of the occlusion's work.
+    bool half = false;
     uint32_t frame = 0;    // moves the noise
 };
 
