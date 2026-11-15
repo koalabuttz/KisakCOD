@@ -6,6 +6,9 @@
 #include "r_buffers.h"
 #include <universal/profile.h>
 #include "r_dobj_skin.h"
+#include "r_model_skin_vec.h"
+
+#include <cstddef>
 
 
 //uint32_t const *const g_shortBoneWeightPerm__uint4 820f4950     gfx_d3d : r_model_skin.obj
@@ -63,6 +66,9 @@ void R_SkinXModelCmd(_WORD *data)
     // sys_SSE is never set off x86 (Sys_FindInfo), so Arm takes the scalar path.
     bool sseEnabled = KISAK_ARCH_X86 && sys_SSE->current.enabled && r_sse_skinning->current.enabled;
     bool sseStateUsed = false;
+    // Off x86 the dvar switches the vector path instead (r_model_skin_vec.h),
+    // so that a perf run can hold it against the scalar code.
+    const bool vecEnabled = KISAK_SKIN_VEC && !KISAK_ARCH_X86 && r_sse_skinning->current.enabled;
 
     SkinXModelCmd* skinCmd = (SkinXModelCmd*)data;
 
@@ -165,6 +171,10 @@ void R_SkinXModelCmd(_WORD *data)
             R_SkinXSurfaceSkinnedSse(xsurf, &boneSkelMats[boneIndex], skinVertNormalIn, skinVertNormalOut, skinVerticesOut);
 #endif
         }
+        else if (vecEnabled)
+        {
+            R_SkinXSurfaceSkinnedVec(xsurf, &boneSkelMats[boneIndex], skinVerticesOut);
+        }
         else
         {
             R_SkinXSurfaceSkinned(xsurf, &boneSkelMats[boneIndex], skinVerticesOut);
@@ -186,6 +196,45 @@ void R_SkinXSurfaceSkinned(
     else
         R_SkinXSurfaceRigid(xsurf, xsurf->vertCount, boneMatrix, skinVerticesOut);
 }
+
+#if KISAK_SKIN_VEC
+static_assert(sizeof(skin_vec::Vertex) == sizeof(GfxPackedVertex));
+static_assert(offsetof(skin_vec::Vertex, binormalSign) == offsetof(GfxPackedVertex, binormalSign));
+static_assert(offsetof(skin_vec::Vertex, color) == offsetof(GfxPackedVertex, color));
+static_assert(offsetof(skin_vec::Vertex, texCoord) == offsetof(GfxPackedVertex, texCoord));
+static_assert(offsetof(skin_vec::Vertex, normal) == offsetof(GfxPackedVertex, normal));
+static_assert(offsetof(skin_vec::Vertex, tangent) == offsetof(GfxPackedVertex, tangent));
+static_assert(sizeof(skin_vec::Bone) == sizeof(DObjSkelMat));
+static_assert(offsetof(skin_vec::Bone, origin) == offsetof(DObjSkelMat, origin));
+
+void R_SkinXSurfaceSkinnedVec(
+    const XSurface *xsurf,
+    const DObjSkelMat *boneMatrix,
+    GfxPackedVertex *skinVerticesOut)
+{
+    const skin_vec::Vertex *in = reinterpret_cast<const skin_vec::Vertex *>(xsurf->verts0);
+    const skin_vec::Bone *bones = reinterpret_cast<const skin_vec::Bone *>(boneMatrix);
+    skin_vec::Vertex *out = reinterpret_cast<skin_vec::Vertex *>(skinVerticesOut);
+    if (xsurf->deformed)
+    {
+        skin_vec::Weighted(in, xsurf->vertInfo.vertsBlend, xsurf->vertInfo.vertCount, bones, out);
+        return;
+    }
+    for (uint32_t i = 0; i < xsurf->vertListCount; ++i)
+    {
+        const XRigidVertList *list = &xsurf->vertList[i];
+        skin_vec::Rigid(in, list->vertCount,
+                        reinterpret_cast<const skin_vec::Bone *>(reinterpret_cast<const char *>(bones) + list->boneOffset),
+                        out);
+        in += list->vertCount;
+        out += list->vertCount;
+    }
+}
+#else
+void R_SkinXSurfaceSkinnedVec(const XSurface *, const DObjSkelMat *, GfxPackedVertex *)
+{
+}
+#endif
 
 void R_SkinXSurfaceWeight(
     const GfxPackedVertex *inVerts,
