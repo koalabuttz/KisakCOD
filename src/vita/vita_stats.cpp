@@ -314,9 +314,59 @@ namespace
     }
 }
 
+namespace
+{
+    cmd_function_s s_threadsCommand;
+    cmd_function_s s_threadCommand;
+
+    // vita_threads: one line for each thread the port started.
+    void Threads_f()
+    {
+        VitaThreadRow rows[24];
+        const int count = Vita_ThreadRows(rows, 24);
+        for (int i = 0; i < count; ++i)
+        {
+            const VitaThreadRow &row = rows[i];
+            Com_Printf(CON_CHANNEL_SYSTEM, "Vita thread: %-14s priority %d (started at %d), cores %c%c%c, last ran on "
+                "core %d, ran %u ms, pre-empted %u, gave way %u, changed core %u\n", row.name, row.priority,
+                row.startPriority, (row.cores & 1) ? '0' : '-', (row.cores & 2) ? '1' : '-',
+                (row.cores & 4) ? '2' : '-', row.lastCore, (unsigned int)(row.runMicroseconds / 1000),
+                row.preempted, row.released, row.movedCore);
+        }
+    }
+
+    // vita_thread <part of a name> cores <0-7> | priority <-32..32>
+    void Thread_f()
+    {
+        const bool cores = Cmd_Argc() == 4 && !strcmp(Cmd_Argv(2), "cores");
+        const bool priority = Cmd_Argc() == 4 && !strcmp(Cmd_Argv(2), "priority");
+        const int value = Cmd_Argc() == 4 ? atoi(Cmd_Argv(3)) : 0;
+        if ((!cores && !priority) || (cores && (value < 0 || value > 7)) || value < -32 || value > 32)
+        {
+            Com_Printf(CON_CHANNEL_SYSTEM, "usage: vita_thread <part of a thread's name> cores <0-7> (bits: user "
+                "cores 0 to 2; 0: all) | priority <-32..32> (added to the priority it started with; higher runs "
+                "later)\n");
+            return;
+        }
+        int error = 0;
+        const int changed = cores ? Vita_SetThreadCores(Cmd_Argv(1), value, &error)
+            : Vita_SetThreadPriorityStep(Cmd_Argv(1), value, &error);
+        if (changed < 0)
+            Com_PrintError(CON_CHANNEL_SYSTEM, "vita_thread: too many names are remembered already\n");
+        else if (error)
+            Com_PrintError(CON_CHANNEL_SYSTEM, "vita_thread: the kernel refused with 0x%08x\n", (unsigned int)error);
+        else
+            Com_Printf(CON_CHANNEL_SYSTEM, "vita_thread: \"%s\" %s %d on %d running thread%s, and on threads of "
+                "that name that start later\n", Cmd_Argv(1), cores ? "cores" : "priority", value, changed,
+                changed == 1 ? "" : "s");
+    }
+}
+
 void Vita_StatsInit()
 {
     Cmd_AddCommandInternal("vitastats", Stats_f, &s_statsCommand);
+    Cmd_AddCommandInternal("vita_threads", Threads_f, &s_threadsCommand);
+    Cmd_AddCommandInternal("vita_thread", Thread_f, &s_threadCommand);
     Com_Printf(CON_CHANNEL_SYSTEM, "Vita: a 5 ms timed wait took %u us\n", (unsigned int)Vita_TimedWaitMicroseconds(5));
     vita_quitAfter = Dvar_RegisterInt("vita_quitAfter", 0, 0, 86400, DVAR_NOFLAG,
         "Quit this many seconds after start-up, for runs nobody watches (0: never)");

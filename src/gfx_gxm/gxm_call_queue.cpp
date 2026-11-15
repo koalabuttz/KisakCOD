@@ -181,6 +181,7 @@ void CallQueue::ThreadMain()
 {
 #if defined(__vita__)
     Vita_NoteThread("gxm submit");
+    Vita_QuietWaits();
 #endif
     if (started_)
         started_(user_);

@@ -49,6 +49,32 @@ struct VitaThreadTime
 void Vita_NoteThread(const char *name);
 int Vita_ThreadTimes(VitaThreadTime *times, int count);
 
+// Where and how those threads run, for a run that tries other cores or
+// priorities (the "vita_thread" and "vita_threads" commands, vita_stats.cpp).
+// The port sets neither by itself: every thread starts on all three user
+// cores at the process's priority.
+//
+// Vita_SetThreadCores keeps the threads whose name holds `namePart` (in any
+// case) on the user cores in `cores` (bits 0 to 2; 0: all three).
+// Vita_SetThreadPriorityStep adds `step` to the priority each started with;
+// on the Vita a higher number runs later. Both return how many running
+// threads they changed (-1: no room to remember it) and, in `firstError`,
+// the kernel's error if a change failed. Both are remembered: a thread that
+// says a matching name later gets the same.
+struct VitaThreadRow
+{
+    int id;
+    char name[24];
+    int priority, startPriority;
+    int cores;    // bits 0 to 2: user cores; bit 3: the system's
+    int lastCore; // it last ran on
+    unsigned int preempted, released, movedCore; // counts since it started
+    uint64_t runMicroseconds;
+};
+int Vita_SetThreadCores(const char *namePart, int cores, int *firstError);
+int Vita_SetThreadPriorityStep(const char *namePart, int step, int *firstError);
+int Vita_ThreadRows(VitaThreadRow *rows, int count);
+
 // Makes the calling thread's pthread waits real waits. VitaSDK's pthreads
 // wake a thread that waits on a condition or a semaphore every 500
 // microseconds to look for a cancel request, unless the thread has turned

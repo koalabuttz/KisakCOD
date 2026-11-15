@@ -924,8 +924,14 @@ What the GXM back end does so far (step 2d):
   may not hold every map), and `big-gxm-rings` twice the default rings
   (3 MB more of main memory).
   Not run on a console or in Vita3K yet.
-- **sceGxm's calls on a thread of their own** (built, not run on a console
-  yet; off by default). In the busy view the render thread spends about
+- **sceGxm's calls on a thread of their own** (off by default; console
+  run BN: it runs without a fault and the render thread's CPU time falls
+  from 32.9 to 21.4 ms a frame, but the frame stays at 38.1 ms, because
+  the new thread takes turns with the main thread on one core while the
+  other two cores have 17 ms a frame to spare. The port sets no thread's
+  cores or priority; `vita_thread` and `vita_threads` below are there to
+  find an arrangement that works). In the busy view the render thread
+  spends about
   30 ms a frame, and the back end's own draws are 12.5 ms of that (console
   run BG: 1380 draws at 9.1 us each). With an empty file
   `gxm-submit-thread` in the folder of the compiled programs, or
@@ -948,6 +954,18 @@ What the GXM back end does so far (step 2d):
   woken N times ..., N waits for it (N ms)`). The queue is tested on the
   host with the address and thread sanitizers
   (`scripts/tests/test_vita_call_queue.py`).
+- **Threads on cores and priorities of a run's choice.** Every thread of
+  the port starts on all three user cores at the process's priority, and
+  the kernel decides the rest. `vita_threads` logs one line for each
+  thread the port started (`Vita thread: <name> priority N (started at
+  N), cores 012, last ran on core N, ran N ms, pre-empted N, gave way N,
+  changed core N`). `vita_thread <part of a name> cores <0-7>` keeps the
+  threads of that name on the user cores whose bits are set (0: all
+  three), and `vita_thread <part of a name> priority <N>` adds N to the
+  priority they started with (a higher number runs later). Both are
+  remembered, so a thread that starts later under a matching name (the
+  submit thread, turned off and on) gets the same. They are commands for
+  run files: nothing is saved, and the port's own defaults do not change.
 - **Textures** are linear: rows of whole multiples of 8 texels, and the
   levels of a mipmapped texture sized from the power of two above the base,
   which is how sceGxm reads them and also a layout LockRect can hand out.
