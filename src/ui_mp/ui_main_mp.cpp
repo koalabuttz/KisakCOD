@@ -31,6 +31,9 @@
 #include <win32/win_input.h>
 #include <universal/timing.h>
 #include <universal/profile.h>
+#ifdef KISAK_RMLUI
+#include <ui_rml/rml_frontend.h>
+#endif
 
 enum sscType_t : __int32
 {                                       // ...
@@ -980,6 +983,11 @@ void UI_Refresh(int localClientNum)
             localClientNum);
     if (Menu_Count(&uiInfoArray.uiDC) > 0)
     {
+#ifdef KISAK_RMLUI
+        if (RmlFrontend_WantsClassicMenus())
+            RmlFrontend_PaintClassic(&uiInfoArray.uiDC);
+        else
+#endif
         Menu_PaintAll(&uiInfoArray.uiDC);
         UI_DoServerRefresh(&uiInfoArray);
         UI_BuildServerStatus(&uiInfoArray, 0);
@@ -1048,6 +1056,9 @@ void UI_Shutdown(int localClientNum)
             "(localClientNum == 0)",
             localClientNum);
     Menus_CloseAll(&uiInfoArray.uiDC);
+#ifdef KISAK_RMLUI
+    RmlFrontend_Shutdown();
+#endif
     sharedUiInfo.assets.whiteMaterial = 0;
     UILocalVar_Shutdown(&uiInfoArray.uiDC.localVars);
     if (!IsFastFileLoad())
@@ -4702,6 +4713,10 @@ void UI_RegisterDvars()
     DvarLimits mind; // [esp+10h] [ebp-10h]
     DvarLimits mine; // [esp+10h] [ebp-10h]
     DvarLimits minf; // [esp+10h] [ebp-10h]
+
+#ifdef KISAK_RMLUI
+    RmlFrontend_RegisterDvars();
+#endif
 
     ui_customModeName = Dvar_RegisterString("ui_customModeName", (char *)"", DVAR_NOFLAG, "Custom game mode name");
     ui_customModeEditName = Dvar_RegisterString(

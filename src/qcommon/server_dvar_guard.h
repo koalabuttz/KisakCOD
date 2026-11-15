@@ -96,6 +96,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "xanim_blendOnce",
     // Menus.
     "ui_fastExpressions",
+    "ui_rml",
     // How the player's own server admits players.
     "sv_advertisedProtocol",
     "sv_allowProtocol6",
