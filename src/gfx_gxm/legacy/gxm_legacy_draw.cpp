@@ -358,6 +358,8 @@ struct DrawState
         gxm::cg::TextureReads reads;
         uint32_t instructions = 0;
         uint64_t draws = 0;
+        // Each read that is not direct, in words (cg::ReadInfo::words).
+        std::vector<std::string> words;
     };
     // 0: writes depth or does not blend, 1: blends without a depth write.
     std::map<const Shader *, ReadCensusEntry> readCensus[2];
@@ -3129,6 +3131,9 @@ void LogReadCensus(Device &device)
                 kinds[kind], unsigned(i + 1), (unsigned long long)e.draws, 100.0 * double(e.draws) / all,
                 e.instructions, unsigned(e.reads.direct), unsigned(e.reads.swizzled), unsigned(e.reads.affine),
                 unsigned(e.reads.mixed), unsigned(e.reads.dependent), unsigned(e.reads.projected + e.reads.other));
+            for (size_t read = 0; read < e.words.size() && i < 8; ++read)
+                Log(device, "read census, %s, shader %u, read %u: %.400s", kinds[kind], unsigned(i + 1),
+                    unsigned(read + 1), e.words[read].c_str());
         }
         d.readCensus[kind].clear();
     }
@@ -3733,6 +3738,11 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         {
             entry.reads = gxm::cg::CountTextureReads(ps->parsed);
             entry.instructions = ps->parsed.reflection.instructions;
+            static const char *const names[] = {"",       "direct",    "swizzled",  "affine",
+                                                "mixed",  "dependent", "projected", "other"};
+            for (const gxm::cg::ReadInfo &info : gxm::cg::AnalyzeReads(ps->parsed))
+                if (info.kind != gxm::cg::ReadKind::None)
+                    entry.words.push_back(std::string(names[int(info.kind)]) + ", " + info.words);
         }
         ++entry.draws;
     }

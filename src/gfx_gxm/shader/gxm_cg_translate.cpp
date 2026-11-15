@@ -1871,8 +1871,49 @@ std::vector<ReadInfo> AnalyzeReads(const Shader &shader)
         uint8_t lanes[4] = {};
         bool hasRoot = false;
         Operand root;
+        // For ReadInfo::words: the inputs, constants and samplers that went
+        // into the temporary, and the instructions that made it.
+        std::set<std::string> inputs, constants, samplers;
+        std::map<std::string, int> made;
     };
     std::map<uint16_t, Temp> temps;
+    std::set<uint16_t> literals;
+    std::map<uint16_t, std::string> usages;
+    static const char *const kUsages[] = {"position", "blendweight", "blendindices", "normal",   "psize",
+                                          "texcoord", "tangent",     "binormal",     "tessfactor", "positiont",
+                                          "color",    "fog",         "depth",        "sample"};
+    for (const Instruction &ins : shader.instructions)
+    {
+        if (ins.opcode == kDef)
+            literals.insert(ins.destination.number);
+        else if (ins.opcode == kDcl && ins.destination.type == kInput)
+        {
+            const uint8_t usage = ins.declaration & 0x1f, index = (ins.declaration >> 16) & 0xf;
+            usages[ins.destination.number] = std::string(usage < 14 ? kUsages[usage] : "usage") + std::to_string(index);
+        }
+    }
+    const auto lanesOf = [](const Operand &op, int count) {
+        std::string out;
+        for (int lane = 0; lane < count; ++lane)
+            out += "xyzw"[(op.swizzle >> (2 * lane)) & 3];
+        return out;
+    };
+    const auto inputName = [&](const Operand &op, int count) {
+        const auto found = usages.find(op.number);
+        return (op.type == kTexture ? "t" + std::to_string(op.number)
+                                    : found != usages.end() ? found->second : "v" + std::to_string(op.number)) +
+               "." + lanesOf(op, count);
+    };
+    const auto join = [](const std::set<std::string> &set) {
+        std::string out;
+        for (const std::string &item : set)
+            out += (out.empty() ? "" : ", ") + item;
+        return out.empty() ? std::string("none") : out;
+    };
+    const auto opName = [](uint16_t opcode) {
+        return opcode == kMov ? std::string("mov") : opcode == kAdd ? std::string("add") : opcode == kSub ? std::string("sub")
+               : opcode == kMul ? std::string("mul") : opcode == kMad ? std::string("mad") : "op" + std::to_string(opcode);
+    };
     // Flow control would need the two ways merged: such a shader's computed
     // reads are all called Mixed.
     bool straight = true;
@@ -1891,7 +1932,21 @@ std::vector<ReadInfo> AnalyzeReads(const Shader &shader)
             const Operand &coord = ins.sources[0];
             const uint16_t unit = ins.sources[1].number;
             const bool cube = unit < 16 && shader.reflection.samplers[unit] == SamplerType::Cube;
-            const int lanes = cube ? 3 : 2;
+            const bool volume = unit < 16 && shader.reflection.samplers[unit] == SamplerType::Volume;
+            const int lanes = cube || volume ? 3 : 2;
+            info.words = "sampler " + std::to_string(unit) + (cube ? " (cube)" : volume ? " (volume)" : " (2d)");
+            if (coord.type == kInput || coord.type == kTexture)
+                info.words += " at input " + inputName(coord, lanes);
+            else if (coord.type == kTemp)
+            {
+                const Temp &temp = temps[coord.number];
+                std::string made;
+                for (const auto &entry : temp.made)
+                    made += (made.empty() ? "" : " ") + std::to_string(entry.second) + " " + entry.first;
+                info.words += " at a temporary's " + lanesOf(coord, lanes) + " made by " + (made.empty() ? "nothing" : made) +
+                              " from inputs " + join(temp.inputs) + "; constants " + join(temp.constants) +
+                              "; reads of samplers " + join(temp.samplers);
+            }
             if (ins.opcode != kTex || ins.control == 2)
                 info.kind = ReadKind::Other;
             else if (ins.control == 1)
@@ -1925,10 +1980,42 @@ std::vector<ReadInfo> AnalyzeReads(const Shader &shader)
         uint8_t flags = 0;
         bool hasRoot = false;
         Operand root;
+        Temp next;
+        if ((ins.destination.mask & 0xf) != 0xf)
+        {
+            // A partial write keeps what the other components were made of.
+            next.inputs = dst.inputs;
+            next.constants = dst.constants;
+            next.samplers = dst.samplers;
+            next.made = dst.made;
+        }
         if (texture)
+        {
             flags = kFromTexture;
+            if (ins.sourceCount >= 2)
+                next.samplers.insert(std::to_string(ins.sources[1].number));
+        }
         else
         {
+            ++next.made[opName(ins.opcode)];
+            for (int i = 0; i < ins.sourceCount; ++i)
+            {
+                const Operand &src = ins.sources[i];
+                if (src.type == kConst)
+                    next.constants.insert("c" + std::to_string(src.number) + "." + lanesOf(src, 4) +
+                                          (literals.count(src.number) ? " (literal)" : " (set by the game)"));
+                else if (src.type == kInput || src.type == kTexture)
+                    next.inputs.insert(inputName(src, 4));
+                else if (src.type == kTemp)
+                {
+                    const Temp &from = temps[src.number];
+                    next.inputs.insert(from.inputs.begin(), from.inputs.end());
+                    next.constants.insert(from.constants.begin(), from.constants.end());
+                    next.samplers.insert(from.samplers.begin(), from.samplers.end());
+                    for (const auto &entry : from.made)
+                        next.made[entry.first] += entry.second;
+                }
+            }
             int constants = 0;
             for (int i = 0; i < ins.sourceCount; ++i)
             {
@@ -1979,6 +2066,10 @@ std::vector<ReadInfo> AnalyzeReads(const Shader &shader)
             dst.hasRoot = hasRoot;
             dst.root = root;
         }
+        dst.inputs = std::move(next.inputs);
+        dst.constants = std::move(next.constants);
+        dst.samplers = std::move(next.samplers);
+        dst.made = std::move(next.made);
     }
     return infos;
 }

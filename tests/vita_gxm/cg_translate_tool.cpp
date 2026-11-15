@@ -91,6 +91,9 @@ int main(int argc, char **argv)
                  r.kills ? 1 : 0, r.instructions, unsigned(reads.direct), unsigned(reads.swizzled),
                  unsigned(reads.affine), unsigned(reads.mixed), unsigned(reads.dependent),
                  unsigned(reads.projected + reads.other));
+    for (const ReadInfo &info : AnalyzeReads(shader))
+        if (info.kind != ReadKind::None)
+            std::fprintf(stderr, "read: %s\n", info.words.c_str());
     std::fwrite(cg.data(), 1, cg.size(), stdout);
     return 0;
 }

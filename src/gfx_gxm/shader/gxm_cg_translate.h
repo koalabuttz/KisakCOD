@@ -226,6 +226,10 @@ struct ReadInfo
     // (the first one, where several take part).
     bool hasRoot = false;
     Operand root;
+    // The read in words, for a run's log: its sampler and, for a coordinate
+    // that is not an input's first components, what it is made of (which
+    // inputs, how many constants of which sort, how many instructions).
+    std::string words;
 };
 // One entry for each instruction of the shader.
 std::vector<ReadInfo> AnalyzeReads(const Shader &shader);
