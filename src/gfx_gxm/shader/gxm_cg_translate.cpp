@@ -1826,6 +1826,33 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
     return true;
 }
 
+TextureReads CountTextureReads(const Shader &shader)
+{
+    TextureReads reads;
+    for (const Instruction &ins : shader.instructions)
+    {
+        if (ins.opcode != kTex && ins.opcode != kTexLdl && ins.opcode != kTexLdd)
+            continue;
+        if (ins.sourceCount < 2 || ins.sources[1].type != kSampler)
+            continue;
+        const Operand &coord = ins.sources[0];
+        if (ins.opcode != kTex || ins.control == 2)
+            ++reads.other;
+        else if (ins.control == 1)
+            ++reads.projected;
+        else if (coord.type != kInput && coord.type != kTexture)
+            ++reads.computed;
+        else
+        {
+            const uint16_t unit = ins.sources[1].number;
+            const bool cube = unit < 16 && shader.reflection.samplers[unit] == SamplerType::Cube;
+            const bool first = cube ? (coord.swizzle & 0x3f) == 0x24 : (coord.swizzle & 0x0f) == 0x04;
+            ++(first ? reads.direct : reads.swizzled);
+        }
+    }
+    return reads;
+}
+
 bool Emit(const Shader &shader, const Options &options, std::string &cg, std::string &error)
 {
     Emitter emitter(shader, options);

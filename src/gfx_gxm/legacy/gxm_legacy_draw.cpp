@@ -341,6 +341,19 @@ struct DrawState
     // keep their vertices, their coverage and their blend, so the frame
     // time says what their fragment programs cost.
     bool diagFlatBlend = false;
+    // Run diagnostic (switch diag-read-census): while it is on, the draws
+    // of each pixel shader are counted by kind, and turning it off logs the
+    // shaders with the most draws of each kind with their texture reads
+    // (cg::TextureReads) and instruction counts.
+    bool diagReadCensus = false;
+    struct ReadCensusEntry
+    {
+        gxm::cg::TextureReads reads;
+        uint32_t instructions = 0;
+        uint64_t draws = 0;
+    };
+    // 0: writes depth or does not blend, 1: blends without a depth write.
+    std::map<const Shader *, ReadCensusEntry> readCensus[2];
     bool lastDrawFlat = false;
     uint64_t flatBlendDraws = 0;
     // 0: the last draw had no alpha test, 1: one with a discard, 2: one
@@ -2545,7 +2558,7 @@ const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "n
                                      "no-draw-reuse",     "no-filter-stretch", "no-gpu-boost",
                                      "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
                                      "gpu-watch",           "no-alpha-test-drop", "no-alpha-test-zero",
-                                     "diag-flat-blend"};
+                                     "diag-flat-blend",     "diag-read-census"};
 struct LiveSwitch
 {
     const char *name;
@@ -2555,6 +2568,8 @@ std::mutex g_liveSwitchLock;
 std::vector<LiveSwitch> g_liveSwitches;
 
 // Between two frames, on the thread that draws.
+void LogReadCensus(Device &device);
+
 void ApplyLiveSwitches(Device &device)
 {
     std::vector<LiveSwitch> asked;
@@ -2598,6 +2613,12 @@ void ApplyLiveSwitches(Device &device)
         {
             d.sameState = !s.on;
             d.lastDrawValid = false;
+        }
+        else if (name == "diag-read-census")
+        {
+            d.diagReadCensus = s.on;
+            if (!s.on)
+                LogReadCensus(device);
         }
         else if (name == "diag-flat-blend")
         {
@@ -3049,6 +3070,54 @@ void DiagnoseDraw(Device &device, d3d::PrimitiveType type, uint32_t indexCount, 
         first, unsigned(position->type), stride, p[0], p[1], p[2], p[3]);
 }
 } // namespace
+
+// Run diagnostic (diag-read-census): the pixel shaders with the most draws
+// since the switch was turned on, with where their texture reads take
+// their coordinates from.
+void LogReadCensus(Device &device)
+{
+    DrawState &d = *device.draw;
+    static const char *const kinds[] = {"opaque or depth-writing", "blended without a depth write"};
+    for (int kind = 0; kind < 2; ++kind)
+    {
+        std::vector<DrawState::ReadCensusEntry> entries;
+        uint64_t draws = 0;
+        // Draw-weighted sums over every shader of the kind.
+        uint64_t sums[6] = {};
+        for (const auto &found : d.readCensus[kind])
+        {
+            const DrawState::ReadCensusEntry &e = found.second;
+            entries.push_back(e);
+            draws += e.draws;
+            sums[0] += e.draws * e.reads.direct;
+            sums[1] += e.draws * e.reads.swizzled;
+            sums[2] += e.draws * e.reads.computed;
+            sums[3] += e.draws * e.reads.projected;
+            sums[4] += e.draws * e.reads.other;
+            sums[5] += e.draws * e.instructions;
+        }
+        std::sort(entries.begin(), entries.end(),
+                  [](const DrawState::ReadCensusEntry &a, const DrawState::ReadCensusEntry &b) { return a.draws > b.draws; });
+        const double all = draws ? double(draws) : 1.0;
+        Log(device,
+            "read census, %s: %llu draws of %u pixel shaders; a draw's shader has %.2f direct, %.2f swizzled, %.2f "
+            "computed, %.2f projected and %.2f other texture reads and %.1f instructions",
+            kinds[kind], (unsigned long long)draws, unsigned(entries.size()), double(sums[0]) / all,
+            double(sums[1]) / all, double(sums[2]) / all, double(sums[3]) / all, double(sums[4]) / all,
+            double(sums[5]) / all);
+        for (size_t i = 0; i < entries.size() && i < 12; ++i)
+        {
+            const DrawState::ReadCensusEntry &e = entries[i];
+            Log(device,
+                "read census, %s, shader %u: %llu draws (%.1f %%), %u instructions, reads %u direct, %u swizzled, %u "
+                "computed, %u projected, %u other",
+                kinds[kind], unsigned(i + 1), (unsigned long long)e.draws, 100.0 * double(e.draws) / all,
+                e.instructions, unsigned(e.reads.direct), unsigned(e.reads.swizzled), unsigned(e.reads.computed),
+                unsigned(e.reads.projected), unsigned(e.reads.other));
+        }
+        d.readCensus[kind].clear();
+    }
+}
 
 // Run diagnostic (diag-state-census): the D3D9 state of each new
 // combination a draw brings, in numbers, so that a run can say which state
@@ -3637,6 +3706,17 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     part(gxm::FrameTime::PartFragmentConstants);
     if (d.census)
         LogCensus(device, *vs, *ps, *vertex, *pixel, blended, blend);
+    if (d.diagReadCensus && (device.renderStates[d3d::RS_COLORWRITEENABLE] & 0xf))
+    {
+        const bool layer = blended && !device.renderStates[d3d::RS_ZWRITEENABLE];
+        DrawState::ReadCensusEntry &entry = d.readCensus[layer][ps];
+        if (!entry.draws)
+        {
+            entry.reads = gxm::cg::CountTextureReads(ps->parsed);
+            entry.instructions = ps->parsed.reflection.instructions;
+        }
+        ++entry.draws;
+    }
     Texture *const target = SceneTexture(d);
     if (!BindTextures(device, *pixel, pixelUniforms))
     {

@@ -196,6 +196,19 @@ struct Shader
     std::vector<Instruction> instructions;
 };
 
+// A pixel shader's texture reads by where their coordinates come from. A
+// tile GPU fetches a read whose coordinate is an interpolated input's first
+// components before the fragment program runs; every other read waits for
+// the program (a dependent read). `direct`: texld of an input register's
+// .xy (.xyz for a cube). `swizzled`: texld of other components of an input
+// register (.zw, say). `computed`: texld of a temporary or a constant.
+// `projected`: texldp. `other`: texldb, texldl, texldd.
+struct TextureReads
+{
+    uint8_t direct = 0, swizzled = 0, computed = 0, projected = 0, other = 0;
+};
+TextureReads CountTextureReads(const Shader &shader);
+
 // False with the reason when the bytecode is malformed or uses something
 // the translator does not handle.
 bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &error);
