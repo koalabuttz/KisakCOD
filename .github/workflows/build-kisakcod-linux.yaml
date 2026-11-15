@@ -42,6 +42,7 @@ on:
       - '!scripts/runs/**'
       - '!scripts/tests/test_perf_run.py'
       - '!scripts/tests/test_pc_run.py'
+      - '!scripts/tests/test_android_run.py'
       - '!scripts/tests/test_vita3k_runner.py'
       - deps/**
       - tests/linux_net/**
@@ -86,6 +87,7 @@ on:
       - '!scripts/runs/**'
       - '!scripts/tests/test_perf_run.py'
       - '!scripts/tests/test_pc_run.py'
+      - '!scripts/tests/test_android_run.py'
       - '!scripts/tests/test_vita3k_runner.py'
       - deps/**
       - tests/linux_net/**
@@ -355,6 +357,7 @@ jobs:
           python3 scripts/tests/test_frame_log.py
           python3 scripts/tests/test_perf_run.py
           python3 scripts/tests/test_pc_run.py
+          python3 scripts/tests/test_android_run.py
           python3 scripts/tests/test_menu_check.py
           python3 scripts/tests/test_vita3k_runner.py
           python3 scripts/tests/test_changed_units.py

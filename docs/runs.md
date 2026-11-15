@@ -415,6 +415,54 @@ fit with two passes and 9 with one.
 - Frozen AO looked lighter than in play (arch 17.3 against 22.1 levels, same
   radius and view, proof 2): compare frozen shots only with frozen shots.
 
+- The game keeps 1023 bytes of its command line (`sys_cmdline`; Windows cuts
+  the rest, Linux and Android do not start). A long variant list is the usual
+  way past it, so the recipe check refuses a launch whose command line would
+  be longer: split the variants over two launches.
+
+## Android runs from one recipe: `android_run.py`
+
+`scripts/runs/android_run.py` does for the Android app what pc_run.py does for
+the Windows game, through adb, on a device (the Retroid Pocket 6) or on the
+PC's own Android emulator. The script's own header is the full reference; in
+short, one recipe (`kisak-android-run/1`) can:
+
+- build the APK in WSL from a branch or commit (`build`: build_apk.py in the
+  Android source tree, which must have no changes of its own), or take one
+  already built (`apk`);
+- start the emulator headless with its GPU (`emulator`: `-gpu host`, no
+  window, no audio, no snapshot saved), wait for it to boot, and shut it
+  down after; copy the game's files in from this machine once per virtual
+  device (`game_files`);
+- `adb install -r` it (never an uninstall; the report shows the package's
+  first-install time before and after, so you can see the data was kept);
+- per launch: force-stop the app, start it with the launch's arguments in
+  the `args` extra, read logcat as it comes, time host steps from the start,
+  the menu or the map (`screencap`, `tap`, `swipe`, `key`, `text`; nothing
+  else reaches the device), stop when the game quits, crashes or times out,
+  and pull the game's own screenshots;
+- write `results.json` (checksummed), `report.md` and per launch the whole
+  logcat and the game's part of it, with pc_run.py's variants, frame logs and
+  picture numbers (screen captures are PNGs, read the same way).
+
+The timed commands are pc_run.py's (`at_menu`, `at_map`, `variants`), with one
+Android difference: KisakActivity splits the extra at spaces and the game
+quotes every piece with a space or a quote again, so the runner sends
+`+set run_atMap 5 setviewpos 1 2 3 | 12 quit` unquoted (`set` joins the words
+back) and refuses a `"` anywhere. The app's own `fs_basepath`, `fs_homepath`
+and `r_fullscreen` count against the 1023 bytes too.
+
+A launch waits while the app is already running (someone may be playing it)
+and gives up with `blocked`; it never installs over a running app.
+`--queue <folder> --out-root <folder>` runs every recipe in a folder that has
+no results yet, one at a time (`--watch 60` keeps looking; a `PAUSE` file
+stops it; a lock file keeps a second runner off the device).
+
+`scripts/tests/test_android_run.py` checks it against a stand-in adb
+(`tests/runs/fake_adb.py`) that is also the device, the emulator and the app:
+the app builds its command line as KisakActivity and src/linux/main.cpp do,
+so the test shows the unquoted timed list reaching the game whole.
+
 ## Menus without a person: `menu_check.py`
 
 `scripts/runs/menu_check.py` clicks through the multiplayer menus of the native

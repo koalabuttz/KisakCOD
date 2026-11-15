@@ -118,6 +118,10 @@ keeps 31 parts, so a timed command or a variant value with a ``+`` in it
 (``45 +left``) would break the whole list: the recipe check refuses it. Put
 such commands in a cfg in the home template and send ``exec <cfg>``. A launch
 whose timed list the game refused anyway ends with status ``run_error``.
+The game also keeps only 1023 bytes of its command line (``sys_cmdline``):
+on Windows it cuts the rest, timed list and all, so the recipe check refuses
+a launch whose command line would be longer (a long variant list is the
+usual cause; split it over two launches).
 
 Exit status: 0 when every launch exited 0, ran its timed commands and wrote
 every screenshot it named, 1 otherwise (the report says which), 2 on a bad
@@ -139,6 +143,9 @@ import zlib
 from pathlib import Path
 
 FORMAT = "kisak-pc-run/1"
+# Windows copies its command line into sys_cmdline[1024] and cuts the rest
+# (src/win32/win_main.cpp); Linux and Android refuse to start (src/linux/main.cpp).
+COMMAND_LINE_BYTES = 1023
 MAX_CONSOLE_LINES = 31  # Com_ParseCommandLine keeps 32 lines, the first is what comes before the first '+'
 SAFETY_AFTER_LAST = 30
 # Variants start after the pre-match countdown (about 16-17 s on mp_crash under
@@ -200,6 +207,11 @@ def load_recipe(path):
                                       "in a cfg and send 'exec <cfg>'")
                 if len(command.split(None, 1)[1]) >= 160:
                     raise RecipeError(f"{name}: {key} entry {command!r} is longer than the client takes")
+        length = command_line_length(recipe, launch)
+        if length > COMMAND_LINE_BYTES:
+            raise RecipeError(f"{name}: the command line would be {length} bytes; the game keeps "
+                              f"{COMMAND_LINE_BYTES} (sys_cmdline) and cuts the rest, timed list and all. "
+                              "Fewer or shorter timed commands, or fewer variants per launch")
         lines = command_line_parts(recipe, launch)
         if lines > MAX_CONSOLE_LINES:
             raise RecipeError(f"{name}: the command line has {lines} '+' parts; the game reads the first "
@@ -225,6 +237,16 @@ def command_line_parts(recipe, launch):
     exe = recipe["game"]["exe"]
     skip = len(exe) if isinstance(exe, list) else 1
     return " ".join(launch_argv(recipe, launch, Path("home"))[skip:]).count("+")
+
+
+def command_line_length(recipe, launch):
+    """The length of the command line the game copies into sys_cmdline: the
+    arguments after the program, as Windows joins them (Linux joins them the
+    same way, src/linux/main.cpp), with a home folder of a typical length."""
+    exe = recipe["game"]["exe"]
+    skip = len(exe) if isinstance(exe, list) else 1
+    home = Path("C:/kisak/runs/run-folder-of-typical-length") / launch["name"] / "home"
+    return len(subprocess.list2cmdline(launch_argv(recipe, launch, home)[skip:]))
 
 
 def check_variants(launch):
@@ -557,6 +579,72 @@ def read_tga(path):
     return width, height, bytes(rgb)
 
 
+def read_png(path):
+    """(width, height, rgb bytes top row first) of an 8-bit RGB or RGBA PNG
+    without interlacing, as Android's screencap writes it (android_run.py)."""
+    data = Path(path).read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError(f"{path}: not a PNG")
+    position, idat, header = 8, bytearray(), None
+    while position + 8 <= len(data):
+        length, kind = struct.unpack_from(">I4s", data, position)
+        body = data[position + 8:position + 8 + length]
+        if kind == b"IHDR":
+            header = struct.unpack(">IIBBBBB", body)
+        elif kind == b"IDAT":
+            idat += body
+        elif kind == b"IEND":
+            break
+        position += 12 + length
+    if not header:
+        raise ValueError(f"{path}: no IHDR")
+    width, height, depth, colour, _, _, interlace = header
+    if depth != 8 or colour not in (2, 6) or interlace:
+        raise ValueError(f"{path}: PNG depth {depth}, colour type {colour}, interlace {interlace}; "
+                         "only 8-bit RGB or RGBA without interlacing is read")
+    step = 3 if colour == 2 else 4
+    stride = width * step
+    raw = zlib.decompress(bytes(idat))
+    rows, previous = [], bytearray(stride)
+    for y in range(height):
+        kind = raw[y * (stride + 1)]
+        line = bytearray(raw[y * (stride + 1) + 1:(y + 1) * (stride + 1)])
+        if kind == 1:
+            for i in range(step, stride):
+                line[i] = (line[i] + line[i - step]) & 0xFF
+        elif kind == 2:
+            line = bytearray((a + b) & 0xFF for a, b in zip(line, previous))
+        elif kind == 3:
+            for i in range(stride):
+                left = line[i - step] if i >= step else 0
+                line[i] = (line[i] + ((left + previous[i]) >> 1)) & 0xFF
+        elif kind == 4:
+            for i in range(stride):
+                a = line[i - step] if i >= step else 0
+                b = previous[i]
+                c = previous[i - step] if i >= step else 0
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                line[i] = (line[i] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 0xFF
+        elif kind != 0:
+            raise ValueError(f"{path}: row {y} has filter {kind}")
+        rows.append(bytes(line))
+        previous = line
+    pixels = b"".join(rows)
+    if step == 3:
+        return width, height, pixels
+    rgb = bytearray(width * height * 3)
+    rgb[0::3] = pixels[0::4]
+    rgb[1::3] = pixels[1::4]
+    rgb[2::3] = pixels[2::4]
+    return width, height, bytes(rgb)
+
+
+def read_picture(path):
+    """A screenshot the game wrote (TGA) or a screen capture (PNG)."""
+    return read_png(path) if str(path).lower().endswith(".png") else read_tga(path)
+
+
 def write_png(path, width, height, rgb):
     row = width * 3
     raw = b"".join(b"\x00" + rgb[y * row:(y + 1) * row] for y in range(height))
@@ -706,7 +794,7 @@ def pictures(recipe, results, out):
 
     def image(name):
         if name not in cache:
-            cache[name] = read_tga(shots[name])
+            cache[name] = read_picture(shots[name])
         return cache[name]
 
     report = {"means": {}, "compare": []}
@@ -762,39 +850,34 @@ def seal(results):
     return results
 
 
-def report_text(results):
-    lines = [f"# {results['title']}", "", f"Recipe {results['id']}, run {results['finished']}. "
-             "Local run on a test machine, not CI evidence.", ""]
-    lines += ["| Launch | Status | Exit | Seconds | Screenshots | Missing |", "| --- | --- | --- | --- | --- | --- |"]
-    for launch in results["launches"]:
-        lines.append(f"| {launch['name']} | {launch.get('status', '-')} | {launch.get('exit_code', '-')} | "
-                     f"{launch.get('seconds', '-')} | {len(launch.get('shots') or {})} | "
-                     f"{', '.join(launch.get('missing_shots') or []) or '-'} |")
-    for launch in results["launches"]:
-        lines += ["", f"## {launch['name']}", ""]
-        for key in ("blocked_before", "blocked_after", "run_errors"):
-            if launch.get(key):
-                lines.append(f"- {key.replace('_', ' ')}: {', '.join(launch[key])}")
-        if launch.get("variants"):
-            lines += ["| Variant | Sets | fps per pass | Mean fps | vs first | ms vs first | Pass spread |",
-                      "| --- | --- | --- | --- | --- | --- | --- |"]
-            for entry in launch["variants"]:
-                sets = ", ".join(f"{dvar} {value}" for dvar, value in entry["set"].items())
-                per_pass = ", ".join(str(p.get("fps", "missing")) for p in entry["passes"]) or "-"
-                vs, ms = entry.get("fps_vs_first_pct"), entry.get("ms_vs_first")
-                spread = entry.get("pass_spread_pct")
-                lines.append(f"| {entry['name']} | {sets} | {per_pass} | {entry.get('mean_fps', '-')} | "
-                             f"{'-' if vs is None else f'{vs:+.2f}%'} | {'-' if ms is None else f'{ms:+.3f}'} | "
-                             f"{'-' if spread is None else f'{spread}%'} |")
-            wide = [e["name"] for e in launch["variants"] if (e.get("pass_spread_pct") or 0) > SPREAD_WARNING_PCT]
-            if wide:
-                lines.append(f"- passes differ by more than {SPREAD_WARNING_PCT}% for {', '.join(wide)}: "
-                             "the launch drifted, or a pass ran during a change of scene")
-            lines.append("")
-        verbatim = (launch.get("frame_logs") or []) + (launch.get("lines") or [])
-        if verbatim:
-            lines += ["```"] + verbatim + ["```"]
-    pics = results.get("pictures") or {}
+def launch_report_lines(launch):
+    """A launch's variant table and its verbatim lines (android_run.py too)."""
+    lines = []
+    if launch.get("variants"):
+        lines += ["| Variant | Sets | fps per pass | Mean fps | vs first | ms vs first | Pass spread |",
+                  "| --- | --- | --- | --- | --- | --- | --- |"]
+        for entry in launch["variants"]:
+            sets = ", ".join(f"{dvar} {value}" for dvar, value in entry["set"].items())
+            per_pass = ", ".join(str(p.get("fps", "missing")) for p in entry["passes"]) or "-"
+            vs, ms = entry.get("fps_vs_first_pct"), entry.get("ms_vs_first")
+            spread = entry.get("pass_spread_pct")
+            lines.append(f"| {entry['name']} | {sets} | {per_pass} | {entry.get('mean_fps', '-')} | "
+                         f"{'-' if vs is None else f'{vs:+.2f}%'} | {'-' if ms is None else f'{ms:+.3f}'} | "
+                         f"{'-' if spread is None else f'{spread}%'} |")
+        wide = [e["name"] for e in launch["variants"] if (e.get("pass_spread_pct") or 0) > SPREAD_WARNING_PCT]
+        if wide:
+            lines.append(f"- passes differ by more than {SPREAD_WARNING_PCT}% for {', '.join(wide)}: "
+                         "the launch drifted, or a pass ran during a change of scene")
+        lines.append("")
+    verbatim = (launch.get("frame_logs") or []) + (launch.get("lines") or [])
+    if verbatim:
+        lines += ["```"] + verbatim + ["```"]
+    return lines
+
+
+def picture_report_lines(pics):
+    """The mean colours and the comparisons (android_run.py too)."""
+    lines = []
     if pics.get("means"):
         regions = sorted({key for entry in pics["means"].values() for key in entry if key not in ("size", "error")})
         lines += ["", "## Mean colour (R, G, B)", "", "| Screenshot | " + " | ".join(regions) + " |",
@@ -815,6 +898,24 @@ def report_text(results):
                          f"{numbers['mean_signed_b_minus_a']}, {shares}; changed areas: {boxes}")
         if entry.get("files"):
             lines.append(f"- pictures: {', '.join(entry['files'])}")
+    return lines
+
+
+def report_text(results):
+    lines = [f"# {results['title']}", "", f"Recipe {results['id']}, run {results['finished']}. "
+             "Local run on a test machine, not CI evidence.", ""]
+    lines += ["| Launch | Status | Exit | Seconds | Screenshots | Missing |", "| --- | --- | --- | --- | --- | --- |"]
+    for launch in results["launches"]:
+        lines.append(f"| {launch['name']} | {launch.get('status', '-')} | {launch.get('exit_code', '-')} | "
+                     f"{launch.get('seconds', '-')} | {len(launch.get('shots') or {})} | "
+                     f"{', '.join(launch.get('missing_shots') or []) or '-'} |")
+    for launch in results["launches"]:
+        lines += ["", f"## {launch['name']}", ""]
+        for key in ("blocked_before", "blocked_after", "run_errors"):
+            if launch.get(key):
+                lines.append(f"- {key.replace('_', ' ')}: {', '.join(launch[key])}")
+        lines += launch_report_lines(launch)
+    lines += picture_report_lines(results.get("pictures") or {})
     lines += ["", f"results.json sha256 {results['sha256']}", ""]
     return "\n".join(lines)
 
