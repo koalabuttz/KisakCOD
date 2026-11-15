@@ -367,18 +367,37 @@ The world's visible surfaces are drawn in batches, and for each batch the main
 thread copies its surfaces' indices into the frame's index buffer
 (`R_PreTessBspDrawSurfs`, `r_pretess`). The surfaces of a batch lie anywhere in
 the world's index array, a hundred or two hundred bytes each. `r_pretessPrefetch
-1` (builds with GCC or Clang; off by default) asks the processor for the next
-surface's indices while it copies the one before, and does the same for the
-instances of a cached static model (`R_PreTessStaticModelCachedList`). The
-same bytes are copied either way.
+1` (builds with GCC or Clang; on by default on the PS Vita, off elsewhere) asks
+the processor for the next surface's indices while it copies the one before,
+and does the same for the instances of a cached static model
+(`R_PreTessStaticModelCachedList`). The same bytes are copied either way.
 
 ```
 perf_ab "set r_pretessPrefetch 0" "set r_pretessPrefetch 1"
 ```
 
 compares the two; `world: a batch's indices copied`, `static models: cached
-indices copied` and the two `scene:` parts they sit in are its timers. No
-machine has run it yet.
+indices copied` and the two `scene:` parts they sit in are its timers.
+
+Console run CB (a PS Vita, the CI build of 89c46a25, the busy view of mp_crash,
+eight windows of 10 s in the order A B B A A B B A) is why the Vita has it on.
+Every window of one setting is within 0.04 ms of the others in these rows, in
+ms a frame on the main thread:
+
+| timer | off | on |
+| --- | --- | --- |
+| `world: a batch's indices copied` (212 batches) | 3.67 to 3.71 | 3.18 to 3.20 |
+| `scene: world surfaces` | 4.51 to 4.56 | 4.02 to 4.04 |
+| `static models: cached indices copied` (128 lists) | 1.85 to 1.86 | 1.55 to 1.56 |
+| `scene: static models` | 4.49 to 4.50 | 4.18 to 4.19 |
+
+That is 0.8 ms of the main thread a frame, a seventh of the copies. The frame
+time does not move (37.11 against 37.05 ms): the render thread sets the pace at
+that view. The whole process's CPU time says less than the rows do, because the
+sound's share of the main thread swings by 1.9 ms between windows of either
+setting. No other machine has run it; a desktop processor copies these indices
+in a small fraction of the time, so the setting stays off there until one
+does.
 
 ## Checks
 

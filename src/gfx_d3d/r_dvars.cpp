@@ -634,11 +634,16 @@
      r_smc_enable = Dvar_RegisterBool("r_smc_enable", false, DVAR_ROM, "Enable static model cache");
 #endif
      r_pretess = Dvar_RegisterBool("r_pretess", true, DVAR_NOFLAG, "Batch surfaces to reduce primitive count");
-     // The same indices are copied either way (r_add_bsp.cpp); off until a
-     // machine shows what it is worth.
+     // The same indices are copied either way (r_add_bsp.cpp). On for the PS
+     // Vita, where console run CB measured it (docs/perf-ab.md); off elsewhere
+     // until a machine shows what it is worth there.
      r_pretessPrefetch = Dvar_RegisterBool(
          "r_pretessPrefetch",
+#ifdef KISAK_GFX_GXM
+         true,
+#else
          false,
+#endif
          DVAR_NOFLAG,
          "Ask for the indices a batch copies next while it copies (world surfaces, cached static models; builds with GCC or Clang)");
      // The PS Vita's buffers are smaller than the retail game's (r_gfx.h), and
