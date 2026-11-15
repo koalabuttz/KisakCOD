@@ -96,7 +96,7 @@ starting `Vita` come from the Vita layer:
 - `free memory at start-up`: what the system had left after loading the
   program and newlib's heap, before the engine's reservations.
 - `Vita memory ...` (after start-up, then once a minute, before a timed
-  quit, and at a fatal error): game memory free in the zone arena, heap use out of its block, the
+  quit, and at a fatal error): game memory free in the zone arena, heap use out of its block (and the most malloc had taken out of that block when a line was written), the
   engine's reservations and what the system still has free. An out-of-memory
   error prints it last, which shows the pool that ran out.
 - `Vita load, last 60 s: busy 12.3%, slowest frame 18.2 ms, 0 frames over

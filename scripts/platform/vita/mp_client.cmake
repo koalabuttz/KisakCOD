@@ -170,10 +170,18 @@ set_source_files_properties(
     "${SRC_DIR}/gfx_d3d/r_dpvs_static_vec.cpp"
     TARGET_DIRECTORY KisakCOD-mp-vita-standin
     PROPERTIES COMPILE_OPTIONS "-mfpu=neon")
-# newlib's heap (src/vita/vita_main.cpp). More than 64 is for measuring in an
-# emulator what the game would take; a console has no memory for it.
-set(KISAK_VITA_HEAP_MB "64" CACHE STRING "Size of the Vita client's heap in MB (64 on a console; more only for emulator measurements)")
-target_compile_definitions(KisakCOD-mp-vita-standin PRIVATE KISAK_VITA_HEAP_MB=${KISAK_VITA_HEAP_MB})
+# newlib's heap (src/vita/vita_main.cpp). The client's is 60 MB: mp_crash
+# uses 34, and the 4 MB went to the GPU's main pool when the parameter buffer
+# grew to 16 MB (gxm_legacy.cpp). More is for measuring in an emulator what
+# the game would take; a console has no memory for it. An empty value means
+# the client's default, so that a build folder made before the default
+# changed follows it; a cached "64", the former default, is taken as empty.
+set(KISAK_VITA_HEAP_MB "" CACHE STRING "Size of the Vita client's heap in MB (empty: 60, the console's size; more only for emulator measurements)")
+set(kisak_vita_heap_mb "${KISAK_VITA_HEAP_MB}")
+if(kisak_vita_heap_mb STREQUAL "" OR kisak_vita_heap_mb STREQUAL "64")
+    set(kisak_vita_heap_mb 60)
+endif()
+target_compile_definitions(KisakCOD-mp-vita-standin PRIVATE KISAK_VITA_HEAP_MB=${kisak_vita_heap_mb})
 # The static model cache's size (src/gfx_d3d/r_staticmodelcache_sizes.h): 2^n
 # trees in each of its four sections, 1 to 7. Empty is the header's own
 # choice for the Vita (6: 4 MB of GPU memory). For measuring other sizes.
