@@ -402,7 +402,9 @@ class Adb:
 
 
 def app_pids(adb, package):
-    code, out, _ = adb.shell(f"pidof {package}", timeout=20)
+    # The game runs in the app's ":game" process (the launcher in the main
+    # one), so both names count.
+    code, out, _ = adb.shell(f"pidof {package} {package}:game", timeout=20)
     return [int(word) for word in out.split() if word.isdigit()] if code == 0 else []
 
 
