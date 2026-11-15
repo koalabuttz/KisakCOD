@@ -432,9 +432,16 @@ class Emitter
         if (!options_.hoist || vertex_)
             return nullptr;
         for (const HoistRead &read : options_.hoist->reads)
-            if (read.instruction == current_ && read.coord < options_.hoist->coords.size())
+            if (read.instruction == current_ && read.coord < options_.hoist->coords.size() &&
+                (read.coord == 0 || !(options_.diagHoist & 4)))
                 return &options_.hoist->coords[read.coord];
         return nullptr;
+    }
+    // How the fragment program names a hoisted coordinate.
+    std::string HoistedInput(const HoistCoord &coord) const
+    {
+        const std::string name = "in_TEXCOORD" + std::to_string(coord.slot);
+        return options_.diagHoist & 8 ? name + ".zw" : options_.diagHoist & 2 ? name + ".xy" : name;
     }
 };
 
@@ -738,8 +745,9 @@ bool Emitter::Texture(const Instruction &ins, std::string &value)
         hoisted && ins.opcode == kTex && ins.control == 0 && !cube && !(options_.sharpSamplers >> unit & 1))
     {
         // The vertex program worked this coordinate out.
-        value = "tex2D(" + s + ", in_TEXCOORD" + std::to_string(hoisted->slot) + ")" +
-                SwizzleSuffix(ins.sources[1].swizzle);
+        if (options_.diagHoist & 1)
+            Line("kisak_hoist_err = max(kisak_hoist_err, abs(" + HoistedInput(*hoisted) + " - (" + coord + ").xy));");
+        value = "tex2D(" + s + ", " + HoistedInput(*hoisted) + ")" + SwizzleSuffix(ins.sources[1].swizzle);
         return true;
     }
     switch (ins.opcode)
@@ -1287,8 +1295,23 @@ bool Emitter::Run(std::string &cg, std::string &error)
                         text += (text.empty() ? "" : " + ") + Float(constant);
                     return text;
                 };
-                parameters.push_back("out float2 " + name + " : TEXCOORD" + std::to_string(coord.slot));
-                epilogue += "    " + name + " = float2(" + sum(coord.x) + ", " + sum(coord.y) + ");\n";
+                if (options_.diagHoist & 8)
+                {
+                    parameters.push_back("out float4 " + name + " : TEXCOORD" + std::to_string(coord.slot));
+                    epilogue += "    " + name + " = float4(0.0, 0.0, " + sum(coord.x) + ", " + sum(coord.y) + ");\n";
+                }
+                else if (options_.diagHoist & 2)
+                {
+                    parameters.push_back("out float4 " + name + " : TEXCOORD" + std::to_string(coord.slot));
+                    epilogue += "    " + name + " = float4(" + sum(coord.x) + ", " + sum(coord.y) + ", 0.0, 1.0);\n";
+                }
+                else
+                {
+                    parameters.push_back("out float2 " + name + " : TEXCOORD" + std::to_string(coord.slot));
+                    epilogue += "    " + name + " = float2(" + sum(coord.x) + ", " + sum(coord.y) + ");\n";
+                }
+                if (options_.diagHoist & 4)
+                    break;
             }
         bool position = false;
         for (const std::string &p : parameters)
@@ -1392,8 +1415,16 @@ bool Emitter::Run(std::string &cg, std::string &error)
                         error = "hoist: the pixel shader reads TEXCOORD" + std::to_string(coord.slot) + " itself";
                         return false;
                     }
-                parameters.push_back("float2 " + name + " : TEXCOORD" + std::to_string(coord.slot));
+                parameters.push_back(std::string(options_.diagHoist & 10 ? "float4 " : "float2 ") + name + " : TEXCOORD" +
+                                     std::to_string(coord.slot));
+                if (options_.diagHoist & 4)
+                    break;
             }
+        if (options_.hoist && (options_.diagHoist & 1))
+        {
+            prologue += "    float2 kisak_hoist_err = float2(0.0, 0.0);\n";
+            epilogue += "    oC0 = float4(saturate(kisak_hoist_err * 256.0), 0.25, 1.0);\n";
+        }
         if (alphaTest)
         {
             static const char *const tests[] = {nullptr,       "false", "a < ref",  "a == ref",

@@ -168,6 +168,15 @@ struct Options
     // vertex program hands over (PlanHoist). Null for none. Only read
     // during Emit.
     const struct HoistPlan *hoist = nullptr;
+    // Both stages, run diagnostics for the hoist (bits):
+    //   1: the fragment program's colour is how far each hoisted
+    //      coordinate is from the one the pixel shader works out
+    //      (red and green, x 256; blue 0.25 marks a program with hoisted reads)
+    //   2: the coordinates are handed over as float4 (in x and y)
+    //   4: only the plan's first coordinate is handed over
+    //   8: handed over in z and w of a float4, so the reads at them are
+    //      not fetched ahead
+    uint8_t diagHoist = 0;
 };
 
 // ---- Parsed form ---------------------------------------------------------------------------

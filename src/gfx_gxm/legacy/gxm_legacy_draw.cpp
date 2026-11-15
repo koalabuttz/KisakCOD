@@ -223,7 +223,8 @@ struct PipelineKey
     uint8_t index32;
     uint16_t sharp; // and the samplers it reads through the sharpening filter
     uint8_t hoist; // DrawState::readHoist when the draw came by
-    uint8_t pad[3];
+    uint8_t diagHoist; // DrawState::diagHoist then
+    uint8_t pad[2];
 };
 struct Pipeline
 {
@@ -367,6 +368,9 @@ struct DrawState
     // the pixel shader's plan.
     bool readHoist = true;
     uint64_t hoistedDraws = 0, hoistUnfed = 0;
+    // Run diagnostics for the hoist: cg::Options::diagHoist's bits
+    // (switches diag-hoist-show, -float4, -one, -zw).
+    uint8_t diagHoist = 0;
     // 0: the last draw had no alpha test, 1: one with a discard, 2: one
     // that was left out, 3: one that writes zero.
     uint8_t lastDrawAlphaTest = 0;
@@ -820,6 +824,7 @@ uint64_t VariantKey(const gxm::cg::Options &options)
            (options.alphaFunc == gxm::cg::AlphaFunc::Always ? 0 : uint64_t(options.alphaFunc)) ^
            (uint64_t(options.sharpSamplers) * 0xff51afd7ed558ccdull) ^
            (options.alphaZero ? 0x00a5000000000000ull : 0) ^ (options.hoist ? options.hoist->hash : 0) ^
+           (uint64_t(options.diagHoist) * 0xd6e8feb86659fd93ull) ^
            (options.farPlaneInside ? 0x5a5a000000000000ull : 0) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
 }
 
@@ -2804,7 +2809,8 @@ const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "n
                                      "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
                                      "gpu-watch",           "no-prepass-clear",  "no-depth-only-scene",
                                      "no-scene-in-copy",    "no-alpha-test-drop", "no-alpha-test-zero",
-                                     "no-read-hoist"};
+                                     "no-read-hoist",       "diag-hoist-show",    "diag-hoist-float4",
+                                     "diag-hoist-one",      "diag-hoist-zw"};
 struct LiveSwitch
 {
     const char *name;
@@ -2876,6 +2882,12 @@ void ApplyLiveSwitches(Device &device)
             d.lastDrawValid = false;
             Log(device, "diag: read hoist so far: %llu draws with texture coordinates from the vertex program",
                 (unsigned long long)d.hoistedDraws);
+        }
+        else if (name.rfind("diag-hoist-", 0) == 0)
+        {
+            const uint8_t bit = name == "diag-hoist-show" ? 1 : name == "diag-hoist-float4" ? 2 : name == "diag-hoist-one" ? 4 : 8;
+            d.diagHoist = uint8_t(s.on ? d.diagHoist | bit : d.diagHoist & ~bit);
+            d.lastDrawValid = false;
         }
         else if (name == "no-filter-stretch")
             gfx_gxm::g_stretchInFilter = !s.on;
@@ -3577,6 +3589,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             pipelineKey.sharp = sharpSamplers;
             pipelineKey.index32 = index32;
             pipelineKey.hoist = d.readHoist;
+            pipelineKey.diagHoist = d.diagHoist;
             pipeline = &PipelineSlot(d, pipelineKey);
             known = std::memcmp(&pipeline->key, &pipelineKey, sizeof(pipelineKey)) == 0;
             ++d.pipelineLookups;
@@ -3612,6 +3625,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             {
                 gxm::cg::Options vertexOptions = plan.options, hoistedOptions = pixelOptions;
                 vertexOptions.hoist = hoistedOptions.hoist = &ps->hoist;
+                vertexOptions.diagHoist = hoistedOptions.diagHoist = d.diagHoist;
                 bool making = false;
                 Variant *const hoistedVertex = GetVariant(device, *vs, vertexOptions, making);
                 Variant *const hoistedPixel = GetVariant(device, *ps, hoistedOptions, making);
