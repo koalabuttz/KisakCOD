@@ -413,6 +413,17 @@ class ObjectiveTests(unittest.TestCase):
                                      "bots: 4 attacks an objective 900 units away\n"))
 
 
+    def test_arrivals_count_with_or_without_a_stance(self):
+        import contextlib
+        import io
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            validate_objectives("bots: 4 is on an objective, prone\n"
+                                "bots: 5 is on an objective, crouched\n"
+                                "bots: 6 is on an objective\n")
+        self.assertIn("got onto an objective 3 times (1 of them lying prone)", printed.getvalue())
+
+
 class CombatHoldTests(unittest.TestCase):
     def test_a_bot_may_die_after_the_first_sample(self):
         log = healthy_log().replace('sample=2 state=playing health=100', 'sample=2 state=dead health=0', 1)

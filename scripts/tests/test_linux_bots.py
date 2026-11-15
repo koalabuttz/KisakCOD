@@ -632,8 +632,10 @@ def validate_objectives(output: str) -> list:
         shown[team] = max(shown.get(team, 0), int(take) + int(hold))
     attacks = len(re.findall(r"^bots: \d+ attacks an objective", output, re.M))
     held = sum(1 for _, _, hold in TEAM_OBJECTIVES_ROW.findall(output) if int(hold) > 0)
-    arrived = len(re.findall(r"^bots: \d+ is on an objective\s*$", output, re.M))
-    print(f"INFO: bots got onto an objective {arrived} times")
+    arrivals = re.findall(r"^bots: \d+ is on an objective(?:, (\w+))?\s*$", output, re.M)
+    arrived = len(arrivals)
+    prone = sum(1 for stance in arrivals if stance == "prone")
+    print(f"INFO: bots got onto an objective {arrived} times ({prone} of them lying prone)")
     stuck = len(re.findall(r"^bots: \d+ (is stuck on its way|finds no way) to an objective", output, re.M))
     short = len(re.findall(r"^bots: \d+ stopped \d+ units from an objective", output, re.M))
     print(f"INFO: bots got stuck or found no way to an objective {stuck} times and stopped short of one "

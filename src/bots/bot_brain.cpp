@@ -115,6 +115,8 @@ struct BotSlot
     kb::Intent goalFor = kb::Intent::Roam;
     int holdUntil = 0;
     bool holdCrouched = false;
+    // Lies prone while it holds (on a flag it takes, the patient most often).
+    bool holdProne = false;
     // Cover from the threat it knows of, looked for at most once a second.
     float cover[3] = {0.0f, 0.0f, 0.0f};
     bool coverKnown = false;
@@ -1009,6 +1011,7 @@ void HoldFor(BotSlot &bot, int untilMs, const float *facing, bool crouched)
 {
     bot.holdUntil = untilMs;
     bot.holdCrouched = crouched;
+    bot.holdProne = false;
     bot.holdFacingKnown = facing != nullptr;
     if (facing && facing != bot.holdFacing)
         std::memcpy(bot.holdFacing, facing, sizeof(bot.holdFacing));
@@ -1089,11 +1092,16 @@ RolePlan PlanRole(BotSlot &bot, int clientNum, const kb::NavMesh &nav, const flo
             if (arrived)
             {
                 // There: stay on it (a flag captures while someone stands
-                // in it) and press use (a bomb plants or defuses on it).
-                HoldFor(bot, svs.time + 1000, nullptr, false);
+                // in it) and press use (a bomb plants or defuses on it), in
+                // the stance it chose on the way: many players lie down on a
+                // flag and wait for whoever comes to take it back.
+                const bool prone = bot.holdProne;
+                HoldFor(bot, svs.time + 1000, nullptr, bot.holdCrouched);
+                bot.holdProne = prone;
                 bot.atObjective = Distance2D(origin, bot.objective) < 96.0f;
                 if (bot.atObjective && !wasAtObjective && LogOn())
-                    Com_Printf(CON_CHANNEL_SERVER, "bots: %d is on an objective\n", clientNum);
+                    Com_Printf(CON_CHANNEL_SERVER, "bots: %d is on an objective, %s\n", clientNum,
+                               bot.holdProne ? "prone" : bot.holdCrouched ? "crouched" : "standing");
                 if (!bot.atObjective && !bot.shortLogged && LogOn())
                 {
                     bot.shortLogged = true;
@@ -1108,6 +1116,10 @@ RolePlan PlanRole(BotSlot &bot, int clientNum, const kb::NavMesh &nav, const flo
         bot.roleGoal = true;
         bot.holdUntil = 0;
         bot.shortLogged = false;
+        // How it will wait there: prone (the patient more often), crouched or
+        // standing.
+        bot.holdProne = bot.rng.Unit() < 0.3f + 0.5f * bot.personality.patience;
+        bot.holdCrouched = !bot.holdProne && bot.rng.Unit() < 0.6f;
         if (LogOn())
             Com_Printf(CON_CHANNEL_SERVER, "bots: %d attacks an objective %.0f units away\n", clientNum,
                        Distance2D(origin, bot.objective));
@@ -1288,6 +1300,7 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
                 bot.holdUntil =
                     svs.time + static_cast<int>(bot.rng.Range(2500.0f, 7000.0f) * (0.5f + bot.personality.patience));
                 bot.holdCrouched = bot.rng.Unit() < 0.5f;
+                bot.holdProne = false;
             }
             replan = true;
         }
@@ -1533,8 +1546,21 @@ bool Bot_UserMove(client_t *cl)
                 ViewToward(ps, bot.holdFacing, facingView);
                 look = facingView;
             }
+            // Prone on a flag it takes: it stays down and fights from there
+            // rather than strafing off the flag.
+            const bool downOnFlag = bot.holdProne && bot.atObjective && bot.role == kb::Role::Attack &&
+                                    (fighting || holding) && Distance2D(ps->origin, bot.objective) < 96.0f;
+            if (downOnFlag)
+                side = 0;
             bool walked = false;
-            if (side != 0 && bot.mind.intent != kb::Intent::Cover)
+            if (downOnFlag)
+            {
+                bot.progressTime = svs.time;
+                cmd.buttons |= BUTTON_PRONE;
+                if (holding)
+                    cmd.buttons |= BUTTON_USE;
+            }
+            else if (side != 0 && bot.mind.intent != kb::Intent::Cover)
             {
                 cmd.rightmove = static_cast<char>(side * 127);
                 // A strafe is not being stuck on the way.
@@ -1549,7 +1575,9 @@ bool Bot_UserMove(client_t *cl)
             else
             {
                 bot.progressTime = svs.time;
-                if (bot.holdCrouched)
+                if (bot.holdProne)
+                    cmd.buttons |= BUTTON_PRONE;
+                else if (bot.holdCrouched)
                     cmd.buttons |= BUTTON_CROUCH;
                 // On an objective: use it (a bomb plants or defuses while
                 // use is held there).
