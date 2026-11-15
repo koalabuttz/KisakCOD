@@ -1,0 +1,26 @@
+#version 450
+
+// The Modern path's volumetric fog as a froxel volume, second compute pass
+// (src/gfx_vk/modern/vk_modern_fog.cpp): adds fog_froxel_inject.comp's
+// froxels up front to back, one invocation per column, so that slice z holds
+// the sums from the camera to the far end of slice z, which fog_apply.frag
+// reads at each pixel's distance.
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform readonly image3D injected;
+layout(set = 0, binding = 1, rgba16f) uniform writeonly image3D integrated;
+
+void main()
+{
+    const ivec3 size = imageSize(injected);
+    const ivec2 column = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(column, size.xy)))
+        return;
+    vec4 sum = vec4(0.0);
+    for (int z = 0; z < size.z; ++z)
+    {
+        sum += imageLoad(injected, ivec3(column, z));
+        imageStore(integrated, ivec3(column, z), sum);
+    }
+}

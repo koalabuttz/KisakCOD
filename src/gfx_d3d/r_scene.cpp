@@ -2227,17 +2227,56 @@ static void R_ModernSceneFog(const GfxViewInfo *viewInfo, GfxModernFog &fog)
     fog.sunDirection[0] = data->sunLight.dir[0];
     fog.sunDirection[1] = data->sunLight.dir[1];
     fog.sunDirection[2] = data->sunLight.dir[2];
-    if (viewInfo->dynamicShadowType != SHADOW_MAP || !rgp.world
-        || !Com_BitCheckAssert(data->shadowableLightHasShadowMap, rgp.world->sunPrimaryLightIndex, 32))
+    const GfxImage *sunImage = gfxRenderTargets[R_RENDERTARGET_SHADOWMAP_SUN].image;
+    const GfxImage *spotImage = gfxRenderTargets[R_RENDERTARGET_SHADOWMAP_SPOT].image;
+    if (viewInfo->dynamicShadowType == SHADOW_MAP && rgp.world && sunImage && sunImage->texture.map
+        && Com_BitCheckAssert(data->shadowableLightHasShadowMap, rgp.world->sunPrimaryLightIndex, 32))
+    {
+        fog.sunShadowed = true;
+        fog.shadowMap = sunImage->texture.map;
+        memcpy(fog.shadowLookup, viewInfo->sunShadow.lookupMatrix.m, sizeof(fog.shadowLookup));
+        memcpy(fog.switchPartition, viewInfo->sunShadow.sunProj.switchPartition, sizeof(fog.switchPartition));
+        fog.shadowmapScale[0] = viewInfo->sunShadow.sunProj.shadowmapScale[0];
+        fog.shadowmapScale[1] = viewInfo->sunShadow.sunProj.shadowmapScale[1];
+    }
+    // The shadowed spot lights, as R_SetDrawSurfsShadowableLight lights
+    // surfaces with them: those whose shadow map is drawn this frame.
+    if (viewInfo->dynamicShadowType != SHADOW_MAP)
         return;
-    const GfxImage *image = gfxRenderTargets[R_RENDERTARGET_SHADOWMAP_SUN].image;
-    if (!image || !image->texture.map)
-        return;
-    fog.shadowMap = image->texture.map;
-    memcpy(fog.shadowLookup, viewInfo->sunShadow.lookupMatrix.m, sizeof(fog.shadowLookup));
-    memcpy(fog.switchPartition, viewInfo->sunShadow.sunProj.switchPartition, sizeof(fog.switchPartition));
-    fog.shadowmapScale[0] = viewInfo->sunShadow.sunProj.shadowmapScale[0];
-    fog.shadowmapScale[1] = viewInfo->sunShadow.sunProj.shadowmapScale[1];
+    const uint32_t spotShadowCount = viewInfo->spotShadowCount < 4 ? viewInfo->spotShadowCount : 4;
+    for (uint32_t i = 0; i < spotShadowCount; ++i)
+    {
+        const GfxSpotShadow &spotShadow = viewInfo->spotShadows[i];
+        const GfxLight *light = spotShadow.light;
+        if (!light || light->radius <= 0.0f || light->cosHalfFovInner <= light->cosHalfFovOuter
+            || light->cosHalfFovOuter <= 0.0f
+            || !Com_BitCheckAssert(data->shadowableLightHasShadowMap, spotShadow.shadowableLightIndex, 32))
+            continue;
+        const GfxImage *image = spotShadow.image;
+        if (!image || !image->texture.map || (image != sunImage && image != spotImage))
+            continue;
+        GfxModernFogSpot &spot = fog.spots[fog.spotCount++];
+        spot.origin[0] = light->origin[0];
+        spot.origin[1] = light->origin[1];
+        spot.origin[2] = light->origin[2];
+        spot.radius = light->radius;
+        spot.dir[0] = light->dir[0];
+        spot.dir[1] = light->dir[1];
+        spot.dir[2] = light->dir[2];
+        spot.exponent = static_cast<float>(light->exponent);
+        spot.cosHalfFovOuter = light->cosHalfFovOuter;
+        spot.cosHalfFovInner = light->cosHalfFovInner;
+        spot.fade = spotShadow.fade;
+        spot.color[0] = light->color[0] * r_diffuseColorScale->current.value;
+        spot.color[1] = light->color[1] * r_diffuseColorScale->current.value;
+        spot.color[2] = light->color[2] * r_diffuseColorScale->current.value;
+        memcpy(spot.shadowLookup, spotShadow.lookupMatrix.m, sizeof(spot.shadowLookup));
+        spot.inSunMap = image == sunImage;
+        if (spot.inSunMap)
+            fog.shadowMap = image->texture.map;
+        else
+            fog.spotShadowMap = image->texture.map;
+    }
 }
 
 static GfxModernScene &R_ModernScene(const GfxViewInfo *viewInfo)
