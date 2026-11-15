@@ -15,6 +15,55 @@
 
 struct IDirect3DDevice9;
 struct IDirect3DCubeTexture9;
+struct IDirect3DTexture9;
+
+// A view's fog as the game's shaders apply it, and the sun that lights it,
+// for the Modern path's volumetric fog (docs/vulkan-modern.md, "Volumetric
+// fog"): with it the back end lights the map's own fog where the sun reaches
+// it.
+// A spot light that lights the fog: one of the view's shadowed spot lights,
+// as the lit shaders read it (r_draw_shadowable_light.cpp).
+struct GfxModernFogSpot
+{
+    float origin[3];       // world units
+    float radius;          // its reach, world units
+    float dir[3];          // from a lit point towards the light along the cone's axis, unit length
+    float exponent;        // the cone's falloff power (0: none)
+    float cosHalfFovOuter; // the cone's edge
+    float cosHalfFovInner; // the cone's full-strength part (more than the edge)
+    float fade;            // how far its shadow map counts (0 none, 1 all); the rest is lit
+    float color[3];        // the light's diffuse colour, display values (may pass 1)
+    // World (row vector, p * M) to the shadow map, projective: xy / w the
+    // texture coordinates of its tile, z / w the depth (lit where it is at
+    // most the stored depth).
+    float shadowLookup[4][4];
+    bool inSunMap;         // its tile is in shadowMap (the sun's), else in spotShadowMap
+};
+
+struct GfxModernFog
+{
+    bool on;               // the map's fog is drawn (r_fog) and has a density
+    float color[3];        // the fog's colour, display values 0 to 1
+    float density;         // what reaches the eye through d units is 2^(-density (d - start)), at most 1
+    float start;           // world units
+    float origin[3];       // the camera, world units
+    float sunDirection[3]; // towards the sun, world space, unit length
+    // The sun's shadow is drawn for the view: the lookup below is set.
+    bool sunShadowed;
+    // The sun's shadow map: when the sun's shadow is in it, or a spot
+    // light's (they share it while the sun has none). Else null.
+    IDirect3DTexture9 *shadowMap;
+    // World (row vector, p * M) to the near partition's texture coordinates
+    // (xy), depth (z, lit where it is at most the stored depth) and partition
+    // value (w: the near partition to 1, then the far one).
+    float shadowLookup[4][4];
+    float switchPartition[4]; // the far partition's xy: near xy * w + this xy
+    float shadowmapScale[2];  // the far partition's edge fade (lit shaders' c4)
+    // The spot lights' own shadow map, when a spot light's tile is in it.
+    IDirect3DTexture9 *spotShadowMap;
+    int spotCount;
+    GfxModernFogSpot spots[4];
+};
 
 struct GfxModernScene
 {
@@ -31,6 +80,7 @@ struct GfxModernScene
     // Set by sceneDone when the back end drew bloom in place of the glow:
     // the renderer then leaves its own glow out of this view.
     bool glowDrawn;
+    GfxModernFog fog;
 };
 
 // A planar reflection view (r_modern_planar): the scene seen in a mirror
@@ -98,6 +148,21 @@ enum GfxModernLitShader : uint16_t
     GFX_MODERN_LIT_SHADER_OMNI = 0x200,
     GFX_MODERN_LIT_SHADER_AMBIENT = 0x300,
     GFX_MODERN_LIT_SHADER_LIGHT = 0x300,
+    // water_l_sun: CoD4's water (a water map's ripples, the reflection probe
+    // by Fresnel over a constant colour, the sun's glint; water shader facts,
+    // PC water run 1), alone: no family, map or mode bit with it.
+    GFX_MODERN_LIT_SHADER_WATER = 0x400,
+    // Variations of the lp_ shaders (skin and flag shader facts): the
+    // reflection probe's light times 0.3 (skin_'s s0: character skin), and the sun
+    // lighting both faces (flag_ with the sun).
+    GFX_MODERN_LIT_SHADER_SKIN_PROBE = 0x800,
+    GFX_MODERN_LIT_SHADER_TWO_SIDED_SUN = 0x1000,
+    // With no family, SPOT or OMNI: the extra per-light pass
+    // l_<spot|omni>[_flag|_skin][_hsm]_<mode>c0[d0][n0] that effects' lights
+    // (muzzle flashes, explosions) add over the lit scene (light pass facts
+    // 1), with SHADOW (a spot's hsm), NORMAL, DETAIL and the mode; with
+    // TWO_SIDED_SUN, flag_'s light on both faces. The back end's shader adds
+    // it as physical light, in linear light.
 };
 
 // The sun's shadow map as a view's lit surfaces read it (sunShadow): its two
@@ -171,6 +236,17 @@ struct GfxModernHooks
     // (the renderer then draws nothing for the view).
     bool (*planarBegin)(void *user, IDirect3DDevice9 *device, const GfxModernPlanar *planar);
     void (*planarDone)(void *user, IDirect3DDevice9 *device, const GfxModernPlanar *planar);
+    // Re-capturing the world's reflection probes with the back end's own
+    // light (docs/vulkan-modern.md "Reflection probes"): whether the back end
+    // wants it (asked once a map). May be null (no).
+    bool (*probeCaptureWanted)(void *user, IDirect3DDevice9 *device);
+    // Capturing on or off: while on, the back end reads each scene's light
+    // back (linear, before its bloom, exposure and tonemap); probeCaptureRead
+    // gives a rectangle of the last one (in pixels of the scene's target) as
+    // rgb floats, rows from the top, once the GPU is done. False when none was
+    // read back. Both may be null when probeCaptureWanted is.
+    void (*probeCapture)(void *user, IDirect3DDevice9 *device, bool on);
+    bool (*probeCaptureRead)(void *user, IDirect3DDevice9 *device, int x, int y, int width, int height, float *rgb);
     // A view's lit surfaces come next, and this is the sun's shadow map they
     // read, or that they read none, and where the sun is. Called before the
     // view's sceneDepth, so that what that builds can use the sun. May be
@@ -183,3 +259,10 @@ struct GfxModernHooks
 void R_SetModernHooks(const GfxModernHooks *hooks);
 // The hooks installed, or null.
 const GfxModernHooks *R_ModernHooks();
+
+// The graphics back end's memory log, with any visuals: the Vulkan back end
+// sets it when it makes its Direct3D object (null clears it), and
+// R_LogBackendMemory calls it when set. R_LoadWorld logs the memory at each
+// map load, so a log shows whether memory comes back between maps.
+void R_SetBackendMemoryLog(void (*log)(const char *when));
+void R_LogBackendMemory(const char *when);

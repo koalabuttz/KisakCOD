@@ -163,6 +163,10 @@
  const dvar_t *r_scaleViewport;
 #ifdef KISAK_GFX_GXM
  const dvar_t *vita_sceneScale;
+ const dvar_t *vita_sceneScaleMin;
+ const dvar_t *vita_sceneScaleGoal;
+ const dvar_t *vita_sceneScaleWidthOnly;
+ const dvar_t *vita_sceneSharpen;
 #endif
  const dvar_t *r_normal;
  const dvar_t *sm_sunShadowCenter;
@@ -240,6 +244,7 @@
  const dvar_t *r_fastSkin;
  const dvar_t *r_smc_enable;
  const dvar_t *r_pretess;
+ const dvar_t *r_fetchAhead;
  const dvar_t *r_dynamicBufferReport;
  const dvar_t *r_picmip_manual;
  const dvar_t *r_picmip;
@@ -258,6 +263,7 @@
  const dvar_t *r_glow_allowed_script_forced;
  const dvar_t *r_outdoor;
  const dvar_t *r_sse_skinning;
+ const dvar_t *r_staticCullVec;
  const dvar_t *r_monitor;
  const dvar_t *r_rendererPreference;
  const dvar_t *r_rendererInUse;
@@ -633,6 +639,20 @@
      r_smc_enable = Dvar_RegisterBool("r_smc_enable", false, DVAR_ROM, "Enable static model cache");
 #endif
      r_pretess = Dvar_RegisterBool("r_pretess", true, DVAR_NOFLAG, "Batch surfaces to reduce primitive count");
+     // Nothing but the time changes (r_add_bsp.cpp, r_add_staticmodel.cpp,
+     // r_dpvs_static_vec.cpp). On for the PS Vita, where console runs CB and
+     // trial A measured it (docs/perf-ab.md); off elsewhere until a machine
+     // shows what it is worth there.
+#ifdef KISAK_GFX_GXM
+     const bool fetchAheadDefault = true;
+#else
+     const bool fetchAheadDefault = false;
+#endif
+     r_fetchAhead = Dvar_RegisterBool(
+         "r_fetchAhead",
+         fetchAheadDefault,
+         DVAR_NOFLAG,
+         "Ask the processor ahead of time for what the scene's walks read next (index copies, static model records, a culled leaf's boxes; builds with GCC or Clang)");
      // The PS Vita's buffers are smaller than the retail game's (r_gfx.h), and
      // its runs are read from the log: there the line is on.
      r_dynamicBufferReport = Dvar_RegisterInt(
@@ -948,6 +968,36 @@
          DVAR_NOFLAG,
          "Draw the 3D picture at this fraction of the screen's width and height and stretch it to the screen; "
          "the HUD keeps the full resolution");
+     // Under vita_sceneScale: the back end picks the size between the two
+     // from the time each frame waits for the GPU (gxm_scale_governor.h).
+     vita_sceneScaleMin = Dvar_RegisterFloat(
+         "vita_sceneScaleMin",
+         1.0f,
+         minv,
+         DVAR_ARCHIVE,
+         "Under vita_sceneScale: the 3D picture shrinks down to this fraction, frame by frame, as far as the GPU "
+         "needs to keep the frame's goal, and no further");
+     minv.value.max = 100.0f;
+     minv.value.min = 0.0f;
+     vita_sceneScaleGoal = Dvar_RegisterFloat(
+         "vita_sceneScaleGoal",
+         0.0f,
+         minv,
+         DVAR_NOFLAG,
+         "The frame time in ms that vita_sceneScaleMin keeps the GPU under; 0 picks 16.7 where the CPU fills a "
+         "frame in that time and 33.3 elsewhere");
+     // Two ways to keep a smaller 3D picture sharp
+     // (src/gfx_gxm/gxm_engine_options.h).
+     vita_sceneScaleWidthOnly = Dvar_RegisterBool(
+         "vita_sceneScaleWidthOnly",
+         false,
+         DVAR_NOFLAG,
+         "A smaller 3D picture keeps its height and gives up the same share of pixels in its width alone");
+     vita_sceneSharpen = Dvar_RegisterBool(
+         "vita_sceneSharpen",
+         false,
+         DVAR_ARCHIVE,
+         "Sharpen a smaller 3D picture as it is stretched to the screen");
 #endif
      r_smp_backend = Dvar_RegisterBool("r_smp_backend", true, DVAR_NOFLAG, "Process renderer back end in a separate thread");
      r_smp_worker = Dvar_RegisterBool("r_smp_worker", true, DVAR_NOFLAG, "Process renderer front end in a separate thread");
@@ -1552,6 +1602,13 @@
      sv_cheats = Dvar_RegisterBool("sv_cheats", 1, DVAR_SYSTEMINFO | DVAR_ROM, "Allow server side cheats");
      com_statmon = Dvar_RegisterBool("com_statmon", false, DVAR_NOFLAG, "Draw stats monitor");
      r_sse_skinning = Dvar_RegisterBool("r_sse_skinning", true, DVAR_NOFLAG, "Use Streaming SIMD Extensions for skinning");
+     // The same models and surfaces come out either way (r_dpvs_static_vec.h);
+     // the setting is there to time the two against each other.
+     r_staticCullVec = Dvar_RegisterBool(
+         "r_staticCullVec",
+         true,
+         DVAR_NOFLAG,
+         "Hold a cell's static models and surfaces against four clip planes at a time (builds with GCC or Clang)");
      r_monitor = Dvar_RegisterInt(
          "r_monitor",
          0,

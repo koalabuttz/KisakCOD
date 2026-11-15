@@ -500,6 +500,35 @@ front::ModernSceneView ModernViewOf(const GfxModernScene *scene)
     view.glow.intensity = scene->glowIntensity;
     view.glow.cutoff = scene->glowCutoff;
     view.glow.desaturation = scene->glowDesaturation;
+    const GfxModernFog &fog = scene->fog;
+    view.fog.on = fog.on;
+    std::memcpy(view.fog.color, fog.color, sizeof(view.fog.color));
+    view.fog.density = fog.density;
+    view.fog.start = fog.start;
+    std::memcpy(view.fog.origin, fog.origin, sizeof(view.fog.origin));
+    std::memcpy(view.fog.sunDirection, fog.sunDirection, sizeof(view.fog.sunDirection));
+    view.fog.sunShadowed = fog.sunShadowed;
+    view.fog.shadowMap = fog.shadowMap;
+    std::memcpy(view.fog.shadowLookup, fog.shadowLookup, sizeof(view.fog.shadowLookup));
+    std::memcpy(view.fog.switchPartition, fog.switchPartition, sizeof(view.fog.switchPartition));
+    std::memcpy(view.fog.shadowmapScale, fog.shadowmapScale, sizeof(view.fog.shadowmapScale));
+    view.fog.spotShadowMap = fog.spotShadowMap;
+    view.fog.spotCount = fog.spotCount < 0 ? 0 : (fog.spotCount > 4 ? 4 : fog.spotCount);
+    for (int i = 0; i < view.fog.spotCount; ++i)
+    {
+        const GfxModernFogSpot &from = fog.spots[i];
+        front::ModernSceneView::Fog::Spot &to = view.fog.spots[i];
+        std::memcpy(to.origin, from.origin, sizeof(to.origin));
+        to.radius = from.radius;
+        std::memcpy(to.dir, from.dir, sizeof(to.dir));
+        to.exponent = from.exponent;
+        to.cosHalfFovOuter = from.cosHalfFovOuter;
+        to.cosHalfFovInner = from.cosHalfFovInner;
+        to.fade = from.fade;
+        std::memcpy(to.color, from.color, sizeof(to.color));
+        std::memcpy(to.shadowLookup, from.shadowLookup, sizeof(to.shadowLookup));
+        to.inSunMap = from.inSunMap;
+    }
     return view;
 }
 
@@ -634,6 +663,24 @@ void ModernPlanarDone(void *, IDirect3DDevice9 *device, const GfxModernPlanar *p
         front::ModernPlanarDone(device, ModernPlanarViewOf(planar));
 }
 
+bool ModernProbeCaptureWanted(void *, IDirect3DDevice9 *device)
+{
+    return !s_modernRefused.load(std::memory_order_relaxed) && front::ModernProbeCaptureWanted(device);
+}
+
+void ModernProbeCapture(void *, IDirect3DDevice9 *device, bool on)
+{
+    front::ModernProbeCapture(device, on);
+}
+
+bool ModernProbeCaptureRead(void *, IDirect3DDevice9 *device, int x, int y, int width, int height, float *rgb)
+{
+    if (x < 0 || y < 0 || width <= 0 || height <= 0)
+        return false;
+    return front::ModernProbeCaptureRead(device, static_cast<uint32_t>(x), static_cast<uint32_t>(y),
+                                         static_cast<uint32_t>(width), static_cast<uint32_t>(height), rgb);
+}
+
 // The sun's shadow map the view's lit surfaces read, for the soft filter.
 void ModernSunShadow(void *, IDirect3DDevice9 *device, const GfxModernSunShadow *shadow)
 {
@@ -656,7 +703,9 @@ const GfxModernHooks s_modernHooks = {nullptr,          ModernJitterPixels, Mode
                                       ModernSceneBegin, ModernSceneLit,     ModernSurfaceMoved,
                                       ModernSkinnedSurfaceMoved, ModernLitInputs, ModernWantsSceneDepth,
                                       ModernSceneDepth, ModernReflectionProbe, ModernPlanarWanted,
-                                      ModernPlanarBegin, ModernPlanarDone, ModernSunShadow};
+                                      ModernPlanarBegin, ModernPlanarDone,
+                                      ModernProbeCaptureWanted, ModernProbeCapture, ModernProbeCaptureRead,
+                                      ModernSunShadow};
 } // namespace
 
 int Kisak_VulkanBackendSelected()
@@ -666,6 +715,7 @@ int Kisak_VulkanBackendSelected()
         return 1;
     // The Modern path's hooks belong to the Vulkan back end.
     R_SetModernHooks(nullptr);
+    R_SetBackendMemoryLog(nullptr);
     return 0;
 }
 
@@ -701,6 +751,7 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
                s_visualsNames[r_visuals->current.integer]);
     s_modernRefused.store(false, std::memory_order_relaxed);
     R_SetModernHooks(r_visuals->current.integer == VISUALS_MODERN ? &s_modernHooks : nullptr);
+    R_SetBackendMemoryLog([](const char *when) { front::LogDeviceMemory(when); });
     return front::CreateDirect3D9(host);
 }
 

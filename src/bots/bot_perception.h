@@ -120,6 +120,36 @@ struct SightSample
     Stance stance = Stance::Standing;
 };
 
+// The field of view at the hip (cg_fov), in the same terms as a weapon's
+// fAdsZoomFov.
+constexpr float kHipFov = 65.0f;
+
+// The screen while the bot aims down its sight: the view zooms from kHipFov
+// to the weapon's `zoomFov` as the sight comes up (`ads`, 0 to 1), so less of
+// the world fits on it, and a scope's overlay (an ACOG's or a sniper's)
+// leaves only a circle as tall as the screen once the sight is up. What is on
+// the screen is magnified as much: a far player is as easy to pick out as one
+// that much nearer.
+inline PerceptionParams SightThrough(const PerceptionParams &params, float ads, float zoomFov, bool overlay)
+{
+    PerceptionParams sight = params;
+    if (!(ads > 0.0f) || !(zoomFov > 0.0f) || zoomFov >= kHipFov)
+        return sight;
+    if (ads > 1.0f)
+        ads = 1.0f;
+    constexpr float kHalfRadians = 3.14159265358979f / 360.0f;
+    constexpr float kDegrees = 180.0f / 3.14159265358979f;
+    const float fov = kHipFov + (zoomFov - kHipFov) * ads;
+    const float scale = std::tan(fov * kHalfRadians) / std::tan(kHipFov * kHalfRadians);
+    sight.screenHalfYaw = std::atan(std::tan(params.screenHalfYaw * 2.0f * kHalfRadians) * scale) * kDegrees;
+    sight.screenHalfPitch = std::atan(std::tan(params.screenHalfPitch * 2.0f * kHalfRadians) * scale) * kDegrees;
+    if (overlay && ads >= 0.9f)
+        sight.screenHalfYaw = sight.screenHalfPitch;
+    sight.focusDegrees = params.focusDegrees * scale;
+    sight.closeRange = params.closeRange / scale;
+    return sight;
+}
+
 inline bool OnScreen(const SightSample &sample, const PerceptionParams &params)
 {
     return std::fabs(sample.yawOff) <= params.screenHalfYaw && std::fabs(sample.pitchOff) <= params.screenHalfPitch;
@@ -188,6 +218,10 @@ struct Contact
     int lastHeardAt = -1;
     float lastSeen[3] = {0.0f, 0.0f, 0.0f};
     float lastHeard[3] = {0.0f, 0.0f, 0.0f};
+    // How the player moved between the bot's last two looks, units a second
+    // (0 until it has looked twice in a row).
+    float velocity[3] = {0.0f, 0.0f, 0.0f};
+    bool tracked = false;
 };
 
 // Where a bot's attention goes, best first.
@@ -371,6 +405,27 @@ private:
 
     static void Remember(Contact &contact, const float *position, int nowMs)
     {
+        // Looks at most half a second apart give the player's motion; a gap
+        // starts it afresh. Never faster than a player sprints.
+        const int ms = nowMs - contact.lastSeenAt;
+        if (contact.tracked && ms > 0 && ms <= 500)
+        {
+            float moved[3];
+            float speed2 = 0.0f;
+            for (int k = 0; k < 3; ++k)
+            {
+                moved[k] = (position[k] - contact.lastSeen[k]) * 1000.0f / static_cast<float>(ms);
+                speed2 += moved[k] * moved[k];
+            }
+            const float scale = speed2 > 400.0f * 400.0f ? 400.0f / std::sqrt(speed2) : 1.0f;
+            for (int k = 0; k < 3; ++k)
+                contact.velocity[k] = 0.5f * contact.velocity[k] + 0.5f * moved[k] * scale;
+        }
+        else
+        {
+            contact.velocity[0] = contact.velocity[1] = contact.velocity[2] = 0.0f;
+        }
+        contact.tracked = true;
         contact.lastSeenAt = nowMs;
         std::memcpy(contact.lastSeen, position, sizeof(contact.lastSeen));
     }

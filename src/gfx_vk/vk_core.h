@@ -14,8 +14,11 @@
 //               transient memory and descriptor sets, passes with
 //               layout tracking and barriers, copies, read-back,
 //               GPU timestamps per pass and occlusion counts     (vk_frame.cpp)
-//   pipelines   shader modules, graphics pipelines through an on-disk
-//               pipeline cache with a compile counter, samplers  (vk_pipeline.cpp)
+//               compute passes and dispatches, storage images and
+//               buffers with their barriers                      (vk_frame.cpp)
+//   pipelines   shader modules, graphics and compute pipelines through
+//               an on-disk pipeline cache with a compile counter,
+//               samplers                                         (vk_pipeline.cpp)
 //
 // It knows nothing about the engine, materials or D3D9; the window system is
 // handed in (WindowSystem below), so the same code serves SDL3 on Linux, Windows
@@ -27,7 +30,7 @@
 // and pipeline creation feedback are core there), timeline semaphores and
 // scalar block layout (core since 1.2, optional there, required by the core
 // here; the Legacy shaders' uniform blocks use it), VK_KHR_swapchain, and one queue family
-// that does graphics and presents to the window. Mesa's lavapipe, Intel ANV,
+// that does graphics and compute and presents to the window. Mesa's lavapipe, Intel ANV,
 // NVIDIA's driver for the RTX 2080 Super and MoltenVK all meet them.
 //
 // Threading: one thread at a time calls a Core, the "owning thread" in these
@@ -44,6 +47,7 @@
 #include <new>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace gfx_vk
 {
@@ -135,6 +139,7 @@ struct CoreStats
     uint64_t framesPresented;
     uint64_t framesSkipped;   // window minimised or swapchain out of date
     uint32_t swapchainBuilds; // the first one included
+    uint32_t surfacesLost;    // surfaces the window took away (RenewSurface)
     uint32_t validationErrors;
     uint32_t validationWarnings;
     // Validation messages known not to apply (see OnDebugMessage in vk_core.cpp):
@@ -178,6 +183,13 @@ struct CoreStats
     double memoryAllocateMs;    // in vkAllocateMemory and vkMapMemory for them
     uint32_t buffersAlive;
     uint32_t imagesAlive;
+    // By memory heap (VkPhysicalDeviceMemoryProperties::memoryHeaps), the
+    // bytes the core holds there, and the blocks that went to a later memory
+    // type because the driver had no room in an earlier one.
+    uint64_t heapBytes[VK_MAX_MEMORY_HEAPS];
+    uint32_t memoryFallbacks;
+    uint32_t emptyBlocksFreed;  // pooled blocks given back once empty
+    uint32_t arenaChunksFreed;  // staging and transient chunks given back once idle
     uint64_t deferredDestroyed; // objects destroyed after their last frame finished
 
     uint64_t stagingBytes;      // copied through staging memory, all frames
@@ -186,13 +198,16 @@ struct CoreStats
     uint64_t lastingDescriptorSets; // allocated by AllocateLastingDescriptorSet, all frames
     uint32_t lastingRetires;    // RetireLastingDescriptorSets calls that gave up any set
     uint32_t barriers;          // image barriers recorded, all frames
+    uint32_t bufferBarriers;    // buffer barriers recorded by UseBuffer, all frames
+    uint64_t computePasses;     // BeginComputePass calls that began one, all frames
+    uint64_t dispatches;        // DispatchCompute calls recorded, all frames
     uint64_t occlusionCounts;   // begun by BeginOcclusionCount, all frames
     uint32_t occlusionPools;    // query pools made for them (256 counts each)
 
-    uint32_t pipelinesCreated;         // all graphics pipelines
+    uint32_t pipelinesCreated;         // all graphics and compute pipelines
     uint32_t pipelinesCreatedInFrame;  // of those, created between BeginFrame and Present
     uint32_t pipelineCacheHits;        // reported by pipeline creation feedback
-    double pipelineCreateMs;           // CPU time spent in vkCreateGraphicsPipelines
+    double pipelineCreateMs;           // CPU time spent in vkCreate*Pipelines
     bool pipelineCacheLoaded;          // the cache file existed and matched the device
     uint32_t samplersCreated;
 };
@@ -252,6 +267,13 @@ bool FrameGpuTime(const Core *core, uint64_t frame, FrameGpuTimes &out);
 // frame checks the surface and rebuilds the swapchain if the size differs.
 void NotifyResize(Core *core);
 
+// The window system took the surface away, as Android does when the app goes
+// to the background (VK_ERROR_SURFACE_LOST_KHR from a present, an acquire or a
+// size query says so to the core by itself). The next BeginFrame lets go of the
+// swapchain and the surface, asks the window for a new surface and builds a
+// swapchain on it; while the window has none, frames are skipped. For tests.
+void LoseSurface(Core *core);
+
 // The window is about to be destroyed: waits for the GPU, then destroys the
 // swapchain and the surface, which must go before their window does. Work
 // recorded in an open frame is submitted (not inside a pass). The device and
@@ -302,6 +324,12 @@ struct OptionalFeatures
     bool independentBlend;
     bool shaderClipDistance;
     bool shaderFloat16;
+    // Storage images in the formats Vulkan does not require for them, such
+    // as R11G11B10 (shaderStorageImageExtendedFormats). Whether a format can
+    // be a storage image at all is FormatSupports(format,
+    // VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT); R16G16B16A16_SFLOAT and
+    // R32G32B32A32_SFLOAT always can.
+    bool storageImageExtendedFormats;
     // VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE in pipelines. Core in
     // Vulkan 1.3, but MoltenVK has it only from macOS 14 on Mac2 or Apple4
     // GPUs and cannot say so, so it is off on every portability-subset device
@@ -331,6 +359,11 @@ struct OptionalFeatures
     // MoltenVK on Intel and AMD Macs (and macOS VMs) lacks them. True forces
     // that on every device (KISAK_VK_RENDER_TARGETS=wide), for testing.
     bool forceWideRenderTargets;
+    // The Legacy adapter reads UBYTE4 vertex elements as R8G8B8A8_UNORM and
+    // scales them back in the vertex shader where the device cannot read
+    // R8G8B8A8_USCALED vertex data (Adreno). True forces that on every device
+    // (KISAK_VK_BYTE_INPUTS=unorm), for testing.
+    bool forceByteStandIn;
     // The Legacy adapter writes a new uniform descriptor set for every draw
     // instead of binding its pipeline's set again with dynamic offsets
     // (KISAK_VK_UNIFORMS=static), to compare the two or rule one out.
@@ -400,6 +433,8 @@ struct OptionalFeatures
 const OptionalFeatures &Features(const Core *core);
 // Whether images of this format with optimal tiling support these features.
 bool FormatSupports(const Core *core, VkFormat format, VkFormatFeatureFlags features);
+// True when the device reads the format as vertex data (its buffer features).
+bool VertexFormatSupported(const Core *core, VkFormat format);
 // The depth-stencil format for depth targets: D24S8 where it can be a depth
 // attachment and sampled, else D32_SFLOAT_S8_UINT.
 VkFormat DepthStencilFormat(const Core *core);
@@ -419,7 +454,17 @@ enum class MemoryKind
     Device,   // device-local; written through StageBufferWrite
     Upload,   // host-visible, persistently mapped; the CPU writes, the GPU reads
     Readback, // host-visible and cached where possible; the GPU writes, the CPU reads
+    Staging,  // host-visible, persistently mapped, read once by a copy: system memory first
 };
+
+// The memory types a request of `size` bytes may use, best first; Allocate
+// tries each in turn when the driver has no room left in one (a full heap).
+// Device-local memory the CPU can map is a small heap (256 MB) on a discrete
+// GPU without resizable BAR: Upload memory takes it only while what the
+// core holds there (heapUsed, by heap, may be null) stays within half of it,
+// and Staging and Device memory go elsewhere first. Exposed for the checks.
+std::vector<uint32_t> MemoryTypeOrder(const VkPhysicalDeviceMemoryProperties &memory, uint32_t typeBits,
+                                      MemoryKind kind, VkDeviceSize size, const uint64_t *heapUsed);
 
 struct BufferDesc
 {
@@ -592,15 +637,36 @@ void RefreshProgress(Core *core);
 //
 // The core tracks each image's layout and last access, and records the
 // barriers a pass or copy needs. Images sampled inside a pass must be made
-// Sampled before it begins (UseImage); a pass cannot record barriers.
+// Sampled before it begins (UseImage); a pass cannot record barriers. A
+// compute pass can (below): make each image what the next dispatch needs.
 
 enum class ImageUse
 {
-    Sampled,      // read by vertex or fragment shaders
+    Sampled,      // read by vertex, fragment or compute shaders through a sampler
     TransferSrc,
     TransferDst,
+    // Storage images of compute shaders, in the GENERAL layout: read only,
+    // or written (and read). Bind ImageView(), never ImageSampleView(). The
+    // image needs VK_IMAGE_USAGE_STORAGE_BIT. A write after a write gets a
+    // barrier, so each dispatch sees the one before it: dispatches that
+    // write different images of one pass do not wait for each other.
+    StorageRead,
+    StorageWrite,
 };
 void UseImage(Core *core, Image *image, ImageUse use);
+
+// Buffers are tracked the same way for what shaders do with them (copies
+// keep their own barriers, see StageBufferWrite). A buffer starts with no
+// use: its first ShaderWrite waits only for copies recorded before it.
+enum class BufferUse
+{
+    ShaderRead,  // read by vertex, fragment or compute shaders (uniform or storage)
+    ShaderWrite, // written (and read) by compute shaders as a storage buffer
+    Indirect,    // the arguments of vkCmdDispatchIndirect or an indirect draw
+};
+// Records the barrier the use needs after the buffer's last one (none for a
+// read after a read). Not inside a render pass.
+void UseBuffer(Core *core, Buffer *buffer, BufferUse use);
 
 struct ColorAttachment
 {
@@ -633,9 +699,29 @@ bool BeginPass(Core *core, const PassDesc &desc);
 void EndPass(Core *core);
 bool InPass(const Core *core);
 
-// GPU time of every pass recorded under this name so far; supported false when
-// the queue has no timestamps or no such pass ran.
+// GPU time of every pass recorded under this name so far, render or compute;
+// supported false when the queue has no timestamps or no such pass ran.
 PassTimings PassTimingsFor(const Core *core, const char *name);
+
+// ---- Compute passes ------------------------------------------------------------------
+//
+// A compute pass is a stretch of dispatches between render passes, timed
+// under its name like a render pass (PassTimingsFor, CoreStats::framePasses).
+// Inside one, UseImage and UseBuffer record the barriers between dispatches;
+// BeginPass and uploads are refused. Bind the pipeline (bind point COMPUTE),
+// descriptor sets and push constants with Record(), then DispatchCompute.
+// Images uploaded since the last pass are made Sampled at BeginComputePass,
+// as at BeginPass. Inside a frame or outside one (work at a map load).
+bool BeginComputePass(Core *core, const char *name);
+void EndComputePass(Core *core);
+bool InComputePass(const Core *core);
+// vkCmdDispatch with that many work groups each way, counted in
+// CoreStats::dispatches. Only inside a compute pass. Group counts beyond
+// the device's maxComputeWorkGroupCount fail the core.
+void DispatchCompute(Core *core, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ);
+// vkCmdDispatchIndirect: the group counts are three uint32 at `offset` in
+// `args` (VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT; UseBuffer(Indirect) first).
+void DispatchComputeIndirect(Core *core, Buffer *args, VkDeviceSize offset);
 
 // ---- Occlusion counts ---------------------------------------------------------------
 //
@@ -767,6 +853,7 @@ void DestroyShaderModule(Core *core, VkShaderModule module);
 // Through the pipeline cache, counted in CoreStats (creation inside a frame is
 // counted separately: the target is none during play). VK_NULL_HANDLE on failure.
 VkPipeline CreateGraphicsPipeline(Core *core, const VkGraphicsPipelineCreateInfo &info);
+VkPipeline CreateComputePipeline(Core *core, const VkComputePipelineCreateInfo &info);
 // The same through the pipeline cache, from any thread while the core lives:
 // it touches nothing of the core but the cache, which Vulkan synchronises, so
 // it counts nothing in CoreStats and sets no error. VK_NULL_HANDLE on failure,
@@ -793,6 +880,10 @@ bool SavePipelineCache(Core *core);
 // wish): that mode is taken whenever it is offered, vsync or not. The core
 // passes KISAK_VK_PRESENT_MODE there, to compare the modes on one machine.
 VkPresentModeKHR ChoosePresentMode(const VkPresentModeKHR *offered, uint32_t count, bool vsync, const char *wanted);
+// The preTransform a swapchain asks for: the identity whenever the surface
+// supports it, so the compositor turns the picture for a rotated panel
+// (Android), else the surface's own transform.
+VkSurfaceTransformFlagBitsKHR ChoosePreTransform(const VkSurfaceCapabilitiesKHR &caps);
 const char *PresentModeName(VkPresentModeKHR mode);
 const char *FormatName(VkFormat format);
 const char *DeviceTypeName(VkPhysicalDeviceType type);

@@ -50,6 +50,9 @@ void CloseBackend(Backend *backend);
 // Logs the back end's frame statistics since it was opened or since they
 // were last reset (vk_d3d9.h LogDeviceStats); with reset, starts them again.
 void BackendLogStats(Backend *backend, bool reset);
+// Logs the memory the device holds (vk_d3d9.h LogDeviceMemory): `when` says
+// at what point, as "map load mp_crash".
+void BackendLogMemory(Backend *backend, const char *when);
 // Called at every Present, before the frame is presented: the back end takes
 // up the host's settings (Host::tuning) if they changed.
 void BackendFrame(Backend *backend);
@@ -78,10 +81,14 @@ void BackendPollProgress(Backend *backend);
 // the linear-light scene (BackendModernSceneTarget): after the passes the
 // tonemap writes it into display within the view's viewport, and that is
 // done even when the passes are refused. With display and view.glow on, the
-// bloom is drawn before the tonemap and *glowDrawn set true.
+// bloom is drawn before the tonemap and *glowDrawn set true. sunShadow and
+// spotShadow are level 0 of view.fog.shadowMap (the sun's shadow map) and
+// view.fog.spotShadowMap (the spot lights'), when they are set and this
+// device's textures: volumetric fog reads them.
 ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surface *depth,
                                 const ModernSceneView &view, lg::Surface *display = nullptr,
-                                bool *glowDrawn = nullptr);
+                                bool *glowDrawn = nullptr, lg::Surface *sunShadow = nullptr,
+                                lg::Surface *spotShadow = nullptr);
 // The linear-light image a 3D scene is drawn into instead of this back buffer
 // (vk_d3d9.h ModernSceneBegin), made or made again at its size; null when
 // linear light is off or cannot run (logged once). Refused tells the two
@@ -97,6 +104,16 @@ bool BackendModernEffectsOnDisplay(Backend *backend);
 // True when it was; false when it is not wanted, not an 8-bit colour cube
 // with levels, or on a back end without a Modern path.
 bool BackendModernReflectionProbe(Backend *backend, lg::Device *legacy, lg::Texture *probe);
+// Re-capturing the reflection probes (vk_d3d9.h ModernProbeCapture): whether
+// it is wanted (KISAK_VK_MODERN_PROBES_CAPTURE=1 with linear light and the
+// probe filter); capturing on or off (while on, each scene's linear-light
+// image is read back before its tonemap); and a rectangle of the last one
+// read back, as linear light (rgb floats, rows from the top; waits for the
+// GPU; false when there is none or the rectangle is outside it).
+bool BackendModernProbeCaptureWanted(Backend *backend);
+void BackendModernProbeCapture(Backend *backend, bool on);
+bool BackendModernProbeCaptureRead(Backend *backend, uint32_t x, uint32_t y, uint32_t width, uint32_t height,
+                                   float *rgb);
 // Planar reflections (vk_d3d9.h ModernPlanarBegin): whether a planar view is
 // wanted this frame; the planar image (linear light) and depth surface of the
 // view's size to draw it into, made or remade as needed (false when there is

@@ -2,7 +2,7 @@
 // (src/gfx_gxm/shader/gxm_cg_translate.h), used by
 // scripts/tests/test_vita_cg_translate.py.
 //
-//   cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--far-plane-inside] [--diag-position N] shader.bin
+//   cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--sharp MASK] [--far-plane-inside] [--diag-position N] shader.bin
 //
 // Writes the Cg program to stdout and one line of reflection to stderr, or
 // "refused: <reason>" to stderr and exits 2.
@@ -45,6 +45,10 @@ int main(int argc, char **argv)
         }
         else if (!std::strcmp(argv[i], "--alpha") && i + 1 < argc)
             options.alphaFunc = AlphaFunc(std::strtoul(argv[++i], nullptr, 0));
+        else if (!std::strcmp(argv[i], "--sharp") && i + 1 < argc)
+            options.sharpSamplers = uint16_t(std::strtoul(argv[++i], nullptr, 0));
+        else if (!std::strcmp(argv[i], "--alpha-zero"))
+            options.alphaZero = true;
         else if (!std::strcmp(argv[i], "--far-plane-inside"))
             options.farPlaneInside = true;
         else if (!std::strcmp(argv[i], "--diag-position") && i + 1 < argc)
@@ -54,7 +58,7 @@ int main(int argc, char **argv)
     }
     if (!path)
     {
-        std::fprintf(stderr, "usage: cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--far-plane-inside] [--diag-position N] shader.bin\n");
+        std::fprintf(stderr, "usage: cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--sharp MASK] [--far-plane-inside] [--diag-position N] shader.bin\n");
         return 1;
     }
     std::ifstream file(path, std::ios::binary);
@@ -79,9 +83,13 @@ int main(int argc, char **argv)
     for (const VertexInput &v : r.inputs)
         inputs += (inputs.empty() ? "" : ",") + std::to_string(v.reg) + ":" + std::to_string(v.usage) + "." +
                   std::to_string(v.usageIndex);
-    std::fprintf(stderr, "constants=%u relative=%d samplers=%s varyings=%s inputs=%s kills=%d instructions=%u\n",
+    std::string fromApi;
+    for (const uint16_t number : r.apiConstants)
+        fromApi += (fromApi.empty() ? "" : ",") + std::to_string(number);
+    std::fprintf(stderr,
+                 "constants=%u relative=%d samplers=%s varyings=%s inputs=%s kills=%d instructions=%u api=%s\n",
                  r.floatConstants, r.relativeConstants ? 1 : 0, samplers.c_str(), varyings.c_str(), inputs.c_str(),
-                 r.kills ? 1 : 0, r.instructions);
+                 r.kills ? 1 : 0, r.instructions, fromApi.c_str());
     std::fwrite(cg.data(), 1, cg.size(), stdout);
     return 0;
 }

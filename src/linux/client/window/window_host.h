@@ -87,6 +87,11 @@ public:
     bool OnOwnerThread() const { return sdl::CurrentThread() == owner_; }
     bool Focused() const { return focused_; }
     bool PointerInside() const { return pointerInside_; }
+    // Text input on a platform with an on-screen keyboard (sdl::ScreenKeyboard):
+    // the keyboard is up only while the owner wants text, such as the console
+    // or a menu text field. Elsewhere text input runs for the window's life
+    // and this does nothing. False when SDL refuses to start it.
+    bool SetTextWanted(bool wanted);
     // Hide the native cursor only while this running, focused window owns the
     // pointer. Restores the previously observed SDL visibility on release.
     void SetEngineCursor(bool requested);
@@ -116,7 +121,7 @@ private:
     SDL_Window *window_ = nullptr;
     sdl::ThreadId owner_;
     uint32_t clockOffset_ = 0;
-    bool running_ = true, focused_ = false, startedText_ = false, quitComplete_ = false;
+    bool running_ = true, focused_ = false, startedText_ = false, screenKeyboard_ = false, quitComplete_ = false;
     bool adopted_ = false, minimized_ = false;
     bool relativeRequested_=false,relativeActive_=false;
     std::string relativeError_;

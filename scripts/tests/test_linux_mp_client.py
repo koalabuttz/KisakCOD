@@ -78,6 +78,19 @@ def source_checks(checker):
                     and 'NOT EXISTS "${KISAK_OPENAL_INCLUDE_DIR}/AL/al.h"' in module,
                     "the optional OpenAL header directory is checked for AL/al.h")
     fence = (ROOT / "scripts" / "platform" / "linux" / "platform.cmake").read_text(encoding="utf-8")
+    # The Android block (docs/android.md) has rules of its own: it is taken
+    # out before the desktop 64-bit blocks are read.
+    android_start = 'elseif(KISAK_PLATFORM STREQUAL "android")'
+    android_end = 'elseif(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")'
+    android = fence.split(android_start, 1)[-1].split(android_end, 1)[0]
+    android_refused = android.split("foreach(kisak_not_on_android", 1)[-1].split("endforeach()", 1)[0]
+    checker.require(android_start in fence and android_end in fence
+                    and "KISAK_BUILD_LINUX_MP_CLIENT" not in android_refused
+                    and "KISAK_BUILD_LINUX_SP_GAME" not in android_refused
+                    and "if((KISAK_BUILD_LINUX_MP_CLIENT OR KISAK_BUILD_LINUX_SP_GAME) AND NOT KISAK_BUILD_VULKAN_BACKEND)"
+                    in android,
+                    "the Android configuration builds the client and the campaign only with the Vulkan back end")
+    fence = fence.replace(android_start + android, "")
     d3d9_module = (ROOT / "scripts" / "platform" / "linux" / "native_d3d9.cmake").read_text(encoding="utf-8")
     # No 64-bit block of the fence (macOS, x86_64, aarch64) refuses the client;
     # the 32-bit Arm block after them (armv7, dedicated server only) does.

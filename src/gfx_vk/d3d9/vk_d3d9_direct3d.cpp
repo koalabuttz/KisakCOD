@@ -277,6 +277,18 @@ uint32_t LogDeviceStats(bool reset)
     return count;
 }
 
+uint32_t LogDeviceMemory(const char *when)
+{
+    const FrontLock lock;
+    uint32_t count = 0;
+    for (Device *live : LiveDevices())
+    {
+        live->LogMemory(when);
+        ++count;
+    }
+    return count;
+}
+
 bool Counters(IDirect3DDevice9 *device, DeviceCounters &out)
 {
     const FrontLock lock;
@@ -361,6 +373,33 @@ bool ModernReflectionProbe(IDirect3DDevice9 *device, IDirect3DCubeTexture9 *prob
             owner->Release();
             return live->ModernReflectionProbe(static_cast<CubeTexture *>(probe)->state_.texture);
         }
+    return false;
+}
+
+bool ModernProbeCaptureWanted(IDirect3DDevice9 *device)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernProbeCaptureWanted();
+    return false;
+}
+
+void ModernProbeCapture(IDirect3DDevice9 *device, bool on)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernProbeCapture(on);
+}
+
+bool ModernProbeCaptureRead(IDirect3DDevice9 *device, uint32_t x, uint32_t y, uint32_t width, uint32_t height,
+                            float *rgb)
+{
+    const FrontLock lock;
+    for (Device *live : LiveDevices())
+        if (static_cast<IDirect3DDevice9 *>(live) == device)
+            return live->ModernProbeCaptureRead(x, y, width, height, rgb);
     return false;
 }
 

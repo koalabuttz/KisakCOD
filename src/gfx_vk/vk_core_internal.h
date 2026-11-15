@@ -66,6 +66,9 @@ struct Buffer
     BufferDesc desc{};
     Allocation allocation{};
     std::string name;
+    // Tracked use by shaders (UseBuffer); copies keep their own barriers.
+    VkPipelineStageFlags2 lastStages = VK_PIPELINE_STAGE_2_NONE;
+    VkAccessFlags2 lastAccess = VK_ACCESS_2_NONE;
 };
 
 struct Image
@@ -113,8 +116,13 @@ struct LinearArena
 {
     VkBufferUsageFlags usage = 0;
     VkDeviceSize chunkSize = 0;
+    MemoryKind memory = MemoryKind::Upload;
     std::vector<LinearChunk> chunks;
     uint32_t current = 0;
+    // Whether a request went past the first chunk since the slot's last
+    // recycle, and the recycles in a row where none did (TrimArena).
+    bool spilled = false;
+    uint32_t quietRecycles = 0;
 };
 
 enum class DeferredKind
@@ -199,6 +207,7 @@ struct RecordState : RecordContext
     uint64_t submitted = 0; // last serial submitted
     uint64_t presents = 0;  // presents made
     bool rebuild = false;   // a present found the swapchain out of date or suboptimal
+    bool surfaceLost = false; // a present found the surface gone (VK_ERROR_SURFACE_LOST_KHR)
 };
 
 // Packets start at multiples of kRecordAlign in memory from operator new,
@@ -231,6 +240,7 @@ struct RecordProgress
     uint64_t submitted = 0;
     uint64_t presents = 0;
     bool rebuild = false;
+    bool surfaceLost = false;
     uint64_t chunksDone = 0;
 };
 
@@ -325,7 +335,19 @@ public:
     std::vector<VkSemaphore> renderDone; // one per swapchain image
     bool rebuildPending = false;
     bool resizePending = false;
+    // The swapchain was built with an identity preTransform on a rotated
+    // surface (Android, a panel whose own orientation is not the game's):
+    // the compositor turns the picture, and presents report
+    // VK_SUBOPTIMAL_KHR for that alone, which must not rebuild every frame.
+    bool transformLeftToCompositor = false;
+    // Frames begun on such a swapchain: every 32nd compares the surface's
+    // size with the swapchain's, since Android reports no resize to it.
+    uint32_t turnedFrames = 0;
     bool windowDetached = false; // DetachWindow: no swapchain or surface any more
+    // The window system took the surface away (Android destroys the window of
+    // an app sent to the background): BeginFrame skips frames until
+    // RenewSurface gets a new one from the window.
+    bool surfaceLost = false;
 
     FrameSlot frames[kFramesInFlight];
     uint32_t frameIndex = 0;
@@ -337,6 +359,7 @@ public:
     bool recordingOpen = false;      // a command buffer is being recorded
     uint64_t recordingId = 0;        // counts command buffers begun
     bool inPass = false;
+    bool inComputePass = false; // BeginComputePass ... EndComputePass
     int currentTimedPass = -1;
     bool bufferCopiesOpen = false;            // see CloseBufferCopies
     std::vector<Image *> pendingUploads;      // uploadPending images
@@ -423,6 +446,11 @@ bool Check(Core &core, VkResult result, const char *what);
 const char *ResultName(VkResult result);
 BuildResult BuildSwapchain(Core &core);
 bool SurfaceExtent(Core &core, VkSurfaceCapabilitiesKHR &caps, VkExtent2D &extent);
+// After surfaceLost, with nothing recorded or in flight: lets go of the
+// swapchain and the old surface, then asks the window for a new surface. True
+// once there is one (the swapchain is rebuilt next); false while the window has
+// none (or the core failed).
+bool RenewSurface(Core &core);
 
 // vk_memory.cpp
 // own: a memory allocation of its own (offset 0) whatever the size.

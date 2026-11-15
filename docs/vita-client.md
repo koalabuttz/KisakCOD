@@ -45,15 +45,17 @@ cmake --build build-vita-mp --target KisakCOD-mp-vpk
 Hosted CI: the **PS Vita multiplayer client** job of the PS Vita workflow
 (`.github/workflows/build-kisakcod-vita.yaml`) builds Debug
 and RelWithDebInfo. It runs the server's float checks (no fused multiply-add, no
-NEON float outside the vector skinning path, which has to be there and be
-NEON) and link checks (weak pthread references, the main stack size), and
+NEON float outside the vector skinning path, the static culling walk and the MP3 decoder, which all
+have to be there and be NEON) and link checks (weak pthread references, the main stack size), and
 uploads the RelWithDebInfo `.vpk`. It also runs the controls' and the sound's
 host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`), the run
 plan's, the GPU heap's, the frame time figures', the GPU progress bookkeeping's,
-the GPU watch's and the shader translator's (`test_vita_run_plan.py`,
-`test_vita_gxm_heap.py`, `test_vita_frame_time.py`,
-`test_vita_gpu_progress.py`, `test_vita_gpu_watch.py`,
-`test_vita_cg_translate.py`), and the static model cache's size arithmetic
+the GPU watch's, the idle alpha test's and the shader translator's
+(`test_vita_run_plan.py`, `test_vita_gxm_heap.py`,
+`test_vita_frame_time.py`, `test_vita_gpu_progress.py`,
+`test_vita_gpu_watch.py`, `test_vita_idle_alpha_test.py`,
+`test_vita_cg_translate.py`), the 3D picture size governor's
+(`test_vita_scale_governor.py`), and the static model cache's size arithmetic
 (`test_static_model_cache_sizes.py`).
 
 ## Running
@@ -123,7 +125,8 @@ had the room; a console has no memory for either:
   pool, so a map's buffers and textures can all be made and the
   `gpu memory by use` line says what they come to;
 - `-DKISAK_VITA_HEAP_MB=128` at configure time builds a client with a 128 MB
-  heap instead of 64.
+  heap instead of 60. (An empty value, the default, means 60; a `64` left in
+  an older build folder's cache, the former default, is read as 60 too.)
 
 ## What it builds
 
@@ -169,9 +172,9 @@ Static data of the RelWithDebInfo build (2026-11-09):
 
 Other large static arrays in the client:
 - `cls` 2.9 MB, `odeGlob` 2.8 MB, `gfxBuf` 2.3 MB (1.5 MB since the smaller skinned caches below), `s_backEndData` 2.2 MB, `tess` 2.2 MB;
-- `clients` 1.7 MB, `g_streamState` 1.7 MB.
+- `clients` 1.7 MB, `g_streamStates` 0.4 MB (1.7 MB until 2026-11-15, when the sound driver kept an MP3 decoder's 33 KB of state for each of its 53 channels; only 13 of them stream).
 
-The heap and the engine reservations are the server's for now: a 64 MB heap, the 128 MB zone arena and the hunks. Textures go to the GPU's own memory (CDRAM, about 112 MB), not main memory.
+The heap and the engine reservations are the server's for now: a 64 MB heap (60 MB in the client since the 16 MB parameter buffer), the 128 MB zone arena and the hunks. Textures go to the GPU's own memory (CDRAM, about 112 MB), not main memory.
 
 What the menu takes (run K on the console, and the same build in Vita3K, 2026-11-10):
 - **Heap:** 55 of 64 MB once `common_mp` is loaded. About 40 MB of that is the menu's 702 loaded sounds, held as 16-bit PCM as the fastfiles hold them. At the failed map load the console's heap stood at 60.7 MB. That build kept every sound that way; with `snd_adpcm 1`, the default since, the same menu holds 23.8 MB in Vita3K (run S, under Sound below), which is not measured on a console yet.
@@ -591,6 +594,66 @@ reads a constant bit rate file through at its start and prints both counts.
 The host test holds the size's answer against the decoder's own count on
 made-up files, and `--survey` does the same for real ones.
 
+**Streamed sounds on a thread** (`snd_streamThread`). The driver decoded a
+stream where it queued it: on the main thread, 8192 frames at a time, each
+time one of the stream's four OpenAL buffers had played out. On the Vita that
+is 10 ms and more of MP3 decoding in one frame, every 186 ms for each stream
+that plays: console run BM (2026-11-15) timed the sound update at 3.3 ms a
+frame at the busy view of `mp_crash`, with single updates of 23 ms, on a
+main thread that is busy 27 ms of a 37 ms frame. A stream that starts part of
+the way in, as the ambient sounds do, also decoded its way to that place
+before the start returned.
+
+With `snd_streamThread 1`, the default on the Vita, a thread named `sound
+decode` does that work. Each stream channel has a feed
+(`src/sound/snd_stream_feed.h`): the thread decodes into it, two chunks
+ahead, and the sound update only hands finished chunks to OpenAL. The thread
+runs one priority step below the engine's threads, so it decodes when a core
+has nothing else to do; the 0.7 s of sound a stream has queued is its margin.
+What changes for the game:
+
+- A stream's first sound is queued a frame or two after its start, when the
+  thread has decoded it. The driver remembers that the source was told to
+  play and plays it then (`AL_PlayStream`); a stream with nothing queued yet
+  is not taken for one that has ended.
+- The way to the starting place is the thread's as well. The MP3 decoder
+  reaches a frame by decoding everything before it, which the feed does
+  itself, a chunk's worth at a time between the other streams' chunks, so a
+  stream that starts 100 s in neither holds up the streams that play nor a
+  stop of its own channel.
+- Stopping a stream waits until the thread is out of its decoder: a chunk is
+  decoded in pieces of 2048 frames and the thread gives up at the next piece,
+  so that is a wait of 3 ms at the most, and none most of the time.
+- A stream's file inside an `.iwd` is always read through a file handle of
+  its own (`FS_FOpenFileReadStream`). It used to read through the archive's
+  one handle when no other file of that archive was open, and every later
+  open in that archive seeks and reads on that handle from the main thread.
+
+The MP3 decoder itself (dr_mp3) is built for NEON on the Vita: its synthesis
+filter and transforms work on four floats at a time. Until 2026-11-15 it ran
+on scalar VFP like the rest of the port, because the toolchain file's
+`-mfpu=vfpv3` hid the CPU's NEON from it. The file it is built in
+(`src/sound/snd_driver_load_obj.cpp`) gets `-mfpu=neon`
+(`scripts/platform/vita/mp_client.cmake`); the samples are the scalar
+build's to within one step of 16 bits
+(`scripts/tests/test_mp3_neon_decode.py`, under `qemu-arm` in the Linux
+workflow's armv7 job). Not timed on a console yet.
+
+`snd_streamThread 0` gives the decoding back to the main thread, at once and
+also for streams that are playing: the same feed is then stepped by the sound
+update, a chunk at a time as chunks are wanted. That is the default on the
+other platforms, where the decoding is too small to see. `snd_alDebug 1`
+adds to its 5 second line how many chunks the thread decoded, how many the
+main thread did, and how often a playing stream down to its last buffer found
+none ready (`late`). `scripts/tests/test_snd_stream_feed.py` runs the feed and its
+thread on the host under the address, undefined-behaviour and thread
+sanitizers, and `test_openal_channel_stop.py` runs the driver's side against
+OpenAL both ways.
+
+The same change takes 1.3 MB off the client's static memory: the driver kept
+decoder state for all 53 sound channels and now keeps it for the 13 that
+stream.
+
 **Loaded sounds in memory** (`snd_adpcm`). The OpenAL driver keeps every
 loaded sound as 16-bit PCM, and that is also how the fastfiles hold the sounds
 counted so far: all 702 the menu loads and the nine Crash adds came as 16-bit
@@ -740,7 +803,7 @@ Builds with `KISAK_GFX_GXM` leave the Vulkan parts of `vk_d3d9.h` and
 
 What the GXM back end does so far (step 2d):
 - The device owns the screen and reserves the GPU memory pools: nearly all of
-  CDRAM, 20 MB of main memory, and a 12 MB parameter buffer.
+  CDRAM, 30 MB of main memory, and a 16 MB parameter buffer.
 - Textures, surfaces and buffers live in those pools with D3D9's lock rules.
   Textures go to CDRAM first, dynamic buffers to main memory first.
 - Shaders are translated to Cg and compiled on the Vita (below).
@@ -811,19 +874,47 @@ What the GXM back end does so far (step 2d):
   the uniform buffers are neither reserved nor written when both programs
   and every constant are the last draw's (sceGxm keeps a reserved default
   uniform buffer for a program until the program is set anew; the back end
-  drops both when either program changes and at every scene's start, and
-  always writes for a pixel shader that takes a volume texture's depth).
+  drops both when either program changes and at every scene's start).
   Draws a run diagnostic looks at or changes take the old path. The quit
   summary says how often each applied: `draw work left out: N draws kept
   the last draw's programs and fixed state; N of N others found their
   programs in the table; of N texture binds N were set already and N set
-  their filters anew; of N uniform buffers N were the last draw's`. A file
+  their filters anew; of N uniform buffers N were the last draw's; of N
+  draws with textures N had the last draw's and set none`. A file
   named `no-draw-reuse` in the folder of the compiled programs turns all of
   them off (the log says so at start-up), so that a console run can tell a
   fault of theirs without another build. Console run AR (2026-11-14) put a
   draw at about 10.5 us of the render thread's time, of which working out
   its programs and its fixed state (viewport, clip, cull, depth, stencil,
   bias) took about 4.
+- **Fragment constants kept for the models.** A model's lit pixel shader
+  reads its lighting from a volume texture, which the back end keeps as a
+  2D texture with the depth in a uniform, and the rule above used to
+  write a new fragment uniform buffer for every draw of such a program.
+  Console run CP (2026-11-15) put that at about 4 us a model draw on the
+  render thread, 215 draws at the busy view of `mp_crash`, with waits
+  for the fragment ring on top: 33.4 ms a frame against 28.7 with the
+  read left out. Now the buffer serves on while the volumes bound have
+  the depths written into it, and a draw after a pixel constant changed
+  keeps it when none of the constants its shader reads did (the
+  translator lists them: `apiConstants` in its reflection). The picture
+  is the same. The log's `fragment constants` lines count the buffers
+  written and kept by each rule and time the reserve and the write on
+  the timed draws. Empty files `no-frag-keep-depth` and
+  `no-frag-keep-same` in the folder of the compiled programs, or
+  `vita_gxm <name> 1`, turn the rules off one by one. `frag-direct-write`
+  (off unless asked for) copies the constants into the buffer itself in
+  place of `sceGxmSetUniformDataF`, for programs where a first copy
+  matched sceGxm's own, to measure what that call costs.
+- **The last draw's textures kept.** Going through a draw's textures
+  was the largest part of a draw in the back end (about 2.1 us of 7.5 in
+  console run CP), also when every one of them was set already. The
+  D3D9 front now counts the changes to what a bind reads (a sampler's
+  texture or state, a texture made anew, moved to other memory, left
+  unfilled or destroyed), and a draw that finds the count, its pixel
+  program, the mip bias and the frame as the last draw's textures were
+  set with in the same scene sets none. An empty file `no-texture-keep`,
+  or `vita_gxm no-texture-keep 1`, turns it off.
 - **The last draw's state kept.** The D3D9 front counts every call that
   changes what a draw's programs and fixed state come from (a render
   state, a shader, the vertex declaration, a stream's stride, the
@@ -836,6 +927,41 @@ What the GXM back end does so far (step 2d):
   change only their buffers and constants. An empty file `no-same-state`
   in the folder of the compiled programs, or `vita_gxm no-same-state 1`,
   turns it off.
+- **No discard where the alpha test changes nothing.** The game's blended
+  materials (decals, smoke, most effects) ask for the alpha test "greater
+  than 0" beside their blend, which on a PC spares the blend of pixels
+  that add nothing. The back end makes an alpha test a `discard` in the
+  fragment program, and a tile GPU has to run such a program before it
+  knows which pixels the primitive covers, which PowerVR's own advice is
+  to avoid. Console run CD (2026-11-15) found
+  the decals of one view of `mp_crash`, 122 draws of 1570, at 16.7 ms of
+  the frame's 45.8 ms of fragment work. When the test rejects only alpha
+  0, the blend adds nothing for alpha 0 and the draw writes neither depth
+  nor stencil, the picture is the same without the test, so the draw
+  takes the program without the discard
+  (src/gfx_gxm/gxm_idle_alpha_test.h; `test_vita_idle_alpha_test.py`
+  draws every such state both ways). The quit summary counts the draws
+  (`alpha tests: ...`). An empty file `no-alpha-test-drop` in the folder
+  of the compiled programs, or `vita_gxm no-alpha-test-drop 1`, turns it
+  off. Console run CH (2026-11-15) measured 0.7 to 0.8 ms a frame at two
+  views of `mp_crash` (34.54 against 35.36 ms, and 16.73 against
+  17.45 ms).
+- **Zero instead of a discard for the other blended draws.** A census of
+  the same view on a PC (2026-11-15) found that most of the map's decals
+  do not blend with the source alpha: 34 of their 50 materials carry
+  premultiplied colour (blend One, InvSrcAlpha) with the alpha test
+  "greater than 0", so a pixel of alpha 0 may still add colour and the
+  rule above leaves their discard in. For a draw that blends, writes
+  neither depth nor stencil and has a blend whose result for a source of
+  (0, 0, 0, 0) is the picture as it was (destination factor One,
+  InvSrcAlpha or InvSrcColor, operation add or reverse subtract), the
+  fragment program writes (0, 0, 0, 0) for a pixel the test rejects
+  where it would discard it (`alphaZero` in the translator's options,
+  `AlphaTestCanZero` in gxm_idle_alpha_test.h). The picture is the same
+  for any test and reference value, and the program has no discard. The
+  quit summary counts these draws apart. An empty file
+  `no-alpha-test-zero`, or `vita_gxm no-alpha-test-zero 1`, turns it
+  off. What it saves on the console is not measured yet.
 - **Depth first.** The scene's depth is always drawn before its lit pass
   on the Vita (src/gfx_gxm/gxm_engine_options.h), whatever r_depthPrepass
   says, so that the GPU skips hidden pixels of the lit pass early. Console
@@ -905,6 +1031,107 @@ What the GXM back end does so far (step 2d):
   the copy it makes anyway, so the stretch costs no scene of its own; an
   empty file `no-filter-stretch` in the folder of the compiled programs, or
   `vita_gxm no-filter-stretch 1`, keeps the two scenes.
+- **A 3D picture that shrinks only where the GPU needs it.** Console run
+  BV (2026-11-15, mp_crash, busy view) found the frame held by the GPU's
+  pixel work at the full size (35.5 ms a frame, 6.6 to 8.4 ms of it the CPU
+  waiting for the frame before last) and by the CPU at 0.7 (29.6 ms, no
+  wait). With `vita_sceneScaleMin` (0.5 to 1; 1 by default, which is off)
+  under `vita_sceneScale`, the back end picks the size between the two
+  frame by frame (`src/gfx_gxm/gxm_scale_governor.h`), in steps of 1/32 of
+  the screen. Its measure is the time a frame waits for the GPU: the frame
+  less its waits is what the CPU needs, and a frame with waits took what
+  the GPU needs. Its goal is a frame every refresh (16.7 ms) where the CPU
+  fills one in that time and every second refresh (33.3 ms) elsewhere,
+  since with vsync a frame between the two is no smoother than 33.3 ms;
+  `vita_sceneScaleGoal` names another goal in ms, and a goal the CPU does
+  not reach means "the GPU must not hold the frame at all". Windows of 12
+  frames, the 2 longest and 2 shortest left out: over the goal, the
+  picture's area shrinks by the share that is over (times 1.4, as not all
+  GPU time is pixel work); when a step more is known to fit, it grows a
+  step; when the GPU's time is not known because it did not hold the
+  frame, a step more is tried, and a try that fails is taken back and
+  doubles the wait before the next (2 to 32 seconds). A goal of 16.7 ms
+  that the smallest picture does not reach is given up for 16 seconds,
+  doubled by each loss up to 128. The size costs nothing to change: the
+  targets keep the screen's size and only the viewport moves. The log's
+  `3D picture size` line, beside the frame time line, gives the sizes
+  picked. While the depth pass governor tries the scene the other way the
+  size stays as it is, so that the try is timed at one size; the size then
+  follows the way that was kept. A game server can set neither dvar.
+  Options > Game has the setting as "Dynamic Resolution" (Off, or down to
+  85, 70 or 50 %) and `vita_sceneSharpen` as "Sharpen Scaled Picture"
+  ([options-menu.md](options-menu.md)); both are saved in the player's
+  settings.
+  `scripts/tests/test_vita_scale_governor.py` runs it on a model of the
+  console with run BV's times.
+- **Keeping a smaller 3D picture sharp.** The Vita has none of the
+  upscalers a PC pairs with a moving resolution (they need motion vectors
+  and a history of frames), so the smaller picture is kept close to the
+  full one in three plain ways, each with its own switch
+  (`src/gfx_gxm/gxm_engine_options.h`):
+  - *Mip bias, on by default.* A picture drawn smaller makes the GPU pick
+    smaller mip levels, and the stretched picture would show blurrier
+    textures than the full-size one. While the picture is scaled, every
+    mipped texture's level of detail is biased by log2 of the scale, in
+    sceGxm's steps of 1/8 of a level (one step at 0.92, four at 0.7), so it
+    samples the texels the full-size picture would have. An empty file
+    `no-mip-bias`, or `vita_gxm no-mip-bias 1`, turns it off. The start-up
+    line `diag: a fresh texture's LOD bias reads N` gives the value the
+    bias counts from.
+  - *Width only* (`vita_sceneScaleWidthOnly 1`). The picture keeps its
+    height and gives up the same share of its pixels in width alone: the
+    width's factor is the scale squared (0.85 at a scale of 0.92), no less
+    than a half. Every line of the screen is still drawn.
+  - *A sharpening stretch* (`vita_sceneSharpen 1`). The stretch is drawn
+    by a program of the back end's that reads the picture at each pixel
+    and one texel up, left, right and down, adds 0.2 of the pixel's
+    difference from its neighbours and holds the result between the
+    darkest and the brightest of the five, so an edge gets steeper and
+    gains no halo. As a stretch of its own it costs the copy's and the
+    stretch's two scenes again. Where the film filter's quad does the
+    stretch, that quad is drawn with a variant of the filter's own
+    program whose reads of the picture go through the same filter
+    (`gxm_cg_translate.h`, `Options::sharpSamplers`), and no scene is
+    added; `no-filter-sharpen`, or `vita_gxm no-filter-sharpen 1`, goes
+    back to the stretch of its own. Until the variant is compiled (once,
+    then it is in the program cache) the quad is drawn plain.
+  The HUD and all text are drawn after the stretch at 960x544 in every
+  case. The `3D picture size` log line counts the biased texture views and
+  the sharpened stretches. Console run CC (2026-11-15, mp_crash, busy
+  view at 0.85): the mip bias costs nothing (33.05 ms a frame without,
+  33.14 with), width only costs nothing (32.91), and the sharpening
+  stretch of its own costs 2.3 to 3.1 ms a frame, which is all that 0.85
+  saves there (35.82 ms at the full size). The sharpening in the filter's
+  quad is not measured yet.
+- **Three scenes a frame instead of five.** Each scene makes the GPU load
+  the whole colour and depth targets and store them again, whatever is
+  drawn: console run V measured 2.25 ms for a scene with no draw, and
+  console run BX (2026-11-15) 16.9 ms of fragment work a frame in a view
+  of 65 draws. The frame of a map with a film colour filter had five: a
+  clear of the back buffer, the depth pass, the lit and emissive passes,
+  the copy the filter reads, and the filter with the HUD. Three choices,
+  each with the same picture (src/gfx_gxm/gxm_engine_options.h;
+  src/gfx_d3d/rb_draw3d.cpp, RB_StandardDrawCommands):
+  - the depth pass's scene clears the depth and stencil itself and the lit
+    pass's scene clears the colour, so the scene that held only the clear
+    is gone (`no-prepass-clear` turns it off);
+  - the depth pass's scene is begun with sceGxm's disabled colour surface,
+    since the pass writes no colour and nothing reads its colour target,
+    so that scene loads and stores no colour (`no-depth-only-scene`). The
+    engine marks the pass's draws for the back end, which keeps them in a
+    scene of their own even when the lit pass draws to the same surface:
+    depth and lit passes in one scene cost the GPU more (console runs AA
+    and AD);
+  - when the film filter is the view's only post effect, the 3D passes
+    draw into the image the filter reads and not into the back buffer, so
+    the copy between the two is not made (`no-scene-in-copy`). Depth of
+    field, glow, blur and the debug views keep the back buffer and the
+    copy, and so does a view that reads that image while it draws
+    (distortion, shadow cookies).
+
+  The three names are empty files in the folder of the compiled programs,
+  or `vita_gxm <name> 1` while the game runs. The log's `gpu watch` line
+  says how many scenes a frame had.
 - **The CPU a frame ahead of the GPU.** The CPU fills frame N while the GPU
   still draws frame N - 1, so a frame costs the longer of the two times and
   not their sum. Console run U (2026-11-11, mp_crash) had shown them taking
@@ -925,7 +1152,8 @@ What the GXM back end does so far (step 2d):
     the first discard that finds none makes one. On mp_crash that is one
     more skinned cache (3 MB), dynamic index buffer (2 MB), pretess buffer
     and dynamic vertex buffer (1 MB each) and some small ones, which is why
-    the main pool grew from 20 to 26 MB. A texture the game rewrites whole
+    the main pool grew from 20 to 26 MB (and to 30 with the 16 MB parameter
+    buffer, below). A texture the game rewrites whole
     every frame while the GPU samples it (the model lighting volume, 1 MB)
     gets a second piece the same way. Only when there is no piece and no
     room for one does a lock still wait for the whole GPU.
@@ -949,29 +1177,46 @@ What the GXM back end does so far (step 2d):
   file `no-vsync` there shows each frame without waiting for the display's
   refresh (it tears): for measuring what that wait costs. With two frames
   on their way, sceGxm's parameter buffer and the context's ring buffers
-  hold the geometry, draw calls and uniform buffers of both at times. The
-  parameter buffer is 12 MB: console run AD found 8 MB too small (the GPU
-  was 10 to 19 ms a frame slower at the same view, 14 to 18%, in every
-  phase; with David's settings 86-91 against 68 ms a frame), at the cost of
-  4 MB of CDRAM. For comparing, `small-parameter-buffer` gives the old
-  8 MB, `big-parameter-buffer` 16 MB (4 MB less for the CDRAM pool, which
-  may not hold every map).
-  sceGxm's ring buffers are 256 KB for draw calls, 2 MB for vertex
-  constants and 1 MB for fragment constants: the first and the last at
-  twice sceGxm's default. A draw that finds a ring full waits inside sceGxm
-  until the GPU has finished a scene, and no line of the log names that
-  wait. Console run BV (2026-11-15, the busy view of `mp_crash`, 1500
-  draws a frame) found it: with the default rings about one timed draw a
-  frame took 5 to 11 ms, in `sceGxmDraw` or where the fragment constants
-  are reserved (`N timed draws took over 2 ms` on the frame time line, 7 to
-  18 in 10 s, and those two steps of a draw's parts at 3.5 to 9.5 us), and
-  with all three rings doubled none did, the two steps cost 2.4 and 0.7 us
-  and the frame was 37.1 against 35.5 ms. The time left is the pacing
-  wait: that view is bound by the GPU at full size. `small-gxm-rings`
-  gives sceGxm's defaults (and the main pool 1 MB less), `big-gxm-rings`
-  twice the default for the vertex constants too (2 MB more of main
-  memory), for comparing. The sizes as they are now have not run on a
-  console yet.
+  hold the geometry, draw calls and uniform buffers of both at times.
+  The parameter buffer, which comes out of CDRAM, is 16 MB, sceGxm's own
+  default. The GPU's vertex job for one frame runs beside the fragment job
+  of the frame before, and the buffer holds the binned geometry of both.
+  When both do not fit, the vertex job waits until the frame before is
+  drawn and the two jobs take turns. Console run AD found 8 MB too small
+  at every view (12 MB was 10 to 19 ms a frame faster, 14 to 18%, in every
+  phase). Console run CS (2026-11-15, full 3D size) found 12 MB too small
+  at mp_crash's heaviest view (`setviewpos -256 2272 291 270 0`): the frame
+  there flipped by itself between 38 ms and 49 to 51 ms, the GPU's vertex
+  job between 22 and 48 ms, and a saving on the CPU tipped it to the slow
+  side, so that a faster render thread measured as a slower frame. With
+  16 MB every window stayed at 37 to 38 ms; with 8 MB every window took 49
+  to 52. The 4 MB come out of the CDRAM pool, which on mp_crash then peaks
+  at 92.9 of 96 MB with about 1 MB gone over to main memory, so the main
+  pool grew from 26 to 30 MB and the client's heap went from 64 to 60 MB
+  (mp_crash uses 34). For comparing, an empty file in the folder of the
+  compiled programs gives another size: `small-parameter-buffer` 8 MB,
+  `mid-parameter-buffer` the former 12 MB, `big-parameter-buffer` 20 MB.
+  At this view a timing is only worth reading with the `gpu watch` line
+  beside it: a vertex job of 40 ms or more means the two jobs took turns.
+  sceGxm's ring buffers have its default sizes: 128 KB for draw calls,
+  2 MB for vertex constants and 512 KB for fragment constants. A draw that
+  finds a ring full waits inside sceGxm until the GPU has finished a
+  scene, and no line of the log names that wait. Console run BV
+  (2026-11-15, the busy view of `mp_crash`, 1500 draws a frame) found it:
+  about one timed draw a frame took 5 to 11 ms, in `sceGxmDraw` or where
+  the fragment constants are reserved, and with the rings doubled none
+  did. PR 376 doubled the draw calls' and the fragment constants' rings
+  for that; console run BY measured about 1 ms a frame at that view. But
+  the wait is also what keeps the CPU from handing the GPU more than it
+  can take. Console run CJ (the same day, three starts of one build, a
+  heavier view of 1570 draws at full size) measured 40.8, 44.1 and 41.9 ms
+  a frame with the default rings against 56.7, 50.4 and 62.1 ms with the
+  two doubled (and 59.1, 49.2, 49.5 with all three doubled): the GPU's
+  vertex work took 22 to 26 ms against 38 to 61, with the same fragment
+  work (36 to 41 ms) and the same CPU time on every thread. The busy view
+  was 35.0 ms against 34.2. So the defaults are back. `double-gxm-rings`
+  gives the two doubled rings (and the main pool 1 MB more),
+  `big-gxm-rings` all three doubled (3 MB more), for comparing.
 - **What the CPU pays for GPU memory.** The main pool is memory the CPU
   does not cache (`SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE`), as Sony's
   samples have it, and CDRAM is not cached either. The engine skins
@@ -1289,7 +1534,8 @@ Its sums are plain arithmetic (`gxm_gpu_watch.h`), tested on the host by
 yet.
 
 The display's own buffers take about 9 MB of CDRAM and 2.6 MB of main memory.
-The parameter buffer, which sceGxm takes from main memory itself, adds 16 MB.
+The parameter buffer, which sceGxm takes itself, adds 16 MB (out of CDRAM:
+in console run CS the game's CDRAM pool came out at 112 MB less the buffer).
 The probe measures what is left.
 
 ## Stages

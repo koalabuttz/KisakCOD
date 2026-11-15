@@ -70,6 +70,11 @@ struct ModernTuning
     float aoEdge = -1.0f;
     float ssrDistance = -1.0f;
     float ssrThickness = -1.0f;
+    int fog = -1;              // volumetric fog (KISAK_VK_MODERN_FOG)
+    float fogSun = -1.0f;      // the sun's share of the fog's light, 0 to 1 (KISAK_VK_MODERN_FOG_SUN)
+    float fogScatter = -1.0f;  // forward scattering, 0 to below 0.95 (KISAK_VK_MODERN_FOG_SCATTER)
+    float fogSpots = -1.0f;    // how brightly spot lights light the fog, 0 to 4 (KISAK_VK_MODERN_FOG_SPOTS)
+    int fogFroxels = -1;       // the fog from a froxel volume, not a march (KISAK_VK_MODERN_FOG_FROXELS)
     int softShadows = -1;         // soft sun shadows (KISAK_VK_MODERN_SOFT_SHADOWS)
     float shadowSoftness = -1.0f; // the sun's apparent size, degrees (KISAK_VK_MODERN_SHADOW_SOFTNESS)
     int softSpotShadows = -1;     // soft spot-light shadows (KISAK_VK_MODERN_SOFT_SPOT_SHADOWS)
@@ -88,6 +93,7 @@ enum ModernDebugView : int
     ModernDebugNormals = 3,
     ModernDebugAo = 4,
     ModernDebugReflections = 5,
+    ModernDebugFog = 6,         // the light the volumetric fog adds, over grey
 };
 
 // Settings the program may change while a device exists, so that one run can
@@ -216,6 +222,13 @@ bool Counters(IDirect3DDevice9 *device, DeviceCounters &out);
 // Any thread. Returns how many devices there were.
 uint32_t LogDeviceStats(bool reset);
 
+// Logs the memory every live device holds through its host, one `memory`
+// line each: device-local and mapped memory, live buffers and images, and
+// each memory heap's share (the engine calls it at each map load, with
+// `when` as "map load mp_crash"). Any thread. Returns how many devices there
+// were.
+uint32_t LogDeviceMemory(const char *when);
+
 // The window is about to be destroyed (WM_DESTROY on Windows, before
 // SDL_DestroyWindow elsewhere). Every device the front made for it lets go of
 // its Vulkan swapchain and surface now, while the window still exists; a
@@ -246,6 +259,44 @@ struct ModernSceneView
         float cutoff = 0.0f;       // display value (0 to 1) below which nothing glows
         float desaturation = 0.0f; // 0 keeps the colour, 1 makes the glow grey
     } glow;
+    // The view's fog as the game's shaders apply it, and the sun's shadow
+    // map: the back end lights the fog where the sun reaches it (volumetric
+    // fog, docs/vulkan-modern.md).
+    struct Fog
+    {
+        bool on = false;               // the map's fog is drawn and has a density
+        float color[3] = {};           // display values, 0 to 1
+        float density = 0.0f;          // what reaches the eye through d units: 2^(-density (d - start)), at most 1
+        float start = 0.0f;            // world units
+        float origin[3] = {};          // the camera, world units
+        float sunDirection[3] = {};    // towards the sun, world space
+        // The sun's shadow is drawn: the lookup below is set.
+        bool sunShadowed = false;
+        // The sun's shadow map (one of this device's textures, depth): when
+        // the sun's shadow is in it or a spot light's tile is, else null.
+        IDirect3DTexture9 *shadowMap = nullptr;
+        float shadowLookup[4][4] = {}; // world (p * M) to near xy, depth z (lit at most stored), partition w
+        float switchPartition[4] = {}; // far xy = near xy * w + xy
+        float shadowmapScale[2] = {};  // the far partition's edge fade
+        // The spot lights' shadow map, when a spot light's tile is in it.
+        IDirect3DTexture9 *spotShadowMap = nullptr;
+        // The view's shadowed spot lights, as the lit shaders read them.
+        struct Spot
+        {
+            float origin[3] = {};
+            float radius = 0.0f;
+            float dir[3] = {};             // from a lit point towards the light, the cone's axis
+            float exponent = 0.0f;         // the cone's falloff power, 0 none
+            float cosHalfFovOuter = 0.0f;
+            float cosHalfFovInner = 0.0f;
+            float fade = 0.0f;             // how far the shadow map counts, the rest lit
+            float color[3] = {};           // diffuse colour, display values
+            float shadowLookup[4][4] = {}; // world (p * M) to the tile, projective: xy / w, depth z / w
+            bool inSunMap = false;         // the tile is in shadowMap, else in spotShadowMap
+        };
+        int spotCount = 0;
+        Spot spots[4];
+    } fog;
 };
 enum class ModernResult
 {
@@ -336,6 +387,19 @@ void SetModernLitInputs(IDirect3DDevice9 *device, const ModernLitInputs *inputs)
 // texture is not an 8-bit colour cube with levels, or on a back end without
 // a Modern path. Filtering a probe again gives the same levels.
 bool ModernReflectionProbe(IDirect3DDevice9 *device, IDirect3DCubeTexture9 *probe);
+// Re-capturing the reflection probes with the Modern path's own light
+// (docs/vulkan-modern.md "Reflection probes"): whether it is wanted
+// (KISAK_VK_MODERN_PROBES_CAPTURE=1, with linear light and the probe filter;
+// false on a back end without a Modern path). While capturing is on, each
+// scene's linear-light image is read back before its bloom, exposure and
+// tonemap; ModernProbeCaptureRead gives a rectangle of the last one (in
+// pixels of render target 0) as linear light, rgb floats in rows from the
+// top, after waiting for the GPU. False when none was read back, or the
+// rectangle is outside it.
+bool ModernProbeCaptureWanted(IDirect3DDevice9 *device);
+void ModernProbeCapture(IDirect3DDevice9 *device, bool on);
+bool ModernProbeCaptureRead(IDirect3DDevice9 *device, uint32_t x, uint32_t y, uint32_t width, uint32_t height,
+                            float *rgb);
 // A planar reflection view (docs/vulkan-modern.md "Planar reflections"): the
 // scene seen in a mirror laid on one plane, which the renderer draws after
 // the main view.

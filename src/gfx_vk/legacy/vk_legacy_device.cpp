@@ -242,6 +242,16 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
             Log(*device, "shader cache %s: %s", desc.shaderCachePath, message.c_str());
         }
     }
+    // UBYTE4 vertex data (model texcoords and normals) where the device cannot
+    // read it as it is: fed as UNORM and scaled back in the vertex shader.
+    device->byteStandIn =
+        Features(core).forceByteStandIn || !VertexFormatSupported(core, VK_FORMAT_R8G8B8A8_USCALED);
+    if (device->byteStandIn)
+        Log(*device, "the device reads no R8G8B8A8_USCALED vertex data: UBYTE4 elements are read as UNORM and "
+                     "scaled back in the vertex shaders");
+    // D3DCOLOR elements (vertex colours) have no stand-in yet.
+    if (!VertexFormatSupported(core, VK_FORMAT_B8G8R8A8_UNORM))
+        Log(*device, "the device reads no B8G8R8A8_UNORM vertex data: vertex colours read wrong");
     // Pipelines built ahead: before any shader is created, so each one
     // created queues what the list has for it.
     StartAhead(*device, desc.pipelineListPath);
@@ -250,6 +260,12 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     // D3DRS_DEPTHBIAS is in units of the depth range; Vulkan's constant factor
     // is in units of the format's smallest step.
     device->depthBiasScale = device->depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ? float(1u << 24) : float(1u << 23);
+    // Shadow maps are depth textures that D3D9 samples with a linear filter
+    // (hardware PCF); Vulkan defines that only where the format allows it.
+    device->depthFilterLinear =
+        FormatSupports(core, device->depthFormat, VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT);
+    Log(*device, "depth textures: format %d, linear filtering %s", static_cast<int>(device->depthFormat),
+        device->depthFilterLinear ? "supported" : "NOT supported: shadow maps are sampled with the nearest texel");
     device->dynamicUniforms = !Features(core).staticUniforms;
     device->uniformAlignment = static_cast<uint32_t>(std::max<VkDeviceSize>(16, Limits(core).minUniformBufferOffsetAlignment));
     device->verifyShortcuts = ValidationEnabled(core);

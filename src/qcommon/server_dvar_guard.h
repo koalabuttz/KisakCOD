@@ -47,6 +47,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     // Renderer.
     "r_backend",
     "r_dynamicBufferReport",
+    "r_fetchAhead",
     "r_fullscreenMode",
     "r_gpuSyncSleep",
     "r_gpuSyncSleepThreads",
@@ -65,6 +66,11 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "r_modernDebug",
     "r_modernExposure",
     "r_modernExposureKey",
+    "r_modernFog",
+    "r_modernFogFroxels",
+    "r_modernFogScatter",
+    "r_modernFogSpots",
+    "r_modernFogSun",
     "r_modernLightShaders",
     "r_modernModelShaders",
     "r_modernNoSunShaders",
@@ -80,6 +86,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "r_modernSunStrength",
     "r_modernTonemap",
     "r_modernVelocity",
+    "r_staticCullVec",
     "r_visuals",
     "r_vkDevice",
     "r_vkGpuFeed",
@@ -91,6 +98,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     // Sound and animation.
     "snd_adpcm",
     "snd_alDebug",
+    "snd_streamThread",
     "xanim_blendOnce",
     // Menus.
     "ui_fastExpressions",
@@ -102,6 +110,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     // Test clients on the player's own server.
     "bot_brain",
     "bot_log",
+    "bot_combat",
     "sv_botSnapshots",
     // Runs that play themselves (the run plan's timed console commands).
     "run_atMap",
@@ -130,6 +139,10 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "vita_quitAfterMenu",
     "vita_rearTouch",
     "vita_sceneScale",
+    "vita_sceneScaleGoal",
+    "vita_sceneScaleMin",
+    "vita_sceneScaleWidthOnly",
+    "vita_sceneSharpen",
     "vita_statsEvery",
     "vita_stickDeadzone",
 };

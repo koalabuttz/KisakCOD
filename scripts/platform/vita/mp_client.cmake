@@ -159,16 +159,29 @@ set(KISAK_VITA_MP_OPTIONS
 add_library(KisakCOD-mp-vita-native OBJECT ${vita_mp_native_sources} ${vita_mp_client_sources})
 add_library(KisakCOD-mp-vita-standin OBJECT ${vita_mp_standin_sources} ${vita_mp_posix_sources} ${KISAK_VITA_SOURCES})
 add_library(KisakCOD-mp-vita-own OBJECT ${vita_mp_own_sources})
-# The vector skinning path is the client's one file built for NEON, which the
-# Vita's Cortex-A9 has; the toolchain file's -mfpu=vfpv3 keeps everything else
-# on scalar VFP. The file includes nothing of the engine
-# (src/gfx_d3d/r_model_skin_vec.h says why).
-set_source_files_properties("${SRC_DIR}/gfx_d3d/r_model_skin_vec.cpp" TARGET_DIRECTORY KisakCOD-mp-vita-standin
+# The client's files built for NEON, which the Vita's Cortex-A9 has: the
+# vector skinning path and the static culling walk. The toolchain file's
+# -mfpu=vfpv3 keeps everything else on scalar VFP. Each of them includes
+# nothing of the engine and makes only what is drawn
+# (src/gfx_d3d/r_model_skin_vec.h says why), and each is a namespace in the
+# NEON float check of .github/workflows/build-kisakcod-vita.yaml.
+set_source_files_properties(
+    "${SRC_DIR}/gfx_d3d/r_model_skin_vec.cpp"
+    "${SRC_DIR}/gfx_d3d/r_dpvs_static_vec.cpp"
+    TARGET_DIRECTORY KisakCOD-mp-vita-standin
     PROPERTIES COMPILE_OPTIONS "-mfpu=neon")
-# newlib's heap (src/vita/vita_main.cpp). More than 64 is for measuring in an
-# emulator what the game would take; a console has no memory for it.
-set(KISAK_VITA_HEAP_MB "64" CACHE STRING "Size of the Vita client's heap in MB (64 on a console; more only for emulator measurements)")
-target_compile_definitions(KisakCOD-mp-vita-standin PRIVATE KISAK_VITA_HEAP_MB=${KISAK_VITA_HEAP_MB})
+# newlib's heap (src/vita/vita_main.cpp). The client's is 60 MB: mp_crash
+# uses 34, and the 4 MB went to the GPU's main pool when the parameter buffer
+# grew to 16 MB (gxm_legacy.cpp). More is for measuring in an emulator what
+# the game would take; a console has no memory for it. An empty value means
+# the client's default, so that a build folder made before the default
+# changed follows it; a cached "64", the former default, is taken as empty.
+set(KISAK_VITA_HEAP_MB "" CACHE STRING "Size of the Vita client's heap in MB (empty: 60, the console's size; more only for emulator measurements)")
+set(kisak_vita_heap_mb "${KISAK_VITA_HEAP_MB}")
+if(kisak_vita_heap_mb STREQUAL "" OR kisak_vita_heap_mb STREQUAL "64")
+    set(kisak_vita_heap_mb 60)
+endif()
+target_compile_definitions(KisakCOD-mp-vita-standin PRIVATE KISAK_VITA_HEAP_MB=${kisak_vita_heap_mb})
 # The static model cache's size (src/gfx_d3d/r_staticmodelcache_sizes.h): 2^n
 # trees in each of its four sections, 1 to 7. Empty is the header's own
 # choice for the Vita (6: 4 MB of GPU memory). For measuring other sizes.
@@ -226,6 +239,15 @@ target_include_directories(KisakCOD-mp-vita-input-sound SYSTEM PRIVATE "${KISAK_
 
 set_property(SOURCE "${SRC_DIR}/sound/snd_driver_load_obj.cpp" TARGET_DIRECTORY KisakCOD-mp-vita-standin
     APPEND PROPERTY COMPILE_DEFINITIONS DR_WAV_IMPLEMENTATION DR_MP3_IMPLEMENTATION)
+# dr_mp3 lives in that file and has a NEON path it takes when the compiler
+# offers NEON: the synthesis filter and the transforms four floats at a time.
+# It only makes sound, so NEON's flushed denormals touch nothing the game's
+# sums depend on. The rest of the file is the WAV loader, which the compiler
+# does not vectorize for float (the Vita workflow checks: NEON float
+# instructions only in drmp3 functions and the skinning path).
+# scripts/tests/test_mp3_neon_decode.py compares the two builds' samples.
+set_property(SOURCE "${SRC_DIR}/sound/snd_driver_load_obj.cpp" TARGET_DIRECTORY KisakCOD-mp-vita-standin
+    APPEND PROPERTY COMPILE_OPTIONS "-mfpu=neon")
 target_link_libraries(KisakCOD-mp-vita-native PRIVATE kisak_linux_native_d3d9)
 target_link_libraries(KisakCOD-mp-vita-own PRIVATE kisak_linux_native_d3d9)
 

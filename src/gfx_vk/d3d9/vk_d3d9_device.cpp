@@ -225,11 +225,30 @@ ModernResult Device::ModernSceneDone(const ModernSceneView &view, bool *glowDraw
     if (!linearScene_)
         return BackendModernScene(backend_, renderTargets_[0] ? renderTargets_[0]->handle() : nullptr, depth,
                                   view);
+    // The sun's and the spot lights' shadow maps, for the volumetric fog: a
+    // texture is this device's only when it says so.
+    const auto levelZero = [this](IDirect3DTexture9 *map) -> lg::Surface * {
+        if (!map)
+            return nullptr;
+        lg::Surface *surface = nullptr;
+        IDirect3DDevice9 *owner = nullptr;
+        if (SUCCEEDED(map->GetDevice(&owner)) && owner == static_cast<IDirect3DDevice9 *>(this))
+        {
+            lg::Texture *texture = static_cast<Texture *>(map)->state_.texture;
+            surface = texture ? lg::GetSurfaceLevel(legacy_, texture, 0, 0) : nullptr;
+        }
+        if (owner)
+            owner->Release();
+        return surface;
+    };
+    lg::Surface *sunShadow = levelZero(view.fog.shadowMap);
+    lg::Surface *spotShadow = levelZero(view.fog.spotShadowMap);
     // The scene went to the linear-light image, wherever render target 0
     // points now: it is tonemapped into the back buffer.
     lg::Surface *scene = linearScene_;
     linearScene_ = nullptr;
-    const ModernResult result = BackendModernScene(backend_, scene, depth, view, backBuffer_->handle(), glowDrawn);
+    const ModernResult result =
+        BackendModernScene(backend_, scene, depth, view, backBuffer_->handle(), glowDrawn, sunShadow, spotShadow);
     if (renderTargets_[0] == backBuffer_.get())
         RebindTarget0();
     return result;
@@ -385,6 +404,11 @@ void Device::DetachWindow()
 void Device::LogStats(bool reset)
 {
     BackendLogStats(backend_, reset);
+}
+
+void Device::LogMemory(const char *when)
+{
+    BackendLogMemory(backend_, when);
 }
 
 DeviceCounters Device::counters() const

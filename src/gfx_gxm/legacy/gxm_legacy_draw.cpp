@@ -39,8 +39,10 @@
 
 #include <gfx_gxm/gxm_engine_options.h>
 #include <gfx_gxm/gxm_gpu_watch.h>
+#include <gfx_gxm/gxm_idle_alpha_test.h>
 #include <gfx_gxm/gxm_live_switch.h>
 #include <gfx_gxm/gxm_prepass_governor.h>
+#include <gfx_gxm/gxm_scale_governor.h>
 #include <gfx_gxm/gxm_program_cache.h>
 #include <vita/vita_gpu_clock.h>
 #include <vita/vita_platform.h> // Vita_NoteThread
@@ -64,9 +66,24 @@ bool g_prepassWorldOnly = true;
 bool g_prepassSkipModels = false;
 bool g_resolveWhenUsed = true;
 float g_sceneScale = 1.0f;
+std::atomic<float> g_sceneScaleLeast{1.0f};
+std::atomic<float> g_sceneScaleMost{1.0f};
+std::atomic<float> g_sceneScaleGoalMs{0.0f};
+std::atomic<float> g_sceneScaleNow{1.0f};
+bool g_mipBias = true;
+bool g_sceneWidthOnly = false;
+bool g_sceneSharpen = false;
+bool g_sharpenThisStretch = false;
+bool g_sharpenInFilter = true;
+bool g_sharpenDraws = false;
 bool g_stretchInFilter = true;
 float g_filterReadS = 1.0f;
 float g_filterReadT = 1.0f;
+bool g_prepassClears = true;
+bool g_prepassNoColour = true;
+bool g_prepassScene = false;
+bool g_sceneInCopy = true;
+bool g_sceneIsCopy = false;
 } // namespace gfx_gxm
 
 namespace gfx_vk::legacy
@@ -204,7 +221,7 @@ struct PipelineKey
     uint32_t strides[kMaxStreams];
     uint8_t alphaFunc; // the pixel shader variant's alpha test
     uint8_t index32;
-    uint8_t pad[2];
+    uint16_t sharp; // and the samplers it reads through the sharpening filter
 };
 struct Pipeline
 {
@@ -286,6 +303,12 @@ struct DrawState
     bool sceneOpen = false;
     Surface *sceneColor = nullptr;
     Surface *sceneDepth = nullptr;
+    // The open scene was asked to begin with sceGxm's disabled colour
+    // surface (gxm_engine_options.h, g_prepassNoColour).
+    bool sceneNoColour = false;
+    // The open scene is the depth pass's own (g_prepassScene).
+    bool scenePrepass = false;
+    bool noColourLogged = false;
     uint32_t sceneWidth = 0, sceneHeight = 0;
     bool hasColor = false;
     ColorTarget color{};
@@ -307,11 +330,44 @@ struct DrawState
     SceGxmTexture unitView[SCE_GXM_MAX_TEXTURE_UNITS];
     uint32_t unitBound = 0;
     uint64_t textureBinds = 0, textureBindsLeftOut = 0, textureViewsMade = 0;
+    // The last draw whose textures BindTextures set, by what the binds
+    // depend on: its pixel program (which samplers go to which units),
+    // Device::textureSerial, the mip bias, and the frame and the count of
+    // waits for the GPU its textures were stamped with. A draw that finds
+    // all of it unchanged in the same scene sets nothing again (marker and
+    // switch no-texture-keep for never).
+    bool keepBinds = true;
+    const Variant *keptBindPixel = nullptr;
+    uint64_t keptBindSerial = 0, keptBindWaits = 0, keptBindStamp = 0;
+    int keptBindBias = 0;
+    uint64_t bindDraws = 0, bindDrawsKept = 0;
     // The default uniform buffers the bound programs last reserved hold these
     // constants: a draw with the same two programs and the same constants
     // reserves and writes neither again. Both end when either program is set
     // (SetPrograms) and with the scene.
     bool vertexUniformsLive = false, fragmentUniformsLive = false;
+    // What the live fragment buffer holds: the pixel constants as they were
+    // when it was written, and the depth BindTextures wrote for each volume
+    // sampler. A program with a depth uniform keeps the buffer while the
+    // volumes bound have those depths (marker and switch no-frag-keep-depth
+    // for never, as it was), and a draw after a constant changed keeps it
+    // when none of the constants its program reads did (no-frag-keep-same).
+    // frag-direct-write copies the constants into the buffer itself in
+    // place of sceGxmSetUniformDataF, for programs where a first copy
+    // matched sceGxm's own.
+    bool fragKeepDepth = true, fragKeepSame = true, fragDirect = false;
+    std::vector<float> fragmentConstantsWritten = std::vector<float>(224 * 4, 0.0f);
+    float fragmentDepthWritten[16] = {};
+    // Since the last "fragment constants" line: buffers written and their
+    // bytes, buffers kept by each of the two rules, and for the timed draws
+    // (FrameTime) what reserving and writing took.
+    struct FragmentCounts
+    {
+        uint64_t written = 0, bytes = 0, keptDepth = 0, keptSame = 0, direct = 0;
+        uint64_t timed = 0, reserveMicros = 0, writeMicros = 0;
+    } fragmentCounts, fragmentTotals;
+    uint32_t directMismatches = 0;
+    uint64_t fragmentCountsDrawn = 0;
     uint64_t vertexUniformsVersion = 0, fragmentUniformsVersion = 0;
     uint32_t fragmentAlphaRef = 0;
     uint64_t uniformWrites = 0, uniformWritesLeftOut = 0;
@@ -326,6 +382,18 @@ struct DrawState
     Pipeline lastDraw{};
     bool lastDrawValid = false;
     bool sameState = true;
+    // An alpha test that cannot change the picture is left out, so that the
+    // draw's fragment program has no discard (gxm_idle_alpha_test.h). The
+    // marker and switch no-alpha-test-drop turn it off.
+    bool dropIdleAlphaTest = true;
+    // And one on a blend that keeps the target for a source of zero writes
+    // zero for a rejected pixel in place of the discard. The marker and
+    // switch no-alpha-test-zero turn it off.
+    bool zeroAlphaTest = true;
+    // 0: the last draw had no alpha test, 1: one with a discard, 2: one
+    // that was left out, 3: one that writes zero.
+    uint8_t lastDrawAlphaTest = 0;
+    uint64_t alphaTestDraws = 0, idleAlphaTestDraws = 0, zeroAlphaTestDraws = 0;
     bool lastDrawIndex32 = false;
     uint32_t lastDrawType = 0, lastDrawUpStride = 0;
     uint64_t lastDrawSerial = 0, lastDrawScene = 0;
@@ -339,6 +407,19 @@ struct DrawState
     Variant copyVertex, copyFragment;
     SceGxmVertexProgram *copyVertexProgram = nullptr;
     int copyUnit = -1;
+    // The stretch that sharpens (gxm_engine_options.h, g_sceneSharpen); the
+    // vertex program is null when its programs could not be made.
+    Variant sharpenVertex, sharpenFragment;
+    SceGxmVertexProgram *sharpenVertexProgram = nullptr;
+    const SceGxmProgramParameter *sharpenStep = nullptr;
+    int sharpenUnit = -1;
+    uint64_t sharpenStretches = 0;
+    // The mip bias of a scaled 3D picture, in sceGxm's steps, for the scale
+    // it was worked out from; and the views it was set on.
+    float biasScale = 1.0f;
+    bool biasWidthOnly = false;
+    int biasSteps = 0;
+    uint64_t biasedViews = 0;
 
     uint16_t *sequential = nullptr; // 0, 1, 2, ... for draws without indices
     uint8_t *ring = nullptr;
@@ -382,6 +463,10 @@ struct DrawState
     gfx_gxm::PrepassGovernor prepassGovernor;
     bool prepassOff = false, governorOff = false;
     uint64_t paceWaits = 0, paceMicros = 0;
+    // The size of the 3D picture, picked from each frame's waits for the GPU
+    // (gxm_scale_governor.h) when the engine allows a range of sizes.
+    gfx_gxm::ScaleGovernor scaleGovernor;
+    uint64_t scaleWaitMicros = 0; // this frame's waits for the GPU so far
     // Renames that found no room and waited for the GPU, renames a wait since
     // the buffer's last draw made needless, and the bytes of renamed buffers'
     // old memory the GPU may still read.
@@ -727,6 +812,8 @@ bool Register(Device &device, Variant &variant, const char *what)
     const SceGxmProgram *program = variant.program();
     variant.constants = sceGxmProgramFindParameterByName(program, "c");
     variant.alphaRef = sceGxmProgramFindParameterByName(program, "kisak_alpha_ref");
+    variant.sharp = sceGxmProgramFindParameterByName(program, "kisak_sharp");
+    variant.sharpMax = sceGxmProgramFindParameterByName(program, "kisak_sharp_max");
     char name[32];
     for (int i = 0; i < 16; ++i)
     {
@@ -735,13 +822,20 @@ bool Register(Device &device, Variant &variant, const char *what)
         if (const SceGxmProgramParameter *sampler = sceGxmProgramFindParameterByName(program, name))
             if (sceGxmProgramParameterGetCategory(sampler) == SCE_GXM_PARAMETER_CATEGORY_SAMPLER)
                 variant.textureUnit[i] = int8_t(sceGxmProgramParameterGetResourceIndex(sampler));
+        variant.samplers |= uint16_t(variant.textureUnit[i] >= 0 ? 1u << i : 0u);
         std::snprintf(name, sizeof(name), "kisak_depth_s%d", i);
         variant.depth[i] = sceGxmProgramFindParameterByName(program, name);
         variant.depthUniforms |= variant.depth[i] != nullptr;
+        variant.depthMask |= uint16_t(variant.depth[i] ? 1u << i : 0u);
         std::snprintf(name, sizeof(name), "in_v%d", i);
         variant.inputs[i] = sceGxmProgramFindParameterByName(program, name);
     }
-    variant.uniforms = sceGxmProgramGetDefaultUniformBufferSize(program) != 0;
+    variant.uniformBytes = sceGxmProgramGetDefaultUniformBufferSize(program);
+    variant.uniforms = variant.uniformBytes != 0;
+    if (variant.constants && sceGxmProgramParameterGetCategory(variant.constants) == SCE_GXM_PARAMETER_CATEGORY_UNIFORM &&
+        sceGxmProgramParameterGetType(variant.constants) == SCE_GXM_PARAMETER_TYPE_F32 &&
+        sceGxmProgramParameterGetComponentCount(variant.constants) == 4)
+        variant.constantsAt = int32_t(sceGxmProgramParameterGetResourceIndex(variant.constants));
     return true;
 }
 
@@ -754,6 +848,8 @@ uint64_t VariantKey(const gxm::cg::Options &options)
         components |= uint64_t(options.inputComponents[i] & 3) << (2 * i);
     return (uint64_t(options.bgraInputs) | uint64_t(options.absentInputs) << 16) ^ (components << 32) ^
            (options.alphaFunc == gxm::cg::AlphaFunc::Always ? 0 : uint64_t(options.alphaFunc)) ^
+           (uint64_t(options.sharpSamplers) * 0xff51afd7ed558ccdull) ^
+           (options.alphaZero ? 0x00a5000000000000ull : 0) ^
            (options.farPlaneInside ? 0x5a5a000000000000ull : 0) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
 }
 
@@ -934,7 +1030,7 @@ Pipeline &PipelineSlot(DrawState &d, const PipelineKey &key)
     uint32_t hash = uint32_t(reinterpret_cast<uintptr_t>(key.vs) >> 4) * 0x9e3779b1u;
     hash ^= uint32_t(reinterpret_cast<uintptr_t>(key.ps) >> 4) * 0x85ebca6bu;
     hash ^= uint32_t(reinterpret_cast<uintptr_t>(key.decl) >> 4) * 0xc2b2ae35u;
-    hash ^= (uint32_t(key.alphaFunc) << 1 | key.index32) * 0x27d4eb2fu;
+    hash ^= (uint32_t(key.sharp) << 9 | uint32_t(key.alphaFunc) << 1 | key.index32) * 0x27d4eb2fu;
     return d.pipelines[(hash >> 16) & (kPipelines - 1)];
 }
 
@@ -945,6 +1041,7 @@ void ForgetPipelines(DrawState &d)
 {
     std::memset(static_cast<void *>(d.pipelines), 0, sizeof(d.pipelines));
     d.lastDrawValid = false;
+    d.keptBindPixel = nullptr;
 }
 
 const VertexProgramEntry *GetVertexProgram(Device &device, const Variant &variant, const VertexDecl &decl,
@@ -1052,6 +1149,34 @@ uint8_t BlendFunc(uint32_t op)
     }
 }
 
+// The state the alpha test rules read (gxm_idle_alpha_test.h).
+gfx_gxm::AlphaTestState AlphaTestStateOf(const Device &device)
+{
+    static_assert(d3d::CMP_GREATER == gfx_gxm::d3d9::kCmpGreater && d3d::CMP_NOTEQUAL == gfx_gxm::d3d9::kCmpNotEqual);
+    static_assert(d3d::BLEND_ZERO == gfx_gxm::d3d9::kBlendZero && d3d::BLEND_ONE == gfx_gxm::d3d9::kBlendOne &&
+                  d3d::BLEND_INVSRCCOLOR == gfx_gxm::d3d9::kBlendInvSrcColor &&
+                  d3d::BLEND_SRCALPHA == gfx_gxm::d3d9::kBlendSrcAlpha &&
+                  d3d::BLEND_INVSRCALPHA == gfx_gxm::d3d9::kBlendInvSrcAlpha &&
+                  d3d::BLEND_BOTHSRCALPHA == gfx_gxm::d3d9::kBlendBothSrcAlpha &&
+                  d3d::BLEND_BOTHINVSRCALPHA == gfx_gxm::d3d9::kBlendBothInvSrcAlpha);
+    static_assert(d3d::BLENDOP_ADD == gfx_gxm::d3d9::kBlendOpAdd &&
+                  d3d::BLENDOP_REVSUBTRACT == gfx_gxm::d3d9::kBlendOpRevSubtract);
+    const uint32_t *rs = device.renderStates;
+    gfx_gxm::AlphaTestState state;
+    state.func = rs[d3d::RS_ALPHAFUNC];
+    state.ref = rs[d3d::RS_ALPHAREF];
+    state.blend = rs[d3d::RS_ALPHABLENDENABLE] != 0;
+    state.separateAlpha = rs[d3d::RS_SEPARATEALPHABLENDENABLE] != 0;
+    state.op = rs[d3d::RS_BLENDOP];
+    state.src = rs[d3d::RS_SRCBLEND];
+    state.dst = rs[d3d::RS_DESTBLEND];
+    state.opAlpha = rs[d3d::RS_BLENDOPALPHA];
+    state.dstAlpha = rs[d3d::RS_DESTBLENDALPHA];
+    state.depthWrite = rs[d3d::RS_ZWRITEENABLE] != 0;
+    state.stencil = rs[d3d::RS_STENCILENABLE] != 0;
+    return state;
+}
+
 // False: no blend info at all (no blending, every channel written).
 bool MakeBlend(Device &device, bool noAlpha, SceGxmBlendInfo &blend)
 {
@@ -1140,7 +1265,17 @@ bool OpenScene(Device &device)
     DrawState &d = *device.draw;
     Surface *color = device.renderTargets[0];
     Surface *depth = device.depthStencil;
-    if (d.sceneOpen && d.sceneColor == color && d.sceneDepth == depth)
+    // The depth pass has a scene of its own, whatever its targets are: the
+    // engine's flag is read here and not when the targets are set, since the
+    // pass's colour target can be the very surface the lit pass draws to
+    // (gxm_engine_options.h, g_prepassScene). Nobody reads that colour
+    // target, so with a depth surface to draw into the scene is begun
+    // without it.
+    const bool prepass = gfx_gxm::g_prepassScene;
+    const bool noColour = prepass && gfx_gxm::g_prepassNoColour && depth && color &&
+                          color->kind == SurfaceKind::TextureLevel;
+    if (d.sceneOpen && d.sceneColor == color && d.sceneDepth == depth && d.scenePrepass == prepass &&
+        d.sceneNoColour == noColour)
         return true;
     EndScene(device);
 
@@ -1171,14 +1306,25 @@ bool OpenScene(Device &device)
             NotYet(device, "a render target format sceGxm cannot draw to (draws skipped)");
             return false;
         }
-        const int result = sceGxmColorSurfaceInit(&d.colorSurface, d.color.format, SCE_GXM_COLOR_SURFACE_LINEAR,
-                                                  SCE_GXM_COLOR_SURFACE_SCALE_NONE, d.color.size, level.width,
-                                                  level.height, level.pitch / texture.format->blockBytes,
-                                                  texture.memory.data + level.offset);
+        // Without colour the draws keep the programs made for the target's
+        // format; what they write goes nowhere.
+        const int result =
+            noColour ? sceGxmColorSurfaceInitDisabled(&d.colorSurface)
+                     : sceGxmColorSurfaceInit(&d.colorSurface, d.color.format, SCE_GXM_COLOR_SURFACE_LINEAR,
+                                              SCE_GXM_COLOR_SURFACE_SCALE_NONE, d.color.size, level.width,
+                                              level.height, level.pitch / texture.format->blockBytes,
+                                              texture.memory.data + level.offset);
         if (result < 0)
         {
-            Log(device, "sceGxmColorSurfaceInit on %s failed (0x%08x)", texture.name.c_str(), unsigned(result));
+            Log(device, "%s on %s failed (0x%08x)", noColour ? "sceGxmColorSurfaceInitDisabled" : "sceGxmColorSurfaceInit",
+                texture.name.c_str(), unsigned(result));
             return false;
+        }
+        if (noColour && !d.noColourLogged)
+        {
+            d.noColourLogged = true;
+            Log(device, "diag: a scene on %s (%ux%u) is begun without its colour: nothing reads it", texture.name.c_str(),
+                level.width, level.height);
         }
         colorSurface = &d.colorSurface;
         width = level.width;
@@ -1228,12 +1374,15 @@ bool OpenScene(Device &device)
     d.sceneOpen = true;
     d.sceneColor = color;
     d.sceneDepth = depth;
+    d.sceneNoColour = noColour;
+    d.scenePrepass = prepass;
     d.sceneWidth = width;
     d.sceneHeight = height;
     d.boundVertex = nullptr;
     d.boundFragment = nullptr;
     d.fixedValid = false;
     d.unitBound = 0;
+    d.keptBindPixel = nullptr;
     d.vertexUniformsLive = false;
     d.fragmentUniformsLive = false;
     ++d.scenes;
@@ -1417,9 +1566,64 @@ SceGxmTextureAddrMode AddressMode(uint32_t address)
 }
 
 // False when the draw samples an unfilled colour target and must not happen.
+// The depth BindTextures writes for the texture a volume sampler has.
+float VolumeDepth(const Texture *texture)
+{
+    return texture && texture->sampleable && texture->desc.kind == TextureKind::Volume ? float(texture->desc.depth)
+                                                                                       : 1.0f;
+}
+
+// The fragment constants line: what the draws since the last one did with
+// their fragment uniform buffers.
+void LogFragmentConstants(Device &device, const char *when)
+{
+    DrawState &d = *device.draw;
+    const DrawState::FragmentCounts &c = d.fragmentCounts;
+    Log(device,
+        "fragment constants %s: in %llu draws %llu buffers written (%llu bytes), %llu kept by a program that takes a "
+        "volume's depth, %llu kept though other constants changed, %llu written by a direct copy; %llu timed draws "
+        "wrote one, reserving took %.2f us and writing %.2f us each%s%s%s",
+        when, (unsigned long long)(d.drawn - d.fragmentCountsDrawn), (unsigned long long)c.written,
+        (unsigned long long)c.bytes, (unsigned long long)c.keptDepth, (unsigned long long)c.keptSame,
+        (unsigned long long)c.direct, (unsigned long long)c.timed,
+        c.timed ? double(c.reserveMicros) / double(c.timed) : 0.0,
+        c.timed ? double(c.writeMicros) / double(c.timed) : 0.0, d.fragKeepDepth ? "" : " (no-frag-keep-depth)",
+        d.fragKeepSame ? "" : " (no-frag-keep-same)", d.fragDirect ? " (frag-direct-write)" : "");
+    DrawState::FragmentCounts &t = d.fragmentTotals;
+    t.written += c.written, t.bytes += c.bytes, t.keptDepth += c.keptDepth, t.keptSame += c.keptSame;
+    t.direct += c.direct, t.timed += c.timed, t.reserveMicros += c.reserveMicros, t.writeMicros += c.writeMicros;
+    d.fragmentCounts = DrawState::FragmentCounts();
+    d.fragmentCountsDrawn = d.drawn;
+}
+
 bool BindTextures(Device &device, const Variant &pixel, void *uniforms)
 {
     DrawState &d = *device.draw;
+    // A scaled 3D picture: mipped textures get the levels the full-size
+    // picture would have used (gxm_engine_options.h, g_mipBias).
+    int biasSteps = 0;
+    if (gfx_gxm::g_mipBias && gfx_gxm::g_sceneScale < 1.0f)
+    {
+        if (d.biasScale != gfx_gxm::g_sceneScale || d.biasWidthOnly != gfx_gxm::g_sceneWidthOnly)
+        {
+            d.biasScale = gfx_gxm::g_sceneScale;
+            d.biasWidthOnly = gfx_gxm::g_sceneWidthOnly;
+            d.biasSteps = gfx_gxm::SceneMipBiasSteps(
+                (std::min)(gfx_gxm::SceneScaleX(d.biasScale), gfx_gxm::SceneScaleY(d.biasScale)));
+        }
+        biasSteps = d.biasSteps;
+    }
+    // A new uniform buffer of a program with a volume's depth in it goes
+    // the long way: the depths are written below.
+    const bool keepable = d.reuse && d.keepBinds && pixel.samplers && !(uniforms && pixel.depthMask);
+    d.bindDraws += pixel.samplers != 0;
+    if (keepable && d.keptBindPixel == &pixel && d.keptBindSerial == device.textureSerial &&
+        d.keptBindBias == biasSteps && d.keptBindWaits == d.gpuWaits && d.keptBindStamp == Stamp(d))
+    {
+        ++d.bindDrawsKept;
+        return true;
+    }
+    d.keptBindPixel = nullptr;
     for (int i = 0; i < 16; ++i)
     {
         if (pixel.textureUnit[i] < 0)
@@ -1459,8 +1663,10 @@ bool BindTextures(Device &device, const Variant &pixel, void *uniforms)
         const bool linearMag = ss[d3d::SAMP_MAGFILTER] >= d3d::TEXF_LINEAR;
         const bool linearMip = ss[d3d::SAMP_MIPFILTER] == d3d::TEXF_LINEAR;
         // Everything the five calls below take from the sampler state.
+        const int bias = texture && texture->sampleable && texture->desc.levels > 1 ? biasSteps : 0;
         const uint32_t bits = uint32_t(linearMin) | uint32_t(linearMag) << 1 | uint32_t(linearMip) << 2 |
-                              (ss[d3d::SAMP_ADDRESSU] & 0xffu) << 8 | (ss[d3d::SAMP_ADDRESSV] & 0xffu) << 16;
+                              (ss[d3d::SAMP_ADDRESSU] & 0xffu) << 8 | (ss[d3d::SAMP_ADDRESSV] & 0xffu) << 16 |
+                              (uint32_t(-bias) & 0x3fu) << 24;
         // Its own view, not a stand-in's: the one kept with the texture serves.
         const bool own = d.reuse && texture && texture->sampleable;
         if (own && texture->viewBits == bits && std::memcmp(&texture->viewOf, &view, sizeof(view)) == 0)
@@ -1474,6 +1680,14 @@ bool BindTextures(Device &device, const Variant &pixel, void *uniforms)
                                                        : SCE_GXM_TEXTURE_MIP_FILTER_DISABLED);
             sceGxmTextureSetUAddrMode(&view, AddressMode(ss[d3d::SAMP_ADDRESSU]));
             sceGxmTextureSetVAddrMode(&view, AddressMode(ss[d3d::SAMP_ADDRESSV]));
+            if (bias)
+            {
+                // sceGxm's bias is 0 to 63 in steps of 1/8 of a level; a
+                // fresh texture's value is "none".
+                const int none = int(sceGxmTextureGetLodBias(&view));
+                sceGxmTextureSetLodBias(&view, unsigned(std::clamp(none + bias, 0, 63)));
+                ++d.biasedViews;
+            }
             ++d.textureViewsMade;
             if (own)
             {
@@ -1497,7 +1711,18 @@ bool BindTextures(Device &device, const Variant &pixel, void *uniforms)
             }
         }
         if (pixel.depth[i] && uniforms)
+        {
             sceGxmSetUniformDataF(uniforms, pixel.depth[i], 0, 1, &depth);
+            d.fragmentDepthWritten[i] = depth;
+        }
+    }
+    if (d.reuse && d.keepBinds && pixel.samplers)
+    {
+        d.keptBindPixel = &pixel;
+        d.keptBindSerial = device.textureSerial;
+        d.keptBindBias = biasSteps;
+        d.keptBindWaits = d.gpuWaits;
+        d.keptBindStamp = Stamp(d);
     }
     return true;
 }
@@ -1604,6 +1829,92 @@ const char kCopyFragmentCg[] = "// KisakCOD: StretchRect quad\n"
                                "{\n"
                                "    return tex2D(s0, in_TEXCOORD0);\n"
                                "}\n";
+
+// The stretch that sharpens: the picture read at each pixel and at one of
+// its own texels up, left, right and down. The vertex program works the five
+// places out, so that the fragment program reads at places it was handed.
+// Each pixel's difference from the mean of its four neighbours is added to
+// it, and the result is held between the darkest and the brightest of the
+// five, so that an edge gets steeper and never gains a halo.
+// The same filter is in the translator's sharpening read
+// (gxm_cg_translate.cpp, kisak_sharp2D), which takes this strength.
+constexpr float kSharpenStrength = 0.2f;
+const char kSharpenVertexCg[] =
+    "// KisakCOD: sharpening stretch\n"
+    "void main(float2 in_position, float2 in_texcoord, uniform float4 kisak_step,\n"
+    "          out float4 out_POSITION : POSITION, out float2 out_TEXCOORD0 : TEXCOORD0,\n"
+    "          out float2 out_TEXCOORD1 : TEXCOORD1, out float2 out_TEXCOORD2 : TEXCOORD2,\n"
+    "          out float2 out_TEXCOORD3 : TEXCOORD3, out float2 out_TEXCOORD4 : TEXCOORD4)\n"
+    "{\n"
+    "    out_POSITION = float4(in_position, 0.0, 1.0);\n"
+    "    out_TEXCOORD0 = in_texcoord;\n"
+    "    out_TEXCOORD1 = in_texcoord - float2(0.0, kisak_step.y);\n"
+    "    out_TEXCOORD2 = in_texcoord - float2(kisak_step.x, 0.0);\n"
+    "    out_TEXCOORD3 = in_texcoord + float2(kisak_step.x, 0.0);\n"
+    "    out_TEXCOORD4 = in_texcoord + float2(0.0, kisak_step.y);\n"
+    "}\n";
+const char kSharpenFragmentCg[] =
+    "// KisakCOD: sharpening stretch\n"
+    "float4 main(float2 in_TEXCOORD0 : TEXCOORD0, float2 in_TEXCOORD1 : TEXCOORD1,\n"
+    "            float2 in_TEXCOORD2 : TEXCOORD2, float2 in_TEXCOORD3 : TEXCOORD3,\n"
+    "            float2 in_TEXCOORD4 : TEXCOORD4, uniform sampler2D s0) : COLOR\n"
+    "{\n"
+    "    float4 here = tex2D(s0, in_TEXCOORD0);\n"
+    "    float3 up = tex2D(s0, in_TEXCOORD1).rgb;\n"
+    "    float3 left = tex2D(s0, in_TEXCOORD2).rgb;\n"
+    "    float3 right = tex2D(s0, in_TEXCOORD3).rgb;\n"
+    "    float3 down = tex2D(s0, in_TEXCOORD4).rgb;\n"
+    "    float3 low = min(here.rgb, min(min(up, left), min(right, down)));\n"
+    "    float3 high = max(here.rgb, max(max(up, left), max(right, down)));\n"
+    "    float3 sharp = here.rgb + (4.0 * here.rgb - up - left - right - down) * 0.2;\n"
+    "    return float4(clamp(sharp, low, high), here.a);\n"
+    "}\n";
+
+// Not needed to draw: a failure leaves the plain stretch.
+void MakeSharpenPrograms(Device &device)
+{
+    DrawState &d = *device.draw;
+    std::string log;
+    if (!gxm::GetProgram(kSharpenVertexCg, gxm::ShaderStage::Vertex, d.sharpenVertex.gxp, log) ||
+        !gxm::GetProgram(kSharpenFragmentCg, gxm::ShaderStage::Fragment, d.sharpenFragment.gxp, log))
+    {
+        Log(device, "the sharpening stretch's programs did not compile (%s): vita_sceneSharpen stretches plainly",
+            log.substr(0, log.find('\n')).c_str());
+        return;
+    }
+    if (!Register(device, d.sharpenVertex, "sharpen vertex program") ||
+        !Register(device, d.sharpenFragment, "sharpen fragment program"))
+        return;
+    const SceGxmProgramParameter *position =
+        sceGxmProgramFindParameterByName(d.sharpenVertex.program(), "in_position");
+    const SceGxmProgramParameter *texcoord =
+        sceGxmProgramFindParameterByName(d.sharpenVertex.program(), "in_texcoord");
+    d.sharpenStep = sceGxmProgramFindParameterByName(d.sharpenVertex.program(), "kisak_step");
+    d.sharpenUnit = d.sharpenFragment.textureUnit[0];
+    if (!position || !texcoord || !d.sharpenStep || d.sharpenUnit < 0)
+    {
+        Log(device, "the sharpening stretch's programs lack their parameters: vita_sceneSharpen stretches plainly");
+        return;
+    }
+    SceGxmVertexAttribute attributes[2]{};
+    for (int i = 0; i < 2; ++i)
+    {
+        attributes[i].streamIndex = 0;
+        attributes[i].offset = uint16_t(i * 8);
+        attributes[i].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+        attributes[i].componentCount = 2;
+        attributes[i].regIndex = uint16_t(sceGxmProgramParameterGetResourceIndex(i ? texcoord : position));
+    }
+    SceGxmVertexStream stream{16, SCE_GXM_INDEX_SOURCE_INDEX_16BIT};
+    const int result = sceGxmShaderPatcherCreateVertexProgram(gxm::ShaderPatcher(), d.sharpenVertex.id, attributes, 2,
+                                                              &stream, 1, &d.sharpenVertexProgram);
+    if (result < 0)
+    {
+        d.sharpenVertexProgram = nullptr;
+        Log(device, "the sharpening stretch's vertex program could not be made (0x%08x): vita_sceneSharpen stretches "
+                    "plainly", unsigned(result));
+    }
+}
 
 bool MakeCopyPrograms(Device &device, std::string &error)
 {
@@ -1788,6 +2099,14 @@ bool InitDraw(Device &device, std::string &error)
     if (!gfx_gxm::g_stretchInFilter)
         Log(device, "diag: no-filter-stretch is there: a scaled picture is always copied and stretched in two "
                     "scenes of its own");
+    gfx_gxm::g_prepassClears = !gxm::ProgramCacheMarker("no-prepass-clear");
+    gfx_gxm::g_prepassNoColour = !gxm::ProgramCacheMarker("no-depth-only-scene");
+    gfx_gxm::g_sceneInCopy = !gxm::ProgramCacheMarker("no-scene-in-copy");
+    Log(device, "diag: fewer scenes: the depth pass's scene clears the depth %s, has no colour surface %s, the 3D "
+                "passes draw into the film filter's image %s",
+        gfx_gxm::g_prepassClears ? "on" : "off (no-prepass-clear)",
+        gfx_gxm::g_prepassNoColour ? "on" : "off (no-depth-only-scene)",
+        gfx_gxm::g_sceneInCopy ? "on" : "off (no-scene-in-copy)");
     d.notifications = sceGxmGetNotificationRegion();
     if (gxm::ProgramCacheMarker("no-frame-overlap"))
     {
@@ -1812,6 +2131,41 @@ bool InitDraw(Device &device, std::string &error)
         d.sameState = false;
         Log(device, "diag: no-same-state is there: every draw works out its programs and fixed state anew");
     }
+    if (gxm::ProgramCacheMarker("no-alpha-test-drop"))
+    {
+        d.dropIdleAlphaTest = false;
+        Log(device, "diag: no-alpha-test-drop is there: an alpha test that cannot change the picture stays in its "
+                    "fragment program");
+    }
+    if (gxm::ProgramCacheMarker("no-frag-keep-depth"))
+    {
+        d.fragKeepDepth = false;
+        Log(device, "diag: no-frag-keep-depth is there: a program that takes a volume's depth gets a new fragment "
+                    "uniform buffer every draw");
+    }
+    if (gxm::ProgramCacheMarker("no-frag-keep-same"))
+    {
+        d.fragKeepSame = false;
+        Log(device, "diag: no-frag-keep-same is there: a draw after any pixel constant changed gets a new fragment "
+                    "uniform buffer");
+    }
+    if (gxm::ProgramCacheMarker("frag-direct-write"))
+    {
+        d.fragDirect = true;
+        Log(device, "diag: frag-direct-write is there: pixel constants are copied into the uniform buffer directly");
+    }
+    if (gxm::ProgramCacheMarker("no-alpha-test-zero"))
+    {
+        d.zeroAlphaTest = false;
+        Log(device, "diag: no-alpha-test-zero is there: an alpha test on a blended draw is a discard, not a pixel "
+                    "of zero");
+    }
+    if (gxm::ProgramCacheMarker("no-texture-keep"))
+    {
+        d.keepBinds = false;
+        Log(device, "diag: no-texture-keep is there: every draw goes through its textures, also when they are the "
+                    "last draw's");
+    }
     if (gxm::ProgramCacheMarker("no-draw-reuse"))
     {
         d.reuse = false;
@@ -1820,6 +2174,12 @@ bool InitDraw(Device &device, std::string &error)
     }
     if (!MakeStandIns(device, error) || !MakeClearPrograms(device, error) || !MakeCopyPrograms(device, error))
         return false;
+    MakeSharpenPrograms(device);
+    gfx_gxm::g_sharpenInFilter = !gxm::ProgramCacheMarker("no-filter-sharpen");
+    gfx_gxm::g_mipBias = !gxm::ProgramCacheMarker("no-mip-bias");
+    Log(device, "diag: a fresh texture's LOD bias reads %u (the scaled 3D picture's mip bias counts from it; %s)",
+        unsigned(sceGxmTextureGetLodBias(&d.white)),
+        gfx_gxm::g_mipBias ? "on" : "off: no-mip-bias is there");
     // Run diagnostics: opaque green (no inputs, so it links with any vertex
     // program). Not having it only loses that test.
     std::string log;
@@ -2144,6 +2504,7 @@ void ReadSwizzled(const Texture &texture, uint32_t face, uint32_t level, uint8_t
 
 void SetUpTexture(Device &device, Texture &texture)
 {
+    ++device.textureSerial;
     texture.sampleable = false;
     const TextureDesc &desc = texture.desc;
     if (texture.swizzledLayout)
@@ -2320,9 +2681,11 @@ void FinishGpu(Device &device, WaitCause cause)
     EndScene(device);
     const uint64_t from = Micros();
     gxm::Finish();
-    device.frameTime.Wait(Micros() - from);
+    const uint64_t took = Micros() - from;
+    device.frameTime.Wait(took);
     if (DrawState *d = device.draw)
     {
+        d->scaleWaitMicros += took;
         ++d->gpuWaits;
         ++d->waitsBy[size_t(cause)];
         // Every frame before this one is drawn; what this frame has drawn so
@@ -2374,6 +2737,7 @@ void PaceFrame(Device &device)
         device.frameTime.Pace(took);
         ++d.paceWaits;
         d.paceMicros += took;
+        d.scaleWaitMicros += took;
         return;
     }
     // No notification will say so (the frame ended without a scene, or the
@@ -2387,6 +2751,62 @@ void PaceFrame(Device &device)
             "waits for the whole GPU at every Present (as with no-frame-overlap)",
             unsigned(kTimeoutMicros / 1000), kTimeoutsAllowed);
     }
+}
+
+// After PaceFrame, whose wait is the last of this frame's: the size of the
+// next frame's 3D picture.
+void ScaleFrame(Device &device)
+{
+    DrawState &d = *device.draw;
+    const gfx_gxm::ScaleGovernor::Limits limits{gfx_gxm::g_sceneScaleLeast.load(std::memory_order_relaxed),
+                                                gfx_gxm::g_sceneScaleMost.load(std::memory_order_relaxed),
+                                                gfx_gxm::g_sceneScaleGoalMs.load(std::memory_order_relaxed)};
+    // The depth pass governor's try is timed at one size.
+    if (!d.prepassOff && !d.governorOff && d.prepassGovernor.Probing() && limits.least < limits.most)
+        d.scaleGovernor.Hold(Micros());
+    else
+        d.scaleGovernor.FrameEnded(Micros(), d.scaleWaitMicros, limits);
+    d.scaleWaitMicros = 0;
+    gfx_gxm::g_sceneScaleNow.store(d.scaleGovernor.Scale(), std::memory_order_relaxed);
+}
+
+void LogSceneScale(Device &device)
+{
+    DrawState *d = device.draw;
+    if (!d)
+        return;
+    const gfx_gxm::ScaleGovernor::Counts &c = d->scaleGovernor.Totals();
+    if (!c.frames)
+    {
+        // One size only (vita_sceneScale alone): what kept it sharp.
+        if (d->biasedViews || d->sharpenStretches)
+            Log(device,
+                "3D picture size: fixed at %.3f of the screen. Mip bias %s, now %d eighths of a level (%llu texture "
+                "views biased); %s; %llu sharpened stretches",
+                double(gfx_gxm::g_sceneScaleMost.load(std::memory_order_relaxed)), gfx_gxm::g_mipBias ? "on" : "off",
+                d->biasSteps, (unsigned long long)d->biasedViews,
+                gfx_gxm::g_sceneWidthOnly ? "width only" : "width and height",
+                (unsigned long long)d->sharpenStretches);
+        d->biasedViews = 0;
+        d->sharpenStretches = 0;
+        return;
+    }
+    Log(device,
+        "3D picture size, last %llu frames: %.3f of the screen now, %.3f on average (%.3f to %.3f; allowed %.3f to "
+        "%.3f). %llu steps down, %llu up, of them %llu tries of a larger picture (%llu taken back); 16.7 ms given up "
+        "%llu times. The GPU held the frame in %llu of %llu windows; the last window: %.1f ms a frame, %.1f ms of it "
+        "waiting for the GPU, goal %.1f ms. Mip bias %s, now %d eighths of a level (%llu texture views biased); %s; "
+        "%llu sharpened stretches",
+        (unsigned long long)c.frames, double(d->scaleGovernor.Scale()), c.scaleSum / double(c.frames),
+        double(c.lowest), double(c.highest), double(gfx_gxm::g_sceneScaleLeast.load(std::memory_order_relaxed)),
+        double(gfx_gxm::g_sceneScaleMost.load(std::memory_order_relaxed)), (unsigned long long)c.down,
+        (unsigned long long)c.up, (unsigned long long)c.tries, (unsigned long long)c.triesLost,
+        (unsigned long long)c.fastLost, (unsigned long long)c.boundWindows, (unsigned long long)c.windows, c.frameMs,
+        c.waitMs, c.goalMs, gfx_gxm::g_mipBias ? "on" : "off", d->biasSteps, (unsigned long long)d->biasedViews,
+        gfx_gxm::g_sceneWidthOnly ? "width only" : "width and height", (unsigned long long)d->sharpenStretches);
+    d->biasedViews = 0;
+    d->sharpenStretches = 0;
+    d->scaleGovernor.ClearTotals();
 }
 
 void LogWaitCauses(Device &device)
@@ -2481,8 +2901,12 @@ void SetGpuWatch(Device &device, bool on)
 // (gxm_live_switch.h). The others size or make things at start-up.
 const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "no-vsync",
                                      "no-draw-reuse",     "no-filter-stretch", "no-gpu-boost",
+                                     "no-mip-bias",         "no-filter-sharpen",
                                      "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
-                                     "gpu-watch"};
+                                     "gpu-watch",           "no-prepass-clear",  "no-depth-only-scene",
+                                     "no-scene-in-copy",    "no-alpha-test-drop", "no-alpha-test-zero",
+                                     "no-frag-keep-depth",  "no-frag-keep-same",  "frag-direct-write",
+                                     "no-texture-keep"};
 struct LiveSwitch
 {
     const char *name;
@@ -2525,6 +2949,13 @@ void ApplyLiveSwitches(Device &device)
             gxm::SetDisplayVsync(!s.on);
         else if (name == "no-draw-reuse")
             d.reuse = !s.on;
+        else if (name == "no-texture-keep")
+        {
+            Log(device, "diag: texture binds so far: of %llu draws with textures %llu had the last draw's and set none",
+                (unsigned long long)d.bindDraws, (unsigned long long)d.bindDrawsKept);
+            d.keepBinds = !s.on;
+            d.keptBindPixel = nullptr;
+        }
         else if (name == "no-world-only-prepass")
         {
             // The pass costs another time now: the governor times it anew.
@@ -2536,8 +2967,39 @@ void ApplyLiveSwitches(Device &device)
             d.sameState = !s.on;
             d.lastDrawValid = false;
         }
+        else if (name == "no-frag-keep-depth" || name == "no-frag-keep-same" || name == "frag-direct-write")
+        {
+            // The line covers the draws up to the change.
+            LogFragmentConstants(device, "so far");
+            if (name == "frag-direct-write")
+                d.fragDirect = s.on;
+            else
+                (name == "no-frag-keep-depth" ? d.fragKeepDepth : d.fragKeepSame) = !s.on;
+            d.lastDrawValid = false;
+            d.fragmentUniformsLive = false;
+        }
+        else if (name == "no-alpha-test-drop" || name == "no-alpha-test-zero")
+        {
+            (name == "no-alpha-test-drop" ? d.dropIdleAlphaTest : d.zeroAlphaTest) = !s.on;
+            d.lastDrawValid = false;
+            Log(device,
+                "diag: alpha tests so far: %llu draws with a discard, %llu with the test left out, %llu that write "
+                "zero",
+                (unsigned long long)d.alphaTestDraws, (unsigned long long)d.idleAlphaTestDraws,
+                (unsigned long long)d.zeroAlphaTestDraws);
+        }
         else if (name == "no-filter-stretch")
             gfx_gxm::g_stretchInFilter = !s.on;
+        else if (name == "no-mip-bias")
+            gfx_gxm::g_mipBias = !s.on;
+        else if (name == "no-filter-sharpen")
+            gfx_gxm::g_sharpenInFilter = !s.on;
+        else if (name == "no-prepass-clear")
+            gfx_gxm::g_prepassClears = !s.on;
+        else if (name == "no-depth-only-scene")
+            gfx_gxm::g_prepassNoColour = !s.on;
+        else if (name == "no-scene-in-copy")
+            gfx_gxm::g_sceneInCopy = !s.on;
         else if (name == "gpu-watch")
             SetGpuWatch(device, s.on);
         else if (name == "no-gpu-boost")
@@ -2770,6 +3232,7 @@ void MakeWritable(Device &device, Texture &texture)
     // The view draws bind points at the memory: the kept one no longer
     // matches `sampled` and is made anew by the next draw.
     sceGxmTextureSetData(&texture.sampled, texture.memory.data);
+    ++device.textureSerial;
     ++d->textureSwaps;
 }
 
@@ -3131,6 +3594,21 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         strides[0] = upStride;
     const uint32_t upStrideUsed = upVertices ? upStride : 0u;
     const bool plain = d.reuse && !test && !d.diagnosedDraws;
+    // The engine's pass that stretches the scaled 3D picture
+    // (gxm_engine_options.h, g_sharpenDraws): the draw's program reads its
+    // render target textures through the sharpening filter.
+    uint16_t sharpSamplers = 0;
+    if (gfx_gxm::g_sharpenDraws && ps)
+    {
+        for (uint32_t i = 0; i < 16; ++i)
+        {
+            const Texture *texture = device.textures[i];
+            if (ps->parsed.reflection.samplers[i] == gxm::cg::SamplerType::Tex2D && texture &&
+                (texture->desc.usage & d3d::USAGE_RENDERTARGET))
+                sharpSamplers |= uint16_t(1u << i);
+        }
+        d.lastDrawValid = false;
+    }
     gxm::FrameTime &frameTime = device.frameTime;
     const auto part = [&frameTime](gxm::FrameTime::DrawPart done) {
         if (frameTime.parting)
@@ -3168,12 +3646,33 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     else
     {
         gxm::cg::Options pixelOptions;
+        d.lastDrawAlphaTest = 0;
         if (device.renderStates[d3d::RS_ALPHATESTENABLE])
         {
             const uint32_t func = device.renderStates[d3d::RS_ALPHAFUNC];
             if (func >= d3d::CMP_NEVER && func < d3d::CMP_ALWAYS)
                 pixelOptions.alphaFunc = gxm::cg::AlphaFunc(func);
+            d.lastDrawAlphaTest = pixelOptions.alphaFunc != gxm::cg::AlphaFunc::Always;
+            // A test that only rejects what the blend would not show is
+            // left out, and one on a blend that keeps the target for a
+            // source of zero writes zero: neither program has a discard
+            // (gxm_idle_alpha_test.h).
+            if (d.lastDrawAlphaTest && (d.dropIdleAlphaTest || d.zeroAlphaTest))
+            {
+                const gfx_gxm::AlphaTestState state = AlphaTestStateOf(device);
+                if (d.dropIdleAlphaTest && gfx_gxm::AlphaTestIsIdle(state))
+                {
+                    pixelOptions.alphaFunc = gxm::cg::AlphaFunc::Always;
+                    d.lastDrawAlphaTest = 2;
+                }
+                else if (d.zeroAlphaTest && gfx_gxm::AlphaTestCanZero(state))
+                {
+                    pixelOptions.alphaZero = true;
+                    d.lastDrawAlphaTest = 3;
+                }
+            }
         }
+        pixelOptions.sharpSamplers = sharpSamplers;
         // The programs this combination last drew with (Pipeline), unless a
         // run diagnostic wants to see or change how they are found.
         PipelineKey pipelineKey;
@@ -3186,7 +3685,8 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             pipelineKey.ps = ps;
             pipelineKey.decl = device.decl;
             std::memcpy(pipelineKey.strides, strides, sizeof(strides));
-            pipelineKey.alphaFunc = uint8_t(pixelOptions.alphaFunc);
+            pipelineKey.alphaFunc = uint8_t(uint8_t(pixelOptions.alphaFunc) | (pixelOptions.alphaZero ? 0x80 : 0));
+            pipelineKey.sharp = sharpSamplers;
             pipelineKey.index32 = index32;
             pipeline = &PipelineSlot(d, pipelineKey);
             known = std::memcmp(&pipeline->key, &pipelineKey, sizeof(pipelineKey)) == 0;
@@ -3215,6 +3715,18 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         if (!vertex)
             vertex = GetVariant(device, *vsUsed, plan.options, waiting);
         pixel = known ? pipeline->pixel : GetVariant(device, *ps, pixelOptions, waiting);
+        if (!pixel && sharpSamplers)
+        {
+            // The sharpening variant is still being made, or was refused:
+            // this draw is the frame's picture, so it is drawn plain
+            // meanwhile and not left out.
+            bool plainWaiting = false;
+            pixelOptions.sharpSamplers = sharpSamplers = 0;
+            pixel = GetVariant(device, *ps, pixelOptions, plainWaiting);
+            waiting = (vertex ? false : waiting) || plainWaiting;
+            // Not kept as this combination's programs.
+            pipeline = nullptr;
+        }
         if (!vertex || !pixel)
         {
             if (waiting)
@@ -3280,7 +3792,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
                 : GetFragmentProgram(device, *pixel, passThrough ? *standIn : *vertex, blended ? &blend : nullptr);
         if (!fragmentProgram)
             return;
-        if (plain)
+        if (plain && pipeline)
         {
             pipeline->key = pipelineKey;
             pipeline->vertex = vertex;
@@ -3489,24 +4001,102 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     }
     part(gxm::FrameTime::PartVertexConstants);
     void *pixelUniforms = nullptr;
-    // Not kept for a program that takes a texture's depth as a uniform
-    // (BindTextures writes those).
     const uint32_t alphaRef = device.renderStates[d3d::RS_ALPHAREF] & 0xff;
-    const bool pixelKept = plain && d.fragmentUniformsLive && !pixel->depthUniforms &&
-                           d.fragmentUniformsVersion == device.psConstantsVersion &&
-                           (!pixel->alphaRef || d.fragmentAlphaRef == alphaRef);
+    bool pixelKept = plain && d.fragmentUniformsLive && !pixel->sharp && pixel->uniforms &&
+                     (!pixel->alphaRef || d.fragmentAlphaRef == alphaRef);
+    if (pixelKept && pixel->depthMask)
+    {
+        // BindTextures writes a volume's depth into a new buffer only: the
+        // live one serves while the volumes bound have the depths it holds.
+        pixelKept = d.fragKeepDepth;
+        for (uint32_t mask = pixel->depthMask; pixelKept && mask; mask &= mask - 1)
+        {
+            const int i = __builtin_ctz(mask);
+            pixelKept = VolumeDepth(device.textures[i]) == d.fragmentDepthWritten[i];
+        }
+        d.fragmentCounts.keptDepth += pixelKept && d.fragmentUniformsVersion == device.psConstantsVersion;
+    }
+    if (pixelKept && d.fragmentUniformsVersion != device.psConstantsVersion)
+    {
+        // A constant changed since the buffer was written. It still serves
+        // when none of the constants this program reads did.
+        pixelKept = d.fragKeepSame && !diagPixel;
+        for (size_t run = 0; pixelKept && run < ps->constantRuns.size(); ++run)
+            pixelKept = std::memcmp(&device.psConstants[ps->constantRuns[run].first * 4u],
+                                    &d.fragmentConstantsWritten[ps->constantRuns[run].first * 4u],
+                                    ps->constantRuns[run].second * 4u * sizeof(float)) == 0;
+        if (pixelKept)
+        {
+            d.fragmentUniformsVersion = device.psConstantsVersion;
+            ++d.fragmentCounts.keptSame;
+        }
+    }
     d.uniformWrites += pixel->uniforms;
     d.uniformWritesLeftOut += pixel->uniforms && pixelKept;
     if (pixel->uniforms && !pixelKept)
     {
+        const bool timed = frameTime.parting;
+        const uint64_t reserveFrom = timed ? Micros() : 0;
         const int reserved = sceGxmReserveFragmentDefaultUniformBuffer(context, &pixelUniforms);
+        const uint64_t writeFrom = timed ? Micros() : 0;
         const uint16_t count = ps->parsed.reflection.floatConstants;
-        if (pixel->constants && count)
-            sceGxmSetUniformDataF(pixelUniforms, pixel->constants, 0, count * 4u, device.psConstants.data());
+        if (pixel->constants && count && pixelUniforms)
+        {
+            const size_t bytes = count * 4u * sizeof(float);
+            float *const at = pixel->constantsAt >= 0 ? static_cast<float *>(pixelUniforms) + pixel->constantsAt : nullptr;
+            if (d.fragDirect && at && pixel->directChecked == 1 && pixel->constantsAt * 4u + bytes <= pixel->uniformBytes)
+            {
+                std::memcpy(at, device.psConstants.data(), bytes);
+                ++d.fragmentCounts.direct;
+            }
+            else
+            {
+                sceGxmSetUniformDataF(pixelUniforms, pixel->constants, 0, count * 4u, device.psConstants.data());
+                if (d.fragDirect && at && !pixel->directChecked)
+                {
+                    // Once a program: does a plain copy put the same bytes
+                    // where sceGxm puts them?
+                    const bool fits = pixel->constantsAt * 4u + bytes <= pixel->uniformBytes;
+                    pixel->directChecked = fits && std::memcmp(at, device.psConstants.data(), bytes) == 0 ? 1 : 2;
+                    if (pixel->directChecked == 2 && d.directMismatches++ < 5)
+                        Log(device, "fragment constants: a direct copy would not match sceGxm's write for program "
+                                    "%016llx (constants at float %d, %u of %u bytes); it keeps sceGxm's",
+                            (unsigned long long)pixel->cacheKey, int(pixel->constantsAt), unsigned(bytes),
+                            unsigned(pixel->uniformBytes));
+                }
+            }
+            for (const std::pair<uint16_t, uint16_t> &run : ps->constantRuns)
+                std::memcpy(&d.fragmentConstantsWritten[run.first * 4u], &device.psConstants[run.first * 4u],
+                            run.second * 4u * sizeof(float));
+        }
+        ++d.fragmentCounts.written;
+        d.fragmentCounts.bytes += pixel->uniformBytes;
+        if (timed)
+        {
+            const uint64_t done = Micros();
+            ++d.fragmentCounts.timed;
+            d.fragmentCounts.reserveMicros += writeFrom - reserveFrom;
+            d.fragmentCounts.writeMicros += done - writeFrom;
+        }
         if (pixel->alphaRef)
         {
             const float ref = float(alphaRef) / 255.0f;
             sceGxmSetUniformDataF(pixelUniforms, pixel->alphaRef, 0, 1, &ref);
+        }
+        if (pixel->sharp && pixel->sharpMax && sharpSamplers)
+        {
+            // One texel of the picture it reads, the filter's strength, and
+            // the far edge of the part that was drawn this frame.
+            const Texture *source = nullptr;
+            for (uint32_t i = 0; i < 16 && !source; ++i)
+                if (sharpSamplers >> i & 1)
+                    source = device.textures[i];
+            const float step[4] = {1.0f / float((std::max)(source->desc.width, 1u)),
+                                   1.0f / float((std::max)(source->desc.height, 1u)), kSharpenStrength, 0.0f};
+            const float most[4] = {gfx_gxm::g_filterReadS, gfx_gxm::g_filterReadT, 0.0f, 0.0f};
+            sceGxmSetUniformDataF(pixelUniforms, pixel->sharp, 0, 4, step);
+            sceGxmSetUniformDataF(pixelUniforms, pixel->sharpMax, 0, 4, most);
+            ++d.sharpenStretches;
         }
         d.fragmentUniformsLive = reserved >= 0 && pixelUniforms != nullptr;
         d.fragmentUniformsVersion = device.psConstantsVersion;
@@ -3521,6 +4111,9 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         CountSkip(device, SkipUnfilledSource);
         if (target)
             target->unfilled = true;
+            ++device.textureSerial;
+        // A new buffer may lack a depth BindTextures did not get to.
+        d.fragmentUniformsLive = false;
         return;
     }
     part(gxm::FrameTime::PartTextures);
@@ -3541,6 +4134,9 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         return;
     }
     ++d.drawn;
+    d.alphaTestDraws += d.lastDrawAlphaTest == 1;
+    d.idleAlphaTestDraws += d.lastDrawAlphaTest == 2;
+    d.zeroAlphaTestDraws += d.lastDrawAlphaTest == 3;
     if (target)
         target->unfilled = false;
     part(gxm::FrameTime::PartSubmit);
@@ -3557,6 +4153,7 @@ void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const
         CountSkip(device, SkipCopy);
         if (dstTexture)
             dstTexture->unfilled = true;
+            ++device.textureSerial;
     };
     // The source as a texture: the back buffer, or one level of a texture.
     SceGxmTexture view;
@@ -3619,7 +4216,13 @@ void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const
         skip();
         return;
     }
-    const FragmentProgramEntry *fragment = GetFragmentProgram(device, d.copyFragment, d.copyVertex, nullptr);
+    // The scaled 3D picture's stretch, sharpened when the engine asks.
+    const bool sharpen = linear && gfx_gxm::g_sharpenThisStretch && d.sharpenVertexProgram;
+    const FragmentProgramEntry *fragment =
+        sharpen ? GetFragmentProgram(device, d.sharpenFragment, d.sharpenVertex, nullptr) : nullptr;
+    const bool sharpening = fragment != nullptr;
+    if (!fragment)
+        fragment = GetFragmentProgram(device, d.copyFragment, d.copyVertex, nullptr);
     if (!fragment)
         return;
     const float w = float(d.sceneWidth), h = float(d.sceneHeight);
@@ -3652,15 +4255,19 @@ void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const
         state.stencilFail[side] = state.stencilDepthFail[side] = state.stencilPass[side] = SCE_GXM_STENCIL_OP_KEEP;
     }
     ApplyFixedState(device, state);
-    SetPrograms(device, d.copyVertexProgram, fragment->program);
+    SetPrograms(device, sharpening ? d.sharpenVertexProgram : d.copyVertexProgram, fragment->program);
 
     float *quad = static_cast<float *>(Transient(device, 16 * sizeof(float)));
     if (!quad)
         return;
     const float x0 = 2.0f * to.left / w - 1.0f, x1 = 2.0f * to.right / w - 1.0f;
     const float y0 = 1.0f - 2.0f * to.top / h, y1 = 1.0f - 2.0f * to.bottom / h;
-    const float u0 = float(from.left) / width, u1 = float(from.right) / width;
-    const float v0 = float(from.top) / height, v1 = float(from.bottom) / height;
+    // The sharpening program reads a texel beyond each place. Past the
+    // source's right and bottom edges lies what an earlier frame left, so
+    // the picture ends a texel and a half before them.
+    const float inset = sharpening ? 1.5f : 0.0f;
+    const float u0 = float(from.left) / width, u1 = (float(from.right) - inset) / width;
+    const float v0 = float(from.top) / height, v1 = (float(from.bottom) - inset) / height;
     const float corners[16] = {x0, y0, u0, v0, x1, y0, u1, v0, x0, y1, u0, v1, x1, y1, u1, v1};
     std::memcpy(quad, corners, sizeof(corners));
     const SceGxmTextureFilter filter = linear ? SCE_GXM_TEXTURE_FILTER_LINEAR : SCE_GXM_TEXTURE_FILTER_POINT;
@@ -3670,8 +4277,17 @@ void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const
     sceGxmTextureSetUAddrMode(&view, SCE_GXM_TEXTURE_ADDR_CLAMP);
     sceGxmTextureSetVAddrMode(&view, SCE_GXM_TEXTURE_ADDR_CLAMP);
     SceGxmContext *context = Gxm();
-    sceGxmSetFragmentTexture(context, unsigned(d.copyUnit), &view);
+    if (sharpening)
+    {
+        const float step[4] = {1.0f / float(width), 1.0f / float(height), 0.0f, 0.0f};
+        void *uniforms = nullptr;
+        sceGxmReserveVertexDefaultUniformBuffer(context, &uniforms);
+        sceGxmSetUniformDataF(uniforms, d.sharpenStep, 0, 4, step);
+        ++d.sharpenStretches;
+    }
+    sceGxmSetFragmentTexture(context, unsigned(sharpening ? d.sharpenUnit : d.copyUnit), &view);
     d.unitBound = 0; // a unit's texture changed behind BindTextures
+    d.keptBindPixel = nullptr;
     sceGxmSetVertexStream(context, 0, quad);
     sceGxmDraw(context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, d.sequential, 4);
     ++d.copies;
@@ -3759,17 +4375,39 @@ void LogDrawSummary(Device &device)
         (unsigned long long)d->drawn, (unsigned long long)d->copies, (unsigned long long)d->scenes, unsigned(d->vertexPrograms.size()),
         unsigned(d->fragmentPrograms.size()), d->variantsMade, d->variantFailures, (unsigned long long)d->renames,
         (unsigned long long)d->ringOverflows, d->drawFailures);
+    Log(device,
+        "alpha tests: %llu draws with a discard in their fragment program, %llu with the test left out because it "
+        "could not change the picture%s, %llu that write zero for a rejected pixel%s",
+        (unsigned long long)d->alphaTestDraws, (unsigned long long)d->idleAlphaTestDraws,
+        d->dropIdleAlphaTest ? "" : " (no-alpha-test-drop)", (unsigned long long)d->zeroAlphaTestDraws,
+        d->zeroAlphaTest ? "" : " (no-alpha-test-zero)");
+    {
+        const DrawState::FragmentCounts &c = d->fragmentCounts, &t = d->fragmentTotals;
+        const uint64_t timed = c.timed + t.timed;
+        Log(device,
+            "fragment constants in all: %llu buffers written (%llu bytes), %llu kept by a program that takes a "
+            "volume's depth%s, %llu kept though other constants changed%s, %llu written by a direct copy%s; %llu "
+            "timed draws wrote one, reserving took %.2f us and writing %.2f us each",
+            (unsigned long long)(c.written + t.written), (unsigned long long)(c.bytes + t.bytes),
+            (unsigned long long)(c.keptDepth + t.keptDepth), d->fragKeepDepth ? "" : " (no-frag-keep-depth)",
+            (unsigned long long)(c.keptSame + t.keptSame), d->fragKeepSame ? "" : " (no-frag-keep-same)",
+            (unsigned long long)(c.direct + t.direct), d->fragDirect ? " (frag-direct-write)" : "",
+            (unsigned long long)timed, timed ? double(c.reserveMicros + t.reserveMicros) / double(timed) : 0.0,
+            timed ? double(c.writeMicros + t.writeMicros) / double(timed) : 0.0);
+    }
     // What the draws did not do again (Pipeline, BindTextures, the uniform
     // buffers in Draw).
     Log(device,
         "draw work left out: %llu draws kept the last draw's programs and fixed state; %llu of %llu others found "
         "their programs in the table; of %llu texture binds %llu were set already and %llu set their filters anew; of "
-        "%llu uniform buffers %llu were the last draw's",
+        "%llu uniform buffers %llu were the last draw's; of %llu draws with textures %llu had the last draw's and "
+        "set none%s",
         (unsigned long long)d->sameStateDraws, (unsigned long long)d->pipelineHits,
         (unsigned long long)d->pipelineLookups,
         (unsigned long long)d->textureBinds, (unsigned long long)d->textureBindsLeftOut,
         (unsigned long long)d->textureViewsMade, (unsigned long long)d->uniformWrites,
-        (unsigned long long)d->uniformWritesLeftOut);
+        (unsigned long long)d->uniformWritesLeftOut, (unsigned long long)d->bindDraws,
+        (unsigned long long)d->bindDrawsKept, d->keepBinds ? "" : " (no-texture-keep)");
     for (int i = 0; i < SkipCount; ++i)
         if (d->skipped[i])
             Log(device, "draws skipped: %llu x %s", (unsigned long long)d->skipped[i], kSkipNames[i]);

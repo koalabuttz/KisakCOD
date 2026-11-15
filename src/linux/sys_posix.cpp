@@ -124,6 +124,18 @@ struct PosixEvent
     pthread_cond_t cond;
     bool manualReset;
     bool signalled;
+    // How often a manual-reset event has been set. SetEvent on Windows lets
+    // go of every thread that waits at that moment, whatever happens to the
+    // event afterwards. Here a woken thread first has to get the mutex back,
+    // and by then another thread may have reset the event: the engine's
+    // worker threads do exactly that (a worker sets the worker command event
+    // when it finishes a command, finds no other, goes to wait, is let
+    // through at once and resets the event: R_WorkerThread and
+    // R_ProcessWorkerCmds). A thread that only looked at `signalled` then
+    // slept on to the end of its timeout: the main thread a millisecond for
+    // a command that had ended. A waiter is let go by a set that came while
+    // it waited, reset or not.
+    uint32_t setCount;
 };
 
 PosixEvent *Posix_CreateEvent(bool manualReset, bool initialState)
@@ -138,6 +150,7 @@ PosixEvent *Posix_CreateEvent(bool manualReset, bool initialState)
 
     event->manualReset = manualReset;
     event->signalled = initialState;
+    event->setCount = 0;
     return event;
 }
 
@@ -149,7 +162,10 @@ void Posix_SetEvent(PosixEvent *event)
     pthread_mutex_lock(&event->mutex);
     event->signalled = true;
     if (event->manualReset)
+    {
+        ++event->setCount;
         pthread_cond_broadcast(&event->cond);
+    }
     else
         pthread_cond_signal(&event->cond);
     pthread_mutex_unlock(&event->mutex);
@@ -189,12 +205,16 @@ bool Posix_WaitEvent(PosixEvent *event, uint32_t msec)
     // with the default timer slack, so every "is it ready yet?" poll by the
     // main, render and worker threads would sleep instead of returning.
     //
-    // Predicate loop: a spurious wakeup is not a signal.
+    // Predicate loop: a spurious wakeup is not a signal. A manual-reset event
+    // that was set while this thread waited lets it go even when it has been
+    // reset since (see PosixEvent::setCount); an auto-reset event's count
+    // never moves.
+    const uint32_t setCountBefore = event->setCount;
     if (!event->signalled && msec != 0)
     {
         const struct timespec deadline = Posix_MonotonicDeadline(msec);
 
-        while (!event->signalled)
+        while (!event->signalled && event->setCount == setCountBefore)
         {
             const int status = Posix_CondTimedWaitMonotonic(&event->cond, &event->mutex, &deadline);
             if (status == ETIMEDOUT)
@@ -208,6 +228,10 @@ bool Posix_WaitEvent(PosixEvent *event, uint32_t msec)
         if (!event->manualReset)
             event->signalled = false; // consume so exactly one waiter proceeds
     }
+    else if (event->setCount != setCountBefore)
+    {
+        result = true;
+    }
 
     pthread_mutex_unlock(&event->mutex);
     return result;
@@ -219,7 +243,8 @@ void Posix_WaitEventInfinite(PosixEvent *event)
         return;
 
     pthread_mutex_lock(&event->mutex);
-    while (!event->signalled)
+    const uint32_t setCountBefore = event->setCount;
+    while (!event->signalled && event->setCount == setCountBefore)
         pthread_cond_wait(&event->cond, &event->mutex);
 
     if (!event->manualReset)
