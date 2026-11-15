@@ -159,6 +159,12 @@ set(sp_game_own_sources
     "${SRC_DIR}/linux/client/window/pixel_buffer.cpp"
     "${SRC_DIR}/linux/client/window/win32_window_sdl3.cpp"
     "${SRC_DIR}/linux/client/window/window_host.cpp")
+# The controller (KISAK_LINUX_GAMEPAD), as KisakCOD-mp has it (mp_client.cmake).
+if(KISAK_LINUX_GAMEPAD)
+    list(APPEND sp_game_own_sources
+        ${KISAK_MP_CLIENT_GAMEPAD_SOURCES}
+        "${SRC_DIR}/linux/client/mp_client_gamepad.cpp")
+endif()
 
 # The Windows KisakCOD-sp definitions without CINEMA (see r_cinematic.cpp above).
 set(KISAK_SP_GAME_DEFINITIONS
@@ -199,7 +205,14 @@ endforeach()
 set_property(SOURCE "${SRC_DIR}/sound/snd_driver_load_obj.cpp" TARGET_DIRECTORY KisakCOD-sp-standin
     APPEND PROPERTY COMPILE_DEFINITIONS DR_WAV_IMPLEMENTATION DR_MP3_IMPLEMENTATION)
 target_link_libraries(KisakCOD-sp-native PRIVATE kisak_linux_native_d3d9)
-target_compile_definitions(KisakCOD-sp-own PRIVATE KISAK_LINUX_SDL_MAJOR=3)
+target_compile_definitions(KisakCOD-sp-own PRIVATE KISAK_LINUX_SDL_MAJOR=3
+    $<$<BOOL:${KISAK_LINUX_GAMEPAD}>:KISAK_LINUX_GAMEPAD>)
+if(KISAK_LINUX_GAMEPAD)
+    # Warnings are errors in the engine-free units, as in KisakCOD-mp.
+    set_property(SOURCE ${KISAK_MP_CLIENT_GAMEPAD_SOURCES}
+        TARGET_DIRECTORY KisakCOD-sp-own APPEND PROPERTY COMPILE_OPTIONS -Wall -Wextra -Werror)
+    message(STATUS "KisakCOD-sp: game controller support on")
+endif()
 target_link_libraries(KisakCOD-sp-own PRIVATE kisak_linux_native_d3d9 SDL3::SDL3)
 
 if(KISAK_LINUX_CINEMATICS)

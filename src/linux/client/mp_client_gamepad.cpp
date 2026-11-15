@@ -1,4 +1,5 @@
-// A game controller in the multiplayer client (mp_client_gamepad.h).
+// A game controller in the multiplayer client and the singleplayer game
+// (mp_client_gamepad.h).
 //
 // The engine takes keys and a mouse. src/linux/client/input/gamepad_map.cpp
 // decides what the controller's buttons, sticks and triggers mean in those
@@ -21,8 +22,8 @@
 // Nothing here runs until a controller is connected, apart from asking SDL
 // once a second whether there is one; in_gamepad 0 stops that too.
 
-#if !defined(KISAK_LINUX_MP_CLIENT) || !defined(KISAK_LINUX_GAMEPAD)
-#error "mp_client_gamepad.cpp is KisakCOD-mp's controller support: build it with KISAK_LINUX_GAMEPAD"
+#if !(defined(KISAK_LINUX_MP_CLIENT) || defined(KISAK_LINUX_SP_GAME)) || !defined(KISAK_LINUX_GAMEPAD)
+#error "mp_client_gamepad.cpp is the games' controller support: build it with KISAK_LINUX_GAMEPAD"
 #endif
 
 #include "mp_client_gamepad.h"
@@ -36,7 +37,11 @@
 #include <qcommon/cmd.h>
 #include <qcommon/threads.h>
 #include <client/client.h>
+#ifdef KISAK_SP
+#include <client/cl_input.h>
+#else
 #include <client_mp/client_mp.h>
+#endif
 #include <ui/keycodes.h>
 #include <ui/ui_shared.h>
 #include <win32/win_local.h>

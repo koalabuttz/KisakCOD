@@ -180,9 +180,9 @@ adb shell am start -n org.kisakcod.game/.CampaignActivity --es args "+devmap kil
 A level needs an active player profile ("Tried to use a player profile before
 it was set"), and a handheld has no keyboard to name one, so the first
 campaign start makes one called `player` (`home/players/profiles/active.txt`)
-unless the home folder has one. It has no controller support yet
-(`mp_client_gamepad.cpp` is the multiplayer client's), and has not run on a
-device or the emulator yet.
+unless the home folder has one. The controller works as in multiplayer
+(`KISAK_LINUX_GAMEPAD`: `mp_client_gamepad.cpp` serves both games). It has
+not run on a device or the emulator yet.
 
 The stock scripts read `scr_testclients` only in their developer blocks
 (`/# ... #/`), so without `developer_script 1` no bot joins (run 6 on the
