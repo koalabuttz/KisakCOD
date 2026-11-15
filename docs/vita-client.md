@@ -962,6 +962,21 @@ What the GXM back end does so far (step 2d):
   quit summary counts these draws apart. An empty file
   `no-alpha-test-zero`, or `vita_gxm no-alpha-test-zero 1`, turns it
   off. What it saves on the console is not measured yet.
+- **The alpha test first.** Console run CL (2026-11-15) found that most of
+  what the decals cost the GPU is their fragment programs, the lit
+  lightmap programs, run for every pixel the decal covers, also the
+  transparent ones its test rejects. With an alpha test (a discard, or a
+  zero written as above) the translator now writes the instructions the
+  colour's alpha depends on first, on copies of their registers
+  (`e_r0`, `e_oC0`), tests the alpha and leaves the program for a pixel
+  that fails, before the lighting (`alphaEarly` in the translator's
+  options). Only for a program with no flow control and whose alpha needs
+  at most half of its instructions; the others are written as before, and
+  the quit summary's `alpha tests:` line says how many programs were of
+  each kind. The test at the end stays, so the picture is the same. An
+  empty file `no-alpha-early`, or `vita_gxm no-alpha-early 1`, turns it
+  off. Whether the Vita's compiler makes it a real branch, and what it
+  saves, only a console shows.
 - **Depth first.** The scene's depth is always drawn before its lit pass
   on the Vita (src/gfx_gxm/gxm_engine_options.h), whatever r_depthPrepass
   says, so that the GPU skips hidden pixels of the lit pass early. Console
