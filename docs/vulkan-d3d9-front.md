@@ -185,14 +185,22 @@ frame. Two things keep that from costing the render thread:
   only then sleeps on the mutex. Nearly every call holds the lock for a
   microsecond or less; a waiter that sleeps at once makes the holder pay a
   system call to wake it, and then often finds the lock taken again.
-  `KISAK_VK_FRONT_SPIN=0` makes every waiter sleep at once, to compare. The PS
-  Vita build keeps the plain recursive mutex.
+  `KISAK_VK_FRONT_SPIN=0` makes every waiter sleep at once, to compare.
 * The lock is one word (free, held, held with sleepers) and its owner, both
   atomics: taking and dropping it without a waiter is one atomic operation
   each, inline in the method, with no call into the C library. Only a waiter
   that runs out of tries touches a mutex and condition variable to sleep on.
   The object needs no constructor that runs, so a call from a static
-  constructor or destructor still finds it.
+  constructor or destructor still finds it. The owner is an address that is
+  the calling thread's alone: a `thread_local` byte's, and on the PS Vita,
+  where `thread_local` is a library call on every use, what the thread
+  register holds (TPIDRURO, the thread's block of kernel-kept storage; one
+  instruction). The Vita had a `std::recursive_mutex` here until 2026-11-15:
+  four library calls for each of the 5000 and more calls a frame. Its
+  start-up log says what each costs (`front lock: taken and dropped in N ns
+  (a std::recursive_mutex: N ns)`), and an `ERROR: front lock:` line if the
+  register does not hold what the kernel's own `sceKernelGetTLSAddr` starts
+  from.
 * `IDirect3DQuery9::GetData` asks the GPU how far it has got before it takes
   the lock (`BackendPollProgress`, the core's `RefreshProgress`,
   [vulkan-core.md](vulkan-core.md)), which is the part that takes a system
