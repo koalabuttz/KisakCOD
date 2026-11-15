@@ -105,6 +105,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "r_vkKeepDrawState",
     "r_vkShaderCache",
     "r_vkValidation",
+    "r_vsyncInterval",
     // Sound and animation.
     "snd_adpcm",
     "snd_alDebug",

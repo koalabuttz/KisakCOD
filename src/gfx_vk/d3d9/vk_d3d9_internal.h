@@ -41,6 +41,15 @@ void HostLog(const Host &host, const char *format, ...);
 // on the PS Vita. Samples of a D3D9 multisample type: 1 for none.
 bool OffersSamples(D3DMULTISAMPLE_TYPE type);
 inline uint32_t SamplesOf(D3DMULTISAMPLE_TYPE type) { return type >= D3DMULTISAMPLE_2_SAMPLES ? uint32_t(type) : 1u; }
+// The refreshes a frame stays on screen for a presentation interval (1 for
+// DEFAULT, ONE and IMMEDIATE).
+inline uint32_t SwapIntervalOf(UINT interval)
+{
+    return interval == D3DPRESENT_INTERVAL_TWO ? 2u
+        : interval == D3DPRESENT_INTERVAL_THREE ? 3u
+        : interval == D3DPRESENT_INTERVAL_FOUR  ? 4u
+                                                : 1u;
+}
 
 // The lock every method of every front object holds for its whole call. One
 // for the process and recursive: a method calls others (Release from a

@@ -95,6 +95,8 @@ bool BackendWindowSize(const Backend *, uint32_t &width, uint32_t &height)
     return true;
 }
 
+void BackendSetSwapInterval(Backend *, uint32_t) {}
+
 void BackendCounters(const Backend *, DeviceCounters &out)
 {
     out.validationErrors = 0;

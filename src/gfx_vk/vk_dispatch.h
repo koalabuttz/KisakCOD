@@ -166,5 +166,8 @@ struct Dispatch
     GFX_VK_DEBUG_FUNCTIONS(GFX_VK_DECLARE)
     GFX_VK_DEVICE_FUNCTIONS(GFX_VK_DECLARE)
 #undef GFX_VK_DECLARE
+    // VK_GOOGLE_display_timing, when the device has it (null otherwise).
+    PFN_vkGetRefreshCycleDurationGOOGLE vkGetRefreshCycleDurationGOOGLE = nullptr;
+    PFN_vkGetPastPresentationTimingGOOGLE vkGetPastPresentationTimingGOOGLE = nullptr;
 };
 } // namespace gfx_vk
