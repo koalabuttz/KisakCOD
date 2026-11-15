@@ -784,12 +784,39 @@ enum ModernLitShader : uint16_t
     ModernLitSkinProbe = 0x800,
     ModernLitTwoSidedSun = 0x1000,
     ModernLitVariationMask = 0x1800,
+    // With no family, ModernLitSpot or ModernLitOmni: the extra per-light
+    // pass l_<spot|omni>[_flag|_skin][_hsm]_<mode>c0[d0][n0] that effects'
+    // lights (muzzle flashes, explosions) add over the lit scene (light pass
+    // facts 1): the light's term alone, drawn additively (INVDESTALPHA, ONE).
+    // The colour map at s0; the light's shadow map at s4 (hsm, spots only,
+    // not with a detail map), then the normal map (n0), the attenuation and
+    // the detail map (d0), each at the next sampler; fog colour at c0,
+    // lightPosition and lightDiffuse at c5 and c6, spotDir and spotFactors at
+    // c7 and c8 (a spot), spotShadowmapPixelAdjust at c9 (hsm), detailScale
+    // after those (d0); texcoords 0, 1 and 5, 2 and 3 (n0), 4 (hsm) and colour
+    // 0 in. ModernLitTwoSidedSun with it is flag_'s light on both faces. Ours
+    // adds the light as physical light (SetModernLightPass).
 };
+// Whether it is an extra per-light pass (l_).
+constexpr bool ModernLitLightPass(uint16_t shader)
+{
+    const uint16_t light = shader & ModernLitLightMask;
+    return !(shader & ModernLitFamilyMask) && (light == ModernLitSpot || light == ModernLitOmni);
+}
 // Whether shader names a Modern lit shader of ours.
 constexpr bool ModernLitShaderValid(uint16_t shader)
 {
     if (shader == ModernLitWater)
         return true;
+    if (ModernLitLightPass(shader))
+    {
+        // No specular map, no variation but the two-sided light, and the
+        // shadow map on spots alone and not with a detail map.
+        const bool spot = (shader & ModernLitLightMask) == ModernLitSpot;
+        return !(shader & (ModernLitSpecular | ModernLitSkinProbe | ModernLitWater))
+            && (shader & ModernLitModeMask) != 0x30 && shader <= 0x1fff
+            && (!(shader & ModernLitShadow) || (spot && !(shader & ModernLitDetail)));
+    }
     const uint16_t family = shader & ModernLitFamilyMask;
     const uint16_t light = shader & ModernLitLightMask;
     if (shader & ModernLitVariationMask)
@@ -849,6 +876,13 @@ constexpr uint32_t ModernLitConstantCount(uint16_t shader)
 {
     if (shader == ModernLitWater)
         return 19u;
+    if (ModernLitLightPass(shader))
+    {
+        // c5 lightPosition, c6 lightDiffuse; c7 spotDir and c8 spotFactors
+        // (a spot); c9 spotShadowmapPixelAdjust (hsm); then detailScale.
+        const bool spot = (shader & ModernLitLightMask) == ModernLitSpot;
+        return 7u + (spot ? 2u : 0u) + (shader & ModernLitShadow ? 1u : 0u) + (shader & ModernLitDetail ? 1u : 0u);
+    }
     if (ModernLitAmbientOnly(shader))
         return 19u;
     if (ModernLitPointLight(shader))
@@ -926,6 +960,12 @@ struct ModernPlanarParams
 };
 static_assert(sizeof(ModernPlanarParams) == 96, "the lit shaders' push constant block");
 void SetModernPlanar(Device *device, Image *image, const ModernPlanarParams *params);
+// The strength of the extra light passes of ours (ModernLitLightPass): they
+// add their light as physical light, the decoded colour times the decoded
+// light colour times the attenuation, cone, shadow and N.L, in linear light,
+// times this (1 by default). Set before the first draw that uses one:
+// shaders already built keep theirs.
+void SetModernLightPass(Device *device, float strength);
 #endif
 
 // The device's window is about to be destroyed: an open pass and frame end

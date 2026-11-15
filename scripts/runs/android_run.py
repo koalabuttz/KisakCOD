@@ -169,6 +169,7 @@ APP_ARGUMENTS = ["+set", "fs_basepath", "{folder}", "+set", "fs_homepath", "{fol
                  "+set", "r_fullscreen", "1"]
 # The same folder as adb's shell sees it, for pulling screenshots.
 DEVICE_HOME = "/sdcard/Android/data/{package}/files/home"
+GAME_PROCESS = ":game"
 DEFAULT_TAGS = ["KisakCOD", "SDL", "AndroidRuntime", "DEBUG", "libc"]
 LOGCAT_LINE = re.compile(r"^(\d\d-\d\d \d\d:\d\d:\d\d\.\d+)\s+(\d+)\s+(\d+)\s+([VDIWEFA])\s+(.*?)\s*: ?(.*)$")
 EVENT_LINES = {"menu": "run: the menu is up", "map": "run: the map is up", "quit": "run: quitting as asked"}
@@ -186,6 +187,7 @@ PID_EVERY = 1.0
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 DEFAULT_EMULATOR_PORT = 5554
 DEFAULT_BOOT_TIMEOUT = 300
+MKDIR_BATCH = 20
 EMULATOR_ARGS = ["-no-snapshot-save", "-no-boot-anim", "-no-audio"]
 
 
@@ -401,11 +403,24 @@ class Adb:
         return subprocess.Popen(self.base + list(args), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
 
-def app_pids(adb, package):
-    # The game runs in the app's ":game" process (the launcher in the main
-    # one), so both names count.
-    code, out, _ = adb.shell(f"pidof {package} {package}:game", timeout=20)
+def app_pids(adb, package, names=None):
+    """The pids of the app's processes: the launcher's (the package's own
+    name) and the game's (``<package>:game``, AndroidManifest.xml)."""
+    names = names or [package, package + GAME_PROCESS]
+    code, out, _ = adb.shell("pidof " + " ".join(names), timeout=20)
     return [int(word) for word in out.split() if word.isdigit()] if code == 0 else []
+
+
+def game_pids(adb, package, seen):
+    """The game's own process. The app runs its game activities in a
+    process of their own (``android:process=":game"``), so the launcher's
+    process stays up when the game ends; a build from before that has one
+    process, the package's. ``seen`` remembers which this build has."""
+    pids = app_pids(adb, package, [package + GAME_PROCESS])
+    if pids:
+        seen["game_process"] = True
+        return pids
+    return [] if seen.get("game_process") else app_pids(adb, package, [package])
 
 
 def package_times(adb, package):
@@ -542,6 +557,19 @@ def run_game_files(recipe, adb):
         adb.shell(f"am start -W -n {package}/{device(recipe)['activity']}", timeout=60)
         time.sleep(5)
         adb.shell(f"am force-stop {package}")
+    # adbd makes only one new folder level per file on some images (the
+    # Android 13 x86_64 emulator image: "remote secure_mkdirs failed:
+    # Operation not permitted"), while the shell's mkdir -p works, so the
+    # whole folder tree is made first.
+    folders = sorted({f"{folder}/{path.relative_to(source).as_posix()}"
+                      for path in source.rglob("*") if path.is_dir()})
+    for start in range(0, len(folders), MKDIR_BATCH):
+        batch = " ".join(shlex.quote(path) for path in folders[start:start + MKDIR_BATCH])
+        code, out, err = adb.shell(f"mkdir -p {batch}", timeout=60)
+        if code != 0:
+            result["status"] = f"failed: mkdir -p on the device: {(out + ' ' + err).strip()}"
+            return result
+    result["folders"] = len(folders)
     code, out, err = adb.run("push", f"{source}/.", f"{folder}/", timeout=float(files.get("timeout", 7200)))
     result["output"] = (out + "\n" + err).strip().splitlines()[-2:]
     ok = code == 0 and adb.shell(f"ls {folder}/{files['check']}", timeout=30)[0] == 0
@@ -732,7 +760,7 @@ def run_launch(recipe, adb, launch, out):
     all_lines, game_lines = [], []
     timeout = float(launch.get("timeout") or recipe.get("timeout") or 300)
     tags = set(recipe.get("logcat_tags") or DEFAULT_TAGS)
-    last_pid_check, gone_at, status = 0.0, None, None
+    last_pid_check, gone_at, status, processes = 0.0, None, None, {}
 
     def take(lines):
         for line in lines:
@@ -763,7 +791,7 @@ def run_launch(recipe, adb, launch, out):
             now_time = time.time()
         if now_time - last_pid_check >= PID_EVERY:
             last_pid_check = now_time
-            pids = app_pids(adb, package)
+            pids = game_pids(adb, package, processes)
             pids_seen.update(pids)
             if pids:
                 gone_at = None

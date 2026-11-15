@@ -56,6 +56,11 @@ struct SlowFrame
     FrameGpuTimes gpu{};
 };
 constexpr uint32_t kSlowFrames = 3;
+// The extra light passes' (muzzle flashes, explosions) strength as physical
+// light: brighter than the game's colours alone, which were set for light
+// added in display values (David, 2026-11-15: "the physical light with the
+// flash made brighter").
+constexpr float kLightPassStrength = 2.0f;
 } // namespace
 
 struct Backend
@@ -134,6 +139,11 @@ struct Backend
     // Water's (water_l_sun) shader of ours, unless KISAK_VK_MODERN_WATER=0
     // (at start-up only).
     bool waterShaderWanted = true;
+    // The extra light passes' (l_) shader of ours, unless
+    // KISAK_VK_MODERN_LIGHT_PASS=0, and its strength as physical light
+    // (KISAK_VK_MODERN_LIGHT_PASS_STRENGTH; at start-up only).
+    bool lightPassWanted = true;
+    float lightPassStrength = kLightPassStrength;
     float sunStrength = 1.0f;
     float skyStrength = 1.0f;
     uint64_t litShaderChanges = 0, litShaderChangesBase = 0;
@@ -763,6 +773,12 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     backend->debugCompute = EnvIs("KISAK_VK_MODERN_DEBUG", "compute");
     backend->debugPlanarRead = EnvIs("KISAK_VK_MODERN_DEBUG", "planar-read");
     backend->waterShaderWanted = !EnvIsZero("KISAK_VK_MODERN_WATER");
+    backend->lightPassWanted = !EnvIsZero("KISAK_VK_MODERN_LIGHT_PASS");
+    {
+        const std::string strength = EnvText("KISAK_VK_MODERN_LIGHT_PASS_STRENGTH");
+        const float value = strength.empty() ? -1.0f : std::strtof(strength.c_str(), nullptr);
+        backend->lightPassStrength = value >= 0.0f ? value : kLightPassStrength;
+    }
     backend->planarWanted = backend->linearWanted && !EnvIsZero("KISAK_VK_MODERN_PLANAR")
                             && (EnvIs("KISAK_VK_MODERN_PLANAR", "1") || backend->debugPlanar
                                 || backend->debugPlanarRead);
@@ -845,6 +861,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     }
     backend->ownFeed = lg::GetGpuFeed(backend->legacy);
     lg::SetModernLitStrengths(backend->legacy, backend->sunStrength, backend->skyStrength);
+    lg::SetModernLightPass(backend->legacy, backend->lightPassStrength);
     return backend;
 }
 
@@ -1035,10 +1052,11 @@ void BackendLogStats(Backend *backend, bool reset)
         // modules built as them (and that could not be).
         if (backend->shadersWanted)
             HostLog(h, "vulkan d3d9: modern: lit shaders of our own: %.1f changes to one each scene, %u pixel modules "
-                       "built as one (%u could not be), sun strength %.2f, sky strength %.2f",
+                       "built as one (%u could not be), sun strength %.2f, sky strength %.2f, light pass %s at %.2f",
                     double(backend->litShaderChanges - backend->litShaderChangesBase) / double(scenes),
                     stats.modernLitModules - was.modernLitModules, stats.modernLitRefused - was.modernLitRefused,
-                    backend->sunStrength, backend->skyStrength);
+                    backend->sunStrength, backend->skyStrength, backend->lightPassWanted ? "on" : "off",
+                    backend->lightPassStrength);
     }
     // Velocity: the surfaces drawn again with their own motion, and the
     // GPU time of that pass.
@@ -1584,7 +1602,8 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
     if ((lg::ModernLitModel(shader) && !backend->modelShadersWanted)
         || ((shader & lg::ModernLitFamilyMask) == lg::ModernLitNoSun && !backend->noSunShadersWanted)
         || (lg::ModernLitPointLight(shader) && !backend->lightShadersWanted)
-        || (shader == lg::ModernLitWater && !backend->waterShaderWanted))
+        || (shader == lg::ModernLitWater && !backend->waterShaderWanted)
+        || (lg::ModernLitLightPass(shader) && !backend->lightPassWanted))
         shader = lg::ModernLitNone;
     if (inputs && backend->linearScene && !backend->linearFailed)
     {

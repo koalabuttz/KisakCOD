@@ -94,6 +94,7 @@ struct Situation
     bool coverKnown = false;     // the map sense found cover from the threat
     bool inCover = false;        // and the bot is there
     bool forObjective = false;   // going for, or on, an objective its team takes
+    int teammatesHunting = 0;    // teammates who went after the same lead first
 };
 
 struct IntentScores
@@ -153,6 +154,12 @@ inline IntentScores ScoreIntents(const Situation &s, const Personality &p)
             hunt = 0.3f + 0.5f * s.rememberedConfidence;
         if (s.heardSomething)
             hunt = std::fmax(hunt, 0.45f);
+        // Teammates already gone after it: a team sends one or two, and the
+        // rest look and keep on with what they were doing.
+        if (s.teammatesHunting >= 2)
+            hunt = 0.0f;
+        else if (s.teammatesHunting == 1)
+            hunt *= s.enemyRemembered ? 0.6f : 0.3f;
         if (hunt > 0.0f)
             scores.hunt = hunt * (0.6f + 0.8f * p.aggression);
     }
