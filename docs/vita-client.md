@@ -553,8 +553,41 @@ it opens it: the seek to the end read the whole file and the step back to the
 tag read it again. AY's 3.5 MB was one 1.2 MB file read three times. The
 driver now opens a stream without that callback, so the open reads the file's
 head only; a tag at the end of a file reaches the decoder as bytes that are no
-frame, which it skips. The same host test opens a made-up MP3 both ways and
-counts the bytes.
+frame, which it skips (and with them the last frame before the tag, 26 ms,
+which the decoder cannot confirm against what follows). The same host test
+opens a made-up MP3 both ways and counts the bytes.
+
+That left the first play of each file, one read for the length: a quarter of
+a second for a 1.2 MB file. The game's music is constant bit rate (128 kbit/s,
+44.1 kHz), where every frame has the same length, so the file's size says how
+many frames it holds. A file has to show that it is one, twice over. The
+driver reads the first 32 KB of a file it has no length for: past an ID3v2
+tag, every frame there has to be a layer 3 frame of one bit rate and sample
+rate, each starting where the one before ends, and at least 16 of them. And
+the file has to be a whole number of such frames long to the byte, alone or
+with an ID3v1 tag's 128 bytes behind the last frame. Then the length comes
+from the size, and nothing more is read. Any other file (variable bit rate,
+as the ambient streams are; a tag longer than the head) is read through once
+as before.
+
+The head alone is not enough. A survey of the game's 119 MP3 streams on the
+owner's PC (2026-11-14, `test_openal_stream_lengths.py --survey <folder>`)
+found the 60 music files constant bit rate, each with an ID3v1 tag, and six of
+the 59 variable bit rate ambient streams with one bit rate all through their
+first 32 KB: their sizes gave lengths up to 40 s wrong. The second proof
+turns five of the six away. The sixth is a whole number of frames long by
+chance (about one file in seventy of another kind is) and gets a length 78 ms
+out, for a stream that loops and so never uses it.
+
+So a length from a size is put right at the first full play. When the decoder
+reaches the end of a file it began at the first frame, the frames it gave
+replace the size's answer (`AL_CountStreamLength`). For the music that takes
+one frame off, 26 ms: the frame before the tag that the decoder does not
+play. `snd_alDebug 1` prints which way each file went and each length put
+right (`played through: F frames, not the G its size gave`), and level 2 also
+reads a constant bit rate file through at its start and prints both counts.
+The host test holds the size's answer against the decoder's own count on
+made-up files, and `--survey` does the same for real ones.
 
 **Loaded sounds in memory** (`snd_adpcm`). The OpenAL driver keeps every
 loaded sound as 16-bit PCM, and that is also how the fastfiles hold the sounds
