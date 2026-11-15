@@ -1354,7 +1354,7 @@ chain).
 | Thickness | 16 units | `KISAK_VK_MODERN_SSR_THICKNESS` |
 | Steps | 32 | `KISAK_VK_MODERN_SSR_STEPS` (at most 256) |
 | Levels | 5 | `KISAK_VK_MODERN_SSR_LEVELS` (1 to 8) |
-| Debug view | off | `KISAK_VK_MODERN_DEBUG=reflections` draws the sharpest level over the finished scene: the stored light over black, through the sRGB curve (no exposure, no tonemap); black is "no reflection" |
+| Debug view | off | `KISAK_VK_MODERN_DEBUG=reflections` draws the sharpest level over the finished scene: the stored light (its compression undone) over black, through the sRGB curve (no exposure, no tonemap); black is "no reflection" |
 
 The statistics line: `vulkan d3d9: modern: N scenes with screen-space
 reflections (L levels), X ms GPU each` (the trace pass; the blits are not

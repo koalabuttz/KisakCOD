@@ -136,6 +136,7 @@ SETS = [
             ("debug_ao.frag", "kDebugAoFrag"),
             ("reflections.frag", "kReflectionsFrag"),
             ("debug_reflections.frag", "kDebugReflectionsFrag"),
+            ("debug_reflections.frag", "kDebugImageFrag", ("DEBUG_PLAIN=1",)),
             ("fog_march.frag", "kFogMarchFrag"),
             ("fog_apply.frag", "kFogApplyFrag"),
             ("fog_apply.frag", "kFogApplyFroxelsFrag", ("FOG_FROXELS=1",)),

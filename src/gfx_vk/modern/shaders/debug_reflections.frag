@@ -6,6 +6,14 @@
 // the reflected light (its compression undone) times its confidence, over
 // black, through the sRGB curve (clamped to 1, no exposure, no tonemap).
 // Black is "no reflection here".
+//
+// Built again with DEBUG_PLAIN=1 (kDebugImageFrag) for an image that is not
+// compressed, the planar reflection's (KISAK_VK_MODERN_DEBUG=planar): it is
+// shown as it is.
+
+#ifndef DEBUG_PLAIN
+#define DEBUG_PLAIN 0
+#endif
 
 layout(set = 0, binding = 0) uniform sampler2D reflections;
 
@@ -20,6 +28,10 @@ vec3 Encode(vec3 light)
 void main()
 {
     const vec4 reflection = texelFetch(reflections, ivec2(gl_FragCoord.xy), 0);
+#if DEBUG_PLAIN
+    outColor = vec4(Encode(reflection.rgb), 1.0);
+    return;
+#endif
     // Stored as L / (1 + luma L) times the confidence (reflections.frag).
     const vec3 stored = reflection.a > 1e-4 ? reflection.rgb / reflection.a : vec3(0.0);
     const float luma = dot(stored, vec3(0.2126, 0.7152, 0.0722));
