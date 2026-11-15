@@ -1351,7 +1351,12 @@ the scene drawn again from the camera mirrored in it.
 frame of the map the point is traced 512 units down through the world; the
 height met makes the plane `z = height`, logged once as `modern: planar
 reflections on mp_strike at height H`. Only `mp_strike`'s main street is
-listed now (picked from the reflections' PC run 4).
+listed now (picked from the reflections' PC run 4). A map not in the list
+reflects in its water, if it has any: of the world surfaces whose material
+has a water map and whose bounds are flat, the height where the most of them
+lie (by the area of their bounds, at least 256 by 256 units) makes the plane,
+logged as `modern: planar reflections on <map> at height H (water, A square
+units)`. The water's own shader does not read the image yet.
 
 **The view.** After each main view (`R_RenderScene` from the game), while
 the camera is above the plane, `R_ModernPlanarScene` draws the scene again:

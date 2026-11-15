@@ -2225,6 +2225,57 @@ static const float kModernPlanarCut = 1.0f;
 
 bool R_ModernPlanarViewActive() { return s_modernPlanarActive; }
 
+// A map not in the table reflects in its water, if it has any: the height
+// where the most flat water lies (the area of the bounds of the world
+// surfaces whose material has a water map and whose bounds are flat, by
+// height within half a unit), when that is at least kModernPlanarWaterArea.
+static const float kModernPlanarWaterArea = 256.0f * 256.0f;
+
+static void R_ModernPlanarFindWater(const char *name)
+{
+    constexpr int kHeights = 8;
+    float heights[kHeights];
+    float areas[kHeights];
+    int heightCount = 0;
+    const GfxWorldDpvsStatic &dpvs = rgp.world->dpvs;
+    for (uint32_t s = 0; s < dpvs.staticSurfaceCount; ++s)
+    {
+        const GfxSurface &surface = dpvs.surfaces[s];
+        if (!surface.material || !R_ModernWaterMap(surface.material))
+            continue;
+        const float z = surface.bounds[1][2];
+        if (z - surface.bounds[0][2] > 0.5f)
+            continue;
+        const float area = (surface.bounds[1][0] - surface.bounds[0][0]) * (surface.bounds[1][1] - surface.bounds[0][1]);
+        int h = 0;
+        while (h < heightCount && fabsf(heights[h] - z) > 0.5f)
+            ++h;
+        if (h == heightCount)
+        {
+            if (heightCount == kHeights)
+                continue;
+            heights[heightCount] = z;
+            areas[heightCount++] = 0.0f;
+        }
+        areas[h] += area;
+    }
+    int best = -1;
+    for (int h = 0; h < heightCount; ++h)
+    {
+        if (areas[h] >= kModernPlanarWaterArea && (best < 0 || areas[h] > areas[best]))
+            best = h;
+    }
+    if (best < 0)
+        return;
+    s_modernPlanarPlane[0] = 0.0f;
+    s_modernPlanarPlane[1] = 0.0f;
+    s_modernPlanarPlane[2] = 1.0f;
+    s_modernPlanarPlane[3] = -heights[best];
+    s_modernPlanarHavePlane = true;
+    Com_Printf(CON_CHANNEL_GFX, "modern: planar reflections on %s at height %.1f (water, %.0f square units)\n", name,
+               heights[best], areas[best]);
+}
+
 static void R_ModernPlanarFindPlane()
 {
     s_modernPlanarWorld = rgp.world;
@@ -2257,6 +2308,7 @@ static void R_ModernPlanarFindPlane()
                    -s_modernPlanarPlane[3]);
         return;
     }
+    R_ModernPlanarFindWater(name);
 }
 
 // The projection's near plane becomes the reflection plane (raised by
