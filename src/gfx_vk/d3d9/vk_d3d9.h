@@ -75,6 +75,11 @@ struct ModernTuning
     float fogScatter = -1.0f;  // forward scattering, 0 to below 0.95 (KISAK_VK_MODERN_FOG_SCATTER)
     float fogSpots = -1.0f;    // how brightly spot lights light the fog, 0 to 4 (KISAK_VK_MODERN_FOG_SPOTS)
     int fogFroxels = -1;       // the fog from a froxel volume, not a march (KISAK_VK_MODERN_FOG_FROXELS)
+    int godRays = -1;          // god rays, light shafts from the sun on the screen (KISAK_VK_MODERN_GOD_RAYS)
+    float godRaysStrength = -1.0f; // how bright the god rays are, 0 to 8 (KISAK_VK_MODERN_GOD_RAYS_STRENGTH)
+    float godRaysSpread = -1.0f;   // how tightly the kept sky gathers round the sun, 1 to 512 (_SPREAD)
+    float godRaysThreshold = -1.0f; // the sky's light below this is not kept, 0 to 16 (_THRESHOLD)
+    float godRaysSky = -1.0f;      // the share of the rays added over the sky itself, 0 to 1 (_SKY)
     int softShadows = -1;         // soft sun shadows (KISAK_VK_MODERN_SOFT_SHADOWS)
     float shadowSoftness = -1.0f; // the sun's apparent size, degrees (KISAK_VK_MODERN_SHADOW_SOFTNESS)
     int softSpotShadows = -1;     // soft spot-light shadows (KISAK_VK_MODERN_SOFT_SPOT_SHADOWS)
@@ -297,6 +302,13 @@ struct ModernSceneView
         int spotCount = 0;
         Spot spots[4];
     } fog;
+    // The view's sun, for the god rays: where the map has one.
+    struct Sun
+    {
+        bool on = false;
+        float direction[3] = {}; // towards the sun, world space
+        float color[3] = {};     // the sun light's colour, display values (may pass 1)
+    } sun;
 };
 enum class ModernResult
 {
@@ -377,6 +389,11 @@ struct ModernLitInputs
     // With overWhite: a Modern lit shader of ours to draw the pixel shader as
     // (legacy ModernLitShader; 0 for none), unless KISAK_VK_MODERN_SHADERS=0.
     uint16_t shader = 0;
+    // Instead of the above: an unlit, light-giving surface (a lamp, a lit
+    // sign). Nothing read is decoded; the stored colour is decoded as an
+    // ordinary draw's and its brightest parts made brighter than white
+    // (legacy SetLinearInputs' emissive), unless KISAK_VK_MODERN_EMISSIVE=0.
+    bool emissive = false;
 };
 void SetModernLitInputs(IDirect3DDevice9 *device, const ModernLitInputs *inputs);
 // One of the game's reflection probes, a cube texture of this device, as the

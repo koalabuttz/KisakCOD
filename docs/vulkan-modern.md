@@ -83,6 +83,9 @@ back to them.
 | `r_modernFogSun`, `r_modernFogScatter` | -1, or 0 to 1 and 0 to 0.9 | `KISAK_VK_MODERN_FOG_SUN`, `_SCATTER` |
 | `r_modernFogSpots` | -1, or 0 to 4 | `KISAK_VK_MODERN_FOG_SPOTS` |
 | `r_modernFogFroxels` | default, off, on | `KISAK_VK_MODERN_FOG_FROXELS` |
+| `r_modernGodRays` | default, off, on | `KISAK_VK_MODERN_GOD_RAYS` |
+| `r_modernGodRaysStrength` | -1, or 0 to 8 | `KISAK_VK_MODERN_GOD_RAYS_STRENGTH` |
+| `r_modernGodRaysSpread`, `r_modernGodRaysThreshold`, `r_modernGodRaysSky` | -1, or 1 to 512, 0 to 16 and 0 to 1 | `KISAK_VK_MODERN_GOD_RAYS_SPREAD`, `_THRESHOLD`, `_SKY` |
 | `r_modernSoftShadows` | default, off, on | `KISAK_VK_MODERN_SOFT_SHADOWS` |
 | `r_modernShadowSoftness` | -1, or above 0 to 20 (degrees) | `KISAK_VK_MODERN_SHADOW_SOFTNESS` |
 | `r_modernContactShadows` | default, off, on | `KISAK_VK_MODERN_CONTACT_SHADOWS` |
@@ -1057,6 +1060,42 @@ The `lit shaders of our own` stats line ends with the light pass's state
 and strength. **Check:** `modern_light_pass` adds an omni light with the
 game's blend over grey 128, over black, and normal-mapped over the grey.
 
+### Lamps and lit signs
+
+David, 2026-11-15: the maps should look lit by their own lights. On the
+night maps the lamps, lanterns, neon and shop signs are unlit materials
+(technique sets `mc_unlit*` for models, `wc_unlit*` for the world; night
+lamps facts 1: 51 materials on mp_carentan, 28 on mp_crash_snow). Drawn as
+any unlit surface they reach white at most, so nothing at night glows or
+blooms. The renderer marks those materials' passes as light-giving
+(`R_ModernEmissiveMaterial`, `GfxModernLitInputs::emissive`), but only when
+the set does not multiply and the material's name says it is a light (it
+holds light, lamp, lantern, neon, sign, bulb, glow, window, candle, monitor,
+`_tv`, `tv_` or `_star`, and not lighten). Night lamps run 1 found unlit
+materials that are not lights: multiply decals (stains, graffiti), whose
+white made brighter lit up the wall under them with the decal's hard edges;
+snowy tree canopies; a candy cane; a portal "lighten" card; Chinatown's
+backdrop facades. Their stored
+colour is decoded as an ordinary draw's (clamped to 1, then the sRGB curve),
+then the three channels are multiplied by one factor, so the hue stays. The
+factor is 1 while the brightest channel is under display value 0.75, and it
+rises along a smoothstep to the strength at white
+(`legacy_shader::EmissiveColorOutput`). Bulbs, flames and neon letters go
+over white and bloom; the darker parts of a sign stay as they were. The
+glow sprites that effects place around lamps are effects, drawn after the
+tonemap, and are not changed.
+
+| Switch | Default |
+| --- | --- |
+| `KISAK_VK_MODERN_EMISSIVE=0` | on: lamps and lit signs made brighter than white |
+| `KISAK_VK_MODERN_EMISSIVE_STRENGTH` | 4: white's light, 1 to 63.75 (start-up only) |
+
+The `lamps and lit signs` stats line gives the state, the strength and how
+often a scene switched to one. `KISAK_VK_MODERN_LIT_LOG=1` prints each
+light-giving material once (`Modern emissive: <material> (<technique set>),
+pixel shader <name>`). **Check:** `modern_emissive` draws white, grey 230
+and grey 128 as light-giving, and a white ordinary draw beside them.
+
 ## Normals buffer
 
 Ambient occlusion and screen-space reflections need the normal of the surface
@@ -1853,6 +1892,79 @@ the second slice (0.73 to 2.93 units), read 0.494 of the way between the
 slices' sums rather than 0.5, the same within the check's tolerance.
 `test_vulkan_d3d9_front.py` counts its eleven fog scenes, three from
 froxels, five through the sun's map and five with a spot light.
+
+## God rays
+
+Light shafts: the sky's light streaming from the sun past buildings and
+trees, with dark gaps where they block it. PC fog runs 1 to 3 (2026-11-15)
+found the volumetric fog shows none on multiplayer maps: their fog is too
+thin for the light it scatters to read as shafts, even at its strongest
+settings or with the air made up to nine times thicker for the light alone.
+David chose (2026-11-15) the effect most games use for them instead, drawn
+on the screen, independent of the map's fog: `r_modernGodRays on` (or
+`KISAK_VK_MODERN_GOD_RAYS=1`), off by default, in linear light only.
+
+`DrawSceneRays` records `modern::DrawRays` (`vk_modern_rays.cpp`, one shader
+`shaders/rays.frag` built three ways) right after the volumetric fog,
+before the anti-aliasing, where the view has a sun (`GfxModernScene::sun`,
+the frame's sun light with its overrides, set when the map has a sun):
+
+1. **Mask**, at half resolution: the scene's light where the sky shows (the
+   scene depth at the sky's, `SkyDepth`, as a share of the four pixels
+   under each), only what is above a threshold (`r_modernGodRaysThreshold`,
+   default 0.8 of linear light, a soft knee as bloom's), weighted by
+   cos(angle to the sun) to a power (`r_modernGodRaysSpread`, default 32:
+   half at about 12 degrees), plus a glow of the sun's own colour (cos^256,
+   half at about 4 degrees), so a sky without a bright sun drawn in it
+   still has rays. Light is held below 8 (linear) so one bright pixel does
+   not streak. Whatever stands in front of the sky keeps nothing.
+2. **Smear**, at half resolution: each pixel averages the mask along its
+   line towards the sun's place on the screen, 48 samples
+   (`KISAK_VK_MODERN_GOD_RAYS_SAMPLES`, 8 to 128) over 0.85 of the way, each
+   counting 0.96 of the one before, from an offset that moves each frame
+   (interleaved gradient noise; the anti-aliasing averages it). Lines are
+   at most a screen long, and outside the screen the mask reads as black.
+   The mask's gaps become the dark gaps between the shafts.
+3. **Apply**: adds the smear, times `r_modernGodRaysStrength` (default 0.6,
+   up to 8) and a fade as the sun leaves the view (whole while the sun is
+   within about 70 degrees of the view's middle, none from 90), to the
+   linear-light scene (blend one, one); over the sky itself only a share of
+   it (`r_modernGodRaysSky`, default 0.3).
+
+PC god rays run 1 (2026-11-15, eda2c0d9, RTX 2080 Super, 1280x720): 0.084
+to 0.097 ms GPU a scene. With the first settings (no threshold, cos^12, the
+whole share over the sky) the shafts were right where the sun stands behind
+something with gaps (mp_overgrown's trees the best, mp_backlot, mp_strike),
+but against an open sky (mp_crash, mp_crossfire) the smeared sky was a white
+veil that washed out clouds and the sun's halo and faded wires and poles.
+The threshold, the tighter spread and the smaller share over the sky are
+for that; the old look is spread 12, threshold 0, sky 1.
+
+With the sun behind the camera nothing is recorded. All three passes are
+timed under "modern god rays". The statistics line: `vulkan d3d9: modern: S
+scenes with god rays (B with the sun out of view; strength K, spread P,
+threshold L, sky Q, N samples), T ms GPU each`, T for the three passes of a scene drawn.
+
+Two more lines say what the last scene's map set, for choosing where the
+air could be thicker: `the last scene's fog: start S, density D (half the
+light gone H units out), colour R G B` (or `none`), and `the last scene's
+sun: colour R G B, towards X Y Z` (or `none`).
+
+**What it does not do yet:** rays from spot lights or from bright windows,
+and shafts in the air itself (that is the volumetric fog's part, which
+shows them only where a map's fog is thick). Thicker air for hazy maps
+only, chosen per map from each map's own fog, is planned next.
+
+**Check:** the D3D9 check's `modern_god_rays` scene clears grey 100 under
+identity matrices with the sun straight ahead, its place the screen's
+middle. At depth 1 the whole scene is sky and the middle pixel gets grey x
+(1 + strength): strength 1 and 0.5. At depth 0.5 nothing is sky: no rays.
+The sun behind the camera, a view without a sun, or the god rays off: no
+rays. With the sun's colour 0.5 its glow adds about 0.214 x 0.95 of light
+more. These run with no threshold and the whole share over the sky; then a
+threshold of 0.1 keeps grey - 0.1, the default 0.8 keeps nothing, and a
+share of 0.5 over the sky adds half. Without linear light, grey 100
+throughout.
 
 ## Compute passes
 
