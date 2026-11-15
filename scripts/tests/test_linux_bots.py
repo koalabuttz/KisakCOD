@@ -524,9 +524,14 @@ def validate_brain_view(log_text: str, bots: int, hold_seconds: int, combat: boo
             (bool(turned), f"bot brain: every bot looked around (at least {BRAIN_MIN_TOTAL_TURN:g} degrees)")]
 
 
-# A player runs about 190 units a second; a bot walks the mesh (with a jump
-# when stuck), so a second between samples never covers more than a sprint.
-BRAIN_MAX_MOVE_PER_SAMPLE = 300.0
+# A player runs about 190 units a second and sprints about 285; a bot walks
+# the mesh (with a jump when stuck) and never sprints. Around a round's start
+# the engine moves a few freshly spawned bots in one long server frame (PC
+# runs 16 to 18: 304 to 346 units in that second, 44 to 100 units in one
+# 150 ms frame while their velocity read 0: the engine placing them, not
+# their running), so the limit leaves room for that, and is still far below
+# what a bot moving faster than a player could do every second.
+BRAIN_MAX_MOVE_PER_SAMPLE = 360.0
 BRAIN_MIN_WALKED = 300.0
 
 
