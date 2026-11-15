@@ -157,6 +157,12 @@ enum GfxModernLitShader : uint16_t
     // lighting both faces (flag_ with the sun).
     GFX_MODERN_LIT_SHADER_SKIN_PROBE = 0x800,
     GFX_MODERN_LIT_SHADER_TWO_SIDED_SUN = 0x1000,
+    // With no family, SPOT or OMNI: the extra per-light pass
+    // l_<spot|omni>[_flag|_skin][_hsm]_<mode>c0[d0][n0] that effects' lights
+    // (muzzle flashes, explosions) add over the lit scene (light pass facts
+    // 1), with SHADOW (a spot's hsm), NORMAL, DETAIL and the mode; with
+    // TWO_SIDED_SUN, flag_'s light on both faces. The back end's shader adds
+    // it as physical light, in linear light.
 };
 
 struct GfxModernHooks

@@ -530,6 +530,7 @@ public:
     void ModernLitSkin();
     void ModernLitNoSun();
     void ModernLitLights();
+    void ModernLightPass();
     void ModernTonemap();
     void ModernTonemapAs(const std::string &curve);
     void ModernExposure();
@@ -6413,6 +6414,129 @@ void Check::ModernLitLights()
     SafeRelease(color);
 }
 
+// An extra light pass (l_, ModernLitLightPass) drawn as ours: an omni light
+// added, with the game's blend (INVDESTALPHA, ONE), over a grey 128 base and
+// over black, then a normal-mapped one over the same grey. Ours adds
+// physical light: decode(colour 128) * decode(light 128) * attenuation 192 *
+// N.L * the strength (KISAK_VK_MODERN_LIGHT_PASS_STRENGTH, 2 by default), the
+// same over the grey as over black.
+// With the light pass's shader off (KISAK_VK_MODERN_LIGHT_PASS=0, or
+// KISAK_VK_MODERN_LIGHT_SHADERS=0 with the other lights') the stand-in
+// shader draws instead and only the untouched black beside them is checked.
+void Check::ModernLightPass()
+{
+    const bool on = EnvText("KISAK_VK_MODERN_LINEAR") != "0" && EnvText("KISAK_VK_MODERN_LIT") != "0"
+        && EnvText("KISAK_VK_MODERN_SHADERS") != "0";
+    const bool ours = on && EnvText("KISAK_VK_MODERN_LIGHT_PASS") != "0"
+        && EnvText("KISAK_VK_MODERN_LIGHT_SHADERS") != "0";
+    IDirect3DTexture9 *color = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 128, 128, 128); });
+    IDirect3DTexture9 *attenuation = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 192, 192, 192); });
+    IDirect3DTexture9 *normalFlat = FilledTexture(1, 1, [](UINT, UINT) { return Argb(130, 0, 130, 0); });
+    if (color && attenuation && normalFlat)
+    {
+        Reset(Argb(255, 0, 0, 0));
+        front::ModernSceneBegin(device);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET, Argb(0, 0, 0, 0), 1.0f, 0), "Clear(scene)");
+        device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+        // The base: grey 128 with alpha 0 (the renderer clears the
+        // destination's alpha over a light's rectangle before its passes),
+        // on the left and right thirds; black in the middle.
+        device->SetVertexShader(vsBasic);
+        device->SetPixelShader(psColor);
+        front::SetModernLitInputs(device, nullptr);
+        DrawQuad(0, 0, 32, 64, 0.5f, Argb(0, 128, 128, 128));
+        DrawQuad(64, 0, 96, 64, 0.5f, Argb(0, 128, 128, 128));
+
+        // The light passes: colour s0, then the attenuation (s4, or s5 after
+        // the normal map); the light at the eye, half its radius (2) from the
+        // point one unit below it; the normal straight up, no fog.
+        device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+        device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_INVDESTALPHA);
+        device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+        device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+        for (DWORD sampler : {4u, 5u})
+        {
+            device->SetSamplerState(sampler, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+            device->SetSamplerState(sampler, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+        }
+        device->SetVertexShader(vsLmSunMaps);
+        device->SetPixelShader(psLmSunMapsStandIn);
+        device->SetTexture(0, color);
+        const float vertex[6][4] = {{0.5f, 0.5f, 0.5f, 0.5f}, {0, 0, 1, 1}, {0, 1, 0, 0},
+                                    {1, 0, 0, 0},             {0, 0, 0, 0}, {0, 0, -1, 0}};
+        Ok(device->SetVertexShaderConstantF(1, &vertex[0][0], 6), "SetVertexShaderConstantF(light)");
+        const float grey = 128.0f / 255.0f;
+        // c0 fog colour (black, as the game's literal), c5 lightPosition, c6
+        // lightDiffuse.
+        const float pixel[7][4] = {{0, 0, 0, 0}, {}, {}, {}, {}, {0, 0, 0, 0.5f}, {grey, grey, grey, 1}};
+        Ok(device->SetPixelShaderConstantF(0, &pixel[0][0], 7), "SetPixelShaderConstantF(light)");
+        front::ModernLitInputs inputs;
+        inputs.overWhite = true;
+        // l_omni_r0c0 over the grey and over black.
+        device->SetTexture(4, attenuation);
+        inputs.shader = 0x200;
+        front::SetModernLitInputs(device, &inputs);
+        DrawQuad(0, 0, 64, 64, 0.5f, Argb(255, 255, 255, 255));
+        // l_omni_r0c0n0 over the grey: the normal map at s4, the attenuation
+        // at s5.
+        device->SetTexture(4, normalFlat);
+        device->SetTexture(5, attenuation);
+        inputs.shader = 0x202;
+        front::SetModernLitInputs(device, &inputs);
+        DrawQuad(64, 0, 96, 64, 0.5f, Argb(255, 255, 255, 255));
+        front::SetModernLitInputs(device, nullptr);
+        device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+        device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+        device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ZERO);
+        device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+
+        front::ModernSceneView view{};
+        for (int i = 0; i < 4; ++i)
+            view.view[i][i] = view.projection[i][i] = 1.0f;
+        view.width = view.height = kSize;
+        view.cut = true;
+        if (front::ModernSceneLit(device, view) == front::ModernResult::Skipped)
+            front::ModernSceneDone(device, view);
+        for (DWORD sampler : {0u, 4u, 5u})
+            device->SetTexture(sampler, nullptr);
+        device->SetVertexShader(vsBasic);
+        device->SetPixelShader(psColor);
+        if (Read())
+        {
+            const std::string curve = ModernCurve();
+            const auto decode = [](double v) {
+                v = std::max(v, 0.0);
+                return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+            };
+            const auto expect = [&](const char *name, int x, int y, double value) {
+                const Rgb c = TonemapCurve(curve, {value, value, value});
+                const int byte = ShownByte(c[0]);
+                Expect(name, x, y, byte, byte, byte);
+            };
+            const std::string strengthText = EnvText("KISAK_VK_MODERN_LIGHT_PASS_STRENGTH");
+            const double strengthValue = strengthText.empty() ? -1.0 : std::strtod(strengthText.c_str(), nullptr);
+            const double strength = strengthValue >= 0.0 ? strengthValue : 2.0;
+            const double base = decode(128 / 255.0);
+            const double light = strength * base * base * (192 / 255.0);
+            // The flat normal map's slope along the binormal, and its N.L.
+            const double flatY = 130 / 255.0 * 4.06452 - 2.06452;
+            const double flatX = 130 / 255.0 * 4.08 - 2.08;
+            const double facing = 1.0 / std::sqrt(flatX * flatX + flatY * flatY + 1.0);
+            expect("untouched", 112, 32, 0.0);
+            if (ours)
+            {
+                expect("light_over_grey", 16, 32, base + light);
+                expect("light_over_black", 48, 32, light);
+                expect("light_mapped_over_grey", 80, 32, base + light * facing);
+            }
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    }
+    SafeRelease(normalFlat);
+    SafeRelease(attenuation);
+    SafeRelease(color);
+}
+
 // The tonemap's curve (KISAK_VK_MODERN_TONEMAP): grey 128 (0.216 of light),
 // white (1), and white added twice (2) and four times (4) in the linear-light
 // scene, as each curve shows them. Clamp shows 128, 255, 255, 255; the others
@@ -7077,6 +7201,7 @@ int Run(const Options &options)
         {"modern_lit_skin", &Check::ModernLitSkin, true},
         {"modern_lit_no_sun", &Check::ModernLitNoSun, true},
         {"modern_lit_lights", &Check::ModernLitLights, true},
+        {"modern_light_pass", &Check::ModernLightPass, true},
         {"modern_tonemap", &Check::ModernTonemap, true},
         {"modern_exposure", &Check::ModernExposure, true},
         {"modern_velocity", &Check::ModernVelocity, true},

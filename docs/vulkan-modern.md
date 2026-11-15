@@ -939,8 +939,8 @@ facts 6 and 7, from the PC):
   Backlot draws `lm_hsm_spot_...` and `lp_hsm_spot_...` from its spawn
   on.
 - **As an extra light**, `l_<spot|omni>_...`, drawn additively after the
-  lit passes (muzzle flashes, explosions). Those stay on the game's shader
-  for now. To look at one on a still view, `KISAK_TEST_LIGHT` adds a fixed
+  lit passes (muzzle flashes, explosions). Our `l_light.frag` draws those
+  (below). To look at one on a still view, `KISAK_TEST_LIGHT` adds a fixed
   light to every frame, as an effect adds a muzzle flash's, in any renderer
   or visuals mode: `omni x y z radius r g b` or
   `spot x y z dx dy dz radius r g b`.
@@ -988,7 +988,7 @@ renderer checks every argument against that layout (code constants 0x0-0x4,
 
 | Switch | Default |
 | --- | --- |
-| `KISAK_VK_MODERN_LIGHT_SHADERS=0` | spot and omni lights' on too |
+| `KISAK_VK_MODERN_LIGHT_SHADERS=0` | spot and omni lights' on too (the extra light passes' too) |
 
 **Checks:** the `modern_lit_lights` scene draws `lm_spot_r0c0n0s0` at
 half the cone's ramp with exponent 2, `lm_spot_r0c0` facing away (the
@@ -998,6 +998,48 @@ above the point at half its radius, against the formulas above (5 of 5
 points; with `KISAK_VK_MODERN_LIGHT_SHADERS=0` the stand-ins show black).
 The shadowed builds are not drawn there; a PC run on Backlot's lamp-lit
 rooms checks them against the game's.
+
+
+### Extra light passes (muzzle flashes, explosions)
+
+An effect's light (a muzzle flash, an explosion, `KISAK_TEST_LIGHT`) is
+drawn as an extra pass over the lit scene: for each light the renderer
+clears the destination's alpha over the light's rectangle, then draws
+every surface the light reaches again with
+`l_<spot|omni>[_flag|_skin][_hsm|_sm]_<mode>c0[d0][n0]` and the blend
+INVDESTALPHA, ONE, so each light adds once to a pixel (light pass facts 1).
+The game's shader outputs only the light's term, in display values:
+colour times N.L times lightDiffuse times the attenuation curve (and a
+spot's cone and shadow), blended towards c0 (a black literal) by the fog
+factor; b0 scales it by the colour's alpha twice, t0 drops it below half,
+flag_ lights both faces.
+
+The game adds that term to the scene's display value, which lights a
+sunlit wall as much as a dark one. Decoded and added in linear light as it
+stands, the Legacy adapter's way for a lit pass, it added an eighth of
+Legacy's light on a sunlit wall and a fifth on a shaded one (PC light pass
+facts 1). David chose physical light with the flash made brighter
+(2026-11-15): our `l_light.frag` (10 builds: spot or omni, a spot's shadow
+map, the maps) works out the game's term from the same samplers and
+registers, but adds it as light, in linear light: the decoded colour times
+the decoded light colour times the attenuation, cone, shadow and N.L, times
+a strength, faded by the fog factor. That is how a real flash lights a
+wall: hard in shade and indoors, barely at all in sun. The renderer names
+the shader only where the pass binds exactly what it reads (colour map s0;
+from s4 the spot's shadow map, the normal map, the attenuation, the detail
+map; c0 fog colour, c5 lightPosition, c6 lightDiffuse, c7 spotDir and c8
+spotFactors for a spot, c9 spotShadowmapPixelAdjust with the shadow map,
+then detailScale); `sm_` (compared in the shader) and the shadow map with
+a detail map keep the game's.
+
+| Switch | Default |
+| --- | --- |
+| `KISAK_VK_MODERN_LIGHT_PASS=0` | on: our shader for the extra light passes |
+| `KISAK_VK_MODERN_LIGHT_PASS_STRENGTH` | 2: the light's strength as physical light |
+
+The `lit shaders of our own` stats line ends with the light pass's state
+and strength. **Check:** `modern_light_pass` adds an omni light with the
+game's blend over grey 128, over black, and normal-mapped over the grey.
 
 ## Normals buffer
 

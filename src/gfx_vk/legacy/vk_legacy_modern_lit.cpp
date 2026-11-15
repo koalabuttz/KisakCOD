@@ -184,6 +184,8 @@ struct LitSpecialization
 bool LinkLitSpirv(const LitBuild &build, const std::vector<Placeholder> &placeholders, const ls::Shader &vs,
                   const LitSpecialization &specialization, std::vector<uint32_t> &spirv);
 bool BuildWaterSpirv(const ls::Shader &vs, bool alphaTest, std::vector<uint32_t> &spirv);
+bool BuildLightPassSpirv(uint16_t shader, const ls::Shader &vs, float strength, bool clampDepthReference,
+                         bool alphaTest, std::vector<uint32_t> &spirv);
 } // namespace
 
 bool BuildModernLitSpirv(uint16_t shader, const ls::Shader &vs, float sunStrength, float skyStrength,
@@ -193,6 +195,8 @@ bool BuildModernLitSpirv(uint16_t shader, const ls::Shader &vs, float sunStrengt
         return false;
     if (shader == ModernLitWater)
         return BuildWaterSpirv(vs, alphaTest, spirv);
+    if (ModernLitLightPass(shader))
+        return BuildLightPassSpirv(shader, vs, sunStrength, clampDepthReference, alphaTest, spirv);
     const LitBuild build = LitBuildFor(shader & ~ModernLitVariationMask);
     if (!build.words)
         return false;
@@ -353,6 +357,48 @@ bool BuildWaterSpirv(const ls::Shader &vs, bool alphaTest, std::vector<uint32_t>
         {10, kUsageColor, 0, 4},
     };
     const LitSpecialization specialization{1.0f, 1.0f, false, 0, alphaTest};
+    return LinkLitSpirv(build, placeholders, vs, specialization, spirv);
+}
+// l_light.frag, by light, shadow map and maps (gen_spirv_header.py).
+bool BuildLightPassSpirv(uint16_t shader, const ls::Shader &vs, float strength, bool clampDepthReference,
+                         bool alphaTest, std::vector<uint32_t> &spirv)
+{
+    const bool spot = (shader & ModernLitLightMask) == ModernLitSpot;
+    const bool shadow = (shader & ModernLitShadow) != 0;
+    const bool normal = (shader & ModernLitNormal) != 0;
+    const bool detail = (shader & ModernLitDetail) != 0;
+    LitBuild build{nullptr, 0};
+    if (spot && shadow)
+        build = normal ? LIT_BUILD(kLLightSpotShadowNFrag) : LIT_BUILD(kLLightSpotShadowFrag);
+    else if (spot)
+        build = detail ? (normal ? LIT_BUILD(kLLightSpotDNFrag) : LIT_BUILD(kLLightSpotDFrag))
+                       : (normal ? LIT_BUILD(kLLightSpotNFrag) : LIT_BUILD(kLLightSpotFrag));
+    else if (!shadow)
+        build = detail ? (normal ? LIT_BUILD(kLLightOmniDNFrag) : LIT_BUILD(kLLightOmniDFrag))
+                       : (normal ? LIT_BUILD(kLLightOmniNFrag) : LIT_BUILD(kLLightOmniFrag));
+    if (!build.words)
+        return false;
+    std::vector<Placeholder> placeholders = {
+        {0, kUsageTexcoord, 0, 4},
+        {1, kUsageTexcoord, 1, 4},
+        {5, kUsageTexcoord, 5, 4},
+        {10, kUsageColor, 0, 4},
+    };
+    if (normal)
+    {
+        placeholders.push_back({2, kUsageTexcoord, 2, 4});
+        placeholders.push_back({3, kUsageTexcoord, 3, 4});
+    }
+    if (shadow)
+        placeholders.push_back({4, kUsageTexcoord, 4, 4});
+    // Spec constant 0: the light's strength (l_light.frag kStrength).
+    const LitSpecialization specialization{strength,
+                                           1.0f,
+                                           clampDepthReference,
+                                           static_cast<uint32_t>((shader & ModernLitModeMask) >> ModernLitModeShift),
+                                           alphaTest,
+                                           1.0f,
+                                           (shader & ModernLitTwoSidedSun) != 0};
     return LinkLitSpirv(build, placeholders, vs, specialization, spirv);
 }
 #undef LIT_BUILD
