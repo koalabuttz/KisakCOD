@@ -12,7 +12,9 @@
 // sleep, since r_gpuSyncSleep is not in the Windows build.
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #if defined(_WIN32)
 #include <chrono>
 #else
@@ -235,3 +237,144 @@ private:
 void Sys_PerfInit();
 // Once per main-loop frame, on the main thread.
 void Sys_PerfFrame();
+
+// ---------------------------------------------------------------------------
+// Phases of the render thread (perf_phases, docs/perf-ab.md): what the thread
+// is in, read by a thread that looks about a thousand times a second.
+//
+// A probe above reads the clock twice, 1.4 us on the PS Vita, which is more
+// than the work of most things a draw is made of. A phase scope writes a byte
+// and counts its entry, and reads no clock, so it can sit around a call that
+// happens thousands of times a frame; the share of the looks that find the
+// thread in a phase, times the frame's length, over the entries in a frame,
+// is what one call costs. The innermost scope is the one a look counts.
+//
+// The scopes sit in code that draws, which one thread at a time does: the
+// render thread, or the main thread while it owns the device (a loading
+// screen, a build without the render thread). Two threads inside scopes at
+// once would only spoil the count.
+//
+// The scopes are compiled in Debug builds, which keeps them building on every
+// platform, and in a build configured with -DKISAK_PERF_PHASES=ON, which is
+// the one to measure with. Elsewhere a scope is nothing: fifteen thousand of
+// them a frame would cost the Vita's render thread about 0.1 ms.
+// ---------------------------------------------------------------------------
+#if !defined(KISAK_PERF_PHASES)
+#if defined(_DEBUG)
+#define KISAK_PERF_PHASES 1
+#else
+#define KISAK_PERF_PHASES 0
+#endif
+#endif
+
+enum SysPerfPhase : uint8_t
+{
+    SYS_PERF_PHASE_NONE,            // no scope: the thread's own loop, anything unmarked
+    SYS_PERF_PHASE_IDLE,            // asleep until the main thread hands over a frame, or until it may present
+    SYS_PERF_PHASE_PRESENT,         // RB_EndFrame: Present and what waits there
+    SYS_PERF_PHASE_3D,              // RB_Draw3D, outside the lists below
+    SYS_PERF_PHASE_2D,              // the frame's 2D commands, outside the text
+    SYS_PERF_PHASE_TEXT_2D,         // DrawText2D: a string's letters made quads
+    SYS_PERF_PHASE_TESS_END,        // R_DrawTessTechnique: a filled batch of 2D, effects or code meshes drawn
+    SYS_PERF_PHASE_LIST,            // R_DrawSurfs: a draw list walked, between materials
+    SYS_PERF_PHASE_MATERIAL,        // R_RenderDrawSurfListMaterial: R_SetupMaterial, a pass picked
+    SYS_PERF_PHASE_PASS,            // R_SetupPass
+    SYS_PERF_PHASE_STABLE_ARGS,     // R_SetPassShaderStableArguments: a pass's textures and constants
+    SYS_PERF_PHASE_CRITICAL_ARGS,   // R_SetupPassCriticalPixelShaderArgs, R_SetupPassVertexShaderArgs
+    SYS_PERF_PHASE_OBJECT_ARGS,     // R_SetupPassPerObjectArgs
+    SYS_PERF_PHASE_PRIM_ARGS,       // R_SetupPassPerPrimArgs
+    SYS_PERF_PHASE_MATRIX,          // R_GetCodeMatrix deriving a matrix
+    SYS_PERF_PHASE_PLACEMENT,       // a model's world matrix made
+    SYS_PERF_PHASE_LIGHTING_COORDS, // a model's lighting coordinates
+    SYS_PERF_PHASE_STATE_BITS,      // R_ChangeState_0 and _1
+    SYS_PERF_PHASE_VERTEX_DECL,     // R_UpdateVertexDecl
+    SYS_PERF_PHASE_INDEX_FILL,      // R_SetIndexData: indices copied into the dynamic index buffer
+    SYS_PERF_PHASE_VERTEX_FILL,     // R_SetVertexData: vertices copied into the dynamic vertex buffer
+    SYS_PERF_PHASE_DEVICE_DRAW,     // the device: DrawIndexedPrimitive
+    SYS_PERF_PHASE_DEVICE_VERTEX_CONSTANTS,
+    SYS_PERF_PHASE_DEVICE_PIXEL_CONSTANTS,
+    SYS_PERF_PHASE_DEVICE_TEXTURES, // textures and sampler states
+    SYS_PERF_PHASE_DEVICE_STREAMS,  // vertex streams, the index buffer, the vertex declaration
+    SYS_PERF_PHASE_DEVICE_SHADERS,  // the vertex and pixel shader set
+    SYS_PERF_PHASE_TESS,            // + surface type: rb_tessTable's function, outside all of the above
+    SYS_PERF_PHASE_COUNT = SYS_PERF_PHASE_TESS + SYS_PERF_TESS_SLOTS
+};
+
+// The name a phase prints under. `text` is used for the surface types.
+inline const char *Sys_PerfPhaseName(uint32_t phase, char *text, size_t textSize)
+{
+    static const char *const kTess[SYS_PERF_TESS_SLOTS] = {
+        "triangles", "pretessellated triangles", "static models", "pretessellated static models",
+        "cached static models", "skinned static models", "brush models", "rigid models",
+        "rigid skinned models", "skinned models", "code meshes", "marks", "particle clouds"};
+    if (phase >= SYS_PERF_PHASE_TESS && phase < SYS_PERF_PHASE_COUNT)
+    {
+        snprintf(text, textSize, "tess %s", kTess[phase - SYS_PERF_PHASE_TESS]);
+        return text;
+    }
+    switch (phase)
+    {
+    case SYS_PERF_PHASE_NONE: return "unmarked";
+    case SYS_PERF_PHASE_IDLE: return "waiting for a frame";
+    case SYS_PERF_PHASE_PRESENT: return "present";
+    case SYS_PERF_PHASE_3D: return "3d outside the lists";
+    case SYS_PERF_PHASE_2D: return "2d";
+    case SYS_PERF_PHASE_TEXT_2D: return "2d text";
+    case SYS_PERF_PHASE_TESS_END: return "a filled batch drawn";
+    case SYS_PERF_PHASE_LIST: return "list walk";
+    case SYS_PERF_PHASE_MATERIAL: return "material setup";
+    case SYS_PERF_PHASE_PASS: return "pass setup";
+    case SYS_PERF_PHASE_STABLE_ARGS: return "a pass's textures and constants";
+    case SYS_PERF_PHASE_CRITICAL_ARGS: return "critical args";
+    case SYS_PERF_PHASE_OBJECT_ARGS: return "per-object args";
+    case SYS_PERF_PHASE_PRIM_ARGS: return "per-prim args";
+    case SYS_PERF_PHASE_MATRIX: return "matrices derived";
+    case SYS_PERF_PHASE_PLACEMENT: return "model placement";
+    case SYS_PERF_PHASE_LIGHTING_COORDS: return "lighting coords";
+    case SYS_PERF_PHASE_STATE_BITS: return "state bits";
+    case SYS_PERF_PHASE_VERTEX_DECL: return "vertex declaration";
+    case SYS_PERF_PHASE_INDEX_FILL: return "index fill";
+    case SYS_PERF_PHASE_VERTEX_FILL: return "vertex fill";
+    case SYS_PERF_PHASE_DEVICE_DRAW: return "device: draw";
+    case SYS_PERF_PHASE_DEVICE_VERTEX_CONSTANTS: return "device: vertex constants";
+    case SYS_PERF_PHASE_DEVICE_PIXEL_CONSTANTS: return "device: pixel constants";
+    case SYS_PERF_PHASE_DEVICE_TEXTURES: return "device: textures";
+    case SYS_PERF_PHASE_DEVICE_STREAMS: return "device: streams";
+    case SYS_PERF_PHASE_DEVICE_SHADERS: return "device: shaders";
+    default: return "?";
+    }
+}
+
+#if KISAK_PERF_PHASES
+// Written by the render thread only, read by the thread that looks. Relaxed
+// atomics: a plain load and a plain store on every platform here, and a count
+// that is one entry behind is as good.
+inline std::atomic<uint8_t> g_sysPerfPhase;
+inline std::atomic<uint32_t> g_sysPerfPhaseEntries[SYS_PERF_PHASE_COUNT]; // wraps; the reader takes differences
+
+class SysPerfPhaseScope
+{
+public:
+    explicit SysPerfPhaseScope(uint8_t phase) : before_(g_sysPerfPhase.load(std::memory_order_relaxed))
+    {
+        g_sysPerfPhase.store(phase, std::memory_order_relaxed);
+        std::atomic<uint32_t> &entries = g_sysPerfPhaseEntries[phase];
+        entries.store(entries.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
+    }
+    ~SysPerfPhaseScope() { g_sysPerfPhase.store(before_, std::memory_order_relaxed); }
+    SysPerfPhaseScope(const SysPerfPhaseScope &) = delete;
+    SysPerfPhaseScope &operator=(const SysPerfPhaseScope &) = delete;
+
+private:
+    uint8_t before_;
+};
+#else
+class SysPerfPhaseScope
+{
+public:
+    explicit SysPerfPhaseScope(uint8_t) {}
+    ~SysPerfPhaseScope() {} // not trivial: a scope with no other use is not an unused variable
+    SysPerfPhaseScope(const SysPerfPhaseScope &) = delete;
+    SysPerfPhaseScope &operator=(const SysPerfPhaseScope &) = delete;
+};
+#endif
