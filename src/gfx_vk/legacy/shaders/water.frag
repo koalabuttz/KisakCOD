@@ -79,8 +79,17 @@ layout(constant_id = 4) const int kAlphaTest = 1;
 // Water lies only near its plane: a few units off it (a map's pools at
 // slightly different heights) still reads it, this many times the reach.
 const float kWaterReachScale = 4.0;
-// The ripples move the point read further than a floor's normal map does.
-const float kWaterRippleScale = 4.0;
+// How far the ripples move the point read: a tilt of the normal turns the
+// reflected ray by twice as much, which moves what it meets by about that
+// times the distance; this share of the distance per unit of tilt, times the
+// ripple (4 by default), so a far reflection wobbles as much on screen as a
+// near one. A flat mirror read only the ripples' tilt times 16 units, too
+// little to see: Bog's water looked glassy (PC water run 2).
+const float kWaterRippleScale = 0.02;
+// The sun's sparkle on the ripples where the mirror image takes the probe's
+// place (the probe held the sun, the image's sky does not as brightly): a
+// sharp lobe around the sun's reflection, times its colour and envMapParms.w.
+const float kWaterSparkleExponent = 256.0;
 
 vec3 Decode(vec3 value)
 {
@@ -144,7 +153,8 @@ void main()
         if (abs(height) < planar.reach * kWaterReachScale)
         {
             const vec3 tilt = vec3(normal.xy, 0.0);
-            const vec4 clip = planar.clip * vec4(texcoord2.xyz + tilt * planar.ripple * kWaterRippleScale, 1.0);
+            const float reach = length(texcoord2.xyz) * planar.ripple * kWaterRippleScale;
+            const vec4 clip = planar.clip * vec4(texcoord2.xyz + tilt * reach, 1.0);
             if (clip.w > 0.0)
             {
                 const vec2 ndc = clip.xy / clip.w;
@@ -156,7 +166,9 @@ void main()
                 {
                     const vec3 seen = max(textureLod(sampler2D(planarImage, planarSampler), at, 0.0).rgb, vec3(0.0));
                     planarRead = seen;
-                    reflection = mix(reflection, Encode(seen), edge);
+                    const float sparkle =
+                        pow(max(dot(reflected, pc.c[17].xyz), 0.0), kWaterSparkleExponent) * pc.c[5].w;
+                    reflection = mix(reflection, Encode(seen) + sparkle * pc.c[18].rgb, edge);
                 }
             }
         }

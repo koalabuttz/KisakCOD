@@ -1354,11 +1354,11 @@ reflections on mp_strike at height H`. Only `mp_strike`'s main street is
 listed now (picked from the reflections' PC run 4). A map not in the list
 reflects in its water, if it has any: of the world surfaces whose material
 has a water map and whose bounds are flat, the height where the most of them
-lie (by the area of their bounds, at least 256 by 256 units) makes the plane,
-logged as `modern: planar reflections on <map> at height H (water, A square
-units)`. On mp_bog that is the large `wc/aftermath_water` sheet at -26 (PC
-water run 1); the swamp's own `wc/night_water_mud` lies between -36 and -20,
-so which surfaces are flat, and at what height, is still being checked.
+lie, counted in triangles (at least 64), makes the plane, logged as `modern:
+planar reflections on <map> at height H (water, N triangles)`. On mp_bog that
+is -20, where 41 of the swamp's 53 surfaces lie (PC water run 2); counted by
+the area of their bounds instead, a 200-triangle sheet at -26 around the
+whole map won, and the reflections sat 6 units low.
 
 **The view.** After each main view (`R_RenderScene` from the game), while
 the camera is above the plane, `R_ModernPlanarScene` draws the scene again:
@@ -1419,7 +1419,7 @@ frame where the scene moves; on a camera cut it is not read.
 | Debug view | off | `KISAK_VK_MODERN_DEBUG=planar` draws it too, and puts the last planar image, as it is (upside down, no exposure), over the top left of the finished scene; `KISAK_VK_MODERN_DEBUG=planar-read` draws it and shows, on every surface that reads it, only what it read there (in linear light, unweighted by gloss and Fresnel; the rest of the scene at a quarter), to check that a reflection lines up with what it mirrors; `KISAK_VK_MODERN_PLANAR=0` turns them off |
 | Reach | 4 | `KISAK_VK_MODERN_PLANAR_REACH=N`: how far from the plane (units) a surface still reads the image |
 | Ripple | 4 | `KISAK_VK_MODERN_PLANAR_RIPPLE=N`: how far (units) the normal map's tilt moves the point read; 0 reads a flat mirror |
-| Water's shader | on | `KISAK_VK_MODERN_WATER=0` keeps the game's `water_l_sun` (start-up only); ours reads the image within 4 times the reach, moved by 4 times the ripple |
+| Water's shader | on | `KISAK_VK_MODERN_WATER=0` keeps the game's `water_l_sun` (start-up only); ours reads the image within 4 times the reach, moved by the ripple times 0.02 of the distance per unit of tilt |
 
 The statistics lines: `vulkan d3d9: modern: N planar reflection views (WxH)`
 and `vulkan d3d9: modern: N scenes read the planar reflection`.
@@ -1438,9 +1438,15 @@ the water's colour times the normal's z, mixed toward the probe's light by
 Fresnel (0 looking straight down to 0.5 grazing on Bog), plus the sun's
 glint, fogged in display values and decoded to linear light. Where the water
 lies within 16 units of the plane (four times the reach: pools a few units
-off it still read it), last frame's planar image, at the point moved by the
-ripples' tilt (16 units at most), takes the probe's place, so the water
-mirrors the bank, the buildings and the sky that are really above it.
+off it still read it), last frame's planar image takes the probe's place, so
+the water mirrors the bank, the buildings and the sky that are really above
+it. The point read is moved by the ripples' tilt times 0.02 of its distance
+times the ripple (4), so a far reflection wobbles as much on screen as a
+near one (a fixed 16 units looked glassy in PC water run 2), and the sun's
+sparkle on the ripples, which the probe held, is added back as a sharp lobe
+(exponent 256) times the sun's colour and `envMapParms.w`. The planar view
+is 10% wider than the main view, so reflections near the screen's sides
+still find themselves in it.
 `KISAK_VK_MODERN_WATER=0` (start-up only) keeps the game's shader;
 `KISAK_VK_MODERN_DEBUG=planar-read` shows the water's read as the floors'.
 

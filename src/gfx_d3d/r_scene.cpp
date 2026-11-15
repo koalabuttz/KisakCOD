@@ -2326,20 +2326,25 @@ static refdef_s s_modernPlanarRefdef;
 // Geometry within this many units above the plane is cut too, so the
 // reflecting surface itself is not in its own reflection.
 static const float kModernPlanarCut = 1.0f;
+// The planar view's field of view against the main view's (tangents).
+static const float kModernPlanarWiden = 1.1f;
 
 bool R_ModernPlanarViewActive() { return s_modernPlanarActive; }
 
 // A map not in the table reflects in its water, if it has any: the height
-// where the most flat water lies (the area of the bounds of the world
-// surfaces whose material has a water map and whose bounds are flat, by
-// height within half a unit), when that is at least kModernPlanarWaterArea.
-static const float kModernPlanarWaterArea = 256.0f * 256.0f;
+// where the most flat water lies, counted in triangles (of the world surfaces
+// whose material has a water map and whose bounds are flat, by height within
+// half a unit), when that is at least kModernPlanarWaterTriangles. Not by the
+// area of their bounds: mp_bog's swamp lies mostly at -20 (1,100 triangles),
+// but a sheet of 200 triangles at -26 around the whole map has bounds a
+// hundred times larger (PC water run 2).
+static const uint32_t kModernPlanarWaterTriangles = 64;
 
 static void R_ModernPlanarFindWater(const char *name)
 {
     constexpr int kHeights = 8;
     float heights[kHeights];
-    float areas[kHeights];
+    uint32_t triangles[kHeights];
     int heightCount = 0;
     const GfxWorldDpvsStatic &dpvs = rgp.world->dpvs;
     for (uint32_t s = 0; s < dpvs.staticSurfaceCount; ++s)
@@ -2350,7 +2355,6 @@ static void R_ModernPlanarFindWater(const char *name)
         const float z = surface.bounds[1][2];
         if (z - surface.bounds[0][2] > 0.5f)
             continue;
-        const float area = (surface.bounds[1][0] - surface.bounds[0][0]) * (surface.bounds[1][1] - surface.bounds[0][1]);
         int h = 0;
         while (h < heightCount && fabsf(heights[h] - z) > 0.5f)
             ++h;
@@ -2359,14 +2363,14 @@ static void R_ModernPlanarFindWater(const char *name)
             if (heightCount == kHeights)
                 continue;
             heights[heightCount] = z;
-            areas[heightCount++] = 0.0f;
+            triangles[heightCount++] = 0;
         }
-        areas[h] += area;
+        triangles[h] += surface.tris.triCount;
     }
     int best = -1;
     for (int h = 0; h < heightCount; ++h)
     {
-        if (areas[h] >= kModernPlanarWaterArea && (best < 0 || areas[h] > areas[best]))
+        if (triangles[h] >= kModernPlanarWaterTriangles && (best < 0 || triangles[h] > triangles[best]))
             best = h;
     }
     if (best < 0)
@@ -2376,8 +2380,8 @@ static void R_ModernPlanarFindWater(const char *name)
     s_modernPlanarPlane[2] = 1.0f;
     s_modernPlanarPlane[3] = -heights[best];
     s_modernPlanarHavePlane = true;
-    Com_Printf(CON_CHANNEL_GFX, "modern: planar reflections on %s at height %.1f (water, %.0f square units)\n", name,
-               heights[best], areas[best]);
+    Com_Printf(CON_CHANNEL_GFX, "modern: planar reflections on %s at height %.1f (water, %u triangles)\n", name,
+               heights[best], triangles[best]);
 }
 
 static void R_ModernPlanarFindPlane()
@@ -2481,6 +2485,11 @@ void R_ModernPlanarScene(const refdef_s *refdef)
     mirror.height = refdef->height / 2 > 0 ? refdef->height / 2 : 1;
     mirror.useScissorViewport = false;
     mirror.blurRadius = 0.0f;
+    // A little wider than the main view, so a reflection near the screen's
+    // sides, moved by a ripple or a slope, still finds itself in the image
+    // (PC water run 2: the outer 3% of each side read nothing).
+    mirror.tanHalfFovX = refdef->tanHalfFovX * kModernPlanarWiden;
+    mirror.tanHalfFovY = refdef->tanHalfFovY * kModernPlanarWiden;
     for (int i = 0; i < 3; ++i)
         mirror.vieworg[i] = o[i] - 2.0f * above * n[i];
     for (int axis = 0; axis < 3; ++axis)
