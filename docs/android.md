@@ -213,6 +213,12 @@ adb logcat -s KisakCOD SDL
 
 Extra engine arguments for a run go in the `args` extra, split at spaces:
 `adb shell am start -n org.kisakcod.game/.KisakActivity --es args "+set developer 1"`.
+`KISAK_*` environment variables (the start-up knobs such as
+`KISAK_VK_MODERN_SSR_STEPS`) go in the `env` extra as `NAME=VALUE` pairs split
+at spaces, and the activity sets them in its process before the game starts:
+`--es env "KISAK_VK_MODERN_SSR_STEPS=16 KISAK_VK_MODERN_AO_HALF=0"`. Other
+names are refused. `scripts/runs/android_run.py` fills it from a recipe's or
+launch's `env`.
 The activity starts the game without shadow maps (`+set sm_enable 0`): on
 the Adreno 740 the sun's shadows flickered from frame to frame (2026-11-15,
 cause not found yet). The activity always starts the game full screen (`+set r_fullscreen 1`, so

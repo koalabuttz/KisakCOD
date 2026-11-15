@@ -360,7 +360,7 @@ bool BuildAmbientOcclusion(Core *core, AmbientOcclusion *ao, Image *depth, Image
     blurPush.power = params.power;
     blurPush.lowest = params.floor;
     blurPush.halfJitter = halfJitter;
-    if (!Pass(core, ao, ao->gtaoPipeline, "modern ao", depth, normals, ao->raw, rawArea, &push, sizeof(push), error))
+    if (!Pass(core, ao, ao->gtaoPipeline, "modern ao trace", depth, normals, ao->raw, rawArea, &push, sizeof(push), error))
         return false;
     if (!Pass(core, ao, blur, "modern ao", depth, ao->raw, target, view.area, &blurPush, sizeof(blurPush), error))
         return false;

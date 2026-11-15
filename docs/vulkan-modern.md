@@ -1147,8 +1147,9 @@ shadow, and darkening it too would draw dark halos on sunlit ground.
 
 **How a scene goes with it.** Ambient occlusion is recorded right after the
 normals buffer, in the same `sceneDepth` hand-over, before the lit surfaces
-are drawn (`modern::BuildAmbientOcclusion`, `vk_modern_ao.cpp`, both passes
-timed as "modern ao"):
+are drawn (`modern::BuildAmbientOcclusion`, `vk_modern_ao.cpp`; the trace is
+timed as "modern ao trace" and the blur as "modern ao", and `r_vkStats` prints
+both apart on an "ambient occlusion passes" line):
 
 1. `shaders/gtao.frag`: ground-truth ambient occlusion (Jimenez et al.,
    "Practical Real-Time Strategies for Accurate Indirect Occlusion", 2016).
