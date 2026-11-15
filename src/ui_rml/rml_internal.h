@@ -27,6 +27,8 @@ Material *MaterialFromTexture(Rml::TextureHandle texture);
 // The engine-side interfaces RmlUi is given (rml_render.cpp, rml_font.cpp,
 // rml_system.cpp). Each lives for the whole process once made.
 Rml::RenderInterface *RenderInterface();
+// Drops the cached engine materials (the UI is shutting down).
+void RenderForget();
 Rml::FontEngineInterface *FontEngine();
 Rml::SystemInterface *SystemInterface();
 Rml::FileInterface *FileInterface();
@@ -69,6 +71,8 @@ struct FrameStats
     int indices;
     int slots;
     int fallbacks;
+    int untextured;      // fills, borders, gradients: drawn with the white material
+    const char *white;   // that material's name, as registered
 };
 FrameStats &Stats();
 } // namespace kisak_rml

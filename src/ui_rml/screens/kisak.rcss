@@ -173,9 +173,15 @@ row .bar {
     height: 26dp;
 }
 
-row .bar .fill {
+row .bar .track {
     display: block;
     margin-top: 10dp;
+    height: 6dp;
+    background-color: #ffffff24;
+}
+
+row .bar .fill {
+    display: block;
     height: 6dp;
     background-color: #e0b04a;
 }

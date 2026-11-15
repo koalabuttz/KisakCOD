@@ -143,6 +143,16 @@ const Material *Material_FromHandle(Material *)
     return nullptr; // no image: RmlUi gets the 64 x 64 default size
 }
 
+const char *Material_GetName(Material *material)
+{
+    for (const auto &entry : materials)
+    {
+        if (entry.second == material)
+            return entry.first.c_str();
+    }
+    return "?";
+}
+
 Material *Material_RegisterHandle(const char *name, int)
 {
     return MaterialNamed(name);
