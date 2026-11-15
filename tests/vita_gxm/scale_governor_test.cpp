@@ -41,6 +41,11 @@ struct Console
     double pixelMs = 24.85;
     double noiseMs = 0.0;   // each frame's CPU and GPU times move by up to this
     uint32_t hitchEvery = 0; // every so many frames the CPU takes 60 ms more
+    // With a display: a frame is sent no sooner than this after the one
+    // before, and no sooner than the GPU has finished the frame before last
+    // (the back end's pacing). Only the second wait is one for the GPU.
+    double vsyncMs = 0.0;
+    double sentAt = 0.0, gpuDone[2] = {0.0, 0.0};
     ScaleGovernor::Limits limits{0.7f, 1.0f, 0.0f};
 
     ScaleGovernor governor;
@@ -68,8 +73,18 @@ struct Console
         if (hitchEvery && frames % hitchEvery == hitchEvery - 1)
             cpu += 60.0;
         const double gpu = GpuMs(scale) + Noise();
-        const double frame = (std::max)(cpu, gpu);
-        const double wait = (std::max)(gpu - cpu, 0.0);
+        double frame = (std::max)(cpu, gpu);
+        double wait = (std::max)(gpu - cpu, 0.0);
+        if (vsyncMs > 0.0)
+        {
+            const double ready = sentAt + cpu;
+            wait = (std::max)(gpuDone[0] - ready, 0.0);
+            const double sent = (std::max)(ready + wait, sentAt + vsyncMs);
+            frame = sent - sentAt;
+            gpuDone[0] = gpuDone[1];
+            gpuDone[1] = (std::max)(sent, gpuDone[1]) + gpu;
+            sentAt = sent;
+        }
         now += uint64_t(frame * 1000.0);
         changes += governor.FrameEnded(now, uint64_t(wait * 1000.0), limits);
         lowest = (std::min)(lowest, governor.Scale());
@@ -183,8 +198,8 @@ void TestFastGoalOutOfReach()
     CHECK(c.lowest >= 0.6875f);
 }
 
-// The view empties: the picture is whole again within two seconds, with no
-// try (the GPU's time is known to fit).
+// The view empties: the picture is whole again within six seconds. Each
+// step is a try, and none is lost.
 void TestViewEmpties()
 {
     Console c;
@@ -193,9 +208,9 @@ void TestViewEmpties()
     c.fixedMs = 8.0;
     c.pixelMs = 12.0;
     c.governor.ClearTotals();
-    c.Run(2);
+    c.Run(6);
     CHECK(c.governor.Scale() == 1.0f);
-    CHECK(c.governor.Totals().tries == 0);
+    CHECK(c.governor.Totals().triesLost == 0);
     // And fills again.
     c.fixedMs = 10.65;
     c.pixelMs = 24.85;
@@ -263,6 +278,7 @@ void TestNoise()
 void TestHold()
 {
     Console c;
+    c.limits.least = 0.6f;
     c.Run(5);
     const float settled = c.governor.Scale();
     c.fixedMs = 20.0; // the try: no depth pass, more pixel work
@@ -273,9 +289,50 @@ void TestHold()
         c.governor.Hold(c.now);
         CHECK(c.governor.Scale() == settled);
     }
-    c.Run(3); // the try was kept
+    c.Run(6); // the try was kept
     CHECK(c.governor.Scale() < settled);
     CHECK(c.GpuMs(c.governor.Scale()) <= ScaleGovernor::kSlowGoalMs - ScaleGovernor::kMarginMs + ScaleGovernor::kSlackMs + 0.01);
+}
+
+// Console run CA's other view: the CPU needs 7.5 ms, the display paces the
+// frames at 16.7 ms and the GPU needs 16.9 ms at the full size, just too
+// much. The picture settles one step under the size that is too much and
+// tries that size seldom: run CA's build stepped 38 times in 10 s there.
+void TestPacedEdge()
+{
+    Console c;
+    c.cpuMs = 7.5;
+    c.fixedMs = 6.0;
+    c.pixelMs = 10.9;
+    c.vsyncMs = 1000.0 / 60.0;
+    c.Run(20);
+    c.changes = 0;
+    c.lowest = 1.0f;
+    c.governor.ClearTotals();
+    const double minutes = 10.0;
+    c.Run(minutes * 60.0);
+    const ScaleGovernor::Counts &counts = c.governor.Totals();
+    std::printf("paced edge: %.1f changes a minute, scale %.3f to %.3f, mean %.3f, %llu tries (%llu lost)\n",
+                double(c.changes) / minutes, double(c.lowest), double(counts.highest),
+                counts.scaleSum / double(counts.frames), (unsigned long long)counts.tries,
+                (unsigned long long)counts.triesLost);
+    CHECK(c.lowest >= 0.93f);
+    CHECK(counts.scaleSum / double(counts.frames) < 0.98);
+    CHECK(double(c.changes) / minutes <= 6.0);
+}
+
+// The least size is a floor, also when it is not one of the steps.
+void TestFloor()
+{
+    Console c;
+    c.fixedMs = 30.0; // nothing fits
+    c.limits = {0.7f, 1.0f, 0.0f};
+    c.Run(20);
+    CHECK(c.lowest >= 0.7f);
+    CHECK(c.lowest < 0.75f);
+    const ScaleGovernor::Counts &counts = c.governor.Totals();
+    CHECK(counts.lowest >= 0.7f);
+    CHECK(counts.lowest <= c.governor.Scale() && c.governor.Scale() <= counts.highest);
 }
 
 // The helpers that keep a smaller picture sharp (gxm_engine_options.h).
@@ -341,6 +398,8 @@ int main()
     TestLeast();
     TestNoise();
     TestHold();
+    TestPacedEdge();
+    TestFloor();
     TestSharpHelpers();
     TestLimitsMove();
     if (g_failures)

@@ -19,12 +19,21 @@
 // Each window of frames:
 //   - the GPU held the frame over the goal: the picture's area shrinks by
 //     the share of the frame that is over, times kGain (not all of the
-//     GPU's time is pixel work), at least one step;
+//     GPU's time is pixel work), at least one step. Frames that still come
+//     at the goal's pace were paced by the display, and their time says
+//     nothing of how far over the GPU is: one step. The size that was over
+//     is remembered as too much;
 //   - the GPU's time is known and a step more would still fit: one step up;
 //   - the GPU did not hold the frame, so its time is not known: one step up
-//     as a try, when the last try is old enough. A try that puts the frame
-//     over the goal is taken back and doubles the wait before the next
-//     (2 seconds up to 32); one that holds brings it back to 2 seconds.
+//     as a try. Under the size that was too much a try may follow each
+//     window. A try at that size or above waits: 2 seconds after the size
+//     was found too much, doubled up to 32 by each such try that is lost
+//     (a view at the edge of its goal is then tried twice a minute, where
+//     console run CA's build stepped 38 times in 10 seconds), and after a
+//     try that holds 3 seconds, halved by each further one that holds, so
+//     that a view that emptied has its picture back within seconds. A try
+//     is lost when the GPU holds the frame over the goal within 3 seconds
+//     of it: a GPU a little too slow falls behind over many frames.
 // The depth pass governor (gxm_prepass_governor.h) tries the scene with and
 // without its depth pass and compares frame times. While it tries, the size
 // stays as it is (Hold), so that it compares the two ways at one size; the
@@ -79,6 +88,8 @@ public:
     static constexpr double kLeastShare = 0.6;
     static constexpr uint64_t kFirstTryMicros = 2'000'000;
     static constexpr uint64_t kLastTryMicros = 32'000'000;
+    static constexpr uint64_t kTryProofMicros = 3'000'000;
+    static constexpr uint32_t kDrainWindows = 4;
     static constexpr uint64_t kFirstFastMicros = 16'000'000;
     static constexpr uint64_t kLastFastMicros = 128'000'000;
 
@@ -135,7 +146,8 @@ public:
         const float most = (std::min)((std::max)(limits.most, 0.5f), 1.0f);
         const float least = (std::max)(limits.least, 0.5f);
         const int high = StepOf(most);
-        const int low = (std::max)(StepOf(least), kLowestStep);
+        // The least size is a floor: the first step at or above it.
+        const int low = (std::max)(int(std::ceil(least * kSteps - 0.001f)), kLowestStep);
         const uint64_t last = m_lastEnd;
         m_lastEnd = nowMicros;
         if (least >= most || low >= high)
@@ -200,7 +212,16 @@ public:
             m_fast = true;
         const double goalMs = limits.goalMs > 0.0f ? double(limits.goalMs) : m_fast ? kFastGoalMs : kSlowGoalMs;
         const double budgetMs = (std::max)(goalMs - kMarginMs, cpuMs + kSlackMs);
-        const bool over = bound && frameMs > budgetMs + kSlackMs;
+        // After a step down the GPU still has the larger frames it fell
+        // behind with: for a few windows its waits at the goal's pace are
+        // that backlog and not the new size's doing.
+        const bool paced = frameMs <= goalMs + kSlackMs;
+        if (!bound)
+            m_drain = 0;
+        const bool draining = bound && paced && m_drain > 0;
+        if (draining)
+            --m_drain;
+        const bool over = bound && frameMs > budgetMs + kSlackMs && !draining;
 
         ++m_counts.windows;
         m_counts.boundWindows += bound;
@@ -209,22 +230,30 @@ public:
         m_counts.goalMs = goalMs;
 
         int step = m_step;
-        const bool tried = m_trying;
-        m_trying = false;
+        const bool tried = m_lastTry && nowMicros - m_lastTry < kTryProofMicros;
         if (over && m_step > low)
         {
             const double area = double(m_step) * m_step;
             const double share = (std::max)(1.0 - kGain * (frameMs - budgetMs) / frameMs, kLeastShare);
             step = (std::min)(int(std::sqrt(area * share)), m_step - 1);
             step = (std::max)(step, low);
+            // A lost try is taken back, and frames the display paced say
+            // nothing of how far over the GPU is.
+            if (tried || paced)
+                step = (std::max)(step, m_step - 1);
             if (tried)
             {
-                step = (std::max)(step, m_step - 1);
                 ++m_counts.triesLost;
-                m_tryWait = (std::min)(m_tryWait * 2, kLastTryMicros);
+                m_ceilWait = (std::min)(m_ceilWait * 2, kLastTryMicros);
             }
             else
-                m_tryWait = kFirstTryMicros;
+                m_ceilWait = kFirstTryMicros;
+            m_ceil = m_step;
+            m_tryAt = nowMicros + m_ceilWait;
+            m_proof = kTryProofMicros;
+            m_lastTry = 0;
+            m_triedAbove = false;
+            m_drain = kDrainWindows;
             m_fastOver = 0;
         }
         else if (over)
@@ -244,22 +273,29 @@ public:
             m_fastOver = 0;
             if (m_fast)
                 m_fastWait = kFirstFastMicros;
-            if (tried)
-                m_tryWait = kFirstTryMicros;
             if (m_step < high)
             {
                 // What the GPU needs is the frame's time when it held the
-                // frame and no more than the CPU's time when it did not.
+                // frame. When it did not, nothing says what it needs: the
+                // larger picture is a try.
                 const double next = double(m_step + 1) * (m_step + 1) / (double(m_step) * m_step);
-                const double gpuMs = bound ? frameMs : cpuMs;
-                if (gpuMs * next <= budgetMs)
+                const bool under = m_step + 1 < m_ceil;
+                if (bound && frameMs * next <= budgetMs)
                     step = m_step + 1;
-                else if (!bound && nowMicros - m_lastTry >= m_tryWait)
+                else if (!bound && (under || nowMicros >= m_tryAt))
                 {
                     step = m_step + 1;
-                    m_trying = true;
                     m_lastTry = nowMicros;
                     ++m_counts.tries;
+                    if (!under)
+                    {
+                        // The try before this one held.
+                        if (m_triedAbove)
+                            m_ceilWait = kFirstTryMicros;
+                        m_triedAbove = true;
+                        m_tryAt = nowMicros + m_proof;
+                        m_proof /= 2;
+                    }
                 }
             }
         }
@@ -269,6 +305,8 @@ public:
             m_step = step;
             m_settle = kSettleFrames;
             m_scale = ScaleOf(m_step, high, most);
+            m_counts.lowest = (std::min)(m_counts.lowest, m_scale);
+            m_counts.highest = (std::max)(m_counts.highest, m_scale);
         }
         return m_scale != before;
     }
@@ -287,11 +325,14 @@ private:
 
     float m_scale = 1.0f;
     int m_step = kSteps;
-    bool m_on = false, m_fast = false, m_trying = false;
-    uint32_t m_settle = 0, m_windowFrames = 0, m_fastOver = 0;
+    bool m_on = false, m_fast = false, m_triedAbove = false;
+    uint32_t m_settle = 0, m_windowFrames = 0, m_fastOver = 0, m_drain = 0;
     uint64_t m_lastEnd = 0;
     uint32_t m_frames[kWindowFrames] = {}, m_waits[kWindowFrames] = {};
-    uint64_t m_lastTry = 0, m_tryWait = kFirstTryMicros;
+    // The step last found too much, when a try at or above it may be made,
+    // the wait a lost one sets and the wait one that holds sets.
+    int m_ceil = kSteps + 1;
+    uint64_t m_lastTry = 0, m_tryAt = 0, m_ceilWait = kFirstTryMicros, m_proof = kTryProofMicros;
     uint64_t m_fastFrom = 0, m_fastWait = kFirstFastMicros;
     Counts m_counts;
 };
