@@ -1732,6 +1732,7 @@ PresentResult Present(Device *device)
         Log(*device, "%s", DescribeMemoryUse().c_str());
         LogFrameTime(*device);
         LogWaitCauses(*device);
+        LogGpuWatch(*device);
     }
     if (!shown)
     {
