@@ -12,6 +12,8 @@
 #include <universal/com_files.h>
 #include <universal/q_parse.h>
 #include "r_image.h"
+#include "r_init.h"
+#include "rhi/r_rhi_modern.h"
 #include <win32/win_local.h>
 
 int s_numColorCorrectionDataEntries;
@@ -545,4 +547,292 @@ void R_GenerateReflections(char *mapname, GfxReflectionProbe *probes, uint32_t p
         }
         Dvar_SetBool(r_reflectionProbeGenerate, 0);
     }
+}
+// ---- The Modern path's own probes (GfxModernHooks::probeCaptureWanted) ----------------
+//
+// docs/vulkan-modern.md "Reflection probes". Once a world, after its first
+// frames of play, each of the world's probes (index 0 is the default probe,
+// not one of the map's) is drawn again from its origin: six square views of
+// 90 degrees, one along each face of the cube, through the Modern path with
+// the back end reading each scene's light back (linear, before bloom,
+// exposure and the tonemap). Each texel of the probe's first level is the
+// light the views saw along its direction (two by two of the views' pixels),
+// stored in the game's encoding; the back end then makes the blurrier levels
+// again from it (GfxModernHooks::reflectionProbe).
+
+static bool s_modernProbeCapturing;
+// Whether the world loaded last still has its probes to draw.
+static bool s_modernProbesPending;
+
+bool R_ModernProbeCaptureActive() { return s_modernProbeCapturing; }
+
+void R_ModernProbesLoaded() { s_modernProbesPending = true; }
+
+// The direction through (u, v) of a face of a D3D9 cube (+X, -X, +Y, -Y, +Z,
+// -Z), u and v from -1 to 1 across and down it; the game reads its probes
+// with world directions. Not normalised.
+static void R_ModernCubeDirection(int face, float u, float v, float *d)
+{
+    switch (face)
+    {
+    case 0: d[0] = 1.0f; d[1] = -v; d[2] = -u; break;
+    case 1: d[0] = -1.0f; d[1] = -v; d[2] = u; break;
+    case 2: d[0] = u; d[1] = 1.0f; d[2] = v; break;
+    case 3: d[0] = u; d[1] = -1.0f; d[2] = -v; break;
+    case 4: d[0] = u; d[1] = -v; d[2] = 1.0f; break;
+    default: d[0] = -u; d[1] = -v; d[2] = -1.0f; break;
+    }
+}
+
+static float R_ModernEncodeSrgb(float light)
+{
+    const float v = light > 0.0f ? light : 0.0f;
+    return v <= 0.0031308f ? v * 12.92f : 1.055f * powf(v, 1.0f / 2.4f) - 0.055f;
+}
+
+static float R_ModernDecodeSrgb(float value)
+{
+    const float v = value > 0.0f ? value : 0.0f;
+    return v <= 0.04045f ? v / 12.92f : powf((v + 0.055f) / 1.055f, 2.4f);
+}
+
+// The game's encoding of a probe texel (R_ColorCorrectBGRAPixel): the display
+// value's rgb over its largest channel (at least 0.1, at most 4), alpha that
+// channel over 4. BGRA.
+static void R_ModernStoreProbeTexel(const float *light, uint8_t *texel)
+{
+    float value[3];
+    float largest = 0.1f;
+    for (int c = 0; c < 3; ++c)
+    {
+        value[c] = R_ModernEncodeSrgb(light[c]);
+        value[c] = value[c] > 4.0f ? 4.0f : value[c];
+        largest = value[c] > largest ? value[c] : largest;
+    }
+    int alpha = (int)ceilf(largest / 4.0f * 255.0f);
+    alpha = alpha < 1 ? 1 : alpha > 255 ? 255 : alpha;
+    const float scale = (float)alpha / 255.0f * 4.0f;
+    for (int c = 0; c < 3; ++c)
+    {
+        int channel = (int)(value[c] / scale * 255.0f + 0.5f);
+        channel = channel < 0 ? 0 : channel > 255 ? 255 : channel;
+        texel[2 - c] = (uint8_t)channel;
+    }
+    texel[3] = (uint8_t)alpha;
+}
+
+// The mean light (linear, the channels' mean) of a face's first level as the
+// game stores it.
+static float R_ModernProbeTexelLight(const uint8_t *texel)
+{
+    const float scale = (float)texel[3] / 255.0f * 4.0f;
+    float sum = 0.0f;
+    for (int c = 0; c < 3; ++c)
+        sum += R_ModernDecodeSrgb((float)texel[2 - c] / 255.0f * scale);
+    return sum / 3.0f;
+}
+
+// One face: a frame of the probe's origin looking along the face, which the
+// back end reads back. size is the view's inner square (a pixel of border
+// around it, as the game's own cube shots).
+static bool R_ModernCaptureFace(const GfxModernHooks *hooks, const float *origin, int face, int size, float *rgb)
+{
+    float forward[3], down[3], up[3], left[3];
+    R_ModernCubeDirection(face, 0.0f, 0.0f, forward);
+    // The direction's change down the face: v from -1 to 1.
+    float below[3];
+    R_ModernCubeDirection(face, 0.0f, 1.0f, below);
+    for (int i = 0; i < 3; ++i)
+    {
+        down[i] = below[i] - forward[i];
+        up[i] = -down[i];
+    }
+    // Right-handed: forward x left = up.
+    Vec3Cross(up, forward, left);
+
+    refdef_s *refdef = (refdef_s *)Z_Malloc(sizeof(refdef_s), "R_ModernCaptureFace", 0);
+    memset(refdef, 0, sizeof(*refdef));
+    refdef->x = 0;
+    refdef->y = 0;
+    refdef->width = size + 2;
+    refdef->height = size + 2;
+    // The inner square spans exactly 90 degrees.
+    refdef->tanHalfFovX = (float)(size + 2) / (float)size;
+    refdef->tanHalfFovY = refdef->tanHalfFovX;
+    refdef->zNear = 0.0f;
+    for (int i = 0; i < 3; ++i)
+    {
+        refdef->vieworg[i] = origin[i];
+        refdef->viewaxis[0][i] = forward[i];
+        refdef->viewaxis[1][i] = left[i];
+        refdef->viewaxis[2][i] = up[i];
+    }
+    refdef->localClientNum = 0;
+    refdef->time = 0;
+    refdef->blurRadius = 0.0f;
+    refdef->useScissorViewport = 0;
+    R_InitPrimaryLights(refdef->primaryLights);
+
+    FxCmd cmd;
+    R_BeginFrame();
+    R_BeginSharedCmdList();
+    R_ClearClientCmdList2D();
+    R_ClearScene(0);
+    FX_BeginUpdate(0);
+    R_SetLodOrigin(refdef);
+    const float zfar = R_GetFarPlaneDist();
+    FX_SetNextUpdateCamera(0, refdef, zfar);
+    FX_FillUpdateCmd(0, &cmd);
+    R_UpdateSpotLightEffect(&cmd);
+    R_UpdateNonDependentEffects(&cmd);
+    R_UpdateRemainingEffects(&cmd);
+    R_RenderScene(refdef);
+    R_EndFrame();
+    R_IssueRenderCommands(0xFFFFFFFF);
+    R_SyncRenderThread();
+    Z_Free(refdef, 0);
+    return hooks->probeCaptureRead(hooks->user, dx.device, 1, 1, size, size, rgb);
+}
+
+void R_ModernCaptureProbes()
+{
+    if (!s_modernProbesPending || !rgp.world || !rg.registered || r_norefresh->current.enabled)
+        return;
+    s_modernProbesPending = false;
+    const GfxModernHooks *hooks = R_ModernHooks();
+    if (!hooks || !hooks->probeCaptureWanted || !hooks->probeCapture || !hooks->probeCaptureRead
+        || !hooks->reflectionProbe || !hooks->probeCaptureWanted(hooks->user, dx.device))
+        return;
+    const int started = Sys_Milliseconds();
+    int captured = 0, skipped = 0;
+    float before = 0.0f, after = 0.0f;
+    float *rgb[6] = {};
+    uint8_t *texels = nullptr;
+    int capturedEdge = 0;
+    s_modernProbeCapturing = true;
+    hooks->probeCapture(hooks->user, dx.device, true);
+    for (uint32_t probeIndex = 1; probeIndex < rgp.world->reflectionProbeCount; ++probeIndex)
+    {
+        const GfxReflectionProbe &probe = rgp.world->reflectionProbes[probeIndex];
+        IDirect3DCubeTexture9 *cube = probe.reflectionImage ? probe.reflectionImage->texture.cubemap : nullptr;
+        D3DSURFACE_DESC desc;
+        if (!cube || FAILED(cube->GetLevelDesc(0, &desc)) || desc.Format != D3DFMT_A8R8G8B8 || desc.Width < 2
+            || desc.Width > 256 || desc.Width != desc.Height)
+        {
+            ++skipped;
+            continue;
+        }
+        const int edge = (int)desc.Width;
+        // Two by two of the views' pixels for each texel.
+        const int size = 2 * edge;
+        if (edge != capturedEdge)
+        {
+            for (int face = 0; face < 6; ++face)
+            {
+                if (rgb[face])
+                    Z_Free(rgb[face], 0);
+                rgb[face] = (float *)Z_Malloc(sizeof(float) * 3 * size * size, "R_ModernCaptureProbes", 0);
+            }
+            if (texels)
+                Z_Free(texels, 0);
+            texels = (uint8_t *)Z_Malloc(4 * edge * edge, "R_ModernCaptureProbes", 0);
+            capturedEdge = edge;
+        }
+        bool read = true;
+        for (int face = 0; face < 6 && read; ++face)
+            read = R_ModernCaptureFace(hooks, probe.origin, face, size, rgb[face]);
+        if (!read)
+        {
+            ++skipped;
+            continue;
+        }
+        float probeBefore = 0.0f, probeAfter = 0.0f;
+        for (int face = 0; face < 6; ++face)
+        {
+            // Each texel: the light along its direction in the view of the
+            // same face (its forward is the face's centre), averaged over the
+            // two by two pixels around where the direction lands.
+            float forward[3], below[3], up[3], left[3];
+            R_ModernCubeDirection(face, 0.0f, 0.0f, forward);
+            R_ModernCubeDirection(face, 0.0f, 1.0f, below);
+            for (int i = 0; i < 3; ++i)
+                up[i] = forward[i] - below[i];
+            Vec3Cross(up, forward, left);
+            for (int y = 0; y < edge; ++y)
+            {
+                for (int x = 0; x < edge; ++x)
+                {
+                    float d[3];
+                    R_ModernCubeDirection(face, 2.0f * ((float)x + 0.5f) / (float)edge - 1.0f,
+                                          2.0f * ((float)y + 0.5f) / (float)edge - 1.0f, d);
+                    const float along = Vec3Dot(d, forward);
+                    // Across (right is -left) and down the view, -1 to 1.
+                    const float sx = -Vec3Dot(d, left) / along;
+                    const float sy = -Vec3Dot(d, up) / along;
+                    // The view's pixel centres are at (i + 0.5) / size * 2 - 1.
+                    const float px = (sx + 1.0f) * 0.5f * (float)size - 0.5f;
+                    const float py = (sy + 1.0f) * 0.5f * (float)size - 0.5f;
+                    int x0 = (int)floorf(px), y0 = (int)floorf(py);
+                    x0 = x0 < 0 ? 0 : x0 > size - 2 ? size - 2 : x0;
+                    y0 = y0 < 0 ? 0 : y0 > size - 2 ? size - 2 : y0;
+                    float light[3] = {0.0f, 0.0f, 0.0f};
+                    for (int dy = 0; dy < 2; ++dy)
+                        for (int dx = 0; dx < 2; ++dx)
+                        {
+                            const float *pixel = &rgb[face][3 * ((y0 + dy) * size + x0 + dx)];
+                            for (int c = 0; c < 3; ++c)
+                                light[c] += 0.25f * pixel[c];
+                        }
+                    R_ModernStoreProbeTexel(light, &texels[4 * (y * edge + x)]);
+                }
+            }
+            D3DLOCKED_RECT locked;
+            if (FAILED(cube->LockRect((D3DCUBEMAP_FACES)face, 0, &locked, nullptr, 0)))
+            {
+                read = false;
+                break;
+            }
+            for (int y = 0; y < edge; ++y)
+            {
+                uint8_t *row = (uint8_t *)locked.pBits + y * locked.Pitch;
+                for (int x = 0; x < edge; ++x)
+                {
+                    probeBefore += R_ModernProbeTexelLight(&row[4 * x]);
+                    probeAfter += R_ModernProbeTexelLight(&texels[4 * (y * edge + x)]);
+                }
+                memcpy(row, &texels[4 * y * edge], 4 * edge);
+            }
+            cube->UnlockRect((D3DCUBEMAP_FACES)face, 0);
+        }
+        if (!read)
+        {
+            ++skipped;
+            continue;
+        }
+        // The blurrier levels again, from the new first level.
+        hooks->reflectionProbe(hooks->user, dx.device, cube);
+        probeBefore /= (float)(6 * edge * edge);
+        probeAfter /= (float)(6 * edge * edge);
+        if (captured < 64)
+            Com_Printf(CON_CHANNEL_GFX, "modern: probe %u at (%.0f %.0f %.0f): mean light %.3f as stored, %.3f drawn\n",
+                       probeIndex, probe.origin[0], probe.origin[1], probe.origin[2], probeBefore, probeAfter);
+        before += probeBefore;
+        after += probeAfter;
+        ++captured;
+    }
+    hooks->probeCapture(hooks->user, dx.device, false);
+    s_modernProbeCapturing = false;
+    for (int face = 0; face < 6; ++face)
+    {
+        if (rgb[face])
+            Z_Free(rgb[face], 0);
+    }
+    if (texels)
+        Z_Free(texels, 0);
+    const int took = Sys_Milliseconds() - started;
+    Com_Printf(CON_CHANNEL_GFX,
+               "modern: %d reflection probes drawn again with the Modern path (%d left as they were) in %d ms; "
+               "mean light %.3f as stored, %.3f drawn\n",
+               captured, skipped, took, captured ? before / (float)captured : 0.0f,
+               captured ? after / (float)captured : 0.0f);
 }

@@ -164,6 +164,17 @@ struct GfxModernHooks
     // (the renderer then draws nothing for the view).
     bool (*planarBegin)(void *user, IDirect3DDevice9 *device, const GfxModernPlanar *planar);
     void (*planarDone)(void *user, IDirect3DDevice9 *device, const GfxModernPlanar *planar);
+    // Re-capturing the world's reflection probes with the back end's own
+    // light (docs/vulkan-modern.md "Reflection probes"): whether the back end
+    // wants it (asked once a map). May be null (no).
+    bool (*probeCaptureWanted)(void *user, IDirect3DDevice9 *device);
+    // Capturing on or off: while on, the back end reads each scene's light
+    // back (linear, before its bloom, exposure and tonemap); probeCaptureRead
+    // gives a rectangle of the last one (in pixels of the scene's target) as
+    // rgb floats, rows from the top, once the GPU is done. False when none was
+    // read back. Both may be null when probeCaptureWanted is.
+    void (*probeCapture)(void *user, IDirect3DDevice9 *device, bool on);
+    bool (*probeCaptureRead)(void *user, IDirect3DDevice9 *device, int x, int y, int width, int height, float *rgb);
 };
 
 // Null removes them. Called while no frame is being built (as the renderer

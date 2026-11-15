@@ -243,6 +243,17 @@ struct Backend
     uint32_t probesFiltered = 0;
     uint32_t probesLeft = 0;
     double probesMs = 0.0;
+    // Re-capturing the probes with the Modern path's own light
+    // (KISAK_VK_MODERN_PROBES_CAPTURE=1, with the filter above): while the
+    // renderer captures (BackendModernProbeCapture), each scene's linear-light
+    // image is read back before its bloom, exposure and tonemap, for
+    // BackendModernProbeCaptureRead. Counts since the device was made: scenes
+    // read back, and rectangles taken from them.
+    bool probeCaptureWanted = false;
+    bool probeCapturing = false;
+    Readback *probeCaptureReadback = nullptr;
+    uint32_t probeCaptureScenes = 0;
+    uint32_t probeCaptureReads = 0;
     // KISAK_VK_MODERN_DEBUG=velocity: the velocity debug view over each
     // anti-aliased scene (docs/vulkan-modern.md), made at its first use.
     // velocity-all: the same, with every surface that moves on its own drawn
@@ -690,6 +701,8 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     // stays start-up only.
     backend->probesWanted = !EnvIsZero("KISAK_VK_MODERN_PROBES")
         && (EnvIs("KISAK_VK_MODERN_PROBES", "1") || backend->linearWanted);
+    backend->probeCaptureWanted =
+        backend->probesWanted && backend->linearWanted && EnvIs("KISAK_VK_MODERN_PROBES_CAPTURE", "1");
     // The planar view and its debug view are start-up only, as the probes.
     backend->debugPlanar = EnvIs("KISAK_VK_MODERN_DEBUG", "planar");
     backend->debugPlanarRead = EnvIs("KISAK_VK_MODERN_DEBUG", "planar-read");
@@ -1027,6 +1040,10 @@ void BackendLogStats(Backend *backend, bool reset)
                    "are), %.1f ms each",
                 backend->probesFiltered, backend->probesLeft,
                 backend->probesFiltered ? backend->probesMs / double(backend->probesFiltered) : 0.0);
+    if (backend->probeCaptureScenes)
+        HostLog(h, "vulkan d3d9: modern: %u scenes read back in linear light to capture reflection probes (%u "
+                   "faces taken)",
+                backend->probeCaptureScenes, backend->probeCaptureReads);
     // Planar reflections: the views drawn into the planar image, and its size.
     if (backend->planarViews > backend->planarViewsBase)
         HostLog(h, "vulkan d3d9: modern: %llu planar reflection views (%ux%u)",
@@ -1149,6 +1166,12 @@ void CloseBackend(Backend *backend)
         modern::DestroyTonemap(backend->core, backend->tonemap);
         backend->tonemap = nullptr;
     }
+    if (backend->probeCaptureReadback)
+    {
+        DestroyReadback(backend->core, backend->probeCaptureReadback);
+        backend->probeCaptureReadback = nullptr;
+    }
+    backend->probeCapturing = false;
     if (backend->legacy && backend->planarColor)
         lg::DestroyTexture(backend->legacy, backend->planarColor);
     if (backend->legacy && backend->planarDepth)
@@ -1958,6 +1981,79 @@ bool BackendModernReflectionProbe(Backend *backend, lg::Device *legacy, lg::Text
     return true;
 }
 
+namespace
+{
+// An IEEE half (binary16) as a float.
+float HalfToFloat(uint16_t half)
+{
+    const uint32_t sign = (half & 0x8000u) << 16;
+    const uint32_t exponent = (half >> 10) & 0x1fu;
+    const uint32_t mantissa = half & 0x3ffu;
+    uint32_t bits;
+    if (exponent == 0)
+    {
+        if (mantissa == 0)
+            bits = sign;
+        else
+        {
+            // Subnormal: 2^-14 times mantissa / 1024.
+            const float value = std::ldexp(static_cast<float>(mantissa), -24);
+            return sign ? -value : value;
+        }
+    }
+    else if (exponent == 31)
+        bits = sign | 0x7f800000u | (mantissa << 13);
+    else
+        bits = sign | ((exponent + 112u) << 23) | (mantissa << 13);
+    float value;
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+} // namespace
+
+bool BackendModernProbeCaptureWanted(Backend *backend)
+{
+    return backend && backend->legacy && backend->core && backend->probeCaptureWanted && !backend->linearFailed;
+}
+
+void BackendModernProbeCapture(Backend *backend, bool on)
+{
+    if (!backend)
+        return;
+    backend->probeCapturing = on && BackendModernProbeCaptureWanted(backend);
+    if (!backend->probeCapturing && backend->probeCaptureReadback && backend->core)
+    {
+        DestroyReadback(backend->core, backend->probeCaptureReadback);
+        backend->probeCaptureReadback = nullptr;
+    }
+}
+
+bool BackendModernProbeCaptureRead(Backend *backend, uint32_t x, uint32_t y, uint32_t width, uint32_t height,
+                                   float *rgb)
+{
+    if (!backend || !backend->core || !backend->probeCaptureReadback || !rgb || !width || !height)
+        return false;
+    ReadbackData data{};
+    if (!WaitReadback(backend->core, backend->probeCaptureReadback, &data) || !data.pixels
+        || data.format != modern::kSceneFormat || uint64_t(x) + width > data.width
+        || uint64_t(y) + height > data.height)
+        return false;
+    for (uint32_t row = 0; row < height; ++row)
+    {
+        const uint8_t *from = data.pixels + static_cast<size_t>(y + row) * data.rowBytes + static_cast<size_t>(x) * 8;
+        float *to = rgb + static_cast<size_t>(row) * width * 3;
+        for (uint32_t column = 0; column < width; ++column)
+            for (uint32_t c = 0; c < 3; ++c)
+            {
+                uint16_t half;
+                std::memcpy(&half, from + column * 8 + c * 2, sizeof(half));
+                to[column * 3 + c] = HalfToFloat(half);
+            }
+    }
+    ++backend->probeCaptureReads;
+    return true;
+}
+
 bool BackendModernPlanarWanted(Backend *backend)
 {
     return backend && backend->legacy && backend->planarWanted && !backend->planarFailed && !backend->linearFailed;
@@ -2128,6 +2224,16 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
             return ModernResult::Skipped;
         const VkRect2D area = {{static_cast<int32_t>(view.x), static_cast<int32_t>(view.y)}, {view.width, view.height}};
         Image *scene = lg::SurfaceImage(color);
+        if (backend->probeCapturing && scene)
+        {
+            // A reflection probe's face: the light before bloom, exposure
+            // and the tonemap (BackendModernProbeCaptureRead).
+            if (backend->probeCaptureReadback)
+                DestroyReadback(backend->core, backend->probeCaptureReadback);
+            backend->probeCaptureReadback = ReadImage(backend->core, scene, 0, 0);
+            if (backend->probeCaptureReadback)
+                ++backend->probeCaptureScenes;
+        }
         float bloomScale = 0.0f;
         Image *bloom = DrawBloom(backend, scene, area, view, bloomScale);
         Image *exposure = MeasureExposure(backend, scene, area, view.cut);

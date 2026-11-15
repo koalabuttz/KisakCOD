@@ -102,6 +102,10 @@ void SCR_UpdateFrame()
     }
     if (r_reflectionProbeGenerate->current.enabled && refreshedUI && CL_GetLocalClientGlobals(0)->serverTime > 1000)
         R_BspGenerateReflections();
+    // The Modern path's own probes, once a world, after its first frames of
+    // play (as the game's generator above).
+    else if (refreshedUI && CL_GetLocalClientGlobals(0)->serverTime > 1000)
+        R_ModernCaptureProbes();
 }
 
 int CL_CGameRendering(int localClientNum)

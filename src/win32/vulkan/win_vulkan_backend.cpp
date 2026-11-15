@@ -634,11 +634,30 @@ void ModernPlanarDone(void *, IDirect3DDevice9 *device, const GfxModernPlanar *p
         front::ModernPlanarDone(device, ModernPlanarViewOf(planar));
 }
 
+bool ModernProbeCaptureWanted(void *, IDirect3DDevice9 *device)
+{
+    return !s_modernRefused.load(std::memory_order_relaxed) && front::ModernProbeCaptureWanted(device);
+}
+
+void ModernProbeCapture(void *, IDirect3DDevice9 *device, bool on)
+{
+    front::ModernProbeCapture(device, on);
+}
+
+bool ModernProbeCaptureRead(void *, IDirect3DDevice9 *device, int x, int y, int width, int height, float *rgb)
+{
+    if (x < 0 || y < 0 || width <= 0 || height <= 0)
+        return false;
+    return front::ModernProbeCaptureRead(device, static_cast<uint32_t>(x), static_cast<uint32_t>(y),
+                                         static_cast<uint32_t>(width), static_cast<uint32_t>(height), rgb);
+}
+
 const GfxModernHooks s_modernHooks = {nullptr,          ModernJitterPixels, ModernSceneDone,
                                       ModernSceneBegin, ModernSceneLit,     ModernSurfaceMoved,
                                       ModernSkinnedSurfaceMoved, ModernLitInputs, ModernWantsSceneDepth,
                                       ModernSceneDepth, ModernReflectionProbe, ModernPlanarWanted,
-                                      ModernPlanarBegin, ModernPlanarDone};
+                                      ModernPlanarBegin, ModernPlanarDone,
+                                      ModernProbeCaptureWanted, ModernProbeCapture, ModernProbeCaptureRead};
 } // namespace
 
 int Kisak_VulkanBackendSelected()

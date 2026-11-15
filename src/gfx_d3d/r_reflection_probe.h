@@ -49,6 +49,17 @@ inline CubemapShot &operator++(CubemapShot &e, int i)
     return e;
 }
 
+// Re-capturing the world's reflection probes with the Modern path's own light
+// (GfxModernHooks::probeCaptureWanted; r_reflection_probe.cpp): the client
+// calls R_ModernCaptureProbes after each frame of play, and once a world (the
+// first time a frame of play is done after R_LoadWorld, which calls
+// R_ModernProbesLoaded) it draws every probe's six faces and writes them over
+// the probe. R_ModernProbeCaptureActive is true while it draws them (each
+// scene a camera cut, without jitter).
+void R_ModernCaptureProbes();
+void R_ModernProbesLoaded();
+bool R_ModernProbeCaptureActive();
+
 void R_GenerateReflections(char *mapname, GfxReflectionProbe *probes, uint32_t probeCount);
 void R_BspGenerateReflections();
 void R_GenerateReflectionImages(
