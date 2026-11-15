@@ -181,6 +181,10 @@ struct Options
     //  32: the same for alpha, as grey
     //  64: the fetched-ahead reads are written tex2D<float4>
     // 128: reads of sampler 2 are not hoisted; 256: nor those of sampler 3
+    // 512: the first coordinate comes as a float3 with z = 1 and every
+    //      fetched-ahead read is multiplied by that z
+    // 1024, 2048: the fragment program asks for a compile without fast
+    //      math, without the FX mode (a first line the compile call reads)
     uint16_t diagHoist = 0;
 };
 

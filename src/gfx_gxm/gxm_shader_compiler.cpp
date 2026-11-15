@@ -211,6 +211,12 @@ bool CompileCg(const char *source, size_t length, ShaderStage stage, std::vector
     options.optimizationLevel = optimization;
     options.useFastmath = fastMath ? 1 : 0;
     options.warningLevel = 1;
+    // Run diagnostics (cg::Options::diagHoist): the program asks.
+    const std::string head(source, std::min<size_t>(length, 96));
+    if (head.find("// kisak-compile: nofastmath\n") != std::string::npos)
+        options.useFastmath = 0;
+    if (head.find("// kisak-compile: nofx\n") != std::string::npos)
+        options.useFx = 0;
 
     SceShaccCgCallbackList callbacks;
     sceShaccCgInitializeCallbackList(&callbacks, SCE_SHACCCG_TRIVIAL);

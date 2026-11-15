@@ -441,7 +441,16 @@ class Emitter
     std::string HoistedInput(const HoistCoord &coord) const
     {
         const std::string name = "in_TEXCOORD" + std::to_string(coord.slot);
-        return options_.diagHoist & 8 ? name + ".zw" : options_.diagHoist & 2 ? name + ".xy" : name;
+        const bool first = !options_.hoist->coords.empty() && &coord == &options_.hoist->coords[0];
+        return options_.diagHoist & 8                              ? name + ".zw"
+               : (options_.diagHoist & 2) || (HoistOne() && first) ? name + ".xy"
+                                                                   : name;
+    }
+    // diagHoist 512, without the float4 diagnostics: the first coordinate's
+    // slot is a float3 whose z the vertex program sets to 1.
+    bool HoistOne() const
+    {
+        return (options_.diagHoist & 512) && !(options_.diagHoist & 10);
     }
 };
 
@@ -753,8 +762,10 @@ bool Emitter::Texture(const Instruction &ins, std::string &value)
         if (options_.diagHoist & 48)
             Line("kisak_hoist_diff = max(kisak_hoist_diff, abs(tex2D(" + s + ", " + in + ") - tex2D(" + s + ", (" +
                  coord + ").xy)));");
-        value = std::string(options_.diagHoist & 64 ? "tex2D<float4>(" : "tex2D(") + s + ", " + in + ")" +
-                SwizzleSuffix(ins.sources[1].swizzle);
+        value = std::string(options_.diagHoist & 64 ? "tex2D<float4>(" : "tex2D(") + s + ", " + in + ")";
+        if (HoistOne())
+            value = "(" + value + " * in_TEXCOORD" + std::to_string(options_.hoist->coords[0].slot) + ".z)";
+        value += SwizzleSuffix(ins.sources[1].swizzle);
         return true;
     }
     switch (ins.opcode)
@@ -1312,6 +1323,11 @@ bool Emitter::Run(std::string &cg, std::string &error)
                     parameters.push_back("out float4 " + name + " : TEXCOORD" + std::to_string(coord.slot));
                     epilogue += "    " + name + " = float4(" + sum(coord.x) + ", " + sum(coord.y) + ", 0.0, 1.0);\n";
                 }
+                else if (HoistOne() && &coord == &options_.hoist->coords[0])
+                {
+                    parameters.push_back("out float3 " + name + " : TEXCOORD" + std::to_string(coord.slot));
+                    epilogue += "    " + name + " = float3(" + sum(coord.x) + ", " + sum(coord.y) + ", 1.0);\n";
+                }
                 else
                 {
                     parameters.push_back("out float2 " + name + " : TEXCOORD" + std::to_string(coord.slot));
@@ -1422,8 +1438,10 @@ bool Emitter::Run(std::string &cg, std::string &error)
                         error = "hoist: the pixel shader reads TEXCOORD" + std::to_string(coord.slot) + " itself";
                         return false;
                     }
-                parameters.push_back(std::string(options_.diagHoist & 10 ? "float4 " : "float2 ") + name + " : TEXCOORD" +
-                                     std::to_string(coord.slot));
+                parameters.push_back(std::string(options_.diagHoist & 10                                    ? "float4 "
+                                                 : HoistOne() && &coord == &options_.hoist->coords[0] ? "float3 "
+                                                                                                      : "float2 ") +
+                                     name + " : TEXCOORD" + std::to_string(coord.slot));
                 if (options_.diagHoist & 4)
                     break;
             }
@@ -1981,7 +1999,18 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
 bool Emit(const Shader &shader, const Options &options, std::string &cg, std::string &error)
 {
     Emitter emitter(shader, options);
-    return emitter.Run(cg, error);
+    if (!emitter.Run(cg, error))
+        return false;
+    // Run diagnostics: a first line the Vita's compile call looks for
+    // (gxm_shader_compiler.cpp) on programs with hoisted reads.
+    if (options.hoist && shader.reflection.stage != Stage::Vertex)
+    {
+        if (options.diagHoist & 1024)
+            cg = "// kisak-compile: nofastmath\n" + cg;
+        if (options.diagHoist & 2048)
+            cg = "// kisak-compile: nofx\n" + cg;
+    }
+    return true;
 }
 
 // ---- Texture coordinates worked out by the vertex program ---------------------------------

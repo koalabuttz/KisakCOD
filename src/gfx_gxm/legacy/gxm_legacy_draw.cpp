@@ -2812,7 +2812,8 @@ const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "n
                                      "no-read-hoist",       "diag-hoist-show",    "diag-hoist-float4",
                                      "diag-hoist-one",      "diag-hoist-zw",      "diag-hoist-diff",
                                      "diag-hoist-diff-alpha", "diag-hoist-typed",  "diag-hoist-skip-s2",
-                                     "diag-hoist-skip-s3"};
+                                     "diag-hoist-skip-s3", "diag-hoist-times-one", "diag-hoist-no-fastmath",
+                                     "diag-hoist-no-fx"};
 struct LiveSwitch
 {
     const char *name;
@@ -2889,7 +2890,9 @@ void ApplyLiveSwitches(Device &device)
         {
             static const char *const names[] = {"diag-hoist-show", "diag-hoist-float4",     "diag-hoist-one",
                                                 "diag-hoist-zw",   "diag-hoist-diff",       "diag-hoist-diff-alpha",
-                                                "diag-hoist-typed", "diag-hoist-skip-s2",   "diag-hoist-skip-s3"};
+                                                "diag-hoist-typed", "diag-hoist-skip-s2",   "diag-hoist-skip-s3",
+                                                "diag-hoist-times-one", "diag-hoist-no-fastmath",
+                                                "diag-hoist-no-fx"};
             uint16_t bit = 0;
             for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); ++i)
                 if (name == names[i])
