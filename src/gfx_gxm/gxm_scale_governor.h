@@ -25,6 +25,11 @@
 //     as a try, when the last try is old enough. A try that puts the frame
 //     over the goal is taken back and doubles the wait before the next
 //     (2 seconds up to 32); one that holds brings it back to 2 seconds.
+// The depth pass governor (gxm_prepass_governor.h) tries the scene with and
+// without its depth pass and compares frame times. While it tries, the size
+// stays as it is (Hold), so that it compares the two ways at one size; the
+// size then follows whichever way it kept.
+//
 // The goal of 16.7 ms is given up for a while (16 seconds, doubled by each
 // loss up to 128) when the smallest picture still does not reach it.
 //
@@ -111,6 +116,16 @@ public:
         m_counts.frameMs = last.frameMs;
         m_counts.waitMs = last.waitMs;
         m_counts.goalMs = last.goalMs;
+    }
+
+    // One frame ended at `nowMicros` that must not count: something else is
+    // being timed at this size (the depth pass governor's try). The size
+    // stays and the window starts again.
+    void Hold(uint64_t nowMicros)
+    {
+        m_lastEnd = nowMicros;
+        m_windowFrames = 0;
+        m_settle = (std::max)(m_settle, kSettleFrames);
     }
 
     // One frame ended at `nowMicros`, having waited `waitMicros` for the GPU.

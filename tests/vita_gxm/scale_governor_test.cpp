@@ -251,6 +251,26 @@ void TestNoise()
     CHECK(double(c.changes) / minutes <= 12.0);
 }
 
+// Held (the depth pass governor tries the other way): the size stays however
+// slow the GPU gets, and follows once the hold ends.
+void TestHold()
+{
+    Console c;
+    c.Run(5);
+    const float settled = c.governor.Scale();
+    c.fixedMs = 20.0; // the try: no depth pass, more pixel work
+    for (int i = 0; i < 40; ++i)
+    {
+        const double frame = (std::max)(c.cpuMs, c.GpuMs(settled));
+        c.now += uint64_t(frame * 1000.0);
+        c.governor.Hold(c.now);
+        CHECK(c.governor.Scale() == settled);
+    }
+    c.Run(3); // the try was kept
+    CHECK(c.governor.Scale() < settled);
+    CHECK(c.GpuMs(c.governor.Scale()) <= ScaleGovernor::kSlowGoalMs - ScaleGovernor::kMarginMs + ScaleGovernor::kSlackMs + 0.01);
+}
+
 // The engine's limits move while the game runs.
 void TestLimitsMove()
 {
@@ -287,6 +307,7 @@ int main()
     TestSlowCpu();
     TestLeast();
     TestNoise();
+    TestHold();
     TestLimitsMove();
     if (g_failures)
     {

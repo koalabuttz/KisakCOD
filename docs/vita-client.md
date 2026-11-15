@@ -929,9 +929,9 @@ What the GXM back end does so far (step 2d):
   doubled by each loss up to 128. The size costs nothing to change: the
   targets keep the screen's size and only the viewport moves. The log's
   `3D picture size` line, beside the frame time line, gives the sizes
-  picked. The depth pass governor times frames on its own and does not
-  know of this one yet: console runs of it keep the depth pass forced on
-  (`vita_gxm no-prepass-governor 1`). A game server can set neither dvar.
+  picked. While the depth pass governor tries the scene the other way the
+  size stays as it is, so that the try is timed at one size; the size then
+  follows the way that was kept. A game server can set neither dvar.
   `scripts/tests/test_vita_scale_governor.py` runs it on a model of the
   console with run BV's times.
 - **The CPU a frame ahead of the GPU.** The CPU fills frame N while the GPU

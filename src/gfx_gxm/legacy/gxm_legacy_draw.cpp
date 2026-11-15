@@ -2346,7 +2346,11 @@ void ScaleFrame(Device &device)
     const gfx_gxm::ScaleGovernor::Limits limits{gfx_gxm::g_sceneScaleLeast.load(std::memory_order_relaxed),
                                                 gfx_gxm::g_sceneScaleMost.load(std::memory_order_relaxed),
                                                 gfx_gxm::g_sceneScaleGoalMs.load(std::memory_order_relaxed)};
-    d.scaleGovernor.FrameEnded(Micros(), d.scaleWaitMicros, limits);
+    // The depth pass governor's try is timed at one size.
+    if (!d.prepassOff && !d.governorOff && d.prepassGovernor.Probing() && limits.least < limits.most)
+        d.scaleGovernor.Hold(Micros());
+    else
+        d.scaleGovernor.FrameEnded(Micros(), d.scaleWaitMicros, limits);
     d.scaleWaitMicros = 0;
     gfx_gxm::g_sceneScaleNow.store(d.scaleGovernor.Scale(), std::memory_order_relaxed);
 }
