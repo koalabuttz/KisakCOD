@@ -1498,7 +1498,7 @@ run draws and reads no planar view unless asked.
 **Next.** Water on the other maps that have it, and planes found on their
 own for floors. `KISAK_VK_MODERN_WATER_LOG=1` names how water is drawn: as a
 map's water is looked at for the planar view (with it wanted), each material
-with a water map, its surfaces, triangles (flat ones), heights and lit pixel
+with a water map, its surfaces, triangles (flat ones), bounds and lit pixel
 shader, and whether our water shader can draw it (`modern water: map ...`),
 then each change of the plane the view takes (`modern water: planar view on
 the water at height H`, or `no water in view`; at most 64); once per map that

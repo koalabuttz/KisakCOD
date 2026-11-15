@@ -2376,7 +2376,7 @@ static bool R_ModernWaterLogOn()
 // reflections: each material with a water map, how many world surfaces use
 // it, and the lit pass's pixel shader with whether our water shader can draw
 // it (so a run over many maps tells which water reflects without looking at
-// it).
+// it), with the bounds of its surfaces.
 static void R_ModernLogWaterMaterials(const char *name)
 {
     const GfxWorldDpvsStatic &dpvs = rgp.world->dpvs;
@@ -2394,7 +2394,8 @@ static void R_ModernLogWaterMaterials(const char *name)
             continue;
         done[doneCount++] = material;
         uint32_t surfaces = 0, triangles = 0, flat = 0;
-        float low = FLT_MAX, high = -FLT_MAX;
+        float mins[3] = {FLT_MAX, FLT_MAX, FLT_MAX};
+        float maxs[3] = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
         for (uint32_t o = s; o < dpvs.staticSurfaceCount; ++o)
         {
             const GfxSurface &surface = dpvs.surfaces[o];
@@ -2404,17 +2405,21 @@ static void R_ModernLogWaterMaterials(const char *name)
             triangles += surface.tris.triCount;
             if (surface.bounds[1][2] - surface.bounds[0][2] <= 0.5f)
                 flat += surface.tris.triCount;
-            low = surface.bounds[0][2] < low ? surface.bounds[0][2] : low;
-            high = surface.bounds[1][2] > high ? surface.bounds[1][2] : high;
+            for (int i = 0; i < 3; ++i)
+            {
+                mins[i] = surface.bounds[0][i] < mins[i] ? surface.bounds[0][i] : mins[i];
+                maxs[i] = surface.bounds[1][i] > maxs[i] ? surface.bounds[1][i] : maxs[i];
+            }
         }
         const MaterialTechnique *lit =
             material->techniqueSet ? material->techniqueSet->techniques[TECHNIQUE_LIT] : nullptr;
         const MaterialPass *pass = lit && lit->passCount ? &lit->passArray[0] : nullptr;
         const char *shader = pass && pass->pixelShader ? pass->pixelShader->name : nullptr;
         Com_Printf(CON_CHANNEL_GFX,
-                   "modern water: map %s: material %s: %u surfaces, %u triangles (%u flat), z %.1f to %.1f, "
-                   "lit pixel shader %s, %s\n",
-                   name, material->info.name, surfaces, triangles, flat, low, high, shader ? shader : "none",
+                   "modern water: map %s: material %s: %u surfaces, %u triangles (%u flat), x %.0f to %.0f, "
+                   "y %.0f to %.0f, z %.1f to %.1f, lit pixel shader %s, %s\n",
+                   name, material->info.name, surfaces, triangles, flat, mins[0], maxs[0], mins[1], maxs[1], mins[2],
+                   maxs[2], shader ? shader : "none",
                    shader && R_ModernWaterShader(shader, material, pass) ? "our water shader can draw it"
                                                                          : "not ours");
     }
