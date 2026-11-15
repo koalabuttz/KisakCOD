@@ -34,7 +34,7 @@ library: no FreeType, Lua, SVG or Lottie. To build offline, point
 | --- | --- |
 | `ui_rml 0` | Default. The stock menu painter. |
 | `ui_rml 1` | Classic mode: the stock menus drawn by RmlUi. |
-| `ui_rmlStats` | Prints the last classic frame: slots, how many the stock painter drew, draw commands, vertices, indices. |
+| `ui_rmlStats` | Prints the last frame: classic slots and how many the stock painter drew, draw commands, vertices, indices; the open screen, and how many draws had no texture (plain fills, drawn with the `white` material) or a texture. `ui_rmlStats 1` also lists every classic slot (`RmlUi slot ...` lines): the window that made it and what it set. |
 | `ui_rmlOpen <screen>` | Opens the screen `ui_rml/<screen>.rml` over the menus, e.g. `ui_rmlOpen graphics`. |
 | `ui_rmlClose` | Closes it. |
 | `ui_rmlGraphics 1` | Options > Graphics opens the graphics screen in place of the stock page. On by default on Android, off elsewhere. |
@@ -63,7 +63,12 @@ Menus_OpenByName("options_graphics") -> UI_MenuOpenHook (ui_rmlGraphics: the gra
 becomes one `RC_DRAW_UI_TRIANGLES` render command
 (`R_AddCmdDrawUiTriangles`, `src/gfx_d3d/r_rendercmds.cpp`), which the back end
 draws like a stretch pic: the 2D pass, `TECHNIQUE_UNLIT`, the material's own
-blend state, an optional scissor rectangle. The command sits in the shared
+blend state, an optional scissor rectangle. Plain fills (backgrounds,
+borders) use the `white` material, as `UI_FillRect` does. Every triangle is
+turned the way `RB_DrawStretchPic` turns its own (clockwise on screen):
+RmlUi builds its quads the other way, and some drivers (the Android
+emulator's) then culled every fill and picture and drew only the text. The
+command sits in the shared
 back-end command table, so every back end that draws the stock menus (D3D9,
 DXVK, Vulkan through its D3D9 front, GXM) runs it without code of its own.
 Large meshes are split into commands of at most 1,500
@@ -173,6 +178,9 @@ open screen takes all of them:
 | Escape, B, right mouse button | close |
 | A touch that moves | scrolls the page |
 
+A slider's value is a fill along a faint track; a tap anywhere on the bar
+sets it.
+
 The graphics screen (`graphics.rml`) has six pages: Quality (Low, Medium,
 High and Ultra presets), Display, Textures, Effects, Modern and Advanced (the
 last two only with Modern visuals).
@@ -187,13 +195,15 @@ order, rectangles, flips, tints, and every glyph's position, shadow and colour
 against the stock text path's arithmetic. It then opens the built-in
 graphics screen with stand-in dvars and plays it with keys and taps: hidden
 rows, show-if, pages by bumper, choices, toggles, sliders (step, tap on the
-bar, Auto), restart marks, a preset, Apply and Escape. The x86_64 client job runs it after
+bar, Auto), restart marks, a preset, Apply and Escape. It also checks that
+every triangle drawn turns the stock way. The x86_64 client job runs it after
 the default build (`.github/workflows/build-kisakcod-linux.yaml`).
 
 ## Next
 
 The classic mode is the proof, and the graphics screen the first new menu.
-Next: settings for the Modern features that only the environment switches
-today, a render resolution scale, then the bot-match screen, the main menu and
+Both draw correctly on the Retroid Pocket 6 and the Android emulator
+(November 2026), in Legacy and Modern visuals. Next: a render resolution
+scale (the Vulkan back end needs one first), then the bot-match screen, the main menu and
 the rest of the settings; the stock menus stay available behind `ui_rml 0`
 and `ui_rmlGraphics 0`.
