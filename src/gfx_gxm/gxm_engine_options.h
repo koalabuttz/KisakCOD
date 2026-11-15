@@ -48,6 +48,45 @@
 // and puts it back to 1 once the picture is stretched, so nothing drawn
 // after (the sun's flare, the HUD) is scaled.
 //
+// g_sceneScaleLeast, g_sceneScaleMost, g_sceneScaleGoalMs, g_sceneScaleNow:
+// with vita_sceneScaleMin under vita_sceneScale the back end picks the size
+// between the two, frame by frame, from the time each frame waited for the
+// GPU (gxm_scale_governor.h): the picture shrinks only as far as the GPU
+// needs to keep the frame's goal, and is whole again where the view allows.
+// The engine hands over the two limits and the goal (vita_sceneScaleGoal, in
+// ms; 0 lets the governor choose 16.7 or 33.3 ms) when a full-screen 3D view
+// starts and reads the size for that view. The back end's thread writes the
+// size at each Present. Console run BV (2026-11-15, mp_crash, busy view):
+// 35.5 ms a frame at the full size, held by the GPU, and 29.6 ms at 0.7,
+// held by the CPU.
+//
+// Keeping the smaller picture sharp:
+// - g_mipBias: a picture drawn smaller makes the GPU pick smaller mip
+//   levels of every texture, so the stretched picture would show blurrier
+//   textures than the full-size one. While the 3D picture is scaled, the
+//   back end biases each mipped texture's level of detail by log2 of the
+//   scale (in sceGxm's steps of 1/8 of a level), which gives the texels the
+//   full-size picture would have used. An empty file `no-mip-bias`, or
+//   "vita_gxm no-mip-bias 1", turns it off.
+// - g_sceneWidthOnly (vita_sceneScaleWidthOnly): the picture keeps its
+//   height and gives up the same share of its pixels in width alone (the
+//   width's factor is the scale squared, no less than a half), so every
+//   line of the screen is still drawn.
+// - g_sceneSharpen (vita_sceneSharpen): the stretch is drawn by a program
+//   of the back end's that reads the picture five times and raises each
+//   pixel's contrast against its four neighbours, held inside the range of
+//   the five so that no halo appears. As a stretch of its own it costs
+//   the two scenes of the copy and the stretch, which g_stretchInFilter
+//   otherwise saves: console run CC (2026-11-15) measured 2.3 to 3.1 ms a
+//   frame, as much as a picture of 0.85 saves at the busy view.
+// - g_sharpenInFilter: so where the film filter's quad does the stretch
+//   (g_stretchInFilter), the quad sharpens as well. The engine sets
+//   g_sharpenDraws for that one draw, and the back end draws it with a
+//   variant of the filter's own program whose reads of the picture go
+//   through the same five-read filter (gxm_cg_translate.h,
+//   Options::sharpSamplers). No scene is added. An empty file
+//   `no-filter-sharpen`, or "vita_gxm no-filter-sharpen 1", turns it off.
+//
 // g_stretchInFilter: the copy and the stretch of the scaled picture are two
 // more scenes a frame (console run AH, 2026-11-14: 5 became 7). When the
 // only post effect of the view is the map's film colour filter, which reads
@@ -99,6 +138,8 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
+#include <cmath>
 
 namespace gfx_gxm
 {
@@ -107,6 +148,17 @@ extern bool g_prepassWorldOnly;
 extern bool g_prepassSkipModels;
 extern bool g_resolveWhenUsed;
 extern float g_sceneScale;
+extern std::atomic<float> g_sceneScaleLeast;
+extern std::atomic<float> g_sceneScaleMost;
+extern std::atomic<float> g_sceneScaleGoalMs;
+extern std::atomic<float> g_sceneScaleNow;
+extern bool g_mipBias;
+extern bool g_sceneWidthOnly;
+extern bool g_sceneSharpen;
+// True while the engine asks for the scaled picture's stretch (StretchRect).
+extern bool g_sharpenThisStretch;
+extern bool g_sharpenInFilter;
+extern bool g_sharpenDraws;
 extern bool g_stretchInFilter;
 extern float g_filterReadS;
 extern float g_filterReadT;
@@ -120,6 +172,39 @@ extern bool g_sceneIsCopy;
 inline int SceneScaled(int size, float scale)
 {
     return (std::max)(1, int(float(size) * scale));
+}
+
+// The factors of the picture's width and height for a scale.
+inline float SceneScaleX(float scale)
+{
+    return g_sceneWidthOnly ? (std::max)(scale * scale, 0.5f) : scale;
+}
+inline float SceneScaleY(float scale)
+{
+    return g_sceneWidthOnly ? 1.0f : scale;
+}
+
+// Steps of 1/8 of a mip level (sceGxm's unit) that a picture scaled by
+// `smallest` on its smaller side moves every texture's level of detail by:
+// 8 * log2(smallest), rounded; 0 or less.
+inline int SceneMipBiasSteps(float smallest)
+{
+    if (smallest >= 1.0f)
+        return 0;
+    return int(std::lround(8.0f * std::log2((std::max)(smallest, 0.25f))));
+}
+
+// The size of this frame's 3D picture: the engine's own (`most`), or the
+// back end's choice between `least` and it. Hands the back end the limits
+// for the frames to come.
+inline float SceneScaleFor(float least, float most, float goalMs)
+{
+    g_sceneScaleLeast.store(least, std::memory_order_relaxed);
+    g_sceneScaleMost.store(most, std::memory_order_relaxed);
+    g_sceneScaleGoalMs.store(goalMs, std::memory_order_relaxed);
+    if (least >= most)
+        return most;
+    return std::clamp(g_sceneScaleNow.load(std::memory_order_relaxed), least, most);
 }
 } // namespace gfx_gxm
 

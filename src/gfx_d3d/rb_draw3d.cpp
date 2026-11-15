@@ -99,20 +99,25 @@ static void RB_StretchScaledScene(const GfxViewInfo *viewInfo)
     const GfxViewport &view = viewInfo->sceneViewport;
     const int width = gfxCmdBufSourceState.renderTargetWidth;
     const int height = gfxCmdBufSourceState.renderTargetHeight;
-    if (KISAK_GXM_STRETCH_IN_FILTER() && RB_FilmFilterOnly(viewInfo) && view.x == 0 && view.y == 0 &&
-        view.width == width && view.height == height)
+    const int drawnWidth = gfx_gxm::SceneScaled(view.width, gfx_gxm::SceneScaleX(scale));
+    const int drawnHeight = gfx_gxm::SceneScaled(view.height, gfx_gxm::SceneScaleY(scale));
+    // A sharpened picture goes the same way as a plain one where it can:
+    // the film filter's quad then draws with a program that reads the
+    // picture through the sharpening filter (g_sharpenInFilter).
+    gfx_gxm::g_sceneSharpen = vita_sceneSharpen && vita_sceneSharpen->current.enabled;
+    if (KISAK_GXM_STRETCH_IN_FILTER() && (!gfx_gxm::g_sceneSharpen || gfx_gxm::g_sharpenInFilter) &&
+        RB_FilmFilterOnly(viewInfo) && view.x == 0 && view.y == 0 && view.width == width && view.height == height)
     {
         // The film filter's full-screen quad reads only the drawn corner of
         // the copy (RB_ApplyColorManipulationFullscreen). Half a texel is
         // kept off the far edges so the linear filter never mixes in the
         // part of the copy that was not drawn this frame.
-        gfx_gxm::g_filterReadS = (float(gfx_gxm::SceneScaled(view.width, scale)) - 0.5f) / float(width);
-        gfx_gxm::g_filterReadT = (float(gfx_gxm::SceneScaled(view.height, scale)) - 0.5f) / float(height);
+        gfx_gxm::g_filterReadS = (float(drawnWidth) - 0.5f) / float(width);
+        gfx_gxm::g_filterReadT = (float(drawnHeight) - 0.5f) / float(height);
         return;
     }
     const RECT whole = {view.x, view.y, view.x + view.width, view.y + view.height};
-    const RECT drawn = {view.x, view.y, view.x + gfx_gxm::SceneScaled(view.width, scale),
-                        view.y + gfx_gxm::SceneScaled(view.height, scale)};
+    const RECT drawn = {view.x, view.y, view.x + drawnWidth, view.y + drawnHeight};
     IDirect3DSurface9 *scene = gfxRenderTargets[R_RENDERTARGET_SCENE].surface.color;
     IDirect3DSurface9 *copy = Image_GetSurface(gfxRenderTargets[R_RENDERTARGET_RESOLVED_SCENE].image);
     if (!scene || !copy)
@@ -121,7 +126,9 @@ static void RB_StretchScaledScene(const GfxViewInfo *viewInfo)
     if (!gfx_gxm::g_sceneIsCopy)
         R_HW_StretchRect(gfxCmdBufState.prim.device, scene, &drawn, copy, &drawn, D3DTEXF_POINT);
     gfx_gxm::g_sceneIsCopy = false;
+    gfx_gxm::g_sharpenThisStretch = gfx_gxm::g_sceneSharpen;
     R_HW_StretchRect(gfxCmdBufState.prim.device, copy, &drawn, scene, &whole, D3DTEXF_LINEAR);
+    gfx_gxm::g_sharpenThisStretch = false;
     R_HW_Release(copy);
 }
 
@@ -200,11 +207,18 @@ void RB_Draw3DInternal(const GfxViewInfo *viewInfo)
     // Every 3D pass of this view draws the smaller picture until
     // RB_StretchScaledScene. Only the standard full-screen scene: a view
     // that is not the whole screen, fullbright and the debug shaders keep
-    // the full size.
-    gfx_gxm::g_sceneScale = gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD && viewInfo->isRenderingFullScreen &&
-                                    vita_sceneScale
-                                ? std::clamp(vita_sceneScale->current.value, 0.5f, 1.0f)
-                                : 1.0f;
+    // the full size. vita_sceneScaleMin under vita_sceneScale lets the back
+    // end pick the size between the two (gxm_engine_options.h).
+    if (gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD && viewInfo->isRenderingFullScreen && vita_sceneScale)
+    {
+        const float most = std::clamp(vita_sceneScale->current.value, 0.5f, 1.0f);
+        const float least = vita_sceneScaleMin ? std::clamp(vita_sceneScaleMin->current.value, 0.5f, 1.0f) : 1.0f;
+        const float goalMs = vita_sceneScaleGoal ? vita_sceneScaleGoal->current.value : 0.0f;
+        gfx_gxm::g_sceneWidthOnly = vita_sceneScaleWidthOnly && vita_sceneScaleWidthOnly->current.enabled;
+        gfx_gxm::g_sceneScale = gfx_gxm::SceneScaleFor(least, most, goalMs);
+    }
+    else
+        gfx_gxm::g_sceneScale = 1.0f;
 #endif
 
     if (gfxDrawMethod.drawScene)

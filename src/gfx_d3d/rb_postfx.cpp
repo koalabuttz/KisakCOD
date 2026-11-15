@@ -59,8 +59,13 @@ void RB_ApplyColorManipulationFullscreen(const GfxViewInfo *viewInfo)
     // the copy: the filter's quad stretches it over the screen.
     if (gfx_gxm::g_filterReadS < 1.0f || gfx_gxm::g_filterReadT < 1.0f)
     {
+        // With vita_sceneSharpen the back end draws this one quad with a
+        // program that reads the picture through the sharpening filter
+        // (nothing waits to be drawn here: RB_StretchScaledScene saw to it).
+        gfx_gxm::g_sharpenDraws = gfx_gxm::g_sceneSharpen && gfx_gxm::g_sharpenInFilter;
         RB_DrawFullScreenColoredQuad(rgp.postFxColorMaterial, 0.0f, 0.0f, gfx_gxm::g_filterReadS,
                                      gfx_gxm::g_filterReadT, 0xFFFFFFFF);
+        gfx_gxm::g_sharpenDraws = false;
         gfx_gxm::g_filterReadS = 1.0f;
         gfx_gxm::g_filterReadT = 1.0f;
         return;
