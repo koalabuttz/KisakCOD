@@ -184,6 +184,23 @@ def test_failures(work):
     check(done.returncode == 0 and launch["status"] == "ok" and launch["events"].get("quit"),
           f"a build with one process: {launch}")
 
+    # A late "start" step does not hold back a "map" step due sooner.
+    launches = [{"name": "o", "args": ["+devmap", "mp_crash"], "at_map": ["1 quit"],
+                 "host": [{"after": "start", "at": 30, "do": "screencap", "name": "late"},
+                          {"after": "map", "at": 0.2, "do": "screencap", "name": "early"}]}]
+    path = write_recipe(work, launches)
+    run(work, path, work / "out-order")
+    launch = json.loads((work / "out-order" / "results.json").read_text())["launches"][0]
+    steps = {step["name"]: step for step in launch["host_steps"]}
+    check(steps["early"].get("ok") and steps["late"].get("not_run") == "the launch ended first",
+          f"each host step waits only for its own moment: {launch['host_steps']}")
+
+    launches = [{"name": "q", "at_menu": ["0.3 quit"]}]
+    path = write_recipe(work, launches)
+    done = run(work, path, work / "out-quit-crash", env={"FAKE_APP_CRASH_AT_QUIT": "1"})
+    launch = json.loads((work / "out-quit-crash" / "results.json").read_text())["launches"][0]
+    check(done.returncode == 1 and launch["status"] == "crash_at_quit", f"a crash at the quit: {launch['status']}")
+
     launches = [{"name": "l", "at_menu": ["0.2 quit"]}]
     path = write_recipe(work, launches)
     started = time.time()

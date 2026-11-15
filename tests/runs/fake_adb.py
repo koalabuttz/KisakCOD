@@ -31,7 +31,8 @@ gives the one process of older builds. FAKE_APP_EXIT=1: the game ends
 without a word when the map is up.
 
 FAKE_ADB_OFFLINE=1: no device. FAKE_EMULATOR_FAIL=1: the emulator exits at once. FAKE_INSTALL_FAIL=1: the install fails.
-FAKE_APP_CRASH=1: the app crashes when the map is up. FAKE_APP_LINGER=1: the
+FAKE_APP_CRASH=1: the app crashes when the map is up; FAKE_APP_CRASH_AT_QUIT=1:
+it crashes right after saying it quits. FAKE_APP_LINGER=1: the
 app process stays after the game quits (SDL's activity). FAKE_ASLEEP=1: the
 screen is asleep until a KEYCODE_WAKEUP.
 """
@@ -316,6 +317,9 @@ def app(extra):
                     f"p99 {ms + 2:.3f}, max {ms + 3:.3f}; 0 over 50 ms")
             elif words[0] == "quit":
                 log("run: quitting as asked")
+                if os.environ.get("FAKE_APP_CRASH_AT_QUIT") == "1":
+                    log("Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 2 (hwuiTask0)", tag="libc", level="F")
+                    return 1
                 if os.environ.get("FAKE_APP_LINGER") == "1":
                     time.sleep(3600)
                 return 0
