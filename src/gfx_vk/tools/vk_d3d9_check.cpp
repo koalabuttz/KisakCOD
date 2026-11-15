@@ -6368,7 +6368,8 @@ void Check::ModernLive()
 // in the sun's map (the sun itself unshadowed) the same as lit. Spot share 0
 // adds nothing. Last, lit air, air in shadow and the lit spot light again
 // from a froxel volume (r_modernFogFroxels): the same within the check's
-// tolerance. Without linear light there is no fog: grey 100 throughout.
+// tolerance. Then air in shadow with haze 1 (r_modernFogHaze): the light
+// passes' air twice as thick, T 0.25, so 0.214 * 0.75 of light is taken. Without linear light there is no fog: grey 100 throughout.
 void Check::ModernFog()
 {
     const bool linear = EnvText("KISAK_VK_MODERN_LINEAR") != "0";
@@ -6414,9 +6415,10 @@ void Check::ModernFog()
     // the shadow lookup's reference `reference`; the middle pixel's shown
     // value is expected to be `want`.
     const auto scene = [&](const char *name, int fogOn, float sun, float reference, int want, Spot spot = {},
-                           bool froxels = false) {
+                           bool froxels = false, float haze = 0.0f) {
         front::ModernTuning modern;
         modern.fogFroxels = froxels ? 1 : 0;
+        modern.fogHaze = haze;
         modern.exposure = 0;
         modern.fog = fogOn;
         modern.fogSun = sun;
@@ -6505,6 +6507,10 @@ void Check::ModernFog()
         scene("fog_froxels_lit_air", 1, 1.0f, 0.1f, plain, Spot{}, true);
         scene("fog_froxels_shadowed_air", 1, 1.0f, 0.5f, shaded, Spot{}, true);
         scene("fog_froxels_spot_lit_air", 1, 0.0f, 0.5f, spotLit, Spot{1, 0.1f, 1.0f, false, 1.0f}, true);
+        // Haze 1: the light passes' air twice as thick (T 0.25 over the 2
+        // units), so the shadow takes 0.214 * 0.75 of light away.
+        const int hazeShaded = linear ? shown(grey - fogLight * 0.75) : plain;
+        scene("fog_haze_shadowed_air", 1, 1.0f, 0.5f, hazeShaded, Spot{}, false, 1.0f);
     }
     take(front::ModernTuning{});
     SafeRelease(depth);

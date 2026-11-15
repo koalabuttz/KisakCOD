@@ -83,6 +83,7 @@ back to them.
 | `r_modernFogSun`, `r_modernFogScatter` | -1, or 0 to 1 and 0 to 0.9 | `KISAK_VK_MODERN_FOG_SUN`, `_SCATTER` |
 | `r_modernFogSpots` | -1, or 0 to 4 | `KISAK_VK_MODERN_FOG_SPOTS` |
 | `r_modernFogFroxels` | default, off, on | `KISAK_VK_MODERN_FOG_FROXELS` |
+| `r_modernFogHaze` | -1, or 0 to 8 | `KISAK_VK_MODERN_FOG_HAZE` |
 | `r_modernTonemap` | default, clamp, neutral, agx, aces | `KISAK_VK_MODERN_TONEMAP` |
 | `r_modernDebug` | default, none, velocity, velocity-all, normals, ao, reflections, fog | `KISAK_VK_MODERN_DEBUG` |
 
@@ -1615,6 +1616,15 @@ without a shadow map does not light the air.
    the pixel that was marched), and adds the light above (blend one, one).
    The anti-aliasing then averages the march's noise away.
 
+**Extra haze** (`r_modernFogHaze`, default 0): most MP maps' fog is thin,
+so the light it scatters is faint and shafts barely show (PC fog run 1,
+2026-11-15: subtle everywhere but mp_overgrown). With haze h the light
+passes take the fog's density times 1 + h: the sun's and spot lights' light
+in the air, and the shadows they leave in it, are as in air 1 + h times as
+thick, while the game's fog over the scene, and so each map's own look of
+distance, stays as it is. David chose to have it (2026-11-15) as a knob;
+0 keeps the map's own air.
+
 **Froxels, the second option** (`r_modernFogFroxels on`, or
 `KISAK_VK_MODERN_FOG_FROXELS=1`): the same sums from a volume in place of the
 march, on the core's compute passes (below). In place of step 3:
@@ -1655,8 +1665,8 @@ volume to settle its noise (the anti-aliasing does that per pixel for now).
 
 The statistics line: `vulkan d3d9: modern: S scenes with volumetric fog (F
 from froxels, M through the sun's shadow map, P with L spot lights; sun K,
-scatter G, spot lights J, N steps over D units, half resolution), T ms GPU
-each` (all its passes, for the mix of march and froxel scenes drawn).
+scatter G, spot lights J, haze H, N steps over D units, half resolution), T
+ms GPU each` (all its passes, for the mix of march and froxel scenes drawn).
 
 **Check:** the D3D9 check's `modern_fog` scene draws grey 100 at depth 0.5
 under identity matrices, seen from 1.5 units behind, through fog of density
@@ -1673,9 +1683,11 @@ pixel gains 0.214 x 0.5 of light; in shadow with fade 1 nothing; with fade
 lit; with `r_modernFogSpots` 0 nothing. Last, lit air, air in shadow and
 the lit spot light again from froxels: the middle pixel's 2 units fall in
 the second slice (0.73 to 2.93 units), read 0.494 of the way between the
-slices' sums rather than 0.5, the same within the check's tolerance.
-`test_vulkan_d3d9_front.py` counts its eleven fog scenes, three from
-froxels, five through the sun's map and five with a spot light.
+slices' sums rather than 0.5, the same within the check's tolerance. Then
+air in shadow with haze 1: the light passes' air is twice as thick (T 0.25),
+so the middle pixel loses 0.214 x 0.75 of light.
+`test_vulkan_d3d9_front.py` counts its twelve fog scenes, three from
+froxels, six through the sun's map and five with a spot light.
 
 ## Compute passes
 

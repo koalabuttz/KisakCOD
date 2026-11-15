@@ -40,21 +40,21 @@ involved. The checks:
                  setting (what each setting did to its frame, and that the
                  statistics count from where they were last started, are the
                  scene's own points); and the Modern path's statistics lines
-                 count the 114 anti-aliased scenes of modern_taa,
+                 count the 115 anti-aliased scenes of modern_taa,
                  modern_linear, modern_bloom, modern_effects, modern_lit,
                  modern_lit_shader, modern_lit_models, modern_lit_no_sun,
                  modern_lit_lights, modern_tonemap, modern_exposure,
                  modern_velocity, modern_normals, modern_ao,
                  modern_reflections, modern_planar, modern_fog, modern_live
-                 and modern_live_cut (a second modern_taa run), 43 of them
-                 without history, the 42 scenes of modern_linear,
+                 and modern_live_cut (a second modern_taa run), 44 of them
+                 without history, the 43 scenes of modern_linear,
                  modern_bloom, modern_effects, modern_lit, modern_lit_shader,
                  modern_lit_models, modern_lit_no_sun, modern_lit_lights,
                  modern_tonemap, modern_exposure, modern_normals, modern_ao,
                  modern_reflections, modern_planar, modern_fog and
                  modern_live in linear light with one copy read from them
-                 (none with KISAK_VK_MODERN_LINEAR=0), modern_fog's 11 scenes
-                 with volumetric fog, 3 of them from froxels, 5 through the
+                 (none with KISAK_VK_MODERN_LINEAR=0), modern_fog's 12 scenes
+                 with volumetric fog, 3 of them from froxels, 6 through the
                  sun's shadow map and 5 with a spot light in the air (none
                  with KISAK_VK_MODERN_LINEAR=0),
                  modern_bloom's 2 scenes with bloom (none with
@@ -709,14 +709,14 @@ def main():
     # the modern_normals scene's one (a cut), the modern_ao scene's one, the
     # same, and the modern_reflections scene's five (the first and the third
     # cuts), the modern_planar scene's two (the first a cut), the
-    # modern_fog scene's twelve (cuts), then modern_live's three (cuts: two of modern_tonemap's and one of
+    # modern_fog scene's thirteen (cuts), then modern_live's three (cuts: two of modern_tonemap's and one of
     # modern_ao's, with lit surfaces), in linear light unless
     # KISAK_VK_MODERN_LINEAR=0. Then modern_live_cut, modern_taa's twenty
     # scenes again (two without history).
     modern = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes anti-aliased \((\d+) without history\)',
                        stdout)
-    checks.expect('the Modern path anti-aliased 114 scenes, 43 without history',
-                  modern is not None and modern.group(1) == '114' and modern.group(2) == '43',
+    checks.expect('the Modern path anti-aliased 115 scenes, 44 without history',
+                  modern is not None and modern.group(1) == '115' and modern.group(2) == '44',
                   modern.group(0) if modern else 'missing')
     velocity = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with surfaces that move on their own '
                          r'\((\d+) surfaces, (\d+) of them brush models\), ([0-9.]+) ms GPU each for their velocity$',
@@ -798,21 +798,21 @@ def main():
         checks.expect('no scene in linear light with KISAK_VK_MODERN_LINEAR=0', linear is None,
                       linear.group(0) if linear else '')
     else:
-        checks.expect('the Modern path drew 42 scenes in linear light and read 1 copy from them',
-                      linear is not None and linear.group(1) == '42' and linear.group(2) == '1',
+        checks.expect('the Modern path drew 43 scenes in linear light and read 1 copy from them',
+                      linear is not None and linear.group(1) == '43' and linear.group(2) == '1',
                       linear.group(0) if linear else 'missing')
-    # Volumetric fog: modern_fog's eleven scenes with the fog switched on,
-    # the last three from froxels; five through the sun's shadow map (the
-    # first three and two froxel ones), five with a spot light in the air, in
-    # linear light only.
+    # Volumetric fog: modern_fog's twelve scenes with the fog switched on,
+    # three from froxels; six through the sun's shadow map (the first three,
+    # two froxel ones and the haze one), five with a spot light in the air,
+    # in linear light only.
     fog = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with volumetric fog \((\d+) from froxels, '
                     r"(\d+) through the sun's shadow map, (\d+) with (\d+) spot lights; .*\), ([0-9.]+) ms GPU each$",
                     stdout)
     if env.get('KISAK_VK_MODERN_LINEAR') == '0':
         checks.expect('no volumetric fog without linear light', fog is None, fog.group(0) if fog else '')
     else:
-        checks.expect('volumetric fog over 11 scenes: 3 from froxels, 5 through the shadow map, 5 with a spot light',
-                      fog is not None and fog.group(1) == '11' and fog.group(2) == '3' and fog.group(3) == '5'
+        checks.expect('volumetric fog over 12 scenes: 3 from froxels, 6 through the shadow map, 5 with a spot light',
+                      fog is not None and fog.group(1) == '12' and fog.group(2) == '3' and fog.group(3) == '6'
                       and fog.group(4) == '5' and fog.group(5) == '5',
                       fog.group(0) if fog else 'missing')
     bloom = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with bloom in place of the glow '

@@ -75,6 +75,7 @@ struct ModernTuning
     float fogScatter = -1.0f;  // forward scattering, 0 to below 0.95 (KISAK_VK_MODERN_FOG_SCATTER)
     float fogSpots = -1.0f;    // how brightly spot lights light the fog, 0 to 4 (KISAK_VK_MODERN_FOG_SPOTS)
     int fogFroxels = -1;       // the fog from a froxel volume, not a march (KISAK_VK_MODERN_FOG_FROXELS)
+    float fogHaze = -1.0f;     // extra haze for the light, 0 to 8 (KISAK_VK_MODERN_FOG_HAZE)
 };
 
 // The debug view over each Modern scene (ModernTuning::debug,

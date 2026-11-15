@@ -48,6 +48,7 @@ inline const dvar_s *fogSun;
 inline const dvar_s *fogScatter;
 inline const dvar_s *fogSpots;
 inline const dvar_s *fogFroxels;
+inline const dvar_s *fogHaze;
 
 // Harmless to call again (the engine keeps the first registration).
 inline void Register()
@@ -136,6 +137,11 @@ inline void Register()
     fogFroxels = Dvar_RegisterEnum("r_modernFogFroxels", kOnOffNames, 0, DVAR_NOFLAG,
                                    "Modern visuals: volumetric fog from a froxel volume (compute passes) in place "
                                    "of a march per pixel (default: off unless KISAK_VK_MODERN_FOG_FROXELS=1)");
+    fogHaze = Dvar_RegisterFloat("r_modernFogHaze", -1.0f, -1.0f, 8.0f, DVAR_NOFLAG,
+                                 "Modern visuals: extra haze for the fog's light, so light shafts show in thin fog: "
+                                 "the air the sun and spot lights light is 1 + this times as thick as the map's fog, "
+                                 "which itself stays as it is (0 the map's own air); -1 the default "
+                                 "(KISAK_VK_MODERN_FOG_HAZE or 0)");
 }
 
 // The switches as the back end takes them: an enum's index 0 (default) is -1,
@@ -172,5 +178,6 @@ inline void Read(gfx_vk::d3d9::ModernTuning &out)
     out.fogScatter = fogScatter->current.value;
     out.fogSpots = fogSpots->current.value;
     out.fogFroxels = fogFroxels->current.integer - 1;
+    out.fogHaze = fogHaze->current.value;
 }
 } // namespace modern_dvars

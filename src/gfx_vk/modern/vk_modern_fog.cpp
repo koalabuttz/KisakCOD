@@ -555,7 +555,7 @@ bool DrawFog(Core *core, Fog *fog, Image *color, Image *depth, Image *shadowMap,
         }
     }
     block.sun[3] = std::fmin(std::fmax(params.scatter, 0.0f), 0.95f);
-    block.fog[0] = inputs.density;
+    block.fog[0] = inputs.density * (1.0f + std::fmax(params.haze, 0.0f));
     block.fog[1] = inputs.start;
     block.fog[2] = params.march;
     block.fog[3] = static_cast<float>(params.steps ? params.steps : 1u);

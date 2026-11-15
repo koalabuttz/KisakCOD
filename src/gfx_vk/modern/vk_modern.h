@@ -334,6 +334,11 @@ struct FogParams
     // How brightly the spot lights light the fog: 0 not at all, 1 as the
     // fog scatters their light.
     float spotShare = 1.0f;
+    // Extra haze for the light: the fog's density in these passes is
+    // multiplied by 1 + haze, so the light the sun and spot lights add, and
+    // the shadows they leave in the air, are as in thicker air, while the
+    // game's own fog over the scene stays as it is. 0: the map's own air.
+    float haze = 0.0f;
     // Steps marched through each spot light's reach.
     uint32_t spotSteps = 12;
     bool half = true;   // march at half resolution
