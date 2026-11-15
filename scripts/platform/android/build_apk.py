@@ -16,8 +16,9 @@ Steps, each kept in --work so a second run only redoes what changed:
   2. fetch the pinned DXVK Native headers (the D3D9 types the renderer
      compiles against) and build the D3D9 stand-in that answers "no device":
      Android has no DXVK, so the game draws through the Vulkan back end;
-  3. build KisakCOD-mp as libmain.so with KISAK_PLATFORM=android;
-  4. stage the four libraries and run Gradle on scripts/platform/android,
+  3. build KisakCOD-mp as libmain.so and KisakCOD-sp (the campaign) as
+     libmain_sp.so with KISAK_PLATFORM=android;
+  4. stage the five libraries and run Gradle on scripts/platform/android,
      which writes <work>/KisakCOD-<config>.apk (debug-signed). The libraries
      keep their debug information for now, so a crash on a device can be
      read back to source lines (the APK is about 100 MB).
@@ -147,19 +148,20 @@ def main():
         f'-DCMAKE_RUNTIME_OUTPUT_DIRECTORY={out}',
         '-DKISAK_BUILD_LINUX_NATIVE_D3D9=ON', f'-DKISAK_DXVK_NATIVE_INCLUDE_DIR={dxvk_include}',
         f'-DKISAK_DXVK_NATIVE_LIBRARY={stand_in}',
-        '-DKISAK_BUILD_LINUX_MP_CLIENT=ON', f'-DKISAK_OPENAL_LIBRARY={openal}',
+        '-DKISAK_BUILD_LINUX_MP_CLIENT=ON', '-DKISAK_BUILD_LINUX_SP_GAME=ON', f'-DKISAK_OPENAL_LIBRARY={openal}',
         f'-DKISAK_OPENAL_INCLUDE_DIR={work / "openal-source/include"}',
         '-DKISAK_LINUX_CINEMATICS=OFF', '-DKISAK_LINUX_HTTP_DOWNLOADS=OFF', '-DKISAK_LINUX_GAMEPAD=ON',
         f'-DSDL3_DIR={sdl_sdk / "lib/cmake/SDL3"}',
         '-DKISAK_BUILD_VULKAN_PROBE=ON', '-DKISAK_BUILD_VULKAN_SHADERS=ON', '-DKISAK_BUILD_VULKAN_LEGACY=ON',
         '-DKISAK_BUILD_VULKAN_BACKEND=ON')
-    run('cmake', '--build', build, '--target', 'KisakCOD-mp')
+    run('cmake', '--build', build, '--target', 'KisakCOD-mp', 'KisakCOD-sp')
     libmain = out / 'libmain.so'
+    libmain_sp = out / 'libmain_sp.so'
 
     # 4. The APK.
     jni = work / f'jniLibs{suffix}'
     (jni / ABI).mkdir(parents=True, exist_ok=True)
-    for library in (libmain, sdl_sdk / 'lib/libSDL3.so', openal, stand_in):
+    for library in (libmain, libmain_sp, sdl_sdk / 'lib/libSDL3.so', openal, stand_in):
         shutil.copy2(library, jni / ABI / library.name)
     print(f'native libraries in {jni / ABI}')
     if args.native_only:

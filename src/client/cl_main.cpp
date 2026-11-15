@@ -29,6 +29,9 @@
 #include <universal/profile.h>
 #include <sound/snd_local.h>
 #include <server/server.h>
+#if !defined(__vita__)
+#include "cl_run_plan.h"
+#endif
 
 enum MovieToPlayScriptOp : __int32
 {
@@ -811,6 +814,12 @@ void CL_Frame(int localClientNum, int msec)
     v14 = msec;
     Hunk_CheckTempMemoryClear();
     Hunk_CheckTempMemoryHighClear();
+#if !defined(__vita__)
+    // KISAK: runs that play themselves (src/client/cl_run_plan.h).
+    kisak::client_run::Frame(
+        cls.uiStarted && clientUIActives[0].connectionState == CA_DISCONNECTED && UI_IsFullscreen(),
+        clientUIActives[0].connectionState == CA_ACTIVE);
+#endif
     //PIXSetMarker(0xFFFFFFFF, "CL_Frame");
     if (clientUIActives[0].isRunning)
     {
@@ -1816,6 +1825,9 @@ void CL_Init(int localClientNum)
     CL_InitInput();
     cl_noprint = Dvar_RegisterBool("cl_noprint", 0, 0, "Print nothing to the console");
     cl_shownet = Dvar_RegisterInt("cl_shownet", 0, -2, 4, 0, "Display network debugging information");
+#if !defined(__vita__)
+    kisak::client_run::RegisterDvars();
+#endif
     cl_avidemo = Dvar_RegisterInt("cl_avidemo", 0, 0, 0x7FFFFFFF, 0, "AVI demo frames per second");
     cl_forceavidemo = Dvar_RegisterBool("cl_forceavidemo", 0, 0, "Record AVI demo even if client is not active");
     cl_yawspeed = Dvar_RegisterFloat("cl_yawspeed", 140.0, -FLT_MAX, FLT_MAX, 0, "Max yaw speed in degrees for game pad and keyboard");

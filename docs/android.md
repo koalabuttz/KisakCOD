@@ -159,9 +159,30 @@ controller works: the d-pad or left stick moves, A presses, L1 and R1 change
 the number of bots. It lists every map in the game folder (`zone/*/mp_*.ff`
 and `usermaps`); a map starts a match against KisakCOD's bots
 (`+set developer_script 1 +set bot_brain 1 +set scr_testclients <n> +set
-g_gametype war|dm +devmap <map>`), and "Main menu" starts the game's own menu. The game runs in a process of its
-own (`:game`), which ends with the game: the engine never starts twice in one
-process, and the first screen comes back when the game quits.
+g_gametype war|dm +devmap <map>`), "Multiplayer" starts the multiplayer
+game's own menu and "Campaign" the singleplayer game's. The game runs in a
+process of its own (`:game`), which ends with the game: the engine never
+starts twice in one process, and the first screen comes back when the game
+quits.
+
+### The campaign
+
+The singleplayer game, KisakCOD-sp, builds as `libmain_sp.so` beside
+`libmain.so` (`sp_game.cmake`, `build_apk.py`), through the same Vulkan back
+end. CampaignActivity (KisakActivity in the same `:game` process) loads it
+instead of `libmain.so`, as KisakActivity does when the intent's boolean extra
+`campaign` is true; runs that can only name an activity use the first:
+
+```
+adb shell am start -n org.kisakcod.game/.CampaignActivity --es args "+devmap killhouse"
+```
+
+A level needs an active player profile ("Tried to use a player profile before
+it was set"), and a handheld has no keyboard to name one, so the first
+campaign start makes one called `player` (`home/players/profiles/active.txt`)
+unless the home folder has one. The controller works as in multiplayer
+(`KISAK_LINUX_GAMEPAD`: `mp_client_gamepad.cpp` serves both games). It has
+not run on a device or the emulator yet.
 
 The stock scripts read `scr_testclients` only in their developer blocks
 (`/# ... #/`), so without `developer_script 1` no bot joins (run 6 on the

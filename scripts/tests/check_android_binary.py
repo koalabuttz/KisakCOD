@@ -17,7 +17,8 @@ ELF file with the NDK's llvm-readelf and llvm-objdump:
   * it holds no fused multiply-add instruction (-ffp-contract=off): float
     results have to match x86's, as on Arm Linux (docs/linux-arm64.md).
 
-With --library the file is libmain.so, the game client in the APK: a shared
+With --library the file is libmain.so or libmain_sp.so, the multiplayer
+client or the campaign in the APK: a shared
 object with no program interpreter that may also need the libraries packed
 beside it (libSDL3.so, libopenal.so, libd3d9_unavailable.so) and Android's
 liblog.so and libandroid.so, and exports

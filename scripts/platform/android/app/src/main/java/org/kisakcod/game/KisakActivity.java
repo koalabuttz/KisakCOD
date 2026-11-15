@@ -12,8 +12,9 @@ import org.libsdl.app.SDLActivity;
 
 /**
  * The KisakCOD app: SDL3's activity around libmain.so, the Android build of
- * KisakCOD-mp (docs/android.md). SDL3 loads the libraries below, makes the
- * window and calls SDL_main, the game's main.
+ * KisakCOD-mp (docs/android.md), or libmain_sp.so, KisakCOD-sp (the campaign),
+ * when the intent's boolean extra "campaign" is true. SDL3 loads the libraries
+ * below, makes the window and calls SDL_main, the game's main.
  *
  * The game folder is the app's folder on shared storage,
  * Android/data/org.kisakcod.game/files, where the player copies the game's
@@ -25,9 +26,19 @@ import org.libsdl.app.SDLActivity;
  * come from the intent's "args" extra, split at spaces (they come last, so
  * they win):
  *   adb shell am start -n org.kisakcod.game/.KisakActivity --es args "+set developer 1"
+ *   adb shell am start -n org.kisakcod.game/.KisakActivity --ez campaign true --es args "+devmap killhouse"
+ *   adb shell am start -n org.kisakcod.game/.CampaignActivity --es args "+devmap killhouse"
  */
 public class KisakActivity extends SDLActivity {
     private static final String TAG = "KisakCOD";
+    // The campaign's player profile when the home folder has none yet.
+    private static final String PROFILE = "player";
+
+    // CampaignActivity says yes whatever the intent holds.
+    protected boolean campaign() {
+        Intent intent = getIntent();
+        return intent != null && intent.getBooleanExtra("campaign", false);
+    }
 
     @Override
     protected void onDestroy() {
@@ -42,9 +53,10 @@ public class KisakActivity extends SDLActivity {
 
     @Override
     protected String[] getLibraries() {
-        // libmain.so needs libSDL3.so, libopenal.so and libd3d9_unavailable.so,
-        // which Android's linker finds in the app's own library folder.
-        return new String[] { "SDL3", "main" };
+        // libmain.so (and libmain_sp.so) need libSDL3.so, libopenal.so and
+        // libd3d9_unavailable.so, which Android's linker finds in the app's own
+        // library folder. One game per process (":game"), so only one loads.
+        return new String[] { "SDL3", campaign() ? "main_sp" : "main" };
     }
 
     @Override
@@ -58,6 +70,9 @@ public class KisakActivity extends SDLActivity {
             }
             Collections.addAll(args, "+set", "fs_basepath", game.getAbsolutePath(),
                     "+set", "fs_homepath", home.getAbsolutePath());
+            if (campaign()) {
+                seedProfile(home);
+            }
         } else {
             Log.e(TAG, "shared storage is not available; the game cannot find its files");
         }
@@ -79,7 +94,29 @@ public class KisakActivity extends SDLActivity {
                 }
             }
         }
-        Log.i(TAG, "arguments: " + args);
+        Log.i(TAG, (campaign() ? "campaign " : "") + "arguments: " + args);
         return args.toArray(new String[0]);
+    }
+
+    // The singleplayer game needs an active player profile before a level
+    // loads ("Tried to use a player profile before it was set"), and a phone
+    // has no keyboard to name one at first start. The first campaign start
+    // makes one called "player"; the game keeps it from then on.
+    private static void seedProfile(File home) {
+        File profiles = new File(home, "players/profiles");
+        File active = new File(profiles, "active.txt");
+        if (active.isFile()) {
+            return;
+        }
+        File profile = new File(profiles, PROFILE);
+        if (!profile.isDirectory() && !profile.mkdirs()) {
+            Log.w(TAG, "cannot make " + profile);
+            return;
+        }
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(active)) {
+            out.write((PROFILE + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (java.io.IOException e) {
+            Log.w(TAG, "cannot write " + active + ": " + e);
+        }
     }
 }
