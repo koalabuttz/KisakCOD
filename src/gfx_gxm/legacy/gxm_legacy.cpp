@@ -417,9 +417,14 @@ gxm::MemorySizes PoolSizes(Device &device)
     // and less than 1 MB of small ones. A console had 16 MB of system memory
     // free on a map when this pool was 20 MB.
     sizes.main = 26u << 20;
-    // For a console run that asks whether sceGxm's ring buffers hold two
-    // frames (big-gxm-rings, below): room for rings of twice the size.
-    if (gxm::ProgramCacheMarker("big-gxm-rings"))
+    // For comparing on a console: double-gxm-rings gives sceGxm's rings of
+    // draw calls and fragment constants twice their default size and the
+    // megabyte for them (gxm_display.h; console runs BV and CJ),
+    // big-gxm-rings a ring of vertex constants of twice the size too (2 MB
+    // more).
+    if (gxm::ProgramCacheMarker("double-gxm-rings"))
+        sizes.main += 1u << 20;
+    else if (gxm::ProgramCacheMarker("big-gxm-rings"))
         sizes.main += 3u << 20;
     // For measuring in an emulator what a map would take if it fitted: a file
     // named big-gpu-pool beside the compiled programs adds 96 MB to the main
@@ -590,8 +595,7 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     // console, an empty file named small-parameter-buffer beside the
     // compiled programs gives the old 8 MB and one named
     // big-parameter-buffer 16 MB (4 MB less for the pool, which may not
-    // hold every map); big-gxm-rings doubles the rings (3 MB more of main
-    // memory).
+    // hold every map).
     display.parameterBufferBytes = 12u << 20;
     if (gxm::ProgramCacheMarker("small-parameter-buffer"))
     {
@@ -603,10 +607,16 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
         display.parameterBufferBytes = 16u << 20;
         Log(*device, "diag: big-parameter-buffer is there: the parameter buffer is 16 MB");
     }
-    if (gxm::ProgramCacheMarker("big-gxm-rings"))
+    if (gxm::ProgramCacheMarker("double-gxm-rings") || gxm::ProgramCacheMarker("big-gxm-rings"))
     {
-        display.ringScale = 2;
-        Log(*device, "diag: big-gxm-rings is there: sceGxm's ring buffers are twice their default size");
+        const bool all = !gxm::ProgramCacheMarker("double-gxm-rings");
+        display.vdmRingBytes = 2 * SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE;
+        display.fragmentRingBytes = 2 * SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE;
+        if (all)
+            display.vertexRingBytes = 2 * SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE;
+        Log(*device, "diag: %s is there: %s of sceGxm's ring buffers are twice their default size",
+            all ? "big-gxm-rings" : "double-gxm-rings",
+            all ? "all three" : "the draw calls' and the fragment constants'");
     }
     // The main pool is memory the CPU does not cache, as Sony's samples have
     // it: the GPU then reads what the CPU wrote with nothing to flush. But
@@ -1721,6 +1731,7 @@ PresentResult Present(Device *device)
         Log(*device, "%s", DescribeMemoryUse().c_str());
         LogFrameTime(*device);
         LogWaitCauses(*device);
+        LogGpuWatch(*device);
     }
     if (!shown)
     {

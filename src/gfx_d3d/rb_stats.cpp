@@ -95,10 +95,15 @@ void RB_EndTrackImmediatePrims()
     backupPrimStats = 0;
 }
 
+// Every draw the back end has made, for the perf probes' draws by surface
+// type (rb_backend.cpp). The render thread's alone; it only counts up.
+uint32_t rb_drawPrimCalls;
+
 void RB_TrackDrawPrimCall(int triCount)
 {
     int histogramIndex; // [esp+0h] [ebp-4h]
 
+    ++rb_drawPrimCalls;
     iassert( g_primStats );
     g_primStats->triCount += triCount;
     ++g_primStats->primCount;

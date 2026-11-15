@@ -768,10 +768,20 @@ enum ModernLitShader : uint16_t
     ModernLitOmni = 0x200,
     ModernLitAmbient = 0x300,
     ModernLitLightMask = 0x300,
+    // water_l_sun, alone (no family, map, mode or light bit): CoD4's water
+    // (water shader facts, PC water run 1). The reflection probe (a cube) at
+    // s1, the water map at s4; fog colour at c0, envMapParms at c5,
+    // waterColor at c6, sun direction and colour at c17 and c18; texcoord 0
+    // (the water map's UV), texcoord 2 (the point relative to the eye, fog)
+    // and colour 0 (alpha) in. It reads the planar reflection where the
+    // water lies on its plane.
+    ModernLitWater = 0x400,
 };
 // Whether shader names a Modern lit shader of ours.
 constexpr bool ModernLitShaderValid(uint16_t shader)
 {
+    if (shader == ModernLitWater)
+        return true;
     const uint16_t family = shader & ModernLitFamilyMask;
     const uint16_t light = shader & ModernLitLightMask;
     if (!family || (shader & ModernLitModeMask) == 0x30 || shader > 0x3ff)
@@ -814,9 +824,11 @@ constexpr bool ModernLitShadowed(uint16_t shader)
 }
 // How many pixel constants it reads: to c18 (c19 with s0) with the sun;
 // without, to envMapParms (s0) or detailScale (d0), at least c0 for the world
-// and c5 for models; lp_amb to c18.
+// and c5 for models; lp_amb and water to c18.
 constexpr uint32_t ModernLitConstantCount(uint16_t shader)
 {
+    if (shader == ModernLitWater)
+        return 19u;
     if (ModernLitAmbientOnly(shader))
         return 19u;
     if (ModernLitPointLight(shader))

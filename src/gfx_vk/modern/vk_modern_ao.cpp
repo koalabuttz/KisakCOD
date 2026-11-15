@@ -42,6 +42,7 @@ struct BlurPush
     float edge;
     float power;
     float lowest;
+    float halfJitter;
 };
 static_assert(sizeof(BlurPush) <= sizeof(Push), "the blur's push constants fit the layout's range");
 
@@ -273,11 +274,28 @@ bool BuildAmbientOcclusion(Core *core, AmbientOcclusion *ao, Image *depth, Image
             push.up[2] = z / norm;
         }
     }
+    // At half resolution: 1 + which pixel of each 2x2 block is worked out
+    // (gtao.frag, ao_blur.frag), moving over the four from frame to frame.
+    const float halfJitter = params.half ? static_cast<float>(1 + (params.frame & 3u)) : 0.0f;
+    push.up[3] = halfJitter;
+    // The raw result's size and area: the scene's, or a pixel for each 2x2
+    // block of it.
+    const uint32_t rawWidth = params.half ? (depthInfo.width + 1) / 2 : depthInfo.width;
+    const uint32_t rawHeight = params.half ? (depthInfo.height + 1) / 2 : depthInfo.height;
+    VkRect2D rawArea = view.area;
+    if (params.half)
+    {
+        const int32_t x0 = view.area.offset.x / 2, y0 = view.area.offset.y / 2;
+        const int32_t x1 = (view.area.offset.x + static_cast<int32_t>(view.area.extent.width) - 1) / 2;
+        const int32_t y1 = (view.area.offset.y + static_cast<int32_t>(view.area.extent.height) - 1) / 2;
+        rawArea.offset = {x0, y0};
+        rawArea.extent = {static_cast<uint32_t>(x1 - x0 + 1), static_cast<uint32_t>(y1 - y0 + 1)};
+    }
 
     if (ao->raw)
     {
         const ImageDesc &have = ImageInfo(ao->raw);
-        if (have.width != depthInfo.width || have.height != depthInfo.height)
+        if (have.width != rawWidth || have.height != rawHeight)
         {
             DestroyImage(core, ao->raw);
             ao->raw = nullptr;
@@ -287,8 +305,8 @@ bool BuildAmbientOcclusion(Core *core, AmbientOcclusion *ao, Image *depth, Image
     {
         ImageDesc desc;
         desc.format = kRawFormat;
-        desc.width = depthInfo.width;
-        desc.height = depthInfo.height;
+        desc.width = rawWidth;
+        desc.height = rawHeight;
         desc.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         desc.name = "modern ao raw";
         ao->raw = CreateImage(core, desc);
@@ -316,7 +334,8 @@ bool BuildAmbientOcclusion(Core *core, AmbientOcclusion *ao, Image *depth, Image
     blurPush.edge = params.edge;
     blurPush.power = params.power;
     blurPush.lowest = params.floor;
-    if (!Pass(core, ao, ao->gtaoPipeline, "modern ao", depth, normals, ao->raw, view.area, &push, sizeof(push), error))
+    blurPush.halfJitter = halfJitter;
+    if (!Pass(core, ao, ao->gtaoPipeline, "modern ao", depth, normals, ao->raw, rawArea, &push, sizeof(push), error))
         return false;
     if (!Pass(core, ao, blur, "modern ao", depth, ao->raw, target, view.area, &blurPush, sizeof(blurPush), error))
         return false;

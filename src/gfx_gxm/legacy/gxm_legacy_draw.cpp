@@ -38,13 +38,19 @@
 #include "gxm_legacy_internal.h"
 
 #include <gfx_gxm/gxm_engine_options.h>
+#include <gfx_gxm/gxm_gpu_watch.h>
+#include <gfx_gxm/gxm_idle_alpha_test.h>
 #include <gfx_gxm/gxm_live_switch.h>
 #include <gfx_gxm/gxm_prepass_governor.h>
 #include <gfx_gxm/gxm_program_cache.h>
 #include <vita/vita_gpu_clock.h>
+#include <vita/vita_platform.h> // Vita_NoteThread
 
 #include <psp2/kernel/threadmgr.h>
 
+#include <pthread.h>
+
+#include <atomic>
 #include <cmath>
 #include <cstring>
 #include <functional>
@@ -321,6 +327,18 @@ struct DrawState
     Pipeline lastDraw{};
     bool lastDrawValid = false;
     bool sameState = true;
+    // An alpha test that cannot change the picture is left out, so that the
+    // draw's fragment program has no discard (gxm_idle_alpha_test.h). The
+    // marker and switch no-alpha-test-drop turn it off.
+    bool dropIdleAlphaTest = true;
+    // And one on a blend that keeps the target for a source of zero writes
+    // zero for a rejected pixel in place of the discard. The marker and
+    // switch no-alpha-test-zero turn it off.
+    bool zeroAlphaTest = true;
+    // 0: the last draw had no alpha test, 1: one with a discard, 2: one
+    // that was left out, 3: one that writes zero.
+    uint8_t lastDrawAlphaTest = 0;
+    uint64_t alphaTestDraws = 0, idleAlphaTestDraws = 0, zeroAlphaTestDraws = 0;
     bool lastDrawIndex32 = false;
     uint32_t lastDrawType = 0, lastDrawUpStride = 0;
     uint64_t lastDrawSerial = 0, lastDrawScene = 0;
@@ -360,6 +378,16 @@ struct DrawState
     gfx_gxm::GpuProgress progress;
     volatile uint32_t *notifications = nullptr;
     bool overlap = true, notifyScene = false;
+    // How long the GPU works on a frame (gxm_gpu_watch.h), while the marker
+    // or live switch gpu-watch is on: every scene then carries a vertex and a
+    // fragment notification, and a thread looks at the region four thousand
+    // times a second. The lock is for the watch: the drawing thread adds
+    // scenes, the watching thread notes what is done.
+    gfx_gxm::GpuWatch watch;
+    std::mutex watchLock;
+    bool watchOn = false;
+    std::atomic<bool> watchStop{false};
+    pthread_t watchThread{};
     uint32_t paceTimeouts = 0;
     // Whether the scene's depth is drawn first is measured while the game
     // runs (gxm_prepass_governor.h), unless no-depth-prepass turns the pass
@@ -739,6 +767,7 @@ uint64_t VariantKey(const gxm::cg::Options &options)
         components |= uint64_t(options.inputComponents[i] & 3) << (2 * i);
     return (uint64_t(options.bgraInputs) | uint64_t(options.absentInputs) << 16) ^ (components << 32) ^
            (options.alphaFunc == gxm::cg::AlphaFunc::Always ? 0 : uint64_t(options.alphaFunc)) ^
+           (options.alphaZero ? 0x00a5000000000000ull : 0) ^
            (options.farPlaneInside ? 0x5a5a000000000000ull : 0) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
 }
 
@@ -1035,6 +1064,34 @@ uint8_t BlendFunc(uint32_t op)
     case d3d::BLENDOP_MAX: return SCE_GXM_BLEND_FUNC_MAX;
     default: return SCE_GXM_BLEND_FUNC_ADD;
     }
+}
+
+// The state the alpha test rules read (gxm_idle_alpha_test.h).
+gfx_gxm::AlphaTestState AlphaTestStateOf(const Device &device)
+{
+    static_assert(d3d::CMP_GREATER == gfx_gxm::d3d9::kCmpGreater && d3d::CMP_NOTEQUAL == gfx_gxm::d3d9::kCmpNotEqual);
+    static_assert(d3d::BLEND_ZERO == gfx_gxm::d3d9::kBlendZero && d3d::BLEND_ONE == gfx_gxm::d3d9::kBlendOne &&
+                  d3d::BLEND_INVSRCCOLOR == gfx_gxm::d3d9::kBlendInvSrcColor &&
+                  d3d::BLEND_SRCALPHA == gfx_gxm::d3d9::kBlendSrcAlpha &&
+                  d3d::BLEND_INVSRCALPHA == gfx_gxm::d3d9::kBlendInvSrcAlpha &&
+                  d3d::BLEND_BOTHSRCALPHA == gfx_gxm::d3d9::kBlendBothSrcAlpha &&
+                  d3d::BLEND_BOTHINVSRCALPHA == gfx_gxm::d3d9::kBlendBothInvSrcAlpha);
+    static_assert(d3d::BLENDOP_ADD == gfx_gxm::d3d9::kBlendOpAdd &&
+                  d3d::BLENDOP_REVSUBTRACT == gfx_gxm::d3d9::kBlendOpRevSubtract);
+    const uint32_t *rs = device.renderStates;
+    gfx_gxm::AlphaTestState state;
+    state.func = rs[d3d::RS_ALPHAFUNC];
+    state.ref = rs[d3d::RS_ALPHAREF];
+    state.blend = rs[d3d::RS_ALPHABLENDENABLE] != 0;
+    state.separateAlpha = rs[d3d::RS_SEPARATEALPHABLENDENABLE] != 0;
+    state.op = rs[d3d::RS_BLENDOP];
+    state.src = rs[d3d::RS_SRCBLEND];
+    state.dst = rs[d3d::RS_DESTBLEND];
+    state.opAlpha = rs[d3d::RS_BLENDOPALPHA];
+    state.dstAlpha = rs[d3d::RS_DESTBLENDALPHA];
+    state.depthWrite = rs[d3d::RS_ZWRITEENABLE] != 0;
+    state.stencil = rs[d3d::RS_STENCILENABLE] != 0;
+    return state;
 }
 
 // False: no blend info at all (no blending, every channel written).
@@ -1785,10 +1842,29 @@ bool InitDraw(Device &device, std::string &error)
         d.overlap = false;
         Log(device, "sceGxm gave no notification region: the CPU waits for the whole GPU at every Present");
     }
+    if (gxm::ProgramCacheMarker("gpu-watch"))
+    {
+        SetGpuWatch(device, true);
+        if (d.watchOn)
+            Log(device, "diag: gpu-watch is there: every scene tells when the GPU is done with its vertex and its "
+                        "fragment work, and the log gets a gpu watch line");
+    }
     if (gxm::ProgramCacheMarker("no-same-state"))
     {
         d.sameState = false;
         Log(device, "diag: no-same-state is there: every draw works out its programs and fixed state anew");
+    }
+    if (gxm::ProgramCacheMarker("no-alpha-test-drop"))
+    {
+        d.dropIdleAlphaTest = false;
+        Log(device, "diag: no-alpha-test-drop is there: an alpha test that cannot change the picture stays in its "
+                    "fragment program");
+    }
+    if (gxm::ProgramCacheMarker("no-alpha-test-zero"))
+    {
+        d.zeroAlphaTest = false;
+        Log(device, "diag: no-alpha-test-zero is there: an alpha test on a blended draw is a discard, not a pixel "
+                    "of zero");
     }
     if (gxm::ProgramCacheMarker("no-draw-reuse"))
     {
@@ -1905,11 +1981,28 @@ bool InitDraw(Device &device, std::string &error)
     return true;
 }
 
+void LogGpuWatch(Device &device)
+{
+    DrawState *d = device.draw;
+    if (!d)
+        return;
+    std::string line;
+    {
+        const std::lock_guard<std::mutex> lock(d->watchLock);
+        if (!d->watchOn && !d->watch.framesDone)
+            return;
+        line = d->watch.Line(Micros());
+    }
+    if (!line.empty())
+        Log(device, "%s", line.c_str());
+}
+
 void ShutdownDraw(Device &device)
 {
     DrawState *d = device.draw;
     if (!d)
         return;
+    SetGpuWatch(device, false);
     // The GPU is idle: everything deferred can go now. The pools and the
     // shader patcher go whole with the display.
     for (auto &[frame, work] : d->deferred)
@@ -2228,18 +2321,42 @@ void EndScene(Device &device)
     d->sceneColor = d->sceneDepth = nullptr;
     // The frame's last scene tells when the GPU is done with the frame.
     SceGxmNotification done{};
-    const bool notify = d->notifyScene && d->overlap && d->notifications;
+    const bool lastOfFrame = d->notifyScene;
+    const bool notify = lastOfFrame && d->overlap && d->notifications;
     d->notifyScene = false;
+    uint32_t word = 0, value = 0;
     if (notify)
     {
-        uint32_t value = 0;
-        const uint32_t word = d->progress.Submit(Stamp(*d), value);
+        word = d->progress.Submit(Stamp(*d), value);
         d->notifications[word] = 0;
         done.address = d->notifications + word;
         done.value = value;
     }
     const uint64_t from = Micros();
-    const int result = sceGxmEndScene(Gxm(), nullptr, notify ? &done : nullptr);
+    // With the GPU watch on, every scene tells when each of its two jobs is
+    // done; a frame's last scene keeps the fragment notification above.
+    SceGxmNotification vertexDone{}, fragmentDone{};
+    const SceGxmNotification *vertexNote = nullptr, *fragmentNote = notify ? &done : nullptr;
+    if (d->watchOn)
+    {
+        const std::lock_guard<std::mutex> lock(d->watchLock);
+        const gfx_gxm::GpuWatch::Words words = d->watch.Send(from, lastOfFrame, notify, word, value);
+        if (words.watched)
+        {
+            d->notifications[words.vertexWord] = 0;
+            vertexDone.address = d->notifications + words.vertexWord;
+            vertexDone.value = words.vertexValue;
+            vertexNote = &vertexDone;
+            if (!notify)
+            {
+                d->notifications[words.fragmentWord] = 0;
+                fragmentDone.address = d->notifications + words.fragmentWord;
+                fragmentDone.value = words.fragmentValue;
+                fragmentNote = &fragmentDone;
+            }
+        }
+    }
+    const int result = sceGxmEndScene(Gxm(), vertexNote, fragmentNote);
     device.frameTime.SceneEnd(Micros() - from);
     if (result < 0)
         Log(device, "sceGxmEndScene failed (0x%08x)", unsigned(result));
@@ -2351,11 +2468,75 @@ void LogWaitCauses(Device &device)
         Log(device, "waits for the whole GPU since the last such line: %s", line.c_str());
 }
 
+// The GPU watch's thread: looks at the notification region every quarter of
+// a millisecond. It runs above the game's threads so that what it notes is
+// when the GPU wrote, not when a core came free; a look is a few loads.
+void *WatchThread(void *user)
+{
+    DrawState &d = *static_cast<DrawState *>(user);
+    Vita_NoteThread("gpu watch");
+    Vita_QuietWaits();
+    SceKernelThreadInfo info{};
+    info.size = sizeof(info);
+    const SceUID self = sceKernelGetThreadId();
+    if (sceKernelGetThreadInfo(self, &info) >= 0)
+        sceKernelChangeThreadPriority(self, info.currentPriority - 8);
+    while (!d.watchStop.load(std::memory_order_acquire))
+    {
+        sceKernelDelayThread(250);
+        const std::lock_guard<std::mutex> lock(d.watchLock);
+        if (d.watch.head != d.watch.fragmentAt)
+            d.watch.Poll(Micros(), [&d](uint32_t word) { return d.notifications[word]; });
+    }
+    return nullptr;
+}
+
+// Between two frames, on the thread that draws.
+void SetGpuWatch(Device &device, bool on)
+{
+    DrawState &d = *device.draw;
+    if (on == d.watchOn)
+        return;
+    if (!on)
+    {
+        d.watchOn = false;
+        d.watchStop.store(true, std::memory_order_release);
+        pthread_join(d.watchThread, nullptr);
+        LogGpuWatch(device);
+        const std::lock_guard<std::mutex> lock(d.watchLock);
+        d.watch.Forget();
+        return;
+    }
+    if (!d.notifications || !d.overlap)
+    {
+        Log(device, "gpu watch: not without sceGxm's notifications (no-frame-overlap is on, or there is no region)");
+        return;
+    }
+    {
+        const std::lock_guard<std::mutex> lock(d.watchLock);
+        d.watch = gfx_gxm::GpuWatch{};
+        d.watch.since = Micros();
+    }
+    d.watchStop.store(false, std::memory_order_release);
+    pthread_attr_t attributes;
+    pthread_attr_init(&attributes);
+    pthread_attr_setstacksize(&attributes, 32 << 10);
+    const bool started = pthread_create(&d.watchThread, &attributes, WatchThread, &d) == 0;
+    pthread_attr_destroy(&attributes);
+    if (!started)
+    {
+        Log(device, "gpu watch: its thread could not be started");
+        return;
+    }
+    d.watchOn = true;
+}
+
 // The switches "vita_gxm <marker> <0|1>" may turn while the game runs
 // (gxm_live_switch.h). The others size or make things at start-up.
 const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "no-vsync",
                                      "no-draw-reuse",     "no-filter-stretch", "no-gpu-boost",
-                                     "no-prepass-governor", "no-same-state",     "no-world-only-prepass"};
+                                     "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
+                                     "gpu-watch",           "no-alpha-test-drop", "no-alpha-test-zero"};
 struct LiveSwitch
 {
     const char *name;
@@ -2385,6 +2566,9 @@ void ApplyLiveSwitches(Device &device)
         }
         else if (name == "no-frame-overlap")
         {
+            // The GPU watch reads the notifications the overlap sends.
+            if (s.on)
+                SetGpuWatch(device, false);
             // Everything drawn so far is done before the way of waiting
             // changes, so neither way sees the other's frames in flight.
             FinishGpu(device, WaitCause::Other);
@@ -2406,8 +2590,20 @@ void ApplyLiveSwitches(Device &device)
             d.sameState = !s.on;
             d.lastDrawValid = false;
         }
+        else if (name == "no-alpha-test-drop" || name == "no-alpha-test-zero")
+        {
+            (name == "no-alpha-test-drop" ? d.dropIdleAlphaTest : d.zeroAlphaTest) = !s.on;
+            d.lastDrawValid = false;
+            Log(device,
+                "diag: alpha tests so far: %llu draws with a discard, %llu with the test left out, %llu that write "
+                "zero",
+                (unsigned long long)d.alphaTestDraws, (unsigned long long)d.idleAlphaTestDraws,
+                (unsigned long long)d.zeroAlphaTestDraws);
+        }
         else if (name == "no-filter-stretch")
             gfx_gxm::g_stretchInFilter = !s.on;
+        else if (name == "gpu-watch")
+            SetGpuWatch(device, s.on);
         else if (name == "no-gpu-boost")
         {
             vita::SetGpuBoost(!s.on);
@@ -3036,11 +3232,31 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     else
     {
         gxm::cg::Options pixelOptions;
+        d.lastDrawAlphaTest = 0;
         if (device.renderStates[d3d::RS_ALPHATESTENABLE])
         {
             const uint32_t func = device.renderStates[d3d::RS_ALPHAFUNC];
             if (func >= d3d::CMP_NEVER && func < d3d::CMP_ALWAYS)
                 pixelOptions.alphaFunc = gxm::cg::AlphaFunc(func);
+            d.lastDrawAlphaTest = pixelOptions.alphaFunc != gxm::cg::AlphaFunc::Always;
+            // A test that only rejects what the blend would not show is
+            // left out, and one on a blend that keeps the target for a
+            // source of zero writes zero: neither program has a discard
+            // (gxm_idle_alpha_test.h).
+            if (d.lastDrawAlphaTest && (d.dropIdleAlphaTest || d.zeroAlphaTest))
+            {
+                const gfx_gxm::AlphaTestState state = AlphaTestStateOf(device);
+                if (d.dropIdleAlphaTest && gfx_gxm::AlphaTestIsIdle(state))
+                {
+                    pixelOptions.alphaFunc = gxm::cg::AlphaFunc::Always;
+                    d.lastDrawAlphaTest = 2;
+                }
+                else if (d.zeroAlphaTest && gfx_gxm::AlphaTestCanZero(state))
+                {
+                    pixelOptions.alphaZero = true;
+                    d.lastDrawAlphaTest = 3;
+                }
+            }
         }
         // The programs this combination last drew with (Pipeline), unless a
         // run diagnostic wants to see or change how they are found.
@@ -3054,7 +3270,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             pipelineKey.ps = ps;
             pipelineKey.decl = device.decl;
             std::memcpy(pipelineKey.strides, strides, sizeof(strides));
-            pipelineKey.alphaFunc = uint8_t(pixelOptions.alphaFunc);
+            pipelineKey.alphaFunc = uint8_t(uint8_t(pixelOptions.alphaFunc) | (pixelOptions.alphaZero ? 0x80 : 0));
             pipelineKey.index32 = index32;
             pipeline = &PipelineSlot(d, pipelineKey);
             known = std::memcmp(&pipeline->key, &pipelineKey, sizeof(pipelineKey)) == 0;
@@ -3409,6 +3625,9 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         return;
     }
     ++d.drawn;
+    d.alphaTestDraws += d.lastDrawAlphaTest == 1;
+    d.idleAlphaTestDraws += d.lastDrawAlphaTest == 2;
+    d.zeroAlphaTestDraws += d.lastDrawAlphaTest == 3;
     if (target)
         target->unfilled = false;
     part(gxm::FrameTime::PartSubmit);
@@ -3627,6 +3846,12 @@ void LogDrawSummary(Device &device)
         (unsigned long long)d->drawn, (unsigned long long)d->copies, (unsigned long long)d->scenes, unsigned(d->vertexPrograms.size()),
         unsigned(d->fragmentPrograms.size()), d->variantsMade, d->variantFailures, (unsigned long long)d->renames,
         (unsigned long long)d->ringOverflows, d->drawFailures);
+    Log(device,
+        "alpha tests: %llu draws with a discard in their fragment program, %llu with the test left out because it "
+        "could not change the picture%s, %llu that write zero for a rejected pixel%s",
+        (unsigned long long)d->alphaTestDraws, (unsigned long long)d->idleAlphaTestDraws,
+        d->dropIdleAlphaTest ? "" : " (no-alpha-test-drop)", (unsigned long long)d->zeroAlphaTestDraws,
+        d->zeroAlphaTest ? "" : " (no-alpha-test-zero)");
     // What the draws did not do again (Pipeline, BindTextures, the uniform
     // buffers in Draw).
     Log(device,

@@ -943,12 +943,19 @@ uint32_t R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArgs, GfxCm
             Sys_PerfProbeAdd(SYS_PERF_PROBE_RENDER_MATERIAL, now - mark);
             mark = now;
         }
+        const uint32_t drawsBefore = rb_drawPrimCalls;
         subListCount = rb_tessTable[drawSurf.fields.surfType](listArgs, passPrepassContext);
         if (timed)
         {
             const uint64_t now = Sys_PerfNowNs();
             if (drawSurf.fields.surfType < SYS_PERF_TESS_SLOTS)
+            {
                 Sys_PerfProbeAdd(SYS_PERF_PROBE_RENDER_TESS + drawSurf.fields.surfType, now - mark);
+                // The same time by the draw: time over calls is what a draw
+                // of this kind costs, the engine's work for it included.
+                if (const uint32_t draws = rb_drawPrimCalls - drawsBefore)
+                    Sys_PerfProbeAdd(SYS_PERF_PROBE_RENDER_TESS_DRAWS + drawSurf.fields.surfType, now - mark, draws);
+            }
             mark = now;
         }
     }

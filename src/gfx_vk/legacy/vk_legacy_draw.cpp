@@ -556,7 +556,29 @@ bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Sh
     // alpha test's block), and the shadow map must be a depth image where
     // depth compare is fixed.
     const uint16_t shader = recipe.linearInputs ? recipe.moduleKey.inputs.shader : uint16_t(ModernLitNone);
-    if (ModernLitShaderValid(shader))
+    // Water (ModernLitWater): the probe, a cube at s1, and the water map, a 2D
+    // image at s4; the constants to c18.
+    if (shader == ModernLitWater)
+    {
+        const ls::Reflection &pr = ps.translated.reflection;
+        const uint32_t uniforms = 1u << static_cast<uint32_t>(ls::Uniform::FloatConstants)
+            | 1u << static_cast<uint32_t>(ls::Uniform::AlphaTest);
+        const bool fits =
+            !(pr.samplers & (1u << kModernAoSampler | 1u << kModernReflectionsSampler | 1u << kModernPlanarSampler))
+            && pr.floatConstants >= ModernLitConstantCount(shader) && (pr.uniforms & uniforms) == uniforms
+            && (pr.samplers & (1u << 1 | 1u << 4)) == (1u << 1 | 1u << 4)
+            && pr.samplerTypes[1] == ls::TextureType::Cube && pr.samplerTypes[4] == ls::TextureType::Tex2D;
+        const bool alphaTest =
+            !recipe.fixAlpha || recipe.alphaCompare != static_cast<uint32_t>(ls::AlphaCompare::Always);
+        if (fits
+            && BuildModernLitSpirv(shader, vs.translated, recipe.sunStrength, recipe.skyStrength, false, alphaTest,
+                                   spirv))
+        {
+            recipe.modernBuilt = true;
+            return true;
+        }
+    }
+    else if (ModernLitShaderValid(shader))
     {
         const ls::Reflection &pr = ps.translated.reflection;
         const bool model = ModernLitModel(shader);

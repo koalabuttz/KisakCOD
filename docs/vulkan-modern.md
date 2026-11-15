@@ -76,6 +76,7 @@ back to them.
 | `r_modernSunStrength`, `r_modernSkyStrength` | -1, or 0 to 16 | `KISAK_VK_MODERN_SUN_STRENGTH`, `_SKY_STRENGTH` |
 | `r_modernAo` | default, off, on | `KISAK_VK_MODERN_AO` |
 | `r_modernAoRadius`, `r_modernAoPower`, `r_modernAoThickness`, `r_modernAoGrazing`, `r_modernAoFloor`, `r_modernAoEdge` | -1, or the variable's range | `KISAK_VK_MODERN_AO_RADIUS`, `_POWER`, `_THICKNESS`, `_GRAZING`, `_FLOOR`, `_EDGE` |
+| `r_modernAoHalf` | default, off, on | `KISAK_VK_MODERN_AO_HALF` |
 | `r_modernSsr` | default, off, on | `KISAK_VK_MODERN_SSR` |
 | `r_modernSsrDistance`, `r_modernSsrThickness` | -1, or above 0 | `KISAK_VK_MODERN_SSR_DISTANCE`, `_THICKNESS` |
 | `r_modernTonemap` | default, clamp, neutral, agx, aces | `KISAK_VK_MODERN_TONEMAP` |
@@ -1128,11 +1129,12 @@ for yet) are not darkened.
 | Strength | power 2 (PC AO run 1: 1 read slightly weak, 2 about right in the shade; with the thickness, PC AO run 3 found 1.5 as weak as run 1's 1) | `KISAK_VK_MODERN_AO_POWER=<p>`: the visibility is raised to p (2 darkens, 1 lightens, 0 turns it off) |
 | Floor | 0.35: after the power the visibility is kept above it, through a soft knee from 0.45 down (lighter shading is unchanged). PC AO run 7: the crash-in arch line is a narrow slot between the pillar's side and the arch's inside face that went near black (0.13) and ended in a hard edge; ground contact shadows sit near 0.85 | `KISAK_VK_MODERN_AO_FLOOR=<0 to 1>`: 0 turns it off |
 | Blur edge | 0.08: the blur counts a tap half when its view depth is 8% of the pixel's away, so it keeps to each surface but runs across small depth steps. PC AO run 9: at 0.02 the crash-in arch slot ended in a one-pixel step; at 0.08 it ramps over four, with no halos and the ground unchanged | `KISAK_VK_MODERN_AO_EDGE=<share>`: 0.02 is the old, stricter blur; more lightens depth edges such as ceiling beams' |
+| Half resolution | off | `KISAK_VK_MODERN_AO_HALF=1` (live: `r_modernAoHalf on`) works the occlusion out at one pixel of each 2x2 block, which pixel moving over the four from frame to frame, into a half-size raw image; the blur then takes the 3x3 raw pixels around each pixel's block, weighted by the depth of the scene pixel each was worked out at, back to full size. About a quarter of the occlusion's work; contact shadows come out softer and a little lighter (the `modern_ao` scene's wall foot 175 to 200 of 255 in the debug view, its corner 152 to 159) |
 | Debug view | off | `KISAK_VK_MODERN_DEBUG=ao` draws the visibility as grey over the finished scene (after the tonemap): white open, darker in corners |
 
 The statistics line: `vulkan d3d9: modern: N scenes with ambient occlusion
-(radius R, thickness T, power P, floor F, edge E), X ms GPU each` (both
-passes).
+(radius R, thickness T, power P, floor F, edge E[, half resolution]), X ms
+GPU each` (both passes).
 
 **Checks:** the D3D9 check's `modern_ao` scene draws a floor 120 units below
 a camera with the engine's 90-degree perspective, and a wall rising from it
@@ -1353,7 +1355,14 @@ the scene drawn again from the camera mirrored in it.
 frame of the map the point is traced 512 units down through the world; the
 height met makes the plane `z = height`, logged once as `modern: planar
 reflections on mp_strike at height H`. Only `mp_strike`'s main street is
-listed now (picked from the reflections' PC run 4).
+listed now (picked from the reflections' PC run 4). A map not in the list
+reflects in its water, if it has any: of the world surfaces whose material
+has a water map and whose bounds are flat, the height where the most of them
+lie, counted in triangles (at least 64), makes the plane, logged as `modern:
+planar reflections on <map> at height H (water, N triangles)`. On mp_bog that
+is -20, where 41 of the swamp's 53 surfaces lie (PC water run 2); counted by
+the area of their bounds instead, a 200-triangle sheet at -26 around the
+whole map won, and the reflections sat 6 units low.
 
 **The view.** After each main view (`R_RenderScene` from the game), while
 the camera is above the plane, `R_ModernPlanarScene` draws the scene again:
@@ -1414,13 +1423,41 @@ frame where the scene moves; on a camera cut it is not read.
 | Debug view | off | `KISAK_VK_MODERN_DEBUG=planar` draws it too, and puts the last planar image, as it is (upside down, no exposure), over the top left of the finished scene; `KISAK_VK_MODERN_DEBUG=planar-read` draws it and shows, on every surface that reads it, only what it read there (in linear light, unweighted by gloss and Fresnel; the rest of the scene at a quarter), to check that a reflection lines up with what it mirrors; `KISAK_VK_MODERN_PLANAR=0` turns them off |
 | Reach | 4 | `KISAK_VK_MODERN_PLANAR_REACH=N`: how far from the plane (units) a surface still reads the image |
 | Ripple | 4 | `KISAK_VK_MODERN_PLANAR_RIPPLE=N`: how far (units) the normal map's tilt moves the point read; 0 reads a flat mirror |
+| Water's shader | on | `KISAK_VK_MODERN_WATER=0` keeps the game's `water_l_sun` (start-up only); ours reads the image within 4 times the reach, moved by the ripple times 0.02 of the distance per unit of tilt |
 
 The statistics lines: `vulkan d3d9: modern: N planar reflection views (WxH)`
 and `vulkan d3d9: modern: N scenes read the planar reflection`.
 
+**Water.** CoD4's water is not drawn by the lit shaders: its material
+(technique set `wc_water`) draws one lit pass with the pixel shader
+`water_l_sun`, which the game side recognises by its name and arguments (the
+reflection probe as a custom sampler at s1, the water map at s4, `fogColor`
+at c0, `envMapParms` at c5, `waterColor` at c6, the sun at c17 and c18) and
+hands to our own water shader (`ModernLitWater`,
+`src/gfx_vk/legacy/shaders/water.frag`; built for a water-map UV of 2, 3 or 4
+components, as the game's vertex shader writes it). It computes the game's
+colour the game's way, from the water shader facts (PC water run 1): a
+height from the water map's red at three scales, its slopes as the normal;
+the water's colour times the normal's z, mixed toward the probe's light by
+Fresnel (0 looking straight down to 0.5 grazing on Bog), plus the sun's
+glint, fogged in display values and decoded to linear light. Where the water
+lies within 16 units of the plane (four times the reach: pools a few units
+off it still read it), last frame's planar image takes the probe's place, so
+the water mirrors the bank, the buildings and the sky that are really above
+it. The point read is moved by the ripples' tilt times 0.02 of its distance
+times the ripple (4), so a far reflection wobbles as much on screen as a
+near one (a fixed 16 units looked glassy in PC water run 2), and the sun's
+sparkle on the ripples, which the probe held, is added back as a sharp lobe
+(exponent 256) times the sun's colour and `envMapParms.w`. The planar view
+is 10% wider than the main view, so reflections near the screen's sides
+still find themselves in it.
+`KISAK_VK_MODERN_WATER=0` (start-up only) keeps the game's shader;
+`KISAK_VK_MODERN_DEBUG=planar-read` shows the water's read as the floors'.
+
 **Cost.** Not measured yet: the view draws the world's and the models' lit
 surfaces a second time at a quarter of the pixels, and the visibility walk
-runs again on the CPU.
+runs again on the CPU. On mp_bog with the debug view, PC water run 1 measured
+5.17 ms a frame against 3.57 ms without the view (RTX 2080 SUPER, 1280x720).
 
 **Checks:** the D3D9 check's `modern_planar` scene draws a grey scene in
 linear light, then a 64x64 planar view in which it sets the back buffer and
@@ -1434,17 +1471,29 @@ half at one point, through a planar projection that is not symmetric: the
 left half must show the image's blue and the right half its green, so a
 transposed matrix, an eye of the wrong sign, or an image read upside down or
 mirrored each fails, and the floor stays black where the image is not read
-(no switch, or `KISAK_VK_MODERN_SHADERS=0`). With
+(no switch, or `KISAK_VK_MODERN_SHADERS=0`). A fourth frame draws the same
+halves as water (a stand-in for `water_l_sun`, drawn as our water shader,
+with a flat water map, a black probe and Fresnel 1 everywhere): the same
+blue and green must show, and the water stays dark where the image is not
+read (also with `KISAK_VK_MODERN_WATER=0`). With
 `KISAK_VK_MODERN_LINEAR=0` or without either switch nothing is drawn.
 `test_vulkan_d3d9_front.py` runs it with no switch, with
-`KISAK_VK_MODERN_PLANAR=1` (beside `KISAK_VK_MODERN_SHADERS=0` or not), with
+`KISAK_VK_MODERN_PLANAR=1` (beside `KISAK_VK_MODERN_SHADERS=0` or
+`KISAK_VK_MODERN_WATER=0`, or not), with
 `KISAK_VK_MODERN_DEBUG=planar` (beside `KISAK_VK_MODERN_PLANAR=0` and
 `KISAK_VK_MODERN_LINEAR=0` or not), with `KISAK_VK_MODERN_DEBUG=planar-read`
 (the floor's halves show the same colours, unweighted), checks the two lines, and that a full
 run draws and reads no planar view unless asked.
 
-**Next.** Water (`mp_bog`, whose water has its own shader), and planes found
-on their own.
+**Next.** The right height for Bog's swamp, more than one plane a map, and
+planes found on their own for floors. `KISAK_VK_MODERN_WATER_LOG=1` names how
+water is drawn: once per map, every world surface whose material has a water
+map, by material, with their bounds, then each surface's bounds (at most
+96); and once per material and pass of water that draws, its technique,
+shaders, arguments, blend state, custom samplers, whether it is among the
+lit passes and whether our water shader can draw it, the material's
+constants and the water simulation's settings (at most 32). It works on any
+path.
 
 ## Next
 

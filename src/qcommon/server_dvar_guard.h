@@ -55,6 +55,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "r_modernAoEdge",
     "r_modernAoFloor",
     "r_modernAoGrazing",
+    "r_modernAoHalf",
     "r_modernAoPower",
     "r_modernAoRadius",
     "r_modernAoThickness",
@@ -84,6 +85,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     // Sound and animation.
     "snd_adpcm",
     "snd_alDebug",
+    "snd_streamThread",
     "xanim_blendOnce",
     // Menus.
     "ui_fastExpressions",
