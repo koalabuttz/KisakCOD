@@ -608,6 +608,19 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
         display.ringScale = 2;
         Log(*device, "diag: big-gxm-rings is there: sceGxm's ring buffers are twice their default size");
     }
+    // The main pool is memory the CPU does not cache, as Sony's samples have
+    // it: the GPU then reads what the CPU wrote with nothing to flush. But
+    // the CPU reads it back slowly and writes it a word at a time slowly,
+    // and the engine skins vertices, writes indices and fills constants
+    // there on three threads. A file named cached-main-memory gives the pool
+    // as ordinary cached memory, so that a console run can say what the
+    // uncached kind costs. Whether the picture stays right with it is not
+    // known: it is for measuring.
+    if (gxm::ProgramCacheMarker("cached-main-memory"))
+    {
+        display.memory.mainCached = true;
+        Log(*device, "diag: cached-main-memory is there: the main GPU pool is cached memory");
+    }
     // A frame is shown at the display's next refresh. A file named no-vsync
     // beside the compiled programs shows it at once (it tears): a console run
     // can then tell what waiting for the refresh costs.
@@ -626,6 +639,7 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     }
     InitTargetReserve(*device);
     Log(*device, "%s", gxm::DescribeMemory().c_str());
+    Log(*device, "%s", gxm::DescribeMemorySpeed().c_str());
     SetDefaultState(*device);
     device->frameTime.since = Micros();
     return device.release();
