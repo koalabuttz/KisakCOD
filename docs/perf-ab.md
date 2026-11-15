@@ -503,12 +503,13 @@ perf_phases 1      start a count
 perf_phases 0      end it and print
 ```
 
-The lines of a count (the figures here are made up to show the layout):
+The first lines of a count (PS Vita, see below):
 
 ```
-perf: render thread phases, 16000 looks in 20.00 s (one each 1250 us), 800 frames (25.00 ms a frame)
-perf: phase device: draw: 56.00 %, 14.000 ms a frame, 1600.0 calls a frame, 8.75 us a call
-perf: phase 2d: 7.00 %, 1.750 ms a frame, 1.0 calls a frame, 1750.00 us a call
+perf: render thread phases, 17891 looks in 22.00 s (one each 1230 us), 941 frames (23.38 ms a frame)
+perf: phase device: draw: 54.76 %, 12.803 ms a frame, 1464.0 calls a frame, 8.75 us a call
+perf: phase tess pretessellated triangles: 5.10 %, 1.192 ms a frame, 380.0 calls a frame, 3.14 us a call
+perf: phase device: vertex constants: 4.65 %, 1.087 ms a frame, 1174.0 calls a frame, 0.93 us a call
 ...
 ```
 
@@ -520,7 +521,8 @@ perf: phase 2d: 7.00 %, 1.750 ms a frame, 1.0 calls a frame, 1750.00 us a call
   build otherwise. Elsewhere a mark is nothing and the command says so.
 - The looks are asked for every 397 us; a busy console gave one each 1.2 ms.
   Twenty seconds is some 16 000 looks, which holds a 1 % share to about a
-  tenth of itself. Two counts of the same view agreed within 0.7 points.
+  tenth of itself. Two counts of the same view agreed within 0.4 points, and
+  the frame was as long with a count on as without (23.4 ms).
 - The phases: `waiting for a frame`, `present`, `3d outside the lists`, `2d`
   and `2d text`, `a filled batch drawn` (2D, effects and code meshes flushed),
   `list walk`, `material setup`, `pass setup`, `a pass's textures and
@@ -531,33 +533,71 @@ perf: phase 2d: 7.00 %, 1.750 ms a frame, 1.0 calls a frame, 1750.00 us a call
   graphics device's part: `device: draw`, `device: vertex constants`, `device:
   pixel constants`, `device: textures`, `device: streams`, `device: shaders`.
 
-The first count, on a PS Vita (console, the busy view of `mp_crash` at
+A count on a PS Vita (console, the busy view of `mp_crash` at
 `1264 -1896 124` yaw 90, twelve bots, `vita_sceneScale 0.5` so that the
-processor and not the graphics chip sets the frame, 25.8 ms a frame, 18 001
-looks in 22 s, 2026-11-15, with an earlier and coarser set of marks):
+processor and not the graphics chip sets the frame; this commit built with
+the option, 17 891 looks in 22 s, 23.38 ms a frame, 2026-11-15). A second
+count right after it gave the same within 0.09 ms on every line.
 
-| Phase | Share |
-| --- | --- |
-| device: draw | 55.7 % |
-| 2d (the HUD, text included) | 6.8 % |
-| material setup (passes and their constants included) | 6.4 % |
-| device: vertex constants | 5.0 % |
-| tess pretessellated triangles (the world) | 4.8 % |
-| device: textures | 3.6 % |
-| tess rigid models | 3.2 % |
-| device: streams | 2.3 % |
-| per-prim args | 1.5 % |
-| device: shaders | 1.3 % |
-| state bits | 1.3 % |
-| everything else, each under 1.2 % | 8.0 % |
+| Phase | Share | ms a frame | Calls a frame | us a call |
+| --- | --- | --- | --- | --- |
+| device: draw | 54.8 % | 12.80 | 1464 | 8.75 |
+| tess pretessellated triangles (the world) | 5.1 % | 1.19 | 380 | 3.14 |
+| device: vertex constants | 4.7 % | 1.09 | 1174 | 0.93 |
+| device: textures | 3.9 % | 0.90 | 850 | 1.06 |
+| material setup | 3.2 % | 0.74 | 710 | 1.05 |
+| device: streams | 2.7 % | 0.63 | 912 | 0.69 |
+| tess rigid models | 2.6 % | 0.60 | 24 | 25.0 |
+| 2d text | 2.3 % | 0.53 | 25 | 21.2 |
+| a pass's textures and constants | 2.1 % | 0.48 | 560 | 0.86 |
+| 3d outside the lists | 1.9 % | 0.45 | 1 | 451 |
+| per-prim args | 1.8 % | 0.43 | 1463 | 0.29 |
+| pass setup | 1.7 % | 0.41 | 702 | 0.58 |
+| 2d | 1.4 % | 0.34 | 1 | 336 |
+| device: shaders | 1.2 % | 0.28 | 259 | 1.06 |
+| state bits | 1.1 % | 0.26 | 121 | 2.15 |
+| critical args | 1.0 % | 0.24 | 702 | 0.35 |
+| vertex fill | 1.0 % | 0.24 | 32 | 7.51 |
+| eighteen more, each under 1 % | 7.6 % | 1.77 | | |
 
 So more than half of that thread is inside the draw call of the Vita's
-graphics back end, an eighth in the other device calls and about a third in
-the engine's own code, the HUD first. Deriving matrices was 0.4 %: replacing
-the 4x4 products there with vector code (tried on the console as `r_ignore`
-in a trial build) changed nothing that a run could show, and was dropped. At
-full size the same view waits for the graphics chip: device: draw 72.0 %,
-present 6.5 %.
+graphics back end, an eighth in the other device calls and a third (7.6 ms)
+in the engine's own code, spread thin: its largest piece is the loop over the
+world's batches. Deriving matrices is 0.5 %: replacing the 4x4 products there
+with vector code (tried on the console as `r_ignore` in a trial build)
+changed nothing that a run could show, and was dropped.
+
+At full size the same view waits for the graphics chip, and the wait shows
+inside the draw call: 33.61 ms a frame, device: draw 72.4 % (16.6 us a call
+against 8.75), present 2.5 %, every other phase about as long as at half
+size or a little shorter.
+
+## Measured on the PS Vita and left alone
+
+Trial builds on the console (2026-11-15, the busy view of `mp_crash` at full
+size, each switch a bit of `r_ignore` in a build that was never merged, A B B A
+windows of 6 s). They are listed so that nobody tries them again without a new
+reason. The frame is the graphics chip's at that size, so the figure is the
+main thread's time in a frame, which windows of one variant repeat to 0.05 ms.
+
+- **The world's index copies** (539 draws a frame from 2522 surfaces, 169 008
+  indices; another 141 048 for 776 static models). Not copying the world's at
+  all, for measuring only, saves 1.8 ms: that is all a cache of them across
+  frames could ever save. Copying by a loop of words in place of `memcpy` is
+  slower (the world +0.35 ms, the static models +1.06 ms). Copying surfaces
+  whose indices follow each other with one call saves 0.13 ms. The draws
+  already equal the groups of surfaces that may share one, so regrouping
+  cannot lower their number.
+- **Static culling's cost is work, not waiting for memory.** Walking every
+  cell's tree a second time and marking nothing costs 3.3 ms of main thread
+  (6.5 ms over all threads). Making a node's sums twice costs
+  1.2 ms and a model's or surface's sums twice 0.6 ms, so the sums are over
+  half of a walk and what is left for fetches and branches is about 1.4 ms.
+  `r_fetchAhead` already took what fetching ahead can.
+- **The 4x4 matrix products of a draw** are 401 instructions each there (sums
+  in double precision), but deriving matrices is 0.4 % of the render thread
+  (see above). Products of four floats at a time changed the frame by
+  +0.04 ms, inside what windows of one variant differ by.
 
 ## Checks
 
