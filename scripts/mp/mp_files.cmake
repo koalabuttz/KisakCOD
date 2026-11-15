@@ -168,6 +168,7 @@ set(QCOMMON
 set(SERVER_MP
     "${SRC_DIR}/bots/bot_brain.cpp"
     "${SRC_DIR}/bots/bot_brain.h"
+    "${SRC_DIR}/bots/bot_combat.h"
     "${SRC_DIR}/bots/bot_motor.h"
     "${SRC_DIR}/bots/bot_nav_world.cpp"
     "${SRC_DIR}/bots/bot_navmesh.cpp"

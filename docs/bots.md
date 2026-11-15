@@ -10,8 +10,10 @@ now and how to use it.
 - A bot plays through the same door as a player. Its only output is the
   `usercmd_s` a player's client sends (view angles, movement, buttons), which
   the server runs through `SV_ClientThink` and Pmove. It cannot turn faster,
-  move differently or shoot differently from a player: recoil, spread, sway,
-  aim-down-sight time and damage are the game's own.
+  move differently or shoot differently from a player: spread, sway,
+  aim-down-sight time and damage are the game's own. Two things a player's
+  client adds to every command, the weapon's view kick and the view error on
+  entering the sight, the bot adds to its own (see "How a bot fights").
 - A bot turns at a human pace. The view motor (`src/bots/bot_motor.h`) moves
   the view like a hand moves a mouse or a stick: it starts a turn smoothly, has
   a top speed and slows as it arrives.
@@ -37,10 +39,20 @@ Set it when the game or server starts, for example on a dedicated server:
 or in a listen server's console before `scr_testclients` / `devmap`. It can be
 changed at any time; each bot starts afresh when it does.
 
-`bot_brain` is a setting this port added, so it is on the list a game server
-may not set on a player's client (`src/qcommon/server_dvar_guard.h`).
+With `bot_brain 1`, `bot_combat` says whether they fight:
 
-## What the bots do now (phase 2)
+| `bot_combat` | KisakCOD's bots |
+|---|---|
+| `0` | never fire: they walk, look and notice |
+| `1` (default) | fight the opponents they see |
+
+`bot_log 1` prints each player a bot notices and the first shot of each fight.
+
+`bot_brain`, `bot_combat` and `bot_log` are settings this port added, so they
+are on the list a game server may not set on a player's client
+(`src/qcommon/server_dvar_guard.h`).
+
+## What the bots do now (phase 3)
 
 The brain takes over the test clients' commands. A bot that is playing walks to
 random places on the map's navigation mesh: it turns toward the next corner of
@@ -52,14 +64,57 @@ new direction every 1.5 to 4 seconds, up to 120 degrees a second). It carries
 on from wherever the server puts its view (a spawn, a killcam, a script's
 `setPlayerAngles`) and taps use while dead.
 
-A bot that noticed an opponent watches them while it walks on, turning at up
-to 200 degrees a second; it looks where it last saw one it lost, and toward a
-sound or a compass dot it heard. It does not aim or shoot yet.
+A bot that sees an opponent it noticed fights them (with `bot_combat 1`, see
+"How a bot fights"); with `bot_combat 0` it watches them while it walks on,
+turning at up to 200 degrees a second. It keeps its aim where it last saw one
+it lost, and looks toward a sound or a compass dot it heard. It reloads an
+empty clip, or one under half when it has not fought for two seconds, and
+switches to its other gun when one runs dry.
 
-Next phases, in order: the motor model and combat for TDM and FFA, decisions
-and objective modes (with the objectives the bot's own HUD shows), then
+Next phases, in order: decisions and objective modes (where to go, when to
+push or hold, grenades, the objectives the bot's own HUD shows), then
 difficulty levels, start-a-game and start-a-server options, and the PS Vita's
 bot budget (6v6 TDM first, then 9v9 Ground War).
+
+## How a bot fights
+
+`src/bots/bot_combat.h` is the bot's hand and trigger. It fights only the
+player its perception noticed and sees now, and aims at where it thinks that
+player is, never at where they really are:
+
+- **Reaction.** After noticing (at least 0.2 s in view), the hand starts after
+  a further 120 ms on average (deviation 40, never under 60): a player's
+  decision and motor onset.
+- **Flick, then settle.** The hand makes aimed movements at up to 450 degrees a
+  second. Each lands off by a normal error of 0.35 degrees plus 7% of the
+  movement's size, so a 60 degree flick lands a few degrees off and a small
+  correction lands close; a new correction starts every 170 ms or so. In the
+  host test the first moment on a still player 5 to 64 degrees off comes a
+  median 0.45 s after the notice, and a second after a 60 degree flick the
+  error is under 0.6 degrees in nine runs out of ten.
+- **Tracking.** The bot sees a moving player ten times a second (its sense
+  ticks) and leads 60% of the motion it saw since, for at most 0.15 s. It
+  trails a player strafing back and forth: in the host test it is on one
+  strafing at 500 units about a fifth of the time, against all the time on a
+  still one.
+- **Trigger.** It fires while its view is within the player's angular
+  half-width of where it thinks they are (never tighter than half a degree).
+  It clicks a semi-automatic about six times a second (never more than every
+  110 ms), holds an automatic close up and fires it in bursts of about 0.45 s
+  beyond 900 units. It aims down the sight beyond 400 units or with a scope,
+  and fires then only once the sight is up.
+- **Recoil.** On a player's client, `CG_KickAngles` adds the weapon's view kick
+  to every command (`CL_CreateCmd` sends `viewangles + cgameKickAngles`); the
+  server only moves the gun model. A bot has no client, so it would have no
+  kick at all. The brain therefore runs the same kick for its own shots, with
+  the weapon's numbers and the same 5 ms steps, and adds it to its command;
+  the hand pulls back half of it, 0.15 s late. Entering the sight throws its
+  view off by the weapon's ADS view error, as `CG_PredictPlayerState` does a
+  player's, and the hand has to find the player again.
+- **Moving.** While it fights it keeps walking its way or strafes for 0.4 to
+  1.2 s at a time, more often the other way than the last.
+
+The numbers are one decent player's; difficulty levels (phase 5) change them.
 
 ## What a bot knows
 
@@ -143,6 +198,7 @@ walks into one notices it is stuck, jumps, then takes another way.
 | Where | What |
 |---|---|
 | `src/bots/bot_brain.h`, `bot_brain.cpp` | `bot_brain`, and `Bot_UserMove`: one bot's command for this server frame |
+| `src/bots/bot_combat.h` | the hand and trigger: reaction onset, aimed movements and corrections, tracking lead, firing, the view kick, strafing; no engine types |
 | `src/bots/bot_perception.h` | what a bot knows: the noticing meter, memory, hearing, what to look at; no engine types |
 | `src/bots/bot_senses.cpp` | `Bot_Sense`: one sense tick of a bot's eyes, ears and compass on the server |
 | `src/bots/bot_motor.h` | the view motor, command angle conversion, the movement keys toward a point and each bot's random source; no engine types |
@@ -176,6 +232,16 @@ to one second behind.
   and cover slow noticing; a lost player is remembered, then forgotten;
   footsteps and shots are heard in range and only roughly; a smoke cloud
   grows, holds and fades, and hides what is behind or inside it.
+- `bot_combat` (`scripts/tests/test_bot_combat.py`, in `run_linux_checks.py`):
+  builds `tests/bots/bot_combat_test.cpp` on the host, 64-bit with sanitizers
+  and 32-bit. Over 1000 runs the hand never moves before its onset or faster
+  than its top speed and is never on a player sooner than 100 ms after the
+  notice; a big flick takes longer and lands further off than a small one,
+  and corrections close in; a strafing player is harder to stay on than a
+  still one; a semi-automatic is clicked no faster than every 110 ms and
+  released between clicks, an automatic held close up and fired in bursts at
+  range; a shot kicks the view up and it comes back, never past 10 degrees,
+  and the hand pulls back only part of it, late.
 - `server_test_clients` (`scripts/tests/test_server_test_clients.py`): the
   extracted `SV_UpdateBots` asks the brain about active bots only, and a brain
   that takes the command replaces the random inputs.
@@ -196,7 +262,8 @@ to one second behind.
 - `bot_driver` (`scripts/tests/test_linux_bot_driver.py`): the live probe's
   view and place evidence cannot pass with missing samples, a bot that never
   turns or never walks, a snap faster than the motor, a pitch past the limit or
-  a bot faster than a player.
+  a bot faster than a player; a death and spawn is no turn and no walk; a
+  first shot at a teammate, or sooner than the human floor, fails.
 
 Live, with the game's assets (a machine that has them):
 
@@ -213,12 +280,20 @@ degrees a second (with a margin), kept its pitch within the player's limits and
 walked at least 300 units, never more than 300 in a second. With `bot_log 1`
 it audits every notice: an opponent (with up to four bots, all on one team,
 there are none), on the bot's screen, partly in view and in view for at least
-200 ms; it prints how many there were. Views are a
+200 ms; it prints how many there were. The probe sets `bot_combat 0` so every
+bot stays alive. With `--combat` the bots fight: only the first hold sample
+must be healthy, a quarter second to or from one a bot was not playing is no
+turn and a second of it no walk, turns may reach the aiming hand's 450 degrees
+a second (with the kick on top), and each fight's first shot must be at an
+opponent, at least 60 ms after noticing and 260 ms after the player came into
+view; on both teams at least one bot must have fired. It prints how often the
+bots opened fire and the hits and kills the game logged. Views are a
 quarter second apart because at one a second any turn would fit: the short way
 round is never more than 180 degrees.
 
 A stock team holds at most half the server's slots, so the probe puts more than
-four bots on both teams (odd entity numbers on axis) and keeps them from firing.
+four bots on both teams (odd entity numbers on axis) and keeps the retail
+random inputs from firing.
 It takes up to 18 bots, 9 against 9; `sv_maxclients` is the larger of 8 and the
 bot count. PC bot brain run 1 sent 6 and 8 bots all to allies before this, and
 every bot past the fourth stayed a spectator.
