@@ -1441,13 +1441,38 @@ static uint32_t R_ModernLitParts()
 }
 
 // An unlit, light-giving surface: a lamp, a lantern, a neon or lit sign. On
-// the stock maps those are the materials whose technique set is mc_unlit*
-// (models) or wc_unlit* (world), which have no lit technique at all (night
+// the stock maps those are drawn with an unlit technique set, mc_unlit*
+// (models) or wc_unlit* (world), which has no lit technique at all (night
 // lamps facts 1, 2026-11-15: mp_carentan 51 materials, mp_crash_snow 28).
+// Not every unlit material gives light, though: night lamps run 1 found
+// multiply decals (stains, graffiti), snowy tree canopies, a candy cane and
+// a portal "lighten" card among them, and a multiply decal's white made
+// brighter than white lit up the wall under it with the decal's hard edges.
+// So the set must not multiply, and the material's name must say it is a
+// light.
 static bool R_ModernEmissiveMaterial(const Material *material)
 {
     const char *set = material && material->techniqueSet ? material->techniqueSet->name : nullptr;
-    return set && (!strncmp(set, "mc_unlit", 8) || !strncmp(set, "wc_unlit", 8));
+    if (!set || (strncmp(set, "mc_unlit", 8) && strncmp(set, "wc_unlit", 8)) || strstr(set, "multiply"))
+        return false;
+    const char *name = material->info.name;
+    if (!name)
+        return false;
+    char lower[96];
+    size_t length = 0;
+    for (; name[length] && length + 1 < sizeof(lower); ++length)
+        lower[length] = static_cast<char>(tolower(static_cast<unsigned char>(name[length])));
+    lower[length] = 0;
+    if (strstr(lower, "lighten"))
+        return false;
+    static const char *const kLightWords[] = {"light", "lamp", "lantern", "neon", "sign", "bulb",
+                                              "glow",  "window", "candle", "monitor", "_tv", "tv_", "_star"};
+    for (const char *word : kLightWords)
+    {
+        if (strstr(lower, word))
+            return true;
+    }
+    return false;
 }
 
 // KISAK_VK_MODERN_LIT_LOG=1 also prints each light-giving material drawn

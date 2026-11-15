@@ -40,7 +40,7 @@ involved. The checks:
                  setting (what each setting did to its frame, and that the
                  statistics count from where they were last started, are the
                  scene's own points); and the Modern path's statistics lines
-                 count the 125 anti-aliased scenes of modern_taa,
+                 count the 128 anti-aliased scenes of modern_taa,
                  modern_linear, modern_bloom, modern_effects, modern_lit,
                  modern_lit_shader, modern_soft_shadow, modern_contact_shadow,
                  modern_soft_spot_shadow, modern_lit_models, modern_lit_skin,
@@ -49,9 +49,9 @@ involved. The checks:
                  modern_velocity, modern_normals, modern_ao,
                  modern_reflections, modern_planar, modern_fog,
                  modern_god_rays, modern_live and modern_live_cut (a second
-                 modern_taa run), 54 of them without history
+                 modern_taa run), 57 of them without history
                  (modern_light_pass's scene has no depth to anti-alias
-                 with, nor modern_emissive's), the 55 scenes of modern_linear,
+                 with, nor modern_emissive's), the 58 scenes of modern_linear,
                  modern_bloom, modern_effects, modern_lit, modern_lit_shader,
                  modern_soft_shadow, modern_contact_shadow, modern_soft_spot_shadow,
                  modern_lit_models, modern_lit_skin, modern_lit_no_sun,
@@ -473,6 +473,16 @@ def main():
                   code == 0 and found.get('d3d9_check') == 'passed'
                   and [s[0] for s in scenes] == ['modern_emissive'],
                   f'status {code}\n{stdout}')
+    # soft-spot-off
+    off = dict(env)
+    off['KISAK_VK_MODERN_SOFT_SPOT_SHADOWS'] = '0'
+    code, stdout, _ = run(binary, ['--scene', 'modern_soft_spot_shadow', '--validation', args.validation], off)
+    found, scenes = parse(stdout)
+    checks.expect('modern_soft_spot_shadow passes with KISAK_VK_MODERN_SOFT_SPOT_SHADOWS=0',
+                  code == 0 and found.get('d3d9_check') == 'passed'
+                  and [s[0] for s in scenes] == ['modern_soft_spot_shadow']
+                  and 'drew soft spot-light shadows (' not in stdout,
+                  f'status {code}\n{stdout}')
     # debug-velocity
     debug = dict(env)
     debug['KISAK_VK_MODERN_DEBUG'] = 'velocity'
@@ -802,8 +812,8 @@ def main():
     # scenes again (two without history).
     modern = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes anti-aliased \((\d+) without history\)',
                        stdout)
-    checks.expect('the Modern path anti-aliased 125 scenes, 54 without history',
-                  modern is not None and modern.group(1) == '125' and modern.group(2) == '54',
+    checks.expect('the Modern path anti-aliased 128 scenes, 57 without history',
+                  modern is not None and modern.group(1) == '128' and modern.group(2) == '57',
                   modern.group(0) if modern else 'missing')
     velocity = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes with surfaces that move on their own '
                          r'\((\d+) surfaces, (\d+) of them brush models\), ([0-9.]+) ms GPU each for their velocity$',
@@ -904,8 +914,8 @@ def main():
         checks.expect('no scene in linear light with KISAK_VK_MODERN_LINEAR=0', linear is None,
                       linear.group(0) if linear else '')
     else:
-        checks.expect('the Modern path drew 55 scenes in linear light and read 1 copy from them',
-                      linear is not None and linear.group(1) == '55' and linear.group(2) == '1',
+        checks.expect('the Modern path drew 58 scenes in linear light and read 1 copy from them',
+                      linear is not None and linear.group(1) == '58' and linear.group(2) == '1',
                       linear.group(0) if linear else 'missing')
     # Lamps and lit signs: modern_emissive's light-giving draws, once in its
     # one scene, at strength 4 (none with linear light or lit inputs off; off
