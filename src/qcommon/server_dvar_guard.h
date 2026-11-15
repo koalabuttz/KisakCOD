@@ -72,6 +72,8 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "r_modernShadowSoftness",
     "r_modernSkyStrength",
     "r_modernSoftShadows",
+    "r_modernSoftSpotShadows",
+    "r_modernSpotLightSize",
     "r_modernSsr",
     "r_modernSsrDistance",
     "r_modernSsrThickness",

@@ -45,6 +45,8 @@ inline const dvar_s *ssrDistance;
 inline const dvar_s *ssrThickness;
 inline const dvar_s *softShadows;
 inline const dvar_s *shadowSoftness;
+inline const dvar_s *softSpotShadows;
+inline const dvar_s *spotLightSize;
 inline const dvar_s *contactShadows;
 inline const dvar_s *contactLength;
 
@@ -126,6 +128,14 @@ inline void Register()
                                         "Modern visuals: the sun's apparent size in degrees for soft shadows "
                                         "(bigger is softer); -1 the default (KISAK_VK_MODERN_SHADOW_SOFTNESS or "
                                         "1.5)");
+    softSpotShadows = Dvar_RegisterEnum("r_modernSoftSpotShadows", kOnOffNames, 0, DVAR_NOFLAG,
+                                        "Modern visuals: soft shadows from spot and omni lights, sharp where "
+                                        "they meet their caster (default: with our lit shaders, unless "
+                                        "KISAK_VK_MODERN_SOFT_SPOT_SHADOWS says otherwise)");
+    spotLightSize = Dvar_RegisterFloat("r_modernSpotLightSize", -1.0f, -1.0f, 64.0f, DVAR_NOFLAG,
+                                       "Modern visuals: the size of spot and omni lights for soft shadows, in "
+                                       "world units (bigger is softer); -1 the default "
+                                       "(KISAK_VK_MODERN_SPOT_LIGHT_SIZE or 4)");
     contactShadows = Dvar_RegisterEnum("r_modernContactShadows", kOnOffNames, 0, DVAR_NOFLAG,
                                        "Modern visuals: contact shadows, the sun's small shadows where things "
                                        "touch (default: with our lit shaders, unless "
@@ -166,6 +176,8 @@ inline void Read(gfx_vk::d3d9::ModernTuning &out)
     out.ssrThickness = ssrThickness->current.value;
     out.softShadows = softShadows->current.integer - 1;
     out.shadowSoftness = shadowSoftness->current.value;
+    out.softSpotShadows = softSpotShadows->current.integer - 1;
+    out.spotLightSize = spotLightSize->current.value;
     out.contactShadows = contactShadows->current.integer - 1;
     out.contactLength = contactLength->current.value;
 }

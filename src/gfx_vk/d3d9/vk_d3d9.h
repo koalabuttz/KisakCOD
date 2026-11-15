@@ -72,6 +72,8 @@ struct ModernTuning
     float ssrThickness = -1.0f;
     int softShadows = -1;         // soft sun shadows (KISAK_VK_MODERN_SOFT_SHADOWS)
     float shadowSoftness = -1.0f; // the sun's apparent size, degrees (KISAK_VK_MODERN_SHADOW_SOFTNESS)
+    int softSpotShadows = -1;     // soft spot-light shadows (KISAK_VK_MODERN_SOFT_SPOT_SHADOWS)
+    float spotLightSize = -1.0f;  // the lights' size, world units (KISAK_VK_MODERN_SPOT_LIGHT_SIZE)
     int contactShadows = -1;      // contact shadows (KISAK_VK_MODERN_CONTACT_SHADOWS)
     float contactLength = -1.0f;  // their ray's length, world units (KISAK_VK_MODERN_CONTACT_LENGTH)
 };

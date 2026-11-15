@@ -83,6 +83,8 @@ back to them.
 | `r_modernShadowSoftness` | -1, or above 0 to 20 (degrees) | `KISAK_VK_MODERN_SHADOW_SOFTNESS` |
 | `r_modernContactShadows` | default, off, on | `KISAK_VK_MODERN_CONTACT_SHADOWS` |
 | `r_modernContactLength` | -1, or above 0 to 256 (world units) | `KISAK_VK_MODERN_CONTACT_LENGTH` |
+| `r_modernSoftSpotShadows` | default, off, on | `KISAK_VK_MODERN_SOFT_SPOT_SHADOWS` |
+| `r_modernSpotLightSize` | -1, or 0 to 64 (world units) | `KISAK_VK_MODERN_SPOT_LIGHT_SIZE` |
 | `r_modernTonemap` | default, clamp, neutral, agx, aces | `KISAK_VK_MODERN_TONEMAP` |
 | `r_modernDebug` | default, none, velocity, velocity-all, normals, ao, reflections | `KISAK_VK_MODERN_DEBUG` |
 
@@ -1490,8 +1492,9 @@ view without the sun's shadow map, or with soft shadows off, pushes `on` 0
 and the shaders take the game's taps. On by default with our lit shaders;
 `r_modernSoftShadows off` (or `KISAK_VK_MODERN_SOFT_SHADOWS=0`) keeps the
 game's. Their cost is inside the lit passes' own time; the statistics line is
-`modern: N scenes with soft sun shadows (sun 1.50 degrees)`. Spot light
-shadows keep the game's taps for now.
+`modern: N scenes with soft sun shadows (sun 1.50 degrees)`. Spot and omni
+light shadows have their own switch: [Soft spot-light
+shadows](#soft-spot-light-shadows).
 
 The `modern_soft_shadow` check scene draws lm_hsm_sun_r0c0 across a blocker's
 edge in the shadow map: the game's taps give an edge about a texel wide, the
@@ -1539,6 +1542,42 @@ The `modern_contact_shadow` check scene puts a kerb 10 units tall on a sunlit
 floor with the sun behind it at 45 degrees: the floor 3 units in front of
 the kerb is shaded, open floor beside it stays sunlit, and with
 `KISAK_VK_MODERN_CONTACT_SHADOWS=0` both are sunlit.
+
+## Soft spot-light shadows
+
+The primary spot and omni lights' shadows (CoD4's spot shadow map, 512-texel
+tiles one under the other) get the same percentage-closer soft filter as the
+sun's, in the lit shaders' spot families with `hsm_` (`SoftSpotShadow` in
+`lm_sun.frag` and `lp_sun.frag`), so a lamp's shadow is sharp at its caster
+and spreads with distance instead of the game's four taps' hard edge. Taps
+stay inside the light's own tile.
+
+The light's shadow projection is a perspective one with its near plane at 1
+and its far plane at the light's radius (`1 / lightPosition.w`, a constant
+the shaders already have), so the blocker search turns stored depths into
+distances from the light, and the receiver's distance is the shadow
+coordinate's w. The cone's half angle comes from the spot factors (their ramp
+is 0 at the outer cosine), and with it a texel's width at the receiver. The
+filter radius is the light's size (`r_modernSpotLightSize`, 4 world units by
+default, about a bulb in its fitting) times how far the receiver lies past
+its blockers over the blockers' distance from the light, in texels, from 1 to
+16. Each tap follows the receiver's slope as the sun's do (capped at 2:1), and
+the discs turn with the same per-frame noise for the TAA. Nothing per light
+is pushed: the lit shaders' push block carries only the light size and a flag
+(`lg::ModernShadowParams` is repacked to fit: `on` is now 1 for soft sun
+shadows plus 2 for soft spot-light shadows).
+
+On by default with our lit shaders; `r_modernSoftSpotShadows off` (or
+`KISAK_VK_MODERN_SOFT_SPOT_SHADOWS=0`) keeps the game's taps, and a light size
+of 0 gives the narrowest filter. Their cost is inside the lit passes' own
+time; the statistics line is `modern: N scenes with soft spot-light shadows
+(lights 4.0 units)`.
+
+The `modern_soft_spot_shadow` check scene draws lm_hsm_spot_r0c0 across a
+blocker's edge in a spot light's tile, the blocker 10 units from the light
+and the floor 50: the game's taps give a hard edge, the soft filter a
+penumbra a few texels wide either side of it, and with
+`KISAK_VK_MODERN_SOFT_SPOT_SHADOWS=0` the edge is hard again.
 
 ## Next
 

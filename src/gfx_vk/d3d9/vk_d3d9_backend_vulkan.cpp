@@ -243,6 +243,12 @@ struct Backend
     bool softShadowsWanted = false;
     float shadowSoftness = 1.5f;
     uint64_t softShadowScenes = 0, softShadowScenesBase = 0;
+    // Soft spot-light shadows (docs/vulkan-modern.md "Soft spot-light
+    // shadows"), wanted as the sun's, and the lights' size in world units;
+    // the scenes whose lit surfaces were told to use them.
+    bool softSpotShadowsWanted = false;
+    float spotLightSize = 4.0f;
+    uint64_t softSpotScenes = 0, softSpotScenesBase = 0;
     uint32_t shadowFrame = 0;
     // Contact shadows (docs/vulkan-modern.md "Contact shadows"): wanted with
     // our lit shaders unless switched on or off outright, which makes the
@@ -311,8 +317,9 @@ struct Backend
     {
         bool bloom = true, exposure = true, velocity = true;
         bool shaders = true, modelShaders = true, noSunShaders = true, lightShaders = true;
-        int ao = -1, reflections = -1, normals = -1, softShadows = -1, contactShadows = -1;
+        int ao = -1, reflections = -1, normals = -1, softShadows = -1, contactShadows = -1, softSpotShadows = -1;
         float shadowSoftness = 1.5f;
+        float spotLightSize = 4.0f;
         float contactLength = 12.0f;
         ModernDebugView debug = ModernDebugNone;
         modern::TonemapCurve curve = modern::TonemapCurve::Neutral;
@@ -552,7 +559,9 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
                                                     || backend->contactWanted);
     const int softShadows = tuning.softShadows >= 0 ? tuning.softShadows : start.softShadows;
     backend->softShadowsWanted = softShadows == 1 || (softShadows < 0 && ours);
-    if (!backend->softShadowsWanted && backend->legacy)
+    const int softSpot = tuning.softSpotShadows >= 0 ? tuning.softSpotShadows : start.softSpotShadows;
+    backend->softSpotShadowsWanted = softSpot == 1 || (softSpot < 0 && ours);
+    if (!backend->softShadowsWanted && !backend->softSpotShadowsWanted && backend->legacy)
         lg::SetModernShadow(backend->legacy, nullptr);
     if (backend->legacy)
     {
@@ -602,6 +611,7 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
     reflectionParams.thickness = number(tuning.ssrThickness, start.reflectionParams.thickness, 0.0f, kAny, false);
     backend->shadowSoftness = number(tuning.shadowSoftness, start.shadowSoftness, 0.0f, 20.0f, false);
     backend->contactParams.length = number(tuning.contactLength, start.contactLength, 0.0f, 256.0f, false);
+    backend->spotLightSize = number(tuning.spotLightSize, start.spotLightSize, 0.0f, 64.0f, false);
 
     backend->tonemapCurve = tuning.tonemap >= static_cast<int>(modern::TonemapCurve::Clamp)
                                     && tuning.tonemap <= static_cast<int>(modern::TonemapCurve::Aces)
@@ -616,7 +626,8 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
             "vulkan d3d9: modern: switches now: bloom %s, exposure %s (key %.3f), velocity %s, our shaders %s "
             "(models %s, without the sun %s, lights %s; sun %.2f, sky %.2f), ambient occlusion %s (radius %.1f, power %.2f, "
             "thickness %.1f, grazing %.2f, floor %.2f, edge %.3f%s), reflections %s (distance %.0f, thickness %.1f), normals %s, "
-            "soft shadows %s (sun %.2f degrees), contact shadows %s (length %.1f), tonemap %s, debug view %s",
+            "soft shadows %s (sun %.2f degrees), soft spot-light shadows %s (lights %.1f units), contact shadows %s "
+            "(length %.1f), tonemap %s, debug view %s",
             onOff(backend->bloomWanted), onOff(backend->exposureWanted), backend->exposureParams.key,
             onOff(backend->velocityWanted), onOff(backend->shadersWanted), onOff(backend->modelShadersWanted),
             onOff(backend->noSunShadersWanted), onOff(backend->lightShadersWanted), backend->sunStrength, backend->skyStrength, onOff(backend->aoWanted),
@@ -624,7 +635,8 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
             aoParams.half ? ", half resolution" : "",
             onOff(backend->reflectionsWanted), reflectionParams.maxDistance, reflectionParams.thickness,
             onOff(backend->normalsWanted), onOff(backend->softShadowsWanted), backend->shadowSoftness,
-            onOff(backend->contactWanted), backend->contactParams.length,
+            onOff(backend->softSpotShadowsWanted), backend->spotLightSize, onOff(backend->contactWanted),
+            backend->contactParams.length,
             modern::CurveName(backend->tonemapCurve), DebugViewName(view));
 }
 } // namespace
@@ -762,6 +774,15 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         const float value = softness.empty() ? 0.0f : std::strtof(softness.c_str(), nullptr);
         if (value > 0.0f && value <= 20.0f)
             start.shadowSoftness = value;
+    }
+    // Soft spot-light shadows with our lit shaders, unless this says
+    // otherwise; the lights' size in world units.
+    start.softSpotShadows = onOff("KISAK_VK_MODERN_SOFT_SPOT_SHADOWS");
+    {
+        const std::string size = EnvText("KISAK_VK_MODERN_SPOT_LIGHT_SIZE");
+        const float value = size.empty() ? 0.0f : std::strtof(size.c_str(), nullptr);
+        if (value > 0.0f && value <= 64.0f)
+            start.spotLightSize = value;
     }
     // Contact shadows with our lit shaders, unless this says otherwise; how
     // far towards the sun they look, in world units.
@@ -1104,6 +1125,10 @@ void BackendLogStats(Backend *backend, bool reset)
         HostLog(h, "vulkan d3d9: modern: %llu scenes with soft sun shadows (sun %.2f degrees)",
                 static_cast<unsigned long long>(backend->softShadowScenes - backend->softShadowScenesBase),
                 backend->shadowSoftness);
+    if (backend->softSpotScenes > backend->softSpotScenesBase)
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with soft spot-light shadows (lights %.1f units)",
+                static_cast<unsigned long long>(backend->softSpotScenes - backend->softSpotScenesBase),
+                backend->spotLightSize);
     // Bloom: the scenes it ran for in place of the glow, the passes of each,
     // and their GPU time per scene.
     if (backend->bloom)
@@ -1133,6 +1158,7 @@ void BackendLogStats(Backend *backend, bool reset)
         backend->planarViewsBase = backend->planarViews;
         backend->planarReadsBase = backend->planarReads;
         backend->softShadowScenesBase = backend->softShadowScenes;
+        backend->softSpotScenesBase = backend->softSpotScenes;
         modern::ResetStats(backend->exposure);
         if (backend->exposure)
             backend->exposureMsBase = PassTimingsFor(backend->core, "modern exposure").totalMs;
@@ -2136,31 +2162,43 @@ void BackendModernSunShadow(Backend *backend, lg::Device *legacy, const ModernSu
         backend->contactParams.sun[i] = view.sunDir[i];
     const bool usable = view.on && view.texel[0] > 0.0f && view.texel[1] > 0.0f && view.depthUnits[0] > 0.0f
                         && view.depthUnits[1] > 0.0f;
-    if (!backend->softShadowsWanted || !usable)
+    const bool sun = backend->softShadowsWanted && usable;
+    const bool spot = backend->softSpotShadowsWanted;
+    if (!sun && !spot)
     {
         lg::SetModernShadow(legacy, nullptr);
         return;
     }
     // The filter's radius (texels) is the receiver's depth below its
     // blockers times the tangent of half the sun's apparent size, over a
-    // texel's width; it reaches at most 16 texels, the blocker search with
-    // it, so a soft edge costs the same taps everywhere.
+    // texel's width (a spot light's: its size, in the shader); it reaches at
+    // most 16 texels, the blocker search with it, so a soft edge costs the
+    // same taps everywhere.
     constexpr float kWidestTexels = 16.0f;
     constexpr float kPi = 3.14159265f;
-    const float tanHalf = std::tan(0.5f * backend->shadowSoftness * kPi / 180.0f);
     lg::ModernShadowParams params{};
-    for (int i = 0; i < 2; ++i)
+    params.maxRadius = kWidestTexels;
+    if (sun)
     {
-        params.penumbra[i] = view.depthUnits[i] * tanHalf / view.texel[i];
-        params.maxRadius[i] = kWidestTexels;
-        // The steepest receiver the per-tap bias follows: two units of
-        // height a unit across (63 degrees), in depth per texel.
-        params.slopeCap[i] = 2.0f * view.texel[i] / view.depthUnits[i];
+        const float tanHalf = std::tan(0.5f * backend->shadowSoftness * kPi / 180.0f);
+        for (int i = 0; i < 2; ++i)
+        {
+            params.penumbra[i] = view.depthUnits[i] * tanHalf / view.texel[i];
+            // The steepest receiver the per-tap bias follows: two units of
+            // height a unit across (63 degrees), in depth per texel.
+            params.slopeCap[i] = 2.0f * view.texel[i] / view.depthUnits[i];
+        }
+        params.on += lg::kModernSoftSun;
+        ++backend->softShadowScenes;
     }
-    params.on = 1.0f;
+    if (spot)
+    {
+        params.spotSize = backend->spotLightSize;
+        params.on += lg::kModernSoftSpot;
+        ++backend->softSpotScenes;
+    }
     params.frame = static_cast<float>(backend->shadowFrame++ & 63u);
     lg::SetModernShadow(legacy, &params);
-    ++backend->softShadowScenes;
 }
 
 void BackendModernPlanarDone(Backend *backend, const ModernPlanarView &view)
