@@ -176,7 +176,12 @@ struct Options
     //   4: only the plan's first coordinate is handed over
     //   8: handed over in z and w of a float4, so the reads at them are
     //      not fetched ahead
-    uint8_t diagHoist = 0;
+    //  16: the colour is how far each fetched-ahead read's red, green and
+    //      blue are from the same read made in the program (x 4)
+    //  32: the same for alpha, as grey
+    //  64: the fetched-ahead reads are written tex2D<float4>
+    // 128: reads of sampler 2 are not hoisted; 256: nor those of sampler 3
+    uint16_t diagHoist = 0;
 };
 
 // ---- Parsed form ---------------------------------------------------------------------------

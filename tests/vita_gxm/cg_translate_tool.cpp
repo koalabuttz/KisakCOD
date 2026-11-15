@@ -62,7 +62,7 @@ int main(int argc, char **argv)
         else if (!std::strcmp(argv[i], "--diag-position") && i + 1 < argc)
             options.diagPosition = uint8_t(std::strtoul(argv[++i], nullptr, 0));
         else if (!std::strcmp(argv[i], "--diag-hoist") && i + 1 < argc)
-            options.diagHoist = uint8_t(std::strtoul(argv[++i], nullptr, 0));
+            options.diagHoist = uint16_t(std::strtoul(argv[++i], nullptr, 0));
         else if (!std::strcmp(argv[i], "--hoist"))
             hoist = true;
         else if (!std::strcmp(argv[i], "--hoist-from") && i + 1 < argc)

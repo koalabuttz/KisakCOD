@@ -741,13 +741,20 @@ bool Emitter::Texture(const Instruction &ins, std::string &value)
     }
     if (type == SamplerType::None)
         return Fail("samples " + s + " without declaring it");
+    const bool hoistSkipped = ((options_.diagHoist & 128) && unit == 2) || ((options_.diagHoist & 256) && unit == 3);
     if (const HoistCoord *hoisted = Hoisted();
-        hoisted && ins.opcode == kTex && ins.control == 0 && !cube && !(options_.sharpSamplers >> unit & 1))
+        hoisted && !hoistSkipped && ins.opcode == kTex && ins.control == 0 && !cube &&
+        !(options_.sharpSamplers >> unit & 1))
     {
         // The vertex program worked this coordinate out.
+        const std::string in = HoistedInput(*hoisted);
         if (options_.diagHoist & 1)
-            Line("kisak_hoist_err = max(kisak_hoist_err, abs(" + HoistedInput(*hoisted) + " - (" + coord + ").xy));");
-        value = "tex2D(" + s + ", " + HoistedInput(*hoisted) + ")" + SwizzleSuffix(ins.sources[1].swizzle);
+            Line("kisak_hoist_err = max(kisak_hoist_err, abs(" + in + " - (" + coord + ").xy));");
+        if (options_.diagHoist & 48)
+            Line("kisak_hoist_diff = max(kisak_hoist_diff, abs(tex2D(" + s + ", " + in + ") - tex2D(" + s + ", (" +
+                 coord + ").xy)));");
+        value = std::string(options_.diagHoist & 64 ? "tex2D<float4>(" : "tex2D(") + s + ", " + in + ")" +
+                SwizzleSuffix(ins.sources[1].swizzle);
         return true;
     }
     switch (ins.opcode)
@@ -1424,6 +1431,12 @@ bool Emitter::Run(std::string &cg, std::string &error)
         {
             prologue += "    float2 kisak_hoist_err = float2(0.0, 0.0);\n";
             epilogue += "    oC0 = float4(saturate(kisak_hoist_err * 256.0), 0.25, 1.0);\n";
+        }
+        if (options_.hoist && (options_.diagHoist & 48))
+        {
+            prologue += "    float4 kisak_hoist_diff = float4(0.0, 0.0, 0.0, 0.0);\n";
+            epilogue += options_.diagHoist & 32 ? "    oC0 = float4(saturate(kisak_hoist_diff.aaa * 4.0), 1.0);\n"
+                                                : "    oC0 = float4(saturate(kisak_hoist_diff.rgb * 4.0), 1.0);\n";
         }
         if (alphaTest)
         {

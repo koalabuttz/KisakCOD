@@ -223,8 +223,8 @@ struct PipelineKey
     uint8_t index32;
     uint16_t sharp; // and the samplers it reads through the sharpening filter
     uint8_t hoist; // DrawState::readHoist when the draw came by
-    uint8_t diagHoist; // DrawState::diagHoist then
-    uint8_t pad[2];
+    uint8_t pad;
+    uint16_t diagHoist; // DrawState::diagHoist then
 };
 struct Pipeline
 {
@@ -370,7 +370,7 @@ struct DrawState
     uint64_t hoistedDraws = 0, hoistUnfed = 0;
     // Run diagnostics for the hoist: cg::Options::diagHoist's bits
     // (switches diag-hoist-show, -float4, -one, -zw).
-    uint8_t diagHoist = 0;
+    uint16_t diagHoist = 0;
     // 0: the last draw had no alpha test, 1: one with a discard, 2: one
     // that was left out, 3: one that writes zero.
     uint8_t lastDrawAlphaTest = 0;
@@ -2810,7 +2810,9 @@ const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "n
                                      "gpu-watch",           "no-prepass-clear",  "no-depth-only-scene",
                                      "no-scene-in-copy",    "no-alpha-test-drop", "no-alpha-test-zero",
                                      "no-read-hoist",       "diag-hoist-show",    "diag-hoist-float4",
-                                     "diag-hoist-one",      "diag-hoist-zw"};
+                                     "diag-hoist-one",      "diag-hoist-zw",      "diag-hoist-diff",
+                                     "diag-hoist-diff-alpha", "diag-hoist-typed",  "diag-hoist-skip-s2",
+                                     "diag-hoist-skip-s3"};
 struct LiveSwitch
 {
     const char *name;
@@ -2885,8 +2887,14 @@ void ApplyLiveSwitches(Device &device)
         }
         else if (name.rfind("diag-hoist-", 0) == 0)
         {
-            const uint8_t bit = name == "diag-hoist-show" ? 1 : name == "diag-hoist-float4" ? 2 : name == "diag-hoist-one" ? 4 : 8;
-            d.diagHoist = uint8_t(s.on ? d.diagHoist | bit : d.diagHoist & ~bit);
+            static const char *const names[] = {"diag-hoist-show", "diag-hoist-float4",     "diag-hoist-one",
+                                                "diag-hoist-zw",   "diag-hoist-diff",       "diag-hoist-diff-alpha",
+                                                "diag-hoist-typed", "diag-hoist-skip-s2",   "diag-hoist-skip-s3"};
+            uint16_t bit = 0;
+            for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); ++i)
+                if (name == names[i])
+                    bit = uint16_t(1u << i);
+            d.diagHoist = uint16_t(s.on ? d.diagHoist | bit : d.diagHoist & ~bit);
             d.lastDrawValid = false;
         }
         else if (name == "no-filter-stretch")

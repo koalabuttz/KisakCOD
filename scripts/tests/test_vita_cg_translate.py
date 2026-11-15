@@ -214,6 +214,15 @@ CHECKS = [
     ("ps3_vita_hoist", ["--hoist", "--diag-hoist", "4"], "r2 = tex2D(s0, (r2).xy);", "hoist=3/4"),
     ("ps3_vita_hoist", ["--hoist", "--diag-hoist", "4"], "r1 = tex2D(s2, in_TEXCOORD9);", "hoist=3/4"),
     ("ps3_vita_hoist", ["--hoist", "--diag-hoist", "9"], "r3 = tex2D(s0, in_TEXCOORD7.zw);", "hoist=3/4"),
+    ("ps3_vita_hoist", ["--hoist", "--diag-hoist", "16"],
+     "kisak_hoist_diff = max(kisak_hoist_diff, abs(tex2D(s0, in_TEXCOORD8) - tex2D(s0, (r2).xy)));", "hoist=3/4"),
+    ("ps3_vita_hoist", ["--hoist", "--diag-hoist", "16"],
+     "oC0 = float4(saturate(kisak_hoist_diff.rgb * 4.0), 1.0);\n    return oC0;", "hoist=3/4"),
+    ("ps3_vita_hoist", ["--hoist", "--diag-hoist", "32"],
+     "oC0 = float4(saturate(kisak_hoist_diff.aaa * 4.0), 1.0);\n    return oC0;", "hoist=3/4"),
+    ("ps3_vita_hoist", ["--hoist", "--diag-hoist", "64"], "r2 = tex2D<float4>(s0, in_TEXCOORD8);", "hoist=3/4"),
+    ("ps3_vita_hoist", ["--hoist", "--diag-hoist", "128"], "r1 = tex2D(s2, (", "hoist=3/4"),
+    ("ps3_vita_hoist", ["--hoist", "--diag-hoist", "128"], "r2 = tex2D(s0, in_TEXCOORD8);", "hoist=3/4"),
     ("vs3_vita_hoist", ["--hoist-from", "@ps3_vita_hoist", "--diag-hoist", "8"],
      "out_TEXCOORD8 = float4(0.0, 0.0, o1.z * 0.5, o1.w * 0.25);", "hoist=3/4"),
     ("vs3_vita_hoist", ["--hoist-from", "@ps3_vita_hoist", "--diag-hoist", "2"],
@@ -320,7 +329,8 @@ def main() -> int:
                 failures.append(f"{name} {extra}: the program lacks {text!r}")
             if reflection not in result.stderr:
                 failures.append(f"{name} {extra}: the reflection lacks {reflection!r}: {result.stderr.strip()}")
-            if glslang and extra:
+            # tex2D<float4> is the Vita compiler's own spelling.
+            if glslang and extra and "tex2D<" not in result.stdout:
                 program = work / (name + "-options.cg")
                 program.write_text(result.stdout)
                 ok, log = glslang_ok(glslang, "vert" if name.startswith("vs") else "frag", program)
