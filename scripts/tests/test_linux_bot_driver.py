@@ -6,7 +6,7 @@ from test_linux_bots import (FIXTURE_GSC, transition_fixture, transition_plan,
                              validate_kick_window, validate_hold, validate_transitions,
                              validate_brain_view, validate_brain_walk, balanced_teams,
                              uses_both_teams, TEAM_CAPACITY, MAX_BOTS, validate_brain_notices,
-                             validate_brain_fights)
+                             validate_brain_fights, COVER_ROW, HUNT_ROW)
 
 
 def healthy_log():
@@ -354,6 +354,16 @@ class BrainFightTests(unittest.TestCase):
     def test_faster_than_a_human_fails(self):
         self.assertFalse(self.passed(fired(0, 1, after=40)))
         self.assertFalse(self.passed(fired(0, 1, view=250)))
+
+
+class DecisionLogTests(unittest.TestCase):
+    def test_cover_and_hunt_lines_are_counted(self):
+        output = ('bots: 3 takes cover 210 units away (reloading)\n'
+                  'bots: 4 takes cover 0 units away (hurt)\n'
+                  'bots: 5 hunts (heard)\nbots: 6 hunts (seen)\nbots: 7 hunts (hit)\n'
+                  'bots: 8 hunts (guessed)\n')
+        self.assertEqual(len(COVER_ROW.findall(output)), 2)
+        self.assertEqual(len(HUNT_ROW.findall(output)), 3)
 
 
 class CombatHoldTests(unittest.TestCase):

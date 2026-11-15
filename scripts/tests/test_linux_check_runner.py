@@ -241,6 +241,7 @@ class PlannedCommandTests(unittest.TestCase):
             "bot_motor",
             "bot_perception",
             "bot_combat",
+            "bot_mind",
             "bot_navmesh",
             "bot_driver",
             "database_publication",
