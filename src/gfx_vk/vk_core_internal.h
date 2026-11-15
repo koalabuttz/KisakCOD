@@ -66,6 +66,9 @@ struct Buffer
     BufferDesc desc{};
     Allocation allocation{};
     std::string name;
+    // Tracked use by shaders (UseBuffer); copies keep their own barriers.
+    VkPipelineStageFlags2 lastStages = VK_PIPELINE_STAGE_2_NONE;
+    VkAccessFlags2 lastAccess = VK_ACCESS_2_NONE;
 };
 
 struct Image
@@ -337,6 +340,7 @@ public:
     bool recordingOpen = false;      // a command buffer is being recorded
     uint64_t recordingId = 0;        // counts command buffers begun
     bool inPass = false;
+    bool inComputePass = false; // BeginComputePass ... EndComputePass
     int currentTimedPass = -1;
     bool bufferCopiesOpen = false;            // see CloseBufferCopies
     std::vector<Image *> pendingUploads;      // uploadPending images
