@@ -247,6 +247,36 @@ static void Priorities()
     Check(focus.kind == kb::FocusKind::Remembered, "a fresh memory comes before a sound");
 }
 
+static void SmokeClouds()
+{
+    std::printf("\n== smoke hides what is behind it ==\n");
+    kb::PerceptionParams params;
+    kb::Smoke smoke;
+    smoke.burst[0] = 500.0f;
+    smoke.startMs = 10000;
+    Check(kb::SmokeRadius(smoke, 9999, params) == 0.0f && kb::SmokeRadius(smoke, 10000, params) == 0.0f,
+          "no cloud before the burst");
+    Check(kb::SmokeRadius(smoke, 11000, params) > 0.0f &&
+              kb::SmokeRadius(smoke, 11000, params) < kb::SmokeRadius(smoke, 12000, params),
+          "the cloud grows from the burst");
+    Check(kb::SmokeRadius(smoke, 30000, params) == params.smokeRadius, "the cloud holds its size");
+    Check(kb::SmokeRadius(smoke, 52000, params) < params.smokeRadius &&
+              kb::SmokeRadius(smoke, 10000 + static_cast<int>(params.smokeSeconds * 1000.0f), params) == 0.0f,
+          "the cloud shrinks and is gone after smokeSeconds");
+
+    const float eye[3] = {0.0f, 0.0f, 60.0f};
+    const float behind[3] = {1000.0f, 0.0f, 60.0f};
+    const float beside[3] = {1000.0f, 900.0f, 60.0f};
+    const float before[3] = {100.0f, 0.0f, 60.0f};
+    Check(kb::SmokeHides(eye, behind, &smoke, 1, 30000, params), "a player behind the cloud is hidden");
+    Check(!kb::SmokeHides(eye, beside, &smoke, 1, 30000, params), "a player off to the side is not");
+    Check(!kb::SmokeHides(eye, before, &smoke, 1, 30000, params), "a player between the bot and the cloud is not");
+    Check(!kb::SmokeHides(eye, behind, &smoke, 1, 70000, params), "nor is anybody once the cloud is gone");
+    const float inside[3] = {500.0f, 0.0f, 60.0f};
+    Check(kb::SmokeHides(eye, inside, &smoke, 1, 30000, params), "a player inside the cloud is hidden");
+    Check(!kb::LineThroughBall(eye, behind, inside, 0.0f), "a ball of no size hides nothing");
+}
+
 int main()
 {
     NoticeRates();
@@ -254,6 +284,7 @@ int main()
     Memory();
     Hearing();
     Priorities();
+    SmokeClouds();
     if (gFailures)
     {
         std::printf("\n%d bot perception check(s) failed\n", gFailures);
