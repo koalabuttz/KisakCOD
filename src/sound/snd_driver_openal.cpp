@@ -22,6 +22,12 @@
 #include <fstream>
 
 #include "snd_ima_adpcm.h"
+#include "snd_stream_feed.h"
+
+#ifdef __vita__
+#include <vita/vita_platform.h>
+#include <psp2/kernel/threadmgr.h>
+#endif
 
 // AL_EXT_IMA4, AL_SOFT_block_alignment and AL_SOFT_loop_points (alext.h).
 #ifndef AL_FORMAT_MONO_IMA4
@@ -45,6 +51,7 @@ const dvar_t *snd_khz;
 const dvar_t *snd_outputConfiguration;
 static const dvar_t *snd_alDebug;
 static const dvar_t *snd_adpcm;
+static const dvar_t *snd_streamThread;
 
 // Loaded sounds are kept as IMA ADPCM and decoded by OpenAL as they play:
 // snd_adpcm is on and this OpenAL takes such buffers. Set when the driver
@@ -56,9 +63,13 @@ static std::atomic<bool> s_keepSoundsPacked;
 #ifdef __vita__
 #define SND_DEFAULT_KHZ 22
 #define SND_DEFAULT_ADPCM 1
+// Decoding an MP3 stream is 6% of one of the Vita's cores for as long as it
+// plays, in pieces of 10 ms and more: too long for a frame's main thread.
+#define SND_DEFAULT_STREAM_THREAD 1
 #else
 #define SND_DEFAULT_KHZ 44
 #define SND_DEFAULT_ADPCM 0
+#define SND_DEFAULT_STREAM_THREAD 0
 #endif
 
 static bool SND_AlPlaysImaAdpcm()
@@ -97,6 +108,11 @@ char SND_InitDriver()
         SND_DEFAULT_ADPCM,
         DVAR_NOFLAG,
         "Keep loaded sounds in memory as IMA ADPCM, a quarter the size of 16-bit PCM, and decode them as they play. Read when the sound system starts; sounds already loaded stay as they are");
+    snd_streamThread = Dvar_RegisterBool(
+        "snd_streamThread",
+        SND_DEFAULT_STREAM_THREAD,
+        DVAR_NOFLAG,
+        "Decode streamed sounds (music, ambience) ahead on a thread of their own. Off, the main thread decodes them as it queues them. Takes effect at once, also for streams that are playing");
 
     s_keepSoundsPacked.store(false, std::memory_order_relaxed);
     if (MSS_Startup())
@@ -132,10 +148,13 @@ char SND_InitDriver()
     }
 }
 
+static void AL_StopStreamThread();
+
 void SND_ShutdownDriver()
 {
     R_Cinematic_StopPlayback();
     R_Cinematic_SyncNow();
+    AL_StopStreamThread();
     MSS_ShutdownCleanup();
 }
 
@@ -167,6 +186,9 @@ struct AlDebugStats
     int starts;
     int cuts;            // sounds whose source was still playing when the channel stopped
     int underruns;       // stream sources that ran dry and were restarted
+    int ownChunks;       // stream chunks the main thread decoded as it queued them
+    int lateChunks;      // updates in which a playing stream down to its last buffer found no chunk decoded
+    uint32_t threadChunks; // the decode thread's count at the last report
     int alErrors;
     int printedErrors;   // errors printed in this report window (capped to keep the console readable)
     int maxUpdateGapMs;  // longest time between two sound updates in this window
@@ -217,6 +239,22 @@ static void SND_AlDebugNoteUnderrun(int index)
         Com_PrintWarning(CON_CHANNEL_SOUND, "snd_al: stream ch %i '%s' ran dry, restarted\n", index, SND_AlDebugAliasName(index));
 }
 
+// A stream chunk decoded by the main thread itself (snd_streamThread off, or
+// no thread to be had).
+static void SND_AlDebugNoteOwnChunk()
+{
+    ++g_alDebug.ownChunks;
+}
+
+// The decode thread is behind: a stream with one buffer left at most wanted a
+// chunk and none was ready.
+static void SND_AlDebugNoteLateChunk()
+{
+    ++g_alDebug.lateChunks;
+}
+
+static uint32_t AL_StreamThreadChunks();
+
 static void SND_AlDebugNoteStart(const char *kind, int index, const char *aliasName, int rate, int channels, float pitch, float gain, int startMsec)
 {
     ++g_alDebug.starts;
@@ -253,7 +291,10 @@ static void SND_AlDebugFrame()
     }
     else
     {
+        // The first update with snd_alDebug on: the counts start here.
+        memset(&g_alDebug, 0, sizeof(g_alDebug));
         g_alDebug.lastReportTime = now;
+        g_alDebug.threadChunks = AL_StreamThreadChunks();
     }
     g_alDebug.lastUpdateTime = now;
     SND_AlCheckError("sound update");
@@ -261,6 +302,7 @@ static void SND_AlDebugFrame()
     if (now - g_alDebug.lastReportTime < AL_DEBUG_REPORT_MS)
         return;
 
+    const uint32_t threadChunks = AL_StreamThreadChunks();
     int playing[3] = { 0, 0, 0 };
     const int counts[3] = { g_snd.max_2D_channels, g_snd.max_3D_channels, g_snd.max_stream_channels };
     int index = 0;
@@ -278,12 +320,16 @@ static void SND_AlDebugFrame()
     Com_Printf(
         CON_CHANNEL_SOUND,
         "snd_al: last %.1f s: %i starts, %i cut while playing, %i stream underruns, %i OpenAL errors; "
+        "stream chunks decoded: %u by their thread, %i by the main thread, %i late; "
         "playing 2D %i/%i 3D %i/%i stream %i/%i; longest update gap %i ms\n",
         (now - g_alDebug.lastReportTime) / 1000.0f,
         g_alDebug.starts,
         g_alDebug.cuts,
         g_alDebug.underruns,
         g_alDebug.alErrors,
+        (unsigned int)(threadChunks - g_alDebug.threadChunks),
+        g_alDebug.ownChunks,
+        g_alDebug.lateChunks,
         playing[0],
         counts[0],
         playing[1],
@@ -295,6 +341,7 @@ static void SND_AlDebugFrame()
     memset(&g_alDebug, 0, sizeof(g_alDebug));
     g_alDebug.lastUpdateTime = now;
     g_alDebug.lastReportTime = now;
+    g_alDebug.threadChunks = threadChunks;
 }
 
 // Stops a 2D/3D channel's source and frees its buffer. OpenAL refuses to change AL_BUFFER
@@ -350,18 +397,39 @@ struct AlStreamState
     char lengthName[128];
     uint32_t fileBytes;
     bool countsFromStart;
+    // The source is to play as soon as a buffer is queued: the stream was told
+    // to play while its first sound was still being decoded (AL_PlayStream).
+    bool playWhenQueued;
 };
-
-// Per-stream-channel decoder state. Indices 40-52 are the only ones ever used (matching
-// g_snd's stream channel range), sized to 53 anyway for the same direct-index-equals-
-// channel-index convention as AlLocal::source/channelBuffer. Kept file-static here rather
-// than in AlLocal/snd_local.h so that widely-included header doesn't force every file that
-// includes it (e.g. r_cinematic.cpp, which has nothing to do with streaming) to also pull
-// in dr_wav.h/dr_mp3.h.
-static AlStreamState g_streamState[53];
 
 static const int AL_STREAM_BUFFER_COUNT = 4;
 static const int AL_STREAM_BUFFER_FRAMES = 8192;
+
+// The stream channels are indices 40 to 52 (g_snd's stream channel range).
+static const int AL_FIRST_STREAM_FEED = 40;
+static const int AL_STREAM_FEEDS = 13;
+
+// Per-stream-channel decoder state: AL_Stream(index) for channel `index`. One for each
+// stream channel and no more: a decoder's state is 33 KB, and a table with a place for
+// every channel index, as AlLocal::source and channelBuffer have, kept 1.3 MB for the 40
+// channels that never stream. Kept file-static here rather than in AlLocal/snd_local.h so
+// that widely-included header doesn't force every file that includes it (e.g.
+// r_cinematic.cpp, which has nothing to do with streaming) to also pull in
+// dr_wav.h/dr_mp3.h.
+static AlStreamState g_streamStates[AL_STREAM_FEEDS];
+
+static AlStreamState *AL_Stream(int index)
+{
+    return &g_streamStates[index - AL_FIRST_STREAM_FEED];
+}
+
+// The decoders' side of the stream channels (snd_stream_feed.h): a stream's
+// decoder and file are read from its feed's Step alone, on the thread below
+// with snd_streamThread and on the main thread without. A channel's feed is
+// g_streamFeeds[index - AL_FIRST_STREAM_FEED].
+static kisak::snd_stream::Feed g_streamFeeds[AL_STREAM_FEEDS];
+static kisak::snd_stream::FeedThread g_streamThread;
+static bool g_streamThreadFailed;
 
 // The lengths of the MP3 streams that have played, by file.
 //
@@ -611,13 +679,113 @@ static drmp3_bool32 AL_Mp3SeekCallback(void *pUserData, int offset, drmp3_seek_o
     return DRMP3_TRUE;
 }
 
+// A stream's decoder as its feed reads it.
+static uint32_t AL_StreamSourceRead(void *user, int16_t *pcm, uint32_t frames)
+{
+    AlStreamState *stream = (AlStreamState *)user;
+    return (uint32_t)(stream->isMp3
+        ? drmp3_read_pcm_frames_s16(&stream->mp3, frames, pcm)
+        : drwav_read_pcm_frames_s16(&stream->wav, frames, pcm));
+}
+
+static void AL_StreamSourceSeek(void *user, uint64_t frame)
+{
+    AlStreamState *stream = (AlStreamState *)user;
+    if (stream->isMp3)
+        drmp3_seek_to_pcm_frame(&stream->mp3, frame);
+    else
+        drwav_seek_to_pcm_frame(&stream->wav, frame);
+}
+
+// Opens the feed of a stream whose decoder is ready. From here to
+// SND_ReleaseStreamChannel the decoder and the file belong to the feed's Step.
+// The decoder goes to startFrame in the feed's Step, not here. dr_mp3 gets
+// to a frame by decoding all that comes before it, so the feed does that
+// itself for an MP3, in steps; dr_wav seeks.
+static bool AL_OpenStreamFeed(int index, uint64_t startFrame)
+{
+    AlStreamState *stream = AL_Stream(index);
+    kisak::snd_stream::Source source;
+    source.read = AL_StreamSourceRead;
+    source.seek = AL_StreamSourceSeek;
+    source.user = stream;
+    return g_streamFeeds[index - AL_FIRST_STREAM_FEED].Open(
+        source, stream->channels, stream->looping, startFrame, AL_STREAM_BUFFER_FRAMES, stream->isMp3);
+}
+
+static void AL_StreamThreadBegin()
+{
+#ifdef __vita__
+    Vita_NoteThread("sound decode");
+    Vita_QuietWaits();
+    // One step behind the engine's threads: the stream's queue holds 0.7 s
+    // of sound, so decoding waits for a core that has nothing else to do and
+    // takes no time from a frame.
+    const SceUID self = sceKernelGetThreadId();
+    SceKernelThreadInfo info;
+    memset(&info, 0, sizeof(info));
+    info.size = sizeof(info);
+    if (sceKernelGetThreadInfo(self, &info) >= 0)
+        sceKernelChangeThreadPriority(self, info.currentPriority + 1);
+#endif
+}
+
+// Whether streams are decoded ahead by the thread (snd_streamThread). The
+// thread is started by the first call that wants it.
+static bool AL_StreamThreadOn()
+{
+    if (!snd_streamThread || !snd_streamThread->current.enabled)
+        return false;
+    if (!g_streamThread.Running() && !g_streamThreadFailed)
+    {
+        if (g_streamThread.Start(g_streamFeeds, AL_STREAM_FEEDS, AL_StreamThreadBegin))
+        {
+            Com_Printf(CON_CHANNEL_SOUND, "Streamed sounds are decoded on a thread of their own (snd_streamThread)\n");
+        }
+        else
+        {
+            g_streamThreadFailed = true;
+            Com_PrintWarning(CON_CHANNEL_SOUND, "WARNING: no thread for snd_streamThread; the main thread decodes streamed sounds\n");
+        }
+    }
+    return g_streamThread.Running();
+}
+
+static uint32_t AL_StreamThreadChunks()
+{
+    return g_streamThread.Chunks();
+}
+
+static void AL_StopStreamThread()
+{
+    g_streamThread.Stop();
+    g_streamThreadFailed = false;
+}
+
+// Plays a stream's source, or leaves word to play it once sound is queued:
+// with the decode thread a stream's first buffer comes a frame or two after
+// its start, and OpenAL stops a source that is played with nothing queued.
+static void AL_PlayStream(int index)
+{
+    ALint queued = 0;
+    alGetSourcei(alGlob.source[index], AL_BUFFERS_QUEUED, &queued);
+    AL_Stream(index)->playWhenQueued = queued <= 0;
+    if (queued > 0)
+        alSourcePlay(alGlob.source[index]);
+}
+
 // Stops, unqueues/deletes all buffers, closes the decoder and file handle for a stream
 // channel. Safe to call on an already-inactive channel (no-op).
 static void SND_ReleaseStreamChannel(int index)
 {
-    AlStreamState *stream = &g_streamState[index];
+    AlStreamState *stream = AL_Stream(index);
     if (!stream->active)
         return;
+
+    // First of all: once this returns the decode thread is out of the decoder
+    // and the file, and stays out.
+    g_streamFeeds[index - AL_FIRST_STREAM_FEED].Close();
+    stream->playWhenQueued = false;
 
     alSourceStop(alGlob.source[index]);
     ALint queued = 0;
@@ -654,9 +822,10 @@ static void AL_StreamPlayedThrough(AlStreamState *stream)
     }
 }
 
-// Decodes and queues fresh PCM chunks to bring the channel's buffer queue back up to
+// Queues fresh PCM chunks to bring the channel's buffer queue back up to
 // AL_STREAM_BUFFER_COUNT, first unqueuing/deleting any buffers that finished playing.
-// Handles looping by seeking back to the start of the audio data when the decoder runs dry.
+// The chunks come from the stream's feed, which also loops the stream: it seeks back to
+// the start of the audio data when the decoder runs dry.
 // Returns false once the stream has ended (not looping) with nothing left queued - the
 // caller uses that to know when the channel should stop/free itself.
 // With restartIfStarved, a source that played every queued buffer before this refill is
@@ -664,7 +833,7 @@ static void AL_StreamPlayedThrough(AlStreamState *stream)
 // buffers does not restart it, so one long frame used to silence the stream for good.
 static bool SND_FillStreamBuffers(int index, bool restartIfStarved)
 {
-    AlStreamState *stream = &g_streamState[index];
+    AlStreamState *stream = AL_Stream(index);
     if (!stream->active)
         return false;
 
@@ -685,30 +854,40 @@ static bool SND_FillStreamBuffers(int index, bool restartIfStarved)
     ALint queued = 0;
     alGetSourcei(source, AL_BUFFERS_QUEUED, &queued);
 
-    // Reused across calls rather than stack-allocated (32KB) each time; safe because stream
-    // channels are always filled one at a time, never interleaved, on a single thread.
-    static int16_t chunk[AL_STREAM_BUFFER_FRAMES * 2]; // *2 for stereo worst case
+    // The feed decodes; this queues what it has finished. Without the decode
+    // thread the feed's Step runs here, a chunk at a time as chunks are wanted,
+    // which is the decoding this function always did.
+    kisak::snd_stream::Feed &feed = g_streamFeeds[index - AL_FIRST_STREAM_FEED];
+    const bool onThread = AL_StreamThreadOn();
+    bool roomMade = false;
 
-    for (int i = queued; i < AL_STREAM_BUFFER_COUNT; ++i)
+    while (queued < AL_STREAM_BUFFER_COUNT)
     {
-        uint64_t framesRead = stream->isMp3
-            ? drmp3_read_pcm_frames_s16(&stream->mp3, AL_STREAM_BUFFER_FRAMES, chunk)
-            : drwav_read_pcm_frames_s16(&stream->wav, AL_STREAM_BUFFER_FRAMES, chunk);
-
-        if (framesRead == 0)
+        kisak::snd_stream::Chunk chunk;
+        if (!feed.Peek(&chunk))
         {
-            AL_StreamPlayedThrough(stream);
-            if (!stream->looping)
+            if (onThread)
+            {
+                if (queued <= 1 && stateBefore == AL_PLAYING && feed.IsOpen() && !feed.Ended())
+                    SND_AlDebugNoteLateChunk();
                 break;
-            if (stream->isMp3)
-                drmp3_seek_to_pcm_frame(&stream->mp3, 0);
-            else
-                drwav_seek_to_pcm_frame(&stream->wav, 0);
-            framesRead = stream->isMp3
-                ? drmp3_read_pcm_frames_s16(&stream->mp3, AL_STREAM_BUFFER_FRAMES, chunk)
-                : drwav_read_pcm_frames_s16(&stream->wav, AL_STREAM_BUFFER_FRAMES, chunk);
-            if (framesRead == 0)
-                break; // zero-length file - avoid spinning forever
+            }
+            // A stream on the way to its starting frame takes more than one
+            // Step to its first chunk.
+            bool decoded = false;
+            while (!decoded && feed.Step(&decoded))
+            {
+            }
+            if (!decoded || !feed.Peek(&chunk))
+                break;
+            SND_AlDebugNoteOwnChunk();
+        }
+
+        if (chunk.newPass)
+        {
+            // The decoder reached the file's end before this chunk and went
+            // back to its first frame (a looping stream).
+            AL_StreamPlayedThrough(stream);
             stream->framesQueued = 0; // starting a fresh loop pass
             stream->countsFromStart = true;
         }
@@ -716,19 +895,40 @@ static bool SND_FillStreamBuffers(int index, bool restartIfStarved)
         ALuint buffer;
         alGenBuffers(1, &buffer);
         ALenum format = (stream->channels == 2) ? AL_FORMAT_STEREO16 : AL_FORMAT_MONO16;
-        alBufferData(buffer, format, chunk, (ALsizei)(framesRead * stream->channels * sizeof(int16_t)), stream->sampleRate);
+        alBufferData(buffer, format, chunk.pcm, (ALsizei)(chunk.frames * stream->channels * sizeof(int16_t)), stream->sampleRate);
         alSourceQueueBuffers(source, 1, &buffer);
-        stream->framesQueued += framesRead;
+        stream->framesQueued += chunk.frames;
         ++queued;
+        feed.Pop();
+        roomMade = true;
     }
 
-    if (restartIfStarved && stateBefore == AL_STOPPED && queued > 0)
+    const bool ended = !feed.IsOpen() || feed.Ended();
+    if (ended)
+        AL_StreamPlayedThrough(stream);
+    // The thread sleeps when no feed has room. It is woken when one has again,
+    // and when this stream wants a chunk and found none (also the case right
+    // after snd_streamThread is turned on).
+    if (onThread && !ended && (roomMade || queued < AL_STREAM_BUFFER_COUNT))
+        g_streamThread.Wake();
+
+    if (stream->playWhenQueued)
+    {
+        if (queued > 0)
+        {
+            stream->playWhenQueued = false;
+            alSourcePlay(source);
+        }
+    }
+    else if (restartIfStarved && stateBefore == AL_STOPPED && queued > 0)
     {
         SND_AlDebugNoteUnderrun(index);
         alSourcePlay(source);
     }
 
-    return queued > 0;
+    // More is to come while the decoder has not reached the end, also when
+    // nothing is queued at the moment.
+    return queued > 0 || !ended;
 }
 #endif
 
@@ -827,7 +1027,7 @@ void SND_UnpauseStreamChannel(int index, int timeshift)
 
     if (!g_snd.chaninfo[index].startDelay)
     {
-        alSourcePlay(alGlob.source[index]);
+        AL_PlayStream(index);
     }
 
     g_snd.chaninfo[index].soundFileInfo.endtime += timeshift;
@@ -839,7 +1039,7 @@ bool SND_IsStreamChannelFree(int index)
 {
     iassert(index >= SND_FIRST_STREAM_CHANNEL && index < SND_FIRST_STREAM_CHANNEL + g_snd.max_stream_channels);
 
-    if (!g_streamState[index].active)
+    if (!AL_Stream(index)->active)
         return 1;
 
     if (g_snd.chaninfo[index].paused || g_snd.chaninfo[index].startDelay)
@@ -1198,7 +1398,7 @@ int SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int index)
 
     SND_ReleaseStreamChannel(index); // close any previous stream still open on this channel
 
-    AlStreamState *stream = &g_streamState[index];
+    AlStreamState *stream = AL_Stream(index);
     memset(stream, 0, sizeof(*stream));
 
     const uint32_t fileBytes = FS_FOpenFileReadStream(realname, &stream->fsHandle);
@@ -1357,15 +1557,20 @@ int SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int index)
     if (start_msec)
         startAliasInfo->startDelay = 0;
 
+    uint64_t targetFrame = 0;
     if (start_msec > 0 && baserate > 0)
     {
-        uint64_t targetFrame = (uint64_t)start_msec * baserate / 1000;
-        if (stream->isMp3)
-            drmp3_seek_to_pcm_frame(&stream->mp3, targetFrame);
-        else
-            drwav_seek_to_pcm_frame(&stream->wav, targetFrame);
+        targetFrame = (uint64_t)start_msec * baserate / 1000;
         stream->framesQueued = targetFrame; // SND_FillStreamBuffers adds onto this below
         stream->countsFromStart = false;    // a seek past the end would make the count too long
+    }
+
+    // From here the decoder is the feed's, which takes it to targetFrame.
+    if (!AL_OpenStreamFeed(index, targetFrame))
+    {
+        SND_ReleaseStreamChannel(index);
+        Com_PrintError(CON_CHANNEL_SOUND, "Couldn't play stream '%s' from alias '%s' - no memory for its decoded sound\n", realname, startAliasInfo->alias0->aliasName);
+        return SND_SetPlaybackIdNotPlayed(index);
     }
 
     SND_FillStreamBuffers(index, false);
@@ -1373,7 +1578,7 @@ int SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int index)
     if (!startAliasInfo->startDelay
         && (!g_snd.paused || !g_snd.pauseSettings[(startAliasInfo->alias0->flags & 0x3F00) >> 8]))
     {
-        alSourcePlay(source);
+        AL_PlayStream(index);
     }
 
     int totalMsecForChan = total_msec + startAliasInfo->startDelay;
@@ -1850,7 +2055,7 @@ void SND_GetStreamChannelSaveInfo(int index, snd_save_stream_t *info)
 {
     iassert(index >= SND_FIRST_STREAM_CHANNEL && index < SND_FIRST_STREAM_CHANNEL + g_snd.max_stream_channels);
 
-    AlStreamState *stream = &g_streamState[index];
+    AlStreamState *stream = AL_Stream(index);
     int baserate = g_snd.chaninfo[index].soundFileInfo.baserate;
     int totalMsec = g_snd.chaninfo[index].totalMsec;
     if (totalMsec > 0 && baserate > 0)
@@ -2070,7 +2275,7 @@ void SND_UpdateStreamChannel(int i, int frametime)
                 g_snd.chaninfo[i].startDelay = v2;
                 if (!g_snd.chaninfo[i].startDelay)
                 {
-                    alSourcePlay(alGlob.source[i]);
+                    AL_PlayStream(i);
                 }
             }
         }
