@@ -4,6 +4,7 @@
 #include <client/client.h>
 #include <cgame/cg_local.h>
 #include <universal/profile.h>
+#include <linux/sys_perf.h>
 #ifdef KISAK_MP
 #include <client_mp/client_mp.h>
 #elif defined(KISAK_SP)
@@ -174,6 +175,7 @@ void Item_Paint(UiContext *dc, itemDef_s *item)
                     item->window.rect.h = GetExpressionFloat(dc->localClientNum, &item->rectHExp);
                 if (item->window.style == 5)
                 {
+                    SysPerfScope perfScope(SYS_PERF_PROBE_UI_MATERIAL_NAMES);
                     String = (char *)Dvar_GetString(item->dvar);
                     I_strncpyz(lowerCaseName, String, 64);
                     I_strlwr(lowerCaseName);
@@ -181,6 +183,7 @@ void Item_Paint(UiContext *dc, itemDef_s *item)
                 }
                 else if (item->materialExp.numEntries)
                 {
+                    SysPerfScope perfScope(SYS_PERF_PROBE_UI_MATERIAL_NAMES);
                     ExpressionResultString = GetExpressionResultString(dc->localClientNum, &item->materialExp);
                     I_strncpyz(lowerCaseName, ExpressionResultString, 64);
                     I_strlwr(lowerCaseName);
@@ -204,6 +207,9 @@ void Item_Paint(UiContext *dc, itemDef_s *item)
                 }
                 if (item->window.style != 5)
                 {
+                    SysPerfScope perfScope(item->type == 0 || item->type == 1 ? SYS_PERF_PROBE_UI_TEXT_ITEMS
+                                           : item->type == 8 ? SYS_PERF_PROBE_UI_OWNERDRAW_ITEMS
+                                           : SYS_PERF_PROBE_UI_OTHER_ITEMS);
                     switch (item->type)
                     {
                     case 0:

@@ -36,6 +36,12 @@
 // of an open surface seen at an angle gives more than 1 or less, and only the
 // average over slice angles is 1, so clamping each pixel would darken open
 // surfaces seen at an angle. The blur averages it and then clamps it.
+//
+// At half resolution (up.w above 0, KISAK_VK_MODERN_AO_HALF) each output
+// pixel stands for a 2x2 block of the scene and works out one pixel of it,
+// which one moving from frame to frame over the four (up.w - 1); everything
+// else is the same, on the full-resolution depth and normals. The blur then
+// brings it back to full resolution.
 
 layout(set = 0, binding = 0) uniform sampler2D sceneDepth; // nearest, depth aspect
 layout(set = 0, binding = 1) uniform sampler2D normals;    // nearest, the normals buffer
@@ -52,7 +58,7 @@ layout(push_constant) uniform Params
     uint frame;      // moves the noise from frame to frame
     float thickness; // world units a sample's surface is taken to reach behind it
     float grazing;   // |N.V| from which the effect is whole on walls; below it, it fades out
-    vec4 up;         // xyz: world up in view space
+    vec4 up;         // xyz: world up in view space; w: 0 at full resolution, else half, 1 + which pixel of 2x2
 } params;
 
 layout(location = 0) out vec4 outVisibility;
@@ -75,13 +81,25 @@ vec3 ViewAt(vec2 pixelCentre, float depth)
     return view.xyz / view.w;
 }
 
+// acos to within 0.009 radians (Lagarde's fit, as XeGTAO uses), well under a
+// sector of the slice (about pi / 32), for a fraction of acos's cost: the
+// pass takes two for each sample. PC AO run 3: the visibility bitmask, with
+// those two exact acos a sample, made the pass about 55% dearer (0.40 to
+// 0.66 ms on the 2080 Super) than the horizon-only GTAO.
+float FastAcos(float x)
+{
+    const float a = abs(x);
+    const float r = (-0.156583 * a + 0.5 * kPi) * sqrt(max(1.0 - a, 0.0));
+    return x >= 0.0 ? r : kPi - r;
+}
+
 // The slice's cosine-weighted visible measure from the view direction to the
 // angle theta (signed like the horizons), for the projected normal at angle
-// n: the integral of |sin t| cos(t - n) from 0 to theta (GTAO's inner
-// integral; increasing in theta across the hemisphere).
-float Measure(float theta, float n)
+// n, given as (n, cos n, sin n): the integral of |sin t| cos(t - n) from 0 to
+// theta (GTAO's inner integral; increasing in theta across the hemisphere).
+float Measure(float theta, vec3 n)
 {
-    const float v = 0.25 * (-cos(2.0 * theta - n) + cos(n) + 2.0 * theta * sin(n));
+    const float v = 0.25 * (-cos(2.0 * theta - n.x) + n.y + 2.0 * theta * n.z);
     return theta >= 0.0 ? v : -v;
 }
 
@@ -93,7 +111,14 @@ float Noise(vec2 pixel)
 
 void main()
 {
-    const ivec2 pixel = ivec2(gl_FragCoord.xy);
+    ivec2 pixel = ivec2(gl_FragCoord.xy);
+    const int halfMode = int(params.up.w + 0.5);
+    if (halfMode > 0)
+    {
+        const int k = halfMode - 1; // (0, 0), (1, 1), (1, 0), (0, 1)
+        const ivec2 first = ivec2(params.area.xy);
+        pixel = clamp(pixel * 2 + ivec2((k >> 1) ^ (k & 1), k & 1), first, first + ivec2(params.area.zw) - 1);
+    }
     const float depth = texelFetch(sceneDepth, pixel, 0).r;
     const vec4 stored = texelFetch(normals, pixel, 0);
     if (depth >= params.sky || stored.a < 0.9)
@@ -132,10 +157,11 @@ void main()
             continue;
         const float signN = sign(dot(orthoDirection, projectedNormal));
         const float cosN = clamp(dot(projectedNormal, toEye) / projectedLength, -1.0, 1.0);
-        const float n = signN * acos(cosN);
+        const float angleN = signN * FastAcos(cosN);
+        const vec3 n = vec3(angleN, cos(angleN), sin(angleN));
 
         // The hemisphere in this slice, and its measure.
-        const float low = n - 0.5 * kPi, high = n + 0.5 * kPi;
+        const float low = angleN - 0.5 * kPi, high = angleN + 0.5 * kPi;
         const float lowMeasure = Measure(low, n);
         const float total = Measure(high, n) - lowMeasure;
         uint hidden = 0u;
@@ -168,9 +194,9 @@ void main()
                 const vec3 backDelta = front + params.thickness * normalize(front) - here;
                 const float edge = side == 0 ? low : high;
                 const float frontAngle =
-                    mix(sideSign * acos(clamp(dot(delta / distance, toEye), -1.0, 1.0)), edge, fade);
+                    mix(sideSign * FastAcos(clamp(dot(delta / distance, toEye), -1.0, 1.0)), edge, fade);
                 const float backAngle =
-                    mix(sideSign * acos(clamp(dot(normalize(backDelta), toEye), -1.0, 1.0)), edge, fade);
+                    mix(sideSign * FastAcos(clamp(dot(normalize(backDelta), toEye), -1.0, 1.0)), edge, fade);
                 const float from = max(min(frontAngle, backAngle), low);
                 const float to = min(max(frontAngle, backAngle), high);
                 if (to <= from)

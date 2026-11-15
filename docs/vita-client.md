@@ -49,9 +49,10 @@ NEON float outside the vector skinning path and the static culling walk, which
 have to be there and be NEON) and link checks (weak pthread references, the main stack size), and
 uploads the RelWithDebInfo `.vpk`. It also runs the controls' and the sound's
 host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`), the run
-plan's, the GPU heap's, the frame time figures', the GPU progress bookkeeping's
-and the shader translator's (`test_vita_run_plan.py`, `test_vita_gxm_heap.py`,
-`test_vita_frame_time.py`, `test_vita_gpu_progress.py`,
+plan's, the GPU heap's, the frame time figures', the GPU progress bookkeeping's,
+the GPU watch's and the shader translator's (`test_vita_run_plan.py`,
+`test_vita_gxm_heap.py`, `test_vita_frame_time.py`,
+`test_vita_gpu_progress.py`, `test_vita_gpu_watch.py`,
 `test_vita_cg_translate.py`), and the static model cache's size arithmetic
 (`test_static_model_cache_sizes.py`).
 
@@ -954,9 +955,23 @@ What the GXM back end does so far (step 2d):
   phase; with David's settings 86-91 against 68 ms a frame), at the cost of
   4 MB of CDRAM. For comparing, `small-parameter-buffer` gives the old
   8 MB, `big-parameter-buffer` 16 MB (4 MB less for the CDRAM pool, which
-  may not hold every map), and `big-gxm-rings` twice the default rings
-  (3 MB more of main memory).
-  Not run on a console or in Vita3K yet.
+  may not hold every map).
+  sceGxm's ring buffers are 256 KB for draw calls, 2 MB for vertex
+  constants and 1 MB for fragment constants: the first and the last at
+  twice sceGxm's default. A draw that finds a ring full waits inside sceGxm
+  until the GPU has finished a scene, and no line of the log names that
+  wait. Console run BV (2026-11-15, the busy view of `mp_crash`, 1500
+  draws a frame) found it: with the default rings about one timed draw a
+  frame took 5 to 11 ms, in `sceGxmDraw` or where the fragment constants
+  are reserved (`N timed draws took over 2 ms` on the frame time line, 7 to
+  18 in 10 s, and those two steps of a draw's parts at 3.5 to 9.5 us), and
+  with all three rings doubled none did, the two steps cost 2.4 and 0.7 us
+  and the frame was 37.1 against 35.5 ms. The time left is the pacing
+  wait: that view is bound by the GPU at full size. `small-gxm-rings`
+  gives sceGxm's defaults (and the main pool 1 MB less), `big-gxm-rings`
+  twice the default for the vertex constants too (2 MB more of main
+  memory), for comparing. The sizes as they are now have not run on a
+  console yet.
 - **What the CPU pays for GPU memory.** The main pool is memory the CPU
   does not cache (`SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE`), as Sony's
   samples have it, and CDRAM is not cached either. The engine skins
@@ -1227,8 +1242,51 @@ textures. ...`. How to read it:
   line beside it says how busy the processor was.
 
 The sums are plain arithmetic (`gxm_frame_time.h`), tested on the host by
-`scripts/tests/test_vita_frame_time.py`. The line itself has not run on a
-console or in Vita3K yet; in Vita3K its figures will be the emulator's.
+`scripts/tests/test_vita_frame_time.py`. In Vita3K its figures are the
+emulator's.
+
+**What the frame time line cannot say** is how long the GPU works. A CPU
+that waits for the GPU does not always do it in a call the line names: in
+console runs BO, BP and BQ (2026-11-15, the busy view of `mp_crash` at
+37 ms a frame) there was no wait for the GPU and almost no pacing wait,
+yet about one timed draw a frame took 5 to 11 ms, in the step that reserves
+room for the draw's fragment constants (BQ) or in the one that hands the
+draw to sceGxm (BP), and every millisecond saved on the render thread made
+that one draw a millisecond longer. sceGxm keeps a frame's draws and their
+constants in ring buffers that the GPU frees as it finishes scenes, so a
+draw that finds a ring full would wait there for the GPU.
+
+The **GPU watch** measures the GPU itself. With an empty file `gpu-watch` in
+the folder of the compiled programs, or `vita_gxm gpu-watch 1` while the game
+runs, every scene carries two sceGxm notifications, one for the end of its
+vertex job and one for the end of its fragment job, and a thread of the back
+end's (`gpu watch` in the thread table, above the game's threads in
+priority) looks at the notification region every quarter of a millisecond
+and notes when each came. Beside the frame time line the log then says:
+`gxm legacy: gpu watch, last N frames (X ms a frame): the GPU's vertex work
+X ms a frame, its fragment work X ms a frame, in N scenes (longest for one
+scene X and X ms); it finished a frame X ms after the frame's last scene was
+sent (longest X ms); N scenes not watched`. How to read it:
+- **Vertex work** of a scene runs from when the scene was sent, or the
+  vertex job before it ended if that was later, to the end of its vertex
+  job: the GPU running the vertex programs and sorting triangles into
+  tiles. It grows with vertices and draws, not with the size of the picture.
+- **Fragment work** runs from the end of the scene's vertex job, or of the
+  fragment job before it, to the end of its fragment job: the GPU shading
+  pixels. It grows with the size of the picture and the cost of the pixel
+  programs.
+- The two are done by different parts of the GPU and overlap, so their sum
+  is not the GPU's frame. When either is about as long as the frame, the
+  GPU sets the frame's length and that half of it is where to look; when
+  both are well under it, the CPU does.
+- **Finished a frame N ms after** its last scene was sent is how far behind
+  the CPU the GPU runs. Near a whole frame, the CPU is waiting for it
+  somewhere.
+
+The watch is off by default: its thread wakes four thousand times a second.
+Its sums are plain arithmetic (`gxm_gpu_watch.h`), tested on the host by
+`scripts/tests/test_vita_gpu_watch.py`. Not run on a console or in Vita3K
+yet.
 
 The display's own buffers take about 9 MB of CDRAM and 2.6 MB of main memory.
 The parameter buffer, which sceGxm takes from main memory itself, adds 16 MB.

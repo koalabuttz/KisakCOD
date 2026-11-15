@@ -1,4 +1,5 @@
 #include <ui/ui_time.h>
+#include <linux/sys_perf.h>
 #include "ui_cursor.h"
 #include <ui/ui_font_selection.h>
 #ifndef KISAK_SP 
@@ -1289,6 +1290,8 @@ char *UI_SafeTranslateString(const char *reference)
     int v5; // ctr
     char *v6; // r11
     int v7; // r10
+
+    SysPerfScope perfScope(SYS_PERF_PROBE_UI_TRANSLATE);
 
     v1 = reference;
     if (*reference == 21)

@@ -112,6 +112,9 @@ src/universal/com_memory.cpp: hdr = (hunkHeader_t*)(buf - 16);
 # a buffer length
 src/universal/com_sndalias.cpp: Com_sprintf(dest, 0x20u, "%.4f %.4f\n", graph->knots[i][0], graph->knots[i][1]);
 
+# the two "show by dvar" flag bits of an item (the statement holds perf timers)
+src/ui/ui_paint.cpp: if ((item->dvarFlags & 0xC) == 0 || Item_EnableShowViaDvar(item, 4))
+
 # --- Singleplayer (KisakCOD-sp) sources ---
 
 # entity types and entity, spawn and weapon-lock flag bits
