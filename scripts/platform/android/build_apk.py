@@ -17,7 +17,9 @@ Steps, each kept in --work so a second run only redoes what changed:
      Android has no DXVK, so the game draws through the Vulkan back end;
   3. build KisakCOD-mp as libmain.so with KISAK_PLATFORM=android;
   4. stage the four libraries and run Gradle on scripts/platform/android,
-     which writes <work>/KisakCOD-<config>.apk (debug-signed).
+     which writes <work>/KisakCOD-<config>.apk (debug-signed). The libraries
+     keep their debug information for now, so a crash on a device can be
+     read back to source lines (the APK is about 100 MB).
 """
 import argparse
 import os
@@ -81,6 +83,8 @@ def main():
     parser.add_argument('--ndk', default=os.environ.get('ANDROID_NDK_HOME') or os.environ.get('ANDROID_NDK_ROOT'))
     parser.add_argument('--sdk', default=os.environ.get('ANDROID_HOME') or os.environ.get('ANDROID_SDK_ROOT'))
     parser.add_argument('--gradle', default='gradle')
+    parser.add_argument('--gradle-arg', action='append', default=[],
+                        help='one more argument for Gradle (repeatable), such as --init-script for a Maven mirror')
     parser.add_argument('--native-only', action='store_true',
                         help='stop after the native libraries (no Android SDK or Gradle needed)')
     args = parser.parse_args()
@@ -152,8 +156,7 @@ def main():
                     f'-PkisakJniLibs={jni}',
                     f'-PkisakSdlJava={work / "SDL3-source/android-project/app/src/main/java"}',
                     f'-PkisakVersionName={args.config}',
-                    f'-Pandroid.ndkPath={ndk}',
-                    f'--project-cache-dir={work / "gradle-cache"}'],
+                    f'--project-cache-dir={work / "gradle-cache"}', *args.gradle_arg],
                    check=True, env=env)
     apk = ANDROID_DIR / 'app/build/outputs/apk/debug/app-debug.apk'
     final = work / f'KisakCOD-{args.config}.apk'
