@@ -483,6 +483,7 @@ struct Device
     // scale them back (Shader::byteModules, legacy_shader::BuildSpirv).
     bool byteStandIn = false;
     float depthBiasScale = 1.0f;                 // D3DRS_DEPTHBIAS to Vulkan's constant factor
+    bool clearDepthStencil = false;              // KISAK_VK_CLEAR_DEPTH_STENCIL=1 (Clear)
     bool staticCull = false;                     // KISAK_VK_STATIC_CULL=1 (PipelineKey::staticCull)
     float depthSlopeScale = 1.0f;                // KISAK_VK_DEPTH_BIAS on D3DRS_SLOPESCALEDEPTHBIAS
     // depthFormat can be sampled with linear filtering. Without it, depth

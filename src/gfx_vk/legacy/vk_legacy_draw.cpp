@@ -2707,6 +2707,14 @@ void Clear(Device *device_, uint32_t rectCount, const Rect *rects, uint32_t flag
     Device &device = *device_;
     if (!EnsureFrame(device))
         return;
+    // KISAK_VK_CLEAR_DEPTH_STENCIL=1 (test switch): a depth texture (a shadow
+    // map, whose stencil nothing reads) cleared for depth alone has its
+    // stencil cleared with it, so both aspects of the packed D24S8 image are
+    // cleared together (the Retroid's Adreno leaves the near sun shadow map
+    // wrong).
+    if (device.clearDepthStencil && device.depthStencil && (flags & d3d::CLEAR_ZBUFFER)
+        && !device.depthStencil->standalone)
+        flags |= d3d::CLEAR_STENCIL;
     if (ClearAtPassStart(device, rectCount, rects, flags, color, z, stencil))
         return;
     if (!PassMatches(device))

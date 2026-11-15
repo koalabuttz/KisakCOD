@@ -273,6 +273,11 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
         device->staticCull = true;
         Log(*device, "cull mode: baked into each pipeline as well (KISAK_VK_STATIC_CULL)");
     }
+    if (const char *text = std::getenv("KISAK_VK_CLEAR_DEPTH_STENCIL"); text && std::strcmp(text, "1") == 0)
+    {
+        device->clearDepthStencil = true;
+        Log(*device, "depth textures: a depth clear clears stencil too (KISAK_VK_CLEAR_DEPTH_STENCIL)");
+    }
     if (const char *text = std::getenv("KISAK_VK_DEPTH_BIAS"); text && *text)
     {
         char *end = nullptr;
