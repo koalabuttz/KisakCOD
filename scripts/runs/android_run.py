@@ -35,7 +35,10 @@ One run is, in order:
    client's "run: the menu is up" and "run: the map is up" lines), and stop
    when the game quits, crashes, or runs out of time. Then pull the
    screenshots the game took (``screenshot <name>`` in a timed command writes
-   ``home/main/screenshots/<name>.tga`` in the app's folder).
+   ``home/main/screenshots/<name>.tga`` in the app's folder). Each host step
+   runs at its own moment, whatever the others wait for. A crash after the
+   game said it was quitting is ``crash_at_quit``, not ``crash``: the launch
+   did everything it asked first.
 
 The launch's timed commands (``at_menu``, ``at_map``, ``variants``,
 ``quit_after_map``) are pc_run.py's, with the same checks: the client reads
@@ -784,9 +787,17 @@ def run_launch(recipe, adb, launch, out):
     while True:
         take(logcat.take())
         now_time = time.time()
-        while steps and steps[0]["after"] in events and \
-                now_time >= events[steps[0]["after"]] + steps[0]["at"]:
-            step = steps.pop(0)
+        # Every step whose moment has come, earliest first. A step waits only
+        # for its own moment: a late "start" step must not hold back a
+        # "map" step that is due sooner (item 332b: start +90 held map +15
+        # and +35 until the launch ended).
+        while True:
+            due = [step for step in steps if step["after"] in events
+                   and now_time >= events[step["after"]] + step["at"]]
+            if not due:
+                break
+            step = min(due, key=lambda step: events[step["after"]] + step["at"])
+            steps.remove(step)
             done_steps.append(run_host_step(adb, step, folder, events, now_time))
             now_time = time.time()
         if now_time - last_pid_check >= PID_EVERY:
@@ -798,7 +809,10 @@ def run_launch(recipe, adb, launch, out):
             elif pids_seen or now_time - started > NEVER_STARTED:
                 gone_at = gone_at or now_time
         if crashes:
-            status = "crash"
+            # A crash once the game had said it was quitting still is one,
+            # but everything the launch asked for has run (item 332b: SIGABRT
+            # in an hwui thread after "window detached").
+            status = "crash_at_quit" if "quit" in events else "crash"
         elif gone_at and now_time - gone_at >= 1:
             status = "ok" if "quit" in events else "died"
         elif "quit" in events and now_time - events["quit"] >= QUIT_GRACE:
