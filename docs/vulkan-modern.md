@@ -1358,7 +1358,21 @@ lie, counted in triangles (at least 64), makes the plane, logged as `modern:
 planar reflections on <map> at height H (water, N triangles)`. On mp_bog that
 is -20, where 41 of the swamp's 53 surfaces lie (PC water run 2); counted by
 the area of their bounds instead, a 200-triangle sheet at -26 around the
-whole map won, and the reflections sat 6 units low.
+whole map won, and the reflections sat 6 units low. Every other height with
+at least 64 triangles of flat water is a plane too (up to eight), logged as
+`... also at height H (water, N triangles)`: on mp_bog the western swamp at
+-36 and the sheet at -26. Each frame the view takes one of them, from what
+the main view just found visible (its cells, portals and frustum: the
+world's `surfaceVisData[0]`): the plane whose visible water surfaces weigh
+most, each by its triangles, half as much at 1024 units away, almost nothing
+when it is wider than 4096 units both ways (the sheet, visible from nearly
+everywhere), and only planes the camera is above. The plane last taken stays
+while it weighs at least half the best, so the view does not hop between
+two. When no water is visible, no planar view is drawn at all (it cost
+mp_bog 1.9 ms a frame wherever the camera looked, PC water run 3). The frame
+after a change of plane, or after frames without the view, reads the image
+last drawn, through its own matrices: the world in it lines up, and water
+more than 16 units off its plane reads the probe for that frame.
 
 **The view.** After each main view (`R_RenderScene` from the game), while
 the camera is above the plane, `R_ModernPlanarScene` draws the scene again:
@@ -1481,15 +1495,19 @@ read (also with `KISAK_VK_MODERN_WATER=0`). With
 (the floor's halves show the same colours, unweighted), checks the two lines, and that a full
 run draws and reads no planar view unless asked.
 
-**Next.** The right height for Bog's swamp, more than one plane a map, and
-planes found on their own for floors. `KISAK_VK_MODERN_WATER_LOG=1` names how
-water is drawn: once per map, every world surface whose material has a water
-map, by material, with their bounds, then each surface's bounds (at most
-96); and once per material and pass of water that draws, its technique,
-shaders, arguments, blend state, custom samplers, whether it is among the
-lit passes and whether our water shader can draw it, the material's
-constants and the water simulation's settings (at most 32). It works on any
-path.
+**Next.** Water on the other maps that have it, and planes found on their
+own for floors. `KISAK_VK_MODERN_WATER_LOG=1` names how water is drawn: as a
+map's water is looked at for the planar view (with it wanted), each material
+with a water map, its surfaces, triangles (flat ones), heights and lit pixel
+shader, and whether our water shader can draw it (`modern water: map ...`),
+then each change of the plane the view takes (`modern water: planar view on
+the water at height H`, or `no water in view`; at most 64); once per map that
+draws water, every world surface whose material has a water map, by
+material, with their bounds, then each surface's bounds (at most 96); and
+once per material and pass of water that draws, its technique, shaders,
+arguments, blend state, custom samplers, whether it is among the lit passes
+and whether our water shader can draw it, the material's constants and the
+water simulation's settings (at most 32). It works on any path.
 
 ## Next
 
