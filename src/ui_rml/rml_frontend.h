@@ -37,6 +37,9 @@ void RmlFrontend_PaintMenus(UiContext *dc);
 bool RmlFrontend_KeyEvent(int key, int down);
 bool RmlFrontend_MouseEvent(int x, int y);
 bool RmlFrontend_ScreenOpen();
+// The stock cursor stays hidden over an open screen until the mouse moves
+// (always on Android, where the pointer is a finger).
+bool RmlFrontend_HidesCursor();
 
 // Releases every RmlUi document and texture (UI_Shutdown: the menus and the
 // materials they point at are about to go). RmlUi itself stays up, and a
