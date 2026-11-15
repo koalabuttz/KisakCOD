@@ -344,8 +344,11 @@ void Screens::BuildRow(Rml::Element *element)
     AddText(document, row->right, ">");
     if (row->kind == Row::Kind::Slider)
     {
+        // The bar is the touch target; the track inside it is the thin line
+        // the fill runs along.
         row->bar = AddChild(document, element, "span", "bar");
-        row->fill = AddChild(document, row->bar, "span", "fill");
+        Rml::Element *track = AddChild(document, row->bar, "span", "track");
+        row->fill = AddChild(document, track, "span", "fill");
     }
     Rml::Element *mark = AddChild(document, element, "span", "mark");
     AddText(document, mark, element->GetAttribute<Rml::String>("pending-label", "Restart"));

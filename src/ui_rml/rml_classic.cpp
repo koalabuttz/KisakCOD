@@ -248,7 +248,7 @@ public:
             }
             if (!slot->appliedText.empty())
                 line += " text=\"" + slot->appliedText.substr(0, 24) + "\"";
-            Com_Printf(CON_CHANNEL_UI, "  %3d %s%s:%s\n", (int)i, slot->origin ? slot->origin : "?",
+            Com_Printf(CON_CHANNEL_UI, "RmlUi slot %3d %s%s:%s\n", (int)i, slot->origin ? slot->origin : "?",
                        slot->stock ? " (stock painter)" : "", line.c_str());
         }
     }

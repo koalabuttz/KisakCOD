@@ -29,6 +29,7 @@ bool started;
 bool failed;
 Rml::Context *context;
 kisak_rml::FrameStats lastFrame;
+bool lastFrameScreen;
 
 // The screens' settings are dvars, set the way the console sets them.
 class DvarSettings final : public kisak_rml::SettingsStore
@@ -115,6 +116,9 @@ void UI_RmlStats_f()
     Com_Printf(CON_CHANNEL_UI,
                "RmlUi classic mode, last frame: %d slots (%d drawn by the stock painter), %d draw commands, %d vertices, %d indices\n",
                lastFrame.slots, lastFrame.fallbacks, lastFrame.commands, lastFrame.vertices, lastFrame.indices);
+    Com_Printf(CON_CHANNEL_UI, "RmlUi last frame: screen %s, %d untextured draw commands (white material %s), %d textured\n",
+               lastFrameScreen ? screens.Name().c_str() : "none", lastFrame.untextured,
+               lastFrame.white ? lastFrame.white : "missing", lastFrame.commands - lastFrame.untextured);
     // ui_rmlStats 1 also lists the slots: the window that made each, and
     // what it set.
     if (Cmd_Argc() > 1 && atoi(Cmd_Argv(1)) != 0)
@@ -213,10 +217,10 @@ void RmlFrontend_PaintMenus(UiContext *dc)
     if ((classic || screen) && Start())
         target = ContextFor(&scrPlaceView[dc->localClientNum]);
 
+    if (target)
+        kisak_rml::Stats() = {};
     if (classic && target)
     {
-        kisak_rml::FrameStats &stats = kisak_rml::Stats();
-        stats = {};
         kisak_rml::ClassicPaint(dc, target);
     }
     else
@@ -231,8 +235,8 @@ void RmlFrontend_PaintMenus(UiContext *dc)
     screens.Refresh();
     target->Update();
     target->Render();
-    if (classic)
-        lastFrame = kisak_rml::Stats();
+    lastFrame = kisak_rml::Stats();
+    lastFrameScreen = screen;
 }
 
 bool RmlFrontend_KeyEvent(int key, int down)
@@ -281,4 +285,5 @@ void RmlFrontend_Shutdown()
     // about to unload: drop RmlUi's handles to both.
     Rml::ReleaseTextures();
     Rml::ReleaseFontResources();
+    kisak_rml::RenderForget();
 }
