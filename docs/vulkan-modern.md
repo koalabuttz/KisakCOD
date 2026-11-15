@@ -1393,6 +1393,14 @@ scenes read back in linear light to capture reflection probes (M faces
 taken)`. The game's colour correction of each probe (a file named in the
 map's probe lump, which a fast file does not keep) is not applied.
 
+Two switches help to see what the new probes hold:
+`KISAK_VK_MODERN_PROBES_DUMP=1` writes each probe's first level as stored
+and as drawn again into the game's folder (`modern_probe_<map>_<n>_stock.ppm`
+and `_new.ppm`: the six faces side by side, +X, -X, +Y, -Y, +Z, -Z, in
+display values, and below them the same at a quarter of the light), and
+`KISAK_VK_MODERN_PROBES_AT_PLAY=1` draws them after the first frames of play
+instead of behind the loading screen, once the map's effects have started.
+
 **Checks:** the D3D9 check's `modern_probe_capture` scene, with
 `KISAK_VK_MODERN_PROBES_CAPTURE=1`, draws a scene in linear light (a clear
 and an opaque quad) while capturing: two rectangles read back come back as

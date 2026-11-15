@@ -815,18 +815,94 @@ static bool R_ModernProbeMeans(IDirect3DCubeTexture9 *cube, int edge, const floa
     return true;
 }
 
-static bool R_ModernWriteProbe(IDirect3DCubeTexture9 *cube, int edge, const float *light, float scale)
+// KISAK_VK_MODERN_PROBES_DUMP=1: each probe's first level, as stored and as
+// drawn again, is written to the game's folder as a picture
+// (modern_probe_<map>_<n>_stock.ppm and _new.ppm): the six faces side by side
+// (+X, -X, +Y, -Y, +Z, -Z), in display values, light above white clipped, and
+// below them the same at a quarter of the light, so what is above white shows
+// too.
+static bool R_ModernProbeDumpOn()
 {
+    static const bool on = [] {
+        const char *text = getenv("KISAK_VK_MODERN_PROBES_DUMP");
+        return text && *text && *text != '0';
+    }();
+    return on;
+}
+
+static uint8_t R_ModernDumpChannel(float light)
+{
+    const float v = R_ModernEncodeSrgb(light);
+    return (uint8_t)(v >= 1.0f ? 255 : v <= 0.0f ? 0 : (int)(v * 255.0f + 0.5f));
+}
+
+static void R_ModernDumpProbe(uint32_t index, int edge, const float *light, const char *which)
+{
+    const char *name = rgp.world && rgp.world->name ? rgp.world->name : "map";
+    const char *slash = strrchr(name, '/');
+    name = slash ? slash + 1 : name;
+    char base[64];
+    I_strncpyz(base, name, sizeof(base));
+    if (char *dot = strchr(base, '.'))
+        *dot = 0;
+    char path[128];
+    Com_sprintf(path, sizeof(path), "modern_probe_%s_%02u_%s.ppm", base, index, which);
+    FILE *file = fopen(path, "wb");
+    if (!file)
+    {
+        Com_Printf(CON_CHANNEL_GFX, "modern: could not write %s\n", path);
+        return;
+    }
+    const int width = 6 * edge;
+    fprintf(file, "P6\n%d %d\n255\n", width, 2 * edge);
+    uint8_t *row = (uint8_t *)Z_Malloc(3 * width, "R_ModernDumpProbe", 0);
+    for (int half = 0; half < 2; ++half)
+    {
+        const float scale = half ? 0.25f : 1.0f;
+        for (int y = 0; y < edge; ++y)
+        {
+            for (int face = 0; face < 6; ++face)
+                for (int x = 0; x < edge; ++x)
+                    for (int c = 0; c < 3; ++c)
+                        row[3 * (face * edge + x) + c] =
+                            R_ModernDumpChannel(scale * light[3 * ((face * edge + y) * edge + x) + c]);
+            fwrite(row, 1, 3 * width, file);
+        }
+    }
+    Z_Free(row, 0);
+    fclose(file);
+    Com_Printf(CON_CHANNEL_GFX, "modern: wrote %s\n", path);
+}
+
+static bool R_ModernWriteProbe(IDirect3DCubeTexture9 *cube, uint32_t index, int edge, const float *light,
+                               float scale)
+{
+    float *dump = R_ModernProbeDumpOn()
+                      ? (float *)Z_Malloc(sizeof(float) * 3 * 6 * edge * edge, "R_ModernWriteProbe", 0)
+                      : nullptr;
     for (int face = 0; face < 6; ++face)
     {
         D3DLOCKED_RECT locked;
         if (FAILED(cube->LockRect((D3DCUBEMAP_FACES)face, 0, &locked, nullptr, 0)))
+        {
+            if (dump)
+                Z_Free(dump, 0);
             return false;
+        }
         for (int y = 0; y < edge; ++y)
         {
             uint8_t *row = (uint8_t *)locked.pBits + y * locked.Pitch;
             for (int x = 0; x < edge; ++x)
             {
+                if (dump)
+                {
+                    // The stored texel's light, before it is written over.
+                    const uint8_t *texel = &row[4 * x];
+                    const float texelScale = (float)texel[3] / 255.0f * 4.0f;
+                    for (int c = 0; c < 3; ++c)
+                        dump[3 * ((face * edge + y) * edge + x) + c] =
+                            R_ModernDecodeSrgb((float)texel[2 - c] / 255.0f * texelScale);
+                }
                 const float *in = &light[3 * ((face * edge + y) * edge + x)];
                 const float scaled[3] = {in[0] * scale, in[1] * scale, in[2] * scale};
                 R_ModernStoreProbeTexel(scaled, &row[4 * x]);
@@ -834,12 +910,29 @@ static bool R_ModernWriteProbe(IDirect3DCubeTexture9 *cube, int edge, const floa
         }
         cube->UnlockRect((D3DCUBEMAP_FACES)face, 0);
     }
+    if (dump)
+    {
+        R_ModernDumpProbe(index, edge, dump, "stock");
+        for (int i = 0; i < 3 * 6 * edge * edge; ++i)
+            dump[i] = light[i] * scale;
+        R_ModernDumpProbe(index, edge, dump, "new");
+        Z_Free(dump, 0);
+    }
     return true;
 }
 
 void R_ModernCaptureProbes(void (*overlay)())
 {
     if (!s_modernProbesPending || !rgp.world || !rg.registered || r_norefresh->current.enabled)
+        return;
+    // KISAK_VK_MODERN_PROBES_AT_PLAY=1 waits for play instead of the loading
+    // screen (the effects of the map, such as its lamps' glows, have started
+    // by then), to compare the two.
+    static const bool atPlay = [] {
+        const char *text = getenv("KISAK_VK_MODERN_PROBES_AT_PLAY");
+        return text && *text && *text != '0';
+    }();
+    if (overlay && atPlay)
         return;
     s_modernProbesPending = false;
     const GfxModernHooks *hooks = R_ModernHooks();
@@ -920,7 +1013,7 @@ void R_ModernCaptureProbes(void (*overlay)())
                                                  : scale;
         const GfxReflectionProbe &probe = rgp.world->reflectionProbes[kept.index];
         IDirect3DCubeTexture9 *cube = probe.reflectionImage->texture.cubemap;
-        if (R_ModernWriteProbe(cube, kept.edge, kept.light, scale))
+        if (R_ModernWriteProbe(cube, kept.index, kept.edge, kept.light, scale))
         {
             hooks->reflectionProbe(hooks->user, dx.device, cube);
             ++written;
