@@ -440,6 +440,32 @@ if(KISAK_LINUX_GAMEPAD)
     message(STATUS "KisakCOD-mp: game controller support on")
 endif()
 target_link_libraries(KisakCOD-mp-own PRIVATE kisak_linux_native_d3d9 SDL3::SDL3)
+# The RmlUi menu front-end (KISAK_RMLUI, scripts/extern/rmlui.cmake): its own
+# units, and KISAK_RMLUI on the one stock unit that calls them, so turning it
+# on rebuilds only that unit.
+if(KISAK_RMLUI)
+    include(${SCRIPTS_DIR}/extern/rmlui.cmake)
+    set_property(SOURCE "${SRC_DIR}/ui_mp/ui_main_mp.cpp" TARGET_DIRECTORY KisakCOD-mp-standin
+        APPEND PROPERTY COMPILE_DEFINITIONS KISAK_RMLUI)
+    add_library(KisakCOD-mp-rmlui OBJECT ${KISAK_RMLUI_SOURCES})
+    target_compile_features(KisakCOD-mp-rmlui PRIVATE cxx_std_20)
+    target_compile_definitions(KisakCOD-mp-rmlui PRIVATE ${KISAK_MP_CLIENT_DEFINITIONS} KISAK_RMLUI)
+    target_compile_options(KisakCOD-mp-rmlui PRIVATE ${KISAK_MP_CLIENT_OPTIONS})
+    target_include_directories(KisakCOD-mp-rmlui PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
+    target_link_libraries(KisakCOD-mp-rmlui PRIVATE RmlUi::Core)
+    add_dependencies(KisakCOD-mp-rmlui update_build_number)
+    # Asset-free test of the font engine and render interface, with stand-ins
+    # for the engine calls they make (tests/rmlui/rmlui_frontend_test.cpp).
+    add_executable(KisakCOD-rmlui-test
+        "${TESTS_DIR}/rmlui/rmlui_frontend_test.cpp"
+        "${SRC_DIR}/ui_rml/rml_font.cpp"
+        "${SRC_DIR}/ui_rml/rml_render.cpp")
+    target_compile_features(KisakCOD-rmlui-test PRIVATE cxx_std_20)
+    target_compile_definitions(KisakCOD-rmlui-test PRIVATE ${KISAK_MP_CLIENT_DEFINITIONS} KISAK_RMLUI)
+    target_compile_options(KisakCOD-rmlui-test PRIVATE ${KISAK_MP_CLIENT_OPTIONS})
+    target_include_directories(KisakCOD-rmlui-test PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
+    target_link_libraries(KisakCOD-rmlui-test PRIVATE RmlUi::Core)
+endif()
 
 # Bundled C libraries, with the dedicated target's rules.
 set(mp_client_c_sources "")
@@ -454,7 +480,8 @@ set(kisak_mp_client_objects
     $<TARGET_OBJECTS:KisakCOD-mp-native>
     $<TARGET_OBJECTS:KisakCOD-mp-standin>
     $<TARGET_OBJECTS:KisakCOD-mp-own>
-    $<$<BOOL:${KISAK_LINUX_CINEMATICS}>:$<TARGET_OBJECTS:KisakCOD-mp-cinematic>>)
+    $<$<BOOL:${KISAK_LINUX_CINEMATICS}>:$<TARGET_OBJECTS:KisakCOD-mp-cinematic>>
+    $<$<BOOL:${KISAK_RMLUI}>:$<TARGET_OBJECTS:KisakCOD-mp-rmlui>>)
 if(KISAK_PLATFORM STREQUAL "android")
     # An Android app's code is a shared library its Java activity loads: SDL3's
     # activity loads libSDL3.so, then libmain.so, and calls SDL_main (the
@@ -511,6 +538,9 @@ if(KISAK_LINUX_HTTP_DOWNLOADS)
 endif()
 if(KISAK_LINUX_TRACY)
     target_link_libraries(KisakCOD-mp PRIVATE TracyClient)
+endif()
+if(KISAK_RMLUI)
+    target_link_libraries(KisakCOD-mp PRIVATE RmlUi::Core)
 endif()
 
 # The game window's asset-free test, on SDL's dummy video driver. The Win32 layer

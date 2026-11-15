@@ -74,6 +74,7 @@ void(*const RB_RenderCommandTable[RC_COUNT])(GfxRenderCommandExecState *) =
   &RB_DrawEditorSkinnedCachedCmd,   // RC_DRAW_EDITOR_SKINNEDCACHED = 0x17 (r_ed_scene.cpp)
   &RB_SetCustomConstantCmd,         // RC_SET_CUSTOM_CONSTANT = 0x18 (#26 layer C2 sun preview)
 #endif
+  &RB_DrawUiTrianglesCmd,           // RC_DRAW_UI_TRIANGLES (port addition, last in both lists)
 }; // idb (KISAK_RADIANT extends with RC_BEGIN_VIEW + RC_DRAW_EDITOR_SKINNEDCACHED + RC_SET_CUSTOM_CONSTANT; RC_COUNT sizes the table)
 
 GfxBackEndData *backEndData;
@@ -1629,6 +1630,50 @@ void RB_DrawTriangles_Internal(
     tess.indexCount += indexCount;
     tess.vertexCount += vertexCount;
     RB_EndTessSurface();
+}
+
+// RC_DRAW_UI_TRIANGLES: the RmlUi front-end's meshes (R_AddCmdDrawUiTriangles).
+// Drawn like a stretch pic (TECHNIQUE_UNLIT in the 2D pass), so every back end
+// that draws the stock menus draws these too. A scissored mesh ends the current
+// batch before and after itself, so the rectangle covers only its own triangles.
+void RB_DrawUiTrianglesCmd(GfxRenderCommandExecState *execState)
+{
+    const GfxCmdDrawUiTriangles *cmd = (const GfxCmdDrawUiTriangles *)execState->cmd;
+    const GfxUiVertex *verts = (const GfxUiVertex *)(cmd + 1);
+    const uint16_t *indices = (const uint16_t *)(verts + cmd->vertexCount);
+
+    iassert(gfxCmdBufSourceState.viewMode == VIEW_MODE_2D);
+
+    if (cmd->scissorEnabled)
+    {
+        if (tess.indexCount)
+            RB_EndTessSurface();
+        tagRECT rect;
+        rect.left = cmd->scissor[0];
+        rect.top = cmd->scissor[1];
+        rect.right = cmd->scissor[2];
+        rect.bottom = cmd->scissor[3];
+        R_HW_EnableScissor(gfxCmdBufState.prim.device, &rect);
+    }
+
+    RB_SetTessTechnique(cmd->material, TECHNIQUE_UNLIT);
+    R_TrackPrims(&gfxCmdBufState, GFX_PRIM_STATS_HUD);
+    RB_CheckTessOverflow(cmd->vertexCount, cmd->indexCount);
+    const uint16_t base = (uint16_t)tess.vertexCount;
+    for (int i = 0; i < cmd->indexCount; ++i)
+        tess.indices[tess.indexCount + i] = (uint16_t)(base + indices[i]);
+    for (int i = 0; i < cmd->vertexCount; ++i)
+        R_SetVertex2d(&tess.verts[tess.vertexCount + i], verts[i].x, verts[i].y, verts[i].s, verts[i].t, verts[i].color);
+    tess.vertexCount += cmd->vertexCount;
+    tess.indexCount += cmd->indexCount;
+
+    if (cmd->scissorEnabled)
+    {
+        RB_EndTessSurface();
+        R_HW_DisableScissor(gfxCmdBufState.prim.device);
+    }
+
+    execState->cmd = (char *)execState->cmd + cmd->header.byteCount;
 }
 
 void RB_DrawProfileCmd(GfxRenderCommandExecState *execState)
