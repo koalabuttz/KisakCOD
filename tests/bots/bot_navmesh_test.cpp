@@ -253,6 +253,40 @@ static void Drops()
     }
 }
 
+static void Storeys()
+{
+    std::printf("\n== a goal under a low ceiling ==\n");
+    // A floor, and over its far half an upper floor whose top is 100 units
+    // up (84 of clearance under it), reached by nothing but its edge.
+    kb::NavGeometry g;
+    Floor(g, 0, 0, 1600, 800);
+    Box(g, 800, 0, 84, 1600, 800, 100);
+    Built b;
+    Build(g, b);
+    Check(b.ok, "the two storeys build");
+    float start[3] = {300, 400, 0};
+    // A shot heard at a player's eye, 60 up, under the upper floor: its top
+    // is closer than the shooter's own floor.
+    float eye[3] = {1200, 400, 60};
+    float pts[32][3];
+    bool complete = false;
+    float onMesh[3] = {};
+    int n = b.mesh.FindPath(start, eye, pts, 32, &complete, onMesh);
+    Check(n >= 2 && std::fabs(pts[n - 1][2]) < 6.0f && complete && std::fabs(onMesh[2]) < 6.0f,
+          "the way to an eye under the upper floor ends on the floor under it, not upstairs");
+    float chest[3] = {1200, 400, 42};
+    n = b.mesh.FindPath(start, chest, pts, 32, &complete);
+    Check(n >= 2 && std::fabs(pts[n - 1][2]) < 6.0f && complete, "and so does the way to a chest");
+    float top[3] = {1300, 400, 100};
+    n = b.mesh.FindPath(top, eye, pts, 32, &complete);
+    Check(n >= 2 && std::fabs(pts[n - 1][2]) < 6.0f && complete,
+          "from upstairs, the way to a player right below drops off the edge and comes back under");
+    float upstairs[3] = {1200, 400, 160};
+    n = b.mesh.FindPath(start, upstairs, pts, 32, &complete, onMesh);
+    Check(n >= 2 && !complete && std::fabs(onMesh[2] - 100.0f) < 6.0f,
+          "an eye upstairs is upstairs, and from below no way reaches it");
+}
+
 static void Facing()
 {
     std::printf("\n== which side is the floor ==\n");
@@ -408,6 +442,7 @@ int main()
     Doors();
     Heights();
     Drops();
+    Storeys();
     Facing();
     Islands();
     Nearby();

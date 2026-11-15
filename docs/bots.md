@@ -152,8 +152,8 @@ hunt goes to where it last saw or heard them.
   nearest the team first, so a team takes the flags on its side of the map
   before it contests the others. A roaming bot prefers places its teammates
   are not at or going to, so a team spreads out rather than moving as a
-  pack. A lead whose way ends above or below it (a sound on a floor the
-  way does not reach) is left alone for 10 s rather than stood under, and a
+  pack. A lead whose way stops short of its floor, above or below it (a
+  sound on a floor the way does not reach) is left alone for 10 s rather than stood under, and a
   bot looks no more than 35 degrees up or down toward a sound or an enemy
   it lost from sight. A lead (a sound, an enemy lost from sight) is chased by one or two
   bots: one more goes only for an enemy it saw itself, and the rest look
@@ -309,10 +309,16 @@ triangles. The agent is a standing player: 15 units across from the middle, 70
 tall, steps up 18 units and walks slopes up to 45 degrees. Cells are 6 units
 across and 3 high, in tiles of 64 cells.
 
+A way's goal is the floor under the point asked for, up to 96 units down,
+before anything above it: a lead may be a player's feet, chest (seen) or eye
+(a shot heard), and under a low ceiling an eye is closer to the floor upstairs
+than to its own. On Chinatown, PC bot brain runs 19 and 20 sent bots upstairs
+over shots heard 93 and 109 units below them; there they stood over the
+shooter staring at the floor.
+
 Recast links only floors a player walks between, so a floor reached by
-stepping off a ledge (a balcony over a street, a landing over a room) was an
-island: on Chinatown, bots upstairs hunted enemies 80 to 110 units below them
-and found no way down. The build now adds drop-downs, one-way links from the
+stepping off a ledge (a balcony over a street, a landing over a room) is an
+island. The build adds drop-downs, one-way links from the
 edge of a floor to a floor 21 to 116 units below it (fall damage starts at
 128): along every edge of the mesh with nothing beyond it, every 64 units, it
 looks 44, 60 and 76 units out for a floor below, and keeps the link only when

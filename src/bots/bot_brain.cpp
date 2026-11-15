@@ -77,6 +77,8 @@ struct BotSlot
     float path[kMaxCorners][3];
     int pathCount = 0;
     int pathIndex = 0;
+    bool pathComplete = false;   // the way reaches the goal's floor
+    float goalOnMesh[3] = {0.0f, 0.0f, 0.0f};
     float bestDistance = 0.0f;
     int progressTime = 0;
     int nextPlanTime = 0;
@@ -303,7 +305,7 @@ bool PlanWalk(BotSlot &bot, const kb::NavMesh &nav, const float *origin, const f
     bot.pathIndex = 0;
     bot.preAimKnown = false;
     bot.nextPreAim = 0;
-    const int count = nav.FindPath(origin, goal, bot.path, BotSlot::kMaxCorners);
+    const int count = nav.FindPath(origin, goal, bot.path, BotSlot::kMaxCorners, &bot.pathComplete, bot.goalOnMesh);
     if (count < 2)
         return false;
     bot.pathCount = count;
@@ -1443,14 +1445,15 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
         bot.hasGoal = true;
         bot.goalFor = intent;
         const bool walkable = PlanWalk(bot, *nav, origin, bot.goal);
-        // A hunt whose way ends short of the lead, above or below it (on
-        // another floor the way does not reach): no way there. Standing under
-        // a sound and staring at the ceiling is what a player does not do.
+        // A hunt whose way stops short of the lead's floor, above or below
+        // it (on another floor the way does not reach): no way there.
+        // Standing under a sound and staring at the ceiling is what a player
+        // does not do.
         if (walkable && intent == kb::Intent::Hunt)
         {
             const float *end = bot.path[bot.pathCount - 1];
-            const float floorAt = bot.goal[2] - kb::kHeadHeight;
-            if (std::fabs(end[2] - floorAt) > 80.0f && Distance2D(end, bot.goal) < 400.0f)
+            const float floorAt = bot.goalOnMesh[2];
+            if (!bot.pathComplete && std::fabs(end[2] - floorAt) > 48.0f && Distance2D(end, bot.goal) < 400.0f)
             {
                 std::memcpy(bot.noWayTo, bot.goal, sizeof(bot.noWayTo));
                 bot.noWayUntil = svs.time + 10000;
@@ -1458,8 +1461,11 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
                 bot.pathIndex = 0;
                 bot.hasGoal = false;
                 if (LogOn())
-                    Com_Printf(CON_CHANNEL_SERVER, "bots: %d finds no way to a lead %.0f units %s\n", clientNum,
-                               std::fabs(end[2] - floorAt), end[2] < floorAt ? "above" : "below");
+                    Com_Printf(CON_CHANNEL_SERVER,
+                               "bots: %d finds no way to a lead %.0f units %s (bot at %.0f %.0f %.0f, lead %.0f %.0f "
+                               "%.0f, way ends %.0f %.0f %.0f)\n",
+                               clientNum, std::fabs(end[2] - floorAt), end[2] < floorAt ? "above" : "below", origin[0],
+                               origin[1], origin[2], bot.goal[0], bot.goal[1], bot.goal[2], end[0], end[1], end[2]);
                 return;
             }
         }

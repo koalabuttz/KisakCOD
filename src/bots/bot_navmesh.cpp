@@ -981,8 +981,15 @@ bool NavMesh::Nearest(const float point[3], float reach, float out[3]) const
     return true;
 }
 
-int NavMesh::FindPath(const float start[3], const float end[3], float (*points)[3], int maxPoints) const
+int NavMesh::FindPath(const float start[3],
+                      const float end[3],
+                      float (*points)[3],
+                      int maxPoints,
+                      bool *complete,
+                      float goalOnMesh[3]) const
 {
+    if (complete)
+        *complete = false;
     if (!m_query || maxPoints < 2)
         return 0;
     float s[3];
@@ -996,8 +1003,17 @@ int NavMesh::FindPath(const float start[3], const float end[3], float (*points)[
     float eOn[3];
     if (dtStatusFailed(m_query->findNearestPoly(s, extents, m_filter, &startRef, sOn)) || !startRef)
         return 0;
-    if (dtStatusFailed(m_query->findNearestPoly(e, extents, m_filter, &endRef, eOn)) || !endRef)
-        return 0;
+    // The floor under the goal first: from 96 units below it to 24 above.
+    const float under[3] = {e[0], e[1] - 36.0f, e[2]};
+    const float underExtents[3] = {48.0f, 60.0f, 48.0f};
+    if (dtStatusFailed(m_query->findNearestPoly(under, underExtents, m_filter, &endRef, eOn)) || !endRef)
+    {
+        endRef = 0;
+        if (dtStatusFailed(m_query->findNearestPoly(e, extents, m_filter, &endRef, eOn)) || !endRef)
+            return 0;
+    }
+    if (goalOnMesh)
+        FromRecast(eOn, goalOnMesh);
 
     constexpr int kMaxCorridor = 512;
     dtPolyRef corridor[kMaxCorridor];
@@ -1020,6 +1036,8 @@ int NavMesh::FindPath(const float start[3], const float end[3], float (*points)[
         return 0;
     for (int i = 0; i < count; ++i)
         FromRecast(&straight[i * 3], points[i]);
+    if (complete)
+        *complete = corridor[corridorCount - 1] == endRef;
     return count;
 }
 
