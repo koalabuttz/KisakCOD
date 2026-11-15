@@ -32,8 +32,9 @@ import java.util.TreeMap;
 /**
  * The app's first screen: big buttons that a controller or a thumb can work,
  * for starting a match against KisakCOD's bots (docs/bots.md) on any map in
- * the game folder, or the game's own main menu. Each choice starts
- * KisakActivity with engine arguments in its "args" extra.
+ * the game folder, the game's own multiplayer menu, or the campaign (the
+ * singleplayer game's menu). Each choice starts KisakActivity with engine
+ * arguments in its "args" extra, and "campaign" for the singleplayer game.
  *
  * The game runs in a process of its own (":game" in the manifest), which
  * ends with the game, so every match starts the engine afresh and this
@@ -98,10 +99,12 @@ public class LauncherActivity extends Activity {
             botIndex = (botIndex + 1) % BOT_COUNTS.length;
             update();
         });
-        Button menu = button("Main menu", v -> start(null));
+        Button menu = button("Multiplayer", v -> start(null, false));
+        Button campaign = button("Campaign", v -> start(null, true));
         settings.addView(modeButton, weighted(2));
         settings.addView(botButton, weighted(1));
         settings.addView(menu, weighted(1));
+        settings.addView(campaign, weighted(1));
         page.addView(settings);
 
         TextView hint = new TextView(this);
@@ -125,7 +128,7 @@ public class LauncherActivity extends Activity {
         }
         for (Map.Entry<String, String> map : maps.entrySet()) {
             final String file = map.getValue();
-            Button play = button(map.getKey(), v -> start(matchArgs(file)));
+            Button play = button(map.getKey(), v -> start(matchArgs(file), false));
             GridLayout.LayoutParams cell = new GridLayout.LayoutParams(
                     GridLayout.spec(GridLayout.UNDEFINED), GridLayout.spec(GridLayout.UNDEFINED, 1f));
             cell.width = 0;
@@ -181,12 +184,13 @@ public class LauncherActivity extends Activity {
                 bots, mode, map);
     }
 
-    private void start(String args) {
+    private void start(String args, boolean campaign) {
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt("mode", modeIndex).putInt("bots", botIndex).apply();
         Intent intent = new Intent(this, KisakActivity.class);
         if (args != null) {
             intent.putExtra("args", args);
         }
+        intent.putExtra("campaign", campaign);
         startActivity(intent);
     }
 
