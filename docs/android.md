@@ -202,6 +202,16 @@ scales the old picture, so every 32nd frame compares the surface's size with
 the swapchain's and rebuilds it when they differ (runs 4 and 5 kept a
 1920x970 swapchain on the 1920x1080 screen).
 
+Android takes the window away from an app sent to the background (Home, the
+lock screen) and gives it a new one when it comes back; SDL meanwhile holds
+the game's main thread in its event loop. Presents, acquires and size queries
+on the old window answer `VK_ERROR_SURFACE_LOST_KHR`, which no longer fails
+the core: the next frame lets go of the swapchain and the surface and asks
+the window for a new surface (`RenewSurface` in `src/gfx_vk/vk_core.cpp`),
+skipping frames until there is one, and builds a swapchain on it. The Vulkan
+window probe's `--lose-surface` (in `test_vulkan_window_probe.py`) does the
+same on a desktop window.
+
 What run 4 (mp_crash on the Pocket 6) showed, and the fixes:
 
 - Sticks and triggers did nothing while the buttons worked. The window host

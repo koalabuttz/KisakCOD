@@ -798,6 +798,21 @@ FrameResult BeginFrame(Core *core_)
         ++core.stats.framesSkipped;
         return FrameResult::Skipped;
     }
+    if (core.surfaceLost)
+    {
+        // The window took the surface away (Android: the app went to the
+        // background, or the screen locked). Work recorded so far goes first;
+        // frames are skipped until the window has a surface again.
+        if (!SubmitRecording(core, false))
+            return FrameResult::Failed;
+        if (!RenewSurface(core))
+        {
+            if (core.failed)
+                return FrameResult::Failed;
+            ++core.stats.framesSkipped;
+            return FrameResult::Skipped;
+        }
+    }
 
     // A swapchain the compositor turns (Android) hears of no resize: Android
     // scales a picture of the old size without a word (the Retroid Pocket 6,
@@ -867,10 +882,13 @@ Image *AcquireImage(Core &core)
         result = core.vk.vkAcquireNextImageKHR(core.dev, core.swapchain, UINT64_MAX, CurrentSlot(core).acquired,
                                                VK_NULL_HANDLE, &core.imageIndex);
     }
-    if (result == VK_ERROR_OUT_OF_DATE_KHR)
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_ERROR_SURFACE_LOST_KHR)
     {
-        // Nothing was signalled. This frame shows nothing; rebuild next time.
+        // Nothing was signalled. This frame shows nothing; rebuild next time
+        // (on a new surface if the window took this one away).
         core.rebuildPending = true;
+        if (result == VK_ERROR_SURFACE_LOST_KHR)
+            core.surfaceLost = true;
         core.imageMissing = true;
         return nullptr;
     }
@@ -949,7 +967,9 @@ FrameResult Present(Core *core_)
             ++state.presents;
             // VK_SUBOPTIMAL_KHR is expected for a swapchain the compositor turns.
             const bool expected = result == VK_SUBOPTIMAL_KHR && turnedByCompositor;
-            if (!expected && (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR))
+            if (result == VK_ERROR_SURFACE_LOST_KHR)
+                state.surfaceLost = true; // the window went (Android, sent to the background)
+            else if (!expected && (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR))
                 state.rebuild = true;
             else if (!expected)
                 RecordCheck(state, result, "vkQueuePresentKHR");

@@ -141,6 +141,13 @@ void LoadModes()
 bool CreateSurface(void *user, VkInstance instance, VkSurfaceKHR *surface)
 {
     SDL_Window *const window = static_cast<SDL_Window *>(user);
+#ifdef __ANDROID__
+    // Between the app's return from the background and its new window there
+    // is no native window to draw on (SDL would hand Vulkan a null one): no
+    // surface yet, quietly, and the core asks again next frame.
+    if (!SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr))
+        return false;
+#endif
     if (SDL_Vulkan_CreateSurface(window, instance, nullptr, surface))
         return true;
     Com_Printf(CON_CHANNEL_GFX, "Vulkan: SDL_Vulkan_CreateSurface failed: %s\n", SDL_GetError());
