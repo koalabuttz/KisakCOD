@@ -369,7 +369,15 @@ perf_ab "set r_staticCullVec 0" "set r_staticCullVec 1"
 ```
 
 compares the two; `main thread runs: dpvs cell static` and `other threads
-run: dpvs cell static` are its timers. No machine has run it yet.
+run: dpvs cell static` are its timers.
+
+Console run BU (2026-11-15, the PS Vita, that view, eight windows of 10 s):
+`dpvs cell static` went from 4.93-4.97 to 4.12-4.15 ms a frame on the main
+thread and from 6.20-6.25 to 5.38-5.40 ms on the other threads, and the
+process's CPU time from 72.6 to 71.2 ms a frame. The frame itself stayed at
+37.3 to 37.4 ms: that view waits on the render thread, not on this work. The
+walk got a seventh faster, not twice: most of a box test's time is not the
+sums. No other machine has run it.
 
 ## Checks
 
