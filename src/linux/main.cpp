@@ -829,6 +829,15 @@ void Sys_Quit()
 #if defined(__vita__)
     Vita_Exit(0);
 #endif
+#if defined(__ANDROID__)
+    // KISAK: exit() runs the process's exit handlers and static destructors,
+    // Android's UI libraries' among them, while the activity's render thread
+    // is still running: every quit ended in SIGABRT in an hwui thread (PC
+    // emulator campaign run 1b). The game has its own process (":game"),
+    // which simply ends here; the launcher's process is untouched, and the
+    // config and the console are already written.
+    _exit(0);
+#endif
     exit(0);
 }
 

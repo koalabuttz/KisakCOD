@@ -170,6 +170,8 @@ process of its own (`:game`), which ends with the game: the engine never
 starts twice in one process, and the first screen comes back when the game
 quits.
 
+Quitting ends the game's process with `_exit(0)` (`Sys_Quit`, `src/linux/main.cpp`): a plain `exit()` ran Android's UI libraries' exit handlers while the activity's render thread still drew, and every quit ended in SIGABRT in an hwui thread.
+
 ### The campaign
 
 The singleplayer game, KisakCOD-sp, builds as `libmain_sp.so` beside
