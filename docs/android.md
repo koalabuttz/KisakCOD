@@ -215,7 +215,16 @@ the core: the next frame lets go of the swapchain and the surface and asks
 the window for a new surface (`RenewSurface` in `src/gfx_vk/vk_core.cpp`),
 skipping frames until there is one, and builds a swapchain on it. The Vulkan
 window probe's `--lose-surface` (in `test_vulkan_window_probe.py`) does the
-same on a desktop window.
+same on a desktop window. On Android the client makes the surface itself
+from the activity's `Surface` as Java has it at that moment
+(`AndroidWindowNow` in `src/linux/client/vulkan/vulkan_backend.cpp`): SDL's
+copy of the window goes on the Java thread while the render thread may be
+asking, and with the screen turned off SDL handed Vulkan a null window
+(run 7, a crash in `vkCreateAndroidSurfaceKHR`).
+
+The "computer changed, set optimal settings?" question is not asked on
+Android: a handheld measures a different CPU speed at nearly every start, and
+the box came up over a black screen (run 7).
 
 What run 4 (mp_crash on the Pocket 6) showed, and the fixes:
 
