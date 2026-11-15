@@ -178,6 +178,8 @@ struct LitSpecialization
     bool clampDepthReference;
     uint32_t mode;
     bool alphaTest;
+    float probeScale = 1.0f;
+    bool twoSidedSun = false;
 };
 bool LinkLitSpirv(const LitBuild &build, const std::vector<Placeholder> &placeholders, const ls::Shader &vs,
                   const LitSpecialization &specialization, std::vector<uint32_t> &spirv);
@@ -191,7 +193,7 @@ bool BuildModernLitSpirv(uint16_t shader, const ls::Shader &vs, float sunStrengt
         return false;
     if (shader == ModernLitWater)
         return BuildWaterSpirv(vs, alphaTest, spirv);
-    const LitBuild build = LitBuildFor(shader);
+    const LitBuild build = LitBuildFor(shader & ~ModernLitVariationMask);
     if (!build.words)
         return false;
     std::vector<Placeholder> placeholders = {
@@ -219,8 +221,13 @@ bool BuildModernLitSpirv(uint16_t shader, const ls::Shader &vs, float sunStrengt
         placeholders.push_back({5, kUsageTexcoord, 5, 4});
     if (ModernLitModel(shader) && !ModernLitAmbientOnly(shader))
         placeholders.push_back({6, kUsageTexcoord, 6, 4}); // the lighting-volume coordinate (lp_amb: texcoord 1)
-    const LitSpecialization specialization{sunStrength, skyStrength, clampDepthReference,
-                                           static_cast<uint32_t>((shader & ModernLitModeMask) >> ModernLitModeShift), alphaTest};
+    const LitSpecialization specialization{sunStrength,
+                                           skyStrength,
+                                           clampDepthReference,
+                                           static_cast<uint32_t>((shader & ModernLitModeMask) >> ModernLitModeShift),
+                                           alphaTest,
+                                           (shader & ModernLitSkinProbe) ? 0.3f : 1.0f,
+                                           (shader & ModernLitTwoSidedSun) != 0};
     return LinkLitSpirv(build, placeholders, vs, specialization, spirv);
 }
 
@@ -301,6 +308,10 @@ bool LinkLitSpirv(const LitBuild &build, const std::vector<Placeholder> &placeho
                     out[at + 3] = specialization.mode;
                 else if (specId == 4)
                     out[at + 3] = specialization.alphaTest ? 1u : 0u;
+                else if (specId == 5)
+                    out[at + 3] = std::bit_cast<uint32_t>(specialization.probeScale);
+                else if (specId == 6)
+                    out[at + 3] = specialization.twoSidedSun ? 1u : 0u;
             }
         }
         at += length;

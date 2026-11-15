@@ -526,6 +526,7 @@ public:
     void ModernLit();
     void ModernLitShader();
     void ModernLitModels();
+    void ModernLitSkin();
     void ModernLitNoSun();
     void ModernLitLights();
     void ModernTonemap();
@@ -5537,6 +5538,207 @@ void Check::ModernLitModels()
     SafeRelease(color);
 }
 
+// The variations of our model shader for skinned models and cloth (skin and
+// flag shader facts), lit by the shadow map as modern_lit_models sets it
+// up. Top half, under the sun overhead: lp_hsm_sun_r0c0n0s0 (left) and the
+// same as lp_hsm_skin_sun_r0c0n0s0 (right), whose reflection probe's grey 64
+// counts 0.3. Bottom half, with the sun below the surface: lp_hsm_sun_t0c0
+// (left), facing away from the sun and lit by the volume alone, and
+// lp_hsm_flag_sun_t0c0 (right), lit by the sun on its back face as on its
+// front. Without our model shaders the stand-ins show black.
+void Check::ModernLitSkin()
+{
+    const bool on = EnvText("KISAK_VK_MODERN_LINEAR") != "0" && EnvText("KISAK_VK_MODERN_LIT") != "0"
+        && EnvText("KISAK_VK_MODERN_SHADERS") != "0" && EnvText("KISAK_VK_MODERN_MODEL_SHADERS") != "0";
+    const auto strength = [](const char *name, double fallback) {
+        const std::string text = EnvText(name);
+        const double value = text.empty() ? -1.0 : std::strtod(text.c_str(), nullptr);
+        return value >= 0.0 ? value : fallback;
+    };
+    const double sun = strength("KISAK_VK_MODERN_SUN_STRENGTH", 1.0);
+    const double sky = strength("KISAK_VK_MODERN_SKY_STRENGTH", 1.0);
+    IDirect3DTexture9 *color = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 128, 128, 128); });
+    IDirect3DTexture9 *normalFlat = FilledTexture(1, 1, [](UINT, UINT) { return Argb(130, 0, 130, 0); });
+    IDirect3DTexture9 *specularMap = FilledTexture(1, 1, [](UINT, UINT) { return Argb(0, 128, 128, 128); });
+    IDirect3DCubeTexture9 *probe = nullptr;
+    if (Ok(device->CreateCubeTexture(1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &probe, nullptr),
+           "CreateCubeTexture(probe)"))
+    {
+        for (UINT face = 0; face < 6; ++face)
+        {
+            D3DLOCKED_RECT rect{};
+            if (Ok(probe->LockRect(static_cast<D3DCUBEMAP_FACES>(face), 0, &rect, nullptr, 0), "LockRect(probe)"))
+            {
+                *static_cast<uint32_t *>(rect.pBits) = Argb(255, 64, 64, 64);
+                probe->UnlockRect(static_cast<D3DCUBEMAP_FACES>(face), 0);
+            }
+        }
+    }
+    IDirect3DVolumeTexture9 *volume = nullptr;
+    if (Ok(device->CreateVolumeTexture(1, 1, 2, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &volume, nullptr),
+           "CreateVolumeTexture(lighting)"))
+    {
+        D3DLOCKED_BOX locked{};
+        if (Ok(volume->LockBox(0, &locked, nullptr, 0), "LockBox(lighting)"))
+        {
+            uint8_t *bytes = static_cast<uint8_t *>(locked.pBits);
+            *reinterpret_cast<uint32_t *>(bytes) = Argb(0, 0, 0, 0);
+            *reinterpret_cast<uint32_t *>(bytes + locked.SlicePitch) = Argb(200, 48, 48, 48);
+            volume->UnlockBox(0);
+        }
+    }
+    IDirect3DTexture9 *shadow = nullptr, *shadowColor = nullptr;
+    IDirect3DSurface9 *shadowLevel = nullptr, *shadowColorLevel = nullptr, *depth = nullptr;
+    const bool made = color && normalFlat && specularMap && probe && volume
+        && Ok(device->CreateTexture(64, 64, 1, D3DUSAGE_DEPTHSTENCIL, D3DFMT_D24S8, D3DPOOL_DEFAULT, &shadow, nullptr),
+              "CreateTexture(D24S8 depth)")
+        && Ok(shadow->GetSurfaceLevel(0, &shadowLevel), "GetSurfaceLevel(depth)")
+        && Ok(device->CreateTexture(64, 64, 1, D3DUSAGE_RENDERTARGET, D3DFMT_R5G6B5, D3DPOOL_DEFAULT, &shadowColor,
+                                    nullptr),
+              "CreateTexture(R5G6B5 target)")
+        && Ok(shadowColor->GetSurfaceLevel(0, &shadowColorLevel), "GetSurfaceLevel(colour)")
+        && Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
+                                                nullptr),
+              "CreateDepthStencilSurface");
+    if (made)
+    {
+        // The shadow pass: depth 0.5 everywhere.
+        Ok(device->SetRenderTarget(0, shadowColorLevel), "SetRenderTarget(shadow colour)");
+        Ok(device->SetDepthStencilSurface(shadowLevel), "SetDepthStencilSurface(shadow)");
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 0.5f, 0),
+           "Clear(shadow)");
+
+        Reset(Argb(255, 0, 0, 0));
+        front::ModernSceneBegin(device);
+        device->SetDepthStencilSurface(depth);
+        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0),
+           "Clear(scene)");
+        device->SetVertexShader(vsLpSunMaps);
+        device->SetPixelShader(psLpSunMapsStandIn);
+        device->SetTexture(0, color);
+        device->SetTexture(1, probe);
+        device->SetTexture(4, volume);
+        device->SetTexture(5, shadow);
+        device->SetTexture(6, normalFlat);
+        device->SetTexture(7, specularMap);
+        device->SetTexture(8, specularMap);
+        for (DWORD sampler : {1u, 4u, 5u, 6u, 7u, 8u})
+        {
+            device->SetSamplerState(sampler, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+            device->SetSamplerState(sampler, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+            device->SetSamplerState(sampler, D3DSAMP_ADDRESSW, D3DTADDRESS_CLAMP);
+        }
+        const float grey = 128.0f / 255.0f;
+        float pixel[20][4] = {
+            {1, 0, 0, 0},          // c0 fog colour: red
+            {0, 0, 0, 0},          // c1: the stand-in's black
+            {0, 0, 0, 1},          // c2 shadow partition switch: far = near
+            {0, 0, 0, 0},          // c3
+            {0, 0, 0, 0},          // c4 shadow-map scale (no edge fade)
+            {0, 0, 0.5f, 0},       // c5 lightingLookupScale: half the volume's depth
+            {1, 1, 0, 0.5f},       // c6 envMapParms: Fresnel 1, sun highlight 0.5
+            {1, 1, 0, 0},          // c7
+            {}, {}, {}, {}, {}, {}, {}, {}, {},
+            {0, 0, 1, 0},          // c17 sun direction: overhead
+            {grey, grey, grey, 0}, // c18 sun colour
+            {grey, grey, grey, 0}, // c19 the sun's specular colour
+        };
+        Ok(device->SetPixelShaderConstantF(0, &pixel[0][0], 20), "SetPixelShaderConstantF");
+        // As modern_lit_models: no fog, the shadow map lit (near partition),
+        // looking straight down.
+        const float values[7][4] = {{0.5f, 0.5f, 0, 0}, {0, 0, 1, 1.0f},          {0, 1, 0, 0},
+                                    {1, 0, 0, 0},       {0.5f, 0.5f, 0.25f, 0.5f}, {0, 0, -1, 0},
+                                    {0.5f, 0.5f, 0.25f, 0}};
+        Ok(device->SetVertexShaderConstantF(1, &values[0][0], 7), "SetVertexShaderConstantF");
+        const uint32_t white = Argb(255, 255, 255, 255);
+        front::ModernLitInputs inputs;
+        inputs.overWhite = true;
+        inputs.shader = 0x87; // lp_hsm_sun_r0c0n0s0
+        front::SetModernLitInputs(device, &inputs);
+        DrawQuad(0, 0, 64, 64, 0.5f, white);
+        inputs.shader = 0x887; // lp_hsm_skin_sun_r0c0n0s0: the probe times 0.3
+        front::SetModernLitInputs(device, &inputs);
+        DrawQuad(64, 0, 128, 64, 0.5f, white);
+        // The sun below the surface.
+        pixel[17][2] = -1.0f;
+        Ok(device->SetPixelShaderConstantF(17, &pixel[17][0], 1), "SetPixelShaderConstantF(sun below)");
+        inputs.shader = 0xa1; // lp_hsm_sun_t0c0
+        front::SetModernLitInputs(device, &inputs);
+        DrawQuad(0, 64, 64, 128, 0.5f, white);
+        inputs.shader = 0x10a1; // lp_hsm_flag_sun_t0c0: both faces lit
+        front::SetModernLitInputs(device, &inputs);
+        DrawQuad(64, 64, 128, 128, 0.5f, white);
+        front::SetModernLitInputs(device, nullptr);
+
+        front::ModernSceneView view{};
+        for (int i = 0; i < 4; ++i)
+            view.view[i][i] = view.projection[i][i] = 1.0f;
+        view.width = view.height = kSize;
+        view.cut = true;
+        if (front::ModernSceneLit(device, view) == front::ModernResult::Skipped)
+            front::ModernSceneDone(device, view);
+        device->SetDepthStencilSurface(nullptr);
+        for (DWORD sampler : {0u, 1u, 4u, 5u, 6u, 7u, 8u})
+            device->SetTexture(sampler, nullptr);
+        device->SetVertexShader(vsBasic);
+        device->SetPixelShader(psColor);
+        if (Read())
+        {
+            const std::string curve = ModernCurve();
+            const auto shown = [&](double v) {
+                const Rgb c = TonemapCurve(curve, {v, v, v});
+                return std::array<int, 3>{ShownByte(c[0]), ShownByte(c[1]), ShownByte(c[2])};
+            };
+            const auto expect = [&](const char *name, int x, int y, double v) {
+                const std::array<int, 3> rgb = shown(v);
+                Expect(name, x, y, on ? rgb[0] : 0, on ? rgb[1] : 0, on ? rgb[2] : 0);
+            };
+            const auto decode = [](double v) {
+                v = std::max(v, 0.0);
+                return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+            };
+            const double greyValue = 128 / 255.0;
+            const double skyDisplay = 2.0 * 48 / 255.0, skyLight = decode(skyDisplay);
+            struct Light
+            {
+                double linear, display;
+            };
+            const auto colour = [&](double albedoDisplay, const Light &light) {
+                return decode(albedoDisplay * light.display) * light.linear / std::max(decode(light.display), 1e-12);
+            };
+            const auto diffuse = [&](double vis, double facing) {
+                const double sunDisplay = vis * facing * greyValue;
+                return Light{skyLight * sky + (decode(skyDisplay + sunDisplay) - skyLight) * sun,
+                             skyDisplay + sunDisplay};
+            };
+            // The flat normal map's slope y faces the sun by 1 / length;
+            // looking straight down the highlight is whole, the Fresnel 1.
+            const double y = 130 / 255.0 * 4.06452 - 2.06452;
+            const auto specular = [&](double probeScale) {
+                const Light light = diffuse(1.0, 1.0 / std::sqrt(y * y + 1.0));
+                const double diffuseDisplay = greyValue * light.display;
+                const double specularDisplay = greyValue * (0.5 * greyValue * sun + probeScale * 64 / 255.0);
+                return colour(greyValue, light) + decode(diffuseDisplay + specularDisplay) - decode(diffuseDisplay);
+            };
+            expect("specular_plain", 32, 32, specular(1.0));
+            expect("specular_skin", 96, 32, specular(0.3));
+            expect("sun_behind_plain", 32, 96, colour(greyValue, diffuse(1.0, 0.0)));
+            expect("sun_behind_flag", 96, 96, colour(greyValue, diffuse(1.0, 1.0)));
+        }
+        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
+    }
+    SafeRelease(depth);
+    SafeRelease(shadowColorLevel);
+    SafeRelease(shadowColor);
+    SafeRelease(shadowLevel);
+    SafeRelease(shadow);
+    SafeRelease(volume);
+    SafeRelease(probe);
+    SafeRelease(specularMap);
+    SafeRelease(normalFlat);
+    SafeRelease(color);
+}
+
 // The shaders of our own for surfaces without the sun (lm_<mode>c0... and
 // lp_[i_]<mode>c0..., interiors; lit shader facts 5): the sun stand-ins,
 // which read what those read and show black, are drawn as our shaders
@@ -6571,6 +6773,7 @@ int Run(const Options &options)
         {"modern_lit", &Check::ModernLit, true},
         {"modern_lit_shader", &Check::ModernLitShader, true},
         {"modern_lit_models", &Check::ModernLitModels, true},
+        {"modern_lit_skin", &Check::ModernLitSkin, true},
         {"modern_lit_no_sun", &Check::ModernLitNoSun, true},
         {"modern_lit_lights", &Check::ModernLitLights, true},
         {"modern_tonemap", &Check::ModernTonemap, true},

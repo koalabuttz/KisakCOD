@@ -799,10 +799,25 @@ game's formulas.
 The models' sunlit family, `lp_[hsm_][i_]sun_<mode>c0[d0][n0][s0]` (code 0x80
 plus the same flags), is drawn with `lp_sun.frag` the same way: 16 builds,
 the mode a specialization constant. `i_` (instanced) shares the pixel shader
-and only changes the vertex shader. `skin_` and `flag_` names keep the game's
-shader: some of them have pixel shaders of their own that model-lit shader
-facts (project files, 2026-11-13) did not read; so does `sm_`, which compares
-the shadow map in the shader.
+and only changes the vertex shader. `sm_` keeps the game's shader: it
+compares the shadow map in the shader.
+
+Skinned models (players, the first-person weapon) and cloth draw with it too
+(skin and flag shader facts, project files, 2026-11-15):
+
+* **`lp_[hsm_][i_]skin_sun_<r0c0|r0c0n0|r0c0s0|r0c0n0s0>`**: r0c0 and
+  r0c0n0 are the plain model's shaders. With `s0` the reflection probe's
+  light is scaled by 0.3, a literal in the game's shader (code bit 0x800,
+  the specialization constant `kProbeScale`). The vertex shaders are the
+  plain ones; the skinning is done before them.
+* **`lp_[hsm_]flag_[sun_]t0c0[n0][s0]`**: the plain `t0` shader, except
+  that with the sun the sun lights both faces, |N.L| in place of the clamp,
+  with the normal unflipped (code bit 0x1000, `kTwoSidedSun`). Without a
+  light it is the plain shader itself. Its vertex shader waves the cloth
+  but writes the same outputs.
+* Skinned models without the sun or with a spot or omni light, and flag_
+  with a spot or omni light, keep the game's shader: the facts did not read
+  them.
 
 The game's model shader is the world's with the lighting volume in place of
 the lightmaps, so ours differs from `lm_sun.frag` only there:
@@ -837,7 +852,10 @@ blended and alpha-tested, and `lp_sun_r0c0n0` with a tilted normal. Its
 volume is 1x1x2, black in the first slice. Only a lookup that moves along
 the normal by lightingLookupScale reaches the grey second slice.
 `test_vulkan_d3d9_front.py` also runs it with
-`KISAK_VK_MODERN_MODEL_SHADERS=0`.
+`KISAK_VK_MODERN_MODEL_SHADERS=0`. The `modern_lit_skin` scene draws
+`lp_hsm_sun_r0c0n0s0` beside its `skin_` variation (the probe's grey 64
+counts 0.3), and, with the sun below the surface, `lp_hsm_sun_t0c0` (lit by
+the volume alone) beside its `flag_` variation (the sun lights its back).
 
 ### Without the sun: interiors
 

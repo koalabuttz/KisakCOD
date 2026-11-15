@@ -776,6 +776,14 @@ enum ModernLitShader : uint16_t
     // and colour 0 (alpha) in. It reads the planar reflection where the
     // water lies on its plane.
     ModernLitWater = 0x400,
+    // Variations of the lp_ shaders, beside the bits above (skin and flag
+    // shader facts): the reflection probe's light scaled by 0.3, as
+    // skinned models' specular surfaces (lp_..skin_..s0) have it; and the
+    // sun lighting both faces, |N.L| in place of the clamp, as flag_
+    // surfaces with the sun have it.
+    ModernLitSkinProbe = 0x800,
+    ModernLitTwoSidedSun = 0x1000,
+    ModernLitVariationMask = 0x1800,
 };
 // Whether shader names a Modern lit shader of ours.
 constexpr bool ModernLitShaderValid(uint16_t shader)
@@ -784,6 +792,18 @@ constexpr bool ModernLitShaderValid(uint16_t shader)
         return true;
     const uint16_t family = shader & ModernLitFamilyMask;
     const uint16_t light = shader & ModernLitLightMask;
+    if (shader & ModernLitVariationMask)
+    {
+        // Models only: the probe's scale with s0, the two-sided sun with it.
+        const bool model = family == ModernLitLpSun || (family == ModernLitNoSun && (shader & ModernLitNoSunModel));
+        if (!model || light == ModernLitAmbient)
+            return false;
+        if ((shader & ModernLitSkinProbe) && !(shader & ModernLitSpecular))
+            return false;
+        if ((shader & ModernLitTwoSidedSun) && (family != ModernLitLpSun || light != 0))
+            return false;
+        shader &= ~ModernLitVariationMask;
+    }
     if (!family || (shader & ModernLitModeMask) == 0x30 || shader > 0x3ff)
         return false;
     if (light == ModernLitAmbient)
