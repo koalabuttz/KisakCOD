@@ -81,6 +81,8 @@ struct BotSlot
     int progressTime = 0;
     int nextPlanTime = 0;
     bool jumpHeld = false;
+    int nextJump = 0;
+    int stallJumps = 0; // jumps since it last got closer to the corner
     int stuckCount = 0;
     float lastOrigin[3] = {0.0f, 0.0f, 0.0f};
 
@@ -291,6 +293,7 @@ bool PlanWalk(BotSlot &bot, const kb::NavMesh &nav, const float *origin, const f
     bot.pathIndex = 1; // corner 0 is where the bot stands
     bot.bestDistance = Distance2D(origin, bot.path[1]);
     bot.progressTime = svs.time;
+    bot.stallJumps = 0;
     return true;
 }
 
@@ -328,6 +331,7 @@ bool Walk(BotSlot &bot, const playerState_s *ps, float seconds, usercmd_s &cmd, 
     {
         bot.bestDistance = distance;
         bot.progressTime = svs.time;
+        bot.stallJumps = 0;
     }
     const int stalled = svs.time - bot.progressTime;
     if (stalled > kReplanAfterMs)
@@ -360,11 +364,16 @@ bool Walk(BotSlot &bot, const playerState_s *ps, float seconds, usercmd_s &cmd, 
     cmd.rightmove = static_cast<char>(keys.right);
 
     // Jump is pressed on one frame and released on the next: the game jumps
-    // on the press only.
-    if (stalled > kJumpAfterMs && !bot.jumpHeld)
+    // on the press only. Once a second at most: a jump into a ledge mantles
+    // (the weapon goes down meanwhile), and PC bot brain run 11 had a bot
+    // that pressed it every other frame keep its gun down for 28 s.
+    // Two jumps that got it no closer: no more until it does.
+    if (stalled > kJumpAfterMs && !bot.jumpHeld && svs.time >= bot.nextJump && bot.stallJumps < 2)
     {
         cmd.buttons |= BUTTON_JUMP;
         bot.jumpHeld = true;
+        bot.nextJump = svs.time + 1000;
+        ++bot.stallJumps;
     }
     else
     {

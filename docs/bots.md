@@ -59,8 +59,8 @@ are on the list a game server may not set on a player's client
 The brain takes over the test clients' commands. Each frame a bot decides what
 to do (see "How a bot decides"), walks there on the map's navigation mesh with
 the movement keys a player would press, turning at up to 200 degrees a second,
-jumps when it has made no headway for 1.2 seconds and finds another way after
-2.5. Without a mesh it stands and looks around at a human pace (a new
+jumps when it has made no headway for 1.2 seconds (once a second, twice at most
+until it gets closer) and finds another way after 2.5. Without a mesh it stands and looks around at a human pace (a new
 direction every 1.5 to 4 seconds, up to 120 degrees a second). It carries on
 from wherever the server puts its view (a spawn, a killcam, a script's
 `setPlayerAngles`) and taps use while dead.
