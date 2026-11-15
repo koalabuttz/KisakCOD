@@ -330,6 +330,17 @@ struct DrawState
     SceGxmTexture unitView[SCE_GXM_MAX_TEXTURE_UNITS];
     uint32_t unitBound = 0;
     uint64_t textureBinds = 0, textureBindsLeftOut = 0, textureViewsMade = 0;
+    // The last draw whose textures BindTextures set, by what the binds
+    // depend on: its pixel program (which samplers go to which units),
+    // Device::textureSerial, the mip bias, and the frame and the count of
+    // waits for the GPU its textures were stamped with. A draw that finds
+    // all of it unchanged in the same scene sets nothing again (marker and
+    // switch no-texture-keep for never).
+    bool keepBinds = true;
+    const Variant *keptBindPixel = nullptr;
+    uint64_t keptBindSerial = 0, keptBindWaits = 0, keptBindStamp = 0;
+    int keptBindBias = 0;
+    uint64_t bindDraws = 0, bindDrawsKept = 0;
     // The default uniform buffers the bound programs last reserved hold these
     // constants: a draw with the same two programs and the same constants
     // reserves and writes neither again. Both end when either program is set
@@ -811,6 +822,7 @@ bool Register(Device &device, Variant &variant, const char *what)
         if (const SceGxmProgramParameter *sampler = sceGxmProgramFindParameterByName(program, name))
             if (sceGxmProgramParameterGetCategory(sampler) == SCE_GXM_PARAMETER_CATEGORY_SAMPLER)
                 variant.textureUnit[i] = int8_t(sceGxmProgramParameterGetResourceIndex(sampler));
+        variant.samplers |= uint16_t(variant.textureUnit[i] >= 0 ? 1u << i : 0u);
         std::snprintf(name, sizeof(name), "kisak_depth_s%d", i);
         variant.depth[i] = sceGxmProgramFindParameterByName(program, name);
         variant.depthUniforms |= variant.depth[i] != nullptr;
@@ -1029,6 +1041,7 @@ void ForgetPipelines(DrawState &d)
 {
     std::memset(static_cast<void *>(d.pipelines), 0, sizeof(d.pipelines));
     d.lastDrawValid = false;
+    d.keptBindPixel = nullptr;
 }
 
 const VertexProgramEntry *GetVertexProgram(Device &device, const Variant &variant, const VertexDecl &decl,
@@ -1369,6 +1382,7 @@ bool OpenScene(Device &device)
     d.boundFragment = nullptr;
     d.fixedValid = false;
     d.unitBound = 0;
+    d.keptBindPixel = nullptr;
     d.vertexUniformsLive = false;
     d.fragmentUniformsLive = false;
     ++d.scenes;
@@ -1599,6 +1613,17 @@ bool BindTextures(Device &device, const Variant &pixel, void *uniforms)
         }
         biasSteps = d.biasSteps;
     }
+    // A new uniform buffer of a program with a volume's depth in it goes
+    // the long way: the depths are written below.
+    const bool keepable = d.reuse && d.keepBinds && pixel.samplers && !(uniforms && pixel.depthMask);
+    d.bindDraws += pixel.samplers != 0;
+    if (keepable && d.keptBindPixel == &pixel && d.keptBindSerial == device.textureSerial &&
+        d.keptBindBias == biasSteps && d.keptBindWaits == d.gpuWaits && d.keptBindStamp == Stamp(d))
+    {
+        ++d.bindDrawsKept;
+        return true;
+    }
+    d.keptBindPixel = nullptr;
     for (int i = 0; i < 16; ++i)
     {
         if (pixel.textureUnit[i] < 0)
@@ -1690,6 +1715,14 @@ bool BindTextures(Device &device, const Variant &pixel, void *uniforms)
             sceGxmSetUniformDataF(uniforms, pixel.depth[i], 0, 1, &depth);
             d.fragmentDepthWritten[i] = depth;
         }
+    }
+    if (d.reuse && d.keepBinds && pixel.samplers)
+    {
+        d.keptBindPixel = &pixel;
+        d.keptBindSerial = device.textureSerial;
+        d.keptBindBias = biasSteps;
+        d.keptBindWaits = d.gpuWaits;
+        d.keptBindStamp = Stamp(d);
     }
     return true;
 }
@@ -2127,6 +2160,12 @@ bool InitDraw(Device &device, std::string &error)
         Log(device, "diag: no-alpha-test-zero is there: an alpha test on a blended draw is a discard, not a pixel "
                     "of zero");
     }
+    if (gxm::ProgramCacheMarker("no-texture-keep"))
+    {
+        d.keepBinds = false;
+        Log(device, "diag: no-texture-keep is there: every draw goes through its textures, also when they are the "
+                    "last draw's");
+    }
     if (gxm::ProgramCacheMarker("no-draw-reuse"))
     {
         d.reuse = false;
@@ -2465,6 +2504,7 @@ void ReadSwizzled(const Texture &texture, uint32_t face, uint32_t level, uint8_t
 
 void SetUpTexture(Device &device, Texture &texture)
 {
+    ++device.textureSerial;
     texture.sampleable = false;
     const TextureDesc &desc = texture.desc;
     if (texture.swizzledLayout)
@@ -2865,7 +2905,8 @@ const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "n
                                      "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
                                      "gpu-watch",           "no-prepass-clear",  "no-depth-only-scene",
                                      "no-scene-in-copy",    "no-alpha-test-drop", "no-alpha-test-zero",
-                                     "no-frag-keep-depth",  "no-frag-keep-same",  "frag-direct-write"};
+                                     "no-frag-keep-depth",  "no-frag-keep-same",  "frag-direct-write",
+                                     "no-texture-keep"};
 struct LiveSwitch
 {
     const char *name;
@@ -2908,6 +2949,13 @@ void ApplyLiveSwitches(Device &device)
             gxm::SetDisplayVsync(!s.on);
         else if (name == "no-draw-reuse")
             d.reuse = !s.on;
+        else if (name == "no-texture-keep")
+        {
+            Log(device, "diag: texture binds so far: of %llu draws with textures %llu had the last draw's and set none",
+                (unsigned long long)d.bindDraws, (unsigned long long)d.bindDrawsKept);
+            d.keepBinds = !s.on;
+            d.keptBindPixel = nullptr;
+        }
         else if (name == "no-world-only-prepass")
         {
             // The pass costs another time now: the governor times it anew.
@@ -3184,6 +3232,7 @@ void MakeWritable(Device &device, Texture &texture)
     // The view draws bind points at the memory: the kept one no longer
     // matches `sampled` and is made anew by the next draw.
     sceGxmTextureSetData(&texture.sampled, texture.memory.data);
+    ++device.textureSerial;
     ++d->textureSwaps;
 }
 
@@ -4062,6 +4111,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         CountSkip(device, SkipUnfilledSource);
         if (target)
             target->unfilled = true;
+            ++device.textureSerial;
         // A new buffer may lack a depth BindTextures did not get to.
         d.fragmentUniformsLive = false;
         return;
@@ -4103,6 +4153,7 @@ void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const
         CountSkip(device, SkipCopy);
         if (dstTexture)
             dstTexture->unfilled = true;
+            ++device.textureSerial;
     };
     // The source as a texture: the back buffer, or one level of a texture.
     SceGxmTexture view;
@@ -4236,6 +4287,7 @@ void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const
     }
     sceGxmSetFragmentTexture(context, unsigned(sharpening ? d.sharpenUnit : d.copyUnit), &view);
     d.unitBound = 0; // a unit's texture changed behind BindTextures
+    d.keptBindPixel = nullptr;
     sceGxmSetVertexStream(context, 0, quad);
     sceGxmDraw(context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, d.sequential, 4);
     ++d.copies;
@@ -4348,12 +4400,14 @@ void LogDrawSummary(Device &device)
     Log(device,
         "draw work left out: %llu draws kept the last draw's programs and fixed state; %llu of %llu others found "
         "their programs in the table; of %llu texture binds %llu were set already and %llu set their filters anew; of "
-        "%llu uniform buffers %llu were the last draw's",
+        "%llu uniform buffers %llu were the last draw's; of %llu draws with textures %llu had the last draw's and "
+        "set none%s",
         (unsigned long long)d->sameStateDraws, (unsigned long long)d->pipelineHits,
         (unsigned long long)d->pipelineLookups,
         (unsigned long long)d->textureBinds, (unsigned long long)d->textureBindsLeftOut,
         (unsigned long long)d->textureViewsMade, (unsigned long long)d->uniformWrites,
-        (unsigned long long)d->uniformWritesLeftOut);
+        (unsigned long long)d->uniformWritesLeftOut, (unsigned long long)d->bindDraws,
+        (unsigned long long)d->bindDrawsKept, d->keepBinds ? "" : " (no-texture-keep)");
     for (int i = 0; i < SkipCount; ++i)
         if (d->skipped[i])
             Log(device, "draws skipped: %llu x %s", (unsigned long long)d->skipped[i], kSkipNames[i]);
