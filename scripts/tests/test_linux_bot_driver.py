@@ -423,6 +423,16 @@ class ObjectiveTests(unittest.TestCase):
                                 "bots: 6 is on an objective\n")
         self.assertIn("got onto an objective 3 times (1 of them lying prone)", printed.getvalue())
 
+    def test_stays_on_an_objective_are_summed_up(self):
+        import contextlib
+        import io
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            validate_objectives("bots: 4 left an objective after 2.5 s (hunt, role attack)\n"
+                                "bots: 5 left an objective after 11.0 s (died)\n"
+                                "bots: 6 left an objective after 0.4 s (hunt, role attack)\n")
+        self.assertIn("left an objective 3 times, after 11.0 s at most (died 1, hunt 2)", printed.getvalue())
+
 
 class CombatHoldTests(unittest.TestCase):
     def test_a_bot_may_die_after_the_first_sample(self):

@@ -146,6 +146,7 @@ struct BotSlot
     bool atObjective = false;
     int roleRetryAt = 0;
     bool shortLogged = false; // said it stopped short of its objective
+    int onObjectiveSince = 0; // when an attacker stepped onto its objective, or 0
 
     // A grenade: lining up the throw, holding the button (the fuse runs),
     // when it may throw again, and the enemy it last thought about one for.
@@ -1434,6 +1435,8 @@ bool Bot_UserMove(client_t *cl)
             bot.hurtFromKnown = false;
             bot.roleGoal = false;
             bot.holdFacingKnown = false;
+            bot.atObjective = false;
+            bot.onObjectiveSince = 0;
             bot.mind.Reset(svs.time);
             bot.look.pitch = bot.view.angles[0];
             bot.look.yaw = bot.view.angles[1];
@@ -1492,6 +1495,11 @@ bool Bot_UserMove(client_t *cl)
             bot.holdUntil = 0;
             bot.roleGoal = false;
             bot.holdFacingKnown = false;
+            bot.atObjective = false;
+            if (bot.onObjectiveSince && LogOn())
+                Com_Printf(CON_CHANNEL_SERVER, "bots: %d left an objective after %.1f s (died)\n", clientNum,
+                           (svs.time - bot.onObjectiveSince) / 1000.0f);
+            bot.onObjectiveSince = 0;
             bot.mind.Reset(svs.time);
             // Tap use now and then: the stock gametypes respawn on it where
             // they wait for a button, and it skips nothing that matters.
@@ -1506,6 +1514,22 @@ bool Bot_UserMove(client_t *cl)
                 Bot_StepSpots(*nav, ps->origin);
             NoticeHits(bot, ps);
             Decide(bot, clientNum, ps, focus, nav, fighting);
+            // How long an attacker stays on the objective it takes, and what
+            // it was doing when it left.
+            {
+                const bool on = bot.role == kb::Role::Attack && bot.objectiveKnown &&
+                                Distance2D(ps->origin, bot.objective) < 96.0f;
+                if (on && !bot.onObjectiveSince)
+                    bot.onObjectiveSince = svs.time ? svs.time : 1;
+                else if (!on && bot.onObjectiveSince)
+                {
+                    if (LogOn())
+                        Com_Printf(CON_CHANNEL_SERVER, "bots: %d left an objective after %.1f s (%s, role %s)\n",
+                                   clientNum, (svs.time - bot.onObjectiveSince) / 1000.0f,
+                                   kb::IntentName(bot.mind.intent), kb::RoleName(bot.role));
+                    bot.onObjectiveSince = 0;
+                }
+            }
 
             int side = 0;
             // An enemy in view: a throw still being lined up is dropped.

@@ -636,6 +636,15 @@ def validate_objectives(output: str) -> list:
     arrived = len(arrivals)
     prone = sum(1 for stance in arrivals if stance == "prone")
     print(f"INFO: bots got onto an objective {arrived} times ({prone} of them lying prone)")
+    stays = [(float(seconds), why) for seconds, why in
+             re.findall(r"^bots: \d+ left an objective after ([\d.]+) s \(([^,)]+)", output, re.M)]
+    if stays:
+        longest = max(seconds for seconds, _ in stays)
+        reasons = {}
+        for _, why in stays:
+            reasons[why] = reasons.get(why, 0) + 1
+        print(f"INFO: attackers left an objective {len(stays)} times, after {longest:.1f} s at most ("
+              + ", ".join(f"{why} {count}" for why, count in sorted(reasons.items())) + ")")
     stuck = len(re.findall(r"^bots: \d+ (is stuck on its way|finds no way) to an objective", output, re.M))
     short = len(re.findall(r"^bots: \d+ stopped \d+ units from an objective", output, re.M))
     print(f"INFO: bots got stuck or found no way to an objective {stuck} times and stopped short of one "
