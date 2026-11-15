@@ -17,6 +17,9 @@ struct client_t;
 namespace kisak::bots
 {
 class NavMesh;
+class Perception;
+struct PerceptionParams;
+struct Rng;
 }
 
 void Bot_RegisterDvars();
@@ -30,3 +33,28 @@ bool Bot_UserMove(client_t *cl);
 // folder's cache the first time it is asked for (bot_nav_world.cpp), or
 // nullptr when there is none.
 const kisak::bots::NavMesh *Bot_Nav();
+
+// A player a bot noticed on a sense tick, for the log and the fairness
+// audit: how long the player was in view first, how far and how far off the
+// view's centre (degrees), and how much of them showed (0 to 1).
+struct BotNotice
+{
+    int entity = -1;
+    int afterMs = 0;
+    float distance = 0.0f;
+    float offDegrees = 0.0f;
+    float exposure = 0.0f;
+};
+
+// One sense tick for the bot in `clientNum`, `now` and `lastSense` in server
+// milliseconds (bot_senses.cpp): what its eyes and ears get of every other
+// player goes into `perception`. Writes the players noticed on this tick to
+// `notices` and returns how many.
+int Bot_Sense(int clientNum,
+              kisak::bots::Perception &perception,
+              const kisak::bots::PerceptionParams &params,
+              int now,
+              int lastSense,
+              kisak::bots::Rng &rng,
+              BotNotice *notices,
+              int maxNotices);
