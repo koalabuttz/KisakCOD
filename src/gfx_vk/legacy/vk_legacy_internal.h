@@ -479,6 +479,10 @@ struct Device
     // scale them back (Shader::byteModules, legacy_shader::BuildSpirv).
     bool byteStandIn = false;
     float depthBiasScale = 1.0f;                 // D3DRS_DEPTHBIAS to Vulkan's constant factor
+    // depthFormat can be sampled with linear filtering. Without it, depth
+    // textures (shadow maps) are sampled with the nearest texel: Vulkan leaves
+    // a linear filter on such a format undefined.
+    bool depthFilterLinear = true;
     uint32_t uniformAlignment = 16;
     bool dynamicUniforms = true; // !OptionalFeatures::staticUniforms
 

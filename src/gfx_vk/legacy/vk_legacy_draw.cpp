@@ -1136,6 +1136,11 @@ VkSampler MakeSampler(Device &device, uint32_t slot, const Texture *texture)
     {
         info.compareEnable = VK_TRUE;
         info.compareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+        if (!device.depthFilterLinear)
+        {
+            info.magFilter = info.minFilter = VK_FILTER_NEAREST;
+            info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        }
     }
     // As DXVK: a single level gets the range 0-1, no mip filter level 0 only.
     if (!texture || texture->desc.levels <= 1)
