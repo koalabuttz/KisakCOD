@@ -76,9 +76,11 @@ struct LinearInputs
     // Of those, the ones the shader doubles (a 2x overbright): their results
     // become decode(2v) / 2, so that twice them is the decoded double.
     uint16_t doubled = 0;
-    // kLinearColorInput, kLinearOverWhite.
+    // kLinearColorInput, kLinearOverWhite, kLinearEmissive.
     uint8_t flags = 0;
-    uint8_t unused = 0;
+    // With kLinearEmissive: the light a white texel gives, in quarters (4 is
+    // the decoded colour as it stands, 16 four times it).
+    uint8_t emissive = 0;
     // A Modern lit shader of our own that the pixel shader is drawn as
     // instead (the Legacy adapter's ModernLitShader; 0 for none). BuildSpirv
     // ignores it: the adapter builds that shader itself.
@@ -91,6 +93,11 @@ constexpr uint8_t kLinearColorInput = 1u << 0;
 // linearOutput, but only kept from going negative, not clamped to 1, so a
 // colour the shader computes over white stays over white in linear light.
 constexpr uint8_t kLinearOverWhite = 1u << 1;
+// LinearInputs::flags: an unlit, light-giving surface (a lamp, a lit sign): no
+// input is decoded; the stored colour is decoded with its clamp to 1, as with
+// linearOutput, and then its brightest parts are made brighter, up to
+// LinearInputs::emissive / 4 times at white, so that they glow over white.
+constexpr uint8_t kLinearEmissive = 1u << 2;
 
 // Set 0: vertex shader blocks at 0-8, pixel shader blocks at 16-24.
 constexpr uint32_t UniformBinding(Stage stage, Uniform uniform)

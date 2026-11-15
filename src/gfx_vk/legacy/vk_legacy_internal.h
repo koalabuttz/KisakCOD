@@ -641,6 +641,9 @@ struct Device
     // SetModernLightPass: the strength of the extra light passes of ours
     // built from now on.
     float modernLightPass = 1.0f;
+    // SetModernEmissive: how much brighter than white unlit, light-giving
+    // surfaces built from now on make their white, in quarters (4 = as they are).
+    uint8_t modernEmissive = 4;
     // SetModernShadow: pushed after modernPlanarParams.
     ModernShadowParams modernShadowParams{};
     // Bumped whenever SetModernPlanar or SetModernShadow changes the
