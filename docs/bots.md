@@ -143,7 +143,9 @@ hunt goes to where it last saw or heard them.
   | roam | the rest | roams as before |
 
   With no objectives (team deathmatch), about 40% push, 25% anchor and the
-  rest roam. Fights, cover and hunts come first: a part is what a bot does
+  rest roam. Attackers and defenders are spread over the objectives
+  nearest the team first, so a team takes the flags on its side of the map
+  before it contests the others. Fights, cover and hunts come first: a part is what a bot does
   between them.
 - **Objectives.** A bot reads them off its own compass: the objectives the game
   sends its team, active ones only. The stock gametypes mark them with

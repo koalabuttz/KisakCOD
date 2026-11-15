@@ -171,6 +171,9 @@ struct TeamState
     float hold[kMaxObjectives][3];
     int takeCount = 0;
     int holdCount = 0;
+    // Where the team started: its side of the map.
+    float side[3] = {0.0f, 0.0f, 0.0f};
+    bool sideKnown = false;
 };
 
 TeamState s_teams[TEAM_NUM_TEAMS];
@@ -873,6 +876,7 @@ void Command()
         {
             team.board.Reset();
             team.nextCommand = 0;
+            team.sideKnown = false;
         }
         team.lastTime = svs.time;
         if (svs.time < team.nextCommand)
@@ -896,6 +900,26 @@ void Command()
         const int oldTake = team.takeCount;
         const int oldHold = team.holdCount;
         ReadObjectives(team, SV_GameClientNum(members[0]));
+        // Nearest the team first: the first attackers go to the flags on its
+        // side of the map. The side is where the team was when objectives
+        // first showed (its spawn), so the order holds while bots spread out.
+        if (!team.sideKnown && team.takeCount + team.holdCount > 0)
+        {
+            team.side[0] = 0.0f;
+            team.side[1] = 0.0f;
+            for (int i = 0; i < count; ++i)
+            {
+                const playerState_s *member = SV_GameClientNum(members[i]);
+                team.side[0] += member->origin[0] / static_cast<float>(count);
+                team.side[1] += member->origin[1] / static_cast<float>(count);
+            }
+            team.sideKnown = true;
+        }
+        if (team.sideKnown)
+        {
+            kb::SortNearestFirst(team.take, team.takeCount, team.side);
+            kb::SortNearestFirst(team.hold, team.holdCount, team.side);
+        }
         if ((team.takeCount != oldTake || team.holdCount != oldHold) && LogOn())
             Com_Printf(CON_CHANNEL_SERVER, "bots: team %d objectives: take %d, hold %d\n", teamIndex, team.takeCount,
                        team.holdCount);
