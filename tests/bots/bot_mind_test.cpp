@@ -102,6 +102,14 @@ static void Choices()
     Check(Pick(sound, bold) == kb::Intent::Hunt, "a bold bot hunts a sound");
     Check(kb::ScoreIntents(sound, bold).hunt > kb::ScoreIntents(sound, calm).hunt,
           "a bold bot wants to hunt more than a calm one");
+    kb::Situation claimed = sound;
+    claimed.teammatesHunting = 1;
+    Check(Pick(claimed, bold) == kb::Intent::Roam, "a sound a teammate already went after: even a bold bot keeps on");
+    kb::Situation sharedLead = lead;
+    sharedLead.teammatesHunting = 1;
+    Check(Pick(sharedLead, bold) == kb::Intent::Hunt, "an enemy it saw itself: a second bot may still go");
+    sharedLead.teammatesHunting = 2;
+    Check(Pick(sharedLead, bold) == kb::Intent::Roam, "but never a third");
     kb::Situation faded = lead;
     faded.rememberedConfidence = 0.0f;
     faded.enemyRemembered = false;

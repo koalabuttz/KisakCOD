@@ -172,6 +172,108 @@ static void Accuracy()
     Check(bigLanding > 4.0f * smallLanding, "a 60 degree flick lands much further off than a 5 degree one");
 }
 
+static void SprayAndSwitch()
+{
+    std::printf("\n== long sprays, switching targets, the aim point ==\n");
+    kb::SkillProfile skill;
+    const float kick[2] = {0.0f, 0.0f};
+    const float target[2] = {0.0f, 0.0f};
+
+    // The spread of the hand's landings on a still player, with the trigger
+    // kept going for `sprayMs`.
+    auto spread = [&](int sprayMs) {
+        kb::Rng rng;
+        rng.Seed(11);
+        float sum = 0.0f;
+        for (int i = 0; i < 4000; ++i)
+        {
+            kb::AimState aim;
+            kb::ViewMotorState view;
+            kb::PrimeView(view, 0.0f, 0.0f);
+            kb::StepAim(aim, view, target, kick, 0, 0.0f, skill, rng, sprayMs);
+            sum += std::hypot(aim.offset[0], aim.offset[1]);
+        }
+        return sum / 4000.0f;
+    };
+    const float tap = spread(0);
+    const float spray = spread(1500);
+    const float longSpray = spread(10000);
+    std::printf("INFO: mean landing error on a still player: %.2f degrees, %.2f after a 1.5 s spray\n", tap, spray);
+    Check(spray > 2.5f * tap, "a 1.5 s spray lands far wider than a first shot");
+    Check(std::fabs(longSpray - spread(static_cast<int>(1000.0f * skill.sprayErrorMax / skill.sprayErrorPerSecond)))
+              < 0.01f,
+          "and a spray stops getting worse at its cap");
+
+    // A player crossing the view is harder to land on.
+    {
+        kb::Rng rng;
+        rng.Seed(12);
+        float still = 0.0f;
+        float moving = 0.0f;
+        for (int i = 0; i < 2000; ++i)
+        {
+            for (int which = 0; which < 2; ++which)
+            {
+                kb::AimState aim;
+                kb::ViewMotorState view;
+                kb::PrimeView(view, 0.0f, 0.0f);
+                aim.nextMoveMs = 1000000;
+                for (int now = 0; now <= 500; now += kFrameMs)
+                {
+                    const float there[2] = {0.0f, which ? 0.03f * static_cast<float>(now) : 0.0f};
+                    if (now == 500)
+                        aim.nextMoveMs = now;
+                    kb::StepAim(aim, view, there, kick, now, kFrameMs * 0.001f, skill, rng);
+                }
+                (which ? moving : still) += std::hypot(aim.offset[0], aim.offset[1]);
+            }
+        }
+        Check(moving > 1.5f * still, "a player crossing the view at 30 degrees a second is landed on less well");
+    }
+
+    // Straight from one fight into the next: a longer wait, a rougher flick.
+    kb::Rng rng;
+    rng.Seed(13);
+    float fresh = 0.0f;
+    float switched = 0.0f;
+    bool floor = true;
+    for (int i = 0; i < 2000; ++i)
+    {
+        kb::AimState a;
+        kb::AimState b;
+        kb::Engage(a, 1, 0, 0, skill, rng);
+        kb::Engage(b, 2, 0, 0, skill, rng, true);
+        fresh += static_cast<float>(a.startMs);
+        switched += static_cast<float>(b.startMs);
+        floor = floor && b.startMs >= static_cast<int>(skill.onsetMinMs + skill.switchOnsetMinMs);
+    }
+    std::printf("INFO: hand onset: %.0f ms for a first player, %.0f ms going straight to the next\n", fresh / 2000.0f,
+                switched / 2000.0f);
+    Check(switched > fresh + 0.8f * skill.switchOnsetMeanMs, "going straight to the next player takes longer");
+    Check(floor, "and never less than both floors");
+
+    // Each fight has its own recoil control and aim point, within bounds.
+    bool bounded = true;
+    float lowShare = 1.0f;
+    float highShare = 0.0f;
+    float lowAim = 0.0f;
+    float highAim = 0.0f;
+    for (int i = 0; i < 2000; ++i)
+    {
+        kb::AimState aim;
+        kb::Engage(aim, 1, 0, 0, skill, rng);
+        bounded = bounded && aim.recoilShare >= 0.1f && aim.recoilShare <= 0.8f
+                  && std::fabs(aim.heightOffset) <= 2.0f * skill.aimHeightDeviation;
+        lowShare = std::fmin(lowShare, aim.recoilShare);
+        highShare = std::fmax(highShare, aim.recoilShare);
+        lowAim = std::fmin(lowAim, aim.heightOffset);
+        highAim = std::fmax(highAim, aim.heightOffset);
+    }
+    Check(bounded, "the recoil share stays in 0.1 to 0.8 and the aim point within two deviations of the chest");
+    Check(highShare - lowShare > 0.3f && highAim - lowAim > 2.0f * skill.aimHeightDeviation,
+          "and they differ from fight to fight");
+}
+
 static void Tracking()
 {
     std::printf("\n== tracking a strafing player ==\n");
@@ -390,6 +492,7 @@ int main()
 {
     Reaction();
     Accuracy();
+    SprayAndSwitch();
     Tracking();
     Trigger();
     Recoil();
