@@ -217,6 +217,18 @@ struct Backend
     bool sceneAo = false;
     uint32_t aoFrame = 0;
     modern::AoStats aoBase{};
+    // Volumetric fog (vk_modern.h DrawFog): the map's fog lit by the sun,
+    // drawn over the linear-light scene before its anti-aliasing, where the
+    // view has fog. Off unless switched on (r_modernFog,
+    // KISAK_VK_MODERN_FOG=1) or its debug view is; its parameters
+    // (KISAK_VK_MODERN_FOG_SUN, _SCATTER live; _STEPS, _MARCH, _HALF
+    // start-up only); the scenes counted at the last reset.
+    bool fogWanted = false;
+    bool fogFailed = false;
+    modern::Fog *fog = nullptr;
+    modern::FogParams fogParams{};
+    uint32_t fogFrame = 0;
+    modern::FogStats fogBase{};
     // Screen-space reflections (vk_modern.h TraceReflections), traced right
     // after the normals buffer from the prepass depth and last scene's
     // anti-aliased linear-light colour: wanted when something reads it (our
@@ -259,6 +271,9 @@ struct Backend
     // KISAK_VK_MODERN_DEBUG=reflections: the reflections debug view over each
     // finished scene that has them (on the display image).
     bool debugReflections = false;
+    // KISAK_VK_MODERN_DEBUG=fog: the light the volumetric fog adds, over
+    // grey, in place of each scene.
+    bool debugFog = false;
     // Planar reflections (docs/vulkan-modern.md "Planar reflections"): wanted
     // with KISAK_VK_MODERN_PLANAR=1 or KISAK_VK_MODERN_DEBUG=planar or
     // planar-read, in linear light only. The renderer draws the planar view into planarColor (linear
@@ -285,6 +300,13 @@ struct Backend
     uint64_t planarReads = 0, planarReadsBase = 0;
     bool debugFailed = false;
     modern::DebugView *debug = nullptr;
+    // KISAK_VK_MODERN_DEBUG=compute (start-up only): the compute check
+    // (vk_modern.h) builds its volume at each scene's lit point and draws it
+    // over the finished scene, made at its first use.
+    bool debugCompute = false;
+    bool computeCheckFailed = false;
+    modern::ComputeCheck *computeCheck = nullptr;
+    modern::ComputeCheckStats computeCheckBase{};
     // The Modern switches the device started with (the KISAK_VK_MODERN_*
     // variables, or the built-in defaults), which a ModernTuning field of -1
     // keeps (ApplyModernTuning), and the Modern tuning last taken up. The
@@ -294,13 +316,14 @@ struct Backend
     {
         bool bloom = true, exposure = true, velocity = true;
         bool shaders = true, modelShaders = true, noSunShaders = true, lightShaders = true;
-        int ao = -1, reflections = -1, normals = -1;
+        int ao = -1, reflections = -1, normals = -1, fog = -1;
         ModernDebugView debug = ModernDebugNone;
         modern::TonemapCurve curve = modern::TonemapCurve::Neutral;
         float sunStrength = 1.0f, skyStrength = 1.0f;
         modern::ExposureParams exposureParams{};
         modern::AoParams aoParams{};
         modern::ReflectionParams reflectionParams{};
+        modern::FogParams fogParams{};
     } modernStart;
     ModernTuning modernTuning{};
 };
@@ -470,6 +493,8 @@ const char *DebugViewName(ModernDebugView view)
         return "ao";
     case ModernDebugReflections:
         return "reflections";
+    case ModernDebugFog:
+        return "fog";
     default:
         return "none";
     }
@@ -494,7 +519,7 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
     backend->noSunShadersWanted = pick(tuning.noSunShaders, start.noSunShaders);
     backend->lightShadersWanted = pick(tuning.lightShaders, start.lightShaders);
 
-    const ModernDebugView view = tuning.debug >= ModernDebugNone && tuning.debug <= ModernDebugReflections
+    const ModernDebugView view = tuning.debug >= ModernDebugNone && tuning.debug <= ModernDebugFog
                                      ? static_cast<ModernDebugView>(tuning.debug)
                                      : start.debug;
     const bool velocityAllBefore = backend->debugVelocityAll;
@@ -503,6 +528,7 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
     backend->debugNormals = view == ModernDebugNormals;
     backend->debugAo = view == ModernDebugAo;
     backend->debugReflections = view == ModernDebugReflections;
+    backend->debugFog = view == ModernDebugFog;
     // The velocity pass takes its depth test when it is made: made again at
     // its next scene (a wait for the GPU, once; only the debug view asks).
     if (velocityAllBefore != backend->debugVelocityAll && backend->velocity)
@@ -573,6 +599,14 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
     reflectionParams = start.reflectionParams;
     reflectionParams.maxDistance = number(tuning.ssrDistance, start.reflectionParams.maxDistance, 0.0f, kAny, false);
     reflectionParams.thickness = number(tuning.ssrThickness, start.reflectionParams.thickness, 0.0f, kAny, false);
+    // Volumetric fog is off unless switched on (its debug view switches it on).
+    const int fog = tuning.fog >= 0 ? tuning.fog : start.fog;
+    backend->fogWanted = backend->linearWanted && (fog == 1 || (fog < 0 && backend->debugFog));
+    modern::FogParams &fogParams = backend->fogParams;
+    fogParams = start.fogParams;
+    fogParams.sunShare = number(tuning.fogSun, start.fogParams.sunShare, 0.0f, 1.0f, true);
+    fogParams.scatter = tuning.fogScatter >= 0.0f && tuning.fogScatter < 0.95f ? tuning.fogScatter
+                                                                                 : start.fogParams.scatter;
 
     backend->tonemapCurve = tuning.tonemap >= static_cast<int>(modern::TonemapCurve::Clamp)
                                     && tuning.tonemap <= static_cast<int>(modern::TonemapCurve::Aces)
@@ -587,14 +621,15 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
             "vulkan d3d9: modern: switches now: bloom %s, exposure %s (key %.3f), velocity %s, our shaders %s "
             "(models %s, without the sun %s, lights %s; sun %.2f, sky %.2f), ambient occlusion %s (radius %.1f, power %.2f, "
             "thickness %.1f, grazing %.2f, floor %.2f, edge %.3f%s), reflections %s (distance %.0f, thickness %.1f), normals %s, "
-            "tonemap %s, debug view %s",
+            "volumetric fog %s (sun %.2f, scatter %.2f), tonemap %s, debug view %s",
             onOff(backend->bloomWanted), onOff(backend->exposureWanted), backend->exposureParams.key,
             onOff(backend->velocityWanted), onOff(backend->shadersWanted), onOff(backend->modelShadersWanted),
             onOff(backend->noSunShadersWanted), onOff(backend->lightShadersWanted), backend->sunStrength, backend->skyStrength, onOff(backend->aoWanted),
             aoParams.radius, aoParams.power, aoParams.thickness, aoParams.grazing, aoParams.floor, aoParams.edge,
             aoParams.half ? ", half resolution" : "",
             onOff(backend->reflectionsWanted), reflectionParams.maxDistance, reflectionParams.thickness,
-            onOff(backend->normalsWanted), modern::CurveName(backend->tonemapCurve), DebugViewName(view));
+            onOff(backend->normalsWanted), onOff(backend->fogWanted), fogParams.sunShare, fogParams.scatter,
+            modern::CurveName(backend->tonemapCurve), DebugViewName(view));
 }
 } // namespace
 
@@ -658,6 +693,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
                       : debug == "normals"      ? ModernDebugNormals
                       : debug == "ao"           ? ModernDebugAo
                       : debug == "reflections"  ? ModernDebugReflections
+                      : debug == "fog"          ? ModernDebugFog
                                                 : ModernDebugNone;
     }
     const auto onOff = [](const char *name) { return EnvIs(name, "0") ? 0 : EnvIs(name, "1") ? 1 : -1; };
@@ -689,12 +725,34 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
             start.aoParams.edge = edge;
         start.aoParams.half = !EnvIsZero("KISAK_VK_MODERN_AO_HALF");
     }
+    start.fog = onOff("KISAK_VK_MODERN_FOG");
+    {
+        modern::FogParams &fog = start.fogParams;
+        const std::string sun = EnvText("KISAK_VK_MODERN_FOG_SUN");
+        const float share = sun.empty() ? -1.0f : std::strtof(sun.c_str(), nullptr);
+        if (share >= 0.0f && share <= 1.0f)
+            fog.sunShare = share;
+        const std::string scatter = EnvText("KISAK_VK_MODERN_FOG_SCATTER");
+        const float g = scatter.empty() ? -1.0f : std::strtof(scatter.c_str(), nullptr);
+        if (g >= 0.0f && g < 0.95f)
+            fog.scatter = g;
+        const std::string steps = EnvText("KISAK_VK_MODERN_FOG_STEPS");
+        const long count = steps.empty() ? 0 : std::strtol(steps.c_str(), nullptr, 10);
+        if (count >= 4 && count <= 128)
+            fog.steps = static_cast<uint32_t>(count);
+        const std::string march = EnvText("KISAK_VK_MODERN_FOG_MARCH");
+        const float length = march.empty() ? 0.0f : std::strtof(march.c_str(), nullptr);
+        if (length > 0.0f)
+            fog.march = length;
+        fog.half = !EnvIsZero("KISAK_VK_MODERN_FOG_HALF");
+    }
     // Reflection probes are filtered as their textures load, so this one
     // stays start-up only.
     backend->probesWanted = !EnvIsZero("KISAK_VK_MODERN_PROBES")
         && (EnvIs("KISAK_VK_MODERN_PROBES", "1") || backend->linearWanted);
     // The planar view and its debug view are start-up only, as the probes.
     backend->debugPlanar = EnvIs("KISAK_VK_MODERN_DEBUG", "planar");
+    backend->debugCompute = EnvIs("KISAK_VK_MODERN_DEBUG", "compute");
     backend->debugPlanarRead = EnvIs("KISAK_VK_MODERN_DEBUG", "planar-read");
     backend->waterShaderWanted = !EnvIsZero("KISAK_VK_MODERN_WATER");
     backend->planarWanted = backend->linearWanted && !EnvIsZero("KISAK_VK_MODERN_PLANAR")
@@ -1026,6 +1084,19 @@ void BackendLogStats(Backend *backend, bool reset)
                 static_cast<unsigned long long>(reflections.traces - backend->reflectionsBase.traces),
                 reflections.levels, pass.supported ? average(pass) : 0.0);
     }
+    // Volumetric fog: the scenes it was drawn over (those that marched the
+    // sun's shadow map) and its two passes' GPU time.
+    if (backend->fog)
+    {
+        const modern::FogStats fog = modern::Stats(backend->fog);
+        const PassTimings pass = PassTimingsFor(backend->core, "modern fog");
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with volumetric fog (%llu through the sun's shadow map; sun %.2f, "
+                   "scatter %.2f, %u steps over %.0f units%s), %.3f ms GPU each",
+                static_cast<unsigned long long>(fog.scenes - backend->fogBase.scenes),
+                static_cast<unsigned long long>(fog.shadowed - backend->fogBase.shadowed), backend->fogParams.sunShare,
+                backend->fogParams.scatter, backend->fogParams.steps, backend->fogParams.march,
+                backend->fogParams.half ? ", half resolution" : "", pass.supported ? 2.0 * average(pass) : 0.0);
+    }
     // Reflection probes: filtered as the world loaded, since the device was made.
     if (backend->probesFiltered || backend->probesLeft)
         HostLog(h, "vulkan d3d9: modern: %u reflection probes filtered by gloss in linear light (%u left as they "
@@ -1052,10 +1123,23 @@ void BackendLogStats(Backend *backend, bool reset)
                 static_cast<unsigned long long>(scenes), scenes ? double(passes) / double(scenes) : 0.0,
                 pass.supported && scenes ? (pass.totalMs - backend->bloomMsBase) / double(scenes) : 0.0);
     }
+    // The compute check: the volumes built and drawn, and its passes' GPU time.
+    if (backend->computeCheck)
+    {
+        const modern::ComputeCheckStats check = modern::Stats(backend->computeCheck);
+        const PassTimings fill = PassTimingsFor(backend->core, "modern compute check fill");
+        const PassTimings integrate = PassTimingsFor(backend->core, "modern compute check integrate");
+        HostLog(h, "vulkan d3d9: modern: %llu compute check volumes built (%llu drawn), %.3f ms GPU each for "
+                   "its compute passes",
+                static_cast<unsigned long long>(check.builds - backend->computeCheckBase.builds),
+                static_cast<unsigned long long>(check.draws - backend->computeCheckBase.draws),
+                fill.supported && integrate.supported ? average(fill) + average(integrate) : 0.0);
+    }
     if (reset)
     {
         if (backend->taa)
             backend->taaBase = modern::Stats(backend->taa);
+        backend->computeCheckBase = modern::Stats(backend->computeCheck);
         backend->bloomScenesBase = backend->bloomScenes;
         backend->bloomPassesBase = modern::Stats(backend->bloom).passes;
         if (backend->bloom)
@@ -1063,6 +1147,7 @@ void BackendLogStats(Backend *backend, bool reset)
         backend->velocityBase = modern::Stats(backend->velocity);
         backend->normalsBase = modern::Stats(backend->normals);
         backend->aoBase = modern::Stats(backend->ao);
+        backend->fogBase = modern::Stats(backend->fog);
         backend->reflectionsBase = modern::Stats(backend->reflections);
         backend->keptBase = modern::Stats(backend->kept);
         backend->linearScenesBase = backend->linearScenes;
@@ -1111,6 +1196,11 @@ void CloseBackend(Backend *backend)
         modern::DestroyAmbientOcclusion(backend->core, backend->ao);
         backend->ao = nullptr;
     }
+    if (backend->fog)
+    {
+        modern::DestroyFog(backend->core, backend->fog);
+        backend->fog = nullptr;
+    }
     if (backend->legacy && backend->aoTexture)
     {
         lg::DestroyTexture(backend->legacy, backend->aoTexture);
@@ -1138,6 +1228,11 @@ void CloseBackend(Backend *backend)
     {
         modern::DestroyDebugView(backend->core, backend->debug);
         backend->debug = nullptr;
+    }
+    if (backend->computeCheck)
+    {
+        modern::DestroyComputeCheck(backend->core, backend->computeCheck);
+        backend->computeCheck = nullptr;
     }
     if (backend->bloom)
     {
@@ -2063,6 +2158,56 @@ void BackendModernPlanarDone(Backend *backend, const ModernPlanarView &view)
     backend->planarReady = true;
 }
 
+// ---- Scene passes ----------------------------------------------------------------
+//
+// Where the Modern path's own passes (render or compute) slot into a scene,
+// beside the ones above that have places of their own (normals, AO and
+// reflections after the depth prepass; velocity, TAA, bloom, exposure and
+// the tonemap at the end).
+
+// Once per scene, between passes: the lit surfaces are drawn into `scene`
+// (the linear-light image when `linear`), with its depth, and nothing has
+// read it yet: before velocity, TAA, bloom, exposure and the tonemap, and
+// before the effects unless they are drawn in linear light. Passes that
+// change the lit scene, or build what a later point draws, go here. Not run
+// when the scene is refused before the tonemap without linear light.
+void LitScenePasses(Backend *backend, Image *scene, Image *depth, const modern::SceneView &view, bool linear)
+{
+    (void)scene;
+    (void)depth;
+    (void)view;
+    (void)linear;
+    if (backend->debugCompute && !backend->computeCheckFailed)
+    {
+        std::string error;
+        if (!backend->computeCheck)
+        {
+            backend->computeCheck = modern::CreateComputeCheck(backend->core, error);
+            if (!backend->computeCheck)
+            {
+                backend->computeCheckFailed = true;
+                HostLog(*backend->host, "vulkan d3d9: modern: no compute check: %s", error.c_str());
+                return;
+            }
+        }
+        if (!modern::BuildComputeCheck(backend->core, backend->computeCheck, error))
+            LogModernOnce(backend, "the compute check is not built", error);
+    }
+}
+
+// Once per scene, between passes: the scene is finished in `target` (the
+// display image after the tonemap, or the anti-aliased scene without linear
+// light) within `area`. Debug views go here.
+void FinishedScenePasses(Backend *backend, Image *target, const VkRect2D &area)
+{
+    if (backend->debugCompute && backend->computeCheck && target)
+    {
+        std::string error;
+        if (!modern::DrawComputeCheck(backend->core, backend->computeCheck, target, area, 0.5f, error))
+            LogModernOnce(backend, "the compute check is not drawn", error);
+    }
+}
+
 bool BackendModernWantsSceneDepth(Backend *backend)
 {
     return backend && backend->legacy && backend->core && backend->normalsWanted && !backend->normalsFailed;
@@ -2111,8 +2256,48 @@ ModernResult BackendModernSceneDepth(Backend *backend, lg::Surface *depth, const
     return ModernResult::Done;
 }
 
+namespace
+{
+// Volumetric fog over the linear-light scene (vk_modern.h DrawFog), when it
+// is wanted and the view has fog. A failure is logged once and the scene
+// goes on without it.
+void DrawSceneFog(Backend *backend, Image *color, Image *depth, Image *sunShadow, const ModernSceneView &view,
+                  const modern::SceneView &scene)
+{
+    if (!backend->fogWanted || backend->fogFailed || !view.fog.on)
+        return;
+    if (!backend->fog)
+    {
+        std::string error;
+        backend->fog = modern::CreateFog(backend->core, error);
+        if (!backend->fog)
+        {
+            backend->fogFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no volumetric fog: %s", error.c_str());
+            return;
+        }
+    }
+    modern::FogInputs inputs;
+    std::memcpy(inputs.color, view.fog.color, sizeof(inputs.color));
+    inputs.density = view.fog.density;
+    inputs.start = view.fog.start;
+    std::memcpy(inputs.origin, view.fog.origin, sizeof(inputs.origin));
+    std::memcpy(inputs.sunDirection, view.fog.sunDirection, sizeof(inputs.sunDirection));
+    std::memcpy(inputs.shadowLookup, view.fog.shadowLookup, sizeof(inputs.shadowLookup));
+    std::memcpy(inputs.switchPartition, view.fog.switchPartition, sizeof(inputs.switchPartition));
+    std::memcpy(inputs.shadowmapScale, view.fog.shadowmapScale, sizeof(inputs.shadowmapScale));
+    modern::FogParams params = backend->fogParams;
+    params.frame = backend->fogFrame++;
+    params.debug = backend->debugFog;
+    std::string error;
+    if (!modern::DrawFog(backend->core, backend->fog, color, depth, sunShadow, scene, inputs, params, error))
+        LogModernOnce(backend, "no volumetric fog", error);
+}
+} // namespace
+
 ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surface *depth,
-                                const ModernSceneView &view, lg::Surface *display, bool *glowDrawn)
+                                const ModernSceneView &view, lg::Surface *display, bool *glowDrawn,
+                                lg::Surface *sunShadow)
 {
     if (!backend || !backend->legacy || !backend->core)
         return ModernResult::Refused;
@@ -2154,6 +2339,16 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
         lg::Device *legacy;
         ~ReleaseHeld() { lg::ReleaseHeldBuffers(legacy); }
     } heldGuard{backend->legacy};
+    // The scene passes at its lit point (LitScenePasses), once: before the
+    // anti-aliasing, or before the tonemap when that is refused.
+    bool litPassesRun = false;
+    const auto litPasses = [&]() {
+        if (litPassesRun)
+            return;
+        litPassesRun = true;
+        LitScenePasses(backend, color ? lg::SurfaceImage(color) : nullptr, depth ? lg::SurfaceImage(depth) : nullptr,
+                       SceneViewOf(view), display != nullptr);
+    };
     // In linear light the scene must reach the back buffer whatever the
     // anti-aliasing does.
     const auto tonemap = [&](ModernResult passes) {
@@ -2161,6 +2356,7 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
             return passes;
         if (!lg::HandOverRecording(backend->legacy))
             return ModernResult::Skipped;
+        litPasses();
         const VkRect2D area = {{static_cast<int32_t>(view.x), static_cast<int32_t>(view.y)}, {view.width, view.height}};
         Image *scene = lg::SurfaceImage(color);
         float bloomScale = 0.0f;
@@ -2190,6 +2386,7 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
             DrawReflectionsDebug(backend, lg::SurfaceImage(backend->planarColorSurface), lg::SurfaceImage(display),
                                  planarArea);
         }
+        FinishedScenePasses(backend, lg::SurfaceImage(display), area);
         return passes;
     };
     if (backend->taaFailed)
@@ -2219,6 +2416,10 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
         return ModernResult::Skipped; // nothing of this frame is drawn either
     const modern::SceneView scene = SceneViewOf(view);
     std::string error;
+    // The fog is lit before the anti-aliasing, which averages its noise away.
+    if (display)
+        DrawSceneFog(backend, colorImage, depthImage, sunShadow ? lg::SurfaceImage(sunShadow) : nullptr, view,
+                     scene);
     // Skinned surfaces whose vertices the last scene kept are drawn from
     // those and this scene's.
     if (!scene.cut)
@@ -2230,6 +2431,7 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
             if (modern::FindKept(backend->kept, surface.key, draw.vertexCount, draw.previous, draw.previousOffset))
                 moved.push_back(draw);
         }
+    litPasses();
     Image *velocity = SceneVelocity(backend, depthImage, scene, moved);
     keptGuard.done = KeepSkinned(backend, skinned);
     if (!modern::Resolve(backend->core, backend->taa, colorImage, depthImage, scene, error, velocity))
@@ -2241,6 +2443,8 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
         DrawNormalsDebug(backend, normals, colorImage, scene.area);
     if (backend->debugAo && !display)
         DrawAoDebug(backend, ao, colorImage, scene.area);
+    if (!display)
+        FinishedScenePasses(backend, colorImage, scene.area);
     return tonemap(ModernResult::Done);
 }
 

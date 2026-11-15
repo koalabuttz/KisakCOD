@@ -996,6 +996,9 @@ class CiTriggerTests(unittest.TestCase):
         'src/linux/main.cpp',
         'scripts/platform/linux/CMakeLists.txt',
         'scripts/platform/android/android_toolchain.cmake',
+        'scripts/platform/android/build_apk.py',
+        'scripts/platform/android/app/src/main/AndroidManifest.xml',
+        'scripts/vulkan_probe/vulkan_backend.cmake',
         'scripts/tests/check_android_binary.py',
         'deps/some_library/source.c',
         '.github/workflows/build-kisakcod-android.yaml',
@@ -1021,6 +1024,9 @@ class CiTriggerTests(unittest.TestCase):
                     self.assertFalse(_selected(path, paths))
         steps = [step.get('run', '') for step in self.android['jobs']['android_dedicated']['steps']]
         self.assertTrue(any('check_android_binary.py "$binary"' in run for run in steps))
+        steps = [step.get('run', '') for step in self.android['jobs']['android_apk']['steps']]
+        self.assertTrue(any('scripts/platform/android/build_apk.py' in run for run in steps))
+        self.assertTrue(any('check_android_binary.py --library' in run for run in steps))
 
     def test_workflow_edits_start_the_contract_check_not_the_linux_build(self):
         # This file checks every workflow. workflow-contracts.yaml runs it on

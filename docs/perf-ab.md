@@ -124,6 +124,25 @@ perf: done
     (`R_AddAllStaticModelSurfacesCamera`), `entities`
     (`R_DrawAllSceneEnt`) and `sorted lists`
     (`R_MergeAndEmitDrawSurfLists`, `R_SortDrawSurfs`).
+  - `cells: a cell handed to the workers`: inside `scene: cells`, the four
+    worker commands queued for each visible cell
+    (`R_AddCellSurfacesAndCullGroupsInFrustumDelayed`). What is left of
+    `scene: cells` is the walk through the portals.
+  - `world: <part>`: parts of `scene: world surfaces`: `lit surfaces`,
+    `decals` and `emissive surfaces` (the three walks over the world's
+    visible surfaces, each making its batches), `lights and shadow maps` (the
+    shadowed lights chosen, the draw method, the sun shadow's maps set up)
+    and `a batch's indices copied` (`R_PreTessBspDrawSurfs`, inside the
+    three walks and the sun shadow's: the indices of a batch's surfaces
+    copied into the frame's index buffer).
+  - `static models: <part>`: parts of `scene: static models`: `a model's
+    draw surfaces` (`R_SkinStaticModelsCameraForLod`: the visible instances
+    of one model made draw surfaces) and, inside it, `cached indices copied`
+    (`R_PreTessStaticModelCachedList`). What is left of `scene: static
+    models` is the walk over the visible models itself: distance, level of
+    detail, lighting slot and cache entry of each. The two copies are timed
+    for every batch, hundreds a frame, so on a slow machine take two clock
+    readings off each call before comparing them with anything.
   - `workers: awake`: a worker thread from waking to its next sleep, both
     workers added up. Its calls are wake-ups; a wake-up that finds no
     command still counts.
@@ -138,6 +157,20 @@ perf: done
     front-end command before the frame is handed over, `other` any other.
   - `wait for the render thread`: the main thread asleep until the render
     thread takes the frame.
+
+    Both waits sleep on the worker command event, a millisecond at a time.
+    Until 2026-11-15 a thread on Linux, macOS and the PS Vita missed a set of
+    that event that another thread reset straight afterwards (the render
+    thread and the workers do that every frame) and slept to the end of its
+    millisecond, where Windows lets it go at the set
+    (`PosixEvent::setCount` in `src/linux/sys_posix.cpp`). On the console
+    (trial builds of dc9dc6a7 with a switch between the two, eight windows of
+    6 s each at the busy view of mp_crash) `wait for workers: add scene ent`
+    went from 1.40 to 0.22 ms a frame and `render: waiting for a frame` from
+    0.70 to 0.10. At full size the GPU sets that view's frame and its mean
+    stayed at 36.0 ms (p95 37.3 to 36.3); with the 3D picture at half size
+    the frame went from 26.59 to 25.74 ms, every window with the fix ahead of
+    every window without, and at 0.7 from 26.68 to 26.47.
   - `render: <part>`: the render thread's frame. `3d` is `RB_Draw3D`, the
     3D views, and holds `depth pass` (`R_DepthPrepass`), `lit`
     (`R_DrawLit`), `decals`, `sun`, `point lights`, `emissive` (effects and
@@ -383,6 +416,67 @@ process's CPU time from 72.6 to 71.2 ms a frame. The frame itself stayed at
 37.3 to 37.4 ms: that view waits on the render thread, not on this work. The
 walk got a seventh faster, not twice: most of a box test's time is not the
 sums. No other machine has run it.
+
+## `r_fetchAhead`
+
+The scene's walks read small records that lie anywhere in the world's arrays,
+one after another, so the processor does not see the next one coming.
+`r_fetchAhead 1` (builds with GCC or Clang; on by default on the PS Vita, off
+elsewhere) asks for the next ones while one is worked on. Nothing but the time
+changes: the same bytes are copied and the same models and surfaces are
+marked. It asks for:
+
+- the indices of the next surface of a batch while one surface's indices are
+  copied into the frame's index buffer (`R_PreTessBspDrawSurfs`, `r_pretess`),
+  and the record of the surface four ahead;
+- the cached indices of a static model's next instance
+  (`R_PreTessStaticModelCachedList`);
+- the record of the visible static model two ahead while one is handed on
+  (`R_AddAllStaticModelSurfacesCamera`);
+- in the static culling of `r_staticCullVec`, the tree node two further in a
+  row of nodes, and in a leaf that planes cut the box of the static model or
+  surface two ahead.
+
+```
+perf_ab "set r_fetchAhead 0" "set r_fetchAhead 1"
+```
+
+compares the two; `main thread runs: dpvs cell static`, `other threads run:
+dpvs cell static`, `scene: world surfaces`, `scene: static models` and the
+`world:` and `static models:` parts are its timers.
+
+Three console runs on a PS Vita at the busy view of mp_crash are why the Vita
+has it on: CB (the CI build of 89c46a25, the index copies alone) and two
+trial runs of builds made on the PC from PR 371's head with trial patches, in
+which every piece was a bit of its own. The rows are steady to a few hundredths
+of a millisecond from window to window. The second trial run held everything
+but the tree nodes off against on, eight windows of 6 s in the order A B B A A
+B B A, in ms a frame:
+
+| timer | off | on |
+| --- | --- | --- |
+| `main thread runs: dpvs cell static` | 3.98 to 4.01 | 3.65 to 3.67 |
+| `other threads run: dpvs cell static` | 5.54 to 5.57 | 5.18 to 5.21 |
+| `scene: world surfaces` (main thread) | 4.54 to 4.56 | 4.05 to 4.07 |
+| `scene: static models` (main thread) | 4.61 to 4.64 | 4.01 to 4.02 |
+
+That is 1.8 ms of processor time a frame, 1.45 of it on the main thread. The
+tree nodes are another 0.2 ms (3.67 to 3.56 and 5.19 to 5.09 in their own four
+windows). The frame was 0.5 to 1.2 ms shorter with it on (34.7 to 35.1 ms
+against 35.4 to 36.7): in that build the main thread set the pace at that view.
+The whole process's CPU time says less than the rows do, because the sound's
+share of the main thread swings by 1.7 ms between windows of either setting.
+
+What the trials ruled out, each in four windows of its own: a leaf's boxes four
+ahead instead of two (0.15 ms slower on each of the two threads), indices two
+surfaces ahead instead of one (no change), surface records eight ahead instead
+of four (0.04 ms slower), the static model record four ahead instead of two (no
+change), holding all the nodes of a row before going down into any (0.55 ms
+slower on each thread), and holding a leaf's boxes against one or two planes
+without the vectors (0.05 ms slower).
+
+No other machine has run it; a desktop processor does this work in a small
+fraction of the time, so the setting stays off there until one does.
 
 ## Checks
 

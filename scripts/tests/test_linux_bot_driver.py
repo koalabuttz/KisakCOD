@@ -6,7 +6,8 @@ from test_linux_bots import (FIXTURE_GSC, transition_fixture, transition_plan,
                              validate_kick_window, validate_hold, validate_transitions,
                              validate_brain_view, validate_brain_walk, balanced_teams,
                              uses_both_teams, TEAM_CAPACITY, MAX_BOTS, validate_brain_notices,
-                             validate_brain_fights, COVER_ROW, HUNT_ROW)
+                             validate_brain_fights, COVER_ROW, HUNT_ROW, team_play,
+                             objective_fixture, validate_objectives, FIXTURE_GSC)
 
 
 def healthy_log():
@@ -364,6 +365,43 @@ class DecisionLogTests(unittest.TestCase):
                   'bots: 8 hunts (guessed)\n')
         self.assertEqual(len(COVER_ROW.findall(output)), 2)
         self.assertEqual(len(HUNT_ROW.findall(output)), 3)
+
+    def test_team_play_lines_are_counted(self):
+        output = ('bots: 2 plays push\nbots: 3 plays anchor\nbots: 4 plays push\nbots: 5 plays boss\n'
+                  'bots: 2 calls out 7\nbots: 3 calls out 9\n'
+                  'bots: 2 pushes to a callout 840 units away\n'
+                  'bots: 3 anchors 610 units from a callout\n'
+                  'bots: 6 attacks an objective 1200 units away\nbots: 7 defends an objective from 420 units\n'
+                  'bots: map spots ready: 311 spots, 48205 lines, in 12.3 s\n')
+        team = team_play(output)
+        self.assertEqual(team["roles"], {"push": 2, "anchor": 1})
+        self.assertEqual((team["callouts"], team["pushes"], team["anchors"], team["objectives"]), (2, 1, 1, 2))
+        self.assertEqual(team["spots"], ("311", "48205", "12.3"))
+        self.assertIsNone(team_play("")["spots"])
+
+
+class ObjectiveTests(unittest.TestCase):
+    def test_the_fixture_starts_domination(self):
+        fixture = objective_fixture(FIXTURE_GSC)
+        self.assertIn("maps\\mp\\gametypes\\dom::main();", fixture)
+        self.assertNotIn("war::main", fixture)
+
+    def passed(self, output):
+        return all(ok for ok, _ in validate_objectives(output))
+
+    def test_both_teams_reading_flags_and_an_attack_pass(self):
+        self.assertTrue(self.passed("bots: team 1 objectives: take 3, hold 0\n"
+                                    "bots: team 2 objectives: take 2, hold 1\n"
+                                    "bots: 4 attacks an objective 900 units away\n"))
+
+    def test_one_team_or_no_attack_fails(self):
+        self.assertFalse(self.passed("bots: team 1 objectives: take 3, hold 0\n"
+                                     "bots: 4 attacks an objective 900 units away\n"))
+        self.assertFalse(self.passed("bots: team 1 objectives: take 3, hold 0\n"
+                                     "bots: team 2 objectives: take 3, hold 0\n"))
+        self.assertFalse(self.passed("bots: team 1 objectives: take 0, hold 0\n"
+                                     "bots: team 2 objectives: take 3, hold 0\n"
+                                     "bots: 4 attacks an objective 900 units away\n"))
 
 
 class CombatHoldTests(unittest.TestCase):

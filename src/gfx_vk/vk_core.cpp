@@ -456,7 +456,8 @@ Candidate Evaluate(Core &core, VkPhysicalDevice physical)
     bool found = false;
     for (uint32_t i = 0; i < count && !found; ++i)
     {
-        if (!(families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT))
+        // The Modern path's compute passes run on the same queue as the draws.
+        if (!(families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) || !(families[i].queueFlags & VK_QUEUE_COMPUTE_BIT))
             continue;
         VkBool32 present = VK_FALSE;
         if (vk.vkGetPhysicalDeviceSurfaceSupportKHR(physical, i, core.surface, &present) == VK_SUCCESS && present)
@@ -467,7 +468,7 @@ Candidate Evaluate(Core &core, VkPhysicalDevice physical)
     }
     if (!found)
     {
-        std::snprintf(candidate.why, sizeof(candidate.why), "no queue family both draws and presents to this window");
+        std::snprintf(candidate.why, sizeof(candidate.why), "no queue family draws, computes and presents to this window");
         return candidate;
     }
 
@@ -692,6 +693,7 @@ bool CreateDevice(Core &core)
     core.optional.independentBlend = supported.independentBlend;
     core.optional.shaderClipDistance = supported.shaderClipDistance;
     core.optional.shaderFloat16 = supported12.shaderFloat16;
+    core.optional.storageImageExtendedFormats = supported.shaderStorageImageExtendedFormats;
     // MoltenVK's paths (see OptionalFeatures), or forced for testing.
     core.optional.dynamicVertexStride = !portability && !EnvEquals("KISAK_VK_VERTEX_STRIDE", "static");
     core.optional.ownIndexMemory = EnvEquals("KISAK_VK_INDEX_MEMORY", "own")
@@ -743,6 +745,7 @@ bool CreateDevice(Core &core)
     features.features.fillModeNonSolid = supported.fillModeNonSolid;
     features.features.independentBlend = supported.independentBlend;
     features.features.shaderClipDistance = supported.shaderClipDistance;
+    features.features.shaderStorageImageExtendedFormats = supported.shaderStorageImageExtendedFormats;
     features.features.occlusionQueryPrecise = core.optional.occlusionCounts ? VK_TRUE : VK_FALSE;
 
     VkDeviceCreateInfo info{};
@@ -880,6 +883,23 @@ VkPresentModeKHR ChoosePresentMode(const VkPresentModeKHR *offered, uint32_t cou
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
+// The picture is drawn upright for the extent the surface reports, so the
+// swapchain asks for no rotation whenever the surface allows it, and the
+// compositor turns the picture for the panel. On desktops the surface's own
+// transform is the identity anyway. On Android a panel whose own orientation
+// is portrait reports a quarter turn while the game runs in landscape, and
+// handing that transform over unchanged told the compositor the landscape
+// picture was already turned: it came out squeezed into portrait (first app
+// run on the Retroid Pocket 6, 2026-11-15). Drawing the picture turned
+// instead (Android's "pre-rotation") saves the compositor that work and is
+// left for later.
+VkSurfaceTransformFlagBitsKHR ChoosePreTransform(const VkSurfaceCapabilitiesKHR &caps)
+{
+    if (caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+        return VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    return caps.currentTransform;
+}
+
 bool SurfaceExtent(Core &core, VkSurfaceCapabilitiesKHR &caps, VkExtent2D &extent)
 {
     if (!Check(core, core.vk.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(core.physical, core.surface, &caps),
@@ -973,7 +993,7 @@ BuildResult BuildSwapchain(Core &core)
     info.imageArrayLayers = 1;
     info.imageUsage = usage;
     info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    info.preTransform = caps.currentTransform;
+    info.preTransform = ChoosePreTransform(caps);
     info.compositeAlpha = alpha;
     info.presentMode = mode;
     info.clipped = VK_TRUE;
@@ -1028,9 +1048,11 @@ BuildResult BuildSwapchain(Core &core)
                      static_cast<uint32_t>(core.swapImages.size()), canCapture};
     core.rebuildPending = false;
     core.resizePending = false;
+    core.transformLeftToCompositor = info.preTransform != caps.currentTransform;
     ++core.stats.swapchainBuilds;
-    Log(core, "swapchain %ux%u %s %s, %u images%s", extent.width, extent.height, FormatName(format.format),
-        PresentModeName(mode), core.swapInfo.imageCount, canCapture ? ", capturable" : "");
+    Log(core, "swapchain %ux%u %s %s, %u images%s%s", extent.width, extent.height, FormatName(format.format),
+        PresentModeName(mode), core.swapInfo.imageCount, canCapture ? ", capturable" : "",
+        core.transformLeftToCompositor ? ", turned by the compositor" : "");
     return BuildResult::Built;
 }
 

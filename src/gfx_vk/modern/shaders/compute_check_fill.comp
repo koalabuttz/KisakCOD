@@ -1,0 +1,26 @@
+#version 450
+
+// The Modern path's compute check (vk_modern_compute.cpp,
+// KISAK_VK_MODERN_DEBUG=compute), pass one of two: fills a 3D volume, one
+// invocation per texel, with where the texel is (its centre in 0..1 along x,
+// y and z) and alpha 0.5, and a storage buffer with each slice's weights.
+// Pass two (compute_check_integrate.comp) reads both.
+
+layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform writeonly image3D volume;
+layout(set = 0, binding = 1, std430) writeonly buffer Slices
+{
+    vec4 weight[];
+} slices;
+
+void main()
+{
+    const ivec3 size = imageSize(volume);
+    const ivec3 texel = ivec3(gl_GlobalInvocationID);
+    if (any(greaterThanEqual(texel, size)))
+        return;
+    imageStore(volume, texel, vec4((vec3(texel) + 0.5) / vec3(size), 0.5));
+    if (texel.x == 0 && texel.y == 0)
+        slices.weight[texel.z] = vec4(1.0, 1.0, 1.0, 2.0);
+}

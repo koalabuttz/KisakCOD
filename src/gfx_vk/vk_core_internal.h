@@ -66,6 +66,9 @@ struct Buffer
     BufferDesc desc{};
     Allocation allocation{};
     std::string name;
+    // Tracked use by shaders (UseBuffer); copies keep their own barriers.
+    VkPipelineStageFlags2 lastStages = VK_PIPELINE_STAGE_2_NONE;
+    VkAccessFlags2 lastAccess = VK_ACCESS_2_NONE;
 };
 
 struct Image
@@ -330,6 +333,11 @@ public:
     std::vector<VkSemaphore> renderDone; // one per swapchain image
     bool rebuildPending = false;
     bool resizePending = false;
+    // The swapchain was built with an identity preTransform on a rotated
+    // surface (Android, a panel whose own orientation is not the game's):
+    // the compositor turns the picture, and presents report
+    // VK_SUBOPTIMAL_KHR for that alone, which must not rebuild every frame.
+    bool transformLeftToCompositor = false;
     bool windowDetached = false; // DetachWindow: no swapchain or surface any more
 
     FrameSlot frames[kFramesInFlight];
@@ -342,6 +350,7 @@ public:
     bool recordingOpen = false;      // a command buffer is being recorded
     uint64_t recordingId = 0;        // counts command buffers begun
     bool inPass = false;
+    bool inComputePass = false; // BeginComputePass ... EndComputePass
     int currentTimedPass = -1;
     bool bufferCopiesOpen = false;            // see CloseBufferCopies
     std::vector<Image *> pendingUploads;      // uploadPending images

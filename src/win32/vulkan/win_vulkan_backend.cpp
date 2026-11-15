@@ -500,6 +500,17 @@ front::ModernSceneView ModernViewOf(const GfxModernScene *scene)
     view.glow.intensity = scene->glowIntensity;
     view.glow.cutoff = scene->glowCutoff;
     view.glow.desaturation = scene->glowDesaturation;
+    const GfxModernFog &fog = scene->fog;
+    view.fog.on = fog.on;
+    std::memcpy(view.fog.color, fog.color, sizeof(view.fog.color));
+    view.fog.density = fog.density;
+    view.fog.start = fog.start;
+    std::memcpy(view.fog.origin, fog.origin, sizeof(view.fog.origin));
+    std::memcpy(view.fog.sunDirection, fog.sunDirection, sizeof(view.fog.sunDirection));
+    view.fog.shadowMap = fog.shadowMap;
+    std::memcpy(view.fog.shadowLookup, fog.shadowLookup, sizeof(view.fog.shadowLookup));
+    std::memcpy(view.fog.switchPartition, fog.switchPartition, sizeof(view.fog.switchPartition));
+    std::memcpy(view.fog.shadowmapScale, fog.shadowmapScale, sizeof(view.fog.shadowmapScale));
     return view;
 }
 

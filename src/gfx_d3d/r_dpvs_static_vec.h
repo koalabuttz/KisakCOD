@@ -78,6 +78,10 @@ struct World
     uint8_t *modelVis;
     uint8_t *surfaceVis;
     bool decals; // the tree's surface ranges with decals, or without
+    // Ask for what is held next while one box is held: the node two further
+    // in a row of nodes, and in a leaf that planes cut the box of the static
+    // model or surface two ahead (r_fetchAhead). The same marks.
+    bool fetchAhead;
 };
 
 enum

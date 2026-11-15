@@ -319,6 +319,14 @@ namespace
             case SYS_PERF_PROBE_SCENE_STATIC_MODELS: return "scene: static models";
             case SYS_PERF_PROBE_SCENE_ENTITIES: return "scene: entities";
             case SYS_PERF_PROBE_SCENE_MERGE: return "scene: sorted lists";
+            case SYS_PERF_PROBE_CELLS_HAND_OVER: return "cells: a cell handed to the workers";
+            case SYS_PERF_PROBE_WORLD_LIT: return "world: lit surfaces";
+            case SYS_PERF_PROBE_WORLD_DECAL: return "world: decals";
+            case SYS_PERF_PROBE_WORLD_EMISSIVE: return "world: emissive surfaces";
+            case SYS_PERF_PROBE_WORLD_LIGHTS: return "world: lights and shadow maps";
+            case SYS_PERF_PROBE_WORLD_PRETESS: return "world: a batch's indices copied";
+            case SYS_PERF_PROBE_SMODEL_HAND_ON: return "static models: a model's draw surfaces";
+            case SYS_PERF_PROBE_SMODEL_PRETESS: return "static models: cached indices copied";
             case SYS_PERF_PROBE_RENDER_3D: return "render: 3d";
             case SYS_PERF_PROBE_RENDER_DEPTH: return "render: depth pass";
             case SYS_PERF_PROBE_RENDER_LIT: return "render: lit";

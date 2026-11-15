@@ -13,7 +13,11 @@
 //             at: the player it sees, a sound it just heard, or the corner of
 //             its way an enemy would come round (pre-aim); fight the player
 //             it sees (bot_combat.h, with bot_combat 1); ask to respawn when
-//             dead; objectives come later (docs/bots.md);
+//             dead;
+//   team      call out the enemies it sees to its team, and play the part
+//             the team's commander gave it (bot_team.h): push to where the
+//             team saw enemies, anchor a spot that overlooks them, roam, or
+//             attack and defend the objectives on its compass;
 //   move      the view motor (bot_motor.h) turns toward that at a human pace,
 //             the hand of bot_combat.h aims, and the bot kicks its own view
 //             when it fires, as a player's client does;
@@ -34,6 +38,7 @@
 #include "bot_motor.h"
 #include "bot_navmesh.h"
 #include "bot_perception.h"
+#include "bot_team.h"
 
 #include <cmath>
 #include <cstring>
@@ -121,9 +126,40 @@ struct BotSlot
     int hurtAt = -1000000;
     bool hurtFromKnown = false;
     float hurtFrom[3] = {0.0f, 0.0f, 0.0f};
+
+    // Its team (bot_team.h): its part, the objective that part is about, when
+    // it last called out each enemy, and the goal the part gave it.
+    kb::Role role = kb::Role::Roam;
+    bool objectiveKnown = false;
+    float objective[3] = {0.0f, 0.0f, 0.0f};
+    int calledAt[kMaxBotSlots] = {};
+    bool roleGoal = false;
+    int roleUntil = 0;
+    int pushedCall = -1;
+    float holdFacing[3] = {0.0f, 0.0f, 0.0f};
+    bool holdFacingKnown = false;
+    bool atObjective = false;
+    int roleRetryAt = 0;
 };
 
 BotSlot s_slots[kMaxBotSlots];
+
+// A team of bots: what they said to each other, and the objectives on their
+// compass, sorted for the commander.
+struct TeamState
+{
+    kb::TeamBoard board;
+    int lastTime = 0;
+    int nextCommand = 0;
+    static constexpr int kMaxObjectives = MAX_OBJECTIVES;
+    float take[kMaxObjectives][3];
+    float hold[kMaxObjectives][3];
+    int takeCount = 0;
+    int holdCount = 0;
+};
+
+TeamState s_teams[TEAM_NUM_TEAMS];
+int s_commandFrame = -1;
 
 kb::ViewMotorParams IdleMotor()
 {
@@ -286,6 +322,11 @@ bool Walk(BotSlot &bot, const playerState_s *ps, float seconds, usercmd_s &cmd, 
         {
             bot.hasGoal = false;
             bot.stuckCount = 0;
+            if (bot.roleGoal)
+            {
+                bot.roleGoal = false;
+                bot.roleRetryAt = svs.time + 3000;
+            }
         }
         return false;
     }
@@ -604,6 +645,308 @@ bool RoamGoal(BotSlot &bot, const kb::NavMesh &nav, const float *origin, float *
     return bestScore >= 0.0f;
 }
 
+// ---------------------------------------------------------------------------
+// The team (bot_team.h).
+
+bool LogOn()
+{
+    return bot_log && bot_log->current.integer;
+}
+
+team_t TeamOf(int clientNum)
+{
+    const gentity_s *ent = SV_GentityNum(clientNum);
+    if (!ent || !ent->client)
+        return TEAM_FREE;
+    return ent->client->sess.cs.team;
+}
+
+// The bot's team, or nullptr in free-for-all (every bot for itself) and when
+// it spectates.
+TeamState *BoardOf(int clientNum)
+{
+    const team_t team = TeamOf(clientNum);
+    if (team != TEAM_AXIS && team != TEAM_ALLIES)
+        return nullptr;
+    return &s_teams[team];
+}
+
+// The objectives on the compass of a player of the team, as the HUD shows
+// them: where, and whether the icon asks to take or to hold the place.
+void ReadObjectives(TeamState &team, const playerState_s *ps)
+{
+    team.takeCount = 0;
+    team.holdCount = 0;
+    for (int i = 0; i < MAX_OBJECTIVES; ++i)
+    {
+        const objective_t &obj = ps->objective[i];
+        if (obj.state != OBJST_ACTIVE && obj.state != OBJST_CURRENT)
+            continue;
+        if (obj.icon <= 0 || obj.icon >= CS_SERVER_MATERIALS_COUNT)
+            continue;
+        char material[64];
+        SV_GetConfigstring(CS_SERVER_MATERIALS + obj.icon, material, sizeof(material));
+        const kb::ObjectiveKind kind = kb::ObjectiveKindFromIcon(material);
+        if (kind == kb::ObjectiveKind::None)
+            continue;
+        // An icon on an entity (a carried flag or bomb) follows it on the
+        // compass.
+        const float *place = obj.origin;
+        if (obj.entNum != ENTITYNUM_NONE)
+        {
+            const gentity_s *ent = SV_GentityNum(obj.entNum);
+            if (ent && ent->r.inuse)
+                place = ent->r.currentOrigin;
+        }
+        float *out = kind == kb::ObjectiveKind::Take ? team.take[team.takeCount++] : team.hold[team.holdCount++];
+        out[0] = place[0];
+        out[1] = place[1];
+        out[2] = place[2];
+    }
+}
+
+// The commander, once a second for each team: reads the team's objectives
+// and gives each of its bots a part (kb::AssignRoles), and an objective to
+// the attackers and defenders, spread over the objectives there are.
+void Command()
+{
+    if (s_commandFrame == svs.time)
+        return;
+    s_commandFrame = svs.time;
+    for (int teamIndex : {static_cast<int>(TEAM_AXIS), static_cast<int>(TEAM_ALLIES)})
+    {
+        TeamState &team = s_teams[teamIndex];
+        // A new map, or the brain was off: what the team said is old news.
+        if (svs.time < team.lastTime || svs.time - team.lastTime > 5000)
+        {
+            team.board.Reset();
+            team.nextCommand = 0;
+        }
+        team.lastTime = svs.time;
+        if (svs.time < team.nextCommand)
+            continue;
+        team.nextCommand = svs.time + 1000;
+
+        int members[kMaxBotSlots];
+        kb::Personality people[kMaxBotSlots];
+        int count = 0;
+        for (int clientNum = 0; clientNum < kMaxBotSlots && clientNum < sv_maxclients->current.integer; ++clientNum)
+        {
+            const BotSlot &bot = s_slots[clientNum];
+            if (!bot.active || svs.time - bot.lastTime > 1000 || TeamOf(clientNum) != teamIndex)
+                continue;
+            members[count] = clientNum;
+            people[count] = bot.personality;
+            ++count;
+        }
+        if (!count)
+            continue;
+        const int oldTake = team.takeCount;
+        const int oldHold = team.holdCount;
+        ReadObjectives(team, SV_GameClientNum(members[0]));
+        if ((team.takeCount != oldTake || team.holdCount != oldHold) && LogOn())
+            Com_Printf(CON_CHANNEL_SERVER, "bots: team %d objectives: take %d, hold %d\n", teamIndex, team.takeCount,
+                       team.holdCount);
+
+        kb::Role roles[kMaxBotSlots];
+        kb::AssignRoles(people, count, team.takeCount, team.holdCount, roles);
+        int attackers = 0;
+        int defenders = 0;
+        for (int i = 0; i < count; ++i)
+        {
+            BotSlot &bot = s_slots[members[i]];
+            const float *objective = nullptr;
+            if (roles[i] == kb::Role::Attack && team.takeCount)
+                objective = team.take[attackers++ % team.takeCount];
+            else if (roles[i] == kb::Role::Defend && team.holdCount)
+                objective = team.hold[defenders++ % team.holdCount];
+            bot.objectiveKnown = objective != nullptr;
+            if (objective)
+                std::memcpy(bot.objective, objective, sizeof(bot.objective));
+            if (roles[i] != bot.role)
+            {
+                bot.role = roles[i];
+                bot.roleGoal = false;
+                if (LogOn())
+                    Com_Printf(CON_CHANNEL_SERVER, "bots: %d plays %s\n", members[i], kb::RoleName(roles[i]));
+            }
+        }
+    }
+}
+
+// Calls out to the team the enemies the bot sees, each at most every few
+// seconds; the team hears it after the moment it takes to say. What the team
+// said goes into the bot's memory of where enemies were.
+void TalkToTeam(BotSlot &bot, int clientNum)
+{
+    TeamState *team = BoardOf(clientNum);
+    if (!team)
+        return;
+    for (int entity = 0; entity < kb::kMaxContacts && entity < kMaxBotSlots; ++entity)
+    {
+        const kb::Contact &contact = bot.perception.contacts[entity];
+        if (!contact.active || !contact.noticed || !contact.visible)
+            continue;
+        if (bot.calledAt[entity] && svs.time - bot.calledAt[entity] < 3000)
+            continue;
+        bot.calledAt[entity] = svs.time;
+        const int heardAt = svs.time + static_cast<int>(bot.rng.Range(600.0f, 1200.0f));
+        team->board.Report(entity, contact.lastSeen, heardAt);
+        if (LogOn())
+            Com_Printf(CON_CHANNEL_SERVER, "bots: %d calls out %d\n", clientNum, entity);
+    }
+    const kb::Callout *calls = team->board.Calls();
+    for (int i = 0; i < kb::TeamBoard::kMaxCallouts; ++i)
+        if (kb::TeamBoard::Heard(calls[i], svs.time, kb::TeamBoard::kLifeMs))
+            bot.areas.EnemyAt(calls[i].place, calls[i].heardAtMs);
+}
+
+// A place on the mesh at `place`, or near it.
+bool PlaceOnMesh(BotSlot &bot, const kb::NavMesh &nav, const float *place, float *out)
+{
+    if (nav.Nearest(place, 128.0f, out))
+        return true;
+    return nav.RandomPointNear(place, 200.0f, NextUnit, &bot.rng, out);
+}
+
+enum class RolePlan
+{
+    Default, // the part has nothing to say: roam
+    Keep,    // keep going where it goes, or hold where it is
+    NewGoal, // bot.goal is set: go there
+};
+
+// Starts a hold at a place the part sent the bot to, facing `facing`.
+void HoldFor(BotSlot &bot, int untilMs, const float *facing, bool crouched)
+{
+    bot.holdUntil = untilMs;
+    bot.holdCrouched = crouched;
+    bot.holdFacingKnown = facing != nullptr;
+    if (facing && facing != bot.holdFacing)
+        std::memcpy(bot.holdFacing, facing, sizeof(bot.holdFacing));
+}
+
+// Where the bot's part sends it when nothing more pressing is on: push to a
+// callout, anchor a spot overlooking one, attack or defend its objective.
+RolePlan PlanRole(BotSlot &bot, int clientNum, const kb::NavMesh &nav, const float *origin, bool arrived)
+{
+    TeamState *team = BoardOf(clientNum);
+    bot.atObjective = false;
+    // Its last goal could not be reached: roam a moment first.
+    if (svs.time < bot.roleRetryAt)
+        return RolePlan::Default;
+    switch (bot.role)
+    {
+    case kb::Role::Roam:
+        return RolePlan::Default;
+
+    case kb::Role::Push:
+    {
+        const kb::Callout *call = team ? team->board.Freshest(svs.time, 10000) : nullptr;
+        if (!call || call->heardAtMs <= bot.pushedCall)
+            return RolePlan::Default;
+        if (Distance2D(origin, call->place) < 300.0f)
+        {
+            bot.pushedCall = call->heardAtMs; // got there: nobody
+            bot.roleGoal = false;
+            return RolePlan::Default;
+        }
+        if (bot.roleGoal && Distance2D(bot.goal, call->place) < 256.0f && !arrived)
+            return RolePlan::Keep;
+        if (!PlaceOnMesh(bot, nav, call->place, bot.goal))
+            return RolePlan::Default;
+        bot.roleGoal = true;
+        bot.holdUntil = 0;
+        if (LogOn())
+            Com_Printf(CON_CHANNEL_SERVER, "bots: %d pushes to a callout %.0f units away\n", clientNum,
+                       Distance2D(origin, call->place));
+        return RolePlan::NewGoal;
+    }
+
+    case kb::Role::Anchor:
+    {
+        if (bot.roleGoal && svs.time < bot.roleUntil)
+        {
+            if (arrived && svs.time >= bot.holdUntil)
+                HoldFor(bot, bot.roleUntil, bot.holdFacingKnown ? bot.holdFacing : nullptr, bot.holdCrouched);
+            return RolePlan::Keep;
+        }
+        bot.roleGoal = false;
+        const kb::Callout *call = team ? team->board.Nearest(origin, svs.time) : nullptr;
+        if (!call)
+            return RolePlan::Default;
+        const float eye[3] = {call->place[0], call->place[1], call->place[2] + 18.0f};
+        if (!Bot_FindOverwatch(origin, eye, call->place, 1200.0f, nav, bot.rng, bot.goal))
+            return RolePlan::Default;
+        bot.roleGoal = true;
+        bot.roleUntil =
+            svs.time + static_cast<int>(bot.rng.Range(10000.0f, 25000.0f) * (0.5f + bot.personality.patience));
+        bot.holdUntil = 0;
+        bot.holdFacingKnown = true;
+        std::memcpy(bot.holdFacing, eye, sizeof(eye));
+        bot.holdCrouched = bot.rng.Unit() < 0.4f;
+        if (LogOn())
+            Com_Printf(CON_CHANNEL_SERVER, "bots: %d anchors %.0f units from a callout\n", clientNum,
+                       Distance2D(bot.goal, call->place));
+        return RolePlan::NewGoal;
+    }
+
+    case kb::Role::Attack:
+    {
+        if (!bot.objectiveKnown)
+            return RolePlan::Default;
+        if (bot.roleGoal && Distance2D(bot.goal, bot.objective) < 150.0f)
+        {
+            if (arrived)
+            {
+                // There: stay on it (a flag captures while someone stands
+                // in it) and press use (a bomb plants or defuses on it).
+                HoldFor(bot, svs.time + 1000, nullptr, false);
+                bot.atObjective = Distance2D(origin, bot.objective) < 96.0f;
+            }
+            return RolePlan::Keep;
+        }
+        if (!PlaceOnMesh(bot, nav, bot.objective, bot.goal))
+            return RolePlan::Default;
+        bot.roleGoal = true;
+        bot.holdUntil = 0;
+        if (LogOn())
+            Com_Printf(CON_CHANNEL_SERVER, "bots: %d attacks an objective %.0f units away\n", clientNum,
+                       Distance2D(origin, bot.objective));
+        return RolePlan::NewGoal;
+    }
+
+    case kb::Role::Defend:
+    {
+        if (!bot.objectiveKnown)
+            return RolePlan::Default;
+        if (bot.roleGoal && svs.time < bot.roleUntil && bot.holdFacingKnown
+            && Distance2D(bot.holdFacing, bot.objective) < 150.0f)
+        {
+            if (arrived && svs.time >= bot.holdUntil)
+                HoldFor(bot, bot.roleUntil, bot.holdFacing, bot.holdCrouched);
+            return RolePlan::Keep;
+        }
+        const float watched[3] = {bot.objective[0], bot.objective[1], bot.objective[2] + 40.0f};
+        if (!Bot_FindOverwatch(origin, watched, bot.objective, 900.0f, nav, bot.rng, bot.goal)
+            && !nav.RandomPointNear(bot.objective, 300.0f, NextUnit, &bot.rng, bot.goal))
+            return RolePlan::Default;
+        bot.roleGoal = true;
+        bot.roleUntil =
+            svs.time + static_cast<int>(bot.rng.Range(12000.0f, 25000.0f) * (0.5f + bot.personality.patience));
+        bot.holdUntil = 0;
+        bot.holdFacingKnown = true;
+        std::memcpy(bot.holdFacing, watched, sizeof(watched));
+        bot.holdCrouched = bot.rng.Unit() < 0.4f;
+        if (LogOn())
+            Com_Printf(CON_CHANNEL_SERVER, "bots: %d defends an objective from %.0f units\n", clientNum,
+                       Distance2D(bot.goal, bot.objective));
+        return RolePlan::NewGoal;
+    }
+    }
+    return RolePlan::Default;
+}
+
 const char *CoverReason(const kb::Situation &s)
 {
     if (s.reloading || s.clip < 0.25f)
@@ -623,7 +966,9 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
     float threat[3];
     const bool threatKnown = Threat(bot, focus, threat);
 
-    // What the bot remembers of the map: where it has been and met enemies.
+    // What the bot remembers of the map: where it has been and met enemies,
+    // and where its team said they were.
+    TalkToTeam(bot, clientNum);
     bot.areas.Visit(origin, svs.time);
     if (focus.kind != kb::FocusKind::None)
         bot.areas.EnemyAt(focus.position, svs.time);
@@ -688,6 +1033,7 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
         // Keep walking the way it was on (bot_combat.h may strafe instead).
         return;
     case kb::Intent::Cover:
+        bot.roleGoal = false;
         if (!bot.coverKnown)
             return;
         if (Distance2D(bot.goal, bot.cover) > 32.0f)
@@ -698,6 +1044,7 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
         break;
     case kb::Intent::Hunt:
     {
+        bot.roleGoal = false;
         float place[3];
         if (!HuntPlace(bot, focus, place))
             return;
@@ -716,6 +1063,17 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
         break;
     }
     case kb::Intent::Roam:
+    {
+        // The bot's part in the team first.
+        const RolePlan plan = PlanRole(bot, clientNum, *nav, origin, arrived);
+        if (plan == RolePlan::NewGoal)
+        {
+            replan = true;
+            break;
+        }
+        if (plan == RolePlan::Keep)
+            break;
+        bot.holdFacingKnown = false;
         if (arrived || replan)
         {
             if (!RoamGoal(bot, *nav, origin, bot.goal))
@@ -736,6 +1094,7 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
         }
         break;
     }
+    }
 
     if (replan || (bot.pathIndex >= bot.pathCount && !arrived && svs.time >= bot.nextPlanTime))
     {
@@ -746,6 +1105,11 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
             bot.nextPlanTime = svs.time + 1000;
             if (intent == kb::Intent::Roam)
                 bot.hasGoal = false;
+            if (bot.roleGoal)
+            {
+                bot.roleGoal = false;
+                bot.roleRetryAt = svs.time + 3000;
+            }
         }
     }
 }
@@ -853,6 +1217,8 @@ bool Bot_UserMove(client_t *cl)
             bot.holdUntil = 0;
             bot.coverKnown = false;
             bot.hurtFromKnown = false;
+            bot.roleGoal = false;
+            bot.holdFacingKnown = false;
             bot.mind.Reset(svs.time);
             bot.look.pitch = bot.view.angles[0];
             bot.look.yaw = bot.view.angles[1];
@@ -909,6 +1275,8 @@ bool Bot_UserMove(client_t *cl)
             bot.pathIndex = 0;
             bot.hasGoal = false;
             bot.holdUntil = 0;
+            bot.roleGoal = false;
+            bot.holdFacingKnown = false;
             bot.mind.Reset(svs.time);
             // Tap use now and then: the stock gametypes respawn on it where
             // they wait for a button, and it skips nothing that matters.
@@ -918,6 +1286,9 @@ bool Bot_UserMove(client_t *cl)
         }
         else if (alive)
         {
+            Command();
+            if (nav)
+                Bot_StepSpots(*nav, ps->origin);
             NoticeHits(bot, ps);
             Decide(bot, clientNum, ps, focus, nav, fighting);
 
@@ -940,6 +1311,13 @@ bool Bot_UserMove(client_t *cl)
             }
 
             const bool holding = bot.mind.intent == kb::Intent::Roam && svs.time < bot.holdUntil;
+            // Holding for its part in the team: watch what the part is about.
+            float facingView[2];
+            if (!fighting && !look && holding && bot.holdFacingKnown)
+            {
+                ViewToward(ps, bot.holdFacing, facingView);
+                look = facingView;
+            }
             bool walked = false;
             if (side != 0 && bot.mind.intent != kb::Intent::Cover)
             {
@@ -958,6 +1336,10 @@ bool Bot_UserMove(client_t *cl)
                 bot.progressTime = svs.time;
                 if (bot.holdCrouched)
                     cmd.buttons |= BUTTON_CROUCH;
+                // On an objective: use it (a bomb plants or defuses while
+                // use is held there).
+                if (bot.atObjective)
+                    cmd.buttons |= BUTTON_USE;
             }
 
             if (fighting || walked)

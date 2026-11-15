@@ -609,6 +609,12 @@ Image *CreateImage(Core *core, const ImageDesc &desc)
             return nullptr;
         }
     }
+    if ((desc.usage & VK_IMAGE_USAGE_STORAGE_BIT)
+        && !FormatSupports(core, desc.format, VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT))
+    {
+        Fail(*core, "CreateImage: %s cannot be a storage image here (%s)", FormatName(desc.format), name);
+        return nullptr;
+    }
     Image *image = new Image();
     image->desc = desc;
     image->name = name;

@@ -125,7 +125,8 @@ had the room; a console has no memory for either:
   pool, so a map's buffers and textures can all be made and the
   `gpu memory by use` line says what they come to;
 - `-DKISAK_VITA_HEAP_MB=128` at configure time builds a client with a 128 MB
-  heap instead of 64.
+  heap instead of 60. (An empty value, the default, means 60; a `64` left in
+  an older build folder's cache, the former default, is read as 60 too.)
 
 ## What it builds
 
@@ -173,7 +174,7 @@ Other large static arrays in the client:
 - `cls` 2.9 MB, `odeGlob` 2.8 MB, `gfxBuf` 2.3 MB (1.5 MB since the smaller skinned caches below), `s_backEndData` 2.2 MB, `tess` 2.2 MB;
 - `clients` 1.7 MB, `g_streamStates` 0.4 MB (1.7 MB until 2026-11-15, when the sound driver kept an MP3 decoder's 33 KB of state for each of its 53 channels; only 13 of them stream).
 
-The heap and the engine reservations are the server's for now: a 64 MB heap, the 128 MB zone arena and the hunks. Textures go to the GPU's own memory (CDRAM, about 112 MB), not main memory.
+The heap and the engine reservations are the server's for now: a 64 MB heap (60 MB in the client since the 16 MB parameter buffer), the 128 MB zone arena and the hunks. Textures go to the GPU's own memory (CDRAM, about 112 MB), not main memory.
 
 What the menu takes (run K on the console, and the same build in Vita3K, 2026-11-10):
 - **Heap:** 55 of 64 MB once `common_mp` is loaded. About 40 MB of that is the menu's 702 loaded sounds, held as 16-bit PCM as the fastfiles hold them. At the failed map load the console's heap stood at 60.7 MB. That build kept every sound that way; with `snd_adpcm 1`, the default since, the same menu holds 23.8 MB in Vita3K (run S, under Sound below), which is not measured on a console yet.
@@ -802,7 +803,7 @@ Builds with `KISAK_GFX_GXM` leave the Vulkan parts of `vk_d3d9.h` and
 
 What the GXM back end does so far (step 2d):
 - The device owns the screen and reserves the GPU memory pools: nearly all of
-  CDRAM, 20 MB of main memory, and a 12 MB parameter buffer.
+  CDRAM, 30 MB of main memory, and a 16 MB parameter buffer.
 - Textures, surfaces and buffers live in those pools with D3D9's lock rules.
   Textures go to CDRAM first, dynamic buffers to main memory first.
 - Shaders are translated to Cg and compiled on the Vita (below).
@@ -1151,7 +1152,8 @@ What the GXM back end does so far (step 2d):
     the first discard that finds none makes one. On mp_crash that is one
     more skinned cache (3 MB), dynamic index buffer (2 MB), pretess buffer
     and dynamic vertex buffer (1 MB each) and some small ones, which is why
-    the main pool grew from 20 to 26 MB. A texture the game rewrites whole
+    the main pool grew from 20 to 26 MB (and to 30 with the 16 MB parameter
+    buffer, below). A texture the game rewrites whole
     every frame while the GPU samples it (the model lighting volume, 1 MB)
     gets a second piece the same way. Only when there is no piece and no
     room for one does a lock still wait for the whole GPU.
@@ -1175,13 +1177,27 @@ What the GXM back end does so far (step 2d):
   file `no-vsync` there shows each frame without waiting for the display's
   refresh (it tears): for measuring what that wait costs. With two frames
   on their way, sceGxm's parameter buffer and the context's ring buffers
-  hold the geometry, draw calls and uniform buffers of both at times. The
-  parameter buffer is 12 MB: console run AD found 8 MB too small (the GPU
-  was 10 to 19 ms a frame slower at the same view, 14 to 18%, in every
-  phase; with David's settings 86-91 against 68 ms a frame), at the cost of
-  4 MB of CDRAM. For comparing, `small-parameter-buffer` gives the old
-  8 MB, `big-parameter-buffer` 16 MB (4 MB less for the CDRAM pool, which
-  may not hold every map).
+  hold the geometry, draw calls and uniform buffers of both at times.
+  The parameter buffer, which comes out of CDRAM, is 16 MB, sceGxm's own
+  default. The GPU's vertex job for one frame runs beside the fragment job
+  of the frame before, and the buffer holds the binned geometry of both.
+  When both do not fit, the vertex job waits until the frame before is
+  drawn and the two jobs take turns. Console run AD found 8 MB too small
+  at every view (12 MB was 10 to 19 ms a frame faster, 14 to 18%, in every
+  phase). Console run CS (2026-11-15, full 3D size) found 12 MB too small
+  at mp_crash's heaviest view (`setviewpos -256 2272 291 270 0`): the frame
+  there flipped by itself between 38 ms and 49 to 51 ms, the GPU's vertex
+  job between 22 and 48 ms, and a saving on the CPU tipped it to the slow
+  side, so that a faster render thread measured as a slower frame. With
+  16 MB every window stayed at 37 to 38 ms; with 8 MB every window took 49
+  to 52. The 4 MB come out of the CDRAM pool, which on mp_crash then peaks
+  at 92.9 of 96 MB with about 1 MB gone over to main memory, so the main
+  pool grew from 26 to 30 MB and the client's heap went from 64 to 60 MB
+  (mp_crash uses 34). For comparing, an empty file in the folder of the
+  compiled programs gives another size: `small-parameter-buffer` 8 MB,
+  `mid-parameter-buffer` the former 12 MB, `big-parameter-buffer` 20 MB.
+  At this view a timing is only worth reading with the `gpu watch` line
+  beside it: a vertex job of 40 ms or more means the two jobs took turns.
   sceGxm's ring buffers have its default sizes: 128 KB for draw calls,
   2 MB for vertex constants and 512 KB for fragment constants. A draw that
   finds a ring full waits inside sceGxm until the GPU has finished a
@@ -1518,7 +1534,8 @@ Its sums are plain arithmetic (`gxm_gpu_watch.h`), tested on the host by
 yet.
 
 The display's own buffers take about 9 MB of CDRAM and 2.6 MB of main memory.
-The parameter buffer, which sceGxm takes from main memory itself, adds 16 MB.
+The parameter buffer, which sceGxm takes itself, adds 16 MB (out of CDRAM:
+in console run CS the game's CDRAM pool came out at 112 MB less the buffer).
 The probe measures what is left.
 
 ## Stages

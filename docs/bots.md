@@ -46,13 +46,15 @@ With `bot_brain 1`, `bot_combat` says whether they fight:
 | `0` | never fire: they walk, look and notice |
 | `1` (default) | fight the opponents they see |
 
-`bot_log 1` prints each player a bot notices and the first shot of each fight.
+`bot_log 1` prints each player a bot notices, the first shot of each fight,
+each choice to take cover or hunt, and its team play (parts, callouts, where
+its part sends it).
 
 `bot_brain`, `bot_combat` and `bot_log` are settings this port added, so they
 are on the list a game server may not set on a player's client
 (`src/qcommon/server_dvar_guard.h`).
 
-## What the bots do now (phase 4a)
+## What the bots do now (phase 4b)
 
 The brain takes over the test clients' commands. Each frame a bot decides what
 to do (see "How a bot decides"), walks there on the map's navigation mesh with
@@ -69,11 +71,13 @@ It keeps its aim where it last saw one it lost, and looks toward a sound or a
 compass dot it heard. It reloads an empty clip, or one under half when it has
 not fought for two seconds, and switches to its other gun when one runs dry.
 
-Next: a team commander (roles, where the team saw enemies), cover and hiding
-spots worked out once per map, objective modes (the objectives the bot's own
-HUD shows), grenades, knifing and killstreaks, jumps, mantles and ladders,
-then difficulty levels and per-bot style, start-a-game and start-a-server
-options, and the PS Vita's bot budget (6v6 TDM first, then 9v9 Ground War).
+On a team, bots call out the enemies they see and play the part their
+team's commander gives them (see "How a team of bots plays").
+
+Next: peeking from cover, grenades, knifing and killstreaks, class choice,
+jumps, mantles and ladders, stance in fights, then difficulty levels and
+per-bot style, start-a-game and start-a-server options, and the PS Vita's bot
+budget (6v6 TDM first, then 9v9 Ground War).
 
 ## How a bot decides
 
@@ -94,7 +98,8 @@ the way shipped shooter bots weigh their options:
 - **No flip-flopping.** The current intent gets a bonus, and a hunt or cover is
   kept for at least 1.5 s unless a fight starts.
 - **Its own memory.** Where a bot has been and met enemies is its own grid of
-  256-unit cells: what it saw, heard or was hit from, never its team's yet.
+  256-unit cells: what it saw, heard or was hit from, and what its team called
+  out.
 - **The hit indicator.** A player's HUD shows the direction a hit came from (the
   game puts it in the player state); a bot turns that into a lead to hunt or a
   threat to hide from.
@@ -103,15 +108,59 @@ the way shipped shooter bots weigh their options:
   of sight round a corner, which is where an enemy would appear. It checks
   every 64 units up to 960 along the way, four times a second, with sight
   traces through the map's solid geometry only.
-- **Cover.** `src/bots/bot_tactics.cpp` tries 12 random places on the mesh
-  within about 450 units and keeps the nearest one, at most a 700 unit walk,
-  where a standing player's chest and head are hidden from where the bot
-  thinks the enemy's eyes are. It looks at most once a second and keeps a
-  spot while it still hides it.
+- **Cover.** Once the map's spots are worked out (below), `src/bots/bot_tactics.cpp`
+  takes the nearest spot within 450 units that the spot nearest the threat
+  does not see. Before that, or when none fits, it tries 12 random places on
+  the mesh within about 450 units. Either way it keeps the nearest place, at
+  most a 700 unit walk, where a standing player's chest and head are hidden
+  from where the bot thinks the enemy's eyes are, checked with real traces.
+  It looks at most once a second and keeps a spot while it still hides it.
+  A bot that is reloading in a fight takes cover unless it is bold.
 
 The decisions read only what the bot knows (its perception, its own player
 state, the map's geometry): cover is from where it thinks the enemy is, and a
 hunt goes to where it last saw or heard them.
+
+## How a team of bots plays
+
+`src/bots/bot_team.h` is what a team says and who does what:
+
+- **Callouts.** A bot that sees an enemy calls out where, at most every 3
+  seconds per enemy. Its team hears it 0.6 to 1.2 s later (the moment it takes
+  to say), at a place rounded to a 128-unit grid (a callout names an area, not
+  a point), and acts on it for 15 s. Teammates put callouts into their memory
+  of where enemies were. Every bot is its own team in free-for-all.
+- **The commander.** Once a second it gives each bot of a team a part, from
+  the team's size, the objectives on its compass and the bots' personalities:
+
+  | Part | Who | What it does when nothing more pressing is on |
+  |---|---|---|
+  | push | the boldest | goes to the latest callout (10 s at most), then roams |
+  | anchor | the most patient | goes to a spot that overlooks the callout nearest it, holds there for 7 to 35 s, crouched or standing, watching it |
+  | attack | the boldest, when the compass shows places to take | goes to the objective and stays on it, holding use (a flag captures while someone stands in it, a bomb plants or defuses while use is held) |
+  | defend | the most patient, when the compass shows places to hold | holds a spot that overlooks the objective for 8 to 35 s, watching it |
+  | roam | the rest | roams as before |
+
+  With no objectives (team deathmatch), about 40% push, 25% anchor and the
+  rest roam. Fights, cover and hunts come first: a part is what a bot does
+  between them.
+- **Objectives.** A bot reads them off its own compass: the objectives the game
+  sends its team, active ones only. The stock gametypes mark them with
+  `compass_waypoint_*` icons: "defend" ones are to hold, the rest (capture,
+  target, bomb, defuse) to take. An icon on an entity (a carried flag or bomb)
+  follows it, as on the compass. Other icons (killstreak markers) are not
+  objectives. `bot_log 1` prints a team's objective count when
+  it changes.
+
+`src/bots/bot_spots.h` is the map knowledge a player gets from playing a map a
+few times, worked out once per map while the bots play: spots 200 units apart
+over the mesh (at most 512, from 4000 random places, 100 a server frame), then
+for every pair whether a standing player at one sees the head of one at the
+other, 200 lines a server frame. On mp_crash-sized maps that takes about half
+a minute. Bots use it for cover (above) and to find where to anchor and defend
+from: a spot that sees the place and that few other spots see. A spot stands
+for the area around it, so a bot checks with a real trace before it relies on
+one.
 
 ## How a bot fights
 
@@ -236,7 +285,9 @@ walks into one notices it is stuck, jumps, then takes another way.
 |---|---|
 | `src/bots/bot_brain.h`, `bot_brain.cpp` | `bot_brain`, and `Bot_UserMove`: one bot's command for this server frame |
 | `src/bots/bot_mind.h` | what a bot decides: intents and their scores, personality, the memory of places, the pre-aim point; no engine types |
-| `src/bots/bot_tactics.cpp` | the map sense on the server: clear lines through the map, cover from a threat |
+| `src/bots/bot_team.h` | a team's callouts, the commander's roles, objectives from compass icons; no engine types |
+| `src/bots/bot_spots.h` | a map's spots and which see each other, cover and overwatch queries; no engine types |
+| `src/bots/bot_tactics.cpp` | the map sense on the server: clear lines through the map, the spot table worked out a frame at a time, cover from a threat, overwatch |
 | `src/bots/bot_combat.h` | the hand and trigger: reaction onset, aimed movements and corrections, tracking lead, firing, the view kick, strafing; no engine types |
 | `src/bots/bot_perception.h` | what a bot knows: the noticing meter, memory, hearing, what to look at; no engine types |
 | `src/bots/bot_senses.cpp` | `Bot_Sense`: one sense tick of a bot's eyes, ears and compass on the server |
@@ -291,6 +342,16 @@ to one second behind.
   enemy in view ends a hunt at once. It roams to places it has not seen and
   where enemies were lately (more so when bold), and pre-aims where its way
   turns out of sight round a corner, at head height.
+- `bot_team` (`scripts/tests/test_bot_team.py`, in `run_linux_checks.py`):
+  builds `tests/bots/bot_team_test.cpp` on the host, 64-bit with sanitizers
+  and 32-bit. Objectives are read off compass icons; a callout is not heard
+  before it is said, names an area, is dropped when old, and the same enemy
+  close by updates it; the commander's roles fit the team's size and
+  objectives, the boldest push or attack and the most patient anchor or
+  defend, and the same team keeps its roles. In a made-up map with a wall and
+  a door the spot table is filled a step at a time within its budget, matches
+  every line, finds cover the threat does not see (nearest first) and places
+  that see a target (least seen first).
 - `server_test_clients` (`scripts/tests/test_server_test_clients.py`): the
   extracted `SV_UpdateBots` asks the brain about active bots only, and a brain
   that takes the command replaces the random inputs.
@@ -337,7 +398,12 @@ a second (with the kick on top), and each fight's first shot must be at an
 opponent, at least 60 ms after noticing and 260 ms after the player came into
 view; on both teams at least one bot must have fired. It prints how often the
 bots opened fire and the hits and kills the game logged. With `--brain 1` it
-also prints how often bots took cover and went hunting. Views are a
+also prints how often bots took cover and went hunting, the parts the
+commander gave, the callouts, pushes, anchors and objective moves, and when
+the map's spots were ready. With `--objectives` (and more than four bots) the
+fixture starts the stock Domination game type instead of team deathmatch: the
+bots of both teams must read flags off their compass (`bots: team N
+objectives: take T, hold H`), and at least one must go to take one. Views are a
 quarter second apart because at one a second any turn would fit: the short way
 round is never more than 180 degrees.
 

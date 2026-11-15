@@ -416,8 +416,11 @@ gxm::MemorySizes PoolSizes(Device &device)
     // every frame (Rename): one more skinned cache (3 MB), dynamic index
     // buffer (2 MB), pretess buffer and dynamic vertex buffer (1 MB each)
     // and less than 1 MB of small ones. A console had 16 MB of system memory
-    // free on a map when this pool was 20 MB.
-    sizes.main = 26u << 20;
+    // free on a map when this pool was 20 MB. The last 4 MB stand in for
+    // the 4 MB of CDRAM that the 16 MB parameter buffer takes
+    // (CreateDevice): what finds no room in CDRAM goes here. The client's heap gave
+    // them (60 MB where it had 64; mp_crash uses 34).
+    sizes.main = 30u << 20;
     // For comparing on a console: double-gxm-rings gives sceGxm's rings of
     // draw calls and fragment constants twice their default size and the
     // megabyte for them (gxm_display.h; console runs BV and CJ),
@@ -584,29 +587,37 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
 
     gxm::DisplayDesc display;
     display.memory = PoolSizes(*device);
-    // A frame's geometry beyond this is binned in partial renders: slower,
-    // not wrong. sceGxm's default 16 MB is a quarter of what the engine has
-    // left. With the CPU a frame ahead, the parameter buffer and the
-    // context's ring buffers hold the geometry, draw calls and uniform
-    // buffers of two frames at times, and 8 MB was too little for that:
-    // console run AD measured 12 MB against 8 at the same view and found the
-    // GPU 10 to 19 ms a frame faster in every phase (14 to 18%; David's
-    // settings 86-91 to 68 ms a frame), the CPU unchanged, and peak CDRAM
-    // use the same with 5.7 MB of the pool to spare. For comparing on a
-    // console, an empty file named small-parameter-buffer beside the
-    // compiled programs gives the old 8 MB and one named
-    // big-parameter-buffer 16 MB (4 MB less for the pool, which may not
-    // hold every map).
-    display.parameterBufferBytes = 12u << 20;
+    // sceGxm bins a frame's geometry into the parameter buffer, which comes
+    // out of CDRAM. With the CPU a frame ahead, the GPU's vertex job for one
+    // frame runs beside the fragment job of the frame before, and the
+    // buffer holds the geometry of both. When both do not fit, the vertex
+    // job waits for the frame before to be drawn, and the two jobs take
+    // turns. 8 MB was too little at every view (console run AD: 12 MB was 10
+    // to 19 ms a frame faster). 12 MB was too little at mp_crash's heaviest
+    // view: console run CS (2026-11-15) found the frame there flipping by
+    // itself between 38 ms and 49 to 51 ms (the GPU's vertex job 22 ms
+    // against 48), and any saving on the CPU tipped it to the slow side;
+    // with 16 MB it stayed at 37 to 38 ms in every window, with 8 MB at 49
+    // to 52. So the buffer is sceGxm's default 16 MB, and the main pool
+    // (PoolSizes) has the 4 MB the CDRAM pool lost. For comparing on a
+    // console, an empty file beside the compiled programs gives another
+    // size: small-parameter-buffer 8 MB, mid-parameter-buffer the former
+    // 12 MB, big-parameter-buffer 20 MB.
+    display.parameterBufferBytes = 16u << 20;
     if (gxm::ProgramCacheMarker("small-parameter-buffer"))
     {
         display.parameterBufferBytes = 8u << 20;
         Log(*device, "diag: small-parameter-buffer is there: the parameter buffer is 8 MB");
     }
+    else if (gxm::ProgramCacheMarker("mid-parameter-buffer"))
+    {
+        display.parameterBufferBytes = 12u << 20;
+        Log(*device, "diag: mid-parameter-buffer is there: the parameter buffer is 12 MB");
+    }
     else if (gxm::ProgramCacheMarker("big-parameter-buffer"))
     {
-        display.parameterBufferBytes = 16u << 20;
-        Log(*device, "diag: big-parameter-buffer is there: the parameter buffer is 16 MB");
+        display.parameterBufferBytes = 20u << 20;
+        Log(*device, "diag: big-parameter-buffer is there: the parameter buffer is 20 MB");
     }
     if (gxm::ProgramCacheMarker("double-gxm-rings") || gxm::ProgramCacheMarker("big-gxm-rings"))
     {

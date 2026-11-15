@@ -123,6 +123,11 @@ SETS = [
             ("debug_ao.frag", "kDebugAoFrag"),
             ("reflections.frag", "kReflectionsFrag"),
             ("debug_reflections.frag", "kDebugReflectionsFrag"),
+            ("fog_march.frag", "kFogMarchFrag"),
+            ("fog_apply.frag", "kFogApplyFrag"),
+            ("compute_check_fill.comp", "kComputeCheckFillComp"),
+            ("compute_check_integrate.comp", "kComputeCheckIntegrateComp"),
+            ("compute_check_draw.frag", "kComputeCheckDrawFrag"),
         ],
     ),
     ShaderSet(

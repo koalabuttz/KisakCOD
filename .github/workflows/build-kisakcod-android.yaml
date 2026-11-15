@@ -8,6 +8,11 @@ name: Android
 # only bionic, with 16 KiB segments and no fused multiply-add. There is no
 # Android device or emulator here, so start-up and map loading are checked on
 # David's handheld. The RelWithDebInfo binary is kept as an artifact for that.
+#
+# Stage two builds the game itself as an app: KisakCOD-mp as libmain.so on
+# the Vulkan back end, with the pinned SDL3 and OpenAL Soft, packed into a
+# debug-signed APK by scripts/platform/android/build_apk.py with the runner's
+# Android SDK. The APK is kept as an artifact for device runs.
 # The Linux, macOS, Windows and Vita builds are untouched.
 
 on:
@@ -22,6 +27,9 @@ on:
       - scripts/platform/linux/**
       - scripts/platform/android/**
       - scripts/tests/check_android_binary.py
+      - scripts/tests/run_native_d3d9_boundary_checks.py
+      - scripts/vulkan_probe/**
+      - tests/linux_device_probe/d3d9_unavailable.cpp
       - scripts/ci/each-config.sh
       - scripts/ci/use-ccache.sh
       - src/**
@@ -43,6 +51,9 @@ on:
       - scripts/platform/linux/**
       - scripts/platform/android/**
       - scripts/tests/check_android_binary.py
+      - scripts/tests/run_native_d3d9_boundary_checks.py
+      - scripts/vulkan_probe/**
+      - tests/linux_device_probe/d3d9_unavailable.cpp
       - scripts/ci/each-config.sh
       - scripts/ci/use-ccache.sh
       - src/**
@@ -149,3 +160,95 @@ jobs:
         with:
           path: ${{ runner.temp }}/ccache
           key: ccache-android-dedicated-${{ github.run_id }}-${{ github.run_attempt }}
+
+  android_apk:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # The game as an Android app (docs/android.md, stage two): libmain.so,
+    # its libraries and SDL3's Java activity, packed with Gradle. Built
+    # RelWithDebInfo only: Debug is the dedicated server job's to check.
+    name: Android app (APK)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore downloaded apt packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ github.job }}-${{ runner.arch }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-${{ github.job }}-${{ runner.arch }}-v1
+
+      - name: Install build tools
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/ci/apt-install.sh cmake ninja-build python3 ccache
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Restore the pinned SDL3 and OpenAL Soft builds
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/android/SDL3-sdk
+            ${{ runner.temp }}/android/openal-build/libopenal.so
+          key: android-deps-${{ hashFiles('scripts/platform/android/build_apk.py') }}
+
+      - name: Restore compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-android-apk-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-android-apk-
+      - name: Use compiler cache
+        id: ccache
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/ci/use-ccache.sh
+
+      - name: Build the APK
+        timeout-minutes: 60
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep Pkg.Revision "$ANDROID_NDK_HOME/source.properties"
+          python3 scripts/platform/android/build_apk.py --work "$RUNNER_TEMP/android" \
+            --ndk "$ANDROID_NDK_HOME" --sdk "$ANDROID_HOME" --config RelWithDebInfo
+          python3 scripts/tests/check_android_binary.py --library \
+            "$RUNNER_TEMP/android/out-RelWithDebInfo/libmain.so"
+          ls -l "$RUNNER_TEMP/android/KisakCOD-RelWithDebInfo.apk"
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: KisakCOD-android-arm64-RelWithDebInfo-apk
+          path: ${{ runner.temp }}/android/KisakCOD-RelWithDebInfo.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Report compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats
+      - name: Save compiler cache
+        if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-android-apk-${{ github.run_id }}-${{ github.run_attempt }}
