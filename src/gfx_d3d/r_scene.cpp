@@ -1766,6 +1766,76 @@ static uint16_t R_ModernLitShader(const char *name, const Material *material, co
     return found == wanted ? shader : GFX_MODERN_LIT_SHADER_NONE;
 }
 
+// Whether a pass's pixel shader is CoD4's water (water_l_sun) as water
+// shader facts read it (PC water run 1, mp_bog): the reflection probe (a
+// custom sampler, s1), the material's water map at s4, fog colour at c0,
+// envMapParms at c5, waterColor at c6, the sun's direction and colour at
+// c17 and c18, each once and nothing else. Our water shader then draws it.
+static bool R_ModernWaterShader(const char *name, const Material *material, const MaterialPass *pass)
+{
+    size_t length = strlen(name);
+    if (length > 5 && !strcmp(name + length - 5, ".hlsl"))
+        length -= 5;
+    if (length != 11 || strncmp(name, "water_l_sun", 11))
+        return false;
+    if (!(pass->customSamplerFlags & 1u))
+        return false;
+    enum : uint32_t
+    {
+        WATER_MAP = 1u << 0,
+        FOG_COLOR = 1u << 1,
+        ENV_MAP_PARMS = 1u << 2,
+        WATER_COLOR = 1u << 3,
+        SUN_POSITION = 1u << 4,
+        SUN_DIFFUSE = 1u << 5,
+        ALL = (1u << 6) - 1,
+    };
+    uint32_t found = 0;
+    const uint32_t argCount = pass->perPrimArgCount + pass->perObjArgCount + pass->stableArgCount;
+    for (uint32_t i = 0; i < argCount; ++i)
+    {
+        const MaterialShaderArgument &arg = pass->args[i];
+        uint32_t what = 0;
+        switch (arg.type)
+        {
+        case MTL_ARG_MATERIAL_PIXEL_SAMPLER:
+            for (uint32_t t = 0; t < material->textureCount; ++t)
+            {
+                const MaterialTextureDef &def = material->textureTable[t];
+                if (def.nameHash == arg.u.nameHash && def.semantic == TS_WATER_MAP && arg.dest == 4)
+                    what = WATER_MAP;
+            }
+            break;
+        case MTL_ARG_CODE_PIXEL_SAMPLER:
+            return false;
+        case MTL_ARG_CODE_PIXEL_CONST:
+            if (arg.u.codeConst.rowCount != 1)
+                break;
+            if (arg.u.codeConst.index == CONST_SRC_CODE_FOG_COLOR && arg.dest == 0)
+                what = FOG_COLOR;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_SUN_POSITION && arg.dest == 17)
+                what = SUN_POSITION;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_SUN_DIFFUSE && arg.dest == 18)
+                what = SUN_DIFFUSE;
+            break;
+        case MTL_ARG_MATERIAL_PIXEL_CONST:
+            if (arg.dest == 5 && R_ModernMaterialConstIs(material, arg.u.nameHash, "envMapParms"))
+                what = ENV_MAP_PARMS;
+            else if (arg.dest == 6 && R_ModernMaterialConstIs(material, arg.u.nameHash, "waterColor"))
+                what = WATER_COLOR;
+            break;
+        case MTL_ARG_LITERAL_PIXEL_CONST:
+            return false;
+        default:
+            continue; // vertex arguments
+        }
+        if (!what || (found & what))
+            return false;
+        found |= what;
+    }
+    return found == ALL;
+}
+
 // Which colours a lit pass's pixel shader reads, by its kind (the pixel
 // shader's name: lm_ world surfaces lit by lightmaps, lp_ models lit by the
 // lighting volume, l_ dynamic lights) and what its arguments bind. The rest
@@ -1773,6 +1843,8 @@ static uint16_t R_ModernLitShader(const char *name, const Material *material, co
 // fog and shadow parameters) are not colours. A detail map is added to the
 // colour map around grey (colour + detail - 0.5), so it stays as it is: the
 // offset is not a colour of its own.
+static bool R_ModernWaterShader(const char *name, const Material *material, const MaterialPass *pass);
+
 // The material's water map (the FFT water simulation), or null.
 static const MaterialTextureDef *R_ModernWaterMap(const Material *material)
 {
@@ -1786,10 +1858,10 @@ static const MaterialTextureDef *R_ModernWaterMap(const Material *material)
 
 // KISAK_VK_MODERN_WATER_LOG=1 names how water is drawn, for planar
 // reflections on water (piece 3): once per world, every world surface whose
-// material has a water map, by material, with the union of their bounds; and
-// once per pass of a water material that is drawn, the technique, shaders,
-// arguments, blend state, the material's constants and the simulation's
-// settings. At most 32 passes.
+// material has a water map, by material, with the union of their bounds, then
+// each surface's bounds (at most 96); and once per material and pass of water
+// that is drawn, the technique, shaders, arguments, blend state, the
+// material's constants and the simulation's settings (at most 32).
 static void R_ModernLogWaterPass(const Material *material, const MaterialPass *pass)
 {
     static const bool on = [] {
@@ -1847,17 +1919,35 @@ static void R_ModernLogWaterPass(const Material *material, const MaterialPass *p
         if (!doneCount)
             Com_Printf(CON_CHANNEL_GFX, "modern water: world %s: no world surface has a water map\n",
                        rgp.world->name ? rgp.world->name : "?");
+        // Each surface on its own (at most 96), to see which are flat and at
+        // what height.
+        int surfaceLines = 0;
+        for (uint32_t s = 0; s < dpvs.staticSurfaceCount && surfaceLines < 96; ++s)
+        {
+            const GfxSurface &surface = dpvs.surfaces[s];
+            if (!surface.material || !R_ModernWaterMap(surface.material))
+                continue;
+            ++surfaceLines;
+            Com_Printf(CON_CHANNEL_GFX,
+                       "modern water:   surface %u (%s): %u triangles, x %.1f to %.1f, y %.1f to %.1f, z %.1f to %.1f\n",
+                       s, surface.material->info.name, (uint32_t)surface.tris.triCount, surface.bounds[0][0],
+                       surface.bounds[1][0], surface.bounds[0][1], surface.bounds[1][1], surface.bounds[0][2],
+                       surface.bounds[1][2]);
+        }
     }
 
+    // By material and pass: materials of one technique set share its passes.
     static const MaterialPass *logged[32];
+    static const Material *loggedMaterials[32];
     static int loggedCount;
     if (loggedCount >= 32)
         return;
     for (int i = 0; i < loggedCount; ++i)
     {
-        if (logged[i] == pass)
+        if (logged[i] == pass && loggedMaterials[i] == material)
             return;
     }
+    loggedMaterials[loggedCount] = material;
     logged[loggedCount++] = pass;
 
     // Which technique and pass of the material's set this is.
@@ -1892,10 +1982,14 @@ static void R_ModernLogWaterPass(const Material *material, const MaterialPass *p
     }
     Com_Printf(CON_CHANNEL_GFX,
                "modern water: material %s, technique %d (%s) pass %d: vertex shader %s, pixel shader %s, "
-               "state bits 0x%08x 0x%08x\n",
+               "state bits 0x%08x 0x%08x, custom samplers 0x%x, %s, %s\n",
                material->info.name, techType, techName, passIndex,
                pass->vertexShader ? pass->vertexShader->name : "?", pass->pixelShader ? pass->pixelShader->name : "?",
-               loadBits[0], loadBits[1]);
+               loadBits[0], loadBits[1], pass->customSamplerFlags,
+               s_modernLitPasses ? "among the lit passes" : "outside the lit passes",
+               pass->pixelShader && R_ModernWaterShader(pass->pixelShader->name, material, pass)
+                   ? "our water shader can draw it"
+                   : "not ours");
 
     char args[768];
     size_t used = 0;
@@ -1990,6 +2084,16 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
     s_modernInputsPass = pass;
     s_modernInputsMaterial = material;
     const char *name = pass->pixelShader ? pass->pixelShader->name : nullptr;
+    // Water: our water shader, which takes its colour to linear light itself.
+    if (name && !strncmp(name, "water_", 6) && R_ModernWaterShader(name, material, pass))
+    {
+        GfxModernLitInputs inputs{};
+        inputs.overWhite = true;
+        inputs.shader = GFX_MODERN_LIT_SHADER_WATER;
+        R_ModernLogPassInputs(name, pass, material, inputs);
+        R_ModernSendInputs(&inputs);
+        return;
+    }
     const bool lit = name && (!strncmp(name, "lm_", 3) || !strncmp(name, "lp_", 3) || !strncmp(name, "l_", 2));
     if (!lit)
     {

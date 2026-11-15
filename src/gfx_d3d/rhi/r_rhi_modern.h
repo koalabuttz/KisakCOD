@@ -98,6 +98,10 @@ enum GfxModernLitShader : uint16_t
     GFX_MODERN_LIT_SHADER_OMNI = 0x200,
     GFX_MODERN_LIT_SHADER_AMBIENT = 0x300,
     GFX_MODERN_LIT_SHADER_LIGHT = 0x300,
+    // water_l_sun: CoD4's water (a water map's ripples, the reflection probe
+    // by Fresnel over a constant colour, the sun's glint; water shader facts,
+    // PC water run 1), alone: no family, map or mode bit with it.
+    GFX_MODERN_LIT_SHADER_WATER = 0x400,
 };
 
 struct GfxModernHooks

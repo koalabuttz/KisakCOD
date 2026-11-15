@@ -1356,7 +1356,9 @@ reflects in its water, if it has any: of the world surfaces whose material
 has a water map and whose bounds are flat, the height where the most of them
 lie (by the area of their bounds, at least 256 by 256 units) makes the plane,
 logged as `modern: planar reflections on <map> at height H (water, A square
-units)`. The water's own shader does not read the image yet.
+units)`. On mp_bog that is the large `wc/aftermath_water` sheet at -26 (PC
+water run 1); the swamp's own `wc/night_water_mud` lies between -36 and -20,
+so which surfaces are flat, and at what height, is still being checked.
 
 **The view.** After each main view (`R_RenderScene` from the game), while
 the camera is above the plane, `R_ModernPlanarScene` draws the scene again:
@@ -1417,13 +1419,35 @@ frame where the scene moves; on a camera cut it is not read.
 | Debug view | off | `KISAK_VK_MODERN_DEBUG=planar` draws it too, and puts the last planar image, as it is (upside down, no exposure), over the top left of the finished scene; `KISAK_VK_MODERN_DEBUG=planar-read` draws it and shows, on every surface that reads it, only what it read there (in linear light, unweighted by gloss and Fresnel; the rest of the scene at a quarter), to check that a reflection lines up with what it mirrors; `KISAK_VK_MODERN_PLANAR=0` turns them off |
 | Reach | 4 | `KISAK_VK_MODERN_PLANAR_REACH=N`: how far from the plane (units) a surface still reads the image |
 | Ripple | 4 | `KISAK_VK_MODERN_PLANAR_RIPPLE=N`: how far (units) the normal map's tilt moves the point read; 0 reads a flat mirror |
+| Water's shader | on | `KISAK_VK_MODERN_WATER=0` keeps the game's `water_l_sun` (start-up only); ours reads the image within 4 times the reach, moved by 4 times the ripple |
 
 The statistics lines: `vulkan d3d9: modern: N planar reflection views (WxH)`
 and `vulkan d3d9: modern: N scenes read the planar reflection`.
 
+**Water.** CoD4's water is not drawn by the lit shaders: its material
+(technique set `wc_water`) draws one lit pass with the pixel shader
+`water_l_sun`, which the game side recognises by its name and arguments (the
+reflection probe as a custom sampler at s1, the water map at s4, `fogColor`
+at c0, `envMapParms` at c5, `waterColor` at c6, the sun at c17 and c18) and
+hands to our own water shader (`ModernLitWater`,
+`src/gfx_vk/legacy/shaders/water.frag`; built for a water-map UV of 2, 3 or 4
+components, as the game's vertex shader writes it). It computes the game's
+colour the game's way, from the water shader facts (PC water run 1): a
+height from the water map's red at three scales, its slopes as the normal;
+the water's colour times the normal's z, mixed toward the probe's light by
+Fresnel (0 looking straight down to 0.5 grazing on Bog), plus the sun's
+glint, fogged in display values and decoded to linear light. Where the water
+lies within 16 units of the plane (four times the reach: pools a few units
+off it still read it), last frame's planar image, at the point moved by the
+ripples' tilt (16 units at most), takes the probe's place, so the water
+mirrors the bank, the buildings and the sky that are really above it.
+`KISAK_VK_MODERN_WATER=0` (start-up only) keeps the game's shader;
+`KISAK_VK_MODERN_DEBUG=planar-read` shows the water's read as the floors'.
+
 **Cost.** Not measured yet: the view draws the world's and the models' lit
 surfaces a second time at a quarter of the pixels, and the visibility walk
-runs again on the CPU.
+runs again on the CPU. On mp_bog with the debug view, PC water run 1 measured
+5.17 ms a frame against 3.57 ms without the view (RTX 2080 SUPER, 1280x720).
 
 **Checks:** the D3D9 check's `modern_planar` scene draws a grey scene in
 linear light, then a 64x64 planar view in which it sets the back buffer and
@@ -1437,22 +1461,29 @@ half at one point, through a planar projection that is not symmetric: the
 left half must show the image's blue and the right half its green, so a
 transposed matrix, an eye of the wrong sign, or an image read upside down or
 mirrored each fails, and the floor stays black where the image is not read
-(no switch, or `KISAK_VK_MODERN_SHADERS=0`). With
+(no switch, or `KISAK_VK_MODERN_SHADERS=0`). A fourth frame draws the same
+halves as water (a stand-in for `water_l_sun`, drawn as our water shader,
+with a flat water map, a black probe and Fresnel 1 everywhere): the same
+blue and green must show, and the water stays dark where the image is not
+read (also with `KISAK_VK_MODERN_WATER=0`). With
 `KISAK_VK_MODERN_LINEAR=0` or without either switch nothing is drawn.
 `test_vulkan_d3d9_front.py` runs it with no switch, with
-`KISAK_VK_MODERN_PLANAR=1` (beside `KISAK_VK_MODERN_SHADERS=0` or not), with
+`KISAK_VK_MODERN_PLANAR=1` (beside `KISAK_VK_MODERN_SHADERS=0` or
+`KISAK_VK_MODERN_WATER=0`, or not), with
 `KISAK_VK_MODERN_DEBUG=planar` (beside `KISAK_VK_MODERN_PLANAR=0` and
 `KISAK_VK_MODERN_LINEAR=0` or not), with `KISAK_VK_MODERN_DEBUG=planar-read`
 (the floor's halves show the same colours, unweighted), checks the two lines, and that a full
 run draws and reads no planar view unless asked.
 
-**Next.** Water (`mp_bog`, whose water has its own shader), and planes found
-on their own. `KISAK_VK_MODERN_WATER_LOG=1` names how water is drawn, for
-that work: once per map, every world surface whose material has a water map,
-by material, with their bounds (the water's height); and once per pass of a
-water material that draws, its technique, shaders, arguments, blend state,
-the material's constants and the water simulation's settings. It prints at
-most 32 passes and works on any path.
+**Next.** The right height for Bog's swamp, more than one plane a map, and
+planes found on their own for floors. `KISAK_VK_MODERN_WATER_LOG=1` names how
+water is drawn: once per map, every world surface whose material has a water
+map, by material, with their bounds, then each surface's bounds (at most
+96); and once per material and pass of water that draws, its technique,
+shaders, arguments, blend state, custom samplers, whether it is among the
+lit passes and whether our water shader can draw it, the material's
+constants and the water simulation's settings (at most 32). It works on any
+path.
 
 ## Next
 
