@@ -172,6 +172,8 @@ struct GfxModernSunShadow
     bool on;              // the view's lit surfaces read the sun's shadow map
     float texel[2];       // world units across a texel, near and far partitions
     float depthUnits[2];  // world units per unit of the map's depth, near and far
+    bool sun;             // the view has a sun: sunDir is the direction towards it
+    float sunDir[3];      // world space, unit length (contact shadows)
 };
 
 struct GfxModernHooks
@@ -245,8 +247,9 @@ struct GfxModernHooks
     // read back. Both may be null when probeCaptureWanted is.
     void (*probeCapture)(void *user, IDirect3DDevice9 *device, bool on);
     bool (*probeCaptureRead)(void *user, IDirect3DDevice9 *device, int x, int y, int width, int height, float *rgb);
-    // A view's lit surfaces come next (after its depth prepass, if any), and
-    // this is the sun's shadow map they read, or that they read none. May be
+    // A view's lit surfaces come next, and this is the sun's shadow map they
+    // read, or that they read none, and where the sun is. Called before the
+    // view's sceneDepth, so that what that builds can use the sun. May be
     // null.
     void (*sunShadow)(void *user, IDirect3DDevice9 *device, const GfxModernSunShadow *shadow);
 };

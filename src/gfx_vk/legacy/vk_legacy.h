@@ -966,24 +966,31 @@ void SetModernPlanar(Device *device, Image *image, const ModernPlanarParams *par
 // times this (1 by default). Set before the first draw that uses one:
 // shaders already built keep theirs.
 void SetModernLightPass(Device *device, float strength);
-// Soft sun shadows (docs/vulkan-modern.md "Soft sun shadows"): how the
-// Modern lit shaders with the sun's shadow map filter it, pushed after
-// ModernPlanarParams (fragment stage, offset 96) to every pipeline drawn as
-// one of ours. on 0 keeps the game's four taps. Set before a scene's lit
-// surfaces draw; null turns soft shadows off.
+// Soft shadows (docs/vulkan-modern.md "Soft sun shadows", "Soft spot-light
+// shadows"): how the Modern lit shaders with a shadow map (the sun's, or a
+// spot or omni light's tile) filter it, pushed after ModernPlanarParams
+// (fragment stage, offset 96) to every pipeline drawn as one of ours. on 0
+// keeps the game's four taps for both. Set before a scene's lit surfaces
+// draw; null turns soft shadows off.
 struct ModernShadowParams
 {
-    // Filter radius (texels) per unit of the map's depth between a receiver
-    // and its blockers, near and far partitions: the sun's apparent size.
+    // Filter radius (texels) per unit of the sun's map's depth between a
+    // receiver and its blockers, near and far partitions: the sun's apparent
+    // size.
     float penumbra[2];
-    // The widest filter and blocker search (texels), near and far.
-    float maxRadius[2];
+    // The widest filter and blocker search (texels).
+    float maxRadius;
+    // A spot or omni light's size (world units): its penumbra is that times
+    // how far a receiver lies past its blockers over their distance from it.
+    float spotSize;
     // Depth per texel at the steepest receiver slope the per-tap depth bias
-    // follows (steeper slopes are capped), near and far.
+    // follows (steeper slopes are capped), the sun's near and far partitions.
     float slopeCap[2];
-    float on;    // 1 soft shadows, 0 the game's four taps
+    float on;    // + kModernSoftSun, + kModernSoftSpot; 0 the game's four taps
     float frame; // turns the sample pattern each frame, for TAA to average
 };
+constexpr float kModernSoftSun = 1.0f;
+constexpr float kModernSoftSpot = 2.0f;
 static_assert(sizeof(ModernShadowParams) == 32, "the lit shaders' push constant block, after the planar's");
 void SetModernShadow(Device *device, const ModernShadowParams *params);
 #endif

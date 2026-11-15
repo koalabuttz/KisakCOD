@@ -50,6 +50,10 @@ inline const dvar_s *fogSpots;
 inline const dvar_s *fogFroxels;
 inline const dvar_s *softShadows;
 inline const dvar_s *shadowSoftness;
+inline const dvar_s *softSpotShadows;
+inline const dvar_s *spotLightSize;
+inline const dvar_s *contactShadows;
+inline const dvar_s *contactLength;
 
 // Harmless to call again (the engine keeps the first registration).
 inline void Register()
@@ -146,6 +150,21 @@ inline void Register()
                                         "Modern visuals: the sun's apparent size in degrees for soft shadows "
                                         "(bigger is softer); -1 the default (KISAK_VK_MODERN_SHADOW_SOFTNESS or "
                                         "1.5)");
+    softSpotShadows = Dvar_RegisterEnum("r_modernSoftSpotShadows", kOnOffNames, 0, DVAR_NOFLAG,
+                                        "Modern visuals: soft shadows from spot and omni lights, sharp where "
+                                        "they meet their caster (default: with our lit shaders, unless "
+                                        "KISAK_VK_MODERN_SOFT_SPOT_SHADOWS says otherwise)");
+    spotLightSize = Dvar_RegisterFloat("r_modernSpotLightSize", -1.0f, -1.0f, 64.0f, DVAR_NOFLAG,
+                                       "Modern visuals: the size of spot and omni lights for soft shadows, in "
+                                       "world units (bigger is softer); -1 the default "
+                                       "(KISAK_VK_MODERN_SPOT_LIGHT_SIZE or 4)");
+    contactShadows = Dvar_RegisterEnum("r_modernContactShadows", kOnOffNames, 0, DVAR_NOFLAG,
+                                       "Modern visuals: contact shadows, the sun's small shadows where things "
+                                       "touch (default: with our lit shaders, unless "
+                                       "KISAK_VK_MODERN_CONTACT_SHADOWS says otherwise)");
+    contactLength = Dvar_RegisterFloat("r_modernContactLength", -1.0f, -1.0f, 256.0f, DVAR_NOFLAG,
+                                       "Modern visuals: how far towards the sun contact shadows look, in world "
+                                       "units; -1 the default (KISAK_VK_MODERN_CONTACT_LENGTH or 12)");
 }
 
 // The switches as the back end takes them: an enum's index 0 (default) is -1,
@@ -184,5 +203,9 @@ inline void Read(gfx_vk::d3d9::ModernTuning &out)
     out.fogFroxels = fogFroxels->current.integer - 1;
     out.softShadows = softShadows->current.integer - 1;
     out.shadowSoftness = shadowSoftness->current.value;
+    out.softSpotShadows = softSpotShadows->current.integer - 1;
+    out.spotLightSize = spotLightSize->current.value;
+    out.contactShadows = contactShadows->current.integer - 1;
+    out.contactLength = contactLength->current.value;
 }
 } // namespace modern_dvars

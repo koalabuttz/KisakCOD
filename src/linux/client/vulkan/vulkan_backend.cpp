@@ -662,6 +662,9 @@ void ModernSunShadow(void *, IDirect3DDevice9 *device, const GfxModernSunShadow 
         view.texel[i] = shadow->texel[i];
         view.depthUnits[i] = shadow->depthUnits[i];
     }
+    view.sun = shadow->sun;
+    for (int i = 0; i < 3; ++i)
+        view.sunDir[i] = shadow->sunDir[i];
     front::ModernSunShadow(device, view);
 }
 

@@ -240,7 +240,7 @@ NormalsStats Stats(const Normals *normals);
 // they can darken their indirect light alone: two slices of six steps a side
 // per pixel, jittered per pixel and frame, then a 5x5 blur that keeps to each
 // surface. The result is the visible fraction (1 unoccluded) in the red
-// channel of a target the caller owns.
+// channel of a target the caller owns (green 1: TraceContactShadows' place).
 
 struct AoParams
 {
@@ -296,9 +296,36 @@ void DestroyAmbientOcclusion(Core *core, AmbientOcclusion *ao);
 bool BuildAmbientOcclusion(Core *core, AmbientOcclusion *ao, Image *depth, Image *normals, const SceneView &view,
                            const AoParams &params, Image *target, std::string &error);
 
+// ---- Contact shadows (docs/vulkan-modern.md "Contact shadows") ----
+//
+// The sun's small shadows the shadow map is too coarse to hold, from a short
+// ray stepped from each pixel's surface towards the sun through the scene
+// depth (shaders/contact.frag), into the green channel of the ambient
+// occlusion's target: the lit shaders of ours take the smaller of it and the
+// sun's shadow, so it darkens the sun's light alone.
+
+struct ContactParams
+{
+    float sun[3] = {0.0f, 0.0f, 1.0f}; // towards the sun, in world space (unit length)
+    float length = 12.0f;    // world units (inches) the ray reaches: about 30 cm
+    float thickness = 8.0f;  // world units a surface is taken to reach behind itself
+    float strength = 1.0f;   // how dark a full hit makes the sun's light (1: none of it)
+    uint32_t frame = 0;      // moves the noise
+};
+
+// Records the contact shadows of view.area into the green of `target` (the
+// ambient occlusion's: a colour attachment as large as the area's corner,
+// single-sampled, sampled usage), keeping its other channels; with `clear`
+// the area is first cleared to white (no ambient occlusion this scene).
+// From `depth` and BuildNormals' `normals`. Outside a pass, inside a frame.
+// False with the reason, and nothing recorded, when it cannot.
+bool TraceContactShadows(Core *core, AmbientOcclusion *ao, Image *depth, Image *normals, const SceneView &view,
+                         const ContactParams &params, Image *target, bool clear, std::string &error);
+
 struct AoStats
 {
-    uint64_t builds; // BuildAmbientOcclusion calls that recorded
+    uint64_t builds;   // BuildAmbientOcclusion calls that recorded
+    uint64_t contacts; // TraceContactShadows calls that recorded
 };
 AoStats Stats(const AmbientOcclusion *ao);
 

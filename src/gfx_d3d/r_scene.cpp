@@ -2605,6 +2605,13 @@ void R_ModernSunShadow(const GfxViewInfo *viewInfo, bool sunShadowMap)
         shadow.texel[i] = 2.0f / (projection.m[0][0] * 1024.0f);
         shadow.depthUnits[i] = 1.0f / projection.m[2][2];
     }
+    // The sun's direction (towards it, as the lit shaders' sun position
+    // constant has it: R_SetSunConstants).
+    const GfxLight &sun = backEndData->sunLight;
+    const float length = sqrtf(sun.dir[0] * sun.dir[0] + sun.dir[1] * sun.dir[1] + sun.dir[2] * sun.dir[2]);
+    shadow.sun = sun.type == GFX_LIGHT_TYPE_DIR && length > 1e-4f;
+    for (int i = 0; i < 3 && shadow.sun; ++i)
+        shadow.sunDir[i] = sun.dir[i] / length;
     hooks->sunShadow(hooks->user, dx.device, &shadow);
 }
 

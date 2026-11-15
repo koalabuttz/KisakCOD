@@ -269,7 +269,28 @@ struct Backend
     bool softShadowsWanted = false;
     float shadowSoftness = 1.5f;
     uint64_t softShadowScenes = 0, softShadowScenesBase = 0;
+    // Soft spot-light shadows (docs/vulkan-modern.md "Soft spot-light
+    // shadows"), wanted as the sun's, and the lights' size in world units;
+    // the scenes that drew a shadowed spot or omni light's surfaces with our
+    // lit shaders while they were on (not every scene with the switch on: a
+    // view with no shadowed lamp in it counts none).
+    bool softSpotShadowsWanted = false;
+    float spotLightSize = 4.0f;
+    uint64_t softSpotScenes = 0, softSpotScenesBase = 0;
+    bool softSpotThisScene = false;
     uint32_t shadowFrame = 0;
+    // Contact shadows (docs/vulkan-modern.md "Contact shadows"): wanted with
+    // our lit shaders unless switched on or off outright, which makes the
+    // normals buffer wanted too; traced into the green of the ambient
+    // occlusion's texture (made for them when the occlusion is off) right
+    // after the occlusion. Their parameters, the sun's direction from the
+    // view's sunShadow (before its scene depth; contactSun false: no sun),
+    // and whether this scene has them.
+    bool contactWanted = false;
+    modern::ContactParams contactParams{};
+    bool contactSun = false;
+    bool sceneContact = false;
+    uint32_t contactFrame = 0;
     bool probesWanted = false;
     uint32_t probesFiltered = 0;
     uint32_t probesLeft = 0;
@@ -346,8 +367,11 @@ struct Backend
     {
         bool bloom = true, exposure = true, velocity = true;
         bool shaders = true, modelShaders = true, noSunShaders = true, lightShaders = true;
-        int ao = -1, reflections = -1, normals = -1, fog = -1, softShadows = -1;
+        int ao = -1, reflections = -1, normals = -1, fog = -1, softShadows = -1, contactShadows = -1,
+            softSpotShadows = -1;
         float shadowSoftness = 1.5f;
+        float spotLightSize = 4.0f;
+        float contactLength = 12.0f;
         ModernDebugView debug = ModernDebugNone;
         modern::TonemapCurve curve = modern::TonemapCurve::Neutral;
         float sunStrength = 1.0f, skyStrength = 1.0f;
@@ -583,19 +607,25 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
     backend->aoWanted = ao == 1 || (ao < 0 && (backend->debugAo || ours));
     const int reflections = tuning.reflections >= 0 ? tuning.reflections : start.reflections;
     backend->reflectionsWanted = reflections == 1 || (reflections < 0 && (backend->debugReflections || ours));
+    const int contact = tuning.contactShadows >= 0 ? tuning.contactShadows : start.contactShadows;
+    backend->contactWanted = contact == 1 || (contact < 0 && ours);
     backend->normalsWanted = start.normals != 0 && (start.normals == 1 || backend->debugNormals || backend->aoWanted
-                                                    || backend->reflectionsWanted || backend->planarWanted);
+                                                    || backend->reflectionsWanted || backend->planarWanted
+                                                    || backend->contactWanted);
     const int softShadows = tuning.softShadows >= 0 ? tuning.softShadows : start.softShadows;
     backend->softShadowsWanted = softShadows == 1 || (softShadows < 0 && ours);
-    if (!backend->softShadowsWanted && backend->legacy)
+    const int softSpot = tuning.softSpotShadows >= 0 ? tuning.softSpotShadows : start.softSpotShadows;
+    backend->softSpotShadowsWanted = softSpot == 1 || (softSpot < 0 && ours);
+    if (!backend->softShadowsWanted && !backend->softSpotShadowsWanted && backend->legacy)
         lg::SetModernShadow(backend->legacy, nullptr);
     if (backend->legacy)
     {
         if (!backend->aoWanted || !backend->normalsWanted)
-        {
             backend->sceneAo = false;
+        if (!backend->contactWanted || !backend->normalsWanted)
+            backend->sceneContact = false;
+        if (!backend->sceneAo && !backend->sceneContact)
             lg::SetModernAmbientOcclusion(backend->legacy, nullptr);
-        }
         if (!backend->reflectionsWanted || !backend->normalsWanted)
         {
             backend->sceneReflections = nullptr;
@@ -645,6 +675,8 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
     fogParams.spotShare = number(tuning.fogSpots, start.fogParams.spotShare, 0.0f, 4.0f, true);
     fogParams.froxels = tuning.fogFroxels >= 0 ? tuning.fogFroxels == 1 : start.fogParams.froxels;
     backend->shadowSoftness = number(tuning.shadowSoftness, start.shadowSoftness, 0.0f, 20.0f, false);
+    backend->contactParams.length = number(tuning.contactLength, start.contactLength, 0.0f, 256.0f, false);
+    backend->spotLightSize = number(tuning.spotLightSize, start.spotLightSize, 0.0f, 64.0f, false);
 
     backend->tonemapCurve = tuning.tonemap >= static_cast<int>(modern::TonemapCurve::Clamp)
                                     && tuning.tonemap <= static_cast<int>(modern::TonemapCurve::Aces)
@@ -660,7 +692,7 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
             "(models %s, without the sun %s, lights %s; sun %.2f, sky %.2f), ambient occlusion %s (radius %.1f, power %.2f, "
             "thickness %.1f, grazing %.2f, floor %.2f, edge %.3f%s), reflections %s (distance %.0f, thickness %.1f), normals %s, "
             "volumetric fog %s (%s, sun %.2f, scatter %.2f, spot lights %.2f), soft shadows %s (sun %.2f degrees), "
-            "tonemap %s, debug view %s",
+            "soft spot-light shadows %s (lights %.1f units), contact shadows %s (length %.1f), tonemap %s, debug view %s",
             onOff(backend->bloomWanted), onOff(backend->exposureWanted), backend->exposureParams.key,
             onOff(backend->velocityWanted), onOff(backend->shadersWanted), onOff(backend->modelShadersWanted),
             onOff(backend->noSunShadersWanted), onOff(backend->lightShadersWanted), backend->sunStrength, backend->skyStrength, onOff(backend->aoWanted),
@@ -669,7 +701,9 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
             onOff(backend->reflectionsWanted), reflectionParams.maxDistance, reflectionParams.thickness,
             onOff(backend->normalsWanted), onOff(backend->fogWanted), fogParams.froxels ? "froxels" : "march",
             fogParams.sunShare, fogParams.scatter, fogParams.spotShare, onOff(backend->softShadowsWanted),
-            backend->shadowSoftness, modern::CurveName(backend->tonemapCurve), DebugViewName(view));
+            backend->shadowSoftness, onOff(backend->softSpotShadowsWanted), backend->spotLightSize,
+            onOff(backend->contactWanted), backend->contactParams.length, modern::CurveName(backend->tonemapCurve),
+            DebugViewName(view));
 }
 } // namespace
 
@@ -843,6 +877,24 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         const float value = softness.empty() ? 0.0f : std::strtof(softness.c_str(), nullptr);
         if (value > 0.0f && value <= 20.0f)
             start.shadowSoftness = value;
+    }
+    // Soft spot-light shadows with our lit shaders, unless this says
+    // otherwise; the lights' size in world units.
+    start.softSpotShadows = onOff("KISAK_VK_MODERN_SOFT_SPOT_SHADOWS");
+    {
+        const std::string size = EnvText("KISAK_VK_MODERN_SPOT_LIGHT_SIZE");
+        const float value = size.empty() ? 0.0f : std::strtof(size.c_str(), nullptr);
+        if (value > 0.0f && value <= 64.0f)
+            start.spotLightSize = value;
+    }
+    // Contact shadows with our lit shaders, unless this says otherwise; how
+    // far towards the sun they look, in world units.
+    start.contactShadows = onOff("KISAK_VK_MODERN_CONTACT_SHADOWS");
+    {
+        const std::string length = EnvText("KISAK_VK_MODERN_CONTACT_LENGTH");
+        const float value = length.empty() ? 0.0f : std::strtof(length.c_str(), nullptr);
+        if (value > 0.0f && value <= 256.0f)
+            start.contactLength = value;
     }
     ApplyModernTuning(backend, backend->modernTuning);
     if (!h.windowSystem || !h.windowSystem(h.user, desc.window, backend->windowSystem))
@@ -1137,6 +1189,17 @@ void BackendLogStats(Backend *backend, bool reset)
                 backend->aoParams.power, backend->aoParams.floor, backend->aoParams.edge,
                 backend->aoParams.half ? ", half resolution" : "",
                 pass.supported ? 2.0 * average(pass) : 0.0);
+        // Contact shadows: the scenes traced and their pass's GPU time.
+        const uint64_t contacts = modern::Stats(backend->ao).contacts - backend->aoBase.contacts;
+        if (contacts)
+        {
+            const PassTimings contactPass = PassTimingsFor(backend->core, "modern contact shadows");
+            HostLog(h, "vulkan d3d9: modern: %llu scenes with contact shadows (length %.1f, thickness %.1f, "
+                       "strength %.2f), %.3f ms GPU each",
+                    static_cast<unsigned long long>(contacts), backend->contactParams.length,
+                    backend->contactParams.thickness, backend->contactParams.strength,
+                    contactPass.supported ? average(contactPass) : 0.0);
+        }
     }
     // Screen-space reflections: the scenes traced, the levels of the last,
     // the trace pass's GPU time (the levels are blits, not timed).
@@ -1199,6 +1262,10 @@ void BackendLogStats(Backend *backend, bool reset)
         HostLog(h, "vulkan d3d9: modern: %llu scenes with soft sun shadows (sun %.2f degrees)",
                 static_cast<unsigned long long>(backend->softShadowScenes - backend->softShadowScenesBase),
                 backend->shadowSoftness);
+    if (backend->softSpotScenes > backend->softSpotScenesBase)
+        HostLog(h, "vulkan d3d9: modern: %llu scenes drew soft spot-light shadows (lights %.1f units)",
+                static_cast<unsigned long long>(backend->softSpotScenes - backend->softSpotScenesBase),
+                backend->spotLightSize);
     // Bloom: the scenes it ran for in place of the glow, the passes of each,
     // and their GPU time per scene.
     if (backend->bloom)
@@ -1242,6 +1309,7 @@ void BackendLogStats(Backend *backend, bool reset)
         backend->planarViewsBase = backend->planarViews;
         backend->planarReadsBase = backend->planarReads;
         backend->softShadowScenesBase = backend->softShadowScenes;
+        backend->softSpotScenesBase = backend->softSpotScenes;
         modern::ResetStats(backend->exposure);
         if (backend->exposure)
             backend->exposureMsBase = PassTimingsFor(backend->core, "modern exposure").totalMs;
@@ -1645,6 +1713,7 @@ lg::Surface *BackendModernSceneTarget(Backend *backend, lg::Surface *backBuffer,
     }
     ++backend->linearScenes;
     backend->litThisScene = false;
+    backend->softSpotThisScene = false;
     result = ModernResult::Done;
     return backend->linearSceneSurface;
 }
@@ -1669,6 +1738,12 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
         if (!backend->litThisScene)
             ++backend->litScenes;
         backend->litThisScene = true;
+        if (inputs->overWhite && backend->softSpotShadowsWanted && lg::ModernLitPointLight(shader)
+            && lg::ModernLitShadowed(shader) && !backend->softSpotThisScene)
+        {
+            ++backend->softSpotScenes;
+            backend->softSpotThisScene = true;
+        }
     }
     lg::SetLinearInputs(backend->legacy, inputs ? inputs->constants : 0, inputs ? inputs->samplers : 0,
                         inputs ? inputs->doubled : 0, inputs && inputs->colorInput, inputs && inputs->overWhite,
@@ -1946,24 +2021,31 @@ modern::SceneView SceneViewOf(const ModernSceneView &view)
 
 namespace
 {
-// The scene's ambient occlusion into the back end's texture (made, or made
-// again, at the depth's size), right after its normals; sceneAo tells
-// whether it is there. Off or failing, the reason is logged once.
-void SceneAmbientOcclusion(Backend *backend, Image *depth, const modern::SceneView &scene)
+// The ambient occlusion module (pipelines for the occlusion and the contact
+// shadows), made at its first use; false (logged once, and aoFailed) when it
+// cannot be.
+bool EnsureAoModule(Backend *backend)
 {
-    if (!backend->aoWanted || backend->aoFailed)
-        return;
+    if (backend->ao)
+        return true;
+    if (backend->aoFailed)
+        return false;
     std::string error;
+    backend->ao = modern::CreateAmbientOcclusion(backend->core, error);
     if (!backend->ao)
     {
-        backend->ao = modern::CreateAmbientOcclusion(backend->core, error);
-        if (!backend->ao)
-        {
-            backend->aoFailed = true;
-            HostLog(*backend->host, "vulkan d3d9: modern: no ambient occlusion: %s", error.c_str());
-            return;
-        }
+        backend->aoFailed = true;
+        HostLog(*backend->host, "vulkan d3d9: modern: no ambient occlusion or contact shadows: %s", error.c_str());
+        return false;
     }
+    return true;
+}
+
+// The texture the lit shaders of ours read the ambient occlusion (red) and
+// the contact shadows (green) from, made, or made again, at the depth's
+// size; false (logged once, and aoFailed) when it cannot be.
+bool EnsureAoTexture(Backend *backend, Image *depth)
+{
     const ImageDesc &depthInfo = ImageInfo(depth);
     if (backend->aoTexture)
     {
@@ -1975,31 +2057,41 @@ void SceneAmbientOcclusion(Backend *backend, Image *depth, const modern::SceneVi
             backend->aoSurface = nullptr;
         }
     }
-    if (!backend->aoTexture)
+    if (backend->aoTexture)
+        return true;
+    lg::TextureDesc desc;
+    desc.width = depthInfo.width;
+    desc.height = depthInfo.height;
+    desc.levels = 1;
+    desc.usage = lg::d3d::USAGE_RENDERTARGET;
+    desc.format = lg::d3d::FMT_A8R8G8B8;
+    desc.pool = lg::d3d::POOL_DEFAULT;
+    desc.name = "modern ambient occlusion";
+    backend->aoTexture = lg::CreateTexture(backend->legacy, desc);
+    backend->aoSurface = backend->aoTexture ? lg::GetSurfaceLevel(backend->legacy, backend->aoTexture, 0, 0) : nullptr;
+    if (!backend->aoSurface || !lg::SurfaceImage(backend->aoSurface))
     {
-        lg::TextureDesc desc;
-        desc.width = depthInfo.width;
-        desc.height = depthInfo.height;
-        desc.levels = 1;
-        desc.usage = lg::d3d::USAGE_RENDERTARGET;
-        desc.format = lg::d3d::FMT_A8R8G8B8;
-        desc.pool = lg::d3d::POOL_DEFAULT;
-        desc.name = "modern ambient occlusion";
-        backend->aoTexture = lg::CreateTexture(backend->legacy, desc);
-        backend->aoSurface =
-            backend->aoTexture ? lg::GetSurfaceLevel(backend->legacy, backend->aoTexture, 0, 0) : nullptr;
-        if (!backend->aoSurface || !lg::SurfaceImage(backend->aoSurface))
-        {
-            if (backend->aoTexture)
-                lg::DestroyTexture(backend->legacy, backend->aoTexture);
-            backend->aoTexture = nullptr;
-            backend->aoSurface = nullptr;
-            backend->aoFailed = true;
-            HostLog(*backend->host, "vulkan d3d9: modern: no ambient occlusion: cannot make the %ux%u image",
-                    depthInfo.width, depthInfo.height);
-            return;
-        }
+        if (backend->aoTexture)
+            lg::DestroyTexture(backend->legacy, backend->aoTexture);
+        backend->aoTexture = nullptr;
+        backend->aoSurface = nullptr;
+        backend->aoFailed = true;
+        HostLog(*backend->host, "vulkan d3d9: modern: no ambient occlusion or contact shadows: cannot make the %ux%u "
+                                "image",
+                depthInfo.width, depthInfo.height);
+        return false;
     }
+    return true;
+}
+
+// The scene's ambient occlusion into the back end's texture, right after its
+// normals; sceneAo tells whether it is there. Off or failing, the reason is
+// logged once.
+void SceneAmbientOcclusion(Backend *backend, Image *depth, const modern::SceneView &scene)
+{
+    if (!backend->aoWanted || !EnsureAoModule(backend) || !EnsureAoTexture(backend, depth))
+        return;
+    std::string error;
     modern::AoParams params = backend->aoParams;
     params.frame = backend->aoFrame++;
     backend->sceneAo = modern::BuildAmbientOcclusion(backend->core, backend->ao, depth, backend->sceneNormals,
@@ -2008,6 +2100,26 @@ void SceneAmbientOcclusion(Backend *backend, Image *depth, const modern::SceneVi
         LogModernOnce(backend, "no ambient occlusion", error);
     // The lit shaders of ours read it until the scene is lit (BackendModernScene).
     lg::SetModernAmbientOcclusion(backend->legacy, backend->sceneAo ? backend->aoTexture : nullptr);
+}
+
+// The scene's contact shadows into the green of the same texture, after the
+// occlusion (into a texture cleared to white without it); sceneContact
+// tells whether they are there.
+void SceneContactShadows(Backend *backend, Image *depth, const modern::SceneView &scene)
+{
+    if (!backend->contactWanted || !backend->contactSun || !EnsureAoModule(backend)
+        || !EnsureAoTexture(backend, depth))
+        return;
+    std::string error;
+    modern::ContactParams params = backend->contactParams;
+    params.frame = backend->contactFrame++;
+    backend->sceneContact =
+        modern::TraceContactShadows(backend->core, backend->ao, depth, backend->sceneNormals, scene, params,
+                                    lg::SurfaceImage(backend->aoSurface), !backend->sceneAo, error);
+    if (!backend->sceneContact)
+        LogModernOnce(backend, "no contact shadows", error);
+    else
+        lg::SetModernAmbientOcclusion(backend->legacy, backend->aoTexture);
 }
 
 // The scene's screen-space reflections, after its normals buffer. They read
@@ -2328,33 +2440,48 @@ void BackendModernSunShadow(Backend *backend, lg::Device *legacy, const ModernSu
 {
     if (!backend || !legacy)
         return;
+    // The sun, for the contact shadows of the view's scene depth (next).
+    backend->contactSun = view.sun;
+    for (int i = 0; i < 3; ++i)
+        backend->contactParams.sun[i] = view.sunDir[i];
     const bool usable = view.on && view.texel[0] > 0.0f && view.texel[1] > 0.0f && view.depthUnits[0] > 0.0f
                         && view.depthUnits[1] > 0.0f;
-    if (!backend->softShadowsWanted || !usable)
+    const bool sun = backend->softShadowsWanted && usable;
+    const bool spot = backend->softSpotShadowsWanted;
+    if (!sun && !spot)
     {
         lg::SetModernShadow(legacy, nullptr);
         return;
     }
     // The filter's radius (texels) is the receiver's depth below its
     // blockers times the tangent of half the sun's apparent size, over a
-    // texel's width; it reaches at most 16 texels, the blocker search with
-    // it, so a soft edge costs the same taps everywhere.
+    // texel's width (a spot light's: its size, in the shader); it reaches at
+    // most 16 texels, the blocker search with it, so a soft edge costs the
+    // same taps everywhere.
     constexpr float kWidestTexels = 16.0f;
     constexpr float kPi = 3.14159265f;
-    const float tanHalf = std::tan(0.5f * backend->shadowSoftness * kPi / 180.0f);
     lg::ModernShadowParams params{};
-    for (int i = 0; i < 2; ++i)
+    params.maxRadius = kWidestTexels;
+    if (sun)
     {
-        params.penumbra[i] = view.depthUnits[i] * tanHalf / view.texel[i];
-        params.maxRadius[i] = kWidestTexels;
-        // The steepest receiver the per-tap bias follows: two units of
-        // height a unit across (63 degrees), in depth per texel.
-        params.slopeCap[i] = 2.0f * view.texel[i] / view.depthUnits[i];
+        const float tanHalf = std::tan(0.5f * backend->shadowSoftness * kPi / 180.0f);
+        for (int i = 0; i < 2; ++i)
+        {
+            params.penumbra[i] = view.depthUnits[i] * tanHalf / view.texel[i];
+            // The steepest receiver the per-tap bias follows: two units of
+            // height a unit across (63 degrees), in depth per texel.
+            params.slopeCap[i] = 2.0f * view.texel[i] / view.depthUnits[i];
+        }
+        params.on += lg::kModernSoftSun;
+        ++backend->softShadowScenes;
     }
-    params.on = 1.0f;
+    if (spot)
+    {
+        params.spotSize = backend->spotLightSize;
+        params.on += lg::kModernSoftSpot;
+    }
     params.frame = static_cast<float>(backend->shadowFrame++ & 63u);
     lg::SetModernShadow(legacy, &params);
-    ++backend->softShadowScenes;
 }
 
 void BackendModernPlanarDone(Backend *backend, const ModernPlanarView &view)
@@ -2426,6 +2553,7 @@ ModernResult BackendModernSceneDepth(Backend *backend, lg::Surface *depth, const
         return ModernResult::Skipped;
     backend->sceneNormals = nullptr;
     backend->sceneAo = false;
+    backend->sceneContact = false;
     lg::SetModernAmbientOcclusion(backend->legacy, nullptr);
     lg::SetModernReflections(backend->legacy, nullptr);
     Image *depthImage = depth ? lg::SurfaceImage(depth) : nullptr;
@@ -2458,6 +2586,7 @@ ModernResult BackendModernSceneDepth(Backend *backend, lg::Surface *depth, const
         return ModernResult::Refused;
     }
     SceneAmbientOcclusion(backend, depthImage, scene);
+    SceneContactShadows(backend, depthImage, scene);
     TraceSceneReflections(backend, depthImage, scene);
     SetScenePlanar(backend, view);
     return ModernResult::Done;
@@ -2532,6 +2661,7 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
     backend->sceneNormals = nullptr;
     Image *ao = backend->sceneAo ? lg::SurfaceImage(backend->aoSurface) : nullptr;
     backend->sceneAo = false;
+    backend->sceneContact = false;
     lg::SetModernAmbientOcclusion(backend->legacy, nullptr);
     Image *reflections = backend->sceneReflections;
     backend->sceneReflections = nullptr;
