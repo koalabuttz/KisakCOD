@@ -90,6 +90,9 @@ def shell(command):
     words = shlex.split(command)
     if words[:2] == ["getprop", "sys.boot_completed"]:
         print("1" if os.environ.get("FAKE_ADB_EMULATOR") != "1" or (STATE / "booted").exists() else "")
+    elif words[:2] == ["mkdir", "-p"]:
+        for path in words[2:]:
+            device_path(path).mkdir(parents=True, exist_ok=True)
     elif words[:1] == ["ls"]:
         if not device_path(words[1]).exists():
             print(f"ls: {words[1]}: No such file or directory", file=sys.stderr)
@@ -178,6 +181,14 @@ def adb(argv):
         print("OK: killing emulator, bye bye")
     elif kind == "push":
         source, target = Path(argv[1].rstrip(".").rstrip("/\\")), device_path(argv[2].rstrip("/"))
+        # As the Android 13 x86_64 emulator image: adbd makes one new folder
+        # level for a file, no more ("remote secure_mkdirs failed").
+        for path in source.rglob("*"):
+            parent = (target / path.relative_to(source)).parent
+            if not parent.exists() and not parent.parent.exists():
+                print(f"adb: error: failed to copy '{path}': remote secure_mkdirs failed: Operation not permitted",
+                      file=sys.stderr)
+                return 1
         shutil.copytree(source, target, dirs_exist_ok=True)
         print(f"{argv[1]}: {sum(1 for _ in source.rglob('*'))} files pushed")
     elif kind == "pull":

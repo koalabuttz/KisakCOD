@@ -186,6 +186,7 @@ PID_EVERY = 1.0
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 DEFAULT_EMULATOR_PORT = 5554
 DEFAULT_BOOT_TIMEOUT = 300
+MKDIR_BATCH = 20
 EMULATOR_ARGS = ["-no-snapshot-save", "-no-boot-anim", "-no-audio"]
 
 
@@ -540,6 +541,19 @@ def run_game_files(recipe, adb):
         adb.shell(f"am start -W -n {package}/{device(recipe)['activity']}", timeout=60)
         time.sleep(5)
         adb.shell(f"am force-stop {package}")
+    # adbd makes only one new folder level per file on some images (the
+    # Android 13 x86_64 emulator image: "remote secure_mkdirs failed:
+    # Operation not permitted"), while the shell's mkdir -p works, so the
+    # whole folder tree is made first.
+    folders = sorted({f"{folder}/{path.relative_to(source).as_posix()}"
+                      for path in source.rglob("*") if path.is_dir()})
+    for start in range(0, len(folders), MKDIR_BATCH):
+        batch = " ".join(shlex.quote(path) for path in folders[start:start + MKDIR_BATCH])
+        code, out, err = adb.shell(f"mkdir -p {batch}", timeout=60)
+        if code != 0:
+            result["status"] = f"failed: mkdir -p on the device: {(out + ' ' + err).strip()}"
+            return result
+    result["folders"] = len(folders)
     code, out, err = adb.run("push", f"{source}/.", f"{folder}/", timeout=float(files.get("timeout", 7200)))
     result["output"] = (out + "\n" + err).strip().splitlines()[-2:]
     ok = code == 0 and adb.shell(f"ls {folder}/{files['check']}", timeout=30)[0] == 0
