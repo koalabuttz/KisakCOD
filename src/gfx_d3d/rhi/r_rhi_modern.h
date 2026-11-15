@@ -103,7 +103,7 @@ enum GfxModernLitShader : uint16_t
     // PC water run 1), alone: no family, map or mode bit with it.
     GFX_MODERN_LIT_SHADER_WATER = 0x400,
     // Variations of the lp_ shaders (skin and flag shader facts): the
-    // reflection probe's light times 0.3 (skinned models' s0), and the sun
+    // reflection probe's light times 0.3 (skin_'s s0: character skin), and the sun
     // lighting both faces (flag_ with the sun).
     GFX_MODERN_LIT_SHADER_SKIN_PROBE = 0x800,
     GFX_MODERN_LIT_SHADER_TWO_SIDED_SUN = 0x1000,

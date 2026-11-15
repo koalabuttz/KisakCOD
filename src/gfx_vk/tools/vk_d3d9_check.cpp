@@ -5538,7 +5538,7 @@ void Check::ModernLitModels()
     SafeRelease(color);
 }
 
-// The variations of our model shader for skinned models and cloth (skin and
+// The variations of our model shader for character skin and cloth (skin and
 // flag shader facts), lit by the shadow map as modern_lit_models sets it
 // up. Top half, under the sun overhead: lp_hsm_sun_r0c0n0s0 (left) and the
 // same as lp_hsm_skin_sun_r0c0n0s0 (right), whose reflection probe's grey 64

@@ -802,20 +802,26 @@ the mode a specialization constant. `i_` (instanced) shares the pixel shader
 and only changes the vertex shader. `sm_` keeps the game's shader: it
 compares the shadow map in the shader.
 
-Skinned models (players, the first-person weapon) and cloth draw with it too
-(skin and flag shader facts, project files, 2026-11-15):
+Skin and cloth draw with it too (skin and flag shader facts, and the
+materials that use them, project files, 2026-11-15). `skin_` is character
+skin, not skeletal skinning: in stock multiplayer only bare hands and
+forearms have it, the Marine glove (`mc/mtl_marine_glove`, common_mp) and
+the SAS woodland sleeves (mp_bloc, mp_countdown, mp_creek, mp_farm,
+mp_overgrown, mp_pipeline); no head or face material does, and the weapons
+are plain. `flag_` is cloth: the five Domination flags (`mtl_flag_*`,
+common_mp) and the large banners on mp_bloc and mp_showdown.
 
 * **`lp_[hsm_][i_]skin_sun_<r0c0|r0c0n0|r0c0s0|r0c0n0s0>`**: r0c0 and
   r0c0n0 are the plain model's shaders. With `s0` the reflection probe's
   light is scaled by 0.3, a literal in the game's shader (code bit 0x800,
-  the specialization constant `kProbeScale`). The vertex shaders are the
-  plain ones; the skinning is done before them.
+  the specialization constant `kProbeScale`): skin reflects less. The
+  vertex shaders are the plain ones.
 * **`lp_[hsm_]flag_[sun_]t0c0[n0][s0]`**: the plain `t0` shader, except
   that with the sun the sun lights both faces, |N.L| in place of the clamp,
   with the normal unflipped (code bit 0x1000, `kTwoSidedSun`). Without a
   light it is the plain shader itself. Its vertex shader waves the cloth
   but writes the same outputs.
-* Skinned models without the sun or with a spot or omni light, and flag_
+* skin_ without the sun or with a spot or omni light, and flag_
   with a spot or omni light, keep the game's shader: the facts did not read
   them.
 

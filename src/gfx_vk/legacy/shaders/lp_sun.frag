@@ -46,7 +46,7 @@
 // taken (no primary lightmap to skip it) and fading to the volume's alpha,
 // the material's samplers and constants one register further on, and a
 // blended surface's normal-map slopes and specular scaled by its alpha.
-// Skinned models (skin_) and cloth (flag_) draw with it too: the probe's
+// Character skin (skin_) and cloth (flag_) draw with it too: the probe's
 // light scaled (kProbeScale) and the sun lighting both faces (kTwoSidedSun).
 //
 // The inputs' locations here are placeholders (texcoord N at N, colour 0 at
@@ -217,7 +217,7 @@ layout(constant_id = 2) const int kClampDepthReference = 0;
 layout(constant_id = 3) const int kMode = 0;
 // The alpha test may be on (AlphaTestBlock decides), or is known to be off.
 layout(constant_id = 4) const int kAlphaTest = 1;
-// What the reflection probe's light is scaled by: 0.3 for skinned models'
+// What the reflection probe's light is scaled by: 0.3 for character skin's
 // specular surfaces (lp_..skin_..s0, skin and flag shader facts), else 1.
 layout(constant_id = 5) const float kProbeScale = 1.0;
 // 1 for flag_ surfaces with the sun: the sun lights both faces, |N.L| in

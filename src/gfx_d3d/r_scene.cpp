@@ -1463,9 +1463,10 @@ static bool R_ModernTakeWord(const char **name, size_t *length, const char *word
 // can be drawn as, before its arguments are checked:
 // lm_[hsm_]sun_<r0|b0|t0>c0[d0][n0][s0]_sm3, or lm_[hsm_]sun_r0c0_sm2; and for
 // models lp_[hsm_][i_]sun_<r0|b0|t0>c0[d0][n0][s0]_sm3 (i_, instanced, shares
-// the pixel shader; sm_ compares in the shader). Skinned models (players, the
-// first-person weapon) are lp_[hsm_][i_]skin_sun_<r0c0|r0c0n0|r0c0s0|r0c0n0s0>
-// and cloth lp_[hsm_]flag_[sun_]<t0c0>[n0][s0] (skin and flag shader facts). Without the sun
+// the pixel shader; sm_ compares in the shader). Character skin (bare hands and
+// forearms) is lp_[hsm_][i_]skin_sun_<r0c0|r0c0n0|r0c0s0|r0c0n0s0> and cloth
+// (flags, banners) lp_[hsm_]flag_[sun_]<t0c0>[n0][s0] (skin and flag shader
+// facts, and the materials facts). Without the sun
 // (interiors, lit shader facts 5): lm_<r0|b0|t0>c0[d0][n0][s0]_sm3 and
 // lp_[i_]<r0|b0|t0>c0[d0][n0][s0]_sm3 (their shader model 2 builds read the
 // lightmap's UV elsewhere). A spot or omni light
@@ -1487,7 +1488,7 @@ static uint16_t R_ModernLitShaderFromName(const char *name)
     if (length > 5 && !strcmp(name + length - 5, ".hlsl"))
         length -= 5;
     uint16_t shader;
-    bool skinned = false, flag = false;
+    bool skin = false, flag = false;
     if (R_ModernTakeWord(&name, &length, "lm_"))
     {
         const bool shadow = R_ModernTakeWord(&name, &length, "hsm_");
@@ -1504,15 +1505,15 @@ static uint16_t R_ModernLitShaderFromName(const char *name)
     else if (R_ModernTakeWord(&name, &length, "lp_"))
     {
         const bool shadow = R_ModernTakeWord(&name, &length, "hsm_");
-        // flag_ (cloth) never with i_; skin_ (players, the first-person
-        // weapon) after it. Both are checked against the surface below.
+        // flag_ (cloth) never with i_; skin_ (character skin) after it.
+        // Both are checked against the surface below.
         flag = R_ModernTakeWord(&name, &length, "flag_");
         if (!flag)
         {
             R_ModernTakeWord(&name, &length, "i_");
-            skinned = R_ModernTakeWord(&name, &length, "skin_");
+            skin = R_ModernTakeWord(&name, &length, "skin_");
         }
-        if (!shadow && !skinned && !flag && R_ModernTakeWord(&name, &length, "amb_"))
+        if (!shadow && !skin && !flag && R_ModernTakeWord(&name, &length, "amb_"))
         {
             // lp_[i_]amb[_sun|_spot|_omni]_t0c0: one program whatever the
             // light (lit shader facts 6).
@@ -1557,7 +1558,7 @@ static uint16_t R_ModernLitShaderFromName(const char *name)
     // shader with the sun lighting both faces, and without a light the plain
     // one itself; with a spot or omni light it was not read.
     const uint16_t family = shader & GFX_MODERN_LIT_SHADER_FAMILY;
-    if (skinned)
+    if (skin)
     {
         if (family != GFX_MODERN_LIT_SHADER_LP_SUN || pointLight
             || (shader & (GFX_MODERN_LIT_SHADER_DETAIL | GFX_MODERN_LIT_SHADER_BLENDED

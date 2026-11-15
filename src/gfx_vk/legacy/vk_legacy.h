@@ -778,7 +778,7 @@ enum ModernLitShader : uint16_t
     ModernLitWater = 0x400,
     // Variations of the lp_ shaders, beside the bits above (skin and flag
     // shader facts): the reflection probe's light scaled by 0.3, as
-    // skinned models' specular surfaces (lp_..skin_..s0) have it; and the
+    // character skin's specular surfaces (lp_..skin_..s0) have it; and the
     // sun lighting both faces, |N.L| in place of the clamp, as flag_
     // surfaces with the sun have it.
     ModernLitSkinProbe = 0x800,
