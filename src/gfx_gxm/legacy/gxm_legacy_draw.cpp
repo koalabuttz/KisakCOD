@@ -366,6 +366,11 @@ struct DrawState
     // programs do it, and combinations whose vertex shader could not feed
     // the pixel shader's plan.
     bool readHoist = true;
+    // Where a hoisted fragment program takes the 1.0 it multiplies its
+    // fetched-ahead reads by (cg::Options::hoistOneVarying): the uniform
+    // kisak_one, or with the marker and switch hoist-one-varying the vertex
+    // program.
+    bool hoistOneVarying = false;
     uint64_t hoistedDraws = 0, hoistUnfed = 0;
     // 0: the last draw had no alpha test, 1: one with a discard, 2: one
     // that was left out, 3: one that writes zero.
@@ -791,6 +796,7 @@ bool Register(Device &device, Variant &variant, const char *what)
     variant.alphaRef = sceGxmProgramFindParameterByName(program, "kisak_alpha_ref");
     variant.sharp = sceGxmProgramFindParameterByName(program, "kisak_sharp");
     variant.sharpMax = sceGxmProgramFindParameterByName(program, "kisak_sharp_max");
+    variant.one = sceGxmProgramFindParameterByName(program, "kisak_one");
     char name[32];
     for (int i = 0; i < 16; ++i)
     {
@@ -820,6 +826,7 @@ uint64_t VariantKey(const gxm::cg::Options &options)
            (options.alphaFunc == gxm::cg::AlphaFunc::Always ? 0 : uint64_t(options.alphaFunc)) ^
            (uint64_t(options.sharpSamplers) * 0xff51afd7ed558ccdull) ^
            (options.alphaZero ? 0x00a5000000000000ull : 0) ^ (options.hoist ? options.hoist->hash : 0) ^
+           (options.hoistOneVarying ? 0x5a00000000000000ull : 0) ^
            (options.farPlaneInside ? 0x5a5a000000000000ull : 0) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
 }
 
@@ -2060,6 +2067,12 @@ bool InitDraw(Device &device, std::string &error)
         Log(device, "diag: no-alpha-test-zero is there: an alpha test on a blended draw is a discard, not a pixel "
                     "of zero");
     }
+    if (gxm::ProgramCacheMarker("hoist-one-varying"))
+    {
+        d.hoistOneVarying = true;
+        Log(device, "diag: hoist-one-varying is there: hoisted fragment programs take their 1.0 from the vertex "
+                    "program, not from a uniform");
+    }
     if (gxm::ProgramCacheMarker("no-read-hoist"))
     {
         d.readHoist = false;
@@ -2804,7 +2817,7 @@ const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "n
                                      "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
                                      "gpu-watch",           "no-prepass-clear",  "no-depth-only-scene",
                                      "no-scene-in-copy",    "no-alpha-test-drop", "no-alpha-test-zero",
-                                     "no-read-hoist"};
+                                     "no-read-hoist",       "hoist-one-varying"};
 struct LiveSwitch
 {
     const char *name;
@@ -2876,6 +2889,11 @@ void ApplyLiveSwitches(Device &device)
             d.lastDrawValid = false;
             Log(device, "diag: read hoist so far: %llu draws with texture coordinates from the vertex program",
                 (unsigned long long)d.hoistedDraws);
+        }
+        else if (name == "hoist-one-varying")
+        {
+            d.hoistOneVarying = s.on;
+            d.lastDrawValid = false;
         }
         else if (name == "no-filter-stretch")
             gfx_gxm::g_stretchInFilter = !s.on;
@@ -3576,7 +3594,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             pipelineKey.alphaFunc = uint8_t(uint8_t(pixelOptions.alphaFunc) | (pixelOptions.alphaZero ? 0x80 : 0));
             pipelineKey.sharp = sharpSamplers;
             pipelineKey.index32 = index32;
-            pipelineKey.hoist = d.readHoist;
+            pipelineKey.hoist = uint8_t(uint8_t(d.readHoist) | (d.hoistOneVarying ? 2 : 0));
             pipeline = &PipelineSlot(d, pipelineKey);
             known = std::memcmp(&pipeline->key, &pipelineKey, sizeof(pipelineKey)) == 0;
             ++d.pipelineLookups;
@@ -3612,6 +3630,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             {
                 gxm::cg::Options vertexOptions = plan.options, hoistedOptions = pixelOptions;
                 vertexOptions.hoist = hoistedOptions.hoist = &ps->hoist;
+                vertexOptions.hoistOneVarying = hoistedOptions.hoistOneVarying = d.hoistOneVarying;
                 bool making = false;
                 Variant *const hoistedVertex = GetVariant(device, *vs, vertexOptions, making);
                 Variant *const hoistedPixel = GetVariant(device, *ps, hoistedOptions, making);
@@ -3936,6 +3955,11 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         {
             const float ref = float(alphaRef) / 255.0f;
             sceGxmSetUniformDataF(pixelUniforms, pixel->alphaRef, 0, 1, &ref);
+        }
+        if (pixel->one)
+        {
+            const float one = 1.0f;
+            sceGxmSetUniformDataF(pixelUniforms, pixel->one, 0, 1, &one);
         }
         if (pixel->sharp && pixel->sharpMax && sharpSamplers)
         {

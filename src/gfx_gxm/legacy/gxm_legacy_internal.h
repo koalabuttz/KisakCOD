@@ -245,6 +245,7 @@ struct Variant
     // "kisak_sharp" and "kisak_sharp_max": a variant that reads a scaled
     // picture through the sharpening filter (cg::Options::sharpSamplers).
     const SceGxmProgramParameter *sharp = nullptr, *sharpMax = nullptr;
+    const SceGxmProgramParameter *one = nullptr; // kisak_one of a program with hoisted reads
     const SceGxmProgramParameter *depth[16] = {};      // "kisak_depth_s<n>"
     const SceGxmProgramParameter *inputs[16] = {};     // "in_v<n>"
     int8_t textureUnit[16];                            // sampler s<n>'s unit, -1 none

@@ -295,6 +295,9 @@ program, also the ones that cannot change the picture),
 pixel instead of writing zero for it),
 `no-read-hoist` (fragment programs work out every texture coordinate
 themselves; the vertex programs hand none over),
+`hoist-one-varying` (a fragment program with handed-over coordinates
+takes the 1.0 it multiplies those reads by from the vertex program, not
+from a uniform),
 `gpu-watch` (the log gets a `gpu watch` line that says how long the GPU
 works on a frame, [vita-client.md](vita-client.md)) and the three that
 give a frame its scenes back, `no-prepass-clear`, `no-depth-only-scene`

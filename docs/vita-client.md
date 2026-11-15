@@ -952,13 +952,27 @@ What the GXM back end does so far (step 2d):
   (`CanHoist`), the vertex program works each such coordinate out and
   hands it over in a texture coordinate of its own (9 downward, the
   ones the pixel shader does not read), where the fragment program
-  reads it. The result is the same sum at every pixel, so the picture
-  should not change. Model lighting is not covered: its coordinate
-  depends on the normal map. The programs are made at a combination's
-  first draw; until both are ready the draw runs with the plain pair.
-  The quit summary counts the draws (`read hoist:`). An empty file
-  `no-read-hoist`, or `vita_gxm no-read-hoist 1`, turns it off. What it
-  saves on the console is not measured yet.
+  reads it. The coordinate is the same sum at every pixel. The value
+  read is not treated the same, though: the Vita's compiler works out a
+  product of two fetched-ahead reads in their 8-bit form, where a read
+  made in the program arrives as a float, and the lightmap's two small
+  factors then multiply to black (the first version drew the sunlit
+  ground black, on the console and in Vita3K alike; runs Z61 to Z66,
+  2026-11-15: the coordinates and the values read were right, a compile
+  without fast math or without the FX mode changed nothing, and
+  `tex2D<float4>` is refused). So the fragment program multiplies every
+  read it is handed by 1.0 from the uniform `kisak_one`, a factor the
+  compiler cannot know, which makes what follows float. An empty file
+  `hoist-one-varying`, or `vita_gxm hoist-one-varying 1`, takes that 1
+  from the vertex program instead (the first handed-over coordinate
+  becomes a float3), the form run Z66 proved; a console run compares
+  the two. Model lighting is not covered: its coordinate depends on the
+  normal map. The programs are made at a combination's first draw; until
+  both are ready the draw runs with the plain pair. The quit summary
+  counts the draws (`read hoist:`). An empty file `no-read-hoist`, or
+  `vita_gxm no-read-hoist 1`, turns it off. Console run CO (2026-11-15,
+  first version) measured about 1.25 ms a frame at a heavy view of
+  `mp_crash`; the fixed version is not measured yet.
 - **Depth first.** The scene's depth is always drawn before its lit pass
   on the Vita (src/gfx_gxm/gxm_engine_options.h), whatever r_depthPrepass
   says, so that the GPU skips hidden pixels of the lit pass early. Console

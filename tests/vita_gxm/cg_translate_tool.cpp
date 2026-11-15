@@ -3,7 +3,7 @@
 // scripts/tests/test_vita_cg_translate.py.
 //
 //   cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--sharp MASK] [--far-plane-inside] [--diag-position N]
-//                     [--hoist | --hoist-from pixel.bin] shader.bin
+//                     [--hoist | --hoist-from pixel.bin] [--hoist-one-varying] shader.bin
 //
 // --hoist: a pixel shader's program with the texture reads PlanHoist finds
 // taken from coordinates the vertex program hands over. --hoist-from: a
@@ -65,12 +65,14 @@ int main(int argc, char **argv)
             hoist = true;
         else if (!std::strcmp(argv[i], "--hoist-from") && i + 1 < argc)
             hoistFrom = argv[++i];
+        else if (!std::strcmp(argv[i], "--hoist-one-varying"))
+            options.hoistOneVarying = true;
         else
             path = argv[i];
     }
     if (!path)
     {
-        std::fprintf(stderr, "usage: cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--sharp MASK] [--far-plane-inside] [--diag-position N] [--hoist | --hoist-from pixel.bin] shader.bin\n");
+        std::fprintf(stderr, "usage: cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--sharp MASK] [--far-plane-inside] [--diag-position N] [--hoist | --hoist-from pixel.bin] [--hoist-one-varying] shader.bin\n");
         return 1;
     }
     std::ifstream file(path, std::ios::binary);

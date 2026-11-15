@@ -168,6 +168,13 @@ struct Options
     // vertex program hands over (PlanHoist). Null for none. Only read
     // during Emit.
     const struct HoistPlan *hoist = nullptr;
+    // A fragment program multiplies every read the hoist gives it by 1.0:
+    // the Vita's compiler works out products of fetched-ahead reads in
+    // their 8-bit form (two small lightmap factors come out as black), and
+    // a factor it cannot know makes them float. The 1 is the uniform
+    // kisak_one, or with this set the z of the first handed-over
+    // coordinate, which then is a float3 (both stages).
+    bool hoistOneVarying = false;
 };
 
 // ---- Parsed form ---------------------------------------------------------------------------

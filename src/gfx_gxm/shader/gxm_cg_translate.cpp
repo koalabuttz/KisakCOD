@@ -737,9 +737,15 @@ bool Emitter::Texture(const Instruction &ins, std::string &value)
     if (const HoistCoord *hoisted = Hoisted();
         hoisted && ins.opcode == kTex && ins.control == 0 && !cube && !(options_.sharpSamplers >> unit & 1))
     {
-        // The vertex program worked this coordinate out.
-        value = "tex2D(" + s + ", in_TEXCOORD" + std::to_string(hoisted->slot) + ")" +
-                SwizzleSuffix(ins.sources[1].swizzle);
+        // The vertex program worked this coordinate out. The product by 1
+        // keeps the compiler from 8-bit arithmetic on the result
+        // (Options::hoistOneVarying).
+        const HoistCoord &first = options_.hoist->coords[0];
+        const std::string one =
+            options_.hoistOneVarying ? "in_TEXCOORD" + std::to_string(first.slot) + ".z" : std::string("kisak_one");
+        const std::string in = "in_TEXCOORD" + std::to_string(hoisted->slot) +
+                               (options_.hoistOneVarying && hoisted == &first ? ".xy" : "");
+        value = "(tex2D(" + s + ", " + in + ") * " + one + ")" + SwizzleSuffix(ins.sources[1].swizzle);
         return true;
     }
     switch (ins.opcode)
@@ -1155,6 +1161,8 @@ bool Emitter::Run(std::string &cg, std::string &error)
     const bool alphaTest = !vertex_ && options_.alphaFunc != AlphaFunc::Always;
     if (alphaTest)
         out += "uniform float kisak_alpha_ref;\n";
+    if (!vertex_ && options_.hoist && !options_.hoistOneVarying)
+        out += "uniform float kisak_one;\n";
     out += kHelpers;
     // Only where asked for: a program's text is its key in the cache of
     // compiled programs.
@@ -1287,8 +1295,16 @@ bool Emitter::Run(std::string &cg, std::string &error)
                         text += (text.empty() ? "" : " + ") + Float(constant);
                     return text;
                 };
-                parameters.push_back("out float2 " + name + " : TEXCOORD" + std::to_string(coord.slot));
-                epilogue += "    " + name + " = float2(" + sum(coord.x) + ", " + sum(coord.y) + ");\n";
+                if (options_.hoistOneVarying && &coord == &options_.hoist->coords[0])
+                {
+                    parameters.push_back("out float3 " + name + " : TEXCOORD" + std::to_string(coord.slot));
+                    epilogue += "    " + name + " = float3(" + sum(coord.x) + ", " + sum(coord.y) + ", 1.0);\n";
+                }
+                else
+                {
+                    parameters.push_back("out float2 " + name + " : TEXCOORD" + std::to_string(coord.slot));
+                    epilogue += "    " + name + " = float2(" + sum(coord.x) + ", " + sum(coord.y) + ");\n";
+                }
             }
         bool position = false;
         for (const std::string &p : parameters)
@@ -1392,7 +1408,9 @@ bool Emitter::Run(std::string &cg, std::string &error)
                         error = "hoist: the pixel shader reads TEXCOORD" + std::to_string(coord.slot) + " itself";
                         return false;
                     }
-                parameters.push_back("float2 " + name + " : TEXCOORD" + std::to_string(coord.slot));
+                parameters.push_back(
+                    std::string(options_.hoistOneVarying && &coord == &options_.hoist->coords[0] ? "float3 " : "float2 ") +
+                    name + " : TEXCOORD" + std::to_string(coord.slot));
             }
         if (alphaTest)
         {
