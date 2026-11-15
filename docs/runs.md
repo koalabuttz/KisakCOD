@@ -60,7 +60,8 @@ window's focus or time anything by eye.
 - Nothing changes unless one of them is given. When one is, the log says so
   (`run: run_atMap "..."`), marks the menu and the map coming up (`run: the map
   is up`), echoes every command it sends (`run: sending "screenshot"`) and the
-  quit (`run: run_quitAfterMap 30 reached`, `run: quitting as asked`).
+  quit (`run: run_quitAfterMap 30 reached`, `run: quitting as asked`). A timed
+  `quit` in a list prints `run: quitting as asked` too, after its echo.
 - A list it cannot read is reported once (`run: run_atMap: part 3 "x quit" does
   not start with a time in seconds; none of its commands will be sent`) and
   sends nothing.
