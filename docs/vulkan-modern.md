@@ -1059,7 +1059,14 @@ night maps the lamps, lanterns, neon and shop signs are unlit materials
 lamps facts 1: 51 materials on mp_carentan, 28 on mp_crash_snow). Drawn as
 any unlit surface they reach white at most, so nothing at night glows or
 blooms. The renderer marks those materials' passes as light-giving
-(`R_ModernEmissiveMaterial`, `GfxModernLitInputs::emissive`). Their stored
+(`R_ModernEmissiveMaterial`, `GfxModernLitInputs::emissive`), but only when
+the set does not multiply and the material's name says it is a light (it
+holds light, lamp, lantern, neon, sign, bulb, glow, window, candle, monitor,
+`_tv`, `tv_` or `_star`, and not lighten). Night lamps run 1 found unlit
+materials that are not lights: multiply decals (stains, graffiti), whose
+white made brighter lit up the wall under them with the decal's hard edges;
+snowy tree canopies; a candy cane; a portal "lighten" card; Chinatown's
+backdrop facades. Their stored
 colour is decoded as an ordinary draw's (clamped to 1, then the sRGB curve),
 then the three channels are multiplied by one factor, so the hue stays. The
 factor is 1 while the brightest channel is under display value 0.75, and it
