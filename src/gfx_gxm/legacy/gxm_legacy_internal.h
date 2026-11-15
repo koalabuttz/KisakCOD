@@ -246,6 +246,15 @@ struct Variant
     int8_t textureUnit[16];                            // sampler s<n>'s unit, -1 none
     bool uniforms = false; // has a default uniform buffer
     bool depthUniforms = false; // any of depth[] is there: its uniforms follow the textures
+    uint16_t depthMask = 0;     // the samplers whose depth[] is there
+    // The default uniform buffer's size, and where "c" starts in it in
+    // floats when it is an array of float4 that can be copied in place
+    // (-1 otherwise).
+    uint32_t uniformBytes = 0;
+    int32_t constantsAt = -1;
+    // 0: a direct copy of "c" has not been compared with sceGxm's own write
+    // yet, 1: it matched, 2: it did not (the draws keep sceGxm's write).
+    uint8_t directChecked = 0;
 
     const SceGxmProgram *program() const { return reinterpret_cast<const SceGxmProgram *>(gxp.data()); }
 };
@@ -263,6 +272,11 @@ struct Shader
     // was not translated.
     gfx_gxm::ProgramRequestRef request;
     std::vector<std::unique_ptr<Variant>> variants;
+    // Pixel shaders: the float constants the program reads from the API, as
+    // runs (first, count) in ascending order (cg::Reflection::apiConstants).
+    // A draw whose constants differ from the last draw's only outside these
+    // keeps the last draw's uniform buffer.
+    std::vector<std::pair<uint16_t, uint16_t>> constantRuns;
 };
 
 struct VertexDecl
