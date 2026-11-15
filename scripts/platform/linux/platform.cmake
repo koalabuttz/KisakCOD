@@ -58,6 +58,10 @@ elseif(KISAK_PLATFORM STREQUAL "android")
     # plain char is signed, and client prediction replays the server's
     # movement math, so a * b + c must round twice as on x86 (no fmadd).
     add_compile_options(-fsigned-char -ffp-contract=off)
+    # Segments aligned to 16 KiB, so the programs load on devices with 16 KiB
+    # pages (Android 15 and later may use them). NDK r28 does this by
+    # default; r27, which GitHub's runners carry, aligns to 4 KiB.
+    add_link_options(LINKER:-z,max-page-size=16384)
     message(WARNING "KISAK_PLATFORM=android is the opt-in Android track (${ANDROID_ABI}, ${ANDROID_PLATFORM}): "
         "KisakCOD-dedi builds; it has not run on an Android device yet. See docs/android.md.")
 elseif(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
