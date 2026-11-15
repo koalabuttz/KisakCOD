@@ -139,6 +139,7 @@ struct CoreStats
     uint64_t framesPresented;
     uint64_t framesSkipped;   // window minimised or swapchain out of date
     uint32_t swapchainBuilds; // the first one included
+    uint32_t surfacesLost;    // surfaces the window took away (RenewSurface)
     uint32_t validationErrors;
     uint32_t validationWarnings;
     // Validation messages known not to apply (see OnDebugMessage in vk_core.cpp):
@@ -265,6 +266,13 @@ bool FrameGpuTime(const Core *core, uint64_t frame, FrameGpuTimes &out);
 // The window may have changed size (or was minimised or restored): the next
 // frame checks the surface and rebuilds the swapchain if the size differs.
 void NotifyResize(Core *core);
+
+// The window system took the surface away, as Android does when the app goes
+// to the background (VK_ERROR_SURFACE_LOST_KHR from a present, an acquire or a
+// size query says so to the core by itself). The next BeginFrame lets go of the
+// swapchain and the surface, asks the window for a new surface and builds a
+// swapchain on it; while the window has none, frames are skipped. For tests.
+void LoseSurface(Core *core);
 
 // The window is about to be destroyed: waits for the GPU, then destroys the
 // swapchain and the surface, which must go before their window does. Work

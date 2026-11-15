@@ -903,8 +903,18 @@ VkSurfaceTransformFlagBitsKHR ChoosePreTransform(const VkSurfaceCapabilitiesKHR 
 
 bool SurfaceExtent(Core &core, VkSurfaceCapabilitiesKHR &caps, VkExtent2D &extent)
 {
-    if (!Check(core, core.vk.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(core.physical, core.surface, &caps),
-               "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"))
+    // A lost surface has no size: frames skip as if minimised, and the next
+    // BeginFrame asks the window for a new surface.
+    const VkResult result =
+        core.surfaceLost ? VK_ERROR_SURFACE_LOST_KHR
+                         : core.vk.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(core.physical, core.surface, &caps);
+    if (result == VK_ERROR_SURFACE_LOST_KHR)
+    {
+        core.surfaceLost = true;
+        extent = {0, 0};
+        return true;
+    }
+    if (!Check(core, result, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"))
         return false;
     extent = caps.currentExtent;
     if (extent.width == UINT32_MAX)
@@ -1005,6 +1015,12 @@ BuildResult BuildSwapchain(Core &core)
     if (core.swapchain)
         vk.vkDestroySwapchainKHR(core.dev, core.swapchain, nullptr);
     core.swapchain = swapchain;
+    if (created == VK_ERROR_SURFACE_LOST_KHR || created == VK_ERROR_NATIVE_WINDOW_IN_USE_KHR)
+    {
+        // The window went between the size query and here: wait for a new one.
+        core.surfaceLost = true;
+        return BuildResult::Minimised;
+    }
     if (!Check(core, created, "vkCreateSwapchainKHR"))
         return BuildResult::Failed;
 
@@ -1055,6 +1071,44 @@ BuildResult BuildSwapchain(Core &core)
         PresentModeName(mode), core.swapInfo.imageCount, canCapture ? ", capturable" : "",
         core.transformLeftToCompositor ? ", turned by the compositor" : "");
     return BuildResult::Built;
+}
+
+bool RenewSurface(Core &core)
+{
+    Dispatch &vk = core.vk;
+    if (core.surface)
+    {
+        // The old swapchain and surface go first (Android allows one swapchain
+        // per window, and the old window is gone anyway).
+        Log(core, "surface lost: frames are skipped until the window has a new one");
+        if (!DrainRecorder(core) || !Check(core, vk.vkDeviceWaitIdle(core.dev), "vkDeviceWaitIdle"))
+            return false;
+        DestroySwapchainResources(core);
+        if (core.swapchain)
+            vk.vkDestroySwapchainKHR(core.dev, core.swapchain, nullptr);
+        core.swapchain = VK_NULL_HANDLE;
+        vk.vkDestroySurfaceKHR(core.instance, core.surface, nullptr);
+        core.surface = VK_NULL_HANDLE;
+        ++core.stats.surfacesLost;
+    }
+    // False, quietly, while the window has nothing to draw on (Android between
+    // the app's return and its new window).
+    if (!core.window.createSurface(core.window.user, core.instance, &core.surface) || !core.surface)
+    {
+        core.surface = VK_NULL_HANDLE;
+        return false;
+    }
+    VkBool32 present = VK_FALSE;
+    if (!Check(core, vk.vkGetPhysicalDeviceSurfaceSupportKHR(core.physical, core.queueFamily, core.surface, &present),
+               "vkGetPhysicalDeviceSurfaceSupportKHR"))
+        return false;
+    if (!present)
+        return Fail(core, "the window's new surface cannot be shown from queue family %u", core.queueFamily);
+    core.surfaceLost = false;
+    core.rebuildPending = true;
+    core.resizePending = false;
+    Log(core, "surface renewed: the swapchain is rebuilt on it");
+    return true;
 }
 
 // ---- Public API ---------------------------------------------------------------------------
@@ -1207,6 +1261,11 @@ bool FrameGpuTime(const Core *core, uint64_t frame, FrameGpuTimes &out)
     return true;
 }
 void NotifyResize(Core *core) { core->resizePending = true; }
+void LoseSurface(Core *core)
+{
+    if (!core->windowDetached)
+        core->surfaceLost = true;
+}
 
 const Dispatch &Functions(const Core *core) { return core->vk; }
 VkDevice DeviceHandle(const Core *core) { return core->dev; }

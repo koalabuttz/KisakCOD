@@ -30,6 +30,17 @@ public class KisakActivity extends SDLActivity {
     private static final String TAG = "KisakCOD";
 
     @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        // The game's process (":game") ends with it: the engine cannot run
+        // twice in one process, and the launcher starts the next game in a
+        // new one.
+        if (isFinishing()) {
+            System.exit(0);
+        }
+    }
+
+    @Override
     protected String[] getLibraries() {
         // libmain.so needs libSDL3.so, libopenal.so and libd3d9_unavailable.so,
         // which Android's linker finds in the app's own library folder.
@@ -55,6 +66,10 @@ public class KisakActivity extends SDLActivity {
         // 1920x1080 panel, run 3). SDL hides the system bars for a full-screen
         // window. r_fullscreen defaults to off, the desktop's choice.
         Collections.addAll(args, "+set", "r_fullscreen", "1");
+        // No shadow maps for now: on the Retroid Pocket 6 (Adreno 740) the sun's
+        // shadows flicker from frame to frame (2026-11-15). The maps' baked
+        // shadows stay. An "args" extra with "+set sm_enable 1" turns them on.
+        Collections.addAll(args, "+set", "sm_enable", "0");
         Intent intent = getIntent();
         String extra = intent != null ? intent.getStringExtra("args") : null;
         if (extra != null) {

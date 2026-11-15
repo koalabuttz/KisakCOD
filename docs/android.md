@@ -145,6 +145,29 @@ What is Android-specific in the client:
 way it checks the server, except that a library has no program interpreter,
 may need the three libraries above, and must export `SDL_main` alone.
 
+`build_apk.py --abi x86_64` builds the app for the Android emulator on a PC
+instead (`KisakCOD-<config>-x86_64.apk`; its builds sit beside the arm64 ones
+in `--work`, named with `-x86_64`). It takes the x86_64 Linux track's code. No
+device is x86, and the emulator draws through the PC's own GPU driver, so it
+finds no Adreno-only fault; it is for runs nobody has to watch
+(`scripts/runs/android_run.py`).
+
+### The first screen
+
+The app opens on a screen of big buttons (`LauncherActivity.java`) that the
+controller works: the d-pad or left stick moves, A presses, L1 and R1 change
+the number of bots. It lists every map in the game folder (`zone/*/mp_*.ff`
+and `usermaps`); a map starts a match against KisakCOD's bots
+(`+set developer_script 1 +set bot_brain 1 +set scr_testclients <n> +set
+g_gametype war|dm +devmap <map>`), and "Main menu" starts the game's own menu. The game runs in a process of its
+own (`:game`), which ends with the game: the engine never starts twice in one
+process, and the first screen comes back when the game quits.
+
+The stock scripts read `scr_testclients` only in their developer blocks
+(`/# ... #/`), so without `developer_script 1` no bot joins (run 6 on the
+Pocket 6: the dvar read back as 9 and nobody came). `devmap` is what the PC's
+bot runs use (`scripts/runs/recipes/vulkan-ab-mp-crash.json`).
+
 ### Installing and starting the app
 
 Install, start once (the first start makes the app's folder), copy the game
@@ -162,7 +185,9 @@ adb logcat -s KisakCOD SDL
 
 Extra engine arguments for a run go in the `args` extra, split at spaces:
 `adb shell am start -n org.kisakcod.game/.KisakActivity --es args "+set developer 1"`.
-The activity always starts the game full screen (`+set r_fullscreen 1`, so
+The activity starts the game without shadow maps (`+set sm_enable 0`): on
+the Adreno 740 the sun's shadows flickered from frame to frame (2026-11-15,
+cause not found yet). The activity always starts the game full screen (`+set r_fullscreen 1`, so
 SDL hides Android's system bars; run 3 had a 1920x970 window under the
 navigation bar). The game's console goes to logcat under the tag KisakCOD: Android drops an
 app's stdout and stderr, so `src/linux/main.cpp` copies them there.
@@ -176,10 +201,30 @@ asks for no rotation (`ChoosePreTransform` in `src/gfx_vk/vk_core.cpp`), the
 compositor turns the picture, and the `VK_SUBOPTIMAL_KHR` that Android
 reports for that alone does not rebuild the swapchain. Drawing the picture
 turned (Android's pre-rotation) would save the compositor that work; it is
-left for the speed stage. Android reports a change of size (the window going
-full screen) by that same result alone, so every 32nd one still compares the
-surface's size with the swapchain's and rebuilds it when they differ (run 4
-kept a 1920x970 swapchain on the 1920x1080 screen).
+left for the speed stage. Android tells such a swapchain nothing when the
+window changes size (it goes full screen just after the game starts) and
+scales the old picture, so every 32nd frame compares the surface's size with
+the swapchain's and rebuilds it when they differ (runs 4 and 5 kept a
+1920x970 swapchain on the 1920x1080 screen).
+
+Android takes the window away from an app sent to the background (Home, the
+lock screen) and gives it a new one when it comes back; SDL meanwhile holds
+the game's main thread in its event loop. Presents, acquires and size queries
+on the old window answer `VK_ERROR_SURFACE_LOST_KHR`, which no longer fails
+the core: the next frame lets go of the swapchain and the surface and asks
+the window for a new surface (`RenewSurface` in `src/gfx_vk/vk_core.cpp`),
+skipping frames until there is one, and builds a swapchain on it. The Vulkan
+window probe's `--lose-surface` (in `test_vulkan_window_probe.py`) does the
+same on a desktop window. On Android the client makes the surface itself
+from the activity's `Surface` as Java has it at that moment
+(`AndroidWindowNow` in `src/linux/client/vulkan/vulkan_backend.cpp`): SDL's
+copy of the window goes on the Java thread while the render thread may be
+asking, and with the screen turned off SDL handed Vulkan a null window
+(run 7, a crash in `vkCreateAndroidSurfaceKHR`).
+
+The "computer changed, set optimal settings?" question is not asked on
+Android: a handheld measures a different CPU speed at nearly every start, and
+the box came up over a black screen (run 7).
 
 What run 4 (mp_crash on the Pocket 6) showed, and the fixes:
 

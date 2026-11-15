@@ -1,7 +1,8 @@
 // The app around libmain.so (KisakCOD-mp). Properties, all given by
 // scripts/platform/android/build_apk.py:
-//   kisakJniLibs  folder holding arm64-v8a/ with libmain.so, libSDL3.so,
+//   kisakJniLibs  folder holding <kisakAbi>/ with libmain.so, libSDL3.so,
 //                 libopenal.so and libd3d9_unavailable.so
+//   kisakAbi      arm64-v8a (devices, the default) or x86_64 (the emulator)
 //   kisakSdlJava  SDL3's Java sources (android-project/app/src/main/java of
 //                 the pinned SDL3 checkout), compiled into the app unchanged
 //   kisakVersionName, kisakVersionCode  shown in Android's app settings
@@ -26,7 +27,7 @@ android {
         versionCode = (project.findProperty('kisakVersionCode') ?: '1') as int
         versionName = project.findProperty('kisakVersionName') ?: 'dev'
         ndk {
-            abiFilters 'arm64-v8a'
+            abiFilters(project.findProperty('kisakAbi') ?: 'arm64-v8a')
         }
     }
     sourceSets.main {

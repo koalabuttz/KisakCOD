@@ -8,8 +8,9 @@
 #
 # The defaults (each can be given on the command line, as the NDK's toolchain
 # file reads them):
-#   ANDROID_ABI       arm64-v8a. The only ABI offered: the engine's 64-bit
-#                     fixes are the aarch64 Linux track's.
+#   ANDROID_ABI       arm64-v8a, for devices (the aarch64 Linux track's code).
+#                     x86_64 is also offered, for the Android emulator on a
+#                     PC (the x86_64 Linux track's code); no device is x86.
 #   ANDROID_PLATFORM  android-29 (Android 10), the oldest release the build
 #                     is checked against. The renderer will need Vulkan 1.3,
 #                     which in practice means Android 13 or later, but the
@@ -31,10 +32,10 @@ if(NOT CMAKE_TOOLCHAIN_FILE)
     set(CMAKE_TOOLCHAIN_FILE "${kisak_android_ndk}/build/cmake/android.toolchain.cmake")
 endif()
 if(NOT DEFINED ANDROID_ABI)
-    set(ANDROID_ABI "arm64-v8a" CACHE STRING "Android ABI (arm64-v8a only)")
+    set(ANDROID_ABI "arm64-v8a" CACHE STRING "Android ABI: arm64-v8a, or x86_64 for the emulator")
 endif()
-if(NOT ANDROID_ABI STREQUAL "arm64-v8a")
-    message(FATAL_ERROR "KISAK_PLATFORM=android builds arm64-v8a only, not '${ANDROID_ABI}'")
+if(NOT ANDROID_ABI MATCHES "^(arm64-v8a|x86_64)$")
+    message(FATAL_ERROR "KISAK_PLATFORM=android builds arm64-v8a (or x86_64 for the emulator), not '${ANDROID_ABI}'")
 endif()
 if(NOT DEFINED ANDROID_PLATFORM)
     set(ANDROID_PLATFORM "android-29" CACHE STRING "Oldest Android release the build runs on")

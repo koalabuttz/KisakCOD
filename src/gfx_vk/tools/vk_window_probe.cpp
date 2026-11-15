@@ -61,6 +61,7 @@ struct Options
     int device = -1;
     bool vsync = true;
     bool resize = false;
+    bool loseSurface = false;
     bool checkCapture = false;
     bool listDevices = false;
     bool draw = false;
@@ -71,7 +72,7 @@ void Usage(const char *argv0)
 {
     std::fprintf(stderr,
                  "usage: %s [--frames N] [--size WxH] [--validation off|auto|require] [--device N]\n"
-                 "          [--no-vsync] [--resize] [--check-capture] [--list-devices] [--draw]\n"
+                 "          [--no-vsync] [--resize] [--lose-surface] [--check-capture] [--list-devices] [--draw]\n"
                  "          [--pipeline-cache PATH]\n",
                  argv0);
 }
@@ -132,6 +133,8 @@ bool ParseOptions(int argc, char **argv, Options *options)
             options->vsync = false;
         else if (arg == "--resize")
             options->resize = true;
+        else if (arg == "--lose-surface")
+            options->loseSurface = true;
         else if (arg == "--check-capture")
             options->checkCapture = true;
         else if (arg == "--list-devices")
@@ -146,7 +149,7 @@ bool ParseOptions(int argc, char **argv, Options *options)
         else
             return false;
     }
-    if (options->resize && options->frames < 4)
+    if ((options->resize || options->loseSurface) && options->frames < 4)
         return false;
     return true;
 }
@@ -397,6 +400,7 @@ int Run(const Options &options)
 
     int resizeWidth = 0;
     int resizeHeight = 0;
+    bool surfaceLost = false;
     bool open = true;
     int presented = 0;
     const auto start = std::chrono::steady_clock::now();
@@ -418,6 +422,13 @@ int Run(const Options &options)
             // (out of date); others only through the event. Either way the
             // core rebuilds before the next frame.
             gfx_vk::NotifyResize(core);
+        }
+        if (options.loseSurface && presented == options.frames / 4 && !surfaceLost)
+        {
+            // As Android does to an app sent to the background: the core makes
+            // a new surface and swapchain from the same window.
+            gfx_vk::LoseSurface(core);
+            surfaceLost = true;
         }
         gfx_vk::FrameResult result = gfx_vk::FrameResult::Failed;
         std::string drawError;
@@ -601,6 +612,7 @@ int Run(const Options &options)
     std::printf("vulkan_probe.frames_presented=%llu\n", static_cast<unsigned long long>(stats.framesPresented));
     std::printf("vulkan_probe.frames_skipped=%llu\n", static_cast<unsigned long long>(stats.framesSkipped));
     std::printf("vulkan_probe.swapchain_builds=%u\n", stats.swapchainBuilds);
+    std::printf("vulkan_probe.surfaces_lost=%u\n", stats.surfacesLost);
     std::printf("vulkan_probe.wall_fps=%.1f\n", seconds > 0.0 ? presented / seconds : 0.0);
     if (stats.clearPass.supported && stats.clearPass.samples)
     {
