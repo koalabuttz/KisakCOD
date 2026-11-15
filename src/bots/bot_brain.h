@@ -32,8 +32,8 @@ bool Bot_UserMove(client_t *cl);
 
 // The ping the scoreboard shows for a test client the brain drives, or -1
 // when the brain does not drive it. A test client acknowledges no packets, so
-// SV_CalcPings would give it the retail 999; a bot shows a steady ping of its
-// own instead (25 to 75 ms, wobbling a few ms), as a player on a good line.
+// SV_CalcPings would give it the retail 999. The brain runs in the server,
+// with no network in between, so a bot shows 0.
 int Bot_Ping(int clientNum);
 
 // The navigation mesh of the map that is loaded, built or read from the home

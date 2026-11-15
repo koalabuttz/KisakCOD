@@ -101,8 +101,6 @@ struct BotSlot
     int sprayStart = 0;
     int lastShotAt = -100000;
     int nextFastLog = 0;
-    // The ping the scoreboard shows for it, drawn when it joins.
-    int pingBase = 50;
     kb::ViewKick kick;
     kb::StrafeState strafe;
     int eventSequence = 0;
@@ -1524,10 +1522,8 @@ int Bot_Ping(int clientNum)
     const BotSlot &bot = s_slots[clientNum];
     if (!bot.active || svs.time - bot.lastTime > 1000)
         return -1;
-    // A few ms either way, changing smoothly with time.
-    const float wobble = std::sin(static_cast<float>(svs.time) * 0.0007f + static_cast<float>(clientNum) * 1.7f)
-                         + 0.5f * std::sin(static_cast<float>(svs.time) * 0.0023f + static_cast<float>(clientNum));
-    return bot.pingBase + static_cast<int>(std::lround(wobble * 3.0f));
+    // The brain runs in the server: no network between them.
+    return 0;
 }
 
 bool Bot_UserMove(client_t *cl)
@@ -1554,7 +1550,6 @@ bool Bot_UserMove(client_t *cl)
         bot.rng.Seed(0x6b6973u ^ (port * 2654435761u) ^ static_cast<uint32_t>(clientNum));
         bot.nextSense = svs.time + (clientNum * 37) % kSenseMs;
         bot.personality = kb::RandomPersonality(bot.rng);
-        bot.pingBase = static_cast<int>(bot.rng.Range(25.0f, 75.0f));
         bot.areas.Reset();
         bot.mind.Reset(svs.time);
     }

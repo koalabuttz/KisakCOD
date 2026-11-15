@@ -30,10 +30,10 @@ The bots are always compiled in. `bot_brain` chooses them:
 | `0` (default) | the retail random inputs (`SV_BotUserMove`), as before |
 | `1` | KisakCOD's bot brain |
 
-With the brain, a bot shows a ping of its own on the scoreboard (25 to 75 ms,
-drawn when it joins, wobbling a few ms) rather than the retail 999 a test
-client gets for acknowledging no packets. The ping is only shown; nothing in
-the game uses it.
+With the brain, a bot shows a ping of 0 on the scoreboard (it runs in the
+server, with no network in between) rather than the retail 999 a test client
+gets for acknowledging no packets. The ping is only shown; nothing in the
+game uses it.
 
 Set it when the game or server starts, for example on a dedicated server:
 
