@@ -416,16 +416,16 @@ gxm::MemorySizes PoolSizes(Device &device)
     // buffer (2 MB), pretess buffer and dynamic vertex buffer (1 MB each)
     // and less than 1 MB of small ones. A console had 16 MB of system memory
     // free on a map when this pool was 20 MB.
-    // 1 MB of it is for sceGxm's rings of draw calls and fragment constants
-    // at twice their default size (gxm_display.h; console run BV).
-    sizes.main = 27u << 20;
-    // For comparing on a console: small-gxm-rings gives sceGxm's default
-    // rings and the megabyte back, big-gxm-rings a ring of vertex constants
-    // of twice the size too (2 MB more).
-    if (gxm::ProgramCacheMarker("small-gxm-rings"))
-        sizes.main -= 1u << 20;
+    sizes.main = 26u << 20;
+    // For comparing on a console: double-gxm-rings gives sceGxm's rings of
+    // draw calls and fragment constants twice their default size and the
+    // megabyte for them (gxm_display.h; console runs BV and CJ),
+    // big-gxm-rings a ring of vertex constants of twice the size too (2 MB
+    // more).
+    if (gxm::ProgramCacheMarker("double-gxm-rings"))
+        sizes.main += 1u << 20;
     else if (gxm::ProgramCacheMarker("big-gxm-rings"))
-        sizes.main += 2u << 20;
+        sizes.main += 3u << 20;
     // For measuring in an emulator what a map would take if it fitted: a file
     // named big-gpu-pool beside the compiled programs adds 96 MB to the main
     // pool. A console has no such memory to give (the device is then not
@@ -595,8 +595,7 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
     // console, an empty file named small-parameter-buffer beside the
     // compiled programs gives the old 8 MB and one named
     // big-parameter-buffer 16 MB (4 MB less for the pool, which may not
-    // hold every map); big-gxm-rings doubles the rings (3 MB more of main
-    // memory).
+    // hold every map).
     display.parameterBufferBytes = 12u << 20;
     if (gxm::ProgramCacheMarker("small-parameter-buffer"))
     {
@@ -608,16 +607,16 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
         display.parameterBufferBytes = 16u << 20;
         Log(*device, "diag: big-parameter-buffer is there: the parameter buffer is 16 MB");
     }
-    if (gxm::ProgramCacheMarker("small-gxm-rings"))
+    if (gxm::ProgramCacheMarker("double-gxm-rings") || gxm::ProgramCacheMarker("big-gxm-rings"))
     {
-        display.vdmRingBytes = SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE;
-        display.fragmentRingBytes = SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE;
-        Log(*device, "diag: small-gxm-rings is there: sceGxm's ring buffers have their default sizes");
-    }
-    else if (gxm::ProgramCacheMarker("big-gxm-rings"))
-    {
-        display.vertexRingBytes = 2 * SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE;
-        Log(*device, "diag: big-gxm-rings is there: all three of sceGxm's ring buffers are twice their default size");
+        const bool all = !gxm::ProgramCacheMarker("double-gxm-rings");
+        display.vdmRingBytes = 2 * SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE;
+        display.fragmentRingBytes = 2 * SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE;
+        if (all)
+            display.vertexRingBytes = 2 * SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE;
+        Log(*device, "diag: %s is there: %s of sceGxm's ring buffers are twice their default size",
+            all ? "big-gxm-rings" : "double-gxm-rings",
+            all ? "all three" : "the draw calls' and the fragment constants'");
     }
     // The main pool is memory the CPU does not cache, as Sony's samples have
     // it: the GPU then reads what the CPU wrote with nothing to flush. But

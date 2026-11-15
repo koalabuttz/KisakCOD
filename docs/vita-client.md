@@ -1025,22 +1025,25 @@ What the GXM back end does so far (step 2d):
   4 MB of CDRAM. For comparing, `small-parameter-buffer` gives the old
   8 MB, `big-parameter-buffer` 16 MB (4 MB less for the CDRAM pool, which
   may not hold every map).
-  sceGxm's ring buffers are 256 KB for draw calls, 2 MB for vertex
-  constants and 1 MB for fragment constants: the first and the last at
-  twice sceGxm's default. A draw that finds a ring full waits inside sceGxm
-  until the GPU has finished a scene, and no line of the log names that
-  wait. Console run BV (2026-11-15, the busy view of `mp_crash`, 1500
-  draws a frame) found it: with the default rings about one timed draw a
-  frame took 5 to 11 ms, in `sceGxmDraw` or where the fragment constants
-  are reserved (`N timed draws took over 2 ms` on the frame time line, 7 to
-  18 in 10 s, and those two steps of a draw's parts at 3.5 to 9.5 us), and
-  with all three rings doubled none did, the two steps cost 2.4 and 0.7 us
-  and the frame was 37.1 against 35.5 ms. The time left is the pacing
-  wait: that view is bound by the GPU at full size. `small-gxm-rings`
-  gives sceGxm's defaults (and the main pool 1 MB less), `big-gxm-rings`
-  twice the default for the vertex constants too (2 MB more of main
-  memory), for comparing. The sizes as they are now have not run on a
-  console yet.
+  sceGxm's ring buffers have its default sizes: 128 KB for draw calls,
+  2 MB for vertex constants and 512 KB for fragment constants. A draw that
+  finds a ring full waits inside sceGxm until the GPU has finished a
+  scene, and no line of the log names that wait. Console run BV
+  (2026-11-15, the busy view of `mp_crash`, 1500 draws a frame) found it:
+  about one timed draw a frame took 5 to 11 ms, in `sceGxmDraw` or where
+  the fragment constants are reserved, and with the rings doubled none
+  did. PR 376 doubled the draw calls' and the fragment constants' rings
+  for that; console run BY measured about 1 ms a frame at that view. But
+  the wait is also what keeps the CPU from handing the GPU more than it
+  can take. Console run CJ (the same day, three starts of one build, a
+  heavier view of 1570 draws at full size) measured 40.8, 44.1 and 41.9 ms
+  a frame with the default rings against 56.7, 50.4 and 62.1 ms with the
+  two doubled (and 59.1, 49.2, 49.5 with all three doubled): the GPU's
+  vertex work took 22 to 26 ms against 38 to 61, with the same fragment
+  work (36 to 41 ms) and the same CPU time on every thread. The busy view
+  was 35.0 ms against 34.2. So the defaults are back. `double-gxm-rings`
+  gives the two doubled rings (and the main pool 1 MB more),
+  `big-gxm-rings` all three doubled (3 MB more), for comparing.
 - **What the CPU pays for GPU memory.** The main pool is memory the CPU
   does not cache (`SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE`), as Sony's
   samples have it, and CDRAM is not cached either. The engine skins
