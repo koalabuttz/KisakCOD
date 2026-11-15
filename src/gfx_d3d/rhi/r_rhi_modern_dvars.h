@@ -46,6 +46,7 @@ inline const dvar_s *ssrThickness;
 inline const dvar_s *fog;
 inline const dvar_s *fogSun;
 inline const dvar_s *fogScatter;
+inline const dvar_s *fogSpots;
 
 // Harmless to call again (the engine keeps the first registration).
 inline void Register()
@@ -127,6 +128,10 @@ inline void Register()
                                     "Modern visuals: how much brighter the fog gets looking towards the sun "
                                     "(forward scattering, 0 to 0.9); -1 the default (KISAK_VK_MODERN_FOG_SCATTER "
                                     "or 0.35)");
+    fogSpots = Dvar_RegisterFloat("r_modernFogSpots", -1.0f, -1.0f, 4.0f, DVAR_NOFLAG,
+                                  "Modern visuals: how brightly the shadowed spot lights light the fog (0 not at "
+                                  "all, 1 as the fog scatters their light); -1 the default "
+                                  "(KISAK_VK_MODERN_FOG_SPOTS or 1)");
 }
 
 // The switches as the back end takes them: an enum's index 0 (default) is -1,
@@ -161,5 +166,6 @@ inline void Read(gfx_vk::d3d9::ModernTuning &out)
     out.fog = fog->current.integer - 1;
     out.fogSun = fogSun->current.value;
     out.fogScatter = fogScatter->current.value;
+    out.fogSpots = fogSpots->current.value;
 }
 } // namespace modern_dvars

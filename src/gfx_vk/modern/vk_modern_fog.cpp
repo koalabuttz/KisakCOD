@@ -16,7 +16,19 @@ namespace gfx_vk::modern
 {
 namespace
 {
-// The shaders' uniform block (std140): two matrices, then vec4s.
+// A spot light as the march reads it (std140).
+struct SpotBlock
+{
+    float shadowLookup[4][4]; // world to its tile, projective
+    float origin[4];          // xyz world units; w 1 / radius
+    float dir[4];             // xyz towards the light along the axis; w the cone's power
+    float factors[4];         // the cone's dot scale and bias, the shadow's fade, 1 in the sun's map
+    float color[4];           // rgb linear light times the spot share
+};
+static_assert(sizeof(SpotBlock) == 128, "a spot light is a matrix and four vectors");
+
+// The shaders' uniform block (std140): two matrices, then vec4s, then the
+// spot lights.
 struct Params
 {
     float clipToWorld[4][4];
@@ -29,10 +41,15 @@ struct Params
     float area[4];
     float shape[4];
     float color[4];
+    float spotInfo[4]; // x the spot lights, y the steps through each
+    SpotBlock spots[kFogSpots];
 };
-static_assert(sizeof(Params) == 256, "the fog's uniform block is two matrices and eight vectors");
+static_assert(sizeof(Params) == 256 + 16 + 128 * kFogSpots, "the fog's uniform block");
 
-constexpr VkFormat kMarchFormat = VK_FORMAT_R16G16_SFLOAT;
+// r the sun's shadowed share, gba the spot lights' light.
+constexpr VkFormat kMarchFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+constexpr uint32_t kBindings = 5;
+constexpr uint32_t kUniformBinding = 3;
 
 bool Invert(const double m[4][4], double out[4][4])
 {
@@ -124,7 +141,7 @@ Fog *CreateFog(Core *core, std::string &error)
 {
     if (!FormatSupports(core, kMarchFormat, VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT))
     {
-        error = "the device cannot draw into R16G16_SFLOAT";
+        error = "the device cannot draw into R16G16B16A16_SFLOAT";
         return nullptr;
     }
     const Dispatch &vk = Functions(core);
@@ -136,18 +153,19 @@ Fog *CreateFog(Core *core, std::string &error)
         return nullptr;
     };
     // 0 scene depth, 1 the sun's shadow map (compared), 2 the march's
-    // result, 3 the parameters.
-    VkDescriptorSetLayoutBinding bindings[4]{};
-    for (uint32_t i = 0; i < 4; ++i)
+    // result, 3 the parameters, 4 the spot lights' shadow map (compared).
+    VkDescriptorSetLayoutBinding bindings[kBindings]{};
+    for (uint32_t i = 0; i < kBindings; ++i)
     {
         bindings[i].binding = i;
-        bindings[i].descriptorType = i == 3 ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        bindings[i].descriptorType =
+            i == kUniformBinding ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         bindings[i].descriptorCount = 1;
         bindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     }
     VkDescriptorSetLayoutCreateInfo setInfo{};
     setInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    setInfo.bindingCount = 4;
+    setInfo.bindingCount = kBindings;
     setInfo.pBindings = bindings;
     if (vk.vkCreateDescriptorSetLayout(device, &setInfo, nullptr, &fog->setLayout) != VK_SUCCESS)
         return fail("vkCreateDescriptorSetLayout failed");
@@ -210,8 +228,8 @@ void DestroyFog(Core *core, Fog *fog)
 namespace
 {
 // One full-screen pass of `pipeline` over `area` into `target`.
-bool Pass(Core *core, Fog *fog, VkPipeline pipeline, Image *depth, Image *shadow, Image *marched,
-          const Transient &params, Image *target, const VkRect2D &area, std::string &error)
+bool Pass(Core *core, Fog *fog, VkPipeline pipeline, Image *depth, Image *shadow, Image *spotShadow,
+          Image *marched, const Transient &params, Image *target, const VkRect2D &area, std::string &error)
 {
     const VkDescriptorSet set = AllocateDescriptorSet(core, fog->setLayout);
     if (!set)
@@ -219,20 +237,22 @@ bool Pass(Core *core, Fog *fog, VkPipeline pipeline, Image *depth, Image *shadow
         error = LastError(core);
         return false;
     }
-    const VkDescriptorImageInfo images[3] = {
+    const VkDescriptorImageInfo images[kBindings] = {
         {fog->nearest, ImageSampleView(depth), VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL},
         {fog->compare, ImageSampleView(shadow), VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL},
         {fog->nearest, ImageSampleView(marched), VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL},
+        {},
+        {fog->compare, ImageSampleView(spotShadow), VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL},
     };
     const VkDescriptorBufferInfo buffer{params.buffer, params.offset, sizeof(Params)};
-    VkWriteDescriptorSet writes[4]{};
-    for (uint32_t i = 0; i < 4; ++i)
+    VkWriteDescriptorSet writes[kBindings]{};
+    for (uint32_t i = 0; i < kBindings; ++i)
     {
         writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[i].dstSet = set;
         writes[i].dstBinding = i;
         writes[i].descriptorCount = 1;
-        if (i == 3)
+        if (i == kUniformBinding)
         {
             writes[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             writes[i].pBufferInfo = &buffer;
@@ -243,9 +263,11 @@ bool Pass(Core *core, Fog *fog, VkPipeline pipeline, Image *depth, Image *shadow
             writes[i].pImageInfo = &images[i];
         }
     }
-    Functions(core).vkUpdateDescriptorSets(DeviceHandle(core), 4, writes, 0, nullptr);
+    Functions(core).vkUpdateDescriptorSets(DeviceHandle(core), kBindings, writes, 0, nullptr);
     UseImage(core, depth, ImageUse::Sampled);
     UseImage(core, shadow, ImageUse::Sampled);
+    if (spotShadow != shadow)
+        UseImage(core, spotShadow, ImageUse::Sampled);
     UseImage(core, marched, ImageUse::Sampled);
     PassDesc desc;
     desc.name = "modern fog";
@@ -277,8 +299,8 @@ bool Pass(Core *core, Fog *fog, VkPipeline pipeline, Image *depth, Image *shadow
 }
 } // namespace
 
-bool DrawFog(Core *core, Fog *fog, Image *color, Image *depth, Image *shadowMap, const SceneView &view,
-             const FogInputs &inputs, const FogParams &params, std::string &error)
+bool DrawFog(Core *core, Fog *fog, Image *color, Image *depth, Image *shadowMap, Image *spotShadowMap,
+             const SceneView &view, const FogInputs &inputs, const FogParams &params, std::string &error)
 {
     if (!fog || !color || !depth)
     {
@@ -297,12 +319,16 @@ bool DrawFog(Core *core, Fog *fog, Image *color, Image *depth, Image *shadowMap,
         error = "the scene cannot be drawn into";
         return false;
     }
-    if (shadowMap)
-    {
-        const ImageDesc &shadowInfo = ImageInfo(shadowMap);
-        if (shadowInfo.samples != 1 || !(shadowInfo.usage & VK_IMAGE_USAGE_SAMPLED_BIT))
-            shadowMap = nullptr; // marched as all lit
-    }
+    const auto sampleable = [](Image *map) {
+        if (!map)
+            return false;
+        const ImageDesc &info = ImageInfo(map);
+        return info.samples == 1 && (info.usage & VK_IMAGE_USAGE_SAMPLED_BIT) != 0;
+    };
+    if (!sampleable(shadowMap))
+        shadowMap = nullptr; // the sun's air marched as all lit, its spot lights left out
+    if (!sampleable(spotShadowMap))
+        spotShadowMap = nullptr;
     if (!Inside(view.area, depthInfo) || !Inside(view.area, colorInfo))
     {
         error = "the viewport is not inside the colour and depth images";
@@ -324,7 +350,8 @@ bool DrawFog(Core *core, Fog *fog, Image *color, Image *depth, Image *shadowMap,
     block.camera[0] = inputs.origin[0];
     block.camera[1] = inputs.origin[1];
     block.camera[2] = inputs.origin[2];
-    block.camera[3] = shadowMap ? 1.0f : 0.0f;
+    const bool sunShadowed = shadowMap && inputs.sunShadowed;
+    block.camera[3] = sunShadowed ? 1.0f : 0.0f;
     {
         const float x = inputs.sunDirection[0], y = inputs.sunDirection[1], z = inputs.sunDirection[2];
         const float norm = std::sqrt(x * x + y * y + z * z);
@@ -354,6 +381,38 @@ bool DrawFog(Core *core, Fog *fog, Image *color, Image *depth, Image *shadowMap,
     for (int i = 0; i < 3; ++i)
         block.color[i] = Decode(std::fmin(std::fmax(inputs.color[i], 0.0f), 1.0f));
     block.color[3] = params.debug ? 1.0f : 0.0f;
+    uint32_t spots = 0;
+    const float spotShare = std::fmax(params.spotShare, 0.0f);
+    for (uint32_t i = 0; spotShare > 0.0f && i < inputs.spotCount && i < kFogSpots; ++i)
+    {
+        const FogInputs::Spot &spot = inputs.spots[i];
+        if (!(spot.inSunMap ? shadowMap : spotShadowMap) || spot.radius <= 0.0f
+            || !(spot.cosHalfFovInner > spot.cosHalfFovOuter))
+            continue;
+        const float x = spot.dir[0], y = spot.dir[1], z = spot.dir[2];
+        const float norm = std::sqrt(x * x + y * y + z * z);
+        if (norm < 1e-6f)
+            continue;
+        SpotBlock &to = block.spots[spots++];
+        std::memcpy(to.shadowLookup, spot.shadowLookup, sizeof(to.shadowLookup));
+        to.origin[0] = spot.origin[0];
+        to.origin[1] = spot.origin[1];
+        to.origin[2] = spot.origin[2];
+        to.origin[3] = 1.0f / spot.radius;
+        to.dir[0] = x / norm;
+        to.dir[1] = y / norm;
+        to.dir[2] = z / norm;
+        to.dir[3] = std::fmax(spot.exponent, 0.0f);
+        const float dotScale = 1.0f / (spot.cosHalfFovInner - spot.cosHalfFovOuter);
+        to.factors[0] = dotScale;
+        to.factors[1] = -dotScale * spot.cosHalfFovOuter;
+        to.factors[2] = std::fmin(std::fmax(spot.fade, 0.0f), 1.0f);
+        to.factors[3] = spot.inSunMap ? 1.0f : 0.0f;
+        for (int c = 0; c < 3; ++c)
+            to.color[c] = spotShare * Decode(std::fmax(spot.color[c], 0.0f));
+    }
+    block.spotInfo[0] = static_cast<float>(spots);
+    block.spotInfo[1] = static_cast<float>(params.spotSteps ? params.spotSteps : 1u);
 
     // The march's image and area: the scene's, or a pixel for each 2x2
     // block of it.
@@ -413,17 +472,24 @@ bool DrawFog(Core *core, Fog *fog, Image *color, Image *depth, Image *shadowMap,
         return false;
     }
     std::memcpy(uniforms.data, &block, sizeof(block));
-    // Without a shadow map the march reads nothing from binding 1; the scene
-    // depth stands in so that the set is whole. The march's own image stands
-    // in for binding 2 while it is being drawn: the depth.
+    // Without a shadow map the march reads nothing from its binding; the
+    // scene depth stands in so that the set is whole. The march's own image
+    // stands in for binding 2 while it is being drawn: the depth.
     Image *shadow = shadowMap ? shadowMap : depth;
-    if (!Pass(core, fog, fog->marchPipeline, depth, shadow, depth, uniforms, fog->marched, marchArea, error))
+    Image *spotShadow = spotShadowMap ? spotShadowMap : depth;
+    if (!Pass(core, fog, fog->marchPipeline, depth, shadow, spotShadow, depth, uniforms, fog->marched, marchArea,
+              error))
         return false;
-    if (!Pass(core, fog, apply, depth, shadow, fog->marched, uniforms, color, view.area, error))
+    if (!Pass(core, fog, apply, depth, shadow, spotShadow, fog->marched, uniforms, color, view.area, error))
         return false;
     ++fog->stats.scenes;
-    if (shadowMap)
+    if (sunShadowed)
         ++fog->stats.shadowed;
+    if (spots)
+    {
+        ++fog->stats.spotScenes;
+        fog->stats.spots += spots;
+    }
     return true;
 }
 

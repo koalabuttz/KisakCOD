@@ -65,6 +65,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "r_modernExposureKey",
     "r_modernFog",
     "r_modernFogScatter",
+    "r_modernFogSpots",
     "r_modernFogSun",
     "r_modernLightShaders",
     "r_modernModelShaders",
