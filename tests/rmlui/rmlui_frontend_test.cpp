@@ -602,6 +602,20 @@ int main()
     }
     for (const DrawCall &call : drawCalls)
         Check(!call.scissored, "no scissor");
+    // Every triangle turns like a stock stretch pic's, so a material that
+    // culls back faces keeps it.
+    bool wound = true;
+    for (const DrawCall &call : drawCalls)
+    {
+        for (size_t i = 0; i + 2 < call.indices.size(); i += 3)
+        {
+            const GfxUiVertex &a = call.verts[call.indices[i]];
+            const GfxUiVertex &b = call.verts[call.indices[i + 1]];
+            const GfxUiVertex &c = call.verts[call.indices[i + 2]];
+            wound = wound && (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x) >= 0.0f;
+        }
+    }
+    Check(wound, "every triangle turns like the stock stretch pics");
 
     // The pic.
     const DrawCall &picCall = drawCalls[0];
