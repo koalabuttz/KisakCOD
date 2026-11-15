@@ -1292,14 +1292,21 @@ void BackendLogStats(Backend *backend, bool reset)
     // Ambient occlusion: the scenes it was built for and its two passes' GPU time.
     if (backend->ao)
     {
+        // Two passes: the trace (gtao.frag, "modern ao trace") and the blur
+        // (ao_blur.frag, "modern ao").
+        const PassTimings trace = PassTimingsFor(backend->core, "modern ao trace");
         const PassTimings pass = PassTimingsFor(backend->core, "modern ao");
+        const double traceMs = trace.supported ? average(trace) : 0.0;
+        const double blurMs = pass.supported ? average(pass) : 0.0;
         const uint64_t scenes = modern::Stats(backend->ao).builds - backend->aoBase.builds;
         HostLog(h, "vulkan d3d9: modern: %llu scenes with ambient occlusion (radius %.1f, thickness %.1f, "
                    "power %.2f, floor %.2f, edge %.2f%s), %.3f ms GPU each",
                 static_cast<unsigned long long>(scenes), backend->aoParams.radius, backend->aoParams.thickness,
                 backend->aoParams.power, backend->aoParams.floor, backend->aoParams.edge,
-                backend->aoParams.half ? ", half resolution" : "",
-                pass.supported ? 2.0 * average(pass) : 0.0);
+                backend->aoParams.half ? ", half resolution" : "", traceMs + blurMs);
+        if (scenes)
+            HostLog(h, "vulkan d3d9: modern: ambient occlusion passes: trace %.3f ms, blur %.3f ms GPU each", traceMs,
+                    blurMs);
         // Contact shadows: the scenes traced and their pass's GPU time.
         const uint64_t contacts = modern::Stats(backend->ao).contacts - backend->aoBase.contacts;
         if (contacts)

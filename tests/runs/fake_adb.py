@@ -281,7 +281,7 @@ def app(extra):
             if len(words) == 2:
                 plan.append((offset + float(words[0]), words[1].strip()))
     if devmap and dvars.get("run_quitAfterMap"):
-        plan.append((0.5 + float(dvars["run_quitAfterMap"]), "quit"))
+        plan.append((0.5 + float(dvars["run_quitAfterMap"]), "-quitAfterMap"))
     plan.append((0.2, "-menu"))
     if devmap:
         plan.append((0.5, "-map"))
@@ -301,7 +301,14 @@ def app(extra):
                     tag="libc", level="F")
                 return 1
             continue
-        log(f"run: sending \"{text}\"")
+        if text == "-quitAfterMap":
+            # The game's own quit timer: the only time it says "quitting as asked".
+            log(f"run: run_quitAfterMap {dvars['run_quitAfterMap']} reached")
+            log("run: quitting as asked")
+            text = "quit"
+        else:
+            # A timed "quit" is only sent, as by src/client/cl_run_plan.h.
+            log(f"run: sending \"{text}\"")
         for command in text.split(";"):
             words = command.split()
             if not words:
@@ -316,7 +323,7 @@ def app(extra):
                     f"{1000 / ms:.2f} fps; ms mean {ms:.3f}, median {ms:.3f}, p95 {ms + 1:.3f}, "
                     f"p99 {ms + 2:.3f}, max {ms + 3:.3f}; 0 over 50 ms")
             elif words[0] == "quit":
-                log("run: quitting as asked")
+                log("quitting...")
                 if os.environ.get("FAKE_APP_CRASH_AT_QUIT") == "1":
                     log("Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 2 (hwuiTask0)", tag="libc", level="F")
                     return 1

@@ -1,6 +1,8 @@
 package org.kisakcod.game;
 
 import android.content.Intent;
+import android.system.ErrnoException;
+import android.system.Os;
 import android.util.Log;
 
 import java.io.File;
@@ -98,8 +100,36 @@ public class KisakActivity extends SDLActivity {
                 }
             }
         }
+        setEnvironment(intent != null ? intent.getStringExtra("env") : null);
         Log.i(TAG, (campaign() ? "campaign " : "") + "arguments: " + args);
         return args.toArray(new String[0]);
+    }
+
+    // An "env" extra: KISAK_* variables, NAME=VALUE pairs split at spaces, set
+    // in this process before the game starts (the game runs in this
+    // activity's ":game" process and reads them at start-up), such as
+    // KISAK_VK_MODERN_SSR_STEPS for a test run (scripts/runs/android_run.py's
+    // "env"). Other names are refused.
+    private static void setEnvironment(String extra) {
+        if (extra == null) {
+            return;
+        }
+        for (String pair : extra.trim().split("\\s+")) {
+            int equals = pair.indexOf('=');
+            String name = equals > 0 ? pair.substring(0, equals) : "";
+            if (!name.matches("KISAK_[A-Z0-9_]+")) {
+                if (!pair.isEmpty()) {
+                    Log.w(TAG, "env: " + pair + " refused (only KISAK_NAME=value)");
+                }
+                continue;
+            }
+            try {
+                Os.setenv(name, pair.substring(equals + 1), true);
+                Log.i(TAG, "env: " + pair);
+            } catch (ErrnoException e) {
+                Log.w(TAG, "env: cannot set " + name + ": " + e);
+            }
+        }
     }
 
     // The singleplayer game needs an active player profile before a level
