@@ -257,6 +257,9 @@ struct HoistPlan
 
 HoistPlan PlanHoist(const Shader &pixel);
 bool CanHoist(const Shader &vertex, const HoistPlan &plan);
+// The plan in words, for logs: each coordinate's sum and the samplers read
+// at it, as "TEXCOORD9 = (tc0.z, tc0.w * 0.5 + 0.5) for s3".
+std::string DescribeHoist(const Shader &pixel, const HoistPlan &plan);
 
 // A stable 64-bit hash (FNV-1a) for cache keys.
 uint64_t Hash(const void *data, size_t bytes, uint64_t seed = 0xcbf29ce484222325ull);

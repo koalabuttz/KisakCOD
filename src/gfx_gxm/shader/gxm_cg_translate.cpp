@@ -1193,6 +1193,11 @@ bool Emitter::Run(std::string &cg, std::string &error)
         }
         // Results by semantic.
         std::vector<std::pair<std::string, std::string>> results; // (semantic text, assignment)
+        // What each component of a TEXCOORD result is: a register's
+        // component, or the fill of one no register writes. The hoisted
+        // coordinates below are made from these, not by reading a result
+        // parameter back.
+        std::array<std::array<std::string, 4>, 10> texcoordLanes;
         auto result = [&](Semantic semantic, uint8_t index, const std::string &reg, uint8_t mask) {
             const std::string name = VaryingName("out_", semantic, index);
             const std::string text = SemanticText(semantic, index);
@@ -1200,6 +1205,14 @@ bool Emitter::Run(std::string &cg, std::string &error)
             for (const std::string &p : parameters)
                 if (p.find(" " + name + " ") != std::string::npos)
                     first = false;
+            if (semantic == Semantic::Texcoord && index < 10)
+                for (int i = 0; i < 4; ++i)
+                {
+                    if (mask & (1 << i))
+                        texcoordLanes[index][i] = reg + "." + kComponents[i];
+                    else if (first)
+                        texcoordLanes[index][i] = i == 3 ? "1.0" : "0.0";
+                }
             if (first)
                 parameters.push_back("out " + VaryingType(semantic) + " " + name + " : " + text);
             if (VaryingType(semantic) == "float")
@@ -1243,28 +1256,35 @@ bool Emitter::Run(std::string &cg, std::string &error)
         if (options_.hoist)
             for (const HoistCoord &coord : options_.hoist->coords)
             {
-                const std::string root = "out_TEXCOORD" + std::to_string(coord.root);
                 const std::string name = "out_TEXCOORD" + std::to_string(coord.slot);
-                bool haveRoot = false, haveSlot = false;
+                const std::array<std::string, 4> &root = texcoordLanes[coord.root < 10 ? coord.root : 0];
+                const bool haveRoot = coord.root < 10 && !root[0].empty();
+                bool haveSlot = false;
                 for (const std::string &p : parameters)
-                {
-                    haveRoot |= p.find(" " + root + " ") != std::string::npos;
                     haveSlot |= p.find(" " + name + " ") != std::string::npos;
-                }
                 if (!haveRoot || haveSlot)
                 {
                     error = haveSlot ? "hoist: the vertex shader writes TEXCOORD" + std::to_string(coord.slot) + " itself"
                                      : "hoist: the vertex shader does not write TEXCOORD" + std::to_string(coord.root);
                     return false;
                 }
+                // A component no register writes is a number: it goes into
+                // the constant, so no product by it is left for the
+                // compiler to fold.
                 const auto sum = [&root](const float *k) {
                     std::string text;
+                    float constant = k[4];
                     for (int i = 0; i < 4; ++i)
-                        if (k[i] != 0.0f)
-                            text += (text.empty() ? "" : " + ") + root + "." + kComponents[i] +
-                                    (k[i] == 1.0f ? "" : " * " + Float(k[i]));
-                    if (k[4] != 0.0f || text.empty())
-                        text += (text.empty() ? "" : " + ") + Float(k[4]);
+                    {
+                        if (k[i] == 0.0f)
+                            continue;
+                        if (root[i] == "0.0" || root[i] == "1.0")
+                            constant += root[i] == "1.0" ? k[i] : 0.0f;
+                        else
+                            text += (text.empty() ? "" : " + ") + root[i] + (k[i] == 1.0f ? "" : " * " + Float(k[i]));
+                    }
+                    if (constant != 0.0f || text.empty())
+                        text += (text.empty() ? "" : " + ") + Float(constant);
                     return text;
                 };
                 parameters.push_back("out float2 " + name + " : TEXCOORD" + std::to_string(coord.slot));
@@ -2179,6 +2199,31 @@ HoistPlan PlanHoist(const Shader &pixel)
         plan.hash = hash ? hash : 1;
     }
     return plan;
+}
+
+std::string DescribeHoist(const Shader &pixel, const HoistPlan &plan)
+{
+    std::string text;
+    for (size_t index = 0; index < plan.coords.size(); ++index)
+    {
+        const HoistCoord &coord = plan.coords[index];
+        const auto sum = [&coord](const float *k) {
+            std::string part;
+            for (int i = 0; i < 4; ++i)
+                if (k[i] != 0.0f)
+                    part += (part.empty() ? "" : " + ") + ("tc" + std::to_string(coord.root) + ".") + kComponents[i] +
+                            (k[i] == 1.0f ? "" : " * " + Float(k[i]));
+            if (k[4] != 0.0f || part.empty())
+                part += (part.empty() ? "" : " + ") + Float(k[4]);
+            return part;
+        };
+        text += (text.empty() ? "" : "; ") + ("TEXCOORD" + std::to_string(coord.slot)) + " = (" + sum(coord.x) + ", " +
+                sum(coord.y) + ") for";
+        for (const HoistRead &read : plan.reads)
+            if (read.coord == index && read.instruction < pixel.instructions.size())
+                text += " s" + std::to_string(pixel.instructions[read.instruction].sources[1].number);
+    }
+    return text;
 }
 
 bool CanHoist(const Shader &vertex, const HoistPlan &plan)

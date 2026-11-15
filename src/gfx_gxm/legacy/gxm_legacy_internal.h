@@ -329,6 +329,8 @@ struct Device
         uint32_t created = 0, refused = 0;
         // Pixel shaders with a hoist plan, and the reads in those plans.
         uint32_t hoistable = 0, hoistableReads = 0;
+        // The distinct plans, each logged once in words.
+        std::vector<uint64_t> hoistPlans;
         uint32_t loggedFailures = 0;
         // Draws left out of a frame because a program of theirs was still
         // being made, and the frames that had such a draw.

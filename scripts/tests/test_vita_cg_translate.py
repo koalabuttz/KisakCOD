@@ -120,6 +120,9 @@ VITA_CASES = {
                             "dcl_texcoord9 o2\nmov o0, v0\nmov o1, v1\nmov o2, v1",
     "vs3_vita_hoist_unfed": "vs_3_0\ndcl_position v0\ndcl_texcoord v1\ndcl_position o0\ndcl_texcoord0 o1\n"
                             "dcl_texcoord1 o2\nmov o0, v0\nmov o2, v1",
+    # One that writes only three components of TEXCOORD0: the fourth is 1.
+    "vs3_vita_hoist_three": "vs_3_0\ndcl_position v0\ndcl_texcoord v1\ndcl_position o0\ndcl_texcoord0 o1.xyz\n"
+                            "dcl_texcoord1 o2.xy\nmov o0, v0\nmov o1.xyz, v1\nmov o2.xy, v1",
     "ps2_vita_hoist": "ps_2_0\ndef c0, 2, 3, 0, 0\ndcl t0\ndcl t1\ndcl_2d s0\nmov r0.xy, t0.wzyx\n"
                       "texld r0, r0, s0\nadd r1, t1, -c0.xyxy\ntexld r1, r1, s0\nadd r0, r0, r1\nmov oC0, r0",
     "vs2_vita_hoist": "vs_2_0\ndcl_position v0\ndcl_texcoord v1\nmov oPos, v0\nmov oT0, v1\nmov oT1, v1",
@@ -199,10 +202,17 @@ CHECKS = [
     ("ps3_vita_hoist", ["--hoist"], "r6 = tex2D(s1, (r6).xy);", "hoist=3/4"),
     ("ps3_vita_hoist", ["--hoist"], "float2 in_TEXCOORD7 : TEXCOORD7", "hoist=3/4"),
     ("vs3_vita_hoist", ["--hoist-from", "@ps3_vita_hoist"],
-     "    out_TEXCOORD9 = float2(out_TEXCOORD0.z, out_TEXCOORD0.w);\n"
-     "    out_TEXCOORD8 = float2(out_TEXCOORD0.z * 0.5, out_TEXCOORD0.w * 0.25);\n"
-     "    out_TEXCOORD7 = float2(out_TEXCOORD0.z * 0.5 + 0.125, out_TEXCOORD0.w * 0.25 + 0.25);\n", "hoist=3/4"),
+     "    out_TEXCOORD9 = float2(o1.z, o1.w);\n"
+     "    out_TEXCOORD8 = float2(o1.z * 0.5, o1.w * 0.25);\n"
+     "    out_TEXCOORD7 = float2(o1.z * 0.5 + 0.125, o1.w * 0.25 + 0.25);\n", "hoist=3/4"),
     ("vs3_vita_hoist", ["--hoist-from", "@ps3_vita_hoist"], "out float2 out_TEXCOORD8 : TEXCOORD8", "hoist=3/4"),
+    ("vs3_vita_hoist_three", ["--hoist-from", "@ps3_vita_hoist"],
+     "    out_TEXCOORD9 = float2(o1.z, 1.0);\n"
+     "    out_TEXCOORD8 = float2(o1.z * 0.5, 0.25);\n"
+     "    out_TEXCOORD7 = float2(o1.z * 0.5 + 0.125, 0.5);\n", "hoist=3/4"),
+    ("ps3_vita_hoist", ["--hoist"], "return oC0;",
+     "hoist=3/4 [TEXCOORD9 = (tc0.z, tc0.w) for s2; TEXCOORD8 = (tc0.z * 0.5, tc0.w * 0.25) for s0 s0; "
+     "TEXCOORD7 = (tc0.z * 0.5 + 0.125, tc0.w * 0.25 + 0.25) for s0]"),
     ("vs3_vita_hoist_taken", ["--hoist-from", "@ps3_vita_hoist"], "out_TEXCOORD9 = o2;", "hoist=no"),
     ("vs3_vita_hoist_unfed", ["--hoist-from", "@ps3_vita_hoist"], "out_TEXCOORD1 = o2;", "hoist=no"),
     ("vs3_vita_hoist", ["--hoist-from", "@ps3_texkill"], "out_TEXCOORD0 = o1;", "hoist=no"),
@@ -210,8 +220,8 @@ CHECKS = [
     ("ps2_vita_hoist", ["--hoist"], "r0 = tex2D(s0, in_TEXCOORD9);", "hoist=2/2"),
     ("ps2_vita_hoist", ["--hoist"], "r1 = tex2D(s0, in_TEXCOORD8);", "hoist=2/2"),
     ("vs2_vita_hoist", ["--hoist-from", "@ps2_vita_hoist"],
-     "    out_TEXCOORD9 = float2(out_TEXCOORD0.w, out_TEXCOORD0.z);\n"
-     "    out_TEXCOORD8 = float2(out_TEXCOORD1.x + -2.0, out_TEXCOORD1.y + -3.0);\n", "hoist=2/2"),
+     "    out_TEXCOORD9 = float2(oT0.w, oT0.z);\n"
+     "    out_TEXCOORD8 = float2(oT1.x + -2.0, oT1.y + -3.0);\n", "hoist=2/2"),
 ]
 
 

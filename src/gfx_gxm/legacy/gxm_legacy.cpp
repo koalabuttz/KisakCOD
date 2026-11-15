@@ -1219,6 +1219,14 @@ void RequestDefaultVariant(Device &device, Shader &shader, uint64_t hash)
         shader.hoist = gxm::cg::PlanHoist(shader.parsed);
         counts.hoistable += !shader.hoist.Empty();
         counts.hoistableReads += uint32_t(shader.hoist.reads.size());
+        if (!shader.hoist.Empty() && counts.hoistPlans.size() < 32 &&
+            std::find(counts.hoistPlans.begin(), counts.hoistPlans.end(), shader.hoist.hash) == counts.hoistPlans.end())
+        {
+            counts.hoistPlans.push_back(shader.hoist.hash);
+            Log(device, "read hoist plan %016llx (first in shader %016llx, ps_%u_%u): %s",
+                (unsigned long long)shader.hoist.hash, (unsigned long long)hash, r.major, r.minor,
+                gxm::cg::DescribeHoist(shader.parsed, shader.hoist).c_str());
+        }
     }
     char label[64];
     std::snprintf(label, sizeof(label), "shader %016llx (%s_%u_%u)", (unsigned long long)hash,

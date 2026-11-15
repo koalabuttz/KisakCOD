@@ -108,6 +108,8 @@ int main(int argc, char **argv)
                                      std::to_string(plan.reads.size());
         if (!plan.Empty())
             options.hoist = &plan;
+        if (hoist && !plan.Empty())
+            hoisted += " [" + DescribeHoist(shader, plan) + "]";
     }
     if (!Emit(shader, options, cg, error))
     {
