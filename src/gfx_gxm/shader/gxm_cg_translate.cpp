@@ -689,6 +689,24 @@ bool Emitter::Write(const Instruction &ins, const std::string &valueIn)
     return true;
 }
 
+// The sharpening read of Options::sharpSamplers.
+const char kSharpHelper[] = R"(uniform float4 kisak_sharp;
+uniform float4 kisak_sharp_max;
+float4 kisak_sharp2D(sampler2D s, float2 uv)
+{
+    float2 hi = kisak_sharp_max.xy;
+    float4 c = tex2D(s, min(uv, hi));
+    float4 l = tex2D(s, min(uv - float2(kisak_sharp.x, 0.0), hi));
+    float4 r = tex2D(s, min(uv + float2(kisak_sharp.x, 0.0), hi));
+    float4 u = tex2D(s, min(uv - float2(0.0, kisak_sharp.y), hi));
+    float4 d = tex2D(s, min(uv + float2(0.0, kisak_sharp.y), hi));
+    float4 least = min(c, min(min(l, r), min(u, d)));
+    float4 most = max(c, max(max(l, r), max(u, d)));
+    return clamp(c + (c * 4.0 - l - r - u - d) * kisak_sharp.z, least, most);
+}
+)";
+
+
 bool Emitter::Texture(const Instruction &ins, std::string &value)
 {
     if (ins.sourceCount < 2 || ins.sources[1].type != kSampler)
@@ -716,7 +734,8 @@ bool Emitter::Texture(const Instruction &ins, std::string &value)
     }
     if (type == SamplerType::None)
         return Fail("samples " + s + " without declaring it");
-    if (const HoistCoord *hoisted = Hoisted(); hoisted && ins.opcode == kTex && ins.control == 0 && !cube)
+    if (const HoistCoord *hoisted = Hoisted();
+        hoisted && ins.opcode == kTex && ins.control == 0 && !cube && !(options_.sharpSamplers >> unit & 1))
     {
         // The vertex program worked this coordinate out.
         value = "tex2D(" + s + ", in_TEXCOORD" + std::to_string(hoisted->slot) + ")" +
@@ -731,6 +750,8 @@ bool Emitter::Texture(const Instruction &ins, std::string &value)
                           : "tex2D(" + s + ", (" + coord + ").xy / (" + coord + ").w)";
         else if (ins.control == 2) // texldb
             sample = cube ? "texCUBEbias(" + s + ", " + coord + ")" : "tex2Dbias(" + s + ", " + coord + ")";
+        else if (!cube && !vertex_ && (options_.sharpSamplers >> unit & 1))
+            sample = "kisak_sharp2D(" + s + ", (" + coord + ").xy)";
         else
             sample = cube ? "texCUBE(" + s + ", (" + coord + ").xyz)" : "tex2D(" + s + ", (" + coord + ").xy)";
         break;
@@ -1135,6 +1156,10 @@ bool Emitter::Run(std::string &cg, std::string &error)
     if (alphaTest)
         out += "uniform float kisak_alpha_ref;\n";
     out += kHelpers;
+    // Only where asked for: a program's text is its key in the cache of
+    // compiled programs.
+    if (!vertex_ && options_.sharpSamplers)
+        out += kSharpHelper;
 
     // The signature and the code that copies parameters to registers and
     // registers to results.

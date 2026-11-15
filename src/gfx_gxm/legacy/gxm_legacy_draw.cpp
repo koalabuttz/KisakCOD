@@ -42,6 +42,7 @@
 #include <gfx_gxm/gxm_idle_alpha_test.h>
 #include <gfx_gxm/gxm_live_switch.h>
 #include <gfx_gxm/gxm_prepass_governor.h>
+#include <gfx_gxm/gxm_scale_governor.h>
 #include <gfx_gxm/gxm_program_cache.h>
 #include <vita/vita_gpu_clock.h>
 #include <vita/vita_platform.h> // Vita_NoteThread
@@ -65,6 +66,16 @@ bool g_prepassWorldOnly = true;
 bool g_prepassSkipModels = false;
 bool g_resolveWhenUsed = true;
 float g_sceneScale = 1.0f;
+std::atomic<float> g_sceneScaleLeast{1.0f};
+std::atomic<float> g_sceneScaleMost{1.0f};
+std::atomic<float> g_sceneScaleGoalMs{0.0f};
+std::atomic<float> g_sceneScaleNow{1.0f};
+bool g_mipBias = true;
+bool g_sceneWidthOnly = false;
+bool g_sceneSharpen = false;
+bool g_sharpenThisStretch = false;
+bool g_sharpenInFilter = true;
+bool g_sharpenDraws = false;
 bool g_stretchInFilter = true;
 float g_filterReadS = 1.0f;
 float g_filterReadT = 1.0f;
@@ -210,8 +221,9 @@ struct PipelineKey
     uint32_t strides[kMaxStreams];
     uint8_t alphaFunc; // the pixel shader variant's alpha test
     uint8_t index32;
+    uint16_t sharp; // and the samplers it reads through the sharpening filter
     uint8_t hoist; // DrawState::readHoist when the draw came by
-    uint8_t pad;
+    uint8_t pad[3];
 };
 struct Pipeline
 {
@@ -372,6 +384,19 @@ struct DrawState
     Variant copyVertex, copyFragment;
     SceGxmVertexProgram *copyVertexProgram = nullptr;
     int copyUnit = -1;
+    // The stretch that sharpens (gxm_engine_options.h, g_sceneSharpen); the
+    // vertex program is null when its programs could not be made.
+    Variant sharpenVertex, sharpenFragment;
+    SceGxmVertexProgram *sharpenVertexProgram = nullptr;
+    const SceGxmProgramParameter *sharpenStep = nullptr;
+    int sharpenUnit = -1;
+    uint64_t sharpenStretches = 0;
+    // The mip bias of a scaled 3D picture, in sceGxm's steps, for the scale
+    // it was worked out from; and the views it was set on.
+    float biasScale = 1.0f;
+    bool biasWidthOnly = false;
+    int biasSteps = 0;
+    uint64_t biasedViews = 0;
 
     uint16_t *sequential = nullptr; // 0, 1, 2, ... for draws without indices
     uint8_t *ring = nullptr;
@@ -415,6 +440,10 @@ struct DrawState
     gfx_gxm::PrepassGovernor prepassGovernor;
     bool prepassOff = false, governorOff = false;
     uint64_t paceWaits = 0, paceMicros = 0;
+    // The size of the 3D picture, picked from each frame's waits for the GPU
+    // (gxm_scale_governor.h) when the engine allows a range of sizes.
+    gfx_gxm::ScaleGovernor scaleGovernor;
+    uint64_t scaleWaitMicros = 0; // this frame's waits for the GPU so far
     // Renames that found no room and waited for the GPU, renames a wait since
     // the buffer's last draw made needless, and the bytes of renamed buffers'
     // old memory the GPU may still read.
@@ -760,6 +789,8 @@ bool Register(Device &device, Variant &variant, const char *what)
     const SceGxmProgram *program = variant.program();
     variant.constants = sceGxmProgramFindParameterByName(program, "c");
     variant.alphaRef = sceGxmProgramFindParameterByName(program, "kisak_alpha_ref");
+    variant.sharp = sceGxmProgramFindParameterByName(program, "kisak_sharp");
+    variant.sharpMax = sceGxmProgramFindParameterByName(program, "kisak_sharp_max");
     char name[32];
     for (int i = 0; i < 16; ++i)
     {
@@ -787,6 +818,7 @@ uint64_t VariantKey(const gxm::cg::Options &options)
         components |= uint64_t(options.inputComponents[i] & 3) << (2 * i);
     return (uint64_t(options.bgraInputs) | uint64_t(options.absentInputs) << 16) ^ (components << 32) ^
            (options.alphaFunc == gxm::cg::AlphaFunc::Always ? 0 : uint64_t(options.alphaFunc)) ^
+           (uint64_t(options.sharpSamplers) * 0xff51afd7ed558ccdull) ^
            (options.alphaZero ? 0x00a5000000000000ull : 0) ^ (options.hoist ? options.hoist->hash : 0) ^
            (options.farPlaneInside ? 0x5a5a000000000000ull : 0) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
 }
@@ -969,7 +1001,7 @@ Pipeline &PipelineSlot(DrawState &d, const PipelineKey &key)
     uint32_t hash = uint32_t(reinterpret_cast<uintptr_t>(key.vs) >> 4) * 0x9e3779b1u;
     hash ^= uint32_t(reinterpret_cast<uintptr_t>(key.ps) >> 4) * 0x85ebca6bu;
     hash ^= uint32_t(reinterpret_cast<uintptr_t>(key.decl) >> 4) * 0xc2b2ae35u;
-    hash ^= (uint32_t(key.alphaFunc) << 1 | key.index32) * 0x27d4eb2fu;
+    hash ^= (uint32_t(key.sharp) << 9 | uint32_t(key.alphaFunc) << 1 | key.index32) * 0x27d4eb2fu;
     return d.pipelines[(hash >> 16) & (kPipelines - 1)];
 }
 
@@ -1506,6 +1538,20 @@ SceGxmTextureAddrMode AddressMode(uint32_t address)
 bool BindTextures(Device &device, const Variant &pixel, void *uniforms)
 {
     DrawState &d = *device.draw;
+    // A scaled 3D picture: mipped textures get the levels the full-size
+    // picture would have used (gxm_engine_options.h, g_mipBias).
+    int biasSteps = 0;
+    if (gfx_gxm::g_mipBias && gfx_gxm::g_sceneScale < 1.0f)
+    {
+        if (d.biasScale != gfx_gxm::g_sceneScale || d.biasWidthOnly != gfx_gxm::g_sceneWidthOnly)
+        {
+            d.biasScale = gfx_gxm::g_sceneScale;
+            d.biasWidthOnly = gfx_gxm::g_sceneWidthOnly;
+            d.biasSteps = gfx_gxm::SceneMipBiasSteps(
+                (std::min)(gfx_gxm::SceneScaleX(d.biasScale), gfx_gxm::SceneScaleY(d.biasScale)));
+        }
+        biasSteps = d.biasSteps;
+    }
     for (int i = 0; i < 16; ++i)
     {
         if (pixel.textureUnit[i] < 0)
@@ -1545,8 +1591,10 @@ bool BindTextures(Device &device, const Variant &pixel, void *uniforms)
         const bool linearMag = ss[d3d::SAMP_MAGFILTER] >= d3d::TEXF_LINEAR;
         const bool linearMip = ss[d3d::SAMP_MIPFILTER] == d3d::TEXF_LINEAR;
         // Everything the five calls below take from the sampler state.
+        const int bias = texture && texture->sampleable && texture->desc.levels > 1 ? biasSteps : 0;
         const uint32_t bits = uint32_t(linearMin) | uint32_t(linearMag) << 1 | uint32_t(linearMip) << 2 |
-                              (ss[d3d::SAMP_ADDRESSU] & 0xffu) << 8 | (ss[d3d::SAMP_ADDRESSV] & 0xffu) << 16;
+                              (ss[d3d::SAMP_ADDRESSU] & 0xffu) << 8 | (ss[d3d::SAMP_ADDRESSV] & 0xffu) << 16 |
+                              (uint32_t(-bias) & 0x3fu) << 24;
         // Its own view, not a stand-in's: the one kept with the texture serves.
         const bool own = d.reuse && texture && texture->sampleable;
         if (own && texture->viewBits == bits && std::memcmp(&texture->viewOf, &view, sizeof(view)) == 0)
@@ -1560,6 +1608,14 @@ bool BindTextures(Device &device, const Variant &pixel, void *uniforms)
                                                        : SCE_GXM_TEXTURE_MIP_FILTER_DISABLED);
             sceGxmTextureSetUAddrMode(&view, AddressMode(ss[d3d::SAMP_ADDRESSU]));
             sceGxmTextureSetVAddrMode(&view, AddressMode(ss[d3d::SAMP_ADDRESSV]));
+            if (bias)
+            {
+                // sceGxm's bias is 0 to 63 in steps of 1/8 of a level; a
+                // fresh texture's value is "none".
+                const int none = int(sceGxmTextureGetLodBias(&view));
+                sceGxmTextureSetLodBias(&view, unsigned(std::clamp(none + bias, 0, 63)));
+                ++d.biasedViews;
+            }
             ++d.textureViewsMade;
             if (own)
             {
@@ -1690,6 +1746,92 @@ const char kCopyFragmentCg[] = "// KisakCOD: StretchRect quad\n"
                                "{\n"
                                "    return tex2D(s0, in_TEXCOORD0);\n"
                                "}\n";
+
+// The stretch that sharpens: the picture read at each pixel and at one of
+// its own texels up, left, right and down. The vertex program works the five
+// places out, so that the fragment program reads at places it was handed.
+// Each pixel's difference from the mean of its four neighbours is added to
+// it, and the result is held between the darkest and the brightest of the
+// five, so that an edge gets steeper and never gains a halo.
+// The same filter is in the translator's sharpening read
+// (gxm_cg_translate.cpp, kisak_sharp2D), which takes this strength.
+constexpr float kSharpenStrength = 0.2f;
+const char kSharpenVertexCg[] =
+    "// KisakCOD: sharpening stretch\n"
+    "void main(float2 in_position, float2 in_texcoord, uniform float4 kisak_step,\n"
+    "          out float4 out_POSITION : POSITION, out float2 out_TEXCOORD0 : TEXCOORD0,\n"
+    "          out float2 out_TEXCOORD1 : TEXCOORD1, out float2 out_TEXCOORD2 : TEXCOORD2,\n"
+    "          out float2 out_TEXCOORD3 : TEXCOORD3, out float2 out_TEXCOORD4 : TEXCOORD4)\n"
+    "{\n"
+    "    out_POSITION = float4(in_position, 0.0, 1.0);\n"
+    "    out_TEXCOORD0 = in_texcoord;\n"
+    "    out_TEXCOORD1 = in_texcoord - float2(0.0, kisak_step.y);\n"
+    "    out_TEXCOORD2 = in_texcoord - float2(kisak_step.x, 0.0);\n"
+    "    out_TEXCOORD3 = in_texcoord + float2(kisak_step.x, 0.0);\n"
+    "    out_TEXCOORD4 = in_texcoord + float2(0.0, kisak_step.y);\n"
+    "}\n";
+const char kSharpenFragmentCg[] =
+    "// KisakCOD: sharpening stretch\n"
+    "float4 main(float2 in_TEXCOORD0 : TEXCOORD0, float2 in_TEXCOORD1 : TEXCOORD1,\n"
+    "            float2 in_TEXCOORD2 : TEXCOORD2, float2 in_TEXCOORD3 : TEXCOORD3,\n"
+    "            float2 in_TEXCOORD4 : TEXCOORD4, uniform sampler2D s0) : COLOR\n"
+    "{\n"
+    "    float4 here = tex2D(s0, in_TEXCOORD0);\n"
+    "    float3 up = tex2D(s0, in_TEXCOORD1).rgb;\n"
+    "    float3 left = tex2D(s0, in_TEXCOORD2).rgb;\n"
+    "    float3 right = tex2D(s0, in_TEXCOORD3).rgb;\n"
+    "    float3 down = tex2D(s0, in_TEXCOORD4).rgb;\n"
+    "    float3 low = min(here.rgb, min(min(up, left), min(right, down)));\n"
+    "    float3 high = max(here.rgb, max(max(up, left), max(right, down)));\n"
+    "    float3 sharp = here.rgb + (4.0 * here.rgb - up - left - right - down) * 0.2;\n"
+    "    return float4(clamp(sharp, low, high), here.a);\n"
+    "}\n";
+
+// Not needed to draw: a failure leaves the plain stretch.
+void MakeSharpenPrograms(Device &device)
+{
+    DrawState &d = *device.draw;
+    std::string log;
+    if (!gxm::GetProgram(kSharpenVertexCg, gxm::ShaderStage::Vertex, d.sharpenVertex.gxp, log) ||
+        !gxm::GetProgram(kSharpenFragmentCg, gxm::ShaderStage::Fragment, d.sharpenFragment.gxp, log))
+    {
+        Log(device, "the sharpening stretch's programs did not compile (%s): vita_sceneSharpen stretches plainly",
+            log.substr(0, log.find('\n')).c_str());
+        return;
+    }
+    if (!Register(device, d.sharpenVertex, "sharpen vertex program") ||
+        !Register(device, d.sharpenFragment, "sharpen fragment program"))
+        return;
+    const SceGxmProgramParameter *position =
+        sceGxmProgramFindParameterByName(d.sharpenVertex.program(), "in_position");
+    const SceGxmProgramParameter *texcoord =
+        sceGxmProgramFindParameterByName(d.sharpenVertex.program(), "in_texcoord");
+    d.sharpenStep = sceGxmProgramFindParameterByName(d.sharpenVertex.program(), "kisak_step");
+    d.sharpenUnit = d.sharpenFragment.textureUnit[0];
+    if (!position || !texcoord || !d.sharpenStep || d.sharpenUnit < 0)
+    {
+        Log(device, "the sharpening stretch's programs lack their parameters: vita_sceneSharpen stretches plainly");
+        return;
+    }
+    SceGxmVertexAttribute attributes[2]{};
+    for (int i = 0; i < 2; ++i)
+    {
+        attributes[i].streamIndex = 0;
+        attributes[i].offset = uint16_t(i * 8);
+        attributes[i].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+        attributes[i].componentCount = 2;
+        attributes[i].regIndex = uint16_t(sceGxmProgramParameterGetResourceIndex(i ? texcoord : position));
+    }
+    SceGxmVertexStream stream{16, SCE_GXM_INDEX_SOURCE_INDEX_16BIT};
+    const int result = sceGxmShaderPatcherCreateVertexProgram(gxm::ShaderPatcher(), d.sharpenVertex.id, attributes, 2,
+                                                              &stream, 1, &d.sharpenVertexProgram);
+    if (result < 0)
+    {
+        d.sharpenVertexProgram = nullptr;
+        Log(device, "the sharpening stretch's vertex program could not be made (0x%08x): vita_sceneSharpen stretches "
+                    "plainly", unsigned(result));
+    }
+}
 
 bool MakeCopyPrograms(Device &device, std::string &error)
 {
@@ -1932,6 +2074,12 @@ bool InitDraw(Device &device, std::string &error)
     }
     if (!MakeStandIns(device, error) || !MakeClearPrograms(device, error) || !MakeCopyPrograms(device, error))
         return false;
+    MakeSharpenPrograms(device);
+    gfx_gxm::g_sharpenInFilter = !gxm::ProgramCacheMarker("no-filter-sharpen");
+    gfx_gxm::g_mipBias = !gxm::ProgramCacheMarker("no-mip-bias");
+    Log(device, "diag: a fresh texture's LOD bias reads %u (the scaled 3D picture's mip bias counts from it; %s)",
+        unsigned(sceGxmTextureGetLodBias(&d.white)),
+        gfx_gxm::g_mipBias ? "on" : "off: no-mip-bias is there");
     // Run diagnostics: opaque green (no inputs, so it links with any vertex
     // program). Not having it only loses that test.
     std::string log;
@@ -2432,9 +2580,11 @@ void FinishGpu(Device &device, WaitCause cause)
     EndScene(device);
     const uint64_t from = Micros();
     gxm::Finish();
-    device.frameTime.Wait(Micros() - from);
+    const uint64_t took = Micros() - from;
+    device.frameTime.Wait(took);
     if (DrawState *d = device.draw)
     {
+        d->scaleWaitMicros += took;
         ++d->gpuWaits;
         ++d->waitsBy[size_t(cause)];
         // Every frame before this one is drawn; what this frame has drawn so
@@ -2486,6 +2636,7 @@ void PaceFrame(Device &device)
         device.frameTime.Pace(took);
         ++d.paceWaits;
         d.paceMicros += took;
+        d.scaleWaitMicros += took;
         return;
     }
     // No notification will say so (the frame ended without a scene, or the
@@ -2499,6 +2650,62 @@ void PaceFrame(Device &device)
             "waits for the whole GPU at every Present (as with no-frame-overlap)",
             unsigned(kTimeoutMicros / 1000), kTimeoutsAllowed);
     }
+}
+
+// After PaceFrame, whose wait is the last of this frame's: the size of the
+// next frame's 3D picture.
+void ScaleFrame(Device &device)
+{
+    DrawState &d = *device.draw;
+    const gfx_gxm::ScaleGovernor::Limits limits{gfx_gxm::g_sceneScaleLeast.load(std::memory_order_relaxed),
+                                                gfx_gxm::g_sceneScaleMost.load(std::memory_order_relaxed),
+                                                gfx_gxm::g_sceneScaleGoalMs.load(std::memory_order_relaxed)};
+    // The depth pass governor's try is timed at one size.
+    if (!d.prepassOff && !d.governorOff && d.prepassGovernor.Probing() && limits.least < limits.most)
+        d.scaleGovernor.Hold(Micros());
+    else
+        d.scaleGovernor.FrameEnded(Micros(), d.scaleWaitMicros, limits);
+    d.scaleWaitMicros = 0;
+    gfx_gxm::g_sceneScaleNow.store(d.scaleGovernor.Scale(), std::memory_order_relaxed);
+}
+
+void LogSceneScale(Device &device)
+{
+    DrawState *d = device.draw;
+    if (!d)
+        return;
+    const gfx_gxm::ScaleGovernor::Counts &c = d->scaleGovernor.Totals();
+    if (!c.frames)
+    {
+        // One size only (vita_sceneScale alone): what kept it sharp.
+        if (d->biasedViews || d->sharpenStretches)
+            Log(device,
+                "3D picture size: fixed at %.3f of the screen. Mip bias %s, now %d eighths of a level (%llu texture "
+                "views biased); %s; %llu sharpened stretches",
+                double(gfx_gxm::g_sceneScaleMost.load(std::memory_order_relaxed)), gfx_gxm::g_mipBias ? "on" : "off",
+                d->biasSteps, (unsigned long long)d->biasedViews,
+                gfx_gxm::g_sceneWidthOnly ? "width only" : "width and height",
+                (unsigned long long)d->sharpenStretches);
+        d->biasedViews = 0;
+        d->sharpenStretches = 0;
+        return;
+    }
+    Log(device,
+        "3D picture size, last %llu frames: %.3f of the screen now, %.3f on average (%.3f to %.3f; allowed %.3f to "
+        "%.3f). %llu steps down, %llu up, of them %llu tries of a larger picture (%llu taken back); 16.7 ms given up "
+        "%llu times. The GPU held the frame in %llu of %llu windows; the last window: %.1f ms a frame, %.1f ms of it "
+        "waiting for the GPU, goal %.1f ms. Mip bias %s, now %d eighths of a level (%llu texture views biased); %s; "
+        "%llu sharpened stretches",
+        (unsigned long long)c.frames, double(d->scaleGovernor.Scale()), c.scaleSum / double(c.frames),
+        double(c.lowest), double(c.highest), double(gfx_gxm::g_sceneScaleLeast.load(std::memory_order_relaxed)),
+        double(gfx_gxm::g_sceneScaleMost.load(std::memory_order_relaxed)), (unsigned long long)c.down,
+        (unsigned long long)c.up, (unsigned long long)c.tries, (unsigned long long)c.triesLost,
+        (unsigned long long)c.fastLost, (unsigned long long)c.boundWindows, (unsigned long long)c.windows, c.frameMs,
+        c.waitMs, c.goalMs, gfx_gxm::g_mipBias ? "on" : "off", d->biasSteps, (unsigned long long)d->biasedViews,
+        gfx_gxm::g_sceneWidthOnly ? "width only" : "width and height", (unsigned long long)d->sharpenStretches);
+    d->biasedViews = 0;
+    d->sharpenStretches = 0;
+    d->scaleGovernor.ClearTotals();
 }
 
 void LogWaitCauses(Device &device)
@@ -2593,6 +2800,7 @@ void SetGpuWatch(Device &device, bool on)
 // (gxm_live_switch.h). The others size or make things at start-up.
 const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "no-vsync",
                                      "no-draw-reuse",     "no-filter-stretch", "no-gpu-boost",
+                                     "no-mip-bias",         "no-filter-sharpen",
                                      "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
                                      "gpu-watch",           "no-prepass-clear",  "no-depth-only-scene",
                                      "no-scene-in-copy",    "no-alpha-test-drop", "no-alpha-test-zero",
@@ -2671,6 +2879,10 @@ void ApplyLiveSwitches(Device &device)
         }
         else if (name == "no-filter-stretch")
             gfx_gxm::g_stretchInFilter = !s.on;
+        else if (name == "no-mip-bias")
+            gfx_gxm::g_mipBias = !s.on;
+        else if (name == "no-filter-sharpen")
+            gfx_gxm::g_sharpenInFilter = !s.on;
         else if (name == "no-prepass-clear")
             gfx_gxm::g_prepassClears = !s.on;
         else if (name == "no-depth-only-scene")
@@ -3270,6 +3482,21 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         strides[0] = upStride;
     const uint32_t upStrideUsed = upVertices ? upStride : 0u;
     const bool plain = d.reuse && !test && !d.diagnosedDraws;
+    // The engine's pass that stretches the scaled 3D picture
+    // (gxm_engine_options.h, g_sharpenDraws): the draw's program reads its
+    // render target textures through the sharpening filter.
+    uint16_t sharpSamplers = 0;
+    if (gfx_gxm::g_sharpenDraws && ps)
+    {
+        for (uint32_t i = 0; i < 16; ++i)
+        {
+            const Texture *texture = device.textures[i];
+            if (ps->parsed.reflection.samplers[i] == gxm::cg::SamplerType::Tex2D && texture &&
+                (texture->desc.usage & d3d::USAGE_RENDERTARGET))
+                sharpSamplers |= uint16_t(1u << i);
+        }
+        d.lastDrawValid = false;
+    }
     gxm::FrameTime &frameTime = device.frameTime;
     const auto part = [&frameTime](gxm::FrameTime::DrawPart done) {
         if (frameTime.parting)
@@ -3333,6 +3560,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
                 }
             }
         }
+        pixelOptions.sharpSamplers = sharpSamplers;
         // The programs this combination last drew with (Pipeline), unless a
         // run diagnostic wants to see or change how they are found.
         PipelineKey pipelineKey;
@@ -3346,6 +3574,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             pipelineKey.decl = device.decl;
             std::memcpy(pipelineKey.strides, strides, sizeof(strides));
             pipelineKey.alphaFunc = uint8_t(uint8_t(pixelOptions.alphaFunc) | (pixelOptions.alphaZero ? 0x80 : 0));
+            pipelineKey.sharp = sharpSamplers;
             pipelineKey.index32 = index32;
             pipelineKey.hoist = d.readHoist;
             pipeline = &PipelineSlot(d, pipelineKey);
@@ -3375,8 +3604,9 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         // While either is being made the draw runs with the plain pair,
         // which is not kept in the table; it keeps the plain pair when one
         // of them cannot be had.
+        // Not for the one quad that reads through the sharpening filter.
         bool settled = true;
-        if (!known && d.readHoist && !test && !ps->hoist.Empty())
+        if (!known && d.readHoist && !test && !sharpSamplers && !ps->hoist.Empty())
         {
             if (gxm::cg::CanHoist(vs->parsed, ps->hoist))
             {
@@ -3402,6 +3632,18 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             vertex = GetVariant(device, *vsUsed, plan.options, waiting);
         if (!pixel)
             pixel = known ? pipeline->pixel : GetVariant(device, *ps, pixelOptions, waiting);
+        if (!pixel && sharpSamplers)
+        {
+            // The sharpening variant is still being made, or was refused:
+            // this draw is the frame's picture, so it is drawn plain
+            // meanwhile and not left out.
+            bool plainWaiting = false;
+            pixelOptions.sharpSamplers = sharpSamplers = 0;
+            pixel = GetVariant(device, *ps, pixelOptions, plainWaiting);
+            waiting = (vertex ? false : waiting) || plainWaiting;
+            // Not kept as this combination's programs.
+            pipeline = nullptr;
+        }
         if (!vertex || !pixel)
         {
             if (waiting)
@@ -3467,7 +3709,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
                 : GetFragmentProgram(device, *pixel, passThrough ? *standIn : *vertex, blended ? &blend : nullptr);
         if (!fragmentProgram)
             return;
-        if (plain && settled)
+        if (plain && pipeline && settled)
         {
             pipeline->key = pipelineKey;
             pipeline->vertex = vertex;
@@ -3679,7 +3921,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     // Not kept for a program that takes a texture's depth as a uniform
     // (BindTextures writes those).
     const uint32_t alphaRef = device.renderStates[d3d::RS_ALPHAREF] & 0xff;
-    const bool pixelKept = plain && d.fragmentUniformsLive && !pixel->depthUniforms &&
+    const bool pixelKept = plain && d.fragmentUniformsLive && !pixel->depthUniforms && !pixel->sharp &&
                            d.fragmentUniformsVersion == device.psConstantsVersion &&
                            (!pixel->alphaRef || d.fragmentAlphaRef == alphaRef);
     d.uniformWrites += pixel->uniforms;
@@ -3694,6 +3936,21 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
         {
             const float ref = float(alphaRef) / 255.0f;
             sceGxmSetUniformDataF(pixelUniforms, pixel->alphaRef, 0, 1, &ref);
+        }
+        if (pixel->sharp && pixel->sharpMax && sharpSamplers)
+        {
+            // One texel of the picture it reads, the filter's strength, and
+            // the far edge of the part that was drawn this frame.
+            const Texture *source = nullptr;
+            for (uint32_t i = 0; i < 16 && !source; ++i)
+                if (sharpSamplers >> i & 1)
+                    source = device.textures[i];
+            const float step[4] = {1.0f / float((std::max)(source->desc.width, 1u)),
+                                   1.0f / float((std::max)(source->desc.height, 1u)), kSharpenStrength, 0.0f};
+            const float most[4] = {gfx_gxm::g_filterReadS, gfx_gxm::g_filterReadT, 0.0f, 0.0f};
+            sceGxmSetUniformDataF(pixelUniforms, pixel->sharp, 0, 4, step);
+            sceGxmSetUniformDataF(pixelUniforms, pixel->sharpMax, 0, 4, most);
+            ++d.sharpenStretches;
         }
         d.fragmentUniformsLive = reserved >= 0 && pixelUniforms != nullptr;
         d.fragmentUniformsVersion = device.psConstantsVersion;
@@ -3810,7 +4067,13 @@ void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const
         skip();
         return;
     }
-    const FragmentProgramEntry *fragment = GetFragmentProgram(device, d.copyFragment, d.copyVertex, nullptr);
+    // The scaled 3D picture's stretch, sharpened when the engine asks.
+    const bool sharpen = linear && gfx_gxm::g_sharpenThisStretch && d.sharpenVertexProgram;
+    const FragmentProgramEntry *fragment =
+        sharpen ? GetFragmentProgram(device, d.sharpenFragment, d.sharpenVertex, nullptr) : nullptr;
+    const bool sharpening = fragment != nullptr;
+    if (!fragment)
+        fragment = GetFragmentProgram(device, d.copyFragment, d.copyVertex, nullptr);
     if (!fragment)
         return;
     const float w = float(d.sceneWidth), h = float(d.sceneHeight);
@@ -3843,15 +4106,19 @@ void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const
         state.stencilFail[side] = state.stencilDepthFail[side] = state.stencilPass[side] = SCE_GXM_STENCIL_OP_KEEP;
     }
     ApplyFixedState(device, state);
-    SetPrograms(device, d.copyVertexProgram, fragment->program);
+    SetPrograms(device, sharpening ? d.sharpenVertexProgram : d.copyVertexProgram, fragment->program);
 
     float *quad = static_cast<float *>(Transient(device, 16 * sizeof(float)));
     if (!quad)
         return;
     const float x0 = 2.0f * to.left / w - 1.0f, x1 = 2.0f * to.right / w - 1.0f;
     const float y0 = 1.0f - 2.0f * to.top / h, y1 = 1.0f - 2.0f * to.bottom / h;
-    const float u0 = float(from.left) / width, u1 = float(from.right) / width;
-    const float v0 = float(from.top) / height, v1 = float(from.bottom) / height;
+    // The sharpening program reads a texel beyond each place. Past the
+    // source's right and bottom edges lies what an earlier frame left, so
+    // the picture ends a texel and a half before them.
+    const float inset = sharpening ? 1.5f : 0.0f;
+    const float u0 = float(from.left) / width, u1 = (float(from.right) - inset) / width;
+    const float v0 = float(from.top) / height, v1 = (float(from.bottom) - inset) / height;
     const float corners[16] = {x0, y0, u0, v0, x1, y0, u1, v0, x0, y1, u0, v1, x1, y1, u1, v1};
     std::memcpy(quad, corners, sizeof(corners));
     const SceGxmTextureFilter filter = linear ? SCE_GXM_TEXTURE_FILTER_LINEAR : SCE_GXM_TEXTURE_FILTER_POINT;
@@ -3861,7 +4128,15 @@ void Copy(Device &device, Surface *src, const Rect *srcRect, Surface *dst, const
     sceGxmTextureSetUAddrMode(&view, SCE_GXM_TEXTURE_ADDR_CLAMP);
     sceGxmTextureSetVAddrMode(&view, SCE_GXM_TEXTURE_ADDR_CLAMP);
     SceGxmContext *context = Gxm();
-    sceGxmSetFragmentTexture(context, unsigned(d.copyUnit), &view);
+    if (sharpening)
+    {
+        const float step[4] = {1.0f / float(width), 1.0f / float(height), 0.0f, 0.0f};
+        void *uniforms = nullptr;
+        sceGxmReserveVertexDefaultUniformBuffer(context, &uniforms);
+        sceGxmSetUniformDataF(uniforms, d.sharpenStep, 0, 4, step);
+        ++d.sharpenStretches;
+    }
+    sceGxmSetFragmentTexture(context, unsigned(sharpening ? d.sharpenUnit : d.copyUnit), &view);
     d.unitBound = 0; // a unit's texture changed behind BindTextures
     sceGxmSetVertexStream(context, 0, quad);
     sceGxmDraw(context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, d.sequential, 4);

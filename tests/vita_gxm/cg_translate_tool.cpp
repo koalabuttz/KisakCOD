@@ -2,7 +2,7 @@
 // (src/gfx_gxm/shader/gxm_cg_translate.h), used by
 // scripts/tests/test_vita_cg_translate.py.
 //
-//   cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--far-plane-inside] [--diag-position N]
+//   cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--sharp MASK] [--far-plane-inside] [--diag-position N]
 //                     [--hoist | --hoist-from pixel.bin] shader.bin
 //
 // --hoist: a pixel shader's program with the texture reads PlanHoist finds
@@ -53,6 +53,8 @@ int main(int argc, char **argv)
         }
         else if (!std::strcmp(argv[i], "--alpha") && i + 1 < argc)
             options.alphaFunc = AlphaFunc(std::strtoul(argv[++i], nullptr, 0));
+        else if (!std::strcmp(argv[i], "--sharp") && i + 1 < argc)
+            options.sharpSamplers = uint16_t(std::strtoul(argv[++i], nullptr, 0));
         else if (!std::strcmp(argv[i], "--alpha-zero"))
             options.alphaZero = true;
         else if (!std::strcmp(argv[i], "--far-plane-inside"))
@@ -68,7 +70,7 @@ int main(int argc, char **argv)
     }
     if (!path)
     {
-        std::fprintf(stderr, "usage: cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--far-plane-inside] [--diag-position N] [--hoist | --hoist-from pixel.bin] shader.bin\n");
+        std::fprintf(stderr, "usage: cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--sharp MASK] [--far-plane-inside] [--diag-position N] [--hoist | --hoist-from pixel.bin] shader.bin\n");
         return 1;
     }
     std::ifstream file(path, std::ios::binary);

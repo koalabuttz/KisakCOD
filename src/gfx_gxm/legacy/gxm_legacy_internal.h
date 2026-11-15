@@ -242,6 +242,9 @@ struct Variant
     // What the draws write, found once by name.
     const SceGxmProgramParameter *constants = nullptr; // "c"
     const SceGxmProgramParameter *alphaRef = nullptr;  // "kisak_alpha_ref"
+    // "kisak_sharp" and "kisak_sharp_max": a variant that reads a scaled
+    // picture through the sharpening filter (cg::Options::sharpSamplers).
+    const SceGxmProgramParameter *sharp = nullptr, *sharpMax = nullptr;
     const SceGxmProgramParameter *depth[16] = {};      // "kisak_depth_s<n>"
     const SceGxmProgramParameter *inputs[16] = {};     // "in_v<n>"
     int8_t textureUnit[16];                            // sampler s<n>'s unit, -1 none
@@ -447,6 +450,12 @@ void FrameDone(Device &device);
 // After FrameDone: waits until the GPU has drawn the frame before last, so
 // that the CPU runs one frame ahead of it and no further.
 void PaceFrame(Device &device);
+// After PaceFrame: picks the size of the next frame's 3D picture from this
+// frame's time and its waits for the GPU (gxm_scale_governor.h).
+void ScaleFrame(Device &device);
+// The sizes picked since the last such line; nothing while the engine allows
+// one size only.
+void LogSceneScale(Device &device);
 // The waits for the whole GPU since the last such line, by cause.
 void LogWaitCauses(Device &device);
 // With the marker or live switch gpu-watch: how long the GPU worked on a
