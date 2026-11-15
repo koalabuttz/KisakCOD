@@ -1352,6 +1352,7 @@ static void R_ModernSendInputs(const GfxModernLitInputs *inputs)
                       && s_modernInputsSent.doubled == inputs->doubled
                       && s_modernInputsSent.colorInput == inputs->colorInput
                       && s_modernInputsSent.overWhite == inputs->overWhite
+                      && s_modernInputsSent.emissive == inputs->emissive
                       && s_modernInputsSent.shader == inputs->shader)
         return;
     s_modernInputsLit = inputs != nullptr;
@@ -1437,6 +1438,39 @@ static uint32_t R_ModernLitParts()
         return wanted;
     }();
     return parts;
+}
+
+// An unlit, light-giving surface: a lamp, a lantern, a neon or lit sign. On
+// the stock maps those are the materials whose technique set is mc_unlit*
+// (models) or wc_unlit* (world), which have no lit technique at all (night
+// lamps facts 1, 2026-11-15: mp_carentan 51 materials, mp_crash_snow 28).
+static bool R_ModernEmissiveMaterial(const Material *material)
+{
+    const char *set = material && material->techniqueSet ? material->techniqueSet->name : nullptr;
+    return set && (!strncmp(set, "mc_unlit", 8) || !strncmp(set, "wc_unlit", 8));
+}
+
+// KISAK_VK_MODERN_LIT_LOG=1 also prints each light-giving material drawn
+// (R_ModernEmissiveMaterial), once per material (at most 96): its technique
+// set and pixel shader.
+static void R_ModernLogEmissive(const char *name, const Material *material)
+{
+    static const bool on = [] {
+        const char *text = getenv("KISAK_VK_MODERN_LIT_LOG");
+        return text && *text && *text != '0';
+    }();
+    static const Material *logged[96];
+    static int loggedCount;
+    if (!on || loggedCount >= 96)
+        return;
+    for (int i = 0; i < loggedCount; ++i)
+    {
+        if (logged[i] == material)
+            return;
+    }
+    logged[loggedCount++] = material;
+    Com_Printf(CON_CHANNEL_GFX, "Modern emissive: %s (%s), pixel shader %s\n", material->info.name,
+               material->techniqueSet->name, name ? name : "?");
 }
 
 // KISAK_VK_MODERN_LIT_LOG=1 prints what each lit pixel shader reads, what is
@@ -2338,6 +2372,14 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass, uint
     const bool lit = name && (!strncmp(name, "lm_", 3) || !strncmp(name, "lp_", 3) || !strncmp(name, "l_", 2));
     if (!lit)
     {
+        if (R_ModernEmissiveMaterial(material))
+        {
+            GfxModernLitInputs inputs{};
+            inputs.emissive = true;
+            R_ModernLogEmissive(name, material);
+            R_ModernSendInputs(&inputs);
+            return;
+        }
         R_ModernSendInputs(nullptr);
         return;
     }

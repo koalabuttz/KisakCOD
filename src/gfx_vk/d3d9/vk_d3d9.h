@@ -383,6 +383,11 @@ struct ModernLitInputs
     // With overWhite: a Modern lit shader of ours to draw the pixel shader as
     // (legacy ModernLitShader; 0 for none), unless KISAK_VK_MODERN_SHADERS=0.
     uint16_t shader = 0;
+    // Instead of the above: an unlit, light-giving surface (a lamp, a lit
+    // sign). Nothing read is decoded; the stored colour is decoded as an
+    // ordinary draw's and its brightest parts made brighter than white
+    // (legacy SetLinearInputs' emissive), unless KISAK_VK_MODERN_EMISSIVE=0.
+    bool emissive = false;
 };
 void SetModernLitInputs(IDirect3DDevice9 *device, const ModernLitInputs *inputs);
 // One of the game's reflection probes, a cube texture of this device, as the
