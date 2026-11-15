@@ -160,19 +160,32 @@ the number of bots. It lists every map in the game folder (`zone/*/mp_*.ff`
 and `usermaps`); a map starts a match against KisakCOD's bots
 (`+set developer_script 1 +set bot_brain 1 +set scr_testclients <n> +set
 g_gametype war|dm +devmap <map>`), "Multiplayer" starts the multiplayer
-game's own menu and "Campaign" the singleplayer game's. "Visuals" picks
-the look of every start: Legacy (`+set r_visuals legacy`), Modern (`+set
-r_aaSamples 1 +set r_visuals modern`, docs/vulkan-modern.md) held to an even
-30 fps (`r_vsync 1`, `r_vsyncInterval 2`), or Modern Fast, which turns off
-ambient occlusion, screen-space reflections and contact shadows
-(`r_modernAo off`, `r_modernSsr off`, `r_modernContactShadows off`) and runs
-at the display's rate (Crash: 55 fps with only the first two off, GPU 17 ms). On the Retroid Pocket 6,
-Modern with everything on drew Crash in about 30 ms (33 fps); ambient
-occlusion cost about 6 ms and reflections about 5. The feature and pace
-settings go only with the first start after the choice changes, so what the
-game's settings menu changes later stays. The choice is kept with the bot
-count and mode. The sun's shadows stay off on Android (`sm_enable 0`), so the
-fog shows no light shafts there. The game runs in a
+game's own menu and "Campaign" the singleplayer game's. "Visuals" opens a
+page of its own (`VisualsActivity.java`) with a button for each setting of
+the look and a Preset button that sets them together: Legacy (`+set
+r_visuals legacy`, 60 fps), Modern (`+set r_aaSamples 1 +set r_visuals
+modern`, docs/vulkan-modern.md, every pass at the renderer's default and god
+rays on, held to an even 30 fps with `r_vsync 1`, `r_vsyncInterval 2`) or
+Modern Fast (Modern at 60 fps with ambient occlusion, screen-space
+reflections and contact shadows off). Changing any setting makes the preset
+Custom. The settings: the look; the frame rate (60 fps, 30 fps or no
+vsync); the sun's shadows (`sm_enable`, off by default, see below); ambient
+occlusion (default, on, half resolution or off); screen-space reflections,
+contact shadows, soft sun and lamp shadows, volumetric fog, fog lit by
+lamps, god rays, bloom and auto exposure (each default, on or off, the
+`r_modern*` switches); mirror (planar) reflections, live reflection probes,
+glowing lamps, muzzle-flash light and the water shader (each default, on or
+off, as `KISAK_VK_MODERN_*` variables in the start's env extra, since they
+have no dvar); and the tone map. Modern's settings show dimmed while the look
+is Legacy. On the Retroid Pocket 6, Modern with everything on drew Crash in
+about 30 ms (33 fps); ambient occlusion cost about 6 ms and reflections about
+5; Modern Fast runs at 60 fps (GPU frame about 15 ms). The look, the sun's
+shadows and the variables go with every start; the game's saved settings
+(frame rate, the `r_modern*` switches, the tone map) only when they changed
+since the last start, so what the game's settings menu changes later stays.
+The sun's shadows are off on Android unless the Visuals page turns them on
+(`KisakActivity` passes `sm_enable 0` first), so the fog shows no light
+shafts there by default. The game runs in a
 process of its own (`:game`), which ends with the game: the engine never
 starts twice in one process, and the first screen comes back when the game
 quits.

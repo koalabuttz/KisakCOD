@@ -41,14 +41,9 @@ import java.util.TreeMap;
  * ends with the game, so every match starts the engine afresh and this
  * screen comes back when the game quits.
  *
- * The Visuals button picks the look for every start: Legacy (the game as it
- * was made), Modern (r_visuals modern: anti-aliasing, linear light, ambient
- * occlusion, reflections, fog and the rest; docs/vulkan-modern.md) held to an
- * even 30 fps, or Modern Fast (Modern without ambient occlusion, screen-space
- * reflections and contact shadows, its dearest passes on a handheld GPU) at
- * the display's rate. The presets' feature and vsync settings go with the first
- * start after the choice changes, so a change made later in the game's own
- * settings menu stays.
+ * The Visuals button opens VisualsActivity, where the look every start
+ * gets is set: a preset (Legacy, Modern at an even 30 fps, Modern Fast at 60
+ * fps) or each setting on its own (docs/android.md).
  *
  * Controls: the d-pad or the left stick moves between buttons (Android turns
  * them into arrow keys), A presses, L1 and R1 change the number of bots.
@@ -77,9 +72,6 @@ public class LauncherActivity extends Activity {
 
     private int modeIndex;
     private int botIndex;
-    // The Visuals button's choices: Legacy, Modern, Modern Fast.
-    private static final String[] VISUALS = {"Legacy", "Modern", "Modern Fast"};
-    private int visualsIndex;
     private Button modeButton;
     private Button botButton;
     private Button visualsButton;
@@ -90,9 +82,6 @@ public class LauncherActivity extends Activity {
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         modeIndex = Math.max(0, Math.min(MODES.length - 1, prefs.getInt("mode", 0)));
         botIndex = Math.max(0, Math.min(BOT_COUNTS.length - 1, prefs.getInt("bots", 4)));
-        // "modern" is the switch before Modern Fast: Legacy or Modern.
-        visualsIndex = Math.max(0, Math.min(VISUALS.length - 1,
-                prefs.getInt("visuals", prefs.getBoolean("modern", false) ? 1 : 0)));
 
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
@@ -116,10 +105,7 @@ public class LauncherActivity extends Activity {
             botIndex = (botIndex + 1) % BOT_COUNTS.length;
             update();
         });
-        visualsButton = button("", v -> {
-            visualsIndex = (visualsIndex + 1) % VISUALS.length;
-            update();
-        });
+        visualsButton = button("", v -> startActivity(new Intent(this, VisualsActivity.class)));
         Button menu = button("Multiplayer", v -> start(null, false));
         Button campaign = button("Campaign", v -> start(null, true));
         settings.addView(modeButton, weighted(2));
@@ -172,7 +158,9 @@ public class LauncherActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        hideSystemBars();
+        hideSystemBars(this);
+        // Back from the Visuals page.
+        update();
     }
 
     @Override
@@ -208,39 +196,23 @@ public class LauncherActivity extends Activity {
 
     private void start(String args, boolean campaign) {
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-        // The preset last sent with a start, -1 for none yet.
-        boolean presetChanged = prefs.getInt("visualsSent", -1) != visualsIndex;
-        prefs.edit().putInt("mode", modeIndex).putInt("bots", botIndex).putInt("visuals", visualsIndex)
-                .putInt("visualsSent", visualsIndex).apply();
+        prefs.edit().putInt("mode", modeIndex).putInt("bots", botIndex).apply();
         Intent intent = new Intent(this, campaign ? CampaignActivity.class : KisakActivity.class);
-        String visuals = visualsArgs(visualsIndex, presetChanged);
+        String visuals = VisualsActivity.startArgs(prefs, true);
         intent.putExtra("args", args != null ? visuals + " " + args : visuals);
+        String env = VisualsActivity.startEnv(prefs);
+        if (!env.isEmpty()) {
+            intent.putExtra("env", env);
+        }
         startActivity(intent);
-    }
-
-    // r_visuals is saved in the game's config and read at start-up, so every
-    // start names the look, Legacy as well. Modern's anti-aliasing needs a
-    // one-sample back buffer (r_aaSamples 1). The rest is saved too, and is
-    // sent only when the preset changed: the passes the preset turns off or
-    // leaves to the game ("default"), and the pace. Modern holds 30 fps with
-    // vsync on every second refresh (r_vsyncInterval 2); the others run at
-    // the display's rate.
-    static String visualsArgs(int visuals, boolean presetChanged) {
-        if (visuals == 0)
-            return presetChanged ? "+set r_visuals legacy +set r_vsyncInterval 1" : "+set r_visuals legacy";
-        String args = "+set r_aaSamples 1 +set r_visuals modern";
-        if (!presetChanged)
-            return args;
-        if (visuals == 1)
-            return args + " +set r_modernAo default +set r_modernSsr default +set r_modernContactShadows default"
-                + " +set r_vsync 1 +set r_vsyncInterval 2";
-        return args + " +set r_modernAo off +set r_modernSsr off +set r_modernContactShadows off +set r_vsyncInterval 1";
     }
 
     private void update() {
         modeButton.setText("Mode: " + MODES[modeIndex][1]);
         botButton.setText("Bots: " + BOT_COUNTS[botIndex]);
-        visualsButton.setText("Visuals: " + VISUALS[visualsIndex]);
+        if (visualsButton != null) {
+            visualsButton.setText("Visuals: " + VisualsActivity.presetName(getSharedPreferences(PREFS, MODE_PRIVATE)));
+        }
     }
 
     // The maps in the game folder: zone/<language>/mp_*.ff (not the _load
@@ -283,7 +255,11 @@ public class LauncherActivity extends Activity {
     }
 
     private Button button(String text, View.OnClickListener onClick) {
-        Button button = new Button(this);
+        return styledButton(this, text, onClick);
+    }
+
+    static Button styledButton(Activity activity, String text, View.OnClickListener onClick) {
+        Button button = new Button(activity);
         button.setText(text);
         button.setAllCaps(false);
         button.setTextColor(Color.WHITE);
@@ -298,21 +274,22 @@ public class LauncherActivity extends Activity {
         button.setFocusable(true);
         button.setFocusableInTouchMode(false);
         StateListDrawable background = new StateListDrawable();
-        background.addState(new int[] {android.R.attr.state_pressed}, rounded(Color.rgb(230, 160, 40), 0));
-        background.addState(new int[] {android.R.attr.state_focused}, rounded(Color.rgb(70, 76, 82), Color.rgb(240, 180, 60)));
-        background.addState(new int[] {}, rounded(Color.rgb(48, 52, 56), 0));
+        background.addState(new int[] {android.R.attr.state_pressed}, rounded(activity, Color.rgb(230, 160, 40), 0));
+        background.addState(new int[] {android.R.attr.state_focused},
+                rounded(activity, Color.rgb(70, 76, 82), Color.rgb(240, 180, 60)));
+        background.addState(new int[] {}, rounded(activity, Color.rgb(48, 52, 56), 0));
         button.setBackground(background);
-        button.setPadding(dp(8), dp(8), dp(8), dp(8));
+        button.setPadding(dp(activity, 8), dp(activity, 8), dp(activity, 8), dp(activity, 8));
         button.setOnClickListener(onClick);
         return button;
     }
 
-    private GradientDrawable rounded(int fill, int border) {
+    private static GradientDrawable rounded(Activity activity, int fill, int border) {
         GradientDrawable shape = new GradientDrawable();
         shape.setColor(fill);
-        shape.setCornerRadius(dp(10));
+        shape.setCornerRadius(dp(activity, 10));
         if (border != 0) {
-            shape.setStroke(dp(4), border);
+            shape.setStroke(dp(activity, 4), border);
         }
         return shape;
     }
@@ -324,13 +301,17 @@ public class LauncherActivity extends Activity {
     }
 
     private int dp(int value) {
-        return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value,
-                getResources().getDisplayMetrics()));
+        return dp(this, value);
     }
 
-    private void hideSystemBars() {
-        getWindow().setBackgroundDrawable(new ColorDrawable(Color.rgb(18, 20, 22)));
-        WindowInsetsController controller = getWindow().getInsetsController();
+    static int dp(Activity activity, int value) {
+        return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value,
+                activity.getResources().getDisplayMetrics()));
+    }
+
+    static void hideSystemBars(Activity activity) {
+        activity.getWindow().setBackgroundDrawable(new ColorDrawable(Color.rgb(18, 20, 22)));
+        WindowInsetsController controller = activity.getWindow().getInsetsController();
         if (controller != null) {
             controller.hide(WindowInsets.Type.systemBars());
             controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
