@@ -532,6 +532,30 @@ Gains are Q15 and move toward their targets every 64 frames, so a volume or
 position change does not click. One lock guards all of it; the mixer holds it
 for one update.
 
+**Streamed sounds' lengths.** The engine wants a stream's length when it
+starts, and an MP3 without a Xing or Info tag does not say: the decoder reads
+the whole file to count its frames, on the main thread. The game's streams
+have no tag. Console run AY (2026-11-14, `Vita: long frame's calls`) caught
+it: a 3.5 MB stream in `iw_11.iwd` started every minute or two of a match on
+Crash, and each start held the main thread for about 0.75 s (0.42 s in 72
+file reads, the rest counting), which is a frozen picture. The OpenAL driver
+now keeps each file's count after its first play (`g_streamLengths` in
+`src/sound/snd_driver_openal.cpp`, on every platform; host test
+`scripts/tests/test_openal_stream_lengths.py`), so a stream is read through
+once in a start of the game. `snd_alDebug 1` prints a line each time a file
+is read through.
+
+Console run BB showed that was a third of it: the repeat stalls went from
+0.75 s to 0.48 s. The streams sit deflated in the `.iwd` files, where a seek
+reaches a place by inflating up to it, and the MP3 decoder, given a way to ask
+where it is in the file, looks for an ID3v1 or APE tag at the file's end when
+it opens it: the seek to the end read the whole file and the step back to the
+tag read it again. AY's 3.5 MB was one 1.2 MB file read three times. The
+driver now opens a stream without that callback, so the open reads the file's
+head only; a tag at the end of a file reaches the decoder as bytes that are no
+frame, which it skips. The same host test opens a made-up MP3 both ways and
+counts the bytes.
+
 **Loaded sounds in memory** (`snd_adpcm`). The OpenAL driver keeps every
 loaded sound as 16-bit PCM, and that is also how the fastfiles hold the sounds
 counted so far: all 702 the menu loads and the nine Crash adds came as 16-bit
