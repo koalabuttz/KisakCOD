@@ -315,6 +315,7 @@ jobs:
           python3 scripts/tests/test_vita_frame_time.py
           python3 scripts/tests/test_vita_gpu_progress.py
           python3 scripts/tests/test_vita_gpu_watch.py
+          python3 scripts/tests/test_vita_idle_alpha_test.py
           python3 scripts/tests/test_vita_prepass_governor.py
           python3 scripts/tests/test_vita_cg_translate.py --require-glslang
           # The static model cache's size arithmetic, at every size: the
@@ -362,15 +363,23 @@ jobs:
             echo "the client contains fused multiply-add instructions" >&2
             exit 1
           fi
-          # NEON float math has one place: the vector skinning path
-          # (src/gfx_d3d/r_model_skin_vec.cpp, namespace skin_vec), which
-          # only makes vertices to draw and is built for NEON on purpose.
+          # NEON float math has two places, both built for NEON on purpose:
+          # the vector skinning path (src/gfx_d3d/r_model_skin_vec.cpp,
+          # namespace skin_vec), which only makes vertices to draw, and the
+          # MP3 decoder (dr_mp3's functions in snd_driver_load_obj.cpp),
+          # which only makes sound.
           neon_outside="$(awk '/^[0-9a-f]+ <.*>:$/ { fn = $2 }
-            /\tv[a-z0-9]+\.f(32|64)\tq|\tv[a-z0-9]+\.f32\td/ { if (fn !~ /^<_ZN8skin_vec/) print fn }' \
+            /\tv[a-z0-9]+\.f(32|64)\tq|\tv[a-z0-9]+\.f32\td/ {
+              if (fn !~ /^<_ZN8skin_vec/ && fn !~ /^<(_ZL[0-9]+)?drmp3/) print fn }' \
             "$RUNNER_TEMP/vita-mp.dis" | sort -u)"
           if [ -n "$neon_outside" ]; then
             printf '%s\n' "$neon_outside" | head -20 >&2
-            echo "the client contains NEON float instructions outside the vector skinning path" >&2
+            echo "the client contains NEON float instructions outside the vector skinning path and the MP3 decoder" >&2
+            exit 1
+          fi
+          if ! awk '/^[0-9a-f]+ <.*>:$/ { fn = $2 } /\tv[a-z0-9]+\.f32\tq/ && fn ~ /^<(_ZL[0-9]+)?drmp3/ { found = 1 } END { exit !found }' \
+               "$RUNNER_TEMP/vita-mp.dis"; then
+            echo "the client's MP3 decoder is not built for NEON" >&2
             exit 1
           fi
           if ! grep -Eq $'^[0-9a-f]+ <_ZN8skin_vec8Weighted' "$RUNNER_TEMP/vita-mp.dis" ||

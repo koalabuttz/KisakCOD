@@ -457,6 +457,14 @@ namespace
         Check(shared.ns.load() == 4u * 100u * 4950u, "time from four threads all counts");
         Check(shared.maxNs.load() == 99u, "the longest call is the longest of all threads");
 
+        // A time for several calls at once (a run's draws).
+        SysPerfProbeSlot &draws = g_sysPerfProbes[SYS_PERF_PROBE_RENDER_TESS_DRAWS + 2];
+        const uint32_t drawsBefore = draws.calls.load();
+        const uint32_t drawsNsBefore = draws.ns.load();
+        Sys_PerfProbeAdd(SYS_PERF_PROBE_RENDER_TESS_DRAWS + 2, 700, 12);
+        Check(draws.calls.load() == drawsBefore + 12u, "a time for twelve calls counts twelve calls");
+        Check(draws.ns.load() == drawsNsBefore + 700u, "a time for twelve calls counts its time once");
+
         Sys_PerfProbeAdd(SYS_PERF_PROBE_SERVER_FRAME, 10000000000ull);
         Check(g_sysPerfProbes[SYS_PERF_PROBE_SERVER_FRAME].maxNs.load() == 0xFFFFFFFFu, "a call over 4 s is capped, not wrapped");
         g_sysPerfProbesOn.store(false);
