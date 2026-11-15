@@ -1113,6 +1113,62 @@ void R_InitScene()
     scene.maxDrawSurfCount[33] = 512;
 }
 
+// KISAK_TEST_LIGHT adds one fixed light to every frame's scene, the way an
+// effect adds a muzzle flash's, so that the extra light passes (l_) can be
+// compared between builds and visuals modes on a still view:
+// "omni x y z radius r g b" or "spot x y z dx dy dz radius r g b" (world
+// units, colour 0-1 or brighter). Once per frame, on the first scene drawn.
+static bool s_testLightAdded;
+
+static void R_AddTestLight()
+{
+    struct TestLight
+    {
+        int type; // 0 none, 1 omni, 2 spot
+        float origin[3], dir[3], radius, color[3];
+    };
+    static const TestLight light = [] {
+        TestLight parsed{};
+        const char *text = getenv("KISAK_TEST_LIGHT");
+        if (!text)
+            return parsed;
+        char kind[8] = {};
+        float v[10] = {};
+        const int count = sscanf(text, "%7s %f %f %f %f %f %f %f %f %f %f", kind, &v[0], &v[1], &v[2], &v[3], &v[4],
+                                 &v[5], &v[6], &v[7], &v[8], &v[9]);
+        if (!strcmp(kind, "omni") && count >= 8)
+        {
+            parsed.type = 1;
+            Vec3Copy(v, parsed.origin);
+            parsed.radius = v[3];
+            Vec3Copy(v + 4, parsed.color);
+        }
+        else if (!strcmp(kind, "spot") && count >= 11)
+        {
+            parsed.type = 2;
+            Vec3Copy(v, parsed.origin);
+            Vec3Copy(v + 3, parsed.dir);
+            Vec3Normalize(parsed.dir);
+            parsed.radius = v[6];
+            Vec3Copy(v + 7, parsed.color);
+        }
+        if (parsed.type)
+            Com_Printf(CON_CHANNEL_GFX, "KISAK_TEST_LIGHT: %s at (%g %g %g), radius %g, colour (%g %g %g)\n",
+                       kind, parsed.origin[0], parsed.origin[1], parsed.origin[2], parsed.radius, parsed.color[0],
+                       parsed.color[1], parsed.color[2]);
+        else
+            Com_Printf(CON_CHANNEL_GFX, "KISAK_TEST_LIGHT: could not read \"%s\"\n", text);
+        return parsed;
+    }();
+    if (!light.type || s_testLightAdded)
+        return;
+    s_testLightAdded = true;
+    if (light.type == 1)
+        R_AddOmniLightToScene(light.origin, light.radius, light.color[0], light.color[1], light.color[2]);
+    else
+        R_AddSpotLightToScene(light.origin, light.dir, light.radius, light.color[0], light.color[1], light.color[2]);
+}
+
 void R_ClearScene(uint32_t localClientNum)
 {
     uint32_t viewIndex; // [esp+0h] [ebp-4h]
@@ -1124,6 +1180,7 @@ void R_ClearScene(uint32_t localClientNum)
     Com_Memset(scene.sceneModel, 0, sizeof(GfxSceneModel) * scene.sceneModelCount);
     Com_Memset(scene.sceneBrush, 0, sizeof(GfxSceneBrush) * scene.sceneBrushCount);
     scene.addedLightCount = 0;
+    s_testLightAdded = false;
     memset((uint8_t *)scene.drawSurfCount, 0, sizeof(scene.drawSurfCount));
     for (viewIndex = 0; viewIndex < 7; ++viewIndex)
         Com_Memset((uint32_t *)scene.sceneModelVisData[viewIndex], 1, scene.sceneModelCount);
@@ -3122,6 +3179,7 @@ void R_RenderScene(const refdef_s *refdef)
         rg.viewDir[0] = refdef->viewaxis[0][0];
         rg.viewDir[1] = refdef->viewaxis[0][1];
         rg.viewDir[2] = refdef->viewaxis[0][2];
+        R_AddTestLight();
         viewParmsDraw = R_AllocViewParms();
         R_SetViewParmsForScene(refdef, viewParmsDraw);
         if (s_modernPlanarActive)

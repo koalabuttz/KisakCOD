@@ -940,7 +940,10 @@ facts 6 and 7, from the PC):
   on.
 - **As an extra light**, `l_<spot|omni>_...`, drawn additively after the
   lit passes (muzzle flashes, explosions). Those stay on the game's shader
-  for now.
+  for now. To look at one on a still view, `KISAK_TEST_LIGHT` adds a fixed
+  light to every frame, as an effect adds a muzzle flash's, in any renderer
+  or visuals mode: `omni x y z radius r g b` or
+  `spot x y z dx dy dz radius r g b`.
 
 Our shaders draw the first kind. `lm_sun.frag` and `lp_sun.frag` build them
 with `*_SUN_LIGHT=2` (spot) or `3` (omni): 24 builds each for the world and
