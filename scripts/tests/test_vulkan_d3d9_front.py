@@ -161,7 +161,9 @@ involved. The checks:
                  fourth frame's water, drawn by our water shader, reads it
                  the same way (dark with KISAK_VK_MODERN_WATER=0 too); the
                  full run takes none
-  probe-capture  --scene modern_probe_capture passes as it is and with
+  probe-capture  --scene modern_probe_capture passes as it is (wanted by
+                 default, nothing drawn), with
+                 KISAK_VK_MODERN_PROBES_CAPTURE=0 (not wanted), and with
                  KISAK_VK_MODERN_PROBES_CAPTURE=1 beside
                  KISAK_VK_MODERN_PROBES=0 or KISAK_VK_MODERN_LINEAR=0, where
                  nothing is captured, and with
@@ -604,6 +606,7 @@ def main():
     capture_line = re.compile(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) scenes read back in linear light to '
                               r'capture reflection probes \((\d+) faces taken\)$', re.M)
     for settings, taken in (({}, 0),
+                            ({'KISAK_VK_MODERN_PROBES_CAPTURE': '0'}, 0),
                             ({'KISAK_VK_MODERN_PROBES_CAPTURE': '1'}, 2),
                             ({'KISAK_VK_MODERN_PROBES_CAPTURE': '1', 'KISAK_VK_MODERN_PROBES': '0'}, 0),
                             ({'KISAK_VK_MODERN_PROBES_CAPTURE': '1', 'KISAK_VK_MODERN_LINEAR': '0'}, 0)):

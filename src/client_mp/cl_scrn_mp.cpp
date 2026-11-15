@@ -79,11 +79,22 @@ void SCR_UpdateScreen()
     }
 }
 
+// The loading screen, over each frame that draws a reflection probe again.
+static void SCR_DrawProbeCaptureScreen()
+{
+    Sys_LoadingKeepAlive();
+    SCR_DrawScreenField(0, 0);
+}
+
 void SCR_UpdateFrame()
 {
     int refreshedUI; // [esp+8h] [ebp-4h]
 
     iassert(Sys_IsMainThread() || Sys_IsRenderThread());
+    // The Modern path's own reflection probes, once a world, behind the
+    // loading screen: the game is loaded and waits for its first snapshot.
+    if (Sys_IsMainThread() && clientUIActives[0].connectionState == CA_PRIMED && clientUIActives[0].cgameInitialized)
+        R_ModernCaptureProbes(SCR_DrawProbeCaptureScreen);
 
     R_BeginFrame();
     SND_InitFXSounds();
@@ -102,10 +113,10 @@ void SCR_UpdateFrame()
     }
     if (r_reflectionProbeGenerate->current.enabled && refreshedUI && CL_GetLocalClientGlobals(0)->serverTime > 1000)
         R_BspGenerateReflections();
-    // The Modern path's own probes, once a world, after its first frames of
-    // play (as the game's generator above).
+    // Or after its first frames of play, if a world came without a loading
+    // screen (as the game's generator above).
     else if (refreshedUI && CL_GetLocalClientGlobals(0)->serverTime > 1000)
-        R_ModernCaptureProbes();
+        R_ModernCaptureProbes(nullptr);
 }
 
 int CL_CGameRendering(int localClientNum)
