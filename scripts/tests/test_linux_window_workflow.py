@@ -899,10 +899,13 @@ class CiTriggerTests(unittest.TestCase):
         'scripts/runs/vita3k/vita-run.ps1',
         'scripts/runs/vita3k/wsl/03-build.sh',
         'scripts/runs/pc_run.py',
+        'scripts/runs/android_run.py',
         'tests/runs/fake_game.cpp',
         'tests/runs/fake_pc_game.py',
+        'tests/runs/fake_adb.py',
         'scripts/tests/test_perf_run.py',
         'scripts/tests/test_pc_run.py',
+        'scripts/tests/test_android_run.py',
         'scripts/tests/test_vita3k_runner.py',
     )
 
@@ -925,7 +928,7 @@ class CiTriggerTests(unittest.TestCase):
         # whenever a wider change starts it.
         commands = '\n'.join(step.get('run', '') for job in scripts['jobs'].values() for step in job['steps'])
         native = '\n'.join(step.get('run', '') for step in self.linux['jobs']['native']['steps'])
-        for test in ('scripts/tests/test_perf_run.py', 'scripts/tests/test_pc_run.py',
+        for test in ('scripts/tests/test_perf_run.py', 'scripts/tests/test_pc_run.py', 'scripts/tests/test_android_run.py',
                      'scripts/tests/test_vita3k_runner.py'):
             with self.subTest(test=test):
                 self.assertIn(f'python3 {test}', commands)
@@ -996,6 +999,9 @@ class CiTriggerTests(unittest.TestCase):
         'src/linux/main.cpp',
         'scripts/platform/linux/CMakeLists.txt',
         'scripts/platform/android/android_toolchain.cmake',
+        'scripts/platform/android/build_apk.py',
+        'scripts/platform/android/app/src/main/AndroidManifest.xml',
+        'scripts/vulkan_probe/vulkan_backend.cmake',
         'scripts/tests/check_android_binary.py',
         'deps/some_library/source.c',
         '.github/workflows/build-kisakcod-android.yaml',
@@ -1021,6 +1027,9 @@ class CiTriggerTests(unittest.TestCase):
                     self.assertFalse(_selected(path, paths))
         steps = [step.get('run', '') for step in self.android['jobs']['android_dedicated']['steps']]
         self.assertTrue(any('check_android_binary.py "$binary"' in run for run in steps))
+        steps = [step.get('run', '') for step in self.android['jobs']['android_apk']['steps']]
+        self.assertTrue(any('scripts/platform/android/build_apk.py' in run for run in steps))
+        self.assertTrue(any('check_android_binary.py --library' in run for run in steps))
 
     def test_workflow_edits_start_the_contract_check_not_the_linux_build(self):
         # This file checks every workflow. workflow-contracts.yaml runs it on
@@ -1230,7 +1239,7 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
             'Build the Vulkan window probe', 'Run the Vulkan window probe on lavapipe',
             'Check the Legacy shader translator', 'Run the Legacy adapter check on lavapipe',
             'Run the D3D9 front check on lavapipe'], debug_only=[
-            "Run both checks again on MoltenVK's paths",
+            "Run both checks again on MoltenVK's and Adreno's paths",
             'Run the checks again with the record thread switched',
             'Run the checks again with the GPU feed off and at its extreme',
             'Run the checks again without occlusion counts',

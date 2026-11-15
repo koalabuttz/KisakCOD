@@ -139,6 +139,7 @@ struct CoreStats
     uint64_t framesPresented;
     uint64_t framesSkipped;   // window minimised or swapchain out of date
     uint32_t swapchainBuilds; // the first one included
+    uint32_t surfacesLost;    // surfaces the window took away (RenewSurface)
     uint32_t validationErrors;
     uint32_t validationWarnings;
     // Validation messages known not to apply (see OnDebugMessage in vk_core.cpp):
@@ -266,6 +267,13 @@ bool FrameGpuTime(const Core *core, uint64_t frame, FrameGpuTimes &out);
 // frame checks the surface and rebuilds the swapchain if the size differs.
 void NotifyResize(Core *core);
 
+// The window system took the surface away, as Android does when the app goes
+// to the background (VK_ERROR_SURFACE_LOST_KHR from a present, an acquire or a
+// size query says so to the core by itself). The next BeginFrame lets go of the
+// swapchain and the surface, asks the window for a new surface and builds a
+// swapchain on it; while the window has none, frames are skipped. For tests.
+void LoseSurface(Core *core);
+
 // The window is about to be destroyed: waits for the GPU, then destroys the
 // swapchain and the surface, which must go before their window does. Work
 // recorded in an open frame is submitted (not inside a pass). The device and
@@ -351,6 +359,11 @@ struct OptionalFeatures
     // MoltenVK on Intel and AMD Macs (and macOS VMs) lacks them. True forces
     // that on every device (KISAK_VK_RENDER_TARGETS=wide), for testing.
     bool forceWideRenderTargets;
+    // The Legacy adapter reads UBYTE4 vertex elements as R8G8B8A8_UNORM and
+    // scales them back in the vertex shader where the device cannot read
+    // R8G8B8A8_USCALED vertex data (Adreno). True forces that on every device
+    // (KISAK_VK_BYTE_INPUTS=unorm), for testing.
+    bool forceByteStandIn;
     // The Legacy adapter writes a new uniform descriptor set for every draw
     // instead of binding its pipeline's set again with dynamic offsets
     // (KISAK_VK_UNIFORMS=static), to compare the two or rule one out.
@@ -420,6 +433,8 @@ struct OptionalFeatures
 const OptionalFeatures &Features(const Core *core);
 // Whether images of this format with optimal tiling support these features.
 bool FormatSupports(const Core *core, VkFormat format, VkFormatFeatureFlags features);
+// True when the device reads the format as vertex data (its buffer features).
+bool VertexFormatSupported(const Core *core, VkFormat format);
 // The depth-stencil format for depth targets: D24S8 where it can be a depth
 // attachment and sampled, else D32_SFLOAT_S8_UINT.
 VkFormat DepthStencilFormat(const Core *core);
@@ -865,6 +880,10 @@ bool SavePipelineCache(Core *core);
 // wish): that mode is taken whenever it is offered, vsync or not. The core
 // passes KISAK_VK_PRESENT_MODE there, to compare the modes on one machine.
 VkPresentModeKHR ChoosePresentMode(const VkPresentModeKHR *offered, uint32_t count, bool vsync, const char *wanted);
+// The preTransform a swapchain asks for: the identity whenever the surface
+// supports it, so the compositor turns the picture for a rotated panel
+// (Android), else the surface's own transform.
+VkSurfaceTransformFlagBitsKHR ChoosePreTransform(const VkSurfaceCapabilitiesKHR &caps);
 const char *PresentModeName(VkPresentModeKHR mode);
 const char *FormatName(VkFormat format);
 const char *DeviceTypeName(VkPhysicalDeviceType type);

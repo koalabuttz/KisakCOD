@@ -33,8 +33,14 @@ elseif(KISAK_PLATFORM STREQUAL "android")
     # aarch64 track's rules apply (signed char, no fused multiply-add; set in
     # scripts/platform/linux/platform.cmake, since the NDK's toolchain file
     # replaces the *_FLAGS_INIT variables).
+    # x86_64 (ANDROID_ABI=x86_64) is for the Android emulator on a PC: it
+    # takes the x86_64 Linux track's code paths instead.
     include(${CMAKE_CURRENT_LIST_DIR}/scripts/platform/android/android_toolchain.cmake)
-    set(KISAK_LINUX_ARCH "aarch64" CACHE STRING "Native Linux architecture" FORCE)
+    if(ANDROID_ABI STREQUAL "x86_64")
+        set(KISAK_LINUX_ARCH "x86_64" CACHE STRING "Native Linux architecture" FORCE)
+    else()
+        set(KISAK_LINUX_ARCH "aarch64" CACHE STRING "Native Linux architecture" FORCE)
+    endif()
 elseif(KISAK_PLATFORM STREQUAL "macos")
     # One architecture per build directory: arm64 (Apple silicon) or x86_64
     # (Intel Macs), the host's unless CMAKE_OSX_ARCHITECTURES says otherwise.
@@ -147,6 +153,15 @@ option(KISAK_WIN64_CINEMATICS "64-bit Windows: play Bink movies through the FFmp
 # For profiling runs; player builds leave it off. Linux has KISAK_LINUX_TRACY
 # for its game clients and dedicated server.
 option(KISAK_WIN_TRACY "Windows: build the games with the Tracy profiler (idle until a profiler connects, localhost only). For profiling runs" OFF)
+
+# Opt-in, every platform: compile in the render thread's phase marks, which
+# the console command perf_phases counts (docs/perf-ab.md). A mark is a byte
+# written and a count added many thousands of times a frame, so player builds
+# leave it off; Debug builds have it without this option.
+option(KISAK_PERF_PHASES "Compile in the render thread's phase marks for the perf_phases command. For measuring runs" OFF)
+if (KISAK_PERF_PHASES)
+    add_compile_definitions(KISAK_PERF_PHASES=1)
+endif()
 
 # Set to ON to build the sound system against OpenAL instead of Miles/MSS.
 # When OFF (default), the original Miles Sound System (MSS/AIL) backend is used.

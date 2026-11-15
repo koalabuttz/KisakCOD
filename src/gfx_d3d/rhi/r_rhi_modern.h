@@ -15,6 +15,55 @@
 
 struct IDirect3DDevice9;
 struct IDirect3DCubeTexture9;
+struct IDirect3DTexture9;
+
+// A view's fog as the game's shaders apply it, and the sun that lights it,
+// for the Modern path's volumetric fog (docs/vulkan-modern.md, "Volumetric
+// fog"): with it the back end lights the map's own fog where the sun reaches
+// it.
+// A spot light that lights the fog: one of the view's shadowed spot lights,
+// as the lit shaders read it (r_draw_shadowable_light.cpp).
+struct GfxModernFogSpot
+{
+    float origin[3];       // world units
+    float radius;          // its reach, world units
+    float dir[3];          // from a lit point towards the light along the cone's axis, unit length
+    float exponent;        // the cone's falloff power (0: none)
+    float cosHalfFovOuter; // the cone's edge
+    float cosHalfFovInner; // the cone's full-strength part (more than the edge)
+    float fade;            // how far its shadow map counts (0 none, 1 all); the rest is lit
+    float color[3];        // the light's diffuse colour, display values (may pass 1)
+    // World (row vector, p * M) to the shadow map, projective: xy / w the
+    // texture coordinates of its tile, z / w the depth (lit where it is at
+    // most the stored depth).
+    float shadowLookup[4][4];
+    bool inSunMap;         // its tile is in shadowMap (the sun's), else in spotShadowMap
+};
+
+struct GfxModernFog
+{
+    bool on;               // the map's fog is drawn (r_fog) and has a density
+    float color[3];        // the fog's colour, display values 0 to 1
+    float density;         // what reaches the eye through d units is 2^(-density (d - start)), at most 1
+    float start;           // world units
+    float origin[3];       // the camera, world units
+    float sunDirection[3]; // towards the sun, world space, unit length
+    // The sun's shadow is drawn for the view: the lookup below is set.
+    bool sunShadowed;
+    // The sun's shadow map: when the sun's shadow is in it, or a spot
+    // light's (they share it while the sun has none). Else null.
+    IDirect3DTexture9 *shadowMap;
+    // World (row vector, p * M) to the near partition's texture coordinates
+    // (xy), depth (z, lit where it is at most the stored depth) and partition
+    // value (w: the near partition to 1, then the far one).
+    float shadowLookup[4][4];
+    float switchPartition[4]; // the far partition's xy: near xy * w + this xy
+    float shadowmapScale[2];  // the far partition's edge fade (lit shaders' c4)
+    // The spot lights' own shadow map, when a spot light's tile is in it.
+    IDirect3DTexture9 *spotShadowMap;
+    int spotCount;
+    GfxModernFogSpot spots[4];
+};
 
 struct GfxModernScene
 {
@@ -31,6 +80,7 @@ struct GfxModernScene
     // Set by sceneDone when the back end drew bloom in place of the glow:
     // the renderer then leaves its own glow out of this view.
     bool glowDrawn;
+    GfxModernFog fog;
 };
 
 // A planar reflection view (r_modern_planar): the scene seen in a mirror
@@ -102,6 +152,17 @@ enum GfxModernLitShader : uint16_t
     // by Fresnel over a constant colour, the sun's glint; water shader facts,
     // PC water run 1), alone: no family, map or mode bit with it.
     GFX_MODERN_LIT_SHADER_WATER = 0x400,
+    // Variations of the lp_ shaders (skin and flag shader facts): the
+    // reflection probe's light times 0.3 (skin_'s s0: character skin), and the sun
+    // lighting both faces (flag_ with the sun).
+    GFX_MODERN_LIT_SHADER_SKIN_PROBE = 0x800,
+    GFX_MODERN_LIT_SHADER_TWO_SIDED_SUN = 0x1000,
+    // With no family, SPOT or OMNI: the extra per-light pass
+    // l_<spot|omni>[_flag|_skin][_hsm]_<mode>c0[d0][n0] that effects' lights
+    // (muzzle flashes, explosions) add over the lit scene (light pass facts
+    // 1), with SHADOW (a spot's hsm), NORMAL, DETAIL and the mode; with
+    // TWO_SIDED_SUN, flag_'s light on both faces. The back end's shader adds
+    // it as physical light, in linear light.
 };
 
 struct GfxModernHooks

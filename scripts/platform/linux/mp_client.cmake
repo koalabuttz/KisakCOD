@@ -449,12 +449,22 @@ foreach(path ${ODE} ${ZLIB})
     endif()
 endforeach()
 
-add_executable(KisakCOD-mp
+set(kisak_mp_client_objects
     ${mp_client_c_sources}
     $<TARGET_OBJECTS:KisakCOD-mp-native>
     $<TARGET_OBJECTS:KisakCOD-mp-standin>
     $<TARGET_OBJECTS:KisakCOD-mp-own>
     $<$<BOOL:${KISAK_LINUX_CINEMATICS}>:$<TARGET_OBJECTS:KisakCOD-mp-cinematic>>)
+if(KISAK_PLATFORM STREQUAL "android")
+    # An Android app's code is a shared library its Java activity loads: SDL3's
+    # activity loads libSDL3.so, then libmain.so, and calls SDL_main (the
+    # game's main, renamed by SDL_main.h in src/linux/main.cpp). See
+    # docs/android.md.
+    add_library(KisakCOD-mp SHARED ${kisak_mp_client_objects})
+    set_target_properties(KisakCOD-mp PROPERTIES OUTPUT_NAME main)
+else()
+    add_executable(KisakCOD-mp ${kisak_mp_client_objects})
+endif()
 target_include_directories(KisakCOD-mp PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
 target_compile_options(KisakCOD-mp PRIVATE ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing ${KISAK_LINUX_HARDENING_OPTIONS})
 if(APPLE)
@@ -463,6 +473,13 @@ if(APPLE)
     # loaded later cannot pick up the game's zlib or g_log by name (the ELF
     # problem mp_client_exports.map solves).
     target_link_options(KisakCOD-mp PRIVATE -Wl,-dead_strip ${KISAK_LINUX_HARDENING_LINK_OPTIONS})
+elseif(KISAK_PLATFORM STREQUAL "android")
+    target_link_options(KisakCOD-mp PRIVATE -Wl,--gc-sections ${KISAK_LINUX_HARDENING_LINK_OPTIONS}
+        "-Wl,--version-script=${SCRIPTS_DIR}/platform/android/main_exports.map")
+    set_property(TARGET KisakCOD-mp APPEND PROPERTY LINK_DEPENDS "${SCRIPTS_DIR}/platform/android/main_exports.map")
+    # The console goes to logcat (src/linux/main.cpp); the Vulkan host takes
+    # the activity's window from its Surface (vulkan_backend.cpp).
+    target_link_libraries(KisakCOD-mp PRIVATE log android)
 else()
     target_link_options(KisakCOD-mp PRIVATE -Wl,--gc-sections ${KISAK_LINUX_HARDENING_LINK_OPTIONS}
         "-Wl,--version-script=${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")

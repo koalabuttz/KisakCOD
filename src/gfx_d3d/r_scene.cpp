@@ -1114,6 +1114,62 @@ void R_InitScene()
     scene.maxDrawSurfCount[33] = 512;
 }
 
+// KISAK_TEST_LIGHT adds one fixed light to every frame's scene, the way an
+// effect adds a muzzle flash's, so that the extra light passes (l_) can be
+// compared between builds and visuals modes on a still view:
+// "omni x y z radius r g b" or "spot x y z dx dy dz radius r g b" (world
+// units, colour 0-1 or brighter). Once per frame, on the first scene drawn.
+static bool s_testLightAdded;
+
+static void R_AddTestLight()
+{
+    struct TestLight
+    {
+        int type; // 0 none, 1 omni, 2 spot
+        float origin[3], dir[3], radius, color[3];
+    };
+    static const TestLight light = [] {
+        TestLight parsed{};
+        const char *text = getenv("KISAK_TEST_LIGHT");
+        if (!text)
+            return parsed;
+        char kind[8] = {};
+        float v[10] = {};
+        const int count = sscanf(text, "%7s %f %f %f %f %f %f %f %f %f %f", kind, &v[0], &v[1], &v[2], &v[3], &v[4],
+                                 &v[5], &v[6], &v[7], &v[8], &v[9]);
+        if (!strcmp(kind, "omni") && count >= 8)
+        {
+            parsed.type = 1;
+            Vec3Copy(v, parsed.origin);
+            parsed.radius = v[3];
+            Vec3Copy(v + 4, parsed.color);
+        }
+        else if (!strcmp(kind, "spot") && count >= 11)
+        {
+            parsed.type = 2;
+            Vec3Copy(v, parsed.origin);
+            Vec3Copy(v + 3, parsed.dir);
+            Vec3Normalize(parsed.dir);
+            parsed.radius = v[6];
+            Vec3Copy(v + 7, parsed.color);
+        }
+        if (parsed.type)
+            Com_Printf(CON_CHANNEL_GFX, "KISAK_TEST_LIGHT: %s at (%g %g %g), radius %g, colour (%g %g %g)\n",
+                       kind, parsed.origin[0], parsed.origin[1], parsed.origin[2], parsed.radius, parsed.color[0],
+                       parsed.color[1], parsed.color[2]);
+        else
+            Com_Printf(CON_CHANNEL_GFX, "KISAK_TEST_LIGHT: could not read \"%s\"\n", text);
+        return parsed;
+    }();
+    if (!light.type || s_testLightAdded)
+        return;
+    s_testLightAdded = true;
+    if (light.type == 1)
+        R_AddOmniLightToScene(light.origin, light.radius, light.color[0], light.color[1], light.color[2]);
+    else
+        R_AddSpotLightToScene(light.origin, light.dir, light.radius, light.color[0], light.color[1], light.color[2]);
+}
+
 void R_ClearScene(uint32_t localClientNum)
 {
     uint32_t viewIndex; // [esp+0h] [ebp-4h]
@@ -1125,6 +1181,7 @@ void R_ClearScene(uint32_t localClientNum)
     Com_Memset(scene.sceneModel, 0, sizeof(GfxSceneModel) * scene.sceneModelCount);
     Com_Memset(scene.sceneBrush, 0, sizeof(GfxSceneBrush) * scene.sceneBrushCount);
     scene.addedLightCount = 0;
+    s_testLightAdded = false;
     memset((uint8_t *)scene.drawSurfCount, 0, sizeof(scene.drawSurfCount));
     for (viewIndex = 0; viewIndex < 7; ++viewIndex)
         Com_Memset((uint32_t *)scene.sceneModelVisData[viewIndex], 1, scene.sceneModelCount);
@@ -1384,9 +1441,10 @@ static uint32_t R_ModernLitParts()
 
 // KISAK_VK_MODERN_LIT_LOG=1 prints what each lit pixel shader reads, what is
 // decoded and which Modern lit shader of ours it is drawn as (0 for none),
-// once per shader name (at most 96 names).
+// once per shader name (at most 96 names): with the pass's first state word
+// (blend factors and op, alpha test) and the values of its literal constants.
 static void R_ModernLogPassInputs(const char *name, const MaterialPass *pass, const Material *material,
-                                  const GfxModernLitInputs &inputs)
+                                  const GfxModernLitInputs &inputs, uint32_t stateBits0)
 {
     static const bool on = [] {
         const char *text = getenv("KISAK_VK_MODERN_LIT_LOG");
@@ -1402,7 +1460,7 @@ static void R_ModernLogPassInputs(const char *name, const MaterialPass *pass, co
             return;
     }
     logged[loggedCount++] = name;
-    char args[512];
+    char args[768];
     size_t used = 0;
     args[0] = 0;
     const uint32_t argCount = pass->perPrimArgCount + pass->perObjArgCount + pass->stableArgCount;
@@ -1434,7 +1492,12 @@ static void R_ModernLogPassInputs(const char *name, const MaterialPass *pass, co
             wrote = snprintf(args + used, sizeof(args) - used, " c%u=mat", arg.dest);
             break;
         case MTL_ARG_LITERAL_PIXEL_CONST:
-            wrote = snprintf(args + used, sizeof(args) - used, " c%u=lit", arg.dest);
+            if (arg.u.literalConst)
+                wrote = snprintf(args + used, sizeof(args) - used, " c%u=lit(%g %g %g %g)", arg.dest,
+                                 arg.u.literalConst[0], arg.u.literalConst[1], arg.u.literalConst[2],
+                                 arg.u.literalConst[3]);
+            else
+                wrote = snprintf(args + used, sizeof(args) - used, " c%u=lit", arg.dest);
             break;
         default:
             break;
@@ -1444,9 +1507,9 @@ static void R_ModernLogPassInputs(const char *name, const MaterialPass *pass, co
     }
     Com_Printf(CON_CHANNEL_GFX,
                "Modern lit inputs: %s: decode samplers 0x%04x (doubled 0x%04x), constants 0x%08x%08x, vertex %d; "
-               "custom samplers 0x%x; our shader 0x%03x;%s\n",
+               "custom samplers 0x%x; our shader 0x%03x; state 0x%08x;%s\n",
                name, inputs.samplers, inputs.doubled, (uint32_t)(inputs.constants >> 32), (uint32_t)inputs.constants,
-               inputs.colorInput ? 1 : 0, pass->customSamplerFlags, inputs.shader, args);
+               inputs.colorInput ? 1 : 0, pass->customSamplerFlags, inputs.shader, stateBits0, args);
 }
 
 // Takes word off the front of *name (of *length characters) if it is there.
@@ -1464,12 +1527,13 @@ static bool R_ModernTakeWord(const char **name, size_t *length, const char *word
 // can be drawn as, before its arguments are checked:
 // lm_[hsm_]sun_<r0|b0|t0>c0[d0][n0][s0]_sm3, or lm_[hsm_]sun_r0c0_sm2; and for
 // models lp_[hsm_][i_]sun_<r0|b0|t0>c0[d0][n0][s0]_sm3 (i_, instanced, shares
-// the pixel shader; skin_ and flag_ have shaders of their own that model-lit
-// shader facts did not read, sm_ compares in the shader). Without the sun
+// the pixel shader; sm_ compares in the shader). Character skin (bare hands and
+// forearms) is lp_[hsm_][i_]skin_sun_<r0c0|r0c0n0|r0c0s0|r0c0n0s0> and cloth
+// (flags, banners) lp_[hsm_]flag_[sun_]<t0c0>[n0][s0] (skin and flag shader
+// facts, and the materials facts). Without the sun
 // (interiors, lit shader facts 5): lm_<r0|b0|t0>c0[d0][n0][s0]_sm3 and
 // lp_[i_]<r0|b0|t0>c0[d0][n0][s0]_sm3 (their shader model 2 builds read the
-// lightmap's UV elsewhere; lp_skin_ s0 has a shader of its own, and flag_,
-// the same shader as lp_t0, is left with skin_ for now). A spot or omni light
+// lightmap's UV elsewhere). A spot or omni light
 // as the primary light (lit shader facts 6 and 7): lm_[hsm_]<spot|omni>_...
 // and lp_[hsm_][i_]<spot|omni>_..., shader model 3 only, and with the light's
 // shadow map not with a detail map (facts 7 did not read those).
@@ -1488,6 +1552,7 @@ static uint16_t R_ModernLitShaderFromName(const char *name)
     if (length > 5 && !strcmp(name + length - 5, ".hlsl"))
         length -= 5;
     uint16_t shader;
+    bool skin = false, flag = false;
     if (R_ModernTakeWord(&name, &length, "lm_"))
     {
         const bool shadow = R_ModernTakeWord(&name, &length, "hsm_");
@@ -1504,8 +1569,15 @@ static uint16_t R_ModernLitShaderFromName(const char *name)
     else if (R_ModernTakeWord(&name, &length, "lp_"))
     {
         const bool shadow = R_ModernTakeWord(&name, &length, "hsm_");
-        R_ModernTakeWord(&name, &length, "i_");
-        if (!shadow && R_ModernTakeWord(&name, &length, "amb_"))
+        // flag_ (cloth) never with i_; skin_ (character skin) after it.
+        // Both are checked against the surface below.
+        flag = R_ModernTakeWord(&name, &length, "flag_");
+        if (!flag)
+        {
+            R_ModernTakeWord(&name, &length, "i_");
+            skin = R_ModernTakeWord(&name, &length, "skin_");
+        }
+        if (!shadow && !skin && !flag && R_ModernTakeWord(&name, &length, "amb_"))
         {
             // lp_[i_]amb[_sun|_spot|_omni]_t0c0: one program whatever the
             // light (lit shader facts 6).
@@ -1543,6 +1615,29 @@ static uint16_t R_ModernLitShaderFromName(const char *name)
     const bool pointLight = (shader & GFX_MODERN_LIT_SHADER_LIGHT) != 0;
     if (pointLight && (shader & GFX_MODERN_LIT_SHADER_SHADOW) && (shader & GFX_MODERN_LIT_SHADER_DETAIL))
         return GFX_MODERN_LIT_SHADER_NONE;
+    // Skin and flag shader facts: skin_ is the plain model's shader for the
+    // sun's r0c0 and r0c0n0, and with s0 the plain one with the reflection
+    // probe's light times 0.3; it has no other surfaces, and without the sun
+    // or with a spot or omni light it was not read. flag_ is the plain t0
+    // shader with the sun lighting both faces, and without a light the plain
+    // one itself; with a spot or omni light it was not read.
+    const uint16_t family = shader & GFX_MODERN_LIT_SHADER_FAMILY;
+    if (skin)
+    {
+        if (family != GFX_MODERN_LIT_SHADER_LP_SUN || pointLight
+            || (shader & (GFX_MODERN_LIT_SHADER_DETAIL | GFX_MODERN_LIT_SHADER_BLENDED
+                          | GFX_MODERN_LIT_SHADER_ALPHA_TESTED)))
+            return GFX_MODERN_LIT_SHADER_NONE;
+        if (shader & GFX_MODERN_LIT_SHADER_SPECULAR)
+            shader |= GFX_MODERN_LIT_SHADER_SKIN_PROBE;
+    }
+    if (flag)
+    {
+        if (pointLight || (shader & GFX_MODERN_LIT_SHADER_DETAIL) || !(shader & GFX_MODERN_LIT_SHADER_ALPHA_TESTED))
+            return GFX_MODERN_LIT_SHADER_NONE;
+        if (family == GFX_MODERN_LIT_SHADER_LP_SUN)
+            shader |= GFX_MODERN_LIT_SHADER_TWO_SIDED_SUN;
+    }
     // The shader model 2 builds are known only without maps or a mode (world-lit
     // shader facts 1 and 2); facts 3 read the shader model 3 ones.
     const uint16_t sm3Only = GFX_MODERN_LIT_SHADER_NORMAL | GFX_MODERN_LIT_SHADER_SPECULAR
@@ -1589,8 +1684,155 @@ static bool R_ModernMaterialConstIs(const Material *material, uint32_t nameHash,
 // and, in place of the sun's constants, its own from c5 (models c6) as
 // ModernLitSpot in vk_legacy.h lists them. Anything else keeps the game's
 // shader.
+// The extra per-light pass l_<spot|omni>[_flag|_skin][_hsm]_<mode>c0[d0][n0]
+// that effects' lights (muzzle flashes, explosions) add over the lit scene
+// (lit shader facts 6, light pass facts 1), as our light pass shader draws
+// it: the colour map at s0, from s4 the spot light's shadow map (hsm), the
+// normal map (n0), the attenuation (code sampler 15) and the detail map
+// (d0); the fog colour, a literal, at c0; lightPosition and lightDiffuse at
+// c5 and c6, a spot's spotDir and spotFactors at c7 and c8, the shadow map's
+// spotShadowmapPixelAdjust at c9, then detailScale. Each once and nothing
+// else; skin_ is the plain shader and flag_ (alpha-tested only) lights both
+// faces. sm_ (compared in the shader), the shadow map with a detail map and
+// anything else keep the game's shader.
+static uint16_t R_ModernLightPassShader(const char *name, const Material *material, const MaterialPass *pass)
+{
+    size_t length = strlen(name);
+    if (length > 5 && !strcmp(name + length - 5, ".hlsl"))
+        length -= 5;
+    if (!R_ModernTakeWord(&name, &length, "l_"))
+        return GFX_MODERN_LIT_SHADER_NONE;
+    uint16_t shader;
+    if (R_ModernTakeWord(&name, &length, "spot"))
+        shader = GFX_MODERN_LIT_SHADER_SPOT;
+    else if (R_ModernTakeWord(&name, &length, "omni"))
+        shader = GFX_MODERN_LIT_SHADER_OMNI;
+    else
+        return GFX_MODERN_LIT_SHADER_NONE;
+    const bool spot = shader == GFX_MODERN_LIT_SHADER_SPOT;
+    const bool flag = R_ModernTakeWord(&name, &length, "_flag");
+    if (!flag)
+        R_ModernTakeWord(&name, &length, "_skin");
+    if (R_ModernTakeWord(&name, &length, "_hsm"))
+        shader |= GFX_MODERN_LIT_SHADER_SHADOW;
+    if (!R_ModernTakeWord(&name, &length, "_"))
+        return GFX_MODERN_LIT_SHADER_NONE;
+    if (R_ModernTakeWord(&name, &length, "b0"))
+        shader |= GFX_MODERN_LIT_SHADER_BLENDED;
+    else if (R_ModernTakeWord(&name, &length, "t0"))
+        shader |= GFX_MODERN_LIT_SHADER_ALPHA_TESTED;
+    else if (!R_ModernTakeWord(&name, &length, "r0"))
+        return GFX_MODERN_LIT_SHADER_NONE;
+    if (!R_ModernTakeWord(&name, &length, "c0"))
+        return GFX_MODERN_LIT_SHADER_NONE;
+    if (R_ModernTakeWord(&name, &length, "d0"))
+        shader |= GFX_MODERN_LIT_SHADER_DETAIL;
+    if (R_ModernTakeWord(&name, &length, "n0"))
+        shader |= GFX_MODERN_LIT_SHADER_NORMAL;
+    if (length != 0)
+        return GFX_MODERN_LIT_SHADER_NONE;
+    const bool shadow = (shader & GFX_MODERN_LIT_SHADER_SHADOW) != 0;
+    const bool normal = (shader & GFX_MODERN_LIT_SHADER_NORMAL) != 0;
+    const bool detail = (shader & GFX_MODERN_LIT_SHADER_DETAIL) != 0;
+    if ((shadow && (!spot || detail)) || pass->customSamplerFlags)
+        return GFX_MODERN_LIT_SHADER_NONE;
+    if (flag)
+    {
+        if (!(shader & GFX_MODERN_LIT_SHADER_ALPHA_TESTED))
+            return GFX_MODERN_LIT_SHADER_NONE;
+        shader |= GFX_MODERN_LIT_SHADER_TWO_SIDED_SUN;
+    }
+    const uint32_t normalDest = 4u + (shadow ? 1u : 0u);
+    const uint32_t attenuationDest = normalDest + (normal ? 1u : 0u);
+    const uint32_t detailDest = attenuationDest + 1u;
+    const uint32_t detailScaleDest = 7u + (spot ? 2u : 0u) + (shadow ? 1u : 0u);
+    enum : uint32_t
+    {
+        COLOR_MAP = 1u << 0,
+        FOG_COLOR = 1u << 1,
+        SHADOW_MAP = 1u << 2,
+        NORMAL_MAP = 1u << 3,
+        ATTENUATION = 1u << 4,
+        DETAIL_MAP = 1u << 5,
+        LIGHT_POSITION = 1u << 6,
+        LIGHT_DIFFUSE = 1u << 7,
+        SPOT_DIR = 1u << 8,
+        SPOT_FACTORS = 1u << 9,
+        PIXEL_ADJUST = 1u << 10,
+        DETAIL_SCALE = 1u << 11,
+    };
+    const uint32_t wanted = COLOR_MAP | FOG_COLOR | ATTENUATION | LIGHT_POSITION | LIGHT_DIFFUSE
+        | (shadow ? SHADOW_MAP | PIXEL_ADJUST : 0u) | (normal ? NORMAL_MAP : 0u)
+        | (detail ? DETAIL_MAP | DETAIL_SCALE : 0u) | (spot ? SPOT_DIR | SPOT_FACTORS : 0u);
+    static const uint32_t detailMapHash = R_HashString("detailMap");
+    uint32_t found = 0;
+    const uint32_t argCount = pass->perPrimArgCount + pass->perObjArgCount + pass->stableArgCount;
+    for (uint32_t i = 0; i < argCount; ++i)
+    {
+        const MaterialShaderArgument &arg = pass->args[i];
+        uint32_t what = 0;
+        switch (arg.type)
+        {
+        case MTL_ARG_MATERIAL_PIXEL_SAMPLER:
+            for (uint32_t t = 0; t < material->textureCount; ++t)
+            {
+                const MaterialTextureDef &def = material->textureTable[t];
+                if (def.nameHash != arg.u.nameHash)
+                    continue;
+                if (def.semantic == TS_COLOR_MAP && arg.dest == 0)
+                    what = COLOR_MAP;
+                else if (def.semantic == TS_NORMAL_MAP && arg.dest == normalDest)
+                    what = NORMAL_MAP;
+                else if (def.nameHash == detailMapHash && arg.dest == detailDest)
+                    what = DETAIL_MAP;
+                break;
+            }
+            break;
+        case MTL_ARG_CODE_PIXEL_SAMPLER:
+            if (arg.u.codeSampler == TEXTURE_SRC_CODE_SHADOWMAP_SPOT && arg.dest == 4)
+                what = SHADOW_MAP;
+            else if (arg.u.codeSampler == TEXTURE_SRC_CODE_LIGHT_ATTENUATION && arg.dest == attenuationDest)
+                what = ATTENUATION;
+            break;
+        case MTL_ARG_CODE_PIXEL_CONST:
+            if (arg.u.codeConst.rowCount != 1)
+                break;
+            if (arg.u.codeConst.index == CONST_SRC_CODE_FOG_COLOR && arg.dest == 0)
+                what = FOG_COLOR;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_LIGHT_POSITION && arg.dest == 5)
+                what = LIGHT_POSITION;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_LIGHT_DIFFUSE && arg.dest == 6)
+                what = LIGHT_DIFFUSE;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_LIGHT_SPOTDIR && arg.dest == 7)
+                what = SPOT_DIR;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_LIGHT_SPOTFACTORS && arg.dest == 8)
+                what = SPOT_FACTORS;
+            else if (arg.u.codeConst.index == CONST_SRC_CODE_SPOT_SHADOWMAP_PIXEL_ADJUST && arg.dest == 9)
+                what = PIXEL_ADJUST;
+            break;
+        case MTL_ARG_MATERIAL_PIXEL_CONST:
+            if (arg.dest == detailScaleDest && R_ModernMaterialConstIs(material, arg.u.nameHash, "detailScale"))
+                what = DETAIL_SCALE;
+            break;
+        case MTL_ARG_LITERAL_PIXEL_CONST:
+            // The game's l_ materials bind the fog colour (black) as a literal.
+            if (arg.dest == 0)
+                what = FOG_COLOR;
+            break;
+        default:
+            continue; // vertex arguments
+        }
+        if (!what || (found & what) || !(wanted & what))
+            return GFX_MODERN_LIT_SHADER_NONE;
+        found |= what;
+    }
+    return found == wanted ? shader : GFX_MODERN_LIT_SHADER_NONE;
+}
+
 static uint16_t R_ModernLitShader(const char *name, const Material *material, const MaterialPass *pass)
 {
+    if (!strncmp(name, "l_", 2))
+        return R_ModernLightPassShader(name, material, pass);
     const uint16_t shader = R_ModernLitShaderFromName(name);
     if (shader == GFX_MODERN_LIT_SHADER_NONE)
         return GFX_MODERN_LIT_SHADER_NONE;
@@ -2073,7 +2315,7 @@ static void R_ModernLogWaterPass(const Material *material, const MaterialPass *p
     }
 }
 
-void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
+void R_ModernPassInputs(const Material *material, const MaterialPass *pass, uint32_t stateBits0)
 {
     R_ModernLogWaterPass(material, pass);
     if (!s_modernLitPasses || !pass || !material)
@@ -2089,7 +2331,7 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
         GfxModernLitInputs inputs{};
         inputs.overWhite = true;
         inputs.shader = GFX_MODERN_LIT_SHADER_WATER;
-        R_ModernLogPassInputs(name, pass, material, inputs);
+        R_ModernLogPassInputs(name, pass, material, inputs, stateBits0);
         R_ModernSendInputs(&inputs);
         return;
     }
@@ -2115,7 +2357,7 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
         GfxModernLitInputs inputs{};
         inputs.overWhite = true;
         inputs.shader = R_ModernLitShader(name, material, pass);
-        R_ModernLogPassInputs(name, pass, material, inputs);
+        R_ModernLogPassInputs(name, pass, material, inputs, stateBits0);
         R_ModernSendInputs(&inputs);
         return;
     }
@@ -2201,8 +2443,83 @@ void R_ModernPassInputs(const Material *material, const MaterialPass *pass)
         inputs.samplers |= (uint16_t)(1u << 3);
     if ((pass->customSamplerFlags & 1) && (parts & MODERN_LIT_PROBE))
         inputs.samplers |= (uint16_t)(1u << 1);
-    R_ModernLogPassInputs(name, pass, material, inputs);
+    R_ModernLogPassInputs(name, pass, material, inputs, stateBits0);
     R_ModernSendInputs(&inputs);
+}
+
+// The view's fog and the sun's shadow map (GfxModernFog), as the game's
+// shaders get them: the fog from R_SetFrameFog's settings, the shadow map
+// when RB_StandardDrawCommands draws it for the view.
+static void R_ModernSceneFog(const GfxViewInfo *viewInfo, GfxModernFog &fog)
+{
+    const GfxBackEndData *data = backEndData;
+    if (!data || !r_fog->current.enabled || data->fogSettings.density <= 0.0f)
+        return;
+    fog.on = true;
+    float color[4];
+    Byte4UnpackBgra((const uint8_t *)&data->fogSettings.color, color);
+    fog.color[0] = color[0];
+    fog.color[1] = color[1];
+    fog.color[2] = color[2];
+    fog.density = data->fogSettings.density;
+    fog.start = data->fogSettings.fogStart;
+    const GfxViewParms &parms = viewInfo->viewParms;
+    fog.origin[0] = parms.origin[0];
+    fog.origin[1] = parms.origin[1];
+    fog.origin[2] = parms.origin[2];
+    fog.sunDirection[0] = data->sunLight.dir[0];
+    fog.sunDirection[1] = data->sunLight.dir[1];
+    fog.sunDirection[2] = data->sunLight.dir[2];
+    const GfxImage *sunImage = gfxRenderTargets[R_RENDERTARGET_SHADOWMAP_SUN].image;
+    const GfxImage *spotImage = gfxRenderTargets[R_RENDERTARGET_SHADOWMAP_SPOT].image;
+    if (viewInfo->dynamicShadowType == SHADOW_MAP && rgp.world && sunImage && sunImage->texture.map
+        && Com_BitCheckAssert(data->shadowableLightHasShadowMap, rgp.world->sunPrimaryLightIndex, 32))
+    {
+        fog.sunShadowed = true;
+        fog.shadowMap = sunImage->texture.map;
+        memcpy(fog.shadowLookup, viewInfo->sunShadow.lookupMatrix.m, sizeof(fog.shadowLookup));
+        memcpy(fog.switchPartition, viewInfo->sunShadow.sunProj.switchPartition, sizeof(fog.switchPartition));
+        fog.shadowmapScale[0] = viewInfo->sunShadow.sunProj.shadowmapScale[0];
+        fog.shadowmapScale[1] = viewInfo->sunShadow.sunProj.shadowmapScale[1];
+    }
+    // The shadowed spot lights, as R_SetDrawSurfsShadowableLight lights
+    // surfaces with them: those whose shadow map is drawn this frame.
+    if (viewInfo->dynamicShadowType != SHADOW_MAP)
+        return;
+    const uint32_t spotShadowCount = viewInfo->spotShadowCount < 4 ? viewInfo->spotShadowCount : 4;
+    for (uint32_t i = 0; i < spotShadowCount; ++i)
+    {
+        const GfxSpotShadow &spotShadow = viewInfo->spotShadows[i];
+        const GfxLight *light = spotShadow.light;
+        if (!light || light->radius <= 0.0f || light->cosHalfFovInner <= light->cosHalfFovOuter
+            || light->cosHalfFovOuter <= 0.0f
+            || !Com_BitCheckAssert(data->shadowableLightHasShadowMap, spotShadow.shadowableLightIndex, 32))
+            continue;
+        const GfxImage *image = spotShadow.image;
+        if (!image || !image->texture.map || (image != sunImage && image != spotImage))
+            continue;
+        GfxModernFogSpot &spot = fog.spots[fog.spotCount++];
+        spot.origin[0] = light->origin[0];
+        spot.origin[1] = light->origin[1];
+        spot.origin[2] = light->origin[2];
+        spot.radius = light->radius;
+        spot.dir[0] = light->dir[0];
+        spot.dir[1] = light->dir[1];
+        spot.dir[2] = light->dir[2];
+        spot.exponent = static_cast<float>(light->exponent);
+        spot.cosHalfFovOuter = light->cosHalfFovOuter;
+        spot.cosHalfFovInner = light->cosHalfFovInner;
+        spot.fade = spotShadow.fade;
+        spot.color[0] = light->color[0] * r_diffuseColorScale->current.value;
+        spot.color[1] = light->color[1] * r_diffuseColorScale->current.value;
+        spot.color[2] = light->color[2] * r_diffuseColorScale->current.value;
+        memcpy(spot.shadowLookup, spotShadow.lookupMatrix.m, sizeof(spot.shadowLookup));
+        spot.inSunMap = image == sunImage;
+        if (spot.inSunMap)
+            fog.shadowMap = image->texture.map;
+        else
+            fog.spotShadowMap = image->texture.map;
+    }
 }
 
 static GfxModernScene &R_ModernScene(const GfxViewInfo *viewInfo)
@@ -2248,6 +2565,7 @@ static GfxModernScene &R_ModernScene(const GfxViewInfo *viewInfo)
         modern.glowCutoff = viewInfo->glow.bloomCutoff;
         modern.glowDesaturation = viewInfo->glow.bloomDesaturation;
     }
+    R_ModernSceneFog(viewInfo, modern.fog);
     return modern;
 }
 
@@ -3016,6 +3334,7 @@ void R_RenderScene(const refdef_s *refdef)
         rg.viewDir[0] = refdef->viewaxis[0][0];
         rg.viewDir[1] = refdef->viewaxis[0][1];
         rg.viewDir[2] = refdef->viewaxis[0][2];
+        R_AddTestLight();
         viewParmsDraw = R_AllocViewParms();
         R_SetViewParmsForScene(refdef, viewParmsDraw);
         if (s_modernPlanarActive)

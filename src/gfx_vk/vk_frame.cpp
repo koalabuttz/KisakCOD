@@ -798,7 +798,28 @@ FrameResult BeginFrame(Core *core_)
         ++core.stats.framesSkipped;
         return FrameResult::Skipped;
     }
+    if (core.surfaceLost)
+    {
+        // The window took the surface away (Android: the app went to the
+        // background, or the screen locked). Work recorded so far goes first;
+        // frames are skipped until the window has a surface again.
+        if (!SubmitRecording(core, false))
+            return FrameResult::Failed;
+        if (!RenewSurface(core))
+        {
+            if (core.failed)
+                return FrameResult::Failed;
+            ++core.stats.framesSkipped;
+            return FrameResult::Skipped;
+        }
+    }
 
+    // A swapchain the compositor turns (Android) hears of no resize: Android
+    // scales a picture of the old size without a word (the Retroid Pocket 6,
+    // run 5, kept 1920x970 after the window went full screen). Every 32nd
+    // frame compares the sizes.
+    if (core.transformLeftToCompositor && (++core.turnedFrames & 31u) == 0)
+        core.resizePending = true;
     if (core.resizePending && !core.rebuildPending)
     {
         // A size event: rebuild only when the size really changed (or the
@@ -861,15 +882,23 @@ Image *AcquireImage(Core &core)
         result = core.vk.vkAcquireNextImageKHR(core.dev, core.swapchain, UINT64_MAX, CurrentSlot(core).acquired,
                                                VK_NULL_HANDLE, &core.imageIndex);
     }
-    if (result == VK_ERROR_OUT_OF_DATE_KHR)
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_ERROR_SURFACE_LOST_KHR)
     {
-        // Nothing was signalled. This frame shows nothing; rebuild next time.
+        // Nothing was signalled. This frame shows nothing; rebuild next time
+        // (on a new surface if the window took this one away).
         core.rebuildPending = true;
+        if (result == VK_ERROR_SURFACE_LOST_KHR)
+            core.surfaceLost = true;
         core.imageMissing = true;
         return nullptr;
     }
     if (result == VK_SUBOPTIMAL_KHR)
-        core.rebuildPending = true; // still usable: draw this one, rebuild after
+    {
+        // Still usable: draw this one, rebuild after (unless the compositor
+        // turning the picture is all it means; BeginFrame watches the size).
+        if (!core.transformLeftToCompositor)
+            core.rebuildPending = true;
+    }
     else if (!Check(core, result, "vkAcquireNextImageKHR"))
         return nullptr;
     core.imageAcquired = true;
@@ -925,6 +954,7 @@ FrameResult Present(Core *core_)
     const VkSwapchainKHR swapchain = core.swapchain;
     const VkSemaphore renderDone = core.renderDone[core.imageIndex];
     const uint32_t imageIndex = core.imageIndex;
+    const bool turnedByCompositor = core.transformLeftToCompositor;
     if (!RecordControl(core, [=](RecordState &state) {
             VkPresentInfoKHR present{};
             present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -935,9 +965,13 @@ FrameResult Present(Core *core_)
             present.pImageIndices = &imageIndex;
             const VkResult result = state.vk->vkQueuePresentKHR(state.queue, &present);
             ++state.presents;
-            if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+            // VK_SUBOPTIMAL_KHR is expected for a swapchain the compositor turns.
+            const bool expected = result == VK_SUBOPTIMAL_KHR && turnedByCompositor;
+            if (result == VK_ERROR_SURFACE_LOST_KHR)
+                state.surfaceLost = true; // the window went (Android, sent to the background)
+            else if (!expected && (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR))
                 state.rebuild = true;
-            else
+            else if (!expected)
                 RecordCheck(state, result, "vkQueuePresentKHR");
         }))
         return FrameResult::Failed;

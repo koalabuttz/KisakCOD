@@ -700,6 +700,7 @@ bool CreateDevice(Core &core)
                                    || (portability && !EnvEquals("KISAK_VK_INDEX_MEMORY", "shared"));
     core.optional.fixedDepthCompare = portability || !EnvEquals("KISAK_VK_DEPTH_COMPARE", "dynamic");
     core.optional.forceWideRenderTargets = EnvEquals("KISAK_VK_RENDER_TARGETS", "wide");
+    core.optional.forceByteStandIn = EnvEquals("KISAK_VK_BYTE_INPUTS", "unorm");
     core.optional.staticUniforms = EnvEquals("KISAK_VK_UNIFORMS", "static");
     core.optional.fenceFlush = !EnvEquals("KISAK_VK_FENCE_FLUSH", "0");
     core.optional.passClears = !EnvEquals("KISAK_VK_PASS_CLEARS", "0");
@@ -883,10 +884,37 @@ VkPresentModeKHR ChoosePresentMode(const VkPresentModeKHR *offered, uint32_t cou
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
+// The picture is drawn upright for the extent the surface reports, so the
+// swapchain asks for no rotation whenever the surface allows it, and the
+// compositor turns the picture for the panel. On desktops the surface's own
+// transform is the identity anyway. On Android a panel whose own orientation
+// is portrait reports a quarter turn while the game runs in landscape, and
+// handing that transform over unchanged told the compositor the landscape
+// picture was already turned: it came out squeezed into portrait (first app
+// run on the Retroid Pocket 6, 2026-11-15). Drawing the picture turned
+// instead (Android's "pre-rotation") saves the compositor that work and is
+// left for later.
+VkSurfaceTransformFlagBitsKHR ChoosePreTransform(const VkSurfaceCapabilitiesKHR &caps)
+{
+    if (caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+        return VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    return caps.currentTransform;
+}
+
 bool SurfaceExtent(Core &core, VkSurfaceCapabilitiesKHR &caps, VkExtent2D &extent)
 {
-    if (!Check(core, core.vk.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(core.physical, core.surface, &caps),
-               "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"))
+    // A lost surface has no size: frames skip as if minimised, and the next
+    // BeginFrame asks the window for a new surface.
+    const VkResult result =
+        core.surfaceLost ? VK_ERROR_SURFACE_LOST_KHR
+                         : core.vk.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(core.physical, core.surface, &caps);
+    if (result == VK_ERROR_SURFACE_LOST_KHR)
+    {
+        core.surfaceLost = true;
+        extent = {0, 0};
+        return true;
+    }
+    if (!Check(core, result, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"))
         return false;
     extent = caps.currentExtent;
     if (extent.width == UINT32_MAX)
@@ -976,7 +1004,7 @@ BuildResult BuildSwapchain(Core &core)
     info.imageArrayLayers = 1;
     info.imageUsage = usage;
     info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    info.preTransform = caps.currentTransform;
+    info.preTransform = ChoosePreTransform(caps);
     info.compositeAlpha = alpha;
     info.presentMode = mode;
     info.clipped = VK_TRUE;
@@ -987,6 +1015,12 @@ BuildResult BuildSwapchain(Core &core)
     if (core.swapchain)
         vk.vkDestroySwapchainKHR(core.dev, core.swapchain, nullptr);
     core.swapchain = swapchain;
+    if (created == VK_ERROR_SURFACE_LOST_KHR || created == VK_ERROR_NATIVE_WINDOW_IN_USE_KHR)
+    {
+        // The window went between the size query and here: wait for a new one.
+        core.surfaceLost = true;
+        return BuildResult::Minimised;
+    }
     if (!Check(core, created, "vkCreateSwapchainKHR"))
         return BuildResult::Failed;
 
@@ -1031,10 +1065,50 @@ BuildResult BuildSwapchain(Core &core)
                      static_cast<uint32_t>(core.swapImages.size()), canCapture};
     core.rebuildPending = false;
     core.resizePending = false;
+    core.transformLeftToCompositor = info.preTransform != caps.currentTransform;
     ++core.stats.swapchainBuilds;
-    Log(core, "swapchain %ux%u %s %s, %u images%s", extent.width, extent.height, FormatName(format.format),
-        PresentModeName(mode), core.swapInfo.imageCount, canCapture ? ", capturable" : "");
+    Log(core, "swapchain %ux%u %s %s, %u images%s%s", extent.width, extent.height, FormatName(format.format),
+        PresentModeName(mode), core.swapInfo.imageCount, canCapture ? ", capturable" : "",
+        core.transformLeftToCompositor ? ", turned by the compositor" : "");
     return BuildResult::Built;
+}
+
+bool RenewSurface(Core &core)
+{
+    Dispatch &vk = core.vk;
+    if (core.surface)
+    {
+        // The old swapchain and surface go first (Android allows one swapchain
+        // per window, and the old window is gone anyway).
+        Log(core, "surface lost: frames are skipped until the window has a new one");
+        if (!DrainRecorder(core) || !Check(core, vk.vkDeviceWaitIdle(core.dev), "vkDeviceWaitIdle"))
+            return false;
+        DestroySwapchainResources(core);
+        if (core.swapchain)
+            vk.vkDestroySwapchainKHR(core.dev, core.swapchain, nullptr);
+        core.swapchain = VK_NULL_HANDLE;
+        vk.vkDestroySurfaceKHR(core.instance, core.surface, nullptr);
+        core.surface = VK_NULL_HANDLE;
+        ++core.stats.surfacesLost;
+    }
+    // False, quietly, while the window has nothing to draw on (Android between
+    // the app's return and its new window).
+    if (!core.window.createSurface(core.window.user, core.instance, &core.surface) || !core.surface)
+    {
+        core.surface = VK_NULL_HANDLE;
+        return false;
+    }
+    VkBool32 present = VK_FALSE;
+    if (!Check(core, vk.vkGetPhysicalDeviceSurfaceSupportKHR(core.physical, core.queueFamily, core.surface, &present),
+               "vkGetPhysicalDeviceSurfaceSupportKHR"))
+        return false;
+    if (!present)
+        return Fail(core, "the window's new surface cannot be shown from queue family %u", core.queueFamily);
+    core.surfaceLost = false;
+    core.rebuildPending = true;
+    core.resizePending = false;
+    Log(core, "surface renewed: the swapchain is rebuilt on it");
+    return true;
 }
 
 // ---- Public API ---------------------------------------------------------------------------
@@ -1187,6 +1261,11 @@ bool FrameGpuTime(const Core *core, uint64_t frame, FrameGpuTimes &out)
     return true;
 }
 void NotifyResize(Core *core) { core->resizePending = true; }
+void LoseSurface(Core *core)
+{
+    if (!core->windowDetached)
+        core->surfaceLost = true;
+}
 
 const Dispatch &Functions(const Core *core) { return core->vk; }
 VkDevice DeviceHandle(const Core *core) { return core->dev; }
@@ -1208,6 +1287,13 @@ bool FormatSupports(const Core *core, VkFormat format, VkFormatFeatureFlags feat
     VkFormatProperties props{};
     core->vk.vkGetPhysicalDeviceFormatProperties(core->physical, format, &props);
     return (props.optimalTilingFeatures & features) == features;
+}
+
+bool VertexFormatSupported(const Core *core, VkFormat format)
+{
+    VkFormatProperties props{};
+    core->vk.vkGetPhysicalDeviceFormatProperties(core->physical, format, &props);
+    return (props.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT) != 0;
 }
 
 const char *PresentModeName(VkPresentModeKHR mode)

@@ -1,0 +1,11 @@
+/* libmain.so, the Android build of KisakCOD-mp, exports only SDL_main:
+ * SDL3's activity looks it up by name and calls it (SDL_main.h renames the
+ * game's main in src/linux/main.cpp). Every other name stays local, for the
+ * reason scripts/platform/linux/mp_client_exports.map gives.
+ */
+{
+  global:
+    SDL_main;
+  local:
+    *;
+};

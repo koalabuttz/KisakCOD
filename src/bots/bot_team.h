@@ -188,6 +188,29 @@ private:
     int m_next = 0;
 };
 
+// Sorts objective places nearest `from` first (across), for the commander:
+// a team takes the flags on its side of the map first, as players do, rather
+// than meeting the other team at every flag at once.
+inline void SortNearestFirst(float (*places)[3], int count, const float *from)
+{
+    for (int i = 1; i < count; ++i)
+    {
+        float place[3] = {places[i][0], places[i][1], places[i][2]};
+        const float distance = std::hypot(place[0] - from[0], place[1] - from[1]);
+        int j = i;
+        while (j > 0 && std::hypot(places[j - 1][0] - from[0], places[j - 1][1] - from[1]) > distance)
+        {
+            places[j][0] = places[j - 1][0];
+            places[j][1] = places[j - 1][1];
+            places[j][2] = places[j - 1][2];
+            --j;
+        }
+        places[j][0] = place[0];
+        places[j][1] = place[1];
+        places[j][2] = place[2];
+    }
+}
+
 // The commander: roles for a team's `count` bots (in a fixed order, with
 // their personalities), given how many objectives the compass shows to take
 // and to hold. The boldest attack and push, the most patient defend and

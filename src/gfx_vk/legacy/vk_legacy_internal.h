@@ -177,6 +177,10 @@ struct Shader
     // vertex shader they are linked to, the depth samplers where those are
     // fixed, and the alpha test's compare where that is).
     std::unordered_map<LinkedKey, VkShaderModule, LinkedKeyHash> linked;
+    // Vertex shaders on a device that cannot read UBYTE4 elements as they are
+    // (Device::byteStandIn): modules built for the attribute locations fed
+    // such an element (ByteInputs), by that location mask.
+    std::vector<std::pair<uint32_t, VkShaderModule>> byteModules;
     // 64-bit FNV-1a of the bytecode, by 8-byte words (ContentHash): names the
     // shader in the pipeline list, across launches.
     uint64_t contentHash = 0;
@@ -351,6 +355,8 @@ struct PixelModuleRecipe
     // moduleKey.inputs.shader names a Modern lit shader of ours: these are
     // its strengths (Device::modernSunStrength, modernSkyStrength).
     float sunStrength = 1.0f, skyStrength = 1.0f;
+    // An extra light pass's strength (Device::modernLightPass).
+    float lightPass = 1.0f;
     // Set by BuildPixelSpirv when it built that shader (not the pixel
     // shader as it is), for KeepPixelModule's counts.
     mutable bool modernBuilt = false;
@@ -468,6 +474,10 @@ struct Device
     DeviceStats stats{};
     uint32_t nextId = 1;
     VkFormat depthFormat = VK_FORMAT_UNDEFINED; // the core's depth-stencil format
+    // The device reads no R8G8B8A8_USCALED vertex data (Adreno): UBYTE4
+    // elements are fed as R8G8B8A8_UNORM and the vertex shaders reading them
+    // scale them back (Shader::byteModules, legacy_shader::BuildSpirv).
+    bool byteStandIn = false;
     float depthBiasScale = 1.0f;                 // D3DRS_DEPTHBIAS to Vulkan's constant factor
     uint32_t uniformAlignment = 16;
     bool dynamicUniforms = true; // !OptionalFeatures::staticUniforms
@@ -624,6 +634,9 @@ struct Device
     // modernReflectionsSampler) and in their push constants.
     Image *modernPlanar = nullptr;
     ModernPlanarParams modernPlanarParams{};
+    // SetModernLightPass: the strength of the extra light passes of ours
+    // built from now on.
+    float modernLightPass = 1.0f;
     // Bumped whenever SetModernPlanar changes the parameters; the parameters
     // were last pushed for pushedPlanarGeneration in the bound layout (0:
     // not since the layout or the command buffer changed).
@@ -780,6 +793,8 @@ bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Sh
 // and its strengths, depth reference clamp, mode and whether it runs the
 // alpha test set. False, with nothing built, when vs does not write one of
 // them as the shader reads it. vk_legacy_modern_lit.cpp; safe on any thread.
+// For an extra light pass (ModernLitLightPass) sunStrength is its strength
+// (Device::modernLightPass) and skyStrength is unused.
 bool BuildModernLitSpirv(uint16_t shader, const ls::Shader &vs, float sunStrength, float skyStrength,
                          bool clampDepthReference, bool alphaTest, std::vector<uint32_t> &spirv);
 // Gives the shader a module built from recipe to keep; false (and the module
@@ -787,8 +802,15 @@ bool BuildModernLitSpirv(uint16_t shader, const ls::Shader &vs, float sunStrengt
 bool KeepPixelModule(Device &device, Shader &ps, const PixelModuleRecipe &recipe, VkShaderModule module);
 // Fills info for a pipeline of key. Reads only its arguments: safe on any
 // thread while they live.
-void MakePipelineInfo(PipelineInfo &info, const PipelineKey &key, const Shader &vs, VkShaderModule fragment,
-                      const VertexDecl &decl, const Layout &layout, bool dynamicStride);
+// vertex is vs's module for decl (VertexModule); byteStandIn is the
+// device's Device::byteStandIn.
+void MakePipelineInfo(PipelineInfo &info, const PipelineKey &key, const Shader &vs, VkShaderModule vertex,
+                      VkShaderModule fragment, const VertexDecl &decl, const Layout &layout, bool dynamicStride,
+                      bool byteStandIn);
+// The vertex shader's module for drawing with decl: its own, or one built
+// for the UBYTE4 elements decl feeds it (Device::byteStandIn). Device thread
+// only. VK_NULL_HANDLE when that build fails (Device::error says why).
+VkShaderModule VertexModule(Device &device, Shader &vs, const VertexDecl &decl);
 // Adds a built pipeline to Device::pipelines (it must not be there yet).
 Pipeline *AddPipeline(Device &device, const PipelineKey &key, VkPipeline handle, Layout *layout,
                       uint32_t bindings, const Shader &vs, const Shader &ps, const VertexDecl &decl);

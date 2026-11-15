@@ -10,6 +10,7 @@
 #include "r_water.h"
 #include "r_scene.h"
 #include "r_image.h"
+#include <linux/sys_perf.h>
 
 
 int R_ReserveIndexData(GfxCmdBufPrimState *state, int triCount)
@@ -40,6 +41,7 @@ int R_ReserveIndexData(GfxCmdBufPrimState *state, int triCount)
 
 int R_SetIndexData(GfxCmdBufPrimState *state, uint8_t *indices, int triCount)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_INDEX_FILL);
     int baseIndex; // [esp+60h] [ebp-18h]
     int indexDataSize; // [esp+64h] [ebp-14h]
     uint32_t lockFlags; // [esp+68h] [ebp-10h]
@@ -77,6 +79,7 @@ int R_SetIndexData(GfxCmdBufPrimState *state, uint8_t *indices, int triCount)
 
 void R_SetupPassPerPrimArgs(GfxCmdBufContext context)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_PRIM_ARGS);
     const MaterialPass *pass; // [esp+0h] [ebp-4h]
 
     pass = context.state->pass;
@@ -178,6 +181,7 @@ char R_IsShaderConstantUpToDate(
 
 void R_SetupPassPerObjectArgs(GfxCmdBufContext context)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_OBJECT_ARGS);
     const MaterialPass *pass; // [esp+0h] [ebp-4h]
 
     pass = context.state->pass;
@@ -234,6 +238,7 @@ void R_SetPixelShaderConstantFromCode(GfxCmdBufContext context, const MaterialSh
 
 void R_SetupPassCriticalPixelShaderArgs(GfxCmdBufContext context)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_CRITICAL_ARGS);
     const MaterialPass *pass; // [esp+0h] [ebp-4h]
 
     pass = context.state->pass;
@@ -246,6 +251,7 @@ void R_SetupPassCriticalPixelShaderArgs(GfxCmdBufContext context)
 
 void R_SetupPassVertexShaderArgs(GfxCmdBufContext context)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_CRITICAL_ARGS);
     const MaterialPass *pass; // [esp+0h] [ebp-4h]
 
     pass = context.state->pass;
@@ -403,6 +409,7 @@ void R_SetVertexShader(GfxCmdBufState *state, const MaterialVertexShader *vertex
 
 void R_UpdateVertexDecl(GfxCmdBufState *state)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_VERTEX_DECL);
     const MaterialPass *pass; // [esp+40h] [ebp-8h]
     const MaterialVertexShader *vertexShader; // [esp+44h] [ebp-4h]
 
@@ -425,6 +432,7 @@ void R_UpdateVertexDecl(GfxCmdBufState *state)
 
 void R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_PASS);
     const char *v2; // eax
     const char *v3; // eax
     const char *v4; // eax
@@ -475,7 +483,7 @@ void R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     iassert( pass->pixelShader );
     R_SetPixelShader(context.state, pass->pixelShader);
     // The Modern path's lit surfaces in linear light (r_visuals modern, Vulkan).
-    R_ModernPassInputs(material, pass);
+    R_ModernPassInputs(material, pass, stateBits[0]);
     if (pass->stableArgCount)
         R_SetPassShaderStableArguments(
             context,
@@ -740,6 +748,7 @@ void R_SetPassShaderStableArguments(
     uint32_t argCount,
     const MaterialShaderArgument *arg)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_STABLE_ARGS);
     const char *v3; // eax
     const GfxImage *image; // [esp+14h] [ebp-14h]
     const Material *material; // [esp+18h] [ebp-10h]
@@ -852,6 +861,7 @@ void R_ChangeObjectPlacement(GfxCmdBufSourceState *source, const GfxScaledPlacem
 
 int R_SetVertexData(GfxCmdBufState *state, const void *data, int vertexCount, int stride)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_VERTEX_FILL);
     IDirect3DVertexBuffer9 *vb; // [esp+6Ch] [ebp-14h]
     volatile int vertexOffset; // [esp+70h] [ebp-10h]
     uint32_t lockFlags; // [esp+74h] [ebp-Ch]

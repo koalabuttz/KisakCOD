@@ -608,6 +608,59 @@ uint32_t DecodeLinearInputs(ir::Builder &builder, const LinearInputs &inputs)
     return static_cast<uint32_t>(changes.size());
 }
 
+// Vertex inputs fed as R8G8B8A8_UNORM where the declaration says UBYTE4
+// (R8G8B8A8_USCALED, which a device need not read as vertex data: Adreno does
+// not): every load of an input at a marked location is taken back to 0-255,
+// rounded so that each byte comes back exactly. Returns the loads changed.
+uint32_t ScaleByteInputs(ir::Builder &builder, uint32_t locations)
+{
+    const ir::Type f32 = ir::Type(ir::BasicType(ir::ScalarType::eF32));
+    std::vector<ir::SsaDef> loads;
+    auto [begin, end] = builder.getDeclarations();
+    for (auto it = begin; it != end; ++it)
+    {
+        if (it->getOpCode() != ir::OpCode::eDclInput)
+            continue;
+        const uint32_t location = uint32_t(it->getOperand(1u));
+        if (location >= 32u || !((locations >> location) & 1u))
+            continue;
+        std::vector<ir::SsaDef> uses;
+        builder.getUses(it->getDef(), uses);
+        for (ir::SsaDef use : uses)
+        {
+            if (builder.getOp(use).getOpCode() == ir::OpCode::eInputLoad)
+                loads.push_back(use);
+        }
+    }
+    uint32_t changed = 0;
+    for (ir::SsaDef def : loads)
+    {
+        const ir::Op op = builder.getOp(def);
+        const ir::Type type = op.getType();
+        if (!type.isBasicType() || type.getBaseType(0u).getBaseType() != ir::ScalarType::eF32)
+            continue;
+        const uint32_t count = type.getBaseType(0u).getVectorSize();
+        const ir::SsaDef raw = builder.addBefore(def, op);
+        const auto scale = [&](ir::SsaDef v) {
+            v = builder.addBefore(def, ir::Op::FMul(f32, v, builder.makeConstant(255.0f)));
+            return builder.addBefore(def, ir::Op::FRound(f32, v, ir::RoundMode::eNearestEven));
+        };
+        ir::SsaDef value = {};
+        if (count == 1u)
+            value = scale(raw);
+        else
+        {
+            ir::Op construct(ir::OpCode::eCompositeConstruct, type);
+            for (uint32_t i = 0; i < count; ++i)
+                construct.addOperand(scale(builder.addBefore(def, ir::Op::CompositeExtract(f32, raw, builder.makeConstant(i)))));
+            value = builder.addBefore(def, std::move(construct));
+        }
+        builder.rewriteDef(def, value);
+        ++changed;
+    }
+    return changed;
+}
+
 uint32_t Fnv1a(const void *data, size_t bytes)
 {
     uint32_t hash = 2166136261u;
@@ -946,7 +999,7 @@ bool StagesLinkDirectly(const Shader &vertexShader, const Shader &pixelShader)
 
 bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<uint32_t> &spirv, std::string &error,
                 const uint32_t *fixedDepthCompare, const uint32_t *fixedAlphaCompare, bool linearOutput,
-                const LinearInputs *linearInputs)
+                const LinearInputs *linearInputs, uint32_t byteInputs)
 {
     spirv.clear();
     error.clear();
@@ -968,6 +1021,8 @@ bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<ui
         pass.resolveSemanticIo(previous);
         pass.resolveMismatchedIo(ir::ShaderStage::eVertex, previous);
     }
+    if (byteInputs && shader.reflection.stage == Stage::Vertex)
+        ScaleByteInputs(builder, byteInputs);
     if (fixedDepthCompare)
         FixDepthCompare(builder, *fixedDepthCompare);
     if (fixedAlphaCompare)

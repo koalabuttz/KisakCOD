@@ -610,7 +610,53 @@ PUSH_ROW = re.compile(r"^bots: \d+ pushes to a callout \d+ units away\s*$", re.M
 ANCHOR_ROW = re.compile(r"^bots: \d+ anchors \d+ units from a callout\s*$", re.M)
 OBJECTIVE_ROW = re.compile(r"^bots: \d+ (attacks an objective \d+ units away|defends an objective from \d+ units)\s*$",
                            re.M)
+SHOTS_ROW = re.compile(r"^bots: (\d+) shots fired so far\s*$", re.M)
+GRENADE_ROW = re.compile(r"^bots: \d+ throws a grenade \d+ units\s*$", re.M)
+KNIFE_ROW = re.compile(r"^bots: \d+ knifes \d+, \d+ units\s*$", re.M)
+TEAM_OBJECTIVES_ROW = re.compile(r"^bots: team (\d+) objectives: take (\d+), hold (\d+)\s*$", re.M)
 SPOTS_ROW = re.compile(r"^bots: map spots ready: (\d+) spots, (\d+) lines, in ([\d.]+) s\s*$", re.M)
+
+
+def objective_fixture(fixture: str) -> str:
+    """--objectives: the fixture starts the stock Domination game type instead
+    of team deathmatch, so the compass shows flags to take and hold."""
+    war = '    maps\\mp\\gametypes\\war::main();'
+    assert war in fixture
+    return fixture.replace(war, '    maps\\mp\\gametypes\\dom::main();')
+
+
+def validate_objectives(output: str) -> list:
+    """With --objectives: each team's compass showed objectives, and bots went
+    for them."""
+    shown = {}
+    for team, take, hold in TEAM_OBJECTIVES_ROW.findall(output):
+        shown[team] = max(shown.get(team, 0), int(take) + int(hold))
+    attacks = len(re.findall(r"^bots: \d+ attacks an objective", output, re.M))
+    held = sum(1 for _, _, hold in TEAM_OBJECTIVES_ROW.findall(output) if int(hold) > 0)
+    arrivals = re.findall(r"^bots: \d+ is on an objective(?:, (\w+))?\s*$", output, re.M)
+    arrived = len(arrivals)
+    prone = sum(1 for stance in arrivals if stance == "prone")
+    print(f"INFO: bots got onto an objective {arrived} times ({prone} of them lying prone)")
+    stays = [(float(seconds), why) for seconds, why in
+             re.findall(r"^bots: \d+ left an objective after ([\d.]+) s \(([^,)]+)", output, re.M)]
+    if stays:
+        longest = max(seconds for seconds, _ in stays)
+        reasons = {}
+        for _, why in stays:
+            reasons[why] = reasons.get(why, 0) + 1
+        print(f"INFO: attackers left an objective {len(stays)} times, after {longest:.1f} s at most ("
+              + ", ".join(f"{why} {count}" for why, count in sorted(reasons.items())) + ")")
+    stuck = len(re.findall(r"^bots: \d+ (is stuck on its way|finds no way) to an objective", output, re.M))
+    short = len(re.findall(r"^bots: \d+ stopped \d+ units from an objective", output, re.M))
+    print(f"INFO: bots got stuck or found no way to an objective {stuck} times and stopped short of one "
+          f"{short} times")
+    print(f"INFO: a team's compass showed a flag of its own to hold {held} times "
+          "(a capture turns a flag to take into one to hold)")
+    return [
+        (len(shown) == 2 and all(count > 0 for count in shown.values()),
+         f"both teams' bots read objectives off their compass (teams {sorted(shown)})"),
+        (attacks > 0, f"bots went to take objectives ({attacks} times)"),
+    ]
 
 
 def team_play(output: str) -> dict:
@@ -669,11 +715,16 @@ def main() -> int:
                         help="bot_brain: 0 the retail random inputs, 1 KisakCOD's bots (docs/bots.md)")
     parser.add_argument("--combat", action="store_true",
                         help="with --brain 1: the bots fight (bot_combat 1), may die, and their shots are audited")
+    parser.add_argument("--objectives", action="store_true",
+                        help="with --brain 1 and more than 4 bots: play Domination; the bots must read the flags "
+                             "off their compass and go for them")
     args = parser.parse_args()
     if args.brain and (args.cycles or args.refill_cycles):
         parser.error("--brain 1 holds one map: use it without --cycles and --refill-cycles")
     if args.combat and not args.brain:
         parser.error("--combat needs --brain 1")
+    if args.objectives and (not args.brain or not uses_both_teams(args.bots, args.refill_cycles)):
+        parser.error("--objectives needs --brain 1 and both teams (more than 4 bots)")
 
     if args.hold_seconds < 1:
         parser.error("--hold-seconds must be positive")
@@ -712,10 +763,13 @@ def main() -> int:
         mod = home / "mods" / "bottest"
         scripts = mod / "maps" / "mp" / "gametypes"
         scripts.mkdir(parents=True)
+        fixture = (refill_fixture() if args.refill_cycles else
+                   balanced_teams(transition_fixture() if args.cycles else FIXTURE_GSC) if both_teams else
+                   transition_fixture() if args.cycles else FIXTURE_GSC)
+        if args.objectives:
+            fixture = objective_fixture(fixture)
         (scripts / "dm.gsc").write_text(
-            (refill_fixture() if args.refill_cycles else
-             balanced_teams(transition_fixture() if args.cycles else FIXTURE_GSC) if both_teams else
-             transition_fixture() if args.cycles else FIXTURE_GSC)
+            fixture
             .replace("{bots}", str(args.bots)).replace("{team}", "allies")
             .replace("{hold_seconds}", str(args.hold_seconds))
             .replace("{refill_cycles}", str(args.refill_cycles))
@@ -901,6 +955,7 @@ def main() -> int:
                 "bot brain: the map's navigation mesh was built or loaded")] if args.brain else []),
             *(validate_brain_notices(output, both_teams) if args.brain else []),
             *(validate_brain_fights(output, both_teams) if args.combat else []),
+            *(validate_objectives(output) if args.objectives else []),
             (len(spawned) == expected_admissions and (combined.count("Gamestate has") >= len(spawned) or
              combined.count("Going from CS_FREE to CS_CONNECTED for bot") >= len(spawned)),
              "the server sent gamestates / connected each bot"),
@@ -937,13 +992,19 @@ def main() -> int:
             print("INFO: " + (f"map spots ready: {team['spots'][0]} spots, {team['spots'][1]} lines, "
                               f"in {team['spots'][2]} s" if team["spots"] else "map spots not ready yet"))
         if args.combat:
+            print(f"INFO: bots threw {len(GRENADE_ROW.findall(output))} grenades and knifed "
+                  f"{len(KNIFE_ROW.findall(output))} times")
             fights = fire_rows(output)
             print(f"INFO: bots opened fire {len(fights)} times" +
                   (f" ({min(r[2] for r in fights)} to {max(r[2] for r in fights)} ms after noticing, "
                    f"{min(r[3] for r in fights)} to {max(r[3] for r in fights)} ms after coming into view, "
                    f"{min(r[4] for r in fights)} to {max(r[4] for r in fights)} units)" if fights else ""))
-            print(f"INFO: the game logged {len(DAMAGE_LOG_ROW.findall(log_text))} hits and "
-                  f"{len(KILL_LOG_ROW.findall(log_text))} kills")
+            hits = len(DAMAGE_LOG_ROW.findall(log_text))
+            print(f"INFO: the game logged {hits} hits and {len(KILL_LOG_ROW.findall(log_text))} kills")
+            fired = SHOTS_ROW.findall(output)
+            if fired:
+                print(f"INFO: {fired[-1]} shots fired by the last count, "
+                      f"{hits / max(int(fired[-1]), 1):.2f} hits a shot")
         print(f"\ncompleted in {elapsed:.1f}s on isolated port {port}")
         print("NOT verified: " + ("" if args.combat else "combat kills, ") + "client-originated disconnect packets, " +
               ("drop/refill, " if not args.refill_cycles else "") +

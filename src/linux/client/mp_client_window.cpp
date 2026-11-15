@@ -10,6 +10,8 @@
 #error "the multiplayer client's window follows the renderer's SDL3 window: build it with KISAK_LINUX_SDL_MAJOR=3"
 #endif
 
+#include <ui/keycodes.h>
+
 #include <climits>
 #include <cstdio>
 #include <exception>
@@ -39,12 +41,17 @@ public:
     {
         g_clearKeysOwner = engine;
     }
-    void Attach(const window::WindowHost &host) { host_ = &host; }
+    void Attach(const window::WindowHost &host, ClientWindow &owner)
+    {
+        host_ = &host;
+        owner_ = &owner;
+    }
 
     // Motion is gathered, not queued: the engine takes it once per frame, as
     // win_input.cpp reads the cursor once per frame.
     void Mouse(uint32_t, int x, int y, int dx, int dy) override
     {
+        moved_ = moved_ || x != x_ || y != y_;
         x_ = x;
         y_ = y;
         dx_ = Saturate(static_cast<long long>(dx_) + dx);
@@ -58,7 +65,19 @@ public:
     {
         const Motion motion{x_, y_, dx_, dy_};
         dx_ = dy_ = 0;
+        moved_ = false;
         return motion;
+    }
+    // A click goes into the engine's queue at once, but the pointer's position
+    // only at the next frame. A mouse is already where it clicks; a finger on
+    // a touch screen is not: the tap moves the pointer and clicks in the same
+    // pump, so the click landed where the previous tap had left the cursor
+    // (Android, the Retroid Pocket 6's menus). The position goes first.
+    void Key(uint32_t time, int key, bool down) override
+    {
+        if (down && key >= K_MOUSE1 && key <= K_MOUSE5 && moved_ && owner_)
+            owner_->DeliverPointer();
+        EngineInput::Key(time, key, down);
     }
     void Drop() { dx_ = dy_ = 0; }
 
@@ -87,7 +106,9 @@ private:
 
     const ClientWindowEngine &engine_;
     const window::WindowHost *host_ = nullptr;
+    ClientWindow *owner_ = nullptr;
     int x_ = 0, y_ = 0, dx_ = 0, dy_ = 0;
+    bool moved_ = false; // the position changed since the engine last took it
 };
 
 ClientWindow::ClientWindow(SDL_Window *window, const ClientWindowEngine &engine)
@@ -97,7 +118,7 @@ ClientWindow::ClientWindow(SDL_Window *window, const ClientWindowEngine &engine)
         throw std::invalid_argument("The game window needs every engine callback");
     sink_ = std::make_unique<Sink>(engine_);
     host_ = std::make_unique<window::WindowHost>(*sink_, window::AdoptedWindow{window});
-    sink_->Attach(*host_);
+    sink_->Attach(*host_, *this);
     // A window can already have the keyboard focus when it is adopted: SDL
     // gives a shown window the focus at once where no window manager does it
     // later (X11 with none, as under Xvfb; the dummy driver). The host then
@@ -144,8 +165,11 @@ void ClientWindow::ToPixels(int &x, int &y) const
 
 void ClientWindow::Frame(bool mouseEnabled)
 {
+    mouseEnabled_ = mouseEnabled;
     if (!host_->Running())
         return;
+    if (host_->OnOwnerThread())
+        host_->SetTextWanted(engine_.wantsText && engine_.wantsText());
     if (!mouseEnabled || !host_->Focused() || host_->Minimized())
     {
         Release();
@@ -154,6 +178,16 @@ void ClientWindow::Frame(bool mouseEnabled)
     Sink::Motion motion = sink_->Take();
     ToPixels(motion.x, motion.y);
     SetLook(engine_.mouse(motion.x, motion.y, motion.dx, motion.dy) != 0);
+}
+
+void ClientWindow::DeliverPointer()
+{
+    // Only for a cursor: in look mode the motion is turning, which keeps its
+    // once-a-frame pace. On the window's own thread, from Pump, as the click
+    // is queued.
+    if (look_ || !mouseEnabled_)
+        return;
+    Frame(true);
 }
 
 void ClientWindow::SetLook(bool look)

@@ -120,6 +120,36 @@ struct SightSample
     Stance stance = Stance::Standing;
 };
 
+// The field of view at the hip (cg_fov), in the same terms as a weapon's
+// fAdsZoomFov.
+constexpr float kHipFov = 65.0f;
+
+// The screen while the bot aims down its sight: the view zooms from kHipFov
+// to the weapon's `zoomFov` as the sight comes up (`ads`, 0 to 1), so less of
+// the world fits on it, and a scope's overlay (an ACOG's or a sniper's)
+// leaves only a circle as tall as the screen once the sight is up. What is on
+// the screen is magnified as much: a far player is as easy to pick out as one
+// that much nearer.
+inline PerceptionParams SightThrough(const PerceptionParams &params, float ads, float zoomFov, bool overlay)
+{
+    PerceptionParams sight = params;
+    if (!(ads > 0.0f) || !(zoomFov > 0.0f) || zoomFov >= kHipFov)
+        return sight;
+    if (ads > 1.0f)
+        ads = 1.0f;
+    constexpr float kHalfRadians = 3.14159265358979f / 360.0f;
+    constexpr float kDegrees = 180.0f / 3.14159265358979f;
+    const float fov = kHipFov + (zoomFov - kHipFov) * ads;
+    const float scale = std::tan(fov * kHalfRadians) / std::tan(kHipFov * kHalfRadians);
+    sight.screenHalfYaw = std::atan(std::tan(params.screenHalfYaw * 2.0f * kHalfRadians) * scale) * kDegrees;
+    sight.screenHalfPitch = std::atan(std::tan(params.screenHalfPitch * 2.0f * kHalfRadians) * scale) * kDegrees;
+    if (overlay && ads >= 0.9f)
+        sight.screenHalfYaw = sight.screenHalfPitch;
+    sight.focusDegrees = params.focusDegrees * scale;
+    sight.closeRange = params.closeRange / scale;
+    return sight;
+}
+
 inline bool OnScreen(const SightSample &sample, const PerceptionParams &params)
 {
     return std::fabs(sample.yawOff) <= params.screenHalfYaw && std::fabs(sample.pitchOff) <= params.screenHalfPitch;

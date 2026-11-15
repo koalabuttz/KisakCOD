@@ -83,8 +83,11 @@ def source_checks(checker):
     android_start = 'elseif(KISAK_PLATFORM STREQUAL "android")'
     android_end = 'elseif(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")'
     android = fence.split(android_start, 1)[-1].split(android_end, 1)[0]
-    checker.require(android_start in fence and android_end in fence and "KISAK_BUILD_LINUX_MP_CLIENT" in android,
-                    "the Android configuration refuses the client until its app stage")
+    android_refused = android.split("foreach(kisak_not_on_android", 1)[-1].split("endforeach()", 1)[0]
+    checker.require(android_start in fence and android_end in fence
+                    and "KISAK_BUILD_LINUX_MP_CLIENT" not in android_refused
+                    and "if(KISAK_BUILD_LINUX_MP_CLIENT AND NOT KISAK_BUILD_VULKAN_BACKEND)" in android,
+                    "the Android configuration builds the client only with the Vulkan back end")
     fence = fence.replace(android_start + android, "")
     d3d9_module = (ROOT / "scripts" / "platform" / "linux" / "native_d3d9.cmake").read_text(encoding="utf-8")
     # No 64-bit block of the fence (macOS, x86_64, aarch64) refuses the client;

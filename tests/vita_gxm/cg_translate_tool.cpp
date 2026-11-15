@@ -83,9 +83,13 @@ int main(int argc, char **argv)
     for (const VertexInput &v : r.inputs)
         inputs += (inputs.empty() ? "" : ",") + std::to_string(v.reg) + ":" + std::to_string(v.usage) + "." +
                   std::to_string(v.usageIndex);
-    std::fprintf(stderr, "constants=%u relative=%d samplers=%s varyings=%s inputs=%s kills=%d instructions=%u\n",
+    std::string fromApi;
+    for (const uint16_t number : r.apiConstants)
+        fromApi += (fromApi.empty() ? "" : ",") + std::to_string(number);
+    std::fprintf(stderr,
+                 "constants=%u relative=%d samplers=%s varyings=%s inputs=%s kills=%d instructions=%u api=%s\n",
                  r.floatConstants, r.relativeConstants ? 1 : 0, samplers.c_str(), varyings.c_str(), inputs.c_str(),
-                 r.kills ? 1 : 0, r.instructions);
+                 r.kills ? 1 : 0, r.instructions, fromApi.c_str());
     std::fwrite(cg.data(), 1, cg.size(), stdout);
     return 0;
 }
