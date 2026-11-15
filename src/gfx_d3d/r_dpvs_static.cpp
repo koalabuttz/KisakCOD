@@ -322,6 +322,7 @@ void R_AddCellStaticSurfacesInFrustum(DpvsStaticCellCmd *dpvsCell)
             world.modelVis = rg.drawSModels ? g_smodelVisData : nullptr;
             world.surfaceVis = rg.drawWorld ? g_surfaceVisData : nullptr;
             world.decals = r_drawDecals->current.enabled;
+            world.fetchAhead = r_fetchAhead->current.enabled;
             if (dpvs_vec::AddTree(reinterpret_cast<const dpvs_vec::Tree *>(tree),
                                   reinterpret_cast<const dpvs_vec::Plane *>(planes.planes), planes.count, world))
                 return;

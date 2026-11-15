@@ -245,13 +245,30 @@ struct Contents
     }
 };
 
+// The box of a static model or surface that is about to be held: it may lie
+// over two cache lines.
+inline __attribute__((always_inline)) void AskFor(const float *bounds)
+{
+    __builtin_prefetch(bounds);
+    __builtin_prefetch(reinterpret_cast<const char *>(bounds) + 23);
+}
+
 // A leaf that planes cut: each static model and surface in it that is not
-// marked yet, on its own.
+// marked yet, on its own. Their boxes lie anywhere in the world's lists, so
+// with World::fetchAhead the box two ahead is asked for meanwhile (one that
+// is marked already is not read).
 __attribute__((noinline)) void HoldLeaf(const Tree *tree, const Planes &planes, uint32_t active, const World &world)
 {
+    enum
+    {
+        AHEAD = 2
+    };
     const Contents in(tree, world);
+    const bool ahead = world.fetchAhead;
     for (uint32_t i = 0; i < in.modelCount; ++i)
     {
+        if (ahead && i + AHEAD < in.modelCount && !world.modelVis[in.models[i + AHEAD]])
+            AskFor(At(world.modelBounds, world.modelStride, in.models[i + AHEAD]));
         const uint32_t index = in.models[i];
         if (!world.modelVis[index] &&
             !IsOutside(planes, active, At(world.modelBounds, world.modelStride, index)))
@@ -259,6 +276,8 @@ __attribute__((noinline)) void HoldLeaf(const Tree *tree, const Planes &planes, 
     }
     for (uint32_t i = 0; i < in.surfaceCount; ++i)
     {
+        if (ahead && i + AHEAD < in.surfaceCount && !world.surfaceVis[in.surfaces[i + AHEAD]])
+            AskFor(At(world.surfaceBounds, world.surfaceStride, in.surfaces[i + AHEAD]));
         const uint32_t index = in.surfaces[i];
         if (!world.surfaceVis[index] &&
             !IsOutside(planes, active, At(world.surfaceBounds, world.surfaceStride, index)))
@@ -274,6 +293,13 @@ void Walk(const Tree *nodes, uint32_t nodeCount, const Planes &planes, uint32_t 
     for (uint32_t node = 0; node < nodeCount; ++node)
     {
         const Tree *const tree = &nodes[node];
+        // World::fetchAhead: the node two further in the row, both of its
+        // cache lines.
+        if (world.fetchAhead && node + 2 < nodeCount)
+        {
+            __builtin_prefetch(tree + 2);
+            __builtin_prefetch(&tree[2].childrenOffset); // its last field
+        }
         const uint32_t cut = HoldNode(planes, active, tree->mins);
         if (cut == OUTSIDE)
             continue;

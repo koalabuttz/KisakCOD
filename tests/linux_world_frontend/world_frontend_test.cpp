@@ -545,10 +545,13 @@ int main()
 
     // Every view twice: with the tree walk that holds a box against four clip
     // planes at a time (r_dpvs_static_vec.h, where the build has it), then with
-    // the scalar walk. Both have to give what the geometry says.
+    // the scalar walk. Both have to give what the geometry says. The first
+    // pass also asks for memory ahead of time (r_fetchAhead: the index copies,
+    // the static model records, a culled leaf's boxes), the second does not.
     for (int vec = 1; vec >= 0; --vec)
     {
     SetBool(r_staticCullVec, vec != 0);
+    SetBool(r_fetchAhead, vec != 0);
 
     // ---- view 1: inside cell 0 looking through the portal --------------------
     {
