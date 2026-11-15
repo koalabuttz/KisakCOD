@@ -1580,6 +1580,27 @@ and the floor 50: the game's taps give a hard edge, the soft filter a
 penumbra a few texels wide either side of it, and with
 `KISAK_VK_MODERN_SOFT_SPOT_SHADOWS=0` the edge is hard again.
 
+## Real lights
+
+The plan to make every map's lamps, lanterns, fires and lit windows act as
+real lights (light on players, highlights, moving shadows, glow in the fog) is
+in the project files' plan doc ("Real lights in Modern visuals: plan"). Its
+first piece is a survey of what each map's lamps are made of: the console
+command `r_modernLightSurvey` (in `r_cmds.cpp`; it reads only) prints, each
+line starting `light survey:`,
+
+- the map's primary lights: type, place, radius, colour, cone, and whether
+  they may use a shadow map;
+- the glowing-texture surfaces (technique sets `mc_unlit*` and `wc_unlit*`,
+  the same test as the Modern emissive) on world surfaces and static models,
+  grouped into clusters within 64 units, each with the light grid's baked
+  light there and 48 units below it and its nearest primary light;
+- the effects running now, by name, with how many of their elements are omni
+  or spot lights.
+
+`r_modernLightSurvey all` prints every cluster and effect instead of the first
+256 and 128.
+
 ## Next
 
 What this guide still lists as missing is in [What it does not do
