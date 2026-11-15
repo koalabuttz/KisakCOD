@@ -295,6 +295,10 @@ class RefillEvidenceTests(unittest.TestCase):
         self.assertFalse(validate_kick_window(output + '0:bot0 EXE_PLAYERKICKED\n', expected))
         self.assertFalse(validate_kick_window(output.replace('bot1', 'bot2'), expected))
         self.assertFalse(validate_kick_window(output + 'malformed EXE_PLAYERKICKED\n', expected))
+        # Bots are named "[BOT] Name" (src/bots/bot_names.h): a name has spaces.
+        spaced = 'x\n2:[BOT] ms rat EXE_PLAYERKICKED\n'
+        self.assertTrue(validate_kick_window(spaced, {('2', '[BOT] ms rat')}))
+        self.assertFalse(validate_kick_window(spaced, {('2', '[BOT]')}))
 
     def test_fixture_uses_real_kick_and_default_grace(self):
         fixture = refill_fixture()

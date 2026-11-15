@@ -1082,6 +1082,7 @@ void SV_DelayDropClient(client_t *drop, const char *reason);
 void SV_SendClientGameState(client_t *client);
 void SV_ClientEnterWorld(client_t *client, usercmd_s *cmd);
 void SV_Disconnect_f(client_t *cl);
+void SV_KeepBotTagForBots(client_t *cl);
 void SV_UserinfoChanged(client_t *cl);
 void SV_UpdateUserinfo_f(client_t *cl);
 void SV_ClientThink(client_t *cl, usercmd_s *cmd);

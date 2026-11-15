@@ -260,7 +260,7 @@ def validate_transitions(log_text: str, bots: int, hold_seconds: int,
         label = f"stage {index} ({expected_map})"
         checks.append((marker.group(1) == str(index) and marker.group(2) == expected_map,
                        f"{label}: stage number and map match"))
-        identities = re.findall(r"BOTFEATURE identity entity=(\d+) name=(\S+)\s*$", segment, re.M)
+        identities = re.findall(r"BOTFEATURE identity entity=(\d+) name=(.+?)\s*$", segment, re.M)
         distinct = len(identities) == bots and len(set(identities)) == bots
         distinct = distinct and len({pair[0] for pair in identities}) == bots
         if index == 0:
@@ -379,14 +379,14 @@ def validate_refills(log_text: str, bots: int, hold_seconds: int, cycles: int) -
         label = f"refill {index}"
         checks.append((marker.group(1) == str(index) and marker.group(2) == str(bots),
                        f"{label}: ordered round at full configured capacity"))
-        identities = re.findall(r"BOTFEATURE identity entity=(\d+) name=(\S+)\s*$", segment, re.M)
+        identities = re.findall(r"BOTFEATURE identity entity=(\d+) name=(.+?)\s*$", segment, re.M)
         current = set(identities)
         checks.append((len(identities) == bots and len(current) == bots and
                        len({p[0] for p in identities}) == bots, f"{label}: distinct complete cohort"))
         checks.append((not (seen_names & {p[1] for p in identities}), f"{label}: newly admitted bot names"))
         seen_names.update(p[1] for p in identities)
-        kicks = re.findall(r"BOTFEATURE kick entity=(\d+) name=(\S+)\s*$", segment, re.M)
-        vacated = re.findall(r"BOTFEATURE vacated entity=(\d+) name=(\S+)\s*$", segment, re.M)
+        kicks = re.findall(r"BOTFEATURE kick entity=(\d+) name=(.+?)\s*$", segment, re.M)
+        vacated = re.findall(r"BOTFEATURE vacated entity=(\d+) name=(.+?)\s*$", segment, re.M)
         if previous is not None:
             checks.append((len(kicks) == bots and set(kicks) == previous and
                            len(vacated) == bots and set(vacated) == previous,
@@ -430,7 +430,7 @@ def final_cohort_log(log_text: str) -> str:
 def validate_kick_window(output: str, expected: set) -> bool:
     """Match engine kick lines exactly; planned script markers alone cannot pass."""
     lines = [line for line in output.splitlines() if "EXE_PLAYERKICKED" in line]
-    parsed = [re.fullmatch(r"(\d+):(\S+) EXE_PLAYERKICKED", line.strip()) for line in lines]
+    parsed = [re.fullmatch(r"(\d+):(.+?) EXE_PLAYERKICKED", line.strip()) for line in lines]
     pairs = [(m.group(1), m.group(2)) for m in parsed if m]
     return len(pairs) == len(lines) == len(expected) and set(pairs) == expected
 
@@ -887,7 +887,7 @@ def main() -> int:
                         kick_checks.append((window_ok, f"step {step}: only exact planned kicks in engine output window"))
                         planned_kicks.update(expected_kicks)
                         output_offset = len(output_now)
-                        cohort = set(re.findall(r"BOTFEATURE identity entity=(\d+) name=(\S+)\s*$", stage_log, re.M))
+                        cohort = set(re.findall(r"BOTFEATURE identity entity=(\d+) name=(.+?)\s*$", stage_log, re.M))
                         if not window_ok:
                             stage_failure = f"step {step}: unexpected or missing engine kick"
                             break

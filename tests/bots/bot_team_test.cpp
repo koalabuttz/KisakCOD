@@ -4,13 +4,18 @@
 // A team of bots hears its callouts late and only for a while, reads its
 // objectives off the compass icons, and gets roles that fit the team's size,
 // the objectives and each bot's leanings. The spot table of a map finds cover
-// from a threat and places to watch an objective from.
+// from a threat and places to watch an objective from. Bots are named
+// "[BOT] Name", and a person's name loses the tag (bot_names.h).
 
+#include <bots/bot_names.h>
 #include <bots/bot_spots.h>
 #include <bots/bot_team.h>
 
 #include <cmath>
 #include <cstdio>
+#include <cstring>
+#include <string>
+#include <vector>
 
 namespace kb = kisak::bots;
 
@@ -249,8 +254,61 @@ static void Spots()
     Check(!empty.Ready() && empty.CoverFrom(bot, threat, 600.0f, cover, 8) == 0, "an empty table answers nothing");
 }
 
+static bool TakenIn(const char *name, void *context)
+{
+    for (const std::string &taken : *static_cast<std::vector<std::string> *>(context))
+        if (taken == name)
+            return true;
+    return false;
+}
+
+static void Names()
+{
+    std::printf("\n== names ==\n");
+    Check(kb::WearsBotTag("[BOT] Capy") && kb::WearsBotTag("^1[b^2O t]x") && kb::WearsBotTag("me [bot]"),
+          "the tag is seen however it is coloured, spaced or cased");
+    Check(!kb::WearsBotTag("Bot Hunter") && !kb::WearsBotTag("[B0T]") && !kb::WearsBotTag("Robot"),
+          "a name without it is not");
+    char out[32];
+    kb::RemoveBotTag("[BOT] Capy", out, sizeof(out));
+    Check(!std::strcmp(out, "Capy"), "a person's \"[BOT] Capy\" becomes \"Capy\"");
+    kb::RemoveBotTag("^1[ Bot ]^7Sneaky", out, sizeof(out));
+    Check(!std::strcmp(out, "Sneaky"), "and a coloured, spaced one too");
+    kb::RemoveBotTag("[BOT]", out, sizeof(out));
+    Check(!std::strcmp(out, "Player"), "a name that was only the tag becomes Player");
+    kb::RemoveBotTag("^1Real^7Name", out, sizeof(out));
+    Check(!std::strcmp(out, "^1Real^7Name"), "a name without the tag keeps its colours");
+
+    bool fits = true;
+    for (int i = 0; i < kb::kBotNameCount; ++i)
+        fits = fits && std::strlen(kb::kBotNames[i]) + std::strlen(kb::kBotTag) <= kb::kNameChars;
+    Check(fits, "every name fits a 15-character name with its tag");
+
+    std::vector<std::string> taken;
+    bool unique = true;
+    bool tagged = true;
+    bool fitsAll = true;
+    for (int i = 0; i < 40; ++i)
+    {
+        kb::PickBotName(kb::kBotNames, kb::kBotNameCount, 3, TakenIn, &taken, out, sizeof(out));
+        unique = unique && !TakenIn(out, &taken);
+        tagged = tagged && !std::strncmp(out, "[BOT] ", 6) && kb::WearsBotTag(out);
+        fitsAll = fitsAll && std::strlen(out) <= kb::kNameChars;
+        taken.push_back(out);
+    }
+    Check(unique && tagged && fitsAll, "40 bots get 40 different tagged names that fit");
+    Check(taken[0] == std::string("[BOT] ") + kb::kBotNames[3], "the first is the list's name at the start asked for");
+    Check(taken[kb::kBotNameCount] == std::string("[BOT] ") + kb::kBotNames[3] + " 2",
+          "once every name is taken, a repeat gets a number");
+    const char *longName[] = {"Guillaume"};
+    std::vector<std::string> one = {"[BOT] Guillaume"};
+    kb::PickBotName(longName, 1, 0, TakenIn, &one, out, sizeof(out));
+    Check(!std::strcmp(out, "[BOT] Guillau 2"), "a long name is shortened to fit its number");
+}
+
 int main()
 {
+    Names();
     Objectives();
     Callouts();
     Roles();
