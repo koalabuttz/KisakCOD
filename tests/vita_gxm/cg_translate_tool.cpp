@@ -47,6 +47,8 @@ int main(int argc, char **argv)
             options.alphaFunc = AlphaFunc(std::strtoul(argv[++i], nullptr, 0));
         else if (!std::strcmp(argv[i], "--alpha-zero"))
             options.alphaZero = true;
+        else if (!std::strcmp(argv[i], "--direct-reads") && i + 1 < argc)
+            options.diagDirectReads = uint8_t(std::strtoul(argv[++i], nullptr, 0));
         else if (!std::strcmp(argv[i], "--far-plane-inside"))
             options.farPlaneInside = true;
         else if (!std::strcmp(argv[i], "--diag-position") && i + 1 < argc)
@@ -81,9 +83,14 @@ int main(int argc, char **argv)
     for (const VertexInput &v : r.inputs)
         inputs += (inputs.empty() ? "" : ",") + std::to_string(v.reg) + ":" + std::to_string(v.usage) + "." +
                   std::to_string(v.usageIndex);
-    std::fprintf(stderr, "constants=%u relative=%d samplers=%s varyings=%s inputs=%s kills=%d instructions=%u\n",
+    const TextureReads reads = CountTextureReads(shader);
+    std::fprintf(stderr,
+                 "constants=%u relative=%d samplers=%s varyings=%s inputs=%s kills=%d instructions=%u "
+                 "reads=%u/%u/%u/%u/%u/%u\n",
                  r.floatConstants, r.relativeConstants ? 1 : 0, samplers.c_str(), varyings.c_str(), inputs.c_str(),
-                 r.kills ? 1 : 0, r.instructions);
+                 r.kills ? 1 : 0, r.instructions, unsigned(reads.direct), unsigned(reads.swizzled),
+                 unsigned(reads.affine), unsigned(reads.mixed), unsigned(reads.dependent),
+                 unsigned(reads.projected + reads.other));
     std::fwrite(cg.data(), 1, cg.size(), stdout);
     return 0;
 }

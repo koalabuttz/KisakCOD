@@ -141,6 +141,12 @@ struct Options
     // nothing else, (0, 0, 0, 0) for 1 and (1, 1, 1, 1) for 2. For timing
     // what a blended layer costs apart from its fragment program.
     uint8_t diagFlat = 0;
+    // Pixel shaders, a run diagnostic: texture reads that are not direct
+    // (ReadKind) take the .xy of an input register as their coordinate, so
+    // the picture is wrong and the reads are direct. 1: the Swizzled and
+    // Affine ones, which a vertex shader could hand over; 2: the Mixed and
+    // Dependent ones too. For timing what dependent reads cost.
+    uint8_t diagDirectReads = 0;
     // Vertex shaders: keep the position's z just inside the far plane
     // (z <= w * 0.99999). D3D9 draws z == w; a run-diagnostic option while
     // finding out whether GXM clips it.
@@ -199,13 +205,33 @@ struct Shader
 // A pixel shader's texture reads by where their coordinates come from. A
 // tile GPU fetches a read whose coordinate is an interpolated input's first
 // components before the fragment program runs; every other read waits for
-// the program (a dependent read). `direct`: texld of an input register's
-// .xy (.xyz for a cube). `swizzled`: texld of other components of an input
-// register (.zw, say). `computed`: texld of a temporary or a constant.
-// `projected`: texldp. `other`: texldb, texldl, texldd.
+// the program (a dependent read).
+enum class ReadKind : uint8_t
+{
+    None,      // not a texture read
+    Direct,    // texld of an input register's .xy (.xyz for a cube)
+    Swizzled,  // texld of other components of an input register (.zw, say)
+    Affine,    // of a temporary made from inputs and constants by mov, add,
+               // sub and products with a constant: a vertex shader could
+               // work it out and hand it over as an input
+    Mixed,     // of a temporary made from inputs by other arithmetic
+    Dependent, // of a temporary that holds part of an earlier texture read
+    Projected, // texldp
+    Other,     // texldb, texldl, texldd
+};
+struct ReadInfo
+{
+    ReadKind kind = ReadKind::None;
+    // Swizzled and Affine: the input register the coordinate comes from
+    // (the first one, where several take part).
+    bool hasRoot = false;
+    Operand root;
+};
+// One entry for each instruction of the shader.
+std::vector<ReadInfo> AnalyzeReads(const Shader &shader);
 struct TextureReads
 {
-    uint8_t direct = 0, swizzled = 0, computed = 0, projected = 0, other = 0;
+    uint8_t direct = 0, swizzled = 0, affine = 0, mixed = 0, dependent = 0, projected = 0, other = 0;
 };
 TextureReads CountTextureReads(const Shader &shader);
 

@@ -100,6 +100,13 @@ VITA_CASES = {
     "ps1_vita_coissue_other_lanes": "ps_1_1\ntex t0\nmov r0, t0\nmul r0.rgb, r0, v0\n+mul r0.a, r0.a, v0.a",
     "ps1_vita_bump": "ps_1_1\ntex t0\ntexbem t1, t0\nmov r0, t1",
     "ps1_vita_model_4": "ps_1_4\ntexld r0, t0",
+    # One texture read of each kind the read census tells apart: an input's
+    # .xy, an input's .zw, an input scaled by a constant, an input times an
+    # input, and a coordinate taken from an earlier read.
+    "ps3_vita_read_kinds": "ps_3_0\ndcl_texcoord0 v0\ndcl_texcoord1 v1\ndcl_2d s0\ndcl_2d s1\n"
+                           "texld r0, v0, s0\ntexld r1, v0.zwzw, s1\nmad r2, v1, c4, c5\ntexld r2, r2, s0\n"
+                           "mul r3, v0, v1\ntexld r3, r3, s1\nadd r4.xy, r0, v1\ntexld r4, r4, s0\n"
+                           "add r0, r0, r1\nadd r0, r0, r2\nadd r0, r0, r3\nadd r0, r0, r4\nmov oC0, r0",
 }
 
 # (case, extra tool arguments, text the program must contain, text the
@@ -127,6 +134,11 @@ CHECKS = [
     ("vs2_oT_oD_fog", ["--absent", "2"], "float4 v1 = float4(0.0, 0.0, 0.0, 1.0);", "inputs=0:0.0,1:5.0"),
     ("vs2_oT_oD_fog", ["--components", "0=3,1=2"], "float4 v1 = float4(in_v1, 0.0, 1.0);", "inputs=0:0.0,1:5.0"),
     ("ps3_texkill", ["--alpha", "7"], "if (!(a >= ref)) discard;", "kills=1"),
+    ("ps3_vita_read_kinds", [], "r2 = tex2D(s0, (r2).xy);", "reads=1/1/1/1/1/0"),
+    ("ps3_vita_read_kinds", ["--direct-reads", "1"],
+     "r2 = tex2D(s0, (v1).xy);\n", "reads=1/1/1/1/1/0"),
+    ("ps3_vita_read_kinds", ["--direct-reads", "1"], "r3 = tex2D(s1, (r3).xy);\n", "reads=1/1/1/1/1/0"),
+    ("ps3_vita_read_kinds", ["--direct-reads", "2"], "r3 = tex2D(s1, (v0).xy);\n", "reads=1/1/1/1/1/0"),
     ("ps3_texkill", ["--alpha", "1"], "if (!(false)) discard;", "kills=1"),
     ("ps3_texkill", [], "return oC0;", "kills=1"),
     ("ps3_def_const", [], "const float4 k20 = float4(0.5, 1.0, 2.0, -1.0);", "constants=0"),

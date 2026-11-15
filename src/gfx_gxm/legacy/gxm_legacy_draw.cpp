@@ -205,7 +205,8 @@ struct PipelineKey
     uint32_t strides[kMaxStreams];
     uint8_t alphaFunc; // the pixel shader variant's alpha test
     uint8_t index32;
-    uint8_t pad[2];
+    uint8_t diagDirectReads; // cg::Options::diagDirectReads
+    uint8_t pad[1];
 };
 struct Pipeline
 {
@@ -346,6 +347,12 @@ struct DrawState
     // shaders with the most draws of each kind with their texture reads
     // (cg::TextureReads) and instruction counts.
     bool diagReadCensus = false;
+    // Run diagnostic (switch diag-direct-reads, and diag-direct-reads-all):
+    // the 3D scene's pixel shaders read their textures through an input's
+    // first components where they do not already (cg::Options::
+    // diagDirectReads 1, or 2 with -all). The picture is wrong; the frame
+    // time says what the dependent reads cost.
+    uint8_t diagDirectReads = 0;
     struct ReadCensusEntry
     {
         gxm::cg::TextureReads reads;
@@ -789,6 +796,7 @@ uint64_t VariantKey(const gxm::cg::Options &options)
     return (uint64_t(options.bgraInputs) | uint64_t(options.absentInputs) << 16) ^ (components << 32) ^
            (options.alphaFunc == gxm::cg::AlphaFunc::Always ? 0 : uint64_t(options.alphaFunc)) ^
            (options.alphaZero ? 0x00a5000000000000ull : 0) ^ (uint64_t(options.diagFlat) << 44) ^
+           (uint64_t(options.diagDirectReads) << 42) ^
            (options.farPlaneInside ? 0x5a5a000000000000ull : 0) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
 }
 
@@ -2558,7 +2566,8 @@ const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "n
                                      "no-draw-reuse",     "no-filter-stretch", "no-gpu-boost",
                                      "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
                                      "gpu-watch",           "no-alpha-test-drop", "no-alpha-test-zero",
-                                     "diag-flat-blend",     "diag-read-census"};
+                                     "diag-flat-blend",     "diag-read-census",
+                                     "diag-direct-reads",   "diag-direct-reads-all"};
 struct LiveSwitch
 {
     const char *name;
@@ -2612,6 +2621,11 @@ void ApplyLiveSwitches(Device &device)
         else if (name == "no-same-state")
         {
             d.sameState = !s.on;
+            d.lastDrawValid = false;
+        }
+        else if (name == "diag-direct-reads" || name == "diag-direct-reads-all")
+        {
+            d.diagDirectReads = s.on ? (name == "diag-direct-reads" ? 1 : 2) : 0;
             d.lastDrawValid = false;
         }
         else if (name == "diag-read-census")
@@ -3083,7 +3097,7 @@ void LogReadCensus(Device &device)
         std::vector<DrawState::ReadCensusEntry> entries;
         uint64_t draws = 0;
         // Draw-weighted sums over every shader of the kind.
-        uint64_t sums[6] = {};
+        uint64_t sums[7] = {};
         for (const auto &found : d.readCensus[kind])
         {
             const DrawState::ReadCensusEntry &e = found.second;
@@ -3091,29 +3105,30 @@ void LogReadCensus(Device &device)
             draws += e.draws;
             sums[0] += e.draws * e.reads.direct;
             sums[1] += e.draws * e.reads.swizzled;
-            sums[2] += e.draws * e.reads.computed;
-            sums[3] += e.draws * e.reads.projected;
-            sums[4] += e.draws * e.reads.other;
-            sums[5] += e.draws * e.instructions;
+            sums[2] += e.draws * e.reads.affine;
+            sums[3] += e.draws * e.reads.mixed;
+            sums[4] += e.draws * e.reads.dependent;
+            sums[5] += e.draws * (e.reads.projected + e.reads.other);
+            sums[6] += e.draws * e.instructions;
         }
         std::sort(entries.begin(), entries.end(),
                   [](const DrawState::ReadCensusEntry &a, const DrawState::ReadCensusEntry &b) { return a.draws > b.draws; });
         const double all = draws ? double(draws) : 1.0;
         Log(device,
             "read census, %s: %llu draws of %u pixel shaders; a draw's shader has %.2f direct, %.2f swizzled, %.2f "
-            "computed, %.2f projected and %.2f other texture reads and %.1f instructions",
+            "affine, %.2f mixed, %.2f dependent and %.2f projected or other texture reads and %.1f instructions",
             kinds[kind], (unsigned long long)draws, unsigned(entries.size()), double(sums[0]) / all,
             double(sums[1]) / all, double(sums[2]) / all, double(sums[3]) / all, double(sums[4]) / all,
-            double(sums[5]) / all);
+            double(sums[5]) / all, double(sums[6]) / all);
         for (size_t i = 0; i < entries.size() && i < 12; ++i)
         {
             const DrawState::ReadCensusEntry &e = entries[i];
             Log(device,
                 "read census, %s, shader %u: %llu draws (%.1f %%), %u instructions, reads %u direct, %u swizzled, %u "
-                "computed, %u projected, %u other",
+                "affine, %u mixed, %u dependent, %u projected or other",
                 kinds[kind], unsigned(i + 1), (unsigned long long)e.draws, 100.0 * double(e.draws) / all,
-                e.instructions, unsigned(e.reads.direct), unsigned(e.reads.swizzled), unsigned(e.reads.computed),
-                unsigned(e.reads.projected), unsigned(e.reads.other));
+                e.instructions, unsigned(e.reads.direct), unsigned(e.reads.swizzled), unsigned(e.reads.affine),
+                unsigned(e.reads.mixed), unsigned(e.reads.dependent), unsigned(e.reads.projected + e.reads.other));
         }
         d.readCensus[kind].clear();
     }
@@ -3342,6 +3357,9 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
                 }
             }
         }
+        if (d.diagDirectReads && device.renderStates[d3d::RS_ZENABLE] &&
+            device.renderStates[d3d::RS_ZFUNC] != d3d::CMP_ALWAYS)
+            pixelOptions.diagDirectReads = d.diagDirectReads;
         d.lastDrawFlat = false;
         if (d.diagFlatBlend && device.renderStates[d3d::RS_ZENABLE] &&
             device.renderStates[d3d::RS_ZFUNC] != d3d::CMP_ALWAYS)
@@ -3378,6 +3396,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             std::memcpy(pipelineKey.strides, strides, sizeof(strides));
             pipelineKey.alphaFunc = uint8_t(uint8_t(pixelOptions.alphaFunc) | (pixelOptions.alphaZero ? 0x80 : 0) |
                                             (pixelOptions.diagFlat << 5));
+            pipelineKey.diagDirectReads = pixelOptions.diagDirectReads;
             pipelineKey.index32 = index32;
             pipeline = &PipelineSlot(d, pipelineKey);
             known = std::memcmp(&pipeline->key, &pipelineKey, sizeof(pipelineKey)) == 0;

@@ -402,6 +402,11 @@ class Emitter
 
     const Shader &shader_;
     const Options &options_;
+    // Options::diagDirectReads: the shader's reads, and the input register of
+    // its first direct read for reads that have no input of their own.
+    std::vector<ReadInfo> diagReads_;
+    Operand diagFirstInput_;
+    bool diagHasFirstInput_ = false;
     const Reflection &r_;
     const bool vertex_;
     std::string error_;
@@ -686,7 +691,38 @@ bool Emitter::Texture(const Instruction &ins, std::string &value)
         return Fail("sampler s" + std::to_string(unit) + " is out of range");
     const SamplerType type = r_.samplers[unit];
     const std::string s = "s" + std::to_string(unit);
-    const std::string coord = Source(ins.sources[0]);
+    std::string coord = Source(ins.sources[0]);
+    if (options_.diagDirectReads && !vertex_)
+    {
+        // Run diagnostic: the read takes an input's first components.
+        if (diagReads_.empty())
+        {
+            diagReads_ = AnalyzeReads(shader_);
+            for (const ReadInfo &read : diagReads_)
+                if (read.kind == ReadKind::Direct && !diagHasFirstInput_)
+                {
+                    diagHasFirstInput_ = true;
+                    diagFirstInput_ = read.root;
+                }
+        }
+        const size_t index = size_t(&ins - shader_.instructions.data());
+        if (index < diagReads_.size())
+        {
+            const ReadInfo &info = diagReads_[index];
+            const bool movable = info.kind == ReadKind::Swizzled || info.kind == ReadKind::Affine;
+            const bool rest = info.kind == ReadKind::Mixed || info.kind == ReadKind::Dependent;
+            if (movable || (rest && options_.diagDirectReads >= 2))
+            {
+                Operand direct = info.hasRoot ? info.root : diagFirstInput_;
+                if (info.hasRoot || diagHasFirstInput_)
+                {
+                    direct.swizzle = 0xe4;
+                    direct.modifier = kSmNone;
+                    coord = Source(direct);
+                }
+            }
+        }
+    }
     std::string sample;
     const bool cube = type == SamplerType::Cube;
     if (type == SamplerType::Volume)
@@ -1826,28 +1862,142 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
     return true;
 }
 
+std::vector<ReadInfo> AnalyzeReads(const Shader &shader)
+{
+    // What each component of a temporary holds, as the instructions go by.
+    enum : uint8_t { kFromTexture = 1, kNotAffine = 2, kFromInput = 4 };
+    struct Temp
+    {
+        uint8_t lanes[4] = {};
+        bool hasRoot = false;
+        Operand root;
+    };
+    std::map<uint16_t, Temp> temps;
+    // Flow control would need the two ways merged: such a shader's computed
+    // reads are all called Mixed.
+    bool straight = true;
+    for (const Instruction &ins : shader.instructions)
+        if (ins.opcode == kCall || ins.opcode == kCallNz || ins.opcode == kRep || ins.opcode == kIf ||
+            ins.opcode == kIfc || ins.opcode == kElse || ins.opcode == kLoop)
+            straight = false;
+    std::vector<ReadInfo> infos(shader.instructions.size());
+    for (size_t index = 0; index < shader.instructions.size(); ++index)
+    {
+        const Instruction &ins = shader.instructions[index];
+        const bool texture = ins.opcode == kTex || ins.opcode == kTexLdl || ins.opcode == kTexLdd;
+        if (texture && ins.sourceCount >= 2 && ins.sources[1].type == kSampler)
+        {
+            ReadInfo &info = infos[index];
+            const Operand &coord = ins.sources[0];
+            const uint16_t unit = ins.sources[1].number;
+            const bool cube = unit < 16 && shader.reflection.samplers[unit] == SamplerType::Cube;
+            const int lanes = cube ? 3 : 2;
+            if (ins.opcode != kTex || ins.control == 2)
+                info.kind = ReadKind::Other;
+            else if (ins.control == 1)
+                info.kind = ReadKind::Projected;
+            else if (coord.type == kInput || coord.type == kTexture)
+            {
+                const bool first = cube ? (coord.swizzle & 0x3f) == 0x24 : (coord.swizzle & 0x0f) == 0x04;
+                info.kind = first ? ReadKind::Direct : ReadKind::Swizzled;
+                info.hasRoot = true;
+                info.root = coord;
+            }
+            else if (coord.type == kTemp && straight)
+            {
+                const Temp &temp = temps[coord.number];
+                uint8_t flags = 0;
+                for (int lane = 0; lane < lanes; ++lane)
+                    flags |= temp.lanes[(coord.swizzle >> (2 * lane)) & 3];
+                info.kind = (flags & kFromTexture) ? ReadKind::Dependent
+                            : (flags & kNotAffine) || !(flags & kFromInput) || coord.modifier != kSmNone
+                                  ? ReadKind::Mixed
+                                  : ReadKind::Affine;
+                info.hasRoot = temp.hasRoot;
+                info.root = temp.root;
+            }
+            else
+                info.kind = ReadKind::Mixed;
+        }
+        if (!ins.hasDestination || ins.destination.type != kTemp)
+            continue;
+        Temp &dst = temps[ins.destination.number];
+        uint8_t flags = 0;
+        bool hasRoot = false;
+        Operand root;
+        if (texture)
+            flags = kFromTexture;
+        else
+        {
+            int constants = 0;
+            for (int i = 0; i < ins.sourceCount; ++i)
+            {
+                const Operand &src = ins.sources[i];
+                if (src.modifier != kSmNone && src.modifier != kSmNeg)
+                    flags |= kNotAffine;
+                if (src.type == kConst)
+                    ++constants;
+                else if (src.type == kInput || src.type == kTexture)
+                {
+                    flags |= kFromInput;
+                    if (!hasRoot)
+                    {
+                        hasRoot = true;
+                        root = src;
+                    }
+                }
+                else if (src.type == kTemp)
+                {
+                    const Temp &from = temps[src.number];
+                    for (int lane = 0; lane < 4; ++lane)
+                        flags |= from.lanes[(src.swizzle >> (2 * lane)) & 3];
+                    if (!hasRoot && from.hasRoot)
+                    {
+                        hasRoot = true;
+                        root = from.root;
+                    }
+                }
+                else
+                    flags |= kNotAffine;
+            }
+            const bool sum = ins.opcode == kMov || ins.opcode == kAdd || ins.opcode == kSub;
+            // A product stays affine when one of its two factors is a
+            // constant (mul a, b; mad a, b, c is a * b + c).
+            const bool product = (ins.opcode == kMul || ins.opcode == kMad) && ins.sourceCount >= 2 &&
+                                 (ins.sources[0].type == kConst || ins.sources[1].type == kConst);
+            (void)constants;
+            if (!sum && !product)
+                flags |= kNotAffine;
+            if (ins.destination.modifier & kDmSaturate)
+                flags |= kNotAffine;
+        }
+        for (int lane = 0; lane < 4; ++lane)
+            if (ins.destination.mask >> lane & 1)
+                dst.lanes[lane] = flags;
+        if (hasRoot || (ins.destination.mask & 0xf) == 0xf)
+        {
+            dst.hasRoot = hasRoot;
+            dst.root = root;
+        }
+    }
+    return infos;
+}
+
 TextureReads CountTextureReads(const Shader &shader)
 {
     TextureReads reads;
-    for (const Instruction &ins : shader.instructions)
+    for (const ReadInfo &info : AnalyzeReads(shader))
     {
-        if (ins.opcode != kTex && ins.opcode != kTexLdl && ins.opcode != kTexLdd)
-            continue;
-        if (ins.sourceCount < 2 || ins.sources[1].type != kSampler)
-            continue;
-        const Operand &coord = ins.sources[0];
-        if (ins.opcode != kTex || ins.control == 2)
-            ++reads.other;
-        else if (ins.control == 1)
-            ++reads.projected;
-        else if (coord.type != kInput && coord.type != kTexture)
-            ++reads.computed;
-        else
+        switch (info.kind)
         {
-            const uint16_t unit = ins.sources[1].number;
-            const bool cube = unit < 16 && shader.reflection.samplers[unit] == SamplerType::Cube;
-            const bool first = cube ? (coord.swizzle & 0x3f) == 0x24 : (coord.swizzle & 0x0f) == 0x04;
-            ++(first ? reads.direct : reads.swizzled);
+        case ReadKind::None: break;
+        case ReadKind::Direct: ++reads.direct; break;
+        case ReadKind::Swizzled: ++reads.swizzled; break;
+        case ReadKind::Affine: ++reads.affine; break;
+        case ReadKind::Mixed: ++reads.mixed; break;
+        case ReadKind::Dependent: ++reads.dependent; break;
+        case ReadKind::Projected: ++reads.projected; break;
+        case ReadKind::Other: ++reads.other; break;
         }
     }
     return reads;
