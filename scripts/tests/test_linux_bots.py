@@ -599,6 +599,11 @@ DAMAGE_LOG_ROW = re.compile(r"^\s*\d+:\d+\s*D;", re.M)
 KILL_LOG_ROW = re.compile(r"^\s*\d+:\d+\s*K;", re.M)
 
 
+# bot_log 1 also prints each choice to take cover or hunt (bot_mind.h).
+COVER_ROW = re.compile(r"^bots: \d+ takes cover \d+ units away \((reloading|hurt|outnumbered)\)\s*$", re.M)
+HUNT_ROW = re.compile(r"^bots: \d+ hunts \((seen|heard|hit)\)\s*$", re.M)
+
+
 def fire_rows(output: str) -> list:
     return [tuple(int(v) for v in row) for row in FIRE_ROW.findall(output)]
 
@@ -896,6 +901,9 @@ def main() -> int:
             print(f"INFO: bots noticed opponents {len(rows)} times" +
                   (f" (after {min(r[2] for r in rows)} to {max(r[2] for r in rows)} ms in view, "
                    f"{min(r[3] for r in rows)} to {max(r[3] for r in rows)} units)" if rows else ""))
+            cover = len(COVER_ROW.findall(output))
+            hunts = len(HUNT_ROW.findall(output))
+            print(f"INFO: bots took cover {cover} times and went hunting {hunts} times")
         if args.combat:
             fights = fire_rows(output)
             print(f"INFO: bots opened fire {len(fights)} times" +

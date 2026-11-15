@@ -620,6 +620,30 @@ float UnitTrampoline()
 
 bool NavMesh::RandomReachablePoint(const float from[3], float (*unit)(void *), void *context, float out[3]) const
 {
+    return RandomAround(from, 1.0e6f, unit, context, out);
+}
+
+bool NavMesh::RandomPointNear(const float from[3], float radius, float (*unit)(void *), void *context,
+                              float out[3]) const
+{
+    return RandomAround(from, radius, unit, context, out);
+}
+
+float PathLength(const float (*points)[3], int count)
+{
+    float length = 0.0f;
+    for (int i = 1; i < count; ++i)
+    {
+        const float dx = points[i][0] - points[i - 1][0];
+        const float dy = points[i][1] - points[i - 1][1];
+        const float dz = points[i][2] - points[i - 1][2];
+        length += std::sqrt(dx * dx + dy * dy + dz * dz);
+    }
+    return length;
+}
+
+bool NavMesh::RandomAround(const float from[3], float radius, float (*unit)(void *), void *context, float out[3]) const
+{
     if (!m_query || !unit)
         return false;
     float s[3];
@@ -634,7 +658,7 @@ bool NavMesh::RandomReachablePoint(const float from[3], float (*unit)(void *), v
     dtPolyRef ref = 0;
     float point[3];
     const dtStatus status =
-        m_query->findRandomPointAroundCircle(startRef, sOn, 1.0e6f, m_filter, UnitTrampoline, &ref, point);
+        m_query->findRandomPointAroundCircle(startRef, sOn, radius, m_filter, UnitTrampoline, &ref, point);
     s_unit = nullptr;
     s_unitContext = nullptr;
     if (dtStatusFailed(status) || !ref)
