@@ -659,6 +659,12 @@ bool CreateDevice(Core &core)
     const bool portability = HasExtension(available, kPortabilitySubset);
     if (portability)
         extensions.push_back(kPortabilitySubset);
+    // Presents at a time of our choosing, for a frame every N refreshes
+    // (CoreDesc::swapInterval). KISAK_VK_DISPLAY_TIMING=0 leaves it off.
+    core.displayTiming = HasExtension(available, VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME)
+                         && !EnvEquals("KISAK_VK_DISPLAY_TIMING", "0");
+    if (core.displayTiming)
+        extensions.push_back(VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME);
 
     const float priority = 1.0f;
     VkDeviceQueueCreateInfo queueInfo{};
@@ -768,6 +774,14 @@ bool CreateDevice(Core &core)
 #undef GFX_VK_LOAD_DEVICE
     if (missing)
         return Fail(core, "the Vulkan device does not provide %s", missing);
+    if (core.displayTiming)
+    {
+        vk.vkGetRefreshCycleDurationGOOGLE = reinterpret_cast<PFN_vkGetRefreshCycleDurationGOOGLE>(
+            vk.vkGetDeviceProcAddr(core.dev, "vkGetRefreshCycleDurationGOOGLE"));
+        vk.vkGetPastPresentationTimingGOOGLE = reinterpret_cast<PFN_vkGetPastPresentationTimingGOOGLE>(
+            vk.vkGetDeviceProcAddr(core.dev, "vkGetPastPresentationTimingGOOGLE"));
+        core.displayTiming = vk.vkGetRefreshCycleDurationGOOGLE && vk.vkGetPastPresentationTimingGOOGLE;
+    }
     vk.vkGetDeviceQueue(core.dev, core.queueFamily, 0, &core.queue);
 
     core.depthStencilFormat = PickDepthStencilFormat(core);
@@ -846,6 +860,23 @@ VkSurfaceFormatKHR ChooseFormat(const std::vector<VkSurfaceFormatKHR> &formats)
         }
     }
     return formats[0];
+}
+
+// What CoreDesc::swapInterval does with this swapchain, said once per change.
+void LogSwapInterval(Core &core)
+{
+    const uint32_t interval = core.swapInterval.load();
+    if (interval <= 1 || !core.swapchain)
+        return;
+    const VkPresentModeKHR mode = core.swapInfo.presentMode;
+    if (mode != VK_PRESENT_MODE_FIFO_KHR && mode != VK_PRESENT_MODE_FIFO_RELAXED_KHR)
+        Log(core, "a frame every %u refreshes needs vsync (FIFO); the swapchain is %s, so frames show as they come",
+            interval, PresentModeName(mode));
+    else if (!core.displayTiming)
+        Log(core, "a frame every %u refreshes needs VK_GOOGLE_display_timing, which the device lacks; every frame "
+                  "shows at the next refresh", interval);
+    else
+        Log(core, "a frame every %u refreshes, paced through VK_GOOGLE_display_timing", interval);
 }
 
 // KISAK_VK_PRESENT_MODE, when it names a mode (ChoosePresentMode's `wanted`).
@@ -1070,6 +1101,7 @@ BuildResult BuildSwapchain(Core &core)
     Log(core, "swapchain %ux%u %s %s, %u images%s%s", extent.width, extent.height, FormatName(format.format),
         PresentModeName(mode), core.swapInfo.imageCount, canCapture ? ", capturable" : "",
         core.transformLeftToCompositor ? ", turned by the compositor" : "");
+    LogSwapInterval(core);
     return BuildResult::Built;
 }
 
@@ -1118,6 +1150,7 @@ Core *CreateCore(const CoreDesc &desc, const WindowSystem &window, char *error, 
     Core *core = new Core();
     core->desc = desc;
     core->window = window;
+    core->swapInterval = std::clamp(desc.swapInterval, 1u, 4u);
     if (EnvEquals("KISAK_VK_RECORD_THREAD", "0"))
         core->desc.recordThread = false;
     else if (EnvEquals("KISAK_VK_RECORD_THREAD", "1"))
@@ -1294,6 +1327,15 @@ bool VertexFormatSupported(const Core *core, VkFormat format)
     VkFormatProperties props{};
     core->vk.vkGetPhysicalDeviceFormatProperties(core->physical, format, &props);
     return (props.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT) != 0;
+}
+
+void SetSwapInterval(Core *core, uint32_t interval)
+{
+    if (!core)
+        return;
+    interval = std::clamp(interval, 1u, 4u);
+    if (core->swapInterval.exchange(interval) != interval)
+        LogSwapInterval(*core);
 }
 
 const char *PresentModeName(VkPresentModeKHR mode)

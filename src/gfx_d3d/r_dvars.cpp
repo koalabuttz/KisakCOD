@@ -56,6 +56,7 @@
  const dvar_t *r_drawBModels;
  const dvar_t *r_drawXModels;
  const dvar_t *r_vsync;
+ const dvar_t *r_vsyncInterval;
  const dvar_t *r_singleCell;
  const dvar_t *r_glowTweakBloomDesaturation;
  const dvar_t *sm_polygonOffsetScale;
@@ -1015,6 +1016,18 @@
          1,
          DVAR_ARCHIVE | DVAR_LATCH,
          "Enable v-sync before drawing the next frame to avoid 'tearing' artifacts.");
+     // KISAK: a frame every N refreshes with r_vsync (D3DPRESENT_INTERVAL_TWO
+     // to _FOUR): 2 holds the game to an even half of the display's rate, 30
+     // frames a second on a 60 Hz screen. The Vulkan back end paces it
+     // through VK_GOOGLE_display_timing (Android has it).
+     r_vsyncInterval = Dvar_RegisterInt(
+         "r_vsyncInterval",
+         1,
+         1,
+         4,
+         DVAR_ARCHIVE | DVAR_LATCH,
+         "With r_vsync, the screen refreshes each frame is shown for: 1 every refresh, 2 half the display's rate "
+         "(30 fps at 60 Hz), 3 a third, 4 a quarter");
 #ifdef KISAK_GFX_GXM
      // "steady": the Vita clears a scene's colour to r_clearColor before it
      // draws. The retail game clears it only when a frame has no float-Z

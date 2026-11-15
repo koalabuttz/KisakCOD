@@ -208,6 +208,15 @@ struct RecordState : RecordContext
     uint64_t presents = 0;  // presents made
     bool rebuild = false;   // a present found the swapchain out of date or suboptimal
     bool surfaceLost = false; // a present found the surface gone (VK_ERROR_SURFACE_LOST_KHR)
+    // Present pacing (CoreDesc::swapInterval > 1, VK_GOOGLE_display_timing):
+    // the swapchain it was worked out for, its refresh cycle, the last present
+    // id given and the newest one the display reported shown, and when.
+    VkSwapchainKHR pacedSwapchain = VK_NULL_HANDLE;
+    uint64_t refreshNs = 0;
+    uint32_t presentId = 0;
+    uint32_t shownId = 0;
+    uint64_t shownNs = 0;
+    uint64_t pacedPresents = 0;
 };
 
 // Packets start at multiples of kRecordAlign in memory from operator new,
@@ -307,6 +316,11 @@ public:
     bool debugUtils = false;
     bool syncValidation = false;
     bool portabilityEnumeration = false;
+    // VK_GOOGLE_display_timing is enabled: presents can ask for a time
+    // (CoreDesc::swapInterval).
+    bool displayTiming = false;
+    // CoreDesc::swapInterval as SetSwapInterval last set it.
+    std::atomic<uint32_t> swapInterval{1};
     VkDebugUtilsMessengerEXT messenger = VK_NULL_HANDLE;
     VkSurfaceKHR surface = VK_NULL_HANDLE;
 

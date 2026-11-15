@@ -99,6 +99,7 @@ bool Device::Init()
     desc.host = &h;
     desc.window = window_;
     desc.vsync = params_.PresentationInterval != D3DPRESENT_INTERVAL_IMMEDIATE;
+    desc.swapInterval = SwapIntervalOf(params_.PresentationInterval);
     desc.width = params_.BackBufferWidth;
     desc.height = params_.BackBufferHeight;
     desc.samples = SamplesOf(params_.MultiSampleType);
@@ -522,8 +523,11 @@ HRESULT STDMETHODCALLTYPE Device::Reset(D3DPRESENT_PARAMETERS *params)
         HostLog(host(), "vulkan d3d9: Reset: no back buffer of multisample type %u", unsigned(params->MultiSampleType));
         return D3DERR_NOTAVAILABLE;
     }
-    if ((params->PresentationInterval == D3DPRESENT_INTERVAL_IMMEDIATE)
-        != (params_.PresentationInterval == D3DPRESENT_INTERVAL_IMMEDIATE))
+    // Vsync on or off needs a new device (another present mode); how many
+    // refreshes a frame stays on screen does not.
+    const bool sameVsync = (params->PresentationInterval == D3DPRESENT_INTERVAL_IMMEDIATE)
+                           == (params_.PresentationInterval == D3DPRESENT_INTERVAL_IMMEDIATE);
+    if (!sameVsync)
         HostLog(host(), "vulkan d3d9: Reset: the presentation interval changes only with a new device");
 
     uint32_t width = params->BackBufferWidth, height = params->BackBufferHeight;
@@ -567,7 +571,9 @@ HRESULT STDMETHODCALLTYPE Device::Reset(D3DPRESENT_PARAMETERS *params)
         params_.BackBufferCount = 1;
     if (!params_.hDeviceWindow)
         params_.hDeviceWindow = old.hDeviceWindow;
-    params_.PresentationInterval = old.PresentationInterval;
+    params_.PresentationInterval = sameVsync ? params->PresentationInterval : old.PresentationInterval;
+    if (sameVsync && SwapIntervalOf(params_.PresentationInterval) != SwapIntervalOf(old.PresentationInterval))
+        BackendSetSwapInterval(backend_, SwapIntervalOf(params_.PresentationInterval));
     params_.MultiSampleType = samples > 1 ? static_cast<D3DMULTISAMPLE_TYPE>(samples) : D3DMULTISAMPLE_NONE;
     params_.MultiSampleQuality = 0;
     DefaultState();

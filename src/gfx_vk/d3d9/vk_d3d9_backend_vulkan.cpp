@@ -908,6 +908,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     coreDesc.validation = h.validation;
     coreDesc.deviceIndex = h.deviceIndex;
     coreDesc.vsync = desc.vsync;
+    coreDesc.swapInterval = desc.swapInterval;
     coreDesc.pipelineCachePath = h.pipelineCachePath;
     // Vulkan calls on a thread of the core's own, off the render thread (as
     // DXVK does); KISAK_VK_RECORD_THREAD=0 turns it off.
@@ -1511,6 +1512,12 @@ bool BackendWindowSize(const Backend *backend, uint32_t &width, uint32_t &height
         return false;
     backend->windowSystem.getPixelSize(backend->windowSystem.user, &width, &height);
     return true;
+}
+
+void BackendSetSwapInterval(Backend *backend, uint32_t interval)
+{
+    if (backend && backend->core)
+        SetSwapInterval(backend->core, interval);
 }
 
 void BackendCounters(const Backend *backend, DeviceCounters &out)

@@ -217,7 +217,11 @@ The activity starts the game without shadow maps (`+set sm_enable 0`): on
 the Adreno 740 the sun's shadows flickered from frame to frame (2026-11-15,
 cause not found yet). The activity always starts the game full screen (`+set r_fullscreen 1`, so
 SDL hides Android's system bars; run 3 had a 1920x970 window under the
-navigation bar). The game's console goes to logcat under the tag KisakCOD: Android drops an
+navigation bar). For an even 30 frames a second (Modern visuals on the Retroid Pocket 6
+run at 33-40), `+set r_vsync 1 +set r_vsyncInterval 2` shows each frame for
+two refreshes of a 60 Hz screen (four at 120 Hz: `r_vsyncInterval 4`), paced
+through Android's `VK_GOOGLE_display_timing` (docs/vulkan-core.md, Swapchain).
+The game's console goes to logcat under the tag KisakCOD: Android drops an
 app's stdout and stderr, so `src/linux/main.cpp` copies them there.
 
 First start on the Retroid Pocket 6 (2026-11-15, CI APK of 91d7799): the menu
