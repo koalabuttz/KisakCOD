@@ -634,6 +634,10 @@ def validate_objectives(output: str) -> list:
     held = sum(1 for _, _, hold in TEAM_OBJECTIVES_ROW.findall(output) if int(hold) > 0)
     arrived = len(re.findall(r"^bots: \d+ is on an objective\s*$", output, re.M))
     print(f"INFO: bots got onto an objective {arrived} times")
+    stuck = len(re.findall(r"^bots: \d+ (is stuck on its way|finds no way) to an objective", output, re.M))
+    short = len(re.findall(r"^bots: \d+ stopped \d+ units from an objective", output, re.M))
+    print(f"INFO: bots got stuck or found no way to an objective {stuck} times and stopped short of one "
+          f"{short} times")
     print(f"INFO: a team's compass showed a flag of its own to hold {held} times "
           "(a capture turns a flag to take into one to hold)")
     return [

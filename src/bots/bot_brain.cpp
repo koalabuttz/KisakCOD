@@ -143,6 +143,7 @@ struct BotSlot
     bool holdFacingKnown = false;
     bool atObjective = false;
     int roleRetryAt = 0;
+    bool shortLogged = false; // said it stopped short of its objective
 
     // A grenade: lining up the throw, holding the button (the fuse runs),
     // when it may throw again, and the enemy it last thought about one for.
@@ -351,6 +352,9 @@ bool Walk(BotSlot &bot, const playerState_s *ps, float seconds, usercmd_s &cmd, 
             {
                 bot.roleGoal = false;
                 bot.roleRetryAt = svs.time + 3000;
+                if (bot.role == kb::Role::Attack && LogOn())
+                    Com_Printf(CON_CHANNEL_SERVER, "bots: %d is stuck on its way to an objective at %.0f %.0f %.0f\n",
+                               static_cast<int>(&bot - s_slots), origin[0], origin[1], origin[2]);
             }
         }
         return false;
@@ -921,8 +925,16 @@ void Command()
             kb::SortNearestFirst(team.hold, team.holdCount, team.side);
         }
         if ((team.takeCount != oldTake || team.holdCount != oldHold) && LogOn())
+        {
             Com_Printf(CON_CHANNEL_SERVER, "bots: team %d objectives: take %d, hold %d\n", teamIndex, team.takeCount,
                        team.holdCount);
+            for (int i = 0; i < team.takeCount; ++i)
+                Com_Printf(CON_CHANNEL_SERVER, "bots: team %d objective to take at %.0f %.0f %.0f\n", teamIndex,
+                           team.take[i][0], team.take[i][1], team.take[i][2]);
+            for (int i = 0; i < team.holdCount; ++i)
+                Com_Printf(CON_CHANNEL_SERVER, "bots: team %d objective to hold at %.0f %.0f %.0f\n", teamIndex,
+                           team.hold[i][0], team.hold[i][1], team.hold[i][2]);
+        }
 
         kb::Role roles[kMaxBotSlots];
         kb::AssignRoles(people, count, team.takeCount, team.holdCount, roles);
@@ -1082,6 +1094,12 @@ RolePlan PlanRole(BotSlot &bot, int clientNum, const kb::NavMesh &nav, const flo
                 bot.atObjective = Distance2D(origin, bot.objective) < 96.0f;
                 if (bot.atObjective && !wasAtObjective && LogOn())
                     Com_Printf(CON_CHANNEL_SERVER, "bots: %d is on an objective\n", clientNum);
+                if (!bot.atObjective && !bot.shortLogged && LogOn())
+                {
+                    bot.shortLogged = true;
+                    Com_Printf(CON_CHANNEL_SERVER, "bots: %d stopped %.0f units from an objective at %.0f %.0f %.0f\n",
+                               clientNum, Distance2D(origin, bot.objective), origin[0], origin[1], origin[2]);
+                }
             }
             return RolePlan::Keep;
         }
@@ -1089,6 +1107,7 @@ RolePlan PlanRole(BotSlot &bot, int clientNum, const kb::NavMesh &nav, const flo
             return RolePlan::Default;
         bot.roleGoal = true;
         bot.holdUntil = 0;
+        bot.shortLogged = false;
         if (LogOn())
             Com_Printf(CON_CHANNEL_SERVER, "bots: %d attacks an objective %.0f units away\n", clientNum,
                        Distance2D(origin, bot.objective));
@@ -1289,6 +1308,9 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
             {
                 bot.roleGoal = false;
                 bot.roleRetryAt = svs.time + 3000;
+                if (bot.role == kb::Role::Attack && LogOn())
+                    Com_Printf(CON_CHANNEL_SERVER, "bots: %d finds no way to an objective at %.0f %.0f %.0f\n",
+                               clientNum, bot.goal[0], bot.goal[1], bot.goal[2]);
             }
         }
     }
