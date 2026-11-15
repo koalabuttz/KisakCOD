@@ -64,18 +64,21 @@ involved. The checks:
                  modern_ao's, modern_reflections' three lit-floor scenes,
                  modern_planar's two (its floor's and its water's) and
                  modern_live's three with lit surfaces
-                 kept over white, inputs changed 2.5 times in each (twice in
+                 kept over white, inputs changed 2.6 times in each (2.5 with
+                 KISAK_VK_MODERN_MODEL_SHADERS=0 or KISAK_VK_MODERN_SHADERS=0,
+                 where modern_ao's wall is not ours; twice in
                  modern_lit and
                  modern_tonemap, five times in modern_lit_lights, six in
                  modern_lit_shader and modern_lit_models, seven in
-                 modern_lit_no_sun, once in modern_ao and in each of
+                 modern_lit_no_sun, twice in modern_ao when our model shaders
+                 draw its wall and once when not, once in each of
                  modern_reflections', modern_planar's and modern_live's), and
-                 the twenty-seven
+                 the twenty-eight
                  pixel modules
                  modern_lit_shader's, modern_lit_models', modern_lit_no_sun's
-                 and modern_lit_lights' twenty-four, modern_ao's one (its
-                 floor is depth-tested against the prepass, a depth compare
-                 of its own; twenty-six in all with
+                 and modern_lit_lights' twenty-four, modern_ao's two (its
+                 floor and wall are depth-tested against the prepass, a depth
+                 compare of their own; twenty-six in all with
                  KISAK_VK_DEPTH_COMPARE=dynamic, where the compare is not
                  built in), modern_reflections' one and modern_planar's
                  water built as our own lit shaders (one fewer with
@@ -190,6 +193,14 @@ involved. The checks:
                  KISAK_VK_MODERN_SSR=0 and KISAK_VK_MODERN_NORMALS=0, where
                  they are not; the full run traces them for 3 scenes
                  unless linear light, lit inputs or our lit shaders are off
+  compute        --scene modern_compute, which a full run leaves out, passes
+                 with KISAK_VK_MODERN_DEBUG=compute (and with linear light
+                 off), where two compute passes build a 3D volume (a storage
+                 image and a storage buffer, then a front-to-back
+                 integration along z) and a draw samples it over the
+                 viewport (the scene's own points; one volume built and
+                 drawn, logged), and without the debug view, where nothing
+                 is built and the scene is as drawn
 
 Usage:
   test_vulkan_d3d9_front.py --binary build/bin/KisakCOD-vulkan-d3d9-check
@@ -585,6 +596,30 @@ def main():
                       and (reads is not None and reads.group(1) == '2' if views else reads is None),
                       f'status {code}\n{stdout}')
 
+    # compute
+    compute_line = re.compile(r'^d3d9_check\.log=vulkan d3d9: modern: (\d+) compute check volumes built \((\d+) '
+                              r'drawn\), ([0-9.]+) ms GPU each for its compute passes$', re.M)
+    for settings, built in (({'KISAK_VK_MODERN_DEBUG': 'compute'}, True),
+                            ({'KISAK_VK_MODERN_DEBUG': 'compute', 'KISAK_VK_MODERN_LINEAR': '0'}, True),
+                            ({}, False),
+                            ({'KISAK_VK_MODERN_LINEAR': '0'}, False)):
+        chosen = dict(env)
+        for name in ('KISAK_VK_MODERN_LINEAR', 'KISAK_VK_MODERN_DEBUG'):
+            chosen.pop(name, None)
+        chosen.update(settings)
+        code, stdout, _ = run(binary, ['--scene', 'modern_compute', '--validation', args.validation], chosen)
+        found, scenes = parse(stdout)
+        line = compute_line.search(stdout)
+        named = ' '.join(f'{k}={v}' for k, v in settings.items()) or 'the defaults'
+        checks.expect(f'modern_compute passes with {named}',
+                      code == 0 and found.get('d3d9_check') == 'passed'
+                      and len(scenes) == 1 and scenes[0][0] == 'modern_compute' and scenes[0][1] > 0
+                      and scenes[0][2] == 0
+                      and (line is not None and line.group(1) == '1' and line.group(2) == '1' if built
+                           else line is None)
+                      and 'no compute check' not in stdout and 'compute check is not' not in stdout,
+                      f'status {code}\n{stdout}')
+
     # present-mode
     fifo = dict(env)
     fifo['KISAK_VK_PRESENT_MODE'] = 'fifo'
@@ -793,8 +828,13 @@ def main():
         checks.expect('no scene with lit surfaces in linear light with linear light or lit inputs off', lit is None,
                       lit.group(0) if lit else '')
     else:
-        checks.expect('the Modern path drew lit surfaces in linear light in 15 scenes, inputs changed 2.5 times each',
-                      lit is not None and lit.group(1) == '15' and lit.group(2) == '2.5',
+        # modern_ao changes them twice, its floor's and its wall's, with our
+        # model shaders (39 in 15 scenes); once without them or without any
+        # lit shaders of our own (38).
+        ours_wall = env.get('KISAK_VK_MODERN_MODEL_SHADERS') != '0' and env.get('KISAK_VK_MODERN_SHADERS') != '0'
+        changes = '2.6' if ours_wall else '2.5'
+        checks.expect(f'the Modern path drew lit surfaces in linear light in 15 scenes, inputs changed {changes} times each',
+                      lit is not None and lit.group(1) == '15' and lit.group(2) == changes,
                       lit.group(0) if lit else 'missing')
     shaders = last_line(r'^d3d9_check\.log=vulkan d3d9: modern: lit shaders of our own: ([0-9.]+) changes to one '
                         r'each scene, (\d+) pixel modules built as one \((\d+) could not be\)', stdout)
@@ -803,13 +843,17 @@ def main():
         checks.expect('no lit shaders of our own with linear light, lit inputs or our shaders off', shaders is None,
                       shaders.group(0) if shaders else '')
     else:
-        # modern_ao's floor tests depth against its prepass: a depth compare
-        # of its own, built into its module unless chosen at run time.
-        modules = 27 if env.get('KISAK_VK_DEPTH_COMPARE') != 'dynamic' else 26
+        # modern_ao's floor and wall test depth against its prepass: a depth
+        # compare of their own, built into their modules unless chosen at run
+        # time (then the wall's is modern_lit_models' lp_sun_r0c0).
+        dynamic = env.get('KISAK_VK_DEPTH_COMPARE') == 'dynamic'
+        modules = 28 if not dynamic else 26
         if env.get('KISAK_VK_MODERN_WATER') == '0':
             modules -= 1  # modern_planar's water
         if env.get('KISAK_VK_MODERN_MODEL_SHADERS') == '0':
-            modules -= 11  # the models' with the sun (6), without (2), lp_amb and with a spot or omni light (2)
+            # the models' with the sun (6), without (2), lp_amb and with a spot
+            # or omni light (2), and modern_ao's wall unless the compare is dynamic
+            modules -= 11 if dynamic else 12
         if env.get('KISAK_VK_MODERN_NO_SUN_SHADERS') == '0':
             modules -= 4 if env.get('KISAK_VK_MODERN_MODEL_SHADERS') == '0' else 6
         if env.get('KISAK_VK_MODERN_LIGHT_SHADERS') == '0':

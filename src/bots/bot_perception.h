@@ -188,6 +188,10 @@ struct Contact
     int lastHeardAt = -1;
     float lastSeen[3] = {0.0f, 0.0f, 0.0f};
     float lastHeard[3] = {0.0f, 0.0f, 0.0f};
+    // How the player moved between the bot's last two looks, units a second
+    // (0 until it has looked twice in a row).
+    float velocity[3] = {0.0f, 0.0f, 0.0f};
+    bool tracked = false;
 };
 
 // Where a bot's attention goes, best first.
@@ -371,6 +375,27 @@ private:
 
     static void Remember(Contact &contact, const float *position, int nowMs)
     {
+        // Looks at most half a second apart give the player's motion; a gap
+        // starts it afresh. Never faster than a player sprints.
+        const int ms = nowMs - contact.lastSeenAt;
+        if (contact.tracked && ms > 0 && ms <= 500)
+        {
+            float moved[3];
+            float speed2 = 0.0f;
+            for (int k = 0; k < 3; ++k)
+            {
+                moved[k] = (position[k] - contact.lastSeen[k]) * 1000.0f / static_cast<float>(ms);
+                speed2 += moved[k] * moved[k];
+            }
+            const float scale = speed2 > 400.0f * 400.0f ? 400.0f / std::sqrt(speed2) : 1.0f;
+            for (int k = 0; k < 3; ++k)
+                contact.velocity[k] = 0.5f * contact.velocity[k] + 0.5f * moved[k] * scale;
+        }
+        else
+        {
+            contact.velocity[0] = contact.velocity[1] = contact.velocity[2] = 0.0f;
+        }
+        contact.tracked = true;
         contact.lastSeenAt = nowMs;
         std::memcpy(contact.lastSeen, position, sizeof(contact.lastSeen));
     }

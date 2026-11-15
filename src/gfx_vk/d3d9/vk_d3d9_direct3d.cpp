@@ -277,6 +277,18 @@ uint32_t LogDeviceStats(bool reset)
     return count;
 }
 
+uint32_t LogDeviceMemory(const char *when)
+{
+    const FrontLock lock;
+    uint32_t count = 0;
+    for (Device *live : LiveDevices())
+    {
+        live->LogMemory(when);
+        ++count;
+    }
+    return count;
+}
+
 bool Counters(IDirect3DDevice9 *device, DeviceCounters &out)
 {
     const FrontLock lock;

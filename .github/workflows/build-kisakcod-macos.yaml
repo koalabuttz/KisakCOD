@@ -47,6 +47,7 @@ on:
       - tests/linux_mp_client/**
       - tests/linux_device_probe/d3d9_unavailable.cpp
       - tests/skinning/**
+      - scripts/tests/test_static_cull_vec.py
       - tests/linux_cinematic/**
       - scripts/platform/macos/**
       - scripts/vulkan_probe/**
@@ -81,6 +82,7 @@ on:
       - tests/linux_mp_client/**
       - tests/linux_device_probe/d3d9_unavailable.cpp
       - tests/skinning/**
+      - scripts/tests/test_static_cull_vec.py
       - tests/linux_cinematic/**
       - scripts/platform/macos/**
       - scripts/vulkan_probe/**
@@ -530,6 +532,15 @@ jobs:
           if [[ "${{ matrix.arch }}" == x86_64 ]]; then
             "$OUT_DIR/KisakCOD-skin-sse2-test"
           fi
+
+      # The static culling walk that holds a box against four clip planes at a
+      # time (NEON on Apple silicon), against the scalar walk.
+      - name: Run the static culling check
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/tests/test_static_cull_vec.py
 
   universal:
     # Manual runs with universal=true only: the two optimised client bundles

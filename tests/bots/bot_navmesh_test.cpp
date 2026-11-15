@@ -234,6 +234,44 @@ static void Islands()
     Check(!Reaches(b.mesh, from, other), "the other room is not reachable");
 }
 
+static void Nearby()
+{
+    std::printf("\n== points near the bot ==\n");
+    kb::NavGeometry g;
+    Floor(g, 0, 0, 4000, 4000);
+    Built b;
+    Build(g, b);
+    Seq seq;
+    float from[3] = {2000, 2000, 0};
+    float nearSum = 0.0f;
+    float anySum = 0.0f;
+    float farthest = 0.0f;
+    int got = 0;
+    for (int i = 0; i < 200; ++i)
+    {
+        float p[3];
+        if (b.mesh.RandomPointNear(from, 300.0f, NextUnit, &seq, p))
+        {
+            ++got;
+            const float d = std::hypot(p[0] - from[0], p[1] - from[1]);
+            nearSum += d;
+            farthest = std::fmax(farthest, d);
+        }
+        if (b.mesh.RandomReachablePoint(from, NextUnit, &seq, p))
+            anySum += std::hypot(p[0] - from[0], p[1] - from[1]);
+    }
+    std::printf("INFO: near picks: mean %.0f, farthest %.0f units; anywhere: mean %.0f\n", nearSum / 200.0f, farthest,
+                anySum / 200.0f);
+    Check(got == 200, "every near pick finds a point");
+    // Detour keeps polygons that reach into the circle, so a point can lie a
+    // polygon's size beyond it.
+    Check(farthest < 1000.0f && nearSum < 0.5f * anySum, "near picks stay near");
+
+    const float path[3][3] = {{0, 0, 0}, {300, 0, 0}, {300, 400, 0}};
+    Check(std::fabs(kb::PathLength(path, 3) - 700.0f) < 0.01f && kb::PathLength(path, 1) == 0.0f,
+          "a path's length is the sum of its legs");
+}
+
 static void Cache()
 {
     std::printf("\n== the cache blob ==\n");
@@ -295,6 +333,7 @@ int main()
     Heights();
     Facing();
     Islands();
+    Nearby();
     Cache();
     LargeMap();
     if (gFailures)
