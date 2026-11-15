@@ -20,8 +20,9 @@ fake_pc_game.py), ``framelog`` prints a frame log line, ``<dvar> <value>``
 sets r_fakeCost, ``quit`` quits. Its console goes to logcat under KisakCOD.
 
 As the emulator (``--emulator -avd <name> -port <port> ...``) it writes its
-arguments to ``emulator-args.txt``, boots in 0.3 s and runs until ``adb emu
-kill``; with FAKE_ADB_EMULATOR=1 adb finds a device only while it runs.
+arguments to ``emulator-args.txt``, boots in 0.3 s, mounts shared storage
+2.5 s later (``ls``/``mkdir`` under /sdcard are refused before) and runs
+until ``adb emu kill``; with FAKE_ADB_EMULATOR=1 adb finds a device only while it runs.
 ``push <folder>/. <device folder>/`` copies a folder in, ``shell ls`` says
 whether a path is there.
 
@@ -93,14 +94,24 @@ def alive(name):
     return pid
 
 
+def storage_ready():
+    """Shared storage: on an emulator it mounts a while after boot_completed."""
+    return os.environ.get("FAKE_ADB_EMULATOR") != "1" or (STATE / "storage").exists()
+
+
 def shell(command):
     words = shlex.split(command)
+    if (words[:1] in (["ls"], ["mkdir"]) and any(word.startswith(("/sdcard", "/storage/emulated")) for word in words)
+            and not storage_ready()):
+        print(f"{words[0]}: '/sdcard/Android': Permission denied", file=sys.stderr)
+        return 1
     if words[:2] == ["getprop", "sys.boot_completed"]:
         print("1" if os.environ.get("FAKE_ADB_EMULATOR") != "1" or (STATE / "booted").exists() else "")
     elif words[:2] == ["mkdir", "-p"]:
         for path in words[2:]:
             device_path(path).mkdir(parents=True, exist_ok=True)
     elif words[:1] == ["ls"]:
+        words = [word for word in words if word != "-d"]
         if not device_path(words[1]).exists():
             print(f"ls: {words[1]}: No such file or directory", file=sys.stderr)
             return 1
@@ -343,17 +354,23 @@ def emulator(argv):
         return 1
     (STATE / "emulator.pid").write_text(str(os.getpid()))
     (STATE / "booted").unlink(missing_ok=True)
+    (STATE / "storage").unlink(missing_ok=True)
     time.sleep(0.3)
     (STATE / "booted").write_text("1")
+    # Shared storage mounts later than boot_completed, as on the PC's AVD.
+    time.sleep(2.5)
+    (STATE / "storage").write_text("1")
     try:
         time.sleep(3600)
     finally:
         (STATE / "booted").unlink(missing_ok=True)
+        (STATE / "storage").unlink(missing_ok=True)
     return 0
 
 
 def main():
     STATE.mkdir(parents=True, exist_ok=True)
+    (STATE / "sdcard" / "Android" / "data").mkdir(parents=True, exist_ok=True)  # as on any device
     if sys.argv[1:2] == ["--emulator"]:
         import signal
         signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))

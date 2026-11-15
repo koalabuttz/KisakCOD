@@ -106,6 +106,9 @@
 // The sun's shadow map is read with the soft filter where the push
 // constants say so (ModernShadowParams).
 #define SOFT_SUN_SHADOW (LM_SUN_SHADOW && LM_SUN_LIGHT == 1)
+// So is a spot or omni light's tile of its shadow map.
+#define SOFT_SPOT_SHADOW (LM_SUN_SHADOW && POINT_LIGHT)
+#define SOFT_SHADOW (SOFT_SUN_SHADOW || SOFT_SPOT_SHADOW)
 // Whether the world normal is read: for the light's N.L, or the specular.
 #define WORLD_NORMAL (LM_SUN_LIGHT || LM_SUN_SPECULAR)
 
@@ -261,7 +264,7 @@ const float kPlanarGlossFull = 0.8;
 layout(set = 1, binding = 13) uniform texture2D planarImage;
 layout(set = 1, binding = 29) uniform sampler planarSampler;
 #endif
-#if (LM_SUN_SPECULAR && LM_SUN_LIGHT == 1) || SOFT_SUN_SHADOW
+#if (LM_SUN_SPECULAR && LM_SUN_LIGHT == 1) || SOFT_SHADOW
 // The push constants: vk_legacy.h ModernPlanarParams, then ModernShadowParams.
 layout(push_constant) uniform ModernPush
 {
@@ -276,11 +279,12 @@ layout(push_constant) uniform ModernPush
     float facing; // the cosine from the plane's normal a surface's must reach
     float ripple; // how far the normal map's tilt moves the point read (units)
 #endif
-#if SOFT_SUN_SHADOW
-    // Penumbra near and far (texels per unit of depth), widest disc near and
-    // far (texels).
+#if SOFT_SHADOW
+    // Penumbra near and far (texels per unit of depth), the widest disc
+    // (texels), a spot or omni light's size (world units).
     layout(offset = 96) vec4 shadowDepth;
-    // Slope cap near and far (depth per texel), on (1 soft), frame.
+    // Slope cap near and far (depth per texel), on (+1 soft sun, +2 soft
+    // spot and omni lights), frame.
     vec4 shadowFilter;
 #endif
 } push;
@@ -320,6 +324,16 @@ float AmbientOcclusion()
     const ivec2 size = textureSize(sampler2D(ambientOcclusion, ambientOcclusionSampler), 0);
     const ivec2 at = min(ivec2(gl_FragCoord.xy), size - 1);
     return texelFetch(sampler2D(ambientOcclusion, ambientOcclusionSampler), at, 0).r;
+}
+
+// The Modern path's contact shadows (docs/vulkan-modern.md "Contact
+// shadows"): the sun's visibility from a short screen-space trace, in the
+// green of the same texture (1 where there are none).
+float ContactShadow()
+{
+    const ivec2 size = textureSize(sampler2D(ambientOcclusion, ambientOcclusionSampler), 0);
+    const ivec2 at = min(ivec2(gl_FragCoord.xy), size - 1);
+    return texelFetch(sampler2D(ambientOcclusion, ambientOcclusionSampler), at, 0).g;
 }
 
 // D3D9's alpha test on the output alpha, in 8 bits.
@@ -369,7 +383,7 @@ float ShadowTaps(vec2 xy, float reference)
 }
 #endif
 
-#if SOFT_SUN_SHADOW
+#if SOFT_SHADOW
 // Soft sun shadows (docs/vulkan-modern.md "Soft sun shadows"; percentage-
 // closer soft shadows, Fernando 2005): a search for the blockers around the
 // point, then depth-compare taps over a disc whose radius grows with the
@@ -421,7 +435,7 @@ float SoftShadow(vec2 xy, float reference, vec2 slope, int far, vec2 turn)
     const vec2 lo = vec2(0.5 * texel.x, top + 0.5 * texel.y);
     const vec2 hi = vec2(1.0 - 0.5 * texel.x, top + 0.5 - 0.5 * texel.y);
     const float penumbra = far != 0 ? push.shadowDepth.y : push.shadowDepth.x;
-    const float widest = far != 0 ? push.shadowDepth.w : push.shadowDepth.z;
+    const float widest = push.shadowDepth.z;
     const float cap = far != 0 ? push.shadowFilter.y : push.shadowFilter.x;
 
     // The blockers: the centre texel and a disc as wide as the widest filter.
@@ -457,11 +471,90 @@ float SoftShadow(vec2 xy, float reference, vec2 slope, int far, vec2 turn)
 }
 #endif
 
+#if SOFT_SPOT_SHADOW
+// Soft spot and omni shadows (docs/vulkan-modern.md "Soft spot-light
+// shadows"): the same filter on the light's tile of its shadow map (as wide
+// as the map, as tall as it is wide). The light's projection is a
+// perspective one (R_SetViewParmsForLight: near plane 1 for a primary
+// light, far plane its radius, 1 / lightPosition.w), so a stored depth's
+// distance from the light is far / (far - depth * (far - 1)), and the
+// receiver's is the shadow coordinate's w. The cone's half angle comes from
+// spotFactors (its ramp is 0 at the outer cosine), and with it a texel's
+// width at the receiver. The penumbra is the light's size (shadowDepth.w,
+// world units) times how far the receiver lies past its blockers over their
+// distance from the light, in texels there, from 1 to the widest disc.
+float SoftSpotShadow(vec2 xy, float reference, float distance, vec2 slope)
+{
+    const ivec2 size = textureSize(sampler2D(shadowMap, shadowMapSampler), 0);
+    const vec2 texel = 1.0 / vec2(size);
+    const float tile = float(size.x) * texel.y;
+    const float top = floor(clamp(xy.y, 0.0, 0.99999) / tile) * tile;
+    const vec2 lo = vec2(0.5 * texel.x, top + 0.5 * texel.y);
+    const vec2 hi = vec2(1.0 - 0.5 * texel.x, top + tile - 0.5 * texel.y);
+    const float invRadius = pc.c[CONSTANT_LIGHT_POSITION].w;
+    const float farPlane = invRadius > 0.0 ? max(1.0 / invRadius, 2.0) : 65536.0;
+    const vec4 spotFactors = pc.c[CONSTANT_SPOT_FACTORS];
+    const float cosOuter = spotFactors.x > 0.0 ? clamp(-spotFactors.y / spotFactors.x, 0.05, 0.9999) : 0.7071;
+    const float tanHalf = sqrt(1.0 - cosOuter * cosOuter) / cosOuter;
+    const float receiver = max(distance, 1.0);
+    const float texelWorld = 2.0 * tanHalf * receiver / float(size.x);
+    const float widest = push.shadowDepth.z;
+    const float lightSize = push.shadowDepth.w;
+    // The steepest receiver the per-tap bias follows (two units of height a
+    // unit across), in stored depth per texel: the depth's rate along the
+    // light's axis is far / ((far - 1) * distance^2).
+    const float cap = 2.0 * texelWorld * farPlane / ((farPlane - 1.0) * receiver * receiver);
+    const float spin = ShadowRotation();
+    const vec2 turn = vec2(cos(spin), sin(spin));
+
+    float distanceSum = 0.0;
+    float blockers = 0.0;
+    for (int i = 0; i <= kShadowSearchTaps; ++i)
+    {
+        const vec2 offset = i == kShadowSearchTaps ? vec2(0.0) : VogelTap(i, kShadowSearchTaps, turn) * widest;
+        const vec2 at = clamp(xy + offset * texel, lo, hi);
+        const float reach = cap * length(offset);
+        const float here = reference + clamp(dot(slope, offset * texel), -reach, reach);
+        const float stored = texelFetch(sampler2D(shadowMap, shadowMapSampler), ivec2(at * vec2(size)), 0).r;
+        if (stored < here)
+        {
+            distanceSum += farPlane / max(farPlane - stored * (farPlane - 1.0), 1e-3);
+            blockers += 1.0;
+        }
+    }
+    if (blockers == 0.0)
+        return 1.0;
+    const float blocker = max(distanceSum / blockers, 1.0);
+    const float radius = clamp(lightSize * max(receiver - blocker, 0.0) / (blocker * texelWorld), 1.0, widest);
+
+    float lit = 0.0;
+    for (int i = 0; i < kShadowFilterTaps; ++i)
+    {
+        const vec2 offset = VogelTap(i, kShadowFilterTaps, turn) * radius;
+        const vec2 at = clamp(xy + offset * texel, lo, hi);
+        const float reach = cap * length(offset);
+        const float here = reference + clamp(dot(slope, offset * texel), -reach, reach);
+        lit += textureLod(sampler2DShadow(shadowMap, shadowMapSampler), vec3(at, here), 0.0);
+    }
+    return lit / float(kShadowFilterTaps);
+}
+
+// A spot or omni light's shadow at xy (the tile's UV): soft, or the game's
+// four taps.
+float SpotShadow(vec2 xy, float reference, float distance, vec3 dx, vec3 dy)
+{
+    if (push.shadowFilter.z >= 2.0)
+        return SoftSpotShadow(xy, reference, distance, ShadowDepthSlope(dx, dy));
+    return SpotShadowTaps(xy, reference, pc.c[CONSTANT_PIXEL_ADJUST]);
+}
+#endif
+
 #if SOFT_SUN_SHADOW
 // The sun's shadow at xy in partition `far`: soft, or the game's four taps.
 float SunShadow(vec2 xy, float reference, int far, vec2 slope, vec2 turn)
 {
-    return push.shadowFilter.z != 0.0 ? SoftShadow(xy, reference, slope, far, turn) : ShadowTaps(xy, reference);
+    return mod(push.shadowFilter.z, 2.0) >= 1.0 ? SoftShadow(xy, reference, slope, far, turn)
+                                                 : ShadowTaps(xy, reference);
 }
 #endif
 
@@ -472,6 +565,11 @@ void main()
     // control flow, for the soft filter's depth bias.
     const vec3 shadowDx = dFdx(texcoord4.xyz);
     const vec3 shadowDy = dFdy(texcoord4.xyz);
+#elif SOFT_SPOT_SHADOW
+    // The projected shadow coordinate's, for the same with a spot or omni
+    // light's tile.
+    const vec3 shadowDx = dFdx(texcoord4.xyz / texcoord4.w);
+    const vec3 shadowDy = dFdy(texcoord4.xyz / texcoord4.w);
 #endif
     const vec2 uv = texcoord0.xy;
     const vec2 lightmapUv = texcoord0.zw;
@@ -560,7 +658,7 @@ void main()
         // sets the fade to 0 and binds none: the taps are left out, as the
         // game's D3D9 shader's 0 * anything is 0, whatever the lookup holds.
         if (fade > 0.0)
-            shadow = mix(primary, SpotShadowTaps(shadowUv, reference, pc.c[CONSTANT_PIXEL_ADJUST]), fade);
+            shadow = mix(primary, SpotShadow(shadowUv, reference, texcoord4.w, shadowDx, shadowDy), fade);
     }
 #endif
     const vec3 visibility = shadow * attenuation * cone;
@@ -602,6 +700,8 @@ void main()
         }
     }
 #endif
+    // What the shadow map or the lightmap is too coarse to hold.
+    shadow = min(shadow, ContactShadow());
     const vec3 sunDirection = pc.c[17].xyz;
     const float facingSun = clamp(dot(sunDirection, normal), 0.0, 1.0);
     const vec3 sunDisplay = shadow * facingSun * pc.c[18].rgb;

@@ -536,6 +536,7 @@ VkShaderModule FindPixelModule(Device &device, Shader &ps, const Shader &vs, uin
         inputs.samplers = linear.linearSamplers;
         inputs.doubled = linear.linearDoubled;
         inputs.flags = linear.linearColorInput;
+        inputs.emissive = inputs.flags & ls::kLinearEmissive ? device.modernEmissive : uint8_t(0);
         inputs.shader = linear.linearShader;
         recipe.sunStrength = device.modernSunStrength;
         recipe.skyStrength = device.modernSkyStrength;
@@ -3181,7 +3182,7 @@ void SetLinearLight(Texture *texture, bool linear)
 }
 
 void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint16_t doubled, bool colorInput,
-                     bool overWhite, uint16_t shader)
+                     bool overWhite, uint16_t shader, bool emissive)
 {
     if (!device)
         return;
@@ -3190,6 +3191,11 @@ void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint
     {
         inputs.flags = ls::kLinearOverWhite;
         inputs.shader = ModernLitShaderValid(shader) ? shader : uint16_t(ModernLitNone);
+    }
+    else if (emissive)
+    {
+        inputs.flags = ls::kLinearEmissive;
+        inputs.emissive = device->modernEmissive;
     }
     else
     {
@@ -3235,6 +3241,12 @@ void SetModernLightPass(Device *device, float strength)
 {
     if (device)
         device->modernLightPass = strength >= 0.0f ? strength : 1.0f;
+}
+
+void SetModernEmissive(Device *device, float strength)
+{
+    if (device)
+        device->modernEmissive = static_cast<uint8_t>(std::lround(std::clamp(strength, 1.0f, 63.75f) * 4.0f));
 }
 
 void SetModernShadow(Device *device, const ModernShadowParams *params)

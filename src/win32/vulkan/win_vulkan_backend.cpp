@@ -529,6 +529,9 @@ front::ModernSceneView ModernViewOf(const GfxModernScene *scene)
         std::memcpy(to.shadowLookup, from.shadowLookup, sizeof(to.shadowLookup));
         to.inSunMap = from.inSunMap;
     }
+    view.sun.on = scene->sun.on;
+    std::memcpy(view.sun.direction, scene->sun.direction, sizeof(view.sun.direction));
+    std::memcpy(view.sun.color, scene->sun.color, sizeof(view.sun.color));
     return view;
 }
 
@@ -612,6 +615,7 @@ void ModernLitInputs(void *, IDirect3DDevice9 *device, const GfxModernLitInputs 
     lit.doubled = inputs->doubled;
     lit.colorInput = inputs->colorInput;
     lit.overWhite = inputs->overWhite;
+    lit.emissive = inputs->emissive;
     lit.shader = inputs->shader;
     front::SetModernLitInputs(device, &lit);
 }
@@ -693,6 +697,9 @@ void ModernSunShadow(void *, IDirect3DDevice9 *device, const GfxModernSunShadow 
         view.texel[i] = shadow->texel[i];
         view.depthUnits[i] = shadow->depthUnits[i];
     }
+    view.sun = shadow->sun;
+    for (int i = 0; i < 3; ++i)
+        view.sunDir[i] = shadow->sunDir[i];
     front::ModernSunShadow(device, view);
 }
 

@@ -65,6 +65,15 @@ struct GfxModernFog
     GfxModernFogSpot spots[4];
 };
 
+// The view's sun, for the god rays (light shafts drawn on the screen from
+// the sun past what blocks it): set where the map has a sun.
+struct GfxModernSun
+{
+    bool on;
+    float direction[3]; // towards the sun, world space, unit length
+    float color[3];     // the sun light's colour, display values (may pass 1)
+};
+
 struct GfxModernScene
 {
     float view[4][4];
@@ -81,6 +90,7 @@ struct GfxModernScene
     // the renderer then leaves its own glow out of this view.
     bool glowDrawn;
     GfxModernFog fog;
+    GfxModernSun sun;
 };
 
 // A planar reflection view (r_modern_planar): the scene seen in a mirror
@@ -114,6 +124,11 @@ struct GfxModernLitInputs
     // registers and vertex outputs, which the renderer has checked), or
     // GFX_MODERN_LIT_SHADER_NONE.
     uint16_t shader;
+    // Instead of all the above: an unlit, light-giving surface (a lamp, a
+    // lantern, a lit sign; a material whose technique set is mc_unlit* or
+    // wc_unlit*). Its colour is taken to linear light as an ordinary draw's,
+    // then its brightest parts are made brighter than white, so that it glows.
+    bool emissive;
 };
 
 // The Modern lit shader's code: the family, plus flags for its maps and its
@@ -172,6 +187,8 @@ struct GfxModernSunShadow
     bool on;              // the view's lit surfaces read the sun's shadow map
     float texel[2];       // world units across a texel, near and far partitions
     float depthUnits[2];  // world units per unit of the map's depth, near and far
+    bool sun;             // the view has a sun: sunDir is the direction towards it
+    float sunDir[3];      // world space, unit length (contact shadows)
 };
 
 struct GfxModernHooks
@@ -245,8 +262,9 @@ struct GfxModernHooks
     // read back. Both may be null when probeCaptureWanted is.
     void (*probeCapture)(void *user, IDirect3DDevice9 *device, bool on);
     bool (*probeCaptureRead)(void *user, IDirect3DDevice9 *device, int x, int y, int width, int height, float *rgb);
-    // A view's lit surfaces come next (after its depth prepass, if any), and
-    // this is the sun's shadow map they read, or that they read none. May be
+    // A view's lit surfaces come next, and this is the sun's shadow map they
+    // read, or that they read none, and where the sun is. Called before the
+    // view's sceneDepth, so that what that builds can use the sun. May be
     // null.
     void (*sunShadow)(void *user, IDirect3DDevice9 *device, const GfxModernSunShadow *shadow);
 };
