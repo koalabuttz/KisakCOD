@@ -168,7 +168,20 @@ LitBuild LitBuildFor(uint16_t shader)
 #undef LIT_FAMILY
 #undef LIT_LIGHT
 #undef LIT_NO_SUN
-#undef LIT_BUILD
+
+// The specialization constants' defaults (lm_sun.frag): the strengths, the
+// depth reference's clamp, the mode and whether the alpha test may be on.
+struct LitSpecialization
+{
+    float sunStrength;
+    float skyStrength;
+    bool clampDepthReference;
+    uint32_t mode;
+    bool alphaTest;
+};
+bool LinkLitSpirv(const LitBuild &build, const std::vector<Placeholder> &placeholders, const ls::Shader &vs,
+                  const LitSpecialization &specialization, std::vector<uint32_t> &spirv);
+bool BuildWaterSpirv(const ls::Shader &vs, bool alphaTest, std::vector<uint32_t> &spirv);
 } // namespace
 
 bool BuildModernLitSpirv(uint16_t shader, const ls::Shader &vs, float sunStrength, float skyStrength,
@@ -176,11 +189,11 @@ bool BuildModernLitSpirv(uint16_t shader, const ls::Shader &vs, float sunStrengt
 {
     if (!ModernLitShaderValid(shader))
         return false;
+    if (shader == ModernLitWater)
+        return BuildWaterSpirv(vs, alphaTest, spirv);
     const LitBuild build = LitBuildFor(shader);
     if (!build.words)
         return false;
-    const uint32_t *words = build.words;
-    const size_t count = build.count;
     std::vector<Placeholder> placeholders = {
         {0, kUsageTexcoord, 0, 4},
         {1, kUsageTexcoord, 1, 4},
@@ -206,7 +219,20 @@ bool BuildModernLitSpirv(uint16_t shader, const ls::Shader &vs, float sunStrengt
         placeholders.push_back({5, kUsageTexcoord, 5, 4});
     if (ModernLitModel(shader) && !ModernLitAmbientOnly(shader))
         placeholders.push_back({6, kUsageTexcoord, 6, 4}); // the lighting-volume coordinate (lp_amb: texcoord 1)
-    const uint32_t mode = (shader & ModernLitModeMask) >> ModernLitModeShift;
+    const LitSpecialization specialization{sunStrength, skyStrength, clampDepthReference,
+                                           static_cast<uint32_t>((shader & ModernLitModeMask) >> ModernLitModeShift), alphaTest};
+    return LinkLitSpirv(build, placeholders, vs, specialization, spirv);
+}
+
+namespace
+{
+// Moves the placeholders' inputs to where vs writes them and sets the
+// specialization constants' defaults.
+bool LinkLitSpirv(const LitBuild &build, const std::vector<Placeholder> &placeholders, const ls::Shader &vs,
+                  const LitSpecialization &specialization, std::vector<uint32_t> &spirv)
+{
+    const uint32_t *words = build.words;
+    const size_t count = build.count;
     // Where each placeholder goes.
     std::vector<int> moved(placeholders.size());
     for (size_t i = 0; i < placeholders.size(); ++i)
@@ -266,15 +292,15 @@ bool BuildModernLitSpirv(uint16_t shader, const ls::Shader &vs, float sunStrengt
                 if (id != out[at + 2])
                     continue;
                 if (specId == 0)
-                    out[at + 3] = std::bit_cast<uint32_t>(sunStrength);
+                    out[at + 3] = std::bit_cast<uint32_t>(specialization.sunStrength);
                 else if (specId == 1)
-                    out[at + 3] = std::bit_cast<uint32_t>(skyStrength);
+                    out[at + 3] = std::bit_cast<uint32_t>(specialization.skyStrength);
                 else if (specId == 2)
-                    out[at + 3] = clampDepthReference ? 1u : 0u;
+                    out[at + 3] = specialization.clampDepthReference ? 1u : 0u;
                 else if (specId == 3)
-                    out[at + 3] = mode;
+                    out[at + 3] = specialization.mode;
                 else if (specId == 4)
-                    out[at + 3] = alphaTest ? 1u : 0u;
+                    out[at + 3] = specialization.alphaTest ? 1u : 0u;
             }
         }
         at += length;
@@ -284,4 +310,40 @@ bool BuildModernLitSpirv(uint16_t shader, const ls::Shader &vs, float sunStrengt
     spirv = std::move(out);
     return true;
 }
+
+// water.frag, by how many components vs writes the water map's UV (texcoord
+// 0) in: a fragment input must have as many as the output it reads.
+bool BuildWaterSpirv(const ls::Shader &vs, bool alphaTest, std::vector<uint32_t> &spirv)
+{
+    uint8_t components = 0;
+    for (const ls::IoEntry &entry : vs.reflection.outputs)
+    {
+        if (entry.builtIn || entry.semanticUsage != kUsageTexcoord || entry.semanticIndex != 0)
+            continue;
+        if (entry.mask == 0x3u)
+            components = 2;
+        else if (entry.mask == 0x7u)
+            components = 3;
+        else if (entry.mask == 0xfu)
+            components = 4;
+    }
+    LitBuild build{nullptr, 0};
+    if (components == 2)
+        build = LIT_BUILD(kWater2Frag);
+    else if (components == 3)
+        build = LIT_BUILD(kWater3Frag);
+    else if (components == 4)
+        build = LIT_BUILD(kWater4Frag);
+    else
+        return false;
+    const std::vector<Placeholder> placeholders = {
+        {0, kUsageTexcoord, 0, components},
+        {2, kUsageTexcoord, 2, 4},
+        {10, kUsageColor, 0, 4},
+    };
+    const LitSpecialization specialization{1.0f, 1.0f, false, 0, alphaTest};
+    return LinkLitSpirv(build, placeholders, vs, specialization, spirv);
+}
+#undef LIT_BUILD
+} // namespace
 } // namespace gfx_vk::legacy

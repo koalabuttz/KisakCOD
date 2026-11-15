@@ -315,6 +315,7 @@ jobs:
           python3 scripts/tests/test_vita_frame_time.py
           python3 scripts/tests/test_vita_gpu_progress.py
           python3 scripts/tests/test_vita_gpu_watch.py
+          python3 scripts/tests/test_vita_idle_alpha_test.py
           python3 scripts/tests/test_vita_prepass_governor.py
           python3 scripts/tests/test_vita_cg_translate.py --require-glslang
           # The static model cache's size arithmetic, at every size: the
@@ -367,18 +368,26 @@ jobs:
           # file that is built for NEON on purpose
           # (scripts/platform/vita/mp_client.cmake), includes nothing of the
           # engine and makes only what is drawn. Each has to be there and be
-          # NEON, and no other function may hold a NEON float instruction.
+          # NEON. The MP3 decoder is the other place (dr_mp3's functions in
+          # snd_driver_load_obj.cpp), which only makes sound. No other
+          # function may hold a NEON float instruction.
           neon_functions=(
             '_ZN8skin_vec'  # src/gfx_d3d/r_model_skin_vec.cpp: vertex skinning
             '_ZN8dpvs_vec'  # src/gfx_d3d/r_dpvs_static_vec.cpp: static culling
           )
-          neon_allowed="$(IFS='|'; echo "${neon_functions[*]}")"
+          neon_decoder='(_ZL[0-9]+)?drmp3'
+          neon_allowed="$(IFS='|'; echo "${neon_functions[*]}")|${neon_decoder}"
           neon_outside="$(awk -v allowed="^<(${neon_allowed})" '/^[0-9a-f]+ <.*>:$/ { fn = $2 }
             /\tv[a-z0-9]+\.f(32|64)\tq|\tv[a-z0-9]+\.f32\td/ { if (fn !~ allowed) print fn }' \
             "$RUNNER_TEMP/vita-mp.dis" | sort -u)"
           if [ -n "$neon_outside" ]; then
             printf '%s\n' "$neon_outside" | head -20 >&2
-            echo "the client contains NEON float instructions outside the files built for NEON" >&2
+            echo "the client contains NEON float instructions outside the files built for NEON and the MP3 decoder" >&2
+            exit 1
+          fi
+          if ! awk '/^[0-9a-f]+ <.*>:$/ { fn = $2 } /\tv[a-z0-9]+\.f32\tq/ && fn ~ /^<(_ZL[0-9]+)?drmp3/ { found = 1 } END { exit !found }' \
+               "$RUNNER_TEMP/vita-mp.dis"; then
+            echo "the client's MP3 decoder is not built for NEON" >&2
             exit 1
           fi
           if ! grep -Eq $'^[0-9a-f]+ <_ZN8skin_vec8Weighted' "$RUNNER_TEMP/vita-mp.dis"; then

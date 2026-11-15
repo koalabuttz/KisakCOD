@@ -154,7 +154,12 @@ perf: done
     pass's setup (`R_SetupMaterial`, `R_SetupPass`: state, textures,
     constants), then the surface type's function from `rb_tessTable`
     (static models, brush models, skinned models, triangles and so on) with
-    the draws it makes. The calls a frame count the runs. These take two
+    the draws it makes. The calls a frame count the runs. `render: draws by
+    tess <surface type>` is the same time again with the draws the runs
+    made as its calls, so its time over its calls is what one draw of that
+    kind costs with the engine's work for it; runs that drew nothing (their
+    surfaces only went into a batch that a later run draws) are left out,
+    and a batch's draw counts for the run that flushed it. These take two
     clock readings a run, which on the Vita (about 0.7 us each) adds about
     a millisecond to a busy frame while a run is active.
   - `lock <name>`: any thread getting into that critical section. The time is

@@ -131,6 +131,9 @@ struct Backend
     bool modelShadersWanted = true;
     bool noSunShadersWanted = true;
     bool lightShadersWanted = true;
+    // Water's (water_l_sun) shader of ours, unless KISAK_VK_MODERN_WATER=0
+    // (at start-up only).
+    bool waterShaderWanted = true;
     float sunStrength = 1.0f;
     float skyStrength = 1.0f;
     uint64_t litShaderChanges = 0, litShaderChangesBase = 0;
@@ -684,7 +687,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         const float edge = edgeText.empty() ? 0.0f : std::strtof(edgeText.c_str(), nullptr);
         if (edge > 0.0f && edge <= 10.0f)
             start.aoParams.edge = edge;
-        start.aoParams.half = EnvIs("KISAK_VK_MODERN_AO_HALF", "1");
+        start.aoParams.half = !EnvIsZero("KISAK_VK_MODERN_AO_HALF");
     }
     // Reflection probes are filtered as their textures load, so this one
     // stays start-up only.
@@ -693,6 +696,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     // The planar view and its debug view are start-up only, as the probes.
     backend->debugPlanar = EnvIs("KISAK_VK_MODERN_DEBUG", "planar");
     backend->debugPlanarRead = EnvIs("KISAK_VK_MODERN_DEBUG", "planar-read");
+    backend->waterShaderWanted = !EnvIsZero("KISAK_VK_MODERN_WATER");
     backend->planarWanted = backend->linearWanted && !EnvIsZero("KISAK_VK_MODERN_PLANAR")
                             && (EnvIs("KISAK_VK_MODERN_PLANAR", "1") || backend->debugPlanar
                                 || backend->debugPlanarRead);
@@ -1431,7 +1435,8 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
     uint16_t shader = inputs && backend->shadersWanted ? inputs->shader : uint16_t(lg::ModernLitNone);
     if ((lg::ModernLitModel(shader) && !backend->modelShadersWanted)
         || ((shader & lg::ModernLitFamilyMask) == lg::ModernLitNoSun && !backend->noSunShadersWanted)
-        || (lg::ModernLitPointLight(shader) && !backend->lightShadersWanted))
+        || (lg::ModernLitPointLight(shader) && !backend->lightShadersWanted)
+        || (shader == lg::ModernLitWater && !backend->waterShaderWanted))
         shader = lg::ModernLitNone;
     if (inputs && backend->linearScene && !backend->linearFailed)
     {
