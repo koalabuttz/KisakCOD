@@ -163,8 +163,12 @@ buffer by the core's `Recording()` number.
   pass ends and the next begins with the clear, loading what was drawn to
   the targets it does not clear: MoltenVK left the depth uncleared when it
   was cleared inside the pass after a draw (the `pass_clear` scene on CI's
-  Apple GPU). A depth clear without the stencil stays in the pass on D24S8,
-  since the load operation would clear both.
+  Apple GPU). A depth clear without the stencil stays in the pass on a D24S8
+  depth surface, since the load operation would clear both; on a depth
+  texture (a shadow map) it becomes the load operation all the same, as no
+  shader can read that stencil. The Retroid's Adreno drew the sun shadow
+  map's depth-only clear inside the pass wrongly (sunlit walls in the near
+  map shadowed themselves).
   `KISAK_VK_PASS_CLEARS=0` keeps every clear in its pass; the `device ready:`
   line says which (`clears at pass start` or `clears in the pass`), and
   `DeviceStats::passClears` counts the ones that were load operations (the

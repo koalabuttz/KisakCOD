@@ -2627,9 +2627,15 @@ bool ClearAtPassStart(Device &device, uint32_t rectCount, const Rect *rects, uin
     if (device.depthStencil && (flags & (d3d::CLEAR_ZBUFFER | d3d::CLEAR_STENCIL)))
     {
         // The depth image always has stencil, so a load operation clears
-        // both: only when both are cleared, or the D3D9 format has none.
+        // both: only when both are cleared, or the D3D9 format has none, or
+        // the surface is a depth texture's (a shadow map: no shader can read
+        // its stencil, and the game draws none there). That keeps the sun
+        // shadow map's depth-only clear a whole load operation, not a clear
+        // of the depth aspect alone inside the pass, which the Retroid's
+        // Adreno gets wrong (its near sun map shadowed sunlit walls).
         const bool stencilFormat = device.depthStencil->texture->format->d3d == d3d::FMT_D24S8;
-        if (!(flags & d3d::CLEAR_ZBUFFER) || (stencilFormat && !(flags & d3d::CLEAR_STENCIL)))
+        const bool stencilKept = stencilFormat && device.depthStencil->standalone;
+        if (!(flags & d3d::CLEAR_ZBUFFER) || (stencilKept && !(flags & d3d::CLEAR_STENCIL)))
             return false;
         clearDepth = true;
     }
