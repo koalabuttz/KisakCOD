@@ -922,6 +922,11 @@ void MakePipelineInfo(PipelineInfo &out, const PipelineKey &key, const Shader &v
     // which are 0 for every draw that wants no bias. The Retroid's Adreno
     // shadows sun-facing walls as if the shadow pass had no bias.
     out.raster.depthBiasEnable = VK_TRUE;
+    // The same for the winding, which every draw sets to clockwise, and for
+    // the cull mode where the test switch puts it in the key.
+    out.raster.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    if (key.staticCull)
+        out.raster.cullMode = key.staticCull - 1u;
     out.multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     out.multisample.rasterizationSamples = static_cast<VkSampleCountFlagBits>(key.samples);
     out.depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -1012,6 +1017,13 @@ uint32_t AlphaCompareNow(const Device &device)
         : static_cast<uint32_t>(ls::AlphaCompare::Always);
 }
 
+// D3D9's front faces are clockwise on screen; the flipped viewport keeps
+// the winding, so CULL_CW culls front faces and CULL_CCW back faces.
+VkCullModeFlags CullMode(uint32_t cull)
+{
+    return cull == d3d::CULL_CW ? VK_CULL_MODE_FRONT_BIT : cull == d3d::CULL_CCW ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE;
+}
+
 PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, const VertexDecl &decl,
                     d3d::PrimitiveType type, uint32_t depthSamplers)
 {
@@ -1057,6 +1069,8 @@ PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, co
                                            : rs[d3d::RS_FILLMODE] == d3d::FILL_POINT     ? VK_POLYGON_MODE_POINT
                                            : rs[d3d::RS_FILLMODE] == d3d::FILL_WIREFRAME ? VK_POLYGON_MODE_LINE
                                                                                          : VK_POLYGON_MODE_FILL);
+    if (device.staticCull)
+        key.staticCull = static_cast<uint8_t>(CullMode(rs[d3d::RS_CULLMODE]) + 1);
     key.blendEnable = rs[d3d::RS_ALPHABLENDENABLE] ? 1 : 0;
     if (key.blendEnable && key.colorCount)
     {
@@ -1844,11 +1858,7 @@ DynamicState MakeDynamicState(const Device &device, d3d::PrimitiveType type)
     state.depthBias = AsFloat(rs[d3d::RS_DEPTHBIAS]) * device.depthBiasScale;
     state.depthSlope = AsFloat(rs[d3d::RS_SLOPESCALEDEPTHBIAS]) * device.depthSlopeScale;
     state.depthBiasEnable = state.depthBias != 0.0f || state.depthSlope != 0.0f;
-    // D3D9's front faces are clockwise on screen; the flipped viewport keeps
-    // the winding, so CULL_CW culls front faces and CULL_CCW back faces.
-    state.cullMode = rs[d3d::RS_CULLMODE] == d3d::CULL_CW    ? VK_CULL_MODE_FRONT_BIT
-        : rs[d3d::RS_CULLMODE] == d3d::CULL_CCW ? VK_CULL_MODE_BACK_BIT
-                                                : VK_CULL_MODE_NONE;
+    state.cullMode = CullMode(rs[d3d::RS_CULLMODE]);
     state.topology = Topology(type);
     const bool hasDepth = device.passDepth != nullptr;
     state.depthTest = hasDepth && rs[d3d::RS_ZENABLE];
