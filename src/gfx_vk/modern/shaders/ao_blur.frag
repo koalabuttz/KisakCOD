@@ -104,5 +104,8 @@ void main()
             }
     }
     const float visibility = weights > 0.0 ? clamp(sum / weights, 0.0, 1.0) : 1.0;
-    outVisibility = vec4(Floored(pow(visibility, params.power), params.lowest));
+    // Green stays open for the contact shadows (contact.frag), which draw
+    // over it when they are on.
+    const float result = Floored(pow(visibility, params.power), params.lowest);
+    outVisibility = vec4(result, 1.0, result, result);
 }

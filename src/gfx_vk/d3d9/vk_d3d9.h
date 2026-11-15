@@ -75,6 +75,12 @@ struct ModernTuning
     float fogScatter = -1.0f;  // forward scattering, 0 to below 0.95 (KISAK_VK_MODERN_FOG_SCATTER)
     float fogSpots = -1.0f;    // how brightly spot lights light the fog, 0 to 4 (KISAK_VK_MODERN_FOG_SPOTS)
     int fogFroxels = -1;       // the fog from a froxel volume, not a march (KISAK_VK_MODERN_FOG_FROXELS)
+    int softShadows = -1;         // soft sun shadows (KISAK_VK_MODERN_SOFT_SHADOWS)
+    float shadowSoftness = -1.0f; // the sun's apparent size, degrees (KISAK_VK_MODERN_SHADOW_SOFTNESS)
+    int softSpotShadows = -1;     // soft spot-light shadows (KISAK_VK_MODERN_SOFT_SPOT_SHADOWS)
+    float spotLightSize = -1.0f;  // the lights' size, world units (KISAK_VK_MODERN_SPOT_LIGHT_SIZE)
+    int contactShadows = -1;      // contact shadows (KISAK_VK_MODERN_CONTACT_SHADOWS)
+    float contactLength = -1.0f;  // their ray's length, world units (KISAK_VK_MODERN_CONTACT_LENGTH)
 };
 
 // The debug view over each Modern scene (ModernTuning::debug,
@@ -413,4 +419,17 @@ bool ModernPlanarWanted(IDirect3DDevice9 *device);
 // view (the program then draws nothing for it).
 bool ModernPlanarBegin(IDirect3DDevice9 *device, const ModernPlanarView &view);
 void ModernPlanarDone(IDirect3DDevice9 *device, const ModernPlanarView &view);
+// The sun's shadow map as a view's lit surfaces will read it, given before
+// they draw (docs/vulkan-modern.md "Soft sun shadows"): the Modern lit
+// shaders size their soft filter from it. Nothing on a back end without a
+// Modern path.
+struct ModernSunShadowView
+{
+    bool on = false;            // the view's lit surfaces read the sun's shadow map
+    float texel[2] = {};        // world units across a texel, near and far partitions
+    float depthUnits[2] = {};   // world units per unit of the map's depth, near and far
+    bool sun = false;           // the view has a sun: sunDir holds the direction towards it
+    float sunDir[3] = {};       // world space, unit length
+};
+void ModernSunShadow(IDirect3DDevice9 *device, const ModernSunShadowView &view);
 } // namespace gfx_vk::d3d9

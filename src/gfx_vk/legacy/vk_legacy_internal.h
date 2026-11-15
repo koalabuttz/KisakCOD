@@ -641,7 +641,10 @@ struct Device
     // SetModernLightPass: the strength of the extra light passes of ours
     // built from now on.
     float modernLightPass = 1.0f;
-    // Bumped whenever SetModernPlanar changes the parameters; the parameters
+    // SetModernShadow: pushed after modernPlanarParams.
+    ModernShadowParams modernShadowParams{};
+    // Bumped whenever SetModernPlanar or SetModernShadow changes the
+    // parameters; the parameters
     // were last pushed for pushedPlanarGeneration in the bound layout (0:
     // not since the layout or the command buffer changed).
     uint64_t modernPlanarGeneration = 1;
