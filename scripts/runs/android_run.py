@@ -29,7 +29,10 @@ One run is, in order:
    after, which shows the data was kept.
 3. Each launch: force-stop the app, start it with ``am start`` and the
    launch's arguments in the ``args`` extra (KisakActivity splits it at
-   spaces and puts it after its own ``fs_basepath``/``fs_homepath``), read
+   spaces and puts it after its own ``fs_basepath``/``fs_homepath``), and
+   the recipe's and launch's ``env`` (KISAK_* variables such as
+   KISAK_VK_MODERN_SSR_STEPS) in the ``env`` extra, which KisakActivity sets
+   in the process before the game starts; read
    logcat as it comes, run the host steps (screen captures, taps, keys) timed
    from the moment the app started, the menu came up or the map came up (the
    client's "run: the menu is up" and "run: the map is up" lines), and stop
@@ -69,7 +72,7 @@ The recipe (JSON)::
       "launches": [
         {"name": "menu", "at_menu": ["20 quit"],
          "host": [{"after": "menu", "at": 10, "do": "screencap", "name": "menu-10"}]},
-        {"name": "crash", "args": ["+devmap", "mp_crash"],
+        {"name": "crash", "args": ["+devmap", "mp_crash"], "env": {"KISAK_VK_MODERN_SSR_STEPS": "16"},
          "at_map": ["3 cmd mr {serverid} 8 autoassign", "5 cmd mr {serverid} 15 assault_mp,0",
                     "25 framelog 10 crash", "37 screenshot crash-37", "40 quit"],
          "host": [{"after": "map", "at": 30, "do": "screencap", "name": "crash-30"},
@@ -205,6 +208,7 @@ PID_EVERY = 1.0
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 DEFAULT_EMULATOR_PORT = 5554
 DEFAULT_BOOT_TIMEOUT = 300
+SHARED_STORAGE = "/sdcard/Android/data"  # there once shared storage is mounted
 MKDIR_BATCH = 20
 EMULATOR_ARGS = ["-no-snapshot-save", "-no-boot-anim", "-no-audio"]
 
@@ -353,6 +357,13 @@ def load_recipe(path):
             raise RecipeError(f"launch name {name!r} given twice")
         names.add(name)
         pc_run.check_variants(launch)
+        for scope in (recipe, launch):
+            if not isinstance(scope.get("env", {}), dict):
+                raise RecipeError(f"{name}: env is an object of KISAK_* variables")
+        for env_name, value in launch_env(recipe, launch).items():
+            if not ENV_NAME.fullmatch(env_name) or not ENV_VALUE.fullmatch(value):
+                raise RecipeError(f"{name}: env {env_name}={value!r}: the app sets only KISAK_* variables, with "
+                                  "values of letters, digits and _ . : , -")
         for key in ("at_menu", "at_map"):
             commands = pc_run.launch_commands(launch, key)
             if len(commands) > 32:
@@ -478,12 +489,27 @@ def host_command(step):
     raise ValueError(kind)
 
 
+ENV_NAME = re.compile(r"KISAK_[A-Z0-9_]+")
+ENV_VALUE = re.compile(r"[A-Za-z0-9_.:,-]*")
+
+
+def launch_env(recipe, launch):
+    """The recipe's then the launch's "env": KISAK_* variables the app sets
+    before the game starts (KisakActivity's "env" extra, NAME=VALUE pairs)."""
+    env = dict(recipe.get("env") or {})
+    env.update(launch.get("env") or {})
+    return {str(name): str(value) for name, value in env.items()}
+
+
 def start_command(recipe, launch):
     target = device(recipe)
     command = f"am start -W -n {target['package']}/{target['activity']}"
     extra = extra_text(recipe, launch)
     if extra:
         command += f" --es args {shlex.quote(extra)}"
+    env = launch_env(recipe, launch)
+    if env:
+        command += " --es env " + shlex.quote(" ".join(f"{name}={value}" for name, value in env.items()))
     return command
 
 
@@ -503,7 +529,12 @@ def booted(adb):
     if code != 0 or state.strip() != "device":
         return False
     _, value, _ = adb.shell("getprop sys.boot_completed", timeout=20)
-    return value.strip() == "1"
+    if value.strip() != "1":
+        return False
+    # Shared storage comes up after boot_completed: before it, the game
+    # files' mkdir gets "mkdir: '/sdcard/Android': Permission denied" (PC
+    # item 365, an emulator the runner had just booted).
+    return adb.shell(f"ls -d {SHARED_STORAGE}", timeout=20)[0] == 0
 
 
 class Emulator:
