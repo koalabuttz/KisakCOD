@@ -162,7 +162,9 @@ adb logcat -s KisakCOD SDL
 
 Extra engine arguments for a run go in the `args` extra, split at spaces:
 `adb shell am start -n org.kisakcod.game/.KisakActivity --es args "+set developer 1"`.
-The game's console goes to logcat under the tag KisakCOD: Android drops an
+The activity always starts the game full screen (`+set r_fullscreen 1`, so
+SDL hides Android's system bars; run 3 had a 1920x970 window under the
+navigation bar). The game's console goes to logcat under the tag KisakCOD: Android drops an
 app's stdout and stderr, so `src/linux/main.cpp` copies them there.
 
 First start on the Retroid Pocket 6 (2026-11-15, CI APK of 91d7799): the menu

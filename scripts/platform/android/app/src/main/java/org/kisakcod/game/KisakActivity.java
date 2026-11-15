@@ -21,8 +21,9 @@ import org.libsdl.app.SDLActivity;
  * adb push. Configs and player profiles go to its "home" folder beside them.
  * Nothing needs a storage permission: the app owns that folder.
  *
- * Extra engine arguments for test runs come from the intent's "args" extra,
- * split at spaces:
+ * The game always starts full screen. Extra engine arguments for test runs
+ * come from the intent's "args" extra, split at spaces (they come last, so
+ * they win):
  *   adb shell am start -n org.kisakcod.game/.KisakActivity --es args "+set developer 1"
  */
 public class KisakActivity extends SDLActivity {
@@ -49,6 +50,11 @@ public class KisakActivity extends SDLActivity {
         } else {
             Log.e(TAG, "shared storage is not available; the game cannot find its files");
         }
+        // Always full screen: a windowed game leaves Android's navigation bar
+        // over part of the screen (a 1920x970 window on the Retroid Pocket 6's
+        // 1920x1080 panel, run 3). SDL hides the system bars for a full-screen
+        // window. r_fullscreen defaults to off, the desktop's choice.
+        Collections.addAll(args, "+set", "r_fullscreen", "1");
         Intent intent = getIntent();
         String extra = intent != null ? intent.getStringExtra("args") : null;
         if (extra != null) {
