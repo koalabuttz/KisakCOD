@@ -1414,9 +1414,9 @@ capture is wanted by default and not with `KISAK_VK_MODERN_PROBES_CAPTURE=0`.
 With the switch at 1 it draws a scene in linear light (a clear
 and an opaque quad) while capturing: two rectangles read back come back as
 the light their colours decode to, one outside the scene's image is
-refused, and none is read once capturing is off. Without the switch (or
-with it at 0, or with `KISAK_VK_MODERN_PROBES=0` or
-`KISAK_VK_MODERN_LINEAR=0` beside it) it is not wanted and nothing is drawn.
+refused, and none is read once capturing is off. Without the switch
+nothing is drawn; with it at 0, or with `KISAK_VK_MODERN_PROBES=0` or
+`KISAK_VK_MODERN_LINEAR=0` beside it, it is not wanted and nothing is drawn.
 `test_vulkan_d3d9_front.py` runs it in those five ways and checks that a
 full run reads nothing back.
 
