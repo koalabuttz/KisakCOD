@@ -41,8 +41,9 @@ elseif(KISAK_PLATFORM STREQUAL "android")
     if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
         message(FATAL_ERROR "KISAK_PLATFORM=android requires the Android NDK's toolchain (CMAKE_SYSTEM_NAME Android).")
     endif()
-    if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8 OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
-        message(FATAL_ERROR "KISAK_PLATFORM=android requires arm64-v8a (got ${CMAKE_SYSTEM_PROCESSOR}, "
+    # x86_64 builds for the Android emulator on a PC, on the x86_64 track.
+    if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8 OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|x86_64)$")
+        message(FATAL_ERROR "KISAK_PLATFORM=android requires arm64-v8a or x86_64 (got ${CMAKE_SYSTEM_PROCESSOR}, "
             "${CMAKE_SIZEOF_VOID_P}-byte pointers). Use a new build directory.")
     endif()
     foreach(kisak_not_on_android

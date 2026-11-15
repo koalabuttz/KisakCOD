@@ -145,6 +145,13 @@ What is Android-specific in the client:
 way it checks the server, except that a library has no program interpreter,
 may need the three libraries above, and must export `SDL_main` alone.
 
+`build_apk.py --abi x86_64` builds the app for the Android emulator on a PC
+instead (`KisakCOD-<config>-x86_64.apk`; its builds sit beside the arm64 ones
+in `--work`, named with `-x86_64`). It takes the x86_64 Linux track's code. No
+device is x86, and the emulator draws through the PC's own GPU driver, so it
+finds no Adreno-only fault; it is for runs nobody has to watch
+(`scripts/runs/android_run.py`).
+
 ### Installing and starting the app
 
 Install, start once (the first start makes the app's folder), copy the game
