@@ -18,6 +18,7 @@
 #include <devgui/devgui.h>
 #include "com_math.h"
 #include "memfile.h"        // Dvar_Save/LoadDvars
+#include "name_miss_memory.h"
 
 #include <algorithm>
 #include <atomic>
@@ -812,6 +813,15 @@ int Dvar_ValuesEqual(uint8_t type, DvarValue val0, DvarValue val1)
 // at once (Dvar_Shutdown), which forgets everything under the write lock.
 static std::atomic<dvar_s *> s_dvarFoundByPointer[1024];
 
+// A name that is not a dvar walks its whole chain every time it is asked for,
+// and menu expressions ask for such names every frame. A miss is remembered
+// with the count of registrations so far: no dvar can have appeared while
+// that count is the same, because a dvar only enters the table in
+// Dvar_RegisterNew, under the write lock. (Dvar_Shutdown only takes dvars
+// away, so a remembered miss stays true through it.)
+static std::atomic<uint32_t> s_dvarRegistrations;
+static NameMissMemory<8> s_dvarMisses;
+
 static std::atomic<dvar_s *> &Dvar_FoundByPointerSlot(const char *dvarName)
 {
     const uint32_t bits = (uint32_t)(uintptr_t)dvarName;
@@ -841,6 +851,11 @@ static dvar_s *Dvar_FindMalleableVar(const char *dvarName)
             InterlockedDecrement(&g_dvarCritSect.readCount);
             return var;
         }
+        if (s_dvarMisses.Has(dvarName, s_dvarRegistrations.load(std::memory_order_relaxed)))
+        {
+            InterlockedDecrement(&g_dvarCritSect.readCount);
+            return 0;
+        }
     }
 
     for (var = dvarHashTable[generateHashValue(dvarName)]; var; var = var->hashNext)
@@ -859,6 +874,7 @@ static dvar_s *Dvar_FindMalleableVar(const char *dvarName)
             return var;
         }
     }
+    s_dvarMisses.Remember(dvarName, s_dvarRegistrations.load(std::memory_order_relaxed));
     if (g_dvarCritSect.readCount <= 0)
         MyAssertHandler(
             "c:\\trees\\cod3\\src\\universal\\../qcommon/threads_interlock.h",
@@ -1686,6 +1702,7 @@ const dvar_s *Dvar_RegisterNew(
     areDvarsSorted = 0;
     ++dvarCount;
     HashValue = generateHashValue(dvarName);
+    s_dvarRegistrations.fetch_add(1, std::memory_order_relaxed);
     dvar->hashNext = dvarHashTable[HashValue];
     dvarHashTable[HashValue] = dvar;
     Sys_UnlockWrite(&g_dvarCritSect);
