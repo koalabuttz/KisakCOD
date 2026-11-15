@@ -24,8 +24,9 @@ namespace
 // "KBNV": KisakCOD bot navigation. Bump the version whenever the build or
 // the layout changes, so every cache rebuilds.
 constexpr uint32_t kBlobMagic = 0x564e424bu;
-// Version 2: drop-down links (DropLinks below).
-constexpr uint32_t kBlobVersion = 2;
+// Version 2: drop-down links (DropLinks below). Version 3: entities' brushes
+// left out (bot_nav_world.cpp).
+constexpr uint32_t kBlobVersion = 3;
 constexpr int kMaxVertsPerPoly = 6;
 constexpr unsigned short kPolyWalk = 0x01;
 constexpr unsigned char kAreaGround = 1;

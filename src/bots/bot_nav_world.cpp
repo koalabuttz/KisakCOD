@@ -8,8 +8,9 @@
 // from the home and base folders (FS_SV_*), never from a game archive or a
 // server's download, and is checked before Detour sees it.
 //
-// Not in the mesh yet: static models' collision (props), entities (doors,
-// vehicles, script models) and jumps or mantles. The bots notice when they
+// Not in the mesh: entities' brushes (doors, script brushes, triggers: they
+// move or are not solid where they sit). Not in it yet: static models'
+// collision (props) and jumps or mantles up. The bots notice when they
 // are stuck and pick another way.
 
 #include <universal/q_shared.h>
@@ -211,16 +212,70 @@ bool WriteCache(const char *path, const std::vector<uint8_t> &blob)
     return written == size;
 }
 
-// The map's player-solid collision as a triangle soup.
-int Gather(kb::NavGeometry &geometry)
+// The brushes of the map's entities (cm.cmodels 1 and up: doors, script
+// brushes, triggers), found by walking each one's leaf brush tree the way
+// CM_PointContentsLeafBrushNode_r does. They are not where the map puts them
+// at run time, or not solid at all: on Chinatown one is a 16-unit slab at
+// z -8 to 8 across the whole map, which the mesh took for a floor over the
+// sunken street (PC bot brain run 24) and which closed off the stairs up.
+std::vector<bool> EntityBrushes(int *count)
+{
+    std::vector<bool> entity(cm.numBrushes, false);
+    std::vector<bool> visited(cm.leafbrushNodesCount, false);
+    std::vector<uint32_t> stack;
+    *count = 0;
+    for (uint32_t m = 1; m < cm.numSubModels; ++m)
+    {
+        const cLeaf_t &leaf = cm.cmodels[m].leaf;
+        if (leaf.leafBrushNode <= 0 || static_cast<uint32_t>(leaf.leafBrushNode) >= cm.leafbrushNodesCount)
+            continue;
+        stack.push_back(static_cast<uint32_t>(leaf.leafBrushNode));
+        while (!stack.empty())
+        {
+            const uint32_t index = stack.back();
+            stack.pop_back();
+            if (index >= cm.leafbrushNodesCount || visited[index])
+                continue;
+            visited[index] = true;
+            const cLeafBrushNode_s &node = cm.leafbrushNodes[index];
+            if (node.leafBrushCount > 0)
+            {
+                for (int k = 0; k < node.leafBrushCount; ++k)
+                {
+                    const uint16_t brush = node.data.leaf.brushes[k];
+                    if (brush < cm.numBrushes && !entity[brush])
+                    {
+                        entity[brush] = true;
+                        ++*count;
+                    }
+                }
+                continue;
+            }
+            if (node.leafBrushCount < 0)
+                stack.push_back(index + 1);
+            for (uint16_t offset : node.data.children.childOffset)
+                if (offset)
+                    stack.push_back(index + offset);
+        }
+    }
+    return entity;
+}
+
+// The map's player-solid collision as a triangle soup: the world's brushes
+// (not the entities') and its terrain and patches.
+int Gather(kb::NavGeometry &geometry, int *entityBrushes = nullptr)
 {
     std::vector<float> faceVerts;
     std::vector<int> faceCounts;
+    int skipped = 0;
+    const std::vector<bool> entity = EntityBrushes(&skipped);
+    if (entityBrushes)
+        *entityBrushes = skipped;
     int brushes = 0;
     for (uint32_t i = 0; i < cm.numBrushes; ++i)
     {
         const cbrush_t *brush = &cm.brushes[i];
-        if (!(brush->contents & MASK_PLAYERSOLID))
+        if (!(brush->contents & MASK_PLAYERSOLID) || entity[i])
             continue;
         AddBrush(geometry, brush, faceVerts, faceCounts);
         ++brushes;
@@ -311,7 +366,8 @@ void LoadOrBuild(const char *mapName, uint32_t checksum)
 
     const uint32_t started = Sys_Milliseconds();
     kb::NavGeometry geometry;
-    const int brushes = Gather(geometry);
+    int entityBrushes = 0;
+    const int brushes = Gather(geometry, &entityBrushes);
     DumpRegion(mapName, &geometry);
     const uint32_t gathered = Sys_Milliseconds();
 
@@ -328,9 +384,10 @@ void LoadOrBuild(const char *mapName, uint32_t checksum)
     const uint32_t built = Sys_Milliseconds();
     const bool saved = WriteCache(path, blob);
     Com_Printf(CON_CHANNEL_SERVER,
-               "bots: navigation mesh for %s built in %.1f s (geometry %.1f s: %d brushes, %d triangles; "
-               "%d x %d tiles, %d built, %d polygons, %d drop-downs, %d KB)%s%s\n",
-               mapName, (built - started) * 0.001f, (gathered - started) * 0.001f, brushes, stats.inputTriangles,
+               "bots: navigation mesh for %s built in %.1f s (geometry %.1f s: %d brushes, %d entity brushes left "
+               "out, %d triangles; %d x %d tiles, %d built, %d polygons, %d drop-downs, %d KB)%s%s\n",
+               mapName, (built - started) * 0.001f, (gathered - started) * 0.001f, brushes, entityBrushes,
+               stats.inputTriangles,
                stats.tilesX, stats.tilesY, stats.tilesBuilt, stats.polygons, stats.dropLinks,
                static_cast<int>(stats.bytes / 1024),
                saved ? ", saved to " : ", not saved", saved ? path : "");

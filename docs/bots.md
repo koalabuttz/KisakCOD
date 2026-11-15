@@ -345,13 +345,23 @@ triangles in that box are written to `bots/nav/<map>-dump.obj` in the home
 folder (game coordinates, z up) when the mesh is built or loaded.
 
 Each mesh build or layout change bumps the cache version, so older caches are
-rebuilt (version 2 added the drop-downs). The cache is read only from the home and base folders, never from a game
-archive or a server's download, and each tile's size is checked before Detour
-sees it. The mesh is derived from the map's data, so it is never committed.
+rebuilt (version 2 added the drop-downs, version 3 left out entities'
+brushes). The cache is read only from the home and base folders, never from a
+game archive or a server's download, and each tile's size is checked before
+Detour sees it. The mesh is derived from the map's data, so it is never
+committed.
 
-Not in the mesh yet: static models' collision (props), entities (doors,
-vehicles, script models), and jumps or mantles up between floors. A bot that
-walks into one notices it is stuck, jumps, then takes another way.
+Entities' brushes (the map's submodels 1 and up: doors, script brushes,
+triggers) are left out, found by walking each submodel's leaf brush tree. They
+move, or are not solid where the map file puts them. On Chinatown one is a
+16-unit slab at z -8 to 8 across the whole map. The mesh took it for a floor
+over the sunken street (about 3000 polygons of it), and it closed off the
+stairs up out of there: PC bot brain run 24's dump, built on the host, linked
+the sunken street to the rest of the map once the slab was gone.
+
+Not in the mesh yet: static models' collision (props), moving entities, and
+jumps or mantles up between floors. A bot that walks into one notices it is
+stuck, jumps, then takes another way.
 
 ## Code
 
