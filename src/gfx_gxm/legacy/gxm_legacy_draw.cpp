@@ -331,10 +331,14 @@ struct DrawState
     // draw's fragment program has no discard (gxm_idle_alpha_test.h). The
     // marker and switch no-alpha-test-drop turn it off.
     bool dropIdleAlphaTest = true;
-    // 0: the last draw had no alpha test, 1: one in its program, 2: one
-    // that was left out.
+    // And one on a blend that keeps the target for a source of zero writes
+    // zero for a rejected pixel in place of the discard. The marker and
+    // switch no-alpha-test-zero turn it off.
+    bool zeroAlphaTest = true;
+    // 0: the last draw had no alpha test, 1: one with a discard, 2: one
+    // that was left out, 3: one that writes zero.
     uint8_t lastDrawAlphaTest = 0;
-    uint64_t alphaTestDraws = 0, idleAlphaTestDraws = 0;
+    uint64_t alphaTestDraws = 0, idleAlphaTestDraws = 0, zeroAlphaTestDraws = 0;
     bool lastDrawIndex32 = false;
     uint32_t lastDrawType = 0, lastDrawUpStride = 0;
     uint64_t lastDrawSerial = 0, lastDrawScene = 0;
@@ -763,6 +767,7 @@ uint64_t VariantKey(const gxm::cg::Options &options)
         components |= uint64_t(options.inputComponents[i] & 3) << (2 * i);
     return (uint64_t(options.bgraInputs) | uint64_t(options.absentInputs) << 16) ^ (components << 32) ^
            (options.alphaFunc == gxm::cg::AlphaFunc::Always ? 0 : uint64_t(options.alphaFunc)) ^
+           (options.alphaZero ? 0x00a5000000000000ull : 0) ^
            (options.farPlaneInside ? 0x5a5a000000000000ull : 0) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
 }
 
@@ -1061,15 +1066,16 @@ uint8_t BlendFunc(uint32_t op)
     }
 }
 
-// Whether the alpha test the device asks for cannot change what its draws
-// show (gxm_idle_alpha_test.h).
-bool IdleAlphaTest(const Device &device)
+// The state the alpha test rules read (gxm_idle_alpha_test.h).
+gfx_gxm::AlphaTestState AlphaTestStateOf(const Device &device)
 {
     static_assert(d3d::CMP_GREATER == gfx_gxm::d3d9::kCmpGreater && d3d::CMP_NOTEQUAL == gfx_gxm::d3d9::kCmpNotEqual);
     static_assert(d3d::BLEND_ZERO == gfx_gxm::d3d9::kBlendZero && d3d::BLEND_ONE == gfx_gxm::d3d9::kBlendOne &&
+                  d3d::BLEND_INVSRCCOLOR == gfx_gxm::d3d9::kBlendInvSrcColor &&
                   d3d::BLEND_SRCALPHA == gfx_gxm::d3d9::kBlendSrcAlpha &&
                   d3d::BLEND_INVSRCALPHA == gfx_gxm::d3d9::kBlendInvSrcAlpha &&
-                  d3d::BLEND_BOTHSRCALPHA == gfx_gxm::d3d9::kBlendBothSrcAlpha);
+                  d3d::BLEND_BOTHSRCALPHA == gfx_gxm::d3d9::kBlendBothSrcAlpha &&
+                  d3d::BLEND_BOTHINVSRCALPHA == gfx_gxm::d3d9::kBlendBothInvSrcAlpha);
     static_assert(d3d::BLENDOP_ADD == gfx_gxm::d3d9::kBlendOpAdd &&
                   d3d::BLENDOP_REVSUBTRACT == gfx_gxm::d3d9::kBlendOpRevSubtract);
     const uint32_t *rs = device.renderStates;
@@ -1085,7 +1091,7 @@ bool IdleAlphaTest(const Device &device)
     state.dstAlpha = rs[d3d::RS_DESTBLENDALPHA];
     state.depthWrite = rs[d3d::RS_ZWRITEENABLE] != 0;
     state.stencil = rs[d3d::RS_STENCILENABLE] != 0;
-    return gfx_gxm::AlphaTestIsIdle(state);
+    return state;
 }
 
 // False: no blend info at all (no blending, every channel written).
@@ -1851,7 +1857,14 @@ bool InitDraw(Device &device, std::string &error)
     if (gxm::ProgramCacheMarker("no-alpha-test-drop"))
     {
         d.dropIdleAlphaTest = false;
-        Log(device, "diag: no-alpha-test-drop is there: every alpha test is a discard in its fragment program");
+        Log(device, "diag: no-alpha-test-drop is there: an alpha test that cannot change the picture stays in its "
+                    "fragment program");
+    }
+    if (gxm::ProgramCacheMarker("no-alpha-test-zero"))
+    {
+        d.zeroAlphaTest = false;
+        Log(device, "diag: no-alpha-test-zero is there: an alpha test on a blended draw is a discard, not a pixel "
+                    "of zero");
     }
     if (gxm::ProgramCacheMarker("no-draw-reuse"))
     {
@@ -2523,7 +2536,7 @@ void SetGpuWatch(Device &device, bool on)
 const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "no-vsync",
                                      "no-draw-reuse",     "no-filter-stretch", "no-gpu-boost",
                                      "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
-                                     "gpu-watch",           "no-alpha-test-drop"};
+                                     "gpu-watch",           "no-alpha-test-drop", "no-alpha-test-zero"};
 struct LiveSwitch
 {
     const char *name;
@@ -2577,12 +2590,15 @@ void ApplyLiveSwitches(Device &device)
             d.sameState = !s.on;
             d.lastDrawValid = false;
         }
-        else if (name == "no-alpha-test-drop")
+        else if (name == "no-alpha-test-drop" || name == "no-alpha-test-zero")
         {
-            d.dropIdleAlphaTest = !s.on;
+            (name == "no-alpha-test-drop" ? d.dropIdleAlphaTest : d.zeroAlphaTest) = !s.on;
             d.lastDrawValid = false;
-            Log(device, "diag: alpha tests so far: %llu draws with one in their program, %llu with one left out",
-                (unsigned long long)d.alphaTestDraws, (unsigned long long)d.idleAlphaTestDraws);
+            Log(device,
+                "diag: alpha tests so far: %llu draws with a discard, %llu with the test left out, %llu that write "
+                "zero",
+                (unsigned long long)d.alphaTestDraws, (unsigned long long)d.idleAlphaTestDraws,
+                (unsigned long long)d.zeroAlphaTestDraws);
         }
         else if (name == "no-filter-stretch")
             gfx_gxm::g_stretchInFilter = !s.on;
@@ -3223,12 +3239,23 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             if (func >= d3d::CMP_NEVER && func < d3d::CMP_ALWAYS)
                 pixelOptions.alphaFunc = gxm::cg::AlphaFunc(func);
             d.lastDrawAlphaTest = pixelOptions.alphaFunc != gxm::cg::AlphaFunc::Always;
-            // A test that only rejects what the blend would not show needs
-            // no discard (gxm_idle_alpha_test.h).
-            if (d.dropIdleAlphaTest && d.lastDrawAlphaTest && IdleAlphaTest(device))
+            // A test that only rejects what the blend would not show is
+            // left out, and one on a blend that keeps the target for a
+            // source of zero writes zero: neither program has a discard
+            // (gxm_idle_alpha_test.h).
+            if (d.lastDrawAlphaTest && (d.dropIdleAlphaTest || d.zeroAlphaTest))
             {
-                pixelOptions.alphaFunc = gxm::cg::AlphaFunc::Always;
-                d.lastDrawAlphaTest = 2;
+                const gfx_gxm::AlphaTestState state = AlphaTestStateOf(device);
+                if (d.dropIdleAlphaTest && gfx_gxm::AlphaTestIsIdle(state))
+                {
+                    pixelOptions.alphaFunc = gxm::cg::AlphaFunc::Always;
+                    d.lastDrawAlphaTest = 2;
+                }
+                else if (d.zeroAlphaTest && gfx_gxm::AlphaTestCanZero(state))
+                {
+                    pixelOptions.alphaZero = true;
+                    d.lastDrawAlphaTest = 3;
+                }
             }
         }
         // The programs this combination last drew with (Pipeline), unless a
@@ -3243,7 +3270,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             pipelineKey.ps = ps;
             pipelineKey.decl = device.decl;
             std::memcpy(pipelineKey.strides, strides, sizeof(strides));
-            pipelineKey.alphaFunc = uint8_t(pixelOptions.alphaFunc);
+            pipelineKey.alphaFunc = uint8_t(uint8_t(pixelOptions.alphaFunc) | (pixelOptions.alphaZero ? 0x80 : 0));
             pipelineKey.index32 = index32;
             pipeline = &PipelineSlot(d, pipelineKey);
             known = std::memcmp(&pipeline->key, &pipelineKey, sizeof(pipelineKey)) == 0;
@@ -3600,6 +3627,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     ++d.drawn;
     d.alphaTestDraws += d.lastDrawAlphaTest == 1;
     d.idleAlphaTestDraws += d.lastDrawAlphaTest == 2;
+    d.zeroAlphaTestDraws += d.lastDrawAlphaTest == 3;
     if (target)
         target->unfilled = false;
     part(gxm::FrameTime::PartSubmit);
@@ -3819,10 +3847,11 @@ void LogDrawSummary(Device &device)
         unsigned(d->fragmentPrograms.size()), d->variantsMade, d->variantFailures, (unsigned long long)d->renames,
         (unsigned long long)d->ringOverflows, d->drawFailures);
     Log(device,
-        "alpha tests: %llu draws with one in their fragment program, %llu with one left out because it could not "
-        "change the picture%s",
+        "alpha tests: %llu draws with a discard in their fragment program, %llu with the test left out because it "
+        "could not change the picture%s, %llu that write zero for a rejected pixel%s",
         (unsigned long long)d->alphaTestDraws, (unsigned long long)d->idleAlphaTestDraws,
-        d->dropIdleAlphaTest ? "" : " (no-alpha-test-drop)");
+        d->dropIdleAlphaTest ? "" : " (no-alpha-test-drop)", (unsigned long long)d->zeroAlphaTestDraws,
+        d->zeroAlphaTest ? "" : " (no-alpha-test-zero)");
     // What the draws did not do again (Pipeline, BindTextures, the uniform
     // buffers in Draw).
     Log(device,

@@ -23,6 +23,7 @@ void Check(bool ok, const char *what, int line)
 }
 #define CHECK(condition) Check((condition), #condition, __LINE__)
 
+using gfx_gxm::AlphaTestCanZero;
 using gfx_gxm::AlphaTestIsIdle;
 using gfx_gxm::AlphaTestState;
 
@@ -30,7 +31,8 @@ using gfx_gxm::AlphaTestState;
 constexpr uint32_t kCmpNever = 1, kCmpLess = 2, kCmpEqual = 3, kCmpLessEqual = 4, kCmpGreater = 5, kCmpNotEqual = 6,
                    kCmpGreaterEqual = 7;
 constexpr uint32_t kZero = 1, kOne = 2, kSrcColor = 3, kInvSrcColor = 4, kSrcAlpha = 5, kInvSrcAlpha = 6,
-                   kDestAlpha = 7, kInvDestAlpha = 8, kDestColor = 9, kInvDestColor = 10, kBothSrcAlpha = 12;
+                   kDestAlpha = 7, kInvDestAlpha = 8, kDestColor = 9, kInvDestColor = 10, kBothSrcAlpha = 12,
+                   kBothInvSrcAlpha = 13;
 constexpr uint32_t kAdd = 1, kSubtract = 2, kRevSubtract = 3, kMin = 4, kMax = 5;
 
 struct Pixel
@@ -75,12 +77,20 @@ int Byte(float value)
     return int(value * 255.0f + 0.5f);
 }
 
+// How a draw treats its alpha test.
+enum class Way
+{
+    Discard, // D3D9's: a pixel that fails is not drawn
+    None,    // the test is left out
+    Zero,    // a pixel that fails is drawn as (0, 0, 0, 0)
+};
+
 // What the target holds after the draw, as 8-bit red and alpha.
-void Draw(const AlphaTestState &s, bool test, Pixel src, Pixel dst, int &r, int &a)
+void Draw(const AlphaTestState &s, Way way, Pixel src, Pixel dst, int &r, int &a)
 {
     r = Byte(dst.r);
     a = Byte(dst.a);
-    if (test)
+    if (way != Way::None)
     {
         const int alpha = Byte(src.a), ref = int(s.ref & 0xff);
         bool pass = true;
@@ -94,14 +104,21 @@ void Draw(const AlphaTestState &s, bool test, Pixel src, Pixel dst, int &r, int 
         case kCmpNotEqual: pass = alpha != ref; break;
         case kCmpGreaterEqual: pass = alpha >= ref; break;
         }
-        if (!pass)
+        if (!pass && way == Way::Discard)
             return;
+        if (!pass)
+            src = Pixel{0.0f, 0.0f};
     }
     uint32_t src0 = s.src, dst0 = s.dst;
     if (src0 == kBothSrcAlpha)
     {
         src0 = kSrcAlpha;
         dst0 = kInvSrcAlpha;
+    }
+    else if (src0 == kBothInvSrcAlpha)
+    {
+        src0 = kInvSrcAlpha;
+        dst0 = kSrcAlpha;
     }
     r = Byte(Op(s.op, src.r, Factor(src0, src, dst, false), dst.r, Factor(dst0, src, dst, false)));
     // The header never reads D3DRS_SRCBLENDALPHA: the worst one for it is 1.
@@ -111,8 +128,9 @@ void Draw(const AlphaTestState &s, bool test, Pixel src, Pixel dst, int &r, int 
         a = Byte(Op(s.op, src.a, Factor(src0, src, dst, true), dst.a, Factor(dst0, src, dst, true)));
 }
 
-// Whether any pixel differs between the draw with its test and without.
-bool Differs(const AlphaTestState &s)
+// Whether any pixel differs between the draw with D3D9's test and the other
+// way.
+bool Differs(const AlphaTestState &s, Way way)
 {
     const float levels[] = {0.0f, 0.2f, 0.5f, 1.0f};
     for (int alpha = 0; alpha <= 255; ++alpha)
@@ -122,8 +140,8 @@ bool Differs(const AlphaTestState &s)
                 {
                     const Pixel src{sr, float(alpha) / 255.0f}, dst{dr, da};
                     int r0, a0, r1, a1;
-                    Draw(s, true, src, dst, r0, a0);
-                    Draw(s, false, src, dst, r1, a1);
+                    Draw(s, Way::Discard, src, dst, r0, a0);
+                    Draw(s, way, src, dst, r1, a1);
                     if (r0 != r1 || a0 != a1)
                         return true;
                 }
@@ -188,17 +206,43 @@ void TestKnownStates()
     s = Decal();
     s.ref = 1;
     CHECK(!AlphaTestIsIdle(s));
+
+    // The game's decals: premultiplied colour with "GT0". Not idle, but a
+    // rejected pixel may be written as zero. So may any test on that blend.
+    s = Decal();
+    s.src = kOne;
+    CHECK(!AlphaTestIsIdle(s) && AlphaTestCanZero(s));
+    s.func = kCmpGreaterEqual;
+    s.ref = 128;
+    CHECK(AlphaTestCanZero(s));
+    // A multiply turns a zero source into black.
+    s = Decal();
+    s.src = kZero;
+    s.dst = kSrcColor;
+    CHECK(!AlphaTestCanZero(s));
+    // Depth, stencil or no blend: the rejected pixel must not be drawn.
+    s = Decal();
+    s.src = kOne;
+    s.depthWrite = true;
+    CHECK(!AlphaTestCanZero(s));
+    s.depthWrite = false;
+    s.stencil = true;
+    CHECK(!AlphaTestCanZero(s));
+    s.stencil = false;
+    s.blend = false;
+    CHECK(!AlphaTestCanZero(s));
 }
 
 // Every state the header calls idle draws the same picture without its
-// test, and the count of idle states is not 0.
+// test, every state it lets write zero draws the same picture that way, and
+// neither count is 0.
 void TestEveryState()
 {
-    int idle = 0, wrong = 0;
+    int idle = 0, idleWrong = 0, zero = 0, zeroWrong = 0;
     for (uint32_t func = kCmpNever; func <= kCmpGreaterEqual; ++func)
         for (uint32_t ref : {0u, 1u, 128u})
             for (uint32_t op = kAdd; op <= kMax; ++op)
-                for (uint32_t src = kZero; src <= kBothSrcAlpha; ++src)
+                for (uint32_t src = kZero; src <= kBothInvSrcAlpha; ++src)
                     for (uint32_t dst = kZero; dst <= kInvDestColor; ++dst)
                         for (int separate = 0; separate < 2; ++separate)
                             for (uint32_t opAlpha = kAdd; opAlpha <= (separate ? kMax : kAdd); ++opAlpha)
@@ -217,21 +261,27 @@ void TestEveryState()
                                     s.dst = dst;
                                     s.opAlpha = opAlpha;
                                     s.dstAlpha = dstAlpha;
-                                    if (!AlphaTestIsIdle(s))
-                                        continue;
-                                    ++idle;
-                                    if (Differs(s))
-                                    {
-                                        ++wrong;
+                                    const bool isIdle = AlphaTestIsIdle(s), canZero = AlphaTestCanZero(s);
+                                    idle += isIdle;
+                                    zero += canZero;
+                                    const bool wrongIdle = isIdle && Differs(s, Way::None);
+                                    const bool wrongZero = canZero && Differs(s, Way::Zero);
+                                    idleWrong += wrongIdle;
+                                    zeroWrong += wrongZero;
+                                    if (wrongIdle || wrongZero)
                                         std::fprintf(stderr,
-                                                     "differs: func %u ref %u op %u src %u dst %u separate %d opAlpha "
-                                                     "%u dstAlpha %u\n",
-                                                     func, ref, op, src, dst, separate, opAlpha, dstAlpha);
-                                    }
+                                                     "differs (%s): func %u ref %u op %u src %u dst %u separate %d "
+                                                     "opAlpha %u dstAlpha %u\n",
+                                                     wrongIdle ? "no test" : "zero", func, ref, op, src, dst, separate,
+                                                     opAlpha, dstAlpha);
                                 }
-    std::printf("idle alpha tests: %d states called idle, %d of them draw another picture\n", idle, wrong);
+    std::printf("idle alpha tests: %d states called idle, %d of them draw another picture; %d states may write "
+                "zero, %d of them draw another picture\n",
+                idle, idleWrong, zero, zeroWrong);
     CHECK(idle > 0);
-    CHECK(wrong == 0);
+    CHECK(idleWrong == 0);
+    CHECK(zero > idle);
+    CHECK(zeroWrong == 0);
 }
 } // namespace
 

@@ -14,6 +14,14 @@
 // render state alone, so the back end can draw with the program that has
 // no discard (gxm_legacy_draw.cpp, switch `no-alpha-test-drop`).
 //
+// Most of the game's decals blend premultiplied colour (one, one minus
+// source alpha) and nothing in the state says their colour is 0 where
+// their alpha is. For those, and for any other test on a blended draw, the
+// program can do the test and write (0, 0, 0, 0) for a pixel that fails it:
+// when the blend leaves the target as it was for such a source, that is the
+// discard's picture without the discard. AlphaTestCanZero says when
+// (gxm_cg_translate.h, Options::alphaZero; switch `no-alpha-test-zero`).
+//
 // The state is passed as plain numbers so that the host test needs no
 // renderer header (tests/vita_gxm/idle_alpha_test.cpp).
 
@@ -27,8 +35,8 @@ namespace gfx_gxm
 namespace d3d9
 {
 inline constexpr uint32_t kCmpGreater = 5, kCmpNotEqual = 6;
-inline constexpr uint32_t kBlendZero = 1, kBlendOne = 2, kBlendSrcAlpha = 5, kBlendInvSrcAlpha = 6,
-                          kBlendBothSrcAlpha = 12;
+inline constexpr uint32_t kBlendZero = 1, kBlendOne = 2, kBlendInvSrcColor = 4, kBlendSrcAlpha = 5,
+                          kBlendInvSrcAlpha = 6, kBlendBothSrcAlpha = 12, kBlendBothInvSrcAlpha = 13;
 inline constexpr uint32_t kBlendOpAdd = 1, kBlendOpRevSubtract = 3;
 } // namespace d3d9
 
@@ -67,6 +75,35 @@ inline bool AlphaTestIsIdle(const AlphaTestState &s)
     else if ((s.src != kBlendSrcAlpha && s.src != kBlendZero) || !keeps(s.op, s.dst))
         return false;
     // Alpha: the source's is 0 times any factor; the destination's must stay.
+    if (s.separateAlpha)
+        return keeps(s.opAlpha, s.dstAlpha);
+    return true;
+}
+
+// True when a draw with this state shows the same picture if the pixels its
+// alpha test rejects are written as (0, 0, 0, 0) instead: whatever the test
+// is, the blend adds nothing of such a source and keeps the destination
+// whole.
+inline bool AlphaTestCanZero(const AlphaTestState &s)
+{
+    using namespace d3d9;
+    if (!s.blend || s.depthWrite || s.stencil)
+        return false;
+    // Any source factor times 0 is 0. The destination's factor must be 1
+    // for a source of 0, in a sum or the destination minus the source.
+    auto keeps = [](uint32_t op, uint32_t dst) {
+        return (op == kBlendOpAdd || op == kBlendOpRevSubtract) &&
+               (dst == kBlendOne || dst == kBlendInvSrcAlpha || dst == kBlendInvSrcColor);
+    };
+    if (s.src == kBlendBothInvSrcAlpha)
+        return false; // the destination times the source's alpha
+    if (s.src == kBlendBothSrcAlpha)
+    {
+        if (s.op != kBlendOpAdd && s.op != kBlendOpRevSubtract)
+            return false;
+    }
+    else if (!keeps(s.op, s.dst))
+        return false;
     if (s.separateAlpha)
         return keeps(s.opAlpha, s.dstAlpha);
     return true;
