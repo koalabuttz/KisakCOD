@@ -24,6 +24,7 @@
 #include <gfx_d3d/r_image.h>
 
 #include <cstring>
+#include <utility>
 #include <vector>
 
 namespace kisak_rml
@@ -57,6 +58,25 @@ uint32_t PackColour(Rml::ColourbPremultiplied colour)
     uint32_t packed;
     Byte4PackVertexColor(rgba, reinterpret_cast<uint8_t *>(&packed));
     return packed;
+}
+
+// Turns every triangle the way the stock stretch pics turn theirs
+// (RB_DrawStretchPic: clockwise on the screen, y down). RmlUi's own quads
+// (backgrounds, borders, images) turn the other way, and a material that culls
+// back faces drops them on some drivers (the Android emulator drew none of
+// the screens' fills or the classic mode's animated backdrop).
+void WindLikeStock(CompiledMesh &mesh)
+{
+    const size_t count = mesh.indices.size() - mesh.indices.size() % 3;
+    for (size_t i = 0; i < count; i += 3)
+    {
+        const GfxUiVertex &a = mesh.vertices[mesh.indices[i]];
+        const GfxUiVertex &b = mesh.vertices[mesh.indices[i + 1]];
+        const GfxUiVertex &c = mesh.vertices[mesh.indices[i + 2]];
+        const float turn = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+        if (turn < 0.0f)
+            std::swap(mesh.indices[i + 1], mesh.indices[i + 2]);
+    }
 }
 
 void ImageSize(Material *material, Rml::Vector2i &size)
@@ -108,6 +128,8 @@ public:
                 }
                 mesh->indices[i] = (uint16_t)indices[i];
             }
+            if (mesh->valid)
+                WindLikeStock(*mesh);
         }
         return reinterpret_cast<Rml::CompiledGeometryHandle>(mesh);
     }
