@@ -45,7 +45,8 @@ cmake --build build-vita-mp --target KisakCOD-mp-vpk
 Hosted CI: the **PS Vita multiplayer client** job of the PS Vita workflow
 (`.github/workflows/build-kisakcod-vita.yaml`) builds Debug
 and RelWithDebInfo. It runs the server's float checks (no fused multiply-add, no
-NEON float) and link checks (weak pthread references, the main stack size), and
+NEON float outside the vector skinning path, which has to be there and be
+NEON) and link checks (weak pthread references, the main stack size), and
 uploads the RelWithDebInfo `.vpk`. It also runs the controls' and the sound's
 host tests (`scripts/tests/test_vita_input.py`, `test_vita_sound.py`), the run
 plan's, the GPU heap's, the frame time figures', the GPU progress bookkeeping's
@@ -1006,6 +1007,22 @@ What the GXM back end does so far (step 2d):
   may not hold every map), and `big-gxm-rings` twice the default rings
   (3 MB more of main memory).
   Not run on a console or in Vita3K yet.
+- **What the CPU pays for GPU memory.** The main pool is memory the CPU
+  does not cache (`SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE`), as Sony's
+  samples have it, and CDRAM is not cached either. The engine skins
+  vertices into the pool and reads some of them back, writes a frame's
+  indices there and fills the uniform buffers there, on three threads. At
+  start-up the back end measures what that memory costs and logs one line:
+  `gpu memory speed, 256 KB at a time: the heap: copy in N MB/s, copy out
+  N MB/s, a word written N ns, read N ns; main: ...; cdram: ...` (the
+  shortest of four passes each; "copy out" and "read" are the CPU reading
+  the pool). An empty file `cached-main-memory` in the folder of the
+  compiled programs gives the main pool as ordinary cached memory
+  (`diag: cached-main-memory is there ...`; the two memory lines then say
+  `main (cached)`), so that one console sitting can say what the uncached
+  kind costs a frame. It is for measuring: whether the GPU always sees what
+  the CPU wrote last from cached memory is not known, so the picture may
+  be wrong with it.
 - **Textures** are linear: rows of whole multiples of 8 texels, and the
   levels of a mipmapped texture sized from the power of two above the base,
   which is how sceGxm reads them and also a layout LockRect can hand out.
@@ -1033,6 +1050,18 @@ What the GXM back end does so far (step 2d):
   map's before a frame is shown (run Z8's long warm-ups ran out of CDRAM
   going from mp_crash to mp_backlot). DrawPrimitiveUP and the clear quads
   copy their vertices into a 512 KB per-frame ring.
+- **Skinning.** Animated models (the hands and weapon, players) are skinned
+  on a worker thread into the skinned cache. Console run BD measured 6 ms a
+  frame for the 3227 vertices of the hands and weapon alone, 1.9 us a
+  vertex, with the engine's scalar code: it writes a vertex field by field
+  into memory the CPU does not cache and reads a weighted vertex's position
+  back from it, on a CPU whose NEON the build did not use. The client now
+  skins with the vector path (`src/gfx_d3d/r_model_skin_vec.cpp`, the one
+  file built for NEON; [the rule](linux-armv7.md)): the same bytes, a vertex
+  put together in registers and written once. `r_sse_skinning 0` goes back
+  to the scalar code, so `perf_ab "set r_sse_skinning 0" "set r_sse_skinning 1"`
+  holds the two against each other (`other threads run: skin xmodel` is its timer).
+  Not run on a console or in Vita3K yet.
 
 ### Shaders (step 2c)
 

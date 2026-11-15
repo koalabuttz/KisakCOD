@@ -3,8 +3,12 @@
 #include "r_dvars.h"
 #include <cgame/cg_local.h>
 
+#include "r_dpvs_stats.h"
+
 void R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const DpvsClipPlaneSet *clipSet)
 {
+    const bool counting = s_dpvsCounting.load(std::memory_order_relaxed);
+    uint32_t countTested = 0, countPlanes = 0, countCulled = 0, countSeen = 0;
     int v2; // [esp+10h] [ebp-D0h]
     int v3; // [esp+14h] [ebp-CCh]
     const DpvsPlane *v4; // [esp+18h] [ebp-C8h]
@@ -40,6 +44,8 @@ void R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const DpvsClipPla
 
     clipSetChild.count = 0;
     planeCount = clipSet->count;
+    if (counting)
+        DpvsCountAdd(DPVS_COUNT_NODES, 1);
     for (planeIndex = 0; planeIndex < planeCount; ++planeIndex)
     {
         plane = clipSet->planes[planeIndex];
@@ -47,12 +53,32 @@ void R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const DpvsClipPla
             + plane->coeffs[3]
             + *(float *)((char *)tree->mins + plane->side[1]) * plane->coeffs[1]
             + *(float *)((char *)tree->mins + plane->side[2]) * plane->coeffs[2] <= 0.0)
+        {
+            if (counting)
+            {
+                DpvsCountAdd(DPVS_COUNT_NODE_PLANES, planeIndex + 1);
+                DpvsCountAdd(DPVS_COUNT_NODES_OUTSIDE, 1);
+            }
             return;
+        }
         if (*(float *)((char *)tree->maxs - plane->side[0]) * plane->coeffs[0]
             + plane->coeffs[3]
             + *(float *)((char *)&tree->maxs[2] - plane->side[1]) * plane->coeffs[1]
             + *(float *)((char *)&tree->startSurfIndex - plane->side[2]) * plane->coeffs[2] < 0.0)
             clipSetChild.planes[clipSetChild.count++] = plane;
+    }
+    if (counting)
+    {
+        DpvsCountAdd(DPVS_COUNT_NODE_PLANES, planeCount);
+        if (!clipSetChild.count)
+            DpvsCountAdd(DPVS_COUNT_NODES_INSIDE, 1);
+        else if (!tree->childCount)
+        {
+            DpvsCountAdd(DPVS_COUNT_LEAVES_CLIPPED, 1);
+            DpvsCountAdd(clipSetChild.count > 4 ? DPVS_COUNT_LEAF_PLANES_MORE
+                                                : DpvsCount(DPVS_COUNT_LEAF_PLANES_1 + clipSetChild.count - 1),
+                         1);
+        }
     }
     if (clipSetChild.count)
     {
@@ -79,6 +105,7 @@ void R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const DpvsClipPla
                         //if (!*(_BYTE *)(*(_DWORD *)(*((_DWORD *)NtCurrentTeb()->ThreadLocalStoragePointer + _tls_index) + 24) + v7))
                         if (!g_smodelVisData[v7])
                         {
+                            ++countTested;
                             for (j = 0; j < clipSetChild.count; ++j)
                             {
                                 v9 = clipSetChild.planes[j];
@@ -89,10 +116,13 @@ void R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const DpvsClipPla
                                     + *(float *)((char *)v11->mins + v9->side[2]) * v9->coeffs[2] <= 0.0)
                                 {
                                     v8 = 1;
+                                    countPlanes += j + 1;
+                                    ++countCulled;
                                     goto LABEL_42;
                                 }
                             }
                             v8 = 0;
+                            countPlanes += clipSetChild.count;
                         LABEL_42:
                             if (!v8)
                             {
@@ -100,8 +130,20 @@ void R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const DpvsClipPla
                                 g_smodelVisData[v7] = 1;
                             }
                         }
+                        else
+                        {
+                            ++countSeen;
+                        }
                     }
                 }
+                if (counting)
+                {
+                    DpvsCountAdd(DPVS_COUNT_SMODELS_TESTED, countTested);
+                    DpvsCountAdd(DPVS_COUNT_SMODEL_PLANES, countPlanes);
+                    DpvsCountAdd(DPVS_COUNT_SMODELS_CULLED, countCulled);
+                    DpvsCountAdd(DPVS_COUNT_SMODELS_SEEN, countSeen);
+                }
+                countTested = countPlanes = countCulled = countSeen = 0;
             }
             if (rg.drawWorld)
             {
@@ -122,8 +164,11 @@ void R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const DpvsClipPla
                     {
                         v2 = v13[k];
                         //if (!*(_BYTE *)(*(_DWORD *)(*((_DWORD *)NtCurrentTeb()->ThreadLocalStoragePointer + _tls_index) + 28) + v2))
+                        if (g_surfaceVisData[v2])
+                            ++countSeen;
                         if (!g_surfaceVisData[v2])
                         {
+                            ++countTested;
                             v6 = &rgp.world->dpvs.surfaces[v2];
                             for (m = 0; m < clipSetChild.count; ++m)
                             {
@@ -134,10 +179,13 @@ void R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const DpvsClipPla
                                     + *(float *)((char *)v6->bounds[0] + v4->side[2]) * v4->coeffs[2] <= 0.0)
                                 {
                                     v3 = 1;
+                                    countPlanes += m + 1;
+                                    ++countCulled;
                                     goto LABEL_59;
                                 }
                             }
                             v3 = 0;
+                            countPlanes += clipSetChild.count;
                         LABEL_59:
                             if (!v3)
                             {
@@ -147,6 +195,13 @@ void R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const DpvsClipPla
                                 g_surfaceVisData[v2] = 1;
                             }
                         }
+                    }
+                    if (counting)
+                    {
+                        DpvsCountAdd(DPVS_COUNT_SURFACES_TESTED, countTested);
+                        DpvsCountAdd(DPVS_COUNT_SURFACE_PLANES, countPlanes);
+                        DpvsCountAdd(DPVS_COUNT_SURFACES_CULLED, countCulled);
+                        DpvsCountAdd(DPVS_COUNT_SURFACES_SEEN, countSeen);
                     }
                 }
             }
@@ -159,6 +214,8 @@ void R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const DpvsClipPla
         if (rg.drawSModels)
         {
             smodelIndexCount = tree->smodelIndexCount;
+            if (counting)
+                DpvsCountAdd(DPVS_COUNT_SMODELS_WHOLE, smodelIndexCount);
             if (tree->smodelIndexCount)
             {
                 indices = tree->smodelIndexes;
@@ -182,6 +239,8 @@ void R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const DpvsClipPla
                 startSurfIndex = tree->startSurfIndexNoDecal;
                 surfaceCount = tree->surfaceCountNoDecal;
             }
+            if (counting)
+                DpvsCountAdd(DPVS_COUNT_SURFACES_WHOLE, surfaceCount);
             if (surfaceCount)
             {
                 v20 = &rgp.world->dpvs.sortedSurfIndex[startSurfIndex];
@@ -217,6 +276,11 @@ void R_AddCellStaticSurfacesInFrustum(DpvsStaticCellCmd *dpvsCell)
             clipSet.planes[planeIndex] = &clipPlanePool[planeIndex];
         }
         clipSet.count = planes.count;
+        if (s_dpvsCounting.load(std::memory_order_relaxed))
+        {
+            DpvsCountAdd(DPVS_COUNT_CELLS, 1);
+            DpvsCountAdd(DPVS_COUNT_CELL_PLANES, planes.count);
+        }
         R_AddAabbTreeSurfacesInFrustum_r(tree, &clipSet);
     }
 }
@@ -269,6 +333,8 @@ void R_AddCellCullGroupsInFrustum(DpvsStaticCellCmd *dpvsCell)
     cell = dpvsCell->cell;
     count = cell->cullGroupCount;
     cullGroup = cell->cullGroups;
+    if (count && s_dpvsCounting.load(std::memory_order_relaxed))
+        DpvsCountAdd(DPVS_COUNT_CULL_GROUPS, count);
     while (count)
     {
         R_AddCullGroupSurfacesInFrustum(*cullGroup, dpvsCell->planes, dpvsCell->planeCount);

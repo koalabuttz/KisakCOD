@@ -274,6 +274,8 @@ set(GFX_D3D
     "${SRC_DIR}/gfx_d3d/r_model_skin.cpp"
     "${SRC_DIR}/gfx_d3d/r_model_skin.h"
     "${SRC_DIR}/gfx_d3d/r_model_skin_sse.cpp"
+    "${SRC_DIR}/gfx_d3d/r_model_skin_vec.cpp"
+    "${SRC_DIR}/gfx_d3d/r_model_skin_vec.h"
     "${SRC_DIR}/gfx_d3d/r_outdoor.cpp"
     "${SRC_DIR}/gfx_d3d/r_outdoor.h"
     "${SRC_DIR}/gfx_d3d/r_pixelcost_load_obj.cpp"

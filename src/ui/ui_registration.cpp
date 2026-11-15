@@ -4,6 +4,7 @@
 
 void UI_SetupMenuContext(UiContext *dc, void (*setupKeywords)())
 {
+    UI_MenuListChanged();
     dc->menuCount = 0;
     dc->openMenuCount = 0;
     if (setupKeywords)
@@ -15,6 +16,7 @@ bool UI_AppendMenuReference(UiContext *dc, menuDef_t *menu)
 {
     if (!dc || !menu || dc->menuCount < 0 || dc->menuCount >= 640)
         return false;
+    UI_MenuListChanged();
     dc->Menus[dc->menuCount++] = menu;
     return true;
 }
@@ -24,6 +26,7 @@ void UI_ShutdownOwnedMenuContext(UiContext *dc)
     if (!dc)
         return;
     UILocalVar_Shutdown(&dc->localVars);
+    UI_MenuListChanged();
     std::memset(dc->Menus, 0, sizeof(dc->Menus));
     std::memset(dc->menuStack, 0, sizeof(dc->menuStack));
     dc->menuCount = 0;

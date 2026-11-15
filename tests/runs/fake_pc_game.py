@@ -9,7 +9,13 @@ log line, ``screenshot <name>`` writes ``<home>/main/screenshots/<name>.tga``,
 
 The picture is grey (FAKE_SHADE, default 100) with a square of FAKE_SQUARE
 (default the same grey) at 100,60 to 164,124, written bottom row first and
-RLE-packed when FAKE_RLE=1. FAKE_EXIT sets the exit code, FAKE_HANG=1 hangs.
+RLE-packed when FAKE_RLE=1. FAKE_EXIT sets the exit code, FAKE_HANG=1 hangs,
+FAKE_REFUSE_LIST=1 refuses the timed list as the client does and exits 0.
+
+A timed entry may hold several commands split by ';', as the console takes
+them. ``<dvar> <value>`` sets a dvar: ``r_fakeSquare`` then shades the square
+and ``r_fakeCost`` (ms) slows the frame log (fps = 1000 / (10 + cost)), so a
+launch with variants gets different pictures and frame rates per variant.
 """
 
 import os
@@ -69,19 +75,36 @@ def main():
              "run: the map is up"]
     shade = int(os.environ.get("FAKE_SHADE", "100"))
     square = int(os.environ.get("FAKE_SQUARE", str(shade)))
+    dvars = {}
+    quit_now = False
+    if os.environ.get("FAKE_REFUSE_LIST") == "1":
+        lines.append('run: run_atMap: part 7 "45" has no command after its time; none of its commands will be sent')
+        log.write_text("\n".join(lines) + "\n")
+        return 0
     for part in setting(argv, "run_atMap").split("|"):
-        words = part.split()
+        words = part.split(None, 1)
         if len(words) < 2:
             continue
-        command = words[1:]
-        lines.append(f"run: sending \"{' '.join(command)}\"")
-        if command[0] == "framelog":
-            lines.append(f"frame log {command[2] if len(command) > 2 else '-'}: 1000 frames in 10.000 s: 100.00 fps; "
-                         "ms mean 10.000, median 10.000, p95 11.000, p99 12.000, max 13.000; 0 over 50 ms")
-        elif command[0] == "screenshot":
-            tga(home / "main" / "screenshots" / f"{command[1]}.tga", shade, square, os.environ.get("FAKE_RLE") == "1")
-            lines.append(f"Wrote screenshots/{command[1]}.tga")
-        elif command[0] == "quit":
+        lines.append(f"run: sending \"{words[1].strip()}\"")
+        for text in words[1].split(";"):
+            command = text.split()
+            if not command:
+                continue
+            if command[0] == "framelog":
+                ms = 10.0 + float(dvars.get("r_fakeCost", 0))
+                lines.append(f"frame log {command[2] if len(command) > 2 else '-'}: 1000 frames in {ms:.3f} s: "
+                             f"{1000 / ms:.2f} fps; ms mean {ms:.3f}, median {ms:.3f}, p95 {ms + 1:.3f}, "
+                             f"p99 {ms + 2:.3f}, max {ms + 3:.3f}; 0 over 50 ms")
+            elif command[0] == "screenshot":
+                here = int(dvars.get("r_fakeSquare", square))
+                tga(home / "main" / "screenshots" / f"{command[1]}.tga", shade, here, os.environ.get("FAKE_RLE") == "1")
+                lines.append(f"Wrote screenshots/{command[1]}.tga")
+            elif command[0] == "quit":
+                quit_now = True
+                break
+            elif len(command) == 2 and command[0].startswith("r_"):
+                dvars[command[0]] = command[1]
+        if quit_now:
             break
     lines.append("vulkan d3d9: device destroyed after 0 validation errors")
     log.write_text("\n".join(lines) + "\n")

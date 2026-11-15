@@ -75,13 +75,25 @@ vec3 ViewAt(vec2 pixelCentre, float depth)
     return view.xyz / view.w;
 }
 
+// acos to within 0.009 radians (Lagarde's fit, as XeGTAO uses), well under a
+// sector of the slice (about pi / 32), for a fraction of acos's cost: the
+// pass takes two for each sample. PC AO run 3: the visibility bitmask, with
+// those two exact acos a sample, made the pass about 55% dearer (0.40 to
+// 0.66 ms on the 2080 Super) than the horizon-only GTAO.
+float FastAcos(float x)
+{
+    const float a = abs(x);
+    const float r = (-0.156583 * a + 0.5 * kPi) * sqrt(max(1.0 - a, 0.0));
+    return x >= 0.0 ? r : kPi - r;
+}
+
 // The slice's cosine-weighted visible measure from the view direction to the
 // angle theta (signed like the horizons), for the projected normal at angle
-// n: the integral of |sin t| cos(t - n) from 0 to theta (GTAO's inner
-// integral; increasing in theta across the hemisphere).
-float Measure(float theta, float n)
+// n, given as (n, cos n, sin n): the integral of |sin t| cos(t - n) from 0 to
+// theta (GTAO's inner integral; increasing in theta across the hemisphere).
+float Measure(float theta, vec3 n)
 {
-    const float v = 0.25 * (-cos(2.0 * theta - n) + cos(n) + 2.0 * theta * sin(n));
+    const float v = 0.25 * (-cos(2.0 * theta - n.x) + n.y + 2.0 * theta * n.z);
     return theta >= 0.0 ? v : -v;
 }
 
@@ -132,10 +144,11 @@ void main()
             continue;
         const float signN = sign(dot(orthoDirection, projectedNormal));
         const float cosN = clamp(dot(projectedNormal, toEye) / projectedLength, -1.0, 1.0);
-        const float n = signN * acos(cosN);
+        const float angleN = signN * FastAcos(cosN);
+        const vec3 n = vec3(angleN, cos(angleN), sin(angleN));
 
         // The hemisphere in this slice, and its measure.
-        const float low = n - 0.5 * kPi, high = n + 0.5 * kPi;
+        const float low = angleN - 0.5 * kPi, high = angleN + 0.5 * kPi;
         const float lowMeasure = Measure(low, n);
         const float total = Measure(high, n) - lowMeasure;
         uint hidden = 0u;
@@ -168,9 +181,9 @@ void main()
                 const vec3 backDelta = front + params.thickness * normalize(front) - here;
                 const float edge = side == 0 ? low : high;
                 const float frontAngle =
-                    mix(sideSign * acos(clamp(dot(delta / distance, toEye), -1.0, 1.0)), edge, fade);
+                    mix(sideSign * FastAcos(clamp(dot(delta / distance, toEye), -1.0, 1.0)), edge, fade);
                 const float backAngle =
-                    mix(sideSign * acos(clamp(dot(normalize(backDelta), toEye), -1.0, 1.0)), edge, fade);
+                    mix(sideSign * FastAcos(clamp(dot(normalize(backDelta), toEye), -1.0, 1.0)), edge, fade);
                 const float from = max(min(frontAngle, backAngle), low);
                 const float to = min(max(frontAngle, backAngle), high);
                 if (to <= from)

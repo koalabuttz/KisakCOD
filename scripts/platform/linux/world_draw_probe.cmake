@@ -113,6 +113,7 @@ set(KISAK_WORLD_DRAW_STANDIN_SOURCES
     "${SRC_DIR}/gfx_d3d/r_model_pose.cpp"
     "${SRC_DIR}/gfx_d3d/r_model_skin.cpp"
     "${SRC_DIR}/gfx_d3d/r_model_skin_sse.cpp"
+    "${SRC_DIR}/gfx_d3d/r_model_skin_vec.cpp"
     "${SRC_DIR}/gfx_d3d/r_outdoor.cpp"
     "${SRC_DIR}/gfx_d3d/r_pixelcost_load_obj.cpp"
     "${SRC_DIR}/gfx_d3d/r_reflection_probe.cpp"
