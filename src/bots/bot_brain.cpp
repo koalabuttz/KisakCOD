@@ -947,6 +947,15 @@ void Command()
     if (s_commandFrame == svs.time)
         return;
     s_commandFrame = svs.time;
+    // Every 10 s, how many shots have been fired: the probe sets the game's
+    // logged hits against it.
+    static int s_shotsLoggedAt = 0;
+    if (svs.time - s_shotsLoggedAt >= 10000 || svs.time < s_shotsLoggedAt)
+    {
+        s_shotsLoggedAt = svs.time;
+        if (LogOn())
+            Com_Printf(CON_CHANNEL_SERVER, "bots: %d shots fired so far\n", Bot_ShotsFired());
+    }
     for (int teamIndex : {static_cast<int>(TEAM_AXIS), static_cast<int>(TEAM_ALLIES)})
     {
         TeamState &team = s_teams[teamIndex];

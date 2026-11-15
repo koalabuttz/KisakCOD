@@ -221,6 +221,11 @@ uint32_t JammerPerkBit()
 
 } // namespace
 
+int Bot_ShotsFired()
+{
+    return s_shotCount;
+}
+
 int Bot_Sense(int clientNum, kb::Perception &perception, const kb::PerceptionParams &params, int now, int lastSense,
               kb::Rng &rng, BotNotice *notices, int maxNotices)
 {

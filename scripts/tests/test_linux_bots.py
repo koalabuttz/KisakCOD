@@ -610,6 +610,7 @@ PUSH_ROW = re.compile(r"^bots: \d+ pushes to a callout \d+ units away\s*$", re.M
 ANCHOR_ROW = re.compile(r"^bots: \d+ anchors \d+ units from a callout\s*$", re.M)
 OBJECTIVE_ROW = re.compile(r"^bots: \d+ (attacks an objective \d+ units away|defends an objective from \d+ units)\s*$",
                            re.M)
+SHOTS_ROW = re.compile(r"^bots: (\d+) shots fired so far\s*$", re.M)
 GRENADE_ROW = re.compile(r"^bots: \d+ throws a grenade \d+ units\s*$", re.M)
 KNIFE_ROW = re.compile(r"^bots: \d+ knifes \d+, \d+ units\s*$", re.M)
 TEAM_OBJECTIVES_ROW = re.compile(r"^bots: team (\d+) objectives: take (\d+), hold (\d+)\s*$", re.M)
@@ -998,8 +999,12 @@ def main() -> int:
                   (f" ({min(r[2] for r in fights)} to {max(r[2] for r in fights)} ms after noticing, "
                    f"{min(r[3] for r in fights)} to {max(r[3] for r in fights)} ms after coming into view, "
                    f"{min(r[4] for r in fights)} to {max(r[4] for r in fights)} units)" if fights else ""))
-            print(f"INFO: the game logged {len(DAMAGE_LOG_ROW.findall(log_text))} hits and "
-                  f"{len(KILL_LOG_ROW.findall(log_text))} kills")
+            hits = len(DAMAGE_LOG_ROW.findall(log_text))
+            print(f"INFO: the game logged {hits} hits and {len(KILL_LOG_ROW.findall(log_text))} kills")
+            fired = SHOTS_ROW.findall(output)
+            if fired:
+                print(f"INFO: {fired[-1]} shots fired by the last count, "
+                      f"{hits / max(int(fired[-1]), 1):.2f} hits a shot")
         print(f"\ncompleted in {elapsed:.1f}s on isolated port {port}")
         print("NOT verified: " + ("" if args.combat else "combat kills, ") + "client-originated disconnect packets, " +
               ("drop/refill, " if not args.refill_cycles else "") +

@@ -8,7 +8,7 @@ from test_linux_bots import (FIXTURE_GSC, transition_fixture, transition_plan,
                              uses_both_teams, TEAM_CAPACITY, MAX_BOTS, validate_brain_notices,
                              validate_brain_fights, COVER_ROW, HUNT_ROW, team_play,
                              objective_fixture, validate_objectives, FIXTURE_GSC,
-                             GRENADE_ROW, KNIFE_ROW)
+                             GRENADE_ROW, KNIFE_ROW, SHOTS_ROW)
 
 
 def healthy_log():
@@ -387,6 +387,9 @@ class GrenadeAndKnifeLogTests(unittest.TestCase):
                   'bots: 5 knifes 6, 52 units\nbots: 5 knifes 6 close\n')
         self.assertEqual(len(GRENADE_ROW.findall(output)), 2)
         self.assertEqual(len(KNIFE_ROW.findall(output)), 1)
+
+    def test_the_last_shot_count_is_read(self):
+        self.assertEqual(SHOTS_ROW.findall('bots: 12 shots fired so far\nbots: 340 shots fired so far\n')[-1], '340')
 
 
 class ObjectiveTests(unittest.TestCase):
