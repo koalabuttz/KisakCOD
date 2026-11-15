@@ -384,9 +384,11 @@ jobs:
             echo "the client's vector skinning path is not there" >&2
             exit 1
           fi
+          # A multiply on four floats at once: vmul, or the unfused vmla that
+          # Clang picks for a product that is added when it does not optimize.
           for own in "${neon_functions[@]}"; do
             if ! awk -v own="^<(${own})" '/^[0-9a-f]+ <.*>:$/ { fn = $2 }
-                 /\tvmul\.f32\tq/ && fn ~ own { found = 1 } END { exit !found }' \
+                 /\tv(mul|mla)\.f32\tq/ && fn ~ own { found = 1 } END { exit !found }' \
                  "$RUNNER_TEMP/vita-mp.dis"; then
               echo "the client's NEON code of the functions named $own... is not there or not built for NEON" >&2
               exit 1
