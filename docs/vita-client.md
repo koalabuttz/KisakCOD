@@ -874,8 +874,7 @@ What the GXM back end does so far (step 2d):
   the uniform buffers are neither reserved nor written when both programs
   and every constant are the last draw's (sceGxm keeps a reserved default
   uniform buffer for a program until the program is set anew; the back end
-  drops both when either program changes and at every scene's start, and
-  always writes for a pixel shader that takes a volume texture's depth).
+  drops both when either program changes and at every scene's start).
   Draws a run diagnostic looks at or changes take the old path. The quit
   summary says how often each applied: `draw work left out: N draws kept
   the last draw's programs and fixed state; N of N others found their
@@ -887,6 +886,25 @@ What the GXM back end does so far (step 2d):
   draw at about 10.5 us of the render thread's time, of which working out
   its programs and its fixed state (viewport, clip, cull, depth, stencil,
   bias) took about 4.
+- **Fragment constants kept for the models.** A model's lit pixel shader
+  reads its lighting from a volume texture, which the back end keeps as a
+  2D texture with the depth in a uniform, and the rule above used to
+  write a new fragment uniform buffer for every draw of such a program.
+  Console run CP (2026-11-15) put that at about 4 us a model draw on the
+  render thread, 215 draws at the busy view of `mp_crash`, with waits
+  for the fragment ring on top: 33.4 ms a frame against 28.7 with the
+  read left out. Now the buffer serves on while the volumes bound have
+  the depths written into it, and a draw after a pixel constant changed
+  keeps it when none of the constants its shader reads did (the
+  translator lists them: `apiConstants` in its reflection). The picture
+  is the same. The log's `fragment constants` lines count the buffers
+  written and kept by each rule and time the reserve and the write on
+  the timed draws. Empty files `no-frag-keep-depth` and
+  `no-frag-keep-same` in the folder of the compiled programs, or
+  `vita_gxm <name> 1`, turn the rules off one by one. `frag-direct-write`
+  (off unless asked for) copies the constants into the buffer itself in
+  place of `sceGxmSetUniformDataF`, for programs where a first copy
+  matched sceGxm's own, to measure what that call costs.
 - **The last draw's state kept.** The D3D9 front counts every call that
   changes what a draw's programs and fixed state come from (a render
   state, a shader, the vertex declaration, a stream's stride, the

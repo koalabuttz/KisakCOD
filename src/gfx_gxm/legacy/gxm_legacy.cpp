@@ -1225,6 +1225,18 @@ void RequestDefaultVariant(Device &device, Shader &shader, uint64_t hash)
         return;
     }
     shader.translated = true;
+    // A shader that indexes its constants may read any of them.
+    if (r.relativeConstants && r.floatConstants)
+        shader.constantRuns.emplace_back(uint16_t(0), r.floatConstants);
+    else
+        for (const uint16_t number : r.apiConstants)
+        {
+            if (!shader.constantRuns.empty() &&
+                shader.constantRuns.back().first + shader.constantRuns.back().second == number)
+                ++shader.constantRuns.back().second;
+            else
+                shader.constantRuns.emplace_back(number, uint16_t(1));
+        }
     char label[64];
     std::snprintf(label, sizeof(label), "shader %016llx (%s_%u_%u)", (unsigned long long)hash,
                   shader.pixel ? "ps" : "vs", r.major, r.minor);
