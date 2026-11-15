@@ -429,6 +429,34 @@ void R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBufContext
     }
 }
 
+// The lit pass sets a world piece's lightmap and reflection probe when either
+// changes, and draws each piece of a pretessellated list on its own. A pass
+// that samples neither the probe (custom sampler 0) nor the lightmaps (custom
+// samplers 1 and 2) draws the same picture whichever ones are set, so with
+// r_mergeLitPreTess a piece that changes only one of those is drawn together
+// with the piece before it when both start at the same vertex: the way
+// R_DrawBspDrawSurfsPreTess already draws the other passes. The per-object
+// and per-prim arguments come from the same source for every piece, and the
+// merged draw names the widest vertex range of its pieces.
+static void R_DrawLitPreTessRun(
+    GfxCmdBufPrimState *state,
+    const srfTriangles_t *tris,
+    uint32_t baseIndex,
+    uint32_t triCount,
+    uint32_t vertexCount)
+{
+    GfxDrawPrimArgs args;
+
+    R_SetStreamsForBspSurface(state, tris);
+    args.vertexCount = vertexCount;
+    args.triCount = triCount;
+    args.baseIndex = baseIndex;
+    R_DrawIndexedPrimitive(state, &args);
+    g_frameStatsCur.geoIndexCount += 3 * triCount;
+    iassert( g_primStats );
+    g_primStats->dynamicIndexCount += 3 * triCount;
+}
+
 void R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCmdBufContext context)
 {
     uint32_t baseIndex; // [esp+4h] [ebp-28h] BYREF
@@ -446,11 +474,18 @@ void R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCmdBufCont
         R_SetCodeImageTexture(context.source, TEXTURE_SRC_CODE_DYNAMIC_SHADOWS, gfxRenderTargets[R_RENDERTARGET_DYNAMICSHADOWS].image);
     else
         R_SetCodeImageTexture(context.source, TEXTURE_SRC_CODE_DYNAMIC_SHADOWS, rgp.whiteImage);
+    const uint32_t samplerFlags = context.state->pass->customSamplerFlags;
+    const bool mergeProbe = r_mergeLitPreTess->current.enabled && (samplerFlags & 1) == 0;
+    const bool mergeLightmap = r_mergeLitPreTess->current.enabled && (samplerFlags & 6) == 0;
     cmdBuf.primDrawSurfPos = primDrawSurfPos;
     while (R_ReadBspPreTessDrawSurfs(&cmdBuf, &list, &count, &baseIndex))
     {
         reflectionProbeIndex = 255;
         lightmapIndex = 31;
+        const srfTriangles_t *runTris = nullptr;
+        uint32_t runBaseIndex = 0;
+        uint32_t runTriCount = 0;
+        uint32_t runVertexCount = 0;
         for (index = 0; index < count; ++index)
         {
             surfIndex = list[index].baseSurfIndex;
@@ -464,17 +499,40 @@ void R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCmdBufCont
                     rgp.world->surfaceCount);
             bspSurf = &rgp.world->dpvs.surfaces[surfIndex];
             tris = &bspSurf->tris;
-            if (reflectionProbeIndex != bspSurf->reflectionProbeIndex || lightmapIndex != bspSurf->lightmapIndex)
+            const bool probeChanged = reflectionProbeIndex != bspSurf->reflectionProbeIndex;
+            const bool lightmapChanged = lightmapIndex != bspSurf->lightmapIndex;
+            if (runTris
+                && (!probeChanged || mergeProbe)
+                && (!lightmapChanged || mergeLightmap)
+                && (probeChanged || lightmapChanged)
+                && runTris->firstVertex == tris->firstVertex
+                && runTris->vertexLayerData == tris->vertexLayerData)
             {
-                reflectionProbeIndex = bspSurf->reflectionProbeIndex;
-                lightmapIndex = bspSurf->lightmapIndex;
-                R_SetReflectionProbe(context, reflectionProbeIndex);
-                R_SetLightmap(context, lightmapIndex);
-                R_SetupPassPerObjectArgs(context);
-                R_SetupPassPerPrimArgs(context);
+                runTriCount += list[index].totalTriCount;
+                if (runVertexCount < tris->vertexCount)
+                    runVertexCount = tris->vertexCount;
             }
-            R_DrawPreTessTris(&context.state->prim, tris, baseIndex, list[index].totalTriCount);
+            else
+            {
+                if (runTris)
+                    R_DrawLitPreTessRun(&context.state->prim, runTris, runBaseIndex, runTriCount, runVertexCount);
+                if (probeChanged || lightmapChanged)
+                {
+                    reflectionProbeIndex = bspSurf->reflectionProbeIndex;
+                    lightmapIndex = bspSurf->lightmapIndex;
+                    R_SetReflectionProbe(context, reflectionProbeIndex);
+                    R_SetLightmap(context, lightmapIndex);
+                    R_SetupPassPerObjectArgs(context);
+                    R_SetupPassPerPrimArgs(context);
+                }
+                runTris = tris;
+                runBaseIndex = baseIndex;
+                runTriCount = list[index].totalTriCount;
+                runVertexCount = tris->vertexCount;
+            }
             baseIndex += 3 * list[index].totalTriCount;
         }
+        if (runTris)
+            R_DrawLitPreTessRun(&context.state->prim, runTris, runBaseIndex, runTriCount, runVertexCount);
     }
 }

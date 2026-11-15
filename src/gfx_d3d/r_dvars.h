@@ -255,6 +255,7 @@ extern const dvar_t *r_fastSkin;
 extern const dvar_t *r_smc_enable;
 extern const dvar_t *r_pretess;
 extern const dvar_t *r_fetchAhead;
+extern const dvar_t *r_mergeLitPreTess;
 extern const dvar_t *r_dynamicBufferReport;
 extern const dvar_t *r_picmip_manual;
 extern const dvar_t *r_picmip;
