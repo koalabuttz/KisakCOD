@@ -1327,7 +1327,7 @@ Nothing is done per frame.
 | Setting | Default | Switch |
 | --- | --- | --- |
 | Probe filter | on with linear light | `KISAK_VK_MODERN_PROBES=0` keeps the game's levels; `KISAK_VK_MODERN_PROBES=1` filters them also without linear light |
-| Probes drawn again | off | `KISAK_VK_MODERN_PROBES_CAPTURE=1` draws every probe again with the Modern path behind the map's loading screen, each matched to its stock probe's spread of light (start-up only; needs linear light and the filter) |
+| Probes drawn again | on | Every probe is drawn again with the Modern path behind the map's loading screen, each matched to its stock probe's spread of light; `KISAK_VK_MODERN_PROBES_CAPTURE=0` keeps the stock probes (start-up only; needs linear light and the filter) |
 
 The statistics line: `vulkan d3d9: modern: N reflection probes filtered by
 gloss in linear light (M left as they are), X ms each` (M counts the cubes
@@ -1344,10 +1344,12 @@ marks are kept. `test_vulkan_d3d9_front.py` runs it as it is, with
 `KISAK_VK_MODERN_PROBES=0` and with `KISAK_VK_MODERN_LINEAR=0`, and checks
 that a full run filters 2 (none without linear light).
 
-**Drawn again with the Modern path's light** (`KISAK_VK_MODERN_PROBES_CAPTURE=1`,
-with linear light and the filter; start-up only; multiplayer). Off by
-default: even scaled to the stock light, mp_bog's water lost the bright
-streaks its stock probes give it (PC probes run 4). The game's probes were drawn with the original renderer
+**Drawn again with the Modern path's light** (on by default with linear
+light and the filter, off with `KISAK_VK_MODERN_PROBES_CAPTURE=0`; start-up
+only; multiplayer). Matched to the stock probes' spread of light, mp_bog's
+water keeps about as many bright streaks as with the stock probes, where the
+Modern path's light puts them (PC probes run 6: 0.92% of the water's pixels
+above 100 against 1.22%; scaled to the mean only, 0.09%). The game's probes were drawn with the original renderer
 when the map was compiled, so what shiny surfaces reflect is the old
 lighting, clipped at white. Once a world is loaded (`R_LoadWorld` calls
 `R_ModernProbesLoaded`), the client calls `R_ModernCaptureProbes` while it
@@ -1407,8 +1409,9 @@ display values, and below them the same at a quarter of the light), and
 `KISAK_VK_MODERN_PROBES_AT_PLAY=1` draws them after the first frames of play
 instead of behind the loading screen, once the map's effects have started.
 
-**Checks:** the D3D9 check's `modern_probe_capture` scene, with
-`KISAK_VK_MODERN_PROBES_CAPTURE=1`, draws a scene in linear light (a clear
+**Checks:** the D3D9 check's `modern_probe_capture` scene checks that the
+capture is wanted by default and not with `KISAK_VK_MODERN_PROBES_CAPTURE=0`.
+With the switch at 1 it draws a scene in linear light (a clear
 and an opaque quad) while capturing: two rectangles read back come back as
 the light their colours decode to, one outside the scene's image is
 refused, and none is read once capturing is off. Without the switch (or
