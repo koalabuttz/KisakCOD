@@ -2,7 +2,7 @@
 // (src/gfx_gxm/shader/gxm_cg_translate.h), used by
 // scripts/tests/test_vita_cg_translate.py.
 //
-//   cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--sharp MASK] [--far-plane-inside] [--diag-position N] [--narrow] [--agree other.bin] shader.bin
+//   cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--sharp MASK] [--far-plane-inside] [--diag-position N] [--narrow] [--widths-from pixel.bin] shader.bin
 //
 // Writes the Cg program to stdout and one line of reflection to stderr, or
 // "refused: <reason>" to stderr and exits 2.
@@ -55,20 +55,42 @@ int main(int argc, char **argv)
             options.diagPosition = uint8_t(std::strtoul(argv[++i], nullptr, 0));
         else if (!std::strcmp(argv[i], "--narrow"))
             options.narrowVaryings = true;
-        else if (!std::strcmp(argv[i], "--agree") && i + 1 < argc)
+        else if (!std::strcmp(argv[i], "--widths-from") && i + 1 < argc)
             other = argv[++i];
         else
             path = argv[i];
     }
     if (!path)
     {
-        std::fprintf(stderr, "usage: cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--sharp MASK] [--far-plane-inside] [--diag-position N] [--narrow] [--agree other.bin] shader.bin\n");
+        std::fprintf(stderr, "usage: cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--sharp MASK] [--far-plane-inside] [--diag-position N] [--narrow] [--widths-from pixel.bin] shader.bin\n");
         return 1;
     }
     std::ifstream file(path, std::ios::binary);
     const std::vector<char> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     Shader shader;
     std::string error, cg;
+    // --widths-from: this vertex shader's outputs as that pixel shader
+    // reads them (PixelVaryingWidths).
+    std::string pair;
+    if (other)
+    {
+        std::ifstream otherFile(other, std::ios::binary);
+        const std::vector<char> otherBytes((std::istreambuf_iterator<char>(otherFile)), std::istreambuf_iterator<char>());
+        Shader pixel, vertex;
+        std::string otherError, why;
+        if (!Parse(otherBytes.data(), otherBytes.size(), pixel, otherError) ||
+            !Parse(bytes.data(), bytes.size(), vertex, otherError))
+            pair = " pair=refused";
+        else if (const uint64_t widths = PixelVaryingWidths(vertex, pixel, &why))
+        {
+            options.vertexWidths = widths;
+            char text[32];
+            std::snprintf(text, sizeof(text), " pair=%llx", (unsigned long long)widths);
+            pair = text;
+        }
+        else
+            pair = " pair=no:" + why;
+    }
     if (!Parse(bytes.data(), bytes.size(), shader, error) || !Emit(shader, options, cg, error))
     {
         std::fprintf(stderr, "refused: %s\n", error.c_str());
@@ -89,21 +111,6 @@ int main(int argc, char **argv)
         widths += (widths.empty() ? "" : ",") + std::string(SemanticName(v.semantic)) + std::to_string(v.index) +
                   ":" + std::to_string(VaryingWidth(v.mask));
     }
-    // --agree: whether this shader and the other one, as a vertex and pixel
-    // pair in either order, may both be narrowed.
-    std::string agree;
-    if (other)
-    {
-        std::ifstream otherFile(other, std::ios::binary);
-        const std::vector<char> otherBytes((std::istreambuf_iterator<char>(otherFile)), std::istreambuf_iterator<char>());
-        Shader second;
-        std::string otherError;
-        if (!Parse(otherBytes.data(), otherBytes.size(), second, otherError))
-            agree = " agree=refused";
-        else
-            agree = r.stage == Stage::Vertex ? (VaryingWidthsAgree(shader, second) ? " agree=1" : " agree=0")
-                                             : (VaryingWidthsAgree(second, shader) ? " agree=1" : " agree=0");
-    }
     for (const VertexInput &v : r.inputs)
         inputs += (inputs.empty() ? "" : ",") + std::to_string(v.reg) + ":" + std::to_string(v.usage) + "." +
                   std::to_string(v.usageIndex);
@@ -114,7 +121,7 @@ int main(int argc, char **argv)
                  "constants=%u relative=%d samplers=%s varyings=%s inputs=%s kills=%d instructions=%u api=%s "
                  "widths=%s%s\n",
                  r.floatConstants, r.relativeConstants ? 1 : 0, samplers.c_str(), varyings.c_str(), inputs.c_str(),
-                 r.kills ? 1 : 0, r.instructions, fromApi.c_str(), widths.c_str(), agree.c_str());
+                 r.kills ? 1 : 0, r.instructions, fromApi.c_str(), widths.c_str(), pair.c_str());
     std::fwrite(cg.data(), 1, cg.size(), stdout);
     return 0;
 }

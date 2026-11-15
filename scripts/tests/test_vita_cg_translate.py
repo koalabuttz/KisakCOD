@@ -112,6 +112,11 @@ VITA_CASES = {
     # vertex shader above may be narrowed.
     "ps3_vita_narrow_wide": "ps_3_0\ndcl_texcoord0 v0\ndcl_texcoord1 v1.xyz\ndcl_2d s0\ntexld r0, v0, s0\n"
                             "mul r0.xyz, r0, v1\nmov oC0, r0",
+    # Reads only two components of a varying the vertex shader writes three
+    # of, and nothing else.
+    "ps3_vita_narrow_less": "ps_3_0\ndcl_texcoord1 v1.xy\ndcl_2d s0\ntexld r0, v1, s0\nmov oC0, r0",
+    # Reads a varying the vertex shader above does not write.
+    "ps3_vita_narrow_missing": "ps_3_0\ndcl_texcoord5 v0.xy\ndcl_2d s0\ntexld r0, v0, s0\nmov oC0, r0",
 }
 
 # (case, extra tool arguments, text the program must contain, text the
@@ -200,10 +205,26 @@ CHECKS = [
     ("ps3_vita_narrow", ["--narrow"], "float4 in_TEXCOORD2 : TEXCOORD2", "varyings="),
     ("ps3_vita_narrow", ["--narrow"], "float in_TEXCOORD3 : TEXCOORD3", "varyings="),
     ("ps3_vita_narrow", ["--narrow"], "    v4.x = kisak_splat(in_TEXCOORD3).x;\n", "varyings="),
-    ("vs3_vita_narrow", ["--agree", "@ps3_vita_narrow"], "out_TEXCOORD0", " agree=1"),
-    ("ps3_vita_narrow", ["--agree", "@vs3_vita_narrow"], "in_TEXCOORD0", " agree=1"),
-    ("vs3_vita_narrow", ["--agree", "@ps3_vita_narrow_wide"], "out_TEXCOORD0", " agree=0"),
-    ("vs2_oT_oD_fog", ["--agree", "@ps3_vita_narrow"], "out_TEXCOORD0", " agree=0"),
+    # The vertex program writes what the pixel shader reads, as wide as it
+    # reads it, and leaves the rest out.
+    ("vs3_vita_narrow", ["--widths-from", "@ps3_vita_narrow"], "out float2 out_TEXCOORD0 : TEXCOORD0",
+     " pair=800000010000031a"),
+    ("vs3_vita_narrow", ["--widths-from", "@ps3_vita_narrow"], "    out_TEXCOORD3 = o5.x;\n", " pair="),
+    ("vs3_vita_narrow", ["--widths-from", "@ps3_vita_narrow"], "out float4 out_COLOR0 : COLOR0", " pair="),
+    ("vs3_vita_narrow", ["--widths-from", "@ps3_vita_narrow_wide"],
+     "    out_TEXCOORD0 = float4(0.0, 0.0, 0.0, 1.0);\n    out_TEXCOORD0.xy = o1.xy;\n", " pair=800000000000001c"),
+    ("vs3_vita_narrow", ["--widths-from", "@ps3_vita_narrow_wide"], "    out_TEXCOORD1 = o2.xyz;\n", " pair="),
+    ("vs3_vita_narrow", ["--widths-from", "@ps3_vita_narrow_wide"], "!out_COLOR0", " pair="),
+    ("vs3_vita_narrow", ["--widths-from", "@ps3_vita_narrow_wide"], "!out_TEXCOORD3", " pair="),
+    ("vs3_vita_narrow", ["--widths-from", "@ps3_vita_narrow_less"], "out float2 out_TEXCOORD1 : TEXCOORD1",
+     " pair=8000000000000010"),
+    ("vs3_vita_narrow", ["--widths-from", "@ps3_vita_narrow_less"], "    out_TEXCOORD1 = o2.xy;\n", " pair="),
+    ("vs3_vita_narrow", ["--widths-from", "@ps3_vita_narrow_less"], "!out_TEXCOORD0", " pair="),
+    ("ps3_vita_narrow_less", ["--narrow"], "float2 in_TEXCOORD1 : TEXCOORD1", "widths=TEXCOORD1:2"),
+    ("vs3_vita_narrow", ["--widths-from", "@ps3_vita_narrow_missing"], "out float4 out_TEXCOORD0 : TEXCOORD0",
+     " pair=no:TEXCOORD5 is read but not written"),
+    ("vs2_oT_oD_fog", ["--widths-from", "@ps3_vita_narrow"], "out float4 out_TEXCOORD0 : TEXCOORD0",
+     " pair=no:a shader before model 3"),
     ("vs2_oT_oD_fog", ["--narrow"], "out float4 out_TEXCOORD0 : TEXCOORD0", "varyings="),
 ]
 
@@ -285,7 +306,11 @@ def main() -> int:
             if result.returncode:
                 failures.append(f"{name} {extra}: not translated: {result.stderr.strip()}")
                 continue
-            if text not in result.stdout:
+            # "!text": the program must not contain it.
+            if text.startswith("!"):
+                if text[1:] in result.stdout:
+                    failures.append(f"{name} {extra}: the program has {text[1:]!r}")
+            elif text not in result.stdout:
                 failures.append(f"{name} {extra}: the program lacks {text!r}")
             if reflection not in result.stderr:
                 failures.append(f"{name} {extra}: the reflection lacks {reflection!r}: {result.stderr.strip()}")

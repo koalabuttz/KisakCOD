@@ -952,24 +952,27 @@ What the GXM back end does so far (step 2d):
   quit summary counts these draws apart. An empty file
   `no-alpha-test-zero`, or `vita_gxm no-alpha-test-zero 1`, turns it
   off. What it saves on the console is not measured yet.
-- **Varyings only as wide as declared.** The translator wrote every
-  TEXCOORD and COLOR a vertex program hands to its fragment program as a
-  float4. A model 3 shader declares how many components each one has
-  (`dcl_texcoord0 o1.xy`), and the GPU's vertex job writes every float of
+- **Varyings only as wide as the fragment program reads them.** The
+  translator wrote every TEXCOORD and COLOR a vertex program hands to its
+  fragment program as a float4. The GPU's vertex job writes every float of
   a varying into the parameter buffer, which the fragment job reads back.
   A census in Vita3K (run Z68, 2026-11-15, mp_crash's heaviest view) found
   the draws outside the depth pass writing 5.54 million texture coordinate
-  floats a frame where their declarations come to 4.32 million, about 15
-  floats a vertex against 11.5. With `narrowVaryings` in the translator's
-  options each varying is as wide as its declaration reaches (a varying in
-  the upper components, `o4.zw`, stays four wide). A vertex and a fragment
-  program must agree on every width, so a draw narrows both programs or
-  neither (`VaryingWidthsAgree`: both shaders model 3, and every TEXCOORD
-  and COLOR the pixel shader reads written by the vertex shader at the
-  same width); a shader whose varyings are all four wide keeps its one
-  program. A shader with a narrower varying asks for its narrow program
-  when it is created, in place of the plain one. The picture should not
-  change: a fragment program reads only the components it declares. The
+  floats a frame where the shaders' declarations come to 4.32 million,
+  about 15 floats a vertex against 11.5. Now a model 3 pixel shader's
+  program declares each varying only as wide as its declaration reaches
+  (`dcl_texcoord0 v0.xy` is a float2; one in the upper components, `.zw`,
+  stays four wide), and the vertex program it is drawn with writes each
+  varying at exactly that width and leaves out the ones the pixel shader
+  does not read (`vertexWidths` in the translator's options, from
+  `PixelVaryingWidths`). A vertex shader so has one program for each set
+  of widths it is drawn with. A pair is left four wide when a shader is
+  older than model 3 or the pixel shader reads a varying the vertex
+  shader does not write; the log names the first eight such pairs' cause.
+  A pixel shader with a narrower varying asks for its narrow program when
+  it is created, in place of the plain one. The picture does not change
+  (Vita3K run Z69 of the first version, which narrowed only pairs whose
+  widths agreed, found the world the same on and off at three views). The
   quit summary counts the draws and the combinations narrowed and left
   four wide. An empty file `no-narrow-varyings`, or
   `vita_gxm no-narrow-varyings 1`, turns it off.

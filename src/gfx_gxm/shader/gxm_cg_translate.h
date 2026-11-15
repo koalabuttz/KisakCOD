@@ -173,9 +173,14 @@ struct Options
     // Shader model 3: each TEXCOORD and COLOR varying is as wide as its
     // declaration reaches (dcl_texcoord0 o1.xy is a float2), not a float4.
     // The GPU's vertex job then writes and the parameter buffer holds only
-    // those floats. Both programs of a pair must agree on every width, so
-    // a draw asks for it on both or on neither (VaryingWidthsAgree).
+    // those floats. A pixel shader's program declares what it reads this
+    // way; its vertex program must then write exactly that (vertexWidths).
     bool narrowVaryings = false;
+    // Vertex shaders: the width each TEXCOORD and COLOR output is written
+    // at, as the pixel shader it is drawn with reads it
+    // (PixelVaryingWidths); 0 leaves an output the pixel shader does not
+    // read out. Zero for none: then narrowVaryings or four wide.
+    uint64_t vertexWidths = 0;
 };
 
 // The number of components a varying's mask reaches: 0 to 4.
@@ -225,10 +230,12 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
 
 bool Emit(const Shader &shader, const Options &options, std::string &cg, std::string &error);
 
-// Options::narrowVaryings for this pair: both shaders are model 3 or later
-// and every TEXCOORD and COLOR the pixel shader reads is written by the
-// vertex shader with the same width. When false, both stay float4.
-bool VaryingWidthsAgree(const Shader &vertex, const Shader &pixel);
+// Options::vertexWidths for this pair: the pixel shader's narrow widths of
+// TEXCOORD0-9 (3 bits each from bit 0) and COLOR0-1 (from bit 30), and bit
+// 63. Zero, with the reason in *why, when the pair cannot be narrowed: a
+// shader before model 3, or a TEXCOORD or COLOR the pixel shader reads that
+// the vertex shader does not write. Then both programs stay four wide.
+uint64_t PixelVaryingWidths(const Shader &vertex, const Shader &pixel, std::string *why = nullptr);
 
 // A stable 64-bit hash (FNV-1a) for cache keys.
 uint64_t Hash(const void *data, size_t bytes, uint64_t seed = 0xcbf29ce484222325ull);

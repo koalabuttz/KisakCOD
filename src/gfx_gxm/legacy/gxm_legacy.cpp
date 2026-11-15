@@ -1246,7 +1246,9 @@ void RequestDefaultVariant(Device &device, Shader &shader, uint64_t hash)
             if ((v.semantic == gxm::cg::Semantic::Texcoord || v.semantic == gxm::cg::Semantic::Color) &&
                 gxm::cg::VaryingWidth(v.mask) && gxm::cg::VaryingWidth(v.mask) < 4)
                 shader.narrowable = true;
-    if (shader.narrowable && NarrowVaryingsOn(device))
+    // A vertex shader's narrow programs follow the pixel shader it is drawn
+    // with (cg::Options::vertexWidths): it asks for its plain one here.
+    if (shader.narrowable && shader.pixel && NarrowVaryingsOn(device))
     {
         gxm::cg::Options narrow;
         narrow.narrowVaryings = true;

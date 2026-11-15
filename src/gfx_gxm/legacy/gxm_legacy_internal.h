@@ -274,8 +274,9 @@ struct Shader
     gfx_gxm::ProgramRequestRef request;
     // A model 3 shader with a TEXCOORD or COLOR varying narrower than a
     // float4 (cg::Options::narrowVaryings changes its program). When draws
-    // narrow by default, its program with only that option is asked for
-    // here in place of the plain one, which waits for a draw that wants it.
+    // narrow by default, a pixel shader's program with only that option is
+    // asked for when it is created, in place of the plain one, which waits
+    // for a draw that wants it.
     bool narrowable = false;
     gfx_gxm::ProgramRequestRef narrowRequest;
     std::vector<std::unique_ptr<Variant>> variants;

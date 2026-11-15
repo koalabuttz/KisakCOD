@@ -401,8 +401,11 @@ class Emitter
     std::string Constant(uint16_t number) const;
     // How wide a varying is declared: 4, or with Options::narrowVaryings
     // what a model 3 TEXCOORD or COLOR declaration reaches.
-    uint8_t NarrowWidth(Semantic semantic, uint8_t mask) const
+    uint8_t NarrowWidth(Semantic semantic, uint8_t index, uint8_t mask) const
     {
+        if (vertex_ && options_.vertexWidths && r_.major >= 3 &&
+            ((semantic == Semantic::Texcoord && index < 10) || (semantic == Semantic::Color && index < 2)))
+            return uint8_t(options_.vertexWidths >> ((semantic == Semantic::Texcoord ? 0u : 30u) + 3u * index) & 7u);
         if (!options_.narrowVaryings || r_.major < 3 ||
             (semantic != Semantic::Texcoord && semantic != Semantic::Color))
             return 4;
@@ -1187,21 +1190,27 @@ bool Emitter::Run(std::string &cg, std::string &error)
             for (const std::string &p : parameters)
                 if (p.find(" " + name + " ") != std::string::npos)
                     first = false;
-            const uint8_t width = NarrowWidth(semantic, mask);
+            const uint8_t width = NarrowWidth(semantic, index, mask);
+            if (width == 0)
+                return; // Options::vertexWidths: the pixel shader does not read it
             if (width < 4)
             {
-                // Options::narrowVaryings: only the components declared.
+                // Options::narrowVaryings or vertexWidths: only the
+                // components declared, or read.
                 const std::string type = width == 1 ? "float" : "float" + std::to_string(width);
+                const uint8_t lanes = uint8_t(mask & ((1u << width) - 1));
                 if (first)
                     parameters.push_back("out " + type + " " + name + " : " + text);
-                if (mask == (1u << width) - 1)
-                    epilogue += "    " + name + " = " + reg + "." + MaskSuffix(mask) + ";\n";
+                if (lanes == (1u << width) - 1)
+                    epilogue += "    " + name + " = " + reg + "." + MaskSuffix(lanes) + ";\n";
                 else
                 {
                     if (first)
                         epilogue += "    " + name + " = " + type + "(0.0" +
                                     std::string(width == 1 ? "" : width == 2 ? ", 0.0" : ", 0.0, 0.0") + ");\n";
-                    epilogue += "    " + name + "." + MaskSuffix(mask) + " = " + reg + "." + MaskSuffix(mask) + ";\n";
+                    if (lanes)
+                        epilogue += "    " + name + "." + MaskSuffix(lanes) + " = " + reg + "." + MaskSuffix(lanes) +
+                                    ";\n";
                 }
                 return;
             }
@@ -1290,7 +1299,7 @@ bool Emitter::Run(std::string &cg, std::string &error)
         // Inputs by semantic.
         auto input = [&](Semantic semantic, uint8_t index, uint8_t mask = 0xf) {
             const std::string name = VaryingName("in_", semantic, index);
-            const uint8_t width = NarrowWidth(semantic, mask);
+            const uint8_t width = NarrowWidth(semantic, index, mask);
             const std::string type = width < 4 ? (width == 1 ? std::string("float") : "float" + std::to_string(width))
                                                : VaryingType(semantic);
             for (const std::string &p : parameters)
@@ -1926,26 +1935,35 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
     return true;
 }
 
-bool VaryingWidthsAgree(const Shader &vertex, const Shader &pixel)
+uint64_t PixelVaryingWidths(const Shader &vertex, const Shader &pixel, std::string *why)
 {
     const Reflection &v = vertex.reflection, &p = pixel.reflection;
     if (v.major < 3 || p.major < 3 || v.stage != Stage::Vertex || p.stage == Stage::Vertex)
-        return false;
+    {
+        if (why)
+            *why = "a shader before model 3";
+        return 0;
+    }
+    uint64_t widths = 1ull << 63;
     for (const Varying &read : p.varyings)
     {
         if (read.semantic != Semantic::Texcoord && read.semantic != Semantic::Color)
             continue;
-        bool found = false;
-        for (const Varying &written : v.varyings)
-            if (written.semantic == read.semantic && written.index == read.index)
-            {
-                found = VaryingWidth(written.mask) == VaryingWidth(read.mask);
-                break;
-            }
-        if (!found)
-            return false;
+        const uint32_t limit = read.semantic == Semantic::Texcoord ? 10u : 2u;
+        bool written = false;
+        for (const Varying &w : v.varyings)
+            written |= w.semantic == read.semantic && w.index == read.index;
+        if (!written || read.index >= limit)
+        {
+            if (why)
+                *why = SemanticText(read.semantic, read.index) + " is read but not written";
+            return 0;
+        }
+        const uint8_t width = VaryingWidth(read.mask);
+        const uint32_t at = (read.semantic == Semantic::Texcoord ? 0u : 30u) + 3u * read.index;
+        widths |= uint64_t(width ? width : 4) << at;
     }
-    return true;
+    return widths;
 }
 
 bool Emit(const Shader &shader, const Options &options, std::string &cg, std::string &error)

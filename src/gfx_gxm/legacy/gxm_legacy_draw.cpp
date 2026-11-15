@@ -391,6 +391,7 @@ struct DrawState
     // no-narrow-varyings turn it off.
     bool narrowVaryings = true;
     uint64_t narrowDraws = 0, narrowPairs = 0, widePairs = 0;
+    uint32_t wideLogged = 0;
     bool lastDrawIndex32 = false;
     uint32_t lastDrawType = 0, lastDrawUpStride = 0;
     uint64_t lastDrawSerial = 0, lastDrawScene = 0;
@@ -847,7 +848,7 @@ uint64_t VariantKey(const gxm::cg::Options &options)
            (uint64_t(options.sharpSamplers) * 0xff51afd7ed558ccdull) ^
            (options.alphaZero ? 0x00a5000000000000ull : 0) ^
            (options.farPlaneInside ? 0x5a5a000000000000ull : 0) ^
-           (options.narrowVaryings ? 0xc2b2ae3d27d4eb4full : 0) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
+           (options.narrowVaryings ? 0xc2b2ae3d27d4eb4full : 0) ^ (options.vertexWidths * 0x165667b19e3779f9ull) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
 }
 
 // The shader's program for these options. It is asked for on first use and
@@ -872,7 +873,7 @@ Variant *GetVariant(Device &device, Shader &shader, const gxm::cg::Options &opti
     {
         std::unique_ptr<Variant> variant(new Variant);
         variant->key = key;
-        variant->narrow = options.narrowVaryings;
+        variant->narrow = options.narrowVaryings || options.vertexWidths;
         static const uint64_t narrowKey = [] {
             gxm::cg::Options narrow;
             narrow.narrowVaryings = true;
@@ -3688,12 +3689,20 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             // Both programs narrow, or neither (their widths must match).
             if (d.narrowVaryings && !test)
             {
-                // A shader with every varying four wide has one program
-                // either way: it keeps the plain one.
-                const bool agree = gxm::cg::VaryingWidthsAgree(vs->parsed, ps->parsed);
-                plan.options.narrowVaryings = agree && vs->narrowable;
-                pixelOptions.narrowVaryings = agree && ps->narrowable;
-                ++(agree ? d.narrowPairs : d.widePairs);
+                // The vertex program writes each varying as wide as the
+                // pixel shader reads it, and leaves out what it does not
+                // read. A pixel shader with every varying four wide keeps
+                // its one program.
+                std::string why;
+                const uint64_t widths = gxm::cg::PixelVaryingWidths(vs->parsed, ps->parsed, &why);
+                plan.options.vertexWidths = widths;
+                pixelOptions.narrowVaryings = widths && ps->narrowable;
+                ++(widths ? d.narrowPairs : d.widePairs);
+                if (!widths && d.wideLogged < 8)
+                {
+                    ++d.wideLogged;
+                    Log(device, "narrow varyings: a pair left four wide: %s", why.c_str());
+                }
             }
         }
         vertex = known ? pipeline->vertex : nullptr;
@@ -4135,7 +4144,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
     }
     ++d.drawn;
     d.alphaTestDraws += d.lastDrawAlphaTest == 1;
-    d.narrowDraws += pixel->narrow;
+    d.narrowDraws += vertex->narrow;
     d.idleAlphaTestDraws += d.lastDrawAlphaTest == 2;
     d.zeroAlphaTestDraws += d.lastDrawAlphaTest == 3;
     if (target)
