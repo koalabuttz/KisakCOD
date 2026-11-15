@@ -681,7 +681,10 @@ struct ExposureParams
     // mp_crash's and mp_backlot's outdoor views (PC exposure run 1).
     float key = 0.115f;
     float minEv = -1.0f;   // the range the exposure stays in
-    float maxEv = 1.0f; // David 2026-11-13: +1, so dark interiors keep more of their mood
+    // David 2026-11-15: the maps should look lit by their own lights, not by
+    // the camera, so a dark scene is never brightened (+1 until then; night
+    // maps sat at +1 and read twice as bright as CoD4).
+    float maxEv = 0.0f;
     // Time constants, in seconds: towards a lower exposure (the scene got
     // brighter) and towards a higher one (it got darker).
     float brighterSeconds = 1.0f;

@@ -627,9 +627,11 @@ desaturation, tint) moved into the tonemap.
 ## Auto exposure
 
 Before the tonemap, the linear-light scene is multiplied by an exposure that
-follows its brightness, the way an eye or a camera adapts: a dark room is
-brought up a little and a bright yard down, within a limited range, so the
-picture stays the game's at rest. It is the first stage of the Modern lit
+follows its brightness, the way an eye or a camera adapts: a bright yard is
+brought down, within a limited range, so the picture stays the game's at rest.
+A dark scene is never brought up: the maps should look lit by their own sun,
+lamps and windows, so dark places are left to light that is really there
+(David, 2026-11-15). It is the first stage of the Modern lit
 shaders plan (project files: the "Modern lit shaders plan" document).
 
 Each scene (`modern::MeasureExposure`, `vk_modern_exposure.cpp`, three small
@@ -657,7 +659,7 @@ image after the scene (the default, [Effects](#effects)) are not exposed.
 | --- | --- | --- |
 | On | yes | `KISAK_VK_MODERN_EXPOSURE=0` turns it off (exposure 0 EV) |
 | Key: the average luminance that needs no change | 0.115: mp_crash's and mp_backlot's outdoor views measured 0.117 and 0.110 (PC exposure run 1), so a typical outdoor scene stays at about 0 EV | `KISAK_VK_MODERN_EXPOSURE_KEY=<value>` |
-| Range | -1 to +1 EV (+1.5 until 2026-11-13: the covered arcade looked flatter than CoD4's at +1.4) | `KISAK_VK_MODERN_EXPOSURE_RANGE=<min>,<max>` (`-1,1.5` for the old range) |
+| Range | -1 to 0 EV: never brighter. +1.5 until 2026-11-13 (the covered arcade looked flatter than CoD4's at +1.4), then +1 until 2026-11-15 (night maps sat at +1 and read about twice as bright as CoD4) | `KISAK_VK_MODERN_EXPOSURE_RANGE=<min>,<max>` (`-1,1` or `-1,1.5` for the older ranges) |
 
 The statistics line, one in 16 results read back a few frames later:
 `vulkan d3d9: modern: N scenes with auto exposure (M taken at once), exposure
@@ -669,7 +671,15 @@ standing views (RTX 2080 SUPER): mp_crash outdoors -0.23 EV (L -3.09),
 mp_crash's covered arcade +1.18 EV (L -4.51), mp_backlot -0.14 EV (L -3.18),
 mp_bog at night +0.70 EV (L -4.02); no pumping standing still (the exposure
 within 0.02 EV, two captures 3 s apart alike), about 0.04 ms GPU per scene.
-With 0.115 the indoor view wants about +1.4 EV (held at +1) and mp_bog +0.9 EV.
+With 0.115 the indoor view wants about +1.4 EV and mp_bog +0.9 EV.
+
+PC night maps run 1 (mp_carentan and mp_crash_snow, two views each) with the
++1 maximum: every view wanted +1.28 to +2.50 EV and sat at +1, so Modern read
+1.86 to 2.34 times as bright as Legacy (2.31 to 3.34 times at +1.5). The dark
+half of the picture rose most, so the lamps and lit windows stood out less,
+and the brightest pixels went paler and greener. Without exposure Modern was
+0.86 to 1.14 times Legacy, with Legacy's warm lamps. Bloom changed nothing
+there. Hence the 0 maximum.
 
 **Checks:** the D3D9 check's `modern_exposure` scene draws four uniform greys
 and expects grey 100 brought exactly to the key (shown 95), white held at -1

@@ -6841,12 +6841,12 @@ void Check::ModernFog()
 }
 
 // Auto exposure (vk_modern.h MeasureExposure), with the default key 0.115 and
-// range -1 to +1 EV: four scenes, each one grey all over. A cut takes the
+// range -1 to 0 EV: four scenes, each one grey all over. A cut takes the
 // exposure at once: grey 100 (0.127 of light) is brought to the key exactly
 // (0.115, shown 95); white (1) wants -3.1 EV and gets -1 (0.5, 188); grey 40
-// (0.021) wants +2.4 and gets +1. Then grey 40 without a cut after grey
-// 100 moves only part of the way from grey 100's exposure towards +1 (at
-// most a second's worth of the 2.5 s time constant). With
+// (0.021) wants +2.4 and gets 0, since a dark scene is never brightened. Then
+// grey 40 without a cut after white moves only part of the way from white's
+// exposure towards 0 (at most a second's worth of the 2.5 s time constant). With
 // KISAK_VK_MODERN_EXPOSURE=0, or without linear light, every grey is shown
 // through the curve alone.
 void Check::ModernExposure()
@@ -6880,7 +6880,7 @@ void Check::ModernExposure()
     };
     const double key = 0.115;
     const auto exposed = [&](int grey, double ev) { return shown(decode(grey) * (on ? std::exp2(ev) : 1.0)); };
-    const auto target = [&](int grey) { return std::clamp(std::log2(key / decode(grey)), -1.0, 1.0); };
+    const auto target = [&](int grey) { return std::clamp(std::log2(key / decode(grey)), -1.0, 0.0); };
 
     scene(100, true);
     if (Read())
@@ -6903,18 +6903,18 @@ void Check::ModernExposure()
         Expect("grey40_highest", 64, 64, v, v, v);
     }
     Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
-    // Grey 100 again (a cut), then grey 40 without one: part of the way.
-    scene(100, true);
+    // White again (a cut), then grey 40 without one: part of the way.
+    scene(255, true);
     Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
     scene(40, false);
     if (Read())
     {
         const uint8_t *p = &pixels[(64 * readSize + 64) * 4];
         const int got = p[1];
-        const int from = exposed(40, target(100));
+        const int from = exposed(40, target(255));
         const int to = exposed(40, target(40));
         // At most a second's worth of the 2.5 s time constant: under a third of the way.
-        const int most = exposed(40, target(100) + (target(40) - target(100)) / 3.0);
+        const int most = exposed(40, target(255) + (target(40) - target(255)) / 3.0);
         const bool ok = on ? got >= from - kTolerance && got <= most + kTolerance && got < to
                            : std::abs(got - from) <= kTolerance;
         Equal("grey40_adapting", ok, true);
