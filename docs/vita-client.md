@@ -1448,7 +1448,28 @@ The Legacy back end counts each pool's use by what it is for and logs it
 with the engine's other figures (once a minute by default, `vita_statsEvery`,
 and before a timed quit) and at every failed allocation (`gpu memory by use (cdram +
 main MB, pieces): ...`), and logs each piece of 1 MB or more as it is made
-(`gpu memory piece N: ...`, with its size, format and usage).
+(`gpu memory piece N: ...`, with its size, format and usage). The
+`gpu memory:` line gives each large pool's largest free range, and a
+failed allocation adds `gpu memory free ranges, largest first (MB): ...`,
+so the log tells a full pool from a broken-up one.
+
+Pieces of 2 MB or more (a map's static vertex and index buffers, its
+lightmaps) come from the top end of their pool and
+the smaller ones from the bottom, so that the two grow towards each other
+and the free space between them stays in one piece. With every piece from
+the bottom, the holes that a map change leaves (the menu's textures go
+just before the map's come) broke up the CDRAM pool: on 2026-11-15 a
+console loading mp_backlot from the menu found no room for
+its 14 MB of static vertices with 17.9 MB of CDRAM free, and the main
+pool had 10 MB free. An empty file named `no-big-from-top` in the folder
+of the compiled programs gives the former way, for comparing.
+
+A failed allocation of a map's buffer ends in the renderer's fatal error.
+On the Vita that now ends the process at once (`Vita_Exit`, which also
+goes on with a run list's next start): the game's `exit()` from the
+database thread freed what a render worker was still waiting on, and the
+worker faulted (C2-12828-1, a core file on the card) before the process
+was gone.
 
 With the same figures, and once more when the device goes, it says where a
 frame's time went since the last such line, as a frame's mean:

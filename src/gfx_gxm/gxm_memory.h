@@ -56,7 +56,8 @@ bool InitMemory(const MemorySizes &sizes, std::string &error);
 void ShutdownMemory();
 
 // Null when the pool is full or not reserved. align is a power of two.
-void *Allocate(MemoryKind kind, uint32_t size, uint32_t align);
+// fromTop takes the piece from the top end of the pool (Heap::Allocate).
+void *Allocate(MemoryKind kind, uint32_t size, uint32_t align, bool fromTop = false);
 // Null is ignored; a pointer from another pool is logged by the caller's
 // check (false) and not freed.
 bool Free(MemoryKind kind, void *memory);
@@ -74,6 +75,9 @@ struct PoolStats
 PoolStats Stats(MemoryKind kind);
 // One line: every pool's use, in MB or KB.
 std::string DescribeMemory();
+// One line: the largest free ranges of the large pools, for the log when a
+// piece finds no room (how broken up the free space is).
+std::string DescribeFreeRanges();
 // One line: how fast the CPU copies into and out of the main and CDRAM pools
 // and writes and reads them a word at a time, beside its own heap. Takes a
 // block of each for some tens of milliseconds, so call it once at start-up.
