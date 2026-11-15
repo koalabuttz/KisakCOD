@@ -44,6 +44,7 @@
 #include <new>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace gfx_vk
 {
@@ -178,6 +179,13 @@ struct CoreStats
     double memoryAllocateMs;    // in vkAllocateMemory and vkMapMemory for them
     uint32_t buffersAlive;
     uint32_t imagesAlive;
+    // By memory heap (VkPhysicalDeviceMemoryProperties::memoryHeaps), the
+    // bytes the core holds there, and the blocks that went to a later memory
+    // type because the driver had no room in an earlier one.
+    uint64_t heapBytes[VK_MAX_MEMORY_HEAPS];
+    uint32_t memoryFallbacks;
+    uint32_t emptyBlocksFreed;  // pooled blocks given back once empty
+    uint32_t arenaChunksFreed;  // staging and transient chunks given back once idle
     uint64_t deferredDestroyed; // objects destroyed after their last frame finished
 
     uint64_t stagingBytes;      // copied through staging memory, all frames
@@ -419,7 +427,17 @@ enum class MemoryKind
     Device,   // device-local; written through StageBufferWrite
     Upload,   // host-visible, persistently mapped; the CPU writes, the GPU reads
     Readback, // host-visible and cached where possible; the GPU writes, the CPU reads
+    Staging,  // host-visible, persistently mapped, read once by a copy: system memory first
 };
+
+// The memory types a request of `size` bytes may use, best first; Allocate
+// tries each in turn when the driver has no room left in one (a full heap).
+// Device-local memory the CPU can map is a small heap (256 MB) on a discrete
+// GPU without resizable BAR: Upload memory takes it only while what the
+// core holds there (heapUsed, by heap, may be null) stays within half of it,
+// and Staging and Device memory go elsewhere first. Exposed for the checks.
+std::vector<uint32_t> MemoryTypeOrder(const VkPhysicalDeviceMemoryProperties &memory, uint32_t typeBits,
+                                      MemoryKind kind, VkDeviceSize size, const uint64_t *heapUsed);
 
 struct BufferDesc
 {

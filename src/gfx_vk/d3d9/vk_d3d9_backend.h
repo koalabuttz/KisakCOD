@@ -50,6 +50,9 @@ void CloseBackend(Backend *backend);
 // Logs the back end's frame statistics since it was opened or since they
 // were last reset (vk_d3d9.h LogDeviceStats); with reset, starts them again.
 void BackendLogStats(Backend *backend, bool reset);
+// Logs the memory the device holds (vk_d3d9.h LogDeviceMemory): `when` says
+// at what point, as "map load mp_crash".
+void BackendLogMemory(Backend *backend, const char *when);
 // Called at every Present, before the frame is presented: the back end takes
 // up the host's settings (Host::tuning) if they changed.
 void BackendFrame(Backend *backend);

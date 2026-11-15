@@ -218,6 +218,43 @@ add r0, r0, c19
 mul r0, r0, c1
 mov oC0, r0
 """),
+    # The water's (water_l_sun) in miniature: the vertex shader writes the
+    # water map's UV (two components, as a test of that build) from c1,
+    # texcoord 2 (the point relative to the eye, the fog) from c2 and the
+    # colour; the stand-in reads the probe cube at s1, the water map at s4 and
+    # the constants c0, c5, c6, c17 and c18, showing black (c1 is zero).
+    ("kVsWater", """vs_3_0
+dcl_position v0
+dcl_texcoord0 v1
+dcl_color0 v2
+dcl_position o0
+dcl_texcoord0 o1.xy
+dcl_texcoord2 o2
+dcl_color0 o3
+add o0, v0, c0
+mov o1.xy, c1
+mov o2, c2
+mov o3, v2
+"""),
+    ("kPsWaterStandIn", """ps_3_0
+dcl_texcoord0 v0.xy
+dcl_texcoord2 v1
+dcl_color0 v2
+dcl_cube s1
+dcl_2d s4
+texld r0, v0, s4
+texld r1, v1, s1
+add r0, r0, r1
+add r0, r0, v1
+add r0, r0, v2
+add r0, r0, c0
+add r0, r0, c5
+add r0, r0, c6
+add r0, r0, c17
+add r0, r0, c18
+mul r0, r0, c1
+mov oC0, r0
+"""),
     # The same for the lp_hsm_sun_<mode>c0d0n0s0 family (models): the vertex
     # shader writes texcoords 0-6 from c1-c7 (texcoord 6 the lighting-volume
     # coordinate) and the colour, and the stand-in reads the colour map at s0,

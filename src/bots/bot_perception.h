@@ -16,7 +16,13 @@
 //   hearing   footsteps and gunfire give a rough place, as a player hears
 //             them; they turn the bot's head, not its aim.
 //   compass   a player the HUD shows as a red dot gives a place as the
-//             compass shows it.
+//             compass shows it: one a script pings, and every opponent
+//             without UAV Jammer at each sweep while the bot's side has a
+//             UAV (its own player state's radarEnabled, as the HUD reads it).
+//   smoke     a smoke grenade's cloud blocks sight like a wall. The cloud
+//             is the client's effect, so the server never knew where it
+//             was: the bot keeps its own estimate, a sphere that grows from
+//             the grenade's burst, holds and then shrinks.
 //   memory    a noticed player who goes out of sight stays where the bot
 //             last saw them, with confidence fading, and is forgotten after
 //             forgetSeconds.
@@ -78,6 +84,22 @@ struct PerceptionParams
     float hearingError = 0.15f;
     // A sound heard is acted on (looked toward) for this long.
     float heardSeconds = 2.0f;
+
+    // The compass: a red dot is off by this fraction of its distance, and a
+    // UAV sweeps every radarSweepSeconds (compassRadarUpdateTime).
+    float compassError = 0.05f;
+    float radarSweepSeconds = 4.0f;
+
+    // A smoke cloud: grows to smokeRadius over smokeGrowSeconds from the
+    // burst, holds, and shrinks to nothing over the last smokeFadeSeconds of
+    // smokeSeconds. An estimate of the stock smoke effect, not its exact
+    // shape: too big rather than too small, so a bot never sees through it.
+    float smokeRadius = 320.0f;
+    float smokeGrowSeconds = 2.0f;
+    float smokeSeconds = 45.0f;
+    float smokeFadeSeconds = 5.0f;
+    // The cloud's middle sits this high above the burst.
+    float smokeRise = 64.0f;
 };
 
 enum class Stance : uint8_t
@@ -166,6 +188,10 @@ struct Contact
     int lastHeardAt = -1;
     float lastSeen[3] = {0.0f, 0.0f, 0.0f};
     float lastHeard[3] = {0.0f, 0.0f, 0.0f};
+    // How the player moved between the bot's last two looks, units a second
+    // (0 until it has looked twice in a row).
+    float velocity[3] = {0.0f, 0.0f, 0.0f};
+    bool tracked = false;
 };
 
 // Where a bot's attention goes, best first.
@@ -349,10 +375,90 @@ private:
 
     static void Remember(Contact &contact, const float *position, int nowMs)
     {
+        // Looks at most half a second apart give the player's motion; a gap
+        // starts it afresh. Never faster than a player sprints.
+        const int ms = nowMs - contact.lastSeenAt;
+        if (contact.tracked && ms > 0 && ms <= 500)
+        {
+            float moved[3];
+            float speed2 = 0.0f;
+            for (int k = 0; k < 3; ++k)
+            {
+                moved[k] = (position[k] - contact.lastSeen[k]) * 1000.0f / static_cast<float>(ms);
+                speed2 += moved[k] * moved[k];
+            }
+            const float scale = speed2 > 400.0f * 400.0f ? 400.0f / std::sqrt(speed2) : 1.0f;
+            for (int k = 0; k < 3; ++k)
+                contact.velocity[k] = 0.5f * contact.velocity[k] + 0.5f * moved[k] * scale;
+        }
+        else
+        {
+            contact.velocity[0] = contact.velocity[1] = contact.velocity[2] = 0.0f;
+        }
+        contact.tracked = true;
         contact.lastSeenAt = nowMs;
         std::memcpy(contact.lastSeen, position, sizeof(contact.lastSeen));
     }
 };
+
+// A smoke cloud's burst: where and when (server milliseconds).
+struct Smoke
+{
+    float burst[3] = {0.0f, 0.0f, 0.0f};
+    int startMs = 0;
+};
+
+// The cloud's radius `nowMs`, 0 before its burst and after it is gone.
+inline float SmokeRadius(const Smoke &smoke, int nowMs, const PerceptionParams &params)
+{
+    const float age = static_cast<float>(nowMs - smoke.startMs) * 0.001f;
+    if (age < 0.0f || age >= params.smokeSeconds)
+        return 0.0f;
+    if (age < params.smokeGrowSeconds)
+        return params.smokeRadius * age / params.smokeGrowSeconds;
+    const float left = params.smokeSeconds - age;
+    if (left < params.smokeFadeSeconds)
+        return params.smokeRadius * left / params.smokeFadeSeconds;
+    return params.smokeRadius;
+}
+
+// Whether the line from `a` to `b` passes through the ball of `radius`
+// around `centre`.
+inline bool LineThroughBall(const float *a, const float *b, const float *centre, float radius)
+{
+    if (!(radius > 0.0f))
+        return false;
+    float ab[3];
+    float ac[3];
+    for (int k = 0; k < 3; ++k)
+    {
+        ab[k] = b[k] - a[k];
+        ac[k] = centre[k] - a[k];
+    }
+    const float length2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2];
+    float t = length2 > 0.0f ? (ac[0] * ab[0] + ac[1] * ab[1] + ac[2] * ab[2]) / length2 : 0.0f;
+    t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+    float off2 = 0.0f;
+    for (int k = 0; k < 3; ++k)
+    {
+        const float d = a[k] + ab[k] * t - centre[k];
+        off2 += d * d;
+    }
+    return off2 < radius * radius;
+}
+
+// Whether any cloud hides `point` from `eye`.
+inline bool SmokeHides(const float *eye, const float *point, const Smoke *smokes, int count, int nowMs,
+                       const PerceptionParams &params)
+{
+    for (int i = 0; i < count; ++i)
+    {
+        const float centre[3] = {smokes[i].burst[0], smokes[i].burst[1], smokes[i].burst[2] + params.smokeRise};
+        if (LineThroughBall(eye, point, centre, SmokeRadius(smokes[i], nowMs, params)))
+            return true;
+    }
+    return false;
+}
 
 // Where a sound at `source` seems to come from to a listener at `listener`:
 // off by up to `error` of the distance across the ground, in a direction

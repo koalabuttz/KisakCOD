@@ -25,6 +25,10 @@ constexpr VkDeviceSize kTransientChunk = 4ull << 20;
 // Staging memory a frame slot may hold before an upload flushes and waits, so
 // a map load does not grow staging without bound.
 constexpr VkDeviceSize kStagingFlushBytes = 64ull << 20;
+// Recycles of a frame slot in a row that needed no more than an arena's first
+// chunk before the arena gives the rest back (about a second at 60 fps with
+// two slots): what a map load grew is not held through play.
+constexpr uint32_t kArenaQuietRecycles = 30;
 
 constexpr uint32_t kDescriptorSetsPerPool = 1024;
 
@@ -86,6 +90,34 @@ void DestroyArena(Core &core, LinearArena &arena)
     arena.current = 0;
 }
 
+// At a slot's recycle, before ResetArena: an arena that has needed only its
+// first chunk for kArenaQuietRecycles recycles gives the other chunks back,
+// and the first too when a large request made it bigger than a chunk. The
+// slot's work has finished, so nothing on the GPU reads them.
+void TrimArena(Core &core, LinearArena &arena)
+{
+    if (arena.spilled)
+    {
+        arena.spilled = false;
+        arena.quietRecycles = 0;
+        return;
+    }
+    const bool oversized = !arena.chunks.empty() && BufferSize(arena.chunks[0].buffer) > arena.chunkSize;
+    if (arena.chunks.size() <= 1 && !oversized)
+        return;
+    if (++arena.quietRecycles < kArenaQuietRecycles)
+        return;
+    const size_t keep = oversized ? 0 : 1;
+    for (size_t i = keep; i < arena.chunks.size(); ++i)
+    {
+        DestroyBuffer(&core, arena.chunks[i].buffer);
+        ++core.stats.arenaChunksFreed;
+    }
+    arena.chunks.resize(keep);
+    arena.current = 0;
+    arena.quietRecycles = 0;
+}
+
 VkDeviceSize ArenaBytes(const LinearArena &arena)
 {
     VkDeviceSize bytes = 0;
@@ -107,13 +139,15 @@ bool ArenaAllocate(Core &core, LinearArena &arena, VkDeviceSize size, VkDeviceSi
             chunk.used = offset + size;
             chunkOut = &chunk;
             offsetOut = offset;
+            arena.spilled = arena.spilled || arena.current > 0;
             return true;
         }
     }
+    arena.spilled = true;
     BufferDesc desc;
     desc.size = std::max(arena.chunkSize, AlignUp(size, 256));
     desc.usage = arena.usage;
-    desc.memory = MemoryKind::Upload;
+    desc.memory = arena.memory;
     desc.name = name;
     Buffer *buffer = CreateBuffer(&core, desc);
     if (!buffer)
@@ -365,6 +399,8 @@ bool RecycleSlot(Core &core, uint32_t slotIndex)
                 state.slots[slotIndex].used = 0;
         }))
         return false;
+    TrimArena(core, slot.staging);
+    TrimArena(core, slot.transient);
     ResetArena(slot.staging);
     ResetArena(slot.transient);
     for (VkDescriptorPool pool : slot.descriptorPools)
@@ -689,6 +725,7 @@ bool CreateFrameResources(Core &core)
             return false;
         slot.staging.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         slot.staging.chunkSize = kStagingChunk;
+        slot.staging.memory = MemoryKind::Staging;
         slot.transient.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT
             | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
             | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;

@@ -590,6 +590,7 @@ int Kisak_VulkanBackendSelected()
         return 1;
     // The Modern path's hooks belong to the Vulkan back end.
     R_SetModernHooks(nullptr);
+    R_SetBackendMemoryLog(nullptr);
     return 0;
 }
 
@@ -631,6 +632,7 @@ IDirect3D9 *Kisak_VulkanDirect3DCreate9()
                s_visualsNames[r_visuals->current.integer]);
     s_modernRefused.store(false, std::memory_order_relaxed);
     R_SetModernHooks(r_visuals->current.integer == VISUALS_MODERN ? &s_modernHooks : nullptr);
+    R_SetBackendMemoryLog([](const char *when) { front::LogDeviceMemory(when); });
     return front::CreateDirect3D9(host);
 }
 

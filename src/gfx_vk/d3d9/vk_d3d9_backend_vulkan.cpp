@@ -131,6 +131,9 @@ struct Backend
     bool modelShadersWanted = true;
     bool noSunShadersWanted = true;
     bool lightShadersWanted = true;
+    // Water's (water_l_sun) shader of ours, unless KISAK_VK_MODERN_WATER=0
+    // (at start-up only).
+    bool waterShaderWanted = true;
     float sunStrength = 1.0f;
     float skyStrength = 1.0f;
     uint64_t litShaderChanges = 0, litShaderChangesBase = 0;
@@ -684,7 +687,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
         const float edge = edgeText.empty() ? 0.0f : std::strtof(edgeText.c_str(), nullptr);
         if (edge > 0.0f && edge <= 10.0f)
             start.aoParams.edge = edge;
-        start.aoParams.half = EnvIs("KISAK_VK_MODERN_AO_HALF", "1");
+        start.aoParams.half = !EnvIsZero("KISAK_VK_MODERN_AO_HALF");
     }
     // Reflection probes are filtered as their textures load, so this one
     // stays start-up only.
@@ -693,6 +696,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     // The planar view and its debug view are start-up only, as the probes.
     backend->debugPlanar = EnvIs("KISAK_VK_MODERN_DEBUG", "planar");
     backend->debugPlanarRead = EnvIs("KISAK_VK_MODERN_DEBUG", "planar-read");
+    backend->waterShaderWanted = !EnvIsZero("KISAK_VK_MODERN_WATER");
     backend->planarWanted = backend->linearWanted && !EnvIsZero("KISAK_VK_MODERN_PLANAR")
                             && (EnvIs("KISAK_VK_MODERN_PLANAR", "1") || backend->debugPlanar
                                 || backend->debugPlanarRead);
@@ -871,6 +875,7 @@ void BackendLogStats(Backend *backend, bool reset)
                 average(core.frame), average(core.frameGap), core.frameGap.samples ? core.frameGap.maxMs : 0.0,
                 static_cast<unsigned long long>(stats.feedIdleFlushes - was.feedIdleFlushes));
     LogSlowFrames(*backend);
+    BackendLogMemory(backend, nullptr);
     if (core.recordThread)
         HostLog(h,
                 "vulkan d3d9: record thread: per frame %.0f commands in %.1f blocks; render thread waited "
@@ -1198,6 +1203,36 @@ void DetachBackendWindow(Backend *backend)
         gfx_vk::DetachWindow(backend->core);
 }
 
+void BackendLogMemory(Backend *backend, const char *when)
+{
+    if (!backend || !backend->core)
+        return;
+    // What the core holds from the driver, and where: a heap that only grows
+    // from one map load to the next is memory not given back; the small
+    // device-local heap the CPU can map (256 MB without resizable BAR) is
+    // the one that ran out on the PC (pc-water-run-4).
+    const CoreStats &core = Stats(backend->core);
+    VkPhysicalDeviceMemoryProperties memory{};
+    Functions(backend->core).vkGetPhysicalDeviceMemoryProperties(PhysicalDeviceHandle(backend->core), &memory);
+    std::string heaps;
+    for (uint32_t i = 0; i < memory.memoryHeapCount && i < VK_MAX_MEMORY_HEAPS; ++i)
+    {
+        char heap[96];
+        std::snprintf(heap, sizeof(heap), "%s%u (%s%llu MB) %.1f MB", i ? ", " : "", i,
+                      (memory.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) ? "device-local, " : "",
+                      static_cast<unsigned long long>(memory.memoryHeaps[i].size >> 20),
+                      double(core.heapBytes[i]) / (1024.0 * 1024.0));
+        heaps += heap;
+    }
+    HostLog(*backend->host,
+            "vulkan d3d9: memory%s%s: %.1f MB device memory and %.1f MB mapped in %u blocks, %u buffers and %u "
+            "images alive; by heap %s; %u blocks went to a later memory type, %u empty blocks and %u arena chunks "
+            "given back",
+            when ? " at " : "", when ? when : "", double(core.deviceMemoryBytes) / (1024.0 * 1024.0),
+            double(core.hostMemoryBytes) / (1024.0 * 1024.0), core.memoryBlocks, core.buffersAlive,
+            core.imagesAlive, heaps.c_str(), core.memoryFallbacks, core.emptyBlocksFreed, core.arenaChunksFreed);
+}
+
 uint64_t BackendTextureMemory(const Backend *backend)
 {
     if (!backend || !backend->core)
@@ -1431,7 +1466,8 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
     uint16_t shader = inputs && backend->shadersWanted ? inputs->shader : uint16_t(lg::ModernLitNone);
     if ((lg::ModernLitModel(shader) && !backend->modelShadersWanted)
         || ((shader & lg::ModernLitFamilyMask) == lg::ModernLitNoSun && !backend->noSunShadersWanted)
-        || (lg::ModernLitPointLight(shader) && !backend->lightShadersWanted))
+        || (lg::ModernLitPointLight(shader) && !backend->lightShadersWanted)
+        || (shader == lg::ModernLitWater && !backend->waterShaderWanted))
         shader = lg::ModernLitNone;
     if (inputs && backend->linearScene && !backend->linearFailed)
     {

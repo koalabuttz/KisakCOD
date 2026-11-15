@@ -338,6 +338,8 @@ public:
     IDirect3DPixelShader9 *psLmSunMapsStandIn = nullptr;
     IDirect3DVertexShader9 *vsLpSunMaps = nullptr;
     IDirect3DPixelShader9 *psLpSunMapsStandIn = nullptr;
+    IDirect3DVertexShader9 *vsWater = nullptr;
+    IDirect3DPixelShader9 *psWaterStandIn = nullptr;
     IDirect3DVertexDeclaration9 *decl = nullptr;
     IDirect3DSurface9 *readSurface = nullptr;
     IDirect3DSurface9 *backBuffer = nullptr;
@@ -2980,6 +2982,8 @@ void Check::ModernPlanar()
     // Our lit shaders draw the floor of the third frame (and read the image).
     const bool ours = !envIs("KISAK_VK_MODERN_LINEAR", "0") && !envIs("KISAK_VK_MODERN_LIT", "0")
                       && !envIs("KISAK_VK_MODERN_SHADERS", "0");
+    // Our water shader draws the water of the fourth.
+    const bool oursWater = ours && !envIs("KISAK_VK_MODERN_WATER", "0");
     IDirect3DSurface9 *depth = nullptr;
     if (!Ok(device->CreateDepthStencilSurface(kSize, kSize, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &depth,
                                               nullptr),
@@ -3070,6 +3074,8 @@ void Check::ModernPlanar()
     IDirect3DTexture9 *black = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 0, 0, 0); });
     IDirect3DTexture9 *blackLight = FilledTexture(1, 2, [](UINT, UINT) { return Argb(130, 0, 0, 0); });
     IDirect3DTexture9 *glossy = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 255, 255, 255); });
+    // A flat water map: the same height everywhere.
+    IDirect3DTexture9 *waterMap = FilledTexture(1, 1, [](UINT, UINT) { return Argb(255, 128, 128, 128); });
     IDirect3DCubeTexture9 *probe = nullptr;
     if (Ok(device->CreateCubeTexture(1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &probe, nullptr),
            "CreateCubeTexture(probe)"))
@@ -3084,7 +3090,7 @@ void Check::ModernPlanar()
             }
         }
     }
-    if (black && blackLight && glossy && probe)
+    if (black && blackLight && glossy && waterMap && probe)
     {
         // The engine's InfinitePerspectiveMatrix with tan(fov / 2) = 1 both ways.
         constexpr float k = 0.99951172f, nearPlane = 4.0f;
@@ -3106,90 +3112,136 @@ void Check::ModernPlanar()
         const UINT floorX[2] = {static_cast<UINT>((k * -100.0f / 200.0f + 1.0f) * 0.5f * kSize),
                                 static_cast<UINT>((k * 100.0f / 200.0f + 1.0f) * 0.5f * kSize)};
         const UINT floorY = static_cast<UINT>((1.0f + k * 120.0f / 200.0f) * 0.5f * kSize);
-        front::ModernSceneView view{};
-        for (int i = 0; i < 4; ++i)
-            view.view[i][i] = 1.0f;
-        // The eye at (0.4, 0, 0).
-        view.view[3][0] = -0.4f;
-        view.projection[0][0] = k;
-        view.projection[1][1] = k;
-        view.projection[2][2] = k;
-        view.projection[2][3] = 1.0f;
-        view.projection[3][2] = -nearPlane * k;
-        view.width = view.height = kSize;
-        Reset(Argb(255, 0, 0, 0));
-        front::ModernSceneBegin(device);
-        device->SetDepthStencilSurface(depth);
-        Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0),
-           "Clear(lit scene)");
-        device->SetRenderState(D3DRS_ZENABLE, TRUE);
-        device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-        device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
-        Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, halves, sizeof(Vertex)), "DrawPrimitiveUP(prepass)");
-        device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xf);
-        if (front::ModernWantsSceneDepth(device))
-            Equal("planar_lit_scene_depth", static_cast<int>(front::ModernSceneDepth(device, view)),
-                  static_cast<int>(front::ModernResult::Done));
-        device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-        device->SetVertexShader(vsLmSunMaps);
-        device->SetPixelShader(psLmSunMapsStandIn);
-        device->SetTexture(0, black);
-        device->SetTexture(1, probe);
-        device->SetTexture(2, black);
-        device->SetTexture(3, blackLight);
-        device->SetTexture(4, glossy);
-        float pixel[20][4] = {};
-        pixel[5][0] = pixel[5][1] = 1.0f;
-        pixel[17][2] = 1.0f;
-        Ok(device->SetPixelShaderConstantF(0, &pixel[0][0], 20), "SetPixelShaderConstantF(planar floor)");
-        float vertex[7][4] = {{0, 0, 0, 0}, {0.5f, 0.5f, 0.5f, 0.5f}, {0, 0, 1, 1}, {0, 1, 0, 0},
-                              {1, 0, 0, 0}, {0.5f, 0.5f, 0.25f, 0.5f}, {0, 0, -1, 0}};
-        front::ModernLitInputs inputs;
-        inputs.overWhite = true;
-        inputs.shader = 0x44; // lm_sun_r0c0s0
-        front::SetModernLitInputs(device, &inputs);
-        const float points[2][2] = {{-1.0f, 0.3f}, {0.2f, -0.3f}};
-        for (int h = 0; h < 2; ++h)
+        // The fourth frame draws the same halves as water (water_l_sun's
+        // stand-in, drawn as our water shader): a flat water map, a black
+        // probe and Fresnel 1 everywhere, so the water shows only what it
+        // reads from the planar image, the same blue and green.
+        for (int water = 0; water < 2; ++water)
         {
-            vertex[6][0] = points[h][0];
-            vertex[6][1] = points[h][1];
-            Ok(device->SetVertexShaderConstantF(0, &vertex[0][0], 7), "SetVertexShaderConstantF(planar floor)");
-            Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, halves[h], sizeof(Vertex)),
-               "DrawPrimitiveUP(planar floor)");
-        }
-        front::SetModernLitInputs(device, nullptr);
-        for (DWORD sampler : {0u, 1u, 2u, 3u, 4u})
-            device->SetTexture(sampler, nullptr);
-        device->SetVertexShader(vsBasic);
-        device->SetPixelShader(psColor);
-        Equal("planar_lit_scene_done", front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
-        if (Read())
-        {
-            const char *names[2] = {"planar_floor_left_shows_blue", "planar_floor_right_shows_green"};
-            const int channels[2] = {0, 1}; // B, G, R, A
+            const char *what = water ? "water" : "floor";
+            front::ModernSceneView view{};
+            for (int i = 0; i < 4; ++i)
+                view.view[i][i] = 1.0f;
+            // The eye at (0.4, 0, 0).
+            view.view[3][0] = -0.4f;
+            view.projection[0][0] = k;
+            view.projection[1][1] = k;
+            view.projection[2][2] = k;
+            view.projection[2][3] = 1.0f;
+            view.projection[3][2] = -nearPlane * k;
+            view.width = view.height = kSize;
+            Reset(Argb(255, 0, 0, 0));
+            front::ModernSceneBegin(device);
+            device->SetDepthStencilSurface(depth);
+            Ok(device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, Argb(255, 0, 0, 0), 1.0f, 0),
+               "Clear(lit scene)");
+            device->SetRenderState(D3DRS_ZENABLE, TRUE);
+            device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+            device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+            Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 4, halves, sizeof(Vertex)), "DrawPrimitiveUP(prepass)");
+            device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xf);
+            if (front::ModernWantsSceneDepth(device))
+                Equal("planar_lit_scene_depth", static_cast<int>(front::ModernSceneDepth(device, view)),
+                      static_cast<int>(front::ModernResult::Done));
+            device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+            float pixel[20][4] = {};
+            float vertex[7][4] = {{0, 0, 0, 0}, {0.5f, 0.5f, 0.5f, 0.5f}, {0, 0, 1, 1}, {0, 1, 0, 0},
+                                  {1, 0, 0, 0}, {0.5f, 0.5f, 0.25f, 0.5f}, {0, 0, -1, 0}};
+            front::ModernLitInputs inputs;
+            inputs.overWhite = true;
+            if (water)
+            {
+                device->SetVertexShader(vsWater);
+                device->SetPixelShader(psWaterStandIn);
+                device->SetTexture(1, probe);
+                device->SetTexture(4, waterMap);
+                // envMapParms: Fresnel 1 looking down and grazing, no glint; a
+                // black waterColor and fog colour; the sun straight up.
+                pixel[5][0] = pixel[5][1] = pixel[5][2] = 1.0f;
+                pixel[17][2] = 1.0f;
+                // texcoord 0 (the water map's UV) from c1, texcoord 2 (the point
+                // relative to the eye, no fog) from c2.
+                vertex[1][0] = vertex[1][1] = 0.25f;
+                vertex[2][2] = -1.0f;
+                vertex[2][3] = 1.0f;
+                inputs.shader = 0x400; // water_l_sun
+            }
+            else
+            {
+                device->SetVertexShader(vsLmSunMaps);
+                device->SetPixelShader(psLmSunMapsStandIn);
+                device->SetTexture(0, black);
+                device->SetTexture(1, probe);
+                device->SetTexture(2, black);
+                device->SetTexture(3, blackLight);
+                device->SetTexture(4, glossy);
+                pixel[5][0] = pixel[5][1] = 1.0f;
+                pixel[17][2] = 1.0f;
+                inputs.shader = 0x44; // lm_sun_r0c0s0
+            }
+            Ok(device->SetPixelShaderConstantF(0, &pixel[0][0], 20), "SetPixelShaderConstantF(planar floor)");
+            front::SetModernLitInputs(device, &inputs);
+            const float points[2][2] = {{-1.0f, 0.3f}, {0.2f, -0.3f}};
             for (int h = 0; h < 2; ++h)
             {
-                const uint8_t *at = &pixels[(floorY * readSize + floorX[h]) * 4];
-                if (ours && wanted)
-                {
-                    const int c = at[channels[h]];
-                    bool dominant = c >= 60;
-                    for (int other = 0; other < 3; ++other)
-                        if (other != channels[h])
-                            dominant = dominant && c >= at[other] + 40;
-                    if (!dominant)
-                        std::printf("  planar floor %s: rgb %d %d %d\n", h ? "right" : "left", at[2], at[1], at[0]);
-                    Equal(names[h], dominant, true);
-                }
-                else
-                    Expect(h ? "planar_floor_right_black" : "planar_floor_left_black", floorX[h], floorY, 0, 0, 0);
+                // The point: texcoord 5 (c6) for the floor, texcoord 2 (c2) for water.
+                float *point = water ? vertex[2] : vertex[6];
+                point[0] = points[h][0];
+                point[1] = points[h][1];
+                Ok(device->SetVertexShaderConstantF(0, &vertex[0][0], 7), "SetVertexShaderConstantF(planar floor)");
+                Ok(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, halves[h], sizeof(Vertex)),
+                   "DrawPrimitiveUP(planar floor)");
             }
+            front::SetModernLitInputs(device, nullptr);
+            for (DWORD sampler : {0u, 1u, 2u, 3u, 4u})
+                device->SetTexture(sampler, nullptr);
+            device->SetVertexShader(vsBasic);
+            device->SetPixelShader(psColor);
+            Equal("planar_lit_scene_done", front::ModernSceneDone(device, view) == front::ModernResult::Done, true);
+            if (Read())
+            {
+                const char *names[2][2] = {{"planar_floor_left_shows_blue", "planar_floor_right_shows_green"},
+                                           {"planar_water_left_shows_blue", "planar_water_right_shows_green"}};
+                const char *blackNames[2][2] = {{"planar_floor_left_black", "planar_floor_right_black"},
+                                                {"planar_water_left_black", "planar_water_right_black"}};
+                const int channels[2] = {0, 1}; // B, G, R, A
+                const bool reads = wanted && (water ? oursWater : ours);
+                for (int h = 0; h < 2; ++h)
+                {
+                    const uint8_t *at = &pixels[(floorY * readSize + floorX[h]) * 4];
+                    if (reads)
+                    {
+                        const int c = at[channels[h]];
+                        bool dominant = c >= 60;
+                        for (int other = 0; other < 3; ++other)
+                            if (other != channels[h])
+                                dominant = dominant && c >= at[other] + 40;
+                        if (!dominant)
+                            std::printf("  planar %s %s: rgb %d %d %d\n", what, h ? "right" : "left", at[2], at[1],
+                                        at[0]);
+                        Equal(names[water][h], dominant, true);
+                    }
+                    else if (water)
+                    {
+                        // The floor's colours of the frame before linger a little
+                        // in the history (no cut, which would drop the planar
+                        // image too).
+                        const bool dark = at[0] < 24 && at[1] < 24 && at[2] < 24;
+                        if (!dark)
+                            std::printf("  planar water %s: rgb %d %d %d\n", h ? "right" : "left", at[2], at[1], at[0]);
+                        Equal(blackNames[water][h], dark, true);
+                    }
+                    else
+                        Expect(blackNames[water][h], floorX[h], floorY, 0, 0, 0);
+                }
+            }
+            Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
         }
-        Ok(device->Present(nullptr, nullptr, nullptr, nullptr), "Present");
     }
     SafeRelease(black);
     SafeRelease(blackLight);
     SafeRelease(glossy);
+    SafeRelease(waterMap);
     SafeRelease(probe);
     device->SetDepthStencilSurface(nullptr);
     SafeRelease(depth);
@@ -6392,6 +6444,10 @@ bool Check::CreateObjects(std::string &error)
     if (SUCCEEDED(hr))
         hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsLpSunMapsStandIn),
                                        &psLpSunMapsStandIn);
+    if (SUCCEEDED(hr))
+        hr = device->CreateVertexShader(reinterpret_cast<const DWORD *>(shaders::kVsWater), &vsWater);
+    if (SUCCEEDED(hr))
+        hr = device->CreatePixelShader(reinterpret_cast<const DWORD *>(shaders::kPsWaterStandIn), &psWaterStandIn);
     const D3DVERTEXELEMENT9 elements[] = {
         {0, 0, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
         {0, 12, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
@@ -6440,6 +6496,8 @@ void Check::ReleaseObjects()
     SafeRelease(psLmSunMapsStandIn);
     SafeRelease(vsLpSunMaps);
     SafeRelease(psLpSunMapsStandIn);
+    SafeRelease(vsWater);
+    SafeRelease(psWaterStandIn);
     SafeRelease(psTexture);
     SafeRelease(psShadow);
     SafeRelease(psVolume);

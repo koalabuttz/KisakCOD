@@ -109,10 +109,19 @@ public:
     // picked with `unit`, a source of numbers in [0, 1).
     bool RandomReachablePoint(const float from[3], float (*unit)(void *), void *context, float out[3]) const;
 
+    // A random point on the mesh reachable from `from`, on a polygon within
+    // about `radius` of it.
+    bool RandomPointNear(const float from[3], float radius, float (*unit)(void *), void *context, float out[3]) const;
+
 private:
+    bool RandomAround(const float from[3], float radius, float (*unit)(void *), void *context, float out[3]) const;
+
     dtNavMesh *m_mesh = nullptr;
     dtNavMeshQuery *m_query = nullptr;
     dtQueryFilter *m_filter = nullptr;
 };
+
+// The length of a path's corners, end to end.
+float PathLength(const float (*points)[3], int count);
 
 } // namespace kisak::bots

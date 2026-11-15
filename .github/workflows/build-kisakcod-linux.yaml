@@ -422,7 +422,8 @@ jobs:
           key: ccache-native-${{ matrix.config }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   client_census:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # After merge only (fast PR lane, 2026-11-15): see docs/ci.md.
+    if: github.event_name != 'pull_request'
     # Asset-free compile proof for the multiplayer client sources: one syntax-only
     # -m32 front-end pass per production .cpp with the client definitions, checked
     # against scripts/tests/client_compile_census_blocked.txt in both directions.
@@ -473,6 +474,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/tests/test_openal_channel_stop.py
+          python3 scripts/tests/test_snd_stream_feed.py
           python3 scripts/tests/test_openal_packed_sounds.py
           python3 scripts/tests/test_openal_stream_lengths.py
 
@@ -502,7 +504,8 @@ jobs:
           retention-days: 7
 
   sp_census:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # After merge only (fast PR lane, 2026-11-15): see docs/ci.md.
+    if: github.event_name != 'pull_request'
     # The singleplayer half of the client compile census, on its own runner so
     # it runs beside the multiplayer half instead of after it (about 5 minutes
     # each): the same front-end pass over the Windows KisakCOD-sp sources with
@@ -561,7 +564,8 @@ jobs:
           retention-days: 7
 
   x64_census:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # After merge only (fast PR lane, 2026-11-15): see docs/ci.md.
+    if: github.event_name != 'pull_request'
     # Opt-in 64-bit track, step one (docs/linux-x64.md): one syntax-only x86_64
     # Clang pass over every KisakCOD-dedi unit (exact commands from a
     # -DKISAK_LINUX_ARCH=x86_64 configure) and every client census source, with
@@ -635,7 +639,8 @@ jobs:
           retention-days: 7
 
   x64_dedicated:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # After merge only (fast PR lane, 2026-11-15): see docs/ci.md.
+    if: github.event_name != 'pull_request'
     # Opt-in 64-bit track, step two (docs/linux-x64.md): check the generated
     # fastfile record layout tables against the struct definitions, run the
     # asset-free 64-bit record conversion test, build KisakCOD-dedi with
@@ -781,7 +786,8 @@ jobs:
           key: ccache-x64-dedicated-${{ github.run_id }}-${{ github.run_attempt }}
 
   arm64_dedicated:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # After merge only (fast PR lane, 2026-11-15): see docs/ci.md.
+    if: github.event_name != 'pull_request'
     # Opt-in 64-bit Arm track, step one (docs/linux-arm64.md): on GitHub's
     # native Arm runner, build KisakCOD-dedi with -DKISAK_LINUX_ARCH=aarch64, run
     # the asset-free fastfile record conversion test for aarch64 and the
@@ -883,7 +889,8 @@ jobs:
           key: ccache-arm64-dedicated-${{ github.run_id }}-${{ github.run_attempt }}
 
   armv7_dedicated:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # After merge only (fast PR lane, 2026-11-15): see docs/ci.md.
+    if: github.event_name != 'pull_request'
     # Opt-in 32-bit Arm track, the first step toward a PS Vita port
     # (docs/linux-armv7.md): cross-compile KisakCOD-dedi with
     # -DKISAK_LINUX_ARCH=armv7 on the x86 runner, check that engine code keeps
@@ -968,6 +975,16 @@ jobs:
             --emulator "qemu-arm -L /usr/arm-linux-gnueabihf" "$binary"
           COMMANDS
 
+      # The PS Vita client builds its MP3 decoder for NEON
+      # (docs/linux-armv7.md). This job has the Arm compiler and qemu-arm, so
+      # it compares that build's samples with the scalar build's.
+      - name: Compare the MP3 decoder built for NEON with the scalar build
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/tests/test_mp3_neon_decode.py --require
+
       - name: Report compiler cache
         if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
         shell: bash
@@ -982,7 +999,8 @@ jobs:
           key: ccache-armv7-dedicated-${{ github.run_id }}-${{ github.run_attempt }}
 
   x64_client:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # After merge only (fast PR lane, 2026-11-15): see docs/ci.md.
+    if: github.event_name != 'pull_request'
     # Opt-in 64-bit track, step three (docs/linux-x64.md): build the multiplayer
     # client KisakCOD-mp with -DKISAK_LINUX_ARCH=x86_64 against x86_64 SDL3 and
     # the D3D9 and OpenAL stand-ins (built -m64), then run the same asset-free
@@ -1335,7 +1353,8 @@ jobs:
           key: ccache-x64-mp-client-${{ github.run_id }}-${{ github.run_attempt }}
 
   arm64_client:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # After merge only (fast PR lane, 2026-11-15): see docs/ci.md.
+    if: github.event_name != 'pull_request'
     # Opt-in 64-bit Arm track, step three (docs/linux-arm64.md): on GitHub's
     # native Arm runner, build the multiplayer client KisakCOD-mp with
     # -DKISAK_LINUX_ARCH=aarch64 against aarch64 SDL3 and the D3D9 and OpenAL
@@ -1543,7 +1562,8 @@ jobs:
           key: ccache-arm64-mp-client-${{ github.run_id }}-${{ github.run_attempt }}
 
   world_frontend:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # After merge only (fast PR lane, 2026-11-15): see docs/ci.md.
+    if: github.event_name != 'pull_request'
     # Asset-free CPU test of the production renderer world front end: scene and
     # view setup, DPVS cell/portal visibility, the AABB-tree and cull-group walk,
     # BSP draw-surface batching and the merge, run against a synthetic world. The
@@ -1649,7 +1669,8 @@ jobs:
           retention-days: 7
 
   world_surface:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # After merge only (fast PR lane, 2026-11-15): see docs/ci.md.
+    if: github.event_name != 'pull_request'
     # Asset-free: builds seven standalone -m32 test cases directly
     # and runs the bundle prepare tests. No DXVK, no SDL, no GPU, no game assets,
     # no CMake configure. tests/linux_renderer/CMakeLists.txt is deliberately not
@@ -1936,7 +1957,8 @@ jobs:
           key: ccache-native-d3d9-${{ github.run_id }}-${{ github.run_attempt }}
 
   device_probe:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # After merge only (fast PR lane, 2026-11-15): see docs/ci.md.
+    if: github.event_name != 'pull_request'
     # The opt-in D3D9 device probe (scripts/platform/linux/device_probe.cmake)
     # without a GPU: the engine's r_init.cpp linked through the native D3D9
     # boundary (pinned DXVK Native 2.7.1 *headers*) with the Win32 window layer
@@ -2404,7 +2426,8 @@ jobs:
           key: ccache-device-probe-${{ github.run_id }}-${{ github.run_attempt }}
 
   free_camera:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # After merge only (fast PR lane, 2026-11-15): see docs/ci.md.
+    if: github.event_name != 'pull_request'
     # Asset-free: the host free camera and its frame owner, compiled as two
     # standalone -m32 tests with Clang and the production Linux flags, linked
     # against the unmodified production AnglesToAxis unit. The renderer is a

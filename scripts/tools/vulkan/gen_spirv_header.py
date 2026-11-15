@@ -85,6 +85,10 @@ LIGHT_VARIANTS = [
     if not (shadow and "D" in maps)
 ]
 
+# water_l_sun (water.frag): by how many components the vertex shader writes
+# the water map's UV in (a fragment input must match its output).
+WATER_VARIANTS = [("water.frag", f"kWater{n}Frag", (f"WATER_UV_COMPONENTS={n}",)) for n in (2, 3, 4)]
+
 
 SETS = [
     ShaderSet(
@@ -128,7 +132,7 @@ SETS = [
         [
             ("fullscreen.vert", "kFullscreenVert"),
             ("gamma.frag", "kGammaFrag"),
-        ] + LM_SUN_VARIANTS + LP_SUN_VARIANTS + NO_SUN_VARIANTS + AMBIENT_VARIANTS + LIGHT_VARIANTS,
+        ] + LM_SUN_VARIANTS + LP_SUN_VARIANTS + NO_SUN_VARIANTS + AMBIENT_VARIANTS + LIGHT_VARIANTS + WATER_VARIANTS,
     ),
 ]
 
