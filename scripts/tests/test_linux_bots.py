@@ -602,6 +602,31 @@ KILL_LOG_ROW = re.compile(r"^\s*\d+:\d+\s*K;", re.M)
 # bot_log 1 also prints each choice to take cover or hunt (bot_mind.h).
 COVER_ROW = re.compile(r"^bots: \d+ takes cover \d+ units away \((reloading|hurt|outnumbered)\)\s*$", re.M)
 HUNT_ROW = re.compile(r"^bots: \d+ hunts \((seen|heard|hit)\)\s*$", re.M)
+# And their team play (bot_team.h): the part the commander gives a bot, its
+# callouts, where its part sends it, and the map's spots once worked out.
+ROLE_ROW = re.compile(r"^bots: \d+ plays (roam|push|anchor|attack|defend)\s*$", re.M)
+CALLOUT_ROW = re.compile(r"^bots: \d+ calls out \d+\s*$", re.M)
+PUSH_ROW = re.compile(r"^bots: \d+ pushes to a callout \d+ units away\s*$", re.M)
+ANCHOR_ROW = re.compile(r"^bots: \d+ anchors \d+ units from a callout\s*$", re.M)
+OBJECTIVE_ROW = re.compile(r"^bots: \d+ (attacks an objective \d+ units away|defends an objective from \d+ units)\s*$",
+                           re.M)
+SPOTS_ROW = re.compile(r"^bots: map spots ready: (\d+) spots, (\d+) lines, in ([\d.]+) s\s*$", re.M)
+
+
+def team_play(output: str) -> dict:
+    """Counts of the team play lines bot_log 1 prints."""
+    roles = {}
+    for role in ROLE_ROW.findall(output):
+        roles[role] = roles.get(role, 0) + 1
+    spots = SPOTS_ROW.findall(output)
+    return {
+        "roles": roles,
+        "callouts": len(CALLOUT_ROW.findall(output)),
+        "pushes": len(PUSH_ROW.findall(output)),
+        "anchors": len(ANCHOR_ROW.findall(output)),
+        "objectives": len(OBJECTIVE_ROW.findall(output)),
+        "spots": tuple(spots[-1]) if spots else None,
+    }
 
 
 def fire_rows(output: str) -> list:
@@ -904,6 +929,13 @@ def main() -> int:
             cover = len(COVER_ROW.findall(output))
             hunts = len(HUNT_ROW.findall(output))
             print(f"INFO: bots took cover {cover} times and went hunting {hunts} times")
+            team = team_play(output)
+            print("INFO: the commander gave parts: " +
+                  (", ".join(f"{role} {count}" for role, count in sorted(team["roles"].items())) or "none") +
+                  f"; {team['callouts']} callouts, {team['pushes']} pushes, {team['anchors']} anchors, "
+                  f"{team['objectives']} objective moves")
+            print("INFO: " + (f"map spots ready: {team['spots'][0]} spots, {team['spots'][1]} lines, "
+                              f"in {team['spots'][2]} s" if team["spots"] else "map spots not ready yet"))
         if args.combat:
             fights = fire_rows(output)
             print(f"INFO: bots opened fire {len(fights)} times" +

@@ -134,7 +134,7 @@ inline float CoverNeed(const Situation &s, const Personality &p)
     // regeneration); a hurt bot that is safe waits for it.
     if (s.inCover && s.health < 0.8f)
         need = std::fmax(need, 0.6f);
-    return std::fmin(need, 1.0f) * (1.0f - 0.5f * p.aggression);
+    return std::fmin(need, 1.0f) * (1.0f - 0.35f * p.aggression);
 }
 
 inline IntentScores ScoreIntents(const Situation &s, const Personality &p)
@@ -144,7 +144,7 @@ inline IntentScores ScoreIntents(const Situation &s, const Personality &p)
     if (s.enemyInView)
         scores.fight = 1.0f + 0.2f * p.aggression;
     if (s.coverKnown && (s.enemyInView || s.hurtAgoMs < 3000 || s.inCover))
-        scores.cover = 1.4f * CoverNeed(s, p);
+        scores.cover = 1.5f * CoverNeed(s, p);
     if (!s.enemyInView)
     {
         float hunt = 0.0f;
@@ -224,9 +224,12 @@ public:
         m_visited[Cell(place)] = nowMs;
     }
 
+    // Enemies at `place` at `nowMs`; an older report does not hide a newer one.
     void EnemyAt(const float *place, int nowMs)
     {
-        m_enemy[Cell(place)] = nowMs;
+        int &at = m_enemy[Cell(place)];
+        if (nowMs > at)
+            at = nowMs;
     }
 
     // How much the bot wants to go to `place`: places it has not seen for a

@@ -61,6 +61,8 @@ static void Choices()
     reload.clip = 0.0f;
     reload.canReload = true;
     Check(Pick(reload, calm) == kb::Intent::Cover, "a calm bot reloading in a fight takes the cover it knows");
+    Check(Pick(reload, Leaning(0.5f)) == kb::Intent::Cover && Pick(reload, bold) == kb::Intent::Fight,
+          "so does a middling one; a bold one reloads where it stands");
     kb::Situation noCover = reload;
     noCover.coverKnown = false;
     Check(Pick(noCover, calm) == kb::Intent::Fight && Pick(noCover, bold) == kb::Intent::Fight,
