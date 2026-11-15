@@ -7,7 +7,8 @@ from test_linux_bots import (FIXTURE_GSC, transition_fixture, transition_plan,
                              validate_brain_view, validate_brain_walk, balanced_teams,
                              uses_both_teams, TEAM_CAPACITY, MAX_BOTS, validate_brain_notices,
                              validate_brain_fights, COVER_ROW, HUNT_ROW, team_play,
-                             objective_fixture, validate_objectives, FIXTURE_GSC)
+                             objective_fixture, validate_objectives, FIXTURE_GSC,
+                             GRENADE_ROW, KNIFE_ROW)
 
 
 def healthy_log():
@@ -378,6 +379,14 @@ class DecisionLogTests(unittest.TestCase):
         self.assertEqual((team["callouts"], team["pushes"], team["anchors"], team["objectives"]), (2, 1, 1, 2))
         self.assertEqual(team["spots"], ("311", "48205", "12.3"))
         self.assertIsNone(team_play("")["spots"])
+
+
+class GrenadeAndKnifeLogTests(unittest.TestCase):
+    def test_lines_are_counted(self):
+        output = ('bots: 3 throws a grenade 610 units\nbots: 4 throws a grenade 300 units\n'
+                  'bots: 5 knifes 6, 52 units\nbots: 5 knifes 6 close\n')
+        self.assertEqual(len(GRENADE_ROW.findall(output)), 2)
+        self.assertEqual(len(KNIFE_ROW.findall(output)), 1)
 
 
 class ObjectiveTests(unittest.TestCase):

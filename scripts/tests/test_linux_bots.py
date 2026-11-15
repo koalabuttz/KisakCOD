@@ -610,6 +610,8 @@ PUSH_ROW = re.compile(r"^bots: \d+ pushes to a callout \d+ units away\s*$", re.M
 ANCHOR_ROW = re.compile(r"^bots: \d+ anchors \d+ units from a callout\s*$", re.M)
 OBJECTIVE_ROW = re.compile(r"^bots: \d+ (attacks an objective \d+ units away|defends an objective from \d+ units)\s*$",
                            re.M)
+GRENADE_ROW = re.compile(r"^bots: \d+ throws a grenade \d+ units\s*$", re.M)
+KNIFE_ROW = re.compile(r"^bots: \d+ knifes \d+, \d+ units\s*$", re.M)
 TEAM_OBJECTIVES_ROW = re.compile(r"^bots: team (\d+) objectives: take (\d+), hold (\d+)\s*$", re.M)
 SPOTS_ROW = re.compile(r"^bots: map spots ready: (\d+) spots, (\d+) lines, in ([\d.]+) s\s*$", re.M)
 
@@ -969,6 +971,8 @@ def main() -> int:
             print("INFO: " + (f"map spots ready: {team['spots'][0]} spots, {team['spots'][1]} lines, "
                               f"in {team['spots'][2]} s" if team["spots"] else "map spots not ready yet"))
         if args.combat:
+            print(f"INFO: bots threw {len(GRENADE_ROW.findall(output))} grenades and knifed "
+                  f"{len(KNIFE_ROW.findall(output))} times")
             fights = fire_rows(output)
             print(f"INFO: bots opened fire {len(fights)} times" +
                   (f" ({min(r[2] for r in fights)} to {max(r[2] for r in fights)} ms after noticing, "

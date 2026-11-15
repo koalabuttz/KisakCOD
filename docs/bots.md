@@ -54,7 +54,7 @@ its part sends it).
 are on the list a game server may not set on a player's client
 (`src/qcommon/server_dvar_guard.h`).
 
-## What the bots do now (phase 4b)
+## What the bots do now (phase 4c)
 
 The brain takes over the test clients' commands. Each frame a bot decides what
 to do (see "How a bot decides"), walks there on the map's navigation mesh with
@@ -68,13 +68,14 @@ from wherever the server puts its view (a spawn, a killcam, a script's
 A bot that sees an opponent it noticed fights them (with `bot_combat 1`, see
 "How a bot fights"); with `bot_combat 0` it watches them while it walks on.
 It keeps its aim where it last saw one it lost, and looks toward a sound or a
-compass dot it heard. It reloads an empty clip, or one under half when it has
+compass dot it heard, knifes a player within reach and throws a frag where it
+just lost one (see "How a bot fights"). It reloads an empty clip, or one under half when it has
 not fought for two seconds, and switches to its other gun when one runs dry.
 
 On a team, bots call out the enemies they see and play the part their
 team's commander gives them (see "How a team of bots plays").
 
-Next: peeking from cover, grenades, knifing and killstreaks, class choice,
+Next: peeking from cover, smoke and flash grenades, killstreaks, class choice,
 jumps, mantles and ladders, stance in fights, then difficulty levels and
 per-bot style, start-a-game and start-a-server options, and the PS Vita's bot
 budget (6v6 TDM first, then 9v9 Ground War).
@@ -199,6 +200,19 @@ player is, never at where they really are:
   player's, and the hand has to find the player again.
 - **Moving.** While it fights it keeps walking its way or strafes for 0.4 to
   1.2 s at a time, more often the other way than the last.
+- **The knife.** Within the game's melee range (`player_meleeRange`, plus 8
+  units) and with its view within 25 degrees of the player, after the hand's
+  onset, it knifes instead of firing, at most every 0.45 to 0.7 s.
+- **Grenades.** Once for each enemy it loses sight of, 0.4 to 3.5 s after, a
+  bot may throw a frag where it last saw them, 250 to 1000 units away. The
+  chance is 20% plus half its aggression. `src/bots/bot_grenades.h` finds the
+  flattest view pitch whose arc comes down at the enemy's feet. The game
+  throws along the view at the weapon's projectile speed, plus its upward
+  and forward speeds, with gravity pulling the grenade down. The bot throws
+  only when the arc clears the map until 96 units from the target. It lines
+  up the view at its usual turning pace (giving up after 1.5 s or when an
+  enemy comes into view), holds the frag button 0.25 to 0.6 s while the fuse
+  runs, and lets go. It waits 10 to 20 s before the next throw.
 
 The numbers are one decent player's; difficulty levels (phase 5) change them.
 
@@ -289,6 +303,7 @@ walks into one notices it is stuck, jumps, then takes another way.
 | `src/bots/bot_spots.h` | a map's spots and which see each other, cover and overwatch queries; no engine types |
 | `src/bots/bot_tactics.cpp` | the map sense on the server: clear lines through the map, the spot table worked out a frame at a time, cover from a threat, overwatch |
 | `src/bots/bot_combat.h` | the hand and trigger: reaction onset, aimed movements and corrections, tracking lead, firing, the view kick, strafing; no engine types |
+| `src/bots/bot_grenades.h` | a grenade's arc and the view pitch that lands it on a target; no engine types |
 | `src/bots/bot_perception.h` | what a bot knows: the noticing meter, memory, hearing, what to look at; no engine types |
 | `src/bots/bot_senses.cpp` | `Bot_Sense`: one sense tick of a bot's eyes, ears and compass on the server |
 | `src/bots/bot_motor.h` | the view motor, command angle conversion, the movement keys toward a point and each bot's random source; no engine types |
@@ -332,6 +347,13 @@ to one second behind.
   released between clicks, an automatic held close up and fired in bursts at
   range; a shot kicks the view up and it comes back, never past 10 degrees,
   and the hand pulls back only part of it, late.
+- `bot_grenades` (`scripts/tests/test_bot_grenades.py`, in
+  `run_linux_checks.py`): builds `tests/bots/bot_grenades_test.cpp` on the host,
+  64-bit with sanitizers and 32-bit. A throw comes down where it aims, and it
+  is the flattest throw that gets there. A further target needs a higher
+  pitch and one below the eye a lower one. A target past the weapon's reach
+  gets no throw. A forward speed flattens the throw. The arc ends at the
+  target, in the direction the bot faces.
 - `bot_mind` (`scripts/tests/test_bot_mind.py`, in `run_linux_checks.py`):
   builds `tests/bots/bot_mind_test.cpp` on the host, 64-bit with sanitizers
   and 32-bit. A bot roams with nothing known, fights what it sees, takes the
@@ -400,7 +422,8 @@ view; on both teams at least one bot must have fired. It prints how often the
 bots opened fire and the hits and kills the game logged. With `--brain 1` it
 also prints how often bots took cover and went hunting, the parts the
 commander gave, the callouts, pushes, anchors and objective moves, and when
-the map's spots were ready. With `--objectives` (and more than four bots) the
+the map's spots were ready, and with `--combat` how many grenades bots threw
+and how often they knifed. With `--objectives` (and more than four bots) the
 fixture starts the stock Domination game type instead of team deathmatch: the
 bots of both teams must read flags off their compass (`bots: team N
 objectives: take T, hold H`), and at least one must go to take one. Views are a

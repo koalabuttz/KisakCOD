@@ -34,6 +34,7 @@
 
 #include "bot_brain.h"
 #include "bot_combat.h"
+#include "bot_grenades.h"
 #include "bot_mind.h"
 #include "bot_motor.h"
 #include "bot_navmesh.h"
@@ -140,6 +141,18 @@ struct BotSlot
     bool holdFacingKnown = false;
     bool atObjective = false;
     int roleRetryAt = 0;
+
+    // A grenade: lining up the throw, holding the button (the fuse runs),
+    // when it may throw again, and the enemy it last thought about one for.
+    int grenadePhase = 0; // 0 none, 1 lining up, 2 holding
+    float grenadeView[2] = {0.0f, 0.0f};
+    int grenadeUntil = 0;
+    int nextGrenade = 0;
+    int grenadeThoughtAt = -1;
+    float grenadeDistance = 0.0f;
+    // The knife: pressed on one frame, released on the next.
+    bool meleeHeld = false;
+    int nextMelee = 0;
 };
 
 BotSlot s_slots[kMaxBotSlots];
@@ -196,6 +209,11 @@ const kb::SkillProfile &Skill()
 bool CombatOn()
 {
     return bot_combat && bot_combat->current.integer != 0;
+}
+
+bool LogOn()
+{
+    return bot_log && bot_log->current.integer;
 }
 
 kb::ViewMotorParams WalkMotor()
@@ -517,6 +535,24 @@ int Fight(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focus 
         bot.adsErrorDone = false;
     }
 
+    // Close enough to knife, with the hand on them: a player knifes (one
+    // hit kills from behind or hurt, two from the front).
+    const float meleeReach = (player_meleeRange ? player_meleeRange->current.value : 64.0f) + 8.0f;
+    if (distance < meleeReach && svs.time >= bot.aim.startMs)
+    {
+        const float off = std::fmax(std::fabs(kb::AngleDelta(bot.view.angles[0], target[0])),
+                                    std::fabs(kb::AngleDelta(bot.view.angles[1], target[1])));
+        if (off < 25.0f && !bot.meleeHeld && svs.time >= bot.nextMelee)
+        {
+            cmd.buttons |= BUTTON_MELEE;
+            bot.meleeHeld = true;
+            bot.nextMelee = svs.time + static_cast<int>(bot.rng.Range(450.0f, 700.0f));
+            if (LogOn())
+                Com_Printf(CON_CHANNEL_SERVER, "bots: %d knifes %d, %.0f units\n", clientNum, focus.entity, distance);
+            return kb::StepStrafe(bot.strafe, svs.time, skill, bot.rng);
+        }
+    }
+
     const int clip = ps->ammoclip[BG_ClipForWeapon(ps->weapon)];
     const bool ready = clip > 0 && (!sight || ps->fWeaponPosFrac >= 0.9f);
     const bool onTarget =
@@ -646,12 +682,119 @@ bool RoamGoal(BotSlot &bot, const kb::NavMesh &nav, const float *origin, float *
 }
 
 // ---------------------------------------------------------------------------
-// The team (bot_team.h).
+// Grenades (bot_grenades.h).
 
-bool LogOn()
+// A frag the bot carries, or 0.
+int FragWeapon(const playerState_s *ps)
 {
-    return bot_log && bot_log->current.integer;
+    return BG_GetFirstAvailableOffhand(ps, OFFHAND_CLASS_FRAG_GRENADE);
 }
+
+// Whether the arc from `eye` clears the map until it is close to `target`
+// (it may bounce off what is right at the target).
+bool ArcClear(const kb::ThrowParams &params, const float *eye, float yaw, float pitchUp, float distance,
+              const float *target)
+{
+    float arc[64][3];
+    const int count = kb::ArcPoints(params, eye, yaw, pitchUp, distance, 0.05f, arc, 64);
+    const float *from = eye;
+    for (int i = 0; i < count; ++i)
+    {
+        const float *to = arc[i];
+        const float left = std::hypot(to[0] - target[0], to[1] - target[1]);
+        if (left > 96.0f && !Bot_ClearLine(from, to, nullptr))
+            return false;
+        from = to;
+    }
+    return true;
+}
+
+// A player throws a frag where an enemy just went out of sight. Once per
+// enemy lost, a bot thinks about it: the enemy it remembers was seen a
+// moment ago, at a throwing distance, out of sight now, and the arc to where
+// they were clears the map. Bolder bots throw more often.
+void ConsiderGrenade(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focus &focus)
+{
+    if (bot.grenadePhase != 0 || svs.time < bot.nextGrenade || focus.kind != kb::FocusKind::Remembered)
+        return;
+    const kb::Contact &contact = bot.perception.contacts[focus.entity];
+    const int lostMs = svs.time - contact.lastSeenAt;
+    if (lostMs < 400 || lostMs > 3500 || bot.grenadeThoughtAt == contact.lastSeenAt)
+        return;
+    bot.grenadeThoughtAt = contact.lastSeenAt;
+    if (IsReloading(ps) || ps->weaponstate != WEAPON_READY)
+        return;
+    const int frag = FragWeapon(ps);
+    if (!frag)
+        return;
+    const float eye[3] = {ps->origin[0], ps->origin[1], ps->origin[2] + ps->viewHeightCurrent};
+    // Their feet: the place it saw is their chest.
+    const float target[3] = {contact.lastSeen[0], contact.lastSeen[1], contact.lastSeen[2] - 40.0f};
+    const float distance = std::hypot(target[0] - eye[0], target[1] - eye[1]);
+    if (distance < 250.0f || distance > 1000.0f)
+        return;
+    if (bot.rng.Unit() > 0.2f + 0.5f * bot.personality.aggression)
+        return;
+
+    const WeaponDef *def = BG_GetWeaponDef(frag);
+    kb::ThrowParams params;
+    params.speed = static_cast<float>(def->iProjectileSpeed);
+    params.speedUp = static_cast<float>(def->iProjectileSpeedUp);
+    params.speedForward = static_cast<float>(def->iProjectileSpeedForward);
+    params.gravity = ps->gravity > 0 ? static_cast<float>(ps->gravity) : 800.0f;
+    float pitchUp = 0.0f;
+    if (!kb::ThrowPitch(params, distance, target[2] + 8.0f - eye[2], &pitchUp))
+        return;
+    const float yaw = std::atan2(target[1] - eye[1], target[0] - eye[0]) * (180.0f / 3.14159265358979f);
+    if (!ArcClear(params, eye, yaw, pitchUp, distance, target))
+        return;
+
+    bot.grenadePhase = 1;
+    bot.grenadeView[0] = -pitchUp;
+    bot.grenadeView[1] = yaw;
+    bot.grenadeUntil = svs.time + 1500; // give up lining it up after this
+    bot.grenadeDistance = distance;
+    (void)clientNum;
+}
+
+// One frame of a throw under way: line up the view, then hold the button a
+// moment (the fuse runs, as when a player cooks it) and let go. Returns the
+// view to turn to, or nullptr when no throw is under way.
+const float *StepGrenade(BotSlot &bot, int clientNum, const playerState_s *ps, usercmd_s &cmd)
+{
+    if (bot.grenadePhase == 0)
+        return nullptr;
+    if (bot.grenadePhase == 1)
+    {
+        const float off = std::fmax(std::fabs(kb::AngleDelta(bot.view.angles[0], bot.grenadeView[0])),
+                                    std::fabs(kb::AngleDelta(bot.view.angles[1], bot.grenadeView[1])));
+        if (svs.time >= bot.grenadeUntil || !FragWeapon(ps))
+        {
+            bot.grenadePhase = 0;
+            return nullptr;
+        }
+        if (off < 2.0f)
+        {
+            bot.grenadePhase = 2;
+            bot.grenadeUntil = svs.time + static_cast<int>(bot.rng.Range(250.0f, 600.0f));
+        }
+        return bot.grenadeView;
+    }
+    // Holding: the throw goes on letting go.
+    if (svs.time < bot.grenadeUntil)
+    {
+        cmd.buttons |= BUTTON_FRAG;
+        return bot.grenadeView;
+    }
+    bot.grenadePhase = 0;
+    bot.nextGrenade = svs.time + static_cast<int>(bot.rng.Range(10000.0f, 20000.0f));
+    if (LogOn())
+        Com_Printf(CON_CHANNEL_SERVER, "bots: %d throws a grenade %.0f units\n", clientNum, bot.grenadeDistance);
+    return bot.grenadeView;
+}
+
+// ---------------------------------------------------------------------------
+// The team (bot_team.h).
 
 team_t TeamOf(int clientNum)
 {
@@ -1294,11 +1437,23 @@ bool Bot_UserMove(client_t *cl)
 
             int side = 0;
             if (fighting)
-                side = Fight(bot, clientNum, ps, focus, seconds, cmd);
+            {
+                // An enemy in view: a throw still being lined up is dropped.
+                if (bot.grenadePhase == 1)
+                    bot.grenadePhase = 0;
+                if (bot.grenadePhase == 0)
+                    side = Fight(bot, clientNum, ps, focus, seconds, cmd);
+            }
+            if (!(cmd.buttons & BUTTON_MELEE))
+                bot.meleeHeld = false;
+            if (!fighting && CombatOn())
+                ConsiderGrenade(bot, clientNum, ps, focus);
+            const float *grenadeView = CombatOn() ? StepGrenade(bot, clientNum, ps, cmd) : nullptr;
 
             // Not fighting: look at the player it lost or the sound it heard,
-            // else pre-aim the corner of its way, else along the way.
-            const float *look = watching;
+            // else pre-aim the corner of its way, else along the way. A throw
+            // looks where it throws.
+            const float *look = grenadeView ? grenadeView : watching;
             float preAimView[2];
             if (!fighting && !look && bot.pathIndex < bot.pathCount)
             {
