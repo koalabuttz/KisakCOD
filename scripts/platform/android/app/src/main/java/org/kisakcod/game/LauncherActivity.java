@@ -9,6 +9,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.os.Bundle;
+import android.text.Layout;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -286,9 +287,12 @@ public class LauncherActivity extends Activity {
         button.setText(text);
         button.setAllCaps(false);
         button.setTextColor(Color.WHITE);
-        // One or two lines, smaller where a label would not fit whole (a word
-        // is never broken).
-        button.setMaxLines(2);
+        // A one-word label stays on one line and shrinks to fit; a longer
+        // label may take two lines. Words are never broken or hyphenated
+        // (run 380 showed "Multiplayer" split in the middle).
+        button.setMaxLines(text.indexOf(' ') < 0 ? 1 : 2);
+        button.setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE);
+        button.setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE);
         button.setAutoSizeTextTypeUniformWithConfiguration(12, 22, 1, TypedValue.COMPLEX_UNIT_SP);
         button.setGravity(Gravity.CENTER);
         button.setFocusable(true);
@@ -298,7 +302,7 @@ public class LauncherActivity extends Activity {
         background.addState(new int[] {android.R.attr.state_focused}, rounded(Color.rgb(70, 76, 82), Color.rgb(240, 180, 60)));
         background.addState(new int[] {}, rounded(Color.rgb(48, 52, 56), 0));
         button.setBackground(background);
-        button.setPadding(dp(12), dp(8), dp(12), dp(8));
+        button.setPadding(dp(8), dp(8), dp(8), dp(8));
         button.setOnClickListener(onClick);
         return button;
     }
