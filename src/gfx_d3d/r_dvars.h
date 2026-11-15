@@ -273,6 +273,7 @@ extern const dvar_t *r_glow_allowed_script_forced;
 extern const dvar_t *r_outdoor;
 extern const dvar_t *sv_cheats; // KISAKTODO: Move out of gfx code...
 extern const dvar_t *r_sse_skinning;
+extern const dvar_t *r_staticCullVec;
 extern const dvar_t *r_monitor;
 extern const dvar_t *r_rendererPreference;
 extern const dvar_t *r_rendererInUse;

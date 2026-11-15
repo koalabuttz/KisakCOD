@@ -536,9 +536,10 @@ linker script and stub libraries). `-Wl,-q` keeps the relocations that
   fused multiply-add (`-ffp-contract=off`), signed `char`: the armv7 rules,
   so the server's movement and collision maths give the same results as on a
   PC. The whole binary, VitaSDK's libraries included, has no NEON float
-  instruction (CI checks), but for the client's vector skinning path, which
-  only makes vertices to draw (`src/gfx_d3d/r_model_skin_vec.cpp`), and its
-  MP3 decoder, which only makes sound ([the rule](linux-armv7.md)). At start-up each thread clears the FPSCR
+  instruction (CI checks), but for the client's vector skinning path and its
+  static culling walk, which only make what is drawn
+  (`src/gfx_d3d/r_model_skin_vec.cpp`, `src/gfx_d3d/r_dpvs_static_vec.cpp`),
+  and its MP3 decoder, which only makes sound ([the rule](linux-armv7.md)). At start-up each thread clears the FPSCR
   flush-to-zero and default-NaN bits (`Vita_SetIeeeFloatMode`); the log
   records what the system had set.
 - **Thread-local storage.** VitaSDK's GCC is built without native TLS, and the

@@ -213,6 +213,8 @@ set(GFX_D3D
     "${SRC_DIR}/gfx_d3d/r_dpvs_entity.cpp"
     "${SRC_DIR}/gfx_d3d/r_dpvs_sceneent.cpp"
     "${SRC_DIR}/gfx_d3d/r_dpvs_static.cpp"
+    "${SRC_DIR}/gfx_d3d/r_dpvs_static_vec.cpp"
+    "${SRC_DIR}/gfx_d3d/r_dpvs_static_vec.h"
     "${SRC_DIR}/gfx_d3d/r_drawsurf.cpp"
     "${SRC_DIR}/gfx_d3d/r_drawsurf.h"
     "${SRC_DIR}/gfx_d3d/r_draw_bsp.cpp"
