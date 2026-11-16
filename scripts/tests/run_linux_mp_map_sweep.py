@@ -137,6 +137,8 @@ STOCK_MAPS = (
 # q_shared.h: the first script menu configstring, and how many there are.
 CS_SCRIPT_MENUS = 1970
 CS_SCRIPT_MENUS_COUNT = 32
+# The vision set the server last gave every client: '"<name>" <transition ms>'.
+CS_VISIONSET_NAKED = 824
 # connstate_t: the client is in the game.
 CA_ACTIVE = 9
 CA_DISCONNECTED = 0
@@ -248,6 +250,15 @@ def script_menus(lines):
     return menus
 
 
+def naked_vision(lines):
+    """The vision set configstring from a configstrings listing, or None."""
+    for line in lines:
+        match = CONFIGSTRING.match(line)
+        if match and int(match.group(1)) == CS_VISIONSET_NAKED:
+            return match.group(2).strip()
+    return None
+
+
 # Screenshots are measured the same way in both sweeps.
 Frame = sp.Frame
 
@@ -261,6 +272,7 @@ class MapResult(sp.LevelResult):
         self.sound = None
         self.menus = ""
         self.frame = None
+        self.vision = None
 
 
 class Sweep:
@@ -385,6 +397,10 @@ class Sweep:
                            bool(match) and (match.group(1) == result.level or rotated) and state == CA_ACTIVE,
                            detail):
             return False
+        if options.screenshot:
+            # A whole frame drawn grey can be a vision set (the stock match
+            # start uses a grey one), so note which one the client had.
+            result.vision = naked_vision(game.listing("configstrings", options.probe_timeout) or []) or "none"
         if (options.screenshot and not sp.take_screenshot(game, result, self.home, options, f"sweep_{result.level}")
                 and game.ended):
             return False
@@ -522,6 +538,10 @@ def write_report(path, options, results, missing):
                 starts, cuts, underruns, al_errors, gap = result.sound
                 lines.append(f"| {result.level} | {starts} | {cuts} | {underruns} | {al_errors} | {gap} ms |")
     lines += sp.frame_table(results, "map")
+    visions = [f"{result.level} `{result.vision}`" for result in results if result.vision]
+    if visions:
+        lines += ["", f"Vision set when each frame was taken (configstring {CS_VISIONSET_NAKED}): "
+                  + "; ".join(visions) + "."]
     menus = list(dict.fromkeys(result.menus for result in results if result.menus))
     if menus:
         lines += ["", "Menus answered (name and position): " + "; ".join(menus) + "."]
