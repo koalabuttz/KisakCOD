@@ -11,6 +11,7 @@
 // map, and the commands sent after the menu or the map came up.
 
 #include "vita_platform.h"
+#include "vita_call_watch.h"
 #include "vita_mman.h"
 #include "vita_run_plan.h"
 
@@ -29,12 +30,14 @@
 #include <atomic>
 
 #include <malloc.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
 #include <psp2/kernel/processmgr.h>
 #include <psp2/kernel/sysmem.h>
+#include <psp2/kernel/threadmgr.h>
 
 namespace
 {
@@ -58,6 +61,37 @@ namespace
     Window s_window;
     uint64_t s_frameStart;
     uint64_t s_frameIdle;
+
+    // Long frames. Console runs on 2026-11-14 (AQ to AU) found one or two
+    // frames a start in which the main thread did not come back for 0.3 to
+    // 0.9 s while nothing was loaded or made and no timed part of the frame
+    // ran long. A watcher thread looks at the main thread while a frame runs
+    // long: whether it is running, ready (another thread has its core) or
+    // waiting and on what, how much it ran, and which file, memory block or
+    // packet call it is inside (vita_call_watch.h). Vita_FrameEnd logs what
+    // it saw (WatchFrames, LogLongFrame).
+    constexpr uint64_t kLongFrame = 250u * 1000u;
+    constexpr uint64_t kLookEvery = 100u * 1000u;
+    constexpr int kMaxLooks = 8;
+    struct Look
+    {
+        uint32_t at;     // ms into the frame
+        uint32_t status; // SceThreadStatus
+        uint32_t waitType;
+        SceUID waitId;
+        uint64_t runClocks; // the main thread's run time so far, us
+        uint32_t threadPreempts, intrPreempts;
+        int32_t cpu, priority;
+        bool inCall;
+        kisak::vita_calls::Inside call;
+    };
+    SceUID s_mainThread = -1;
+    // The frame being watched (its start, 0 between frames) and the looks
+    // at it, under s_watchLock: a look taken as the frame ends is dropped.
+    pthread_mutex_t s_watchLock = PTHREAD_MUTEX_INITIALIZER;
+    std::atomic<uint64_t> s_watchedStart{0};
+    int s_lookCount;
+    Look s_looks[kMaxLooks];
 
     cmd_function_s s_statsCommand;
 
@@ -323,6 +357,122 @@ namespace
     }
 }
 
+namespace
+{
+    bool LookAtMain(Look &look, uint64_t age)
+    {
+        SceKernelThreadInfo info;
+        memset(&info, 0, sizeof(info));
+        info.size = sizeof(info);
+        if (sceKernelGetThreadInfo(s_mainThread, &info) < 0)
+            return false;
+        look.at = (uint32_t)(age / 1000u);
+        look.status = info.status;
+        look.waitType = info.waitType;
+        look.waitId = info.waitId;
+        look.runClocks = info.runClocks;
+        look.threadPreempts = info.threadPreemptCount;
+        look.intrPreempts = info.intrPreemptCount;
+        look.cpu = info.currentCpuId;
+        look.priority = info.currentPriority;
+        look.inCall = kisak::vita_calls::Look(look.call, Now());
+        return true;
+    }
+
+    int WatchFrames(SceSize, void *)
+    {
+        uint64_t watched = 0;
+        uint64_t nextLook = 0;
+        for (;;)
+        {
+            sceKernelDelayThread(20 * 1000);
+            const uint64_t start = s_watchedStart.load(std::memory_order_acquire);
+            if (!start)
+                continue;
+            if (start != watched)
+            {
+                watched = start;
+                nextLook = kLongFrame;
+            }
+            const uint64_t age = Now() - start;
+            if (age < nextLook)
+                continue;
+            nextLook += kLookEvery;
+            Look look;
+            if (!LookAtMain(look, age))
+                continue;
+            pthread_mutex_lock(&s_watchLock);
+            if (s_watchedStart.load(std::memory_order_relaxed) == start && s_lookCount < kMaxLooks)
+                s_looks[s_lookCount++] = look;
+            pthread_mutex_unlock(&s_watchLock);
+        }
+        return 0;
+    }
+
+    const char *StatusName(uint32_t status)
+    {
+        switch (status)
+        {
+        case SCE_THREAD_RUNNING: return "running";
+        case SCE_THREAD_READY: return "ready, not running";
+        case SCE_THREAD_WAITING: return "waiting";
+        case SCE_THREAD_SUSPENDED: return "suspended";
+        default: return "other";
+        }
+    }
+
+    void LogLongFrame(uint64_t length, int count)
+    {
+        // The frame's calls first: printing adds a write to them.
+        char calls[256];
+        kisak::vita_calls::DescribeFrame(calls, sizeof(calls));
+        // Each look and what the main thread did since the one before.
+        char line[2048];
+        int used = snprintf(line, sizeof(line), "Vita: long frame, %.0f ms; the main thread", length / 1000.0);
+        for (int i = 0; i < count && used > 0 && used < (int)sizeof(line); ++i)
+        {
+            const Look &look = s_looks[i];
+            int more;
+            if (i == 0)
+                more = snprintf(line + used, sizeof(line) - used, " at %u ms: %s", look.at, StatusName(look.status));
+            else
+            {
+                const Look &before = s_looks[i - 1];
+                more = snprintf(line + used, sizeof(line) - used,
+                    "; at %u ms: %s, ran %u ms of %u, %u thread and %u interrupt preemptions", look.at, StatusName(look.status), (unsigned int)((look.runClocks - before.runClocks) / 1000u),
+                    look.at - before.at, look.threadPreempts - before.threadPreempts,
+                    look.intrPreempts - before.intrPreempts);
+            }
+            if (more > 0 && used + more < (int)sizeof(line) && look.status == SCE_THREAD_WAITING)
+            {
+                used += more;
+                more = snprintf(line + used, sizeof(line) - used, " (wait type 0x%x on 0x%x)",
+                    (unsigned int)look.waitType, (unsigned int)look.waitId);
+            }
+            if (more > 0 && used + more < (int)sizeof(line))
+            {
+                used += more;
+                more = snprintf(line + used, sizeof(line) - used, ", core %d, priority 0x%x", (int)look.cpu,
+                    (unsigned int)look.priority);
+            }
+            if (more > 0 && used + more < (int)sizeof(line))
+            {
+                used += more;
+                if (!look.inCall)
+                    more = snprintf(line + used, sizeof(line) - used, ", in no timed call");
+                else
+                    more = snprintf(line + used, sizeof(line) - used, ", %u ms into %s%s%s", (unsigned int)look.call.forMs,
+                        look.call.name, look.call.path[0] ? " on " : "", look.call.path);
+            }
+            if (more <= 0 || used + more >= (int)sizeof(line))
+                break;
+            used += more;
+        }
+        Com_Printf(CON_CHANNEL_SYSTEM, "%s\n", line);
+        Com_Printf(CON_CHANNEL_SYSTEM, "Vita: long frame's calls: %s\n", calls);
+    }
+}
+
 void Vita_StatsInit()
 {
     Cmd_AddCommandInternal("vitastats", Stats_f, &s_statsCommand);
@@ -373,6 +523,13 @@ void Vita_StatsInit()
     s_atMenuUsed = StepsOf("vita_atMenu", s_atMenu.Get(), s_atMenuSteps, sizeof(s_atMenuSteps));
     s_atMapUsed = StepsOf("vita_atMap", s_atMap.Get(), s_atMapSteps, sizeof(s_atMapSteps));
     PrintMemory("after start-up");
+    s_mainThread = sceKernelGetThreadId();
+    kisak::vita_calls::SetMainThread();
+    // High priority so that it sees the main thread even when the main
+    // thread's core is taken; it sleeps all but a moment of every 20 ms.
+    const SceUID watcher = sceKernelCreateThread("kisak_frame_watch", WatchFrames, 0x40, 16 * 1024, 0, 0, nullptr);
+    if (watcher < 0 || sceKernelStartThread(watcher, 0, nullptr) < 0)
+        Com_Printf(CON_CHANNEL_SYSTEM, "Vita: no long-frame watcher (0x%08x)\n", (unsigned int)watcher);
     s_window = Window();
     s_window.start = Now();
     s_plan.Start(0, s_window.start);
@@ -383,6 +540,8 @@ void Vita_FrameBegin()
 {
     s_frameStart = Now();
     s_frameIdle = 0;
+    kisak::vita_calls::FrameBegin();
+    s_watchedStart.store(s_frameStart, std::memory_order_release);
 }
 
 void Vita_FrameEnd()
@@ -392,6 +551,13 @@ void Vita_FrameEnd()
     const uint64_t now = Now();
     const uint64_t length = now - s_frameStart;
     const uint64_t work = length > s_frameIdle ? length - s_frameIdle : 0;
+    pthread_mutex_lock(&s_watchLock);
+    s_watchedStart.store(0, std::memory_order_relaxed);
+    const int looks = s_lookCount;
+    s_lookCount = 0;
+    pthread_mutex_unlock(&s_watchLock);
+    if (looks)
+        LogLongFrame(length, looks);
     s_window.idle += s_frameIdle;
     if (work > s_window.slowestFrame)
         s_window.slowestFrame = work;
