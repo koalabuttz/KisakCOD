@@ -247,7 +247,11 @@ navigation bar). The game's window is always fullscreen on Android, whatever `r_
 and `r_fullscreenMode` say (`CreateWindowExA` in `win32_window_sdl3.cpp`
 adds `SDL_WINDOW_FULLSCREEN`, and leaving fullscreen does nothing there): a
 windowed or borderless choice in the settings menu had put the picture below
-the status bar with its top cut off and the navigation bar showing. For an even 30 frames a second (Modern visuals on the Retroid Pocket 6
+the status bar with its top cut off and the navigation bar showing. `KisakActivity` also
+lays its window out over the whole screen under the system bars
+(`setDecorFitsSystemWindows(false)`, cutout mode always) and hides them on
+every focus: started from the launcher, SDL's immersive mode alone still left
+the picture's top and bottom cut off. For an even 30 frames a second (Modern visuals on the Retroid Pocket 6
 run at 33-40), `+set r_vsync 1 +set r_vsyncInterval 2` shows each frame for
 two refreshes of a 60 Hz screen (four at 120 Hz: `r_vsyncInterval 4`), paced
 through Android's `VK_GOOGLE_display_timing` (docs/vulkan-core.md, Swapchain).

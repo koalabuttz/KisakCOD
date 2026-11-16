@@ -1,9 +1,15 @@
 package org.kisakcod.game;
 
 import android.content.Intent;
+import android.os.Build;
+import android.os.Bundle;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.util.Log;
+import android.view.Window;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.view.WindowManager;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -40,6 +46,42 @@ public class KisakActivity extends SDLActivity {
     protected boolean campaign() {
         Intent intent = getIntent();
         return intent != null && intent.getBooleanExtra("campaign", false);
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        fillScreen();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            fillScreen();
+        }
+    }
+
+    // The game's window lays out over the whole screen, under Android's bars,
+    // which stay hidden (a swipe shows them for a moment). SDL's immersive
+    // mode alone left the window below the status bar, the picture's top and
+    // bottom cut off and the navigation bar showing, whenever the game was
+    // started from the launcher (Retroid Pocket 6, 2026-11-16; a start by adb
+    // looked right).
+    private void fillScreen() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return;
+        }
+        Window window = getWindow();
+        window.setDecorFitsSystemWindows(false);
+        WindowManager.LayoutParams attributes = window.getAttributes();
+        attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        window.setAttributes(attributes);
+        WindowInsetsController controller = window.getInsetsController();
+        if (controller != null) {
+            controller.hide(WindowInsets.Type.systemBars());
+            controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        }
     }
 
     @Override
