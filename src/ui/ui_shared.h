@@ -955,6 +955,9 @@ void Item_TextField_BeginEdit(int localClientNum, itemDef_s *item);
 void Menus_Open(UiContext *dc, menuDef_t *menu);
 void Menus_AddToStack(UiContext *dc, menuDef_t *pMenu);
 void Menu_LoseFocusDueToOpen(UiContext *dc, menuDef_t *menu);
+// Port: when set and it answers true, Menus_OpenByName opens nothing more
+// (the RmlUi front-end's screens, src/ui_rml/rml_frontend.cpp).
+extern bool (*UI_MenuOpenHook)(UiContext *dc, const char *name);
 int Menus_OpenByName(UiContext *dc, const char *p);
 void Menus_PrintAllLoadedMenus(UiContext *dc);
 int Display_MouseMove(UiContext *dc);

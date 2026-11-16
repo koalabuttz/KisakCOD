@@ -157,6 +157,11 @@ public:
 
         FrameStats &stats = Stats();
         ++stats.commands;
+        if (!texture)
+        {
+            ++stats.untextured;
+            stats.white = Material_GetName(material);
+        }
         stats.vertices += (int)scratch.size();
         stats.indices += (int)mesh->indices.size();
     }
@@ -216,12 +221,19 @@ public:
     }
 
 private:
+    // The stock menus' fill material (UI_FillRect). Looked up again after a
+    // shutdown, since the zone that holds it may have been reloaded.
     Material *White()
     {
         if (!white)
-            white = Material_RegisterHandle("white", 0);
+            white = Material_RegisterHandle("white", IMAGE_TRACK_UI);
         return white;
     }
+
+public:
+    void Forget() { white = nullptr; }
+
+private:
 
     std::vector<GfxUiVertex> scratch;
     Material *white = nullptr;
@@ -235,10 +247,23 @@ Material *MaterialFromTexture(Rml::TextureHandle texture)
     return reinterpret_cast<Material *>(texture);
 }
 
-Rml::RenderInterface *RenderInterface()
+namespace
+{
+EngineRenderInterface &Instance()
 {
     static EngineRenderInterface instance;
-    return &instance;
+    return instance;
+}
+} // namespace
+
+Rml::RenderInterface *RenderInterface()
+{
+    return &Instance();
+}
+
+void RenderForget()
+{
+    Instance().Forget();
 }
 
 FrameStats &Stats()

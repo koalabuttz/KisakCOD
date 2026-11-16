@@ -90,6 +90,8 @@ public:
     Rml::ElementText *text = nullptr;
     std::array<Rml::String, SLOT_COUNT> applied;
     Rml::String appliedText;
+    // The window that made it, for ui_rmlStats 1.
+    const char *origin = nullptr;
 
 protected:
     void OnRender() override
@@ -117,6 +119,7 @@ kisak-slot {
     display: none;
     position: absolute;
     z-index: 0;
+    font-family: "fonts/normalFont";
     margin: 0px;
     padding: 0px;
     white-space: pre;
@@ -221,6 +224,35 @@ public:
         fallbacks = 0;
     }
 
+    // ui_rml went back to 0 while a screen still draws through the context:
+    // the classic slots must not draw with it.
+    void HideAll()
+    {
+        for (size_t i = 0; i < slots.size(); ++i)
+            Hide(slots[i]);
+        used = 0;
+    }
+
+    // ui_rmlStats 1: every slot of the last frame, in draw order.
+    void Dump() const
+    {
+        for (size_t i = 0; i < used; ++i)
+        {
+            const ClassicSlot *slot = slots[i];
+            Rml::String line;
+            for (int p = SLOT_LEFT; p < SLOT_COUNT; ++p)
+            {
+                if (p == SLOT_FONT_FAMILY || p == SLOT_LINE_HEIGHT || slot->applied[p].empty())
+                    continue;
+                line += " " + Rml::String(kPropertyNames[p]) + "=" + slot->applied[p];
+            }
+            if (!slot->appliedText.empty())
+                line += " text=\"" + slot->appliedText.substr(0, 24) + "\"";
+            Com_Printf(CON_CHANNEL_UI, "RmlUi slot %3d %s%s:%s\n", (int)i, slot->origin ? slot->origin : "?",
+                       slot->stock ? " (stock painter)" : "", line.c_str());
+        }
+    }
+
     void Release()
     {
         // The document goes with the context (rml_frontend.cpp).
@@ -269,6 +301,7 @@ private:
             slot->appliedText = spec.text;
         }
         slot->stock = std::move(spec.stock);
+        slot->origin = origin;
     }
 
     static void Hide(ClassicSlot *slot)
@@ -501,6 +534,7 @@ private:
     void PaintWindow(UiContext *dc, windowDef_t *w, float fadeAmount, float fadeInAmount, float fadeClamp, float fadeCycle)
     {
         // Window_Paint
+        origin = w->name;
         const ScreenPlacement *scrPlace = &scrPlaceView[dc->localClientNum];
         const rectDef_s *origRect = &w->rect;
         if (g_debugMode)
@@ -740,6 +774,7 @@ private:
     }
 
     Rml::ElementDocument *document = nullptr;
+    const char *origin = nullptr;
     std::vector<ClassicSlot *> slots;
     size_t used = 0;
     int fallbacks = 0;
@@ -761,6 +796,16 @@ void ClassicRegister()
 void ClassicPaint(UiContext *dc, Rml::Context *context)
 {
     Painter().Paint(dc, context);
+}
+
+void ClassicDump()
+{
+    Painter().Dump();
+}
+
+void ClassicHide()
+{
+    Painter().HideAll();
 }
 
 void ClassicRelease()

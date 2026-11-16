@@ -6,6 +6,7 @@
 
 #include <RmlUi/Core.h>
 
+#include <cstddef>
 #include <cstdint>
 
 struct Material;
@@ -26,6 +27,8 @@ Material *MaterialFromTexture(Rml::TextureHandle texture);
 // The engine-side interfaces RmlUi is given (rml_render.cpp, rml_font.cpp,
 // rml_system.cpp). Each lives for the whole process once made.
 Rml::RenderInterface *RenderInterface();
+// Drops the cached engine materials (the UI is shutting down).
+void RenderForget();
 Rml::FontEngineInterface *FontEngine();
 Rml::SystemInterface *SystemInterface();
 Rml::FileInterface *FileInterface();
@@ -45,11 +48,20 @@ float FontAscent(const Font_s *font, float yScale);
 
 // The classic mode (rml_classic.cpp): the stock menus as one RmlUi document.
 // ClassicRegister runs once, before any document; ClassicPaint builds this
-// frame's document in the context, ClassicRelease forgets it (the context
+// frame's document in the context, ClassicHide hides every slot (the stock
+// painter draws this frame), ClassicRelease forgets it (the context
 // owns it and is about to drop it).
 void ClassicRegister();
 void ClassicPaint(UiContext *dc, Rml::Context *context);
+void ClassicHide();
+void ClassicDump(); // the last frame's slots, to the console
 void ClassicRelease();
+
+// The screen files built into the game (src/ui_rml/screens, embedded by
+// scripts/extern/rmlui.cmake): "ui_rml/<file>". The file interface serves
+// them when the game folders have no file of that name, so a loose copy in
+// the game folder overrides the built-in one.
+bool EmbeddedFile(const char *path, const char **data, size_t *size);
 
 // Frame counters for ui_rmlStats.
 struct FrameStats
@@ -59,6 +71,8 @@ struct FrameStats
     int indices;
     int slots;
     int fallbacks;
+    int untextured;      // fills, borders, gradients: drawn with the white material
+    const char *white;   // that material's name, as registered
 };
 FrameStats &Stats();
 } // namespace kisak_rml

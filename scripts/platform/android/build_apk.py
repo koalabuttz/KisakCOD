@@ -23,6 +23,9 @@ Steps, each kept in --work so a second run only redoes what changed:
      keep their debug information for now, so a crash on a device can be
      read back to source lines (the APK is about 100 MB).
 
+--rmlui builds the RmlUi menus in (docs/rmlui-frontend.md): Options >
+Graphics then opens the new graphics settings screen (ui_rmlGraphics).
+
 --abi x86_64 builds the app for the Android emulator on a PC instead of a
 device (arm64-v8a, the default). Its builds sit beside the arm64 ones in
 --work, with "-x86_64" added to their names, and the APK is
@@ -96,6 +99,9 @@ def main():
     parser.add_argument('--gradle', default='gradle')
     parser.add_argument('--gradle-arg', action='append', default=[],
                         help='one more argument for Gradle (repeatable), such as --init-script for a Maven mirror')
+    parser.add_argument('--rmlui', action='store_true',
+                        help='build the RmlUi menus in (KISAK_RMLUI: the graphics settings screen under '
+                             'Options > Graphics; fetches RmlUi at configure time)')
     parser.add_argument('--native-only', action='store_true',
                         help='stop after the native libraries (no Android SDK or Gradle needed)')
     args = parser.parse_args()
@@ -153,7 +159,7 @@ def main():
         '-DKISAK_LINUX_CINEMATICS=OFF', '-DKISAK_LINUX_HTTP_DOWNLOADS=OFF', '-DKISAK_LINUX_GAMEPAD=ON',
         f'-DSDL3_DIR={sdl_sdk / "lib/cmake/SDL3"}',
         '-DKISAK_BUILD_VULKAN_PROBE=ON', '-DKISAK_BUILD_VULKAN_SHADERS=ON', '-DKISAK_BUILD_VULKAN_LEGACY=ON',
-        '-DKISAK_BUILD_VULKAN_BACKEND=ON')
+        '-DKISAK_BUILD_VULKAN_BACKEND=ON', f'-DKISAK_RMLUI={"ON" if args.rmlui else "OFF"}')
     run('cmake', '--build', build, '--target', 'KisakCOD-mp', 'KisakCOD-sp')
     libmain = out / 'libmain.so'
     libmain_sp = out / 'libmain_sp.so'
