@@ -243,7 +243,15 @@ The activity starts the game without shadow maps (`+set sm_enable 0`): on
 the Adreno 740 the sun's shadows flickered from frame to frame (2026-11-15,
 cause not found yet). The activity always starts the game full screen (`+set r_fullscreen 1`, so
 SDL hides Android's system bars; run 3 had a 1920x970 window under the
-navigation bar). For an even 30 frames a second (Modern visuals on the Retroid Pocket 6
+navigation bar). The game's window is always fullscreen on Android, whatever `r_fullscreen`
+and `r_fullscreenMode` say (`CreateWindowExA` in `win32_window_sdl3.cpp`
+adds `SDL_WINDOW_FULLSCREEN`, and leaving fullscreen does nothing there): a
+windowed or borderless choice in the settings menu had put the picture below
+the status bar with its top cut off and the navigation bar showing. `KisakActivity` also
+lays its window out over the whole screen under the system bars
+(`setDecorFitsSystemWindows(false)`, cutout mode always) and hides them on
+every focus: started from the launcher, SDL's immersive mode alone still left
+the picture's top and bottom cut off. For an even 30 frames a second (Modern visuals on the Retroid Pocket 6
 run at 33-40), `+set r_vsync 1 +set r_vsyncInterval 2` shows each frame for
 two refreshes of a 60 Hz screen (four at 120 Hz: `r_vsyncInterval 4`), paced
 through Android's `VK_GOOGLE_display_timing` (docs/vulkan-core.md, Swapchain).

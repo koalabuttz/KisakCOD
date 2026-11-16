@@ -301,6 +301,12 @@ bool HostFullscreen(void *, front::D3D9Window handle, const front::FullscreenMod
 {
     if (!mode)
     {
+#ifdef __ANDROID__
+        // The window stays fullscreen on Android (CreateWindowExA in
+        // win32_window_sdl3.cpp): leaving it shows the system bars.
+        s_host.fullscreenWindow.store(nullptr);
+        return true;
+#endif
         SDL_Window *const window = s_host.fullscreenWindow.exchange(nullptr);
         if (window && !SDL_SetWindowFullscreen(window, false))
         {
