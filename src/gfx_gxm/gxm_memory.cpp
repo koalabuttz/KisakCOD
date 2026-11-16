@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
+#include <vector>
 
 namespace gfx_gxm
 {
@@ -167,13 +168,13 @@ void ShutdownMemory()
         Release(static_cast<MemoryKind>(i));
 }
 
-void *Allocate(MemoryKind kind, uint32_t size, uint32_t align)
+void *Allocate(MemoryKind kind, uint32_t size, uint32_t align, bool fromTop)
 {
     const std::lock_guard<std::mutex> lock(g_mutex);
     Pool &pool = PoolFor(kind);
     if (!pool.base)
         return nullptr;
-    const uint32_t offset = pool.heap.Allocate(size, align);
+    const uint32_t offset = pool.heap.Allocate(size, align, fromTop);
     return offset == Heap::kNoSpace ? nullptr : pool.base + offset;
 }
 
@@ -214,13 +215,42 @@ std::string DescribeMemory()
             continue;
         char part[128];
         if (stats.size >= (4u << 20))
-            std::snprintf(part, sizeof(part), " %s%s %.1f of %.1f MB (%u blocks, peak %.1f)", MemoryKindName(kind),
-                          kind == MemoryKind::Main && g_mainCached ? " (cached)" : "", stats.used / 1048576.0,
-                          stats.size / 1048576.0, stats.allocations, stats.peak / 1048576.0);
+            std::snprintf(part, sizeof(part), " %s%s %.1f of %.1f MB (%u blocks, peak %.1f, largest free %.1f)",
+                          MemoryKindName(kind), kind == MemoryKind::Main && g_mainCached ? " (cached)" : "",
+                          stats.used / 1048576.0, stats.size / 1048576.0, stats.allocations, stats.peak / 1048576.0,
+                          stats.largestFree / 1048576.0);
         else
             std::snprintf(part, sizeof(part), " %s %u of %u KB (%u blocks)", MemoryKindName(kind), stats.used >> 10,
                           stats.size >> 10, stats.allocations);
         out += part;
+    }
+    return out;
+}
+
+std::string DescribeFreeRanges()
+{
+    std::string out = "gpu memory free ranges, largest first (MB):";
+    for (const MemoryKind kind : {MemoryKind::Cdram, MemoryKind::Main})
+    {
+        std::vector<uint32_t> ranges;
+        uint32_t count = 0;
+        {
+            const std::lock_guard<std::mutex> lock(g_mutex);
+            const Pool &pool = PoolFor(kind);
+            if (!pool.size)
+                continue;
+            ranges = pool.heap.LargestFreeRanges(6);
+            count = pool.heap.FreeRanges();
+        }
+        char part[64];
+        std::snprintf(part, sizeof(part), " %s %u ranges:", MemoryKindName(kind), count);
+        out += part;
+        for (const uint32_t bytes : ranges)
+        {
+            std::snprintf(part, sizeof(part), " %.2f", bytes / 1048576.0);
+            out += part;
+        }
+        out += ";";
     }
     return out;
 }

@@ -1,5 +1,7 @@
 #include "gxm_heap.h"
 
+#include <algorithm>
+#include <functional>
 #include <iterator>
 #include <utility>
 
@@ -29,13 +31,44 @@ void Heap::Reset(uint32_t size)
         free_.emplace(0u, size);
 }
 
-uint32_t Heap::Allocate(uint32_t size, uint32_t align)
+uint32_t Heap::Allocate(uint32_t size, uint32_t align, bool fromTop)
 {
     if (!align || (align & (align - 1)))
         return kNoSpace;
     if (align < kGranule)
         align = kGranule;
     const uint64_t span = AlignUp(size ? size : 1, kGranule);
+    auto take = [&](std::map<uint32_t, uint32_t>::iterator it, uint64_t offset) {
+        const uint64_t start = it->first;
+        const uint64_t end = start + it->second;
+        free_.erase(it);
+        if (offset > start)
+            free_.emplace(static_cast<uint32_t>(start), static_cast<uint32_t>(offset - start));
+        if (offset + span < end)
+            free_.emplace(static_cast<uint32_t>(offset + span), static_cast<uint32_t>(end - offset - span));
+        allocations_.emplace(static_cast<uint32_t>(offset), Allocation{size ? size : 1, static_cast<uint32_t>(span)});
+        used_ += static_cast<uint32_t>(span);
+        if (used_ > peak_)
+            peak_ = used_;
+        return static_cast<uint32_t>(offset);
+    };
+    if (fromTop)
+    {
+        for (auto it = free_.end(); it != free_.begin();)
+        {
+            --it;
+            const uint64_t start = it->first;
+            const uint64_t end = start + it->second;
+            if (span > end - start)
+                continue;
+            // The highest aligned offset whose piece ends inside the range.
+            const uint64_t offset = (end - span) & ~(uint64_t(align) - 1);
+            if (offset < start)
+                continue;
+            return take(it, offset);
+        }
+        return kNoSpace;
+    }
     for (auto it = free_.begin(); it != free_.end(); ++it)
     {
         const uint64_t start = it->first;
@@ -43,17 +76,7 @@ uint32_t Heap::Allocate(uint32_t size, uint32_t align)
         const uint64_t offset = AlignUp(start, align);
         if (offset + span > end)
             continue;
-        free_.erase(it);
-        if (offset > start)
-            free_.emplace(static_cast<uint32_t>(start), static_cast<uint32_t>(offset - start));
-        if (offset + span < end)
-            free_.emplace(static_cast<uint32_t>(offset + span), static_cast<uint32_t>(end - offset - span));
-        allocations_.emplace(static_cast<uint32_t>(offset),
-                             Allocation{size ? size : 1, static_cast<uint32_t>(span)});
-        used_ += static_cast<uint32_t>(span);
-        if (used_ > peak_)
-            peak_ = used_;
-        return static_cast<uint32_t>(offset);
+        return take(it, offset);
     }
     return kNoSpace;
 }
@@ -106,6 +129,18 @@ uint32_t Heap::LargestFree() const
         if (range.second > largest)
             largest = range.second;
     return largest;
+}
+
+std::vector<uint32_t> Heap::LargestFreeRanges(size_t count) const
+{
+    std::vector<uint32_t> sizes;
+    sizes.reserve(free_.size());
+    for (const auto &range : free_)
+        sizes.push_back(range.second);
+    std::sort(sizes.begin(), sizes.end(), std::greater<uint32_t>());
+    if (sizes.size() > count)
+        sizes.resize(count);
+    return sizes;
 }
 
 bool Heap::CheckConsistent() const
