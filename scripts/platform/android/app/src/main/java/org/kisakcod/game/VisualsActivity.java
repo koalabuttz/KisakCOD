@@ -152,6 +152,9 @@ public class VisualsActivity extends Activity {
 
     // The preset the settings match, or "Custom".
     static String presetName(SharedPreferences prefs) {
+        // The first screen asks before any setting is read (Retroid run 381
+        // showed "Custom" on a fresh page).
+        migrate(prefs);
         for (int preset = PRESETS.length - 1; preset >= 0; --preset) {
             boolean matches = true;
             for (String pair : PRESET_CHOICES[preset]) {
