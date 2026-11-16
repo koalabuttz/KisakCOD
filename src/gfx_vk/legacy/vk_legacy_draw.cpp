@@ -2624,6 +2624,7 @@ bool ClearAtPassStart(Device &device, uint32_t rectCount, const Rect *rects, uin
     const uint32_t colors = ColorCount(device.renderTargets);
     const bool clearColor = (flags & d3d::CLEAR_TARGET) && colors;
     bool clearDepth = false;
+    bool textureDepthOnly = false;
     if (device.depthStencil && (flags & (d3d::CLEAR_ZBUFFER | d3d::CLEAR_STENCIL)))
     {
         // The depth image always has stencil, so a load operation clears
@@ -2638,6 +2639,8 @@ bool ClearAtPassStart(Device &device, uint32_t rectCount, const Rect *rects, uin
         if (!(flags & d3d::CLEAR_ZBUFFER) || (stencilKept && !(flags & d3d::CLEAR_STENCIL)))
             return false;
         clearDepth = true;
+        if (stencilFormat && !stencilKept && !(flags & d3d::CLEAR_STENCIL))
+            textureDepthOnly = true;
     }
     if (!clearColor && !clearDepth)
         return false;
@@ -2683,6 +2686,12 @@ bool ClearAtPassStart(Device &device, uint32_t rectCount, const Rect *rects, uin
         return true; // skipped with a warning, as the clear would have been
     ++device.stats.clears;
     ++device.stats.passClears;
+    if (textureDepthOnly && !device.loggedTextureClear)
+    {
+        device.loggedTextureClear = true;
+        Log(device, "clears: depth texture %s cleared at pass start without keeping its stencil",
+            device.depthStencil->texture->name.c_str());
+    }
     return true;
 }
 
