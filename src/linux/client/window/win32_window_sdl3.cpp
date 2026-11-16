@@ -185,7 +185,17 @@ HWND WINAPI CreateWindowExA(DWORD dwExStyle,
     if (!EnsureVideo())
         return nullptr;
 
+#ifdef __ANDROID__
+    // Android has no windows: every one covers the screen with the system
+    // bars hidden (SDL's immersive mode). A windowed or borderless game window
+    // (r_fullscreen 0, or r_fullscreenMode borderless from the settings menu)
+    // otherwise sat below the status bar with its top cut off and the
+    // navigation bar showing (Retroid Pocket 6, 2026-11-16).
+    const SDL_WindowFlags flags =
+        kisak::win32_window::WindowFlagsForStyle(dwStyle, dwExStyle) | SDL_WINDOW_FULLSCREEN;
+#else
     const SDL_WindowFlags flags = kisak::win32_window::WindowFlagsForStyle(dwStyle, dwExStyle);
+#endif
     SDL_PropertiesID properties = SDL_CreateProperties();
     if (!properties)
     {
