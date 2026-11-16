@@ -147,6 +147,14 @@ struct Options
     // target as it was for such a source (gxm_idle_alpha_test.h): the
     // picture is the same and the program has no discard.
     bool alphaZero = false;
+    // Pixel shaders with an alpha test: the instructions the colour's alpha
+    // depends on run first, on copies of their registers, and a pixel that
+    // fails the test leaves at once (discarded, or written as (0, 0, 0, 0)
+    // with alphaZero), before the rest of the program. Only for programs
+    // with no flow control whose alpha needs fewer instructions than the
+    // rest; others are written as without it. A decal's or a leaf's
+    // transparent pixels then skip its lighting.
+    bool alphaEarly = false;
     // Vertex shaders: keep the position's z just inside the far plane
     // (z <= w * 0.99999). D3D9 draws z == w; a run-diagnostic option while
     // finding out whether GXM clips it.

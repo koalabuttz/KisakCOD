@@ -407,6 +407,10 @@ class Emitter
     std::string error_;
     std::string body_;
     int indent_ = 1;
+    // Put before the temporaries' and the colour output's names while the
+    // early alpha test's instructions are written (Options::alphaEarly).
+    std::string prefix_;
+    std::vector<size_t> AlphaSlice() const;
     // Locals the body uses, in first-use order, with their declarations.
     std::vector<std::string> locals_;
     std::set<std::string> declared_;
@@ -438,7 +442,7 @@ std::string Emitter::RegisterName(const Operand &op, bool destination)
     switch (op.type)
     {
     case kTemp:
-        name = "r" + n;
+        name = prefix_ + "r" + n;
         break;
     case kInput:
         name = "v" + n;
@@ -466,7 +470,7 @@ std::string Emitter::RegisterName(const Operand &op, bool destination)
             Fail("writes oC" + n + ": GXM programs have one colour output");
             return "r0";
         }
-        name = "oC0";
+        name = prefix_ + "oC0";
         break;
     case kDepthOut:
         name = "oDepth";
@@ -1064,6 +1068,93 @@ std::string SemanticText(Semantic semantic, uint8_t index)
     return text;
 }
 
+// The instructions, in program order, that the colour output's alpha
+// depends on (Options::alphaEarly); empty when the program cannot take an
+// early alpha test or would gain nothing by it. Walks back from oC0.w,
+// lane by lane for instructions that work lane by lane, every lane a source
+// swizzles in for the others.
+std::vector<size_t> Emitter::AlphaSlice() const
+{
+    const std::vector<Instruction> &list = shader_.instructions;
+    size_t work = 0;
+    for (const Instruction &ins : list)
+    {
+        switch (ins.opcode)
+        {
+        case kNop: case kDcl: case kDef: case kDefI: case kDefB: case kComment: case kPhase: case kEnd:
+            continue;
+        case kCall: case kCallNz: case kLoopOp: case kRet: case kEndLoop: case kLabelOp: case kRep: case kEndRep:
+        case kIf: case kIfc: case kElse: case kEndIf: case kBreak: case kBreakc: case kBreakp: case kSetp:
+        case kTexKill: case kDsx: case kDsy: case kTexLdd:
+            return {}; // flow control, a discard of its own, or gradients
+        default:
+            break;
+        }
+        if (ins.hasDestination && ins.destination.type != kTemp && ins.destination.type != kColorOut)
+            return {};
+        if (ins.hasDestination && ins.destination.type == kColorOut && ins.destination.number != 0)
+            return {};
+        ++work;
+    }
+    // need[register] = lanes still wanted from earlier instructions.
+    std::map<std::pair<uint8_t, uint16_t>, uint8_t> need;
+    need[{kColorOut, 0}] = 8; // w
+    std::vector<size_t> slice;
+    for (size_t i = list.size(); i-- > 0;)
+    {
+        const Instruction &ins = list[i];
+        if (!ins.hasDestination || ins.opcode == kDcl || ins.opcode == kDef || ins.opcode == kDefI ||
+            ins.opcode == kDefB)
+            continue;
+        const std::pair<uint8_t, uint16_t> dst{ins.destination.type, ins.destination.number};
+        const auto found = need.find(dst);
+        if (found == need.end())
+            continue;
+        const uint8_t lanes = found->second & ins.destination.mask;
+        if (!lanes)
+            continue;
+        slice.push_back(i);
+        found->second &= uint8_t(~ins.destination.mask);
+        for (int k = 0; k < ins.sourceCount; ++k)
+        {
+            const Operand &src = ins.sources[k];
+            if (src.type != kTemp && src.type != kColorOut)
+                continue; // inputs, constants and samplers never change
+            uint8_t read = 0;
+            auto lane = [&](int l) { read |= uint8_t(1u << ((src.swizzle >> (2 * l)) & 3)); };
+            switch (ins.opcode)
+            {
+            case kMov: case kAdd: case kSub: case kMad: case kMul: case kMin: case kMax: case kSlt: case kSge:
+            case kFrc: case kLrp: case kCmp: case kCnd: case kAbs: case kSgn:
+                for (int l = 0; l < 4; ++l)
+                    if (lanes & (1 << l))
+                        lane(l);
+                break;
+            case kRcp: case kRsq: case kExp: case kLog: case kExpp: case kLogp: case kPow:
+                lane(0);
+                break;
+            case kDp3:
+                lane(0), lane(1), lane(2);
+                break;
+            default:
+                for (int l = 0; l < 4; ++l)
+                    lane(l);
+                break;
+            }
+            if (src.relative)
+                return {};
+            need[{src.type, src.number}] |= read;
+        }
+    }
+    // Any temporary still wanted was never written: D3D9 reads it as zero,
+    // and so do the copies, which start at zero too.
+    std::reverse(slice.begin(), slice.end());
+    // Worth it only when the rest is a good part of the program.
+    if (slice.empty() || slice.size() * 2 > work)
+        return {};
+    return slice;
+}
+
 bool Emitter::Run(std::string &cg, std::string &error)
 {
     // Declarations and def'd constants first.
@@ -1095,6 +1186,30 @@ bool Emitter::Run(std::string &cg, std::string &error)
         }
     }
 
+    const bool alphaTesting = !vertex_ && options_.alphaFunc != AlphaFunc::Always;
+    if (alphaTesting && options_.alphaEarly)
+    {
+        const std::vector<size_t> slice = AlphaSlice();
+        if (!slice.empty())
+        {
+            static const char *const tests[] = {nullptr,       "false", "a < ref",  "a == ref",
+                                                "a <= ref",    "a > ref", "a != ref", "a >= ref"};
+            prefix_ = "e_";
+            for (const size_t i : slice)
+                if (!Statement(shader_.instructions[i]))
+                {
+                    error = error_;
+                    return false;
+                }
+            prefix_.clear();
+            Line("{");
+            Line("    float a = floor(saturate(e_oC0.w) * 255.0 + 0.5);");
+            Line("    float ref = floor(kisak_alpha_ref * 255.0 + 0.5);");
+            Line(std::string("    if (!(") + tests[int(options_.alphaFunc)] + ")) " +
+                 (options_.alphaZero ? "return float4(0.0, 0.0, 0.0, 0.0);" : "discard;"));
+            Line("}");
+        }
+    }
     for (const Instruction &ins : shader_.instructions)
         if (!Statement(ins))
         {
