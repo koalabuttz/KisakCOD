@@ -26,6 +26,18 @@ constexpr const char *kBotNames[] = {
 };
 constexpr int kBotNameCount = static_cast<int>(sizeof(kBotNames) / sizeof(kBotNames[0]));
 
+// `text` into `out`, cut to fit.
+inline void CopyName(const char *text, char *out, size_t size)
+{
+    if (!size)
+        return;
+    size_t length = std::strlen(text);
+    if (length > size - 1)
+        length = size - 1;
+    std::memcpy(out, text, length);
+    out[length] = '\0';
+}
+
 // `name` without colour codes (^ and a character) or spaces, lower case.
 inline void PlainName(const char *name, char *out, size_t size)
 {
@@ -62,7 +74,7 @@ inline void RemoveBotTag(const char *name, char *out, size_t size)
         return;
     if (!WearsBotTag(name))
     {
-        std::snprintf(out, size, "%s", name);
+        CopyName(name, out, size);
         return;
     }
     // Without colours; then every "[", "b", "o", "t", "]" run that spells
@@ -173,7 +185,7 @@ inline void PickBotName(const char *const *names,
             }
             if (!taken || !taken(candidate, context))
             {
-                std::snprintf(out, size, "%s", candidate);
+                CopyName(candidate, out, size);
                 return;
             }
         }
