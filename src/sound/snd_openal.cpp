@@ -11,6 +11,8 @@
 #include <universal/com_memory.h>
 #include <math.h>
 
+#include "snd_speaker_mix.h"
+
 // alGlob is declared extern in snd_local.h; its one definition lives in snd_driver.cpp
 // (KISAK_SOUND branch), matching where milesGlob's Miles-side definition already lives.
 
@@ -18,6 +20,112 @@ void MSS_InitFailed()
 {
     if (Dvar_GetInt("r_vc_compile") != 2)
         Com_Printf(CON_CHANNEL_SOUND, "OpenAL sound system initialization failed\n");
+}
+
+// The ALC_SOFT_output_mode request for a snd_outputConfiguration layout.
+static ALCint SND_AlOutputMode(kisak::speaker_mix::Layout layout)
+{
+    switch (layout)
+    {
+    case kisak::speaker_mix::Layout::Mono:
+        return ALC_MONO_SOFT;
+    case kisak::speaker_mix::Layout::Stereo:
+        return ALC_STEREO_SOFT;
+    case kisak::speaker_mix::Layout::Quad:
+        return ALC_QUAD_SOFT;
+    case kisak::speaker_mix::Layout::Surround51:
+        return ALC_5POINT1_SOFT;
+    default:
+        return ALC_ANY_SOFT;
+    }
+}
+
+// Speakers of an ALC_OUTPUT_MODE_SOFT answer: 2 for every stereo form (headphones
+// with HRTF, UHJ) and for an answer this code does not know.
+static int SND_AlSpeakersOfMode(ALCint mode)
+{
+    switch (mode)
+    {
+    case ALC_MONO_SOFT:
+        return 1;
+    case ALC_QUAD_SOFT:
+        return 4;
+    case ALC_5POINT1_SOFT:
+        return 6;
+    case ALC_6POINT1_SOFT:
+        return 7;
+    case ALC_7POINT1_SOFT:
+        return 8;
+    default:
+        return 2;
+    }
+}
+
+static const char *SND_AlModeName(ALCint mode)
+{
+    switch (mode)
+    {
+    case ALC_MONO_SOFT: return "mono";
+    case ALC_STEREO_SOFT: return "stereo";
+    case ALC_STEREO_BASIC_SOFT: return "stereo (basic)";
+    case ALC_STEREO_UHJ_SOFT: return "stereo (UHJ)";
+    case ALC_STEREO_HRTF_SOFT: return "headphones (HRTF)";
+    case ALC_QUAD_SOFT: return "4 speakers";
+    case ALC_5POINT1_SOFT: return "5.1 speakers";
+    case ALC_6POINT1_SOFT: return "6.1 speakers";
+    case ALC_7POINT1_SOFT: return "7.1 speakers";
+    default: return "unknown";
+    }
+}
+
+// Reads the layout OpenAL mixes for and sets up what depends on it: multichannel or
+// not (the speaker maps' half and the centre and LFE share, as Miles decides it in
+// MSS_open_digital_driver), the direct-channel playback of speaker-mapped sounds, and
+// the centre and LFE feed slots. Without ALC_SOFT_output_mode the layout is unknown and
+// taken as stereo, as before.
+static void SND_AlSetUpSpeakers(bool outputModes)
+{
+    ALCint mode = ALC_STEREO_SOFT;
+    if (outputModes)
+        alcGetIntegerv(alGlob.device, ALC_OUTPUT_MODE_SOFT, 1, &mode);
+    alGlob.speakers = SND_AlSpeakersOfMode(mode);
+    alGlob.isMultiChannel = kisak::speaker_mix::IsMultiChannel(alGlob.speakers);
+
+    alGlob.directChannels = 0;
+    if (alIsExtensionPresent("AL_SOFT_direct_channels"))
+        alGlob.directChannels = alIsExtensionPresent("AL_SOFT_direct_channels_remix") ? AL_REMIX_UNMATCHED_SOFT : AL_TRUE;
+    alGlob.surroundBuffers = alIsExtensionPresent("AL_EXT_MCFORMATS") != AL_FALSE;
+
+    alGlob.centreLfeFeeds = false;
+    ALCint sends = 0;
+    if (alcIsExtensionPresent(alGlob.device, "ALC_EXT_EFX"))
+        alcGetIntegerv(alGlob.device, ALC_MAX_AUXILIARY_SENDS, 1, &sends);
+    if (alGlob.isMultiChannel && sends >= 3 && alcIsExtensionPresent(alGlob.device, "ALC_EXT_DEDICATED"))
+    {
+        alGetError();
+        alGenAuxiliaryEffectSlots(1, &alGlob.centreSlot);
+        alGenAuxiliaryEffectSlots(1, &alGlob.lfeSlot);
+        alGenEffects(1, &alGlob.centreEffect);
+        alGenEffects(1, &alGlob.lfeEffect);
+        alGenFilters(1, &alGlob.feedFilter);
+        alEffecti(alGlob.centreEffect, AL_EFFECT_TYPE, AL_EFFECT_DEDICATED_DIALOGUE);
+        alEffecti(alGlob.lfeEffect, AL_EFFECT_TYPE, AL_EFFECT_DEDICATED_LOW_FREQUENCY_EFFECT);
+        alEffectf(alGlob.centreEffect, AL_DEDICATED_GAIN, 1.0f);
+        alEffectf(alGlob.lfeEffect, AL_DEDICATED_GAIN, 1.0f);
+        alAuxiliaryEffectSloti(alGlob.centreSlot, AL_EFFECTSLOT_EFFECT, alGlob.centreEffect);
+        alAuxiliaryEffectSloti(alGlob.lfeSlot, AL_EFFECTSLOT_EFFECT, alGlob.lfeEffect);
+        alFilteri(alGlob.feedFilter, AL_FILTER_TYPE, AL_FILTER_LOWPASS);
+        alGlob.centreLfeFeeds = alGetError() == AL_NO_ERROR;
+    }
+
+    Com_Printf(
+        CON_CHANNEL_SOUND,
+        "OpenAL output: %s, %i speakers%s; speaker maps %s; centre and LFE share %s\n",
+        outputModes ? SND_AlModeName(mode) : "not reported",
+        alGlob.speakers,
+        alGlob.isMultiChannel ? " (multichannel)" : "",
+        alGlob.directChannels ? "on" : "off (no AL_SOFT_direct_channels)",
+        alGlob.centreLfeFeeds ? "on" : (alGlob.isMultiChannel ? "off (no dedicated effects or sends)" : "off (not multichannel)"));
 }
 
 // Mirrors MSS_Init + MSS_open_digital_driver in snd_mss.cpp. Unlike Miles (which opens a
@@ -57,8 +165,33 @@ char MSS_Init()
         return 0;
     }
 
-    ALCint attrs[] = { ALC_FREQUENCY, hertz, 0 };
+    // The layout snd_outputConfiguration names, when this OpenAL takes a request
+    // (ALC_SOFT_output_mode); "Windows default" leaves it to the system as before. Three
+    // sends when EFX can: reverb, and the centre and LFE feeds of 3D sounds.
+    const kisak::speaker_mix::Layout layout = kisak::speaker_mix::LayoutForConfiguration(snd_outputConfiguration->current.integer);
+    const bool outputModes = alcIsExtensionPresent(alGlob.device, "ALC_SOFT_output_mode") != ALC_FALSE;
+    ALCint attrs[7];
+    int attrCount = 0;
+    attrs[attrCount++] = ALC_FREQUENCY;
+    attrs[attrCount++] = hertz;
+    if (outputModes && layout != kisak::speaker_mix::Layout::System)
+    {
+        attrs[attrCount++] = ALC_OUTPUT_MODE_SOFT;
+        attrs[attrCount++] = SND_AlOutputMode(layout);
+    }
+    if (alcIsExtensionPresent(alGlob.device, "ALC_EXT_EFX"))
+    {
+        attrs[attrCount++] = ALC_MAX_AUXILIARY_SENDS;
+        attrs[attrCount++] = 3;
+    }
+    attrs[attrCount] = 0;
     alGlob.context = alcCreateContext(alGlob.device, attrs);
+    if (!alGlob.context && attrCount > 2)
+    {
+        Com_PrintWarning(CON_CHANNEL_SOUND, "WARNING: OpenAL refused the output layout or the extra sends; trying without\n");
+        attrs[2] = 0;
+        alGlob.context = alcCreateContext(alGlob.device, attrs);
+    }
     if (!alGlob.context || !alcMakeContextCurrent(alGlob.context))
     {
         Com_PrintError(CON_CHANNEL_SOUND, "ERROR: Couldn't create OpenAL context\n");
@@ -91,6 +224,8 @@ char MSS_Init()
             refresh,
             version ? version : "?");
     }
+
+    SND_AlSetUpSpeakers(outputModes);
 
     // Distance falloff is computed entirely by SND_Attenuate's curve and baked directly
     // into AL_GAIN (see the Phase 4 playback functions); disable OpenAL's own automatic
@@ -125,9 +260,7 @@ char MSS_Init()
     g_snd.playback_rate = hertz + hertz / 2;
     if (g_snd.playback_rate >= 0xAC44)
         g_snd.playback_rate = 0x7FFFFFFF;
-    // KISAK_SOUND TODO (Phase 4): derive from snd_outputConfiguration once speaker-config
-    // mapping is ported; Miles derives this from its opened mss_spec[] channel count.
-    g_snd.playback_channels = 2;
+    g_snd.playback_channels = kisak::speaker_mix::PlaybackChannels(alGlob.speakers);
     g_snd.timescale = 1.0;
     return 1;
 }
@@ -207,6 +340,15 @@ void MSS_ShutdownCleanup()
         }
         alDeleteAuxiliaryEffectSlots(1, &alGlob.auxSlot);
         alDeleteEffects(1, &alGlob.reverbEffect);
+        if (alGlob.centreSlot)
+        {
+            // Sources first: a slot a source still feeds cannot be deleted.
+            alDeleteAuxiliaryEffectSlots(1, &alGlob.centreSlot);
+            alDeleteAuxiliaryEffectSlots(1, &alGlob.lfeSlot);
+            alDeleteEffects(1, &alGlob.centreEffect);
+            alDeleteEffects(1, &alGlob.lfeEffect);
+            alDeleteFilters(1, &alGlob.feedFilter);
+        }
 
         alcMakeContextCurrent(NULL);
         alcDestroyContext(alGlob.context);

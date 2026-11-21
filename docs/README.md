@@ -30,6 +30,8 @@ what is still missing. Build steps are in the
   client dvars by name, as in retail, except the settings this port added
   (all platforms)
 - [Options menu additions](options-menu.md): the Display and Controller pages, borderless fullscreen and ultrawide screens (all platforms)
+- [RmlUi menu front-end](rmlui-frontend.md): opt-in (`KISAK_RMLUI`), the base for new menus that work with mouse, controller and touch: the classic mode that draws the stock menus through RmlUi, and the graphics settings screen (Android first)
+- [KisakCOD's own bots](bots.md): fair, human-like multiplayer bots, how to turn them on, the navigation mesh and the `[BOT]` names
 
 ## Linux dedicated server
 

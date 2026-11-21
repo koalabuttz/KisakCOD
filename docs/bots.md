@@ -39,8 +39,9 @@ Every test client is named "[BOT] " and a name nobody on the server has
 (`src/bots/bot_names.h`), from David's list or from `bots/names.txt` in the
 home or base folder (one name to a line, 9 characters kept). When every name
 is taken, a repeat gets a number ("[BOT] Capy 2"). The tag is kept for bots:
-the server takes "[BOT]" out of a person's name however it is coloured, spaced
-or cased (`SV_KeepBotTagForBots`), so the name alone tells a bot from a person.
+the server takes "[BOT]" out of a person's name however it is coloured, spaced,
+cased, nested or padded (`SV_KeepBotTagForBots`, which looks at the whole
+name), so the name alone tells a bot from a person.
 Only the server decides who is a bot, so a modified client cannot pass as one.
 
 Set it when the game or server starts, for example on a dedicated server:

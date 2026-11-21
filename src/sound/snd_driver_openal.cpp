@@ -22,6 +22,8 @@
 #include <fstream>
 
 #include "snd_ima_adpcm.h"
+#include "snd_speaker_mix.h"
+#include <vector>
 #include "snd_stream_feed.h"
 
 #ifdef __vita__
@@ -192,6 +194,8 @@ struct AlDebugStats
     int alErrors;
     int printedErrors;   // errors printed in this report window (capped to keep the console readable)
     int maxUpdateGapMs;  // longest time between two sound updates in this window
+    int mapped;          // sounds mixed by their alias's speaker map (SND_SpeakerMixFor)
+    int shared;          // 3D sounds with a centre or LFE share on multichannel output
     int lastUpdateTime;
     int lastReportTime;
 };
@@ -272,6 +276,26 @@ static void SND_AlDebugNoteStart(const char *kind, int index, const char *aliasN
             startMsec);
 }
 
+// A sound mixed by its speaker map, or a 3D sound with a centre or LFE share: counted
+// for the summary, and named at snd_alDebug 2.
+static void SND_AlDebugNoteSpeakers(int index, const snd_alias_t *alias, bool mixed, float centre, float lfe)
+{
+    if (mixed)
+        ++g_alDebug.mapped;
+    if (centre > 0.0f || lfe > 0.0f)
+        ++g_alDebug.shared;
+    if (SND_AlDebug(2) && (mixed || centre > 0.0f || lfe > 0.0f))
+        Com_Printf(
+            CON_CHANNEL_SOUND,
+            "snd_al: speakers ch %i '%s': %s%s, centre %.2f, LFE %.2f\n",
+            index,
+            alias && alias->aliasName ? alias->aliasName : "<none>",
+            mixed ? "speaker map " : "panned",
+            mixed && alias->speakerMap->name ? alias->speakerMap->name : "",
+            centre,
+            lfe);
+}
+
 // Called once per sound update. Tracks the longest gap between updates (a gap longer than
 // a stream's queued audio starves it) and prints the summary line.
 static void SND_AlDebugFrame()
@@ -321,7 +345,8 @@ static void SND_AlDebugFrame()
         CON_CHANNEL_SOUND,
         "snd_al: last %.1f s: %i starts, %i cut while playing, %i stream underruns, %i OpenAL errors; "
         "stream chunks decoded: %u by their thread, %i by the main thread, %i late; "
-        "playing 2D %i/%i 3D %i/%i stream %i/%i; longest update gap %i ms\n",
+        "playing 2D %i/%i 3D %i/%i stream %i/%i; longest update gap %i ms; "
+        "%i by speaker map, %i with centre or LFE share\n",
         (now - g_alDebug.lastReportTime) / 1000.0f,
         g_alDebug.starts,
         g_alDebug.cuts,
@@ -336,7 +361,9 @@ static void SND_AlDebugFrame()
         counts[1],
         playing[2],
         counts[2],
-        g_alDebug.maxUpdateGapMs);
+        g_alDebug.maxUpdateGapMs,
+        g_alDebug.mapped,
+        g_alDebug.shared);
 
     memset(&g_alDebug, 0, sizeof(g_alDebug));
     g_alDebug.lastUpdateTime = now;
@@ -373,6 +400,44 @@ void SND_ReleaseChannelBuffer(int index)
 // SND_StartAlias2D/3DSample and SND_StartAliasStreamOnChannel call it before that point.
 void SND_ApplyReverbSend(int index, const snd_alias_t *alias);
 
+// ---- speaker maps (S1 of the port parity audit) --------------------------------------
+// Miles gives a 2D sound per-speaker levels from its alias's speaker map
+// (snd_driver.cpp, SND_ApplyChannelMap). OpenAL has no such levels, so a sound whose
+// alias names a speaker map is mixed by the map into a buffer in the output's layout
+// (stereo, or 5.1 on multichannel output) and played with AL_SOFT_direct_channels,
+// which puts each buffer channel on its speaker untouched (snd_speaker_mix.h). A sound
+// with the default map plays as before: OpenAL centres a mono sound and plays a stereo
+// one left and right. Without the extension, or a 5.1 buffer format on multichannel
+// output, every sound plays as before.
+
+// True and the mix in `matrix` when this alias's sound of `srcChannels` channels is to
+// be mixed by its speaker map.
+static bool SND_SpeakerMixFor(const snd_alias_t *alias, int srcChannels, kisak::speaker_mix::Matrix *matrix)
+{
+    if (!alGlob.directChannels || !alias || !alias->speakerMap || alias->speakerMap->isDefault)
+        return false;
+    if (srcChannels != 1 && srcChannels != 2)
+        return false;
+    const int outputs = alGlob.isMultiChannel ? kisak::speaker_mix::kMaxOutputs : 2;
+    if (outputs == kisak::speaker_mix::kMaxOutputs && !alGlob.surroundBuffers)
+        return false;
+    const MSSChannelMap *map = Com_GetSpeakerMap(alias->speakerMap, srcChannels);
+    return map && kisak::speaker_mix::FromChannelMap(*map, srcChannels, outputs, matrix);
+}
+
+static ALenum SND_SpeakerMixFormat(const kisak::speaker_mix::Matrix &matrix)
+{
+    return matrix.outputs == kisak::speaker_mix::kMaxOutputs ? AL_FORMAT_51CHN16 : AL_FORMAT_STEREO16;
+}
+
+// Plays a mixed sound's channels on their speakers, or any other sound as OpenAL places
+// it. Set at every start, since a source plays sounds of both kinds over time.
+static void SND_SetDirectChannels(ALuint source, bool mixed)
+{
+    if (alGlob.directChannels)
+        alSourcei(source, AL_DIRECT_CHANNELS_SOFT, mixed ? alGlob.directChannels : AL_FALSE);
+}
+
 struct AlStreamState
 {
     bool active;
@@ -400,6 +465,10 @@ struct AlStreamState
     // The source is to play as soon as a buffer is queued: the stream was told
     // to play while its first sound was still being decoded (AL_PlayStream).
     bool playWhenQueued;
+    // A 2D stream with a speaker map is mixed to the output's speakers chunk by chunk
+    // and played on them directly (SND_SpeakerMixFor).
+    bool mixed;
+    kisak::speaker_mix::Matrix matrix;
 };
 
 static const int AL_STREAM_BUFFER_COUNT = 4;
@@ -894,8 +963,18 @@ static bool SND_FillStreamBuffers(int index, bool restartIfStarved)
 
         ALuint buffer;
         alGenBuffers(1, &buffer);
-        ALenum format = (stream->channels == 2) ? AL_FORMAT_STEREO16 : AL_FORMAT_MONO16;
-        alBufferData(buffer, format, chunk.pcm, (ALsizei)(chunk.frames * stream->channels * sizeof(int16_t)), stream->sampleRate);
+        if (stream->mixed)
+        {
+            static int16_t mixedChunk[AL_STREAM_BUFFER_FRAMES * kisak::speaker_mix::kMaxOutputs];
+            kisak::speaker_mix::Apply(chunk.pcm, chunk.frames, stream->matrix, mixedChunk);
+            alBufferData(buffer, SND_SpeakerMixFormat(stream->matrix), mixedChunk,
+                (ALsizei)(chunk.frames * stream->matrix.outputs * sizeof(int16_t)), stream->sampleRate);
+        }
+        else
+        {
+            ALenum format = (stream->channels == 2) ? AL_FORMAT_STEREO16 : AL_FORMAT_MONO16;
+            alBufferData(buffer, format, chunk.pcm, (ALsizei)(chunk.frames * stream->channels * sizeof(int16_t)), stream->sampleRate);
+        }
         alSourceQueueBuffers(source, 1, &buffer);
         stream->framesQueued += chunk.frames;
         ++queued;
@@ -1048,9 +1127,52 @@ bool SND_IsStreamChannelFree(int index)
     return g_snd.chaninfo[index].alias0 == 0;
 }
 
-void SND_ApplyChannelMap(ALuint handle, const snd_alias_t *alias, int srcChannelCount)
+// A loaded sound mixed by a speaker map is at most this big (5.1 frames), about 47
+// seconds of 44.1 kHz; a longer one plays as recorded.
+static const uint32_t SND_MAX_MIXED_BYTES = 24u << 20;
+
+// Hands a loaded sound to `buffer` mixed by `matrix` (SND_SpeakerMixFor), decoding it
+// first when it is kept as IMA ADPCM. False, with the buffer left alone, when the sound
+// is too long or its data does not read; the caller then hands it over as it is.
+static bool SND_SetMixedBufferData(ALuint buffer, const MssSoundCOD4 *sound, const kisak::speaker_mix::Matrix &matrix)
 {
-    // KISAK_OPENAL TODO (Phase 4): per-speaker channel-level mapping. 
+    const _AILSOUNDINFO_COD4 *info = &sound->info;
+    const uint32_t channels = (uint32_t)info->channels;
+    if ((int)channels != matrix.inputs || !sound->data)
+        return false;
+    uint32_t frames = info->samples;
+    if (!frames || (uint64_t)frames * matrix.outputs * sizeof(int16_t) > SND_MAX_MIXED_BYTES)
+        return false;
+
+    std::vector<int16_t> decoded;
+    const int16_t *pcm;
+    if (info->format == SND_FORMAT_IMA_ADPCM)
+    {
+        const uint32_t blockBytes = info->block_size;
+        const uint32_t blockFrames = kisak::ima_adpcm::BlockFrames(blockBytes, channels);
+        if (!blockFrames)
+            return false;
+        decoded.resize((size_t)frames * channels);
+        uint32_t done = 0;
+        for (uint32_t offset = 0; offset + blockBytes <= info->data_len && done < frames; offset += blockBytes)
+            done += kisak::ima_adpcm::DecodeBlock(sound->data + offset, blockBytes, channels, decoded.data() + (size_t)done * channels, frames - done);
+        frames = done;
+        pcm = decoded.data();
+    }
+    else
+    {
+        const uint32_t stored = info->data_len / (channels * sizeof(int16_t));
+        if (stored < frames)
+            frames = stored;
+        pcm = (const int16_t *)sound->data;
+    }
+    if (!frames)
+        return false;
+
+    std::vector<int16_t> mixed((size_t)frames * matrix.outputs);
+    kisak::speaker_mix::Apply(pcm, frames, matrix, mixed.data());
+    alBufferData(buffer, SND_SpeakerMixFormat(matrix), mixed.data(), (ALsizei)(mixed.size() * sizeof(int16_t)), info->rate);
+    return true;
 }
 
 // Hands a loaded sound to an OpenAL buffer. SND_SetData leaves a sound as 16-bit PCM
@@ -1121,9 +1243,16 @@ int SND_StartAlias2DSample(SndStartAliasInfo *startAliasInfo, int *pChannel)
     SND_ReleaseChannelBuffer(index);
     ALuint buffer;
     alGenBuffers(1, &buffer);
-    SND_SetBufferData(buffer, sound);
+    // SND_ApplyChannelMap for OpenAL: a sound with a speaker map is mixed by it here.
+    kisak::speaker_mix::Matrix matrix;
+    const bool mixed = SND_SpeakerMixFor(startAliasInfo->alias0, sound->info.channels, &matrix)
+        && SND_SetMixedBufferData(buffer, sound, matrix);
+    if (!mixed)
+        SND_SetBufferData(buffer, sound);
     alGlob.channelBuffer[index] = buffer;
     alSourcei(source, AL_BUFFER, buffer);
+    SND_SetDirectChannels(source, mixed);
+    SND_AlDebugNoteSpeakers(index, startAliasInfo->alias0, mixed, 0.0f, 0.0f);
 
     MSS_ApplyEqFilter(source, entchannel);
 
@@ -1140,7 +1269,6 @@ int SND_StartAlias2DSample(SndStartAliasInfo *startAliasInfo, int *pChannel)
     if (g_snd.slaveLerp != 0.0 && !startAliasInfo->master && (startAliasInfo->alias0->flags & 4) != 0)
         realVolume = SND_GetLerpedSlavePercentage(startAliasInfo->alias0->slavePercentage) * realVolume;
 
-    SND_ApplyChannelMap(source, startAliasInfo->alias0, sound->info.channels);
     SND_Set2DChannelVolume(index, realVolume);
     alSourcei(source, AL_LOOPING, (startAliasInfo->alias0->flags & 1) != 0 ? AL_TRUE : AL_FALSE); // matches AIL_set_sample_loop_count's polarity above: flags bit 0 set == looping
     SND_ApplyReverbSend(index, startAliasInfo->alias0);
@@ -1199,9 +1327,53 @@ int SND_StartAlias2DSample(SndStartAliasInfo *startAliasInfo, int *pChannel)
     return playbackId;
 }
 
-void SND_Apply3DSpatializationTweaks(ALuint handle, const snd_alias_t *alias)
+// ---- centre and LFE share of 3D sounds (S3 of the port parity audit) -----------------
+// Miles, on multichannel output, turns every speaker of a 3D sound down by the alias's
+// centerPercentage and gives the centre and LFE speakers the alias's centerPercentage and
+// lfePercentage (snd_driver.cpp, SND_Apply3DSpatializationTweaks). Here the panned sound
+// keeps 1 - centerPercentage through the source's direct filter, and two sends feed
+// centerPercentage and lfePercentage of it straight to the centre and LFE speakers
+// (OpenAL Soft's dedicated dialogue and LFE effects, MSS_Init). All of it rides on
+// AL_GAIN, so the volume updates keep the shares. A sound without the shares, a 2D
+// sound and stereo output have none of it. One difference stays: OpenAL pans a sound in
+// front partly into the centre speaker, which Miles' levels would silence.
+// Sends 1 and 2; send 0 is the reverb (SND_ApplyReverbSend).
+// Returns the shares it applied.
+kisak::speaker_mix::CentreLfe SND_Apply3DSpatializationTweaks(ALuint handle, const snd_alias_t *alias)
 {
-    // KISAK_OPENAL TODO (Phase 4)
+    if (!alGlob.centreLfeFeeds)
+        return kisak::speaker_mix::CentreLfe{};
+    const kisak::speaker_mix::CentreLfe shares = alias
+        ? kisak::speaker_mix::CentreLfeShares(alias->centerPercentage, alias->lfePercentage, SND_IsMultiChannel())
+        : kisak::speaker_mix::CentreLfe{};
+
+    if (shares.direct < 1.0f)
+    {
+        alFilterf(alGlob.feedFilter, AL_LOWPASS_GAIN, shares.direct);
+        alFilterf(alGlob.feedFilter, AL_LOWPASS_GAINHF, 1.0f);
+        alSourcei(handle, AL_DIRECT_FILTER, alGlob.feedFilter);
+    }
+    else
+    {
+        alSourcei(handle, AL_DIRECT_FILTER, AL_FILTER_NULL);
+    }
+
+    const ALuint slots[2] = { alGlob.centreSlot, alGlob.lfeSlot };
+    const float gains[2] = { shares.centre, shares.lfe };
+    for (int feed = 0; feed < 2; ++feed)
+    {
+        if (gains[feed] > 0.0f)
+        {
+            alFilterf(alGlob.feedFilter, AL_LOWPASS_GAIN, gains[feed]);
+            alFilterf(alGlob.feedFilter, AL_LOWPASS_GAINHF, 1.0f);
+            alSource3i(handle, AL_AUXILIARY_SEND_FILTER, slots[feed], 1 + feed, alGlob.feedFilter);
+        }
+        else
+        {
+            alSource3i(handle, AL_AUXILIARY_SEND_FILTER, AL_EFFECTSLOT_NULL, 1 + feed, AL_FILTER_NULL);
+        }
+    }
+    return shares;
 }
 
 int SND_StartAlias3DSample(SndStartAliasInfo *startAliasInfo, int *pChannel)
@@ -1261,7 +1433,8 @@ int SND_StartAlias3DSample(SndStartAliasInfo *startAliasInfo, int *pChannel)
     if (g_snd.slaveLerp != 0.0 && !startAliasInfo->master && (startAliasInfo->alias0->flags & 4) != 0)
         realVolume = SND_GetLerpedSlavePercentage(startAliasInfo->alias0->slavePercentage) * realVolume;
 
-    SND_Apply3DSpatializationTweaks(source, startAliasInfo->alias0);
+    const kisak::speaker_mix::CentreLfe shares = SND_Apply3DSpatializationTweaks(source, startAliasInfo->alias0);
+    SND_AlDebugNoteSpeakers(index, startAliasInfo->alias0, false, shares.centre, shares.lfe);
     SND_Set3DChannelVolume(index, realVolume);
     // distMin/distMax feed OpenAL's automatic distance-attenuation model, which is disabled
     // (alDistanceModel(AL_NONE), see MSS_Init) since SND_Attenuate's curve above already
@@ -1521,6 +1694,14 @@ int SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int index)
     alSourcei(source, AL_LOOPING, AL_FALSE); // looping is handled by SND_FillStreamBuffers re-queuing, not AL_LOOPING
     SND_ApplyReverbSend(index, startAliasInfo->alias0);
 
+    // A 2D stream with a speaker map is mixed by it as it is read (SND_FillStreamBuffers);
+    // a 3D one gets the centre and LFE share instead, as Miles does.
+    const bool stream3D = SND_IsAliasChannel3D(entchannel);
+    stream->mixed = !stream3D && SND_SpeakerMixFor(startAliasInfo->alias0, srcChannelCount, &stream->matrix);
+    SND_SetDirectChannels(source, stream->mixed);
+    const kisak::speaker_mix::CentreLfe shares = SND_Apply3DSpatializationTweaks(source, stream3D ? startAliasInfo->alias0 : NULL);
+    SND_AlDebugNoteSpeakers(index, startAliasInfo->alias0, stream->mixed, shares.centre, shares.lfe);
+
     if (startAliasInfo->timeshift >= total_msec && total_msec != 0)
     {
         SND_ReleaseStreamChannel(index);
@@ -1598,10 +1779,6 @@ int SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int index)
         int listenerIndex = SND_GetListenerIndexNearestToOrigin(g_snd.chaninfo[index].org);
         SND_Set3DStreamPosition(index, listenerIndex, g_snd.chaninfo[index].org);
         realVolume = (float)SND_GetStream3DVolumeFallOff(index, listenerIndex) * realVolume;
-    }
-    else
-    {
-        SND_ApplyChannelMap(source, startAliasInfo->alias0, srcChannelCount);
     }
     SND_SetStreamChannelVolume(index, realVolume);
     SND_AlDebugNoteStart("stream", index, startAliasInfo->alias0->aliasName, baserate, srcChannelCount, pitch, realVolume, start_msec);

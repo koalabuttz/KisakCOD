@@ -55,7 +55,8 @@ def extract(source: str, pattern: str, name: str) -> str:
 
 def production_code() -> str:
     source = SOURCE.read_text(errors="replace")
-    parts = [extract(source, r"^struct AlStreamState\s*\{", "AlStreamState")]
+    parts = [extract(source, r"^static ALenum SND_SpeakerMixFormat\([^)]*\)\s*\{", "SND_SpeakerMixFormat"),
+             extract(source, r"^struct AlStreamState\s*\{", "AlStreamState")]
     for name in ("AL_STREAM_BUFFER_COUNT", "AL_STREAM_BUFFER_FRAMES", "AL_FIRST_STREAM_FEED", "AL_STREAM_FEEDS",
                  "g_streamStates", "g_streamFeeds", "g_streamThread"):
         line = re.search(rf"^static [^\n]*\b{name}\b[^\n]*;$", source, re.MULTILINE)
@@ -81,6 +82,7 @@ HARNESS = r"""
 #include <AL/al.h>
 #include <AL/alc.h>
 #include <AL/alext.h>
+#include <sound/snd_speaker_mix.h>
 #include <sound/snd_stream_feed.h>
 #include <chrono>
 #include <cmath>
