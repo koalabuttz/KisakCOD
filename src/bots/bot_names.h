@@ -67,7 +67,7 @@ inline bool WearsBotTag(const char *name)
 
 // A person's name with the bot tag taken out. Only a name that wears it is
 // changed: its colours go too, and a name that was nothing but the tag
-// becomes "Player".
+// becomes "Player". What is left never wears the tag.
 inline void RemoveBotTag(const char *name, char *out, size_t size)
 {
     if (!size)
@@ -91,36 +91,45 @@ inline void RemoveBotTag(const char *name, char *out, size_t size)
         bare[n++] = *p;
     }
     bare[n] = '\0';
+    // Until none is left: taking one out can close another around it
+    // ("[B[BOT]OT] Capy" would be left as "[BOT] Capy").
     char kept[64];
     size_t k = 0;
     static const char kTag[] = "[bot]";
-    for (size_t i = 0; bare[i];)
+    for (bool removed = true; removed;)
     {
-        // Does the tag start here?
-        size_t j = i;
-        size_t t = 0;
-        while (bare[j] && t < 5)
+        removed = false;
+        k = 0;
+        for (size_t i = 0; bare[i];)
         {
-            if (std::isspace(static_cast<unsigned char>(bare[j])) && t > 0)
+            // Does the tag start here?
+            size_t j = i;
+            size_t t = 0;
+            while (bare[j] && t < 5)
             {
+                if (std::isspace(static_cast<unsigned char>(bare[j])) && t > 0)
+                {
+                    ++j;
+                    continue;
+                }
+                if (std::tolower(static_cast<unsigned char>(bare[j])) != kTag[t])
+                    break;
                 ++j;
+                ++t;
+            }
+            if (t == 5)
+            {
+                i = j;
+                removed = true;
                 continue;
             }
-            if (std::tolower(static_cast<unsigned char>(bare[j])) != kTag[t])
-                break;
-            ++j;
-            ++t;
+            if (k + 1 < sizeof(kept))
+                kept[k++] = bare[i];
+            ++i;
         }
-        if (t == 5)
-        {
-            i = j;
-            continue;
-        }
-        if (k + 1 < sizeof(kept))
-            kept[k++] = bare[i];
-        ++i;
+        kept[k] = '\0';
+        std::memcpy(bare, kept, k + 1);
     }
-    kept[k] = '\0';
     // Trim, and fold runs of spaces.
     char *start = kept;
     while (*start == ' ')

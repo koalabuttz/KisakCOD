@@ -278,6 +278,21 @@ static void Names()
     Check(!std::strcmp(out, "Player"), "a name that was only the tag becomes Player");
     kb::RemoveBotTag("^1Real^7Name", out, sizeof(out));
     Check(!std::strcmp(out, "^1Real^7Name"), "a name without the tag keeps its colours");
+    // A tag around a tag: taking the inner one out must not leave the outer.
+    kb::RemoveBotTag("[B[BOT]OT] Capy", out, sizeof(out));
+    Check(!std::strcmp(out, "Capy"), "a tag closed around another goes with it: \"[B[BOT]OT] Capy\" becomes \"Capy\"");
+    bool nested = true;
+    for (const char *name : {"[[BOT]BOT] x", "[BOT[BOT]] x", "[BO[BOT]T]", "^1[^2[BOT]^3BOT] x", "[ [ b o t ] b o t ] y",
+                             "[[[BOT]BOT]BOT] q", "[B[B[BOT]OT]OT][BOT]", "[[bot]bot][[bot]bot]"})
+    {
+        kb::RemoveBotTag(name, out, sizeof(out));
+        if (kb::WearsBotTag(out) || !out[0])
+        {
+            std::printf("  \"%s\" is left as \"%s\"\n", name, out);
+            nested = false;
+        }
+    }
+    Check(nested, "and so does every nesting: what is left never wears the tag");
 
     bool fits = true;
     for (int i = 0; i < kb::kBotNameCount; ++i)
