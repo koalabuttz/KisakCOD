@@ -195,7 +195,6 @@ client src/gfx_d3d/r_outdoor.cpp
 client src/gfx_d3d/r_pixelcost_load_obj.cpp
 client src/gfx_d3d/r_pretess.cpp
 client src/gfx_d3d/r_primarylights.cpp
-client src/gfx_d3d/r_reflection_probe.cpp
 client src/gfx_d3d/r_reflection_probe_load_obj.cpp
 client src/gfx_d3d/r_rendercmds.cpp
 client src/gfx_d3d/r_shadowcookie.cpp
