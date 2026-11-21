@@ -26,6 +26,18 @@ constexpr const char *kBotNames[] = {
 };
 constexpr int kBotNameCount = static_cast<int>(sizeof(kBotNames) / sizeof(kBotNames[0]));
 
+// `text` into `out`, cut to fit.
+inline void CopyName(const char *text, char *out, size_t size)
+{
+    if (!size)
+        return;
+    size_t length = std::strlen(text);
+    if (length > size - 1)
+        length = size - 1;
+    std::memcpy(out, text, length);
+    out[length] = '\0';
+}
+
 // `name` without colour codes (^ and a character) or spaces, lower case.
 inline void PlainName(const char *name, char *out, size_t size)
 {
@@ -55,14 +67,14 @@ inline bool WearsBotTag(const char *name)
 
 // A person's name with the bot tag taken out. Only a name that wears it is
 // changed: its colours go too, and a name that was nothing but the tag
-// becomes "Player".
+// becomes "Player". What is left never wears the tag.
 inline void RemoveBotTag(const char *name, char *out, size_t size)
 {
     if (!size)
         return;
     if (!WearsBotTag(name))
     {
-        std::snprintf(out, size, "%s", name);
+        CopyName(name, out, size);
         return;
     }
     // Without colours; then every "[", "b", "o", "t", "]" run that spells
@@ -79,36 +91,45 @@ inline void RemoveBotTag(const char *name, char *out, size_t size)
         bare[n++] = *p;
     }
     bare[n] = '\0';
+    // Until none is left: taking one out can close another around it
+    // ("[B[BOT]OT] Capy" would be left as "[BOT] Capy").
     char kept[64];
     size_t k = 0;
     static const char kTag[] = "[bot]";
-    for (size_t i = 0; bare[i];)
+    for (bool removed = true; removed;)
     {
-        // Does the tag start here?
-        size_t j = i;
-        size_t t = 0;
-        while (bare[j] && t < 5)
+        removed = false;
+        k = 0;
+        for (size_t i = 0; bare[i];)
         {
-            if (std::isspace(static_cast<unsigned char>(bare[j])) && t > 0)
+            // Does the tag start here?
+            size_t j = i;
+            size_t t = 0;
+            while (bare[j] && t < 5)
             {
+                if (std::isspace(static_cast<unsigned char>(bare[j])) && t > 0)
+                {
+                    ++j;
+                    continue;
+                }
+                if (std::tolower(static_cast<unsigned char>(bare[j])) != kTag[t])
+                    break;
                 ++j;
+                ++t;
+            }
+            if (t == 5)
+            {
+                i = j;
+                removed = true;
                 continue;
             }
-            if (std::tolower(static_cast<unsigned char>(bare[j])) != kTag[t])
-                break;
-            ++j;
-            ++t;
+            if (k + 1 < sizeof(kept))
+                kept[k++] = bare[i];
+            ++i;
         }
-        if (t == 5)
-        {
-            i = j;
-            continue;
-        }
-        if (k + 1 < sizeof(kept))
-            kept[k++] = bare[i];
-        ++i;
+        kept[k] = '\0';
+        std::memcpy(bare, kept, k + 1);
     }
-    kept[k] = '\0';
     // Trim, and fold runs of spaces.
     char *start = kept;
     while (*start == ' ')
@@ -123,6 +144,19 @@ inline void RemoveBotTag(const char *name, char *out, size_t size)
     out[o] = '\0';
     if (o == 0)
         std::snprintf(out, size, "Player");
+}
+
+// The name the server keeps for a person. `name` is the whole "name" value of
+// the userinfo, not its start: the game shows the first 15 characters that
+// are not colour codes or leading spaces, however far into the value they
+// are, so 64 colour codes and then "[BOT] Capy" shows as a bot's name.
+// False if the name stays as it is; else `out` gets it without the tag.
+inline bool PersonNameWithoutBotTag(const char *name, char *out, size_t size)
+{
+    if (!WearsBotTag(name))
+        return false;
+    RemoveBotTag(name, out, size);
+    return true;
 }
 
 // A bot's name: "[BOT] " and a name from `names` that `taken` says no one
@@ -173,7 +207,7 @@ inline void PickBotName(const char *const *names,
             }
             if (!taken || !taken(candidate, context))
             {
-                std::snprintf(out, size, "%s", candidate);
+                CopyName(candidate, out, size);
                 return;
             }
         }

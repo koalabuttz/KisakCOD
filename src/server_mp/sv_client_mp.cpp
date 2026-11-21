@@ -1662,13 +1662,13 @@ void SV_KeepBotTagForBots(client_t *cl)
 {
     if (cl->header.netchan.remoteAddress.type == NA_BOT)
         return;
-    char name[64];
+    // The whole name, however long: what the game shows of it can start past
+    // any shorter copy (bot_names.h, PersonNameWithoutBotTag).
+    char name[sizeof(cl->userinfo)];
     I_strncpyz(name, Info_ValueForKey(cl->userinfo, "name"), sizeof(name));
-    if (!kisak::bots::WearsBotTag(name))
-        return;
     char kept[64];
-    kisak::bots::RemoveBotTag(name, kept, sizeof(kept));
-    Info_SetValueForKey(cl->userinfo, "name", kept);
+    if (kisak::bots::PersonNameWithoutBotTag(name, kept, sizeof(kept)))
+        Info_SetValueForKey(cl->userinfo, "name", kept);
 }
 
 void SV_UserinfoChanged(client_t *cl)
