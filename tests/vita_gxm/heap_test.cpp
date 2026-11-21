@@ -110,6 +110,46 @@ void Edges()
     EXPECT(z == 0 && zero.SizeOf(z) == 1);
 }
 
+void TopDown()
+{
+    // Pieces asked for from the top go at the top end of the highest range
+    // that fits, aligned down; the bottom stays for the others.
+    Heap heap(4096);
+    EXPECT(heap.Allocate(1000, 256, true) == 3072); // 4096 - 1008 = 3088, down to 3072
+    EXPECT(heap.Allocate(100, 16) == 0);
+    EXPECT(heap.Allocate(512, 16, true) == 2560);
+    // The first piece spans 1008 bytes from 3072, leaving [4080, 4096).
+    EXPECT(heap.FreeRanges() == 2); // [112, 2560) and [4080, 4096)
+    EXPECT(heap.LargestFree() == 2448);
+    // The highest range that fits: [4080, 4096) is too small.
+    EXPECT(heap.Allocate(1000, 16, true) == 1552); // 2560 - 1008
+    EXPECT(heap.CheckConsistent());
+    const std::vector<uint32_t> ranges = heap.LargestFreeRanges(4);
+    EXPECT(ranges.size() == 2 && ranges[0] == 1440 && ranges[1] == 16); // [112, 1552), [4080, 4096)
+    EXPECT(heap.Allocate(1441, 16, true) == Heap::kNoSpace);
+    EXPECT(heap.Allocate(1440, 16, true) == 112);
+    EXPECT(heap.LargestFree() == 16);
+    EXPECT(heap.CheckConsistent());
+    // Alignment that does not fit inside the range moves on to a lower one.
+    Heap aligned(8192);
+    EXPECT(aligned.Allocate(4096, 16) == 0);
+    EXPECT(aligned.Allocate(16, 16) == 4096);
+    // Free: [4112, 8192). The highest 4096-aligned offset with 64 bytes
+    // before 8192 is 4096, below the range's start: no room.
+    EXPECT(aligned.Allocate(64, 4096, true) == Heap::kNoSpace);
+    EXPECT(aligned.Allocate(64, 1024, true) == 7168);
+    EXPECT(aligned.CheckConsistent());
+    // Several ranges, largest first, cut to the count.
+    Heap many(1024);
+    uint32_t pieces[8];
+    for (uint32_t &piece : pieces)
+        piece = many.Allocate(128, 16);
+    EXPECT(many.Free(pieces[1]) && many.Free(pieces[3]) && many.Free(pieces[4]) && many.Free(pieces[6]));
+    const std::vector<uint32_t> two = many.LargestFreeRanges(2);
+    EXPECT(two.size() == 2 && two[0] == 256 && two[1] == 128);
+    EXPECT(many.LargestFreeRanges(10).size() == 3);
+}
+
 void Stress()
 {
     // Random allocations and frees against an independent model: no two live
@@ -130,7 +170,7 @@ void Stress()
         {
             const uint32_t bytes = 1 + random() % (random() % 8 ? 4096 : 262144);
             const uint32_t align = 1u << (random() % 13);
-            const uint32_t offset = heap.Allocate(bytes, align);
+            const uint32_t offset = heap.Allocate(bytes, align, random() % 4 == 0);
             if (offset == Heap::kNoSpace)
             {
                 ++failures;
@@ -169,6 +209,7 @@ int main()
     Alignment();
     Merging();
     Edges();
+    TopDown();
     Stress();
     if (g_failures)
     {

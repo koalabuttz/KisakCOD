@@ -29,6 +29,9 @@
 #include "r_utils.h"
 #include "r_draw_method.h"
 #include "r_model.h"
+#if defined(__vita__)
+#include <vita/vita_platform.h> // Vita_LogMemoryAtError, Vita_Exit
+#endif
 
 #ifdef KISAK_MP
 #include <game_mp/g_public_mp.h>
@@ -375,6 +378,15 @@ void Sys_DirectXFatalError()
     ActiveWindow = GetActiveWindow();
     MessageBoxA(ActiveWindow, v1, v2, 0x10u);
     ShellExecuteA(0, "open", "Docs\\TechHelp\\Tech Help\\Information\\DirectX.htm", 0, 0, 3);
+#if defined(__vita__)
+    // This error comes on any thread: the database thread when a map's
+    // buffer finds no GPU memory (console crash of 2026-11-15, mp_backlot).
+    // exit() there freed what a render worker was still waiting on, and the
+    // worker faulted (C2-12828-1) before the process ended. Vita_Exit ends
+    // at once, and goes on with the next start of a run list.
+    Vita_LogMemoryAtError();
+    Vita_Exit(1);
+#endif
     exit(-1);
 }
 

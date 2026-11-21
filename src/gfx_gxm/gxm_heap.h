@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <map>
 #include <unordered_map>
+#include <vector>
 
 namespace gfx_gxm
 {
@@ -32,7 +33,11 @@ public:
     // The offset of size bytes aligned to align (a power of two), or kNoSpace.
     // The lowest free range that fits wins. Bytes skipped for alignment stay
     // free. A size of 0 is taken as 1.
-    uint32_t Allocate(uint32_t size, uint32_t align);
+    // fromTop: the highest free range that fits wins instead, and the piece
+    // goes at its top end. The pools give large pieces this way, so that
+    // they and the small ones grow towards each other from the two ends and
+    // the free space between stays in one piece (gxm_memory.h).
+    uint32_t Allocate(uint32_t size, uint32_t align, bool fromTop = false);
     // Frees an offset Allocate returned; false (and nothing changes) for any
     // other offset.
     bool Free(uint32_t offset);
@@ -43,6 +48,9 @@ public:
     uint32_t Used() const { return used_; }
     uint32_t Allocations() const { return static_cast<uint32_t>(allocations_.size()); }
     uint32_t LargestFree() const;
+    // The sizes of the largest free ranges, largest first, up to count of
+    // them; for the log when a piece finds no room.
+    std::vector<uint32_t> LargestFreeRanges(size_t count) const;
     uint32_t FreeRanges() const { return static_cast<uint32_t>(free_.size()); }
     // The most bytes ever in use at once.
     uint32_t Peak() const { return peak_; }
