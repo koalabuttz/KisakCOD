@@ -146,6 +146,19 @@ inline void RemoveBotTag(const char *name, char *out, size_t size)
         std::snprintf(out, size, "Player");
 }
 
+// The name the server keeps for a person. `name` is the whole "name" value of
+// the userinfo, not its start: the game shows the first 15 characters that
+// are not colour codes or leading spaces, however far into the value they
+// are, so 64 colour codes and then "[BOT] Capy" shows as a bot's name.
+// False if the name stays as it is; else `out` gets it without the tag.
+inline bool PersonNameWithoutBotTag(const char *name, char *out, size_t size)
+{
+    if (!WearsBotTag(name))
+        return false;
+    RemoveBotTag(name, out, size);
+    return true;
+}
+
 // A bot's name: "[BOT] " and a name from `names` that `taken` says no one
 // has, starting at `start`; when every one is taken, the first with a
 // number ("[BOT] Capy 2", "[BOT] Sunshine2"), shortened to fit.

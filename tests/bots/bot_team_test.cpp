@@ -262,6 +262,78 @@ static bool TakenIn(const char *name, void *context)
     return false;
 }
 
+// What the game shows of a name: ClientCleanName
+// (src/game_mp/g_client_mp.cpp) into the 16 bytes of a player's name. Colour
+// codes and leading spaces go, a run of spaces keeps three, 15 characters fit.
+static std::string Shown(const char *in)
+{
+    std::string out;
+    int spaces = 0;
+    for (char c = *in++; c; c = *in++)
+    {
+        if (out.empty() && c == ' ')
+            continue;
+        if (c == '^')
+        {
+            if (*in)
+                ++in;
+            continue;
+        }
+        if (c == ' ' && ++spaces > 3)
+            continue;
+        if (c != ' ')
+            spaces = 0;
+        if (out.size() >= 15)
+            break;
+        out.push_back(c);
+    }
+    return out.empty() ? "UnnamedPlayer" : out;
+}
+
+// What a person who asks for `name` is shown as: the server's step
+// (SV_KeepBotTagForBots, with the whole name), then the game's.
+static std::string PersonShown(const std::string &name)
+{
+    char kept[64];
+    if (kb::PersonNameWithoutBotTag(name.c_str(), kept, sizeof(kept)))
+        return Shown(kept);
+    return Shown(name.c_str());
+}
+
+// Every name made of up to `left` more pieces, alone and after each padding
+// the game does not show: none may show with the tag.
+static void EveryName(std::string &name, int left, long *names, long *withTag, std::string *first)
+{
+    static const char *const kPieces[] = {"[", "B", "o", "T", "]", " ", "^1", "^", "x", "[BOT]"};
+    static const std::string kSpaces(66, ' ');
+    static const std::string kCodes = [] {
+        std::string codes;
+        for (int i = 0; i < 33; ++i)
+            codes += "^1";
+        return codes;
+    }();
+    ++*names;
+    for (const std::string *before : {static_cast<const std::string *>(nullptr), &kSpaces, &kCodes})
+    {
+        const std::string whole = before ? *before + name : name;
+        if (kb::WearsBotTag(PersonShown(whole).c_str()))
+        {
+            if (!*withTag)
+                *first = whole;
+            ++*withTag;
+        }
+    }
+    if (!left)
+        return;
+    for (const char *piece : kPieces)
+    {
+        const size_t length = name.size();
+        name += piece;
+        EveryName(name, left - 1, names, withTag, first);
+        name.resize(length);
+    }
+}
+
 static void Names()
 {
     std::printf("\n== names ==\n");
@@ -293,6 +365,31 @@ static void Names()
         }
     }
     Check(nested, "and so does every nesting: what is left never wears the tag");
+
+    // The server looks at the whole name: the game shows what comes after
+    // any number of colour codes or leading spaces.
+    std::string codes;
+    for (int i = 0; i < 33; ++i)
+        codes += "^1";
+    Check(Shown((codes + "[BOT] Capy").c_str()) == "[BOT] Capy" && Shown("   [BOT] Capy") == "[BOT] Capy"
+              && Shown("^1Real^7Name") == "RealName" && Shown("a      b") == "a   b"
+              && Shown("0123456789abcdefgh") == "0123456789abcde" && Shown("^") == "UnnamedPlayer",
+          "the game shows a name without colour codes, leading spaces and long gaps, 15 characters of it");
+    Check(PersonShown(codes + "[BOT] Capy") == "Capy", "66 characters of colour codes before \"[BOT] Capy\" do not hide the tag");
+    Check(PersonShown(std::string(70, ' ') + "[BOT] Capy") == "Player" && PersonShown("x" + std::string(70, ' ') + "[BOT]") == "x",
+          "nor do 70 spaces before it or inside the name");
+    Check(PersonShown("Capy") == "Capy" && PersonShown("^1Real^7Name") == "RealName" && PersonShown("[B0T] x") == "[B0T] x",
+          "a name without the tag is shown as before");
+    long names = 0;
+    long withTag = 0;
+    std::string first;
+    std::string every;
+    EveryName(every, 6, &names, &withTag, &first);
+    if (withTag)
+        std::printf("  %ld names show with the tag, the first \"%s\" as \"%s\"\n", withTag, first.c_str(),
+                    PersonShown(first).c_str());
+    std::printf("INFO: %ld names of up to 6 pieces, each also after 66 spaces and after 33 colour codes\n", names);
+    Check(names > 1000000 && !withTag, "no name of brackets, letters, spaces, colour codes and tags shows with the tag");
 
     bool fits = true;
     for (int i = 0; i < kb::kBotNameCount; ++i)
