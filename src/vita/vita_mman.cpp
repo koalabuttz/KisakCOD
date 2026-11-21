@@ -156,3 +156,16 @@ extern "C" size_t Vita_MmapBytes()
     pthread_mutex_unlock(&s_lock);
     return total;
 }
+
+extern "C" int Vita_MmapBlockOf(const void *address, size_t length, void **base, size_t *blockLength)
+{
+    pthread_mutex_lock(&s_lock);
+    const Mapping *mapping = FindMapping(address, length);
+    if (mapping)
+    {
+        *base = mapping->base;
+        *blockLength = mapping->length;
+    }
+    pthread_mutex_unlock(&s_lock);
+    return mapping != nullptr;
+}

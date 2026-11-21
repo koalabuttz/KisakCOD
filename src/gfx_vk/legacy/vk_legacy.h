@@ -505,6 +505,19 @@ void DestroyVertexBuffer(Device *device, VertexBuffer *buffer);
 IndexBuffer *CreateIndexBuffer(Device *device, uint32_t bytes, uint32_t usage, d3d::Format format, d3d::Pool pool,
                                const char *name);
 void DestroyIndexBuffer(Device *device, IndexBuffer *buffer);
+#if defined(KISAK_GFX_GXM)
+// A static buffer over memory the caller keeps for as long as the buffer
+// lives (a fast file's own copy of its vertices or indices), which the GPU
+// then reads in place: no GPU memory of its own. Its Unlock makes what the
+// CPU wrote there visible to the GPU, and destroying it waits for the GPU if
+// a draw read it, so the caller may reuse the memory at once. Null when
+// that memory cannot be given to the GPU; the caller then makes an ordinary
+// buffer.
+VertexBuffer *CreateVertexBufferOver(Device *device, void *data, uint32_t bytes, uint32_t usage, d3d::Pool pool,
+                                     const char *name);
+IndexBuffer *CreateIndexBufferOver(Device *device, void *data, uint32_t bytes, uint32_t usage, d3d::Format format,
+                                   d3d::Pool pool, const char *name);
+#endif
 // D3D9's lock semantics: DISCARD hands out fresh memory for a dynamic buffer
 // the GPU may still read; NOOVERWRITE promises not to touch what it reads;
 // neither keeps the contents. bytes 0: to the end.

@@ -31,9 +31,11 @@
 #include <gfx_gxm/gxm_program_cache.h>
 #include <gfx_gxm/shader/gxm_cg_translate.h>
 
+#include <vita/vita_mman.h>     // Vita_MmapBlockOf
 #include <vita/vita_platform.h> // Vita_StatsGeneration
 
 #include <psp2/gxm.h>
+#include <psp2/kernel/dmac.h>
 #include <psp2/kernel/processmgr.h>
 #include <psp2/kernel/sysmem.h>
 
@@ -133,6 +135,12 @@ namespace
 {
 std::atomic<uint32_t> g_useBytes[2][static_cast<int>(MemoryUse::Count)];
 std::atomic<uint32_t> g_useCount[2][static_cast<int>(MemoryUse::Count)];
+// Static buffers the GPU reads where the fast file holds them
+// (CreateVertexBufferOver): bytes and count, vertices [0] and indices [1].
+// A file named no-buffers-in-place beside the compiled programs gives every
+// buffer its own GPU memory, as before.
+std::atomic<uint32_t> g_inPlaceBytes[2], g_inPlaceCount[2];
+bool g_buffersInPlace = true;
 // Pieces this large are logged one by one as they are made, up to a count.
 constexpr uint32_t kLoggedPieceBytes = 1u << 20;
 uint32_t g_loggedPieces = 0;
@@ -211,6 +219,15 @@ std::string DescribeMemoryUse()
                       cdram / 1048576.0, main / 1048576.0, pieces);
         out += part;
     }
+    for (int i = 0; i < 2; ++i)
+    {
+        if (!g_inPlaceCount[i])
+            continue;
+        char part[96];
+        std::snprintf(part, sizeof(part), " %s in place %.1f (%u);", i ? "static indices" : "static vertices",
+                      g_inPlaceBytes[i] / 1048576.0, unsigned(g_inPlaceCount[i]));
+        out += part;
+    }
     return out;
 }
 
@@ -286,7 +303,7 @@ void FreeGpuMemory(gxm::MemoryKind kind, void *data, MemoryUse use, uint32_t byt
 
 void FreeMemory(Memory &memory)
 {
-    if (memory.gpu)
+    if (memory.gpu && !memory.external)
         FreeGpuMemory(memory.kind, memory.data, memory.use, memory.bytes);
     memory = Memory{};
 }
@@ -629,6 +646,14 @@ Device *CreateDevice(Core *core, const DeviceDesc &desc, std::string &error)
         Log(*device, "diag: %s is there: %s of sceGxm's ring buffers are twice their default size",
             all ? "big-gxm-rings" : "double-gxm-rings",
             all ? "all three" : "the draw calls' and the fragment constants'");
+    }
+    // Static vertices and indices are read where their zone holds them
+    // (CreateVertexBufferOver); a file named no-buffers-in-place gives them
+    // GPU memory of their own, as before, for comparing on a console.
+    if (gxm::ProgramCacheMarker("no-buffers-in-place"))
+    {
+        g_buffersInPlace = false;
+        Log(*device, "diag: no-buffers-in-place is there: every static buffer gets GPU memory of its own");
     }
     // The main pool is memory the CPU does not cache, as Sony's samples have
     // it: the GPU then reads what the CPU wrote with nothing to flush. But
@@ -1079,14 +1104,118 @@ void *LockBuffer(Device *device, GpuBuffer *buffer, uint32_t offset, uint32_t by
         return nullptr;
     // DISCARD on a buffer a draw read: fresh memory, so the GPU keeps what
     // it reads. NOOVERWRITE and plain locks write in place.
-    if ((flags & d3d::LOCK_DISCARD) && buffer->drawn && buffer->memory.gpu)
+    if ((flags & d3d::LOCK_DISCARD) && buffer->drawn && buffer->memory.gpu && !buffer->memory.external)
         Rename(*device, *buffer);
     buffer->locked = true;
     return buffer->memory.data + offset;
 }
 
+// The memory blocks given to the GPU for buffers read in place. A block is
+// given once and kept: the zone arena, the only memory that holds them, lives
+// as long as the program.
+struct GpuMappedBlock
+{
+    uint8_t *base;
+    size_t length;
+};
+std::vector<GpuMappedBlock> g_gpuMappedBlocks;
+
+bool GiveToGpu(Device &device, void *data, uint32_t bytes)
+{
+    void *base = nullptr;
+    size_t length = 0;
+    if (!Vita_MmapBlockOf(data, bytes, &base, &length))
+        return false;
+    for (const GpuMappedBlock &block : g_gpuMappedBlocks)
+        if (block.base == base)
+            return true;
+    const int result = sceGxmMapMemory(base, length, SCE_GXM_MEMORY_ATTRIB_READ);
+    Log(device, "gpu reads in place: %.1f MB of main memory at %p given to the GPU (0x%08x)", length / 1048576.0,
+        base, static_cast<unsigned>(result));
+    if (result < 0)
+        return false;
+    g_gpuMappedBlocks.push_back({static_cast<uint8_t *>(base), length});
+    return true;
+}
+
+// What the CPU wrote to memory the GPU reads in place may still sit in its
+// caches, and the GPU reads memory. User code cannot clean the caches, but a
+// DMA copy must read its source from memory, so the kernel cleans that range
+// first: a copy into a small scratch block, a piece at a time, cleans it all.
+void MakeVisibleToGpu(Device &device, const uint8_t *data, uint32_t bytes)
+{
+    static uint8_t scratch[64 * 1024] __attribute__((aligned(64)));
+    const uint64_t start = Micros();
+    int result = 0;
+    for (uint32_t done = 0; done < bytes && result >= 0;)
+    {
+        const uint32_t piece = std::min<uint32_t>(bytes - done, sizeof(scratch));
+        result = sceDmacMemcpy(scratch, data + done, piece);
+        done += piece;
+    }
+    if (result < 0 || bytes >= kLoggedPieceBytes)
+        Log(device, "gpu reads in place: %u KB cleaned out of the CPU's caches in %.1f ms (0x%08x)", bytes >> 10,
+            (Micros() - start) / 1000.0, static_cast<unsigned>(result));
+}
+
+template <class T>
+T *CreateBufferOver(Device *device, void *data, uint32_t bytes, uint32_t usage, d3d::Pool pool, bool vertices,
+                    const char *name)
+{
+    // Static buffers only: a dynamic one is rewritten while the GPU reads it.
+    if (!device || !data || !bytes || !g_buffersInPlace || pool != d3d::POOL_DEFAULT ||
+        (usage & d3d::USAGE_DYNAMIC) || (reinterpret_cast<uintptr_t>(data) & 3))
+        return nullptr;
+    if (!GiveToGpu(*device, data, bytes))
+        return nullptr;
+    std::unique_ptr<T> buffer(new T);
+    buffer->size = bytes;
+    buffer->usage = usage;
+    buffer->pool = pool;
+    buffer->name = name ? name : "";
+    Memory &memory = buffer->memory;
+    memory.data = static_cast<uint8_t *>(data);
+    memory.kind = gxm::MemoryKind::Main;
+    memory.gpu = true;
+    memory.external = true;
+    memory.use = vertices ? MemoryUse::VertexStatic : MemoryUse::IndexStatic;
+    const int i = vertices ? 0 : 1;
+    g_inPlaceBytes[i] += bytes;
+    ++g_inPlaceCount[i];
+    if (bytes >= kLoggedPieceBytes && g_loggedPieces < kLoggedPieces)
+    {
+        ++g_loggedPieces;
+        Log(*device, "gpu memory piece %u: %.1f MB of %s read in place, no GPU memory of its own", g_loggedPieces,
+            bytes / 1048576.0, MemoryUseName(memory.use));
+    }
+    ++device->live;
+    return buffer.release();
+}
+
+void UnlockBuffer(Device *device, GpuBuffer *buffer)
+{
+    if (!buffer)
+        return;
+    if (buffer->locked && buffer->memory.external && device)
+        MakeVisibleToGpu(*device, buffer->memory.data, buffer->size);
+    buffer->locked = false;
+}
+
 void DestroyBuffer(Device *device, GpuBuffer *buffer)
 {
+    if (buffer->memory.external)
+    {
+        // The caller frees or reuses the memory as soon as this returns (a
+        // zone's memory at a map change): the GPU must be done reading it.
+        if (buffer->drawn)
+            FinishGpu(*device);
+        const int i = buffer->memory.use == MemoryUse::IndexStatic ? 1 : 0;
+        g_inPlaceBytes[i] -= buffer->size;
+        --g_inPlaceCount[i];
+        buffer->memory = Memory{};
+        --device->live;
+        return;
+    }
     RetireCopies(*device, *buffer);
     Retire(*device, buffer->memory);
     --device->live;
@@ -1096,6 +1225,21 @@ void DestroyBuffer(Device *device, GpuBuffer *buffer)
 VertexBuffer *CreateVertexBuffer(Device *device, uint32_t bytes, uint32_t usage, d3d::Pool pool, const char *name)
 {
     return CreateBuffer<VertexBuffer>(device, bytes, usage, pool, true, name);
+}
+
+VertexBuffer *CreateVertexBufferOver(Device *device, void *data, uint32_t bytes, uint32_t usage, d3d::Pool pool,
+                                     const char *name)
+{
+    return CreateBufferOver<VertexBuffer>(device, data, bytes, usage, pool, true, name);
+}
+
+IndexBuffer *CreateIndexBufferOver(Device *device, void *data, uint32_t bytes, uint32_t usage, d3d::Format format,
+                                   d3d::Pool pool, const char *name)
+{
+    IndexBuffer *buffer = CreateBufferOver<IndexBuffer>(device, data, bytes, usage, pool, false, name);
+    if (buffer)
+        buffer->indexFormat = format;
+    return buffer;
 }
 
 void DestroyVertexBuffer(Device *device, VertexBuffer *buffer)
@@ -1133,10 +1277,9 @@ void *Lock(Device *device, VertexBuffer *buffer, uint32_t offset, uint32_t bytes
     return LockBuffer(device, buffer, offset, bytes, flags);
 }
 
-void Unlock(Device *, VertexBuffer *buffer)
+void Unlock(Device *device, VertexBuffer *buffer)
 {
-    if (buffer)
-        buffer->locked = false;
+    UnlockBuffer(device, buffer);
 }
 
 void *Lock(Device *device, IndexBuffer *buffer, uint32_t offset, uint32_t bytes, uint32_t flags)
@@ -1144,10 +1287,9 @@ void *Lock(Device *device, IndexBuffer *buffer, uint32_t offset, uint32_t bytes,
     return LockBuffer(device, buffer, offset, bytes, flags);
 }
 
-void Unlock(Device *, IndexBuffer *buffer)
+void Unlock(Device *device, IndexBuffer *buffer)
 {
-    if (buffer)
-        buffer->locked = false;
+    UnlockBuffer(device, buffer);
 }
 
 // ---- Shaders and declarations -------------------------------------------------------------

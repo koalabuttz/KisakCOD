@@ -54,6 +54,11 @@ int madvise(void *address, size_t length, int advice);
 // Number of live mappings and their total size, for diagnostics.
 unsigned int Vita_MmapCount();
 size_t Vita_MmapBytes();
+// The mapping that holds [address, address + length): its block's start and
+// length, for giving the block to the GPU (the GXM back end reads a fast
+// file's vertices where the zone arena holds them). 0 when no mapping holds
+// the whole range.
+int Vita_MmapBlockOf(const void *address, size_t length, void **base, size_t *blockLength);
 
 #ifdef __cplusplus
 }

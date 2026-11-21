@@ -825,10 +825,25 @@ HRESULT STDMETHODCALLTYPE Device::CreateVertexBuffer(UINT length, DWORD usage, D
     if (!buffer)
         return D3DERR_INVALIDCALL;
     *buffer = nullptr;
-    if (shared)
-        return Unsupported("shared resource handles");
     if (!length)
         return D3DERR_INVALIDCALL;
+#if defined(KISAK_GFX_GXM)
+    // The Vita: *shared names memory the caller keeps, which the GPU reads in
+    // place (lg::CreateVertexBufferOver). A refusal is D3DERR_NOTAVAILABLE,
+    // and the caller then makes an ordinary buffer.
+    if (shared)
+    {
+        lg::VertexBuffer *over = lg::CreateVertexBufferOver(legacy_, *shared, length, usage & kAdapterUsage,
+                                                            static_cast<lg::d3d::Pool>(pool), nullptr);
+        if (!over)
+            return D3DERR_NOTAVAILABLE;
+        *buffer = new VertexBuffer(this, over, length, usage, fvf, pool);
+        return D3D_OK;
+    }
+#else
+    if (shared)
+        return Unsupported("shared resource handles");
+#endif
     lg::VertexBuffer *handle = lg::CreateVertexBuffer(legacy_, length, usage & kAdapterUsage,
                                                       static_cast<lg::d3d::Pool>(pool), nullptr);
     if (!handle)
@@ -844,10 +859,24 @@ HRESULT STDMETHODCALLTYPE Device::CreateIndexBuffer(UINT length, DWORD usage, D3
     if (!buffer)
         return D3DERR_INVALIDCALL;
     *buffer = nullptr;
-    if (shared)
-        return Unsupported("shared resource handles");
     if (!length || (format != D3DFMT_INDEX16 && format != D3DFMT_INDEX32))
         return D3DERR_INVALIDCALL;
+#if defined(KISAK_GFX_GXM)
+    // As for vertex buffers above.
+    if (shared)
+    {
+        lg::IndexBuffer *over = lg::CreateIndexBufferOver(legacy_, *shared, length, usage & kAdapterUsage,
+                                                          static_cast<lg::d3d::Format>(format),
+                                                          static_cast<lg::d3d::Pool>(pool), nullptr);
+        if (!over)
+            return D3DERR_NOTAVAILABLE;
+        *buffer = new IndexBuffer(this, over, length, usage, format, pool);
+        return D3D_OK;
+    }
+#else
+    if (shared)
+        return Unsupported("shared resource handles");
+#endif
     lg::IndexBuffer *handle = lg::CreateIndexBuffer(legacy_, length, usage & kAdapterUsage,
                                                     static_cast<lg::d3d::Format>(format),
                                                     static_cast<lg::d3d::Pool>(pool), nullptr);

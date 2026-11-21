@@ -75,7 +75,9 @@ void DB_PushStreamPos(uint32_t index)
 
 void DB_CloneStreamData(uint8_t *destStart)
 {
-    if (destStart)
+    // destStart is the block itself when the GPU reads the block in place
+    // (the Vita, DB_AllocXZoneMemory): nothing to copy.
+    if (destStart && destStart != g_streamZoneMem->blocks[g_streamPosIndex].data)
         memcpy(
             &destStart[g_streamPosArray[g_streamPosIndex] - g_streamZoneMem->blocks[g_streamPosIndex].data],
             g_streamPosArray[g_streamPosIndex],

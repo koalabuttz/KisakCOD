@@ -261,10 +261,67 @@ void *R_AllocStaticIndexBuffer(IDirect3DIndexBuffer9 **ib, int sizeInBytes)
     return 0;
 }
 
+#if defined(KISAK_GFX_GXM)
+// The Vita has 96 MB of GPU memory for a map, and a map's static vertices
+// alone take up to 45 MB of it while its zone keeps a second copy in main
+// memory. The back end gives that copy to the GPU instead (a file named
+// no-buffers-in-place beside the compiled programs turns this off).
+void *R_AllocStaticVertexBufferInPlace(IDirect3DVertexBuffer9 **vb, void *data, int sizeInBytes)
+{
+    iassert( vb );
+    *vb = 0;
+    if (!r_loadForRenderer->current.enabled || !data || sizeInBytes <= 0)
+        return 0;
+    HANDLE shared = data;
+    if (R_HW_CreateVertexBuffer(dx.device, sizeInBytes, 8, 0, D3DPOOL_DEFAULT, vb, &shared) < 0)
+    {
+        *vb = 0;
+        return 0;
+    }
+    void *locked = 0;
+    if (R_HW_Lock(*vb, 0, 0, &locked, 0) < 0 || locked != data)
+    {
+        R_HW_Release(*vb);
+        *vb = 0;
+        return 0;
+    }
+    return locked;
+}
+
+void *R_AllocStaticIndexBufferInPlace(IDirect3DIndexBuffer9 **ib, void *data, int sizeInBytes)
+{
+    iassert( ib );
+    *ib = 0;
+    if (!r_loadForRenderer->current.enabled || !data || sizeInBytes <= 0)
+        return 0;
+    HANDLE shared = data;
+    if (R_HW_CreateIndexBuffer(dx.device, sizeInBytes, 8, (D3DFORMAT)101, D3DPOOL_DEFAULT, ib, &shared) < 0)
+    {
+        *ib = 0;
+        return 0;
+    }
+    void *locked = 0;
+    if (R_HW_Lock(*ib, 0, 0, &locked, 0) < 0 || locked != data)
+    {
+        R_HW_Release(*ib);
+        *ib = 0;
+        return 0;
+    }
+    return locked;
+}
+#endif
+
 void Load_VertexBuffer(IDirect3DVertexBuffer9 **vb, uint8_t *bufferData, int sizeInBytes)
 {
     uint8_t *v3; // eax
 
+#if defined(KISAK_GFX_GXM)
+    if (R_AllocStaticVertexBufferInPlace(vb, bufferData, sizeInBytes))
+    {
+        R_FinishStaticVertexBuffer(*vb);
+        return;
+    }
+#endif
     if (r_loadForRenderer->current.enabled && bufferData)
     {
         v3 = (uint8_t *)R_AllocStaticVertexBuffer(vb, sizeInBytes);
