@@ -33,6 +33,9 @@ struct BackendDesc
     const Host *host = nullptr;
     D3D9Window window{};
     bool vsync = true;
+    // With vsync, the refreshes each frame stays on screen
+    // (D3DPRESENT_INTERVAL_TWO to _FOUR: 2 to 4).
+    uint32_t swapInterval = 1;
     // The back buffer the program asked for; 0 takes the window's size.
     uint32_t width = 0;
     uint32_t height = 0;
@@ -50,6 +53,9 @@ void CloseBackend(Backend *backend);
 // Logs the back end's frame statistics since it was opened or since they
 // were last reset (vk_d3d9.h LogDeviceStats); with reset, starts them again.
 void BackendLogStats(Backend *backend, bool reset);
+// Logs the memory the device holds (vk_d3d9.h LogDeviceMemory): `when` says
+// at what point, as "map load mp_crash".
+void BackendLogMemory(Backend *backend, const char *when);
 // Called at every Present, before the frame is presented: the back end takes
 // up the host's settings (Host::tuning) if they changed.
 void BackendFrame(Backend *backend);
@@ -64,6 +70,9 @@ uint64_t BackendTextureMemory(const Backend *backend);
 // The window's size in pixels, for a Reset that asks for 0 x 0. False when
 // the back end cannot tell.
 bool BackendWindowSize(const Backend *backend, uint32_t &width, uint32_t &height);
+// With vsync, the refreshes each frame stays on screen from the next present
+// on (BackendDesc::swapInterval); a back end that cannot pace ignores it.
+void BackendSetSwapInterval(Backend *backend, uint32_t interval);
 // Fills the back end's part of DeviceCounters (validation, submissions).
 void BackendCounters(const Backend *backend, DeviceCounters &out);
 // Called without FrontLock, from any thread, before a query is asked for its
@@ -78,10 +87,14 @@ void BackendPollProgress(Backend *backend);
 // the linear-light scene (BackendModernSceneTarget): after the passes the
 // tonemap writes it into display within the view's viewport, and that is
 // done even when the passes are refused. With display and view.glow on, the
-// bloom is drawn before the tonemap and *glowDrawn set true.
+// bloom is drawn before the tonemap and *glowDrawn set true. sunShadow and
+// spotShadow are level 0 of view.fog.shadowMap (the sun's shadow map) and
+// view.fog.spotShadowMap (the spot lights'), when they are set and this
+// device's textures: volumetric fog reads them.
 ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surface *depth,
                                 const ModernSceneView &view, lg::Surface *display = nullptr,
-                                bool *glowDrawn = nullptr);
+                                bool *glowDrawn = nullptr, lg::Surface *sunShadow = nullptr,
+                                lg::Surface *spotShadow = nullptr);
 // The linear-light image a 3D scene is drawn into instead of this back buffer
 // (vk_d3d9.h ModernSceneBegin), made or made again at its size; null when
 // linear light is off or cannot run (logged once). Refused tells the two
@@ -97,6 +110,16 @@ bool BackendModernEffectsOnDisplay(Backend *backend);
 // True when it was; false when it is not wanted, not an 8-bit colour cube
 // with levels, or on a back end without a Modern path.
 bool BackendModernReflectionProbe(Backend *backend, lg::Device *legacy, lg::Texture *probe);
+// Re-capturing the reflection probes (vk_d3d9.h ModernProbeCapture): whether
+// it is wanted (KISAK_VK_MODERN_PROBES_CAPTURE=1 with linear light and the
+// probe filter); capturing on or off (while on, each scene's linear-light
+// image is read back before its tonemap); and a rectangle of the last one
+// read back, as linear light (rgb floats, rows from the top; waits for the
+// GPU; false when there is none or the rectangle is outside it).
+bool BackendModernProbeCaptureWanted(Backend *backend);
+void BackendModernProbeCapture(Backend *backend, bool on);
+bool BackendModernProbeCaptureRead(Backend *backend, uint32_t x, uint32_t y, uint32_t width, uint32_t height,
+                                   float *rgb);
 // Planar reflections (vk_d3d9.h ModernPlanarBegin): whether a planar view is
 // wanted this frame; the planar image (linear light) and depth surface of the
 // view's size to draw it into, made or remade as needed (false when there is
@@ -105,6 +128,10 @@ bool BackendModernPlanarWanted(Backend *backend);
 bool BackendModernPlanarBegin(Backend *backend, const ModernPlanarView &view, lg::Surface *&color,
                               lg::Surface *&depth);
 void BackendModernPlanarDone(Backend *backend, const ModernPlanarView &view);
+// The sun's shadow map for the lit surfaces that draw next (vk_d3d9.h
+// ModernSunShadow): with soft shadows wanted, the lit shaders' soft filter
+// parameters (lg::SetModernShadow) from it; else the game's taps.
+void BackendModernSunShadow(Backend *backend, lg::Device *legacy, const ModernSunShadowView &view);
 // Whether the Modern path wants the scene's opaque depth before its lit
 // surfaces (vk_d3d9.h ModernWantsSceneDepth); false on a back end without one.
 bool BackendModernWantsSceneDepth(Backend *backend);

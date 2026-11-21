@@ -240,7 +240,7 @@ NormalsStats Stats(const Normals *normals);
 // they can darken their indirect light alone: two slices of six steps a side
 // per pixel, jittered per pixel and frame, then a 5x5 blur that keeps to each
 // surface. The result is the visible fraction (1 unoccluded) in the red
-// channel of a target the caller owns.
+// channel of a target the caller owns (green 1: TraceContactShadows' place).
 
 struct AoParams
 {
@@ -274,6 +274,10 @@ struct AoParams
     // within 2 levels; 0.25 and 0.6 soften it no further but lighten the
     // ceiling beams' edges more.
     float edge = 0.08f;
+    // Work the occlusion out at half resolution, one pixel of each 2x2 block
+    // (which one moving from frame to frame), and blur it back up to full
+    // resolution across the depth: about a quarter of the occlusion's work.
+    bool half = true;
     uint32_t frame = 0;    // moves the noise
 };
 
@@ -292,11 +296,217 @@ void DestroyAmbientOcclusion(Core *core, AmbientOcclusion *ao);
 bool BuildAmbientOcclusion(Core *core, AmbientOcclusion *ao, Image *depth, Image *normals, const SceneView &view,
                            const AoParams &params, Image *target, std::string &error);
 
+// ---- Contact shadows (docs/vulkan-modern.md "Contact shadows") ----
+//
+// The sun's small shadows the shadow map is too coarse to hold, from a short
+// ray stepped from each pixel's surface towards the sun through the scene
+// depth (shaders/contact.frag), into the green channel of the ambient
+// occlusion's target: the lit shaders of ours take the smaller of it and the
+// sun's shadow, so it darkens the sun's light alone.
+
+struct ContactParams
+{
+    float sun[3] = {0.0f, 0.0f, 1.0f}; // towards the sun, in world space (unit length)
+    float length = 12.0f;    // world units (inches) the ray reaches: about 30 cm
+    float thickness = 8.0f;  // world units a surface is taken to reach behind itself
+    float strength = 1.0f;   // how dark a full hit makes the sun's light (1: none of it)
+    uint32_t frame = 0;      // moves the noise
+};
+
+// Records the contact shadows of view.area into the green of `target` (the
+// ambient occlusion's: a colour attachment as large as the area's corner,
+// single-sampled, sampled usage), keeping its other channels; with `clear`
+// the area is first cleared to white (no ambient occlusion this scene).
+// From `depth` and BuildNormals' `normals`. Outside a pass, inside a frame.
+// False with the reason, and nothing recorded, when it cannot.
+bool TraceContactShadows(Core *core, AmbientOcclusion *ao, Image *depth, Image *normals, const SceneView &view,
+                         const ContactParams &params, Image *target, bool clear, std::string &error);
+
 struct AoStats
 {
-    uint64_t builds; // BuildAmbientOcclusion calls that recorded
+    uint64_t builds;   // BuildAmbientOcclusion calls that recorded
+    uint64_t contacts; // TraceContactShadows calls that recorded
 };
 AoStats Stats(const AmbientOcclusion *ao);
+
+// ---- Volumetric fog (docs/vulkan-modern.md "Volumetric fog") ----
+//
+// The map's own fog lit by the sun: a ray march through the sun's shadow map
+// (fog_march.frag, at half resolution by default) sums how much of each view
+// ray's fog is in shadow, then a full-screen pass (fog_apply.frag) adds the
+// difference that makes to the scene in linear light. A share of the fog's
+// light (sunShare) comes from the sun: air in shadow loses it, and looking
+// towards the sun the air gets more of it (forward scattering), so with
+// sunShare 0, or with all the air lit and no forward scattering, the scene
+// is as the game fogged it. The view's shadowed spot lights light the air in
+// their cones too, marched through their own shadow maps: light added on top
+// of the game's fog (spotShare times what the fog would scatter of it).
+//
+// With `froxels` the same sums come from a volume instead of a march per
+// pixel: compute passes fill a grid of froxels over the view (froxelTile
+// pixels square, froxelSlices deep over the march length, spaced as the
+// march's steps) with each froxel's share, add them up front to back, and
+// the apply pass reads the volume at each pixel's distance.
+
+struct FogParams
+{
+    // The share of the fog's light that comes from the sun, 0 to 1.
+    float sunShare = 0.6f;
+    // Henyey-Greenstein forward scattering, 0 (even) to below 1.
+    float scatter = 0.35f;
+    // World units of each ray marched through the shadow map; air past it
+    // counts as lit.
+    float march = 3000.0f;
+    uint32_t steps = 24;
+    // How brightly the spot lights light the fog: 0 not at all, 1 as the
+    // fog scatters their light.
+    float spotShare = 1.0f;
+    // Steps marched through each spot light's reach.
+    uint32_t spotSteps = 12;
+    bool half = true;   // march at half resolution
+    // Build a froxel volume (compute passes) in place of the march.
+    bool froxels = false;
+    uint32_t froxelTile = 8;    // pixels per froxel across
+    uint32_t froxelSlices = 64; // froxels deep
+    uint32_t frame = 0; // moves the noise and the half-resolution pixel from frame to frame
+    // Write the light the fog adds alone, over mid grey, instead of adding it.
+    bool debug = false;
+};
+
+// The view's fog and sun, as the engine gives them (front ModernSceneView::Fog).
+struct FogInputs
+{
+    float color[3] = {};       // display values, 0 to 1
+    float density = 0.0f;      // log2 units per world unit
+    float start = 0.0f;        // world units
+    float origin[3] = {};      // the camera, world units
+    float sunDirection[3] = {}; // towards the sun, world space
+    // The sun's shadow is in shadowMap (DrawFog): the lookup below is set.
+    bool sunShadowed = false;
+    // World (p * M) to the near partition's xy, depth z and partition value w.
+    float shadowLookup[4][4] = {};
+    float switchPartition[4] = {};
+    float shadowmapScale[2] = {};
+    // The view's shadowed spot lights (front ModernSceneView::Fog::Spot).
+    struct Spot
+    {
+        float origin[3] = {};
+        float radius = 0.0f;
+        float dir[3] = {};             // from a lit point towards the light, the cone's axis
+        float exponent = 0.0f;         // the cone's falloff power, 0 none
+        float cosHalfFovOuter = 0.0f;
+        float cosHalfFovInner = 0.0f;
+        float fade = 0.0f;             // how far the shadow map counts, the rest lit
+        float color[3] = {};           // diffuse colour, display values
+        float shadowLookup[4][4] = {}; // world (p * M) to its tile, projective
+        bool inSunMap = false;         // its tile is in shadowMap, else in spotShadowMap
+    };
+    uint32_t spotCount = 0; // at most kFogSpots
+    Spot spots[4];
+};
+constexpr uint32_t kFogSpots = 4;
+
+struct Fog;
+
+// The pipelines (the march image is made at the first DrawFog and again when
+// the depth's size changes). Null with the reason.
+Fog *CreateFog(Core *core, std::string &error);
+// Waits for the GPU to finish what was recorded.
+void DestroyFog(Core *core, Fog *fog);
+// Records the fog over view.area of `color` (a linear-light colour target),
+// reading `depth` (single-sampled, sampled usage) and, when given, the sun's
+// shadow map `shadowMap` and the spot lights' `spotShadowMap` (depth images).
+// Without shadowMap the sun's air counts as lit; a spot light whose map is
+// not given is left out. Outside a pass, inside a frame. The full-screen passes are
+// timed under "modern fog", the froxel volume's two compute passes under
+// "modern fog froxels". False with the reason, and nothing recorded, when it
+// cannot.
+bool DrawFog(Core *core, Fog *fog, Image *color, Image *depth, Image *shadowMap, Image *spotShadowMap,
+             const SceneView &view, const FogInputs &inputs, const FogParams &params, std::string &error);
+
+struct FogStats
+{
+    uint64_t scenes;     // DrawFog calls that recorded
+    uint64_t shadowed;   // of those, ones that marched the sun's shadow map
+    uint64_t spotScenes; // of those, ones with a spot light in the air
+    uint64_t spots;      // spot lights marched, over all of them
+    uint64_t froxels;    // of the scenes, ones drawn from a froxel volume
+};
+FogStats Stats(const Fog *fog);
+
+// ---- God rays (docs/vulkan-modern.md "God rays") ----
+//
+// Shafts of the sky's light streaming from the sun past what blocks it, made
+// on the screen (the classic radial blur): a pass at half resolution keeps
+// the sky's light near the sun (rays.frag's first pass: sky pixels, by how close
+// they are to the sun's direction, plus a small glow of the sun's own
+// colour, above a threshold), a second smears that along each pixel's line
+// to the sun's place on the screen (its second), and a full-screen pass
+// adds the result to the linear-light scene (its third), less of it
+// over the sky itself, faded out as the sun leaves the view. Where buildings or trees stand in front of the sky the mask is dark,
+// so the smear leaves dark gaps between the shafts. Independent of the map's
+// fog: the air's own thickness does not change.
+
+struct RaysParams
+{
+    // How much of the smeared light is added: 0 none.
+    float strength = 0.6f;
+    // Samples along each pixel's line towards the sun.
+    uint32_t samples = 48;
+    // How far towards the sun each line reaches, as a share of the way.
+    float length = 0.85f;
+    // Each sample counts this much less than the one before it.
+    float decay = 0.96f;
+    // How tightly the kept sky gathers round the sun: its light is weighted
+    // by cos(angle to the sun) to this power (32: half at about 12 degrees).
+    float spread = 32.0f;
+    // Only the sky's light above this (linear light, a soft knee) is kept:
+    // an open sky does not smear into a veil, the bright light round the sun
+    // does.
+    float threshold = 0.8f;
+    // The share of the rays added over the sky itself (0 to 1); whole over
+    // what stands in front of it.
+    float sky = 0.3f;
+    // The sun's own glow added to the kept sky (its colour times this, in a
+    // disc a few degrees across), so a sky without a drawn sun still has
+    // rays.
+    float glow = 1.0f;
+    // Light in the kept sky is held below this (linear light), so one very
+    // bright pixel does not streak.
+    float most = 8.0f;
+    uint32_t frame = 0; // moves the samples' offset from frame to frame
+};
+
+// The view's sun (front ModernSceneView::Sun).
+struct RaysInputs
+{
+    float sunDirection[3] = {}; // towards the sun, world space
+    float sunColor[3] = {};     // display values (may pass 1)
+};
+
+struct Rays;
+
+// The pipelines (the half-resolution images are made at the first DrawRays
+// and again when the area's size changes). Null with the reason.
+Rays *CreateRays(Core *core, std::string &error);
+// Waits for the GPU to finish what was recorded.
+void DestroyRays(Core *core, Rays *rays);
+// Records the god rays over view.area of `color` (the linear-light scene,
+// single-sampled, sampled and colour attachment usage), reading it and
+// `depth` (single-sampled, sampled usage; the sky at SkyDepth). Outside a
+// pass, inside a frame. When the sun is not in front of the camera nothing
+// is recorded and `drawn` is false. The three passes are timed under
+// "modern god rays". False with the reason, and nothing recorded, when it
+// cannot.
+bool DrawRays(Core *core, Rays *rays, Image *color, Image *depth, const SceneView &view, const RaysInputs &inputs,
+              const RaysParams &params, bool &drawn, std::string &error);
+
+struct RaysStats
+{
+    uint64_t scenes; // DrawRays calls that recorded
+    uint64_t behind; // DrawRays calls with the sun out of the view, nothing recorded
+};
+RaysStats Stats(const Rays *rays);
 
 // ---- Screen-space reflections (docs/vulkan-modern.md "Screen-space reflections") ----
 //
@@ -397,10 +607,63 @@ bool DrawNormalsDebug(Core *core, DebugView *debug, Image *normals, Image *targe
 // of `target`. Outside a pass, inside a frame.
 bool DrawAoDebug(Core *core, DebugView *debug, Image *ao, Image *target, const VkRect2D &area, std::string &error);
 // Draws the sharpest level of `reflections` (TraceReflections' image, the
-// same size) over `area` of `target`: the stored light over black, through
-// the sRGB curve. Outside a pass, inside a frame.
+// same size) over `area` of `target`: the stored light (its compression
+// undone) over black, through the sRGB curve. Outside a pass, inside a frame.
 bool DrawReflectionsDebug(Core *core, DebugView *debug, Image *reflections, Image *target, const VkRect2D &area,
                           std::string &error);
+// Draws the first level of `image` as it is over `area` of `target`, through
+// the sRGB curve (the planar reflection's debug view). Outside a pass,
+// inside a frame.
+bool DrawImageDebug(Core *core, DebugView *debug, Image *image, Image *target, const VkRect2D &area,
+                    std::string &error);
+
+// ---- Compute passes (docs/vulkan-modern.md "Compute passes") ----
+//
+// The core's compute passes (vk_core.h BeginComputePass) carry the Modern
+// path's work that is not a full-screen draw: volumes such as a froxel fog's,
+// and later AO or particles. The compute check is the smallest such user, and
+// what checks the facility end to end (KISAK_VK_MODERN_DEBUG=compute): two
+// compute passes build an RGBA16F 3D volume and a draw samples it.
+//
+//   "modern compute check fill"       one invocation per texel writes the
+//                                     texel's centre (x, y, z in 0..1) and
+//                                     alpha 0.5 into a 3D storage image, and
+//                                     each slice's weights (1, 1, 1, 2) into
+//                                     a storage buffer
+//   "modern compute check integrate"  one invocation per column walks the
+//                                     first volume front to back (as a froxel
+//                                     fog integrates) and writes into a second
+//                                     the weighted mean of the slices so far
+//   "modern compute check draw"       a full-screen pass samples the second
+//                                     volume with linear filtering at one
+//                                     depth over an area: red and green the
+//                                     pixel's place across the area (clamped
+//                                     to the outer texel centres), blue the
+//                                     mean slice centre, times alpha (1)
+
+// The check's volume, in texels: x, y, z.
+constexpr uint32_t kComputeCheckSize[3] = {16, 8, 8};
+
+struct ComputeCheck;
+
+// Its pipelines, volumes and buffer. Null with the reason.
+ComputeCheck *CreateComputeCheck(Core *core, std::string &error);
+// Waits for the GPU to finish what was recorded.
+void DestroyComputeCheck(Core *core, ComputeCheck *check);
+// Records the two compute passes. Outside a pass, inside a frame. False with
+// the reason when nothing could be recorded.
+bool BuildComputeCheck(Core *core, ComputeCheck *check, std::string &error);
+// Draws the last volume BuildComputeCheck built over `area` of `target`,
+// sampled at `depth` (0..1 along z). Outside a pass, inside a frame.
+bool DrawComputeCheck(Core *core, ComputeCheck *check, Image *target, const VkRect2D &area, float depth,
+                      std::string &error);
+
+struct ComputeCheckStats
+{
+    uint64_t builds; // BuildComputeCheck calls that recorded
+    uint64_t draws;  // DrawComputeCheck calls that recorded
+};
+ComputeCheckStats Stats(const ComputeCheck *check);
 
 // ---- Linear light (renderer plan MD1; docs/vulkan-modern.md) ----
 //
@@ -524,7 +787,10 @@ struct ExposureParams
     // mp_crash's and mp_backlot's outdoor views (PC exposure run 1).
     float key = 0.115f;
     float minEv = -1.0f;   // the range the exposure stays in
-    float maxEv = 1.5f;
+    // David 2026-11-15: the maps should look lit by their own lights, not by
+    // the camera, so a dark scene is never brightened (+1 until then; night
+    // maps sat at +1 and read twice as bright as CoD4).
+    float maxEv = 0.0f;
     // Time constants, in seconds: towards a lower exposure (the scene got
     // brighter) and towards a higher one (it got darker).
     float brighterSeconds = 1.0f;

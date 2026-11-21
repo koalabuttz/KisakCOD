@@ -27,15 +27,30 @@ of them.
   whoever merged looks at master's run, and a failure is fixed forward in a new
   pull request. A manual run of a workflow on a branch (`workflow_dispatch`)
   runs everything, for a change that is about one of those platforms.
+- **Fast PR lane (2026-11-15).** A pull request runs 6 of the Linux
+  workflow's jobs: the SDL3 window host, the native dedicated server in both
+  configurations, the native D3D9 boundary, and the two Vulkan back-end jobs.
+  The 12 slow sweeps run after the merge only: the x86_64, aarch64 and armv7
+  builds with their 32-bit size and layout scans, the client, singleplayer and
+  x86_64 compile censuses, the world front-end and surface checks, the D3D9
+  device probe and the free camera. In the run that prompted this, those 12
+  took 84 of the 116 runner-minutes, and jobs waited 30-57 min for a runner. A
+  break they find shows on master's run and is fixed forward. The contract is
+  `test_linux_pull_requests_run_only_the_fast_lane`.
 - **Paths.** A workflow starts only when a changed path can reach it. The
   Windows workflow skips documentation, the Linux, macOS and PS Vita ports' own
   sources and tests, and the test machines' run scripts; the macOS workflow
   skips the PS Vita port's sources. The test machines' run scripts
-  (`scripts/runs`, `tests/runs`, `test_perf_run.py`, `test_pc_run.py`,
+  (`scripts/runs`, `tests/runs`, `test_perf_run.py`, `test_pc_run.py`, `test_android_run.py`,
   `test_vita3k_runner.py`)
   start only the one-job **Machine run scripts** workflow (`run-scripts.yaml`);
   on 2026-11-10 a PowerShell-only change had started 26 Linux and PS Vita
-  jobs. The filters look at the whole pull request, not the last push.
+  jobs. An edit to a workflow file starts the one-job **Workflow contracts**
+  workflow (`workflow-contracts.yaml`), which runs the contract test that
+  reads every workflow, plus that workflow's own builds; the Linux workflow no
+  longer starts for Vita or Windows workflow edits (on 2026-11-15 that ran all
+  17 Linux jobs for Vita-only pull requests while jobs waited 30-57 min for a
+  runner). The filters look at the whole pull request, not the last push.
 - **PS Vita.** The port's two build jobs and its host tests are their own
   workflow (`build-kisakcod-vita.yaml`; they were part of the Linux one). A
   change to the port's own files only (`src/vita`, `src/gfx_gxm`,

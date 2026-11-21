@@ -42,8 +42,9 @@ map"` (next section).
 
 ## Runs that play themselves: `run_atMap`
 
-The multiplayer client on Windows, Linux and macOS takes the PS Vita's timed
-console commands and quit timers under `run_*` names. A start with
+The multiplayer client on Windows, Linux and macOS, and the singleplayer game
+(also on Android; both share `src/client/cl_run_plan.h`), take the PS Vita's
+timed console commands and quit timers under `run_*` names. A start with
 
     +set run_atMap "5 setviewpos 336 60 268 65 | 10 framelog 10 A | 21 screenshot | 23 quit"
 
@@ -59,7 +60,8 @@ window's focus or time anything by eye.
 - Nothing changes unless one of them is given. When one is, the log says so
   (`run: run_atMap "..."`), marks the menu and the map coming up (`run: the map
   is up`), echoes every command it sends (`run: sending "screenshot"`) and the
-  quit (`run: run_quitAfterMap 30 reached`, `run: quitting as asked`).
+  quit (`run: run_quitAfterMap 30 reached`, `run: quitting as asked`). A timed
+  `quit` in a list prints `run: quitting as asked` too, after its echo.
 - A list it cannot read is reported once (`run: run_atMap: part 3 "x quit" does
   not start with a time in seconds; none of its commands will be sent`) and
   sends nothing.
@@ -320,6 +322,14 @@ script):
   Give `com_maxfps 0` to any launch whose frame log is read for speed: proof 2
   left it out and both frame logs read about 91 fps where the same view reads
   about 430 without a cap.
+- No `+` inside a timed command or a value: the game splits its whole command
+  line at every `+` (and keeps 31 parts), so `"45 +left"` turns into a part
+  `45` with no command and the client refuses the entire `run_atMap` list
+  (`none of its commands will be sent`), after which the launch only idles to
+  its safety quit. The recipe check refuses such entries; put `+left` and the
+  like in a cfg in the home template and send `exec <cfg>` (`-left` is
+  harmless). A launch whose list was refused anyway is reported `run_error`,
+  not `ok` (found by the perf_ab Windows proof, attempt 1).
 - `home_template` is copied for every launch and given as `fs_homepath`, so
   each launch starts from the same home and its log and screenshots are its
   own (they are found under that home afterwards).
@@ -347,6 +357,113 @@ the PC: two launches in 91 s, both ending by themselves with 0 validation
 errors; a CPU burn made one start ask "Set Optimal Settings?" and the game
 answered it "No" (`KISAK_NO_DIALOGS is set; leaving the player profile
 unchanged`); both screenshots show the map, not a menu, at one sample.
+
+### Several settings in one launch: `variants`
+
+The Modern switches are live dvars since PR 305 (`r_modernAo`, `r_modernSsr`,
+`r_modernTonemap`, the `r_modernAo*` and `r_modernSsr*` numbers, ...;
+`src/gfx_d3d/rhi/r_rhi_modern_dvars.h`), so a comparison no longer needs one
+launch per value. A launch lists its variants and pc_run.py writes the timed
+commands:
+
+```json
+{"name": "crash-in", "args": ["+devmap", "mp_crash"],
+ "at_map": ["3 cmd mr {serverid} 8 autoassign", "5 cmd mr {serverid} 15 assault_mp,0",
+            "8 setviewpos 30 -10 200 140"],
+ "variants": [{"name": "B", "set": {"r_modernAo": "off"}},
+              {"name": "A", "set": {"r_modernAo": "on"}}],
+ "variant_timing": {"start": 20, "framelog": 8, "compare": true}}
+```
+
+From `start` seconds after the map is up (default 20 s, or 2 s after the last
+`at_map` command if that is later), each variant sets its dvars, waits `settle`
+seconds (default 1; the first variant also waits `warmup`, default 30 s when
+frame logs are taken), takes the screenshot
+`<launch>-<variant>` the first time round and, with `framelog`, a frame log
+`<launch>-<variant>-<pass>`. With a frame log the variants run twice in
+mirrored order (A B B A), so steady drift (heat, other load) cancels in the
+mean; `"passes": 1` or `2` overrides. Then the launch quits. `"compare": true`
+compares the first variant's screenshot with each other one. results.json
+gets per launch `variants` (fps per pass, mean fps, the change against the
+first variant in % and in ms, the spread between passes) and report.md a
+table. The client takes 32 timed commands per launch: n variants use 5n + 1
+with two passes of frame logs (3n + 1 with one pass, 2n + 1 for screenshots
+only), so beside the usual three menu and camera commands up to 5 variants
+fit with two passes and 9 with one.
+
+- Give every variant every dvar any variant changes, so the order of passes
+  does not matter, and remember that `default` keeps the start value
+  (`KISAK_VK_MODERN_*` or built in).
+- Start-up only, still one launch per value: `KISAK_VK_MODERN_LINEAR`, `_LIT`,
+  `_EFFECTS`, `_NORMALS`, `_EXPOSURE_RANGE`, `_SSR_STEPS`/`_LEVELS`, and
+  `r_visuals`.
+- Start after the pre-match countdown (about 16-17 s on mp_crash under
+  devmap). The countdown draws a grey picture with no HUD, so in variants
+  proof 1 (start 10) two shots with AO off but either side of it differed by
+  47 levels, more than AO itself.
+- Things that move (smoke, the helicopter, the countdown) move between the
+  screenshots of one launch. `timescale 0.001` in `at_map` (devmap has cheats
+  on) holds them still: in proof 1 the same variant shot twice differed by
+  0.29 levels (arch 0.33), while AO on against off made 19.5 in the arch.
+  Use it for picture launches; leave it out where frame logs are read.
+- AO is fully in on the first frame after a switch: in variants proof 2 every
+  shot from 0.1 s to 4 s after `r_modernAo on` matched the 8 s shot within the
+  0.9-level noise of two unfrozen pictures. Hence the 1 s settle.
+- A launch's first half minute in play is slower: the first frame log of a
+  variant ran 6% (proof 1) and 11% (proof 2) below the same variant's second,
+  while the other variant's two passes agreed within 1%. Hence the 30 s
+  warm-up on the first variant before any frame log. A pass spread over 5%
+  is flagged in the report.
+- Frozen AO looked lighter than in play (arch 17.3 against 22.1 levels, same
+  radius and view, proof 2): compare frozen shots only with frozen shots.
+
+- The game keeps 1023 bytes of its command line (`sys_cmdline`; Windows cuts
+  the rest, Linux and Android do not start). A long variant list is the usual
+  way past it, so the recipe check refuses a launch whose command line would
+  be longer: split the variants over two launches.
+
+## Android runs from one recipe: `android_run.py`
+
+`scripts/runs/android_run.py` does for the Android app what pc_run.py does for
+the Windows game, through adb, on a device (the Retroid Pocket 6) or on the
+PC's own Android emulator. The script's own header is the full reference; in
+short, one recipe (`kisak-android-run/1`) can:
+
+- build the APK in WSL from a branch or commit (`build`: build_apk.py in the
+  Android source tree, which must have no changes of its own), or take one
+  already built (`apk`);
+- start the emulator headless with its GPU (`emulator`: `-gpu host`, no
+  window, no audio, no snapshot saved), wait for it to boot, and shut it
+  down after; copy the game's files in from this machine once per virtual
+  device (`game_files`);
+- `adb install -r` it (never an uninstall; the report shows the package's
+  first-install time before and after, so you can see the data was kept);
+- per launch: force-stop the app, start it with the launch's arguments in
+  the `args` extra, read logcat as it comes, time host steps from the start,
+  the menu or the map (`screencap`, `tap`, `swipe`, `key`, `text`; nothing
+  else reaches the device), stop when the game quits, crashes or times out,
+  and pull the game's own screenshots;
+- write `results.json` (checksummed), `report.md` and per launch the whole
+  logcat and the game's part of it, with pc_run.py's variants, frame logs and
+  picture numbers (screen captures are PNGs, read the same way).
+
+The timed commands are pc_run.py's (`at_menu`, `at_map`, `variants`), with one
+Android difference: KisakActivity splits the extra at spaces and the game
+quotes every piece with a space or a quote again, so the runner sends
+`+set run_atMap 5 setviewpos 1 2 3 | 12 quit` unquoted (`set` joins the words
+back) and refuses a `"` anywhere. The app's own `fs_basepath`, `fs_homepath`
+and `r_fullscreen` count against the 1023 bytes too.
+
+A launch waits while the app is already running (someone may be playing it)
+and gives up with `blocked`; it never installs over a running app.
+`--queue <folder> --out-root <folder>` runs every recipe in a folder that has
+no results yet, one at a time (`--watch 60` keeps looking; a `PAUSE` file
+stops it; a lock file keeps a second runner off the device).
+
+`scripts/tests/test_android_run.py` checks it against a stand-in adb
+(`tests/runs/fake_adb.py`) that is also the device, the emulator and the app:
+the app builds its command line as KisakActivity and src/linux/main.cpp do,
+so the test shows the unquoted timed list reaching the game whole.
 
 ## Menus without a person: `menu_check.py`
 

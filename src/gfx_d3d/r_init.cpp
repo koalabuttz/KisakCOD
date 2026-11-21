@@ -3357,6 +3357,10 @@ bool R_CheckTransparencyMsaa(uint32_t adapterIndex)
             (_D3DFORMAT)1094800211) == 0;
 }
 
+// KISAK: the presentation intervals the device offers (D3DCAPS9), for
+// r_vsyncInterval.
+static uint32_t s_presentIntervals = 0;
+
 void R_StoreDirect3DCaps(uint32_t adapterIndex)
 {
     uint32_t MaxUserClipPlanes; // [esp+0h] [ebp-138h]
@@ -3371,6 +3375,7 @@ void R_StoreDirect3DCaps(uint32_t adapterIndex)
         MaxTextureHeight = caps.MaxTextureWidth;
     vidConfig.maxTextureSize = MaxTextureHeight;
     vidConfig.maxTextureMaps = caps.MaxSimultaneousTextures;
+    s_presentIntervals = caps.PresentationIntervals; // KISAK: for r_vsyncInterval
     vidConfig.deviceSupportsGamma = (caps.Caps2 & 0x20000) != 0;
     if (caps.MaxSimultaneousTextures > 0x10)
         MyAssertHandler(
@@ -3972,6 +3977,18 @@ void R_SetD3DPresentParameters(_D3DPRESENT_PARAMETERS_ *d3dpp, const GfxWindowPa
     d3dpp->EnableAutoDepthStencil = 0;
     d3dpp->AutoDepthStencilFormat = dx.depthStencilFormat;
     d3dpp->PresentationInterval = r_vsync->current.enabled ? 1 : 0x80000000;
+    // KISAK: r_vsyncInterval, a frame every N refreshes, where the device can.
+    if (r_vsync->current.enabled && r_vsyncInterval && r_vsyncInterval->current.integer > 1)
+    {
+        const uint32_t wanted = r_vsyncInterval->current.integer >= 4   ? D3DPRESENT_INTERVAL_FOUR
+                                : r_vsyncInterval->current.integer == 3 ? D3DPRESENT_INTERVAL_THREE
+                                                                        : D3DPRESENT_INTERVAL_TWO;
+        if (s_presentIntervals & wanted)
+            d3dpp->PresentationInterval = wanted;
+        else
+            Com_Printf(CON_CHANNEL_GFX, "r_vsyncInterval %i: the device cannot show a frame every %i refreshes\n",
+                       r_vsyncInterval->current.integer, r_vsyncInterval->current.integer);
+    }
     iassert( wndParms->hwnd );
     d3dpp->hDeviceWindow = wndParms->hwnd;
     d3dpp->Flags = 0;

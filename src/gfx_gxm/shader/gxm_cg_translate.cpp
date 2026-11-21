@@ -677,6 +677,24 @@ bool Emitter::Write(const Instruction &ins, const std::string &valueIn)
     return true;
 }
 
+// The sharpening read of Options::sharpSamplers.
+const char kSharpHelper[] = R"(uniform float4 kisak_sharp;
+uniform float4 kisak_sharp_max;
+float4 kisak_sharp2D(sampler2D s, float2 uv)
+{
+    float2 hi = kisak_sharp_max.xy;
+    float4 c = tex2D(s, min(uv, hi));
+    float4 l = tex2D(s, min(uv - float2(kisak_sharp.x, 0.0), hi));
+    float4 r = tex2D(s, min(uv + float2(kisak_sharp.x, 0.0), hi));
+    float4 u = tex2D(s, min(uv - float2(0.0, kisak_sharp.y), hi));
+    float4 d = tex2D(s, min(uv + float2(0.0, kisak_sharp.y), hi));
+    float4 least = min(c, min(min(l, r), min(u, d)));
+    float4 most = max(c, max(max(l, r), max(u, d)));
+    return clamp(c + (c * 4.0 - l - r - u - d) * kisak_sharp.z, least, most);
+}
+)";
+
+
 bool Emitter::Texture(const Instruction &ins, std::string &value)
 {
     if (ins.sourceCount < 2 || ins.sources[1].type != kSampler)
@@ -712,6 +730,8 @@ bool Emitter::Texture(const Instruction &ins, std::string &value)
                           : "tex2D(" + s + ", (" + coord + ").xy / (" + coord + ").w)";
         else if (ins.control == 2) // texldb
             sample = cube ? "texCUBEbias(" + s + ", " + coord + ")" : "tex2Dbias(" + s + ", " + coord + ")";
+        else if (!cube && !vertex_ && (options_.sharpSamplers >> unit & 1))
+            sample = "kisak_sharp2D(" + s + ", (" + coord + ").xy)";
         else
             sample = cube ? "texCUBE(" + s + ", (" + coord + ").xyz)" : "tex2D(" + s + ", (" + coord + ").xy)";
         break;
@@ -1113,6 +1133,10 @@ bool Emitter::Run(std::string &cg, std::string &error)
     if (alphaTest)
         out += "uniform float kisak_alpha_ref;\n";
     out += kHelpers;
+    // Only where asked for: a program's text is its key in the cache of
+    // compiled programs.
+    if (!vertex_ && options_.sharpSamplers)
+        out += kSharpHelper;
 
     // The signature and the code that copies parameters to registers and
     // registers to results.
@@ -1292,7 +1316,8 @@ bool Emitter::Run(std::string &cg, std::string &error)
             // compares it, as the render target would store it.
             epilogue += "    float a = floor(saturate(oC0.w) * 255.0 + 0.5);\n";
             epilogue += "    float ref = floor(kisak_alpha_ref * 255.0 + 0.5);\n";
-            epilogue += std::string("    if (!(") + tests[func] + ")) discard;\n";
+            epilogue += std::string("    if (!(") + tests[func] + ")) " +
+                        (options_.alphaZero ? "oC0 = float4(0.0, 0.0, 0.0, 0.0);\n" : "discard;\n");
         }
         epilogue += "    return oC0;\n";
         if (!local("oC0"))
@@ -1746,6 +1771,7 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
             if (ins.opcode == kDef)
                 defined.insert(ins.destination.number);
         int highestFromApi = -1;
+        std::set<uint16_t> fromApi;
         for (const Instruction &ins : shader.instructions)
             for (int i = 0; i < ins.sourceCount; ++i)
             {
@@ -1757,9 +1783,13 @@ bool Parse(const void *bytecode, size_t bytes, Shader &shader, std::string &erro
                                      : 1;
                 for (int row = 0; row < rows; ++row)
                     if (!defined.count(uint16_t(src.number + row)))
+                    {
                         highestFromApi = std::max(highestFromApi, src.number + row);
+                        fromApi.insert(uint16_t(src.number + row));
+                    }
             }
         r.floatConstants = uint16_t(highestFromApi + 1);
+        r.apiConstants.assign(fromApi.begin(), fromApi.end());
     }
 
     // The varyings, for linking checks.

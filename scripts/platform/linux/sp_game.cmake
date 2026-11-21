@@ -159,6 +159,12 @@ set(sp_game_own_sources
     "${SRC_DIR}/linux/client/window/pixel_buffer.cpp"
     "${SRC_DIR}/linux/client/window/win32_window_sdl3.cpp"
     "${SRC_DIR}/linux/client/window/window_host.cpp")
+# The controller (KISAK_LINUX_GAMEPAD), as KisakCOD-mp has it (mp_client.cmake).
+if(KISAK_LINUX_GAMEPAD)
+    list(APPEND sp_game_own_sources
+        ${KISAK_MP_CLIENT_GAMEPAD_SOURCES}
+        "${SRC_DIR}/linux/client/mp_client_gamepad.cpp")
+endif()
 
 # The Windows KisakCOD-sp definitions without CINEMA (see r_cinematic.cpp above).
 set(KISAK_SP_GAME_DEFINITIONS
@@ -199,7 +205,14 @@ endforeach()
 set_property(SOURCE "${SRC_DIR}/sound/snd_driver_load_obj.cpp" TARGET_DIRECTORY KisakCOD-sp-standin
     APPEND PROPERTY COMPILE_DEFINITIONS DR_WAV_IMPLEMENTATION DR_MP3_IMPLEMENTATION)
 target_link_libraries(KisakCOD-sp-native PRIVATE kisak_linux_native_d3d9)
-target_compile_definitions(KisakCOD-sp-own PRIVATE KISAK_LINUX_SDL_MAJOR=3)
+target_compile_definitions(KisakCOD-sp-own PRIVATE KISAK_LINUX_SDL_MAJOR=3
+    $<$<BOOL:${KISAK_LINUX_GAMEPAD}>:KISAK_LINUX_GAMEPAD>)
+if(KISAK_LINUX_GAMEPAD)
+    # Warnings are errors in the engine-free units, as in KisakCOD-mp.
+    set_property(SOURCE ${KISAK_MP_CLIENT_GAMEPAD_SOURCES}
+        TARGET_DIRECTORY KisakCOD-sp-own APPEND PROPERTY COMPILE_OPTIONS -Wall -Wextra -Werror)
+    message(STATUS "KisakCOD-sp: game controller support on")
+endif()
 target_link_libraries(KisakCOD-sp-own PRIVATE kisak_linux_native_d3d9 SDL3::SDL3)
 
 if(KISAK_LINUX_CINEMATICS)
@@ -225,18 +238,36 @@ if(KISAK_LINUX_CINEMATICS)
     endif()
 endif()
 
-add_executable(KisakCOD-sp
+set(kisak_sp_game_objects
     ${sp_game_c_sources}
     $<TARGET_OBJECTS:KisakCOD-sp-native>
     $<TARGET_OBJECTS:KisakCOD-sp-standin>
     $<TARGET_OBJECTS:KisakCOD-sp-own>
     $<$<BOOL:${KISAK_LINUX_CINEMATICS}>:$<TARGET_OBJECTS:KisakCOD-sp-cinematic>>)
+if(KISAK_PLATFORM STREQUAL "android")
+    # A shared library the app's activity loads, as KisakCOD-mp's libmain.so
+    # (mp_client.cmake); KisakActivity loads this one for the campaign.
+    add_library(KisakCOD-sp SHARED ${kisak_sp_game_objects})
+    set_target_properties(KisakCOD-sp PROPERTIES OUTPUT_NAME main_sp)
+else()
+    add_executable(KisakCOD-sp ${kisak_sp_game_objects})
+endif()
 target_include_directories(KisakCOD-sp PRIVATE "${SRC_DIR}" "${DEPS_DIR}")
 target_compile_options(KisakCOD-sp PRIVATE ${KISAK_LINUX_SIMD_OPTIONS} -fno-strict-aliasing ${KISAK_LINUX_HARDENING_OPTIONS})
-# The same export rule as KisakCOD-mp: the game exports nothing to the libraries it loads.
-target_link_options(KisakCOD-sp PRIVATE -Wl,--gc-sections ${KISAK_LINUX_HARDENING_LINK_OPTIONS}
-    "-Wl,--version-script=${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")
-set_property(TARGET KisakCOD-sp APPEND PROPERTY LINK_DEPENDS "${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")
+if(KISAK_PLATFORM STREQUAL "android")
+    # SDL_main and the JNI entry points are all it exports (KisakCOD-mp's rule).
+    target_link_options(KisakCOD-sp PRIVATE -Wl,--gc-sections ${KISAK_LINUX_HARDENING_LINK_OPTIONS}
+        "-Wl,--version-script=${SCRIPTS_DIR}/platform/android/main_exports.map")
+    set_property(TARGET KisakCOD-sp APPEND PROPERTY LINK_DEPENDS "${SCRIPTS_DIR}/platform/android/main_exports.map")
+    # The console goes to logcat; the Vulkan host takes the activity's window
+    # from its Surface.
+    target_link_libraries(KisakCOD-sp PRIVATE log android)
+else()
+    # The same export rule as KisakCOD-mp: the game exports nothing to the libraries it loads.
+    target_link_options(KisakCOD-sp PRIVATE -Wl,--gc-sections ${KISAK_LINUX_HARDENING_LINK_OPTIONS}
+        "-Wl,--version-script=${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")
+    set_property(TARGET KisakCOD-sp APPEND PROPERTY LINK_DEPENDS "${SCRIPTS_DIR}/platform/linux/mp_client_exports.map")
+endif()
 target_link_libraries(KisakCOD-sp PRIVATE
     "${KISAK_DXVK_NATIVE_LIBRARY}" "${KISAK_OPENAL_LIBRARY}" SDL3::SDL3 Threads::Threads ${CMAKE_DL_LIBS})
 add_dependencies(KisakCOD-sp update_build_number)

@@ -319,6 +319,18 @@ struct GfxCmdDrawTriangles // sizeof=0x10
     __int16 vertexCount;
 };
 
+// RC_DRAW_UI_TRIANGLES (port addition): followed by vertexCount GfxUiVertex
+// records, then indexCount uint16_t indices (padded to 4 bytes).
+struct GfxCmdDrawUiTriangles
+{
+    GfxCmdHeader header;
+    const Material *material;
+    uint16_t vertexCount;
+    uint16_t indexCount;
+    int scissorEnabled;
+    int scissor[4]; // left, top, right, bottom in screen pixels
+};
+
 struct GfxPrimStats // sizeof=0x18
 {                                       // ...
     int primCount;                      // ...
@@ -478,6 +490,7 @@ void R_SetVertex3d(GfxVertex *vert, float x, float y, float z, float s, float t,
 void RB_DrawLines3D(int count, int width, const GfxPointVertex *verts, bool depthTest);
 void RB_DrawLinesCmd(GfxRenderCommandExecState *execState);
 void RB_DrawTrianglesCmd(GfxRenderCommandExecState *execState);
+void RB_DrawUiTrianglesCmd(GfxRenderCommandExecState *execState);
 void RB_DrawTriangles_Internal(
     const Material *material,
     MaterialTechniqueType techType,

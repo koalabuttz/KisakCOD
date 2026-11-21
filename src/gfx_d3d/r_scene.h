@@ -293,11 +293,14 @@ void R_ModernSceneBegin();
 bool R_ModernWantsSceneDepth();
 // The view's depth prepass is drawn and its lit surfaces come next.
 void R_ModernSceneDepth(const GfxViewInfo *viewInfo);
+// The view's lit surfaces come next: tells the Modern path which sun shadow
+// map they read (GfxModernHooks::sunShadow).
+void R_ModernSunShadow(const GfxViewInfo *viewInfo, bool sunShadowMap);
 void R_ModernSceneLit(const GfxViewInfo *viewInfo);
 void R_ModernSceneDone(const GfxViewInfo *viewInfo);
 // R_SetupPass's call: tells the back end which colours a lit pass's pixel
 // shader reads (GfxModernHooks::litInputs), from sceneBegin to sceneLit.
-void R_ModernPassInputs(const Material *material, const MaterialPass *pass);
+void R_ModernPassInputs(const Material *material, const MaterialPass *pass, uint32_t stateBits0);
 // True when the Modern path drew this view's glow as bloom at its last
 // R_ModernSceneDone: the post effects leave the glow out.
 bool R_ModernDrewGlow(const GfxViewInfo *viewInfo);

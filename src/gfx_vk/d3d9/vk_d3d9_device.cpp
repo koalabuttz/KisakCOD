@@ -99,6 +99,7 @@ bool Device::Init()
     desc.host = &h;
     desc.window = window_;
     desc.vsync = params_.PresentationInterval != D3DPRESENT_INTERVAL_IMMEDIATE;
+    desc.swapInterval = SwapIntervalOf(params_.PresentationInterval);
     desc.width = params_.BackBufferWidth;
     desc.height = params_.BackBufferHeight;
     desc.samples = SamplesOf(params_.MultiSampleType);
@@ -225,11 +226,30 @@ ModernResult Device::ModernSceneDone(const ModernSceneView &view, bool *glowDraw
     if (!linearScene_)
         return BackendModernScene(backend_, renderTargets_[0] ? renderTargets_[0]->handle() : nullptr, depth,
                                   view);
+    // The sun's and the spot lights' shadow maps, for the volumetric fog: a
+    // texture is this device's only when it says so.
+    const auto levelZero = [this](IDirect3DTexture9 *map) -> lg::Surface * {
+        if (!map)
+            return nullptr;
+        lg::Surface *surface = nullptr;
+        IDirect3DDevice9 *owner = nullptr;
+        if (SUCCEEDED(map->GetDevice(&owner)) && owner == static_cast<IDirect3DDevice9 *>(this))
+        {
+            lg::Texture *texture = static_cast<Texture *>(map)->state_.texture;
+            surface = texture ? lg::GetSurfaceLevel(legacy_, texture, 0, 0) : nullptr;
+        }
+        if (owner)
+            owner->Release();
+        return surface;
+    };
+    lg::Surface *sunShadow = levelZero(view.fog.shadowMap);
+    lg::Surface *spotShadow = levelZero(view.fog.spotShadowMap);
     // The scene went to the linear-light image, wherever render target 0
     // points now: it is tonemapped into the back buffer.
     lg::Surface *scene = linearScene_;
     linearScene_ = nullptr;
-    const ModernResult result = BackendModernScene(backend_, scene, depth, view, backBuffer_->handle(), glowDrawn);
+    const ModernResult result =
+        BackendModernScene(backend_, scene, depth, view, backBuffer_->handle(), glowDrawn, sunShadow, spotShadow);
     if (renderTargets_[0] == backBuffer_.get())
         RebindTarget0();
     return result;
@@ -387,6 +407,11 @@ void Device::LogStats(bool reset)
     BackendLogStats(backend_, reset);
 }
 
+void Device::LogMemory(const char *when)
+{
+    BackendLogMemory(backend_, when);
+}
+
 DeviceCounters Device::counters() const
 {
     const FrontLock lock;
@@ -498,8 +523,11 @@ HRESULT STDMETHODCALLTYPE Device::Reset(D3DPRESENT_PARAMETERS *params)
         HostLog(host(), "vulkan d3d9: Reset: no back buffer of multisample type %u", unsigned(params->MultiSampleType));
         return D3DERR_NOTAVAILABLE;
     }
-    if ((params->PresentationInterval == D3DPRESENT_INTERVAL_IMMEDIATE)
-        != (params_.PresentationInterval == D3DPRESENT_INTERVAL_IMMEDIATE))
+    // Vsync on or off needs a new device (another present mode); how many
+    // refreshes a frame stays on screen does not.
+    const bool sameVsync = (params->PresentationInterval == D3DPRESENT_INTERVAL_IMMEDIATE)
+                           == (params_.PresentationInterval == D3DPRESENT_INTERVAL_IMMEDIATE);
+    if (!sameVsync)
         HostLog(host(), "vulkan d3d9: Reset: the presentation interval changes only with a new device");
 
     uint32_t width = params->BackBufferWidth, height = params->BackBufferHeight;
@@ -543,7 +571,9 @@ HRESULT STDMETHODCALLTYPE Device::Reset(D3DPRESENT_PARAMETERS *params)
         params_.BackBufferCount = 1;
     if (!params_.hDeviceWindow)
         params_.hDeviceWindow = old.hDeviceWindow;
-    params_.PresentationInterval = old.PresentationInterval;
+    params_.PresentationInterval = sameVsync ? params->PresentationInterval : old.PresentationInterval;
+    if (sameVsync && SwapIntervalOf(params_.PresentationInterval) != SwapIntervalOf(old.PresentationInterval))
+        BackendSetSwapInterval(backend_, SwapIntervalOf(params_.PresentationInterval));
     params_.MultiSampleType = samples > 1 ? static_cast<D3DMULTISAMPLE_TYPE>(samples) : D3DMULTISAMPLE_NONE;
     params_.MultiSampleQuality = 0;
     DefaultState();

@@ -69,7 +69,9 @@ void RecordThread(Core *core)
         out.submitted = state.submitted;
         out.presents = state.presents;
         out.rebuild = out.rebuild || state.rebuild;
+        out.surfaceLost = out.surfaceLost || state.surfaceLost;
         state.rebuild = false;
+        state.surfaceLost = false;
         ++out.chunksDone;
         recorder.spare.push_back(chunk);
         recorder.progress.notify_all();
@@ -183,6 +185,7 @@ bool SyncRecorder(Core &core)
     Recorder &recorder = core.recorder;
     bool failed = false;
     bool rebuild = false;
+    bool surfaceLost = false;
     char error[sizeof(RecordState::error)] = {};
     if (recorder.threaded)
     {
@@ -191,6 +194,8 @@ bool SyncRecorder(Core &core)
         std::memcpy(error, recorder.published.error, sizeof(error));
         rebuild = recorder.published.rebuild;
         recorder.published.rebuild = false;
+        surfaceLost = recorder.published.surfaceLost;
+        recorder.published.surfaceLost = false;
     }
     else
     {
@@ -198,9 +203,13 @@ bool SyncRecorder(Core &core)
         std::memcpy(error, core.record.error, sizeof(error));
         rebuild = core.record.rebuild;
         core.record.rebuild = false;
+        surfaceLost = core.record.surfaceLost;
+        core.record.surfaceLost = false;
     }
     if (rebuild)
         core.rebuildPending = true;
+    if (surfaceLost)
+        core.surfaceLost = true;
 
     std::vector<std::string> messages;
     {

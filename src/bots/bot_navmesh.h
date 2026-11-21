@@ -52,6 +52,9 @@ struct NavBuildStats
     int tilesY = 0;
     int tilesBuilt = 0;
     int polygons = 0;
+    // Drop-downs: one-way links from the edge of a floor to a floor below it
+    // that a player steps off to without fall damage.
+    int dropLinks = 0;
     size_t bytes = 0;
 };
 
@@ -95,6 +98,8 @@ public:
     void Clear();
     bool Loaded() const { return m_mesh != nullptr; }
     int PolygonCount() const;
+    // The drop-downs in the mesh (NavBuildStats::dropLinks).
+    int DropLinkCount() const;
 
     // The closest point on the mesh within `reach` across and twice that up
     // and down. False when there is none.
@@ -103,16 +108,37 @@ public:
     // A path from `start` to `end` as corner points, the first `start` (on the
     // mesh) and the last `end` or the closest reachable point to it. Returns
     // the number of points, 0 when there is no path.
-    int FindPath(const float start[3], const float end[3], float (*points)[3], int maxPoints) const;
+    //
+    // `end` may be anywhere in a player's body (feet, chest, eye): the goal is
+    // the floor under it, up to 96 units down, before anything above it. An
+    // eye under a low ceiling is closer to the floor upstairs than to its own
+    // floor; PC bot brain runs 19 and 20 sent bots upstairs over a shot heard
+    // below. With `complete`, whether the way reaches that floor; with
+    // `goalOnMesh`, where on it the goal is.
+    int FindPath(const float start[3],
+                 const float end[3],
+                 float (*points)[3],
+                 int maxPoints,
+                 bool *complete = nullptr,
+                 float goalOnMesh[3] = nullptr) const;
 
     // A random point on the mesh reachable from `from` (on the polygon graph),
     // picked with `unit`, a source of numbers in [0, 1).
     bool RandomReachablePoint(const float from[3], float (*unit)(void *), void *context, float out[3]) const;
 
+    // A random point on the mesh reachable from `from`, on a polygon within
+    // about `radius` of it.
+    bool RandomPointNear(const float from[3], float radius, float (*unit)(void *), void *context, float out[3]) const;
+
 private:
+    bool RandomAround(const float from[3], float radius, float (*unit)(void *), void *context, float out[3]) const;
+
     dtNavMesh *m_mesh = nullptr;
     dtNavMeshQuery *m_query = nullptr;
     dtQueryFilter *m_filter = nullptr;
 };
+
+// The length of a path's corners, end to end.
+float PathLength(const float (*points)[3], int count);
 
 } // namespace kisak::bots

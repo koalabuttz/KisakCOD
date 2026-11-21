@@ -153,7 +153,7 @@ VkBlendOp BlendOperation(uint32_t op)
     }
 }
 
-VkFormat DeclFormat(uint8_t type)
+VkFormat DeclFormat(uint8_t type, bool byteStandIn = false)
 {
     switch (type)
     {
@@ -168,7 +168,7 @@ VkFormat DeclFormat(uint8_t type)
     case d3d::DECLTYPE_D3DCOLOR:
         return VK_FORMAT_B8G8R8A8_UNORM;
     case d3d::DECLTYPE_UBYTE4:
-        return VK_FORMAT_R8G8B8A8_USCALED;
+        return byteStandIn ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R8G8B8A8_USCALED;
     case d3d::DECLTYPE_SHORT2:
         return VK_FORMAT_R16G16_SSCALED;
     case d3d::DECLTYPE_SHORT4:
@@ -248,6 +248,18 @@ uint32_t ColorCount(Surface *const targets[kMaxRenderTargets])
     while (count < kMaxRenderTargets && targets[count])
         ++count;
     return count;
+}
+
+// An additive draw (blend ONE, ONE, add) into a linear-light target while
+// SetModernAdditive's strength is not 1: its colour is added that many times
+// over, the source factor being the blend constant (MakePipelineKey) and the
+// constant the strength (MakeDynamicState).
+bool AdditiveBoosted(const Device &device)
+{
+    const uint32_t *rs = device.renderStates;
+    return device.modernAdditive != 1.0f && device.passTargets[0] && device.passTargets[0]->texture->linearLight
+        && rs[d3d::RS_ALPHABLENDENABLE] && rs[d3d::RS_SRCBLEND] == d3d::BLEND_ONE
+        && rs[d3d::RS_DESTBLEND] == d3d::BLEND_ONE && BlendOperation(rs[d3d::RS_BLENDOP]) == VK_BLEND_OP_ADD;
 }
 
 bool UsesTexture(const Surface *surface, const Texture *texture) { return surface && surface->texture == texture; }
@@ -455,7 +467,8 @@ Layout *GetLayout(Device &device, const LayoutKey &key)
     pipelineInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineInfo.setLayoutCount = 2;
     pipelineInfo.pSetLayouts = sets;
-    const VkPushConstantRange push{VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(ModernPlanarParams)};
+    const VkPushConstantRange push{VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                                   sizeof(ModernPlanarParams) + sizeof(ModernShadowParams)};
     if (key.modernPush)
     {
         pipelineInfo.pushConstantRangeCount = 1;
@@ -523,9 +536,11 @@ VkShaderModule FindPixelModule(Device &device, Shader &ps, const Shader &vs, uin
         inputs.samplers = linear.linearSamplers;
         inputs.doubled = linear.linearDoubled;
         inputs.flags = linear.linearColorInput;
+        inputs.emissive = inputs.flags & ls::kLinearEmissive ? device.modernEmissive : uint8_t(0);
         inputs.shader = linear.linearShader;
         recipe.sunStrength = device.modernSunStrength;
         recipe.skyStrength = device.modernSkyStrength;
+        recipe.lightPass = device.modernLightPass;
     }
     // Where depth compare is fixed, so is the reference's clamp
     // (SamplerStateBlock::drefClamp, as FillUniformBlock writes it).
@@ -556,7 +571,62 @@ bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Sh
     // alpha test's block), and the shadow map must be a depth image where
     // depth compare is fixed.
     const uint16_t shader = recipe.linearInputs ? recipe.moduleKey.inputs.shader : uint16_t(ModernLitNone);
-    if (ModernLitShaderValid(shader))
+    // Water (ModernLitWater): the probe, a cube at s1, and the water map, a 2D
+    // image at s4; the constants to c18.
+    if (shader == ModernLitWater)
+    {
+        const ls::Reflection &pr = ps.translated.reflection;
+        const uint32_t uniforms = 1u << static_cast<uint32_t>(ls::Uniform::FloatConstants)
+            | 1u << static_cast<uint32_t>(ls::Uniform::AlphaTest);
+        const bool fits =
+            !(pr.samplers & (1u << kModernAoSampler | 1u << kModernReflectionsSampler | 1u << kModernPlanarSampler))
+            && pr.floatConstants >= ModernLitConstantCount(shader) && (pr.uniforms & uniforms) == uniforms
+            && (pr.samplers & (1u << 1 | 1u << 4)) == (1u << 1 | 1u << 4)
+            && pr.samplerTypes[1] == ls::TextureType::Cube && pr.samplerTypes[4] == ls::TextureType::Tex2D;
+        const bool alphaTest =
+            !recipe.fixAlpha || recipe.alphaCompare != static_cast<uint32_t>(ls::AlphaCompare::Always);
+        if (fits
+            && BuildModernLitSpirv(shader, vs.translated, recipe.sunStrength, recipe.skyStrength, false, alphaTest,
+                                   spirv))
+        {
+            recipe.modernBuilt = true;
+            return true;
+        }
+    }
+    else if (ModernLitLightPass(shader) && ModernLitShaderValid(shader))
+    {
+        // An extra light pass (l_light.frag): 2D images at s0 and from s4 the
+        // shadow map (hsm), the normal map, the attenuation and the detail
+        // map; the shadow map a depth image where depth compare is fixed.
+        const ls::Reflection &pr = ps.translated.reflection;
+        const bool shadowed = (shader & ModernLitShadow) != 0;
+        const uint32_t normal = 4u + (shadowed ? 1u : 0u);
+        const uint32_t attenuation = normal + (shader & ModernLitNormal ? 1u : 0u);
+        const uint32_t images = 1u << 0 | (shadowed ? 1u << 4 : 0u) | (shader & ModernLitNormal ? 1u << normal : 0u)
+            | 1u << attenuation | (shader & ModernLitDetail ? 1u << (attenuation + 1u) : 0u);
+        const uint32_t modern = 1u << kModernAoSampler | 1u << kModernReflectionsSampler
+            | 1u << kModernPlanarSampler;
+        const uint32_t uniforms = 1u << static_cast<uint32_t>(ls::Uniform::FloatConstants)
+            | 1u << static_cast<uint32_t>(ls::Uniform::AlphaTest);
+        bool fits = !(pr.samplers & modern) && pr.floatConstants >= ModernLitConstantCount(shader)
+            && (pr.uniforms & uniforms) == uniforms && (pr.samplers & images) == images
+            && (!shadowed || !recipe.fixDepth || (recipe.depthCompare & (1u << 4)));
+        for (uint32_t sampler = 0; sampler < ls::kSamplerCount && fits; ++sampler)
+        {
+            if (images & (1u << sampler))
+                fits = pr.samplerTypes[sampler] == ls::TextureType::Tex2D;
+        }
+        const bool alphaTest =
+            !recipe.fixAlpha || recipe.alphaCompare != static_cast<uint32_t>(ls::AlphaCompare::Always);
+        if (fits
+            && BuildModernLitSpirv(shader, vs.translated, recipe.lightPass, 1.0f,
+                                   (recipe.depthCompare & ls::kFixedDepthClamp) != 0, alphaTest, spirv))
+        {
+            recipe.modernBuilt = true;
+            return true;
+        }
+    }
+    else if (ModernLitShaderValid(shader))
     {
         const ls::Reflection &pr = ps.translated.reflection;
         const bool model = ModernLitModel(shader);
@@ -717,8 +787,12 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
             Fail(device, "cannot build the pixel shader: %s", LastError(device.core));
         return nullptr;
     }
+    const VkShaderModule vertex = VertexModule(device, vs, decl);
+    if (!vertex)
+        return nullptr;
     PipelineInfo info;
-    MakePipelineInfo(info, key, vs, fragment, decl, *layout, Features(device.core).dynamicVertexStride);
+    MakePipelineInfo(info, key, vs, vertex, fragment, decl, *layout, Features(device.core).dynamicVertexStride,
+                     device.byteStandIn);
     const VkPipeline handle = CreateGraphicsPipeline(device.core, info.info);
     if (!handle)
     {
@@ -734,12 +808,67 @@ Pipeline *BuildPipeline(Device &device, const PipelineKey &key, Shader &vs, Shad
 
 } // namespace
 
-void MakePipelineInfo(PipelineInfo &out, const PipelineKey &key, const Shader &vs, VkShaderModule fragment,
-                      const VertexDecl &decl, const Layout &layout, bool dynamicStride)
+namespace
+{
+// The attribute locations of vs that decl feeds a UBYTE4 element, bit per
+// location (legacy_shader::BuildSpirv's byteInputs).
+uint32_t ByteInputs(const Shader &vs, const VertexDecl &decl)
+{
+    uint32_t mask = 0;
+    for (const ls::IoEntry &input : vs.translated.reflection.inputs)
+    {
+        if (input.builtIn || input.location >= 32)
+            continue;
+        for (const VertexElement &element : decl.elements)
+        {
+            if (element.usage == input.semanticUsage && element.usageIndex == input.semanticIndex)
+            {
+                if (element.type == d3d::DECLTYPE_UBYTE4)
+                    mask |= 1u << input.location;
+                break;
+            }
+        }
+    }
+    return mask;
+}
+} // namespace
+
+VkShaderModule VertexModule(Device &device, Shader &vs, const VertexDecl &decl)
+{
+    const uint32_t mask = device.byteStandIn ? ByteInputs(vs, decl) : 0u;
+    if (!mask)
+        return vs.module;
+    for (const auto &entry : vs.byteModules)
+    {
+        if (entry.first == mask)
+            return entry.second;
+    }
+    std::vector<uint32_t> spirv;
+    std::string error;
+    const uint32_t noDepthSamplers = 0; // as the shader's own module
+    if (!ls::BuildSpirv(vs.translated, nullptr, spirv, error, &noDepthSamplers, nullptr, false, nullptr, mask))
+    {
+        Fail(device, "vertex shader %08x with byte inputs %x: %s", vs.translated.bytecodeHash, mask, error.c_str());
+        return VK_NULL_HANDLE;
+    }
+    const VkShaderModule module = CreateShaderModule(device.core, spirv.data(), spirv.size() * sizeof(uint32_t));
+    if (!module)
+    {
+        Fail(device, "vertex shader %08x with byte inputs %x: %s", vs.translated.bytecodeHash, mask,
+             LastError(device.core));
+        return VK_NULL_HANDLE;
+    }
+    vs.byteModules.emplace_back(mask, module);
+    return module;
+}
+
+void MakePipelineInfo(PipelineInfo &out, const PipelineKey &key, const Shader &vs, VkShaderModule vertex,
+                      VkShaderModule fragment, const VertexDecl &decl, const Layout &layout, bool dynamicStride,
+                      bool byteStandIn)
 {
     out.stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     out.stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    out.stages[0].module = vs.module;
+    out.stages[0].module = vertex;
     out.stages[0].pName = "main";
     out.stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     out.stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -763,7 +892,7 @@ void MakePipelineInfo(PipelineInfo &out, const PipelineKey &key, const Shader &v
             if (element.usage == input.semanticUsage && element.usageIndex == input.semanticIndex)
             {
                 attribute.binding = element.stream;
-                attribute.format = DeclFormat(element.type);
+                attribute.format = DeclFormat(element.type, byteStandIn);
                 attribute.offset = element.offset;
                 break;
             }
@@ -957,6 +1086,8 @@ PipelineKey MakeKey(const Device &device, const Shader &vs, const Shader &ps, co
     {
         key.blendEnable = 0;
     }
+    if (key.blendEnable && AdditiveBoosted(device))
+        key.srcColor = static_cast<uint8_t>(VK_BLEND_FACTOR_CONSTANT_COLOR);
     static const d3d::RenderState kWriteMasks[kMaxRenderTargets] = {
         d3d::RS_COLORWRITEENABLE, d3d::RS_COLORWRITEENABLE1, d3d::RS_COLORWRITEENABLE2, d3d::RS_COLORWRITEENABLE3};
     const bool independent = Features(device.core).independentBlend;
@@ -1021,6 +1152,11 @@ VkSampler MakeSampler(Device &device, uint32_t slot, const Texture *texture)
     {
         info.compareEnable = VK_TRUE;
         info.compareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+        if (!device.depthFilterLinear)
+        {
+            info.magFilter = info.minFilter = VK_FILTER_NEAREST;
+            info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        }
     }
     // As DXVK: a single level gets the range 0-1, no mip filter level 0 only.
     if (!texture || texture->desc.levels <= 1)
@@ -1743,6 +1879,12 @@ DynamicState MakeDynamicState(const Device &device, d3d::PrimitiveType type)
     state.stencilMask = rs[d3d::RS_STENCILMASK] & 0xff;
     state.stencilWriteMask = rs[d3d::RS_STENCILWRITEMASK] & 0xff;
     UnpackColor(rs[d3d::RS_BLENDFACTOR], state.blendConstants);
+    if (AdditiveBoosted(device))
+    {
+        for (int i = 0; i < 3; ++i)
+            state.blendConstants[i] = device.modernAdditive;
+        state.blendConstants[3] = 1.0f;
+    }
     return state;
 }
 
@@ -2009,14 +2151,19 @@ bool PrepareDraw(Device &device, d3d::PrimitiveType type)
             });
         }
     }
-    // A Modern lit shader of ours: the planar reflection's parameters, pushed
-    // when they change (about once a scene) or a layout was bound since (a
-    // layout without the range disturbs them).
+    // A Modern lit shader of ours: the planar reflection's and the sun
+    // shadow's parameters, pushed when they change (about once a scene) or a
+    // layout was bound since (a layout without the range disturbs them).
     if (layout.key.modernPush && device.pushedPlanarGeneration != device.modernPlanarGeneration)
     {
         device.pushedPlanarGeneration = device.modernPlanarGeneration;
         const VkPipelineLayout pipelineLayout = layout.pipeline;
-        const ModernPlanarParams params = device.modernPlanarParams;
+        struct
+        {
+            ModernPlanarParams planar;
+            ModernShadowParams shadow;
+        } params{device.modernPlanarParams, device.modernShadowParams};
+        static_assert(sizeof(params) == sizeof(ModernPlanarParams) + sizeof(ModernShadowParams), "packed");
         Record(device.core, [pipelineLayout, params](VkCommandBuffer cmd, const Dispatch &vk) {
             vk.vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(params), &params);
         });
@@ -3035,7 +3182,7 @@ void SetLinearLight(Texture *texture, bool linear)
 }
 
 void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint16_t doubled, bool colorInput,
-                     bool overWhite, uint16_t shader)
+                     bool overWhite, uint16_t shader, bool emissive)
 {
     if (!device)
         return;
@@ -3044,6 +3191,11 @@ void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint
     {
         inputs.flags = ls::kLinearOverWhite;
         inputs.shader = ModernLitShaderValid(shader) ? shader : uint16_t(ModernLitNone);
+    }
+    else if (emissive)
+    {
+        inputs.flags = ls::kLinearEmissive;
+        inputs.emissive = device->modernEmissive;
     }
     else
     {
@@ -3082,6 +3234,40 @@ void SetModernPlanar(Device *device, Image *image, const ModernPlanarParams *par
     {
         device->modernPlanarParams = next;
         ++device->modernPlanarGeneration;
+    }
+}
+
+void SetModernLightPass(Device *device, float strength)
+{
+    if (device)
+        device->modernLightPass = strength >= 0.0f ? strength : 1.0f;
+}
+
+void SetModernEmissive(Device *device, float strength)
+{
+    if (device)
+        device->modernEmissive = static_cast<uint8_t>(std::lround(std::clamp(strength, 1.0f, 63.75f) * 4.0f));
+}
+
+void SetModernShadow(Device *device, const ModernShadowParams *params)
+{
+    if (!device)
+        return;
+    const ModernShadowParams next = params && params->on != 0.0f ? *params : ModernShadowParams{};
+    if (std::memcmp(&next, &device->modernShadowParams, sizeof(next)) != 0)
+    {
+        device->modernShadowParams = next;
+        ++device->modernPlanarGeneration;
+    }
+}
+
+void SetModernAdditive(Device *device, float strength)
+{
+    if (device)
+    {
+        device->modernAdditive = strength >= 0.0f ? strength : 1.0f;
+        device->keyStale = true;
+        device->dynamicStale = true;
     }
 }
 

@@ -1,0 +1,299 @@
+/* The look shared by the RmlUi screens (src/ui_rml/screens, docs/rmlui-frontend.md).
+   Sizes are in dp: one dp is a pixel of a 720-line screen. Fonts are the
+   game's own (fonts/normalFont and the rest), drawn by src/ui_rml/rml_font.cpp.
+   Colours: text #e6e4dc, muted #9a988f, accent #e0b04a. */
+
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background-color: #05070aeb;
+    font-family: "fonts/normalFont";
+    font-size: 26dp;
+    color: #e6e4dc;
+}
+
+#panel {
+    position: absolute;
+    left: 7%;
+    right: 7%;
+    top: 5%;
+    bottom: 5%;
+    decorator: vertical-gradient(#1b1f24ff #0b0d10ff);
+    border-top: 3dp #e0b04a;
+}
+
+#title {
+    position: absolute;
+    left: 28dp;
+    top: 18dp;
+    font-family: "fonts/boldFont";
+    font-size: 34dp;
+    color: #ffffff;
+}
+
+#subtitle {
+    position: absolute;
+    right: 28dp;
+    top: 28dp;
+    font-size: 22dp;
+    color: #9a988f;
+}
+
+tabs {
+    display: block;
+    position: absolute;
+    left: 20dp;
+    right: 20dp;
+    top: 72dp;
+    height: 40dp;
+    border-bottom: 1dp #ffffff26;
+}
+
+tab {
+    display: inline-block;
+    height: 39dp;
+    padding: 8dp 18dp 0dp 18dp;
+    color: #9a988f;
+    tab-index: auto;
+    nav-left: horizontal;
+    nav-right: horizontal;
+    nav-down: auto;
+    focus: auto;
+}
+
+tab:hover, tab:focus-visible {
+    color: #ffffff;
+    background-color: #ffffff12;
+}
+
+tab.selected {
+    color: #ffffff;
+    border-bottom: 3dp #e0b04a;
+}
+
+page {
+    display: block;
+    position: absolute;
+    left: 20dp;
+    right: 20dp;
+    top: 124dp;
+    bottom: 76dp;
+    overflow-y: auto;
+}
+
+scrollbarvertical {
+    width: 6dp;
+    margin-left: 4dp;
+}
+
+scrollbarvertical slidertrack {
+    background-color: #ffffff10;
+}
+
+scrollbarvertical sliderbar {
+    background-color: #e0b04a90;
+}
+
+h2 {
+    display: block;
+    height: 34dp;
+    padding: 12dp 16dp 0dp 16dp;
+    font-family: "fonts/boldFont";
+    font-size: 22dp;
+    color: #e0b04a;
+}
+
+row {
+    display: block;
+    position: relative;
+    height: 52dp;
+    border-bottom: 1dp #ffffff0f;
+    tab-index: auto;
+    nav-up: auto;
+    nav-down: auto;
+}
+
+row:hover {
+    background-color: #ffffff0a;
+}
+
+row:focus {
+    decorator: horizontal-gradient(#e0b04a40 #e0b04a08);
+}
+
+row .label {
+    position: absolute;
+    left: 18dp;
+    top: 13dp;
+}
+
+row .value {
+    position: absolute;
+    right: 14dp;
+    top: 13dp;
+    width: 280dp;
+    height: 28dp;
+}
+
+row .text {
+    display: block;
+    text-align: center;
+    color: #ffffff;
+}
+
+row .arrow {
+    position: absolute;
+    top: -10dp;
+    width: 52dp;
+    height: 46dp;
+    padding-top: 8dp;
+    text-align: center;
+    color: #9a988f;
+}
+
+row .arrow.left {
+    left: -10dp;
+}
+
+row .arrow.right {
+    right: -10dp;
+}
+
+row:focus .arrow, row .arrow:hover {
+    color: #e0b04a;
+}
+
+row .bar {
+    position: absolute;
+    right: 316dp;
+    top: 13dp;
+    width: 220dp;
+    height: 26dp;
+}
+
+row .bar .track {
+    display: block;
+    margin-top: 10dp;
+    height: 6dp;
+    background-color: #ffffff24;
+}
+
+row .bar .fill {
+    display: block;
+    height: 6dp;
+    background-color: #e0b04a;
+}
+
+row .bar:hover {
+    background-color: #ffffff0a;
+}
+
+row .mark {
+    display: none;
+    position: absolute;
+    right: 560dp;
+    top: 16dp;
+    font-size: 20dp;
+    color: #e0b04a;
+}
+
+row.slider .mark {
+    right: 560dp;
+}
+
+row.pending .mark {
+    display: block;
+}
+
+.presets {
+    display: block;
+    padding: 16dp 8dp;
+}
+
+.preset {
+    display: inline-block;
+    width: 21%;
+    height: 128dp;
+    margin: 0dp 1.5%;
+    padding-top: 24dp;
+    text-align: center;
+    font-family: "fonts/boldFont";
+    font-size: 26dp;
+    background-color: #ffffff0d;
+    border-bottom: 3dp #ffffff26;
+    tab-index: auto;
+    nav: auto;
+}
+
+.preset span {
+    display: block;
+    padding: 12dp 10dp 0dp 10dp;
+    font-family: "fonts/normalFont";
+    font-size: 23dp;
+    color: #9a988f;
+}
+
+.preset:hover, .preset:focus {
+    background-color: #e0b04a33;
+    border-bottom: 3dp #e0b04a;
+}
+
+p {
+    display: block;
+    padding: 10dp 18dp;
+    font-size: 24dp;
+    color: #9a988f;
+}
+
+#footer {
+    position: absolute;
+    left: 20dp;
+    right: 20dp;
+    bottom: 0dp;
+    height: 66dp;
+    border-top: 1dp #ffffff26;
+}
+
+#hint {
+    position: absolute;
+    left: 6dp;
+    right: 340dp;
+    top: 10dp;
+    font-size: 22dp;
+    color: #9a988f;
+}
+
+.button {
+    position: absolute;
+    top: 12dp;
+    width: 150dp;
+    height: 42dp;
+    padding-top: 10dp;
+    text-align: center;
+    font-family: "fonts/boldFont";
+    font-size: 20dp;
+    background-color: #ffffff14;
+    tab-index: auto;
+    nav: auto;
+}
+
+.button:hover, .button:focus {
+    background-color: #e0b04a;
+    color: #0b0d10;
+}
+
+#back {
+    right: 0dp;
+}
+
+#apply {
+    display: none;
+    right: 166dp;
+    background-color: #e0b04a55;
+}
+
+body.pending #apply {
+    display: block;
+}

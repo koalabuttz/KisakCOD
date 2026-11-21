@@ -41,6 +41,15 @@ void HostLog(const Host &host, const char *format, ...);
 // on the PS Vita. Samples of a D3D9 multisample type: 1 for none.
 bool OffersSamples(D3DMULTISAMPLE_TYPE type);
 inline uint32_t SamplesOf(D3DMULTISAMPLE_TYPE type) { return type >= D3DMULTISAMPLE_2_SAMPLES ? uint32_t(type) : 1u; }
+// The refreshes a frame stays on screen for a presentation interval (1 for
+// DEFAULT, ONE and IMMEDIATE).
+inline uint32_t SwapIntervalOf(UINT interval)
+{
+    return interval == D3DPRESENT_INTERVAL_TWO ? 2u
+        : interval == D3DPRESENT_INTERVAL_THREE ? 3u
+        : interval == D3DPRESENT_INTERVAL_FOUR  ? 4u
+                                                : 1u;
+}
 
 // The lock every method of every front object holds for its whole call. One
 // for the process and recursive: a method calls others (Release from a
@@ -65,12 +74,11 @@ inline uint32_t SamplesOf(D3DMULTISAMPLE_TYPE type) { return type >= D3DMULTISAM
 // waiter touches. The object needs no constructor that runs, so a call from a
 // static constructor or destructor still finds it.
 //
-// The PS Vita build keeps the plain recursive mutex: thread_local is emulated
-// there (a library call on every use), and its calls come from one thread.
-#if defined(__vita__)
-using FrontMutexType = std::recursive_mutex;
-FrontMutexType &FrontMutex();
-#else
+// The PS Vita build had a plain recursive mutex here until 2026-11-15,
+// because thread_local is emulated there (a library call on every use). That
+// was four library calls for every call into the front, 5000 and more times a
+// frame on the render thread. It tells its threads apart by the register that
+// holds the thread's own block of kernel-kept memory instead (Self).
 class FrontMutexType
 {
 public:
@@ -103,9 +111,19 @@ private:
     // Any address that is this thread's alone.
     static const void *Self()
     {
+#if defined(__vita__)
+        // TPIDRURO: the kernel keeps the address of the running thread's
+        // local storage in it, which is where sceKernelGetTLSAddr starts
+        // from. CreateDirect3D9 checks the two agree.
+        const void *block;
+        __asm__ __volatile__("mrc p15, 0, %0, c13, c0, 3" : "=r"(block));
+        return block;
+#else
         static thread_local const char t_token = 0;
         return &t_token;
+#endif
     }
+    friend bool FrontLockKnowsItsThread();
     void LockSlow();
     void WakeOne();
     std::atomic<uint32_t> state_{kFree};
@@ -116,7 +134,9 @@ private:
 };
 inline constinit FrontMutexType g_frontMutex;
 inline FrontMutexType &FrontMutex() { return g_frontMutex; }
-#endif
+// Whether the lock's way of telling threads apart holds on this machine.
+// Always true off the PS Vita.
+bool FrontLockKnowsItsThread();
 // Waits for the front lock that ended in a sleep (spinning did not get it),
 // over all threads since start: the slow frame lines print a frame's share.
 struct FrontLockSleeps
@@ -539,6 +559,8 @@ public:
     void DetachWindow();
     // Under FrontLock (LogDeviceStats).
     void LogStats(bool reset);
+    // Under FrontLock (LogDeviceMemory).
+    void LogMemory(const char *when);
     // Under FrontLock (vk_d3d9.h ModernSceneBegin and ModernSceneDone): the
     // scene is render target 0 and the depth surface as they are set now, or
     // the linear-light image standing in for the back buffer.
@@ -558,10 +580,19 @@ public:
     }
     void SetModernLitInputs(const ModernLitInputs *inputs);
     bool ModernReflectionProbe(lg::Texture *probe) { return BackendModernReflectionProbe(backend_, legacy_, probe); }
+    // Under FrontLock (vk_d3d9.h ModernProbeCapture).
+    bool ModernProbeCaptureWanted() { return BackendModernProbeCaptureWanted(backend_); }
+    void ModernProbeCapture(bool on) { BackendModernProbeCapture(backend_, on); }
+    bool ModernProbeCaptureRead(uint32_t x, uint32_t y, uint32_t width, uint32_t height, float *rgb)
+    {
+        return BackendModernProbeCaptureRead(backend_, x, y, width, height, rgb);
+    }
     // Under FrontLock (vk_d3d9.h ModernPlanarBegin and ModernPlanarDone).
     bool ModernPlanarWanted() { return BackendModernPlanarWanted(backend_); }
     bool ModernPlanarBegin(const ModernPlanarView &view);
     void ModernPlanarDone(const ModernPlanarView &view);
+    // Under FrontLock (vk_d3d9.h ModernSunShadow).
+    void ModernSunShadow(const ModernSunShadowView &view) { BackendModernSunShadow(backend_, legacy_, view); }
     const Host &host() const { return parent_->host(); }
     HRESULT Unsupported(const char *method);
     DeviceCounters counters() const;

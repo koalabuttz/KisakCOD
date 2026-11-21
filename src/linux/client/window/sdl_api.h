@@ -623,6 +623,19 @@ inline bool StartTextInput(SDL_Window *window)
 #endif
 }
 
+// True where typing needs an on-screen keyboard (Android, a Steam Deck in
+// game mode): starting text input there brings the keyboard up and, on
+// Android, moves input focus off the game's surface, so controller sticks and
+// triggers stop arriving until it is stopped.
+inline bool ScreenKeyboard()
+{
+#if KISAK_LINUX_SDL_MAJOR == 3
+    return SDL_HasScreenKeyboardSupport();
+#else
+    return SDL_HasScreenKeyboardSupport() == SDL_TRUE;
+#endif
+}
+
 inline void StopTextInput(SDL_Window *window)
 {
 #if KISAK_LINUX_SDL_MAJOR == 3

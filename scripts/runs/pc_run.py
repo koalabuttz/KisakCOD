@@ -79,8 +79,53 @@ since the home template's profile holds the player's own.
 tasklist); a launch never starts while one runs, nor while another copy of
 the game does.
 
-Exit status: 0 when every launch exited 0 and wrote every screenshot it
-named, 1 otherwise (the report says which), 2 on a bad recipe.
+Settings compared inside one launch: ``variants``. The Modern switches are
+live dvars (``r_modernAo``, ``r_modernSsr``, ... ; docs/runs.md), so one launch
+can show every value at the same camera, and its frame rates are not spread by
+the drift between launches. A launch lists its variants and the runner writes
+the timed commands::
+
+    {"name": "crash-in", "args": ["+devmap", "mp_crash"],
+     "at_map": ["3 cmd mr {serverid} 8 autoassign", "5 cmd mr {serverid} 15 assault_mp,0",
+                "8 setviewpos 30 -10 200 140"],
+     "variants": [{"name": "B", "set": {"r_modernAo": "off"}},
+                  {"name": "A", "set": {"r_modernAo": "on"}}],
+     "variant_timing": {"start": 20, "framelog": 8}}
+
+From ``start`` seconds after the map is up (default: 20 s, after the
+pre-match countdown, whose grey picture and missing HUD would swamp any
+difference; or 2 s after the last ``at_map`` command if that is later) each variant in turn sets its dvars, waits ``settle``
+seconds (default 1: AO was fully in 0.1 s after a switch; the first
+variant also waits ``warmup`` seconds, default 30 when frame logs are taken,
+because a launch's first half minute in play ran 6-11% slower), takes the screenshot
+``<launch>-<variant>`` the first time round and, when ``framelog`` is given,
+a frame log ``<launch>-<variant>-<pass>`` of that many seconds; then the
+launch quits. With a frame log the variants run twice, in mirrored order
+(A B B A), so steady drift cancels in the mean; ``"passes": 1`` or ``2`` sets
+it. ``"compare": true`` compares the first variant's screenshot with each
+other one's. Per launch, results.json gets ``variants`` (fps per pass, mean
+fps, and the difference from the first variant) and the report a table. Each
+variant's ``set`` should name every dvar any variant changes, so the order of
+the passes does not matter. Moving things (smoke, the helicopter) move
+between the screenshots; ``"18 timescale 0.001"`` in ``at_map`` (devmap,
+cheats on) holds them still (variants proof 1: the same variant twice differed
+by 0.29 levels), so use it for picture launches but not for frame logs.
+AO looked lighter frozen than in play (arch 17.3 against 22.1 levels at the
+same radius and view, proof 2), so compare frozen shots with frozen shots.
+
+The game splits its command line at every ``+`` (Com_ParseCommandLine) and
+keeps 31 parts, so a timed command or a variant value with a ``+`` in it
+(``45 +left``) would break the whole list: the recipe check refuses it. Put
+such commands in a cfg in the home template and send ``exec <cfg>``. A launch
+whose timed list the game refused anyway ends with status ``run_error``.
+The game also keeps only 1023 bytes of its command line (``sys_cmdline``):
+on Windows it cuts the rest, timed list and all, so the recipe check refuses
+a launch whose command line would be longer (a long variant list is the
+usual cause; split it over two launches).
+
+Exit status: 0 when every launch exited 0, ran its timed commands and wrote
+every screenshot it named, 1 otherwise (the report says which), 2 on a bad
+recipe.
 """
 
 import argparse
@@ -98,8 +143,25 @@ import zlib
 from pathlib import Path
 
 FORMAT = "kisak-pc-run/1"
-SAFETY_AFTER_LAST = 30  # seconds after the last timed command before the safety quit
+# Windows copies its command line into sys_cmdline[1024] and cuts the rest
+# (src/win32/win_main.cpp); Linux and Android refuse to start (src/linux/main.cpp).
+COMMAND_LINE_BYTES = 1023
+MAX_CONSOLE_LINES = 31  # Com_ParseCommandLine keeps 32 lines, the first is what comes before the first '+'
+SAFETY_AFTER_LAST = 30
+# Variants start after the pre-match countdown (about 16-17 s on mp_crash under
+# devmap: a grey vision set and no HUD, pc_run variants proof 1).
+DEFAULT_VARIANT_START = 20
+SPREAD_WARNING_PCT = 5
+# Variants proof 2: AO was fully in 0.1 s after the switch, so 1 s settles.
+DEFAULT_SETTLE = 1
+# Both proofs: the first frame log of a launch ran 6-11% slower than the same
+# variant 40 s later, while later passes agreed within 1%; a launch with frame
+# logs waits this long on its first variant before it starts measuring.
+DEFAULT_WARMUP = 30  # seconds after the last timed command before the safety quit
 FRAME_LOG = re.compile(r"^frame log (\S+): .*$")
+FRAME_LOG_FPS = re.compile(r"^frame log (\S+): (\d+) frames in ([\d.]+) s: ([\d.]+) fps; ms mean ([\d.]+), "
+                           r"median ([\d.]+), p95 ([\d.]+), p99 ([\d.]+)")
+DVAR_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 SHOT_COMMAND = re.compile(r"^\s*[\d.]+\s+screenshot\s+(\S+)\s*$")
 TIMED = re.compile(r"^\s*([\d.]+)\s+\S")
 
@@ -131,15 +193,29 @@ def load_recipe(path):
         if name in names:
             raise RecipeError(f"launch name {name!r} given twice")
         names.add(name)
+        check_variants(launch)
         for key in ("at_menu", "at_map"):
-            commands = launch.get(key) or []
+            commands = launch_commands(launch, key)
             if len(commands) > 32:
                 raise RecipeError(f"{name}: {key} has {len(commands)} commands; the client takes 32")
             for command in commands:
                 if "|" in command or not TIMED.match(command):
                     raise RecipeError(f"{name}: {key} entry {command!r} is not '<seconds> <command>' without '|'")
+                if "+" in command or "\n" in command:
+                    raise RecipeError(f"{name}: {key} entry {command!r} has a '+': the game splits its command line "
+                                      "at every '+', so the whole list would be refused; put '+left' and the like "
+                                      "in a cfg and send 'exec <cfg>'")
                 if len(command.split(None, 1)[1]) >= 160:
                     raise RecipeError(f"{name}: {key} entry {command!r} is longer than the client takes")
+        length = command_line_length(recipe, launch)
+        if length > COMMAND_LINE_BYTES:
+            raise RecipeError(f"{name}: the command line would be {length} bytes; the game keeps "
+                              f"{COMMAND_LINE_BYTES} (sys_cmdline) and cuts the rest, timed list and all. "
+                              "Fewer or shorter timed commands, or fewer variants per launch")
+        lines = command_line_parts(recipe, launch)
+        if lines > MAX_CONSOLE_LINES:
+            raise RecipeError(f"{name}: the command line has {lines} '+' parts; the game reads the first "
+                              f"{MAX_CONSOLE_LINES} and drops the rest")
         for shot in launch_shots(launch):
             if shot in shots:
                 raise RecipeError(f"screenshot {shot!r} is named twice; the second would overwrite the first")
@@ -155,9 +231,108 @@ def load_recipe(path):
     return recipe
 
 
+def command_line_parts(recipe, launch):
+    """How many '+' parts the game's command line splitter (Com_ParseCommandLine)
+    makes of a launch's arguments: it splits at every '+' and keeps 31."""
+    exe = recipe["game"]["exe"]
+    skip = len(exe) if isinstance(exe, list) else 1
+    return " ".join(launch_argv(recipe, launch, Path("home"))[skip:]).count("+")
+
+
+def command_line_length(recipe, launch):
+    """The length of the command line the game copies into sys_cmdline: the
+    arguments after the program, as Windows joins them (Linux joins them the
+    same way, src/linux/main.cpp), with a home folder of a typical length."""
+    exe = recipe["game"]["exe"]
+    skip = len(exe) if isinstance(exe, list) else 1
+    home = Path("C:/kisak/runs/run-folder-of-typical-length") / launch["name"] / "home"
+    return len(subprocess.list2cmdline(launch_argv(recipe, launch, home)[skip:]))
+
+
+def check_variants(launch):
+    name, variants = launch.get("name"), launch.get("variants")
+    if variants is None:
+        if launch.get("variant_timing"):
+            raise RecipeError(f"{name}: variant_timing without variants")
+        return
+    if not isinstance(variants, list) or not variants:
+        raise RecipeError(f"{name}: variants is a list of {{'name', 'set'}}")
+    seen = set()
+    for variant in variants:
+        label = variant.get("name", "")
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", label or ""):
+            raise RecipeError(f"{name}: variant name {label!r}: letters, digits, _ . - only")
+        if label in seen:
+            raise RecipeError(f"{name}: variant {label!r} given twice")
+        seen.add(label)
+        settings = variant.get("set")
+        if not isinstance(settings, dict) or not settings:
+            raise RecipeError(f"{name}: variant {label!r} sets nothing")
+        for dvar, value in settings.items():
+            if not DVAR_NAME.match(dvar) or re.search(r"[|;+\"\s]", str(value)) or str(value) == "":
+                raise RecipeError(f"{name}: variant {label!r} sets {dvar!r} to {value!r}: one dvar name, "
+                                  "one value without spaces, ';', '|', '+' or quotes")
+    timing = launch.get("variant_timing") or {}
+    for key in timing:
+        if key not in ("start", "settle", "framelog", "passes", "compare", "warmup"):
+            raise RecipeError(f"{name}: variant_timing has an unknown key {key!r}")
+    if timing.get("passes", 1) not in (1, 2):
+        raise RecipeError(f"{name}: variant_timing passes is 1 or 2")
+    for key in ("start", "settle", "framelog", "warmup"):
+        if key in timing and not (isinstance(timing[key], (int, float)) and timing[key] >= 0):
+            raise RecipeError(f"{name}: variant_timing {key} is a number of seconds")
+    last = max([float(TIMED.match(c).group(1)) for c in launch.get("at_map") or [] if TIMED.match(c)] or [0])
+    if "start" in timing and timing["start"] <= last:
+        raise RecipeError(f"{name}: variant_timing start {timing['start']} is not after the last at_map command ({last:g})")
+
+
+def number(value):
+    return f"{value:g}"
+
+
+def variant_plan(launch):
+    """The variants' timed commands and what each frame log and screenshot is."""
+    variants = launch.get("variants") or []
+    if not variants:
+        return [], []
+    timing = launch.get("variant_timing") or {}
+    settle = float(timing.get("settle", DEFAULT_SETTLE))
+    framelog = float(timing.get("framelog", 0))
+    warmup = float(timing.get("warmup", DEFAULT_WARMUP if framelog else 0))
+    passes = int(timing.get("passes", 2 if framelog else 1))
+    last = max([float(TIMED.match(c).group(1)) for c in launch.get("at_map") or [] if TIMED.match(c)] or [0])
+    t = float(timing.get("start", max(DEFAULT_VARIANT_START, last + 2)))
+    order = list(variants) + (list(reversed(variants)) if passes == 2 else [])
+    commands, plan = [], []
+    for index, variant in enumerate(order):
+        number_of_pass = 1 if index < len(variants) else 2
+        sets = "; ".join(f"{dvar} {value}" for dvar, value in variant["set"].items())
+        commands.append(f"{number(t)} {sets}")
+        t += settle + (warmup if index == 0 else 0)
+        if number_of_pass == 1:
+            shot = f"{launch['name']}-{variant['name']}"
+            commands.append(f"{number(t)} screenshot {shot}")
+            plan.append({"variant": variant["name"], "pass": 1, "screenshot": shot})
+            t += 1
+        if framelog:
+            label = f"{launch['name']}-{variant['name']}-{number_of_pass}"
+            commands.append(f"{number(t)} framelog {number(framelog)} {label}")
+            plan.append({"variant": variant["name"], "pass": number_of_pass, "framelog": label})
+            t += framelog + 1
+    commands.append(f"{number(t)} quit")
+    return commands, plan
+
+
+def launch_commands(launch, key):
+    commands = list(launch.get(key) or [])
+    if key == "at_map":
+        commands += variant_plan(launch)[0]
+    return commands
+
+
 def launch_shots(launch):
     shots = []
-    for command in (launch.get("at_menu") or []) + (launch.get("at_map") or []):
+    for command in launch_commands(launch, "at_menu") + launch_commands(launch, "at_map"):
         match = SHOT_COMMAND.match(command)
         if match:
             shots.append(match.group(1))
@@ -177,7 +352,7 @@ def launch_argv(recipe, launch, home):
         argv += ["+set", "fs_homepath", str(home)]
     # The run settings go before the launch's own +devmap/+connect, so the
     # game has them when it reads its command line.
-    at_menu, at_map = launch.get("at_menu") or [], launch.get("at_map") or []
+    at_menu, at_map = launch_commands(launch, "at_menu"), launch_commands(launch, "at_map")
     if at_menu:
         argv += ["+set", "run_atMenu", timed_list(at_menu)]
     if at_map:
@@ -302,6 +477,12 @@ def run_launch(recipe, launch, out, dry_run=False):
     result["lines"] = wanted_lines(log_text, recipe.get("lines") or [])
     result["frame_logs"] = [line for line in log_text.splitlines() if FRAME_LOG.match(line.strip())]
     result["run_errors"] = [line for line in log_text.splitlines() if "none of its commands will be sent" in line]
+    if result["run_errors"] and result["status"] == "ok":
+        # The game refused the timed list, so nothing the recipe asked for ran:
+        # the launch only idled until its safety quit.
+        result["status"] = "run_error"
+    if launch.get("variants"):
+        result["variants"] = variant_summary(launch, result["frame_logs"])
 
     shots = {}
     for path, mtime in files_under(search, "*.tga").items():
@@ -315,6 +496,39 @@ def run_launch(recipe, launch, out, dry_run=False):
     after = blockers(recipe)
     result["blocked_after"] = [name for name in after if name in (game.get("forbid_processes") or [])]
     return result
+
+
+def variant_summary(launch, frame_logs):
+    """Frame rate per variant and pass from the frame log lines, and each
+    variant's mean against the first variant's."""
+    found = {}
+    for line in frame_logs:
+        match = FRAME_LOG_FPS.match(line.strip())
+        if match:
+            found[match.group(1)] = {"fps": float(match.group(4)), "ms_mean": float(match.group(5)),
+                                     "ms_median": float(match.group(6)), "ms_p95": float(match.group(7)),
+                                     "ms_p99": float(match.group(8))}
+    summary = []
+    for variant in launch["variants"]:
+        entry = {"name": variant["name"], "set": variant["set"], "passes": []}
+        for step in variant_plan(launch)[1]:
+            if step["variant"] == variant["name"] and "framelog" in step:
+                numbers = found.get(step["framelog"])
+                entry["passes"].append({"pass": step["pass"], "label": step["framelog"], **(numbers or {"missing": True})})
+        fps = [p["fps"] for p in entry["passes"] if "fps" in p]
+        if fps:
+            entry["mean_fps"] = round(sum(fps) / len(fps), 2)
+            medians = [p["ms_median"] for p in entry["passes"] if "ms_median" in p]
+            entry["mean_ms_median"] = round(sum(medians) / len(medians), 3)
+            if len(fps) > 1:
+                entry["pass_spread_pct"] = round(100 * (max(fps) - min(fps)) / (sum(fps) / len(fps)), 2)
+        summary.append(entry)
+    base = summary[0].get("mean_fps") if summary else None
+    for entry in summary:
+        if base and entry.get("mean_fps"):
+            entry["fps_vs_first_pct"] = round(100 * (entry["mean_fps"] - base) / base, 2)
+            entry["ms_vs_first"] = round(1000 / entry["mean_fps"] - 1000 / base, 3)
+    return summary
 
 
 def wanted_lines(text, needles):
@@ -363,6 +577,72 @@ def read_tga(path):
         row = width * 3
         rgb = b"".join(bytes(rgb[y * row:(y + 1) * row]) for y in range(height - 1, -1, -1))
     return width, height, bytes(rgb)
+
+
+def read_png(path):
+    """(width, height, rgb bytes top row first) of an 8-bit RGB or RGBA PNG
+    without interlacing, as Android's screencap writes it (android_run.py)."""
+    data = Path(path).read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError(f"{path}: not a PNG")
+    position, idat, header = 8, bytearray(), None
+    while position + 8 <= len(data):
+        length, kind = struct.unpack_from(">I4s", data, position)
+        body = data[position + 8:position + 8 + length]
+        if kind == b"IHDR":
+            header = struct.unpack(">IIBBBBB", body)
+        elif kind == b"IDAT":
+            idat += body
+        elif kind == b"IEND":
+            break
+        position += 12 + length
+    if not header:
+        raise ValueError(f"{path}: no IHDR")
+    width, height, depth, colour, _, _, interlace = header
+    if depth != 8 or colour not in (2, 6) or interlace:
+        raise ValueError(f"{path}: PNG depth {depth}, colour type {colour}, interlace {interlace}; "
+                         "only 8-bit RGB or RGBA without interlacing is read")
+    step = 3 if colour == 2 else 4
+    stride = width * step
+    raw = zlib.decompress(bytes(idat))
+    rows, previous = [], bytearray(stride)
+    for y in range(height):
+        kind = raw[y * (stride + 1)]
+        line = bytearray(raw[y * (stride + 1) + 1:(y + 1) * (stride + 1)])
+        if kind == 1:
+            for i in range(step, stride):
+                line[i] = (line[i] + line[i - step]) & 0xFF
+        elif kind == 2:
+            line = bytearray((a + b) & 0xFF for a, b in zip(line, previous))
+        elif kind == 3:
+            for i in range(stride):
+                left = line[i - step] if i >= step else 0
+                line[i] = (line[i] + ((left + previous[i]) >> 1)) & 0xFF
+        elif kind == 4:
+            for i in range(stride):
+                a = line[i - step] if i >= step else 0
+                b = previous[i]
+                c = previous[i - step] if i >= step else 0
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                line[i] = (line[i] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 0xFF
+        elif kind != 0:
+            raise ValueError(f"{path}: row {y} has filter {kind}")
+        rows.append(bytes(line))
+        previous = line
+    pixels = b"".join(rows)
+    if step == 3:
+        return width, height, pixels
+    rgb = bytearray(width * height * 3)
+    rgb[0::3] = pixels[0::4]
+    rgb[1::3] = pixels[1::4]
+    rgb[2::3] = pixels[2::4]
+    return width, height, bytes(rgb)
+
+
+def read_picture(path):
+    """A screenshot the game wrote (TGA) or a screen capture (PNG)."""
+    return read_png(path) if str(path).lower().endswith(".png") else read_tga(path)
 
 
 def write_png(path, width, height, rgb):
@@ -491,6 +771,20 @@ def crop(image, box):
     return x1 - x0, y1 - y0, b"".join(rgb[(y * width + x0) * 3:(y * width + x1) * 3] for y in range(y0, y1))
 
 
+def compare_pairs(recipe):
+    """The recipe's own pairs, then each launch's first variant against each
+    other variant when its variant_timing asks for "compare"."""
+    pairs = list((recipe.get("pictures") or {}).get("compare") or [])
+    for launch in recipe["launches"]:
+        variants = launch.get("variants") or []
+        if variants and (launch.get("variant_timing") or {}).get("compare"):
+            first = f"{launch['name']}-{variants[0]['name']}"
+            for variant in variants[1:]:
+                pairs.append({"a": first, "b": f"{launch['name']}-{variant['name']}",
+                              "label": f"{launch['name']}: {variants[0]['name']} vs {variant['name']}"})
+    return pairs
+
+
 def pictures(recipe, results, out):
     settings = recipe.get("pictures") or {}
     levels = sorted(settings.get("levels") or [2, 16])
@@ -500,7 +794,7 @@ def pictures(recipe, results, out):
 
     def image(name):
         if name not in cache:
-            cache[name] = read_tga(shots[name])
+            cache[name] = read_picture(shots[name])
         return cache[name]
 
     report = {"means": {}, "compare": []}
@@ -516,7 +810,7 @@ def pictures(recipe, results, out):
         report["means"][name] = entry
     folder = out / "pictures"
     folder.mkdir(exist_ok=True)
-    for pair in settings.get("compare") or []:
+    for pair in compare_pairs(recipe):
         a, b = pair["a"], pair["b"]
         entry = {"a": a, "b": b, "label": pair.get("label", f"{a} vs {b}")}
         if a not in shots or b not in shots:
@@ -556,23 +850,34 @@ def seal(results):
     return results
 
 
-def report_text(results):
-    lines = [f"# {results['title']}", "", f"Recipe {results['id']}, run {results['finished']}. "
-             "Local run on a test machine, not CI evidence.", ""]
-    lines += ["| Launch | Status | Exit | Seconds | Screenshots | Missing |", "| --- | --- | --- | --- | --- | --- |"]
-    for launch in results["launches"]:
-        lines.append(f"| {launch['name']} | {launch.get('status', '-')} | {launch.get('exit_code', '-')} | "
-                     f"{launch.get('seconds', '-')} | {len(launch.get('shots') or {})} | "
-                     f"{', '.join(launch.get('missing_shots') or []) or '-'} |")
-    for launch in results["launches"]:
-        lines += ["", f"## {launch['name']}", ""]
-        for key in ("blocked_before", "blocked_after", "run_errors"):
-            if launch.get(key):
-                lines.append(f"- {key.replace('_', ' ')}: {', '.join(launch[key])}")
-        verbatim = (launch.get("frame_logs") or []) + (launch.get("lines") or [])
-        if verbatim:
-            lines += ["```"] + verbatim + ["```"]
-    pics = results.get("pictures") or {}
+def launch_report_lines(launch):
+    """A launch's variant table and its verbatim lines (android_run.py too)."""
+    lines = []
+    if launch.get("variants"):
+        lines += ["| Variant | Sets | fps per pass | Mean fps | vs first | ms vs first | Pass spread |",
+                  "| --- | --- | --- | --- | --- | --- | --- |"]
+        for entry in launch["variants"]:
+            sets = ", ".join(f"{dvar} {value}" for dvar, value in entry["set"].items())
+            per_pass = ", ".join(str(p.get("fps", "missing")) for p in entry["passes"]) or "-"
+            vs, ms = entry.get("fps_vs_first_pct"), entry.get("ms_vs_first")
+            spread = entry.get("pass_spread_pct")
+            lines.append(f"| {entry['name']} | {sets} | {per_pass} | {entry.get('mean_fps', '-')} | "
+                         f"{'-' if vs is None else f'{vs:+.2f}%'} | {'-' if ms is None else f'{ms:+.3f}'} | "
+                         f"{'-' if spread is None else f'{spread}%'} |")
+        wide = [e["name"] for e in launch["variants"] if (e.get("pass_spread_pct") or 0) > SPREAD_WARNING_PCT]
+        if wide:
+            lines.append(f"- passes differ by more than {SPREAD_WARNING_PCT}% for {', '.join(wide)}: "
+                         "the launch drifted, or a pass ran during a change of scene")
+        lines.append("")
+    verbatim = (launch.get("frame_logs") or []) + (launch.get("lines") or [])
+    if verbatim:
+        lines += ["```"] + verbatim + ["```"]
+    return lines
+
+
+def picture_report_lines(pics):
+    """The mean colours and the comparisons (android_run.py too)."""
+    lines = []
     if pics.get("means"):
         regions = sorted({key for entry in pics["means"].values() for key in entry if key not in ("size", "error")})
         lines += ["", "## Mean colour (R, G, B)", "", "| Screenshot | " + " | ".join(regions) + " |",
@@ -593,6 +898,24 @@ def report_text(results):
                          f"{numbers['mean_signed_b_minus_a']}, {shares}; changed areas: {boxes}")
         if entry.get("files"):
             lines.append(f"- pictures: {', '.join(entry['files'])}")
+    return lines
+
+
+def report_text(results):
+    lines = [f"# {results['title']}", "", f"Recipe {results['id']}, run {results['finished']}. "
+             "Local run on a test machine, not CI evidence.", ""]
+    lines += ["| Launch | Status | Exit | Seconds | Screenshots | Missing |", "| --- | --- | --- | --- | --- | --- |"]
+    for launch in results["launches"]:
+        lines.append(f"| {launch['name']} | {launch.get('status', '-')} | {launch.get('exit_code', '-')} | "
+                     f"{launch.get('seconds', '-')} | {len(launch.get('shots') or {})} | "
+                     f"{', '.join(launch.get('missing_shots') or []) or '-'} |")
+    for launch in results["launches"]:
+        lines += ["", f"## {launch['name']}", ""]
+        for key in ("blocked_before", "blocked_after", "run_errors"):
+            if launch.get(key):
+                lines.append(f"- {key.replace('_', ' ')}: {', '.join(launch[key])}")
+        lines += launch_report_lines(launch)
+    lines += picture_report_lines(results.get("pictures") or {})
     lines += ["", f"results.json sha256 {results['sha256']}", ""]
     return "\n".join(lines)
 
@@ -611,6 +934,10 @@ def main(argv=None):
         print(f"pc_run: {error}", file=sys.stderr)
         return 2
     out = Path(options.out)
+    if recipe["game"].get("home_template") and "+" in str(out.resolve()):
+        print(f"pc_run: the output folder {out.resolve()} has a '+'; each launch's fs_homepath is under it and "
+              "the game would split its command line there", file=sys.stderr)
+        return 2
     if options.dry_run:
         for launch in recipe["launches"]:
             result = run_launch(recipe, launch, out, dry_run=True)

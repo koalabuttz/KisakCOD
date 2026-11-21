@@ -442,6 +442,125 @@ uint32_t DecodeColorOutput(ir::Builder &builder, bool overWhite = false)
     });
 }
 
+// The display value at which an unlit, light-giving surface starts to be made
+// brighter (EmissiveColorOutput): its brightest channel from here to white
+// takes it from 1 to the full strength along a smoothstep.
+constexpr float kEmissiveKnee = 0.75f;
+
+// Colour output 0's red, green and blue for an unlit, light-giving surface
+// (LinearInputs kLinearEmissive): each clamped to [0, 1] and decoded from sRGB,
+// as DecodeColorOutput does, then all three multiplied by one factor, so the
+// hue stays: 1 while the brightest of the three is under kEmissiveKnee,
+// rising smoothly to `strength` at white. Needs the three stores in one
+// straight run of code (no branch between them), as a shader model 2 or 3
+// colour output is written; the stores are moved together before the last
+// of them. Returns 3, or 0 (nothing changed) when the stores are not like
+// that.
+uint32_t EmissiveColorOutput(ir::Builder &builder, float strength)
+{
+    ir::SsaDef color = {};
+    auto [begin, end] = builder.getDeclarations();
+    for (auto it = begin; it != end; ++it)
+    {
+        if (it->getOpCode() == ir::OpCode::eDclOutput && uint32_t(it->getOperand(1u)) == 0u)
+            color = it->getDef();
+    }
+    if (!color)
+        return 0;
+    const ir::Type f32 = ir::Type(ir::BasicType(ir::ScalarType::eF32));
+    std::vector<ir::SsaDef> uses;
+    builder.getUses(color, uses);
+    std::array<ir::SsaDef, 3> stores = {};
+    for (ir::SsaDef use : uses)
+    {
+        const ir::Op &op = builder.getOp(use);
+        if (op.getOpCode() != ir::OpCode::eOutputStore)
+            continue;
+        const ir::SsaDef addressDef = ir::SsaDef(op.getOperand(1u));
+        if (!addressDef)
+            return 0;
+        const ir::Op &address = builder.getOp(addressDef);
+        if (!address.isConstant() || address.getOperandCount() != 1u)
+            return 0;
+        const uint32_t channel = uint32_t(address.getOperand(0u));
+        if (channel > 2u)
+            continue;
+        if (stores[channel] || builder.getOp(ir::SsaDef(op.getOperand(2u))).getType() != f32)
+            return 0;
+        stores[channel] = use;
+    }
+    if (!stores[0] || !stores[1] || !stores[2])
+        return 0;
+    // Walk forward from each store: the last one is reached from the other
+    // two without passing a branch, a label or a scoped block.
+    const auto reaches = [&](ir::SsaDef from, ir::SsaDef to) {
+        for (ir::SsaDef def = from; def; def = builder.getNext(def))
+        {
+            if (def == to)
+                return true;
+            const uint32_t code = uint32_t(builder.getOp(def).getOpCode());
+            if (def != from && code >= uint32_t(ir::OpCode::eLabel) && code <= uint32_t(ir::OpCode::eScopedEndSwitch))
+                return false;
+        }
+        return false;
+    };
+    ir::SsaDef last = {};
+    for (ir::SsaDef candidate : stores)
+    {
+        bool all = true;
+        for (ir::SsaDef other : stores)
+            all = all && (other == candidate || reaches(other, candidate));
+        if (all)
+            last = candidate;
+    }
+    if (!last)
+        return 0;
+    // The other two stores move to just before the last; their values were
+    // made before them, so before it too. The new colour is made before the
+    // first of the three.
+    for (ir::SsaDef store : stores)
+    {
+        if (store != last)
+            builder.reorderBefore(last, store, store);
+    }
+    ir::SsaDef first = last;
+    for (ir::SsaDef store : stores)
+    {
+        if (reaches(store, first))
+            first = store;
+    }
+    std::array<ir::SsaDef, 3> clamped = {};
+    for (uint32_t i = 0; i < 3; ++i)
+    {
+        const ir::SsaDef value = ir::SsaDef(builder.getOp(stores[i]).getOperand(2u));
+        clamped[i] = builder.addBefore(
+            first, ir::Op::FClamp(f32, value, builder.makeConstant(0.0f), builder.makeConstant(1.0f)));
+    }
+    const ir::SsaDef brightest = builder.addBefore(
+        first, ir::Op::FMax(f32, builder.addBefore(first, ir::Op::FMax(f32, clamped[0], clamped[1])), clamped[2]));
+    // t = clamp((brightest - knee) / (1 - knee)); factor = 1 + (strength - 1) t^2 (3 - 2t).
+    const ir::SsaDef above = builder.addBefore(first, ir::Op::FSub(f32, brightest, builder.makeConstant(kEmissiveKnee)));
+    const ir::SsaDef scaled = builder.addBefore(
+        first, ir::Op::FMul(f32, above, builder.makeConstant(1.0f / (1.0f - kEmissiveKnee))));
+    const ir::SsaDef t = builder.addBefore(
+        first, ir::Op::FClamp(f32, scaled, builder.makeConstant(0.0f), builder.makeConstant(1.0f)));
+    const ir::SsaDef t2 = builder.addBefore(first, ir::Op::FMul(f32, t, t));
+    const ir::SsaDef twoT = builder.addBefore(first, ir::Op::FMul(f32, t, builder.makeConstant(2.0f)));
+    const ir::SsaDef threeLess = builder.addBefore(first, ir::Op::FSub(f32, builder.makeConstant(3.0f), twoT));
+    const ir::SsaDef smooth = builder.addBefore(first, ir::Op::FMul(f32, t2, threeLess));
+    const ir::SsaDef rise = builder.addBefore(first, ir::Op::FMul(f32, smooth, builder.makeConstant(strength - 1.0f)));
+    const ir::SsaDef factor = builder.addBefore(first, ir::Op::FAdd(f32, rise, builder.makeConstant(1.0f)));
+    for (uint32_t i = 0; i < 3; ++i)
+    {
+        const ir::SsaDef decoded = DecodeSrgbBefore(builder, first, clamped[i]);
+        const ir::SsaDef lit = builder.addBefore(first, ir::Op::FMul(f32, decoded, factor));
+        ir::Op rewritten = builder.getOp(stores[i]);
+        rewritten.setOperand(2u, lit);
+        builder.rewriteOp(stores[i], std::move(rewritten));
+    }
+    return 3;
+}
+
 // Colour output 0's red, green and blue kept from going negative, for a
 // shader that computes in linear light (LinearInputs): values over 1 stay.
 uint32_t KeepColorOutputPositive(ir::Builder &builder)
@@ -606,6 +725,59 @@ uint32_t DecodeLinearInputs(ir::Builder &builder, const LinearInputs &inputs)
     for (const auto &[def, how] : changes)
         DecodeComponents(builder, def, how.first, how.second);
     return static_cast<uint32_t>(changes.size());
+}
+
+// Vertex inputs fed as R8G8B8A8_UNORM where the declaration says UBYTE4
+// (R8G8B8A8_USCALED, which a device need not read as vertex data: Adreno does
+// not): every load of an input at a marked location is taken back to 0-255,
+// rounded so that each byte comes back exactly. Returns the loads changed.
+uint32_t ScaleByteInputs(ir::Builder &builder, uint32_t locations)
+{
+    const ir::Type f32 = ir::Type(ir::BasicType(ir::ScalarType::eF32));
+    std::vector<ir::SsaDef> loads;
+    auto [begin, end] = builder.getDeclarations();
+    for (auto it = begin; it != end; ++it)
+    {
+        if (it->getOpCode() != ir::OpCode::eDclInput)
+            continue;
+        const uint32_t location = uint32_t(it->getOperand(1u));
+        if (location >= 32u || !((locations >> location) & 1u))
+            continue;
+        std::vector<ir::SsaDef> uses;
+        builder.getUses(it->getDef(), uses);
+        for (ir::SsaDef use : uses)
+        {
+            if (builder.getOp(use).getOpCode() == ir::OpCode::eInputLoad)
+                loads.push_back(use);
+        }
+    }
+    uint32_t changed = 0;
+    for (ir::SsaDef def : loads)
+    {
+        const ir::Op op = builder.getOp(def);
+        const ir::Type type = op.getType();
+        if (!type.isBasicType() || type.getBaseType(0u).getBaseType() != ir::ScalarType::eF32)
+            continue;
+        const uint32_t count = type.getBaseType(0u).getVectorSize();
+        const ir::SsaDef raw = builder.addBefore(def, op);
+        const auto scale = [&](ir::SsaDef v) {
+            v = builder.addBefore(def, ir::Op::FMul(f32, v, builder.makeConstant(255.0f)));
+            return builder.addBefore(def, ir::Op::FRound(f32, v, ir::RoundMode::eNearestEven));
+        };
+        ir::SsaDef value = {};
+        if (count == 1u)
+            value = scale(raw);
+        else
+        {
+            ir::Op construct(ir::OpCode::eCompositeConstruct, type);
+            for (uint32_t i = 0; i < count; ++i)
+                construct.addOperand(scale(builder.addBefore(def, ir::Op::CompositeExtract(f32, raw, builder.makeConstant(i)))));
+            value = builder.addBefore(def, std::move(construct));
+        }
+        builder.rewriteDef(def, value);
+        ++changed;
+    }
+    return changed;
 }
 
 uint32_t Fnv1a(const void *data, size_t bytes)
@@ -946,7 +1118,7 @@ bool StagesLinkDirectly(const Shader &vertexShader, const Shader &pixelShader)
 
 bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<uint32_t> &spirv, std::string &error,
                 const uint32_t *fixedDepthCompare, const uint32_t *fixedAlphaCompare, bool linearOutput,
-                const LinearInputs *linearInputs)
+                const LinearInputs *linearInputs, uint32_t byteInputs)
 {
     spirv.clear();
     error.clear();
@@ -968,12 +1140,19 @@ bool BuildSpirv(const Shader &shader, const Shader *vertexShader, std::vector<ui
         pass.resolveSemanticIo(previous);
         pass.resolveMismatchedIo(ir::ShaderStage::eVertex, previous);
     }
+    if (byteInputs && shader.reflection.stage == Stage::Vertex)
+        ScaleByteInputs(builder, byteInputs);
     if (fixedDepthCompare)
         FixDepthCompare(builder, *fixedDepthCompare);
     if (fixedAlphaCompare)
         FixAlphaTest(builder, *fixedAlphaCompare);
     if (linearInputs && shader.reflection.stage == Stage::Pixel && (linearInputs->flags & kLinearOverWhite))
         DecodeColorOutput(builder, true);
+    else if (linearInputs && shader.reflection.stage == Stage::Pixel && (linearInputs->flags & kLinearEmissive))
+    {
+        if (!EmissiveColorOutput(builder, float(linearInputs->emissive) / 4.0f))
+            DecodeColorOutput(builder);
+    }
     else if (linearInputs && shader.reflection.stage == Stage::Pixel)
     {
         DecodeLinearInputs(builder, *linearInputs);

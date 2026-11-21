@@ -67,8 +67,14 @@ def production_code() -> str:
     for name in ("SND_SpeakerMixFor", "SND_SpeakerMixFormat", "SND_SetDirectChannels"):
         parts.append(extract(driver, rf"^static [^\n(]*\b{name}\([^)]*\)\s*\{{", name))
     parts.append(extract(driver, r"^struct AlStreamState\s*\{", "AlStreamState"))
-    for name in ("g_streamState", "AL_STREAM_BUFFER_COUNT", "AL_STREAM_BUFFER_FRAMES", "SND_MAX_MIXED_BYTES"):
+    for name in ("AL_STREAM_BUFFER_COUNT", "AL_STREAM_BUFFER_FRAMES", "AL_FIRST_STREAM_FEED", "AL_STREAM_FEEDS",
+                 "g_streamStates", "g_streamFeeds", "g_streamThread", "SND_MAX_MIXED_BYTES"):
         parts.append(static_line(driver, name))
+    parts.append(extract(driver, r"^static AlStreamState \*AL_Stream\(int index\)\s*\{", "AL_Stream"))
+    parts.append(extract(driver, r"^static uint32_t AL_StreamSourceRead\([^)]*\)\s*\{", "AL_StreamSourceRead"))
+    parts.append(extract(driver, r"^static void AL_StreamSourceSeek\([^)]*\)\s*\{", "AL_StreamSourceSeek"))
+    parts.append(extract(driver, r"^static bool AL_OpenStreamFeed\([^)]*\)\s*\{", "AL_OpenStreamFeed"))
+    parts.append(extract(driver, r"^static void AL_StreamPlayedThrough\([^)]*\)\s*\{", "AL_StreamPlayedThrough"))
     parts.append(extract(driver, r"^static bool SND_SetMixedBufferData\([^)]*\)\s*\{", "SND_SetMixedBufferData"))
     parts.append(extract(driver, r"^static bool SND_FillStreamBuffers\([^)]*\)\s*\{", "SND_FillStreamBuffers"))
     parts.append(extract(driver, r"^kisak::speaker_mix::CentreLfe SND_Apply3DSpatializationTweaks\([^)]*\)\s*\{",
@@ -88,6 +94,8 @@ HARNESS = r"""
 #include <AL/efx.h>
 #include <sound/snd_speaker_mix.h>
 #include <sound/snd_ima_adpcm.h>
+#include <sound/snd_stream_feed.h>
+#include <thread>
 #include <cmath>
 #include <cstdarg>
 #include <cstdint>
@@ -134,6 +142,17 @@ static MSSChannelMap *Com_GetSpeakerMap(SpeakerMap *speakerMap, int sourceChanne
     return &speakerMap->channelMaps[sourceChannelCount == 2][SND_IsMultiChannel()];
 }
 static void SND_AlDebugNoteUnderrun(int) {}
+static void SND_AlDebugNoteOwnChunk() {}
+static void SND_AlDebugNoteLateChunk() {}
+static bool SND_AlDebug(int) { return false; }
+static bool AL_CountStreamLength(const char *, uint32_t, uint64_t, uint64_t *was)
+{
+    *was = 0;
+    return false;
+}
+// Streams are decoded on the main thread here (snd_streamThread 0); the decode thread
+// has its own checks in test_openal_channel_stop.py.
+static bool AL_StreamThreadOn() { return false; }
 
 %(production)s
 
@@ -464,12 +483,13 @@ static void StereoOutput()
             file.assign((uint8_t *)data, (uint8_t *)data + size);
             drwav_free(data, nullptr);
         }
-        AlStreamState *stream = &g_streamState[index];
+        AlStreamState *stream = AL_Stream(index);
         std::memset(stream, 0, sizeof(*stream));
         drwav_init_memory(&stream->wav, file.data(), file.size(), nullptr);
         stream->channels = 1;
         stream->sampleRate = RATE;
         stream->active = true;
+        AL_OpenStreamFeed(index, 0);
         SpeakerMap right = EmptyMap();
         Set(right, 0, 0, 0, 1, 0.8f);
         alias.speakerMap = &right;
@@ -490,6 +510,7 @@ static void StereoOutput()
             alSourceUnqueueBuffers(alGlob.source[index], 1, &buf);
             alDeleteBuffers(1, &buf);
         }
+        g_streamFeeds[index - AL_FIRST_STREAM_FEED].Close();
         drwav_uninit(&stream->wav);
     }
 
@@ -690,7 +711,7 @@ def main() -> int:
         binary = Path(tmp) / "speaker_maps"
         program.write_text(code)
         subprocess.run(
-            ["c++", "-std=c++17", "-O1", "-Wall", "-Wno-unused-function", "-I", str(ROOT / "deps"), "-I", str(ROOT / "src"),
+            ["c++", "-std=c++17", "-O1", "-Wall", "-Wno-unused-function", "-pthread", "-I", str(ROOT / "deps"), "-I", str(ROOT / "src"),
              str(program), "-o", str(binary), "-lopenal"],
             check=True,
         )

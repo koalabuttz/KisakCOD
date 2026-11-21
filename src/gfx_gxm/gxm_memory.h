@@ -9,9 +9,11 @@
 //
 //   Cdram         the GPU's own 128 MB (about 112 MB for a game): textures,
 //                 render targets, the display buffers, depth-stencil.
-//   Main          uncached main memory the GPU reads and writes: vertex and
-//                 index buffers, constants, the context's ring buffers. It
-//                 comes out of the same 256 MB as the engine's heap and zones.
+//   Main          main memory the GPU reads and writes: vertex and index
+//                 buffers, constants, the context's ring buffers. It comes
+//                 out of the same 256 MB as the engine's heap and zones, and
+//                 the CPU does not cache it (MemorySizes::mainCached asks for
+//                 the other kind, for a measurement).
 //   VertexUsse    vertex shader code, mapped for the vertex units.
 //   FragmentUsse  fragment shader code, mapped for the fragment units.
 //
@@ -42,6 +44,10 @@ struct MemorySizes
     uint32_t main = 0;
     uint32_t vertexUsse = 0;
     uint32_t fragmentUsse = 0;
+    // The main pool as ordinary cached memory. The CPU then reads and writes
+    // it at the speed of its own heap; whether the GPU always sees what was
+    // written last is what a run with this has to show.
+    bool mainCached = false;
 };
 
 // Reserves and maps the blocks. sceGxmInitialize must have run. False with
@@ -68,4 +74,8 @@ struct PoolStats
 PoolStats Stats(MemoryKind kind);
 // One line: every pool's use, in MB or KB.
 std::string DescribeMemory();
+// One line: how fast the CPU copies into and out of the main and CDRAM pools
+// and writes and reads them a word at a time, beside its own heap. Takes a
+// block of each for some tens of milliseconds, so call it once at start-up.
+std::string DescribeMemorySpeed();
 } // namespace gfx_gxm

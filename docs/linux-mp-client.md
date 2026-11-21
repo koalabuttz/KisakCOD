@@ -124,7 +124,20 @@ also prints every sound start. It is off by default and changes nothing that is
 played. At level 1 it also prints `snd_al: read all of stream '<file>' (N KB)
 to find its length: M ms` the first time an MP3 stream without a length tag
 plays: the decoder has to read such a file through to know how long it is,
-and the driver keeps the answer for the next start of that file.
+and the driver keeps the answer for the next start of that file. A constant
+bit rate file is not read through: its size says its length, and the line is
+`snd_al: stream '<file>' (N KB) is R bit/s all through its head: F frames by
+its size` (level 2 adds `read through: F frames`, the decoder's own count, to
+compare). The size has to fit a whole number of frames as well, or the file is
+read through. A length from a size gives way to the decoder's count the first
+time the file plays from its start to its end: `snd_al: stream '<file>' played
+through: F frames, not the G its size gave`.
+
+`+set snd_streamThread 1` decodes streamed sounds (music, ambience) ahead on
+a thread of their own instead of in the sound update. It is off by default
+here and on by default on the PS Vita, where the decoding is long enough to
+show in a frame (docs/vita-client.md, "Streamed sounds on a thread"). The
+`snd_alDebug 1` line counts the chunks each side decoded.
 
 ### Speakers
 

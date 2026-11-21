@@ -126,6 +126,43 @@ mov o2, c2
 mov o3, c3
 mov o4, v2
 """),
+    # The same with the shadow-map coordinate spread across the quad: c3
+    # plus the quad's UV times c4, for a shadow's edge (modern_soft_shadow).
+    ("kVsLmSunSpread", """vs_3_0
+dcl_position v0
+dcl_texcoord0 v1
+dcl_color0 v2
+dcl_position o0
+dcl_texcoord0 o1
+dcl_texcoord1 o2
+dcl_texcoord4 o3
+dcl_color0 o4
+add o0, v0, c0
+mov o1, c1
+mov o2, c2
+mad o3, v1.xyxy, c4, c3
+mov o4, v2
+"""),
+    # A spot or omni light's: the same spread (projective: c3 and c4 carry
+    # w), and the point from the eye in texcoord 5 from c5
+    # (modern_soft_spot_shadow).
+    ("kVsLmSpotSpread", """vs_3_0
+dcl_position v0
+dcl_texcoord0 v1
+dcl_color0 v2
+dcl_position o0
+dcl_texcoord0 o1
+dcl_texcoord1 o2
+dcl_texcoord4 o3
+dcl_texcoord5 o4
+dcl_color0 o5
+add o0, v0, c0
+mov o1, c1
+mov o2, c2
+mad o3, v1.xyxy, c4, c3
+mov o4, c5
+mov o5, v2
+"""),
     ("kPsLmSunStandIn", """ps_3_0
 dcl_texcoord0 v0
 dcl_texcoord1 v1
@@ -215,6 +252,43 @@ add r0, r0, c5
 add r0, r0, c6
 add r0, r0, c18
 add r0, r0, c19
+mul r0, r0, c1
+mov oC0, r0
+"""),
+    # The water's (water_l_sun) in miniature: the vertex shader writes the
+    # water map's UV (two components, as a test of that build) from c1,
+    # texcoord 2 (the point relative to the eye, the fog) from c2 and the
+    # colour; the stand-in reads the probe cube at s1, the water map at s4 and
+    # the constants c0, c5, c6, c17 and c18, showing black (c1 is zero).
+    ("kVsWater", """vs_3_0
+dcl_position v0
+dcl_texcoord0 v1
+dcl_color0 v2
+dcl_position o0
+dcl_texcoord0 o1.xy
+dcl_texcoord2 o2
+dcl_color0 o3
+add o0, v0, c0
+mov o1.xy, c1
+mov o2, c2
+mov o3, v2
+"""),
+    ("kPsWaterStandIn", """ps_3_0
+dcl_texcoord0 v0.xy
+dcl_texcoord2 v1
+dcl_color0 v2
+dcl_cube s1
+dcl_2d s4
+texld r0, v0, s4
+texld r1, v1, s1
+add r0, r0, r1
+add r0, r0, v1
+add r0, r0, v2
+add r0, r0, c0
+add r0, r0, c5
+add r0, r0, c6
+add r0, r0, c17
+add r0, r0, c18
 mul r0, r0, c1
 mov oC0, r0
 """),

@@ -19,6 +19,7 @@
 #include "../r_reflection_probe.h"
 #include "../r_shade.h"
 #include "../rb_shade.h"
+#include <linux/sys_perf.h>
 
 const uint32_t s_cullTable_30[4] = { 0u, 1u, 3u, 2u }; // idb
 const uint32_t s_blendTable_30[11] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
@@ -31,6 +32,7 @@ const uint32_t s_stencilFuncTable_30[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
 
 void R_HW_DrawIndexedPrimitive(IDirect3DDevice9 *device, const GfxDrawPrimArgs *args, int triCount)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_DEVICE_DRAW);
     const char *v2;
     int hr;
 
@@ -63,6 +65,7 @@ void R_HW_SetStreamSource(
     uint32_t vertexOffset,
     uint32_t vertexStride)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_DEVICE_STREAMS);
     int hr;
 
     do
@@ -88,6 +91,7 @@ void R_HW_SetStreamSource(
 
 void R_HW_SetIndices(IDirect3DDevice9 *device, IDirect3DIndexBuffer9 *ib)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_DEVICE_STREAMS);
     const char *v2;
     int hr;
 
@@ -118,6 +122,7 @@ void R_HW_SetIndices(IDirect3DDevice9 *device, IDirect3DIndexBuffer9 *ib)
 
 void R_HW_SetVertexDeclaration(IDirect3DDevice9 *device, IDirect3DVertexDeclaration9 *decl)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_DEVICE_STREAMS);
     int hr;
 
     do
@@ -1036,6 +1041,7 @@ uint32_t R_HW_SetSamplerState(
     uint32_t samplerState,
     uint32_t oldSamplerState)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_DEVICE_TEXTURES);
     const char *v4; // eax
     const char *v5; // eax
     const char *v6; // eax
@@ -1715,6 +1721,7 @@ void R_HW_SetVertexShaderConstant(
     const float *data,
     uint32_t rowCount)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_DEVICE_VERTEX_CONSTANTS);
     const char *v4; // eax
     const char *v5; // eax
     int hr; // [esp+30h] [ebp-4h]
@@ -1757,6 +1764,7 @@ void R_HW_SetPixelShaderConstant(
     const float *data,
     uint32_t rowCount)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_DEVICE_PIXEL_CONSTANTS);
     const char *v4; // eax
     int hr; // [esp+0h] [ebp-4h]
 
@@ -1783,6 +1791,7 @@ void R_HW_SetPixelShaderConstant(
 
 void R_HW_SetPixelShader(IDirect3DDevice9 *device, const MaterialPixelShader *mtlShader)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_DEVICE_SHADERS);
     int v2; // eax
     HRESULT hr; // [esp+4h] [ebp-4h]
 
@@ -1819,6 +1828,7 @@ void R_HW_SetPixelShader(IDirect3DDevice9 *device, const MaterialPixelShader *mt
 
 void R_HW_SetVertexShader(IDirect3DDevice9 *device, const MaterialVertexShader *mtlShader)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_DEVICE_SHADERS);
     int v2; // eax
     HRESULT hr; // [esp+4h] [ebp-4h]
 
@@ -1854,6 +1864,7 @@ void R_HW_SetVertexShader(IDirect3DDevice9 *device, const MaterialVertexShader *
 
 void R_HW_SetSamplerTexture(IDirect3DDevice9 *device, uint32_t samplerIndex, const GfxTexture *texture)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_DEVICE_TEXTURES);
     int hr; // [esp+0h] [ebp-4h]
 
     iassert(texture);

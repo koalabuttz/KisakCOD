@@ -99,26 +99,100 @@ static void RB_StretchScaledScene(const GfxViewInfo *viewInfo)
     const GfxViewport &view = viewInfo->sceneViewport;
     const int width = gfxCmdBufSourceState.renderTargetWidth;
     const int height = gfxCmdBufSourceState.renderTargetHeight;
-    if (KISAK_GXM_STRETCH_IN_FILTER() && RB_FilmFilterOnly(viewInfo) && view.x == 0 && view.y == 0 &&
-        view.width == width && view.height == height)
+    const int drawnWidth = gfx_gxm::SceneScaled(view.width, gfx_gxm::SceneScaleX(scale));
+    const int drawnHeight = gfx_gxm::SceneScaled(view.height, gfx_gxm::SceneScaleY(scale));
+    // A sharpened picture goes the same way as a plain one where it can:
+    // the film filter's quad then draws with a program that reads the
+    // picture through the sharpening filter (g_sharpenInFilter).
+    gfx_gxm::g_sceneSharpen = vita_sceneSharpen && vita_sceneSharpen->current.enabled;
+    if (KISAK_GXM_STRETCH_IN_FILTER() && (!gfx_gxm::g_sceneSharpen || gfx_gxm::g_sharpenInFilter) &&
+        RB_FilmFilterOnly(viewInfo) && view.x == 0 && view.y == 0 && view.width == width && view.height == height)
     {
         // The film filter's full-screen quad reads only the drawn corner of
         // the copy (RB_ApplyColorManipulationFullscreen). Half a texel is
         // kept off the far edges so the linear filter never mixes in the
         // part of the copy that was not drawn this frame.
-        gfx_gxm::g_filterReadS = (float(gfx_gxm::SceneScaled(view.width, scale)) - 0.5f) / float(width);
-        gfx_gxm::g_filterReadT = (float(gfx_gxm::SceneScaled(view.height, scale)) - 0.5f) / float(height);
+        gfx_gxm::g_filterReadS = (float(drawnWidth) - 0.5f) / float(width);
+        gfx_gxm::g_filterReadT = (float(drawnHeight) - 0.5f) / float(height);
         return;
     }
     const RECT whole = {view.x, view.y, view.x + view.width, view.y + view.height};
-    const RECT drawn = {view.x, view.y, view.x + gfx_gxm::SceneScaled(view.width, scale),
-                        view.y + gfx_gxm::SceneScaled(view.height, scale)};
+    const RECT drawn = {view.x, view.y, view.x + drawnWidth, view.y + drawnHeight};
     IDirect3DSurface9 *scene = gfxRenderTargets[R_RENDERTARGET_SCENE].surface.color;
     IDirect3DSurface9 *copy = Image_GetSurface(gfxRenderTargets[R_RENDERTARGET_RESOLVED_SCENE].image);
     if (!scene || !copy)
         return;
-    R_HW_StretchRect(gfxCmdBufState.prim.device, scene, &drawn, copy, &drawn, D3DTEXF_POINT);
+    // A picture the 3D passes drew into the copy is there already.
+    if (!gfx_gxm::g_sceneIsCopy)
+        R_HW_StretchRect(gfxCmdBufState.prim.device, scene, &drawn, copy, &drawn, D3DTEXF_POINT);
+    gfx_gxm::g_sceneIsCopy = false;
+    gfx_gxm::g_sharpenThisStretch = gfx_gxm::g_sceneSharpen;
     R_HW_StretchRect(gfxCmdBufState.prim.device, copy, &drawn, scene, &whole, D3DTEXF_LINEAR);
+    gfx_gxm::g_sharpenThisStretch = false;
+    R_HW_Release(copy);
+}
+
+// The 3D passes of a view whose only post effect is the film colour filter
+// draw into the image the filter reads, so that no scene is spent on copying
+// the picture there (gxm_engine_options.h, g_sceneInCopy). While they do,
+// R_RENDERTARGET_SCENE's colour is that image's surface, and this holds the
+// scene's own. The image is also the colour target of the dynamic shadows
+// and the copy of the picture that distortion reads
+// (R_InitRenderTargets_PC), so a view that uses either while it draws
+// (imageRead) keeps the back buffer.
+static IDirect3DSurface9 *s_sceneOwnColor;
+
+static void RB_SceneIntoCopy(const GfxViewInfo *viewInfo, bool imageRead)
+{
+    gfx_gxm::g_sceneIsCopy = false;
+    if (!gfx_gxm::g_sceneInCopy || s_sceneOwnColor || imageRead || !RB_FilmFilterOnly(viewInfo))
+        return;
+    GfxRenderTarget &scene = gfxRenderTargets[R_RENDERTARGET_SCENE];
+    GfxImage *image = gfxRenderTargets[R_RENDERTARGET_RESOLVED_SCENE].image;
+    if (!scene.surface.color || !image || image->width != scene.width || image->height != scene.height)
+        return;
+    IDirect3DSurface9 *copy = Image_GetSurface(image);
+    if (!copy)
+        return;
+    // The state leaves the scene's id first, so that the next change to it
+    // sees another surface and tells the device.
+    R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_FRAME_BUFFER);
+    R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_FRAME_BUFFER);
+    R_UnbindImage(&gfxCmdBufState, image);
+    s_sceneOwnColor = scene.surface.color;
+    scene.surface.color = copy;
+    gfx_gxm::g_sceneIsCopy = true;
+}
+
+static void RB_SceneOutOfCopy()
+{
+    if (!s_sceneOwnColor)
+        return;
+    if (tess.indexCount)
+        RB_EndTessSurface();
+    R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_FRAME_BUFFER);
+    R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_FRAME_BUFFER);
+    GfxRenderTarget &scene = gfxRenderTargets[R_RENDERTARGET_SCENE];
+    IDirect3DSurface9 *copy = scene.surface.color;
+    scene.surface.color = s_sceneOwnColor;
+    s_sceneOwnColor = nullptr;
+    R_HW_Release(copy);
+}
+
+// A picture still in the copy after the post effects (none took it): it is
+// drawn to the frame buffer as it is.
+static void RB_SceneCopyLeft()
+{
+    if (!gfx_gxm::g_sceneIsCopy)
+        return;
+    gfx_gxm::g_sceneIsCopy = false;
+    if (tess.indexCount)
+        RB_EndTessSurface();
+    IDirect3DSurface9 *copy = Image_GetSurface(gfxRenderTargets[R_RENDERTARGET_RESOLVED_SCENE].image);
+    if (!copy)
+        return;
+    R_HW_StretchRect(gfxCmdBufState.prim.device, copy, 0, gfxRenderTargets[R_RENDERTARGET_FRAME_BUFFER].surface.color,
+                     0, D3DTEXF_POINT);
     R_HW_Release(copy);
 }
 #endif
@@ -133,11 +207,18 @@ void RB_Draw3DInternal(const GfxViewInfo *viewInfo)
     // Every 3D pass of this view draws the smaller picture until
     // RB_StretchScaledScene. Only the standard full-screen scene: a view
     // that is not the whole screen, fullbright and the debug shaders keep
-    // the full size.
-    gfx_gxm::g_sceneScale = gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD && viewInfo->isRenderingFullScreen &&
-                                    vita_sceneScale
-                                ? std::clamp(vita_sceneScale->current.value, 0.5f, 1.0f)
-                                : 1.0f;
+    // the full size. vita_sceneScaleMin under vita_sceneScale lets the back
+    // end pick the size between the two (gxm_engine_options.h).
+    if (gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD && viewInfo->isRenderingFullScreen && vita_sceneScale)
+    {
+        const float most = std::clamp(vita_sceneScale->current.value, 0.5f, 1.0f);
+        const float least = vita_sceneScaleMin ? std::clamp(vita_sceneScaleMin->current.value, 0.5f, 1.0f) : 1.0f;
+        const float goalMs = vita_sceneScaleGoal ? vita_sceneScaleGoal->current.value : 0.0f;
+        gfx_gxm::g_sceneWidthOnly = vita_sceneScaleWidthOnly && vita_sceneScaleWidthOnly->current.enabled;
+        gfx_gxm::g_sceneScale = gfx_gxm::SceneScaleFor(least, most, goalMs);
+    }
+    else
+        gfx_gxm::g_sceneScale = 1.0f;
 #endif
 
     if (gfxDrawMethod.drawScene)
@@ -462,15 +543,24 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     data = backEndData;
     dynamicShadowType = viewInfo->dynamicShadowType;
     isRenderingFullScreen = viewInfo->isRenderingFullScreen;
+    // Whether this view's lit surfaces read the sun's shadow map.
+    bool sunShadowMap = false;
     if (dynamicShadowType == SHADOW_MAP)
     {
-        if (Com_BitCheckAssert(backEndData->shadowableLightHasShadowMap, rgp.world->sunPrimaryLightIndex, 32))
+        sunShadowMap = Com_BitCheckAssert(backEndData->shadowableLightHasShadowMap, rgp.world->sunPrimaryLightIndex, 32);
+        if (sunShadowMap)
             RB_SunShadowMaps(data, viewInfo);
         RB_SpotShadowMaps(data, viewInfo);
     }
     // The Modern path (r_visuals modern, Vulkan) may want the view's depth
     // before its lit surfaces, for its normals buffer.
     const bool modernDepth = R_ModernWantsSceneDepth();
+    // Whether the picture is copied after the sun for distortion to read.
+    const bool resolvePostSun =
+        rg.distortion && (!KISAK_GXM_RESOLVE_WHEN_USED() || RB_ListReadsResolvedPostSun(&viewInfo->emissiveInfo));
+#ifdef KISAK_GFX_GXM
+    RB_SceneIntoCopy(viewInfo, resolvePostSun || dynamicShadowType == SHADOW_COOKIE);
+#endif
     needsDepthPrepass = r_depthPrepass->current.enabled || KISAK_GXM_DEPTH_PREPASS() || modernDepth;
     // Whether the scene's depth holds its opaque surfaces before R_DrawLit.
     bool depthPrepassed = false;
@@ -511,9 +601,38 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
     memset(gfxCmdBufState.vertexShaderConstState, 0, sizeof(gfxCmdBufState.vertexShaderConstState));
     memset(gfxCmdBufState.pixelShaderConstState, 0, sizeof(gfxCmdBufState.pixelShaderConstState));
+    // The colour is cleared whatever r_clear says, as a clear of everything is.
+    bool clearSceneColor = false;
+    if (needsDepthPrepass && whichToClearForScene == 7 && KISAK_GXM_PREPASS_CLEARS())
+    {
+        // The Vita's GPU pays for every scene, and the depth pass draws to a
+        // colour target of its own (R_DepthPrepassCallback), so a clear of
+        // the scene's target before it is a scene that holds nothing else.
+        // The depth pass's scene clears the depth and stencil instead, and
+        // the scene's colour is cleared below, with the lit pass, as it was
+        // (gxm_engine_options.h, g_prepassClears). The back end is told
+        // which draws are this pass's, so that they have a scene of their
+        // own and one without the colour target nobody reads
+        // (g_prepassScene).
+        SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_DEPTH);
+        R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_DYNAMICSHADOWS);
+        R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_DYNAMICSHADOWS);
+        KISAK_GXM_SET_PREPASS_SCENE(true);
+        R_ClearScreen(gfxCmdBufState.prim.device, 6, colorWhite, 1.0, 0, 0);
+        memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
+        R_InitContext(data, &cmdBuf);
+        KISAK_GXM_SET_PREPASS_SKIP_MODELS(!r_depthPrepass->current.enabled && !modernDepth);
+        R_DepthPrepass(R_RENDERTARGET_SCENE, viewInfo, &cmdBuf);
+        KISAK_GXM_SET_PREPASS_SKIP_MODELS(false);
+        KISAK_GXM_SET_PREPASS_SCENE(false);
+        whichToClearForScene = 1;
+        clearSceneColor = true;
+        needsDepthPrepass = false;
+        depthPrepassed = true;
+    }
     R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_SCENE);
     R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_SCENE);
-    if (R_GetClearColor(clearColor) || (whichToClearForScene & 0xFE) != 0)
+    if (R_GetClearColor(clearColor) || (whichToClearForScene & 0xFE) != 0 || clearSceneColor)
         R_ClearScreen(gfxCmdBufState.prim.device, whichToClearForScene, clearColor, 1.0, 0, 0);
     memcpy(&gfxCmdBufState, &gfxCmdBufState, sizeof(gfxCmdBufState));
     if (needsDepthPrepass)
@@ -523,10 +642,15 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
         // The pass the GXM back end alone asks for may leave the models out
         // (gxm_engine_options.h, g_prepassWorldOnly).
         KISAK_GXM_SET_PREPASS_SKIP_MODELS(!r_depthPrepass->current.enabled && !modernDepth);
+        KISAK_GXM_SET_PREPASS_SCENE(true);
         R_DepthPrepass(R_RENDERTARGET_SCENE, viewInfo, &cmdBuf);
+        KISAK_GXM_SET_PREPASS_SCENE(false);
         KISAK_GXM_SET_PREPASS_SKIP_MODELS(false);
         depthPrepassed = true;
     }
+    // The Modern path's lit shaders size their soft sun shadows from it, and
+    // the scene depth's passes (contact shadows) take the sun's direction.
+    R_ModernSunShadow(viewInfo, sunShadowMap);
     if (modernDepth && depthPrepassed)
         R_ModernSceneDepth(viewInfo);
     {
@@ -561,7 +685,7 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
         SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_LIGHTS);
         R_DrawLights(viewInfo, &cmdBuf);
     }
-    if (rg.distortion && (!KISAK_GXM_RESOLVE_WHEN_USED() || RB_ListReadsResolvedPostSun(&viewInfo->emissiveInfo)))
+    if (resolvePostSun)
     {
         PROF_SCOPED("RB_ApplyPostEffects");
         R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_SCENE);
@@ -579,6 +703,9 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     }
     SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_POSTFX);
     RB_EndSceneRendering(gfxCmdBufContext, &viewInfo->input, viewInfo);
+#ifdef KISAK_GFX_GXM
+    RB_SceneOutOfCopy();
+#endif
 }
 
 void  R_DrawLights(const GfxViewInfo *viewInfo, GfxCmdBuf *cmdBuf)
@@ -921,6 +1048,9 @@ void RB_StandardDrawCommandsCommon()
                 if (RB_UsingColorManipulation(viewInfo))
                     RB_ApplyColorManipulationSplitscreen(viewInfo);
             }
+#ifdef KISAK_GFX_GXM
+            RB_SceneCopyLeft();
+#endif
             R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_FRAME_BUFFER);
             R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_FRAME_BUFFER);
             RB_DrawSunPostEffects(viewInfo->localClientNum);

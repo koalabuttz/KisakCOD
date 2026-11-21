@@ -16,6 +16,12 @@ against the system OpenAL Soft through its loopback device (ALC_SOFT_loopback), 
 mixes offline into memory: no sound card, no game assets. Each check renders the mix and
 measures which tone is audible. The old release code is kept here too, to show the check
 catches the bug on this OpenAL.
+
+A stream's sound reaches SND_FillStreamBuffers through its feed
+(src/sound/snd_stream_feed.h, included as it is). The checks run with the main thread
+decoding, as the driver does without snd_streamThread, and the last ones with the decode
+thread: a stream then starts when its first sound arrives, a frame or two after it was
+told to play.
 """
 
 from pathlib import Path
@@ -51,12 +57,19 @@ def production_code() -> str:
     source = SOURCE.read_text(errors="replace")
     parts = [extract(source, r"^static ALenum SND_SpeakerMixFormat\([^)]*\)\s*\{", "SND_SpeakerMixFormat"),
              extract(source, r"^struct AlStreamState\s*\{", "AlStreamState")]
-    for name in ("g_streamState", "AL_STREAM_BUFFER_COUNT", "AL_STREAM_BUFFER_FRAMES"):
+    for name in ("AL_STREAM_BUFFER_COUNT", "AL_STREAM_BUFFER_FRAMES", "AL_FIRST_STREAM_FEED", "AL_STREAM_FEEDS",
+                 "g_streamStates", "g_streamFeeds", "g_streamThread"):
         line = re.search(rf"^static [^\n]*\b{name}\b[^\n]*;$", source, re.MULTILINE)
         if line is None:
             raise ValueError(f"{name} was not found")
         parts.append(line.group(0))
+    parts.append(extract(source, r"^static AlStreamState \*AL_Stream\(int index\)\s*\{", "AL_Stream"))
     parts.append(extract(source, r"^void SND_ReleaseChannelBuffer\(int index\)\s*\{", "SND_ReleaseChannelBuffer"))
+    parts.append(extract(source, r"^static uint32_t AL_StreamSourceRead\([^)]*\)\s*\{", "AL_StreamSourceRead"))
+    parts.append(extract(source, r"^static void AL_StreamSourceSeek\([^)]*\)\s*\{", "AL_StreamSourceSeek"))
+    parts.append(extract(source, r"^static bool AL_OpenStreamFeed\([^)]*\)\s*\{", "AL_OpenStreamFeed"))
+    parts.append(extract(source, r"^static void AL_PlayStream\(int index\)\s*\{", "AL_PlayStream"))
+    parts.append(extract(source, r"^static void AL_StreamPlayedThrough\([^)]*\)\s*\{", "AL_StreamPlayedThrough"))
     parts.append(extract(source, r"^static bool SND_FillStreamBuffers\([^)]*\)\s*\{", "SND_FillStreamBuffers"))
     return "\n\n".join(parts)
 
@@ -70,10 +83,13 @@ HARNESS = r"""
 #include <AL/alc.h>
 #include <AL/alext.h>
 #include <sound/snd_speaker_mix.h>
+#include <sound/snd_stream_feed.h>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <thread>
 #include <vector>
 
 static struct
@@ -86,8 +102,44 @@ static int cutsNoted = 0;
 static int underrunsNoted = 0;
 static void SND_AlDebugNoteCut(int) { ++cutsNoted; }
 static void SND_AlDebugNoteUnderrun(int) { ++underrunsNoted; }
+static int ownChunksNoted = 0;
+static int lateChunksNoted = 0;
+static void SND_AlDebugNoteOwnChunk() { ++ownChunksNoted; }
+static void SND_AlDebugNoteLateChunk() { ++lateChunksNoted; }
+
+// What AL_StreamPlayedThrough calls. The table of kept lengths has its own
+// test (test_openal_stream_lengths.py); here its entry point records what the
+// stream code hands it.
+static int lengthsCounted = 0;
+static char countedName[128];
+static uint32_t countedBytes = 0;
+static uint64_t countedFrames = 0;
+static bool AL_CountStreamLength(const char *name, uint32_t fileBytes, uint64_t framesPlayed, uint64_t *was)
+{
+    ++lengthsCounted;
+    std::snprintf(countedName, sizeof(countedName), "%%s", name);
+    countedBytes = fileBytes;
+    countedFrames = framesPlayed;
+    *was = 0;
+    return false;
+}
+static bool SND_AlDebug(int) { return false; }
+static const int CON_CHANNEL_SOUND = 0;
+static void Com_Printf(int, const char *, ...) {}
+
+// The driver's AL_StreamThreadOn reads snd_streamThread and starts the thread
+// at the first call that wants it. Here the checks say which way they run.
+static bool decodeOnThread = false;
+static bool AL_StreamThreadOn();
 
 %(production)s
+
+static bool AL_StreamThreadOn()
+{
+    if (decodeOnThread && !g_streamThread.Running())
+        g_streamThread.Start(g_streamFeeds, AL_STREAM_FEEDS);
+    return decodeOnThread && g_streamThread.Running();
+}
 
 // The release code as it was before the fix, to show the bug reproduces here.
 static void OldReleaseChannelBuffer(int index)
@@ -248,12 +300,13 @@ static std::vector<uint8_t> WavFile(int frames, double hz)
 
 static void OpenStream(int index, const std::vector<uint8_t> &file)
 {
-    AlStreamState *stream = &g_streamState[index];
+    AlStreamState *stream = AL_Stream(index);
     std::memset(stream, 0, sizeof(*stream));
     drwav_init_memory(&stream->wav, file.data(), file.size(), nullptr);
     stream->channels = stream->wav.channels;
     stream->sampleRate = stream->wav.sampleRate;
     stream->active = true;
+    AL_OpenStreamFeed(index, 0);
 }
 
 static void CloseStream(int index)
@@ -269,9 +322,120 @@ static void CloseStream(int index)
         alDeleteBuffers(1, &buf);
     }
     alSourcei(source, AL_BUFFER, 0);
-    drwav_uninit(&g_streamState[index].wav);
-    g_streamState[index].active = false;
+    g_streamFeeds[index - AL_FIRST_STREAM_FEED].Close(); // as SND_ReleaseStreamChannel: before the decoder goes
+    if (AL_Stream(index)->isMp3)
+        drmp3_uninit(&AL_Stream(index)->mp3);
+    else
+        drwav_uninit(&AL_Stream(index)->wav);
+    AL_Stream(index)->active = false;
     alGetError();
+}
+
+// An MP3 file in memory: `frames` layer 3 frames of 128 kbit/s at 44.1 kHz
+// with nothing in them, which decode to silence, 1152 samples each.
+static const int MP3_FRAME_SAMPLES = 1152;
+static std::vector<uint8_t> SilentMp3(int frames)
+{
+    const int frameBytes = 417; // 144 * 128000 / 44100, no padding byte
+    std::vector<uint8_t> file((size_t)frames * frameBytes, 0);
+    for (int i = 0; i < frames; ++i)
+    {
+        uint8_t *frame = file.data() + (size_t)i * frameBytes;
+        frame[0] = 0xFF;
+        frame[1] = 0xFB;
+        frame[2] = 0x90;
+        frame[3] = 0x00;
+    }
+    return file;
+}
+
+// startFrame: as SND_StartAliasStreamOnChannel starts a stream part of the way
+// in. The feed's first Step seeks there.
+static void OpenMp3Stream(int index, const std::vector<uint8_t> &file, bool looping, uint64_t startFrame = 0)
+{
+    AlStreamState *stream = AL_Stream(index);
+    std::memset(stream, 0, sizeof(*stream));
+    drmp3_init_memory(&stream->mp3, file.data(), file.size(), nullptr);
+    stream->isMp3 = true;
+    stream->looping = looping;
+    stream->channels = stream->mp3.channels;
+    stream->sampleRate = stream->mp3.sampleRate;
+    stream->active = true;
+    // As SND_StartAliasStreamOnChannel leaves a stream that starts at its first frame.
+    std::snprintf(stream->lengthName, sizeof(stream->lengthName), "sound/music/made_up.mp3");
+    stream->fileBytes = (uint32_t)file.size();
+    stream->countsFromStart = true;
+    if (startFrame)
+    {
+        stream->framesQueued = startFrame;
+        stream->countsFromStart = false;
+    }
+    AL_OpenStreamFeed(index, startFrame);
+}
+
+// A stream the decoder took from its first frame to its end hands the count
+// of its frames to the table of kept lengths, once a pass.
+static void StreamCountsItsLength()
+{
+    const int ch = 43;
+    const int mp3Frames = 20; // 23040 samples: less than the four buffers one refill queues
+    const uint64_t length = (uint64_t)mp3Frames * MP3_FRAME_SAMPLES;
+    const std::vector<uint8_t> file = SilentMp3(mp3Frames);
+    ALuint source = alGlob.source[ch];
+    char what[200];
+
+    lengthsCounted = 0;
+    OpenMp3Stream(ch, file, false);
+    SND_FillStreamBuffers(ch, false);
+    std::snprintf(what, sizeof(what), "stream: an MP3 read from its start to its end reports its length (%%llu frames, %%d reports)",
+                  (unsigned long long)countedFrames, lengthsCounted);
+    Check(lengthsCounted == 1 && countedFrames == length && countedBytes == file.size()
+              && !std::strcmp(countedName, "sound/music/made_up.mp3"), what);
+    SND_FillStreamBuffers(ch, false);
+    SND_FillStreamBuffers(ch, true);
+    Check(lengthsCounted == 1, "stream: a stream that has ended reports its length once");
+    CloseStream(ch);
+
+    // Started part of the way in: what it read is not the file's length.
+    lengthsCounted = 0;
+    OpenMp3Stream(ch, file, false, 5000);
+    SND_FillStreamBuffers(ch, false);
+    Check(lengthsCounted == 0, "stream: a stream started part of the way in reports no length");
+    Check(AL_Stream(ch)->framesQueued == length, "stream: and it was read from its starting frame to the file's end");
+    CloseStream(ch);
+
+    // A looping stream reports every pass that began at the first frame.
+    lengthsCounted = 0;
+    OpenMp3Stream(ch, file, true);
+    SND_FillStreamBuffers(ch, false);   // three buffers to the end, the fourth from the start again
+    Check(lengthsCounted == 1 && countedFrames == length, "stream: a looping MP3 reports its length at the end of its first pass");
+    alSourcePlay(source);
+    Render(AL_STREAM_BUFFER_COUNT * AL_STREAM_BUFFER_FRAMES + 4096);
+    SND_FillStreamBuffers(ch, true);
+    std::snprintf(what, sizeof(what), "stream: and the same length at the end of its second (%%llu frames, %%d reports)",
+                  (unsigned long long)countedFrames, lengthsCounted);
+    Check(lengthsCounted == 2 && countedFrames == length, what);
+    CloseStream(ch);
+
+    // A looping stream started part of the way in reports from its second pass.
+    lengthsCounted = 0;
+    OpenMp3Stream(ch, file, true, 5000);
+    SND_FillStreamBuffers(ch, false);   // to the end (no report), then from the start
+    Check(lengthsCounted == 0, "stream: a looping stream started part of the way in reports nothing for that pass");
+    alSourcePlay(source);
+    Render(AL_STREAM_BUFFER_COUNT * AL_STREAM_BUFFER_FRAMES + 4096);
+    SND_FillStreamBuffers(ch, true);
+    Check(lengthsCounted == 1 && countedFrames == length, "stream: and its length for the next, which began at the first frame");
+    CloseStream(ch);
+
+    // A WAV stream says its own length; nothing is counted for it.
+    lengthsCounted = 0;
+    std::vector<uint8_t> wav = WavFile(AL_STREAM_BUFFER_FRAMES + 100, NEW_HZ);
+    OpenStream(ch, wav);
+    AL_Stream(ch)->countsFromStart = true;
+    SND_FillStreamBuffers(ch, false);
+    Check(lengthsCounted == 0, "stream: a WAV stream reports no length");
+    CloseStream(ch);
 }
 
 static void StreamUnderrun()
@@ -327,6 +491,90 @@ static void StreamEnds()
     CloseStream(ch);
 }
 
+// Calls SND_FillStreamBuffers as the sound update does, a millisecond apart,
+// until `until` holds. False if it does not within two seconds.
+template <typename Until>
+static bool UpdateUntil(int ch, Until until)
+{
+    for (int i = 0; i < 2000; ++i)
+    {
+        SND_FillStreamBuffers(ch, true);
+        if (until())
+            return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return false;
+}
+
+// With the decode thread (snd_streamThread) the main thread decodes nothing:
+// a stream's first buffer comes after its start, the source plays from then,
+// and the stream is not taken for ended while nothing is queued yet.
+static void StreamOnDecodeThread()
+{
+    const int ch = 44;
+    const int queuedFrames = AL_STREAM_BUFFER_COUNT * AL_STREAM_BUFFER_FRAMES;
+    std::vector<uint8_t> file = WavFile(queuedFrames + AL_STREAM_BUFFER_FRAMES + 100, NEW_HZ);
+    ALuint source = alGlob.source[ch];
+    alSourceStop(source);               // a reused channel is left stopped by the last stream
+    char what[200];
+    decodeOnThread = true;
+    int before = underrunsNoted;
+
+    OpenStream(ch, file);
+    ALint queued = -1;
+    // The feed is open and the thread has not been woken for it: nothing can
+    // be queued by this call, whatever the thread's speed.
+    bool more = SND_FillStreamBuffers(ch, false);   // SND_StartAliasStreamOnChannel
+    alGetSourcei(source, AL_BUFFERS_QUEUED, &queued);
+    Check(more && queued == 0, "thread: the start queues nothing itself and the stream is not taken for ended");
+    AL_PlayStream(ch);
+    Check(State(source) != AL_PLAYING && AL_Stream(ch)->playWhenQueued, "thread: told to play with nothing queued, the source waits");
+
+    bool full = UpdateUntil(ch, [&] { alGetSourcei(source, AL_BUFFERS_QUEUED, &queued); return queued == AL_STREAM_BUFFER_COUNT; });
+    std::vector<int16_t> heard = Render(4096);
+    std::snprintf(what, sizeof(what), "thread: the stream plays once its sound arrives (tone %%.0f), with no underrun counted", Level(heard, NEW_HZ));
+    Check(full && State(source) == AL_PLAYING && !AL_Stream(ch)->playWhenQueued && Level(heard, NEW_HZ) > AUDIBLE
+              && underrunsNoted == before, what);
+
+    // The rest of the file follows as buffers play out; then the stream ends.
+    Render(queuedFrames);
+    bool rest = UpdateUntil(ch, [&] { return AL_Stream(ch)->framesQueued == (uint64_t)queuedFrames + AL_STREAM_BUFFER_FRAMES + 100; });
+    Check(rest, "thread: every frame of the file is queued in the end");
+    Render(queuedFrames + AL_STREAM_BUFFER_FRAMES);
+    more = SND_FillStreamBuffers(ch, true);
+    Check(!more && State(source) == AL_STOPPED, "thread: a stream that reached its end stays stopped and frees its channel");
+    CloseStream(ch);
+
+    // A stream that is paused or delayed at its start is not played by the
+    // buffers that arrive.
+    OpenStream(ch, file);
+    alSourceRewind(source);
+    SND_FillStreamBuffers(ch, false);
+    full = UpdateUntil(ch, [&] { alGetSourcei(source, AL_BUFFERS_QUEUED, &queued); return queued == AL_STREAM_BUFFER_COUNT; });
+    Check(full && State(source) == AL_INITIAL, "thread: a stream nobody told to play is queued and stays silent");
+    AL_PlayStream(ch);
+    Check(State(source) == AL_PLAYING && !AL_Stream(ch)->playWhenQueued, "thread: told to play with sound queued, it plays at once");
+    CloseStream(ch);
+
+    // Turned off while a stream plays: the main thread decodes again. A call
+    // or two may be turned away by a Step the thread still has under way.
+    std::vector<uint8_t> longFile = WavFile(queuedFrames * 4, NEW_HZ);
+    OpenStream(ch, longFile);
+    SND_FillStreamBuffers(ch, false);
+    decodeOnThread = false;
+    full = UpdateUntil(ch, [&] { alGetSourcei(source, AL_BUFFERS_QUEUED, &queued); return queued == AL_STREAM_BUFFER_COUNT; });
+    Check(full, "thread: turned off while a stream plays, the queue still fills");
+    // The thread is asleep now and nothing wakes it. Everything queued plays
+    // out; the feed holds two chunks at most, so this one call decodes the rest.
+    alSourcePlay(source);
+    Render(queuedFrames + 4096);
+    SND_FillStreamBuffers(ch, true);
+    alGetSourcei(source, AL_BUFFERS_QUEUED, &queued);
+    Check(queued == AL_STREAM_BUFFER_COUNT, "thread: and from then on the main thread decodes what it queues, in the same call");
+    CloseStream(ch);
+    g_streamThread.Stop();
+}
+
 int main()
 {
     if (!alcIsExtensionPresent(nullptr, "ALC_SOFT_loopback"))
@@ -371,6 +619,8 @@ int main()
     StreamUnderrun();
     StreamDelayed();
     StreamEnds();
+    StreamCountsItsLength();
+    StreamOnDecodeThread();
 
     alDeleteSources(53, alGlob.source);
     alcMakeContextCurrent(nullptr);
@@ -388,8 +638,8 @@ def main() -> int:
         binary = Path(tmp) / "channel_stop"
         program.write_text(code)
         subprocess.run(
-            ["c++", "-std=c++17", "-O1", "-Wall", "-Wno-unused-function", "-I", str(ROOT / "deps"), "-I", str(ROOT / "src"),
-             str(program), "-o", str(binary), "-lopenal"],
+            ["c++", "-std=c++17", "-O1", "-Wall", "-Wno-unused-function", "-pthread", "-I", str(ROOT / "deps"),
+             "-I", str(ROOT / "src"), str(program), "-o", str(binary), "-lopenal"],
             check=True,
         )
         result = subprocess.run([str(binary)])

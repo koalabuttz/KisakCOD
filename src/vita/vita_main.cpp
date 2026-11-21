@@ -2,6 +2,7 @@
 // server. See vita_platform.h and docs/vita.md.
 
 #include "vita_gpu_clock.h"
+#include "vita_log_writer.h"
 #include "vita_platform.h"
 #include "vita_run_list.h"
 
@@ -29,6 +30,7 @@
 #include <psp2/net/netctl.h>
 #include <psp2/power.h>
 #include <psp2/kernel/sysmem.h>
+#include <psp2/kernel/threadmgr.h>
 #include <psp2/sysmodule.h>
 
 // newlib's heap (malloc, new), taken whole at launch. Without this newlib
@@ -43,8 +45,10 @@
 //   main thread stack 8 MB, worker stacks 1 MB each
 // which leaves about 45 MB. console.log reports the heap's use once a minute
 // (vita_stats.cpp); size it again from the first runs.
-// KISAK_VITA_HEAP_MB (a CMake option) is for emulator builds that measure what
-// the game would take with more; a console build keeps 64.
+// The multiplayer client's build gives 60 (KISAK_VITA_HEAP_MB, a CMake option,
+// scripts/platform/vita/mp_client.cmake): mp_crash uses 34 MB of it, and the
+// GPU's main pool has the other 4 MB. More is for emulator builds that measure
+// what the game would take.
 #ifndef KISAK_VITA_HEAP_MB
 #define KISAK_VITA_HEAP_MB 64
 #endif
@@ -129,6 +133,36 @@ namespace
                 break;
             written += (size_t)result;
         }
+    }
+
+    // The log's text on its way to the file (vita_log_writer.h): straight
+    // there until Vita_ConsoleUseThread, then from a thread of its own.
+    kisak::vita_log::LogWriter s_logWriter;
+
+    void LogSink(const char *text, size_t length, void *)
+    {
+        if (s_logFd >= 0)
+            WriteAll(text, length);
+    }
+
+    void LogThreadBegin()
+    {
+        Vita_NoteThread("log writer");
+        // VitaSDK's pthreads wake a waiting thread every 500 microseconds to
+        // look for a cancel request unless the thread turns cancellation off.
+        // This thread waits nearly all the time and nothing cancels it.
+        int before;
+        pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &before);
+        // One step ahead of the engine's threads: a line is then on its way
+        // to the card as soon as it is printed, whatever the cores are doing,
+        // which is what a log is for when the next thing is a crash. The
+        // thread's own work is small; the card's is waited for asleep.
+        const SceUID self = sceKernelGetThreadId();
+        SceKernelThreadInfo info;
+        memset(&info, 0, sizeof(info));
+        info.size = sizeof(info);
+        if (sceKernelGetThreadInfo(self, &info) >= 0)
+            sceKernelChangeThreadPriority(self, info.currentPriority - 1);
     }
 
     void LogText(const char *text)
@@ -458,9 +492,16 @@ void Vita_ConsoleSync()
 {
     if (s_logFd < 0)
         return;
+    // What the log's thread has not written yet, first.
+    s_logWriter.Flush();
     pthread_mutex_lock(&s_logLock);
     fsync(s_logFd);
     pthread_mutex_unlock(&s_logLock);
+}
+
+bool Vita_ConsoleUseThread()
+{
+    return s_logFd >= 0 && s_logWriter.Start(LogThreadBegin);
 }
 
 void Vita_Exit(int status)
@@ -496,7 +537,7 @@ void Vita_Exit(int status)
             const int length = snprintf(line, sizeof(line), "%sVita: run list: %s; %u markers removed\n",
                 s_logAtLineStart ? "" : "\n", more ? "stopped by hand" : "that was its last start", cleared);
             if (length > 0)
-                WriteAll(line, (size_t)length);
+                s_logWriter.Append(line, (size_t)length);
         }
         if (again)
         {
@@ -504,8 +545,19 @@ void Vita_Exit(int status)
             const int length = snprintf(line, sizeof(line), "%sVita: run list: starting again for start %u of %u\n",
                 s_logAtLineStart ? "" : "\n", (unsigned int)(s_listIndex + 2), (unsigned int)s_listCount);
             if (length > 0)
-                WriteAll(line, (size_t)length);
+                s_logWriter.Append(line, (size_t)length);
         }
+        if (const unsigned waits = s_logWriter.FullFlushes())
+        {
+            char line[128];
+            const int length = snprintf(line, sizeof(line), "%sVita: console.log: %u times a print waited for the card\n",
+                s_logAtLineStart ? "" : "\n", waits);
+            if (length > 0)
+                s_logWriter.Append(line, (size_t)length);
+        }
+        // Everything still in memory goes to the file before it closes. The
+        // log's thread stays; with no file it writes nothing more.
+        s_logWriter.Flush();
         s_logFd = -1;
         fsync(fd);
         close(fd);
@@ -564,12 +616,12 @@ void Vita_ConsoleWrite(const char *text, size_t length)
             const int stampLength = snprintf(stamp, sizeof(stamp), "[%5u.%03u] ",
                 (unsigned int)(elapsed / 1000000u), (unsigned int)(elapsed / 1000u % 1000u));
             if (stampLength > 0)
-                WriteAll(stamp, (size_t)stampLength);
+                s_logWriter.Append(stamp, (size_t)stampLength, false); // the line follows
             s_logAtLineStart = false;
         }
         const char *const newline = static_cast<const char *>(memchr(text, '\n', (size_t)(end - text)));
         const char *const lineEnd = newline ? newline + 1 : end;
-        WriteAll(text, (size_t)(lineEnd - text));
+        s_logWriter.Append(text, (size_t)(lineEnd - text));
         if (newline)
             s_logAtLineStart = true;
         text = lineEnd;
@@ -613,6 +665,7 @@ bool Vita_Startup(int *argc, char ***argv)
     RunListBegin();
     unlink(s_logPath);
     s_logFd = open(s_logPath, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    s_logWriter.SetSink(LogSink, nullptr);
 
     std::set_terminate(OnTerminate);
     LogFormat("Vita: KisakCOD %s starting, CPU at %d MHz\n", kProgramKind, scePowerGetArmClockFrequency());

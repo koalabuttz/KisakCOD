@@ -5,7 +5,10 @@ from test_linux_bots import (FIXTURE_GSC, transition_fixture, transition_plan,
                              final_cohort_log, refill_fixture, validate_refills,
                              validate_kick_window, validate_hold, validate_transitions,
                              validate_brain_view, validate_brain_walk, balanced_teams,
-                             uses_both_teams, TEAM_CAPACITY, MAX_BOTS)
+                             uses_both_teams, TEAM_CAPACITY, MAX_BOTS, validate_brain_notices,
+                             validate_brain_fights, COVER_ROW, HUNT_ROW, team_play,
+                             objective_fixture, validate_objectives, FIXTURE_GSC,
+                             GRENADE_ROW, KNIFE_ROW, SHOTS_ROW)
 
 
 def healthy_log():
@@ -17,11 +20,12 @@ def healthy_log():
     return log
 
 
-def view_log(yaws, pitch=0.0, bots=3):
+def view_log(yaws, pitch=0.0, bots=3, states=None):
     log = ''
     for tick, yaw in enumerate(yaws):
         for i in range(bots):
-            log += f'0:05 BOTFEATURE view entity={i} tick={tick} angles=({pitch}, {yaw + i}, 0)\n'
+            state = f' state={states[tick]}' if states else ''
+            log += f'0:05 BOTFEATURE view entity={i} tick={tick}{state} angles=({pitch}, {yaw + i}, 0)\n'
     return log
 
 
@@ -55,8 +59,24 @@ class BrainViewTests(unittest.TestCase):
         self.assertFalse(self.passed(log + log.splitlines(keepends=True)[0]))
         self.assertFalse(self.passed(''))
 
+    def test_a_fighting_bot_may_flick_faster(self):
+        # 100 degrees in a quarter second: past walking, within the aiming hand.
+        log = view_log([0, 100, 100, 100, 60])
+        self.assertFalse(self.passed(log))
+        self.assertTrue(all(ok for ok, _ in validate_brain_view(log, 3, 1, combat=True)))
+        # 180 in a quarter second is past even the aiming hand.
+        self.assertFalse(all(ok for ok, _ in validate_brain_view(view_log([0, 90, -90, -90, -60]), 3, 1,
+                                                                 combat=True)))
+
+    def test_a_death_and_spawn_is_no_turn(self):
+        states = ['playing', 'dead', 'dead', 'playing', 'playing']
+        self.assertTrue(self.passed(view_log([0, 40, 170, -60, -20], states=states)))
+        # The same jump while playing is a snap.
+        self.assertFalse(self.passed(view_log([0, 40, 170, -60, -20], states=['playing'] * 5)))
+
     def test_fixture_logs_the_view(self):
         self.assertIn('BOTFEATURE view entity=', FIXTURE_GSC)
+        self.assertIn('" state=" + b.sessionstate + " angles="', FIXTURE_GSC)
         self.assertIn('botTest_LogViews(sample * 4 + quarter);', FIXTURE_GSC)
         self.assertIn('getplayerangles', FIXTURE_GSC)
 
@@ -86,6 +106,14 @@ class BrainWalkTests(unittest.TestCase):
         log = place_log([0, 150, 300, 300, 420])
         self.assertFalse(self.passed(log.replace(log.splitlines(keepends=True)[3], '', 1)))
         self.assertFalse(self.passed(''))
+
+    def test_a_respawn_is_no_walk(self):
+        log = place_log([0, 150, 2000, 2150, 2300])
+        self.assertFalse(self.passed(log))
+        held = ''.join(f'0:05 BOTFEATURE held entity={i} sample={s} state={"dead" if s == 1 else "playing"} '
+                       'health=0 team=allies class=CLASS_ASSAULT weapon=m16_mp\n'
+                       for s in range(5) for i in range(3))
+        self.assertTrue(self.passed(held + log))
 
     def test_fixture_logs_the_place(self):
         self.assertIn('BOTFEATURE place entity=', FIXTURE_GSC)
@@ -219,6 +247,17 @@ class RefillEvidenceTests(unittest.TestCase):
         self.assertIn('name=bot11', final)
         self.assertNotIn('name=bot0\n', final)
 
+    def test_refills_may_reuse_names(self):
+        # Bots reuse "[BOT] Name" names in every refill (src/bots/bot_names.h).
+        log = healthy_refills()
+        for n in range(12):
+            log = log.replace(f'name=bot{n}\n', f'name=[BOT] ms rat {n % 3}\n')
+        self.assertTrue(self.passed(log))
+        kicks = [(str(i), f'[BOT] ms rat {i}') for i in range(3)] * 2
+        output = ''.join(f'{e}:{n} EXE_PLAYERKICKED\n' for e, n in kicks)
+        self.assertTrue(validate_kick_window(output, kicks))
+        self.assertFalse(validate_kick_window(output, kicks[:3]))
+
     def test_map_transitions_retain_final_not_original_cohort(self):
         maps = healthy_transitions()
         maps = maps[maps.index('0:00 BOTFEATURE stage=1'):]
@@ -267,6 +306,10 @@ class RefillEvidenceTests(unittest.TestCase):
         self.assertFalse(validate_kick_window(output + '0:bot0 EXE_PLAYERKICKED\n', expected))
         self.assertFalse(validate_kick_window(output.replace('bot1', 'bot2'), expected))
         self.assertFalse(validate_kick_window(output + 'malformed EXE_PLAYERKICKED\n', expected))
+        # Bots are named "[BOT] Name" (src/bots/bot_names.h): a name has spaces.
+        spaced = 'x\n2:[BOT] ms rat EXE_PLAYERKICKED\n'
+        self.assertTrue(validate_kick_window(spaced, {('2', '[BOT] ms rat')}))
+        self.assertFalse(validate_kick_window(spaced, {('2', '[BOT]')}))
 
     def test_fixture_uses_real_kick_and_default_grace(self):
         fixture = refill_fixture()
@@ -275,6 +318,147 @@ class RefillEvidenceTests(unittest.TestCase):
         self.assertIn('getdvarint("botTest_refill") < round', fixture)
         self.assertNotIn('setdvar("sv_zombietime"', fixture)
         self.assertEqual(fixture.count('addtestclient()'), 1)
+
+
+def notice(bot, target, after=300, units=900, off=12, showing=67):
+    return (f"bots: {bot} noticed {target} after {after} ms in view, {units} units, "
+            f"{off} degrees off centre, {showing}% showing\n")
+
+
+class BrainNoticeTests(unittest.TestCase):
+    def passed(self, output, both_teams=True):
+        return all(ok for ok, _ in validate_brain_notices(output, both_teams))
+
+    def test_fair_notices_pass(self):
+        self.assertTrue(self.passed(notice(0, 1) + notice(3, 4, after=200, off=40)))
+        self.assertTrue(self.passed(''))
+        self.assertTrue(self.passed('', both_teams=False))
+
+    def test_a_teammate_or_itself_fails(self):
+        self.assertFalse(self.passed(notice(0, 2)))
+        self.assertFalse(self.passed(notice(1, 1)))
+        # With every bot on one team nobody is an opponent.
+        self.assertFalse(self.passed(notice(0, 1), both_teams=False))
+
+    def test_faster_than_the_floor_fails(self):
+        self.assertFalse(self.passed(notice(0, 1, after=100)))
+
+    def test_off_screen_or_hidden_fails(self):
+        self.assertFalse(self.passed(notice(0, 1, off=60)))
+        self.assertFalse(self.passed(notice(0, 1, showing=0)))
+
+
+def fired(bot, target, after=150, view=450, units=700):
+    return (f'bots: {bot} fired at {target}, {after} ms after noticing, {view} ms after it came into view, '
+            f'{units} units\n')
+
+
+class BrainFightTests(unittest.TestCase):
+    def passed(self, output, both_teams=True):
+        return all(ok for ok, _ in validate_brain_fights(output, both_teams))
+
+    def test_fair_first_shots_pass(self):
+        self.assertTrue(self.passed(fired(0, 1) + fired(3, 4, after=60, view=260)))
+
+    def test_bots_on_both_teams_must_fight(self):
+        self.assertFalse(self.passed(''))
+        self.assertTrue(self.passed('', both_teams=False))
+
+    def test_a_teammate_fails(self):
+        self.assertFalse(self.passed(fired(0, 2)))
+        self.assertFalse(self.passed(fired(0, 1), both_teams=False))
+
+    def test_faster_than_a_human_fails(self):
+        self.assertFalse(self.passed(fired(0, 1, after=40)))
+        self.assertFalse(self.passed(fired(0, 1, view=250)))
+
+
+class DecisionLogTests(unittest.TestCase):
+    def test_cover_and_hunt_lines_are_counted(self):
+        output = ('bots: 3 takes cover 210 units away (reloading)\n'
+                  'bots: 4 takes cover 0 units away (hurt)\n'
+                  'bots: 5 hunts (heard)\nbots: 6 hunts (seen)\nbots: 7 hunts (hit)\n'
+                  'bots: 8 hunts (guessed)\n')
+        self.assertEqual(len(COVER_ROW.findall(output)), 2)
+        self.assertEqual(len(HUNT_ROW.findall(output)), 3)
+
+    def test_team_play_lines_are_counted(self):
+        output = ('bots: 2 plays push\nbots: 3 plays anchor\nbots: 4 plays push\nbots: 5 plays boss\n'
+                  'bots: 2 calls out 7\nbots: 3 calls out 9\n'
+                  'bots: 2 pushes to a callout 840 units away\n'
+                  'bots: 3 anchors 610 units from a callout\n'
+                  'bots: 6 attacks an objective 1200 units away\nbots: 7 defends an objective from 420 units\n'
+                  'bots: map spots ready: 311 spots, 48205 lines, in 12.3 s\n')
+        team = team_play(output)
+        self.assertEqual(team["roles"], {"push": 2, "anchor": 1})
+        self.assertEqual((team["callouts"], team["pushes"], team["anchors"], team["objectives"]), (2, 1, 1, 2))
+        self.assertEqual(team["spots"], ("311", "48205", "12.3"))
+        self.assertIsNone(team_play("")["spots"])
+
+
+class GrenadeAndKnifeLogTests(unittest.TestCase):
+    def test_lines_are_counted(self):
+        output = ('bots: 3 throws a grenade 610 units\nbots: 4 throws a grenade 300 units\n'
+                  'bots: 5 knifes 6, 52 units\nbots: 5 knifes 6 close\n')
+        self.assertEqual(len(GRENADE_ROW.findall(output)), 2)
+        self.assertEqual(len(KNIFE_ROW.findall(output)), 1)
+
+    def test_the_last_shot_count_is_read(self):
+        self.assertEqual(SHOTS_ROW.findall('bots: 12 shots fired so far\nbots: 340 shots fired so far\n')[-1], '340')
+
+
+class ObjectiveTests(unittest.TestCase):
+    def test_the_fixture_starts_domination(self):
+        fixture = objective_fixture(FIXTURE_GSC)
+        self.assertIn("maps\\mp\\gametypes\\dom::main();", fixture)
+        self.assertNotIn("war::main", fixture)
+
+    def passed(self, output):
+        return all(ok for ok, _ in validate_objectives(output))
+
+    def test_both_teams_reading_flags_and_an_attack_pass(self):
+        self.assertTrue(self.passed("bots: team 1 objectives: take 3, hold 0\n"
+                                    "bots: team 2 objectives: take 2, hold 1\n"
+                                    "bots: 4 attacks an objective 900 units away\n"))
+
+    def test_one_team_or_no_attack_fails(self):
+        self.assertFalse(self.passed("bots: team 1 objectives: take 3, hold 0\n"
+                                     "bots: 4 attacks an objective 900 units away\n"))
+        self.assertFalse(self.passed("bots: team 1 objectives: take 3, hold 0\n"
+                                     "bots: team 2 objectives: take 3, hold 0\n"))
+        self.assertFalse(self.passed("bots: team 1 objectives: take 0, hold 0\n"
+                                     "bots: team 2 objectives: take 3, hold 0\n"
+                                     "bots: 4 attacks an objective 900 units away\n"))
+
+
+    def test_arrivals_count_with_or_without_a_stance(self):
+        import contextlib
+        import io
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            validate_objectives("bots: 4 is on an objective, prone\n"
+                                "bots: 5 is on an objective, crouched\n"
+                                "bots: 6 is on an objective\n")
+        self.assertIn("got onto an objective 3 times (1 of them lying prone)", printed.getvalue())
+
+    def test_stays_on_an_objective_are_summed_up(self):
+        import contextlib
+        import io
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            validate_objectives("bots: 4 left an objective after 2.5 s (hunt, role attack)\n"
+                                "bots: 5 left an objective after 11.0 s (died)\n"
+                                "bots: 6 left an objective after 0.4 s (hunt, role attack)\n")
+        self.assertIn("left an objective 3 times, after 11.0 s at most (died 1, hunt 2)", printed.getvalue())
+
+
+class CombatHoldTests(unittest.TestCase):
+    def test_a_bot_may_die_after_the_first_sample(self):
+        log = healthy_log().replace('sample=2 state=playing health=100', 'sample=2 state=dead health=0', 1)
+        self.assertFalse(all(ok for ok, _ in validate_hold(log, 3, 2)))
+        self.assertTrue(all(ok for ok, _ in validate_hold(log, 3, 2, combat=True)))
+        first = healthy_log().replace('sample=0 state=playing health=100', 'sample=0 state=dead health=0', 1)
+        self.assertFalse(all(ok for ok, _ in validate_hold(first, 3, 2, combat=True)))
 
 
 class TeamCapacityTests(unittest.TestCase):

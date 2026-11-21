@@ -35,14 +35,32 @@ struct DisplayDesc
     uint32_t parameterBufferBytes = SCE_GXM_DEFAULT_PARAMETER_BUFFER_SIZE;
     // The GPU memory pools (gxm_memory.h). The display's own buffers come out
     // of them: the display buffers and depth-stencil about 9 MB of CDRAM,
-    // the context's ring buffers about 2.6 MB of main memory and 16 KB of
+    // the context's ring buffers about 3.3 MB of main memory and 16 KB of
     // fragment USSE.
     MemorySizes memory;
-    // The context's ring buffers, from the main pool: sceGxm's defaults times
-    // this. They hold the draw calls and uniform buffers of the scenes the GPU
-    // has not finished, which is two frames' when the CPU fills one frame
-    // while the GPU draws another.
-    uint32_t ringScale = 1;
+    // The context's ring buffers, from the main pool. They hold the draw
+    // calls (VDM), the vertex constants and the fragment constants of the
+    // scenes the GPU has not finished, which is two frames' when the CPU
+    // fills one frame while the GPU draws another. A draw that finds one of
+    // them full waits inside sceGxm until the GPU has finished a scene, and
+    // no line of the log names that wait.
+    //
+    // They have sceGxm's default sizes (128 KB, 2 MB and 512 KB). Console
+    // run BV (2026-11-15, the busy view of mp_crash, 1500 draws a frame)
+    // found one draw a frame waiting 5 to 11 ms on a full ring, and the
+    // draw calls' and the fragment constants' rings were doubled for it:
+    // the frame was about 1 ms shorter at that view (run BY). But the wait
+    // is also what keeps the CPU from handing the GPU more than it can
+    // take: console run CJ (the same day, a heavier view of 1570 draws at
+    // full size, three starts of one build) measured 40.8 to 44.1 ms a
+    // frame with the default rings and 50.4 to 62.1 ms with the two
+    // doubled, the GPU's vertex work at 22 to 26 ms against 38 to 61 with
+    // the same fragment work and the same CPU time. The marker
+    // double-gxm-rings doubles those two again and big-gxm-rings all
+    // three (gxm_legacy.cpp), for comparing.
+    uint32_t vdmRingBytes = SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE;
+    uint32_t vertexRingBytes = SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE;
+    uint32_t fragmentRingBytes = SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE;
     bool vsync = true;
     // One line per call, no newline. Null: nowhere.
     void (*log)(void *user, const char *line) = nullptr;

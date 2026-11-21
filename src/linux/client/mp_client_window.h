@@ -54,6 +54,10 @@ struct ClientWindowEngine {
     // Optional. True while the console or a menu has the keyboard, so typed
     // keypad digits go in as text only (EventSink::TypingText).
     bool (*typingText)() = nullptr;
+    // Optional. True while the engine wants typed text: the console, the chat
+    // line or a menu text field. Only a platform with an on-screen keyboard
+    // asks (WindowHost::SetTextWanted), to bring its keyboard up just then.
+    bool (*wantsText)() = nullptr;
 };
 
 class ClientWindow {
@@ -91,6 +95,9 @@ public:
 
 private:
     class Sink;
+    // Hand the gathered pointer position to the engine ahead of a click, as
+    // Frame does once a frame, while a menu has the cursor.
+    void DeliverPointer();
     void SetLook(bool look);
     void ToPixels(int &x, int &y) const;
     ClientWindowEngine engine_;
@@ -99,6 +106,7 @@ private:
     std::unique_ptr<window::WindowHost> host_;
     bool look_ = false;
     bool hideCursor_ = false;
+    bool mouseEnabled_ = false; // Frame's last answer: the engine takes the mouse
 };
 
 // Hook the Win32 window layer so the next window CreateWindowExA makes becomes

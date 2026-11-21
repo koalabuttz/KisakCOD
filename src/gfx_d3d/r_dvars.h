@@ -65,6 +65,7 @@ extern const dvar_t *r_filmUseTweaks;
 extern const dvar_t *r_drawBModels;
 extern const dvar_t *r_drawXModels;
 extern const dvar_t *r_vsync;
+extern const dvar_t *r_vsyncInterval;
 extern const dvar_t *r_singleCell;
 extern const dvar_t *r_glowTweakBloomDesaturation;
 extern const dvar_t *sm_polygonOffsetScale;
@@ -172,6 +173,10 @@ extern const dvar_t *r_filmTweakDarkTint;
 extern const dvar_t *r_scaleViewport;
 #ifdef KISAK_GFX_GXM
 extern const dvar_t *vita_sceneScale;
+extern const dvar_t *vita_sceneScaleMin;
+extern const dvar_t *vita_sceneScaleGoal;
+extern const dvar_t *vita_sceneScaleWidthOnly;
+extern const dvar_t *vita_sceneSharpen;
 #endif
 extern const dvar_t *r_normal;
 extern const dvar_t *sm_sunShadowCenter;
@@ -250,6 +255,7 @@ extern const dvar_t *r_skinCache;
 extern const dvar_t *r_fastSkin;
 extern const dvar_t *r_smc_enable;
 extern const dvar_t *r_pretess;
+extern const dvar_t *r_fetchAhead;
 extern const dvar_t *r_dynamicBufferReport;
 extern const dvar_t *r_picmip_manual;
 extern const dvar_t *r_picmip;
@@ -269,6 +275,7 @@ extern const dvar_t *r_glow_allowed_script_forced;
 extern const dvar_t *r_outdoor;
 extern const dvar_t *sv_cheats; // KISAKTODO: Move out of gfx code...
 extern const dvar_t *r_sse_skinning;
+extern const dvar_t *r_staticCullVec;
 extern const dvar_t *r_monitor;
 extern const dvar_t *r_rendererPreference;
 extern const dvar_t *r_rendererInUse;

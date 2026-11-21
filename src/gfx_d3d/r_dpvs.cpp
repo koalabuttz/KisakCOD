@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "r_dpvs.h"
+#include "r_dpvs_stats.h"
 #include <qcommon/mem_track.h>
 #include "r_model_lighting.h"
 #include "r_dvars.h"
@@ -18,6 +19,7 @@
 #include "r_sunshadow.h" // SCENE_VIEW_CAMERA
 #include "r_scene.h"
 #include <universal/profile.h>
+#include <linux/sys_perf.h>
 
 #ifdef KISAK_MP
 #include <cgame_mp/cg_local_mp.h>
@@ -2423,6 +2425,7 @@ void R_AddCellSurfacesAndCullGroupsInFrustumDelayed(
     DpvsDynamicCellCmd dpvsDynamicCell; // [esp+0h] [ebp-18h] BYREF
     DpvsStaticCellCmd dpvsStaticCell; // [esp+Ch] [ebp-Ch] BYREF
 
+    SysPerfScope perfScope(SYS_PERF_PROBE_CELLS_HAND_OVER);
     dpvsStaticCell.cell = cell;
     dpvsStaticCell.planes = planes;
     dpvsStaticCell.planeCount = planeCount;
@@ -2807,6 +2810,7 @@ void R_AddWorldSurfacesDpvs(const GfxViewParms *viewParms, int cameraCellIndex)
     iassert( rgp.world );
     iassert( viewParms );
     rg.debugViewParms = viewParms;
+    R_DpvsStatsCountView();
     R_AddWorldSurfacesPortalWalk(cameraCellIndex);
     dpvsView = dpvsGlob.views[scene.dpvs.localClientNum];
     if (dpvsGlob.farPlane)

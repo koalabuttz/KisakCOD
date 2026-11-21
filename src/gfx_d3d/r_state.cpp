@@ -10,6 +10,7 @@
 #include "r_rendertarget.h"
 #include "r_utils.h"
 #include "r_reflection_probe.h"
+#include <linux/sys_perf.h>
 
 //float const *const shadowmapClearColor 820ebb50     gfx_d3d : r_state.obj
 //BOOL g_renderTargetIsOverridden 85b5dd38     gfx_d3d : r_state.obj
@@ -236,6 +237,7 @@ GfxCmdBufSourceState *R_GetCodeMatrix(
     if (source->constVersions[sourceIndex] == matrixVersion)
         return (GfxCmdBufSourceState *)((char *)source + 64 * matrixIndex + 16 * firstRow);
 
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_MATRIX);
     baseIndex = matrixIndex & 0xFFFFFFFC;
     if (source->constVersions[(matrixIndex & 0xFFFFFFFC) + CONST_SRC_FIRST_CODE_MATRIX] != matrixVersion)
     {
@@ -279,6 +281,7 @@ GfxCmdBufSourceState *R_GetCodeMatrix(
 
 void R_DeriveCodeMatrix(GfxCmdBufSourceState *source, GfxCodeMatrices *activeMatrices, uint32_t baseIndex)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_MATRIX);
     const char *v3; // eax
 
     switch (baseIndex) // LWSS: mystery enum of sorts
@@ -644,6 +647,7 @@ void R_DrawIndexedPrimitive(GfxCmdBufPrimState *state, const GfxDrawPrimArgs *ar
 
 void R_ChangeState_0(GfxCmdBufState *state, uint32_t stateBits0)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_STATE_BITS);
     bool blendOpRgbWasEnabled; // [esp+2Fh] [ebp-Dh]
     int changedBits; // [esp+30h] [ebp-Ch]
     IDirect3DDevice9 *device; // [esp+38h] [ebp-4h]
@@ -707,6 +711,7 @@ void R_ChangeState_0(GfxCmdBufState *state, uint32_t stateBits0)
 
 void R_ChangeState_1(GfxCmdBufState *state, uint32_t stateBits1)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_STATE_BITS);
     int changedBits; // [esp+30h] [ebp-Ch]
     IDirect3DDevice9 *device; // [esp+38h] [ebp-4h]
 
@@ -936,8 +941,10 @@ void R_GetViewport(GfxCmdBufSourceState *source, GfxViewport *outViewport)
         // viewport, stretched to all of it before the HUD.
         if (source->viewMode != VIEW_MODE_2D && KISAK_GXM_SCENE_SCALE() < 1.0f)
         {
-            outViewport->width = gfx_gxm::SceneScaled(outViewport->width, KISAK_GXM_SCENE_SCALE());
-            outViewport->height = gfx_gxm::SceneScaled(outViewport->height, KISAK_GXM_SCENE_SCALE());
+            outViewport->width =
+                gfx_gxm::SceneScaled(outViewport->width, gfx_gxm::SceneScaleX(KISAK_GXM_SCENE_SCALE()));
+            outViewport->height =
+                gfx_gxm::SceneScaled(outViewport->height, gfx_gxm::SceneScaleY(KISAK_GXM_SCENE_SCALE()));
         }
 #endif
     }

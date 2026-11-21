@@ -25,24 +25,33 @@ constexpr VkDeviceSize kTransientChunk = 4ull << 20;
 // Staging memory a frame slot may hold before an upload flushes and waits, so
 // a map load does not grow staging without bound.
 constexpr VkDeviceSize kStagingFlushBytes = 64ull << 20;
+// Recycles of a frame slot in a row that needed no more than an arena's first
+// chunk before the arena gives the rest back (about a second at 60 fps with
+// two slots): what a map load grew is not held through play.
+constexpr uint32_t kArenaQuietRecycles = 30;
 
 constexpr uint32_t kDescriptorSetsPerPool = 1024;
 
-constexpr VkPipelineStageFlags2 kShaderStages =
-    VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+// Shaders that sample images and read buffers: the compute stage too, so an
+// image written by a copy, a pass or a compute shader and then made Sampled
+// is visible to every shader that samples it, whichever comes first.
+constexpr VkPipelineStageFlags2 kShaderStages = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
+    | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
 constexpr VkPipelineStageFlags2 kDepthStages =
     VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
 // What reads a buffer written by a copy: vertex input, index fetch, shaders,
-// further copies.
+// indirect arguments, further copies.
 constexpr VkPipelineStageFlags2 kBufferReadStages = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT | kShaderStages
-    | VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+    | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
 constexpr VkAccessFlags2 kBufferReadAccess = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_2_INDEX_READ_BIT
-    | VK_ACCESS_2_UNIFORM_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_TRANSFER_READ_BIT;
+    | VK_ACCESS_2_UNIFORM_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT
+    | VK_ACCESS_2_TRANSFER_READ_BIT;
 
 // Device writes only. Host writes need no barrier: submitting the command
 // buffer makes them visible. A HOST_WRITE source access is also invalid with
 // the ALL_COMMANDS stage the buffer-copy barrier uses.
-constexpr VkAccessFlags2 kWriteAccess = VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
+constexpr VkAccessFlags2 kWriteAccess = VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+    | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
     | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT
     | VK_ACCESS_2_MEMORY_WRITE_BIT;
 
@@ -86,6 +95,34 @@ void DestroyArena(Core &core, LinearArena &arena)
     arena.current = 0;
 }
 
+// At a slot's recycle, before ResetArena: an arena that has needed only its
+// first chunk for kArenaQuietRecycles recycles gives the other chunks back,
+// and the first too when a large request made it bigger than a chunk. The
+// slot's work has finished, so nothing on the GPU reads them.
+void TrimArena(Core &core, LinearArena &arena)
+{
+    if (arena.spilled)
+    {
+        arena.spilled = false;
+        arena.quietRecycles = 0;
+        return;
+    }
+    const bool oversized = !arena.chunks.empty() && BufferSize(arena.chunks[0].buffer) > arena.chunkSize;
+    if (arena.chunks.size() <= 1 && !oversized)
+        return;
+    if (++arena.quietRecycles < kArenaQuietRecycles)
+        return;
+    const size_t keep = oversized ? 0 : 1;
+    for (size_t i = keep; i < arena.chunks.size(); ++i)
+    {
+        DestroyBuffer(&core, arena.chunks[i].buffer);
+        ++core.stats.arenaChunksFreed;
+    }
+    arena.chunks.resize(keep);
+    arena.current = 0;
+    arena.quietRecycles = 0;
+}
+
 VkDeviceSize ArenaBytes(const LinearArena &arena)
 {
     VkDeviceSize bytes = 0;
@@ -107,13 +144,15 @@ bool ArenaAllocate(Core &core, LinearArena &arena, VkDeviceSize size, VkDeviceSi
             chunk.used = offset + size;
             chunkOut = &chunk;
             offsetOut = offset;
+            arena.spilled = arena.spilled || arena.current > 0;
             return true;
         }
     }
+    arena.spilled = true;
     BufferDesc desc;
     desc.size = std::max(arena.chunkSize, AlignUp(size, 256));
     desc.usage = arena.usage;
-    desc.memory = MemoryKind::Upload;
+    desc.memory = arena.memory;
     desc.name = name;
     Buffer *buffer = CreateBuffer(&core, desc);
     if (!buffer)
@@ -365,6 +404,8 @@ bool RecycleSlot(Core &core, uint32_t slotIndex)
                 state.slots[slotIndex].used = 0;
         }))
         return false;
+    TrimArena(core, slot.staging);
+    TrimArena(core, slot.transient);
     ResetArena(slot.staging);
     ResetArena(slot.transient);
     for (VkDescriptorPool pool : slot.descriptorPools)
@@ -399,6 +440,16 @@ void UseState(ImageUse use, const Image &image, VkImageLayout &layout, VkPipelin
         layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         stages = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
         access = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+        break;
+    case ImageUse::StorageRead:
+        layout = VK_IMAGE_LAYOUT_GENERAL;
+        stages = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        access = VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
+        break;
+    case ImageUse::StorageWrite:
+        layout = VK_IMAGE_LAYOUT_GENERAL;
+        stages = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        access = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
         break;
     }
     (void)image;
@@ -446,11 +497,148 @@ void EndTimed(Core &core, int query)
     if (query >= 0)
         WriteTimestamp(core, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, static_cast<uint32_t>(query) + 1);
 }
+// The time a present asks for (VK_GOOGLE_display_timing), on the record
+// thread: N refreshes after the refresh the present before it was meant for,
+// less an offset so the target sits just before the refresh it means. When
+// the display reports a frame shown later than that chain allows (the GPU or
+// the game was late), the chain starts again from it: N refreshes after the
+// newest frame shown, one more N for each present since. Until the display
+// has reported a frame the time is 0 and the frame shows at the next refresh.
+//
+// The chain is what keeps the spacing even when the game runs ahead of the
+// display. Worked out from the newest report alone, each target was N
+// refreshes per present after a frame several presents back, so any uneven
+// spacing at the start (a load, a hitch) repeated with that many presents'
+// period: Legacy on the Retroid Pocket 6, five presents queued, showed frames
+// 1, 3, 1, 3 and 2 refreshes apart at r_vsyncInterval 2, every one on time.
+//
+// The offset starts at half a refresh. Where the display's reported times
+// sit apart from the clock the compositor compares a present's time with,
+// half a refresh can land on the edge between two refreshes, and frames then
+// show a refresh early or late at random: a mix of one and three refreshes
+// where two were asked for. A frame shown a refresh early moves the offset an
+// eighth of a refresh later; one shown late, though the display could have
+// shown it in time, an eighth earlier (Core::paceAdapt).
+void CountShown(RecordState &state, const VkPastPresentationTimingGOOGLE &shown, uint32_t interval)
+{
+    const uint64_t refresh = state.refreshNs;
+    if (shown.presentID == state.paceCountedId + 1 && state.paceCountedNs && shown.actualPresentTime > state.paceCountedNs)
+    {
+        const uint64_t refreshes = (shown.actualPresentTime - state.paceCountedNs + refresh / 2) / refresh;
+        ++state.paceAfter[std::min<uint64_t>(std::max<uint64_t>(refreshes, 1), 4) - 1];
+        ++state.paceCounted;
+    }
+    state.paceCountedId = shown.presentID;
+    state.paceCountedNs = shown.actualPresentTime;
+    if (shown.desiredPresentTime)
+    {
+        const uint64_t offset = state.paceOffsets[shown.presentID % RecordState::kPaceOffsets];
+        const int64_t miss =
+            static_cast<int64_t>(shown.actualPresentTime) - static_cast<int64_t>(shown.desiredPresentTime + offset);
+        state.paceMissNs += miss;
+        // Could the display have shown it at the refresh asked for? Not when
+        // the frame was ready only after it (the GPU was late).
+        const bool ready = !shown.earliestPresentTime
+            || shown.earliestPresentTime <= shown.desiredPresentTime + offset + refresh / 2;
+        if (miss < -static_cast<int64_t>(refresh / 2))
+        {
+            ++state.paceEarly;
+            if (state.core->paceAdapt && state.paceOffsetNs >= refresh / 8)
+                state.paceOffsetNs -= refresh / 8;
+        }
+        else if (miss > static_cast<int64_t>(refresh / 2) && ready)
+        {
+            ++state.paceLate;
+            if (state.core->paceAdapt && state.paceOffsetNs + refresh / 8 < refresh)
+                state.paceOffsetNs += refresh / 8;
+        }
+    }
+    if (state.paceCounted < RecordState::kPaceReport)
+        return;
+    char line[320];
+    std::snprintf(line, sizeof(line),
+                  "display timing: %u frames at a frame every %u refreshes of %.2f ms: shown 1/2/3/4+ refreshes "
+                  "after the one before %u/%u/%u/%u; %u a refresh or more early, %u late though ready; on average "
+                  "%.2f ms after the refresh asked for; times now %.2f ms before it%s",
+                  state.paceCounted, interval, refresh / 1e6, state.paceAfter[0], state.paceAfter[1],
+                  state.paceAfter[2], state.paceAfter[3], state.paceEarly, state.paceLate,
+                  state.paceMissNs / 1e6 / state.paceCounted, state.paceOffsetNs / 1e6,
+                  state.core->paceAdapt ? "" : " (fixed: KISAK_VK_PACE_ADAPT=0)");
+    {
+        Recorder &recorder = state.core->recorder;
+        std::lock_guard<std::mutex> lock(recorder.messageMutex);
+        recorder.messages.push_back(line);
+    }
+    std::fill(std::begin(state.paceAfter), std::end(state.paceAfter), 0u);
+    state.paceEarly = state.paceLate = state.paceCounted = 0;
+    state.paceMissNs = 0;
+}
+
+void PacePresent(RecordState &state, VkDevice dev, VkSwapchainKHR swapchain, uint32_t interval,
+                 VkPresentTimeGOOGLE &time)
+{
+    const Dispatch &vk = *state.vk;
+    if (state.pacedSwapchain != swapchain)
+    {
+        state.pacedSwapchain = swapchain;
+        state.refreshNs = 0;
+        state.shownId = 0;
+        state.shownNs = 0;
+        state.paceCountedId = 0;
+        state.paceCountedNs = 0;
+        state.lastTargetNs = 0;
+    }
+    if (!state.refreshNs)
+    {
+        VkRefreshCycleDurationGOOGLE cycle{};
+        if (vk.vkGetRefreshCycleDurationGOOGLE(dev, swapchain, &cycle) == VK_SUCCESS)
+            state.refreshNs = cycle.refreshDuration;
+        if (!state.paceOffsetNs)
+            state.paceOffsetNs = state.refreshNs / 2;
+    }
+    VkPastPresentationTimingGOOGLE past[8];
+    for (int batch = 0; batch < 8; ++batch)
+    {
+        uint32_t count = static_cast<uint32_t>(std::size(past));
+        const VkResult result = vk.vkGetPastPresentationTimingGOOGLE(dev, swapchain, &count, past);
+        if (result != VK_SUCCESS && result != VK_INCOMPLETE)
+            break;
+        std::sort(past, past + count, [](const VkPastPresentationTimingGOOGLE &a, const VkPastPresentationTimingGOOGLE &b) {
+            return a.presentID < b.presentID;
+        });
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            if (!past[i].actualPresentTime)
+                continue;
+            if (past[i].presentID > state.shownId)
+            {
+                state.shownId = past[i].presentID;
+                state.shownNs = past[i].actualPresentTime;
+            }
+            if (state.refreshNs)
+                CountShown(state, past[i], interval);
+        }
+        if (result != VK_INCOMPLETE)
+            break;
+    }
+    time.presentID = ++state.presentId;
+    time.desiredPresentTime = 0;
+    state.paceOffsets[time.presentID % RecordState::kPaceOffsets] = state.paceOffsetNs;
+    if (state.refreshNs && state.shownId)
+    {
+        const uint64_t step = uint64_t(interval) * state.refreshNs;
+        const uint64_t fromShown = state.shownNs + uint64_t(state.presentId - state.shownId) * step;
+        const uint64_t chained = state.lastTargetNs + step;
+        state.lastTargetNs = state.lastTargetNs && chained >= fromShown ? chained : fromShown;
+        time.desiredPresentTime = state.lastTargetNs - state.paceOffsetNs;
+    }
+    ++state.pacedPresents;
+}
 } // namespace
 
 bool AbandonFrame(Core &core)
 {
-    if (!core.inFrame || core.inPass)
+    if (!core.inFrame || core.inPass || core.inComputePass)
         return false;
     SettleUploads(core);
     const bool submitted = SubmitRecording(core, false);
@@ -689,6 +877,7 @@ bool CreateFrameResources(Core &core)
             return false;
         slot.staging.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         slot.staging.chunkSize = kStagingChunk;
+        slot.staging.memory = MemoryKind::Staging;
         slot.transient.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT
             | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
             | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
@@ -746,7 +935,28 @@ FrameResult BeginFrame(Core *core_)
         ++core.stats.framesSkipped;
         return FrameResult::Skipped;
     }
+    if (core.surfaceLost)
+    {
+        // The window took the surface away (Android: the app went to the
+        // background, or the screen locked). Work recorded so far goes first;
+        // frames are skipped until the window has a surface again.
+        if (!SubmitRecording(core, false))
+            return FrameResult::Failed;
+        if (!RenewSurface(core))
+        {
+            if (core.failed)
+                return FrameResult::Failed;
+            ++core.stats.framesSkipped;
+            return FrameResult::Skipped;
+        }
+    }
 
+    // A swapchain the compositor turns (Android) hears of no resize: Android
+    // scales a picture of the old size without a word (the Retroid Pocket 6,
+    // run 5, kept 1920x970 after the window went full screen). Every 32nd
+    // frame compares the sizes.
+    if (core.transformLeftToCompositor && (++core.turnedFrames & 31u) == 0)
+        core.resizePending = true;
     if (core.resizePending && !core.rebuildPending)
     {
         // A size event: rebuild only when the size really changed (or the
@@ -809,15 +1019,23 @@ Image *AcquireImage(Core &core)
         result = core.vk.vkAcquireNextImageKHR(core.dev, core.swapchain, UINT64_MAX, CurrentSlot(core).acquired,
                                                VK_NULL_HANDLE, &core.imageIndex);
     }
-    if (result == VK_ERROR_OUT_OF_DATE_KHR)
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_ERROR_SURFACE_LOST_KHR)
     {
-        // Nothing was signalled. This frame shows nothing; rebuild next time.
+        // Nothing was signalled. This frame shows nothing; rebuild next time
+        // (on a new surface if the window took this one away).
         core.rebuildPending = true;
+        if (result == VK_ERROR_SURFACE_LOST_KHR)
+            core.surfaceLost = true;
         core.imageMissing = true;
         return nullptr;
     }
     if (result == VK_SUBOPTIMAL_KHR)
-        core.rebuildPending = true; // still usable: draw this one, rebuild after
+    {
+        // Still usable: draw this one, rebuild after (unless the compositor
+        // turning the picture is all it means; BeginFrame watches the size).
+        if (!core.transformLeftToCompositor)
+            core.rebuildPending = true;
+    }
     else if (!Check(core, result, "vkAcquireNextImageKHR"))
         return nullptr;
     core.imageAcquired = true;
@@ -838,9 +1056,11 @@ FrameResult Present(Core *core_)
     Core &core = *core_;
     if (core.failed)
         return FrameResult::Failed;
-    if (!core.inFrame || core.inPass)
+    if (!core.inFrame || core.inPass || core.inComputePass)
     {
-        Fail(core, core.inPass ? "Present inside a pass" : "Present outside a frame");
+        Fail(core, core.inPass          ? "Present inside a pass"
+                   : core.inComputePass ? "Present inside a compute pass"
+                                        : "Present outside a frame");
         return FrameResult::Failed;
     }
     // A frame that never asked for its image shows it anyway (undefined).
@@ -871,6 +1091,16 @@ FrameResult Present(Core *core_)
     const VkSwapchainKHR swapchain = core.swapchain;
     const VkSemaphore renderDone = core.renderDone[core.imageIndex];
     const uint32_t imageIndex = core.imageIndex;
+    const bool turnedByCompositor = core.transformLeftToCompositor;
+    // A frame every N refreshes (CoreDesc::swapInterval): with vsync and
+    // display timing, each present asks not to be shown before N refreshes
+    // after the one before it was.
+    const VkPresentModeKHR mode = core.swapInfo.presentMode;
+    const uint32_t interval = core.displayTiming
+            && (mode == VK_PRESENT_MODE_FIFO_KHR || mode == VK_PRESENT_MODE_FIFO_RELAXED_KHR)
+        ? core.swapInterval.load()
+        : 1u;
+    const VkDevice dev = core.dev;
     if (!RecordControl(core, [=](RecordState &state) {
             VkPresentInfoKHR present{};
             present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -879,11 +1109,25 @@ FrameResult Present(Core *core_)
             present.swapchainCount = 1;
             present.pSwapchains = &swapchain;
             present.pImageIndices = &imageIndex;
+            VkPresentTimeGOOGLE time{};
+            VkPresentTimesInfoGOOGLE times{};
+            if (interval > 1)
+            {
+                PacePresent(state, dev, swapchain, interval, time);
+                times.sType = VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE;
+                times.swapchainCount = 1;
+                times.pTimes = &time;
+                present.pNext = &times;
+            }
             const VkResult result = state.vk->vkQueuePresentKHR(state.queue, &present);
             ++state.presents;
-            if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+            // VK_SUBOPTIMAL_KHR is expected for a swapchain the compositor turns.
+            const bool expected = result == VK_SUBOPTIMAL_KHR && turnedByCompositor;
+            if (result == VK_ERROR_SURFACE_LOST_KHR)
+                state.surfaceLost = true; // the window went (Android, sent to the background)
+            else if (!expected && (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR))
                 state.rebuild = true;
-            else
+            else if (!expected)
                 RecordCheck(state, result, "vkQueuePresentKHR");
         }))
         return FrameResult::Failed;
@@ -911,8 +1155,8 @@ bool Flush(Core *core_, bool wait)
     Core &core = *core_;
     if (core.failed)
         return false;
-    if (core.inPass)
-        return Fail(core, "Flush inside a pass");
+    if (core.inPass || core.inComputePass)
+        return Fail(core, core.inPass ? "Flush inside a pass" : "Flush inside a compute pass");
     SettleUploads(core);
     if (!SubmitRecording(core, false))
         return false;
@@ -952,6 +1196,12 @@ void WaitIdle(Core *core)
 
 void UseImage(Core *core, Image *image, ImageUse use)
 {
+    if ((use == ImageUse::StorageRead || use == ImageUse::StorageWrite)
+        && !(image->desc.usage & VK_IMAGE_USAGE_STORAGE_BIT))
+    {
+        Fail(*core, "image %s is used as a storage image without storage usage", image->name.c_str());
+        return;
+    }
     VkImageLayout layout;
     VkPipelineStageFlags2 stages;
     VkAccessFlags2 access;
@@ -968,6 +1218,8 @@ bool BeginPass(Core *core_, const PassDesc &desc)
         return false;
     if (core.inPass)
         return Fail(core, "BeginPass inside a pass");
+    if (core.inComputePass)
+        return Fail(core, "BeginPass %s inside a compute pass", desc.name);
     if (desc.colorCount > kMaxColorAttachments)
         return Fail(core, "BeginPass: %u colour attachments, at most %u", desc.colorCount, kMaxColorAttachments);
     SettleUploads(core);
@@ -1068,6 +1320,146 @@ void EndPass(Core *core_)
 }
 
 bool InPass(const Core *core) { return core->inPass; }
+
+// ---- Public API: buffers in shaders and compute passes ---------------------------------
+
+void UseBuffer(Core *core_, Buffer *buffer, BufferUse use)
+{
+    Core &core = *core_;
+    if (core.failed)
+        return;
+    if (core.inPass)
+    {
+        Fail(core, "UseBuffer inside a pass (%s)", buffer->name.c_str());
+        return;
+    }
+    VkPipelineStageFlags2 stages = VK_PIPELINE_STAGE_2_NONE;
+    VkAccessFlags2 access = VK_ACCESS_2_NONE;
+    switch (use)
+    {
+    case BufferUse::ShaderRead:
+        stages = kShaderStages;
+        access = VK_ACCESS_2_UNIFORM_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
+        break;
+    case BufferUse::ShaderWrite:
+        stages = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        access = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
+        break;
+    case BufferUse::Indirect:
+        stages = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
+        access = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
+        break;
+    }
+    // Copies recorded so far finish before shaders read the buffers.
+    CloseBufferCopies(core);
+    const bool writes = (access & kWriteAccess) != 0;
+    const bool wrote = (buffer->lastAccess & kWriteAccess) != 0;
+    if (!writes && !wrote)
+    {
+        // Read after read: no hazard. A later write waits for every reader.
+        buffer->lastStages |= stages;
+        buffer->lastAccess |= access;
+        return;
+    }
+    VkBufferMemoryBarrier2 barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+    // A write also waits for the copies before it (CloseBufferCopies makes
+    // them visible to reads only).
+    barrier.srcStageMask = buffer->lastStages | (writes ? VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT : 0);
+    barrier.srcAccessMask = (buffer->lastAccess & kWriteAccess) | (writes ? VK_ACCESS_2_TRANSFER_WRITE_BIT : 0);
+    barrier.dstStageMask = stages;
+    barrier.dstAccessMask = access;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.buffer = buffer->buffer;
+    barrier.offset = 0;
+    barrier.size = VK_WHOLE_SIZE;
+    Record(&core, [barrier](VkCommandBuffer cmd, const Dispatch &vk) {
+        VkDependencyInfo dependency{};
+        dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        dependency.bufferMemoryBarrierCount = 1;
+        dependency.pBufferMemoryBarriers = &barrier;
+        vk.vkCmdPipelineBarrier2(cmd, &dependency);
+    });
+    ++core.stats.bufferBarriers;
+    buffer->lastStages = stages;
+    buffer->lastAccess = access;
+}
+
+bool BeginComputePass(Core *core_, const char *name)
+{
+    Core &core = *core_;
+    if (core.failed)
+        return false;
+    if (core.inPass || core.inComputePass)
+        return Fail(core, "BeginComputePass %s inside a pass", name);
+    SettleUploads(core);
+    if (!EnsureRecording(core))
+        return false;
+    BeginTimed(core, name, core.currentTimedPass);
+    core.inComputePass = true;
+    ++core.stats.computePasses;
+    return !core.failed;
+}
+
+void EndComputePass(Core *core_)
+{
+    Core &core = *core_;
+    if (!core.inComputePass)
+    {
+        Fail(core, "EndComputePass outside a compute pass");
+        return;
+    }
+    EndTimed(core, core.currentTimedPass);
+    core.currentTimedPass = -1;
+    core.inComputePass = false;
+}
+
+bool InComputePass(const Core *core) { return core->inComputePass; }
+
+void DispatchCompute(Core *core_, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ)
+{
+    Core &core = *core_;
+    if (core.failed)
+        return;
+    if (!core.inComputePass)
+    {
+        Fail(core, "DispatchCompute outside a compute pass");
+        return;
+    }
+    const uint32_t *most = core.properties.limits.maxComputeWorkGroupCount;
+    if (groupsX > most[0] || groupsY > most[1] || groupsZ > most[2])
+    {
+        Fail(core, "DispatchCompute: %u x %u x %u groups, at most %u x %u x %u", groupsX, groupsY, groupsZ, most[0],
+             most[1], most[2]);
+        return;
+    }
+    if (!groupsX || !groupsY || !groupsZ)
+        return;
+    Record(&core, [=](VkCommandBuffer cmd, const Dispatch &vk) { vk.vkCmdDispatch(cmd, groupsX, groupsY, groupsZ); });
+    ++core.stats.dispatches;
+}
+
+void DispatchComputeIndirect(Core *core_, Buffer *args, VkDeviceSize offset)
+{
+    Core &core = *core_;
+    if (core.failed)
+        return;
+    if (!core.inComputePass)
+    {
+        Fail(core, "DispatchComputeIndirect outside a compute pass");
+        return;
+    }
+    if (!(args->desc.usage & VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT) || offset % 4 || offset + 12 > args->desc.size)
+    {
+        Fail(core, "DispatchComputeIndirect: %s has no indirect usage or no room at %llu", args->name.c_str(),
+             static_cast<unsigned long long>(offset));
+        return;
+    }
+    const VkBuffer buffer = args->buffer;
+    Record(&core, [=](VkCommandBuffer cmd, const Dispatch &vk) { vk.vkCmdDispatchIndirect(cmd, buffer, offset); });
+    ++core.stats.dispatches;
+}
 
 PassTimings PassTimingsFor(const Core *core, const char *name)
 {
@@ -1237,7 +1629,7 @@ void *StageBufferWrite(Core *core_, Buffer *target, VkDeviceSize offset, VkDevic
     Core &core = *core_;
     if (core.failed)
         return nullptr;
-    if (core.inPass)
+    if (core.inPass || core.inComputePass)
     {
         Fail(core, "StageBufferWrite inside a pass (%s)", target->name.c_str());
         return nullptr;
@@ -1266,7 +1658,7 @@ bool CopyBufferRegions(Core *core_, VkBuffer source, Buffer *target, const VkBuf
     Core &core = *core_;
     if (core.failed)
         return false;
-    if (core.inPass)
+    if (core.inPass || core.inComputePass)
     {
         Fail(core, "CopyBufferRegions inside a pass (%s)", target->name.c_str());
         return false;
@@ -1313,7 +1705,7 @@ bool StageImageWrites(Core *core_, Image *image, const ImageRegion *regions, uin
     Core &core = *core_;
     if (core.failed || !count)
         return false;
-    if (core.inPass)
+    if (core.inPass || core.inComputePass)
     {
         Fail(core, "StageImageWrite inside a pass (%s)", image->name.c_str());
         return false;

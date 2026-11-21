@@ -198,12 +198,18 @@ void G_TouchTriggers(gentity_s *ent)
     touch = entityHandlers[ent->handler].touch;
     for (i = 0; i < v7; ++i)
     {
-        item = &g_entities[entityList[i]].s;
-        if ((LODWORD(item[1].lerp.pos.trDelta[2]) & 0x405C0008) == 0)
+        // The trigger's fields by name: the decompiled offsets past its
+        // entityState_s (its contents, its handler) are only right where
+        // pointers are 4 bytes, so on x86_64 every trigger's touch handler
+        // read as none and no trigger_radius or trigger_multiple fired (no
+        // Domination flag could be captured).
+        const gentity_s *hit = &g_entities[entityList[i]];
+        item = const_cast<entityState_s *>(&hit->s);
+        if ((hit->r.contents & 0x405C0008) == 0)
             MyAssertHandler(".\\game_mp\\g_active_mp.cpp", 215, 0, "%s", "hit->r.contents & MASK_TRIGGER");
         if (item->eType == ET_MISSILE)
             MyAssertHandler(".\\game_mp\\g_active_mp.cpp", 216, 0, "%s", "hit->s.eType != ET_MISSILE");
-        v6 = entityHandlers[BYTE2(item[1].attackerEntityNum)].touch;
+        v6 = entityHandlers[hit->handler].touch;
         if (v6 || touch)
         {
             if (item->eType == ET_ITEM)

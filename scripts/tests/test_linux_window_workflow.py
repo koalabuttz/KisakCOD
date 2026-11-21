@@ -824,6 +824,8 @@ class CiTriggerTests(unittest.TestCase):
         cls.windows = load('build-kisarcod-win.yaml')
         cls.macos = load('build-kisakcod-macos.yaml')
         cls.vita = load('build-kisakcod-vita.yaml')
+        cls.android = load('build-kisakcod-android.yaml')
+        cls.contracts = load('workflow-contracts.yaml')
         cls.windows_paths = cls.windows['on']['pull_request']['paths']
 
     def test_a_newer_push_cancels_only_the_same_pull_requests_older_run(self):
@@ -883,6 +885,7 @@ class CiTriggerTests(unittest.TestCase):
                     self.assertFalse(_selected(path, self.linux['on'][event]['paths']))
                     self.assertFalse(_selected(path, self.windows['on'][event]['paths']))
                     self.assertFalse(_selected(path, self.macos['on'][event]['paths']))
+                    self.assertFalse(_selected(path, self.android['on'][event]['paths']))
             for path in ('docs/vita.md', 'README.md'):
                 with self.subTest(event=event, path=path):
                     self.assertFalse(_selected(path, self.vita['on'][event]['paths']))
@@ -896,10 +899,13 @@ class CiTriggerTests(unittest.TestCase):
         'scripts/runs/vita3k/vita-run.ps1',
         'scripts/runs/vita3k/wsl/03-build.sh',
         'scripts/runs/pc_run.py',
+        'scripts/runs/android_run.py',
         'tests/runs/fake_game.cpp',
         'tests/runs/fake_pc_game.py',
+        'tests/runs/fake_adb.py',
         'scripts/tests/test_perf_run.py',
         'scripts/tests/test_pc_run.py',
+        'scripts/tests/test_android_run.py',
         'scripts/tests/test_vita3k_runner.py',
     )
 
@@ -922,7 +928,7 @@ class CiTriggerTests(unittest.TestCase):
         # whenever a wider change starts it.
         commands = '\n'.join(step.get('run', '') for job in scripts['jobs'].values() for step in job['steps'])
         native = '\n'.join(step.get('run', '') for step in self.linux['jobs']['native']['steps'])
-        for test in ('scripts/tests/test_perf_run.py', 'scripts/tests/test_pc_run.py',
+        for test in ('scripts/tests/test_perf_run.py', 'scripts/tests/test_pc_run.py', 'scripts/tests/test_android_run.py',
                      'scripts/tests/test_vita3k_runner.py'):
             with self.subTest(test=test):
                 self.assertIn(f'python3 {test}', commands)
@@ -986,13 +992,66 @@ class CiTriggerTests(unittest.TestCase):
             self.assertNotIn('if', upload)
             self.assertEqual(upload['with']['if-no-files-found'], 'error')
 
-    def test_the_linux_workflow_runs_when_the_vita_workflow_changes(self):
-        # This file checks the Vita workflow, and the Linux native job runs it.
+    # Changes that must build the Android server, and changes that cannot reach it.
+    ANDROID_RUNS = (
+        'CMakeLists.txt',
+        'src/qcommon/common.cpp',
+        'src/linux/main.cpp',
+        'scripts/platform/linux/CMakeLists.txt',
+        'scripts/platform/android/android_toolchain.cmake',
+        'scripts/platform/android/build_apk.py',
+        'scripts/platform/android/app/src/main/AndroidManifest.xml',
+        'scripts/vulkan_probe/vulkan_backend.cmake',
+        'scripts/tests/check_android_binary.py',
+        'deps/some_library/source.c',
+        '.github/workflows/build-kisakcod-android.yaml',
+    )
+    ANDROID_SKIPS = (
+        'README.md',
+        'docs/android.md',
+        'src/vita/vita_stats.cpp',
+        'src/gfx_gxm/legacy/gxm_legacy.cpp',
+        'scripts/platform/vita/CMakeLists.txt',
+        'scripts/runs/perf_run.py',
+        '.github/workflows/build-kisakcod-macos.yaml',
+    )
+
+    def test_android_server_builds_for_shared_sources_and_not_for_other_ports(self):
+        for event in ('push', 'pull_request'):
+            paths = self.android['on'][event]['paths']
+            for path in self.ANDROID_RUNS:
+                with self.subTest(event=event, path=path):
+                    self.assertTrue(_selected(path, paths))
+            for path in self.ANDROID_SKIPS:
+                with self.subTest(event=event, path=path):
+                    self.assertFalse(_selected(path, paths))
+        steps = [step.get('run', '') for step in self.android['jobs']['android_dedicated']['steps']]
+        self.assertTrue(any('check_android_binary.py "$binary"' in run for run in steps))
+        steps = [step.get('run', '') for step in self.android['jobs']['android_apk']['steps']]
+        self.assertTrue(any('scripts/platform/android/build_apk.py' in run for run in steps))
+        self.assertTrue(any('check_android_binary.py --library' in run for run in steps))
+
+    def test_workflow_edits_start_the_contract_check_not_the_linux_build(self):
+        # This file checks every workflow. workflow-contracts.yaml runs it on
+        # any workflow edit; the Linux workflow (17 jobs) runs only for its own
+        # file, so a Vita-only pull request that adds a check to the Vita
+        # workflow no longer starts the Linux build (2026-11-15: jobs waited
+        # 30-57 min for a runner).
+        contracts = self.contracts
         for event in ('push', 'pull_request'):
             with self.subTest(event=event):
-                self.assertIn('.github/workflows/build-kisakcod-vita.yaml', self.linux['on'][event]['paths'])
+                for name in ('build-kisakcod-vita.yaml', 'build-kisarcod-win.yaml', 'build-kisakcod-macos.yaml',
+                             'build-kisakcod-linux.yaml', 'build-kisakcod-android.yaml', 'run-scripts.yaml',
+                             'workflow-contracts.yaml'):
+                    self.assertTrue(_selected(f'.github/workflows/{name}', contracts['on'][event]['paths']), name)
+                self.assertTrue(_selected('scripts/tests/test_linux_window_workflow.py',
+                                          contracts['on'][event]['paths']))
+                for name in ('build-kisakcod-vita.yaml', 'build-kisarcod-win.yaml'):
+                    self.assertFalse(_selected(f'.github/workflows/{name}', self.linux['on'][event]['paths']), name)
                 self.assertFalse(_selected('.github/workflows/build-kisakcod-vita.yaml',
                                            self.windows['on'][event]['paths']))
+        steps = [step.get('run', '') for step in contracts['jobs']['contracts']['steps']]
+        self.assertIn('python3 scripts/tests/test_linux_window_workflow.py', steps)
 
     def test_window_jobs_run_sdl3_on_pull_requests_and_both_after_a_merge(self):
         sdl = self.linux['jobs']['window']['strategy']['matrix']['sdl']
@@ -1040,6 +1099,20 @@ class CiTriggerTests(unittest.TestCase):
                             or "github.event_name == 'workflow_dispatch'" in condition,
                             f'{path.name}: job {key} would run on a draft pull request')
         self.assertGreaterEqual(seen, 3)
+
+    # The fast PR lane (2026-11-15, hosted jobs waited 30-57 min for a runner):
+    # a pull request runs the main i386 builds and the Vulkan back end; the
+    # slow sweeps (64-bit and ARM builds and scans, compile censuses, the world
+    # and device probes) run after the merge, and a break there is fixed forward.
+    LINUX_PR_JOBS = {'window', 'native', 'native_d3d9_boundary', 'vulkan_window', 'vulkan_engine'}
+
+    def test_linux_pull_requests_run_only_the_fast_lane(self):
+        jobs = self.linux['jobs']
+        self.assertTrue(self.LINUX_PR_JOBS <= set(jobs), self.LINUX_PR_JOBS - set(jobs))
+        for key, job in jobs.items():
+            with self.subTest(job=key):
+                expected = self.DRAFT_RULE if key in self.LINUX_PR_JOBS else self.AFTER_MERGE_RULE
+                self.assertEqual(job.get('if'), expected)
 
     def test_windows_arm64_and_intel_macs_build_after_a_merge(self):
         self.assertEqual(self.windows['jobs']['arm64']['if'], self.AFTER_MERGE_RULE)
@@ -1124,13 +1197,6 @@ class CiTriggerTests(unittest.TestCase):
                    and not _selected(path, self.windows_paths)]
         self.assertEqual(skipped, [])
 
-    def test_the_linux_workflow_runs_when_the_windows_triggers_change(self):
-        # This file checks the Windows workflow's triggers, so editing them runs it.
-        for event in ('push', 'pull_request'):
-            with self.subTest(event=event):
-                self.assertIn('.github/workflows/build-kisarcod-win.yaml',
-                              self.linux['on'][event]['paths'])
-
     def test_windows_builds_the_three_games_in_one_parallel_call(self):
         build = next(step for step in self.windows['jobs']['build']['steps']
                      if step.get('name', '').startswith('Build '))
@@ -1173,7 +1239,7 @@ class VulkanWindowWorkflowTests(unittest.TestCase):
             'Build the Vulkan window probe', 'Run the Vulkan window probe on lavapipe',
             'Check the Legacy shader translator', 'Run the Legacy adapter check on lavapipe',
             'Run the D3D9 front check on lavapipe'], debug_only=[
-            "Run both checks again on MoltenVK's paths",
+            "Run both checks again on MoltenVK's and Adreno's paths",
             'Run the checks again with the record thread switched',
             'Run the checks again with the GPU feed off and at its extreme',
             'Run the checks again without occlusion counts',

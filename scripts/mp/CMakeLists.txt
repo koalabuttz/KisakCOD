@@ -94,6 +94,12 @@ if (KISAK_OPENAL)
     include(${SCRIPTS_DIR}/extern/openal.cmake)
 endif()
 
+# Opt-in RmlUi menu front-end (scripts/extern/rmlui.cmake, docs/rmlui-frontend.md)
+if (KISAK_RMLUI)
+    include(${SCRIPTS_DIR}/extern/rmlui.cmake)
+    kisak_rmlui_frontend(${PROJECT_NAME})
+endif()
+
 # Opt-in r_backend vulkan (scripts/vulkan_probe/vulkan_backend_windows.cmake)
 if (KISAK_BUILD_VULKAN_BACKEND)
     kisak_link_windows_vulkan_backend(${PROJECT_NAME})

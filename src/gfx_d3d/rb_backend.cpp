@@ -74,6 +74,7 @@ void(*const RB_RenderCommandTable[RC_COUNT])(GfxRenderCommandExecState *) =
   &RB_DrawEditorSkinnedCachedCmd,   // RC_DRAW_EDITOR_SKINNEDCACHED = 0x17 (r_ed_scene.cpp)
   &RB_SetCustomConstantCmd,         // RC_SET_CUSTOM_CONSTANT = 0x18 (#26 layer C2 sun preview)
 #endif
+  &RB_DrawUiTrianglesCmd,           // RC_DRAW_UI_TRIANGLES (port addition, last in both lists)
 }; // idb (KISAK_RADIANT extends with RC_BEGIN_VIEW + RC_DRAW_EDITOR_SKINNEDCACHED + RC_SET_CUSTOM_CONSTANT; RC_COUNT sizes the table)
 
 GfxBackEndData *backEndData;
@@ -834,6 +835,7 @@ void R_DrawSurfs(GfxCmdBufContext context, GfxCmdBufState *prepassState, const G
     uint32_t drawSurfCount; // [esp+5Ch] [ebp-4h]
 
     PROF_SCOPED("R_DrawSurfs");
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_LIST);
 
     iassert(context.source->cameraView == info->cameraView);
     context.state->origMaterial = 0;
@@ -908,6 +910,7 @@ uint32_t R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArgs, GfxCm
     }
     const bool timed = Sys_PerfProbesOn();
     uint64_t mark = timed ? Sys_PerfNowNs() : 0;
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_MATERIAL);
     if (!R_SetupMaterial(listArgs->context, &prepassContext, listArgs->info, drawSurf))
         return R_SkipDrawSurfListMaterial(drawSurfList, drawSurfCount);
     isPixelCostEnabled = pixelCostMode != GFX_PIXEL_COST_MODE_OFF;
@@ -943,12 +946,25 @@ uint32_t R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArgs, GfxCm
             Sys_PerfProbeAdd(SYS_PERF_PROBE_RENDER_MATERIAL, now - mark);
             mark = now;
         }
-        subListCount = rb_tessTable[drawSurf.fields.surfType](listArgs, passPrepassContext);
+        const uint32_t drawsBefore = rb_drawPrimCalls;
+        {
+            SysPerfPhaseScope tessPhase(
+                drawSurf.fields.surfType < SYS_PERF_TESS_SLOTS
+                    ? (uint8_t)(SYS_PERF_PHASE_TESS + drawSurf.fields.surfType)
+                    : (uint8_t)SYS_PERF_PHASE_NONE);
+            subListCount = rb_tessTable[drawSurf.fields.surfType](listArgs, passPrepassContext);
+        }
         if (timed)
         {
             const uint64_t now = Sys_PerfNowNs();
             if (drawSurf.fields.surfType < SYS_PERF_TESS_SLOTS)
+            {
                 Sys_PerfProbeAdd(SYS_PERF_PROBE_RENDER_TESS + drawSurf.fields.surfType, now - mark);
+                // The same time by the draw: time over calls is what a draw
+                // of this kind costs, the engine's work for it included.
+                if (const uint32_t draws = rb_drawPrimCalls - drawsBefore)
+                    Sys_PerfProbeAdd(SYS_PERF_PROBE_RENDER_TESS_DRAWS + drawSurf.fields.surfType, now - mark, draws);
+            }
             mark = now;
         }
     }
@@ -1616,6 +1632,50 @@ void RB_DrawTriangles_Internal(
     RB_EndTessSurface();
 }
 
+// RC_DRAW_UI_TRIANGLES: the RmlUi front-end's meshes (R_AddCmdDrawUiTriangles).
+// Drawn like a stretch pic (TECHNIQUE_UNLIT in the 2D pass), so every back end
+// that draws the stock menus draws these too. A scissored mesh ends the current
+// batch before and after itself, so the rectangle covers only its own triangles.
+void RB_DrawUiTrianglesCmd(GfxRenderCommandExecState *execState)
+{
+    const GfxCmdDrawUiTriangles *cmd = (const GfxCmdDrawUiTriangles *)execState->cmd;
+    const GfxUiVertex *verts = (const GfxUiVertex *)(cmd + 1);
+    const uint16_t *indices = (const uint16_t *)(verts + cmd->vertexCount);
+
+    iassert(gfxCmdBufSourceState.viewMode == VIEW_MODE_2D);
+
+    if (cmd->scissorEnabled)
+    {
+        if (tess.indexCount)
+            RB_EndTessSurface();
+        tagRECT rect;
+        rect.left = cmd->scissor[0];
+        rect.top = cmd->scissor[1];
+        rect.right = cmd->scissor[2];
+        rect.bottom = cmd->scissor[3];
+        R_HW_EnableScissor(gfxCmdBufState.prim.device, &rect);
+    }
+
+    RB_SetTessTechnique(cmd->material, TECHNIQUE_UNLIT);
+    R_TrackPrims(&gfxCmdBufState, GFX_PRIM_STATS_HUD);
+    RB_CheckTessOverflow(cmd->vertexCount, cmd->indexCount);
+    const uint16_t base = (uint16_t)tess.vertexCount;
+    for (int i = 0; i < cmd->indexCount; ++i)
+        tess.indices[tess.indexCount + i] = (uint16_t)(base + indices[i]);
+    for (int i = 0; i < cmd->vertexCount; ++i)
+        R_SetVertex2d(&tess.verts[tess.vertexCount + i], verts[i].x, verts[i].y, verts[i].s, verts[i].t, verts[i].color);
+    tess.vertexCount += cmd->vertexCount;
+    tess.indexCount += cmd->indexCount;
+
+    if (cmd->scissorEnabled)
+    {
+        RB_EndTessSurface();
+        R_HW_DisableScissor(gfxCmdBufState.prim.device);
+    }
+
+    execState->cmd = (char *)execState->cmd + cmd->header.byteCount;
+}
+
 void RB_DrawProfileCmd(GfxRenderCommandExecState *execState)
 {
     PROF_SCOPED("RB_DrawProfileCmd");
@@ -1763,6 +1823,7 @@ void DrawText2D(
     const Material *fxMaterial,
     const Material *fxMaterialGlow)
 {
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_TEXT_2D);
     int v21; // esi
     const char *v22; // eax
     double v23; // st7
@@ -2918,6 +2979,7 @@ void RB_Draw3D()
     {
         PROF_SCOPED("ExecuteRenderCmds");
         SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_3D);
+        SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_3D);
         RB_Draw3DInternal(&data->viewInfo[data->viewInfoIndex]);
         // Then the Modern path's planar reflection view, which reuses the
         // main view's shadow maps (R_ModernPlanarScene).
@@ -2983,6 +3045,7 @@ void RB_CallExecuteRenderCommands()
     
     PROF_SCOPED("ExecuteRenderCmds");
     SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_2D);
+    SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_2D);
     if ((backEndData->drawType & 2) != 0)
     {
         if (g_primStats)
@@ -3131,6 +3194,7 @@ void RB_RenderThread(uint32_t threadContext)
             {
                 PROF_SCOPED("WaitBackendEvent");
                 SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_IDLE);
+                SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_IDLE);
                 KISAK_NULLSUB();
                 R_ProcessWorkerCmdsWithTimeout(Sys_WaitBackendEvent, 1);
             }
@@ -3229,12 +3293,14 @@ void RB_RenderCommandFrame(const GfxBackEndData *data)
     {
         PROF_SCOPED("WaitRenderSwap");
         SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_SWAP_WAIT);
+        SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_IDLE);
         R_ProcessWorkerCmdsWithTimeout(RB_BackendTimeout, 1);
     }
     if (allowRendering)
     {
         KISAK_NULLSUB();
         SysPerfScope perfScope(SYS_PERF_PROBE_RENDER_PRESENT);
+        SysPerfPhaseScope perfPhase(SYS_PERF_PHASE_PRESENT);
         RB_EndFrame(drawType);
     }
     //Profile_Begin(172);

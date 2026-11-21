@@ -456,7 +456,8 @@ Candidate Evaluate(Core &core, VkPhysicalDevice physical)
     bool found = false;
     for (uint32_t i = 0; i < count && !found; ++i)
     {
-        if (!(families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT))
+        // The Modern path's compute passes run on the same queue as the draws.
+        if (!(families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) || !(families[i].queueFlags & VK_QUEUE_COMPUTE_BIT))
             continue;
         VkBool32 present = VK_FALSE;
         if (vk.vkGetPhysicalDeviceSurfaceSupportKHR(physical, i, core.surface, &present) == VK_SUCCESS && present)
@@ -467,7 +468,7 @@ Candidate Evaluate(Core &core, VkPhysicalDevice physical)
     }
     if (!found)
     {
-        std::snprintf(candidate.why, sizeof(candidate.why), "no queue family both draws and presents to this window");
+        std::snprintf(candidate.why, sizeof(candidate.why), "no queue family draws, computes and presents to this window");
         return candidate;
     }
 
@@ -658,6 +659,13 @@ bool CreateDevice(Core &core)
     const bool portability = HasExtension(available, kPortabilitySubset);
     if (portability)
         extensions.push_back(kPortabilitySubset);
+    // Presents at a time of our choosing, for a frame every N refreshes
+    // (CoreDesc::swapInterval). KISAK_VK_DISPLAY_TIMING=0 leaves it off.
+    core.displayTiming = HasExtension(available, VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME)
+                         && !EnvEquals("KISAK_VK_DISPLAY_TIMING", "0");
+    if (core.displayTiming)
+        extensions.push_back(VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME);
+    core.paceAdapt = !EnvEquals("KISAK_VK_PACE_ADAPT", "0");
 
     const float priority = 1.0f;
     VkDeviceQueueCreateInfo queueInfo{};
@@ -692,12 +700,14 @@ bool CreateDevice(Core &core)
     core.optional.independentBlend = supported.independentBlend;
     core.optional.shaderClipDistance = supported.shaderClipDistance;
     core.optional.shaderFloat16 = supported12.shaderFloat16;
+    core.optional.storageImageExtendedFormats = supported.shaderStorageImageExtendedFormats;
     // MoltenVK's paths (see OptionalFeatures), or forced for testing.
     core.optional.dynamicVertexStride = !portability && !EnvEquals("KISAK_VK_VERTEX_STRIDE", "static");
     core.optional.ownIndexMemory = EnvEquals("KISAK_VK_INDEX_MEMORY", "own")
                                    || (portability && !EnvEquals("KISAK_VK_INDEX_MEMORY", "shared"));
     core.optional.fixedDepthCompare = portability || !EnvEquals("KISAK_VK_DEPTH_COMPARE", "dynamic");
     core.optional.forceWideRenderTargets = EnvEquals("KISAK_VK_RENDER_TARGETS", "wide");
+    core.optional.forceByteStandIn = EnvEquals("KISAK_VK_BYTE_INPUTS", "unorm");
     core.optional.staticUniforms = EnvEquals("KISAK_VK_UNIFORMS", "static");
     core.optional.fenceFlush = !EnvEquals("KISAK_VK_FENCE_FLUSH", "0");
     core.optional.passClears = !EnvEquals("KISAK_VK_PASS_CLEARS", "0");
@@ -743,6 +753,7 @@ bool CreateDevice(Core &core)
     features.features.fillModeNonSolid = supported.fillModeNonSolid;
     features.features.independentBlend = supported.independentBlend;
     features.features.shaderClipDistance = supported.shaderClipDistance;
+    features.features.shaderStorageImageExtendedFormats = supported.shaderStorageImageExtendedFormats;
     features.features.occlusionQueryPrecise = core.optional.occlusionCounts ? VK_TRUE : VK_FALSE;
 
     VkDeviceCreateInfo info{};
@@ -764,6 +775,14 @@ bool CreateDevice(Core &core)
 #undef GFX_VK_LOAD_DEVICE
     if (missing)
         return Fail(core, "the Vulkan device does not provide %s", missing);
+    if (core.displayTiming)
+    {
+        vk.vkGetRefreshCycleDurationGOOGLE = reinterpret_cast<PFN_vkGetRefreshCycleDurationGOOGLE>(
+            vk.vkGetDeviceProcAddr(core.dev, "vkGetRefreshCycleDurationGOOGLE"));
+        vk.vkGetPastPresentationTimingGOOGLE = reinterpret_cast<PFN_vkGetPastPresentationTimingGOOGLE>(
+            vk.vkGetDeviceProcAddr(core.dev, "vkGetPastPresentationTimingGOOGLE"));
+        core.displayTiming = vk.vkGetRefreshCycleDurationGOOGLE && vk.vkGetPastPresentationTimingGOOGLE;
+    }
     vk.vkGetDeviceQueue(core.dev, core.queueFamily, 0, &core.queue);
 
     core.depthStencilFormat = PickDepthStencilFormat(core);
@@ -844,6 +863,23 @@ VkSurfaceFormatKHR ChooseFormat(const std::vector<VkSurfaceFormatKHR> &formats)
     return formats[0];
 }
 
+// What CoreDesc::swapInterval does with this swapchain, said once per change.
+void LogSwapInterval(Core &core)
+{
+    const uint32_t interval = core.swapInterval.load();
+    if (interval <= 1 || !core.swapchain)
+        return;
+    const VkPresentModeKHR mode = core.swapInfo.presentMode;
+    if (mode != VK_PRESENT_MODE_FIFO_KHR && mode != VK_PRESENT_MODE_FIFO_RELAXED_KHR)
+        Log(core, "a frame every %u refreshes needs vsync (FIFO); the swapchain is %s, so frames show as they come",
+            interval, PresentModeName(mode));
+    else if (!core.displayTiming)
+        Log(core, "a frame every %u refreshes needs VK_GOOGLE_display_timing, which the device lacks; every frame "
+                  "shows at the next refresh", interval);
+    else
+        Log(core, "a frame every %u refreshes, paced through VK_GOOGLE_display_timing", interval);
+}
+
 // KISAK_VK_PRESENT_MODE, when it names a mode (ChoosePresentMode's `wanted`).
 const char *WantedPresentMode()
 {
@@ -880,10 +916,37 @@ VkPresentModeKHR ChoosePresentMode(const VkPresentModeKHR *offered, uint32_t cou
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
+// The picture is drawn upright for the extent the surface reports, so the
+// swapchain asks for no rotation whenever the surface allows it, and the
+// compositor turns the picture for the panel. On desktops the surface's own
+// transform is the identity anyway. On Android a panel whose own orientation
+// is portrait reports a quarter turn while the game runs in landscape, and
+// handing that transform over unchanged told the compositor the landscape
+// picture was already turned: it came out squeezed into portrait (first app
+// run on the Retroid Pocket 6, 2026-11-15). Drawing the picture turned
+// instead (Android's "pre-rotation") saves the compositor that work and is
+// left for later.
+VkSurfaceTransformFlagBitsKHR ChoosePreTransform(const VkSurfaceCapabilitiesKHR &caps)
+{
+    if (caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+        return VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    return caps.currentTransform;
+}
+
 bool SurfaceExtent(Core &core, VkSurfaceCapabilitiesKHR &caps, VkExtent2D &extent)
 {
-    if (!Check(core, core.vk.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(core.physical, core.surface, &caps),
-               "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"))
+    // A lost surface has no size: frames skip as if minimised, and the next
+    // BeginFrame asks the window for a new surface.
+    const VkResult result =
+        core.surfaceLost ? VK_ERROR_SURFACE_LOST_KHR
+                         : core.vk.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(core.physical, core.surface, &caps);
+    if (result == VK_ERROR_SURFACE_LOST_KHR)
+    {
+        core.surfaceLost = true;
+        extent = {0, 0};
+        return true;
+    }
+    if (!Check(core, result, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"))
         return false;
     extent = caps.currentExtent;
     if (extent.width == UINT32_MAX)
@@ -973,7 +1036,7 @@ BuildResult BuildSwapchain(Core &core)
     info.imageArrayLayers = 1;
     info.imageUsage = usage;
     info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    info.preTransform = caps.currentTransform;
+    info.preTransform = ChoosePreTransform(caps);
     info.compositeAlpha = alpha;
     info.presentMode = mode;
     info.clipped = VK_TRUE;
@@ -984,6 +1047,12 @@ BuildResult BuildSwapchain(Core &core)
     if (core.swapchain)
         vk.vkDestroySwapchainKHR(core.dev, core.swapchain, nullptr);
     core.swapchain = swapchain;
+    if (created == VK_ERROR_SURFACE_LOST_KHR || created == VK_ERROR_NATIVE_WINDOW_IN_USE_KHR)
+    {
+        // The window went between the size query and here: wait for a new one.
+        core.surfaceLost = true;
+        return BuildResult::Minimised;
+    }
     if (!Check(core, created, "vkCreateSwapchainKHR"))
         return BuildResult::Failed;
 
@@ -1028,10 +1097,51 @@ BuildResult BuildSwapchain(Core &core)
                      static_cast<uint32_t>(core.swapImages.size()), canCapture};
     core.rebuildPending = false;
     core.resizePending = false;
+    core.transformLeftToCompositor = info.preTransform != caps.currentTransform;
     ++core.stats.swapchainBuilds;
-    Log(core, "swapchain %ux%u %s %s, %u images%s", extent.width, extent.height, FormatName(format.format),
-        PresentModeName(mode), core.swapInfo.imageCount, canCapture ? ", capturable" : "");
+    Log(core, "swapchain %ux%u %s %s, %u images%s%s", extent.width, extent.height, FormatName(format.format),
+        PresentModeName(mode), core.swapInfo.imageCount, canCapture ? ", capturable" : "",
+        core.transformLeftToCompositor ? ", turned by the compositor" : "");
+    LogSwapInterval(core);
     return BuildResult::Built;
+}
+
+bool RenewSurface(Core &core)
+{
+    Dispatch &vk = core.vk;
+    if (core.surface)
+    {
+        // The old swapchain and surface go first (Android allows one swapchain
+        // per window, and the old window is gone anyway).
+        Log(core, "surface lost: frames are skipped until the window has a new one");
+        if (!DrainRecorder(core) || !Check(core, vk.vkDeviceWaitIdle(core.dev), "vkDeviceWaitIdle"))
+            return false;
+        DestroySwapchainResources(core);
+        if (core.swapchain)
+            vk.vkDestroySwapchainKHR(core.dev, core.swapchain, nullptr);
+        core.swapchain = VK_NULL_HANDLE;
+        vk.vkDestroySurfaceKHR(core.instance, core.surface, nullptr);
+        core.surface = VK_NULL_HANDLE;
+        ++core.stats.surfacesLost;
+    }
+    // False, quietly, while the window has nothing to draw on (Android between
+    // the app's return and its new window).
+    if (!core.window.createSurface(core.window.user, core.instance, &core.surface) || !core.surface)
+    {
+        core.surface = VK_NULL_HANDLE;
+        return false;
+    }
+    VkBool32 present = VK_FALSE;
+    if (!Check(core, vk.vkGetPhysicalDeviceSurfaceSupportKHR(core.physical, core.queueFamily, core.surface, &present),
+               "vkGetPhysicalDeviceSurfaceSupportKHR"))
+        return false;
+    if (!present)
+        return Fail(core, "the window's new surface cannot be shown from queue family %u", core.queueFamily);
+    core.surfaceLost = false;
+    core.rebuildPending = true;
+    core.resizePending = false;
+    Log(core, "surface renewed: the swapchain is rebuilt on it");
+    return true;
 }
 
 // ---- Public API ---------------------------------------------------------------------------
@@ -1041,6 +1151,7 @@ Core *CreateCore(const CoreDesc &desc, const WindowSystem &window, char *error, 
     Core *core = new Core();
     core->desc = desc;
     core->window = window;
+    core->swapInterval = std::clamp(desc.swapInterval, 1u, 4u);
     if (EnvEquals("KISAK_VK_RECORD_THREAD", "0"))
         core->desc.recordThread = false;
     else if (EnvEquals("KISAK_VK_RECORD_THREAD", "1"))
@@ -1184,6 +1295,11 @@ bool FrameGpuTime(const Core *core, uint64_t frame, FrameGpuTimes &out)
     return true;
 }
 void NotifyResize(Core *core) { core->resizePending = true; }
+void LoseSurface(Core *core)
+{
+    if (!core->windowDetached)
+        core->surfaceLost = true;
+}
 
 const Dispatch &Functions(const Core *core) { return core->vk; }
 VkDevice DeviceHandle(const Core *core) { return core->dev; }
@@ -1205,6 +1321,22 @@ bool FormatSupports(const Core *core, VkFormat format, VkFormatFeatureFlags feat
     VkFormatProperties props{};
     core->vk.vkGetPhysicalDeviceFormatProperties(core->physical, format, &props);
     return (props.optimalTilingFeatures & features) == features;
+}
+
+bool VertexFormatSupported(const Core *core, VkFormat format)
+{
+    VkFormatProperties props{};
+    core->vk.vkGetPhysicalDeviceFormatProperties(core->physical, format, &props);
+    return (props.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT) != 0;
+}
+
+void SetSwapInterval(Core *core, uint32_t interval)
+{
+    if (!core)
+        return;
+    interval = std::clamp(interval, 1u, 4u);
+    if (core->swapInterval.exchange(interval) != interval)
+        LogSwapInterval(*core);
 }
 
 const char *PresentModeName(VkPresentModeKHR mode)

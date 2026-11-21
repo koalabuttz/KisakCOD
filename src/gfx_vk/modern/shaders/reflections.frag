@@ -18,12 +18,16 @@
 // camera's motion. Moving things are therefore reflected where they were a
 // frame ago.
 //
-// Out: rgb = the reflected light (linear light, before exposure) times the
-// confidence, a = the confidence, 0 to 1: it fades where the ray points
+// Out: rgb = the reflected light (linear light, before exposure), held
+// to at most kLightLimit and compressed as L / (1 + luma L), times the
+// confidence; a = the confidence, 0 to 1: it fades where the ray points
 // back at the camera (the screen holds nothing of what it would meet),
-// towards the edges of the view, towards the ray's longest reach, and is 0
-// where nothing was met, on the sky, or where the normal is only a guess.
-// Premultiplied, so the blurred levels average light with its weight.
+// towards the edges of the view, towards the ray's longest reach, where the
+// ray went far behind what it met or met it edge-on, and is 0 where nothing
+// was met, on the sky, or where the normal is only a guess. Premultiplied,
+// so the blurred levels average light with its weight; compressed, so one
+// bright pixel (a lamp) does not light a whole blurred level as a square
+// (Karis 2014). Readers undo it: c / (1 - luma c), on rgb / a.
 //
 // Pixel positions follow D3D9, as the Legacy path draws: pixel (i, j) holds
 // the scene at NDC x = 2 (i + 0.5) / width - 1, y = 1 - 2 (j + 0.5) / height
@@ -55,6 +59,11 @@ layout(push_constant) uniform Params
 } params;
 
 layout(location = 0) out vec4 outReflection;
+
+// The brightest reflected light (luma, linear light): a lamp's or the
+// sky's glare in the history is held to it. Stored compressed, it is 0.8.
+const float kLightLimit = 4.0;
+const vec3 kLuma = vec3(0.2126, 0.7152, 0.0722);
 
 // The depth at a pixel; outside the area, as if it had no surface.
 float DepthAt(ivec2 pixel)
@@ -213,15 +222,27 @@ void main()
         return;
     const vec2 historyPosition =
         params.historyArea.xy + vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5) * params.historyArea.zw;
-    const vec3 light = textureLod(history, historyPosition / vec2(textureSize(history, 0)), 0.0).rgb;
+    vec3 light = max(textureLod(history, historyPosition / vec2(textureSize(history, 0)), 0.0).rgb, vec3(0.0));
+    const float luma = dot(light, kLuma);
+    if (luma > kLightLimit)
+        light *= kLightLimit / luma;
 
-    // Fades: over the outer 8% of the view at its edges, and over the last
-    // quarter of the ray's longest reach (the fraction along the ray in view
-    // space, from the fraction of its projection).
-    const vec2 inside = min(hitPosition - lo, hi - hitPosition) / (0.08 * params.area.zw);
-    const float edgeFade = clamp(min(inside.x, inside.y), 0.0, 1.0);
+    // Fades: over the outer 15% of the view at its edges (smoothly: a
+    // reflection cut at the screen's edge is the most seen flaw of screen
+    // space), and over the last quarter of the ray's longest reach (the
+    // fraction along the ray in view space, from the fraction of its
+    // projection).
+    const vec2 inside = min(hitPosition - lo, hi - hitPosition) / (0.15 * params.area.zw);
+    const float edgeFade = smoothstep(0.0, 1.0, clamp(min(inside.x, inside.y), 0.0, 1.0));
     const float along = tHit * k1 / mix(k0, k1, tHit);
     const float distanceFade = 1.0 - smoothstep(0.75, 1.0, along * reach / params.march.y);
-    const float confidence = facing * edgeFade * distanceFade;
-    outReflection = vec4(max(light, vec3(0.0)) * confidence, confidence);
+    // How sure the hit is: a ray that ended far behind what it met (past
+    // half the thickness: it may have passed behind a thin thing, a post or
+    // a wire, and taken its light as a long streak) or met it nearly
+    // edge-on (one pixel of the surface stretched along the ray) fades.
+    const Sample at = SampleAt(tHit, s0, s1, k0, k1, zk0, zk1);
+    const float depthFade = 1.0 - smoothstep(0.5, 1.0, (at.rayZ - at.sceneZ) / max(params.march.z, 1e-3));
+    const float edgeOn = hitStored.a > 0.5 ? smoothstep(0.0, 0.2, -dot(hitStored.xyz * 2.0 - 1.0, ray)) : 1.0;
+    const float confidence = facing * edgeFade * distanceFade * depthFade * edgeOn;
+    outReflection = vec4(light / (1.0 + dot(light, kLuma)) * confidence, confidence);
 }

@@ -22,4 +22,5 @@ void RB_DrawPrimHistogramOverlay();
 extern GfxPrimStats *backupPrimStats;
 extern GfxViewStats *g_viewStats;
 extern GfxPrimStats *g_primStats;
+extern uint32_t rb_drawPrimCalls;
 extern GfxFrameStats g_frameStatsCur;

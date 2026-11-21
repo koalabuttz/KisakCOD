@@ -34,7 +34,23 @@ What is new for armv7:
   code client prediction shares with the server, onto NEON registers even with
   its vectorizers turned off. The toolchain file therefore targets
   `-mfpu=vfpv3` (scalar VFP, IEEE results). Hand-written NEON for client-only
-  hot paths (skinning, animation blending) can opt in per file later.
+  hot paths (skinning, animation blending) can opt in per file. The first is
+  the PS Vita client's vector skinning path, `src/gfx_d3d/r_model_skin_vec.cpp`
+  (`-mfpu=neon` for that one file in `scripts/platform/vita/mp_client.cmake`):
+  it only makes vertices to draw, includes nothing of the engine, and the
+  Vita workflow's check lets NEON float instructions pass in its two
+  functions. The second is the static culling walk,
+  `src/gfx_d3d/r_dpvs_static_vec.cpp` (`r_staticCullVec`, [what it
+  does](perf-ab.md#r_staticcullvec)), under the same rules: what it marks is
+  drawn and nothing else reads it. The check has one line for each such
+  namespace. The third is the Vita client's MP3 decoder: dr_mp3 has a NEON
+  path of its own, and `src/sound/snd_driver_load_obj.cpp`, the file its
+  code is built in, gets `-mfpu=neon` there. It only makes sound. The
+  workflow's check lets NEON float pass in `drmp3` functions too, wants it
+  there, and nowhere else; `scripts/tests/test_mp3_neon_decode.py` builds
+  the decoder both ways for 32-bit Arm, decodes a made-up stream with each
+  under `qemu-arm`, and wants the samples the same to within one step (this
+  workflow's armv7 job runs it).
 - The VFP `vmla`/`vmls` instructions Clang still emits are *chained*, not fused:
   they round the product before adding, so they give the same result as a
   separate multiply and add.

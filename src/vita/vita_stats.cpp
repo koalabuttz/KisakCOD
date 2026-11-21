@@ -69,6 +69,7 @@ namespace
     const dvar_t *vita_atMenu;
     const dvar_t *vita_atMap;
     const dvar_t *vita_assertExit;
+    const dvar_t *vita_logDirect;
     // vita_atMenu and vita_atMap as the start gave them: their commands go to
     // the console, so the dvars are read once (kisak::vita_run::StartText).
     kisak::vita_run::StartText<kisak::vita_run::kMaxTimedListLength> s_atMenu;
@@ -106,11 +107,20 @@ namespace
         if (sceKernelGetFreeMemorySize(&system) < 0)
             system.size_user = system.size_cdram = system.size_phycont = 0;
         const struct mallinfo heap = mallinfo();
+        // What malloc has taken out of the heap's block so far, at most:
+        // what the block must hold. It is read when a line is written, so
+        // a short peak between two lines shows only while malloc keeps it.
+        static uint32_t taken = 0;
+        if ((uint32_t)heap.arena > taken)
+            taken = (uint32_t)heap.arena;
+        if ((uint32_t)heap.usmblks > taken)
+            taken = (uint32_t)heap.usmblks;
         snprintf(line, size,
-            "Vita memory %s: game memory %.1f MB free, heap %.1f of %d MB used, "
+            "Vita memory %s: game memory %.1f MB free, heap %.1f of %d MB used "
+            "(%.1f MB taken at most), "
             "engine reservations %.1f MB in %u blocks, system %.1f MB free\n",
             when, Megabytes(PMem_GetFreeAmount()), Megabytes(heap.uordblks),
-            Vita_HeapSizeMB(), Megabytes(Vita_MmapBytes()), Vita_MmapCount(),
+            Vita_HeapSizeMB(), Megabytes(taken), Megabytes(Vita_MmapBytes()), Vita_MmapCount(),
             Megabytes((uint32_t)system.size_user));
     }
 
@@ -343,13 +353,23 @@ void Vita_StatsInit()
     vita_assertExit = Dvar_RegisterBool("vita_assertExit", Vita_AssertExits(), DVAR_NOFLAG,
         "A failed assertion or an uncaught exception ends the process with exit code 1 and no core dump "
         "(for emulator runs)");
+    vita_logDirect = Dvar_RegisterBool("vita_logDirect", false, DVAR_NOFLAG,
+        "Write each console.log line to the memory card from the thread that prints it, as the port did at first, "
+        "instead of from the log's own thread: slower, but a crash cannot take the last lines with it "
+        "(read at start-up only)");
+    // Read here and nowhere else, like the lists above. From here on a slow
+    // write to the card does not hold the thread that printed.
+    const bool logDirect = vita_logDirect && vita_logDirect->current.enabled;
+    const bool logThread = !logDirect && Vita_ConsoleUseThread();
     // The log does not hold the command line (it may carry a key), so a run's
     // report could not show what the start was asked to do.
     Com_Printf(CON_CHANNEL_SYSTEM,
         "Vita: run switches: vita_quitAfter %u, vita_quitAfterMenu %u, vita_quitAfterMap %u, vita_statsEvery %u, "
-        "vita_assertExit %d\n",
+        "vita_assertExit %d, vita_logDirect %d\n",
         Seconds(vita_quitAfter), Seconds(vita_quitAfterMenu), Seconds(vita_quitAfterMap), Seconds(vita_statsEvery),
-        vita_assertExit && vita_assertExit->current.enabled ? 1 : 0);
+        vita_assertExit && vita_assertExit->current.enabled ? 1 : 0, logDirect ? 1 : 0);
+    if (!logDirect && !logThread)
+        Com_PrintError(CON_CHANNEL_SYSTEM, "Vita: no thread for console.log; its lines go straight to the card\n");
     s_atMenuUsed = StepsOf("vita_atMenu", s_atMenu.Get(), s_atMenuSteps, sizeof(s_atMenuSteps));
     s_atMapUsed = StepsOf("vita_atMap", s_atMap.Get(), s_atMapSteps, sizeof(s_atMapSteps));
     PrintMemory("after start-up");

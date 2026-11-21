@@ -1,4 +1,5 @@
 #include <ui/ui_time.h>
+#include <linux/sys_perf.h>
 #include <ui/ui_cursor.h>
 #include <ui/ui_font_selection.h>
 #ifndef KISAK_MP
@@ -30,6 +31,9 @@
 #include <win32/win_input.h>
 #include <universal/timing.h>
 #include <universal/profile.h>
+#ifdef KISAK_RMLUI
+#include <ui_rml/rml_frontend.h>
+#endif
 
 enum sscType_t : __int32
 {                                       // ...
@@ -618,6 +622,10 @@ void UI_MouseEvent(int localClientNum, int x, int y)
 
     UI_UpdateCursorPosition(&uiInfoArray.uiDC, &scrPlaceFull, x, y);
     CL_ShowSystemCursor(uiInfoArray.uiDC.isCursorVisible == 0);
+#ifdef KISAK_RMLUI
+    if (RmlFrontend_MouseEvent(x, y))
+        return;
+#endif
     if (uiInfoArray.uiDC.isCursorVisible)
     {
         if (Menu_Count(&uiInfoArray.uiDC) > 0)
@@ -979,7 +987,11 @@ void UI_Refresh(int localClientNum)
             localClientNum);
     if (Menu_Count(&uiInfoArray.uiDC) > 0)
     {
+#ifdef KISAK_RMLUI
+        RmlFrontend_PaintMenus(&uiInfoArray.uiDC);
+#else
         Menu_PaintAll(&uiInfoArray.uiDC);
+#endif
         UI_DoServerRefresh(&uiInfoArray);
         UI_BuildServerStatus(&uiInfoArray, 0);
         UI_BuildFindPlayerList();
@@ -990,7 +1002,11 @@ void UI_Refresh(int localClientNum)
         }
         if (uiInfoArray.uiDC.isCursorVisible)
         {
-            if (!Dvar_GetBool("cl_bypassMouseInput") && UI_GetActiveMenu(localClientNum) != UIMENU_SCOREBOARD)
+            if (!Dvar_GetBool("cl_bypassMouseInput") && UI_GetActiveMenu(localClientNum) != UIMENU_SCOREBOARD
+#ifdef KISAK_RMLUI
+                && !RmlFrontend_HidesCursor()
+#endif
+            )
             {
                 UI_DrawCursor(&uiInfoArray.uiDC, &scrPlaceFull, &scrPlaceView[localClientNum], sharedUiInfo.assets.cursor);
             }
@@ -1047,6 +1063,9 @@ void UI_Shutdown(int localClientNum)
             "(localClientNum == 0)",
             localClientNum);
     Menus_CloseAll(&uiInfoArray.uiDC);
+#ifdef KISAK_RMLUI
+    RmlFrontend_Shutdown();
+#endif
     sharedUiInfo.assets.whiteMaterial = 0;
     UILocalVar_Shutdown(&uiInfoArray.uiDC.localVars);
     if (!IsFastFileLoad())
@@ -4702,6 +4721,10 @@ void UI_RegisterDvars()
     DvarLimits mine; // [esp+10h] [ebp-10h]
     DvarLimits minf; // [esp+10h] [ebp-10h]
 
+#ifdef KISAK_RMLUI
+    RmlFrontend_RegisterDvars();
+#endif
+
     ui_customModeName = Dvar_RegisterString("ui_customModeName", (char *)"", DVAR_NOFLAG, "Custom game mode name");
     ui_customModeEditName = Dvar_RegisterString(
         "ui_customModeEditName",
@@ -4898,6 +4921,10 @@ void UI_KeyEvent(int localClientNum, int key, int down)
             "%s\n\t(localClientNum) = %i",
             "(localClientNum == 0)",
             localClientNum);
+#ifdef KISAK_RMLUI
+    if (Menu_Count(&uiInfoArray.uiDC) && RmlFrontend_KeyEvent(key, down))
+        return;
+#endif
     if (Menu_Count(&uiInfoArray.uiDC))
     {
         menu = Menu_GetFocused(&uiInfoArray.uiDC);
@@ -5731,6 +5758,8 @@ char errorString[1024];
 char *UI_SafeTranslateString(const char *reference)
 {
     const char *translation; // [esp+10h] [ebp-4h]
+
+    SysPerfScope perfScope(SYS_PERF_PROBE_UI_TRANSLATE);
 
     if (*reference == 21)
     {

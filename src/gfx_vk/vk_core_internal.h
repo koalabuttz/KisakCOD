@@ -66,6 +66,9 @@ struct Buffer
     BufferDesc desc{};
     Allocation allocation{};
     std::string name;
+    // Tracked use by shaders (UseBuffer); copies keep their own barriers.
+    VkPipelineStageFlags2 lastStages = VK_PIPELINE_STAGE_2_NONE;
+    VkAccessFlags2 lastAccess = VK_ACCESS_2_NONE;
 };
 
 struct Image
@@ -113,8 +116,13 @@ struct LinearArena
 {
     VkBufferUsageFlags usage = 0;
     VkDeviceSize chunkSize = 0;
+    MemoryKind memory = MemoryKind::Upload;
     std::vector<LinearChunk> chunks;
     uint32_t current = 0;
+    // Whether a request went past the first chunk since the slot's last
+    // recycle, and the recycles in a row where none did (TrimArena).
+    bool spilled = false;
+    uint32_t quietRecycles = 0;
 };
 
 enum class DeferredKind
@@ -199,6 +207,37 @@ struct RecordState : RecordContext
     uint64_t submitted = 0; // last serial submitted
     uint64_t presents = 0;  // presents made
     bool rebuild = false;   // a present found the swapchain out of date or suboptimal
+    bool surfaceLost = false; // a present found the surface gone (VK_ERROR_SURFACE_LOST_KHR)
+    // Present pacing (CoreDesc::swapInterval > 1, VK_GOOGLE_display_timing):
+    // the swapchain it was worked out for, its refresh cycle, the last present
+    // id given and the newest one the display reported shown, and when.
+    VkSwapchainKHR pacedSwapchain = VK_NULL_HANDLE;
+    uint64_t refreshNs = 0;
+    uint32_t presentId = 0;
+    uint32_t shownId = 0;
+    uint64_t shownNs = 0;
+    uint64_t pacedPresents = 0;
+    // The refresh the last paced present was meant for (its time plus the
+    // offset below).
+    uint64_t lastTargetNs = 0;
+    // How far before the refresh it means a present's time is set, adapted
+    // to where the display takes it (PacePresent), and that offset as each
+    // of the last kPaceOffsets presents used it, by id.
+    uint64_t paceOffsetNs = 0;
+    static constexpr uint32_t kPaceOffsets = 32;
+    uint64_t paceOffsets[kPaceOffsets] = {};
+    // What the display reported, logged every kPaceReport frames: the last
+    // id counted and when it showed, the frames shown 1, 2, 3 and 4 or more
+    // refreshes after the one before, those shown a refresh or more before or
+    // after the refresh asked for, and the sum of the differences.
+    static constexpr uint32_t kPaceReport = 240;
+    uint32_t paceCountedId = 0;
+    uint64_t paceCountedNs = 0;
+    uint32_t paceAfter[4] = {};
+    uint32_t paceEarly = 0;
+    uint32_t paceLate = 0;
+    uint32_t paceCounted = 0;
+    int64_t paceMissNs = 0;
 };
 
 // Packets start at multiples of kRecordAlign in memory from operator new,
@@ -231,6 +270,7 @@ struct RecordProgress
     uint64_t submitted = 0;
     uint64_t presents = 0;
     bool rebuild = false;
+    bool surfaceLost = false;
     uint64_t chunksDone = 0;
 };
 
@@ -297,6 +337,14 @@ public:
     bool debugUtils = false;
     bool syncValidation = false;
     bool portabilityEnumeration = false;
+    // VK_GOOGLE_display_timing is enabled: presents can ask for a time
+    // (CoreDesc::swapInterval).
+    bool displayTiming = false;
+    // CoreDesc::swapInterval as SetSwapInterval last set it.
+    std::atomic<uint32_t> swapInterval{1};
+    // Paced presents move their time when the display shows them a refresh
+    // early or late (PacePresent); KISAK_VK_PACE_ADAPT=0 keeps half a refresh.
+    bool paceAdapt = true;
     VkDebugUtilsMessengerEXT messenger = VK_NULL_HANDLE;
     VkSurfaceKHR surface = VK_NULL_HANDLE;
 
@@ -325,7 +373,19 @@ public:
     std::vector<VkSemaphore> renderDone; // one per swapchain image
     bool rebuildPending = false;
     bool resizePending = false;
+    // The swapchain was built with an identity preTransform on a rotated
+    // surface (Android, a panel whose own orientation is not the game's):
+    // the compositor turns the picture, and presents report
+    // VK_SUBOPTIMAL_KHR for that alone, which must not rebuild every frame.
+    bool transformLeftToCompositor = false;
+    // Frames begun on such a swapchain: every 32nd compares the surface's
+    // size with the swapchain's, since Android reports no resize to it.
+    uint32_t turnedFrames = 0;
     bool windowDetached = false; // DetachWindow: no swapchain or surface any more
+    // The window system took the surface away (Android destroys the window of
+    // an app sent to the background): BeginFrame skips frames until
+    // RenewSurface gets a new one from the window.
+    bool surfaceLost = false;
 
     FrameSlot frames[kFramesInFlight];
     uint32_t frameIndex = 0;
@@ -337,6 +397,7 @@ public:
     bool recordingOpen = false;      // a command buffer is being recorded
     uint64_t recordingId = 0;        // counts command buffers begun
     bool inPass = false;
+    bool inComputePass = false; // BeginComputePass ... EndComputePass
     int currentTimedPass = -1;
     bool bufferCopiesOpen = false;            // see CloseBufferCopies
     std::vector<Image *> pendingUploads;      // uploadPending images
@@ -423,6 +484,11 @@ bool Check(Core &core, VkResult result, const char *what);
 const char *ResultName(VkResult result);
 BuildResult BuildSwapchain(Core &core);
 bool SurfaceExtent(Core &core, VkSurfaceCapabilitiesKHR &caps, VkExtent2D &extent);
+// After surfaceLost, with nothing recorded or in flight: lets go of the
+// swapchain and the old surface, then asks the window for a new surface. True
+// once there is one (the swapchain is rebuilt next); false while the window has
+// none (or the core failed).
+bool RenewSurface(Core &core);
 
 // vk_memory.cpp
 // own: a memory allocation of its own (offset 0) whatever the size.
