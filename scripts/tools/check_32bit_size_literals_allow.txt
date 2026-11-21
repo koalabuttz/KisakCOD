@@ -60,6 +60,9 @@ src/game_mp/g_main_mp.cpp: static_assert(LAYOUT_32BIT(sizeof(gclient_s) == 12676
 src/gfx_d3d/r_drawsurf.cpp: iassert(material->info.sortKey >= 24);
 src/gfx_d3d/r_drawsurf.cpp: region = (material->info.sortKey == 48) + (material->info.sortKey != 24 ? 0 : 2) + 6;
 
+# pixel shader constant register c8, not a size
+src/gfx_d3d/r_scene.cpp: else if (arg.u.codeConst.index == CONST_SRC_CODE_LIGHT_SPOTFACTORS && arg.dest == 8)
+
 # vertex size of GfxVertex (32 bytes on both), not GfxMeshData
 src/gfx_d3d/r_rendercmds.cpp: R_InitDynamicMesh(&g_viewInfo[dataIndex][viewIndex].pointLightMeshData[partitionIndex], 6u, 4u, 0x20u);
 src/gfx_d3d/r_rendercmds.cpp: R_InitDynamicMesh(&gfxMeshGlob.fullSceneViewMesh[viewIndexa].meshData, 6u, 4u, 0x20u);

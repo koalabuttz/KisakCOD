@@ -19,6 +19,7 @@ src/gfx_d3d/r_init.cpp: Win32 window/monitor API and IDirect3D9 device creation
 src/gfx_d3d/r_material.cpp: IDirect3DDevice9 shader/declaration creation, _D3DVERTEXELEMENT9
 src/gfx_d3d/r_material_load_obj.cpp: includes <d3d9.h> directly
 src/gfx_d3d/r_model_lighting.cpp: _D3DLOCKED_BOX/_D3DBOX volume texture updates
+src/gfx_d3d/r_reflection_probe.cpp: _D3DLOCKED_RECT/_D3DSURFACE_DESC for the probe re-capture's cube texture locks (R_HW_LockRect)
 src/gfx_d3d/r_rendertarget.cpp: IDirect3D9 format queries, D3DDEVTYPE_HAL
 src/gfx_d3d/r_scene.cpp: IDirect3DQuery9 methods
 src/gfx_d3d/r_screenshot.cpp: tagMONITORINFO/HMONITOR and _D3DLOCKED_RECT
