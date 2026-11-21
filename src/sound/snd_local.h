@@ -11,6 +11,45 @@
 // in, direct linkage is simpler than the usual portable-extension-loading dance.
 #define AL_ALEXT_PROTOTYPES
 #include <AL/efx.h>
+
+// OpenAL Soft extensions the driver asks for at run time, by value, so the build
+// does not need an alext.h that has them (the PS Vita's small OpenAL has none).
+// AL_SOFT_direct_channels, AL_SOFT_direct_channels_remix, AL_EXT_MCFORMATS:
+#ifndef AL_DIRECT_CHANNELS_SOFT
+#define AL_DIRECT_CHANNELS_SOFT 0x1033
+#endif
+#ifndef AL_REMIX_UNMATCHED_SOFT
+#define AL_REMIX_UNMATCHED_SOFT 0x0002
+#endif
+#ifndef AL_FORMAT_51CHN16
+#define AL_FORMAT_51CHN16 0x120B
+#endif
+// ALC_EXT_DEDICATED (EFX effects that feed the centre or the LFE speaker):
+#ifndef AL_EFFECT_DEDICATED_DIALOGUE
+#define AL_EFFECT_DEDICATED_LOW_FREQUENCY_EFFECT 0x9000
+#define AL_EFFECT_DEDICATED_DIALOGUE 0x9001
+#endif
+#ifndef AL_DEDICATED_GAIN
+#define AL_DEDICATED_GAIN 0x0001
+#endif
+// ALC_SOFT_output_mode, and the ALC_SOFT_loopback layouts it shares:
+#ifndef ALC_OUTPUT_MODE_SOFT
+#define ALC_OUTPUT_MODE_SOFT 0x19AC
+#define ALC_ANY_SOFT 0x19AD
+#define ALC_STEREO_BASIC_SOFT 0x19AE
+#define ALC_STEREO_UHJ_SOFT 0x19AF
+#define ALC_STEREO_HRTF_SOFT 0x19B2
+#endif
+#ifndef ALC_MONO_SOFT
+#define ALC_MONO_SOFT 0x1500
+#define ALC_STEREO_SOFT 0x1501
+#define ALC_QUAD_SOFT 0x1503
+#endif
+#ifndef ALC_5POINT1_SOFT
+#define ALC_5POINT1_SOFT 0x1504
+#define ALC_6POINT1_SOFT 0x1505
+#define ALC_7POINT1_SOFT 0x1506
+#endif
 #endif
 #include "snd_public.h"
 
@@ -135,6 +174,18 @@ struct AlLocal
     // parameter of its own. See SND_ApplyReverbSend in snd_driver.cpp.
     ALuint sendFilter[53];
     bool isMultiChannel;
+    // Speakers OpenAL mixes for (ALC_SOFT_output_mode; 2 when it cannot say), and
+    // what the speaker maps and the centre and LFE share of 3D sounds can use. See
+    // snd_speaker_mix.h, MSS_Init and SND_ApplyChannelMap.
+    int speakers;
+    ALint directChannels;               // AL_DIRECT_CHANNELS_SOFT value for a mixed sound, 0 without the extension
+    bool surroundBuffers;               // takes AL_FORMAT_51CHN16 (AL_EXT_MCFORMATS)
+    bool centreLfeFeeds;                // the two slots below work (multichannel output, 3 sends, ALC_EXT_DEDICATED)
+    ALuint centreSlot;                  // AL_EFFECT_DEDICATED_DIALOGUE: straight to the centre speaker
+    ALuint lfeSlot;                     // AL_EFFECT_DEDICATED_LOW_FREQUENCY_EFFECT: straight to the LFE speaker
+    ALuint centreEffect;
+    ALuint lfeEffect;
+    ALuint feedFilter;                  // lowpass used as a gain carrier for the two feeds and the direct path
 };
 #endif
 
