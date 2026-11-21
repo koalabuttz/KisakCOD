@@ -145,6 +145,77 @@ What is Android-specific in the client:
 way it checks the server, except that a library has no program interpreter,
 may need the three libraries above, and must export `SDL_main` alone.
 
+`build_apk.py --abi x86_64` builds the app for the Android emulator on a PC
+instead (`KisakCOD-<config>-x86_64.apk`; its builds sit beside the arm64 ones
+in `--work`, named with `-x86_64`). It takes the x86_64 Linux track's code. No
+device is x86, and the emulator draws through the PC's own GPU driver, so it
+finds no Adreno-only fault; it is for runs nobody has to watch
+(`scripts/runs/android_run.py`).
+
+### The first screen
+
+The app opens on a screen of big buttons (`LauncherActivity.java`) that the
+controller works: the d-pad or left stick moves, A presses, L1 and R1 change
+the number of bots. It lists every map in the game folder (`zone/*/mp_*.ff`
+and `usermaps`); a map starts a match against KisakCOD's bots
+(`+set developer_script 1 +set bot_brain 1 +set scr_testclients <n> +set
+g_gametype war|dm +devmap <map>`), "Multiplayer" starts the multiplayer
+game's own menu and "Campaign" the singleplayer game's. "Visuals" opens a
+page of its own (`VisualsActivity.java`) with a button for each setting of
+the look and a Preset button that sets them together: Legacy (`+set
+r_visuals legacy`, 60 fps), Modern (`+set r_aaSamples 1 +set r_visuals
+modern`, docs/vulkan-modern.md, every pass at the renderer's default and god
+rays on, held to an even 30 fps with `r_vsync 1`, `r_vsyncInterval 2`) or
+Modern Fast (Modern at 60 fps with ambient occlusion, screen-space
+reflections and contact shadows off). Changing any setting makes the preset
+Custom. The settings: the look; the frame rate (60 fps, 30 fps or no
+vsync); the sun's shadows (`sm_enable`, off by default, see below); ambient
+occlusion (default, on, half resolution or off); screen-space reflections,
+contact shadows, soft sun and lamp shadows, volumetric fog, fog lit by
+lamps, god rays, bloom and auto exposure (each default, on or off, the
+`r_modern*` switches); mirror (planar) reflections, live reflection probes,
+glowing lamps, muzzle-flash light and the water shader (each default, on or
+off, as `KISAK_VK_MODERN_*` variables in the start's env extra, since they
+have no dvar); and the tone map. Modern's settings show dimmed while the look
+is Legacy. On the Retroid Pocket 6, Modern with everything on drew Crash in
+about 30 ms (33 fps); ambient occlusion cost about 6 ms and reflections about
+5; Modern Fast runs at 60 fps (GPU frame about 15 ms). The look, the sun's
+shadows and the variables go with every start; the game's saved settings
+(frame rate, the `r_modern*` switches, the tone map) only when they changed
+since the last start, so what the game's settings menu changes later stays.
+The sun's shadows are off on Android unless the Visuals page turns them on
+(`KisakActivity` passes `sm_enable 0` first), so the fog shows no light
+shafts there by default. The game runs in a
+process of its own (`:game`), which ends with the game: the engine never
+starts twice in one process, and the first screen comes back when the game
+quits.
+
+Quitting ends the game's process with `_exit(0)` (`Sys_Quit`, `src/linux/main.cpp`): a plain `exit()` ran Android's UI libraries' exit handlers while the activity's render thread still drew, and every quit ended in SIGABRT in an hwui thread.
+
+### The campaign
+
+The singleplayer game, KisakCOD-sp, builds as `libmain_sp.so` beside
+`libmain.so` (`sp_game.cmake`, `build_apk.py`), through the same Vulkan back
+end. CampaignActivity (KisakActivity in the same `:game` process) loads it
+instead of `libmain.so`, as KisakActivity does when the intent's boolean extra
+`campaign` is true; runs that can only name an activity use the first:
+
+```
+adb shell am start -n org.kisakcod.game/.CampaignActivity --es args "+devmap killhouse"
+```
+
+A level needs an active player profile ("Tried to use a player profile before
+it was set"), and a handheld has no keyboard to name one, so the first
+campaign start makes one called `player` (`home/players/profiles/active.txt`)
+unless the home folder has one. The controller works as in multiplayer
+(`KISAK_LINUX_GAMEPAD`: `mp_client_gamepad.cpp` serves both games). It has
+not run on a device or the emulator yet.
+
+The stock scripts read `scr_testclients` only in their developer blocks
+(`/# ... #/`), so without `developer_script 1` no bot joins (run 6 on the
+Pocket 6: the dvar read back as 9 and nobody came). `devmap` is what the PC's
+bot runs use (`scripts/runs/recipes/vulkan-ab-mp-crash.json`).
+
 ### Installing and starting the app
 
 Install, start once (the first start makes the app's folder), copy the game
@@ -162,9 +233,31 @@ adb logcat -s KisakCOD SDL
 
 Extra engine arguments for a run go in the `args` extra, split at spaces:
 `adb shell am start -n org.kisakcod.game/.KisakActivity --es args "+set developer 1"`.
-The activity always starts the game full screen (`+set r_fullscreen 1`, so
+`KISAK_*` environment variables (the start-up knobs such as
+`KISAK_VK_MODERN_SSR_STEPS`) go in the `env` extra as `NAME=VALUE` pairs split
+at spaces, and the activity sets them in its process before the game starts:
+`--es env "KISAK_VK_MODERN_SSR_STEPS=16 KISAK_VK_MODERN_AO_HALF=0"`. Other
+names are refused. `scripts/runs/android_run.py` fills it from a recipe's or
+launch's `env`.
+The activity starts the game without shadow maps (`+set sm_enable 0`): on
+the Adreno 740 the sun's shadows flickered from frame to frame (2026-11-15,
+cause not found yet). The activity always starts the game full screen (`+set r_fullscreen 1`, so
 SDL hides Android's system bars; run 3 had a 1920x970 window under the
-navigation bar). The game's console goes to logcat under the tag KisakCOD: Android drops an
+navigation bar). The game's window is always fullscreen on Android, whatever `r_fullscreen`
+and `r_fullscreenMode` say (`CreateWindowExA` in `win32_window_sdl3.cpp`
+adds `SDL_WINDOW_FULLSCREEN`, and leaving fullscreen does nothing there): a
+windowed or borderless choice in the settings menu had put the picture below
+the status bar with its top cut off and the navigation bar showing. `KisakActivity` also
+lays its window out over the whole screen under the system bars
+(`setDecorFitsSystemWindows(false)`, cutout mode always) and hides them on
+every focus: started from the launcher, SDL's immersive mode alone still left
+the picture's top and bottom cut off. For an even 30 frames a second (Modern visuals on the Retroid Pocket 6
+run at 33-40), `+set r_vsync 1 +set r_vsyncInterval 2` shows each frame for
+two refreshes of a 60 Hz screen (four at 120 Hz: `r_vsyncInterval 4`), paced
+through Android's `VK_GOOGLE_display_timing` (docs/vulkan-core.md, Swapchain).
+On the Retroid (run 380, PR 457) every Legacy frame at interval 2 showed for
+exactly two refreshes (p99 35.9 ms); the launcher's Modern preset uses it.
+The game's console goes to logcat under the tag KisakCOD: Android drops an
 app's stdout and stderr, so `src/linux/main.cpp` copies them there.
 
 First start on the Retroid Pocket 6 (2026-11-15, CI APK of 91d7799): the menu
@@ -176,10 +269,30 @@ asks for no rotation (`ChoosePreTransform` in `src/gfx_vk/vk_core.cpp`), the
 compositor turns the picture, and the `VK_SUBOPTIMAL_KHR` that Android
 reports for that alone does not rebuild the swapchain. Drawing the picture
 turned (Android's pre-rotation) would save the compositor that work; it is
-left for the speed stage. Android reports a change of size (the window going
-full screen) by that same result alone, so every 32nd one still compares the
-surface's size with the swapchain's and rebuilds it when they differ (run 4
-kept a 1920x970 swapchain on the 1920x1080 screen).
+left for the speed stage. Android tells such a swapchain nothing when the
+window changes size (it goes full screen just after the game starts) and
+scales the old picture, so every 32nd frame compares the surface's size with
+the swapchain's and rebuilds it when they differ (runs 4 and 5 kept a
+1920x970 swapchain on the 1920x1080 screen).
+
+Android takes the window away from an app sent to the background (Home, the
+lock screen) and gives it a new one when it comes back; SDL meanwhile holds
+the game's main thread in its event loop. Presents, acquires and size queries
+on the old window answer `VK_ERROR_SURFACE_LOST_KHR`, which no longer fails
+the core: the next frame lets go of the swapchain and the surface and asks
+the window for a new surface (`RenewSurface` in `src/gfx_vk/vk_core.cpp`),
+skipping frames until there is one, and builds a swapchain on it. The Vulkan
+window probe's `--lose-surface` (in `test_vulkan_window_probe.py`) does the
+same on a desktop window. On Android the client makes the surface itself
+from the activity's `Surface` as Java has it at that moment
+(`AndroidWindowNow` in `src/linux/client/vulkan/vulkan_backend.cpp`): SDL's
+copy of the window goes on the Java thread while the render thread may be
+asking, and with the screen turned off SDL handed Vulkan a null window
+(run 7, a crash in `vkCreateAndroidSurfaceKHR`).
+
+The "computer changed, set optimal settings?" question is not asked on
+Android: a handheld measures a different CPU speed at nearly every start, and
+the box came up over a black screen (run 7).
 
 What run 4 (mp_crash on the Pocket 6) showed, and the fixes:
 

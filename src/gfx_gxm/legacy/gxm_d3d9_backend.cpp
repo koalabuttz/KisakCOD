@@ -95,6 +95,8 @@ bool BackendWindowSize(const Backend *, uint32_t &width, uint32_t &height)
     return true;
 }
 
+void BackendSetSwapInterval(Backend *, uint32_t) {}
+
 void BackendCounters(const Backend *, DeviceCounters &out)
 {
     out.validationErrors = 0;
@@ -130,9 +132,13 @@ lg::Surface *BackendModernSceneTarget(Backend *, lg::Surface *, ModernResult &re
 bool BackendModernEffectsOnDisplay(Backend *) { return false; }
 bool BackendModernWantsSceneDepth(Backend *) { return false; }
 bool BackendModernReflectionProbe(Backend *, lg::Device *, lg::Texture *) { return false; }
+bool BackendModernProbeCaptureWanted(Backend *) { return false; }
+void BackendModernProbeCapture(Backend *, bool) {}
+bool BackendModernProbeCaptureRead(Backend *, uint32_t, uint32_t, uint32_t, uint32_t, float *) { return false; }
 bool BackendModernPlanarWanted(Backend *) { return false; }
 bool BackendModernPlanarBegin(Backend *, const ModernPlanarView &, lg::Surface *&, lg::Surface *&) { return false; }
 void BackendModernPlanarDone(Backend *, const ModernPlanarView &) {}
+void BackendModernSunShadow(Backend *, lg::Device *, const ModernSunShadowView &) {}
 ModernResult BackendModernSceneDepth(Backend *, lg::Surface *, const ModernSceneView &) { return ModernResult::Refused; }
 
 void BackendModernLitInputs(Backend *, const ModernLitInputs *) {}

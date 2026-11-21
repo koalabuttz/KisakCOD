@@ -33,8 +33,14 @@ elseif(KISAK_PLATFORM STREQUAL "android")
     # aarch64 track's rules apply (signed char, no fused multiply-add; set in
     # scripts/platform/linux/platform.cmake, since the NDK's toolchain file
     # replaces the *_FLAGS_INIT variables).
+    # x86_64 (ANDROID_ABI=x86_64) is for the Android emulator on a PC: it
+    # takes the x86_64 Linux track's code paths instead.
     include(${CMAKE_CURRENT_LIST_DIR}/scripts/platform/android/android_toolchain.cmake)
-    set(KISAK_LINUX_ARCH "aarch64" CACHE STRING "Native Linux architecture" FORCE)
+    if(ANDROID_ABI STREQUAL "x86_64")
+        set(KISAK_LINUX_ARCH "x86_64" CACHE STRING "Native Linux architecture" FORCE)
+    else()
+        set(KISAK_LINUX_ARCH "aarch64" CACHE STRING "Native Linux architecture" FORCE)
+    endif()
 elseif(KISAK_PLATFORM STREQUAL "macos")
     # One architecture per build directory: arm64 (Apple silicon) or x86_64
     # (Intel Macs), the host's unless CMAKE_OSX_ARCHITECTURES says otherwise.
@@ -156,6 +162,13 @@ option(KISAK_PERF_PHASES "Compile in the render thread's phase marks for the per
 if (KISAK_PERF_PHASES)
     add_compile_definitions(KISAK_PERF_PHASES=1)
 endif()
+
+# Opt-in: the RmlUi front-end (docs/rmlui-frontend.md, scripts/extern/rmlui.cmake).
+# Builds RmlUi's core library (fetched at configure time) into the multiplayer
+# client, Windows KisakCOD-mp and the Linux client, with the console variable
+# ui_rml: 0 (default) keeps the stock menu painter, 1 draws the stock menus
+# through RmlUi. Player builds leave it off until the new menus land.
+option(KISAK_RMLUI "Build the multiplayer client with the RmlUi menu front-end (ui_rml)" OFF)
 
 # Set to ON to build the sound system against OpenAL instead of Miles/MSS.
 # When OFF (default), the original Miles Sound System (MSS/AIL) backend is used.

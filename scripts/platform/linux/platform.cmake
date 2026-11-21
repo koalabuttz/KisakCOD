@@ -37,26 +37,27 @@ elseif(KISAK_PLATFORM STREQUAL "android")
     # The multiplayer client builds as libmain.so, the native library of an
     # SDL3 app, and draws only through the Vulkan back end: Android has no
     # DXVK, so the D3D9 library it links is the stand-in that has no device.
-    # The singleplayer game and the probes come later.
+    # The singleplayer game builds the same way, as libmain_sp.so. The probes
+    # come later.
     if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
         message(FATAL_ERROR "KISAK_PLATFORM=android requires the Android NDK's toolchain (CMAKE_SYSTEM_NAME Android).")
     endif()
-    if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8 OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
-        message(FATAL_ERROR "KISAK_PLATFORM=android requires arm64-v8a (got ${CMAKE_SYSTEM_PROCESSOR}, "
+    # x86_64 builds for the Android emulator on a PC, on the x86_64 track.
+    if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8 OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|x86_64)$")
+        message(FATAL_ERROR "KISAK_PLATFORM=android requires arm64-v8a or x86_64 (got ${CMAKE_SYSTEM_PROCESSOR}, "
             "${CMAKE_SIZEOF_VOID_P}-byte pointers). Use a new build directory.")
     endif()
     foreach(kisak_not_on_android
             KISAK_BUILD_LINUX_CLIENT_CORE KISAK_BUILD_LINUX_WINDOW_HOST
-            KISAK_BUILD_LINUX_SP_GAME
             KISAK_BUILD_UI_ASSET_EXPORT KISAK_BUILD_WORLD_FRONTEND_PROBE KISAK_BUILD_DEVICE_PROBE
             KISAK_BUILD_WORLD_DEVICE_PROBE KISAK_BUILD_WORLD_DRAW_PROBE
             KISAK_LINUX_TRACY KISAK_WIN_TRACY KISAK_LINUX_STEAM KISAK_SL_TRACE)
         if(${kisak_not_on_android})
-            message(FATAL_ERROR "${kisak_not_on_android} is not available on Android yet; KISAK_PLATFORM=android builds KisakCOD-dedi and KisakCOD-mp (libmain.so)")
+            message(FATAL_ERROR "${kisak_not_on_android} is not available on Android yet; KISAK_PLATFORM=android builds KisakCOD-dedi, KisakCOD-mp (libmain.so) and KisakCOD-sp (libmain_sp.so)")
         endif()
     endforeach()
-    if(KISAK_BUILD_LINUX_MP_CLIENT AND NOT KISAK_BUILD_VULKAN_BACKEND)
-        message(FATAL_ERROR "KisakCOD-mp on Android draws only through the Vulkan back end: also pass "
+    if((KISAK_BUILD_LINUX_MP_CLIENT OR KISAK_BUILD_LINUX_SP_GAME) AND NOT KISAK_BUILD_VULKAN_BACKEND)
+        message(FATAL_ERROR "KisakCOD-mp and KisakCOD-sp on Android draw only through the Vulkan back end: also pass "
             "-DKISAK_BUILD_VULKAN_PROBE=ON -DKISAK_BUILD_VULKAN_SHADERS=ON -DKISAK_BUILD_VULKAN_LEGACY=ON -DKISAK_BUILD_VULKAN_BACKEND=ON")
     endif()
     # The aarch64 Linux track's rules: the engine was written for x86, where
@@ -68,7 +69,8 @@ elseif(KISAK_PLATFORM STREQUAL "android")
     # default; r27, which GitHub's runners carry, aligns to 4 KiB.
     add_link_options(LINKER:-z,max-page-size=16384)
     message(WARNING "KISAK_PLATFORM=android is the opt-in Android track (${ANDROID_ABI}, ${ANDROID_PLATFORM}): "
-        "KisakCOD-dedi and KisakCOD-mp (libmain.so) build; neither has run on an Android device yet. See docs/android.md.")
+        "KisakCOD-dedi, KisakCOD-mp (libmain.so) and KisakCOD-sp (libmain_sp.so) build; the campaign has not run on Android yet. "
+        "See docs/android.md.")
 elseif(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     message(FATAL_ERROR "KISAK_PLATFORM=linux requires a Linux target toolchain.")
 elseif(KISAK_LINUX_ARCH STREQUAL "x86_64")

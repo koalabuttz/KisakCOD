@@ -37,12 +37,17 @@
 #include "bot_grenades.h"
 #include "bot_mind.h"
 #include "bot_motor.h"
+#include "bot_names.h"
 #include "bot_navmesh.h"
 #include "bot_perception.h"
 #include "bot_team.h"
 
+#include <universal/com_files.h>
+
 #include <cmath>
 #include <cstring>
+#include <string>
+#include <vector>
 
 namespace
 {
@@ -77,6 +82,8 @@ struct BotSlot
     float path[kMaxCorners][3];
     int pathCount = 0;
     int pathIndex = 0;
+    bool pathComplete = false;   // the way reaches the goal's floor
+    float goalOnMesh[3] = {0.0f, 0.0f, 0.0f};
     float bestDistance = 0.0f;
     int progressTime = 0;
     int nextPlanTime = 0;
@@ -95,6 +102,12 @@ struct BotSlot
     // (the bot's own, as a player's client keeps it), moving under fire.
     kb::AimState aim;
     kb::TriggerState trigger;
+    // When its last fight ended (or changed player), and the shots it has kept
+    // going: since when, and the last one.
+    int aimEndedAt = -100000;
+    int sprayStart = 0;
+    int lastShotAt = -100000;
+    int nextFastLog = 0;
     kb::ViewKick kick;
     kb::StrafeState strafe;
     int eventSequence = 0;
@@ -131,6 +144,10 @@ struct BotSlot
     int hurtAt = -1000000;
     bool hurtFromKnown = false;
     float hurtFrom[3] = {0.0f, 0.0f, 0.0f};
+    // A lead it found no way to (a sound on a floor its way does not reach):
+    // left alone until then.
+    float noWayTo[3] = {0.0f, 0.0f, 0.0f};
+    int noWayUntil = 0;
 
     // Its team (bot_team.h): its part, the objective that part is about, when
     // it last called out each enemy, and the goal the part gave it.
@@ -293,7 +310,7 @@ bool PlanWalk(BotSlot &bot, const kb::NavMesh &nav, const float *origin, const f
     bot.pathIndex = 0;
     bot.preAimKnown = false;
     bot.nextPreAim = 0;
-    const int count = nav.FindPath(origin, goal, bot.path, BotSlot::kMaxCorners);
+    const int count = nav.FindPath(origin, goal, bot.path, BotSlot::kMaxCorners, &bot.pathComplete, bot.goalOnMesh);
     if (count < 2)
         return false;
     bot.pathCount = count;
@@ -515,16 +532,25 @@ int Fight(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focus 
     const kb::Contact &contact = bot.perception.contacts[focus.entity];
     if (bot.aim.target != focus.entity)
     {
-        kb::Engage(bot.aim, focus.entity, contact.noticedAt, svs.time, skill, bot.rng);
+        // Straight from another fight: the eye and hand still have the last
+        // player, and need a moment to take in the next.
+        const bool switching = bot.aim.target >= 0 || svs.time - bot.aimEndedAt < skill.switchWindowMs;
+        kb::Engage(bot.aim, focus.entity, contact.noticedAt, svs.time, skill, bot.rng, switching);
         bot.trigger = kb::TriggerState();
         bot.firstShotLogged = false;
     }
 
     float place[3];
     kb::LeadPlace(contact.lastSeen, contact.velocity, svs.time - contact.lastSeenAt, skill, place);
+    place[2] += bot.aim.heightOffset;
     float target[2];
     ViewToward(ps, place, target);
-    kb::StepAim(bot.aim, bot.view, target, bot.kick.angles, svs.time, seconds, skill, bot.rng);
+    // A spray kept going (shots no more than 0.3 s apart) wanders; clicks of a
+    // semi-automatic half as much.
+    int sprayMs = svs.time - bot.lastShotAt < 300 ? svs.time - bot.sprayStart : 0;
+    if (const WeaponDef *held = HeldWeapon(ps); held && held->fireType != WEAPON_FIRETYPE_FULLAUTO)
+        sprayMs /= 2;
+    kb::StepAim(bot.aim, bot.view, target, bot.kick.angles, svs.time, seconds, skill, bot.rng, sprayMs);
     if (focus.kind != kb::FocusKind::Seen)
         return 0;
 
@@ -586,6 +612,9 @@ int Fight(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focus 
     if (kb::StepTrigger(bot.trigger, onTarget, automatic, distance, svs.time, skill, bot.rng))
     {
         cmd.buttons |= BUTTON_ATTACK;
+        if (svs.time - bot.lastShotAt >= 300)
+            bot.sprayStart = svs.time;
+        bot.lastShotAt = svs.time;
         if (!bot.firstShotLogged)
         {
             bot.firstShotLogged = true;
@@ -684,26 +713,75 @@ bool HuntPlace(const BotSlot &bot, const kb::Focus &focus, float *out)
     return false;
 }
 
-// A place to roam to: the most interesting of a few reachable ones, by the
-// bot's own memory of where it has been and met enemies.
-bool RoamGoal(BotSlot &bot, const kb::NavMesh &nav, const float *origin, float *out)
+team_t TeamOf(int clientNum);
+
+// Calls fn(clientNum, slot) for each bot on `clientNum`'s team that is
+// playing (none in free-for-all).
+template <typename Fn>
+void ForTeammateBots(int clientNum, Fn fn)
 {
-    float bestScore = -1.0f;
-    for (int attempt = 0; attempt < 6; ++attempt)
+    const team_t team = TeamOf(clientNum);
+    if (team != TEAM_AXIS && team != TEAM_ALLIES)
+        return;
+    for (int other = 0; other < kMaxBotSlots && other < sv_maxclients->current.integer; ++other)
+    {
+        const BotSlot &mate = s_slots[other];
+        if (other == clientNum || !mate.active || svs.time - mate.lastTime > 1000 || TeamOf(other) != team)
+            continue;
+        fn(other, mate);
+    }
+}
+
+// How crowded `place` is with the bot's team: teammates (people too) within
+// 400 units of it, and teammate bots on their way to within 500 of it.
+float Crowding(int clientNum, const float *place)
+{
+    const team_t team = TeamOf(clientNum);
+    if (team != TEAM_AXIS && team != TEAM_ALLIES)
+        return 0.0f;
+    float crowd = 0.0f;
+    for (int other = 0; other < sv_maxclients->current.integer; ++other)
+    {
+        if (other == clientNum || TeamOf(other) != team)
+            continue;
+        const gentity_s *ent = SV_GentityNum(other);
+        if (!ent || !ent->client || ent->client->ps.pm_type != PM_NORMAL)
+            continue;
+        if (Distance2D(ent->client->ps.origin, place) < 400.0f)
+            crowd += 0.5f;
+    }
+    ForTeammateBots(clientNum, [&](int, const BotSlot &mate) {
+        if (mate.hasGoal && Distance2D(mate.goal, place) < 500.0f)
+            crowd += 1.0f;
+    });
+    return crowd;
+}
+
+// A place to roam to: the most interesting of a few reachable ones, by the
+// bot's own memory of where it has been and met enemies, away from where its
+// teammates are and are going (a team spreads out rather than moving as a
+// pack).
+bool RoamGoal(BotSlot &bot, int clientNum, const kb::NavMesh &nav, const float *origin, float *out)
+{
+    float bestScore = -1000.0f;
+    bool found = false;
+    for (int attempt = 0; attempt < 8; ++attempt)
     {
         float place[3];
         if (!nav.RandomReachablePoint(origin, NextUnit, &bot.rng, place))
             continue;
         if (Distance2D(origin, place) < 300.0f)
             continue;
-        const float score = bot.areas.Interest(place, svs.time, bot.personality) + bot.rng.Range(0.0f, 0.3f);
+        found = true;
+        const float score = bot.areas.Interest(place, svs.time, bot.personality) + bot.rng.Range(0.0f, 0.3f)
+                            - 0.5f * Crowding(clientNum, place);
         if (score > bestScore)
         {
             bestScore = score;
             std::memcpy(out, place, sizeof(place));
         }
     }
-    return bestScore >= 0.0f;
+    return found;
 }
 
 // ---------------------------------------------------------------------------
@@ -881,6 +959,15 @@ void Command()
     if (s_commandFrame == svs.time)
         return;
     s_commandFrame = svs.time;
+    // Every 10 s, how many shots have been fired: the probe sets the game's
+    // logged hits against it.
+    static int s_shotsLoggedAt = 0;
+    if (svs.time - s_shotsLoggedAt >= 10000 || svs.time < s_shotsLoggedAt)
+    {
+        s_shotsLoggedAt = svs.time;
+        if (LogOn())
+            Com_Printf(CON_CHANNEL_SERVER, "bots: %d shots fired so far\n", Bot_ShotsFired());
+    }
     for (int teamIndex : {static_cast<int>(TEAM_AXIS), static_cast<int>(TEAM_ALLIES)})
     {
         TeamState &team = s_teams[teamIndex];
@@ -1050,9 +1137,31 @@ RolePlan PlanRole(BotSlot &bot, int clientNum, const kb::NavMesh &nav, const flo
             bot.roleGoal = false;
             return RolePlan::Default;
         }
-        if (bot.roleGoal && Distance2D(bot.goal, call->place) < 256.0f && !arrived)
+        if (bot.roleGoal && Distance2D(bot.goal, call->place) < 400.0f && !arrived)
             return RolePlan::Keep;
-        if (!PlaceOnMesh(bot, nav, call->place, bot.goal))
+        // Teammates already on their way there: two at most go, and the second
+        // comes from another side of it.
+        int others = 0;
+        ForTeammateBots(clientNum, [&](int, const BotSlot &mate) {
+            if (mate.roleGoal && mate.role == kb::Role::Push && Distance2D(mate.goal, call->place) < 400.0f)
+                ++others;
+        });
+        if (others >= 2)
+        {
+            bot.pushedCall = call->heardAtMs;
+            return RolePlan::Default;
+        }
+        if (others == 1)
+        {
+            float place[3];
+            if (!nav.RandomPointNear(call->place, 400.0f, NextUnit, &bot.rng, place)
+                || Crowding(clientNum, place) >= 1.0f || !PlaceOnMesh(bot, nav, place, bot.goal))
+            {
+                bot.pushedCall = call->heardAtMs;
+                return RolePlan::Default;
+            }
+        }
+        else if (!PlaceOnMesh(bot, nav, call->place, bot.goal))
             return RolePlan::Default;
         bot.roleGoal = true;
         bot.holdUntil = 0;
@@ -1224,10 +1333,31 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
     if (s.enemyRemembered)
         s.rememberedConfidence = bot.perception.Confidence(focus.entity, svs.time, Senses());
     s.heardSomething = focus.kind == kb::FocusKind::Heard || (bot.hurtFromKnown && RecentlyHurt(bot, 3000));
+    // A lead where it found no way to go: a player hears someone on the floor
+    // above and does not stand under them; it keeps on with what it did.
+    if (float lead[3]; svs.time < bot.noWayUntil && !s.enemyInView && HuntPlace(bot, focus, lead)
+                       && Distance2D(lead, bot.noWayTo) < 300.0f && std::fabs(lead[2] - bot.noWayTo[2]) < 96.0f)
+    {
+        s.heardSomething = false;
+        s.enemyRemembered = false;
+    }
     s.hurtAgoMs = svs.time - bot.hurtAt;
     s.coverKnown = bot.coverKnown;
     s.inCover = bot.coverKnown && Distance2D(origin, bot.cover) < 40.0f && std::fabs(origin[2] - bot.cover[2]) < 48.0f;
     s.forObjective = bot.role == kb::Role::Attack && bot.objectiveKnown;
+    // Teammates who went after the same lead before this bot did.
+    if (float lead[3]; !s.enemyInView && HuntPlace(bot, focus, lead))
+    {
+        const bool hunting = bot.mind.intent == kb::Intent::Hunt;
+        ForTeammateBots(clientNum, [&](int other, const BotSlot &mate) {
+            if (mate.mind.intent != kb::Intent::Hunt || !mate.hasGoal || Distance2D(mate.goal, lead) > 600.0f)
+                return;
+            if (hunting && (mate.mind.sinceMs > bot.mind.sinceMs
+                            || (mate.mind.sinceMs == bot.mind.sinceMs && other > clientNum)))
+                return;
+            ++s.teammatesHunting;
+        });
+    }
 
     const kb::Intent intent = bot.mind.Decide(s, bot.personality);
     if (bot.mind.changed && bot_log && bot_log->current.integer)
@@ -1294,7 +1424,7 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
         bot.holdFacingKnown = false;
         if (arrived || replan)
         {
-            if (!RoamGoal(bot, *nav, origin, bot.goal))
+            if (!RoamGoal(bot, clientNum, *nav, origin, bot.goal))
             {
                 bot.hasGoal = false;
                 return;
@@ -1319,7 +1449,39 @@ void Decide(BotSlot &bot, int clientNum, const playerState_s *ps, const kb::Focu
     {
         bot.hasGoal = true;
         bot.goalFor = intent;
-        if (!PlanWalk(bot, *nav, origin, bot.goal))
+        const bool walkable = PlanWalk(bot, *nav, origin, bot.goal);
+        // A hunt whose way stops short of the lead's floor, above or below
+        // it (on another floor the way does not reach): no way there.
+        // Standing under a sound and staring at the ceiling is what a player
+        // does not do.
+        if (walkable && intent == kb::Intent::Hunt)
+        {
+            const float *end = bot.path[bot.pathCount - 1];
+            const float floorAt = bot.goalOnMesh[2];
+            // The lead is a player's feet, chest or eye: a way that ends
+            // from 72 units under it to 24 over it ends where the lead
+            // stands, whatever the mesh made of the floor there (PC run 21:
+            // a footstep beside a crate's top on Crash).
+            const float under = bot.goal[2] - end[2];
+            const bool besideLead = under > -24.0f && under < 72.0f;
+            if (!bot.pathComplete && !besideLead && std::fabs(end[2] - floorAt) > 48.0f
+                && Distance2D(end, bot.goal) < 400.0f)
+            {
+                std::memcpy(bot.noWayTo, bot.goal, sizeof(bot.noWayTo));
+                bot.noWayUntil = svs.time + 10000;
+                bot.pathCount = 0;
+                bot.pathIndex = 0;
+                bot.hasGoal = false;
+                if (LogOn())
+                    Com_Printf(CON_CHANNEL_SERVER,
+                               "bots: %d finds no way to a lead %.0f units %s (bot at %.0f %.0f %.0f, lead %.0f %.0f "
+                               "%.0f, way ends %.0f %.0f %.0f)\n",
+                               clientNum, std::fabs(end[2] - floorAt), end[2] < floorAt ? "above" : "below", origin[0],
+                               origin[1], origin[2], bot.goal[0], bot.goal[1], bot.goal[2], end[0], end[1], end[2]);
+                return;
+            }
+        }
+        if (!walkable)
         {
             bot.nextPlanTime = svs.time + 1000;
             if (intent == kb::Intent::Roam)
@@ -1371,6 +1533,91 @@ void Bot_RegisterDvars()
         "0 KisakCOD's bots never fire, 1 they fight the players they see (docs/bots.md)");
 }
 
+namespace
+{
+// Names from bots/names.txt: one to a line, up to 9 characters kept, with no
+// character a userinfo string or a console command treats as its own.
+std::vector<std::string> NamesFromFile()
+{
+    std::vector<std::string> names;
+    int handle = 0;
+    const int length = FS_SV_FOpenFileRead("bots/names.txt", &handle);
+    if (!handle)
+        return names;
+    std::string text;
+    if (length > 0 && length < 64 * 1024)
+    {
+        text.resize(static_cast<size_t>(length));
+        uint8_t *bytes = reinterpret_cast<uint8_t *>(text.data());
+        if (FS_Read(bytes, static_cast<uint32_t>(length), handle) != static_cast<uint32_t>(length))
+            text.clear();
+    }
+    FS_FCloseFile(handle);
+    std::string line;
+    const size_t room = kb::kNameChars - std::strlen(kb::kBotTag);
+    auto finish = [&]() {
+        while (!line.empty() && line.back() == ' ')
+            line.pop_back();
+        if (!line.empty() && !kb::WearsBotTag(line.c_str()))
+            names.push_back(line.substr(0, room));
+        line.clear();
+    };
+    for (char c : text)
+    {
+        if (c == '\n' || c == '\r')
+        {
+            finish();
+            continue;
+        }
+        if (c == '\\' || c == '"' || c == ';' || c == '%' || static_cast<unsigned char>(c) < 32)
+            continue;
+        if (c == ' ' && line.empty())
+            continue;
+        line.push_back(c);
+    }
+    finish();
+    return names;
+}
+
+bool NameTaken(const char *name, void *)
+{
+    for (int i = 0; i < sv_maxclients->current.integer; ++i)
+    {
+        const client_t &cl = svs.clients[i];
+        if (cl.header.state != CS_FREE && !I_stricmp(cl.name, name))
+            return true;
+    }
+    return false;
+}
+} // namespace
+
+void Bot_PickName(char *out, size_t size)
+{
+    static uint32_t s_seed = 0;
+    if (!s_seed)
+        s_seed = static_cast<uint32_t>(Sys_Milliseconds()) | 1u;
+    s_seed = s_seed * 1664525u + 1013904223u;
+    const std::vector<std::string> file = NamesFromFile();
+    std::vector<const char *> names;
+    for (const std::string &name : file)
+        names.push_back(name.c_str());
+    if (names.empty())
+        names.assign(kb::kBotNames, kb::kBotNames + kb::kBotNameCount);
+    const int start = static_cast<int>((s_seed >> 8) % names.size());
+    kb::PickBotName(names.data(), static_cast<int>(names.size()), start, NameTaken, nullptr, out, size);
+}
+
+int Bot_Ping(int clientNum)
+{
+    if (!bot_brain || bot_brain->current.integer != 1 || clientNum < 0 || clientNum >= kMaxBotSlots)
+        return -1;
+    const BotSlot &bot = s_slots[clientNum];
+    if (!bot.active || svs.time - bot.lastTime > 1000)
+        return -1;
+    // The brain runs in the server: no network between them.
+    return 0;
+}
+
 bool Bot_UserMove(client_t *cl)
 {
     if (!bot_brain || bot_brain->current.integer != 1)
@@ -1406,6 +1653,21 @@ bool Bot_UserMove(client_t *cl)
     {
         bot.pathCount = 0;
         bot.pathIndex = 0;
+    }
+    // Faster than a player runs: say how (the probe once saw bots cover 330
+    // units in the first second after a round's start).
+    {
+        const float frameMove = Distance2D(ps->origin, bot.lastOrigin);
+        const float speed = std::hypot(ps->velocity[0], ps->velocity[1]);
+        if ((speed > 250.0f || (frameMove > 40.0f && frameMove <= 128.0f)) && svs.time >= bot.nextFastLog && LogOn())
+        {
+            bot.nextFastLog = svs.time + 2000;
+            Com_Printf(CON_CHANNEL_SERVER,
+                       "bots: %d moves fast: %.0f units in %d ms, velocity %.0f, pm_type %d, pm_flags 0x%x, "
+                       "command time %d behind\n",
+                       clientNum, frameMove, svs.time - bot.lastTime, speed, ps->pm_type, ps->pm_flags,
+                       svs.time - ps->commandTime);
+        }
     }
     bot.lastOrigin[0] = ps->origin[0];
     bot.lastOrigin[1] = ps->origin[1];
@@ -1477,7 +1739,13 @@ bool Bot_UserMove(client_t *cl)
         }
         float watch[2] = {0.0f, 0.0f};
         if (focus.kind != kb::FocusKind::None)
+        {
             ViewToward(ps, focus.position, watch);
+            // A sound or a memory straight above or below: a player looks
+            // toward it, not at the ceiling or the floor.
+            if (focus.kind != kb::FocusKind::Seen)
+                watch[0] = std::fmax(-35.0f, std::fmin(35.0f, watch[0]));
+        }
         const float *watching = focus.kind != kb::FocusKind::None ? watch : nullptr;
 
         // A fight: the player it sees, or the one it was fighting and has just
@@ -1488,6 +1756,7 @@ bool Bot_UserMove(client_t *cl)
         if (!fighting && bot.aim.target >= 0)
         {
             bot.aim = kb::AimState();
+            bot.aimEndedAt = svs.time;
             bot.trigger = kb::TriggerState();
         }
         if (alive)

@@ -65,6 +65,15 @@ struct GfxModernFog
     GfxModernFogSpot spots[4];
 };
 
+// The view's sun, for the god rays (light shafts drawn on the screen from
+// the sun past what blocks it): set where the map has a sun.
+struct GfxModernSun
+{
+    bool on;
+    float direction[3]; // towards the sun, world space, unit length
+    float color[3];     // the sun light's colour, display values (may pass 1)
+};
+
 struct GfxModernScene
 {
     float view[4][4];
@@ -81,6 +90,7 @@ struct GfxModernScene
     // the renderer then leaves its own glow out of this view.
     bool glowDrawn;
     GfxModernFog fog;
+    GfxModernSun sun;
 };
 
 // A planar reflection view (r_modern_planar): the scene seen in a mirror
@@ -114,6 +124,11 @@ struct GfxModernLitInputs
     // registers and vertex outputs, which the renderer has checked), or
     // GFX_MODERN_LIT_SHADER_NONE.
     uint16_t shader;
+    // Instead of all the above: an unlit, light-giving surface (a lamp, a
+    // lantern, a lit sign; a material whose technique set is mc_unlit* or
+    // wc_unlit*). Its colour is taken to linear light as an ordinary draw's,
+    // then its brightest parts are made brighter than white, so that it glows.
+    bool emissive;
 };
 
 // The Modern lit shader's code: the family, plus flags for its maps and its
@@ -157,6 +172,23 @@ enum GfxModernLitShader : uint16_t
     // lighting both faces (flag_ with the sun).
     GFX_MODERN_LIT_SHADER_SKIN_PROBE = 0x800,
     GFX_MODERN_LIT_SHADER_TWO_SIDED_SUN = 0x1000,
+    // With no family, SPOT or OMNI: the extra per-light pass
+    // l_<spot|omni>[_flag|_skin][_hsm]_<mode>c0[d0][n0] that effects' lights
+    // (muzzle flashes, explosions) add over the lit scene (light pass facts
+    // 1), with SHADOW (a spot's hsm), NORMAL, DETAIL and the mode; with
+    // TWO_SIDED_SUN, flag_'s light on both faces. The back end's shader adds
+    // it as physical light, in linear light.
+};
+
+// The sun's shadow map as a view's lit surfaces read it (sunShadow): its two
+// partitions' sizes, for the Modern lit shaders' soft filter.
+struct GfxModernSunShadow
+{
+    bool on;              // the view's lit surfaces read the sun's shadow map
+    float texel[2];       // world units across a texel, near and far partitions
+    float depthUnits[2];  // world units per unit of the map's depth, near and far
+    bool sun;             // the view has a sun: sunDir is the direction towards it
+    float sunDir[3];      // world space, unit length (contact shadows)
 };
 
 struct GfxModernHooks
@@ -219,6 +251,22 @@ struct GfxModernHooks
     // (the renderer then draws nothing for the view).
     bool (*planarBegin)(void *user, IDirect3DDevice9 *device, const GfxModernPlanar *planar);
     void (*planarDone)(void *user, IDirect3DDevice9 *device, const GfxModernPlanar *planar);
+    // Re-capturing the world's reflection probes with the back end's own
+    // light (docs/vulkan-modern.md "Reflection probes"): whether the back end
+    // wants it (asked once a map). May be null (no).
+    bool (*probeCaptureWanted)(void *user, IDirect3DDevice9 *device);
+    // Capturing on or off: while on, the back end reads each scene's light
+    // back (linear, before its bloom, exposure and tonemap); probeCaptureRead
+    // gives a rectangle of the last one (in pixels of the scene's target) as
+    // rgb floats, rows from the top, once the GPU is done. False when none was
+    // read back. Both may be null when probeCaptureWanted is.
+    void (*probeCapture)(void *user, IDirect3DDevice9 *device, bool on);
+    bool (*probeCaptureRead)(void *user, IDirect3DDevice9 *device, int x, int y, int width, int height, float *rgb);
+    // A view's lit surfaces come next, and this is the sun's shadow map they
+    // read, or that they read none, and where the sun is. Called before the
+    // view's sceneDepth, so that what that builds can use the sun. May be
+    // null.
+    void (*sunShadow)(void *user, IDirect3DDevice9 *device, const GfxModernSunShadow *shadow);
 };
 
 // Null removes them. Called while no frame is being built (as the renderer

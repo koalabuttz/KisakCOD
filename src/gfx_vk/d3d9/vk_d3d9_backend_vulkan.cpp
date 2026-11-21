@@ -12,6 +12,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
+#include <mutex>
+#include <string>
 #include <vector>
 
 namespace gfx_vk::d3d9
@@ -56,6 +59,22 @@ struct SlowFrame
     FrameGpuTimes gpu{};
 };
 constexpr uint32_t kSlowFrames = 3;
+// The extra light passes' (muzzle flashes, explosions) strength as physical
+// light: brighter than the game's colours alone, which were set for light
+// added in display values (David, 2026-11-15: "the physical light with the
+// flash made brighter").
+constexpr float kLightPassStrength = 2.0f;
+// How much brighter than white the white parts of lamps, lanterns and lit
+// signs (unlit materials) are made, so that they glow and bloom as the light
+// sources they are (David, 2026-11-15: the maps should look lit by their own
+// lights).
+constexpr float kEmissiveStrength = 4.0f;
+// How many times over the game's additive layers (blend ONE, ONE: light pools
+// on floors, glows) add their colour in linear light. They were made for
+// colours added in display values, where they add more; the same strength as
+// the extra light passes' (night surfaces bisect 1, 2026-11-15: a lamp-lit
+// shop floor on mp_carentan at about half of Legacy's light).
+constexpr float kAdditiveStrength = 2.0f;
 } // namespace
 
 struct Backend
@@ -134,6 +153,20 @@ struct Backend
     // Water's (water_l_sun) shader of ours, unless KISAK_VK_MODERN_WATER=0
     // (at start-up only).
     bool waterShaderWanted = true;
+    // The extra light passes' (l_) shader of ours, unless
+    // KISAK_VK_MODERN_LIGHT_PASS=0, and its strength as physical light
+    // (KISAK_VK_MODERN_LIGHT_PASS_STRENGTH; at start-up only).
+    bool lightPassWanted = true;
+    float lightPassStrength = kLightPassStrength;
+    // Lamps and lit signs (ModernLitInputs::emissive) made brighter than
+    // white, unless KISAK_VK_MODERN_EMISSIVE=0, by
+    // KISAK_VK_MODERN_EMISSIVE_STRENGTH (at start-up only).
+    bool emissiveWanted = true;
+    float emissiveStrength = kEmissiveStrength;
+    uint64_t emissiveChanges = 0, emissiveChangesBase = 0;
+    // Additive layers' strength in linear light
+    // (KISAK_VK_MODERN_ADDITIVE_STRENGTH; 1 adds them as they are).
+    float additiveStrength = kAdditiveStrength;
     float sunStrength = 1.0f;
     float skyStrength = 1.0f;
     uint64_t litShaderChanges = 0, litShaderChangesBase = 0;
@@ -230,6 +263,26 @@ struct Backend
     modern::FogParams fogParams{};
     uint32_t fogFrame = 0;
     modern::FogStats fogBase{};
+    // God rays (vk_modern.h DrawRays): shafts of the sky's light from the sun
+    // on the screen, added to the linear-light scene after the fog, before
+    // its anti-aliasing, where the view has a sun. Off unless switched on
+    // (r_modernGodRays, KISAK_VK_MODERN_GOD_RAYS=1); their strength
+    // (KISAK_VK_MODERN_GOD_RAYS_STRENGTH live; _SAMPLES start-up only); the
+    // scenes counted at the last reset.
+    bool raysWanted = false;
+    bool raysFailed = false;
+    modern::Rays *rays = nullptr;
+    modern::RaysParams raysParams{};
+    uint32_t raysFrame = 0;
+    modern::RaysStats raysBase{};
+    // The last Modern scene's fog and sun as the engine gave them, for the
+    // statistics: what each map sets, to choose where the air could be
+    // thicker.
+    bool lastSceneSeen = false;
+    bool lastFogOn = false;
+    float lastFogStart = 0.0f, lastFogDensity = 0.0f, lastFogColor[3] = {};
+    bool lastSunOn = false;
+    float lastSunColor[3] = {}, lastSunDirection[3] = {};
     // Screen-space reflections (vk_modern.h TraceReflections), traced right
     // after the normals buffer from the prepass depth and last scene's
     // anti-aliased linear-light colour: wanted when something reads it (our
@@ -252,10 +305,50 @@ struct Backend
     // counts since the device was made (a world loads before statistics are
     // started): filtered, left as they are (not 8-bit colour, too small),
     // and the time taken.
+    // Soft sun shadows (docs/vulkan-modern.md "Soft sun shadows"): wanted
+    // with our lit shaders unless switched on or off outright, and the sun's
+    // apparent size in degrees; the scenes that used them, and the shadow
+    // parameters' frame count, which turns the filter's discs.
+    bool softShadowsWanted = false;
+    float shadowSoftness = 1.5f;
+    uint64_t softShadowScenes = 0, softShadowScenesBase = 0;
+    // Soft spot-light shadows (docs/vulkan-modern.md "Soft spot-light
+    // shadows"), wanted as the sun's, and the lights' size in world units;
+    // the scenes that drew a shadowed spot or omni light's surfaces with our
+    // lit shaders while they were on (not every scene with the switch on: a
+    // view with no shadowed lamp in it counts none).
+    bool softSpotShadowsWanted = false;
+    float spotLightSize = 4.0f;
+    uint64_t softSpotScenes = 0, softSpotScenesBase = 0;
+    bool softSpotThisScene = false;
+    uint32_t shadowFrame = 0;
+    // Contact shadows (docs/vulkan-modern.md "Contact shadows"): wanted with
+    // our lit shaders unless switched on or off outright, which makes the
+    // normals buffer wanted too; traced into the green of the ambient
+    // occlusion's texture (made for them when the occlusion is off) right
+    // after the occlusion. Their parameters, the sun's direction from the
+    // view's sunShadow (before its scene depth; contactSun false: no sun),
+    // and whether this scene has them.
+    bool contactWanted = false;
+    modern::ContactParams contactParams{};
+    bool contactSun = false;
+    bool sceneContact = false;
+    uint32_t contactFrame = 0;
     bool probesWanted = false;
     uint32_t probesFiltered = 0;
     uint32_t probesLeft = 0;
     double probesMs = 0.0;
+    // Re-capturing the probes with the Modern path's own light (on with the
+    // filter above, off with KISAK_VK_MODERN_PROBES_CAPTURE=0): while the
+    // renderer captures (BackendModernProbeCapture), each scene's linear-light
+    // image is read back before its bloom, exposure and tonemap, for
+    // BackendModernProbeCaptureRead. Counts since the device was made: scenes
+    // read back, and rectangles taken from them.
+    bool probeCaptureWanted = false;
+    bool probeCapturing = false;
+    Readback *probeCaptureReadback = nullptr;
+    uint32_t probeCaptureScenes = 0;
+    uint32_t probeCaptureReads = 0;
     // KISAK_VK_MODERN_DEBUG=velocity: the velocity debug view over each
     // anti-aliased scene (docs/vulkan-modern.md), made at its first use.
     // velocity-all: the same, with every surface that moves on its own drawn
@@ -317,7 +410,11 @@ struct Backend
     {
         bool bloom = true, exposure = true, velocity = true;
         bool shaders = true, modelShaders = true, noSunShaders = true, lightShaders = true;
-        int ao = -1, reflections = -1, normals = -1, fog = -1;
+        int ao = -1, reflections = -1, normals = -1, fog = -1, rays = -1, softShadows = -1, contactShadows = -1,
+            softSpotShadows = -1;
+        float shadowSoftness = 1.5f;
+        float spotLightSize = 4.0f;
+        float contactLength = 12.0f;
         ModernDebugView debug = ModernDebugNone;
         modern::TonemapCurve curve = modern::TonemapCurve::Neutral;
         float sunStrength = 1.0f, skyStrength = 1.0f;
@@ -325,6 +422,7 @@ struct Backend
         modern::AoParams aoParams{};
         modern::ReflectionParams reflectionParams{};
         modern::FogParams fogParams{};
+        modern::RaysParams raysParams{};
     } modernStart;
     ModernTuning modernTuning{};
 };
@@ -448,9 +546,27 @@ void LogSlowFrames(const Backend &backend)
 
 namespace
 {
+// Start-up switches the program set in place of the environment
+// (SetStartSetting): looked up before the environment.
+std::mutex s_startSettingsLock;
+std::map<std::string, std::string> s_startSettings;
+
+bool StartSetting(const char *name, std::string &out)
+{
+    std::lock_guard<std::mutex> lock(s_startSettingsLock);
+    const auto found = s_startSettings.find(name);
+    if (found == s_startSettings.end())
+        return false;
+    out = found->second;
+    return true;
+}
+
 // Whether the environment variable is set to "0".
 bool EnvIs(const char *name, const char *value)
 {
+    std::string set;
+    if (StartSetting(name, set))
+        return set == value;
 #if defined(_MSC_VER)
     char *text = nullptr;
     size_t length = 0;
@@ -468,6 +584,9 @@ bool EnvIsZero(const char *name) { return EnvIs(name, "0"); }
 // The variable's text, empty when unset.
 std::string EnvText(const char *name)
 {
+    std::string set;
+    if (StartSetting(name, set))
+        return set;
 #if defined(_MSC_VER)
     char *text = nullptr;
     size_t length = 0;
@@ -553,15 +672,25 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
     backend->aoWanted = ao == 1 || (ao < 0 && (backend->debugAo || ours));
     const int reflections = tuning.reflections >= 0 ? tuning.reflections : start.reflections;
     backend->reflectionsWanted = reflections == 1 || (reflections < 0 && (backend->debugReflections || ours));
+    const int contact = tuning.contactShadows >= 0 ? tuning.contactShadows : start.contactShadows;
+    backend->contactWanted = contact == 1 || (contact < 0 && ours);
     backend->normalsWanted = start.normals != 0 && (start.normals == 1 || backend->debugNormals || backend->aoWanted
-                                                    || backend->reflectionsWanted || backend->planarWanted);
+                                                    || backend->reflectionsWanted || backend->planarWanted
+                                                    || backend->contactWanted);
+    const int softShadows = tuning.softShadows >= 0 ? tuning.softShadows : start.softShadows;
+    backend->softShadowsWanted = softShadows == 1 || (softShadows < 0 && ours);
+    const int softSpot = tuning.softSpotShadows >= 0 ? tuning.softSpotShadows : start.softSpotShadows;
+    backend->softSpotShadowsWanted = softSpot == 1 || (softSpot < 0 && ours);
+    if (!backend->softShadowsWanted && !backend->softSpotShadowsWanted && backend->legacy)
+        lg::SetModernShadow(backend->legacy, nullptr);
     if (backend->legacy)
     {
         if (!backend->aoWanted || !backend->normalsWanted)
-        {
             backend->sceneAo = false;
+        if (!backend->contactWanted || !backend->normalsWanted)
+            backend->sceneContact = false;
+        if (!backend->sceneAo && !backend->sceneContact)
             lg::SetModernAmbientOcclusion(backend->legacy, nullptr);
-        }
         if (!backend->reflectionsWanted || !backend->normalsWanted)
         {
             backend->sceneReflections = nullptr;
@@ -610,6 +739,18 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
                                                                                  : start.fogParams.scatter;
     fogParams.spotShare = number(tuning.fogSpots, start.fogParams.spotShare, 0.0f, 4.0f, true);
     fogParams.froxels = tuning.fogFroxels >= 0 ? tuning.fogFroxels == 1 : start.fogParams.froxels;
+    // God rays are off unless switched on.
+    const int rays = tuning.godRays >= 0 ? tuning.godRays : start.rays;
+    backend->raysWanted = backend->linearWanted && rays == 1;
+    modern::RaysParams &raysParams = backend->raysParams;
+    raysParams = start.raysParams;
+    raysParams.strength = number(tuning.godRaysStrength, start.raysParams.strength, 0.0f, 8.0f, true);
+    raysParams.spread = number(tuning.godRaysSpread, start.raysParams.spread, 1.0f, 512.0f, true);
+    raysParams.threshold = number(tuning.godRaysThreshold, start.raysParams.threshold, 0.0f, 16.0f, true);
+    raysParams.sky = number(tuning.godRaysSky, start.raysParams.sky, 0.0f, 1.0f, true);
+    backend->shadowSoftness = number(tuning.shadowSoftness, start.shadowSoftness, 0.0f, 20.0f, false);
+    backend->contactParams.length = number(tuning.contactLength, start.contactLength, 0.0f, 256.0f, false);
+    backend->spotLightSize = number(tuning.spotLightSize, start.spotLightSize, 0.0f, 64.0f, false);
 
     backend->tonemapCurve = tuning.tonemap >= static_cast<int>(modern::TonemapCurve::Clamp)
                                     && tuning.tonemap <= static_cast<int>(modern::TonemapCurve::Aces)
@@ -624,7 +765,9 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
             "vulkan d3d9: modern: switches now: bloom %s, exposure %s (key %.3f), velocity %s, our shaders %s "
             "(models %s, without the sun %s, lights %s; sun %.2f, sky %.2f), ambient occlusion %s (radius %.1f, power %.2f, "
             "thickness %.1f, grazing %.2f, floor %.2f, edge %.3f%s), reflections %s (distance %.0f, thickness %.1f), normals %s, "
-            "volumetric fog %s (%s, sun %.2f, scatter %.2f, spot lights %.2f), tonemap %s, debug view %s",
+            "volumetric fog %s (%s, sun %.2f, scatter %.2f, spot lights %.2f), god rays %s (strength %.2f, "
+            "spread %.0f, threshold %.2f, sky %.2f), soft shadows %s (sun %.2f degrees), "
+            "soft spot-light shadows %s (lights %.1f units), contact shadows %s (length %.1f), tonemap %s, debug view %s",
             onOff(backend->bloomWanted), onOff(backend->exposureWanted), backend->exposureParams.key,
             onOff(backend->velocityWanted), onOff(backend->shadersWanted), onOff(backend->modelShadersWanted),
             onOff(backend->noSunShadersWanted), onOff(backend->lightShadersWanted), backend->sunStrength, backend->skyStrength, onOff(backend->aoWanted),
@@ -632,9 +775,22 @@ void ApplyModernTuning(Backend *backend, const ModernTuning &tuning, bool log = 
             aoParams.half ? ", half resolution" : "",
             onOff(backend->reflectionsWanted), reflectionParams.maxDistance, reflectionParams.thickness,
             onOff(backend->normalsWanted), onOff(backend->fogWanted), fogParams.froxels ? "froxels" : "march",
-            fogParams.sunShare, fogParams.scatter, fogParams.spotShare, modern::CurveName(backend->tonemapCurve), DebugViewName(view));
+            fogParams.sunShare, fogParams.scatter, fogParams.spotShare, onOff(backend->raysWanted), raysParams.strength,
+            raysParams.spread, raysParams.threshold, raysParams.sky, onOff(backend->softShadowsWanted),
+            backend->shadowSoftness, onOff(backend->softSpotShadowsWanted), backend->spotLightSize,
+            onOff(backend->contactWanted), backend->contactParams.length, modern::CurveName(backend->tonemapCurve),
+            DebugViewName(view));
 }
 } // namespace
+
+void SetStartSetting(const char *name, const char *value)
+{
+    std::lock_guard<std::mutex> lock(s_startSettingsLock);
+    if (!value || !*value)
+        s_startSettings.erase(name);
+    else
+        s_startSettings[name] = value;
+}
 
 Backend *OpenBackend(const BackendDesc &desc, std::string &error)
 {
@@ -754,15 +910,55 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
             fog.march = length;
         fog.half = !EnvIsZero("KISAK_VK_MODERN_FOG_HALF");
     }
+    start.rays = onOff("KISAK_VK_MODERN_GOD_RAYS");
+    {
+        modern::RaysParams &rays = start.raysParams;
+        const std::string strength = EnvText("KISAK_VK_MODERN_GOD_RAYS_STRENGTH");
+        const float value = strength.empty() ? -1.0f : std::strtof(strength.c_str(), nullptr);
+        if (value >= 0.0f && value <= 8.0f)
+            rays.strength = value;
+        const std::string samples = EnvText("KISAK_VK_MODERN_GOD_RAYS_SAMPLES");
+        const long count = samples.empty() ? 0 : std::strtol(samples.c_str(), nullptr, 10);
+        if (count >= 8 && count <= 128)
+            rays.samples = static_cast<uint32_t>(count);
+        const auto number = [](const char *name, float low, float high, float &out) {
+            const std::string text = EnvText(name);
+            const float read = text.empty() ? -1.0f : std::strtof(text.c_str(), nullptr);
+            if (read >= low && read <= high)
+                out = read;
+        };
+        number("KISAK_VK_MODERN_GOD_RAYS_SPREAD", 1.0f, 512.0f, rays.spread);
+        number("KISAK_VK_MODERN_GOD_RAYS_THRESHOLD", 0.0f, 16.0f, rays.threshold);
+        number("KISAK_VK_MODERN_GOD_RAYS_SKY", 0.0f, 1.0f, rays.sky);
+    }
     // Reflection probes are filtered as their textures load, so this one
     // stays start-up only.
     backend->probesWanted = !EnvIsZero("KISAK_VK_MODERN_PROBES")
         && (EnvIs("KISAK_VK_MODERN_PROBES", "1") || backend->linearWanted);
+    backend->probeCaptureWanted =
+        backend->probesWanted && backend->linearWanted && !EnvIsZero("KISAK_VK_MODERN_PROBES_CAPTURE");
     // The planar view and its debug view are start-up only, as the probes.
     backend->debugPlanar = EnvIs("KISAK_VK_MODERN_DEBUG", "planar");
     backend->debugCompute = EnvIs("KISAK_VK_MODERN_DEBUG", "compute");
     backend->debugPlanarRead = EnvIs("KISAK_VK_MODERN_DEBUG", "planar-read");
     backend->waterShaderWanted = !EnvIsZero("KISAK_VK_MODERN_WATER");
+    backend->lightPassWanted = !EnvIsZero("KISAK_VK_MODERN_LIGHT_PASS");
+    {
+        const std::string strength = EnvText("KISAK_VK_MODERN_LIGHT_PASS_STRENGTH");
+        const float value = strength.empty() ? -1.0f : std::strtof(strength.c_str(), nullptr);
+        backend->lightPassStrength = value >= 0.0f ? value : kLightPassStrength;
+    }
+    backend->emissiveWanted = !EnvIsZero("KISAK_VK_MODERN_EMISSIVE");
+    {
+        const std::string strength = EnvText("KISAK_VK_MODERN_EMISSIVE_STRENGTH");
+        const float value = strength.empty() ? -1.0f : std::strtof(strength.c_str(), nullptr);
+        backend->emissiveStrength = value >= 1.0f ? std::min(value, 63.75f) : kEmissiveStrength;
+    }
+    {
+        const std::string strength = EnvText("KISAK_VK_MODERN_ADDITIVE_STRENGTH");
+        const float value = strength.empty() ? -1.0f : std::strtof(strength.c_str(), nullptr);
+        backend->additiveStrength = value >= 0.0f ? value : kAdditiveStrength;
+    }
     backend->planarWanted = backend->linearWanted && !EnvIsZero("KISAK_VK_MODERN_PLANAR")
                             && (EnvIs("KISAK_VK_MODERN_PLANAR", "1") || backend->debugPlanar
                                 || backend->debugPlanarRead);
@@ -790,6 +986,33 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     // The normals buffer is built for what reads it; KISAK_VK_MODERN_NORMALS=0
     // keeps it (and so ambient occlusion and reflections) off whatever asks.
     start.normals = onOff("KISAK_VK_MODERN_NORMALS");
+    // Soft sun shadows with our lit shaders, unless this says otherwise; the
+    // sun's apparent size in degrees (bigger is softer).
+    start.softShadows = onOff("KISAK_VK_MODERN_SOFT_SHADOWS");
+    {
+        const std::string softness = EnvText("KISAK_VK_MODERN_SHADOW_SOFTNESS");
+        const float value = softness.empty() ? 0.0f : std::strtof(softness.c_str(), nullptr);
+        if (value > 0.0f && value <= 20.0f)
+            start.shadowSoftness = value;
+    }
+    // Soft spot-light shadows with our lit shaders, unless this says
+    // otherwise; the lights' size in world units.
+    start.softSpotShadows = onOff("KISAK_VK_MODERN_SOFT_SPOT_SHADOWS");
+    {
+        const std::string size = EnvText("KISAK_VK_MODERN_SPOT_LIGHT_SIZE");
+        const float value = size.empty() ? 0.0f : std::strtof(size.c_str(), nullptr);
+        if (value > 0.0f && value <= 64.0f)
+            start.spotLightSize = value;
+    }
+    // Contact shadows with our lit shaders, unless this says otherwise; how
+    // far towards the sun they look, in world units.
+    start.contactShadows = onOff("KISAK_VK_MODERN_CONTACT_SHADOWS");
+    {
+        const std::string length = EnvText("KISAK_VK_MODERN_CONTACT_LENGTH");
+        const float value = length.empty() ? 0.0f : std::strtof(length.c_str(), nullptr);
+        if (value > 0.0f && value <= 256.0f)
+            start.contactLength = value;
+    }
     ApplyModernTuning(backend, backend->modernTuning);
     if (!h.windowSystem || !h.windowSystem(h.user, desc.window, backend->windowSystem))
     {
@@ -802,6 +1025,7 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     coreDesc.validation = h.validation;
     coreDesc.deviceIndex = h.deviceIndex;
     coreDesc.vsync = desc.vsync;
+    coreDesc.swapInterval = desc.swapInterval;
     coreDesc.pipelineCachePath = h.pipelineCachePath;
     // Vulkan calls on a thread of the core's own, off the render thread (as
     // DXVK does); KISAK_VK_RECORD_THREAD=0 turns it off.
@@ -845,6 +1069,9 @@ Backend *OpenBackend(const BackendDesc &desc, std::string &error)
     }
     backend->ownFeed = lg::GetGpuFeed(backend->legacy);
     lg::SetModernLitStrengths(backend->legacy, backend->sunStrength, backend->skyStrength);
+    lg::SetModernLightPass(backend->legacy, backend->lightPassStrength);
+    lg::SetModernEmissive(backend->legacy, backend->emissiveStrength);
+    lg::SetModernAdditive(backend->legacy, backend->linearWanted ? backend->additiveStrength : 1.0f);
     return backend;
 }
 
@@ -1035,11 +1262,20 @@ void BackendLogStats(Backend *backend, bool reset)
         // modules built as them (and that could not be).
         if (backend->shadersWanted)
             HostLog(h, "vulkan d3d9: modern: lit shaders of our own: %.1f changes to one each scene, %u pixel modules "
-                       "built as one (%u could not be), sun strength %.2f, sky strength %.2f",
+                       "built as one (%u could not be), sun strength %.2f, sky strength %.2f, light pass %s at %.2f, "
+                       "additive layers at %.2f",
                     double(backend->litShaderChanges - backend->litShaderChangesBase) / double(scenes),
                     stats.modernLitModules - was.modernLitModules, stats.modernLitRefused - was.modernLitRefused,
-                    backend->sunStrength, backend->skyStrength);
+                    backend->sunStrength, backend->skyStrength, backend->lightPassWanted ? "on" : "off",
+                    backend->lightPassStrength, backend->additiveStrength);
     }
+    // Lamps and lit signs made brighter than white: how often a scene in
+    // linear light switched to drawing one.
+    if (backend->litWanted && backend->linearScenes != backend->linearScenesBase)
+        HostLog(h, "vulkan d3d9: modern: lamps and lit signs: %s at %.2f, %.2f changes to one each scene",
+                backend->emissiveWanted ? "on" : "off", backend->emissiveStrength,
+                double(backend->emissiveChanges - backend->emissiveChangesBase)
+                    / double(backend->linearScenes - backend->linearScenesBase));
     // Velocity: the surfaces drawn again with their own motion, and the
     // GPU time of that pass.
     if (backend->velocity || backend->velocityRemade)
@@ -1073,14 +1309,32 @@ void BackendLogStats(Backend *backend, bool reset)
     // Ambient occlusion: the scenes it was built for and its two passes' GPU time.
     if (backend->ao)
     {
+        // Two passes: the trace (gtao.frag, "modern ao trace") and the blur
+        // (ao_blur.frag, "modern ao").
+        const PassTimings trace = PassTimingsFor(backend->core, "modern ao trace");
         const PassTimings pass = PassTimingsFor(backend->core, "modern ao");
+        const double traceMs = trace.supported ? average(trace) : 0.0;
+        const double blurMs = pass.supported ? average(pass) : 0.0;
         const uint64_t scenes = modern::Stats(backend->ao).builds - backend->aoBase.builds;
         HostLog(h, "vulkan d3d9: modern: %llu scenes with ambient occlusion (radius %.1f, thickness %.1f, "
                    "power %.2f, floor %.2f, edge %.2f%s), %.3f ms GPU each",
                 static_cast<unsigned long long>(scenes), backend->aoParams.radius, backend->aoParams.thickness,
                 backend->aoParams.power, backend->aoParams.floor, backend->aoParams.edge,
-                backend->aoParams.half ? ", half resolution" : "",
-                pass.supported ? 2.0 * average(pass) : 0.0);
+                backend->aoParams.half ? ", half resolution" : "", traceMs + blurMs);
+        if (scenes)
+            HostLog(h, "vulkan d3d9: modern: ambient occlusion passes: trace %.3f ms, blur %.3f ms GPU each", traceMs,
+                    blurMs);
+        // Contact shadows: the scenes traced and their pass's GPU time.
+        const uint64_t contacts = modern::Stats(backend->ao).contacts - backend->aoBase.contacts;
+        if (contacts)
+        {
+            const PassTimings contactPass = PassTimingsFor(backend->core, "modern contact shadows");
+            HostLog(h, "vulkan d3d9: modern: %llu scenes with contact shadows (length %.1f, thickness %.1f, "
+                       "strength %.2f), %.3f ms GPU each",
+                    static_cast<unsigned long long>(contacts), backend->contactParams.length,
+                    backend->contactParams.thickness, backend->contactParams.strength,
+                    contactPass.supported ? average(contactPass) : 0.0);
+        }
     }
     // Screen-space reflections: the scenes traced, the levels of the last,
     // the trace pass's GPU time (the levels are blits, not timed).
@@ -1119,12 +1373,47 @@ void BackendLogStats(Backend *backend, bool reset)
                 backend->fogParams.march, backend->fogParams.half ? ", half resolution" : "",
                 pass.supported ? each : 0.0);
     }
+    // God rays: the scenes they were drawn over (and those whose sun was out
+    // of the view) and their three passes' GPU time per scene drawn.
+    if (backend->rays)
+    {
+        const modern::RaysStats rays = modern::Stats(backend->rays);
+        const PassTimings pass = PassTimingsFor(backend->core, "modern god rays");
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with god rays (%llu with the sun out of view; strength %.2f, "
+                   "spread %.0f, threshold %.2f, sky %.2f, %u samples), %.3f ms GPU each",
+                static_cast<unsigned long long>(rays.scenes - backend->raysBase.scenes),
+                static_cast<unsigned long long>(rays.behind - backend->raysBase.behind), backend->raysParams.strength,
+                backend->raysParams.spread, backend->raysParams.threshold, backend->raysParams.sky,
+                backend->raysParams.samples, pass.supported ? 3.0 * average(pass) : 0.0);
+    }
+    // The last scene's fog and sun, as the map sets them.
+    if (backend->lastSceneSeen)
+    {
+        if (backend->lastFogOn && backend->lastFogDensity > 0.0f)
+            HostLog(h, "vulkan d3d9: modern: the last scene's fog: start %.0f, density %.7f (half the light gone "
+                       "%.0f units out), colour %.3f %.3f %.3f",
+                    backend->lastFogStart, backend->lastFogDensity,
+                    backend->lastFogStart + 1.0f / backend->lastFogDensity, backend->lastFogColor[0],
+                    backend->lastFogColor[1], backend->lastFogColor[2]);
+        else
+            HostLog(h, "vulkan d3d9: modern: the last scene's fog: none");
+        if (backend->lastSunOn)
+            HostLog(h, "vulkan d3d9: modern: the last scene's sun: colour %.3f %.3f %.3f, towards %.3f %.3f %.3f",
+                    backend->lastSunColor[0], backend->lastSunColor[1], backend->lastSunColor[2],
+                    backend->lastSunDirection[0], backend->lastSunDirection[1], backend->lastSunDirection[2]);
+        else
+            HostLog(h, "vulkan d3d9: modern: the last scene's sun: none");
+    }
     // Reflection probes: filtered as the world loaded, since the device was made.
     if (backend->probesFiltered || backend->probesLeft)
         HostLog(h, "vulkan d3d9: modern: %u reflection probes filtered by gloss in linear light (%u left as they "
                    "are), %.1f ms each",
                 backend->probesFiltered, backend->probesLeft,
                 backend->probesFiltered ? backend->probesMs / double(backend->probesFiltered) : 0.0);
+    if (backend->probeCaptureScenes)
+        HostLog(h, "vulkan d3d9: modern: %u scenes read back in linear light to capture reflection probes (%u "
+                   "faces taken)",
+                backend->probeCaptureScenes, backend->probeCaptureReads);
     // Planar reflections: the views drawn into the planar image, and its size.
     if (backend->planarViews > backend->planarViewsBase)
         HostLog(h, "vulkan d3d9: modern: %llu planar reflection views (%ux%u)",
@@ -1133,6 +1422,16 @@ void BackendLogStats(Backend *backend, bool reset)
     if (backend->planarReads > backend->planarReadsBase)
         HostLog(h, "vulkan d3d9: modern: %llu scenes read the planar reflection",
                 static_cast<unsigned long long>(backend->planarReads - backend->planarReadsBase));
+    // Soft sun shadows: the scenes whose lit surfaces filtered the sun's
+    // shadow map with them (their cost is in the lit passes' own time).
+    if (backend->softShadowScenes > backend->softShadowScenesBase)
+        HostLog(h, "vulkan d3d9: modern: %llu scenes with soft sun shadows (sun %.2f degrees)",
+                static_cast<unsigned long long>(backend->softShadowScenes - backend->softShadowScenesBase),
+                backend->shadowSoftness);
+    if (backend->softSpotScenes > backend->softSpotScenesBase)
+        HostLog(h, "vulkan d3d9: modern: %llu scenes drew soft spot-light shadows (lights %.1f units)",
+                static_cast<unsigned long long>(backend->softSpotScenes - backend->softSpotScenesBase),
+                backend->spotLightSize);
     // Bloom: the scenes it ran for in place of the glow, the passes of each,
     // and their GPU time per scene.
     if (backend->bloom)
@@ -1170,17 +1469,21 @@ void BackendLogStats(Backend *backend, bool reset)
         backend->normalsBase = modern::Stats(backend->normals);
         backend->aoBase = modern::Stats(backend->ao);
         backend->fogBase = modern::Stats(backend->fog);
+        backend->raysBase = modern::Stats(backend->rays);
         backend->reflectionsBase = modern::Stats(backend->reflections);
         backend->keptBase = modern::Stats(backend->kept);
         backend->linearScenesBase = backend->linearScenes;
         backend->planarViewsBase = backend->planarViews;
         backend->planarReadsBase = backend->planarReads;
+        backend->softShadowScenesBase = backend->softShadowScenes;
+        backend->softSpotScenesBase = backend->softSpotScenes;
         modern::ResetStats(backend->exposure);
         if (backend->exposure)
             backend->exposureMsBase = PassTimingsFor(backend->core, "modern exposure").totalMs;
         backend->litScenesBase = backend->litScenes;
         backend->litChangesBase = backend->litChanges;
         backend->litShaderChangesBase = backend->litShaderChanges;
+        backend->emissiveChangesBase = backend->emissiveChanges;
         backend->linearCopiesBase = backend->linearCopies;
         backend->statsBase = stats;
         backend->coreBase = core;
@@ -1222,6 +1525,11 @@ void CloseBackend(Backend *backend)
     {
         modern::DestroyFog(backend->core, backend->fog);
         backend->fog = nullptr;
+    }
+    if (backend->rays)
+    {
+        modern::DestroyRays(backend->core, backend->rays);
+        backend->rays = nullptr;
     }
     if (backend->legacy && backend->aoTexture)
     {
@@ -1271,6 +1579,12 @@ void CloseBackend(Backend *backend)
         modern::DestroyTonemap(backend->core, backend->tonemap);
         backend->tonemap = nullptr;
     }
+    if (backend->probeCaptureReadback)
+    {
+        DestroyReadback(backend->core, backend->probeCaptureReadback);
+        backend->probeCaptureReadback = nullptr;
+    }
+    backend->probeCapturing = false;
     if (backend->legacy && backend->planarColor)
         lg::DestroyTexture(backend->legacy, backend->planarColor);
     if (backend->legacy && backend->planarDepth)
@@ -1370,6 +1684,12 @@ bool BackendWindowSize(const Backend *backend, uint32_t &width, uint32_t &height
         return false;
     backend->windowSystem.getPixelSize(backend->windowSystem.user, &width, &height);
     return true;
+}
+
+void BackendSetSwapInterval(Backend *backend, uint32_t interval)
+{
+    if (backend && backend->core)
+        SetSwapInterval(backend->core, interval);
 }
 
 void BackendCounters(const Backend *backend, DeviceCounters &out)
@@ -1572,6 +1892,7 @@ lg::Surface *BackendModernSceneTarget(Backend *backend, lg::Surface *backBuffer,
     }
     ++backend->linearScenes;
     backend->litThisScene = false;
+    backend->softSpotThisScene = false;
     result = ModernResult::Done;
     return backend->linearSceneSurface;
 }
@@ -1584,9 +1905,13 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
     if ((lg::ModernLitModel(shader) && !backend->modelShadersWanted)
         || ((shader & lg::ModernLitFamilyMask) == lg::ModernLitNoSun && !backend->noSunShadersWanted)
         || (lg::ModernLitPointLight(shader) && !backend->lightShadersWanted)
-        || (shader == lg::ModernLitWater && !backend->waterShaderWanted))
+        || (shader == lg::ModernLitWater && !backend->waterShaderWanted)
+        || (lg::ModernLitLightPass(shader) && !backend->lightPassWanted))
         shader = lg::ModernLitNone;
-    if (inputs && backend->linearScene && !backend->linearFailed)
+    const bool emissive = inputs && !inputs->overWhite && inputs->emissive;
+    if (emissive && backend->emissiveWanted && backend->linearScene && !backend->linearFailed)
+        ++backend->emissiveChanges;
+    else if (inputs && !emissive && backend->linearScene && !backend->linearFailed)
     {
         ++backend->litChanges;
         if (inputs->overWhite && shader)
@@ -1595,10 +1920,16 @@ void BackendModernLitInputs(Backend *backend, const ModernLitInputs *inputs)
         if (!backend->litThisScene)
             ++backend->litScenes;
         backend->litThisScene = true;
+        if (inputs->overWhite && backend->softSpotShadowsWanted && lg::ModernLitPointLight(shader)
+            && lg::ModernLitShadowed(shader) && !backend->softSpotThisScene)
+        {
+            ++backend->softSpotScenes;
+            backend->softSpotThisScene = true;
+        }
     }
     lg::SetLinearInputs(backend->legacy, inputs ? inputs->constants : 0, inputs ? inputs->samplers : 0,
                         inputs ? inputs->doubled : 0, inputs && inputs->colorInput, inputs && inputs->overWhite,
-                        shader);
+                        shader, emissive && backend->emissiveWanted);
 }
 
 bool BackendModernEffectsOnDisplay(Backend *backend) { return backend && !backend->effectsInLinear; }
@@ -1834,8 +2165,10 @@ void DrawAoDebug(Backend *backend, Image *ao, Image *target, const VkRect2D &are
 }
 
 // The reflections debug view over a finished scene
-// (KISAK_VK_MODERN_DEBUG=reflections).
-void DrawReflectionsDebug(Backend *backend, Image *reflections, Image *target, const VkRect2D &area)
+// (KISAK_VK_MODERN_DEBUG=reflections); with `plain`, an image shown as it is
+// (the planar view's, KISAK_VK_MODERN_DEBUG=planar).
+void DrawReflectionsDebug(Backend *backend, Image *reflections, Image *target, const VkRect2D &area,
+                          bool plain = false)
 {
     if (backend->debugFailed || !reflections || !target)
         return;
@@ -1850,7 +2183,10 @@ void DrawReflectionsDebug(Backend *backend, Image *reflections, Image *target, c
             return;
         }
     }
-    if (!modern::DrawReflectionsDebug(backend->core, backend->debug, reflections, target, area, error))
+    const bool drawn = plain ? modern::DrawImageDebug(backend->core, backend->debug, reflections, target, area, error)
+                             : modern::DrawReflectionsDebug(backend->core, backend->debug, reflections, target, area,
+                                                            error);
+    if (!drawn)
         LogModernOnce(backend, "the reflections debug view is not drawn", error);
 }
 
@@ -1867,24 +2203,31 @@ modern::SceneView SceneViewOf(const ModernSceneView &view)
 
 namespace
 {
-// The scene's ambient occlusion into the back end's texture (made, or made
-// again, at the depth's size), right after its normals; sceneAo tells
-// whether it is there. Off or failing, the reason is logged once.
-void SceneAmbientOcclusion(Backend *backend, Image *depth, const modern::SceneView &scene)
+// The ambient occlusion module (pipelines for the occlusion and the contact
+// shadows), made at its first use; false (logged once, and aoFailed) when it
+// cannot be.
+bool EnsureAoModule(Backend *backend)
 {
-    if (!backend->aoWanted || backend->aoFailed)
-        return;
+    if (backend->ao)
+        return true;
+    if (backend->aoFailed)
+        return false;
     std::string error;
+    backend->ao = modern::CreateAmbientOcclusion(backend->core, error);
     if (!backend->ao)
     {
-        backend->ao = modern::CreateAmbientOcclusion(backend->core, error);
-        if (!backend->ao)
-        {
-            backend->aoFailed = true;
-            HostLog(*backend->host, "vulkan d3d9: modern: no ambient occlusion: %s", error.c_str());
-            return;
-        }
+        backend->aoFailed = true;
+        HostLog(*backend->host, "vulkan d3d9: modern: no ambient occlusion or contact shadows: %s", error.c_str());
+        return false;
     }
+    return true;
+}
+
+// The texture the lit shaders of ours read the ambient occlusion (red) and
+// the contact shadows (green) from, made, or made again, at the depth's
+// size; false (logged once, and aoFailed) when it cannot be.
+bool EnsureAoTexture(Backend *backend, Image *depth)
+{
     const ImageDesc &depthInfo = ImageInfo(depth);
     if (backend->aoTexture)
     {
@@ -1896,31 +2239,41 @@ void SceneAmbientOcclusion(Backend *backend, Image *depth, const modern::SceneVi
             backend->aoSurface = nullptr;
         }
     }
-    if (!backend->aoTexture)
+    if (backend->aoTexture)
+        return true;
+    lg::TextureDesc desc;
+    desc.width = depthInfo.width;
+    desc.height = depthInfo.height;
+    desc.levels = 1;
+    desc.usage = lg::d3d::USAGE_RENDERTARGET;
+    desc.format = lg::d3d::FMT_A8R8G8B8;
+    desc.pool = lg::d3d::POOL_DEFAULT;
+    desc.name = "modern ambient occlusion";
+    backend->aoTexture = lg::CreateTexture(backend->legacy, desc);
+    backend->aoSurface = backend->aoTexture ? lg::GetSurfaceLevel(backend->legacy, backend->aoTexture, 0, 0) : nullptr;
+    if (!backend->aoSurface || !lg::SurfaceImage(backend->aoSurface))
     {
-        lg::TextureDesc desc;
-        desc.width = depthInfo.width;
-        desc.height = depthInfo.height;
-        desc.levels = 1;
-        desc.usage = lg::d3d::USAGE_RENDERTARGET;
-        desc.format = lg::d3d::FMT_A8R8G8B8;
-        desc.pool = lg::d3d::POOL_DEFAULT;
-        desc.name = "modern ambient occlusion";
-        backend->aoTexture = lg::CreateTexture(backend->legacy, desc);
-        backend->aoSurface =
-            backend->aoTexture ? lg::GetSurfaceLevel(backend->legacy, backend->aoTexture, 0, 0) : nullptr;
-        if (!backend->aoSurface || !lg::SurfaceImage(backend->aoSurface))
-        {
-            if (backend->aoTexture)
-                lg::DestroyTexture(backend->legacy, backend->aoTexture);
-            backend->aoTexture = nullptr;
-            backend->aoSurface = nullptr;
-            backend->aoFailed = true;
-            HostLog(*backend->host, "vulkan d3d9: modern: no ambient occlusion: cannot make the %ux%u image",
-                    depthInfo.width, depthInfo.height);
-            return;
-        }
+        if (backend->aoTexture)
+            lg::DestroyTexture(backend->legacy, backend->aoTexture);
+        backend->aoTexture = nullptr;
+        backend->aoSurface = nullptr;
+        backend->aoFailed = true;
+        HostLog(*backend->host, "vulkan d3d9: modern: no ambient occlusion or contact shadows: cannot make the %ux%u "
+                                "image",
+                depthInfo.width, depthInfo.height);
+        return false;
     }
+    return true;
+}
+
+// The scene's ambient occlusion into the back end's texture, right after its
+// normals; sceneAo tells whether it is there. Off or failing, the reason is
+// logged once.
+void SceneAmbientOcclusion(Backend *backend, Image *depth, const modern::SceneView &scene)
+{
+    if (!backend->aoWanted || !EnsureAoModule(backend) || !EnsureAoTexture(backend, depth))
+        return;
+    std::string error;
     modern::AoParams params = backend->aoParams;
     params.frame = backend->aoFrame++;
     backend->sceneAo = modern::BuildAmbientOcclusion(backend->core, backend->ao, depth, backend->sceneNormals,
@@ -1929,6 +2282,26 @@ void SceneAmbientOcclusion(Backend *backend, Image *depth, const modern::SceneVi
         LogModernOnce(backend, "no ambient occlusion", error);
     // The lit shaders of ours read it until the scene is lit (BackendModernScene).
     lg::SetModernAmbientOcclusion(backend->legacy, backend->sceneAo ? backend->aoTexture : nullptr);
+}
+
+// The scene's contact shadows into the green of the same texture, after the
+// occlusion (into a texture cleared to white without it); sceneContact
+// tells whether they are there.
+void SceneContactShadows(Backend *backend, Image *depth, const modern::SceneView &scene)
+{
+    if (!backend->contactWanted || !backend->contactSun || !EnsureAoModule(backend)
+        || !EnsureAoTexture(backend, depth))
+        return;
+    std::string error;
+    modern::ContactParams params = backend->contactParams;
+    params.frame = backend->contactFrame++;
+    backend->sceneContact =
+        modern::TraceContactShadows(backend->core, backend->ao, depth, backend->sceneNormals, scene, params,
+                                    lg::SurfaceImage(backend->aoSurface), !backend->sceneAo, error);
+    if (!backend->sceneContact)
+        LogModernOnce(backend, "no contact shadows", error);
+    else
+        lg::SetModernAmbientOcclusion(backend->legacy, backend->aoTexture);
 }
 
 // The scene's screen-space reflections, after its normals buffer. They read
@@ -2110,6 +2483,79 @@ bool BackendModernReflectionProbe(Backend *backend, lg::Device *legacy, lg::Text
     return true;
 }
 
+namespace
+{
+// An IEEE half (binary16) as a float.
+float HalfToFloat(uint16_t half)
+{
+    const uint32_t sign = (half & 0x8000u) << 16;
+    const uint32_t exponent = (half >> 10) & 0x1fu;
+    const uint32_t mantissa = half & 0x3ffu;
+    uint32_t bits;
+    if (exponent == 0)
+    {
+        if (mantissa == 0)
+            bits = sign;
+        else
+        {
+            // Subnormal: 2^-14 times mantissa / 1024.
+            const float value = std::ldexp(static_cast<float>(mantissa), -24);
+            return sign ? -value : value;
+        }
+    }
+    else if (exponent == 31)
+        bits = sign | 0x7f800000u | (mantissa << 13);
+    else
+        bits = sign | ((exponent + 112u) << 23) | (mantissa << 13);
+    float value;
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+} // namespace
+
+bool BackendModernProbeCaptureWanted(Backend *backend)
+{
+    return backend && backend->legacy && backend->core && backend->probeCaptureWanted && !backend->linearFailed;
+}
+
+void BackendModernProbeCapture(Backend *backend, bool on)
+{
+    if (!backend)
+        return;
+    backend->probeCapturing = on && BackendModernProbeCaptureWanted(backend);
+    if (!backend->probeCapturing && backend->probeCaptureReadback && backend->core)
+    {
+        DestroyReadback(backend->core, backend->probeCaptureReadback);
+        backend->probeCaptureReadback = nullptr;
+    }
+}
+
+bool BackendModernProbeCaptureRead(Backend *backend, uint32_t x, uint32_t y, uint32_t width, uint32_t height,
+                                   float *rgb)
+{
+    if (!backend || !backend->core || !backend->probeCaptureReadback || !rgb || !width || !height)
+        return false;
+    ReadbackData data{};
+    if (!WaitReadback(backend->core, backend->probeCaptureReadback, &data) || !data.pixels
+        || data.format != modern::kSceneFormat || uint64_t(x) + width > data.width
+        || uint64_t(y) + height > data.height)
+        return false;
+    for (uint32_t row = 0; row < height; ++row)
+    {
+        const uint8_t *from = data.pixels + static_cast<size_t>(y + row) * data.rowBytes + static_cast<size_t>(x) * 8;
+        float *to = rgb + static_cast<size_t>(row) * width * 3;
+        for (uint32_t column = 0; column < width; ++column)
+            for (uint32_t c = 0; c < 3; ++c)
+            {
+                uint16_t half;
+                std::memcpy(&half, from + column * 8 + c * 2, sizeof(half));
+                to[column * 3 + c] = HalfToFloat(half);
+            }
+    }
+    ++backend->probeCaptureReads;
+    return true;
+}
+
 bool BackendModernPlanarWanted(Backend *backend)
 {
     return backend && backend->legacy && backend->planarWanted && !backend->planarFailed && !backend->linearFailed;
@@ -2170,6 +2616,54 @@ bool BackendModernPlanarBegin(Backend *backend, const ModernPlanarView &view, lg
     color = backend->planarColorSurface;
     depth = backend->planarDepth;
     return true;
+}
+
+void BackendModernSunShadow(Backend *backend, lg::Device *legacy, const ModernSunShadowView &view)
+{
+    if (!backend || !legacy)
+        return;
+    // The sun, for the contact shadows of the view's scene depth (next).
+    backend->contactSun = view.sun;
+    for (int i = 0; i < 3; ++i)
+        backend->contactParams.sun[i] = view.sunDir[i];
+    const bool usable = view.on && view.texel[0] > 0.0f && view.texel[1] > 0.0f && view.depthUnits[0] > 0.0f
+                        && view.depthUnits[1] > 0.0f;
+    const bool sun = backend->softShadowsWanted && usable;
+    const bool spot = backend->softSpotShadowsWanted;
+    if (!sun && !spot)
+    {
+        lg::SetModernShadow(legacy, nullptr);
+        return;
+    }
+    // The filter's radius (texels) is the receiver's depth below its
+    // blockers times the tangent of half the sun's apparent size, over a
+    // texel's width (a spot light's: its size, in the shader); it reaches at
+    // most 16 texels, the blocker search with it, so a soft edge costs the
+    // same taps everywhere.
+    constexpr float kWidestTexels = 16.0f;
+    constexpr float kPi = 3.14159265f;
+    lg::ModernShadowParams params{};
+    params.maxRadius = kWidestTexels;
+    if (sun)
+    {
+        const float tanHalf = std::tan(0.5f * backend->shadowSoftness * kPi / 180.0f);
+        for (int i = 0; i < 2; ++i)
+        {
+            params.penumbra[i] = view.depthUnits[i] * tanHalf / view.texel[i];
+            // The steepest receiver the per-tap bias follows: two units of
+            // height a unit across (63 degrees), in depth per texel.
+            params.slopeCap[i] = 2.0f * view.texel[i] / view.depthUnits[i];
+        }
+        params.on += lg::kModernSoftSun;
+        ++backend->softShadowScenes;
+    }
+    if (spot)
+    {
+        params.spotSize = backend->spotLightSize;
+        params.on += lg::kModernSoftSpot;
+    }
+    params.frame = static_cast<float>(backend->shadowFrame++ & 63u);
+    lg::SetModernShadow(legacy, &params);
 }
 
 void BackendModernPlanarDone(Backend *backend, const ModernPlanarView &view)
@@ -2241,6 +2735,7 @@ ModernResult BackendModernSceneDepth(Backend *backend, lg::Surface *depth, const
         return ModernResult::Skipped;
     backend->sceneNormals = nullptr;
     backend->sceneAo = false;
+    backend->sceneContact = false;
     lg::SetModernAmbientOcclusion(backend->legacy, nullptr);
     lg::SetModernReflections(backend->legacy, nullptr);
     Image *depthImage = depth ? lg::SurfaceImage(depth) : nullptr;
@@ -2273,6 +2768,7 @@ ModernResult BackendModernSceneDepth(Backend *backend, lg::Surface *depth, const
         return ModernResult::Refused;
     }
     SceneAmbientOcclusion(backend, depthImage, scene);
+    SceneContactShadows(backend, depthImage, scene);
     TraceSceneReflections(backend, depthImage, scene);
     SetScenePlanar(backend, view);
     return ModernResult::Done;
@@ -2333,6 +2829,36 @@ void DrawSceneFog(Backend *backend, Image *color, Image *depth, Image *sunShadow
                          error))
         LogModernOnce(backend, "no volumetric fog", error);
 }
+
+// God rays over the linear-light scene (vk_modern.h DrawRays), when they are
+// wanted and the view has a sun. A failure is logged once and the scene goes
+// on without them.
+void DrawSceneRays(Backend *backend, Image *color, Image *depth, const ModernSceneView &view,
+                   const modern::SceneView &scene)
+{
+    if (!backend->raysWanted || backend->raysFailed || !view.sun.on)
+        return;
+    if (!backend->rays)
+    {
+        std::string error;
+        backend->rays = modern::CreateRays(backend->core, error);
+        if (!backend->rays)
+        {
+            backend->raysFailed = true;
+            HostLog(*backend->host, "vulkan d3d9: modern: no god rays: %s", error.c_str());
+            return;
+        }
+    }
+    modern::RaysInputs inputs;
+    std::memcpy(inputs.sunDirection, view.sun.direction, sizeof(inputs.sunDirection));
+    std::memcpy(inputs.sunColor, view.sun.color, sizeof(inputs.sunColor));
+    modern::RaysParams params = backend->raysParams;
+    params.frame = backend->raysFrame++;
+    bool drawn = false;
+    std::string error;
+    if (!modern::DrawRays(backend->core, backend->rays, color, depth, scene, inputs, params, drawn, error))
+        LogModernOnce(backend, "no god rays", error);
+}
 } // namespace
 
 ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surface *depth,
@@ -2347,6 +2873,7 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
     backend->sceneNormals = nullptr;
     Image *ao = backend->sceneAo ? lg::SurfaceImage(backend->aoSurface) : nullptr;
     backend->sceneAo = false;
+    backend->sceneContact = false;
     lg::SetModernAmbientOcclusion(backend->legacy, nullptr);
     Image *reflections = backend->sceneReflections;
     backend->sceneReflections = nullptr;
@@ -2399,6 +2926,16 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
         litPasses();
         const VkRect2D area = {{static_cast<int32_t>(view.x), static_cast<int32_t>(view.y)}, {view.width, view.height}};
         Image *scene = lg::SurfaceImage(color);
+        if (backend->probeCapturing && scene)
+        {
+            // A reflection probe's face: the light before bloom, exposure
+            // and the tonemap (BackendModernProbeCaptureRead).
+            if (backend->probeCaptureReadback)
+                DestroyReadback(backend->core, backend->probeCaptureReadback);
+            backend->probeCaptureReadback = ReadImage(backend->core, scene, 0, 0);
+            if (backend->probeCaptureReadback)
+                ++backend->probeCaptureScenes;
+        }
         float bloomScale = 0.0f;
         Image *bloom = DrawBloom(backend, scene, area, view, bloomScale);
         Image *exposure = MeasureExposure(backend, scene, area, view.cut);
@@ -2424,7 +2961,7 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
                                          {std::min(area.extent.width, backend->planarView.width),
                                           std::min(area.extent.height, backend->planarView.height)}};
             DrawReflectionsDebug(backend, lg::SurfaceImage(backend->planarColorSurface), lg::SurfaceImage(display),
-                                 planarArea);
+                                 planarArea, true);
         }
         FinishedScenePasses(backend, lg::SurfaceImage(display), area);
         return passes;
@@ -2454,12 +2991,26 @@ ModernResult BackendModernScene(Backend *backend, lg::Surface *color, lg::Surfac
     }
     if (!lg::HandOverRecording(backend->legacy))
         return ModernResult::Skipped; // nothing of this frame is drawn either
+    if (display)
+    {
+        backend->lastSceneSeen = true;
+        backend->lastFogOn = view.fog.on;
+        backend->lastFogStart = view.fog.start;
+        backend->lastFogDensity = view.fog.density;
+        std::memcpy(backend->lastFogColor, view.fog.color, sizeof(backend->lastFogColor));
+        backend->lastSunOn = view.sun.on;
+        std::memcpy(backend->lastSunColor, view.sun.color, sizeof(backend->lastSunColor));
+        std::memcpy(backend->lastSunDirection, view.sun.direction, sizeof(backend->lastSunDirection));
+    }
     const modern::SceneView scene = SceneViewOf(view);
     std::string error;
     // The fog is lit before the anti-aliasing, which averages its noise away.
     if (display)
         DrawSceneFog(backend, colorImage, depthImage, sunShadow ? lg::SurfaceImage(sunShadow) : nullptr,
                      spotShadow ? lg::SurfaceImage(spotShadow) : nullptr, view, scene);
+    // The god rays after it, before the anti-aliasing, which averages their noise away.
+    if (display)
+        DrawSceneRays(backend, colorImage, depthImage, view, scene);
     // Skinned surfaces whose vertices the last scene kept are drawn from
     // those and this scene's.
     if (!scene.cut)

@@ -103,6 +103,12 @@
 #else
 #define SPOT_FACTORS 0
 #endif
+// The sun's shadow map is read with the soft filter where the push
+// constants say so (ModernShadowParams).
+#define SOFT_SUN_SHADOW (LM_SUN_SHADOW && LM_SUN_LIGHT == 1)
+// So is a spot or omni light's tile of its shadow map.
+#define SOFT_SPOT_SHADOW (LM_SUN_SHADOW && POINT_LIGHT)
+#define SOFT_SHADOW (SOFT_SUN_SHADOW || SOFT_SPOT_SHADOW)
 // Whether the world normal is read: for the light's N.L, or the specular.
 #define WORLD_NORMAL (LM_SUN_LIGHT || LM_SUN_SPECULAR)
 
@@ -229,6 +235,16 @@ layout(set = 1, binding = 30) uniform sampler reflectionsSampler;
 // reflections take its place in full.
 const float kReflectionsGlossNone = 0.3;
 const float kReflectionsGlossFull = 0.5;
+// How wide the reflections' blur is: the cone a surface of gloss g mirrors
+// is taken as its sun highlight's lobe (exponent n = 2^(9.38 g) + 7, half
+// angle about sqrt(2 / (n + 2)) radians), times this share of it (the
+// hit is taken halfway between the eye and what is mirrored, and the lobe
+// narrowed to a sharp core), in pixels of this view at this point. Gloss 1
+// reads about level 1.5 at 720p, gloss 0.75 level 2.6, gloss 0.5 level 3.7:
+// the level no longer depends on the image's size, and no gloss is a perfect
+// mirror (David on the Retroid, 2026-11-15: Chinatown's reflections were
+// too mirror-like).
+const float kReflectionsSpread = 0.0625;
 #endif
 #if LM_SUN_SPECULAR && LM_SUN_LIGHT == 1
 // The planar reflection's own fade: only glossy surfaces, whose probe level
@@ -247,8 +263,12 @@ const float kPlanarGlossFull = 0.8;
 // (0, 0, 0, 0) image, and on 0, where the scene has none.
 layout(set = 1, binding = 13) uniform texture2D planarImage;
 layout(set = 1, binding = 29) uniform sampler planarSampler;
-layout(push_constant) uniform ModernPlanar
+#endif
+#if (LM_SUN_SPECULAR && LM_SUN_LIGHT == 1) || SOFT_SHADOW
+// The push constants: vk_legacy.h ModernPlanarParams, then ModernShadowParams.
+layout(push_constant) uniform ModernPush
 {
+#if LM_SUN_SPECULAR && LM_SUN_LIGHT == 1
     // A point relative to the eye to the image's clip space (D3D9's NDC).
     mat4 clip;
     // The plane's normal, and its distance at the eye: dot(n, point) + w is
@@ -258,7 +278,16 @@ layout(push_constant) uniform ModernPlanar
     float reach;  // how far from the plane a surface still reads it (units)
     float facing; // the cosine from the plane's normal a surface's must reach
     float ripple; // how far the normal map's tilt moves the point read (units)
-} planar;
+#endif
+#if SOFT_SHADOW
+    // Penumbra near and far (texels per unit of depth), the widest disc
+    // (texels), a spot or omni light's size (world units).
+    layout(offset = 96) vec4 shadowDepth;
+    // Slope cap near and far (depth per texel), on (+1 soft sun, +2 soft
+    // spot and omni lights), frame.
+    vec4 shadowFilter;
+#endif
+} push;
 #endif
 
 layout(constant_id = 0) const float kSunStrength = 1.0;
@@ -295,6 +324,16 @@ float AmbientOcclusion()
     const ivec2 size = textureSize(sampler2D(ambientOcclusion, ambientOcclusionSampler), 0);
     const ivec2 at = min(ivec2(gl_FragCoord.xy), size - 1);
     return texelFetch(sampler2D(ambientOcclusion, ambientOcclusionSampler), at, 0).r;
+}
+
+// The Modern path's contact shadows (docs/vulkan-modern.md "Contact
+// shadows"): the sun's visibility from a short screen-space trace, in the
+// green of the same texture (1 where there are none).
+float ContactShadow()
+{
+    const ivec2 size = textureSize(sampler2D(ambientOcclusion, ambientOcclusionSampler), 0);
+    const ivec2 at = min(ivec2(gl_FragCoord.xy), size - 1);
+    return texelFetch(sampler2D(ambientOcclusion, ambientOcclusionSampler), at, 0).g;
 }
 
 // D3D9's alpha test on the output alpha, in 8 bits.
@@ -344,8 +383,194 @@ float ShadowTaps(vec2 xy, float reference)
 }
 #endif
 
+#if SOFT_SHADOW
+// Soft sun shadows (docs/vulkan-modern.md "Soft sun shadows"; percentage-
+// closer soft shadows, Fernando 2005): a search for the blockers around the
+// point, then depth-compare taps over a disc whose radius grows with the
+// point's distance below them, times the sun's apparent size: sharp where a
+// shadow meets its caster, softer further from it. Both use a Vogel disc
+// turned by interleaved gradient noise (Jimenez 2014) that moves each frame,
+// for TAA to average. The depth each tap compares with follows the
+// receiver's own slope (receiver plane depth bias, Isidoro 2006), so a wide
+// disc does not shadow a surface with itself.
+const int kShadowSearchTaps = 8;
+const int kShadowFilterTaps = 12;
+const float kGoldenAngle = 2.39996323;
+
+float ShadowRotation()
+{
+    const vec2 p = gl_FragCoord.xy + 5.588238 * mod(push.shadowFilter.w, 64.0);
+    return 6.28318531 * fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
+}
+
+// Tap i of n on a disc of radius 1, turned by `turn` (cosine, sine).
+vec2 VogelTap(int i, int n, vec2 turn)
+{
+    const float r = sqrt((float(i) + 0.5) / float(n));
+    const float a = float(i) * kGoldenAngle;
+    const vec2 p = r * vec2(cos(a), sin(a));
+    return vec2(p.x * turn.x - p.y * turn.y, p.x * turn.y + p.y * turn.x);
+}
+
+// The receiver's depth slope over the near partition's UV, from the
+// shadow coordinate's screen derivatives (taken in uniform control flow by
+// the caller); 0 where the surface is edge-on to the sun.
+vec2 ShadowDepthSlope(vec3 dx, vec3 dy)
+{
+    const float det = dx.x * dy.y - dx.y * dy.x;
+    if (abs(det) < 1e-14)
+        return vec2(0.0);
+    return vec2(dy.y * dx.z - dx.y * dy.z, dx.x * dy.z - dy.x * dx.z) / det;
+}
+
+// How much of the sun reaches xy (a UV in partition `far`, 0 near or 1 far)
+// with the soft filter; slope is the receiver's depth per UV there.
+float SoftShadow(vec2 xy, float reference, vec2 slope, int far, vec2 turn)
+{
+    const ivec2 size = textureSize(sampler2D(shadowMap, shadowMapSampler), 0);
+    const vec2 texel = 1.0 / vec2(size);
+    // The partition's tile: the near one is the top half, the far one the
+    // bottom; taps stay half a texel inside it.
+    const float top = far != 0 ? 0.5 : 0.0;
+    const vec2 lo = vec2(0.5 * texel.x, top + 0.5 * texel.y);
+    const vec2 hi = vec2(1.0 - 0.5 * texel.x, top + 0.5 - 0.5 * texel.y);
+    const float penumbra = far != 0 ? push.shadowDepth.y : push.shadowDepth.x;
+    const float widest = push.shadowDepth.z;
+    const float cap = far != 0 ? push.shadowFilter.y : push.shadowFilter.x;
+
+    // The blockers: the centre texel and a disc as wide as the widest filter.
+    float depthSum = 0.0;
+    float blockers = 0.0;
+    for (int i = 0; i <= kShadowSearchTaps; ++i)
+    {
+        const vec2 offset = i == kShadowSearchTaps ? vec2(0.0) : VogelTap(i, kShadowSearchTaps, turn) * widest;
+        const vec2 at = clamp(xy + offset * texel, lo, hi);
+        const float reach = cap * length(offset);
+        const float here = reference + clamp(dot(slope, offset * texel), -reach, reach);
+        const float stored = texelFetch(sampler2D(shadowMap, shadowMapSampler), ivec2(at * vec2(size)), 0).r;
+        if (stored < here)
+        {
+            depthSum += here - stored;
+            blockers += 1.0;
+        }
+    }
+    if (blockers == 0.0)
+        return 1.0;
+    const float radius = clamp(depthSum / blockers * penumbra, 1.0, widest);
+
+    float lit = 0.0;
+    for (int i = 0; i < kShadowFilterTaps; ++i)
+    {
+        const vec2 offset = VogelTap(i, kShadowFilterTaps, turn) * radius;
+        const vec2 at = clamp(xy + offset * texel, lo, hi);
+        const float reach = cap * length(offset);
+        const float here = reference + clamp(dot(slope, offset * texel), -reach, reach);
+        lit += textureLod(sampler2DShadow(shadowMap, shadowMapSampler), vec3(at, here), 0.0);
+    }
+    return lit / float(kShadowFilterTaps);
+}
+#endif
+
+#if SOFT_SPOT_SHADOW
+// Soft spot and omni shadows (docs/vulkan-modern.md "Soft spot-light
+// shadows"): the same filter on the light's tile of its shadow map (as wide
+// as the map, as tall as it is wide). The light's projection is a
+// perspective one (R_SetViewParmsForLight: near plane 1 for a primary
+// light, far plane its radius, 1 / lightPosition.w), so a stored depth's
+// distance from the light is far / (far - depth * (far - 1)), and the
+// receiver's is the shadow coordinate's w. The cone's half angle comes from
+// spotFactors (its ramp is 0 at the outer cosine), and with it a texel's
+// width at the receiver. The penumbra is the light's size (shadowDepth.w,
+// world units) times how far the receiver lies past its blockers over their
+// distance from the light, in texels there, from 1 to the widest disc.
+float SoftSpotShadow(vec2 xy, float reference, float distance, vec2 slope)
+{
+    const ivec2 size = textureSize(sampler2D(shadowMap, shadowMapSampler), 0);
+    const vec2 texel = 1.0 / vec2(size);
+    const float tile = float(size.x) * texel.y;
+    const float top = floor(clamp(xy.y, 0.0, 0.99999) / tile) * tile;
+    const vec2 lo = vec2(0.5 * texel.x, top + 0.5 * texel.y);
+    const vec2 hi = vec2(1.0 - 0.5 * texel.x, top + tile - 0.5 * texel.y);
+    const float invRadius = pc.c[CONSTANT_LIGHT_POSITION].w;
+    const float farPlane = invRadius > 0.0 ? max(1.0 / invRadius, 2.0) : 65536.0;
+    const vec4 spotFactors = pc.c[CONSTANT_SPOT_FACTORS];
+    const float cosOuter = spotFactors.x > 0.0 ? clamp(-spotFactors.y / spotFactors.x, 0.05, 0.9999) : 0.7071;
+    const float tanHalf = sqrt(1.0 - cosOuter * cosOuter) / cosOuter;
+    const float receiver = max(distance, 1.0);
+    const float texelWorld = 2.0 * tanHalf * receiver / float(size.x);
+    const float widest = push.shadowDepth.z;
+    const float lightSize = push.shadowDepth.w;
+    // The steepest receiver the per-tap bias follows (two units of height a
+    // unit across), in stored depth per texel: the depth's rate along the
+    // light's axis is far / ((far - 1) * distance^2).
+    const float cap = 2.0 * texelWorld * farPlane / ((farPlane - 1.0) * receiver * receiver);
+    const float spin = ShadowRotation();
+    const vec2 turn = vec2(cos(spin), sin(spin));
+
+    float distanceSum = 0.0;
+    float blockers = 0.0;
+    for (int i = 0; i <= kShadowSearchTaps; ++i)
+    {
+        const vec2 offset = i == kShadowSearchTaps ? vec2(0.0) : VogelTap(i, kShadowSearchTaps, turn) * widest;
+        const vec2 at = clamp(xy + offset * texel, lo, hi);
+        const float reach = cap * length(offset);
+        const float here = reference + clamp(dot(slope, offset * texel), -reach, reach);
+        const float stored = texelFetch(sampler2D(shadowMap, shadowMapSampler), ivec2(at * vec2(size)), 0).r;
+        if (stored < here)
+        {
+            distanceSum += farPlane / max(farPlane - stored * (farPlane - 1.0), 1e-3);
+            blockers += 1.0;
+        }
+    }
+    if (blockers == 0.0)
+        return 1.0;
+    const float blocker = max(distanceSum / blockers, 1.0);
+    const float radius = clamp(lightSize * max(receiver - blocker, 0.0) / (blocker * texelWorld), 1.0, widest);
+
+    float lit = 0.0;
+    for (int i = 0; i < kShadowFilterTaps; ++i)
+    {
+        const vec2 offset = VogelTap(i, kShadowFilterTaps, turn) * radius;
+        const vec2 at = clamp(xy + offset * texel, lo, hi);
+        const float reach = cap * length(offset);
+        const float here = reference + clamp(dot(slope, offset * texel), -reach, reach);
+        lit += textureLod(sampler2DShadow(shadowMap, shadowMapSampler), vec3(at, here), 0.0);
+    }
+    return lit / float(kShadowFilterTaps);
+}
+
+// A spot or omni light's shadow at xy (the tile's UV): soft, or the game's
+// four taps.
+float SpotShadow(vec2 xy, float reference, float distance, vec3 dx, vec3 dy)
+{
+    if (push.shadowFilter.z >= 2.0)
+        return SoftSpotShadow(xy, reference, distance, ShadowDepthSlope(dx, dy));
+    return SpotShadowTaps(xy, reference, pc.c[CONSTANT_PIXEL_ADJUST]);
+}
+#endif
+
+#if SOFT_SUN_SHADOW
+// The sun's shadow at xy in partition `far`: soft, or the game's four taps.
+float SunShadow(vec2 xy, float reference, int far, vec2 slope, vec2 turn)
+{
+    return mod(push.shadowFilter.z, 2.0) >= 1.0 ? SoftShadow(xy, reference, slope, far, turn)
+                                                 : ShadowTaps(xy, reference);
+}
+#endif
+
 void main()
 {
+#if SOFT_SUN_SHADOW
+    // The shadow coordinate's screen derivatives, taken here in uniform
+    // control flow, for the soft filter's depth bias.
+    const vec3 shadowDx = dFdx(texcoord4.xyz);
+    const vec3 shadowDy = dFdy(texcoord4.xyz);
+#elif SOFT_SPOT_SHADOW
+    // The projected shadow coordinate's, for the same with a spot or omni
+    // light's tile.
+    const vec3 shadowDx = dFdx(texcoord4.xyz / texcoord4.w);
+    const vec3 shadowDy = dFdy(texcoord4.xyz / texcoord4.w);
+#endif
     const vec2 uv = texcoord0.xy;
     const vec2 lightmapUv = texcoord0.zw;
     const vec4 colorSample = texture(sampler2D(colorMap, colorMapSampler), uv);
@@ -433,7 +658,7 @@ void main()
         // sets the fade to 0 and binds none: the taps are left out, as the
         // game's D3D9 shader's 0 * anything is 0, whatever the lookup holds.
         if (fade > 0.0)
-            shadow = mix(primary, SpotShadowTaps(shadowUv, reference, pc.c[CONSTANT_PIXEL_ADJUST]), fade);
+            shadow = mix(primary, SpotShadow(shadowUv, reference, texcoord4.w, shadowDx, shadowDy), fade);
     }
 #endif
     const vec3 visibility = shadow * attenuation * cone;
@@ -452,22 +677,31 @@ void main()
     {
         const float reference = kClampDepthReference != 0 ? clamp(texcoord4.z, 0.0, 1.0) : texcoord4.z;
         const vec2 farUv = texcoord4.xy * pc.c[2].w + pc.c[2].xy;
+        // The receiver's depth slope in each partition's UV (the far one's
+        // is the near one's scaled by c2.w), and this pixel's turn of the
+        // soft filter's discs.
+        const vec2 nearSlope = ShadowDepthSlope(shadowDx, shadowDy);
+        const vec2 farSlope = nearSlope / pc.c[2].w;
+        const float spin = ShadowRotation();
+        const vec2 turn = vec2(cos(spin), sin(spin));
         const float partitionValue = texcoord4.w;
         if (partitionValue <= 1.0)
         {
-            shadow = ShadowTaps(texcoord4.xy, reference);
+            shadow = SunShadow(texcoord4.xy, reference, 0, nearSlope, turn);
             if (partitionValue > 0.75)
-                shadow = mix(shadow, ShadowTaps(farUv, reference), 4.0 * partitionValue - 3.0);
+                shadow = mix(shadow, SunShadow(farUv, reference, 1, farSlope, turn), 4.0 * partitionValue - 3.0);
         }
         else
         {
             // Towards the far partition's edge the shadow fades back to the
             // lightmap's.
             const float edge = max(abs(farUv.x - 0.5) * pc.c[4].x, abs(farUv.y - 0.75) * pc.c[4].y);
-            shadow = edge >= 8.0 ? primary : mix(ShadowTaps(farUv, reference), primary, clamp(edge - 7.0, 0.0, 1.0));
+            shadow = edge >= 8.0 ? primary : mix(SunShadow(farUv, reference, 1, farSlope, turn), primary, clamp(edge - 7.0, 0.0, 1.0));
         }
     }
 #endif
+    // What the shadow map or the lightmap is too coarse to hold.
+    shadow = min(shadow, ContactShadow());
     const vec3 sunDirection = pc.c[17].xyz;
     const float facingSun = clamp(dot(sunDirection, normal), 0.0, 1.0);
     const vec3 sunDisplay = shadow * facingSun * pc.c[18].rgb;
@@ -504,6 +738,9 @@ void main()
     const float mask = kMode == 1 ? clamp(dot(specularSample.rgb, vec3(10.0)), 0.0, 1.0) * color0.a : 1.0;
     const float gloss = specularSample.a * mask;
     const vec3 view = normalize(texcoord5.xyz);
+    // The angle one pixel spans here (radians), for the reflections' blur;
+    // taken out here, where every pixel of a quad runs it.
+    const float pixelAngle = max(length(dFdx(view)), length(dFdy(view)));
     const float viewFacing = dot(view, normal);
     const vec3 reflected = view - 2.0 * viewFacing * normal;
     // x at normal incidence, y grazing, z exponent, w sun highlight scale.
@@ -527,14 +764,14 @@ void main()
     // glossy surfaces only (above kPlanarGlossNone). The point read is this
     // one, moved by the normal map's tilt as a ripple moves a reflection; a
     // rougher surface reads a wider spread of it.
-    if (kMode == 0 && planar.on > 0.5 && gloss > kPlanarGlossNone)
+    if (kMode == 0 && push.on > 0.5 && gloss > kPlanarGlossNone)
     {
         const vec3 surfaceNormal = normalize(texcoord1.xyz);
-        const float height = dot(planar.plane.xyz, texcoord5.xyz) + planar.plane.w;
-        if (abs(height) < planar.reach && dot(surfaceNormal, planar.plane.xyz) > planar.facing)
+        const float height = dot(push.plane.xyz, texcoord5.xyz) + push.plane.w;
+        if (abs(height) < push.reach && dot(surfaceNormal, push.plane.xyz) > push.facing)
         {
             const vec3 tilt = normal - surfaceNormal * dot(normal, surfaceNormal);
-            const vec4 clip = planar.clip * vec4(texcoord5.xyz + tilt * planar.ripple, 1.0);
+            const vec4 clip = push.clip * vec4(texcoord5.xyz + tilt * push.ripple, 1.0);
             if (clip.w > 0.0)
             {
                 const vec2 ndc = clip.xy / clip.w;
@@ -560,9 +797,10 @@ void main()
     }
 #endif
     // Where the screen-space reflections found what this pixel mirrors, that
-    // takes the probe's place by their confidence: the level as blurry as
-    // the probe's (LOD 6 - 8 gloss of its 6), the light averaged with its
-    // confidence, put in display values as the probe is. Opaque surfaces
+    // takes the probe's place by their confidence: the level as wide as the
+    // surface's reflected cone (kReflectionsSpread), the light averaged with
+    // its confidence and its compression undone (reflections.frag stores
+    // L / (1 + luma L)), put in display values as the probe is. Opaque surfaces
     // only: the reflections are traced from the depth prepass, which a
     // blended surface is not in. Rough surfaces keep the probe: below gloss
     // 0.5 the reflections fade out, gone at 0.3. Their blurriest level is a
@@ -574,12 +812,18 @@ void main()
     {
         const vec2 size = vec2(textureSize(sampler2D(reflections, reflectionsSampler), 0));
         const float levels = float(textureQueryLevels(sampler2D(reflections, reflectionsSampler)));
-        const float level = clamp((6.0 - 8.0 * gloss) / 6.0, 0.0, 1.0) * (levels - 1.0);
+        const float lobe = sqrt(2.0 / (exp2(gloss * 9.37752) + 9.0));
+        const float footprint = kReflectionsSpread * lobe / max(pixelAngle, 1e-6);
+        const float level = clamp(log2(max(footprint, 1.0)), 0.0, levels - 1.0);
         const vec4 found = textureLod(sampler2D(reflections, reflectionsSampler), gl_FragCoord.xy / size, level);
         const float weight =
             clamp(found.a, 0.0, 1.0) * smoothstep(kReflectionsGlossNone, kReflectionsGlossFull, gloss);
         if (found.a > 1e-4)
-            reflection = mix(reflection, Encode(found.rgb / found.a), weight);
+        {
+            const vec3 stored = found.rgb / found.a;
+            const float luma = dot(stored, vec3(0.2126, 0.7152, 0.0722));
+            reflection = mix(reflection, Encode(stored / max(1.0 - luma, 0.2)), weight);
+        }
     }
 #if POINT_LIGHT
     const float exponent = exp2(gloss * 9.37752) + 7.0;
@@ -615,7 +859,7 @@ void main()
         greaterThan(abs(span), vec3(1e-5)));
     vec3 shown = mix(lit, fogColor, fogShare);
 #if LM_SUN_SPECULAR && LM_SUN_LIGHT == 1
-    if (planar.on > 1.5)
+    if (push.on > 1.5)
         shown = planarRead.r >= 0.0 ? planarRead : shown * 0.25;
 #endif
     if ((kMode == 1 && alpha == 0.0) || !kept)

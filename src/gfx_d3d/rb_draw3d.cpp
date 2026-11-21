@@ -543,9 +543,12 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
     data = backEndData;
     dynamicShadowType = viewInfo->dynamicShadowType;
     isRenderingFullScreen = viewInfo->isRenderingFullScreen;
+    // Whether this view's lit surfaces read the sun's shadow map.
+    bool sunShadowMap = false;
     if (dynamicShadowType == SHADOW_MAP)
     {
-        if (Com_BitCheckAssert(backEndData->shadowableLightHasShadowMap, rgp.world->sunPrimaryLightIndex, 32))
+        sunShadowMap = Com_BitCheckAssert(backEndData->shadowableLightHasShadowMap, rgp.world->sunPrimaryLightIndex, 32);
+        if (sunShadowMap)
             RB_SunShadowMaps(data, viewInfo);
         RB_SpotShadowMaps(data, viewInfo);
     }
@@ -645,6 +648,9 @@ void RB_StandardDrawCommands(const GfxViewInfo *viewInfo)
         KISAK_GXM_SET_PREPASS_SKIP_MODELS(false);
         depthPrepassed = true;
     }
+    // The Modern path's lit shaders size their soft sun shadows from it, and
+    // the scene depth's passes (contact shadows) take the sun's direction.
+    R_ModernSunShadow(viewInfo, sunShadowMap);
     if (modernDepth && depthPrepassed)
         R_ModernSceneDepth(viewInfo);
     {

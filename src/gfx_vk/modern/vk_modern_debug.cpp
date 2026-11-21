@@ -28,7 +28,8 @@ enum Kind : uint32_t
     kNormalsView = 1,
     kAoView = 2,
     kReflectionsView = 3,
-    kKinds = 4,
+    kImageView = 4, // debug_reflections.frag with DEBUG_PLAIN=1
+    kKinds = 5,
 };
 } // namespace
 
@@ -81,8 +82,9 @@ DebugView *CreateDebugView(Core *core, std::string &error)
     debug->fragment[kAoView] = CreateShaderModule(core, shaders::kDebugAoFrag, sizeof(shaders::kDebugAoFrag));
     debug->fragment[kReflectionsView] =
         CreateShaderModule(core, shaders::kDebugReflectionsFrag, sizeof(shaders::kDebugReflectionsFrag));
+    debug->fragment[kImageView] = CreateShaderModule(core, shaders::kDebugImageFrag, sizeof(shaders::kDebugImageFrag));
     if (!debug->vertex || !debug->fragment[kVelocityView] || !debug->fragment[kNormalsView]
-        || !debug->fragment[kAoView] || !debug->fragment[kReflectionsView])
+        || !debug->fragment[kAoView] || !debug->fragment[kReflectionsView] || !debug->fragment[kImageView])
         return fail(LastError(core));
     VkSamplerCreateInfo sampler{};
     sampler.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -228,5 +230,11 @@ bool DrawReflectionsDebug(Core *core, DebugView *debug, Image *reflections, Imag
                           std::string &error)
 {
     return DrawDebug(core, debug, kReflectionsView, "modern debug reflections", reflections, target, area, error);
+}
+
+bool DrawImageDebug(Core *core, DebugView *debug, Image *image, Image *target, const VkRect2D &area,
+                    std::string &error)
+{
+    return DrawDebug(core, debug, kImageView, "modern debug image", image, target, area, error);
 }
 } // namespace gfx_vk::modern

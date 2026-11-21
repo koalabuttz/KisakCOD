@@ -42,8 +42,9 @@ map"` (next section).
 
 ## Runs that play themselves: `run_atMap`
 
-The multiplayer client on Windows, Linux and macOS takes the PS Vita's timed
-console commands and quit timers under `run_*` names. A start with
+The multiplayer client on Windows, Linux and macOS, and the singleplayer game
+(also on Android; both share `src/client/cl_run_plan.h`), take the PS Vita's
+timed console commands and quit timers under `run_*` names. A start with
 
     +set run_atMap "5 setviewpos 336 60 268 65 | 10 framelog 10 A | 21 screenshot | 23 quit"
 
@@ -59,7 +60,8 @@ window's focus or time anything by eye.
 - Nothing changes unless one of them is given. When one is, the log says so
   (`run: run_atMap "..."`), marks the menu and the map coming up (`run: the map
   is up`), echoes every command it sends (`run: sending "screenshot"`) and the
-  quit (`run: run_quitAfterMap 30 reached`, `run: quitting as asked`).
+  quit (`run: run_quitAfterMap 30 reached`, `run: quitting as asked`). A timed
+  `quit` in a list prints `run: quitting as asked` too, after its echo.
 - A list it cannot read is reported once (`run: run_atMap: part 3 "x quit" does
   not start with a time in seconds; none of its commands will be sent`) and
   sends nothing.

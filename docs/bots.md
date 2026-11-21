@@ -30,6 +30,19 @@ The bots are always compiled in. `bot_brain` chooses them:
 | `0` (default) | the retail random inputs (`SV_BotUserMove`), as before |
 | `1` | KisakCOD's bot brain |
 
+With the brain, a bot shows a ping of 0 on the scoreboard (it runs in the
+server, with no network in between) rather than the retail 999 a test client
+gets for acknowledging no packets. The ping is only shown; nothing in the
+game uses it.
+
+Every test client is named "[BOT] " and a name nobody on the server has
+(`src/bots/bot_names.h`), from David's list or from `bots/names.txt` in the
+home or base folder (one name to a line, 9 characters kept). When every name
+is taken, a repeat gets a number ("[BOT] Capy 2"). The tag is kept for bots:
+the server takes "[BOT]" out of a person's name however it is coloured, spaced
+or cased (`SV_KeepBotTagForBots`), so the name alone tells a bot from a person.
+Only the server decides who is a bot, so a modified client cannot pass as one.
+
 Set it when the game or server starts, for example on a dedicated server:
 
 ```
@@ -136,7 +149,7 @@ hunt goes to where it last saw or heard them.
 
   | Part | Who | What it does when nothing more pressing is on |
   |---|---|---|
-  | push | the boldest | goes to the latest callout (10 s at most), then roams |
+  | push | the boldest | goes to the latest callout (10 s at most), then roams; two pushers at most go to one callout, the second to another side of it |
   | anchor | the most patient | goes to a spot that overlooks the callout nearest it, holds there for 7 to 35 s, crouched or standing, watching it |
   | attack | the boldest, when the compass shows places to take | goes to the objective and stays on it, holding use (a flag captures while someone stands in it, a bomb plants or defuses while use is held), lying prone (more often the more patient it is), crouched or standing; on its way and on it, it fights an enemy in view but does not leave to chase a sound or a lead, and a prone bot stays down on the flag and fights from there |
   | defend | the most patient, when the compass shows places to hold | holds a spot that overlooks the objective for 8 to 35 s, watching it |
@@ -145,7 +158,14 @@ hunt goes to where it last saw or heard them.
   With no objectives (team deathmatch), about 40% push, 25% anchor and the
   rest roam. Attackers and defenders are spread over the objectives
   nearest the team first, so a team takes the flags on its side of the map
-  before it contests the others. Fights, cover and hunts come first: a part is what a bot does
+  before it contests the others. A roaming bot prefers places its teammates
+  are not at or going to, so a team spreads out rather than moving as a
+  pack. A lead whose way stops short of its floor, above or below it (a
+  sound on a floor the way does not reach) is left alone for 10 s rather than stood under, and a
+  bot looks no more than 35 degrees up or down toward a sound or an enemy
+  it lost from sight. A lead (a sound, an enemy lost from sight) is chased by one or two
+  bots: one more goes only for an enemy it saw itself, and the rest look
+  and keep on. Fights, cover and hunts come first: a part is what a bot does
   between them.
 - **Objectives.** A bot reads them off its own compass: the objectives the game
   sends its team, active ones only. The stock gametypes mark them with
@@ -175,9 +195,21 @@ player is, never at where they really are:
   a further 120 ms on average (deviation 40, never under 60): a player's
   decision and motor onset.
 - **Flick, then settle.** The hand makes aimed movements at up to 450 degrees a
-  second. Each lands off by a normal error of 0.35 degrees plus 7% of the
+  second. Each lands off by a normal error of 0.55 degrees plus 7% of the
   movement's size, so a 60 degree flick lands a few degrees off and a small
-  correction lands close; a new correction starts every 170 ms or so. In the
+  correction lands close; a new correction starts every 170 ms or so. A
+  player crossing the view is harder to land on: 0.04 degrees more for each
+  degree a second they cross it. The hand aims at the chest give or take a
+  few units up or down, drawn for each fight (some fights it aims high, some
+  low).
+- **Sprays wander.** Each second the trigger is kept going (shots no more than
+  0.3 s apart) adds a degree to where the corrections land, up to two
+  degrees; quick clicks of a semi-automatic add half as much. A short burst
+  is accurate, a long spray is not.
+- **Switching players.** Going straight from one player to the next (or
+  within 2 s of the last fight) the hand waits a further 250 ms on average
+  (never less than 120), and its first movement lands half as far off again:
+  the eye and hand are still on the last player. In the
   host test the first moment on a still player 5 to 64 degrees off comes a
   median 0.45 s after the notice, and a second after a 60 degree flick the
   error is under 0.6 degrees in nine runs out of ten.
@@ -186,8 +218,9 @@ player is, never at where they really are:
   trails a player strafing back and forth: in the host test it is on one
   strafing at 500 units about a fifth of the time, against all the time on a
   still one.
-- **Trigger.** It fires while its view is within the player's angular
-  half-width of where it thinks they are (never tighter than half a degree).
+- **Trigger.** It fires while its view is within 1.25 times the player's
+  angular half-width of where it thinks they are (never tighter than half a
+  degree): like a person, it fires a little before it is truly on them.
   It clicks a semi-automatic about six times a second (never more than every
   110 ms), holds an automatic close up and fires it in bursts of about 0.45 s
   beyond 900 units. It aims down the sight beyond 400 units or with a scope,
@@ -197,7 +230,8 @@ player is, never at where they really are:
   server only moves the gun model. A bot has no client, so it would have no
   kick at all. The brain therefore runs the same kick for its own shots, with
   the weapon's numbers and the same 5 ms steps, and adds it to its command;
-  the hand pulls back half of it, 0.15 s late. Entering the sight throws its
+  the hand pulls back part of it, 0.15 s late: 40% on average, drawn for each
+  fight between 10% and 80%. Entering the sight throws its
   view off by the weapon's ADS view error, as `CG_PredictPlayerState` does a
   player's, and the hand has to find the player again.
 - **Moving.** While it fights it keeps walking its way or strafes for 0.4 to
@@ -231,6 +265,12 @@ left out; in a free-for-all everybody is an opponent.
   client), and then only as much of them as a clear line from the bot's eye
   reaches: head, chest and hips, through what blocks a player's sight
   (`MASK_AIMTARGET_VISIBILITY`: walls, foliage, no-sight brushes, vehicles).
+- **Aiming down a sight.** The screen zooms to the weapon's sight as it comes
+  up (from `cg_fov 65` to the weapon's `fAdsZoomFov`), so less of the world
+  fits on it, and a scope's overlay (an ACOG's or a sniper's) leaves only a
+  circle as tall as the screen. A flanker it would have seen at the hip goes
+  unseen through a scope. What is in the sight is magnified as much, so a
+  far player in it is picked out sooner.
 - **Noticing.** What the bot sees fills a meter. A running opponent close by in
   the middle of the screen fills it in 0.3 s. It fills more slowly with
   distance (beyond 600 units, in proportion), toward the screen's edge (to 30%
@@ -277,23 +317,59 @@ triangles. The agent is a standing player: 15 units across from the middle, 70
 tall, steps up 18 units and walks slopes up to 45 degrees. Cells are 6 units
 across and 3 high, in tiles of 64 cells.
 
+A way's goal is the floor under the point asked for, up to 96 units down,
+before anything above it: a lead may be a player's feet, chest (seen) or eye
+(a shot heard), and under a low ceiling an eye is closer to the floor upstairs
+than to its own. On Chinatown, PC bot brain runs 19 and 20 sent bots upstairs
+over shots heard 93 and 109 units below them; there they stood over the
+shooter staring at the floor.
+
+Recast links only floors a player walks between, so a floor reached by
+stepping off a ledge (a balcony over a street, a landing over a room) is an
+island. The build adds drop-downs, one-way links from the
+edge of a floor to a floor 21 to 116 units below it (fall damage starts at
+128): along every edge of the mesh with nothing beyond it, every 64 units, it
+looks 44, 60 and 76 units out for a floor below, and keeps the link only when
+nothing solid crosses the way (segments at three heights a standing player
+fills, at its middle and both sides, out over the edge and down to the floor)
+against the map's collision triangles. A drop costs one and a half times its
+length, so a bot takes the stairs when they are not much longer. A bot walks
+a drop-down like any corner: it walks off the edge and falls. Nothing climbs
+back up one; that waits for jumps and mantles.
+
 The mesh is built the first time a bot needs it on a map, on the server's own
 frame, and saved as `bots/nav/<map>.kbnav` in the home folder with the map's
 collision checksum; later loads read it back when the checksum matches. The
 server prints which it did:
 
 ```
-bots: navigation mesh for mp_crash built in <seconds> s (geometry ...)
+bots: navigation mesh for mp_crash built in <seconds> s (geometry ..., N drop-downs, ...)
 bots: navigation mesh for mp_crash loaded from bots/nav/mp_crash.kbnav (...)
 ```
 
-The cache is read only from the home and base folders, never from a game
-archive or a server's download, and each tile's size is checked before Detour
-sees it. The mesh is derived from the map's data, so it is never committed.
+To look at a place the mesh gets wrong away from the game, start the server
+with `KISAK_BOT_NAVDUMP="x y z across up"` in its environment: the collision
+triangles in that box are written to `bots/nav/<map>-dump.obj` in the home
+folder (game coordinates, z up) when the mesh is built or loaded.
 
-Not in the mesh yet: static models' collision (props), entities (doors,
-vehicles, script models), and jumps or mantles between floors. A bot that
-walks into one notices it is stuck, jumps, then takes another way.
+Each mesh build or layout change bumps the cache version, so older caches are
+rebuilt (version 2 added the drop-downs, version 3 left out entities'
+brushes). The cache is read only from the home and base folders, never from a
+game archive or a server's download, and each tile's size is checked before
+Detour sees it. The mesh is derived from the map's data, so it is never
+committed.
+
+Entities' brushes (the map's submodels 1 and up: doors, script brushes,
+triggers) are left out, found by walking each submodel's leaf brush tree. They
+move, or are not solid where the map file puts them. On Chinatown one is a
+16-unit slab at z -8 to 8 across the whole map. The mesh took it for a floor
+over the sunken street (about 3000 polygons of it), and it closed off the
+stairs up out of there: PC bot brain run 24's dump, built on the host, linked
+the sunken street to the rest of the map once the slab was gone.
+
+Not in the mesh yet: static models' collision (props), moving entities, and
+jumps or mantles up between floors. A bot that walks into one notices it is
+stuck, jumps, then takes another way.
 
 ## Code
 
@@ -385,6 +461,8 @@ to one second behind.
   and Detour on the host, 64-bit with sanitizers and 32-bit. In made-up rooms a
   bot finds the way through a 64-unit door but not a 24-unit gap, up a 16-unit
   step but not a 40-unit ledge, up a 25 degree ramp but not a 60 degree one;
+  it steps down off a 96-unit platform or balcony (one way) but not off a
+  200-unit one, over a 40-unit railing or through a wall;
   it never walks on a floor's underside or between islands; a cache blob with
   a wrong checksum, a cut or a bad tile size is refused; and an 8000 by 8000
   yard builds in tiles; points picked near a bot stay near it. It also

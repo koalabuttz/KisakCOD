@@ -12,6 +12,8 @@
 
 #pragma once
 
+#include <cstddef>
+
 struct client_t;
 
 namespace kisak::bots
@@ -29,6 +31,18 @@ void Bot_RegisterDvars();
 // is on. Returns false when the brain is off, and the caller then runs the
 // retail SV_BotUserMove.
 bool Bot_UserMove(client_t *cl);
+
+// The ping the scoreboard shows for a test client the brain drives, or -1
+// when the brain does not drive it. A test client acknowledges no packets, so
+// SV_CalcPings would give it the retail 999. The brain runs in the server,
+// with no network in between, so a bot shows 0.
+int Bot_Ping(int clientNum);
+
+// A new test client's name: "[BOT] " and a name nobody on the server has,
+// from bots/names.txt in the home or base folder (one to a line) or else
+// David's list in bot_names.h. Only test clients wear the tag: the server
+// takes it out of a person's name (SV_KeepBotTagForBots).
+void Bot_PickName(char *out, size_t size);
 
 // The navigation mesh of the map that is loaded, built or read from the home
 // folder's cache the first time it is asked for (bot_nav_world.cpp), or
@@ -63,6 +77,10 @@ int Bot_Sense(int clientNum,
               kisak::bots::Rng &rng,
               BotNotice *notices,
               int maxNotices);
+
+// Every shot the players have fired since the server started, as the bots'
+// ears counted them (bot_senses.cpp).
+int Bot_ShotsFired();
 
 // The map sense (bot_tactics.cpp): what a player learns of a map's shape by
 // playing it, from the map's own geometry and never from other players.

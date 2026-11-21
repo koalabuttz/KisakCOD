@@ -20,13 +20,20 @@ fake_pc_game.py), ``framelog`` prints a frame log line, ``<dvar> <value>``
 sets r_fakeCost, ``quit`` quits. Its console goes to logcat under KisakCOD.
 
 As the emulator (``--emulator -avd <name> -port <port> ...``) it writes its
-arguments to ``emulator-args.txt``, boots in 0.3 s and runs until ``adb emu
-kill``; with FAKE_ADB_EMULATOR=1 adb finds a device only while it runs.
+arguments to ``emulator-args.txt``, boots in 0.3 s, mounts shared storage
+2.5 s later (``ls``/``mkdir`` under /sdcard are refused before) and runs
+until ``adb emu kill``; with FAKE_ADB_EMULATOR=1 adb finds a device only while it runs.
 ``push <folder>/. <device folder>/`` copies a folder in, ``shell ls`` says
 whether a path is there.
 
+The app's game runs in its own process (``pidof org.kisakcod.game:game``)
+beside the launcher's, as AndroidManifest.xml has it; FAKE_ONE_PROCESS=1
+gives the one process of older builds. FAKE_APP_EXIT=1: the game ends
+without a word when the map is up.
+
 FAKE_ADB_OFFLINE=1: no device. FAKE_EMULATOR_FAIL=1: the emulator exits at once. FAKE_INSTALL_FAIL=1: the install fails.
-FAKE_APP_CRASH=1: the app crashes when the map is up. FAKE_APP_LINGER=1: the
+FAKE_APP_CRASH=1: the app crashes when the map is up; FAKE_APP_CRASH_AT_QUIT=1:
+it crashes right after saying it quits. FAKE_APP_LINGER=1: the
 app process stays after the game quits (SDL's activity). FAKE_ASLEEP=1: the
 screen is asleep until a KEYCODE_WAKEUP.
 """
@@ -46,6 +53,7 @@ STATE = Path(os.environ.get("FAKE_ADB_STATE", "fake-adb-state"))
 PACKAGE = "org.kisakcod.game"
 APP_FOLDER = f"/storage/emulated/0/Android/data/{PACKAGE}/files"
 PNG = None
+LAUNCHER_PID = 4242
 
 
 def device_path(path):
@@ -86,11 +94,24 @@ def alive(name):
     return pid
 
 
+def storage_ready():
+    """Shared storage: on an emulator it mounts a while after boot_completed."""
+    return os.environ.get("FAKE_ADB_EMULATOR") != "1" or (STATE / "storage").exists()
+
+
 def shell(command):
     words = shlex.split(command)
+    if (words[:1] in (["ls"], ["mkdir"]) and any(word.startswith(("/sdcard", "/storage/emulated")) for word in words)
+            and not storage_ready()):
+        print(f"{words[0]}: '/sdcard/Android': Permission denied", file=sys.stderr)
+        return 1
     if words[:2] == ["getprop", "sys.boot_completed"]:
         print("1" if os.environ.get("FAKE_ADB_EMULATOR") != "1" or (STATE / "booted").exists() else "")
+    elif words[:2] == ["mkdir", "-p"]:
+        for path in words[2:]:
+            device_path(path).mkdir(parents=True, exist_ok=True)
     elif words[:1] == ["ls"]:
+        words = [word for word in words if word != "-d"]
         if not device_path(words[1]).exists():
             print(f"ls: {words[1]}: No such file or directory", file=sys.stderr)
             return 1
@@ -98,11 +119,22 @@ def shell(command):
     elif words[:1] == ["date"]:
         print(time.strftime("%m-%d %H:%M:%S.000"))
     elif words[:1] == ["pidof"]:
-        pid = alive("app.pid")
-        if not pid:
+        # The game runs in "<package>:game", the launcher in "<package>",
+        # unless FAKE_ONE_PROCESS=1 (builds from before the :game process).
+        one = os.environ.get("FAKE_ONE_PROCESS") == "1"
+        found = []
+        for name in words[1:]:
+            if name == PACKAGE + ":game" and not one and alive("app.pid"):
+                found.append(alive("app.pid"))
+            elif name == PACKAGE and one and alive("app.pid"):
+                found.append(alive("app.pid"))
+            elif name == PACKAGE and not one and (STATE / "launcher").exists():
+                found.append(LAUNCHER_PID)
+        if not found:
             return 1
-        print(pid)
+        print(" ".join(map(str, found)))
     elif words[:2] == ["am", "force-stop"]:
+        (STATE / "launcher").unlink(missing_ok=True)
         pid = alive("app.pid")
         if pid:
             os.kill(pid, 9)
@@ -113,6 +145,7 @@ def shell(command):
         app = subprocess.Popen([sys.executable, __file__, "--app", extra], start_new_session=True,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         (STATE / "app.pid").write_text(str(app.pid))
+        (STATE / "launcher").write_text("1")
         print(f"Starting: Intent {{ cmp={words[words.index('-n') + 1]} }}\nStatus: ok")
     elif words[:1] == ["input"]:
         if words[-1] == "KEYCODE_WAKEUP":
@@ -178,6 +211,14 @@ def adb(argv):
         print("OK: killing emulator, bye bye")
     elif kind == "push":
         source, target = Path(argv[1].rstrip(".").rstrip("/\\")), device_path(argv[2].rstrip("/"))
+        # As the Android 13 x86_64 emulator image: adbd makes one new folder
+        # level for a file, no more ("remote secure_mkdirs failed").
+        for path in source.rglob("*"):
+            parent = (target / path.relative_to(source)).parent
+            if not parent.exists() and not parent.parent.exists():
+                print(f"adb: error: failed to copy '{path}': remote secure_mkdirs failed: Operation not permitted",
+                      file=sys.stderr)
+                return 1
         shutil.copytree(source, target, dirs_exist_ok=True)
         print(f"{argv[1]}: {sum(1 for _ in source.rglob('*'))} files pushed")
     elif kind == "pull":
@@ -251,7 +292,7 @@ def app(extra):
             if len(words) == 2:
                 plan.append((offset + float(words[0]), words[1].strip()))
     if devmap and dvars.get("run_quitAfterMap"):
-        plan.append((0.5 + float(dvars["run_quitAfterMap"]), "quit"))
+        plan.append((0.5 + float(dvars["run_quitAfterMap"]), "-quitAfterMap"))
     plan.append((0.2, "-menu"))
     if devmap:
         plan.append((0.5, "-map"))
@@ -264,12 +305,21 @@ def app(extra):
         if text == "-map":
             log(f"Loading fastfile {devmap}_load")
             log("run: the map is up")
+            if os.environ.get("FAKE_APP_EXIT") == "1":
+                return 0
             if os.environ.get("FAKE_APP_CRASH") == "1":
                 log("Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0 in tid 1 (SDLThread)",
                     tag="libc", level="F")
                 return 1
             continue
-        log(f"run: sending \"{text}\"")
+        if text == "-quitAfterMap":
+            # The game's own quit timer: the only time it says "quitting as asked".
+            log(f"run: run_quitAfterMap {dvars['run_quitAfterMap']} reached")
+            log("run: quitting as asked")
+            text = "quit"
+        else:
+            # A timed "quit" is only sent, as by src/client/cl_run_plan.h.
+            log(f"run: sending \"{text}\"")
         for command in text.split(";"):
             words = command.split()
             if not words:
@@ -284,7 +334,10 @@ def app(extra):
                     f"{1000 / ms:.2f} fps; ms mean {ms:.3f}, median {ms:.3f}, p95 {ms + 1:.3f}, "
                     f"p99 {ms + 2:.3f}, max {ms + 3:.3f}; 0 over 50 ms")
             elif words[0] == "quit":
-                log("run: quitting as asked")
+                log("quitting...")
+                if os.environ.get("FAKE_APP_CRASH_AT_QUIT") == "1":
+                    log("Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 2 (hwuiTask0)", tag="libc", level="F")
+                    return 1
                 if os.environ.get("FAKE_APP_LINGER") == "1":
                     time.sleep(3600)
                 return 0
@@ -301,17 +354,23 @@ def emulator(argv):
         return 1
     (STATE / "emulator.pid").write_text(str(os.getpid()))
     (STATE / "booted").unlink(missing_ok=True)
+    (STATE / "storage").unlink(missing_ok=True)
     time.sleep(0.3)
     (STATE / "booted").write_text("1")
+    # Shared storage mounts later than boot_completed, as on the PC's AVD.
+    time.sleep(2.5)
+    (STATE / "storage").write_text("1")
     try:
         time.sleep(3600)
     finally:
         (STATE / "booted").unlink(missing_ok=True)
+        (STATE / "storage").unlink(missing_ok=True)
     return 0
 
 
 def main():
     STATE.mkdir(parents=True, exist_ok=True)
+    (STATE / "sdcard" / "Android" / "data").mkdir(parents=True, exist_ok=True)  # as on any device
     if sys.argv[1:2] == ["--emulator"]:
         import signal
         signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))

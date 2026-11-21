@@ -65,6 +65,7 @@ extern const dvar_t *r_filmUseTweaks;
 extern const dvar_t *r_drawBModels;
 extern const dvar_t *r_drawXModels;
 extern const dvar_t *r_vsync;
+extern const dvar_t *r_vsyncInterval;
 extern const dvar_t *r_singleCell;
 extern const dvar_t *r_glowTweakBloomDesaturation;
 extern const dvar_t *sm_polygonOffsetScale;

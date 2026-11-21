@@ -784,12 +784,39 @@ enum ModernLitShader : uint16_t
     ModernLitSkinProbe = 0x800,
     ModernLitTwoSidedSun = 0x1000,
     ModernLitVariationMask = 0x1800,
+    // With no family, ModernLitSpot or ModernLitOmni: the extra per-light
+    // pass l_<spot|omni>[_flag|_skin][_hsm]_<mode>c0[d0][n0] that effects'
+    // lights (muzzle flashes, explosions) add over the lit scene (light pass
+    // facts 1): the light's term alone, drawn additively (INVDESTALPHA, ONE).
+    // The colour map at s0; the light's shadow map at s4 (hsm, spots only,
+    // not with a detail map), then the normal map (n0), the attenuation and
+    // the detail map (d0), each at the next sampler; fog colour at c0,
+    // lightPosition and lightDiffuse at c5 and c6, spotDir and spotFactors at
+    // c7 and c8 (a spot), spotShadowmapPixelAdjust at c9 (hsm), detailScale
+    // after those (d0); texcoords 0, 1 and 5, 2 and 3 (n0), 4 (hsm) and colour
+    // 0 in. ModernLitTwoSidedSun with it is flag_'s light on both faces. Ours
+    // adds the light as physical light (SetModernLightPass).
 };
+// Whether it is an extra per-light pass (l_).
+constexpr bool ModernLitLightPass(uint16_t shader)
+{
+    const uint16_t light = shader & ModernLitLightMask;
+    return !(shader & ModernLitFamilyMask) && (light == ModernLitSpot || light == ModernLitOmni);
+}
 // Whether shader names a Modern lit shader of ours.
 constexpr bool ModernLitShaderValid(uint16_t shader)
 {
     if (shader == ModernLitWater)
         return true;
+    if (ModernLitLightPass(shader))
+    {
+        // No specular map, no variation but the two-sided light, and the
+        // shadow map on spots alone and not with a detail map.
+        const bool spot = (shader & ModernLitLightMask) == ModernLitSpot;
+        return !(shader & (ModernLitSpecular | ModernLitSkinProbe | ModernLitWater))
+            && (shader & ModernLitModeMask) != 0x30 && shader <= 0x1fff
+            && (!(shader & ModernLitShadow) || (spot && !(shader & ModernLitDetail)));
+    }
     const uint16_t family = shader & ModernLitFamilyMask;
     const uint16_t light = shader & ModernLitLightMask;
     if (shader & ModernLitVariationMask)
@@ -849,6 +876,13 @@ constexpr uint32_t ModernLitConstantCount(uint16_t shader)
 {
     if (shader == ModernLitWater)
         return 19u;
+    if (ModernLitLightPass(shader))
+    {
+        // c5 lightPosition, c6 lightDiffuse; c7 spotDir and c8 spotFactors
+        // (a spot); c9 spotShadowmapPixelAdjust (hsm); then detailScale.
+        const bool spot = (shader & ModernLitLightMask) == ModernLitSpot;
+        return 7u + (spot ? 2u : 0u) + (shader & ModernLitShadow ? 1u : 0u) + (shader & ModernLitDetail ? 1u : 0u);
+    }
     if (ModernLitAmbientOnly(shader))
         return 19u;
     if (ModernLitPointLight(shader))
@@ -874,8 +908,12 @@ constexpr uint32_t ModernLitConstantCount(uint16_t shader)
         return first + 1u;
     return ModernLitModel(shader) ? 6u : 1u;
 }
+// With emissive (and not overWhite) the draw is an unlit, light-giving
+// surface (a lamp, a lit sign): nothing it reads is decoded, its stored colour
+// is decoded as an ordinary draw's, and its brightest parts are then made
+// brighter than white, up to SetModernEmissive's strength.
 void SetLinearInputs(Device *device, uint64_t constants, uint16_t samplers, uint16_t doubled, bool colorInput,
-                     bool overWhite = false, uint16_t shader = ModernLitNone);
+                     bool overWhite = false, uint16_t shader = ModernLitNone, bool emissive = false);
 // The Modern lit shaders' light strengths in linear light: the sun's colour
 // and the lightmap's light are multiplied by these (1 and 1 by default). Set
 // before the first draw that uses one: shaders already built keep theirs.
@@ -926,6 +964,49 @@ struct ModernPlanarParams
 };
 static_assert(sizeof(ModernPlanarParams) == 96, "the lit shaders' push constant block");
 void SetModernPlanar(Device *device, Image *image, const ModernPlanarParams *params);
+// The strength of the extra light passes of ours (ModernLitLightPass): they
+// add their light as physical light, the decoded colour times the decoded
+// light colour times the attenuation, cone, shadow and N.L, in linear light,
+// times this (1 by default). Set before the first draw that uses one:
+// shaders already built keep theirs.
+void SetModernLightPass(Device *device, float strength);
+// How much brighter than white an unlit, light-giving surface's white parts
+// are made (SetLinearInputs' emissive): 1 leaves them as they are; up to 63.75,
+// in quarters. Set before the first draw that uses it: shaders already built
+// keep theirs.
+void SetModernEmissive(Device *device, float strength);
+// Soft shadows (docs/vulkan-modern.md "Soft sun shadows", "Soft spot-light
+// shadows"): how the Modern lit shaders with a shadow map (the sun's, or a
+// spot or omni light's tile) filter it, pushed after ModernPlanarParams
+// (fragment stage, offset 96) to every pipeline drawn as one of ours. on 0
+// keeps the game's four taps for both. Set before a scene's lit surfaces
+// draw; null turns soft shadows off.
+struct ModernShadowParams
+{
+    // Filter radius (texels) per unit of the sun's map's depth between a
+    // receiver and its blockers, near and far partitions: the sun's apparent
+    // size.
+    float penumbra[2];
+    // The widest filter and blocker search (texels).
+    float maxRadius;
+    // A spot or omni light's size (world units): its penumbra is that times
+    // how far a receiver lies past its blockers over their distance from it.
+    float spotSize;
+    // Depth per texel at the steepest receiver slope the per-tap depth bias
+    // follows (steeper slopes are capped), the sun's near and far partitions.
+    float slopeCap[2];
+    float on;    // + kModernSoftSun, + kModernSoftSpot; 0 the game's four taps
+    float frame; // turns the sample pattern each frame, for TAA to average
+};
+constexpr float kModernSoftSun = 1.0f;
+constexpr float kModernSoftSpot = 2.0f;
+static_assert(sizeof(ModernShadowParams) == 32, "the lit shaders' push constant block, after the planar's");
+void SetModernShadow(Device *device, const ModernShadowParams *params);
+// How many times over an additive draw (blend ONE, ONE, add) adds its colour
+// into a linear-light target (1 by default: as it is). The game's additive
+// layers (light pools on floors, glows) were made for colours added in
+// display values; added as light they add less. Applies from the next draw.
+void SetModernAdditive(Device *device, float strength);
 #endif
 
 // The device's window is about to be destroyed: an open pass and frame end

@@ -1352,6 +1352,20 @@ jobs:
           python3 scripts/tests/test_static_cull_vec.py
           python3 scripts/tests/test_static_cull_vec.py --sanitize
 
+      # The opt-in RmlUi menu front-end (KISAK_RMLUI, docs/rmlui-frontend.md).
+      # Turning it on in the same build directory rebuilds one stock unit,
+      # builds RmlUi's core (fetched) and the front-end, links the client again
+      # and runs the front-end's asset-free test. It comes last, so every check
+      # above reads the default build.
+      - name: Build the RmlUi front-end and run its asset-free test
+        timeout-minutes: 25
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B "$BUILD_DIR" -DKISAK_RMLUI=ON
+          cmake --build "$BUILD_DIR" --target KisakCOD-mp KisakCOD-rmlui-test --parallel "$(nproc)"
+          "$OUT_DIR/KisakCOD-rmlui-test"
+
       - name: Report compiler cache
         if: ${{ !cancelled() && steps.ccache.outcome == 'success' }}
         shell: bash

@@ -355,6 +355,8 @@ struct PixelModuleRecipe
     // moduleKey.inputs.shader names a Modern lit shader of ours: these are
     // its strengths (Device::modernSunStrength, modernSkyStrength).
     float sunStrength = 1.0f, skyStrength = 1.0f;
+    // An extra light pass's strength (Device::modernLightPass).
+    float lightPass = 1.0f;
     // Set by BuildPixelSpirv when it built that shader (not the pixel
     // shader as it is), for KeepPixelModule's counts.
     mutable bool modernBuilt = false;
@@ -477,6 +479,10 @@ struct Device
     // scale them back (Shader::byteModules, legacy_shader::BuildSpirv).
     bool byteStandIn = false;
     float depthBiasScale = 1.0f;                 // D3DRS_DEPTHBIAS to Vulkan's constant factor
+    // depthFormat can be sampled with linear filtering. Without it, depth
+    // textures (shadow maps) are sampled with the nearest texel: Vulkan leaves
+    // a linear filter on such a format undefined.
+    bool depthFilterLinear = true;
     uint32_t uniformAlignment = 16;
     bool dynamicUniforms = true; // !OptionalFeatures::staticUniforms
 
@@ -632,7 +638,19 @@ struct Device
     // modernReflectionsSampler) and in their push constants.
     Image *modernPlanar = nullptr;
     ModernPlanarParams modernPlanarParams{};
-    // Bumped whenever SetModernPlanar changes the parameters; the parameters
+    // SetModernLightPass: the strength of the extra light passes of ours
+    // built from now on.
+    float modernLightPass = 1.0f;
+    // SetModernEmissive: how much brighter than white unlit, light-giving
+    // surfaces built from now on make their white, in quarters (4 = as they are).
+    uint8_t modernEmissive = 4;
+    // SetModernShadow: pushed after modernPlanarParams.
+    ModernShadowParams modernShadowParams{};
+    // SetModernAdditive: how many times over additive draws (ONE, ONE) add
+    // their colour into a linear-light target (AdditiveBoosted).
+    float modernAdditive = 1.0f;
+    // Bumped whenever SetModernPlanar or SetModernShadow changes the
+    // parameters; the parameters
     // were last pushed for pushedPlanarGeneration in the bound layout (0:
     // not since the layout or the command buffer changed).
     uint64_t modernPlanarGeneration = 1;
@@ -788,6 +806,8 @@ bool BuildPixelSpirv(const PixelModuleRecipe &recipe, const Shader &ps, const Sh
 // and its strengths, depth reference clamp, mode and whether it runs the
 // alpha test set. False, with nothing built, when vs does not write one of
 // them as the shader reads it. vk_legacy_modern_lit.cpp; safe on any thread.
+// For an extra light pass (ModernLitLightPass) sunStrength is its strength
+// (Device::modernLightPass) and skyStrength is unused.
 bool BuildModernLitSpirv(uint16_t shader, const ls::Shader &vs, float sunStrength, float skyStrength,
                          bool clampDepthReference, bool alphaTest, std::vector<uint32_t> &spirv);
 // Gives the shader a module built from recipe to keep; false (and the module

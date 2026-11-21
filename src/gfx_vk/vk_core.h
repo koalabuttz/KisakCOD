@@ -82,6 +82,12 @@ struct CoreDesc
     // then virtual, then CPU).
     int deviceIndex = -1;
     bool vsync = true;
+    // With vsync, how many refreshes each frame stays on screen: 2 shows the
+    // game at half the display's rate (30 frames a second on a 60 Hz screen),
+    // evenly. Needs VK_GOOGLE_display_timing (Android has it); without it
+    // every frame is shown at the next refresh, as with 1. SetSwapInterval
+    // changes it.
+    uint32_t swapInterval = 1;
     // Ask for swapchain images that can be copied from, so CaptureNextFrame and
     // copies from SwapchainImage() work.
     bool allowCapture = false;
@@ -139,6 +145,7 @@ struct CoreStats
     uint64_t framesPresented;
     uint64_t framesSkipped;   // window minimised or swapchain out of date
     uint32_t swapchainBuilds; // the first one included
+    uint32_t surfacesLost;    // surfaces the window took away (RenewSurface)
     uint32_t validationErrors;
     uint32_t validationWarnings;
     // Validation messages known not to apply (see OnDebugMessage in vk_core.cpp):
@@ -265,6 +272,13 @@ bool FrameGpuTime(const Core *core, uint64_t frame, FrameGpuTimes &out);
 // The window may have changed size (or was minimised or restored): the next
 // frame checks the surface and rebuilds the swapchain if the size differs.
 void NotifyResize(Core *core);
+
+// The window system took the surface away, as Android does when the app goes
+// to the background (VK_ERROR_SURFACE_LOST_KHR from a present, an acquire or a
+// size query says so to the core by itself). The next BeginFrame lets go of the
+// swapchain and the surface, asks the window for a new surface and builds a
+// swapchain on it; while the window has none, frames are skipped. For tests.
+void LoseSurface(Core *core);
 
 // The window is about to be destroyed: waits for the GPU, then destroys the
 // swapchain and the surface, which must go before their window does. Work
@@ -876,6 +890,9 @@ VkPresentModeKHR ChoosePresentMode(const VkPresentModeKHR *offered, uint32_t cou
 // supports it, so the compositor turns the picture for a rotated panel
 // (Android), else the surface's own transform.
 VkSurfaceTransformFlagBitsKHR ChoosePreTransform(const VkSurfaceCapabilitiesKHR &caps);
+// With vsync, the refreshes each frame stays on screen from the next present
+// on (CoreDesc::swapInterval, 1 to 4).
+void SetSwapInterval(Core *core, uint32_t interval);
 const char *PresentModeName(VkPresentModeKHR mode);
 const char *FormatName(VkFormat format);
 const char *DeviceTypeName(VkPhysicalDeviceType type);

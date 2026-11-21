@@ -240,7 +240,7 @@ NormalsStats Stats(const Normals *normals);
 // they can darken their indirect light alone: two slices of six steps a side
 // per pixel, jittered per pixel and frame, then a 5x5 blur that keeps to each
 // surface. The result is the visible fraction (1 unoccluded) in the red
-// channel of a target the caller owns.
+// channel of a target the caller owns (green 1: TraceContactShadows' place).
 
 struct AoParams
 {
@@ -296,9 +296,36 @@ void DestroyAmbientOcclusion(Core *core, AmbientOcclusion *ao);
 bool BuildAmbientOcclusion(Core *core, AmbientOcclusion *ao, Image *depth, Image *normals, const SceneView &view,
                            const AoParams &params, Image *target, std::string &error);
 
+// ---- Contact shadows (docs/vulkan-modern.md "Contact shadows") ----
+//
+// The sun's small shadows the shadow map is too coarse to hold, from a short
+// ray stepped from each pixel's surface towards the sun through the scene
+// depth (shaders/contact.frag), into the green channel of the ambient
+// occlusion's target: the lit shaders of ours take the smaller of it and the
+// sun's shadow, so it darkens the sun's light alone.
+
+struct ContactParams
+{
+    float sun[3] = {0.0f, 0.0f, 1.0f}; // towards the sun, in world space (unit length)
+    float length = 12.0f;    // world units (inches) the ray reaches: about 30 cm
+    float thickness = 8.0f;  // world units a surface is taken to reach behind itself
+    float strength = 1.0f;   // how dark a full hit makes the sun's light (1: none of it)
+    uint32_t frame = 0;      // moves the noise
+};
+
+// Records the contact shadows of view.area into the green of `target` (the
+// ambient occlusion's: a colour attachment as large as the area's corner,
+// single-sampled, sampled usage), keeping its other channels; with `clear`
+// the area is first cleared to white (no ambient occlusion this scene).
+// From `depth` and BuildNormals' `normals`. Outside a pass, inside a frame.
+// False with the reason, and nothing recorded, when it cannot.
+bool TraceContactShadows(Core *core, AmbientOcclusion *ao, Image *depth, Image *normals, const SceneView &view,
+                         const ContactParams &params, Image *target, bool clear, std::string &error);
+
 struct AoStats
 {
-    uint64_t builds; // BuildAmbientOcclusion calls that recorded
+    uint64_t builds;   // BuildAmbientOcclusion calls that recorded
+    uint64_t contacts; // TraceContactShadows calls that recorded
 };
 AoStats Stats(const AmbientOcclusion *ao);
 
@@ -407,6 +434,80 @@ struct FogStats
 };
 FogStats Stats(const Fog *fog);
 
+// ---- God rays (docs/vulkan-modern.md "God rays") ----
+//
+// Shafts of the sky's light streaming from the sun past what blocks it, made
+// on the screen (the classic radial blur): a pass at half resolution keeps
+// the sky's light near the sun (rays.frag's first pass: sky pixels, by how close
+// they are to the sun's direction, plus a small glow of the sun's own
+// colour, above a threshold), a second smears that along each pixel's line
+// to the sun's place on the screen (its second), and a full-screen pass
+// adds the result to the linear-light scene (its third), less of it
+// over the sky itself, faded out as the sun leaves the view. Where buildings or trees stand in front of the sky the mask is dark,
+// so the smear leaves dark gaps between the shafts. Independent of the map's
+// fog: the air's own thickness does not change.
+
+struct RaysParams
+{
+    // How much of the smeared light is added: 0 none.
+    float strength = 0.6f;
+    // Samples along each pixel's line towards the sun.
+    uint32_t samples = 48;
+    // How far towards the sun each line reaches, as a share of the way.
+    float length = 0.85f;
+    // Each sample counts this much less than the one before it.
+    float decay = 0.96f;
+    // How tightly the kept sky gathers round the sun: its light is weighted
+    // by cos(angle to the sun) to this power (32: half at about 12 degrees).
+    float spread = 32.0f;
+    // Only the sky's light above this (linear light, a soft knee) is kept:
+    // an open sky does not smear into a veil, the bright light round the sun
+    // does.
+    float threshold = 0.8f;
+    // The share of the rays added over the sky itself (0 to 1); whole over
+    // what stands in front of it.
+    float sky = 0.3f;
+    // The sun's own glow added to the kept sky (its colour times this, in a
+    // disc a few degrees across), so a sky without a drawn sun still has
+    // rays.
+    float glow = 1.0f;
+    // Light in the kept sky is held below this (linear light), so one very
+    // bright pixel does not streak.
+    float most = 8.0f;
+    uint32_t frame = 0; // moves the samples' offset from frame to frame
+};
+
+// The view's sun (front ModernSceneView::Sun).
+struct RaysInputs
+{
+    float sunDirection[3] = {}; // towards the sun, world space
+    float sunColor[3] = {};     // display values (may pass 1)
+};
+
+struct Rays;
+
+// The pipelines (the half-resolution images are made at the first DrawRays
+// and again when the area's size changes). Null with the reason.
+Rays *CreateRays(Core *core, std::string &error);
+// Waits for the GPU to finish what was recorded.
+void DestroyRays(Core *core, Rays *rays);
+// Records the god rays over view.area of `color` (the linear-light scene,
+// single-sampled, sampled and colour attachment usage), reading it and
+// `depth` (single-sampled, sampled usage; the sky at SkyDepth). Outside a
+// pass, inside a frame. When the sun is not in front of the camera nothing
+// is recorded and `drawn` is false. The three passes are timed under
+// "modern god rays". False with the reason, and nothing recorded, when it
+// cannot.
+bool DrawRays(Core *core, Rays *rays, Image *color, Image *depth, const SceneView &view, const RaysInputs &inputs,
+              const RaysParams &params, bool &drawn, std::string &error);
+
+struct RaysStats
+{
+    uint64_t scenes; // DrawRays calls that recorded
+    uint64_t behind; // DrawRays calls with the sun out of the view, nothing recorded
+};
+RaysStats Stats(const Rays *rays);
+
 // ---- Screen-space reflections (docs/vulkan-modern.md "Screen-space reflections") ----
 //
 // What each pixel's surface would mirror, found on the screen: the view ray
@@ -506,10 +607,15 @@ bool DrawNormalsDebug(Core *core, DebugView *debug, Image *normals, Image *targe
 // of `target`. Outside a pass, inside a frame.
 bool DrawAoDebug(Core *core, DebugView *debug, Image *ao, Image *target, const VkRect2D &area, std::string &error);
 // Draws the sharpest level of `reflections` (TraceReflections' image, the
-// same size) over `area` of `target`: the stored light over black, through
-// the sRGB curve. Outside a pass, inside a frame.
+// same size) over `area` of `target`: the stored light (its compression
+// undone) over black, through the sRGB curve. Outside a pass, inside a frame.
 bool DrawReflectionsDebug(Core *core, DebugView *debug, Image *reflections, Image *target, const VkRect2D &area,
                           std::string &error);
+// Draws the first level of `image` as it is over `area` of `target`, through
+// the sRGB curve (the planar reflection's debug view). Outside a pass,
+// inside a frame.
+bool DrawImageDebug(Core *core, DebugView *debug, Image *image, Image *target, const VkRect2D &area,
+                    std::string &error);
 
 // ---- Compute passes (docs/vulkan-modern.md "Compute passes") ----
 //
@@ -681,7 +787,10 @@ struct ExposureParams
     // mp_crash's and mp_backlot's outdoor views (PC exposure run 1).
     float key = 0.115f;
     float minEv = -1.0f;   // the range the exposure stays in
-    float maxEv = 1.0f; // David 2026-11-13: +1, so dark interiors keep more of their mood
+    // David 2026-11-15: the maps should look lit by their own lights, not by
+    // the camera, so a dark scene is never brightened (+1 until then; night
+    // maps sat at +1 and read twice as bright as CoD4).
+    float maxEv = 0.0f;
     // Time constants, in seconds: towards a lower exposure (the scene got
     // brighter) and towards a higher one (it got darker).
     float brighterSeconds = 1.0f;

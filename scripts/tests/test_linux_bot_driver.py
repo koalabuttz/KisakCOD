@@ -8,7 +8,7 @@ from test_linux_bots import (FIXTURE_GSC, transition_fixture, transition_plan,
                              uses_both_teams, TEAM_CAPACITY, MAX_BOTS, validate_brain_notices,
                              validate_brain_fights, COVER_ROW, HUNT_ROW, team_play,
                              objective_fixture, validate_objectives, FIXTURE_GSC,
-                             GRENADE_ROW, KNIFE_ROW)
+                             GRENADE_ROW, KNIFE_ROW, SHOTS_ROW)
 
 
 def healthy_log():
@@ -247,6 +247,17 @@ class RefillEvidenceTests(unittest.TestCase):
         self.assertIn('name=bot11', final)
         self.assertNotIn('name=bot0\n', final)
 
+    def test_refills_may_reuse_names(self):
+        # Bots reuse "[BOT] Name" names in every refill (src/bots/bot_names.h).
+        log = healthy_refills()
+        for n in range(12):
+            log = log.replace(f'name=bot{n}\n', f'name=[BOT] ms rat {n % 3}\n')
+        self.assertTrue(self.passed(log))
+        kicks = [(str(i), f'[BOT] ms rat {i}') for i in range(3)] * 2
+        output = ''.join(f'{e}:{n} EXE_PLAYERKICKED\n' for e, n in kicks)
+        self.assertTrue(validate_kick_window(output, kicks))
+        self.assertFalse(validate_kick_window(output, kicks[:3]))
+
     def test_map_transitions_retain_final_not_original_cohort(self):
         maps = healthy_transitions()
         maps = maps[maps.index('0:00 BOTFEATURE stage=1'):]
@@ -295,6 +306,10 @@ class RefillEvidenceTests(unittest.TestCase):
         self.assertFalse(validate_kick_window(output + '0:bot0 EXE_PLAYERKICKED\n', expected))
         self.assertFalse(validate_kick_window(output.replace('bot1', 'bot2'), expected))
         self.assertFalse(validate_kick_window(output + 'malformed EXE_PLAYERKICKED\n', expected))
+        # Bots are named "[BOT] Name" (src/bots/bot_names.h): a name has spaces.
+        spaced = 'x\n2:[BOT] ms rat EXE_PLAYERKICKED\n'
+        self.assertTrue(validate_kick_window(spaced, {('2', '[BOT] ms rat')}))
+        self.assertFalse(validate_kick_window(spaced, {('2', '[BOT]')}))
 
     def test_fixture_uses_real_kick_and_default_grace(self):
         fixture = refill_fixture()
@@ -387,6 +402,9 @@ class GrenadeAndKnifeLogTests(unittest.TestCase):
                   'bots: 5 knifes 6, 52 units\nbots: 5 knifes 6 close\n')
         self.assertEqual(len(GRENADE_ROW.findall(output)), 2)
         self.assertEqual(len(KNIFE_ROW.findall(output)), 1)
+
+    def test_the_last_shot_count_is_read(self):
+        self.assertEqual(SHOTS_ROW.findall('bots: 12 shots fired so far\nbots: 340 shots fired so far\n')[-1], '340')
 
 
 class ObjectiveTests(unittest.TestCase):
