@@ -124,6 +124,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "bot_brain",
     "bot_log",
     "bot_combat",
+    "bot_class",
     "sv_botSnapshots",
     // Runs that play themselves (the run plan's timed console commands).
     "run_atMap",

@@ -170,6 +170,7 @@ set(SERVER_MP
     "${SRC_DIR}/bots/bot_brain.h"
     "${SRC_DIR}/bots/bot_combat.h"
     "${SRC_DIR}/bots/bot_grenades.h"
+    "${SRC_DIR}/bots/bot_loadout.h"
     "${SRC_DIR}/bots/bot_mind.h"
     "${SRC_DIR}/bots/bot_motor.h"
     "${SRC_DIR}/bots/bot_nav_world.cpp"

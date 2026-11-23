@@ -8,7 +8,7 @@ from test_linux_bots import (FIXTURE_GSC, transition_fixture, transition_plan,
                              uses_both_teams, TEAM_CAPACITY, MAX_BOTS, validate_brain_notices,
                              validate_brain_fights, COVER_ROW, HUNT_ROW, team_play,
                              objective_fixture, validate_objectives, FIXTURE_GSC,
-                             GRENADE_ROW, KNIFE_ROW, SHOTS_ROW)
+                             GRENADE_ROW, KNIFE_ROW, SHOTS_ROW, kit_lines)
 
 
 def healthy_log():
@@ -450,6 +450,25 @@ class ObjectiveTests(unittest.TestCase):
                                 "bots: 5 left an objective after 11.0 s (died)\n"
                                 "bots: 6 left an objective after 0.4 s (hunt, role attack)\n")
         self.assertIn("left an objective 3 times, after 11.0 s at most (died 1, hunt 2)", printed.getvalue())
+
+
+    def test_classes_and_killstreaks_are_summed_up(self):
+        lines = kit_lines("bots: 3 plays spec ops (its class, map 4200 across)\n"
+                          "bots: 4 plays sniper (its class, map 4200 across)\n"
+                          "bots: 5 plays spec ops (sniper, map 4200 across)\n"
+                          "bots: 3 earned a killstreak: UAV (radar_mp)\n"
+                          "bots: 3 takes out its UAV after 2.1 s\n"
+                          "bots: 3 called in its UAV after 2.6 s\n"
+                          "bots: 4 earned a killstreak: airstrike (airstrike_mp)\n"
+                          "bots: 4 marks an airstrike at (100 -200) on 2 enemies, 1.9 s on the map\n"
+                          "bots: 4 called in its airstrike after 8.0 s\n"
+                          "bots: 6 earned a killstreak: helicopter (helicopter_mp)\n"
+                          "bots: 6 keeps its helicopter: the game did not call it in\n")
+        self.assertEqual(lines[0], "bots answered the class menu: sniper 1, spec ops 2")
+        self.assertEqual(lines[1], "bots earned killstreaks: UAV 1, airstrike 1, helicopter 1; "
+                                   "called in: UAV 1, airstrike 1; 1 airstrikes marked, "
+                                   "0 airstrike maps closed, 1 not called in")
+        self.assertEqual(kit_lines("")[0], "bots answered the class menu: never")
 
 
 class CombatHoldTests(unittest.TestCase):

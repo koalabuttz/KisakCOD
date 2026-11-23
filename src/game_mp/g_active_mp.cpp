@@ -578,8 +578,10 @@ void ClientThink_real(gentity_s *ent, usercmd_s *ucmd)
                 {
                     if ((client->buttonsSinceLastFrame & BUTTON_LOC_CONFIRM) != 0)
                     {
-                        loc2d = ((double)ucmd->selectedLocation[0] + 128.0) / 255.0;
-                        loc2d_4 = ((double)ucmd->selectedLocation[1] + 128.0) / 255.0;
+                        // The client sends the cursor as a signed byte
+                        // (CL_GetSelectedLocation); char is unsigned on ARM.
+                        loc2d = ((double)(int8_t)ucmd->selectedLocation[0] + 128.0) / 255.0;
+                        loc2d_4 = ((double)(int8_t)ucmd->selectedLocation[1] + 128.0) / 255.0;
                         loc2da = loc2d * level.compassMapWorldSize[0];
                         loc2d_4a = loc2d_4 * level.compassMapWorldSize[1];
                         loc[0] = loc2da * level.compassNorth[1] + level.compassMapUpperLeft[0] - loc2d_4a * level.compassNorth[0];

@@ -60,11 +60,18 @@ With `bot_brain 1`, `bot_combat` says whether they fight:
 | `0` | never fire: they walk, look and notice |
 | `1` (default) | fight the opponents they see |
 
+`bot_class` says whether they pick their class:
+
+| `bot_class` | KisakCOD's bots |
+|---|---|
+| `0` | keep the class the game's scripts give them (the stock test-client script picks one at random each life) |
+| `1` (default) | pick one of the five stock classes by the map and their leanings, and keep it (see "Classes and killstreaks") |
+
 `bot_log 1` prints each player a bot notices, the first shot of each fight,
 each choice to take cover or hunt, and its team play (parts, callouts, where
 its part sends it).
 
-`bot_brain`, `bot_combat` and `bot_log` are settings this port added, so they
+`bot_brain`, `bot_combat`, `bot_class` and `bot_log` are settings this port added, so they
 are on the list a game server may not set on a player's client
 (`src/qcommon/server_dvar_guard.h`).
 
@@ -87,9 +94,10 @@ just lost one (see "How a bot fights"). It reloads an empty clip, or one under h
 not fought for two seconds, and switches to its other gun when one runs dry.
 
 On a team, bots call out the enemies they see and play the part their
-team's commander gives them (see "How a team of bots plays").
+team's commander gives them (see "How a team of bots plays"). They pick a
+class and call in the killstreaks they earn (see "Classes and killstreaks").
 
-Next: peeking from cover, smoke and flash grenades, killstreaks, class choice,
+Next: peeking from cover, smoke and flash grenades, custom classes and perks,
 jumps, mantles and ladders, stance in fights, then difficulty levels and
 per-bot style, start-a-game and start-a-server options, and the PS Vita's bot
 budget (6v6 TDM first, then 9v9 Ground War).
@@ -185,6 +193,55 @@ a minute. Bots use it for cover (above) and to find where to anchor and defend
 from: a spot that sees the place and that few other spots see. A spot stands
 for the area around it, so a bot checks with a real trace before it relies on
 one.
+
+## Classes and killstreaks
+
+`src/bots/bot_loadout.h` is what a bot plays with, and it only does what a
+player's client can do: answer the class menu and press the keys.
+
+- **Its class.** A bot picks one of the stock five (assault, spec ops, heavy
+  gunner, demolitions, sniper) the first time it plays, by how big the map's
+  minimap is and its personality: on a map the size of Shipment hardly anyone
+  snipes, on one the size of Overgrown about a third do; a bold bot leans to
+  spec ops and demolitions, a patient one to the sniper rifle and the machine
+  gun. A side takes a second sniper only when it has eight players or more
+  (one in four). It keeps the class from life to life, and when it dies it
+  sometimes (8%) picks another, much more often (38%) after three lives
+  shorter than 20 seconds in a row. It answers the class menu as a player's
+  client does (the `mr` command with the `changeclass` menu,
+  `Cmd_MenuResponse_f`) a second or two into each life, because the stock
+  test-client script (`_dev.gsc`) picks a random class right after every
+  spawn; the stock scripts then give it that class from the next spawn, or at
+  once in a round's first seconds. A class picked when it dies is answered
+  then, so the next life has it. With `scr_oldschool` or `bot_class 0` it
+  leaves the class to the scripts.
+- **Its killstreaks.** The stock `_hardpoints.gsc` gives a UAV, an airstrike
+  and a helicopter as a weapon in action slot 4 ("press 4"). A bot takes it
+  out 1.5 to 5 seconds after earning it, once no fight is on, it is not
+  throwing, has not been hit for 2.5 s and its gun is ready, by switching to
+  that weapon as the key does; an enemy coming into view while it switches
+  puts the gun back up. It holds a UAV while its side still has one up, and
+  calls an airstrike only when it knows where two enemies are together (one
+  will do after 45 s): from the enemies it saw or heard in the last 12 s and
+  its team's callouts, the fresher the better, never within 900 units of
+  itself or 650 of a teammate. On the airstrike's map it stands, takes 1.2 to
+  2.7 s to find the place and clicks on it (`usercmd_s` `selectedLocation`,
+  the cursor's spot on the compass map as a player's client sends it, and the
+  confirm button), or closes the map when it knows no place. When the game
+  does not call it in (another helicopter is up) the bot keeps it and tries
+  again 20 s later.
+- **The game's weapon switches.** A script's `switchToWeapon` sends the
+  player's client a command (`a <weapon>`) that the client acts on by itself;
+  nobody reads a test client's commands, so the server now hands it to the
+  brain (`Bot_ServerCommand`, from `SV_AddServerCommand`), which holds that
+  weapon in its commands until it is up, as the client does. This is how a
+  bot gets its gun back after a killstreak. A bot whose weapon in hand was
+  taken away with nothing asked for takes out a gun.
+
+The server reads a confirmed place from the cursor as a signed byte; it now
+says so (`(int8_t)` in `ClientThink_real`), because `char` is unsigned on ARM
+and an airstrike there landed off the cursor (on Android, the Vita and arm64
+Linux, for players too).
 
 ## How a bot fights
 
@@ -383,6 +440,7 @@ stuck, jumps, then takes another way.
 | `src/bots/bot_tactics.cpp` | the map sense on the server: clear lines through the map, the spot table worked out a frame at a time, cover from a threat, overwatch |
 | `src/bots/bot_combat.h` | the hand and trigger: reaction onset, aimed movements and corrections, tracking lead, firing, the view kick, strafing; no engine types |
 | `src/bots/bot_grenades.h` | a grenade's arc and the view pitch that lands it on a target; no engine types |
+| `src/bots/bot_loadout.h` | the class a bot picks, its killstreaks, where it calls an airstrike and the cursor for it on the compass map; no engine types |
 | `src/bots/bot_perception.h` | what a bot knows: the noticing meter, memory, hearing, what to look at; no engine types |
 | `src/bots/bot_senses.cpp` | `Bot_Sense`: one sense tick of a bot's eyes, ears and compass on the server |
 | `src/bots/bot_motor.h` | the view motor, command angle conversion, the movement keys toward a point and each bot's random source; no engine types |
@@ -452,7 +510,12 @@ to one second behind.
   defend, and the same team keeps its roles. In a made-up map with a wall and
   a door the spot table is filled a step at a time within its budget, matches
   every line, finds cover the threat does not see (nearest first) and places
-  that see a target (least seen first).
+  that see a target (least seen first). Classes follow the map's size and the
+  bot's leanings, a side of six takes one sniper, a bot leaving a class picks
+  another and rethinks more after short lives; killstreak names give their
+  kind, an airstrike goes between enemies together, never on the bot or a
+  teammate and never on old marks, and the compass cursor for a place is the
+  one the server reads back (within a cursor step, about 20 units).
 - `server_test_clients` (`scripts/tests/test_server_test_clients.py`): the
   extracted `SV_UpdateBots` asks the brain about active bots only, and a brain
   that takes the command replaces the random inputs.
