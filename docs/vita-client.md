@@ -119,11 +119,15 @@ second by the game's counter, where H1's had drawn 868 and shown 2. Frame
 times from Vita3K runs before that are therefore the emulator's, not the
 game's.
 
-Two switches are for measuring in an emulator what the game would take if it
-had the room; a console has no memory for either:
+Three switches are for measuring in an emulator; a console has no memory
+for the first and the last:
 - a file named `big-gpu-pool` in the same folder adds 96 MB to the GPU's main
   pool, so a map's buffers and textures can all be made and the
   `gpu memory by use` line says what they come to;
+- a file named `console-cdram` does the opposite: the CDRAM pool is no
+  larger than a console's 96 MB (Vita3K gives 108), so an emulator run says
+  whether a map fits on a console. Vita3K has read about 9 MB more in use
+  than a console for the same map, so the answer errs on the safe side;
 - `-DKISAK_VITA_HEAP_MB=128` at configure time builds a client with a 128 MB
   heap instead of 60. (An empty value, the default, means 60; a `64` left in
   an older build folder's cache, the former default, is read as 60 too.)
