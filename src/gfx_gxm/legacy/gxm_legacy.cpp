@@ -456,6 +456,15 @@ gxm::MemorySizes PoolSizes(Device &device)
         sizes.main += 1u << 20;
     else if (gxm::ProgramCacheMarker("big-gxm-rings"))
         sizes.main += 3u << 20;
+    // For answering in an emulator whether a map fits on a console: a file
+    // named console-cdram beside the compiled programs makes the CDRAM pool
+    // no larger than a console's (96 MB, the 112 a game gets less the 16 MB
+    // parameter buffer; Vita3K gives 108).
+    if (gxm::ProgramCacheMarker("console-cdram") && sizes.cdram > (96u << 20))
+    {
+        sizes.cdram = 96u << 20;
+        Log(device, "diag: console-cdram is there: the CDRAM pool is 96 MB, as on a console");
+    }
     // For measuring in an emulator what a map would take if it fitted: a file
     // named big-gpu-pool beside the compiled programs adds 96 MB to the main
     // pool. A console has no such memory to give (the device is then not
