@@ -98,6 +98,7 @@ FAKE_GAME = textwrap.dedent('''\
             print('"sv_serverid" is: "%d^7" default: "0^7"' % state["server_id"], flush=True)
         elif cmd[0] == "configstrings":
             print("   0: \\\\g_gametype\\\\war", flush=True)
+            print(" 824: \\"%s\\" 2000" % name, flush=True)
             print(" 830: some/model", flush=True)
             for position, menu in sorted(menus().items()):
                 print("%4d: %s" % (1970 + position, menu), flush=True)
@@ -276,6 +277,8 @@ class SweepRunTests(unittest.TestCase):
         self.assertIn("Maps without a zone file (not run): mp_vacant", report)
         self.assertIn("| mp_crash | 12 | 1 | 0 | 0 | 31 ms |", report)
         self.assertIn("Menus answered (name and position): team_marinesopfor (8), changeclass_mw (15).", report)
+        self.assertIn('Vision set when each frame was taken (configstring 824): mp_crash `"mp_crash" 2000`; '
+                      'mp_backlot `"mp_backlot" 2000`.', report)
         self.assertTrue((self.work / "mp_crash.log").is_file())
         self.assertTrue((self.work / "home" / "main" / "screenshots" / "sweep_mp_crash.tga").is_file())
         status, report = self.run_sweep("--maps", "mp_crash", "--screenshot", "--delete-screenshots", "--no-exercise")
