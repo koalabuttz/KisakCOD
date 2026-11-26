@@ -246,6 +246,7 @@
  const dvar_t *r_smc_enable;
  const dvar_t *r_pretess;
  const dvar_t *r_fetchAhead;
+ const dvar_t *r_mergeLitPreTess;
  const dvar_t *r_dynamicBufferReport;
  const dvar_t *r_picmip_manual;
  const dvar_t *r_picmip;
@@ -654,6 +655,19 @@
          fetchAheadDefault,
          DVAR_NOFLAG,
          "Ask the processor ahead of time for what the scene's walks read next (index copies, static model records, a culled leaf's boxes; builds with GCC or Clang)");
+     // The same picture either way (r_draw_bsp.cpp). On for the PS Vita, where
+     // console trial J measured it (docs/perf-ab.md); off elsewhere until a
+     // machine shows what it is worth there.
+#ifdef KISAK_GFX_GXM
+     const bool mergeLitPreTessDefault = true;
+#else
+     const bool mergeLitPreTessDefault = false;
+#endif
+     r_mergeLitPreTess = Dvar_RegisterBool(
+         "r_mergeLitPreTess",
+         mergeLitPreTessDefault,
+         DVAR_NOFLAG,
+         "Draw world pieces together in the lit pass when they differ only in a lightmap or reflection probe the shader does not read");
      // The PS Vita's buffers are smaller than the retail game's (r_gfx.h), and
      // its runs are read from the log: there the line is on.
      r_dynamicBufferReport = Dvar_RegisterInt(

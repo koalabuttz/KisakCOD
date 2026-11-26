@@ -52,6 +52,7 @@ inline constexpr const char* const kServerDvarsOfThisPort[] = {
     "r_gpuSyncSleep",
     "r_gpuSyncSleepThreads",
     "r_gpuSyncSleepUnlocked",
+    "r_mergeLitPreTess",
     "r_modernAo",
     "r_modernAoEdge",
     "r_modernAoFloor",

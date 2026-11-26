@@ -487,6 +487,44 @@ without the vectors (0.05 ms slower).
 No other machine has run it; a desktop processor does this work in a small
 fraction of the time, so the setting stays off there until one does.
 
+## `r_mergeLitPreTess`
+
+The world's lit pass draws a pretessellated list piece by piece
+(`R_DrawBspDrawSurfsLitPreTess`, `r_draw_bsp.cpp`). The main thread starts a
+new piece wherever the first vertex, the lightmap or the reflection probe
+changes, and the render thread sets the lightmap and the probe before each
+piece. A pass whose shader reads neither (the custom samplers of the probe and
+the two lightmaps) draws the same picture whichever are set.
+`r_mergeLitPreTess 1` (on by default on the PS Vita, off elsewhere) draws a
+piece that changes only a lightmap or probe the pass does not read together
+with the piece before it, when both start at the same vertex and the same layer
+data. That is how `R_DrawBspDrawSurfsPreTess` already draws the other passes;
+the merged draw names the widest vertex range of its pieces.
+
+```
+perf_ab "set r_mergeLitPreTess 0" "set r_mergeLitPreTess 1"
+```
+
+compares the two; `render: tess pretessellated triangles` and its draws are the
+timer.
+
+Console trial J (2026-11-15, a PS Vita, the busy view of `mp_crash`, a build
+made on the PC from cbd93105 with the switch as a bit of `r_ignore`) counted
+the lit lists on the render thread: 226 lists a frame, 555 pieces, 326 of them
+after a change of probe only and 2 after a change of lightmap only. The pass
+read neither in all 328 and each started at the vertex of the piece before, so
+the lit draws went from 555 to 227 a frame (the back end's from about 1464 to
+1136). At half the 3D size, where the render thread sets the pace, the frame
+went from 25.24 to 23.68 ms (every window with it on faster than every window
+with it off; the windows of one setting differ by 0.4 %), and the render
+thread's draw phase (`perf_phases`) was 1.90 ms shorter. At full size the
+graphics chip sets the pace: 30.96 to 30.65 ms, with 2.3 ms less processor
+time a frame.
+
+The probe is what changes, and the Vita's lit shaders do not read it. On a
+machine whose lit shaders read the probe (specular on), only lightmap changes
+can merge, so the setting stays off there until a run shows what it is worth.
+
 ## Where the render thread's time goes (`perf_phases`)
 
 The timed pieces above read a clock twice each. That is too dear for what the
@@ -594,6 +632,12 @@ main thread's time in a frame, which windows of one variant repeat to 0.05 ms.
   1.2 ms and a model's or surface's sums twice 0.6 ms, so the sums are over
   half of a walk and what is left for fetches and branches is about 1.4 ms.
   `r_fetchAhead` already took what fetching ahead can.
+- **More static models in the model cache.** The cache (4 MB on the Vita)
+  is already full every frame (4088 of 4096 KB), so giving more models places
+  in it at map load only moves models in and out.
+- **Rebasing the world's indices** so that pieces at different first vertices
+  share a draw. The main thread already splits a list only where the lightmap
+  or probe changes; rebasing left the 539 lit draws at 539.
 - **The 4x4 matrix products of a draw** are 401 instructions each there (sums
   in double precision), but deriving matrices is 0.4 % of the render thread
   (see above). Products of four floats at a time changed the frame by
