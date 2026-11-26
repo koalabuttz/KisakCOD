@@ -134,13 +134,30 @@ void DB_AllocXZoneMemory(
         MyAssertHandler(".\\database\\db_memory.cpp", 104, 0, "%s", "zoneMem->vertexBuffer == NULL");
     if (zoneMem->lockedVertexData)
         MyAssertHandler(".\\database\\db_memory.cpp", 105, 0, "%s", "zoneMem->lockedVertexData == NULL");
+#if defined(KISAK_GFX_GXM)
+    // The Vita: the GPU reads the vertex and index blocks where the zone
+    // holds them (R_AllocStaticVertexBufferInPlace). The locked data is then
+    // the block itself, and DB_CloneStreamData has nothing to copy.
     if (zoneMem->blocks[7].size)
+        zoneMem->lockedVertexData = (uint8_t *)R_AllocStaticVertexBufferInPlace(
+            (IDirect3DVertexBuffer9 **)&zoneMem->vertexBuffer, zoneMem->blocks[7].data, zoneMem->blocks[7].size);
+    if (zoneMem->blocks[7].size && !zoneMem->lockedVertexData)
+#else
+    if (zoneMem->blocks[7].size)
+#endif
         zoneMem->lockedVertexData = (uint8_t *)R_AllocStaticVertexBuffer((IDirect3DVertexBuffer9 **)&zoneMem->vertexBuffer, zoneMem->blocks[7].size);
     if (zoneMem->indexBuffer)
         MyAssertHandler(".\\database\\db_memory.cpp", 110, 0, "%s", "zoneMem->indexBuffer == NULL");
     if (zoneMem->lockedIndexData)
         MyAssertHandler(".\\database\\db_memory.cpp", 111, 0, "%s", "zoneMem->lockedIndexData == NULL");
+#if defined(KISAK_GFX_GXM)
     if (zoneMem->blocks[8].size)
+        zoneMem->lockedIndexData = (uint8_t *)R_AllocStaticIndexBufferInPlace(
+            (IDirect3DIndexBuffer9 **)&zoneMem->indexBuffer, zoneMem->blocks[8].data, zoneMem->blocks[8].size);
+    if (zoneMem->blocks[8].size && !zoneMem->lockedIndexData)
+#else
+    if (zoneMem->blocks[8].size)
+#endif
         zoneMem->lockedIndexData = (uint8_t *)R_AllocStaticIndexBuffer((IDirect3DIndexBuffer9 **)&zoneMem->indexBuffer, zoneMem->blocks[8].size);
 }
 

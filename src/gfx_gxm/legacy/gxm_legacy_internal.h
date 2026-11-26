@@ -121,6 +121,9 @@ struct Memory
     uint8_t *data = nullptr;
     gxm::MemoryKind kind = gxm::MemoryKind::Cdram;
     bool gpu = false;
+    // The caller's memory, read by the GPU in place (CreateVertexBufferOver):
+    // no GPU memory of its own, and never freed here.
+    bool external = false;
     MemoryUse use = MemoryUse::Texture;
     uint32_t bytes = 0; // of GPU memory, for the accounts
     std::vector<uint8_t> host;

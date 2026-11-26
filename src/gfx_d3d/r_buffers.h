@@ -15,6 +15,15 @@ void *R_AllocWriteOnlyVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeInBytes)
 void *R_AllocDynamicIndexBuffer(IDirect3DIndexBuffer9 **ib, uint32_t sizeInBytes);
 void *R_AllocStaticIndexBuffer(IDirect3DIndexBuffer9 **ib, int sizeInBytes);
 void Load_VertexBuffer(IDirect3DVertexBuffer9 **vb, uint8_t *bufferData, int sizeInBytes);
+#if defined(KISAK_GFX_GXM)
+// The Vita: a static buffer the GPU reads where `data` is, with no GPU
+// memory of its own. `data` is a fast file's copy that its zone keeps for as
+// long as the buffer lives. Returns `data`, locked as R_AllocStatic*Buffer
+// leaves its buffer (R_FinishStatic*Buffer unlocks it), or null when the back
+// end refuses: the caller then makes an ordinary buffer.
+void *R_AllocStaticVertexBufferInPlace(IDirect3DVertexBuffer9 **vb, void *data, int sizeInBytes);
+void *R_AllocStaticIndexBufferInPlace(IDirect3DIndexBuffer9 **ib, void *data, int sizeInBytes);
+#endif
 void R_InitDynamicVertexBufferState(GfxVertexBufferState *vb, int bytes);
 void R_InitDynamicIndexBufferState(GfxIndexBufferState *ib, int indexCount);
 void R_InitDynamicIndices(GfxDynamicIndices *ib, int indexCount);

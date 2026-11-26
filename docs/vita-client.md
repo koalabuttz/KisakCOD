@@ -119,11 +119,15 @@ second by the game's counter, where H1's had drawn 868 and shown 2. Frame
 times from Vita3K runs before that are therefore the emulator's, not the
 game's.
 
-Two switches are for measuring in an emulator what the game would take if it
-had the room; a console has no memory for either:
+Three switches are for measuring in an emulator; a console has no memory
+for the first and the last:
 - a file named `big-gpu-pool` in the same folder adds 96 MB to the GPU's main
   pool, so a map's buffers and textures can all be made and the
   `gpu memory by use` line says what they come to;
+- a file named `console-cdram` does the opposite: the CDRAM pool is no
+  larger than a console's 96 MB (Vita3K gives 108), so an emulator run says
+  whether a map fits on a console. Vita3K has read about 9 MB more in use
+  than a console for the same map, so the answer errs on the safe side;
 - `-DKISAK_VITA_HEAP_MB=128` at configure time builds a client with a 128 MB
   heap instead of 60. (An empty value, the default, means 60; a `64` left in
   an older build folder's cache, the former default, is read as 60 too.)
@@ -1443,6 +1447,23 @@ host by `scripts/tests/test_vita_gxm_heap.py`. The kinds are:
 - CDRAM: textures, render targets, the display buffers;
 - uncached main memory: vertex data, ring buffers;
 - the two USSE kinds: shader code.
+
+**Static vertices and indices are read in place.** A fast file's zone keeps
+its own copy of the vertex and index blocks and of a map's world vertices
+for as long as it is loaded; on a PC the renderer copies them into vertex
+and index buffers. On the Vita those copies took 25 to 45 MB of a map's
+96 MB of CDRAM (mp_carentan's world vertices alone are 22 MB, and no
+single free range was that long). So the zone arena's memory block is given
+to the GPU (`sceGxmMapMemory`, read only) and a static buffer made from a
+zone's data points at that data (`CreateVertexBufferOver`, reached through
+D3D9's shared handle of `CreateVertexBuffer`). Its Unlock cleans the range
+out of the CPU's caches, with DMA copies into a small scratch block (user
+code cannot clean caches; the kernel cleans a DMA copy's source), and
+destroying it waits for the GPU if a draw read it, so the zone may reuse
+the memory at once. The `gpu memory by use` line counts them as `static
+vertices in place` and `static indices in place`. A file named
+`no-buffers-in-place` beside the compiled programs gives them GPU memory of
+their own, as before.
 
 The Legacy back end counts each pool's use by what it is for and logs it
 with the engine's other figures (once a minute by default, `vita_statsEvery`,

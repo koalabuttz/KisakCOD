@@ -2592,7 +2592,7 @@ void SetUpTexture(Device &device, Texture &texture)
 
 void Retire(Device &device, Memory &memory)
 {
-    if (memory.gpu && device.draw)
+    if (memory.gpu && !memory.external && device.draw)
     {
         const gxm::MemoryKind kind = memory.kind;
         void *data = memory.data;
@@ -3177,7 +3177,7 @@ void Rename(Device &device, GpuBuffer &buffer)
 void RetireCopies(Device &device, GpuBuffer &buffer)
 {
     DrawState *d = device.draw;
-    if (!d || !buffer.memory.gpu)
+    if (!d || !buffer.memory.gpu || buffer.memory.external)
         return;
     for (size_t i = 0; i < d->kept.size();)
     {

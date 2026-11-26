@@ -274,10 +274,11 @@ target_link_options(KisakCOD-mp PRIVATE ${KISAK_VITA_LINK_OPTIONS})
 # The shader compiler is the user's own libshacccg.suprx, loaded at run time
 # (gxm_shader_compiler.h): weak imports, so the client starts without it.
 # The bench loads the system's installer at run time (vita_bench.cpp): weak
-# imports too.
+# imports too. SceKernelDmacMgr: the GXM back end's DMA copies, which clean
+# the CPU's caches over what the GPU reads in place (gxm_legacy.cpp).
 target_link_libraries(KisakCOD-mp PRIVATE ${KISAK_VITA_LINK_LIBRARIES} SceCtrl_stub SceTouch_stub
     SceAudio_stub SceGxm_stub SceDisplay_stub SceIme_stub SceCommonDialog_stub SceShaccCg_stub_weak
-    ScePromoterUtil_stub_weak)
+    ScePromoterUtil_stub_weak SceKernelDmacMgr_stub)
 add_dependencies(KisakCOD-mp update_build_number)
 
 set(KISAK_VITA_MP_TITLE_ID "KSKD00002" CACHE STRING "PS Vita title ID of the multiplayer client .vpk (9 characters)")
