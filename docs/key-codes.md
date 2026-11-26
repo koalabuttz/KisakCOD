@@ -45,6 +45,10 @@ chmod 600 ~/path/to/home/codkey.txt
   `codkey`).
 - Steam owners find their key in the Steam library: right-click Call of Duty 4,
   Manage, CD keys.
+- The home folder is the one the game started with. A game server can set
+  `fs_homepath` on a client like any other retail setting
+  ([server-set-dvars.md](server-set-dvars.md)); the key code does not follow
+  that, so it is never read from, or saved to, a folder a server named.
 
 ### The key code menu
 

@@ -415,9 +415,10 @@ bool CL_CDKeyValidate(netadr_t addr)
 {
     // Nothing typed into the key code menu goes along to a remote server.
     CL_ClearKeyCodeMenuFields();
-    const char *homePath = fs_homepath ? fs_homepath->current.string : "";
     const bool keyCodeOnly = cl_keyCodeOnly && cl_keyCodeOnly->current.enabled;
-    return CL_PrepareRemoteAuth(addr, homePath, keyCodeOnly) != ClientAuthMethod::none;
+    // The key code of the folder the game started with: a server the player
+    // visited can have changed fs_homepath (FS_StartHomePath).
+    return CL_PrepareRemoteAuth(addr, FS_StartHomePath(), keyCodeOnly) != ClientAuthMethod::none;
 }
 
 //bool CL_CDKeyValidate(const char *key, const char *checksum)

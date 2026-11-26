@@ -12,6 +12,7 @@
 #include <qcommon/com_bsp.h>
 #include <qcommon/cmd.h>
 #include <qcommon/files.h>
+#include <qcommon/run_plan.h> // StartText
 #if defined(__linux__) || defined(__APPLE__) || defined(__vita__)
 #include <linux/compat.h>
 #include <qcommon/threads_interlock.h> // InterlockedCompareExchange in FS_FileExists etc.
@@ -2145,6 +2146,20 @@ bool FS_IsBasePathValid()
     return FS_ReadFile("fileSysCheck.cfg", 0) > 0;
 }
 
+// KISAK: the home folder as the game started with it. A game server sets a
+// client's dvars by name, fs_homepath among them as in retail
+// (docs/server-set-dvars.md), and the file system follows it as retail does.
+// The port's own files that a server must not move go by this instead: the
+// key code (codkey.txt) and the Vulkan back end's caches. Taken once, by the
+// first FS_InitFilesystem, before any server is joined; a later change of the
+// dvar does nothing to it.
+static kisak::run_plan::StartText<1024> fs_startHomePath;
+
+const char *FS_StartHomePath()
+{
+    return fs_startHomePath.Get();
+}
+
 char lastValidBase[256];
 char lastValidGame[256];
 void FS_InitFilesystem()
@@ -2158,6 +2173,7 @@ void FS_InitFilesystem()
     Com_StartupVariable("loc_language");
     SEH_InitLanguage();
     FS_Startup((char*)"main");
+    fs_startHomePath.Take(fs_homepath->current.string);
     SEH_Init_StringEd();
     SEH_UpdateLanguageInfo();
     FS_SetRestrictions();

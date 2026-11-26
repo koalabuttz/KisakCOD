@@ -73,6 +73,16 @@ address the client hands to the desktop, such as the update file a server can
 name through `cl_updatefiles`, is opened only when it is a plain `http://` or
 `https://` address (`src/qcommon/url_check.h`).
 
+What this port added does not follow a folder a server chose. `fs_homepath`
+stays settable, and the retail file system follows it as it always did, but the
+port's own files go by the home folder the game started with
+(`FS_StartHomePath()` in `src/universal/com_files.cpp`, taken once at start-up,
+before any server is joined): the [key code](key-codes.md) is read from and
+saved to `codkey.txt` there, so a key typed after a visit to a server is never
+written to a folder that server named. Starting the other game from the menu
+passes on the start folders in the same way ([Linux client](linux-mp-client.md)).
+The check below fails when the key code reads the dvar again.
+
 A mod the player has installed or downloaded can also run console commands
 through its own menus, as in retail.
 

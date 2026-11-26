@@ -10,7 +10,7 @@ setting stays as it was in retail.  The one exception is the list
 ``kServerDvarsOfThisPort`` in ``src/qcommon/server_dvar_guard.h``: every
 setting this port added, which no retail server and no retail mod knows.
 
-Three things are checked, with no game data and no network:
+Four things are checked, with no game data and no network:
 
 1. The real header is compiled into a small native program, 64-bit and - when
    the toolchain can - 32-bit, with the address and undefined-behaviour
@@ -24,6 +24,10 @@ Three things are checked, with no game data and no network:
    exempted below with a reason.  No listed name is a retail name, and none is
    one the engine itself replicates to clients (``DVAR_SYSTEMINFO``,
    ``DVAR_CODINFO``), so no retail server and no retail mod is refused.
+
+4. The port's own files stay where the game started.  A server can set
+   ``fs_homepath`` like any other retail setting, so the key code file goes by
+   ``FS_StartHomePath()``, taken once at start-up, and never by the dvar.
 
 ``--m32`` makes the 32-bit build a requirement.
 """
@@ -44,6 +48,11 @@ CL_PARSE = SRC / "client_mp" / "cl_parse_mp.cpp"
 CG_SERVERCMDS = SRC / "cgame_mp" / "cg_servercmds_mp.cpp"
 Q_SHARED = SRC / "universal" / "q_shared.h"
 RETAIL_NAMES = Path(__file__).resolve().parent / "retail_dvar_names.txt"
+COM_FILES = SRC / "universal" / "com_files.cpp"
+# The key code's functions that take the home folder, and which argument it is.
+KEY_CODE_HOME_ARGUMENT = {"CL_SaveKeyCode": 0, "CL_StoredKeyCodeStatus": 0, "CL_PrepareRemoteAuth": 1}
+# Where those functions are written and declared; every other file calls them.
+KEY_CODE_OWN_FILES = ("cl_auth.cpp", "cl_auth.h")
 
 SOURCE_SUFFIXES = (".cpp", ".c", ".h", ".hpp", ".inl", ".mm")
 
@@ -624,6 +633,62 @@ def check_call_sites(cl_parse: Path = CL_PARSE, cg_servercmds: Path = CG_SERVERC
     return ok
 
 
+def check_start_home_folder(src: Path = SRC, com_files: Path = COM_FILES) -> bool:
+    """The key code file goes by the folder the game started with, not by fs_homepath."""
+    ok = True
+
+    # The folder is taken once, right after the file system's first start-up.
+    files_text = read_source(com_files)
+    if not re.search(r"\bstatic\s+kisak::run_plan::StartText\s*<\s*\d+\s*>\s*fs_startHomePath\s*;", files_text):
+        print(f"FAIL: {com_files.name} does not keep the start home folder in a StartText named fs_startHomePath")
+        ok = False
+    getter = function_body(files_text, "const char *FS_StartHomePath(")
+    if getter is None or not re.fullmatch(r"\s*return\s+fs_startHomePath\.Get\s*\(\s*\)\s*;\s*", getter):
+        print("FAIL: FS_StartHomePath does not just return fs_startHomePath.Get()")
+        ok = False
+    init = function_body(files_text, "void FS_InitFilesystem(")
+    take = r"fs_startHomePath\.Take\s*\(\s*fs_homepath->current\.string\s*\)\s*;"
+    if init is None:
+        print(f"FAIL: {com_files.name} no longer defines FS_InitFilesystem the way this check reads it")
+        ok = False
+    elif not re.search(r"\bFS_Startup\s*\([^;]*\)\s*;\s*" + take, init):
+        print("FAIL: FS_InitFilesystem does not take the start home folder right after FS_Startup")
+        ok = False
+    uses = len(re.findall(r"\bfs_startHomePath\s*\.", files_text))
+    if uses != 2:
+        print(f"FAIL: {com_files.name} uses fs_startHomePath in {uses} places; only FS_InitFilesystem's Take and "
+              "FS_StartHomePath's Get may")
+        ok = False
+
+    # Every caller of the key code's functions names the start folder.
+    calls = {name: 0 for name in KEY_CODE_HOME_ARGUMENT}
+    pattern = re.compile(r"\b(" + "|".join(KEY_CODE_HOME_ARGUMENT) + r")\s*\(")
+    for path in sorted(src.rglob("*")):
+        if path.suffix not in SOURCE_SUFFIXES or not path.is_file() or path.name in KEY_CODE_OWN_FILES:
+            continue
+        text = read_source(path)
+        for match in pattern.finditer(text):
+            name = match.group(1)
+            arguments = call_arguments(text, match.end() - 1)
+            index = KEY_CODE_HOME_ARGUMENT[name]
+            home = arguments[index] if arguments and len(arguments) > index else None
+            calls[name] += 1
+            if home is None or not re.fullmatch(r"FS_StartHomePath\s*\(\s*\)", home):
+                print(f"FAIL: {path.relative_to(src).as_posix()} calls {name} with the home folder {home!r}; "
+                      "it must be FS_StartHomePath(), since a server can set fs_homepath")
+                ok = False
+    for name, count in calls.items():
+        if not count:
+            print(f"FAIL: no call of {name} was found outside {' and '.join(KEY_CODE_OWN_FILES)}; "
+                  "update KEY_CODE_HOME_ARGUMENT")
+            ok = False
+
+    if ok:
+        print("PASS: the key code file goes by the folder the game started with "
+              f"({sum(calls.values())} key code calls)")
+    return ok
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -641,7 +706,7 @@ def main() -> int:
             print(name)
         return 0
 
-    for needed in (HEADER, CL_PARSE, CG_SERVERCMDS, Q_SHARED, RETAIL_NAMES):
+    for needed in (HEADER, CL_PARSE, CG_SERVERCMDS, Q_SHARED, RETAIL_NAMES, COM_FILES):
         if not needed.is_file():
             print(f"FAIL: {needed} is missing", file=sys.stderr)
             return 1
@@ -654,6 +719,7 @@ def main() -> int:
 
     ok = check_call_sites()
     ok = check_header_lists(header) and ok
+    ok = check_start_home_folder() and ok
     retail = read_retail_names()
     for name in retail:
         if not re.fullmatch(r"[A-Za-z0-9_]+", name):

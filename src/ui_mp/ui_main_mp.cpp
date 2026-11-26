@@ -3192,8 +3192,11 @@ void UI_RunMenuScript(int localClientNum, const char **args, const char *actualS
                     I_strncat(key, 1024, Dvar_GetVariantString("cdkey4"));
                     I_strncat(key, 1024, Dvar_GetVariantString("cdkey5"));
                     const bool typed = key[0] != 0;
-                    const char *homePath = fs_homepath ? fs_homepath->current.string : "";
-                    const KeyCodeStatus keyStatus = typed ? CL_SaveKeyCode(homePath, key) : CL_StoredKeyCodeStatus(homePath);
+                    // In the folder the game started with, not where fs_homepath points
+                    // now: a server can change that dvar, and the key must not be
+                    // written to a folder of a server's choosing (FS_StartHomePath).
+                    const KeyCodeStatus keyStatus = typed ? CL_SaveKeyCode(FS_StartHomePath(), key)
+                                                          : CL_StoredKeyCodeStatus(FS_StartHomePath());
                     CL_WipeKeyCode(key, sizeof(key));
                     Dvar_SetStringByName("ui_cdkeyvalid",
                         UI_SafeTranslateString(keyStatus == KeyCodeStatus::ok ? "EXE_CDKEYVALID" : "EXE_CDKEYINVALID"));
@@ -3211,9 +3214,8 @@ void UI_RunMenuScript(int localClientNum, const char **args, const char *actualS
                 // KISAK: retail filled the fields with the stored key. The stored key is never
                 // read back into dvars; the menu opens empty and says whether one is stored.
                 CL_ClearKeyCodeMenuFields();
-                const char *homePath = fs_homepath ? fs_homepath->current.string : "";
                 Dvar_SetStringByName("ui_cdkeyvalid",
-                    CL_StoredKeyCodeStatus(homePath) == KeyCodeStatus::ok ? UI_SafeTranslateString("EXE_CDKEYVALID") : "");
+                    CL_StoredKeyCodeStatus(FS_StartHomePath()) == KeyCodeStatus::ok ? UI_SafeTranslateString("EXE_CDKEYVALID") : "");
             }
         }
         else if (ui_dedicated->current.integer
