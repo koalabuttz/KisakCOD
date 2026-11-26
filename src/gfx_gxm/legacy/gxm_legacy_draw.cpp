@@ -390,10 +390,17 @@ struct DrawState
     // zero for a rejected pixel in place of the discard. The marker and
     // switch no-alpha-test-zero turn it off.
     bool zeroAlphaTest = true;
+    // A pixel that fails the alpha test leaves its program before the rest
+    // of the program (cg::Options::alphaEarly). The marker and switch
+    // no-alpha-early turn it off.
+    bool alphaEarly = true;
     // 0: the last draw had no alpha test, 1: one with a discard, 2: one
     // that was left out, 3: one that writes zero.
     uint8_t lastDrawAlphaTest = 0;
     uint64_t alphaTestDraws = 0, idleAlphaTestDraws = 0, zeroAlphaTestDraws = 0;
+    // Programs asked for with an early alpha test that have one, and that
+    // the translator wrote without it (flow control, or little to skip).
+    uint32_t alphaEarlyPrograms = 0, alphaLatePrograms = 0;
     bool lastDrawIndex32 = false;
     uint32_t lastDrawType = 0, lastDrawUpStride = 0;
     uint64_t lastDrawSerial = 0, lastDrawScene = 0;
@@ -849,7 +856,7 @@ uint64_t VariantKey(const gxm::cg::Options &options)
     return (uint64_t(options.bgraInputs) | uint64_t(options.absentInputs) << 16) ^ (components << 32) ^
            (options.alphaFunc == gxm::cg::AlphaFunc::Always ? 0 : uint64_t(options.alphaFunc)) ^
            (uint64_t(options.sharpSamplers) * 0xff51afd7ed558ccdull) ^
-           (options.alphaZero ? 0x00a5000000000000ull : 0) ^
+           (options.alphaZero ? 0x00a5000000000000ull : 0) ^ (options.alphaEarly ? 0x3c00000000000000ull : 0) ^
            (options.farPlaneInside ? 0x5a5a000000000000ull : 0) ^ (uint64_t(options.diagPosition) * 0x9e3779b97f4a7c15ull);
 }
 
@@ -883,6 +890,8 @@ Variant *GetVariant(Device &device, Shader &shader, const gxm::cg::Options &opti
             std::string cg, error;
             if (gxm::cg::Emit(shader.parsed, options, cg, error))
             {
+                d.alphaEarlyPrograms += options.alphaEarly && cg.find("e_oC0 = ") != std::string::npos;
+                d.alphaLatePrograms += options.alphaEarly && cg.find("e_oC0 = ") == std::string::npos;
                 char label[64];
                 std::snprintf(label, sizeof(label), "%s shader variant %016llx", shader.pixel ? "pixel" : "vertex",
                               (unsigned long long)key);
@@ -2154,6 +2163,11 @@ bool InitDraw(Device &device, std::string &error)
         d.fragDirect = true;
         Log(device, "diag: frag-direct-write is there: pixel constants are copied into the uniform buffer directly");
     }
+    if (gxm::ProgramCacheMarker("no-alpha-early"))
+    {
+        d.alphaEarly = false;
+        Log(device, "diag: no-alpha-early is there: an alpha test is done at the end of its program");
+    }
     if (gxm::ProgramCacheMarker("no-alpha-test-zero"))
     {
         d.zeroAlphaTest = false;
@@ -2904,7 +2918,7 @@ const char *const kLiveSwitches[] = {"no-depth-prepass",  "no-frame-overlap", "n
                                      "no-mip-bias",         "no-filter-sharpen",
                                      "no-prepass-governor", "no-same-state",     "no-world-only-prepass",
                                      "gpu-watch",           "no-prepass-clear",  "no-depth-only-scene",
-                                     "no-scene-in-copy",    "no-alpha-test-drop", "no-alpha-test-zero",
+                                     "no-scene-in-copy",    "no-alpha-test-drop", "no-alpha-test-zero", "no-alpha-early",
                                      "no-frag-keep-depth",  "no-frag-keep-same",  "frag-direct-write",
                                      "no-texture-keep"};
 struct LiveSwitch
@@ -2978,15 +2992,17 @@ void ApplyLiveSwitches(Device &device)
             d.lastDrawValid = false;
             d.fragmentUniformsLive = false;
         }
-        else if (name == "no-alpha-test-drop" || name == "no-alpha-test-zero")
+        else if (name == "no-alpha-test-drop" || name == "no-alpha-test-zero" || name == "no-alpha-early")
         {
-            (name == "no-alpha-test-drop" ? d.dropIdleAlphaTest : d.zeroAlphaTest) = !s.on;
+            (name == "no-alpha-test-drop"   ? d.dropIdleAlphaTest
+             : name == "no-alpha-test-zero" ? d.zeroAlphaTest
+                                            : d.alphaEarly) = !s.on;
             d.lastDrawValid = false;
             Log(device,
                 "diag: alpha tests so far: %llu draws with a discard, %llu with the test left out, %llu that write "
-                "zero",
+                "zero; %u programs with an early test, %u with nothing to skip",
                 (unsigned long long)d.alphaTestDraws, (unsigned long long)d.idleAlphaTestDraws,
-                (unsigned long long)d.zeroAlphaTestDraws);
+                (unsigned long long)d.zeroAlphaTestDraws, d.alphaEarlyPrograms, d.alphaLatePrograms);
         }
         else if (name == "no-filter-stretch")
             gfx_gxm::g_stretchInFilter = !s.on;
@@ -3672,6 +3688,7 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
                 }
             }
         }
+        pixelOptions.alphaEarly = d.alphaEarly && pixelOptions.alphaFunc != gxm::cg::AlphaFunc::Always;
         pixelOptions.sharpSamplers = sharpSamplers;
         // The programs this combination last drew with (Pipeline), unless a
         // run diagnostic wants to see or change how they are found.
@@ -3685,7 +3702,8 @@ void Draw(Device &device, d3d::PrimitiveType type, int32_t baseVertex, uint32_t 
             pipelineKey.ps = ps;
             pipelineKey.decl = device.decl;
             std::memcpy(pipelineKey.strides, strides, sizeof(strides));
-            pipelineKey.alphaFunc = uint8_t(uint8_t(pixelOptions.alphaFunc) | (pixelOptions.alphaZero ? 0x80 : 0));
+            pipelineKey.alphaFunc = uint8_t(uint8_t(pixelOptions.alphaFunc) | (pixelOptions.alphaZero ? 0x80 : 0) |
+                                            (pixelOptions.alphaEarly ? 0x40 : 0));
             pipelineKey.sharp = sharpSamplers;
             pipelineKey.index32 = index32;
             pipeline = &PipelineSlot(d, pipelineKey);
@@ -4377,10 +4395,12 @@ void LogDrawSummary(Device &device)
         (unsigned long long)d->ringOverflows, d->drawFailures);
     Log(device,
         "alpha tests: %llu draws with a discard in their fragment program, %llu with the test left out because it "
-        "could not change the picture%s, %llu that write zero for a rejected pixel%s",
+        "could not change the picture%s, %llu that write zero for a rejected pixel%s; early alpha tests %s, in %u "
+        "programs (%u had nothing to skip)",
         (unsigned long long)d->alphaTestDraws, (unsigned long long)d->idleAlphaTestDraws,
         d->dropIdleAlphaTest ? "" : " (no-alpha-test-drop)", (unsigned long long)d->zeroAlphaTestDraws,
-        d->zeroAlphaTest ? "" : " (no-alpha-test-zero)");
+        d->zeroAlphaTest ? "" : " (no-alpha-test-zero)", d->alphaEarly ? "on" : "off (no-alpha-early)",
+        d->alphaEarlyPrograms, d->alphaLatePrograms);
     {
         const DrawState::FragmentCounts &c = d->fragmentCounts, &t = d->fragmentTotals;
         const uint64_t timed = c.timed + t.timed;

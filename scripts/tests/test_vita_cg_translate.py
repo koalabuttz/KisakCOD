@@ -100,10 +100,20 @@ VITA_CASES = {
     "ps1_vita_coissue_other_lanes": "ps_1_1\ntex t0\nmov r0, t0\nmul r0.rgb, r0, v0\n+mul r0.a, r0.a, v0.a",
     "ps1_vita_bump": "ps_1_1\ntex t0\ntexbem t1, t0\nmov r0, t1",
     "ps1_vita_model_4": "ps_1_4\ntexld r0, t0",
+    # A lit decal: the alpha is the colour map's times the vertex colour's,
+    # the colour all of the lighting. With an early alpha test only the
+    # alpha's three instructions run before the test.
+    "ps3_vita_decal": "ps_3_0\ndef c10, 2, -1, 0.5, 0\ndcl_texcoord0 v0.xy\ndcl_texcoord1 v1.xy\n"
+                      "dcl_color v2\ndcl_2d s0\ndcl_2d s1\ndcl_2d s2\ntexld r0, v0, s0\ntexld r1, v1, s1\n"
+                      "texld r2, v0, s2\nmad r2.xyz, r2, c10.x, c10.y\ndp3 r3.x, r2, c0\nmul r1.xyz, r1, r3.x\n"
+                      "mul r0.xyz, r0, r1\nmul r0.xyz, r0, c1\nmul r0.w, r0.w, v2.w\nmov oC0, r0",
+    # Its alpha needs most of the program: no early test.
+    "ps3_vita_alpha_lit": "ps_3_0\ndcl_texcoord0 v0.xy\ndcl_texcoord1 v1.xy\ndcl_2d s0\ndcl_2d s1\n"
+                          "texld r0, v0, s0\ntexld r1, v1, s1\nmul r0, r0, r1\nmul r0, r0, c0\nmov oC0, r0",
 }
 
-# (case, extra tool arguments, text the program must contain, text the
-# reflection line must contain)
+# (case, extra tool arguments, text the program must contain (or, after a
+# "!", must not), text the reflection line must contain)
 CHECKS = [
     ("ps1_vita_constant", [], "    oC0 = r0;\n", "constants=1 "),
     ("ps1_vita_constant", ["--alpha", "5"], "if (!(a > ref)) discard;", "varyings= "),
@@ -166,6 +176,18 @@ CHECKS = [
     ("vs2_oT_oD_fog", ["--diag-position", "5"],
      "out_TEXCOORD0 = float4(out_POSITION.x * 0.5 + 0.5, out_POSITION.y * 0.5 + 0.5, out_POSITION.w * 0.5, 1.0);\n"
      "    out_POSITION = float4(v0.x / 480.0 - 1.0, 1.0 - v0.y / 272.0, 0.5, 1.0);", "constants=6"),
+    ("ps3_vita_decal", ["--alpha", "5", "--alpha-zero", "--alpha-early"],
+     "    e_r0 = tex2D(s0, (v0).xy);\n    e_r0.w = ((e_r0.wwww * v2.wwww)).w;\n    e_oC0 = e_r0;\n    {\n"
+     "        float a = floor(saturate(e_oC0.w) * 255.0 + 0.5);\n"
+     "        float ref = floor(kisak_alpha_ref * 255.0 + 0.5);\n"
+     "        if (!(a > ref)) return float4(0.0, 0.0, 0.0, 0.0);\n    }\n    r0 = tex2D(s0, (v0).xy);\n",
+     "samplers=0:2d,1:2d,2:2d"),
+    ("ps3_vita_decal", ["--alpha", "7", "--alpha-early"], "        if (!(a >= ref)) discard;\n    }\n",
+     "samplers=0:2d"),
+    ("ps3_vita_decal", ["--alpha", "5", "--alpha-zero"], "!e_r0", "samplers=0:2d"),
+    ("ps3_vita_decal", ["--alpha-early"], "!e_r0", "samplers=0:2d"),
+    ("ps3_vita_alpha_lit", ["--alpha", "5", "--alpha-early"], "!e_r0", "samplers=0:2d,1:2d"),
+    ("ps3_texkill", ["--alpha", "7", "--alpha-early"], "!e_r", "kills=1"),
     ("vs2_oT_oD_fog", ["--diag-position", "8"],
      "out_TEXCOORD0 = float4(out_POSITION.z * 0.25 + 0.5, out_POSITION.w * 0.25 + 0.5, 0.25, 1.0);", "constants=6"),
 ]
@@ -246,7 +268,10 @@ def main() -> int:
             if result.returncode:
                 failures.append(f"{name} {extra}: not translated: {result.stderr.strip()}")
                 continue
-            if text not in result.stdout:
+            if text.startswith("!"):
+                if text[1:] in result.stdout:
+                    failures.append(f"{name} {extra}: the program has {text[1:]!r}")
+            elif text not in result.stdout:
                 failures.append(f"{name} {extra}: the program lacks {text!r}")
             if reflection not in result.stderr:
                 failures.append(f"{name} {extra}: the reflection lacks {reflection!r}: {result.stderr.strip()}")

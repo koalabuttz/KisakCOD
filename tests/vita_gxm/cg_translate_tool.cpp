@@ -2,7 +2,7 @@
 // (src/gfx_gxm/shader/gxm_cg_translate.h), used by
 // scripts/tests/test_vita_cg_translate.py.
 //
-//   cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--sharp MASK] [--far-plane-inside] [--diag-position N] shader.bin
+//   cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--alpha-early] [--sharp MASK] [--far-plane-inside] [--diag-position N] shader.bin
 //
 // Writes the Cg program to stdout and one line of reflection to stderr, or
 // "refused: <reason>" to stderr and exits 2.
@@ -49,6 +49,8 @@ int main(int argc, char **argv)
             options.sharpSamplers = uint16_t(std::strtoul(argv[++i], nullptr, 0));
         else if (!std::strcmp(argv[i], "--alpha-zero"))
             options.alphaZero = true;
+        else if (!std::strcmp(argv[i], "--alpha-early"))
+            options.alphaEarly = true;
         else if (!std::strcmp(argv[i], "--far-plane-inside"))
             options.farPlaneInside = true;
         else if (!std::strcmp(argv[i], "--diag-position") && i + 1 < argc)
@@ -58,7 +60,7 @@ int main(int argc, char **argv)
     }
     if (!path)
     {
-        std::fprintf(stderr, "usage: cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--sharp MASK] [--far-plane-inside] [--diag-position N] shader.bin\n");
+        std::fprintf(stderr, "usage: cg_translate_tool [--bgra MASK] [--absent MASK] [--components REG=N,...] [--alpha FUNC] [--alpha-zero] [--alpha-early] [--sharp MASK] [--far-plane-inside] [--diag-position N] shader.bin\n");
         return 1;
     }
     std::ifstream file(path, std::ios::binary);
