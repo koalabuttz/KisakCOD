@@ -26,8 +26,9 @@ Four things are checked, with no game data and no network:
    ``DVAR_CODINFO``), so no retail server and no retail mod is refused.
 
 4. The port's own files stay where the game started.  A server can set
-   ``fs_homepath`` like any other retail setting, so the key code file goes by
-   ``FS_StartHomePath()``, taken once at start-up, and never by the dvar.
+   ``fs_homepath`` like any other retail setting, so the key code file and the
+   Vulkan back end's caches go by ``FS_StartHomePath()``, taken once at
+   start-up, and never by the dvar.
 
 ``--m32`` makes the 32-bit build a requirement.
 """
@@ -49,6 +50,8 @@ CG_SERVERCMDS = SRC / "cgame_mp" / "cg_servercmds_mp.cpp"
 Q_SHARED = SRC / "universal" / "q_shared.h"
 RETAIL_NAMES = Path(__file__).resolve().parent / "retail_dvar_names.txt"
 COM_FILES = SRC / "universal" / "com_files.cpp"
+VULKAN_BACK_ENDS = (SRC / "linux" / "client" / "vulkan" / "vulkan_backend.cpp",
+                    SRC / "win32" / "vulkan" / "win_vulkan_backend.cpp")
 # The key code's functions that take the home folder, and which argument it is.
 KEY_CODE_HOME_ARGUMENT = {"CL_SaveKeyCode": 0, "CL_StoredKeyCodeStatus": 0, "CL_PrepareRemoteAuth": 1}
 # Where those functions are written and declared; every other file calls them.
@@ -633,8 +636,8 @@ def check_call_sites(cl_parse: Path = CL_PARSE, cg_servercmds: Path = CG_SERVERC
     return ok
 
 
-def check_start_home_folder(src: Path = SRC, com_files: Path = COM_FILES) -> bool:
-    """The key code file goes by the folder the game started with, not by fs_homepath."""
+def check_start_home_folder(src: Path = SRC, com_files: Path = COM_FILES, back_ends=VULKAN_BACK_ENDS) -> bool:
+    """The key code file and the Vulkan caches go by the folder the game started with, not by fs_homepath."""
     ok = True
 
     # The folder is taken once, right after the file system's first start-up.
@@ -660,6 +663,18 @@ def check_start_home_folder(src: Path = SRC, com_files: Path = COM_FILES) -> boo
               "FS_StartHomePath's Get may")
         ok = False
 
+    # The Vulkan back ends hand what they find in the cache folder to the GPU
+    # driver, and look the folder up again at every vid_restart.
+    for path in back_ends:
+        text = read_source(path)
+        if re.search(r"\"fs_homepath\"|\bfs_homepath\s*->", text):
+            print(f"FAIL: {path.name} reads the fs_homepath dvar, which a server can set; use FS_StartHomePath()")
+            ok = False
+        cache = function_body(text, "std::string CacheDirectory(")
+        if cache is None or not re.search(r"\bFS_StartHomePath\s*\(\s*\)", cache):
+            print(f"FAIL: {path.name}'s CacheDirectory does not go by FS_StartHomePath()")
+            ok = False
+
     # Every caller of the key code's functions names the start folder.
     calls = {name: 0 for name in KEY_CODE_HOME_ARGUMENT}
     pattern = re.compile(r"\b(" + "|".join(KEY_CODE_HOME_ARGUMENT) + r")\s*\(")
@@ -684,8 +699,8 @@ def check_start_home_folder(src: Path = SRC, com_files: Path = COM_FILES) -> boo
             ok = False
 
     if ok:
-        print("PASS: the key code file goes by the folder the game started with "
-              f"({sum(calls.values())} key code calls)")
+        print("PASS: the key code file and the Vulkan caches go by the folder the game started with "
+              f"({sum(calls.values())} key code calls, {len(back_ends)} back ends)")
     return ok
 
 
@@ -706,7 +721,7 @@ def main() -> int:
             print(name)
         return 0
 
-    for needed in (HEADER, CL_PARSE, CG_SERVERCMDS, Q_SHARED, RETAIL_NAMES, COM_FILES):
+    for needed in (HEADER, CL_PARSE, CG_SERVERCMDS, Q_SHARED, RETAIL_NAMES, COM_FILES, *VULKAN_BACK_ENDS):
         if not needed.is_file():
             print(f"FAIL: {needed} is missing", file=sys.stderr)
             return 1

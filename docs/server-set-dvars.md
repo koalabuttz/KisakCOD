@@ -79,9 +79,11 @@ port's own files go by the home folder the game started with
 (`FS_StartHomePath()` in `src/universal/com_files.cpp`, taken once at start-up,
 before any server is joined): the [key code](key-codes.md) is read from and
 saved to `codkey.txt` there, so a key typed after a visit to a server is never
-written to a folder that server named. Starting the other game from the menu
-passes on the start folders in the same way ([Linux client](linux-mp-client.md)).
-The check below fails when the key code reads the dvar again.
+written to a folder that server named, and the Vulkan back ends keep their
+shader and pipeline caches there, so nothing a server's folder holds is handed
+to the graphics driver. Starting the other game from the menu passes on the
+start folders in the same way ([Linux client](linux-mp-client.md)). The check
+below fails when any of these reads the dvar again.
 
 A mod the player has installed or downloaded can also run console commands
 through its own menus, as in retail.
