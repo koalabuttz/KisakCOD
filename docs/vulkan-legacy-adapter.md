@@ -261,7 +261,9 @@ each translation by its bytecode:
 * In the process, for every device: a shader created again (another device, a
   `vid_restart`, the same bytecode twice) is not translated again.
 * In a file between runs, when `DeviceDesc::shaderCachePath` is set (the game's
-  hosts use `<fs_homepath>/vulkan/shaders.bin`, dvar `r_vkShaderCache`). The
+  hosts use `<fs_homepath>/vulkan/shaders.bin`, dvar `r_vkShaderCache`, with
+  `fs_homepath` as the game started with it: a game server can set that dvar,
+  and a folder it named is never used for the caches). The
   first device reads it; a device that goes writes it if anything new was
   translated, through a temporary file renamed over the old one.
 

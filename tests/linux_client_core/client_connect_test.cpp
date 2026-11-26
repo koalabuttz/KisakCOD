@@ -39,7 +39,14 @@ clientConnection_t clientConnections[1];
 clientUIActive_t clientUIActives[1];
 clientStatic_t cls;
 int cl_serverLoadingMap;
+// The dvar, which a server can change, and the folder the game started with
+// (com_files.cpp's FS_StartHomePath), which the key code goes by.
 const dvar_t *fs_homepath;
+static const char *gStartHome = "";
+const char *FS_StartHomePath()
+{
+    return gStartHome;
+}
 int g_waitingForServer;
 
 clientConnection_t *CL_GetLocalClientConnection(int localClientNum)
@@ -228,6 +235,7 @@ int main()
     dvar_t homeDvar{};
     homeDvar.current.string = home;
     fs_homepath = &homeDvar;
+    gStartHome = home;
     const std::string keyPath = std::string(home) + "/codkey.txt";
     // A made-up key with a matching checksum; no real key is used anywhere.
     const char *madeUpKey = "K1SAKC0DTESTKEY9";
@@ -300,9 +308,55 @@ int main()
         "key menu fields: emptied even when the connection is refused");
     writeKey(keyText, 0600);
 
+    // A server sets a client's dvars by name, fs_homepath among them. The key
+    // code stays the one in the folder the game started with: a folder the
+    // server named is neither read for a key nor told where the key is.
+    {
+        char other[] = "/tmp/kisak-keycode-other-XXXXXX";
+        check(mkdtemp(other) != nullptr, "changed fs_homepath: second folder");
+        const std::string otherPath = std::string(other) + "/codkey.txt";
+        const char *otherKey = "0THERKEYF0RTEST5";
+        char otherText[64];
+        std::snprintf(otherText, sizeof(otherText), "%.4s-%.4s-%.4s-%.4s-%04X\n", otherKey, otherKey + 4,
+            otherKey + 8, otherKey + 12, CL_KeyCodeCrc(otherKey, 16));
+        homeDvar.current.string = other;
+
+        reset();
+        check(!connect("192.0.2.10:28960") && clientUIActives[0].connectionState == CA_CONNECTING && authErrors == 0,
+            "changed fs_homepath, no key there: the connection still starts with the start folder's key");
+        check(CL_GetPlatformChallenge(request, sizeof(request)) == ClientAuthResult::ready
+            && request == std::string("getchallenge 0 \"") + guid + "\"",
+            "changed fs_homepath, no key there: getchallenge carries the start folder's GUID");
+        check(printed.find(other) == std::string::npos, "changed fs_homepath: the new folder is named nowhere");
+
+        std::FILE *file = std::fopen(otherPath.c_str(), "w");
+        std::fputs(otherText, file);
+        std::fclose(file);
+        chmod(otherPath.c_str(), 0600);
+        char otherGuid[33];
+        CL_KeyCodeGuid(otherKey, otherGuid);
+        reset();
+        check(!connect("192.0.2.10:28960") && clientUIActives[0].connectionState == CA_CONNECTING && authErrors == 0,
+            "changed fs_homepath, another key there: the connection starts");
+        check(CL_GetPlatformChallenge(request, sizeof(request)) == ClientAuthResult::ready
+            && request == std::string("getchallenge 0 \"") + guid + "\"" && !std::strstr(request, otherGuid),
+            "changed fs_homepath, another key there: getchallenge carries the start folder's GUID, not that key's");
+
+        unlink(keyPath.c_str());
+        refusedRemote("192.0.2.10:28960", "changed fs_homepath, key only in the new folder");
+        check(lastError.find(keyPath) != std::string::npos && lastError.find(other) == std::string::npos,
+            "changed fs_homepath, key only in the new folder: the error names the start folder's file");
+        writeKey(keyText, 0600);
+
+        unlink(otherPath.c_str());
+        rmdir(other);
+        homeDvar.current.string = home;
+    }
+
     unlink(keyPath.c_str());
     rmdir(home);
     fs_homepath = nullptr;
+    gStartHome = "";
 
     // An already connected client is not touched (retail behaviour).
     reset();

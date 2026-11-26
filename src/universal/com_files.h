@@ -129,6 +129,10 @@ int FS_FileExists(char *file);
 int FS_WriteFile(char *filename, char *buffer, uint32_t size);
 void FS_ConvertPath(char *s);
 void FS_InitFilesystem();
+// KISAK: fs_homepath as the game started with it ("" before FS_InitFilesystem,
+// or when it is 1024 characters or longer). For the port's own files that a
+// server's change of the dvar must not move; see com_files.cpp.
+const char *FS_StartHomePath();
 uint32_t FS_FOpenFileByMode(char *qpath, int *f, fsMode_t mode);
 void FS_Flush(int f);
 void FS_FreeFileList(const char **list);

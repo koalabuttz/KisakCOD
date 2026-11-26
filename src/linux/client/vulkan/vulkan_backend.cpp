@@ -10,6 +10,7 @@
 
 #include <universal/q_shared.h>
 #include <qcommon/qcommon.h>
+#include <universal/com_files.h> // FS_StartHomePath
 
 #include <gfx_vk/d3d9/vk_d3d9.h>
 #include <gfx_vk/modern/vk_modern.h>
@@ -400,15 +401,18 @@ void HoldVulkanLoader()
         Com_Printf(CON_CHANNEL_GFX, "Vulkan: SDL_Vulkan_LoadLibrary failed: %s\n", SDL_GetError());
 }
 
-// Where the caches live: <fs_homepath>/vulkan, holding the Legacy adapter's
+// Where the caches live: <home folder>/vulkan, holding the Legacy adapter's
 // shaders.bin (translated shaders) and the core's pipelines.bin (the Vulkan
 // pipeline cache). Empty (no files) when r_vkShaderCache is off or there is no
-// home path.
+// home path. The home folder is the one the game started with
+// (FS_StartHomePath), not the fs_homepath dvar as it is now: a server can
+// change that dvar, this runs again at every vid_restart, and what is read
+// from the folder goes to the GPU driver.
 std::string CacheDirectory()
 {
     if (!r_vkShaderCache->current.enabled)
         return {};
-    const char *home = Dvar_GetString("fs_homepath");
+    const char *home = FS_StartHomePath();
     if (!home || !*home)
         return {};
     const std::string directory = std::string(home) + "/vulkan";

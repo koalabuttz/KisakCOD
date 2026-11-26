@@ -11,6 +11,9 @@
 //     the probe can name the stage that failed, and an assertion prints the
 //     probe's failure line and aborts, because an engine invariant no longer
 //     holds. No command system is linked, so the dvar commands are not added.
+//     No file system is linked either, so there is no home folder
+//     (FS_StartHomePath is com_files.cpp's) and the Vulkan back end keeps no
+//     shader or pipeline cache, as before: the probe never had fs_homepath.
 //
 //     _copyDWord, which the script string list uses, is common.cpp's loop
 //     verbatim: common.cpp itself is the real console and error host, which is
@@ -27,6 +30,7 @@
 #include <universal/q_shared.h>
 #include <universal/assertive.h>
 #include <qcommon/qcommon.h>
+#include <universal/com_files.h> // FS_StartHomePath
 
 #include "device_probe.h"
 
@@ -105,6 +109,13 @@ bool Com_LogFileOpen()
 
 void Dvar_AddCommands()
 {
+}
+
+// src/universal/com_files.cpp. The Vulkan back end asks it where its caches
+// go; with no home folder it keeps none.
+const char *FS_StartHomePath()
+{
+    return "";
 }
 
 // src/qcommon/common.cpp:357.
