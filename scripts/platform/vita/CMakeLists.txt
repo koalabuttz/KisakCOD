@@ -109,7 +109,17 @@ set(KISAK_VITA_LINK_LIBRARIES
     SceNet_stub SceNetCtl_stub SceSysmodule_stub SceKernelThreadMgr_stub
     SceCtrl_stub ScePower_stub SceAppMgr_stub SceAppUtil_stub SceLibKernel_stub SceRtc_stub SceIofilemgr_stub
 )
-target_link_options(KisakCOD-dedi PRIVATE ${KISAK_VITA_LINK_OPTIONS})
+# The main thread's file, memory block and packet calls are timed for the
+# "Vita: long frame" log lines: every call of these goes to the wrapper of
+# the same name in src/vita/vita_call_watch.cpp. Only for targets that build
+# that file.
+set(KISAK_VITA_CALL_WATCH_LINK_OPTIONS "")
+foreach(call sceIoOpen sceIoClose sceIoRead sceIoWrite sceIoPread sceIoPwrite sceIoLseek sceIoLseek32
+        sceIoSyncByFd sceIoGetstat sceIoGetstatByFd sceIoDopen sceIoDread sceIoDclose sceIoRemove sceIoRename
+        sceIoMkdir sceKernelAllocMemBlock sceKernelFreeMemBlock sceNetRecvfrom sceNetSendto)
+    list(APPEND KISAK_VITA_CALL_WATCH_LINK_OPTIONS "-Wl,--wrap=${call}")
+endforeach()
+target_link_options(KisakCOD-dedi PRIVATE ${KISAK_VITA_LINK_OPTIONS} ${KISAK_VITA_CALL_WATCH_LINK_OPTIONS})
 target_link_libraries(KisakCOD-dedi PRIVATE ${KISAK_VITA_LINK_LIBRARIES})
 add_dependencies(KisakCOD-dedi update_build_number)
 
