@@ -137,6 +137,14 @@ std::atomic<uint32_t> g_useCount[2][static_cast<int>(MemoryUse::Count)];
 constexpr uint32_t kLoggedPieceBytes = 1u << 20;
 uint32_t g_loggedPieces = 0;
 constexpr uint32_t kLoggedPieces = 300;
+// Pieces this large come from the top end of their pool and the others from
+// the bottom, so that the free space between stays in one piece. With every
+// piece from the bottom, the holes a map change leaves (the menu's textures)
+// broke up the CDRAM pool: mp_backlot's 14 MB of static vertices found no
+// room with 17.9 MB free (console, 2026-11-15). A file named
+// no-big-from-top beside the compiled programs gives the former way.
+constexpr uint32_t kTopPieceBytes = 2u << 20;
+bool g_bigFromTop = true;
 
 const char *MemoryUseName(MemoryUse use)
 {
@@ -232,7 +240,7 @@ bool AllocateMemory(Device &device, Memory &memory, uint32_t bytes, uint32_t ali
     {
         for (const gxm::MemoryKind kind : {first, second})
         {
-            if (void *data = gxm::Allocate(kind, bytes, align))
+            if (void *data = gxm::Allocate(kind, bytes, align, g_bigFromTop && bytes >= kTopPieceBytes))
             {
                 memory.data = static_cast<uint8_t *>(data);
                 memory.kind = kind;
@@ -261,6 +269,7 @@ bool AllocateMemory(Device &device, Memory &memory, uint32_t bytes, uint32_t ali
     Log(device, "out of GPU memory for %s (%s, %u KB); %s", name && *name ? name : "a resource", MemoryUseName(use),
         bytes >> 10, gxm::DescribeMemory().c_str());
     Log(device, "%s", DescribeMemoryUse().c_str());
+    Log(device, "%s", gxm::DescribeFreeRanges().c_str());
     return false;
 }
 
@@ -434,6 +443,11 @@ gxm::MemorySizes PoolSizes(Device &device)
     // named big-gpu-pool beside the compiled programs adds 96 MB to the main
     // pool. A console has no such memory to give (the device is then not
     // created), and Vita3K reports more free memory than a console has.
+    if (gxm::ProgramCacheMarker("no-big-from-top"))
+    {
+        g_bigFromTop = false;
+        Log(device, "diag: no-big-from-top is there: every GPU memory piece comes from the bottom of its pool");
+    }
     if (gxm::ProgramCacheMarker("big-gpu-pool"))
     {
         sizes.main += 96u << 20;
