@@ -621,6 +621,28 @@ ANCHOR_ROW = re.compile(r"^bots: \d+ anchors \d+ units from a callout\s*$", re.M
 OBJECTIVE_ROW = re.compile(r"^bots: \d+ (attacks an objective \d+ units away|defends an objective from \d+ units)\s*$",
                            re.M)
 SHOTS_ROW = re.compile(r"^bots: (\d+) shots fired so far\s*$", re.M)
+CLASS_ROW = re.compile(r"^bots: \d+ plays (.+?) \(", re.M)
+STREAK_EARNED_ROW = re.compile(r"^bots: \d+ earned a killstreak: (\S+) \(", re.M)
+STREAK_USED_ROW = re.compile(r"^bots: \d+ called in its (\S+) after", re.M)
+
+
+def kit_lines(output):
+    """The INFO lines about the classes bots picked and their killstreaks."""
+    classes = Counter(CLASS_ROW.findall(output))
+    earned = Counter(STREAK_EARNED_ROW.findall(output))
+    used = Counter(STREAK_USED_ROW.findall(output))
+    marked = len(re.findall(r"^bots: \d+ marks an airstrike at", output, re.M))
+    closed = len(re.findall(r"^bots: \d+ closes the airstrike map", output, re.M))
+    kept = len(re.findall(r"^bots: \d+ keeps its \S+: the game did not call it in", output, re.M))
+    return [
+        "bots answered the class menu: " +
+        (", ".join(f"{name} {count}" for name, count in sorted(classes.items())) or "never"),
+        "bots earned killstreaks: " + (", ".join(f"{name} {count}" for name, count in sorted(earned.items())) or "none") +
+        "; called in: " + (", ".join(f"{name} {count}" for name, count in sorted(used.items())) or "none") +
+        f"; {marked} airstrikes marked, {closed} airstrike maps closed, {kept} not called in",
+    ]
+
+
 GRENADE_ROW = re.compile(r"^bots: \d+ throws a grenade \d+ units\s*$", re.M)
 KNIFE_ROW = re.compile(r"^bots: \d+ knifes \d+, \d+ units\s*$", re.M)
 TEAM_OBJECTIVES_ROW = re.compile(r"^bots: team (\d+) objectives: take (\d+), hold (\d+)\s*$", re.M)
@@ -1006,6 +1028,8 @@ def main() -> int:
                   f"{team['objectives']} objective moves")
             print("INFO: " + (f"map spots ready: {team['spots'][0]} spots, {team['spots'][1]} lines, "
                               f"in {team['spots'][2]} s" if team["spots"] else "map spots not ready yet"))
+            for line in kit_lines(output):
+                print("INFO: " + line)
         if args.combat:
             print(f"INFO: bots threw {len(GRENADE_ROW.findall(output))} grenades and knifed "
                   f"{len(KNIFE_ROW.findall(output))} times")

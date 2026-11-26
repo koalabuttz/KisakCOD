@@ -32,6 +32,11 @@ void Bot_RegisterDvars();
 // retail SV_BotUserMove.
 bool Bot_UserMove(client_t *cl);
 
+// A server command the game sends a test client's client (SV_AddServerCommand
+// drops them, as no client is there to read them). The brain follows the one
+// a player's client acts on by itself: a script's weapon switch.
+void Bot_ServerCommand(int clientNum, const char *text);
+
 // The ping the scoreboard shows for a test client the brain drives, or -1
 // when the brain does not drive it. A test client acknowledges no packets, so
 // SV_CalcPings would give it the retail 999. The brain runs in the server,

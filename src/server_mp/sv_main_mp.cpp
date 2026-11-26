@@ -127,7 +127,12 @@ void SV_AddServerCommand(client_t *client, svscmd_type type, char *cmd)
     int i; // [esp+10h] [ebp-8h]
     int to; // [esp+14h] [ebp-4h]
 
-    if (!client->bIsTestClient)
+    if (client->bIsTestClient)
+    {
+        // No client reads it; the bot brain follows what a client would.
+        Bot_ServerCommand(client - svs.clients, cmd);
+        return;
+    }
     {
         if (client->reliableSequence - client->reliableAcknowledge < 64 && client->header.state == CS_ACTIVE
             || (SV_CullIgnorableServerCommands(client), type))

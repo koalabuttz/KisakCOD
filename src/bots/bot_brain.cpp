@@ -23,6 +23,12 @@
 //             when it fires, as a player's client does;
 //   send      the usercmd_s goes through SV_ClientThink like a player's.
 //
+//   kit       pick a class from the class menu, as a player does, and call
+//             in the killstreaks it earns (bot_loadout.h): a UAV, an
+//             airstrike on the place it last knew enemies to be, a
+//             helicopter; follow the game's weapon switches (a script's
+//             switchToWeapon), as a player's client does.
+//
 // The brain reads other players only through the sense step.
 
 #include <universal/q_shared.h>
@@ -35,6 +41,7 @@
 #include "bot_brain.h"
 #include "bot_combat.h"
 #include "bot_grenades.h"
+#include "bot_loadout.h"
 #include "bot_mind.h"
 #include "bot_motor.h"
 #include "bot_names.h"
@@ -57,6 +64,7 @@ namespace kb = kisak::bots;
 const dvar_t *bot_brain;
 const dvar_t *bot_log;
 const dvar_t *bot_combat;
+const dvar_t *bot_class;
 
 constexpr int kMaxBotSlots = 64;
 
@@ -176,6 +184,38 @@ struct BotSlot
     // The knife: pressed on one frame, released on the next.
     bool meleeHeld = false;
     int nextMelee = 0;
+
+    // The weapon the server last told its client to switch to (a script's
+    // switchToWeapon), held in the command until the switch is done.
+    int weaponWanted = 0;
+    int weaponWantedUntil = 0;
+
+    // Its class (bot_loadout.h): the one it plays, when to answer the class
+    // menu with it, and how its lives have gone.
+    kb::PlayerClass playerClass = kb::PlayerClass::Count;
+    int classSendAt = 0;
+    bool wasAlive = false;
+    int lifeStartedAt = 0;
+    int shortLives = 0;
+
+    // Its killstreak: the weapon in action slot 4, since when it has it, when
+    // it may take it out (again), and taking it out: 0 not, 1 switching to
+    // it, 2 waiting for the game to call it in.
+    int streakWeapon = 0;
+    int streakSince = 0;
+    int streakDelay = 0;
+    int streakNextTry = 0;
+    int streakPhase = 0;
+    int streakPhaseAt = 0;
+    int gunBeforeStreak = 0;
+    // The airstrike's map: since when it is up, the place, and when it
+    // confirms it (as a player moves the cursor there and clicks).
+    int selectingSince = 0;
+    bool strikeKnown = false;
+    float strikePlace[3] = {0.0f, 0.0f, 0.0f};
+    int strikeEnemies = 0;
+    int strikeConfirmAt = 0;
+    bool locPressed = false;
 };
 
 BotSlot s_slots[kMaxBotSlots];
@@ -1509,6 +1549,405 @@ void UpdatePreAim(BotSlot &bot, const playerState_s *ps)
                                       nullptr, bot.preAim);
 }
 
+// ---------------------------------------------------------------------------
+// Its kit: the game's weapon switches, its class, its killstreaks
+// ---------------------------------------------------------------------------
+
+bool HasWeapon(const playerState_s *ps, int weapon)
+{
+    return weapon > 0 && BG_ValidateWeaponNumber(static_cast<uint32_t>(weapon))
+           && BG_IsWeaponValid(ps, static_cast<uint32_t>(weapon));
+}
+
+// A gun the bot carries, one with ammunition first; 0 for none.
+int AnyGun(const playerState_s *ps)
+{
+    const uint32_t count = BG_GetNumWeapons();
+    int dry = 0;
+    for (uint32_t weapon = 1; weapon < count; ++weapon)
+    {
+        if (!BG_IsWeaponValid(ps, weapon) || !IsGun(BG_GetWeaponDef(weapon)))
+            continue;
+        if (BG_WeaponAmmo(ps, weapon) > 0)
+            return static_cast<int>(weapon);
+        if (!dry)
+            dry = static_cast<int>(weapon);
+    }
+    return dry;
+}
+
+// The switch the server asked for, as a player's client follows its "a"
+// command (CG_SelectWeaponIndex): the command holds the weapon until it is
+// up, for at most three seconds. With none asked for and the weapon in hand
+// taken away, it takes out a gun.
+void FollowWeaponSwitch(BotSlot &bot, const playerState_s *ps, usercmd_s &cmd)
+{
+    if (bot.weaponWanted)
+    {
+        if (ps->weapon == bot.weaponWanted || svs.time >= bot.weaponWantedUntil || !HasWeapon(ps, bot.weaponWanted))
+            bot.weaponWanted = 0;
+        else
+            cmd.weapon = static_cast<uint8_t>(bot.weaponWanted);
+        return;
+    }
+    if (!HasWeapon(ps, ps->weapon))
+    {
+        const int gun = AnyGun(ps);
+        if (gun)
+            cmd.weapon = static_cast<uint8_t>(gun);
+    }
+}
+
+bool ClassMenuOn()
+{
+    return bot_class && bot_class->current.integer;
+}
+
+// Answers a script menu, as a player's client does when they pick on it: the
+// "mr" command with the server's id, the menu's place among the script menus
+// and the answer (Cmd_MenuResponse_f). False when the game has no such menu.
+bool AnswerMenu(int clientNum, const char *menu, const char *response)
+{
+    int index = -1;
+    char name[64];
+    for (int i = 0; i < 32 && index < 0; ++i)
+    {
+        SV_GetConfigstring(CS_SCRIPT_MENUS + i, name, sizeof(name));
+        if (!I_stricmp(name, menu))
+            index = i;
+    }
+    if (index < 0)
+        return false;
+    char line[128];
+    snprintf(line, sizeof(line), "mr %d %d %s", Dvar_GetInt("sv_serverId"), index, response);
+    SV_ExecuteClientCommand(&svs.clients[clientNum], line, 1, 0);
+    return true;
+}
+
+// Picks the bot's class by the map's size, its leanings and how many snipers
+// its side has (every player in free-for-all), never `avoid`.
+kb::PlayerClass ChooseClass(BotSlot &bot, int clientNum, kb::PlayerClass avoid)
+{
+    const team_t team = TeamOf(clientNum);
+    int teamSize = 0;
+    for (int other = 0; other < sv_maxclients->current.integer; ++other)
+    {
+        if (svs.clients[other].header.state < CS_CONNECTED)
+            continue;
+        const team_t otherTeam = TeamOf(other);
+        if (otherTeam == TEAM_SPECTATOR || (team != TEAM_FREE && otherTeam != team))
+            continue;
+        ++teamSize;
+    }
+    int snipers = 0;
+    for (int other = 0; other < kMaxBotSlots && other < sv_maxclients->current.integer; ++other)
+    {
+        const BotSlot &mate = s_slots[other];
+        if (other == clientNum || !mate.active || svs.time - mate.lastTime > 1000)
+            continue;
+        if (team != TEAM_FREE && TeamOf(other) != team)
+            continue;
+        if (mate.playerClass == kb::PlayerClass::Sniper)
+            ++snipers;
+    }
+    const float openness = kb::MapOpenness(level.compassMapWorldSize[0], level.compassMapWorldSize[1]);
+    const kb::ClassWeights leanings =
+        kb::ClassLeanings(openness, bot.personality.aggression, bot.personality.patience);
+    return kb::PickClass(leanings, bot.rng.Unit(), snipers, teamSize, avoid);
+}
+
+void SendClass(BotSlot &bot, int clientNum, const char *why)
+{
+    static bool s_noMenuSaid = false;
+    if (Dvar_GetInt("scr_oldschool"))
+        return;
+    const team_t team = TeamOf(clientNum);
+    if (team == TEAM_SPECTATOR)
+        return;
+    if (!AnswerMenu(clientNum, "changeclass", kb::ClassResponse(bot.playerClass)))
+    {
+        if (!s_noMenuSaid && LogOn())
+            Com_Printf(CON_CHANNEL_SERVER, "bots: the game has no changeclass menu, so bots keep the class it gives\n");
+        s_noMenuSaid = true;
+        return;
+    }
+    if (LogOn())
+        Com_Printf(CON_CHANNEL_SERVER, "bots: %d plays %s (%s, map %.0f across)\n", clientNum,
+                   kb::ClassName(bot.playerClass), why,
+                   std::hypot(level.compassMapWorldSize[0], level.compassMapWorldSize[1]));
+}
+
+// The class menu: a class picked when the bot first plays, kept from life to
+// life (the stock test-client script picks a new one at random after each
+// spawn, so the bot answers again a moment into each life), and sometimes
+// another one when it dies, more likely after a run of short lives.
+void StepClass(BotSlot &bot, int clientNum, bool alive)
+{
+    if (!ClassMenuOn())
+    {
+        bot.wasAlive = alive;
+        return;
+    }
+    if (alive && !bot.wasAlive)
+    {
+        bot.lifeStartedAt = svs.time;
+        if (bot.playerClass == kb::PlayerClass::Count)
+            bot.playerClass = ChooseClass(bot, clientNum, kb::PlayerClass::Count);
+        bot.classSendAt = svs.time + 1000 + static_cast<int>(bot.rng.Unit() * 1500.0f);
+    }
+    else if (!alive && bot.wasAlive)
+    {
+        bot.classSendAt = 0;
+        bot.shortLives = svs.time - bot.lifeStartedAt < kb::kShortLifeMs ? bot.shortLives + 1 : 0;
+        if (bot.playerClass != kb::PlayerClass::Count && kb::RethinkClass(bot.shortLives, bot.rng.Unit()))
+        {
+            const kb::PlayerClass was = bot.playerClass;
+            bot.playerClass = ChooseClass(bot, clientNum, was);
+            bot.shortLives = 0;
+            // Picked while dead, as a player does before the next spawn.
+            SendClass(bot, clientNum, kb::ClassName(was));
+        }
+    }
+    bot.wasAlive = alive;
+    if (alive && bot.classSendAt && svs.time >= bot.classSendAt)
+    {
+        bot.classSendAt = 0;
+        SendClass(bot, clientNum, "its class");
+    }
+}
+
+// Where the bot would call an airstrike: the enemies it saw or heard lately
+// and its team's callouts, away from itself and its teammates (the compass
+// shows a player their teammates).
+kb::StrikePick PlanStrike(const BotSlot &bot, int clientNum, const playerState_s *ps, int minEnemies)
+{
+    const kb::StrikeParams params;
+    kb::EnemyMark marks[kb::kMaxContacts + kb::TeamBoard::kMaxCallouts];
+    bool marked[kb::kMaxContacts] = {};
+    int count = 0;
+    for (int entity = 0; entity < kb::kMaxContacts; ++entity)
+    {
+        const kb::Contact &contact = bot.perception.contacts[entity];
+        if (!contact.active)
+            continue;
+        const int seenAgo = contact.noticed ? svs.time - contact.lastSeenAt : 1000000;
+        const int heardAgo = contact.lastHeardAt >= 0 ? svs.time - contact.lastHeardAt : 1000000;
+        const bool seen = seenAgo <= heardAgo;
+        const int ago = seen ? seenAgo : heardAgo;
+        if (ago > params.maxAgeMs)
+            continue;
+        std::memcpy(marks[count].place, seen ? contact.lastSeen : contact.lastHeard, sizeof(marks[count].place));
+        marks[count].ageMs = ago;
+        marked[entity] = true;
+        ++count;
+    }
+    if (const TeamState *team = BoardOf(clientNum))
+    {
+        team->board.ForEachHeard(svs.time, params.maxAgeMs, [&](const kb::Callout &call) {
+            if (call.enemy >= 0 && call.enemy < kb::kMaxContacts && marked[call.enemy])
+                return;
+            std::memcpy(marks[count].place, call.place, sizeof(marks[count].place));
+            marks[count].ageMs = svs.time - call.heardAtMs;
+            ++count;
+        });
+    }
+    float friends[64][3];
+    int friendCount = 0;
+    const team_t team = TeamOf(clientNum);
+    if (team == TEAM_AXIS || team == TEAM_ALLIES)
+    {
+        for (int other = 0; other < sv_maxclients->current.integer && friendCount < 64; ++other)
+        {
+            if (other == clientNum || TeamOf(other) != team)
+                continue;
+            const gentity_s *ent = SV_GentityNum(other);
+            if (!ent || !ent->client || ent->client->ps.pm_type != PM_NORMAL)
+                continue;
+            std::memcpy(friends[friendCount++], ent->client->ps.origin, sizeof(friends[0]));
+        }
+    }
+    return kb::PickStrike(marks, count, friends, friendCount, ps->origin, minEnemies, params);
+}
+
+kb::CompassFrame Compass()
+{
+    kb::CompassFrame frame;
+    for (int k = 0; k < 2; ++k)
+    {
+        frame.upperLeft[k] = level.compassMapUpperLeft[k];
+        frame.north[k] = level.compassNorth[k];
+        frame.worldSize[k] = level.compassMapWorldSize[k];
+    }
+    return frame;
+}
+
+// The airstrike's map is up (the game asked for a place, beginLocationSelection):
+// the bot stands, moves the cursor to the place it planned and clicks, or
+// closes the map when it knows no place. Each click is one frame down.
+void StepStrikeMap(BotSlot &bot, int clientNum, const playerState_s *ps, usercmd_s &cmd)
+{
+    cmd.buttons |= BUTTON_LOC_SELECTING;
+    bot.streakPhaseAt = svs.time;
+    if (!bot.selectingSince)
+    {
+        bot.selectingSince = svs.time;
+        bot.locPressed = false;
+        const kb::StrikePick pick = PlanStrike(bot, clientNum, ps, 1);
+        bot.strikeKnown = pick.found;
+        bot.strikeEnemies = pick.enemies;
+        std::memcpy(bot.strikePlace, pick.place, sizeof(bot.strikePlace));
+        // Finding the place on the map and moving the cursor there.
+        bot.strikeConfirmAt = svs.time + 1200 + static_cast<int>(bot.rng.Unit() * 1500.0f);
+    }
+    if (bot.locPressed)
+    {
+        bot.locPressed = false;
+        return;
+    }
+    if (!bot.strikeKnown || svs.time - bot.selectingSince > 8000)
+    {
+        cmd.buttons |= BUTTON_LOC_CANCEL;
+        bot.locPressed = true;
+        bot.strikeConfirmAt = INT_MAX;
+        bot.streakNextTry = svs.time + 15000;
+        if (LogOn())
+            Com_Printf(CON_CHANNEL_SERVER, "bots: %d closes the airstrike map (%s)\n", clientNum,
+                       bot.strikeKnown ? "no answer" : "knows no place");
+        return;
+    }
+    if (svs.time < bot.strikeConfirmAt)
+        return;
+    int8_t selected[2];
+    const bool onMap = kb::CompassLocation(Compass(), bot.strikePlace, selected);
+    cmd.selectedLocation[0] = static_cast<char>(selected[0]);
+    cmd.selectedLocation[1] = static_cast<char>(selected[1]);
+    cmd.buttons |= BUTTON_LOC_CONFIRM;
+    bot.locPressed = true;
+    bot.strikeConfirmAt = INT_MAX;
+    if (LogOn())
+        Com_Printf(CON_CHANNEL_SERVER, "bots: %d marks an airstrike at (%.0f %.0f) on %d enemies, %.1f s on the map%s\n",
+                   clientNum, bot.strikePlace[0], bot.strikePlace[1], bot.strikeEnemies,
+                   (svs.time - bot.selectingSince) / 1000.0f, onMap ? "" : " (off the map, at its edge)");
+}
+
+// The killstreak in action slot 4 (the stock _hardpoints.gsc gives it as a
+// weapon there): taken out when the bot is calm a moment after earning it,
+// as a player presses 4; the game calls it in when it is up, takes it away
+// and switches back. Returns true while the airstrike's map is up: the bot
+// then neither walks nor fights.
+bool StepStreak(BotSlot &bot, int clientNum, const playerState_s *ps, bool fighting, usercmd_s &cmd)
+{
+    if (ps->locationSelectionInfo)
+    {
+        StepStrikeMap(bot, clientNum, ps, cmd);
+        return true;
+    }
+    bot.selectingSince = 0;
+
+    int slotWeapon = 0;
+    if (ps->actionSlotType[3] == ACTIONSLOTTYPE_SPECIFYWEAPON)
+        slotWeapon = static_cast<int>(ps->actionSlotParam[3].specifyWeapon.index);
+    if (!HasWeapon(ps, slotWeapon))
+        slotWeapon = 0;
+    if (slotWeapon != bot.streakWeapon)
+    {
+        if (LogOn() && bot.streakWeapon && bot.streakPhase)
+            Com_Printf(CON_CHANNEL_SERVER, "bots: %d called in its %s after %.1f s\n", clientNum,
+                       kb::StreakName(kb::StreakKindFromWeapon(BG_GetWeaponDef(bot.streakWeapon)->szInternalName)),
+                       (svs.time - bot.streakSince) / 1000.0f);
+        bot.streakWeapon = slotWeapon;
+        bot.streakSince = svs.time;
+        bot.streakDelay = kb::StreakDelayMs(bot.rng.Unit());
+        bot.streakNextTry = 0;
+        bot.streakPhase = 0;
+        if (slotWeapon && LogOn())
+            Com_Printf(CON_CHANNEL_SERVER, "bots: %d earned a killstreak: %s (%s)\n", clientNum,
+                       kb::StreakName(kb::StreakKindFromWeapon(BG_GetWeaponDef(slotWeapon)->szInternalName)),
+                       BG_GetWeaponDef(slotWeapon)->szInternalName);
+    }
+    if (!bot.streakWeapon)
+        return false;
+    const kb::StreakKind kind = kb::StreakKindFromWeapon(BG_GetWeaponDef(bot.streakWeapon)->szInternalName);
+
+    if (bot.streakPhase == 1)
+    {
+        // Switching to it: an enemy in view puts the gun back up.
+        if (fighting)
+        {
+            if (HasWeapon(ps, bot.gunBeforeStreak))
+                cmd.weapon = static_cast<uint8_t>(bot.gunBeforeStreak);
+            bot.streakPhase = 0;
+            bot.streakNextTry = svs.time + 3000;
+            return false;
+        }
+        if (ps->weapon == bot.streakWeapon)
+        {
+            bot.streakPhase = 2;
+            bot.streakPhaseAt = svs.time;
+        }
+        else if (svs.time - bot.streakPhaseAt > 3000)
+        {
+            bot.streakPhase = 0;
+            bot.streakNextTry = svs.time + 10000;
+        }
+        else
+        {
+            cmd.weapon = static_cast<uint8_t>(bot.streakWeapon);
+        }
+        return false;
+    }
+    if (bot.streakPhase == 2)
+    {
+        // Up: the game calls it in (and takes it away), or does not (another
+        // helicopter is up, the airstrike's map was closed) and switches back.
+        if (ps->weapon != bot.streakWeapon || svs.time - bot.streakPhaseAt > 2500)
+        {
+            if (ps->weapon == bot.streakWeapon && HasWeapon(ps, bot.gunBeforeStreak))
+            {
+                bot.weaponWanted = bot.gunBeforeStreak;
+                bot.weaponWantedUntil = svs.time + 3000;
+            }
+            if (LogOn())
+                Com_Printf(CON_CHANNEL_SERVER, "bots: %d keeps its %s: the game did not call it in\n", clientNum,
+                           kb::StreakName(kind));
+            bot.streakPhase = 0;
+            bot.streakNextTry = svs.time + 20000;
+        }
+        return false;
+    }
+
+    // Calm a moment after earning it: no fight, no throw, not just hit, the
+    // gun ready.
+    if (fighting || bot.grenadePhase != 0 || RecentlyHurt(bot, 2500) || ps->weaponstate != WEAPON_READY)
+        return false;
+    if (svs.time < bot.streakSince + bot.streakDelay || svs.time < bot.streakNextTry)
+        return false;
+    if (kind == kb::StreakKind::Radar && ps->radarEnabled)
+    {
+        // Its side's UAV is still up: wait for it to end.
+        bot.streakNextTry = svs.time + 3000;
+        return false;
+    }
+    if (kind == kb::StreakKind::Airstrike)
+    {
+        // Two enemies together, or after 45 s one will do.
+        const int minEnemies = svs.time - bot.streakSince > 45000 ? 1 : 2;
+        if (!PlanStrike(bot, clientNum, ps, minEnemies).found)
+        {
+            bot.streakNextTry = svs.time + 2000;
+            return false;
+        }
+    }
+    bot.gunBeforeStreak = ps->weapon;
+    bot.streakPhase = 1;
+    bot.streakPhaseAt = svs.time;
+    cmd.weapon = static_cast<uint8_t>(bot.streakWeapon);
+    if (LogOn())
+        Com_Printf(CON_CHANNEL_SERVER, "bots: %d takes out its %s after %.1f s\n", clientNum, kb::StreakName(kind),
+                   (svs.time - bot.streakSince) / 1000.0f);
+    return false;
+}
+
 } // namespace
 
 void Bot_RegisterDvars()
@@ -1531,6 +1970,27 @@ void Bot_RegisterDvars()
         DvarLimits(0, 1),
         DVAR_NOFLAG,
         "0 KisakCOD's bots never fire, 1 they fight the players they see (docs/bots.md)");
+    bot_class = Dvar_RegisterInt(
+        "bot_class",
+        1,
+        DvarLimits(0, 1),
+        DVAR_NOFLAG,
+        "1 KisakCOD's bots pick one of the stock classes by the map and keep it, 0 they keep the class the "
+        "game's scripts give them (docs/bots.md)");
+}
+
+void Bot_ServerCommand(int clientNum, const char *text)
+{
+    if (!bot_brain || bot_brain->current.integer != 1 || clientNum < 0 || clientNum >= kMaxBotSlots || !text)
+        return;
+    // "a <weapon>": switch to that weapon (G_SelectWeaponIndex).
+    if (text[0] != 'a' || text[1] != ' ')
+        return;
+    BotSlot &bot = s_slots[clientNum];
+    if (!bot.active)
+        return;
+    bot.weaponWanted = atoi(text + 2);
+    bot.weaponWantedUntil = svs.time + 3000;
 }
 
 namespace
@@ -1760,7 +2220,11 @@ bool Bot_UserMove(client_t *cl)
             bot.trigger = kb::TriggerState();
         }
         if (alive)
+        {
+            FollowWeaponSwitch(bot, ps, cmd);
             LookAfterWeapon(bot, ps, cmd);
+        }
+        StepClass(bot, clientNum, alive);
 
         if (IsDead(ps))
         {
@@ -1806,104 +2270,112 @@ bool Bot_UserMove(client_t *cl)
                 }
             }
 
-            int side = 0;
-            // An enemy in view: a throw still being lined up is dropped.
-            if (focus.kind == kb::FocusKind::Seen && bot.grenadePhase == 1)
-                bot.grenadePhase = 0;
-            // The enemy it fought has gone out of sight: a moment to think of
-            // a grenade (the hand keeps its aim there meanwhile).
-            if (CombatOn())
-                ConsiderGrenade(bot, clientNum, ps, focus);
-            if (fighting && bot.grenadePhase == 0)
-                side = Fight(bot, clientNum, ps, focus, seconds, cmd);
-            if (!(cmd.buttons & BUTTON_MELEE))
-                bot.meleeHeld = false;
-            const float *grenadeView = CombatOn() ? StepGrenade(bot, clientNum, ps, cmd) : nullptr;
-
-            // Not fighting: look at the player it lost or the sound it heard,
-            // else pre-aim the corner of its way, else along the way. A throw
-            // looks where it throws.
-            const float *look = grenadeView ? grenadeView : watching;
-            // The fight's hand has the view, unless a throw is being lined up.
-            const bool handAims = fighting && !grenadeView;
-            float preAimView[2];
-            if (!fighting && !look && bot.pathIndex < bot.pathCount)
-            {
-                UpdatePreAim(bot, ps);
-                if (bot.preAimKnown)
-                {
-                    ViewToward(ps, bot.preAim, preAimView);
-                    look = preAimView;
-                }
-            }
-
-            const bool holding = bot.mind.intent == kb::Intent::Roam && svs.time < bot.holdUntil;
-            // Holding for its part in the team: watch what the part is about.
-            float facingView[2];
-            if (!fighting && !look && holding && bot.holdFacingKnown)
-            {
-                ViewToward(ps, bot.holdFacing, facingView);
-                look = facingView;
-            }
-            // Prone on a flag it takes: it stays down and fights from there
-            // rather than strafing off the flag.
-            const bool downOnFlag = bot.holdProne && bot.atObjective && bot.role == kb::Role::Attack &&
-                                    (fighting || holding) && Distance2D(ps->origin, bot.objective) < 96.0f;
-            if (downOnFlag)
-                side = 0;
-            bool walked = false;
-            if (downOnFlag)
-            {
+            // The airstrike's map up: a player neither walks, looks round nor
+            // fights while they pick the place.
+            const bool onMap = StepStreak(bot, clientNum, ps, fighting, cmd);
+            if (onMap)
                 bot.progressTime = svs.time;
-                cmd.buttons |= BUTTON_PRONE;
-                if (holding)
-                    cmd.buttons |= BUTTON_USE;
-            }
-            else if (side != 0 && bot.mind.intent != kb::Intent::Cover)
-            {
-                cmd.rightmove = static_cast<char>(side * 127);
-                // A strafe is not being stuck on the way.
-                if (bot.pathIndex < bot.pathCount)
-                    bot.bestDistance = Distance2D(ps->origin, bot.path[bot.pathIndex]);
-                bot.progressTime = svs.time;
-            }
-            else if (!holding)
-            {
-                walked = Walk(bot, ps, seconds, cmd, look, handAims);
-            }
             else
             {
-                bot.progressTime = svs.time;
-                if (bot.holdProne)
+                int side = 0;
+                // An enemy in view: a throw still being lined up is dropped.
+                if (focus.kind == kb::FocusKind::Seen && bot.grenadePhase == 1)
+                    bot.grenadePhase = 0;
+                // The enemy it fought has gone out of sight: a moment to think of
+                // a grenade (the hand keeps its aim there meanwhile).
+                if (CombatOn())
+                    ConsiderGrenade(bot, clientNum, ps, focus);
+                if (fighting && bot.grenadePhase == 0)
+                    side = Fight(bot, clientNum, ps, focus, seconds, cmd);
+                if (!(cmd.buttons & BUTTON_MELEE))
+                    bot.meleeHeld = false;
+                const float *grenadeView = CombatOn() ? StepGrenade(bot, clientNum, ps, cmd) : nullptr;
+
+                // Not fighting: look at the player it lost or the sound it heard,
+                // else pre-aim the corner of its way, else along the way. A throw
+                // looks where it throws.
+                const float *look = grenadeView ? grenadeView : watching;
+                // The fight's hand has the view, unless a throw is being lined up.
+                const bool handAims = fighting && !grenadeView;
+                float preAimView[2];
+                if (!fighting && !look && bot.pathIndex < bot.pathCount)
+                {
+                    UpdatePreAim(bot, ps);
+                    if (bot.preAimKnown)
+                    {
+                        ViewToward(ps, bot.preAim, preAimView);
+                        look = preAimView;
+                    }
+                }
+
+                const bool holding = bot.mind.intent == kb::Intent::Roam && svs.time < bot.holdUntil;
+                // Holding for its part in the team: watch what the part is about.
+                float facingView[2];
+                if (!fighting && !look && holding && bot.holdFacingKnown)
+                {
+                    ViewToward(ps, bot.holdFacing, facingView);
+                    look = facingView;
+                }
+                // Prone on a flag it takes: it stays down and fights from there
+                // rather than strafing off the flag.
+                const bool downOnFlag = bot.holdProne && bot.atObjective && bot.role == kb::Role::Attack &&
+                                        (fighting || holding) && Distance2D(ps->origin, bot.objective) < 96.0f;
+                if (downOnFlag)
+                    side = 0;
+                bool walked = false;
+                if (downOnFlag)
+                {
+                    bot.progressTime = svs.time;
                     cmd.buttons |= BUTTON_PRONE;
-                else if (bot.holdCrouched)
-                    cmd.buttons |= BUTTON_CROUCH;
-                // On an objective: use it (a bomb plants or defuses while
-                // use is held there).
-                if (bot.atObjective)
-                    cmd.buttons |= BUTTON_USE;
-            }
-
-            if (handAims || walked)
-            {
-                bot.lookHeld = 0.0f;
-                bot.look.holdSeconds = 0.0f;
-            }
-            else if (look)
-            {
-                kb::StepView(bot.view, look[0], look[1], seconds, WatchMotor());
-                bot.lookHeld = 0.0f;
-                bot.look.holdSeconds = 0.0f;
-            }
-            else
-            {
-                bot.lookHeld += seconds;
-                if (bot.lookHeld >= bot.look.holdSeconds)
-                {
-                    bot.look = kb::NextIdleLook(bot.rng, bot.view.angles[1]);
-                    bot.lookHeld = 0.0f;
+                    if (holding)
+                        cmd.buttons |= BUTTON_USE;
                 }
-                kb::StepView(bot.view, bot.look.pitch, bot.look.yaw, seconds, IdleMotor());
+                else if (side != 0 && bot.mind.intent != kb::Intent::Cover)
+                {
+                    cmd.rightmove = static_cast<char>(side * 127);
+                    // A strafe is not being stuck on the way.
+                    if (bot.pathIndex < bot.pathCount)
+                        bot.bestDistance = Distance2D(ps->origin, bot.path[bot.pathIndex]);
+                    bot.progressTime = svs.time;
+                }
+                else if (!holding)
+                {
+                    walked = Walk(bot, ps, seconds, cmd, look, handAims);
+                }
+                else
+                {
+                    bot.progressTime = svs.time;
+                    if (bot.holdProne)
+                        cmd.buttons |= BUTTON_PRONE;
+                    else if (bot.holdCrouched)
+                        cmd.buttons |= BUTTON_CROUCH;
+                    // On an objective: use it (a bomb plants or defuses while
+                    // use is held there).
+                    if (bot.atObjective)
+                        cmd.buttons |= BUTTON_USE;
+                }
+
+                if (handAims || walked)
+                {
+                    bot.lookHeld = 0.0f;
+                    bot.look.holdSeconds = 0.0f;
+                }
+                else if (look)
+                {
+                    kb::StepView(bot.view, look[0], look[1], seconds, WatchMotor());
+                    bot.lookHeld = 0.0f;
+                    bot.look.holdSeconds = 0.0f;
+                }
+                else
+                {
+                    bot.lookHeld += seconds;
+                    if (bot.lookHeld >= bot.look.holdSeconds)
+                    {
+                        bot.look = kb::NextIdleLook(bot.rng, bot.view.angles[1]);
+                        bot.lookHeld = 0.0f;
+                    }
+                    kb::StepView(bot.view, bot.look.pitch, bot.look.yaw, seconds, IdleMotor());
+                }
             }
         }
     }

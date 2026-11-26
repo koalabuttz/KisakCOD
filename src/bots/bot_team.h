@@ -147,6 +147,15 @@ public:
         return call.active && call.heardAtMs <= nowMs && nowMs - call.heardAtMs <= maxAgeMs;
     }
 
+    // Every callout the team has heard in the last `maxAgeMs`.
+    template <typename Fn>
+    void ForEachHeard(int nowMs, int maxAgeMs, Fn fn) const
+    {
+        for (const Callout &call : m_calls)
+            if (Heard(call, nowMs, maxAgeMs))
+                fn(call);
+    }
+
     // The freshest callout heard by `nowMs`, no older than `maxAgeMs`.
     const Callout *Freshest(int nowMs, int maxAgeMs = kLifeMs) const
     {

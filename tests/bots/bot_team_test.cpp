@@ -5,8 +5,11 @@
 // objectives off the compass icons, and gets roles that fit the team's size,
 // the objectives and each bot's leanings. The spot table of a map finds cover
 // from a threat and places to watch an objective from. Bots are named
-// "[BOT] Name", and a person's name loses the tag (bot_names.h).
+// "[BOT] Name", and a person's name loses the tag (bot_names.h). A bot picks
+// a class by the map and calls in its killstreaks where it knows enemies to
+// be (bot_loadout.h).
 
+#include <bots/bot_loadout.h>
 #include <bots/bot_names.h>
 #include <bots/bot_spots.h>
 #include <bots/bot_team.h>
@@ -422,9 +425,145 @@ static void Names()
     Check(!std::strcmp(out, "[BOT] Sunshine2"), "an eight-letter name drops the space before its number instead");
 }
 
+static int ShareOf(kb::PlayerClass c, float openness, float aggression, float patience, int snipers, int teamSize)
+{
+    const kb::ClassWeights w = kb::ClassLeanings(openness, aggression, patience);
+    int count = 0;
+    for (int i = 0; i < 1000; ++i)
+        if (kb::PickClass(w, (i + 0.5f) / 1000.0f, snipers, teamSize) == c)
+            ++count;
+    return count;
+}
+
+static void Classes()
+{
+    std::printf("\n== class choice ==\n");
+    Check(std::strcmp(kb::ClassResponse(kb::PlayerClass::Assault), "assault_mp") == 0
+              && std::strcmp(kb::ClassResponse(kb::PlayerClass::Sniper), "sniper_mp") == 0
+              && std::strcmp(kb::ClassResponse(kb::PlayerClass::HeavyGunner), "heavygunner_mp") == 0,
+          "the class menu's answers are the stock class keys");
+    Check(kb::MapOpenness(1800.0f, 1800.0f) == 0.0f, "a Shipment-sized map is closed");
+    Check(kb::MapOpenness(6000.0f, 6000.0f) == 1.0f, "an Overgrown-sized map is open");
+    const float middle = kb::MapOpenness(3800.0f, 3800.0f);
+    Check(middle > 0.2f && middle < 0.8f, "a Crash-sized map is in between");
+
+    const int closeSnipers = ShareOf(kb::PlayerClass::Sniper, 0.0f, 0.5f, 0.5f, 0, 6);
+    const int openSnipers = ShareOf(kb::PlayerClass::Sniper, 1.0f, 0.5f, 0.5f, 0, 6);
+    std::printf("  snipers in 1000 picks: %d on a closed map, %d on an open one\n", closeSnipers, openSnipers);
+    Check(closeSnipers < 40, "hardly a sniper on a closed map");
+    Check(openSnipers > 200, "plenty of snipers on an open map");
+    const int boldSpecOps = ShareOf(kb::PlayerClass::SpecOps, 0.5f, 0.9f, 0.5f, 0, 6);
+    const int calmSpecOps = ShareOf(kb::PlayerClass::SpecOps, 0.5f, 0.2f, 0.5f, 0, 6);
+    Check(boldSpecOps > calmSpecOps, "a bold bot takes spec ops more often than a careful one");
+    const int patientSnipers = ShareOf(kb::PlayerClass::Sniper, 0.6f, 0.5f, 0.9f, 0, 6);
+    const int restlessSnipers = ShareOf(kb::PlayerClass::Sniper, 0.6f, 0.5f, 0.2f, 0, 6);
+    Check(patientSnipers > restlessSnipers, "a patient bot snipes more often than a restless one");
+
+    Check(kb::SniperShare(3) == 1 && kb::SniperShare(6) == 1 && kb::SniperShare(9) == 2 && kb::SniperShare(18) == 4,
+          "a side wants one sniper in four, at least one");
+    Check(ShareOf(kb::PlayerClass::Sniper, 1.0f, 0.5f, 0.9f, 1, 6) == 0, "no second sniper on a side of six");
+    Check(ShareOf(kb::PlayerClass::Sniper, 1.0f, 0.5f, 0.9f, 1, 12) > 0, "a second sniper on a side of twelve");
+
+    bool neverAvoided = true;
+    const kb::ClassWeights w = kb::ClassLeanings(0.5f, 0.5f, 0.5f);
+    for (int i = 0; i < 200; ++i)
+        neverAvoided = neverAvoided && kb::PickClass(w, i / 200.0f, 0, 6, kb::PlayerClass::Assault) != kb::PlayerClass::Assault;
+    Check(neverAvoided, "a bot leaving a class picks another");
+    kb::ClassWeights none;
+    Check(kb::PickClass(none, 0.5f, 0, 6) == kb::PlayerClass::Assault, "no leanings at all: assault");
+
+    int calm = 0;
+    int afterBadRun = 0;
+    for (int i = 0; i < 1000; ++i)
+    {
+        calm += kb::RethinkClass(0, (i + 0.5f) / 1000.0f) ? 1 : 0;
+        afterBadRun += kb::RethinkClass(3, (i + 0.5f) / 1000.0f) ? 1 : 0;
+    }
+    Check(calm > 40 && calm < 150, "a bot rethinks its class now and then");
+    Check(afterBadRun > 3 * calm, "and much more often after three short lives");
+}
+
+static void Streaks()
+{
+    std::printf("\n== killstreaks ==\n");
+    Check(kb::StreakKindFromWeapon("radar_mp") == kb::StreakKind::Radar, "radar_mp is the UAV");
+    Check(kb::StreakKindFromWeapon("airstrike_mp") == kb::StreakKind::Airstrike, "airstrike_mp is the airstrike");
+    Check(kb::StreakKindFromWeapon("helicopter_mp") == kb::StreakKind::Helicopter, "helicopter_mp is the helicopter");
+    Check(kb::StreakKindFromWeapon("nuke_mp") == kb::StreakKind::Other, "a mod's killstreak is some other kind");
+    Check(kb::StreakKindFromWeapon("") == kb::StreakKind::None, "no weapon, no killstreak");
+    Check(kb::StreakDelayMs(0.0f) >= 1000 && kb::StreakDelayMs(0.999f) <= 6000, "taken out 1 to 6 s after earning it");
+
+    const float self[3] = {0.0f, 0.0f, 0.0f};
+    kb::EnemyMark marks[4];
+    const float places[4][3] = {{2000.0f, 0.0f, 0.0f}, {2150.0f, 100.0f, 0.0f}, {-1500.0f, 0.0f, 0.0f}, {300.0f, 0.0f, 0.0f}};
+    const int ages[4] = {1000, 3000, 500, 200};
+    for (int i = 0; i < 4; ++i)
+    {
+        std::memcpy(marks[i].place, places[i], sizeof(places[i]));
+        marks[i].ageMs = ages[i];
+    }
+    kb::StrikePick pick = kb::PickStrike(marks, 4, nullptr, 0, self, 2);
+    Check(pick.found && pick.enemies == 2 && std::fabs(pick.place[0] - 2075.0f) < 1.0f,
+          "two enemies together: the strike goes between them");
+    pick = kb::PickStrike(marks, 4, nullptr, 0, self, 3);
+    Check(!pick.found, "no three enemies together: no strike when it wants three");
+    pick = kb::PickStrike(marks + 2, 2, nullptr, 0, self, 1);
+    Check(pick.found && std::fabs(pick.place[0] + 1500.0f) < 1.0f,
+          "one enemy will do when it settles for one, but not the one beside the bot");
+    const float mate[1][3] = {{2100.0f, 300.0f, 0.0f}};
+    pick = kb::PickStrike(marks, 4, mate, 1, self, 2);
+    Check(!pick.found, "never on a teammate");
+    marks[0].ageMs = marks[1].ageMs = 20000;
+    pick = kb::PickStrike(marks, 2, nullptr, 0, self, 1);
+    Check(!pick.found, "marks older than 12 s are worth nothing");
+
+    // The compass map of a map turned so north is not up the picture.
+    kb::CompassFrame frame;
+    frame.upperLeft[0] = -2500.0f;
+    frame.upperLeft[1] = 3000.0f;
+    const float turn = 0.6f;
+    frame.north[0] = std::sin(turn);
+    frame.north[1] = std::cos(turn);
+    frame.worldSize[0] = 5200.0f;
+    frame.worldSize[1] = 4800.0f;
+    // A place the server reads back from a cursor in the middle of the map.
+    const int8_t middleCursor[2] = {0, -10};
+    float ground[2];
+    kb::CompassPlace(frame, middleCursor, ground);
+    const float place[3] = {ground[0], ground[1], 0.0f};
+    int8_t cursor[2];
+    const bool onMap = kb::CompassLocation(frame, place, cursor);
+    float back[2];
+    kb::CompassPlace(frame, cursor, back);
+    std::printf("  cursor %d %d for (%.0f %.0f), read back (%.0f %.0f)\n", cursor[0], cursor[1], place[0], place[1],
+                back[0], back[1]);
+    Check(onMap && cursor[0] == middleCursor[0] && cursor[1] == middleCursor[1],
+          "the cursor for a place is the one the server reads it from");
+    bool close = true;
+    for (int i = 0; i < 40; ++i)
+    {
+        const int8_t from[2] = {static_cast<int8_t>(-128 + i * 6), static_cast<int8_t>(127 - i * 6)};
+        float at[2];
+        kb::CompassPlace(frame, from, at);
+        const float p3[3] = {at[0] + 7.0f, at[1] - 5.0f, 0.0f};
+        int8_t c[2];
+        kb::CompassLocation(frame, p3, c);
+        float again[2];
+        kb::CompassPlace(frame, c, again);
+        close = close && std::hypot(again[0] - p3[0], again[1] - p3[1]) < 20.0f;
+    }
+    Check(close, "every place on the map is read back within a cursor step (about 20 units)");
+    const float far[3] = {-20000.0f, 20000.0f, 0.0f};
+    Check(!kb::CompassLocation(frame, far, cursor), "a place off the map says so");
+    kb::CompassFrame empty;
+    Check(!kb::CompassLocation(empty, place, cursor), "a map with no compass size has no cursor");
+}
+
 int main()
 {
     Names();
+    Classes();
+    Streaks();
     Objectives();
     Callouts();
     Roles();
